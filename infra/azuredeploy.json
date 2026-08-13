@@ -1,0 +1,463 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.46.1.21595",
+      "templateHash": "11128516860675592729"
+    },
+    "description": "Governed gateway for Claude Code on Microsoft Foundry: per-developer token budgets, tiering, and chargeback, with no model credential on any developer machine."
+  },
+  "parameters": {
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "[format('claudegw{0}', uniqueString(resourceGroup().id))]",
+      "minLength": 4,
+      "maxLength": 28,
+      "metadata": {
+        "description": "Base name used to derive resource names. Must be globally unique for the API Management instance."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location for all resources."
+      }
+    },
+    "foundryAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the existing Microsoft Foundry (AIServices) account that hosts your Claude deployments."
+      }
+    },
+    "foundryResourceGroup": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().name]",
+      "metadata": {
+        "description": "Resource group of the Foundry account. Defaults to this resource group."
+      }
+    },
+    "publisherEmail": {
+      "type": "string",
+      "metadata": {
+        "description": "Publisher email shown on the API Management instance."
+      }
+    },
+    "publisherName": {
+      "type": "string",
+      "defaultValue": "AI Platform Team",
+      "metadata": {
+        "description": "Publisher name shown on the API Management instance."
+      }
+    },
+    "apimSku": {
+      "type": "string",
+      "defaultValue": "BasicV2",
+      "allowedValues": [
+        "BasicV2",
+        "StandardV2",
+        "PremiumV2"
+      ],
+      "metadata": {
+        "description": "API Management SKU. Anthropic Messages API token parsing requires a v2 tier; classic tiers count zero tokens and budgets never trigger."
+      }
+    },
+    "apimCapacity": {
+      "type": "int",
+      "defaultValue": 1,
+      "minValue": 1,
+      "metadata": {
+        "description": "API Management scale units."
+      }
+    },
+    "sonnetDeployment": {
+      "type": "string",
+      "defaultValue": "claude-sonnet-5",
+      "metadata": {
+        "description": "Deployment name of the Sonnet-class model in Foundry."
+      }
+    },
+    "opusDeployment": {
+      "type": "string",
+      "defaultValue": "claude-opus-5",
+      "metadata": {
+        "description": "Deployment name of the Opus-class model in Foundry."
+      }
+    },
+    "haikuDeployment": {
+      "type": "string",
+      "defaultValue": "claude-sonnet-5",
+      "metadata": {
+        "description": "Deployment used for the haiku alias and background tasks. Point at your Sonnet deployment if you have no Haiku deployment."
+      }
+    },
+    "tpmStandard": {
+      "type": "int",
+      "defaultValue": 20000,
+      "metadata": {
+        "description": "Standard tier: tokens per minute, per developer."
+      }
+    },
+    "quotaStandard": {
+      "type": "int",
+      "defaultValue": 500000,
+      "metadata": {
+        "description": "Standard tier: tokens per day, per developer."
+      }
+    },
+    "tpmPremium": {
+      "type": "int",
+      "defaultValue": 80000,
+      "metadata": {
+        "description": "Premium tier: tokens per minute, per developer."
+      }
+    },
+    "quotaPremium": {
+      "type": "int",
+      "defaultValue": 5000000,
+      "metadata": {
+        "description": "Premium tier: tokens per day, per developer."
+      }
+    },
+    "callsPerMinute": {
+      "type": "int",
+      "defaultValue": 120,
+      "metadata": {
+        "description": "Request-rate ceiling per developer per minute. Stops a runaway agent loop that makes many small calls."
+      }
+    },
+    "allowStandardOids": {
+      "type": "array",
+      "defaultValue": [],
+      "metadata": {
+        "description": "Object ids allowed at the standard tier. Normally left empty and populated by Sync-ClaudeAccess.ps1 from an Entra group."
+      }
+    },
+    "allowPremiumOids": {
+      "type": "array",
+      "defaultValue": [],
+      "metadata": {
+        "description": "Object ids allowed at the premium tier."
+      }
+    }
+  },
+  "variables": {
+    "$fxv#0": "<!--\r\n  Claude Code on Microsoft Foundry - governed gateway policy (tiered).\r\n\r\n  Identity\r\n  ========\r\n  Claude Code's Foundry mode acquires the developer's own Entra ID token through\r\n  DefaultAzureCredential, so every request carries a real, unforgeable user\r\n  object id (oid). The gateway validates that token, decides the caller's tier,\r\n  meters against the oid, then discards the token and calls Foundry with the\r\n  gateway's own managed identity.\r\n\r\n  Developers hold no Foundry credential. Removing a person from the Entra group\r\n  removes their access; nothing has to be revoked on the endpoint itself.\r\n\r\n  Authorization\r\n  =============\r\n  allow-standard / allow-premium are comma-delimited lists of object ids kept in\r\n  sync from Entra groups by Sync-ClaudeAccess.ps1. Sentinel commas make the\r\n  contains() check exact so one id cannot partially match another.\r\n-->\r\n<policies>\r\n    <inbound>\r\n        <base />\r\n\r\n        <!-- 1. Authenticate the caller. Claude Code requests a token for the\r\n             Cognitive Services data plane, so that is the audience we accept. -->\r\n        <validate-azure-ad-token\r\n            tenant-id=\"{{tenant-id}}\"\r\n            output-token-variable-name=\"jwt\"\r\n            failed-validation-httpcode=\"401\"\r\n            failed-validation-error-message=\"A Microsoft Entra ID token is required. Run 'az login'.\">\r\n            <audiences>\r\n                <audience>https://cognitiveservices.azure.com</audience>\r\n                <audience>https://ai.azure.com</audience>\r\n            </audiences>\r\n        </validate-azure-ad-token>\r\n\r\n        <!-- 2. Identity from the validated token. -->\r\n        <set-variable name=\"userId\" value=\"@(((Jwt)context.Variables[\"jwt\"]).Claims.GetValueOrDefault(\"oid\", \"unknown\"))\" />\r\n        <set-variable name=\"userUpn\" value=\"@{\r\n            var jwt = (Jwt)context.Variables[\"jwt\"];\r\n            return jwt.Claims.GetValueOrDefault(\"upn\",\r\n                   jwt.Claims.GetValueOrDefault(\"unique_name\",\r\n                   jwt.Claims.GetValueOrDefault(\"preferred_username\",\r\n                   jwt.Claims.GetValueOrDefault(\"azp\", \"service-principal\"))));\r\n        }\" />\r\n        <set-variable name=\"sessionId\" value=\"@(context.Request.Headers.GetValueOrDefault(\"x-claude-code-session-id\", \"none\"))\" />\r\n        <set-variable name=\"modelName\" value=\"@{\r\n            try { return context.Request.Body.As<JObject>(preserveContent: true)[\"model\"]?.ToString() ?? \"unknown\"; }\r\n            catch { return \"unknown\"; }\r\n        }\" />\r\n\r\n        <!-- 3. Resolve the tier from Entra group membership. -->\r\n        <set-variable name=\"tier\" value=\"@{\r\n            var oid = \",\" + (string)context.Variables[\"userId\"] + \",\";\r\n            if ((\"{{allow-premium}}\").Contains(oid))  { return \"premium\"; }\r\n            if ((\"{{allow-standard}}\").Contains(oid)) { return \"standard\"; }\r\n            return \"denied\";\r\n        }\" />\r\n\r\n        <!-- 4. Reject anyone not in a Claude Code group. -->\r\n        <choose>\r\n            <when condition=\"@((string)context.Variables[\"tier\"] == \"denied\")\">\r\n                <return-response>\r\n                    <set-status code=\"403\" reason=\"Forbidden\" />\r\n                    <set-header name=\"Content-Type\" exists-action=\"override\">\r\n                        <value>application/json</value>\r\n                    </set-header>\r\n                    <set-body>@{\r\n                        return new JObject(\r\n                            new JProperty(\"type\", \"error\"),\r\n                            new JProperty(\"error\", new JObject(\r\n                                new JProperty(\"type\", \"permission_error\"),\r\n                                new JProperty(\"message\", \"Not entitled to Claude Code. Ask your platform team to add you to the 'claude-code-standard' or 'claude-code-premium' Entra group.\")\r\n                            ))\r\n                        ).ToString();\r\n                    }</set-body>\r\n                </return-response>\r\n            </when>\r\n        </choose>\r\n\r\n        <!-- 5. Tiered token budgets, keyed on oid so one developer cannot\r\n             starve the team. Rate limit exceeded returns 429; the daily\r\n             quota returns 403. -->\r\n        <choose>\r\n            <when condition=\"@((string)context.Variables[\"tier\"] == \"premium\")\">\r\n                <llm-token-limit\r\n                    counter-key=\"@((string)context.Variables[\"userId\"])\"\r\n                    tokens-per-minute=\"{{tpm-premium}}\"\r\n                    estimate-prompt-tokens=\"false\"\r\n                    retry-after-header-name=\"Retry-After\"\r\n                    remaining-tokens-header-name=\"x-ratelimit-remaining-tokens\"\r\n                    tokens-consumed-header-name=\"x-tokens-consumed\" />\r\n                <llm-token-limit\r\n                    counter-key=\"@((string)context.Variables[\"userId\"] + \":daily\")\"\r\n                    token-quota=\"{{quota-premium}}\"\r\n                    token-quota-period=\"Daily\"\r\n                    estimate-prompt-tokens=\"false\"\r\n                    remaining-quota-tokens-header-name=\"x-quota-remaining-today\" />\r\n            </when>\r\n            <otherwise>\r\n                <llm-token-limit\r\n                    counter-key=\"@((string)context.Variables[\"userId\"])\"\r\n                    tokens-per-minute=\"{{tpm-standard}}\"\r\n                    estimate-prompt-tokens=\"false\"\r\n                    retry-after-header-name=\"Retry-After\"\r\n                    remaining-tokens-header-name=\"x-ratelimit-remaining-tokens\"\r\n                    tokens-consumed-header-name=\"x-tokens-consumed\" />\r\n                <llm-token-limit\r\n                    counter-key=\"@((string)context.Variables[\"userId\"] + \":daily\")\"\r\n                    token-quota=\"{{quota-standard}}\"\r\n                    token-quota-period=\"Daily\"\r\n                    estimate-prompt-tokens=\"false\"\r\n                    remaining-quota-tokens-header-name=\"x-quota-remaining-today\" />\r\n            </otherwise>\r\n        </choose>\r\n\r\n        <!-- 6. Request-rate ceiling. Token budgets alone do not stop a runaway\r\n             agent loop making many small calls. -->\r\n        <rate-limit-by-key\r\n            calls=\"{{calls-per-minute}}\"\r\n            renewal-period=\"60\"\r\n            counter-key=\"@((string)context.Variables[\"userId\"])\"\r\n            retry-after-header-name=\"Retry-After\" />\r\n\r\n        <!-- 7. Chargeback telemetry to Application Insights, sliced by\r\n             developer, tier, model and Claude Code session. Azure Monitor\r\n             allows at most 5 custom dimensions here. -->\r\n        <llm-emit-token-metric namespace=\"claudecode\">\r\n            <dimension name=\"User\" value=\"@((string)context.Variables[\"userUpn\"])\" />\r\n            <dimension name=\"UserId\" value=\"@((string)context.Variables[\"userId\"])\" />\r\n            <dimension name=\"Tier\" value=\"@((string)context.Variables[\"tier\"])\" />\r\n            <dimension name=\"Model\" value=\"@((string)context.Variables[\"modelName\"])\" />\r\n            <dimension name=\"SessionId\" value=\"@((string)context.Variables[\"sessionId\"])\" />\r\n        </llm-emit-token-metric>\r\n\r\n        <!-- 8. Swap the caller's token for the gateway's own identity. The\r\n             developer token is deliberately not forwarded: Foundry trusts only\r\n             the gateway's managed identity. -->\r\n        <authentication-managed-identity\r\n            resource=\"https://cognitiveservices.azure.com\"\r\n            output-token-variable-name=\"msi-token\"\r\n            ignore-error=\"false\" />\r\n        <set-header name=\"Authorization\" exists-action=\"override\">\r\n            <value>@(\"Bearer \" + (string)context.Variables[\"msi-token\"])</value>\r\n        </set-header>\r\n        <set-header name=\"x-api-key\" exists-action=\"delete\" />\r\n\r\n        <!-- 9. Attribution for Foundry-side logs. -->\r\n        <set-header name=\"x-gateway-user\" exists-action=\"override\">\r\n            <value>@((string)context.Variables[\"userUpn\"])</value>\r\n        </set-header>\r\n    </inbound>\r\n\r\n    <backend>\r\n        <!-- Agent turns are long, so allow generous time. -->\r\n        <forward-request timeout=\"600\" buffer-request-body=\"false\" />\r\n    </backend>\r\n\r\n    <outbound>\r\n        <base />\r\n        <set-header name=\"x-governed-by\" exists-action=\"override\">\r\n            <value>apim-claude-gateway</value>\r\n        </set-header>\r\n        <set-header name=\"x-claude-tier\" exists-action=\"override\">\r\n            <value>@((string)context.Variables[\"tier\"])</value>\r\n        </set-header>\r\n    </outbound>\r\n\r\n    <on-error>\r\n        <base />\r\n        <set-header name=\"x-gateway-error\" exists-action=\"override\">\r\n            <value>@(context.LastError?.Reason ?? \"unknown\")</value>\r\n        </set-header>\r\n    </on-error>\r\n</policies>\r\n",
+    "apimName": "[format('apim-{0}', parameters('namePrefix'))]",
+    "appInsightsName": "[format('appi-{0}', parameters('namePrefix'))]",
+    "workspaceName": "[format('log-{0}', parameters('namePrefix'))]",
+    "apiId": "claude-foundry",
+    "apiPath": "claude",
+    "allowStandardValue": "[format(',{0},', join(parameters('allowStandardOids'), ','))]",
+    "allowPremiumValue": "[format(',{0},', join(parameters('allowPremiumOids'), ','))]",
+    "namedValues": [
+      {
+        "key": "tenant-id",
+        "value": "[subscription().tenantId]"
+      },
+      {
+        "key": "tpm-standard",
+        "value": "[string(parameters('tpmStandard'))]"
+      },
+      {
+        "key": "quota-standard",
+        "value": "[string(parameters('quotaStandard'))]"
+      },
+      {
+        "key": "tpm-premium",
+        "value": "[string(parameters('tpmPremium'))]"
+      },
+      {
+        "key": "quota-premium",
+        "value": "[string(parameters('quotaPremium'))]"
+      },
+      {
+        "key": "calls-per-minute",
+        "value": "[string(parameters('callsPerMinute'))]"
+      },
+      {
+        "key": "allow-standard",
+        "value": "[variables('allowStandardValue')]"
+      },
+      {
+        "key": "allow-premium",
+        "value": "[variables('allowPremiumValue')]"
+      }
+    ]
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('workspaceName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "retentionInDays": 30
+      }
+    },
+    {
+      "type": "Microsoft.Insights/components",
+      "apiVersion": "2020-02-02",
+      "name": "[variables('appInsightsName')]",
+      "location": "[parameters('location')]",
+      "kind": "web",
+      "properties": {
+        "Application_Type": "web",
+        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('workspaceName'))]",
+        "IngestionMode": "LogAnalytics",
+        "CustomMetricsOptedInType": "WithDimensions"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('workspaceName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service",
+      "apiVersion": "2024-05-01",
+      "name": "[variables('apimName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "[parameters('apimSku')]",
+        "capacity": "[parameters('apimCapacity')]"
+      },
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "publisherEmail": "[parameters('publisherEmail')]",
+        "publisherName": "[parameters('publisherName')]"
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/loggers",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', variables('apimName'), 'appinsights')]",
+      "properties": {
+        "loggerType": "applicationInsights",
+        "description": "Token metrics and request logs for the Claude gateway",
+        "resourceId": "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]",
+        "credentials": {
+          "instrumentationKey": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').InstrumentationKey]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', variables('apimName'))]",
+        "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', variables('apimName'), variables('apiId'))]",
+      "properties": {
+        "displayName": "Claude on Foundry (governed)",
+        "path": "[variables('apiPath')]",
+        "protocols": [
+          "https"
+        ],
+        "serviceUrl": "[format('{0}anthropic', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('foundryResourceGroup')), 'Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), '2024-10-01').endpoints['AI Foundry API'])]",
+        "subscriptionRequired": false
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', variables('apimName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis/operations",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}/{2}', variables('apimName'), variables('apiId'), 'messages')]",
+      "properties": {
+        "displayName": "Create Message",
+        "method": "POST",
+        "urlTemplate": "/v1/messages",
+        "responses": [
+          {
+            "statusCode": 200
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/apis', variables('apimName'), variables('apiId'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis/operations",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}/{2}', variables('apimName'), variables('apiId'), 'count-tokens')]",
+      "properties": {
+        "displayName": "Count Tokens",
+        "method": "POST",
+        "urlTemplate": "/v1/messages/count_tokens",
+        "responses": [
+          {
+            "statusCode": 200
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/apis', variables('apimName'), variables('apiId'))]"
+      ]
+    },
+    {
+      "copy": {
+        "name": "apimNamedValues",
+        "count": "[length(variables('namedValues'))]"
+      },
+      "type": "Microsoft.ApiManagement/service/namedValues",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}', variables('apimName'), variables('namedValues')[copyIndex()].key)]",
+      "properties": {
+        "displayName": "[variables('namedValues')[copyIndex()].key]",
+        "value": "[variables('namedValues')[copyIndex()].value]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', variables('apimName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis/policies",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}/{2}', variables('apimName'), variables('apiId'), 'policy')]",
+      "properties": {
+        "format": "rawxml",
+        "value": "[variables('$fxv#0')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/apis', variables('apimName'), variables('apiId'))]",
+        "apimNamedValues",
+        "[resourceId('Microsoft.ApiManagement/service/apis/operations', variables('apimName'), variables('apiId'), 'count-tokens')]",
+        "[resourceId('Microsoft.ApiManagement/service/apis/operations', variables('apimName'), variables('apiId'), 'messages')]"
+      ]
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis/diagnostics",
+      "apiVersion": "2024-05-01",
+      "name": "[format('{0}/{1}/{2}', variables('apimName'), variables('apiId'), 'applicationinsights')]",
+      "properties": {
+        "loggerId": "[resourceId('Microsoft.ApiManagement/service/loggers', variables('apimName'), 'appinsights')]",
+        "alwaysLog": "allErrors",
+        "metrics": true,
+        "verbosity": "information",
+        "httpCorrelationProtocol": "W3C",
+        "sampling": {
+          "samplingType": "fixed",
+          "percentage": 100
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service/apis', variables('apimName'), variables('apiId'))]",
+        "[resourceId('Microsoft.ApiManagement/service/loggers', variables('apimName'), 'appinsights')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "grant-apim-cognitive-services-user",
+      "resourceGroup": "[parameters('foundryResourceGroup')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "foundryAccountName": {
+            "value": "[parameters('foundryAccountName')]"
+          },
+          "principalId": {
+            "value": "[reference(resourceId('Microsoft.ApiManagement/service', variables('apimName')), '2024-05-01', 'full').identity.principalId]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.46.1.21595",
+              "templateHash": "1670452134809187047"
+            },
+            "description": "Grants a principal the Cognitive Services User role on a Foundry account. Split into its own module so the assignment can target the Foundry resource group when it differs from the gateway resource group."
+          },
+          "parameters": {
+            "foundryAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the existing Foundry (AIServices) account."
+              }
+            },
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Object id of the principal to grant data-plane access to."
+              }
+            }
+          },
+          "variables": {
+            "cognitiveServicesUserRoleId": "a97b65f3-24c7-4388-baec-2e87135dc908"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), parameters('principalId'), variables('cognitiveServicesUserRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesUserRoleId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ],
+          "outputs": {
+            "roleAssignmentId": {
+              "type": "string",
+              "value": "[extensionResourceId(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), parameters('principalId'), variables('cognitiveServicesUserRoleId')))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', variables('apimName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "apimName": {
+      "type": "string",
+      "value": "[variables('apimName')]"
+    },
+    "gatewayUrl": {
+      "type": "string",
+      "value": "[format('{0}/{1}', reference(resourceId('Microsoft.ApiManagement/service', variables('apimName')), '2024-05-01').gatewayUrl, variables('apiPath'))]"
+    },
+    "apimPrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ApiManagement/service', variables('apimName')), '2024-05-01', 'full').identity.principalId]"
+    },
+    "appInsightsName": {
+      "type": "string",
+      "value": "[variables('appInsightsName')]"
+    },
+    "foundryEndpoint": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('foundryResourceGroup')), 'Microsoft.CognitiveServices/accounts', parameters('foundryAccountName')), '2024-10-01').endpoints['AI Foundry API']]"
+    },
+    "claudeCodeSettings": {
+      "type": "object",
+      "value": {
+        "env": {
+          "CLAUDE_CODE_USE_FOUNDRY": "1",
+          "ANTHROPIC_FOUNDRY_BASE_URL": "[format('{0}/{1}', reference(resourceId('Microsoft.ApiManagement/service', variables('apimName')), '2024-05-01').gatewayUrl, variables('apiPath'))]",
+          "ANTHROPIC_DEFAULT_OPUS_MODEL": "[parameters('opusDeployment')]",
+          "ANTHROPIC_DEFAULT_SONNET_MODEL": "[parameters('sonnetDeployment')]",
+          "ANTHROPIC_DEFAULT_HAIKU_MODEL": "[parameters('haikuDeployment')]"
+        }
+      }
+    }
+  }
+}

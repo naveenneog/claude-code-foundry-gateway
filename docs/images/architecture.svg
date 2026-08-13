@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 560" width="1180" height="560" font-family="Segoe UI, system-ui, sans-serif">
+  <rect width="1180" height="560" fill="#ffffff"/>
+
+  <text x="30" y="40" font-size="21" font-weight="600" fill="#1a1a1a">Governed Claude Code on Microsoft Foundry</text>
+  <text x="30" y="64" font-size="14" fill="#666">The developer's own Entra ID token reaches the gateway. Only the gateway can reach Foundry.</text>
+
+  <!-- Developer -->
+  <rect x="30" y="110" width="220" height="150" rx="10" fill="#f3f7fd" stroke="#c7dcf5"/>
+  <text x="46" y="138" font-size="14" font-weight="600" fill="#0f6cbd">Developer workstation</text>
+  <text x="46" y="164" font-size="12.5" fill="#333">Claude Code (CLI + VS Code)</text>
+  <text x="46" y="186" font-size="12" fill="#666">CLAUDE_CODE_USE_FOUNDRY=1</text>
+  <text x="46" y="204" font-size="12" fill="#666">ANTHROPIC_FOUNDRY_BASE_URL</text>
+  <text x="46" y="228" font-size="12" fill="#333">az login  →  DefaultAzureCredential</text>
+  <text x="46" y="248" font-size="12" font-style="italic" fill="#9a4a00">no key stored anywhere</text>
+
+  <!-- arrow 1 -->
+  <line x1="250" y1="185" x2="380" y2="185" stroke="#0f6cbd" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="256" y="176" font-size="11.5" fill="#0f6cbd">Bearer &lt;user token&gt;</text>
+  <text x="256" y="204" font-size="11" fill="#888">oid = the real person</text>
+
+  <!-- APIM -->
+  <rect x="380" y="96" width="380" height="330" rx="10" fill="#fbf7ff" stroke="#dcc9f0"/>
+  <text x="398" y="124" font-size="14" font-weight="600" fill="#6b2fa0">Azure API Management (Basic v2+)</text>
+  <text x="398" y="142" font-size="11.5" fill="#888">v2 tiers parse Anthropic token usage</text>
+
+  <g font-size="12.5" fill="#333">
+    <rect x="398" y="158" width="344" height="30" rx="5" fill="#ffffff" stroke="#e6d8f5"/>
+    <text x="410" y="178">1  validate-azure-ad-token  →  oid, upn</text>
+
+    <rect x="398" y="194" width="344" height="30" rx="5" fill="#ffffff" stroke="#e6d8f5"/>
+    <text x="410" y="214">2  tier lookup  →  403 if not entitled</text>
+
+    <rect x="398" y="230" width="344" height="30" rx="5" fill="#ffffff" stroke="#e6d8f5"/>
+    <text x="410" y="250">3  llm-token-limit  →  429 + Retry-After</text>
+
+    <rect x="398" y="266" width="344" height="30" rx="5" fill="#ffffff" stroke="#e6d8f5"/>
+    <text x="410" y="286">4  daily token quota  →  403 when spent</text>
+
+    <rect x="398" y="302" width="344" height="30" rx="5" fill="#ffffff" stroke="#e6d8f5"/>
+    <text x="410" y="322">5  llm-emit-token-metric  →  chargeback</text>
+
+    <rect x="398" y="338" width="344" height="30" rx="5" fill="#fff8f0" stroke="#f0d8bc"/>
+    <text x="410" y="358">6  swap in the gateway's managed identity</text>
+  </g>
+  <text x="398" y="392" font-size="11.5" fill="#9a4a00">the user token is discarded here, never forwarded</text>
+  <text x="398" y="410" font-size="11.5" fill="#888">system-assigned MI · Cognitive Services User</text>
+
+  <!-- arrow 2 -->
+  <line x1="760" y1="250" x2="890" y2="250" stroke="#0f6cbd" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="766" y="241" font-size="11.5" fill="#0f6cbd">Bearer &lt;MI token&gt;</text>
+
+  <!-- Foundry -->
+  <rect x="890" y="180" width="255" height="140" rx="10" fill="#f2fbf6" stroke="#bfe6d0"/>
+  <text x="906" y="208" font-size="14" font-weight="600" fill="#136c3a">Microsoft Foundry</text>
+  <text x="906" y="232" font-size="12" fill="#333">/anthropic/v1/messages</text>
+  <text x="906" y="256" font-size="12" fill="#333">claude-sonnet-5</text>
+  <text x="906" y="276" font-size="12" fill="#333">claude-opus-5</text>
+  <text x="906" y="302" font-size="11.5" fill="#9a4a00">reachable only by the gateway MI</text>
+
+  <!-- Entra -->
+  <rect x="30" y="300" width="220" height="126" rx="10" fill="#fffdf2" stroke="#ece2b8"/>
+  <text x="46" y="328" font-size="14" font-weight="600" fill="#8a6d00">Microsoft Entra ID</text>
+  <text x="46" y="352" font-size="12" fill="#333">claude-code-standard</text>
+  <text x="46" y="372" font-size="12" fill="#333">claude-code-premium</text>
+  <text x="46" y="398" font-size="11.5" fill="#666">group membership = entitlement</text>
+  <text x="46" y="416" font-size="11.5" fill="#666">remove user = access revoked</text>
+
+  <line x1="250" y1="360" x2="396" y2="290" stroke="#c8a800" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arrowy)"/>
+  <text x="258" y="344" font-size="11" fill="#8a6d00">synced to named values</text>
+
+  <!-- Monitor -->
+  <rect x="620" y="452" width="525" height="78" rx="10" fill="#f7f7f9" stroke="#dcdce2"/>
+  <text x="638" y="478" font-size="13.5" font-weight="600" fill="#333">Application Insights · Azure Monitor</text>
+  <text x="638" y="500" font-size="12" fill="#555">Total / Prompt / Completion Tokens, dimensioned by User, Tier, Model, Session</text>
+  <text x="638" y="518" font-size="11.5" fill="#888">per-developer chargeback and budget alerts</text>
+
+  <line x1="570" y1="426" x2="570" y2="490" stroke="#999" stroke-width="1.6" stroke-dasharray="5 4"/>
+  <line x1="570" y1="490" x2="616" y2="490" stroke="#999" stroke-width="1.6" marker-end="url(#arrowg)"/>
+
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#0f6cbd"/>
+    </marker>
+    <marker id="arrowy" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#c8a800"/>
+    </marker>
+    <marker id="arrowg" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#999"/>
+    </marker>
+  </defs>
+</svg>

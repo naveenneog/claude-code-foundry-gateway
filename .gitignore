@@ -1,0 +1,7 @@
+# generated at deploy time - contains your gateway URL
+claude-settings.json
+
+# local tooling
+node_modules/
+*.log
+.DS_Store

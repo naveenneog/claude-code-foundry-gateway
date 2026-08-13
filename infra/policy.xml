@@ -1,0 +1,176 @@
+<!--
+  Claude Code on Microsoft Foundry - governed gateway policy (tiered).
+
+  Identity
+  ========
+  Claude Code's Foundry mode acquires the developer's own Entra ID token through
+  DefaultAzureCredential, so every request carries a real, unforgeable user
+  object id (oid). The gateway validates that token, decides the caller's tier,
+  meters against the oid, then discards the token and calls Foundry with the
+  gateway's own managed identity.
+
+  Developers hold no Foundry credential. Removing a person from the Entra group
+  removes their access; nothing has to be revoked on the endpoint itself.
+
+  Authorization
+  =============
+  allow-standard / allow-premium are comma-delimited lists of object ids kept in
+  sync from Entra groups by Sync-ClaudeAccess.ps1. Sentinel commas make the
+  contains() check exact so one id cannot partially match another.
+-->
+<policies>
+    <inbound>
+        <base />
+
+        <!-- 1. Authenticate the caller. Claude Code requests a token for the
+             Cognitive Services data plane, so that is the audience we accept. -->
+        <validate-azure-ad-token
+            tenant-id="{{tenant-id}}"
+            output-token-variable-name="jwt"
+            failed-validation-httpcode="401"
+            failed-validation-error-message="A Microsoft Entra ID token is required. Run 'az login'.">
+            <audiences>
+                <audience>https://cognitiveservices.azure.com</audience>
+                <audience>https://ai.azure.com</audience>
+            </audiences>
+        </validate-azure-ad-token>
+
+        <!-- 2. Identity from the validated token. -->
+        <set-variable name="userId" value="@(((Jwt)context.Variables["jwt"]).Claims.GetValueOrDefault("oid", "unknown"))" />
+        <set-variable name="userUpn" value="@{
+            var jwt = (Jwt)context.Variables["jwt"];
+            return jwt.Claims.GetValueOrDefault("upn",
+                   jwt.Claims.GetValueOrDefault("unique_name",
+                   jwt.Claims.GetValueOrDefault("preferred_username",
+                   jwt.Claims.GetValueOrDefault("azp", "service-principal"))));
+        }" />
+        <set-variable name="sessionId" value="@(context.Request.Headers.GetValueOrDefault("x-claude-code-session-id", "none"))" />
+        <set-variable name="modelName" value="@{
+            try { return context.Request.Body.As<JObject>(preserveContent: true)["model"]?.ToString() ?? "unknown"; }
+            catch { return "unknown"; }
+        }" />
+
+        <!-- 3. Resolve the tier from Entra group membership. -->
+        <set-variable name="tier" value="@{
+            var oid = "," + (string)context.Variables["userId"] + ",";
+            if (("{{allow-premium}}").Contains(oid))  { return "premium"; }
+            if (("{{allow-standard}}").Contains(oid)) { return "standard"; }
+            return "denied";
+        }" />
+
+        <!-- 4. Reject anyone not in a Claude Code group. -->
+        <choose>
+            <when condition="@((string)context.Variables["tier"] == "denied")">
+                <return-response>
+                    <set-status code="403" reason="Forbidden" />
+                    <set-header name="Content-Type" exists-action="override">
+                        <value>application/json</value>
+                    </set-header>
+                    <set-body>@{
+                        return new JObject(
+                            new JProperty("type", "error"),
+                            new JProperty("error", new JObject(
+                                new JProperty("type", "permission_error"),
+                                new JProperty("message", "Not entitled to Claude Code. Ask your platform team to add you to the 'claude-code-standard' or 'claude-code-premium' Entra group.")
+                            ))
+                        ).ToString();
+                    }</set-body>
+                </return-response>
+            </when>
+        </choose>
+
+        <!-- 5. Tiered token budgets, keyed on oid so one developer cannot
+             starve the team. Rate limit exceeded returns 429; the daily
+             quota returns 403. -->
+        <choose>
+            <when condition="@((string)context.Variables["tier"] == "premium")">
+                <llm-token-limit
+                    counter-key="@((string)context.Variables["userId"])"
+                    tokens-per-minute="{{tpm-premium}}"
+                    estimate-prompt-tokens="false"
+                    retry-after-header-name="Retry-After"
+                    remaining-tokens-header-name="x-ratelimit-remaining-tokens"
+                    tokens-consumed-header-name="x-tokens-consumed" />
+                <llm-token-limit
+                    counter-key="@((string)context.Variables["userId"] + ":daily")"
+                    token-quota="{{quota-premium}}"
+                    token-quota-period="Daily"
+                    estimate-prompt-tokens="false"
+                    remaining-quota-tokens-header-name="x-quota-remaining-today" />
+            </when>
+            <otherwise>
+                <llm-token-limit
+                    counter-key="@((string)context.Variables["userId"])"
+                    tokens-per-minute="{{tpm-standard}}"
+                    estimate-prompt-tokens="false"
+                    retry-after-header-name="Retry-After"
+                    remaining-tokens-header-name="x-ratelimit-remaining-tokens"
+                    tokens-consumed-header-name="x-tokens-consumed" />
+                <llm-token-limit
+                    counter-key="@((string)context.Variables["userId"] + ":daily")"
+                    token-quota="{{quota-standard}}"
+                    token-quota-period="Daily"
+                    estimate-prompt-tokens="false"
+                    remaining-quota-tokens-header-name="x-quota-remaining-today" />
+            </otherwise>
+        </choose>
+
+        <!-- 6. Request-rate ceiling. Token budgets alone do not stop a runaway
+             agent loop making many small calls. -->
+        <rate-limit-by-key
+            calls="{{calls-per-minute}}"
+            renewal-period="60"
+            counter-key="@((string)context.Variables["userId"])"
+            retry-after-header-name="Retry-After" />
+
+        <!-- 7. Chargeback telemetry to Application Insights, sliced by
+             developer, tier, model and Claude Code session. Azure Monitor
+             allows at most 5 custom dimensions here. -->
+        <llm-emit-token-metric namespace="claudecode">
+            <dimension name="User" value="@((string)context.Variables["userUpn"])" />
+            <dimension name="UserId" value="@((string)context.Variables["userId"])" />
+            <dimension name="Tier" value="@((string)context.Variables["tier"])" />
+            <dimension name="Model" value="@((string)context.Variables["modelName"])" />
+            <dimension name="SessionId" value="@((string)context.Variables["sessionId"])" />
+        </llm-emit-token-metric>
+
+        <!-- 8. Swap the caller's token for the gateway's own identity. The
+             developer token is deliberately not forwarded: Foundry trusts only
+             the gateway's managed identity. -->
+        <authentication-managed-identity
+            resource="https://cognitiveservices.azure.com"
+            output-token-variable-name="msi-token"
+            ignore-error="false" />
+        <set-header name="Authorization" exists-action="override">
+            <value>@("Bearer " + (string)context.Variables["msi-token"])</value>
+        </set-header>
+        <set-header name="x-api-key" exists-action="delete" />
+
+        <!-- 9. Attribution for Foundry-side logs. -->
+        <set-header name="x-gateway-user" exists-action="override">
+            <value>@((string)context.Variables["userUpn"])</value>
+        </set-header>
+    </inbound>
+
+    <backend>
+        <!-- Agent turns are long, so allow generous time. -->
+        <forward-request timeout="600" buffer-request-body="false" />
+    </backend>
+
+    <outbound>
+        <base />
+        <set-header name="x-governed-by" exists-action="override">
+            <value>apim-claude-gateway</value>
+        </set-header>
+        <set-header name="x-claude-tier" exists-action="override">
+            <value>@((string)context.Variables["tier"])</value>
+        </set-header>
+    </outbound>
+
+    <on-error>
+        <base />
+        <set-header name="x-gateway-error" exists-action="override">
+            <value>@(context.LastError?.Reason ?? "unknown")</value>
+        </set-header>
+    </on-error>
+</policies>
