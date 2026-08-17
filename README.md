@@ -12,7 +12,7 @@ One command deploys the whole thing.
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fnaveenneog%2Fclaude-code-foundry-gateway%2Fmain%2Finfra%2Fazuredeploy.json)
 
-![Architecture](docs/images/architecture.svg)
+![Architecture: the developer's Entra ID token reaches Azure API Management, which validates identity, applies tiered token budgets and emits chargeback metrics, then swaps in the gateway managed identity to call Microsoft Foundry](docs/images/architecture.png)
 
 ---
 
