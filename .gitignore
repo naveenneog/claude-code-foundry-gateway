@@ -5,3 +5,8 @@ claude-settings.json
 node_modules/
 *.log
 .DS_Store
+
+# screenshot tooling - browser session cookies and Entra storage state.
+# These authenticate as you; never commit them.
+.pw-profile/
+guide/.auth.json
