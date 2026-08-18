@@ -24,6 +24,10 @@ const APIM = process.env.APIM_NAME ?? 'apim-claude-gw-fzgql9';
 const SUB = process.env.AZURE_SUB ?? '';
 const TENANT = process.env.AZURE_TENANT ?? '';
 
+// Object id of the standard tier group, for the "add a member" capture.
+// Find it with: az ad group show --group claude-code-standard --query id -o tsv
+const STD_GROUP_ID = process.env.STANDARD_GROUP_ID ?? '';
+
 const portal = (p) => `https://portal.azure.com/#@${TENANT}/resource${p}`;
 const apimId = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}`;
 const aiId = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Insights/components/appi-claude-gateway`;
@@ -133,6 +137,36 @@ const STEPS = [
     },
     targets: [{ sel: '.install-button-container, .ux-oneclick-install-button-container', n: 9, pad: 6 }],
   },
+
+  // Day-2 operations. These back the Onboarding and Monitoring guides.
+  {
+    id: 'c2-entra-groups',
+    url: () => `https://portal.azure.com/#view/Microsoft_AAD_IAM/GroupsManagementMenuBlade/~/AllGroups/searchText/claude-code`,
+    needsAuth: true,
+    settle: 16000,
+    banner: { title: 'Entra ID → Groups — the two tier groups', note: 'Membership is the entitlement; there is no per-user RBAC' },
+  },
+  {
+    id: 'c3-group-members',
+    url: () => `https://portal.azure.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Members/groupId/${STD_GROUP_ID}`,
+    needsAuth: true,
+    settle: 16000,
+    banner: { title: 'Add a developer to a tier', note: 'Adding here is not enough — run Sync-ClaudeAccess.ps1 afterwards' },
+  },
+  {
+    id: 'c4-tier-budget',
+    url: () => portal(apimId + '/namedValues'),
+    needsAuth: true,
+    settle: 16000,
+    banner: { title: 'Change what a tier means', note: 'Edit tpm-* or quota-* — applied on the next request, no sync needed' },
+  },
+  {
+    id: 'c5-metrics',
+    url: () => portal(aiId + '/metrics'),
+    needsAuth: true,
+    settle: 17000,
+    banner: { title: 'Chargeback — set aggregation to Sum', note: 'Avg is tokens per request, not consumption' },
+  },
 ];
 
 async function isSignedIn(page) {
@@ -167,6 +201,12 @@ for (const step of wanted) {
   if (step.needsAuth && !authed) {
     skipped.push(step.id);
     console.log(`skip ${step.id}  (needs portal sign-in)`);
+    continue;
+  }
+
+  if (step.id === 'c3-group-members' && !STD_GROUP_ID) {
+    skipped.push(step.id);
+    console.log('skip c3-group-members  (set STANDARD_GROUP_ID)');
     continue;
   }
 

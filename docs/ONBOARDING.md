@@ -124,6 +124,17 @@ the tenant id; nothing else, and no credential.
 7. Copy their **Object ID** from **Overview** if you want to verify the sync
 8. Run the sync (Step 3 above) — **the portal alone does not grant access**
 
+> Screenshots of these two blades are not shipped, because they show real
+> directory membership. Capture them against your own tenant:
+>
+> ```powershell
+> node guide/auth.mjs
+> $env:STANDARD_GROUP_ID = (az ad group show --group claude-code-standard --query id -o tsv)
+> node guide/capture.mjs c2-entra-groups c3-group-members
+> ```
+>
+> See [guide/README.md](../guide/README.md).
+
 ---
 
 ## 3. Common variations

@@ -38,9 +38,20 @@ $env:APIM_NAME    = "<apim-name>"
 $env:GATEWAY_RG   = "<resource-group>"
 $env:FOUNDRY_RESOURCE = "<foundry-account>"
 
+# only needed for the "add a member" capture:
+$env:STANDARD_GROUP_ID = (az ad group show --group claude-code-standard --query id -o tsv)
+
 node guide/capture.mjs              # everything
 node guide/capture.mjs a3-apim-overview   # one step
 ```
+
+Step ids:
+
+| id | Backs |
+|----|-------|
+| `a1`–`a8`, `b1`–`b5` | [UI guide](../docs/UI-GUIDE.md) |
+| `c2-entra-groups`, `c3-group-members`, `c4-tier-budget` | [Onboarding guide](../docs/ONBOARDING.md) |
+| `c5-metrics` | [Monitoring guide](../docs/MONITORING.md) |
 
 Steps that need a portal session are **skipped, not failed**, when the profile
 is not signed in. A run with no session still produces the public-page
