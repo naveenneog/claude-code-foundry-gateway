@@ -154,7 +154,7 @@ az apim nv show -g <rg> --service-name <apim> --named-value-id tpm-standard \
 ![Step 7 — governance verification output](guide/a7-controls.png)
 
 ```powershell
-./gateway/Show-Governance.ps1
+./scripts/Show-Governance.ps1 -ApimName <apim> -ResourceGroup <rg>
 ```
 
 Four things must be true before you hand this to developers:
@@ -259,10 +259,10 @@ prompt or completion leaves your tenant boundary.
 
 ### Step 13 — Check the direct Foundry path
 
-![Step 13 — Test-ClaudeFoundry.ps1 with all seven checks passing](guide/b4-cli-verify.png)
+![Step 13 — the direct-path test with all seven checks passing](guide/b4-cli-verify.png)
 
 ```powershell
-./Test-ClaudeFoundry.ps1
+./scripts/Test-FoundryDirect.ps1 -Resource <foundry-account>
 ```
 
 This script exercises the **direct** path — CLI sign-in, token acquisition,

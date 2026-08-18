@@ -13,6 +13,7 @@
  */
 import path from 'node:path';
 import fs from 'node:fs';
+import sharp from 'sharp';
 import { annotate } from './lib/annotate.mjs';
 
 const OUT = path.resolve('docs/guide');
@@ -71,6 +72,25 @@ const ITEMS = [
     ],
   },
   {
+    src: 'docs/images/pf-user-split-raw.png',
+    out: 'c1-user-split.png',
+    banner: { n: 1, title: 'Total tokens split by developer', note: 'Metrics → namespace claudecode → Total Tokens → Apply splitting → User' },
+    // Drop the browser chrome: the URL carries the subscription id and the
+    // bookmarks bar is full of internal links.
+    crop: { top: 76 },
+    // The chart legend and the hover card both print the caller UPN.
+    masks: [
+      { x: 0.862, y: 0.003, w: 0.130, h: 0.046 },
+      { x: 0.538, y: 0.531, w: 0.089, h: 0.023, text: 'dev@contoso.com', align: 'start' },
+      { x: 0.290, y: 0.847, w: 0.089, h: 0.023, text: 'dev@contoso.com', align: 'start' },
+    ],
+    highlights: [
+      { x: 0.177, y: 0.214, w: 0.199, h: 0.029, n: 'a' },
+      { x: 0.364, y: 0.324, w: 0.300, h: 0.078, n: 'b' },
+      { x: 0.179, y: 0.845, w: 0.214, h: 0.028, n: 'c' },
+    ],
+  },
+  {
     src: 'docs/images/ext-01-panel.png',
     out: 'b2-vscode-panel.png',
     banner: { n: 11, title: 'The extension talking to your gateway', note: 'No API key anywhere on the machine' },
@@ -105,7 +125,24 @@ for (const item of ITEMS) {
     continue;
   }
   console.log(`comp ${item.out}`);
-  await annotate(fs.readFileSync(src), path.join(OUT, item.out), {
+
+  // Cropping browser chrome away beats masking it: no black band, and the
+  // remaining coordinates are all relative to the content that is left.
+  let buf = fs.readFileSync(src);
+  if (item.crop) {
+    const m = await sharp(buf).metadata();
+    buf = await sharp(buf)
+      .extract({
+        left: item.crop.left ?? 0,
+        top: item.crop.top ?? 0,
+        width: item.crop.width ?? m.width - (item.crop.left ?? 0),
+        height: item.crop.height ?? m.height - (item.crop.top ?? 0),
+      })
+      .png()
+      .toBuffer();
+  }
+
+  await annotate(buf, path.join(OUT, item.out), {
     banner: item.banner,
     highlights: item.highlights ?? [],
     masks: item.masks ?? [],

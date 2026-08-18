@@ -239,10 +239,15 @@ scripts/
   Set-GatewayPolicy.ps1        apply a policy file on its own
   inspect-proxy.mjs            see exactly what Claude Code sends
 docs/
+  SETUP.md                     prerequisites, roles, deployment
+  ONBOARDING.md                add/change/revoke access; developer setup
+  MONITORING.md                metrics, chargeback, KQL, alerts
+  DEBUGGING.md                 isolate a failure layer by layer
+  COMPARISON.md                Foundry vs Anthropic direct
   UI-GUIDE.md                  click-by-click walkthrough with screenshots
   ARCHITECTURE.md              how it works, and why each piece is there
-  ONBOARDING.md                hand this to a developer
-  TROUBLESHOOTING.md           every failure mode found while building this
+  GOVERNANCE-CHECKS.md         command reference for verifying controls
+  TROUBLESHOOTING.md           symptom -> fix lookup
 guide/
   capture.mjs                  Playwright capture of the portal flow
   compose.mjs                  banner treatment for existing stills
@@ -256,10 +261,22 @@ JWT Claude Code sends and prints the claims, without ever logging the token.
 
 ## Documentation
 
+Start here:
+
+| Guide | For | Covers |
+|-------|-----|--------|
+| [Setup](docs/SETUP.md) | platform team | prerequisites, **roles and permissions**, deployment, closing the bypass |
+| [Onboarding](docs/ONBOARDING.md) | platform team + developers | add a developer, change tiers, revoke; the developer's own setup |
+| [Monitoring](docs/MONITORING.md) | whoever owns the spend | metrics, filters, chargeback, KQL, alerts |
+| [Debug](docs/DEBUGGING.md) | anyone | isolate a failure layer by layer |
+
+Reference:
+
+- [Foundry vs Anthropic direct](docs/COMPARISON.md) — what changes, and what you give up
 - [UI guide](docs/UI-GUIDE.md) — click-by-click, with annotated screenshots
 - [Architecture](docs/ARCHITECTURE.md) — request path, identity model, design decisions
-- [Onboarding](docs/ONBOARDING.md) — developer-facing instructions
-- [Troubleshooting](docs/TROUBLESHOOTING.md) — the traps, and how to get out of them
+- [Governance checks](docs/GOVERNANCE-CHECKS.md) — command reference for verifying controls
+- [Troubleshooting](docs/TROUBLESHOOTING.md) — symptom → fix lookup
 - [Screenshot tooling](guide/README.md) — regenerate the guide against your own deployment
 
 ---
