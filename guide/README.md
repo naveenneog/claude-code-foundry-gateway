@@ -14,10 +14,16 @@ regardless of where the pixels came from.
 
 ## Setup
 
+The gateway itself needs none of this — the tooling is only for regenerating
+the guide's images.
+
 ```bash
-npm install playwright sharp
-npx playwright install chromium
+npm install
 ```
+
+The capture launches your installed **Microsoft Edge** (`channel: 'msedge'`),
+so no browser download is needed. If Edge is not present, run
+`npx playwright install chromium` and drop the `channel` option.
 
 ## Capturing
 

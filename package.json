@@ -1,0 +1,15 @@
+{
+  "name": "claude-code-foundry-gateway-guide",
+  "private": true,
+  "type": "module",
+  "description": "Screenshot tooling for the Claude Code on Microsoft Foundry gateway accelerator. Not required to deploy the gateway.",
+  "scripts": {
+    "guide:auth": "node guide/auth.mjs",
+    "guide:capture": "node guide/capture.mjs",
+    "guide:compose": "node guide/compose.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1",
+    "sharp": "^0.34.4"
+  }
+}

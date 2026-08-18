@@ -317,24 +317,23 @@ The portal captures are produced by a Playwright script in `guide/`, so they can
 be refreshed against your own deployment rather than reused from this repo.
 
 ```bash
-npm install playwright sharp
-npx playwright install chromium
+npm install     # playwright + sharp; the capture uses your installed Edge
 ```
 
 ```powershell
 # one-time sign-in — approve the Authenticator prompt when it appears.
 # The session is stored in .pw-profile and reused afterwards.
-node guide/auth.mjs
+npm run guide:auth
 
-# capture; omit ids to capture everything
+# capture; append step ids to capture only those
 $env:AZURE_SUB    = "<subscription-id>"
 $env:AZURE_TENANT = "<tenant-id>"
 $env:APIM_NAME    = "<apim-name>"
 $env:GATEWAY_RG   = "<resource-group>"
-node guide/capture.mjs
+npm run guide:capture
 
 # re-apply banners to already-captured stills
-node guide/compose.mjs
+npm run guide:compose
 ```
 
 Two behaviours worth knowing:
