@@ -73,17 +73,17 @@ const ITEMS = [
   {
     src: 'docs/images/ext-01-panel.png',
     out: 'b2-vscode-panel.png',
-    banner: { n: 12, title: 'The extension talking to your gateway', note: 'No API key anywhere on the machine' },
+    banner: { n: 11, title: 'The extension talking to your gateway', note: 'No API key anywhere on the machine' },
   },
   {
     src: 'docs/images/ext-02-answer.png',
     out: 'b3-vscode-answer.png',
-    banner: { n: 13, title: 'A real answer from your own deployment', note: 'Served by claude-sonnet-5 in your Foundry resource' },
+    banner: { n: 12, title: 'A real answer from your own deployment', note: 'Served by claude-sonnet-5 in your Foundry resource' },
   },
   {
     src: 'docs/images/cli-01-verify.png',
     out: 'b4-cli-verify.png',
-    banner: { n: 14, title: 'Verify the direct Foundry path', note: './Test-ClaudeFoundry.ps1 — 7 checks, no gateway involved' },
+    banner: { n: 13, title: 'Verify the direct Foundry path', note: './Test-ClaudeFoundry.ps1 — 7 checks, no gateway involved' },
     masks: [
       { x: 0.080, y: 0.279, w: 0.450, h: 0.033, text: 'dev@contoso.com / your-subscription', align: 'start' },
     ],
@@ -91,7 +91,7 @@ const ITEMS = [
   {
     src: 'docs/images/cli-02-status.png',
     out: 'b5-cli-status.png',
-    banner: { n: 15, title: 'claude /status confirms which provider is in effect', note: 'Terminal only — /status is not available in the VS Code panel' },
+    banner: { n: 14, title: 'claude /status confirms which provider is in effect', note: 'Terminal only — /status is not available in the VS Code panel' },
   },
 ];
 

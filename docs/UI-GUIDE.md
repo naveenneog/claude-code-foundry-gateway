@@ -199,9 +199,9 @@ cannot be spoofed by editing a client config.
 
 Nothing in this part requires elevated rights, and no API key is issued.
 
-### Step 10 — Install the VS Code extension
+### Step 9 — Install the VS Code extension
 
-![Step 10 — the Claude Code extension on the VS Code Marketplace, with Install ringed](guide/b1-marketplace.png)
+![Step 9 — the Claude Code extension on the VS Code Marketplace, with Install ringed](guide/b1-marketplace.png)
 
 ```bash
 code --install-extension anthropic.claude-code
@@ -210,7 +210,7 @@ code --install-extension anthropic.claude-code
 The extension bundles its own engine, so this is the only install needed for the
 IDE experience.
 
-### Step 11 — Point it at the gateway
+### Step 10 — Point it at the gateway
 
 Sign in first — this is what supplies the identity the gateway meters:
 
@@ -238,17 +238,17 @@ export ANTHROPIC_AUTH_TOKEN="$(az account get-access-token \
 
 Restart VS Code so the extension host picks the variables up.
 
-### Step 12 — Open the panel
+### Step 11 — Open the panel
 
-![Step 12 — the Claude Code panel in VS Code running against the gateway](guide/b2-vscode-panel.png)
+![Step 11 — the Claude Code panel in VS Code running against the gateway](guide/b2-vscode-panel.png)
 
 The panel behaves exactly as it does against the public API. The difference is
 entirely on the wire: every request carries the developer's Entra token to your
 gateway, and the gateway swaps in its own managed identity to reach Foundry.
 
-### Step 13 — Confirm a real answer
+### Step 12 — Confirm a real answer
 
-![Step 13 — Claude reading a file in the workspace and answering](guide/b3-vscode-answer.png)
+![Step 12 — Claude reading a file in the workspace and answering](guide/b3-vscode-answer.png)
 
 The response is served by `claude-sonnet-5` in your own Foundry resource. No
 prompt or completion leaves your tenant boundary.
@@ -257,9 +257,9 @@ prompt or completion leaves your tenant boundary.
 
 ## Verifying from the terminal
 
-### Step 14 — Check the direct Foundry path
+### Step 13 — Check the direct Foundry path
 
-![Step 14 — Test-ClaudeFoundry.ps1 with all seven checks passing](guide/b4-cli-verify.png)
+![Step 13 — Test-ClaudeFoundry.ps1 with all seven checks passing](guide/b4-cli-verify.png)
 
 ```powershell
 ./Test-ClaudeFoundry.ps1
@@ -270,9 +270,9 @@ deployment discovery, the Messages API, and Claude Code end to end. It
 deliberately bypasses the gateway, which makes it the right tool for isolating
 whether a failure is in Foundry or in your policy.
 
-### Step 15 — Check which provider is in effect
+### Step 14 — Check which provider is in effect
 
-![Step 15 — claude /status showing API provider: Microsoft Foundry](guide/b5-cli-status.png)
+![Step 14 — claude /status showing API provider: Microsoft Foundry](guide/b5-cli-status.png)
 
 ```bash
 claude

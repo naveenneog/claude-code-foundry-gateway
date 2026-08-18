@@ -127,11 +127,11 @@ const STEPS = [
     maskIdentity: false,
     settle: 6000,
     banner: {
-      n: 10,
+      n: 9,
       title: 'Developer step — install the extension',
       note: 'code --install-extension anthropic.claude-code',
     },
-    targets: [{ sel: '.install-button-container, .ux-oneclick-install-button-container', n: 10, pad: 6 }],
+    targets: [{ sel: '.install-button-container, .ux-oneclick-install-button-container', n: 9, pad: 6 }],
   },
 ];
 
