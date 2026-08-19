@@ -281,6 +281,19 @@ Reference:
 
 ---
 
+## Companion accelerator
+
+**[claude-desktop-foundry](https://github.com/naveenneog/claude-desktop-foundry)** —
+the same treatment for **Claude Desktop**, the GUI client.
+
+It reuses *this* gateway, so if you already run it there is no new Azure
+infrastructure: generate a managed-policy payload, deploy it with Intune or your
+MDM, and Desktop traffic lands under the same budgets, tiering and chargeback.
+
+Entitle a person once in the Entra group and they get both clients.
+
+---
+
 ## Contributing
 
 Issues and pull requests welcome. This accelerator was built and verified end to end against a
