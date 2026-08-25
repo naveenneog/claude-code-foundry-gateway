@@ -202,23 +202,52 @@ Write-Host '5. VS Code extension host' -ForegroundColor White
 $extRoot = "$env:USERPROFILE\.vscode\extensions"
 $latest = Get-ChildItem $extRoot -Directory -Filter 'anthropic.claude-code-*' -ErrorAction SilentlyContinue |
           Sort-Object LastWriteTime -Descending | Select-Object -First 1
-$procs = Get-Process -Name Code -ErrorAction SilentlyContinue
+
+# Two traps here, and getting either wrong gives a confident wrong answer.
+#
+# "Developer: Reload Window" restarts the renderer and the extension host but
+# leaves the main VS Code process running, so the start time of the oldest
+# Code.exe never changes on reload - it is not evidence either way.
+#
+# And current VS Code does not run the host as --type=extensionHost; on Windows
+# it is a utility process with a node.mojom.NodeService sub-type. Searching for
+# "extensionHost" finds nothing and looks like the host is missing.
+$cim = Get-CimInstance Win32_Process -Filter "Name='Code.exe'" -ErrorAction SilentlyContinue
 
 if (-not $latest) { Warn 'extension not installed' }
-elseif (-not $procs) { Info 'VS Code is not running - it will load the current build on next start' }
+elseif (-not $cim) { Info 'VS Code is not running - it will load the current build on next start' }
 else {
-    $oldest = $procs | Sort-Object StartTime | Select-Object -First 1
-    Info "extension $($latest.Name -replace '^anthropic\.claude-code-','' -replace '-win32-x64$','') installed $($latest.LastWriteTime)"
-    Info "VS Code running since $($oldest.StartTime)"
-    if ($oldest.StartTime -lt $latest.LastWriteTime) {
-        $stale = Get-ChildItem $extRoot -Directory -Filter 'anthropic.claude-code-*' |
-                 Where-Object { $_.LastWriteTime -gt $oldest.StartTime }
-        Bad "VS Code predates the extension update by $([int](($latest.LastWriteTime - $oldest.StartTime).TotalHours)) hours"
-        Info "$($stale.Count) extension update(s) have landed since this window opened"
-        Info 'Fix: Ctrl+Shift+P -> Developer: Reload Window'
-        $issues += 'stale extension host'
+    $hosts = foreach ($p in $cim) {
+        $cl = [string]$p.CommandLine
+        $type = if ($cl -match '--type=([a-zA-Z]+)') { $Matches[1] } else { 'main' }
+        $sub  = if ($cl -match '--utility-sub-type=([^\s"]+)') { $Matches[1] } else { '' }
+        if (($type -match 'extensionHost') -or ($type -eq 'utility' -and $sub -match 'NodeService')) {
+            $started = if ($p.CreationDate -is [datetime]) { $p.CreationDate }
+                       else {
+                           try { [Management.ManagementDateTimeConverter]::ToDateTime([string]$p.CreationDate) }
+                           catch { (Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue).StartTime }
+                       }
+            [pscustomobject]@{ ProcId = $p.ProcessId; Started = $started }
+        }
     }
-    else { Ok 'extension host has the current build' }
+    $hosts = @($hosts)
+
+    Info "extension $($latest.Name -replace '^anthropic\.claude-code-','' -replace '-win32-x64$','') installed $($latest.LastWriteTime)"
+
+    if ($hosts.Count -eq 0) { Warn 'could not identify the extension host process' }
+    else {
+        $stale = @($hosts | Where-Object { $_.Started -lt $latest.LastWriteTime })
+        Info "$($hosts.Count) extension host(s) running - one per open window"
+        if ($stale.Count -gt 0) {
+            $oldest = ($stale | Sort-Object Started | Select-Object -First 1)
+            Bad "$($stale.Count) of $($hosts.Count) predate the extension update"
+            Info "oldest running $([int](((Get-Date) - $oldest.Started).TotalHours)) hours (started $($oldest.Started))"
+            Info 'Fix: in EACH affected window, Ctrl+Shift+P -> Developer: Reload Window'
+            Info 'Reloading one window does not fix the others.'
+            $issues += 'stale extension host'
+        }
+        else { Ok 'every extension host has the current build' }
+    }
 }
 
 # -------------------------------------------------------------------- verdict

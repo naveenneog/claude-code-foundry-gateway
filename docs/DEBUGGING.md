@@ -81,13 +81,27 @@ updates**, with a healthy tenant, a healthy gateway, valid tokens, correct
 settings on both the CLI and VS Code side, and a `claude -p` that returned
 normally and reached the gateway.
 
+**Each open window has its own extension host.** Reloading one does not fix the
+others — in the case above there were four, all stale.
+
 ```powershell
-# is the running VS Code older than the installed extension?
-./scripts/Debug-ClaudeCode.ps1 -GatewayBaseUrl <url>   # section 5
+# is any extension host older than the installed extension?
+./scripts/Debug-ClaudeCode.ps1 -GatewayBaseUrl <url> -SkipLiveCall   # section 5
 ```
 
-**Fix:** `Ctrl+Shift+P` → **Developer: Reload Window**. If it persists, quit VS
-Code entirely — a stale helper process can survive a reload.
+**Fix:** in **each** affected window, `Ctrl+Shift+P` → **Developer: Reload
+Window**. If it persists, quit VS Code entirely — a stale helper process can
+survive a reload.
+
+> **Do not check this by looking at the Code.exe start time.** Reload Window
+> restarts the renderer and the extension host but leaves the main process
+> running, so that timestamp never changes and the check reports "stale"
+> forever, including after a successful reload. The first version of
+> `Debug-ClaudeCode.ps1` had exactly this bug.
+>
+> The host is also not `--type=extensionHost` on current builds — on Windows it
+> is a utility process with a `node.mojom.NodeService` sub-type. Searching for
+> `extensionHost` finds nothing and looks like the host is missing.
 
 > Suspect this first whenever the **CLI works and the panel does not**. That
 > asymmetry almost always means the two are running different builds, or reading
