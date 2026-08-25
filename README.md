@@ -233,10 +233,12 @@ infra/
   policy.xml                   the governance policy
   azuredeploy.json             compiled ARM, for the Deploy to Azure button
 scripts/
+  Debug-ClaudeCode.ps1         end-to-end health check, run this first
   Sync-ClaudeAccess.ps1        Entra groups -> APIM named values
   Show-Governance.ps1          verify all four controls
   Get-FoundryValues.ps1        discover your Foundry values (-Mask to share)
   Set-GatewayPolicy.ps1        apply a policy file on its own
+  Test-FoundryDirect.ps1       verify Foundry with the gateway bypassed
   inspect-proxy.mjs            see exactly what Claude Code sends
 docs/
   SETUP.md                     prerequisites, roles, deployment

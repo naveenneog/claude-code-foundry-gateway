@@ -41,6 +41,7 @@ accelerator, not a hypothetical.
 | `CLAUDE_CODE_USE_AZURE` appears to do nothing | It does not exist. The variable is `CLAUDE_CODE_USE_FOUNDRY=1`. |
 | `/status` says it is not available | `/status` works in the terminal UI, not the VS Code panel. Use `claude auth status`. |
 | Extension prompts for Anthropic sign-in | It has not picked up the settings. Run **Developer: Reload Window**; if it persists, add the same variables under `claudeCode.environmentVariables` in VS Code user settings. Shell exports do not reach the extension. |
+| The panel fails but the CLI works | The extension host is running an older build than the one installed on disk — it does not pick up auto-updates until the window reloads. A long-lived window can be several versions behind. **Developer: Reload Window**, and quit VS Code entirely if that is not enough. `Debug-ClaudeCode.ps1` reports this. |
 | Windows: a credential script returns *"Windows Subsystem for Linux has no installed distributions"* | Inside Git Bash a bare `az` resolves to the WSL shim. Use `az.cmd`. Note `command -v az.cmd` also fails because bash ignores `PATHEXT`, so probe by running the candidate and checking the result starts with `eyJ`. |
 
 ## Monitoring

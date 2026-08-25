@@ -9,12 +9,45 @@ below it.
 
 ---
 
+## Step 0 — Run the health check
+
+Before reading any of this, run the whole bisection in one command:
+
+```powershell
+./scripts/Debug-ClaudeCode.ps1 `
+    -GatewayBaseUrl https://<apim>.azure-api.net/claude `
+    -AppInsightsId <app-insights-app-id>
+```
+
+It checks sign-in and token expiry, the gateway per model, CLI and VS Code
+configuration, a real end-to-end call, and whether the VS Code extension host is
+stale — then names the layer at fault.
+
+`-AppInsightsId` is the Application Insights **AppId**, not the resource id:
+
+```bash
+az resource show -g <rg> -n appi-claude-gateway \
+  --resource-type Microsoft.Insights/components --query properties.AppId -o tsv
+```
+
+Supplying it enables the check that matters most: whether the call **arrived**.
+A successful `claude -p` that produces no gateway traffic means Claude Code is
+answering from somewhere other than your gateway, which no other check catches.
+
+> Telemetry ingestion lags by a couple of minutes, so the script waits 90
+> seconds before querying. Do not shorten that — a query run immediately after
+> the call returns nothing and looks exactly like a bypass. That misdiagnosis is
+> why the wait is there.
+
+---
+
 ## The request path
 
 Every failure lives at exactly one of these hops.
 
 ```
   developer machine
+        │  0. VS Code extension host is current?
         │  1. az login → Entra token (oid, upn)
         ▼
   APIM gateway
@@ -30,6 +63,36 @@ Every failure lives at exactly one of these hops.
         ▼
   claude-sonnet-5 / claude-opus-5
 ```
+
+---
+
+## Everything checks out but the panel is still broken
+
+Worth its own section because it is common, it looks nothing like a
+configuration fault, and every other check passes.
+
+**The VS Code extension host holds the build that was current when the window
+opened.** The extension auto-updates on disk; the running host does not pick
+that up. A window left open for days can be several versions behind, and the
+symptom is a Claude Code panel that fails while the CLI works perfectly.
+
+Observed case: a window running for **171 hours** across **7 extension
+updates**, with a healthy tenant, a healthy gateway, valid tokens, correct
+settings on both the CLI and VS Code side, and a `claude -p` that returned
+normally and reached the gateway.
+
+```powershell
+# is the running VS Code older than the installed extension?
+./scripts/Debug-ClaudeCode.ps1 -GatewayBaseUrl <url>   # section 5
+```
+
+**Fix:** `Ctrl+Shift+P` → **Developer: Reload Window**. If it persists, quit VS
+Code entirely — a stale helper process can survive a reload.
+
+> Suspect this first whenever the **CLI works and the panel does not**. That
+> asymmetry almost always means the two are running different builds, or reading
+> different configuration — shell exports never reach the extension host, so
+> VS Code needs `claudeCode.environmentVariables` or `.claude/settings.json`.
 
 ---
 
@@ -247,6 +310,7 @@ claude auth status
 | `baseURL and resource are mutually exclusive` | both `ANTHROPIC_FOUNDRY_BASE_URL` and `ANTHROPIC_FOUNDRY_RESOURCE` set — keep only the base URL for gateway mode |
 | `CLAUDE_CODE_USE_AZURE` has no effect | it does not exist; the variable is `CLAUDE_CODE_USE_FOUNDRY` |
 | Extension prompts for Anthropic sign-in | settings not picked up. **Developer: Reload Window**; shell exports do **not** reach the extension host — use `.claude/settings.json` or `claudeCode.environmentVariables` |
+| Panel fails while the CLI works | the extension host is running an older build than the one on disk. Reload the window — see [above](#everything-checks-out-but-the-panel-is-still-broken) |
 | `/status` unavailable | terminal-only; use `claude auth status` in the panel |
 
 ### See exactly what is on the wire
@@ -284,6 +348,8 @@ If they fail, it is platform-wide. Start at Step 5.
 
 | Signal | Layer | Section |
 |--------|-------|---------|
+| Everything passes but the panel fails | stale extension host | [above](#everything-checks-out-but-the-panel-is-still-broken) |
+| CLI works, VS Code does not | different build or different config | [above](#everything-checks-out-but-the-panel-is-still-broken) |
 | `x-gateway-error` present | gateway rejected it | Steps 3–4 |
 | `x-gateway-error` absent, `401` | Foundry rejected the gateway | Step 5 |
 | No `x-governed-by`, no Live metrics traffic | never left the client | Step 8 |
