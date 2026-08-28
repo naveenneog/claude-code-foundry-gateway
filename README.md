@@ -303,7 +303,6 @@ docs/
   MONITORING.md                metrics, chargeback, KQL, alerts
   DEBUGGING.md                 isolate a failure layer by layer
   COMPARISON.md                Foundry vs Anthropic direct
-  UI-GUIDE.md                  click-by-click walkthrough with screenshots
   ARCHITECTURE.md              how it works, and why each piece is there
   GOVERNANCE-CHECKS.md         command reference for verifying controls
   TROUBLESHOOTING.md           symptom -> fix lookup
@@ -320,7 +319,17 @@ JWT Claude Code sends and prints the claims, without ever logging the token.
 
 ## Documentation
 
-Start here:
+**Find your path:**
+
+| You are… | Read, in order |
+|----------|----------------|
+| **Standing this up for the first time** | [Setup](docs/SETUP.md) → [Onboarding Part A](docs/ONBOARDING.md#part-a--platform-team) → [Monitoring](docs/MONITORING.md) |
+| **A developer who was just given access** | [Onboarding Part B](docs/ONBOARDING.md#part-b--developer) — nothing else |
+| **Deciding whether to do this at all** | [Comparison](docs/COMPARISON.md) → [Architecture](docs/ARCHITECTURE.md) |
+| **Fixing something that broke** | [Debug](docs/DEBUGGING.md) — it names the layer, then sends you on |
+| **Being asked "who spent what?"** | [Monitoring](docs/MONITORING.md) |
+
+**The four guides:**
 
 | Guide | For | Covers |
 |-------|-----|--------|
@@ -329,14 +338,13 @@ Start here:
 | [Monitoring](docs/MONITORING.md) | whoever owns the spend | metrics, filters, chargeback, KQL, alerts |
 | [Debug](docs/DEBUGGING.md) | anyone | isolate a failure layer by layer |
 
-Reference:
+**Reference, when you need it:**
 
 - [Foundry vs Anthropic direct](docs/COMPARISON.md) — what changes, and what you give up
-- [UI guide](docs/UI-GUIDE.md) — click-by-click, with annotated screenshots
 - [Architecture](docs/ARCHITECTURE.md) — request path, identity model, design decisions
 - [Governance checks](docs/GOVERNANCE-CHECKS.md) — command reference for verifying controls
-- [Troubleshooting](docs/TROUBLESHOOTING.md) — symptom → fix lookup
-- [Screenshot tooling](guide/README.md) — regenerate the guide against your own deployment
+- [Troubleshooting](docs/TROUBLESHOOTING.md) — symptom → fix lookup, when you already know what broke
+- [Screenshot tooling](guide/README.md) — regenerate the screenshots against your own deployment
 
 ---
 

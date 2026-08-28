@@ -177,7 +177,21 @@ Write-Ok "subscription: $subName"
 Write-Step 'Foundry account'
 if (-not $FoundryAccount) {
     Write-Note 'Looking for accounts with a Claude deployment...'
-    $accounts = az cognitiveservices account list --query "[].{name:name, rg:resourceGroup, loc:location}" -o json | ConvertFrom-Json
+
+    # Only AIServices and OpenAI-kind accounts can host a Claude deployment, so
+    # filter server-side first. Without this the loop below queries every
+    # Cognitive Services account in the subscription - 40+ on a large one -
+    # which is slow and floods the console.
+    $accounts = az cognitiveservices account list `
+        --query "[?kind=='AIServices' || kind=='OpenAI'].{name:name, rg:resourceGroup, loc:location}" -o json |
+        ConvertFrom-Json
+    $accounts = @($accounts)
+
+    if ($accounts.Count -eq 0) {
+        Write-Bad 'No AIServices or OpenAI accounts found in this subscription.'
+        throw 'No candidate Foundry account.'
+    }
+    Write-Note "checking $($accounts.Count) candidate account(s)..."
 
     $withClaude = @()
     foreach ($a in $accounts) {

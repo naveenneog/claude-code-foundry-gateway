@@ -163,7 +163,19 @@ ok_ "subscription: $SUB_NAME"
 step_ "Foundry account"
 if [ -z "$FOUNDRY_ACCOUNT" ]; then
   note_ "looking for accounts with a Claude deployment..."
-  accounts="$(az cognitiveservices account list --query "[].{name:name,rg:resourceGroup,loc:location}" -o json)"
+
+  # Only AIServices and OpenAI-kind accounts can host a Claude deployment, so
+  # filter server-side first. Without this the loop below queries every
+  # Cognitive Services account in the subscription - 40+ on a large one - which
+  # is slow and floods the console.
+  accounts="$(az cognitiveservices account list --query "[?kind=='AIServices' || kind=='OpenAI'].{name:name,rg:resourceGroup,loc:location}" -o json)"
+  cand="$(printf '%s' "$accounts" | jq 'length')"
+  if [ "$cand" -eq 0 ]; then
+    bad_ "no AIServices or OpenAI accounts found in this subscription"
+    exit 1
+  fi
+  note_ "checking $cand candidate account(s)..."
+
   matches="[]"
   while IFS=$'\t' read -r nm rg loc; do
     [ -z "$nm" ] && continue

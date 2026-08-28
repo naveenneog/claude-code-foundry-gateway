@@ -36,6 +36,8 @@ a client-supplied header and cannot be spoofed by editing a config file.
 
 ## 2. The chart — step by step
 
+![Application Insights Metrics: the metric namespace and Apply splitting controls](guide/a8-chargeback.png)
+
 ![Total tokens split by developer, with the aggregation, splitting control and legend ringed](guide/c1-user-split.png)
 
 1. **Application Insights → Monitoring → Metrics**

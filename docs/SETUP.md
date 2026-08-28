@@ -5,9 +5,6 @@ the gateway once for the organisation.
 
 Time: about 60 minutes, of which 40 is unattended APIM provisioning.
 
-Click-by-click screenshots for these steps are in the
-[UI guide](UI-GUIDE.md).
-
 ---
 
 ## 1. Prerequisites
@@ -150,6 +147,8 @@ budget without creating anything.
 
 ### Option A — the interactive wizard (recommended)
 
+![The accelerator repository, with the Deploy to Azure button highlighted](guide/a1-repo.png)
+
 ```powershell
 git clone https://github.com/naveenneog/claude-code-foundry-gateway
 cd claude-code-foundry-gateway
@@ -167,6 +166,11 @@ It lists only Foundry accounts that actually have a Claude deployment, asks for
 every budget with a default already filled in, and shows a summary before
 creating anything. Pressing Enter throughout gives a working, governed
 deployment.
+
+![The wizard running: every prompt shows its default in brackets, and the summary appears before anything is created](images/run-admin-wizard.png)
+
+Everything in brackets is the default — Enter accepts it. The one typed value
+above is `30000`, overriding the standard tier's tokens per minute.
 
 It then deploys the Bicep template, enables the managed identity, creates the
 role assignment, applies the policy, creates the Entra groups, syncs
@@ -220,6 +224,8 @@ name; everything else is defaulted. Afterwards you still need to run:
 ./scripts/Show-Governance.ps1 -ApimName <apim> -ResourceGroup <rg>
 ```
 
+![All four governance controls passing: entitlement, tier enforcement, per-minute throttling, and chargeback attribution](guide/a7-controls.png)
+
 Four things must pass:
 
 | # | Control | Failure means |
@@ -231,11 +237,26 @@ Four things must pass:
 
 Full command reference: [GOVERNANCE-CHECKS.md](GOVERNANCE-CHECKS.md).
 
-### 4.1 Close the bypass — do not skip this
+### 4.1 Confirm the tier is v2
+
+The single most common silent failure. On a classic tier the policies attach,
+the API returns 200, and every token count is **zero** — so the budgets above
+never trigger.
+
+![API Management overview with the pricing tier showing Basic v2](guide/a3-apim-overview.png)
+
+```bash
+az apim show -g <rg> -n <apim> --query "sku.name" -o tsv
+# expect: BasicV2, StandardV2 or PremiumV2
+```
+
+### 4.2 Close the bypass — do not skip this
 
 The gateway only governs traffic that goes *through* it. Anyone holding
 **Cognitive Services User** directly on the Foundry account can point Claude
 Code straight at Foundry and ignore every budget you just configured.
+
+![The Foundry account's Access control (IAM) blade, where the role assignments live](guide/a5-foundry.png)
 
 ```bash
 az role assignment list \
@@ -265,4 +286,3 @@ az role assignment delete --assignee <principal-id> \
 | Watch usage and cost | [Monitoring guide](MONITORING.md) |
 | Something is broken | [Debug guide](DEBUGGING.md) |
 | Justify this to a stakeholder | [Foundry vs direct Anthropic](COMPARISON.md) |
-| See it click by click | [UI guide](UI-GUIDE.md) |

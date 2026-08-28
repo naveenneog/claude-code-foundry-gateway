@@ -23,6 +23,8 @@ It checks sign-in and token expiry, the gateway per model, CLI and VS Code
 configuration, a real end-to-end call, and whether the VS Code extension host is
 stale — then names the layer at fault.
 
+![The health check: sign-in, gateway per model, client configuration, and the extension host age, with the failing layer named](images/run-governance-checks.png)
+
 `-AppInsightsId` is the Application Insights **AppId**, not the resource id:
 
 ```bash
@@ -273,7 +275,7 @@ API, the Claude Code install, provider resolution, and an end-to-end call.
 
 > This needs you to hold `Cognitive Services User` directly, which by design you
 > normally should not. Grant it temporarily and remove it afterwards — see
-> [Setup §4.1](SETUP.md#41-close-the-bypass--do-not-skip-this).
+> [Setup §4.2](SETUP.md#42-close-the-bypass--do-not-skip-this).
 
 Two `404`s that look alike and are not:
 
