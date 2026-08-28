@@ -97,16 +97,26 @@ az login
 ./Install-ClaudeGateway.ps1
 ```
 
+**macOS and Linux** — same wizard, same Bicep, same result:
+
+```bash
+./install-claude-gateway.sh
+```
+
+Needs `az` and `jq`. The entitlement sync step also wants PowerShell 7
+(`pwsh`); without it the script tells you the one command to run afterwards.
+
 Preview without changing anything:
 
 ```powershell
-./Install-ClaudeGateway.ps1 -WhatIf
+./Install-ClaudeGateway.ps1 -WhatIf     # or: ./install-claude-gateway.sh --what-if
 ```
 
 Unattended, taking every default:
 
 ```powershell
 ./Install-ClaudeGateway.ps1 -FoundryAccount ai-contoso -Yes
+./install-claude-gateway.sh --foundry-account ai-contoso --yes
 ```
 
 `deploy.ps1` is still there for anyone scripting against it; the wizard wraps
@@ -159,7 +169,13 @@ Outlook. `-Send` tries Microsoft Graph and falls back cleanly.
 **3. They run one command**
 
 ```powershell
+# Windows
 .\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json
+```
+
+```bash
+# macOS and Linux
+./setup-claude-workstation.sh --config ./claude-gateway.json
 ```
 
 No admin rights. Checks prerequisites, installs what is missing, and configures
@@ -267,9 +283,12 @@ infra/
   foundry-role.bicep           Cognitive Services User for the gateway identity
   policy.xml                   the governance policy
   azuredeploy.json             compiled ARM, for the Deploy to Azure button
-Install-ClaudeGateway.ps1        interactive admin setup - start here
+Install-ClaudeGateway.ps1        interactive admin setup - start here (Windows)
+install-claude-gateway.sh        the same, for macOS and Linux
 scripts/
-  Setup-ClaudeWorkstation.ps1  one-command developer setup, all three clients
+  Setup-ClaudeWorkstation.ps1  one-command developer setup (Windows)
+  setup-claude-workstation.sh  the same, for macOS and Linux
+  get-foundry-token.*          credential helper for Claude Desktop
   New-OnboardingEmail.ps1      generate the developer's onboarding email
   Debug-ClaudeCode.ps1         end-to-end health check, run this first
   Sync-ClaudeAccess.ps1        Entra groups -> APIM named values

@@ -179,7 +179,16 @@ if (-not $FoundryAccount) {
     if (-not $Location) { $Location = $sel.Loc }
 }
 if (-not $FoundryResourceGroup) {
+    # Same guard as the shell version: an az call that fails silently leaves
+    # these empty and the deployment then fails with something far less
+    # obvious than "I could not find your account".
     $FoundryResourceGroup = az cognitiveservices account list --query "[?name=='$FoundryAccount'].resourceGroup | [0]" -o tsv
+}
+if (-not $FoundryResourceGroup) {
+    Write-Bad "Could not resolve the resource group for '$FoundryAccount'."
+    Write-Note 'Check the name and that you can see it: az cognitiveservices account list -o table'
+    Write-Note 'Or pass -FoundryResourceGroup explicitly.'
+    throw 'Foundry resource group not resolved.'
 }
 Write-Ok "$FoundryAccount (rg $FoundryResourceGroup)"
 
@@ -187,6 +196,11 @@ Write-Ok "$FoundryAccount (rg $FoundryResourceGroup)"
 
 Write-Step 'Where to put the gateway'
 if (-not $Location) { $Location = az cognitiveservices account show -g $FoundryResourceGroup -n $FoundryAccount --query location -o tsv }
+if (-not $Location) {
+    Write-Bad "Could not resolve the location of '$FoundryAccount'."
+    Write-Note 'Pass -Location explicitly.'
+    throw 'Location not resolved.'
+}
 $ResourceGroup = if ($ResourceGroup) { $ResourceGroup } else {
     Read-Default -Prompt 'Resource group' -Default $FoundryResourceGroup `
         -Help 'Created if it does not exist. Same region as Foundry keeps latency down.'

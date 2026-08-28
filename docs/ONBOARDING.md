@@ -348,7 +348,13 @@ that; you only need to be in the group, which you already are.
 ## The short version — one command
 
 ```powershell
+# Windows
 .\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json
+```
+
+```bash
+# macOS and Linux
+./setup-claude-workstation.sh --config ./claude-gateway.json
 ```
 
 No administrator rights needed. It checks what you already have, installs
@@ -368,13 +374,20 @@ Those restarts matter: all three read their configuration at startup.
 
 Useful switches:
 
-| Switch | Effect |
-|--------|--------|
-| `-SkipInstall` | configure only, install nothing |
-| `-SkipDesktop` / `-SkipVSCode` | leave that client alone |
-| `-NoCowork` | configure Desktop without the Cowork tab |
+| Windows | macOS / Linux | Effect |
+|---------|---------------|--------|
+| `-SkipInstall` | `--skip-install` | configure only, install nothing |
+| `-SkipDesktop` / `-SkipVSCode` | `--skip-desktop` / `--skip-vscode` | leave that client alone |
+| `-NoCowork` | `--no-cowork` | configure Desktop without the Cowork tab |
 
 Re-run it any time — it reconciles rather than duplicating.
+
+> **macOS and Linux** need `jq`, and the script installs it if your package
+> manager is one it recognises (Homebrew, apt, dnf, pacman, zypper).
+>
+> If `npm install -g` fails on Linux, it is almost always a non-writable global
+> prefix rather than anything to do with Claude:
+> `npm config set prefix ~/.npm-global && export PATH=~/.npm-global/bin:$PATH`
 
 The rest of this section is what the script does, for anyone who would rather
 do it by hand or needs to understand a failure.
