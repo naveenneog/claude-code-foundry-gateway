@@ -91,55 +91,90 @@ cd claude-code-foundry-gateway
 
 az login
 
-# Auto-discovers a Foundry account that has Claude deployments
-./deploy.ps1
-
-# ...or be explicit
-./deploy.ps1 -FoundryAccount ai-contoso-foundry -FoundryResourceGroup rg-ai -ResourceGroup rg-claude-gateway
+# Interactive. Discovers your Foundry account, asks for each budget with a
+# sensible default already filled in, and shows a summary before it creates
+# anything. Enter throughout gives a working, governed deployment.
+./Install-ClaudeGateway.ps1
 ```
 
 Preview without changing anything:
 
 ```powershell
-./deploy.ps1 -WhatIf
+./Install-ClaudeGateway.ps1 -WhatIf
 ```
 
-Deployment takes about **five minutes** (API Management v2 provisions in minutes; classic tiers
-take 30–45).
+Unattended, taking every default:
 
-### What `deploy.ps1` does
+```powershell
+./Install-ClaudeGateway.ps1 -FoundryAccount ai-contoso -Yes
+```
 
-1. Finds your Foundry account and its Claude deployment names, and maps the `sonnet` / `opus` /
-   `haiku` aliases to deployments that actually exist
-2. Deploys APIM (v2, system-assigned identity), Log Analytics and Application Insights with
-   custom metric dimensions enabled
-3. Creates the Claude API, its operations, and the governance policy
-4. Grants the gateway identity `Cognitive Services User` on your Foundry account
-5. Creates the `claude-code-standard` and `claude-code-premium` Entra groups
-6. Syncs membership into the gateway
-7. Writes `claude-settings.json` — the file you hand to developers
+`deploy.ps1` is still there for anyone scripting against it; the wizard wraps
+the same Bicep and produces the same result.
+
+### What it does
+
+1. Signs you in, picks the subscription, and finds Foundry accounts that
+   actually have a Claude deployment
+2. Collects every budget — tokens per minute and per day, per tier, plus a
+   request ceiling — each with a default in place
+3. Shows a summary and waits. **Nothing is created before you confirm**
+4. Deploys APIM (v2, system-assigned identity), Log Analytics and Application
+   Insights with custom metric dimensions enabled
+5. Creates the Claude API, its operations, and the governance policy
+6. Grants the gateway identity `Cognitive Services User` on your Foundry account
+7. Creates the two Entra tier groups and syncs membership
+8. Verifies the controls, and writes `onboarding/claude-gateway.json` — the file
+   your developers' setup script reads
+
+Re-runnable, so it is also how you change budgets later.
 
 ---
 
 ## Onboarding a developer
 
+**1. Entitle them** — portal or CLI. The
+[portal walkthrough](docs/ONBOARDING.md#2-ui-walkthrough--adding-a-member-in-the-portal)
+includes a deep link, and how to delegate this to a team lead without giving
+them any Azure rights.
+
 ```powershell
-# 1. entitle them
 az ad group member add --group claude-code-standard `
     --member-id (az ad user show --id alice@contoso.com --query id -o tsv)
 
-# 2. push it to the gateway
-./scripts/Sync-ClaudeAccess.ps1 -ApimName <apim-name> -ResourceGroup rg-claude-gateway
+./scripts/Sync-ClaudeAccess.ps1 -ApimName <apim-name> -ResourceGroup <rg>
 ```
 
-They then put `claude-settings.json` at `~/.claude/settings.json`, run `az login`, and start
-working. No key, no Foundry role, and they appear in chargeback from their first request.
+**2. Send them the setup**
 
-Revoking is `az ad group member remove` + sync. Promotion to premium is a group change.
+```powershell
+./scripts/New-OnboardingEmail.ps1 `
+    -ConfigPath ./onboarding/claude-gateway.json `
+    -To alice@contoso.com -DisplayName Alice
+```
+
+Produces a formatted email — HTML, plain text, and an `.eml` to send from
+Outlook. `-Send` tries Microsoft Graph and falls back cleanly.
+
+**3. They run one command**
+
+```powershell
+.\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json
+```
+
+No admin rights. Checks prerequisites, installs what is missing, and configures
+**all three clients** — Claude Code CLI, the VS Code extension, and Claude
+Desktop including Cowork — then makes a real call through the gateway to prove
+it works.
+
+No key, no Foundry role, and they appear in chargeback from their first request.
+
+Revoking is `az ad group member remove` + sync. Promotion to premium is a group
+change.
 
 > **Guest accounts:** if the developer is a B2B guest in your tenant (a `#EXT#` UPN), they must
 > sign in with `az login --tenant <tenant-id>`. A plain `az login` lands them in their home
-> tenant and the gateway returns 401.
+> tenant and the gateway returns 401. The setup script pins the tenant for them.
 
 ---
 
@@ -232,7 +267,10 @@ infra/
   foundry-role.bicep           Cognitive Services User for the gateway identity
   policy.xml                   the governance policy
   azuredeploy.json             compiled ARM, for the Deploy to Azure button
+Install-ClaudeGateway.ps1        interactive admin setup - start here
 scripts/
+  Setup-ClaudeWorkstation.ps1  one-command developer setup, all three clients
+  New-OnboardingEmail.ps1      generate the developer's onboarding email
   Debug-ClaudeCode.ps1         end-to-end health check, run this first
   Sync-ClaudeAccess.ps1        Entra groups -> APIM named values
   Show-Governance.ps1          verify all four controls

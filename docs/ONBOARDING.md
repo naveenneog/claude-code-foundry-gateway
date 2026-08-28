@@ -111,18 +111,90 @@ Their object id must appear. Then confirm end to end:
 Send the developer [Part B](#part-b--developer). They need the gateway URL and
 the tenant id; nothing else, and no credential.
 
+Or generate the whole thing — a formatted email, plus the config file their
+setup script reads:
+
+```powershell
+./scripts/New-OnboardingEmail.ps1 `
+    -ConfigPath ./onboarding/claude-gateway.json `
+    -To developer@contoso.com -DisplayName 'Sam'
+```
+
+Writes HTML, plain text and an `.eml` you can open in Outlook and send. Add
+`-Send` to try Microsoft Graph directly — that needs the `Mail.Send` delegated
+permission, and falls back to the `.eml` cleanly when it is not granted.
+
+The config file carries **no secret**: the gateway URL, the tenant id and the
+tier limits. All of it is information the developer needs, none of it grants
+access. Access is group membership.
+
+> Put `Setup-ClaudeWorkstation.ps1` and `claude-gateway.json` on a share or
+> internal site and pass `-DistributionUrl`; the email then contains a
+> two-line command that fetches and runs them.
+
 ---
 
 ## 2. UI walkthrough — adding a member in the portal
 
-1. **portal.azure.com → Microsoft Entra ID → Groups**
+Two portals work. **Microsoft Entra admin center** (`entra.microsoft.com`) is
+the current home for identity; the Azure portal blade is identical underneath.
+
+### Get a direct link to the group
+
+Skip the navigation entirely — generate the deep link once and bookmark it:
+
+```powershell
+$gid = az ad group show --group claude-code-standard --query id -o tsv
+"https://entra.microsoft.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Members/groupId/$gid"
+```
+
+### Or navigate
+
+1. **entra.microsoft.com** → **Groups** → **All groups**
 2. Search `claude-code-` — both tier groups appear
 3. Open **claude-code-standard**
 4. Left nav → **Members** → **+ Add members**
 5. Search by name or email, tick the person, **Select**
-6. Back on **Members**, confirm they are listed
-7. Copy their **Object ID** from **Overview** if you want to verify the sync
-8. Run the sync (Step 3 above) — **the portal alone does not grant access**
+6. Confirm they now appear in the list
+
+### Then run the sync — this is the step people miss
+
+The portal grants *group membership*. The gateway reads an **allowlist of
+object ids** that is refreshed by the sync, so until it runs the developer still
+gets `403`:
+
+```powershell
+./scripts/Sync-ClaudeAccess.ps1 -ApimName <apim> -ResourceGroup <rg>
+```
+
+> **Why there is no live lookup.** Resolving group membership at request time
+> would need the gateway to hold the Graph `GroupMember.Read.All` application
+> permission, which requires tenant admin consent. The sync approach needs no
+> admin consent at all — the trade-off is that changes apply when it runs.
+> Schedule it (Azure Automation, or a pipeline on a timer) if you want the
+> portal to be the only step.
+
+### Copying someone's object id from the portal
+
+The allowlists key on **object id**, not UPN. If you want to verify a specific
+person landed:
+
+**Entra admin center → Users →** search them **→ Overview → Object ID** (there
+is a copy button next to it). Then:
+
+```powershell
+az apim nv show -g <rg> --service-name <apim> --named-value-id allow-standard --query value -o tsv
+```
+
+Their id should be in that list.
+
+### Delegating this without handing over Azure rights
+
+Adding members needs group **Owner** or Groups Administrator — not any Azure
+RBAC role. Make a team lead the **owner of the group** and they can entitle
+people from the portal without any access to the gateway, the Foundry account,
+or the subscription. Pair that with a scheduled sync and the platform team is
+out of the loop entirely.
 
 > Screenshots of these two blades are not shipped, because they show real
 > directory membership. Capture them against your own tenant:
@@ -272,6 +344,42 @@ and your usage is metered against your own budget.
 
 You do **not** need any Azure role on the Foundry resource. The gateway holds
 that; you only need to be in the group, which you already are.
+
+## The short version — one command
+
+```powershell
+.\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json
+```
+
+No administrator rights needed. It checks what you already have, installs
+anything missing, configures **all three clients** — Claude Code CLI, the VS
+Code extension, and Claude Desktop including Cowork — and finishes with a real
+call through the gateway to prove it works.
+
+Then restart the clients:
+
+| Client | Restart |
+|--------|---------|
+| Claude Code CLI | nothing to do |
+| VS Code | reload the window |
+| Claude Desktop | quit completely, **including the tray icon** |
+
+Those restarts matter: all three read their configuration at startup.
+
+Useful switches:
+
+| Switch | Effect |
+|--------|--------|
+| `-SkipInstall` | configure only, install nothing |
+| `-SkipDesktop` / `-SkipVSCode` | leave that client alone |
+| `-NoCowork` | configure Desktop without the Cowork tab |
+
+Re-run it any time — it reconciles rather than duplicating.
+
+The rest of this section is what the script does, for anyone who would rather
+do it by hand or needs to understand a failure.
+
+---
 
 ## Step 1 — Install the tools
 

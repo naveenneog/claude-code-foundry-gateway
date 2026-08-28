@@ -10,3 +10,11 @@ node_modules/
 # These authenticate as you; never commit them.
 .pw-profile/
 guide/.auth.json
+
+# Generated onboarding artifacts contain your gateway URL and tenant id.
+# Not secret, but environment-specific - regenerate rather than commit.
+onboarding/*.html
+onboarding/*.txt
+onboarding/*.eml
+onboarding/*.png
+onboarding/claude-gateway.json
