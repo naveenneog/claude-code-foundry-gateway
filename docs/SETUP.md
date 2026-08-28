@@ -29,7 +29,7 @@ The gateway is a front door — it cannot create the model behind it.
 |------|---------|-----|
 | Azure CLI | 2.60+ | deployment and all verification commands |
 | Bicep | bundled with the CLI | `az bicep version` |
-| PowerShell | 7+, or Windows PowerShell 5.1 | `deploy.ps1` and the scripts |
+| PowerShell | 7+, or Windows PowerShell 5.1 | the setup wizard and scripts. macOS/Linux can use the `.sh` equivalents instead |
 | Node.js | 18+ | only for the optional screenshot and inspector tooling |
 
 ### Region
@@ -57,7 +57,7 @@ things.
 |-------|------|------------------|---------------------|
 | Target resource group | **Contributor** | create APIM, Application Insights, Log Analytics | Owner also works |
 | Foundry account | **User Access Administrator** or **Owner** | create the role assignment that lets the gateway call Foundry | **No** — Contributor cannot create role assignments |
-| Subscription | **Reader** | resource discovery in `deploy.ps1` | inherited from the above |
+| Subscription | **Reader** | resource discovery during setup | inherited from the above |
 
 Check what you actually hold:
 
@@ -120,7 +120,7 @@ are separate from Azure RBAC.
 
 | Action | Needs | If you do not have it |
 |--------|-------|----------------------|
-| Create the two groups | **Groups Administrator**, or tenant self-service group creation | Ask an admin to create them, then run `deploy.ps1 -SkipGroups` |
+| Create the two groups | **Groups Administrator**, or tenant self-service group creation | Ask an admin to create them; the wizard reuses groups that already exist |
 | Add or remove members | Group **Owner** or Groups Administrator | Ask the group owner |
 | `Sync-ClaudeAccess.ps1` reading membership | Your own delegated token — no app role needed | — |
 
@@ -138,30 +138,60 @@ are separate from Azure RBAC.
 ### 2.5 Everything, as one preflight check
 
 ```powershell
-./deploy.ps1 -FoundryAccount <account> -ResourceGroup <rg> -WhatIf
+./Install-ClaudeGateway.ps1 -WhatIf          # macOS/Linux: ./install-claude-gateway.sh --what-if
 ```
 
-`-WhatIf` resolves the resources, checks the roles you hold, and prints the plan
-without creating anything.
+Resolves the resources, checks what you hold, and prints the full plan and every
+budget without creating anything.
 
 ---
 
 ## 3. Deploy
 
-### Option A — script
+### Option A — the interactive wizard (recommended)
 
 ```powershell
 git clone https://github.com/naveenneog/claude-code-foundry-gateway
 cd claude-code-foundry-gateway
 
+az login
+./Install-ClaudeGateway.ps1
+```
+
+```bash
+# macOS and Linux - needs az and jq
+./install-claude-gateway.sh
+```
+
+It lists only Foundry accounts that actually have a Claude deployment, asks for
+every budget with a default already filled in, and shows a summary before
+creating anything. Pressing Enter throughout gives a working, governed
+deployment.
+
+It then deploys the Bicep template, enables the managed identity, creates the
+role assignment, applies the policy, creates the Entra groups, syncs
+entitlement, verifies the controls, and writes `onboarding/claude-gateway.json`
+— the file your developers' setup script reads.
+
+Re-runnable, so it is also how you change budgets later.
+
+Unattended:
+
+```powershell
+./Install-ClaudeGateway.ps1 -FoundryAccount <account> -Yes
+```
+
+### Option B — non-interactive script
+
+`deploy.ps1` takes the same parameters without prompting. The wizard wraps the
+same Bicep and produces the same result; use `deploy.ps1` if you are scripting
+against it.
+
+```powershell
 ./deploy.ps1 -FoundryAccount <your-foundry-account> -ResourceGroup rg-claude-gateway
 ```
 
-The script discovers the Foundry account, deploys the Bicep template, enables
-the managed identity, creates the role assignment, applies the policy, creates
-the Entra groups, and runs a verification pass.
-
-### Option B — portal
+### Option C — portal
 
 Use the **Deploy to Azure** button in the README. You supply the Foundry account
 name; everything else is defaulted. Afterwards you still need to run:

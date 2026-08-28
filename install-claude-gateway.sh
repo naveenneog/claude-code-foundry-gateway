@@ -120,16 +120,38 @@ ok_ "$USER_NAME"
 note_ "tenant $TENANT_ID"
 
 if [ -z "$SUBSCRIPTION" ]; then
-  subs_json="$(az account list --query "[?state=='Enabled'].{name:name,id:id}" -o json)"
-  n="$(printf '%s' "$subs_json" | jq 'length')"
-  if [ "$n" -gt 1 ] && [ "$ASSUME_YES" = "0" ]; then
-    echo
-    note_ "Subscriptions:"
-    printf '%s' "$subs_json" | jq -r 'to_entries[] | "      \(.key+1). \(.value.name)"'
-    pick="$(ask_ "Subscription number" "1")"
-    SUBSCRIPTION="$(printf '%s' "$subs_json" | jq -r --argjson i "$((pick-1))" '.[$i].id')"
-  else
+  # Listing every subscription is unusable on a large tenant - some accounts
+  # can see dozens. Offer the current one first, then filter if it is wrong.
+  CURRENT_NAME="$(az account show --query name -o tsv)"
+  if [ "$ASSUME_YES" = "1" ] || ask_yn_ "Use subscription '$CURRENT_NAME'?" "y"; then
     SUBSCRIPTION="$(az account show --query id -o tsv)"
+  else
+    subs_json="$(az account list --query "[?state=='Enabled'].{name:name,id:id}" -o json)"
+    total="$(printf '%s' "$subs_json" | jq 'length')"
+    echo
+    filter="$(ask_ "Filter by name (blank for all)" "" "$total subscriptions available.")"
+    if [ -n "$filter" ]; then
+      shown="$(printf '%s' "$subs_json" | jq --arg f "$filter" '[.[] | select(.name | ascii_downcase | contains($f | ascii_downcase))]')"
+    else
+      shown="$subs_json"
+    fi
+    n="$(printf '%s' "$shown" | jq 'length')"
+    if [ "$n" -eq 0 ]; then warn_ "nothing matched '$filter'"; shown="$subs_json"; n="$total"; fi
+    if [ "$n" -gt 25 ]; then
+      warn_ "$n matches - showing the first 25. Filter more narrowly to see others."
+      shown="$(printf '%s' "$shown" | jq '.[0:25]')"; n=25
+    fi
+    echo
+    printf '%s' "$shown" | jq -r 'to_entries[] | "      \(.key+1). \(.value.name)"'
+    echo
+    while true; do
+      pick="$(ask_ "Subscription number" "1")"
+      case "$pick" in
+        ''|*[!0-9]*) warn_ "Enter a number between 1 and $n." ;;
+        *) if [ "$pick" -ge 1 ] && [ "$pick" -le "$n" ]; then break; else warn_ "Enter a number between 1 and $n."; fi ;;
+      esac
+    done
+    SUBSCRIPTION="$(printf '%s' "$shown" | jq -r --argjson i "$((pick-1))" '.[$i].id')"
   fi
 fi
 az account set --subscription "$SUBSCRIPTION"

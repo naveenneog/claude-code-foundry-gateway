@@ -30,13 +30,13 @@ cd claude-code-foundry-gateway
 Two ways to deploy. Pick one:
 
 ```powershell
-# Scripted — auto-discovers the Foundry account and wires everything up
-./deploy.ps1 -FoundryAccount <your-foundry-account> -ResourceGroup rg-claude-gateway
+# Interactive - discovers your Foundry account and asks for each budget
+./Install-ClaudeGateway.ps1
 ```
 
 or click **Deploy to Azure** (ringed above) for the portal form.
 
-> Run `./deploy.ps1 -WhatIf` first if you want to see the plan before anything is created.
+> Run `./Install-ClaudeGateway.ps1 -WhatIf` first if you want to see the plan before anything is created.
 
 ### Step 2 — Fill the deployment form
 

@@ -134,16 +134,39 @@ Write-Ok "$($acct.user.name)"
 Write-Note "tenant $($acct.tenantId)"
 
 if (-not $SubscriptionId) {
-    $subs = az account list --query "[?state=='Enabled'].{name:name, id:id}" -o json | ConvertFrom-Json
-    if (@($subs).Count -gt 1 -and -not $Yes) {
-        Write-Host ''
-        Write-Note 'Subscriptions:'
-        $i = 1
-        foreach ($s in $subs) { Write-Host ("      {0,2}. {1}" -f $i, $s.name); $i++ }
-        $pick = Read-Default -Prompt 'Subscription number' -Default '1'
-        $SubscriptionId = $subs[[int]$pick - 1].id
+    # Listing every subscription is unusable on a large tenant - this account
+    # can see 86 of them. Offer the current one first, which is nearly always
+    # right, and only go looking if it is not.
+    $currentName = $acct.name
+    if ($Yes -or (Read-YesNo "Use subscription '$currentName'?" $true)) {
+        $SubscriptionId = $acct.id
     }
-    else { $SubscriptionId = $acct.id }
+    else {
+        $subs = az account list --query "[?state=='Enabled'].{name:name, id:id}" -o json | ConvertFrom-Json
+        $subs = @($subs)
+        Write-Host ''
+        $filter = Read-Default -Prompt 'Filter by name (blank for all)' -Default '' `
+            -Help "$($subs.Count) subscriptions available."
+        $shown = if ($filter) { @($subs | Where-Object { $_.name -like "*$filter*" }) } else { $subs }
+
+        if ($shown.Count -eq 0) { Write-Warn2 "Nothing matched '$filter'."; $shown = $subs }
+        if ($shown.Count -gt 25) {
+            Write-Warn2 "$($shown.Count) matches - showing the first 25. Filter more narrowly to see others."
+            $shown = $shown[0..24]
+        }
+
+        Write-Host ''
+        $i = 1
+        foreach ($s in $shown) { Write-Host ("      {0,2}. {1}" -f $i, $s.name); $i++ }
+        Write-Host ''
+        $pick = Read-Default -Prompt 'Subscription number' -Default '1' -Validate {
+            param($x)
+            if (($x -as [int]) -and [int]$x -ge 1 -and [int]$x -le $shown.Count) { return $true }
+            Write-Warn2 "Enter a number between 1 and $($shown.Count)."
+            return $false
+        }
+        $SubscriptionId = $shown[[int]$pick - 1].id
+    }
 }
 az account set --subscription $SubscriptionId
 $subName = (az account show --query name -o tsv)

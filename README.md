@@ -4,10 +4,10 @@ Give your engineering team **Claude Code** running on **your own Claude deployme
 Foundry**, with per-developer budgets, tiering, and chargeback — and **no model credential on any
 developer machine**.
 
-One command deploys the whole thing.
+One interactive command deploys the whole thing.
 
 ```powershell
-./deploy.ps1 -FoundryAccount <your-foundry-account> -ResourceGroup rg-claude-gateway
+./Install-ClaudeGateway.ps1          # macOS/Linux: ./install-claude-gateway.sh
 ```
 
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fnaveenneog%2Fclaude-code-foundry-gateway%2Fmain%2Finfra%2Fazuredeploy.json)
