@@ -192,10 +192,31 @@ every budget with a default already filled in, and shows a summary before
 creating anything. Pressing Enter throughout gives a working, governed
 deployment.
 
-![The wizard running: every prompt shows its default in brackets, and the summary appears before anything is created](images/run-admin-wizard.png)
+**1. Prerequisites, sign-in, and Foundry discovery.** Everything is checked
+before anything is touched, and only accounts with a Claude deployment are
+offered — here 13 candidates narrowed to one.
 
-Everything in brackets is the default — Enter accepts it. The one typed value
-above is `30000`, overriding the standard tier's tokens per minute.
+![The wizard checking prerequisites, confirming the Azure sign-in and subscription, then listing the single Foundry account that has Claude deployments](guide/run-1-prerequisites.png)
+
+**2. Reuse an existing gateway, or create one.** API Management is the whole
+cost of this accelerator, so any v2 instance you already own is offered first,
+annotated with whether it already carries the Claude API.
+
+![The wizard listing two existing v2 API Management instances with their SKU, region and resource group, plus a third option to create a new one](guide/run-2-reuse-existing-apim.png)
+
+**3. Budgets.** Every prompt has a working default in brackets — Enter accepts
+it. These become APIM named values, so they are changeable later without
+redeploying.
+
+![Prompts for standard and premium tokens per minute and per day, the per-developer request ceiling, and the two Entra group names, each showing its default](guide/run-3-budgets.png)
+
+**4. The summary, before anything is created.** Reusing is called out
+explicitly, along with what will and will not be touched.
+
+![The summary listing subscription, Foundry account, resource group, API Management instance marked REUSING, both tier budgets and the Entra groups, ending with a confirmation prompt](guide/run-4-summary.png)
+
+> Identifiers in these screenshots are redacted. The raw captures are not in the
+> repository; `guide/redact-terminal.mjs` holds the redaction map.
 
 It then deploys the Bicep template, enables the managed identity, creates the
 role assignment, applies the policy, creates the Entra groups, syncs
