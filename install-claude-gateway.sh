@@ -100,12 +100,18 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-command -v az >/dev/null 2>&1 || { echo "Azure CLI is required. https://learn.microsoft.com/cli/azure/install-azure-cli" >&2; exit 1; }
-command -v jq >/dev/null 2>&1 || { echo "jq is required." >&2; exit 1; }
-
 head_ "Claude on Microsoft Foundry - governed gateway setup"
 printf '\n %sEvery prompt has a default. Press Enter to accept it.%s\n' "$C_GREY" "$C_OFF"
 printf ' %sNothing is created until you confirm the summary.%s\n' "$C_GREY" "$C_OFF"
+
+# Fail here, with a specific remedy, rather than part-way through a deployment.
+if [ -f "$HERE/scripts/preflight.sh" ]; then
+  . "$HERE/scripts/preflight.sh"
+  claude_preflight admin || exit 1
+else
+  command -v az >/dev/null 2>&1 || { echo "Azure CLI is required. https://learn.microsoft.com/cli/azure/install-azure-cli" >&2; exit 1; }
+  command -v jq >/dev/null 2>&1 || { echo "jq is required." >&2; exit 1; }
+fi
 
 # ------------------------------------------------------------------ sign-in
 

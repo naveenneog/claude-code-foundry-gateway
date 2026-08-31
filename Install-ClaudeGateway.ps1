@@ -122,6 +122,10 @@ Write-Host ''
 Write-Host ' Every prompt has a default. Press Enter to accept it.' -ForegroundColor DarkGray
 Write-Host ' Nothing is created until you confirm the summary.' -ForegroundColor DarkGray
 
+# Fail here, with a remedy, rather than part-way through a deployment.
+. (Join-Path $root 'scripts/Test-Prerequisites.ps1')
+if (-not (Test-ClaudePrerequisites -Mode Admin)) { return }
+
 Write-Step 'Azure sign-in'
 $acct = az account show -o json 2>$null | ConvertFrom-Json
 if (-not $acct) {
@@ -142,7 +146,9 @@ if (-not $SubscriptionId) {
         $SubscriptionId = $acct.id
     }
     else {
-        $subs = az account list --query "[?state=='Enabled'].{name:name, id:id}" -o json | ConvertFrom-Json
+        $subs = az account list --query "[].{name:name, id:id, state:state}" -o json |
+            ConvertFrom-Json |
+            Where-Object { $_.state -eq 'Enabled' }
         $subs = @($subs)
         Write-Host ''
         $filter = Read-Default -Prompt 'Filter by name (blank for all)' -Default '' `
@@ -178,14 +184,20 @@ Write-Step 'Foundry account'
 if (-not $FoundryAccount) {
     Write-Note 'Looking for accounts with a Claude deployment...'
 
-    # Only AIServices and OpenAI-kind accounts can host a Claude deployment, so
-    # filter server-side first. Without this the loop below queries every
-    # Cognitive Services account in the subscription - 40+ on a large one -
-    # which is slow and floods the console.
-    $accounts = az cognitiveservices account list `
-        --query "[?kind=='AIServices' || kind=='OpenAI'].{name:name, rg:resourceGroup, loc:location}" -o json |
+    # NOTE ON --query AND WINDOWS POWERSHELL 5.1
+    #
+    # az is a .cmd shim. PowerShell 5.1 only wraps an argument in quotes when it
+    # contains a space, so a JMESPath with no spaces reaches cmd.exe bare and cmd
+    # re-parses it. "[?contains(name,'claude')].name" therefore dies with
+    #     ].name was unexpected at this time
+    # because cmd sees the parentheses. PowerShell 7 quotes differently, which is
+    # why this only ever showed up for 5.1 users.
+    #
+    # Keep JMESPath here free of ( ) | & < > ^ and filter in PowerShell instead.
+    # Brackets and braces alone are fine.
+    $accounts = az cognitiveservices account list --query "[].{name:name, rg:resourceGroup, loc:location, kind:kind}" -o json |
         ConvertFrom-Json
-    $accounts = @($accounts)
+    $accounts = @($accounts | Where-Object { $_.kind -eq 'AIServices' -or $_.kind -eq 'OpenAI' })
 
     if ($accounts.Count -eq 0) {
         Write-Bad 'No AIServices or OpenAI accounts found in this subscription.'
@@ -195,8 +207,11 @@ if (-not $FoundryAccount) {
 
     $withClaude = @()
     foreach ($a in $accounts) {
-        $deps = az cognitiveservices account deployment list -g $a.rg -n $a.name --query "[?contains(name,'claude')].name" -o tsv 2>$null
-        if ($deps) { $withClaude += [pscustomobject]@{ Name = $a.name; Rg = $a.rg; Loc = $a.loc; Models = ($deps -join ', ') } }
+        $names = az cognitiveservices account deployment list -g $a.rg -n $a.name --query "[].name" -o tsv 2>$null
+        $deps = @($names | Where-Object { $_ -like '*claude*' })
+        if ($deps.Count -gt 0) {
+            $withClaude += [pscustomobject]@{ Name = $a.name; Rg = $a.rg; Loc = $a.loc; Models = ($deps -join ', ') }
+        }
     }
 
     if ($withClaude.Count -eq 0) {
@@ -219,7 +234,11 @@ if (-not $FoundryResourceGroup) {
     # Same guard as the shell version: an az call that fails silently leaves
     # these empty and the deployment then fails with something far less
     # obvious than "I could not find your account".
-    $FoundryResourceGroup = az cognitiveservices account list --query "[?name=='$FoundryAccount'].resourceGroup | [0]" -o tsv
+    $FoundryResourceGroup = @(
+        az cognitiveservices account list --query "[].{n:name, rg:resourceGroup}" -o json |
+            ConvertFrom-Json |
+            Where-Object { $_.n -eq $FoundryAccount }
+    )[0].rg
 }
 if (-not $FoundryResourceGroup) {
     Write-Bad "Could not resolve the resource group for '$FoundryAccount'."

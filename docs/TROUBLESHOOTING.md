@@ -13,6 +13,16 @@ accelerator, not a hypothetical.
 | `Authorization_RequestDenied` granting Graph permissions | Granting the gateway identity `GroupMember.Read.All` needs tenant admin consent. Use the default sync approach instead. |
 | Cannot create the Entra groups | Many tenants restrict group creation. Create them by hand and re-run with `-SkipGroups`. |
 
+## Environment
+
+| Symptom | Cause → Fix |
+|---|---|
+| `az : ].name was unexpected at this time` | On Windows `az` is a `.cmd` shim, and PowerShell only quotes native arguments that contain a space. A `--query` with parentheses and no space reaches `cmd.exe` bare and is re-parsed. Affects Windows PowerShell 5.1 **and** PowerShell 7 equally — it is a property of the shim, not the host. Keep `( ) \| & < > ^` out of `--query` and filter in PowerShell instead. |
+| A `--query` that worked breaks after an edit | Same cause. Deleting the last space from the query is enough to trigger it. |
+| A `--query` returns obviously wrong results | Same cause, and quieter. The error text is a non-empty string, so `if ($result)` reads as success and the caller accepts garbage. This shipped once: every Cognitive Services account was reported as having a Claude deployment. Check raw output before trusting a filter. |
+
+The preflight in both setup scripts reports whether the platform is affected.
+
 ## Policy
 
 | Symptom | Cause → Fix |

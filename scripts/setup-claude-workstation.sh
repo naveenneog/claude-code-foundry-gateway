@@ -132,6 +132,14 @@ GATEWAY_URL="${GATEWAY_URL%/}"
 ok_ "gateway: $GATEWAY_URL"
 [ -n "$TENANT_ID" ] && note_ "tenant : $TENANT_ID"
 
+# Check the environment before touching anything. The gateway URL is known by
+# now, so reachability can be probed too. Warnings only: this script installs
+# what is missing, so an absent tool is not a blocker here.
+if [ -f "$(dirname "$0")/preflight.sh" ]; then
+  . "$(dirname "$0")/preflight.sh"
+  claude_preflight workstation "$GATEWAY_URL" || true
+fi
+
 # ------------------------------------------------------------- prerequisites
 
 step_ "Prerequisites"

@@ -97,6 +97,16 @@ $GatewayUrl = $GatewayUrl.TrimEnd('/')
 Write-Ok "gateway: $GatewayUrl"
 if ($TenantId) { Write-Note "tenant : $TenantId" }
 
+# Check the environment before touching anything. The gateway URL is known by
+# now, so reachability can be probed too.
+$preflight = Join-Path $PSScriptRoot 'Test-Prerequisites.ps1'
+if (Test-Path $preflight) {
+    . $preflight
+    # Warnings only: this script installs what is missing, so an absent tool is
+    # not a blocker the way it is for the admin path.
+    $null = Test-ClaudePrerequisites -Mode Workstation -GatewayUrl $GatewayUrl -WarnOnly
+}
+
 # ---------------------------------------------------------- 1. prerequisites
 
 Write-Step 'Prerequisites'

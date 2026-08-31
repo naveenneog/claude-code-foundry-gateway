@@ -134,6 +134,31 @@ are separate from Azure RBAC.
 
 ### 2.5 Everything, as one preflight check
 
+Both setup scripts check the environment before touching anything, and stop with
+a specific remedy rather than failing part-way through:
+
+```
+==> Checking prerequisites
+    [OK]   Windows PowerShell 5.1.26100.8875
+    [OK]   Azure CLI 2.86.0
+    [OK]   Azure CLI responds correctly
+    [OK]   signed in as admin@contoso.com
+    [OK]   Bicep 0.46.1
+    [OK]   management.azure.com reachable
+
+    All prerequisites satisfied.
+```
+
+Blocking issues stop the run before any change. Warnings continue. Run it on its
+own if you just want the report:
+
+```powershell
+. ./scripts/Test-Prerequisites.ps1
+Test-ClaudePrerequisites -Mode Admin
+```
+
+To preview the whole plan without creating anything:
+
 ```powershell
 ./Install-ClaudeGateway.ps1 -WhatIf          # macOS/Linux: ./install-claude-gateway.sh --what-if
 ```
