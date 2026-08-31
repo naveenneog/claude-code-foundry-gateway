@@ -41,6 +41,7 @@ Push-Location $root
 try {
     # Must come first: a missing BOM mangles every other PowerShell check on 5.1.
     Invoke-Check 'Script encoding (PowerShell 5.1 safety)' 'Repair-ScriptEncoding.ps1' @{ Check = $true }
+    Invoke-Check 'Azure CLI arguments vs cmd.exe'          'Test-AzArguments.ps1'
     Invoke-Check 'Shell scripts - syntax and banner'       'Test-ShellScripts.ps1'
     Invoke-Check 'Preflight on both PowerShell hosts'      'Test-PreflightBothHosts.ps1'
     Invoke-Check 'Wizard reaches summary on PS 5.1'        'Test-On-PS51.ps1'

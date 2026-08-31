@@ -152,8 +152,8 @@ function Test-ClaudePrerequisites {
         if ($IsWindows -or $env:OS -eq 'Windows_NT') {
             if ($azCmd.Source -match '\.(cmd|bat)$') {
                 P-Note 'note: az is a .cmd shim here, so unquoted native arguments are'
-                P-Note '      re-parsed by cmd.exe. These scripts avoid the affected'
-                P-Note '      --query shapes - no action needed.'
+                P-Note '      re-parsed by cmd.exe. These scripts keep & ^ < > and'
+                P-Note '      query parentheses out of az arguments - no action needed.'
             }
         }
 

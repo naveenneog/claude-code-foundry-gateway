@@ -389,12 +389,21 @@ code page. PowerShell 7 reads UTF-8 either way, so this is invisible until someo
 on this and no longer does — its art is pure ASCII — but the rule still applies to anything else
 that reaches for a box-drawing or accented character.
 
-**Keep `( )`, `|`, `&`, `<`, `>` and `^` out of `az --query`.** On Windows `az` is a `.cmd`
-shim, and PowerShell only quotes a native argument if it contains a space. A query such as
-`"[?contains(name,'x')].name"` has none, so it reaches `cmd.exe` bare and is re-parsed:
-`].name was unexpected at this time`. This affects PowerShell 5.1 and 7 equally. Worse, the
-error text is a non-empty string, so a plain `if ($result)` reads it as success. Filter in
-PowerShell instead. Brackets and braces are safe; bash is unaffected.
+**Keep `&`, `^`, `<`, `>`, `|` — and `( )` in `--query` — out of Azure CLI arguments.** On Windows
+`az` is a `.cmd` shim, and PowerShell only quotes a native argument if it contains a space. An
+argument with no space reaches `cmd.exe` bare and its metacharacters are interpreted. This has
+bitten twice:
+
+```
+--query "[?contains(name,'claude')].name"        ->  ].name was unexpected at this time
+--uri   ".../members?$select=id&$top=999"        ->  '$top' is not recognized as a command
+```
+
+Both affect PowerShell 5.1 and 7 equally — it's a Windows property, not a host one. Both fail
+*quietly*: the error text is a non-empty string, so a plain `if ($result)` reads it as success.
+Filter in PowerShell, or call the REST API directly with `Invoke-RestMethod` — which is also the
+only way to follow Graph's `@odata.nextLink`, since paging URLs carry `&` too. Brackets and braces
+are safe; bash is unaffected. `./scripts/Test-AzArguments.ps1` enforces this.
 
 ## License
 
