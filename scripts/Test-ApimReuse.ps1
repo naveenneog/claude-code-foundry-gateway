@@ -78,6 +78,50 @@ if ($fail) {
     exit 1
 }
 
+# A reused gateway usually already holds Cognitive Services User on Foundry,
+# granted by whatever created it. Azure refuses a second assignment for the same
+# principal, role and scope even under a different name, so redeploying without
+# checking fails the whole deployment with RoleAssignmentExists.
+#
+# `what-if` does not catch it: the grant is a nested deployment at another
+# scope, which comes back as Unsupported, so the plan looks clean.
+Write-Host ''
+Write-Host 'Role assignment collision check' -ForegroundColor Cyan
+
+$expectedRg = $v2[0].resourceGroup
+$apimOid = az apim show -g $expectedRg -n $expected --query identity.principalId -o tsv 2>$null
+
+if (-not $apimOid) {
+    Write-Host '  skipped - that instance has no managed identity' -ForegroundColor Yellow
+}
+else {
+    # Queried by assignee across the subscription rather than by picking a
+    # Foundry account and looking at its scope.
+    #
+    # The first version of this check took the first AIServices account it
+    # found, which in a subscription with thirteen of them was not the one the
+    # gateway is wired to. It reported "no existing assignment" for a gateway
+    # that demonstrably had one - a green check that verified nothing.
+    $held = @(az role assignment list --assignee $apimOid --all -o json 2>$null | ConvertFrom-Json |
+              Where-Object { $_.roleDefinitionName -eq 'Cognitive Services User' })
+
+    if ($held.Count) {
+        Write-Host ("  [OK]   {0} already holds the role ({1} assignment(s)) - the installer must pass grantFoundryRole=false" -f $expected, $held.Count) -ForegroundColor Green
+        # -WhatIf stops before the deployment step, so the detection does not
+        # run in this pass. Assert the code path exists instead.
+        $src = Get-Content $script -Raw
+        if ($src -match 'grantFoundryRole' -and $src -match 'Cognitive Services User') {
+            Write-Host '  [OK]   the installer checks before granting' -ForegroundColor Green
+        } else {
+            Write-Host '  [FAIL] the installer has no role-assignment check - a reuse deploy will fail' -ForegroundColor Red
+            exit 1
+        }
+    }
+    else {
+        Write-Host '  [OK]   no existing assignment for this principal - the grant will run normally' -ForegroundColor Green
+    }
+}
+
 Write-Host ''
 Write-Host 'Reuse path works.' -ForegroundColor Green
 Write-Host ''

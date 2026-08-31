@@ -454,6 +454,36 @@ if ($ExistingApim -or (az apim show -g $ResourceGroup -n $apimName --query name 
 }
 
 $deployName = "claude-gw-$(Get-Date -Format 'yyyyMMddHHmmss')"
+
+# Azure rejects a second Cognitive Services User assignment for the same
+# principal at the same scope, even under a different name, with
+# RoleAssignmentExists. A gateway that already has the role - because an earlier
+# run, deploy.ps1, or an administrator granted it - therefore fails the
+# deployment rather than skipping the grant.
+#
+# So check first. Only possible when reusing, because a gateway being created
+# has no identity yet.
+$grantRole = $true
+if ($ExistingApim) {
+    $apimOid = az apim show -g $ResourceGroup -n $apimName --query identity.principalId -o tsv 2>$null
+    if ($apimOid) {
+        $foundryId = az cognitiveservices account show -g $FoundryResourceGroup -n $FoundryAccount --query id -o tsv 2>$null
+        if ($foundryId) {
+            # Filtered here rather than in --query: a JMESPath filter needs
+            # parentheses, and on Windows az is a .cmd shim that lets cmd.exe
+            # re-parse them.
+            $existingRoles = az role assignment list --scope $foundryId --include-inherited -o json 2>$null | ConvertFrom-Json
+            $match = @($existingRoles | Where-Object {
+                $_.roleDefinitionName -eq 'Cognitive Services User' -and $_.principalId -eq $apimOid
+            })
+            if ($match.Count) {
+                $grantRole = $false
+                Write-Note "role assignment already in place - not re-granting"
+            }
+        }
+    }
+}
+
 az deployment group create `
     --name $deployName `
     -g $ResourceGroup `
@@ -466,6 +496,7 @@ az deployment group create `
         foundryResourceGroup=$FoundryResourceGroup `
         publisherEmail=$PublisherEmail `
         apimSku=$Sku `
+        grantFoundryRole=$($grantRole.ToString().ToLower()) `
         allowStandardValueExisting=$allowStd `
         allowPremiumValueExisting=$allowPrm `
         tpmStandard=$TpmStandard `

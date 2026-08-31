@@ -64,6 +64,9 @@ param allowStandardOids array = []
 @description('Object ids allowed at the premium tier.')
 param allowPremiumOids array = []
 
+@description('Grant the gateway identity Cognitive Services User on the Foundry account. Set false when an equivalent assignment already exists - Azure rejects a second assignment for the same principal, role and scope even under a different name, which is what a reused gateway hits.')
+param grantFoundryRole bool = true
+
 @description('Existing allow list to preserve, in sentinel form (",oid1,oid2,"). Install-ClaudeGateway.ps1 reads this off the gateway before redeploying. Empty means derive from allowStandardOids.')
 param allowStandardValueExisting string = ''
 
@@ -301,7 +304,19 @@ resource apiDiagnostic 'Microsoft.ApiManagement/service/apis/diagnostics@2024-05
 // The gateway identity is the only principal that may call Foundry
 // ---------------------------------------------------------------------------
 
-module foundryRole 'foundry-role.bicep' = {
+// Conditional because Azure refuses a second role assignment for the same
+// principal, role and scope - even under a different name - and returns
+// RoleAssignmentExists. A gateway created by an earlier run, by deploy.ps1, or
+// by hand carries an assignment with a random name, whereas this module's name
+// is derived from guid(scope, principal, role). Deploying over it collides.
+//
+// `what-if` does not catch this. A nested deployment at another scope comes
+// back as Unsupported, so the plan looked clean and the failure only appeared
+// at deploy time.
+//
+// Install-ClaudeGateway.ps1 checks for an equivalent assignment and passes
+// false when one is already in place.
+module foundryRole 'foundry-role.bicep' = if (grantFoundryRole) {
   name: 'grant-apim-cognitive-services-user'
   scope: resourceGroup(foundryResourceGroup)
   params: {
