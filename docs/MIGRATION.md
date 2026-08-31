@@ -5,10 +5,10 @@ answers and different owners:
 
 | # | Requirement | Short answer |
 |---|---|---|
-| [1](#1-history-memory-and-sessions) | Keep chat history, memory and sessions intact | **Claude Code and Cowork memory survive intact. Desktop conversations do not, and cannot be imported — but they can be exported, and Claude.ai memory can be moved across as CLAUDE.md.** |
+| [1](#1-history-memory-and-sessions) | Keep chat history, memory and sessions intact | **All of it migrates — Desktop chats, Cowork and Code sessions, projects and memory — through an import wizard that is off by default at both ends. Attachments are the exception.** |
 | [2](#2-mass-deployment-through-mdm) | Bulk install and push user-level config via MDM | Fully supported. Managed settings override every user-level value. |
 | [3](#3-bulk-entitlement-from-a-csv-or-an-entra-group) | Bulk migration from C4E, CSV or Entra groups | `Import-ClaudeEntitlement.ps1`. Budget effort for identity resolution, not for the import. |
-| [4](#4-cutover-runbook) | How to actually run it | Export first, pilot, dual-run, cut over, decommission. |
+| [4](#4-cutover-runbook) | How to actually run it | Switch on import, export, pilot, dual-run, cut over, decommission. |
 
 Every claim below was checked against Anthropic's documentation or against a
 live deployment. Where something is genuinely undocumented it says so rather
@@ -20,22 +20,77 @@ than guessing.
 
 ### The short version
 
-**Claude Code loses nothing. Claude Desktop loses conversation history, and
-there is no import path.**
+**Claude Code loses nothing. Claude Desktop and Cowork sessions do migrate —
+through an import wizard that is off by default and has to be switched on from
+both ends.**
 
-That asymmetry is the single most important thing to communicate to a customer
-before they commit to a date, because it is a one-way door and it surprises
-people late if nobody said it early.
+The work is not recovering the data. It is making sure the two switches are on
+*before* people cut over, and knowing the one thing the import leaves behind.
 
-### Why
+### How the import works
 
-Claude Code keeps its state on local disk, and that state is
-provider-independent. Switching to Foundry changes environment variables, not
-storage. Anthropic's feature matrix confirms CLAUDE.md memory, plugins and MCP
-servers work on every provider.
+Claude Desktop on 3P ships an import wizard at **Settings → Import & export**.
+It has three steps, and any can be skipped:
 
-Claude Desktop is different. Anthropic's own architecture table for third-party
-mode:
+| Step | Brings across |
+|------|---------------|
+| **Chats** | claude.ai conversations and projects — sign in and fetch directly, or select a downloaded export `.zip` |
+| **Cowork & Code** | **Cowork and Claude Code sessions already on this machine** from an earlier install, with a time-range selector |
+| **Review** | Confirms, then copies into the local session store |
+
+Imported projects become **Spaces**. Opening an imported conversation and
+sending a message shows a **Resume imported session?** prompt — accept it and
+the reply comes from your provider, not claude.ai.
+
+Sessions are **copied, not moved**, and the import is a **one-time copy, not a
+sync**. Re-running it matches existing imports and skips them, so it does not
+duplicate — which makes "import again just before cutover" a safe step.
+
+— [Import history from claude.ai](https://claude.com/docs/third-party/claude-desktop/import)
+
+### Two switches, both off by default
+
+Neither end is enabled out of the box, and both are administrator-controlled.
+This is the part that bites: a user who tries to import before the switches are
+on is told import is not enabled for this deployment, with no indication that
+it is a policy decision rather than a missing feature.
+
+**1. In your Desktop managed configuration**, set `claudeAiImport`:
+
+| Field | Default | What it does |
+|-------|---------|--------------|
+| `enabled` | `false` | Turns on Settings → Import |
+| `automatic3pImport` | `false` | **Beta.** Copies this machine's earlier third-party sessions in once, in the background. Independent of `enabled` — no user action at all |
+| `exportEnabled` | `false` | Lets a user export this machine's chats, Cowork tasks and Code sessions as a zip another install can import. No effect unless `enabled` |
+| `bannerBehavior` | unset | `detect` prompts only when earlier sessions are found, `show` always, `off` never |
+
+For a fleet migration, `automatic3pImport` is the one that scales — it moves
+local Cowork and Code sessions with nobody having to run a wizard.
+
+**2. On claude.ai, for Team and Enterprise**, a workspace owner must turn on
+**Settings → Organization → Data and privacy → Allow members to export their
+own data**. It is off by default. It does not expose one member's data to
+another; each person can still download only their own.
+
+### The one real gap: attachments
+
+**Project knowledge files and conversation attachments do not come across.**
+A member's own export never includes the contents of files uploaded to a
+project's knowledge base or attached to a conversation. Imported chats keep the
+messages that *referenced* an attachment, but not the file.
+
+This is a claude.ai security policy and it applies to both import paths —
+signing in and selecting a downloaded zip. The only export that includes file
+contents is the **organization-level export**, which only a workspace owner can
+request.
+
+So if a team has been treating a Claude project's knowledge base as a document
+store, plan to move those files separately. That is the item to surface early,
+not conversation history.
+
+### Why the storage still looks empty at first
+
+Anthropic's architecture table for third-party mode:
 
 | Component | Standard Claude Desktop | Claude Desktop on 3P |
 |---|---|---|
@@ -45,18 +100,17 @@ mode:
 
 — [claude.com/docs/third-party/claude-desktop/overview](https://claude.com/docs/third-party/claude-desktop/overview)
 
-In third-party mode there is no Anthropic account, so there is nothing to sync
-*from*. This is observable on any machine that has run both modes: they use
-separate storage roots, each with its own IndexedDB.
+The two modes use separate storage roots, each with its own IndexedDB, which is
+observable on any machine that has run both:
 
 ```
 %APPDATA%\Claude\                 first-party: Local Storage, IndexedDB, Session Storage
 %LOCALAPPDATA%\Claude-3p\         Foundry mode: its own Local Storage and IndexedDB
 ```
 
-Switching a user to Foundry gives them an empty Desktop. Their old
-conversations are still in the first-party app, and still on Anthropic's
-backend, until the account is deprovisioned.
+Nothing crosses between them on its own. A user switched to Foundry sees an
+empty Desktop until the import runs — which is exactly why the switches above
+need to be on before, not after, they cut over.
 
 ### What to do about it
 
@@ -66,12 +120,14 @@ backend, until the account is deprovisioned.
 | Claude Code prompt history | Yes | None. `~/.claude/history.jsonl` |
 | CLAUDE.md memory, all scopes | Yes | None — and you can now deploy an org-wide one, see below |
 | Claude Code auto memory | Yes | None. `~/.claude/projects/<project>/memory/` |
-| **Cowork memory** | **Yes** | None — Cowork runs on Claude Code and reads the same files |
+| **Cowork memory** | Yes | None — Cowork runs on Claude Code and reads the same files |
 | MCP servers, plugins, settings | Yes | None. `~/.claude.json`, `~/.claude/settings.json` |
-| **Claude Desktop conversations** | **No** | **Export first. No import path into third-party mode.** |
-| **Claude.ai chat memory** | Not automatically | **Exportable, and it lands as CLAUDE.md.** See below |
-| Claude.ai Projects | No | Not available in third-party mode |
-| Claude.ai server-side Memory feature | No | No equivalent surface in third-party mode |
+| **Claude Desktop chats** | **Yes, via import** | Enable `claudeAiImport` + the claude.ai member-export toggle |
+| **Cowork and Code sessions on the machine** | **Yes, via import** | Same, or `automatic3pImport` for a silent fleet-wide copy |
+| Claude.ai projects | Yes, as **Spaces** | Custom instructions are shown for review before they take effect |
+| Claude.ai chat memory | Yes — it is in the export | Also landable as `CLAUDE.md`, see below |
+| **Project knowledge files and attachments** | **No** | **The real gap.** Only an org-level export includes file contents |
+| Terminal Claude Code sessions | Not via Desktop export | They never left `~/.claude` — nothing to move |
 
 ### Exporting past conversations
 
@@ -120,14 +176,17 @@ Claude Desktop run on Claude Code and read `~/.claude/CLAUDE.md` and
 > `CLAUDE.md` that pulls content in by reference will look empty in Cowork.
 > Keep the content inline.
 
-**3. Claude.ai chat memory — no automatic path, but not lost either.** There is
-no Anthropic account in third-party mode, so Claude's own memory import flow has
-nothing to import into. Anthropic does document a **prompt-based export**: you
-ask Claude to list everything it has stored about you, and it returns a single
-code block.
+**3. Claude.ai chat memory — it is in the export.** Anthropic's import
+documentation is explicit that an export contains "your own conversations,
+projects, and memory", so the wizard is the primary route and it needs no
+manual step.
 
-That block is Markdown, and `CLAUDE.md` is Markdown, so it moves across
-directly:
+There is still a reason to move it into `CLAUDE.md` as well: memory that lives
+in a `CLAUDE.md` reaches Claude Code and Cowork, is reviewable in a text editor,
+and can be version-controlled or deployed fleet-wide as a house standard.
+Anthropic separately documents a **prompt-based export** — you ask Claude to
+list everything it has stored about you and it returns a single code block —
+which is exactly the right shape for that:
 
 ```powershell
 # paste the exported block, or point at the file you saved it to
@@ -397,47 +456,51 @@ account is disabled, since token acquisition fails at that moment.
 
 ## 4. Cutover runbook
 
-**Export first, before anything is deleted.** On Team or Enterprise this is the
-Primary Owner, from Organization settings → Data and privacy. Do it at the
-*start* of the migration: anything already removed by a retention policy will
-not be in the archive. Ask people to run the memory export prompt in the same
-window, while their account is still live.
+**Turn on both import switches first.** `claudeAiImport.enabled` in the Desktop
+managed configuration, and **Allow members to export their own data** on
+claude.ai for Team and Enterprise. Both are off by default, and a user who hits
+the wizard before they are on is simply told import is not enabled. Consider
+`automatic3pImport` so local Cowork and Code sessions move with no user action.
+
+**Deal with attachments separately.** Project knowledge files and conversation
+attachments are the one thing the member-level export leaves behind. If any
+team is using a project's knowledge base as a document store, get a workspace
+owner to run the organisation-level export, which does include file contents,
+and land those files wherever they should have been in the first place.
+
+**Export the organisation archive before anything is deleted.** Primary Owner,
+Organization settings → Data and privacy. Do it at the *start*: anything already
+removed by a retention policy will not be in the archive.
 
 **Pilot — one team, two weeks.** Deploy the gateway, entitle the team, push MDM
 to their machines only. Confirm `/status` shows the managed source, traffic
 carries `x-governed-by`, and budgets appear in Application Insights. Have them
-use Desktop specifically, so the empty-history reality is discovered by
-volunteers rather than by everyone at once.
+run the import wizard and confirm their Cowork and Code sessions came across —
+that is the step most likely to surprise you, so surface it with volunteers.
 
-**Dual-run.** Leave first-party accounts live while both are configured. This
-is what makes the Desktop history gap survivable: people still have their old
-conversations to refer back to. Tell them the window and when it closes.
+**Dual-run.** Leave first-party accounts live while both are configured. Import
+is a one-time copy rather than a sync, so re-running it just before cutover
+picks up anything created in the meantime, without duplicating what is already
+there.
 
-**Land the memory.** Run `Import-ClaudeMemory.ps1` for anyone who exported, or
-publish a shared `-Scope managed` CLAUDE.md for the house standards. Cowork
-picks up the same file.
+**Land the memory.** The wizard brings memory across. Optionally also run
+`Import-ClaudeMemory.ps1`, or publish a shared `-Scope managed` CLAUDE.md for
+house standards — Cowork reads the same file.
 
 **Cut over.** Push MDM fleet-wide. Run the bulk import for the full population.
 Sync. Watch Application Insights for `403`s — that is your list of people the
 roster missed.
 
-**Decommission.** Deprovision first-party accounts only after the export window
-has closed and the archive has been verified as readable. Then check the
-direct-access bypass: anyone holding `Cognitive Services User` on the Foundry
-account directly can skip the gateway and every budget with it.
+**Decommission.** Deprovision first-party accounts only after the import has
+been verified on real machines and the archive has been confirmed readable.
+Then check the direct-access bypass: anyone holding `Cognitive Services User`
+on the Foundry account directly can skip the gateway and every budget with it.
 [SETUP.md §4.2](SETUP.md) has the audit commands.
 
 ---
 
 ## What is still genuinely unknown
 
-Short list, stated plainly, because a migration plan built on a guess is worse
-than one with a known gap:
-
-- **Whether Projects and Artifacts are included in the data export.** The
-  export article does not enumerate its contents beyond messages, files and
-  projects being subject to the deletion caveat. Open one archive during the
-  pilot and look, rather than assuming either way.
 - **Accepted values for `forceLoginMethod`.** It restricts login to claude.ai,
   the Console, or a gateway, and would stop someone signing in to a personal
   account — but the exact enum was not confirmed, so the generated policy does
