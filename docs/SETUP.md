@@ -251,6 +251,46 @@ name; everything else is defaulted. Afterwards you still need to run:
 > Basic v2 has no SLA-backed multi-region or VNet support. For production, use
 > Standard v2 or Premium v2 — the policy is identical.
 
+### Already have a v2 API Management instance?
+
+API Management is essentially the whole cost of this accelerator, so the wizard
+looks for v2 instances you already own and offers to reuse one:
+
+```
+    Existing v2 API Management instances you can reuse:
+
+       1. apim-claude-gw-fzgql9    BasicV2    East US 2      rg-contosohub
+          already has the Claude API - this would update it
+       2. hocon-gateway            BasicV2    East US 2      rg-hello-agent-dev
+          would add the Claude API
+       3. create a new one
+```
+
+Reuse is **strictly additive**. It adds the Claude API, its policies, named
+values and a logger, and does not touch the instance itself — no SKU change, no
+identity change, and none of your TLS or networking settings.
+
+That last point is load-bearing. An ARM `PUT` asserts a whole resource, so a
+template that merely re-declared the service would reset every property it does
+not mention. Verified with `what-if` against a live gateway, that meant
+`customProperties` being cleared — re-enabling TLS 1.0, TLS 1.1 and SSL 3.0 —
+along with the NAT gateway switched off and both developer portals switched on.
+The template therefore only writes the service when it is creating it.
+
+Two constraints:
+
+- **It must be a v2 SKU.** Classic tiers attach the policies without complaint
+  but meter zero Anthropic tokens, so every budget reads as zero usage forever.
+  Only v2 instances are listed.
+- **The deployment follows the instance.** The API and named values are parented
+  to API Management, so the wizard switches to that instance's resource group
+  and region and tells you it has done so.
+
+Re-running against a gateway you already set up is the supported way to update
+policies or budgets. Entitlement is preserved: the wizard reads the current
+`allow-standard` and `allow-premium` values and passes them back, so a redeploy
+cannot silently revoke anyone.
+
 ---
 
 ## 4. Verify before announcing

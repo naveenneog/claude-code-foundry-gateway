@@ -16,11 +16,19 @@ Write-Host "  $ps51" -ForegroundColor DarkGray
 Write-Host ''
 
 $answers = Join-Path $env:TEMP 'wiz51-answers.txt'
+# y            use this subscription
+# (blank)      resource group default
+# (blank)      location default
+# 3            create a new gateway rather than reusing one
+# then blanks: SKU, name prefix, publisher email, five budgets, two groups
 @'
 y
 
 
-claudegw51
+3
+
+
+
 
 
 

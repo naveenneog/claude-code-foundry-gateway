@@ -48,6 +48,7 @@ try {
 
     if ($IncludeAzure) {
         Invoke-Check 'Foundry discovery is selective'      'Test-Discovery.ps1'
+        Invoke-Check 'Wizard reuses an existing gateway'   'Test-ApimReuse.ps1'
     }
 }
 finally { Pop-Location }

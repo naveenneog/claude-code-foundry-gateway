@@ -263,6 +263,68 @@ $ResourceGroup = if ($ResourceGroup) { $ResourceGroup } else {
 }
 $Location = Read-Default -Prompt 'Location' -Default $Location
 
+# ------------------------------------------------- reuse an existing gateway
+#
+# API Management is the entire cost of this accelerator - roughly $250/month
+# for BasicV2 - and creating a second one by accident is easy to do and easy to
+# miss. Earlier versions always generated a random name prefix, so every run
+# built a new instance even when a perfectly good one already existed.
+#
+# Only v2 SKUs are offered. Classic tiers attach the policies happily but meter
+# zero Anthropic tokens, so every budget silently reads as zero usage.
+
+$ExistingApim = ''
+if (-not $NamePrefix) {
+    $allApim = az apim list -o json 2>$null | ConvertFrom-Json
+    $reusable = @($allApim | Where-Object { $_.sku.name -match 'V2$' })
+
+    if ($reusable.Count) {
+        Write-Host ''
+        Write-Host '    Existing v2 API Management instances you can reuse:' -ForegroundColor Cyan
+        Write-Host ''
+        for ($i = 0; $i -lt $reusable.Count; $i++) {
+            $r = $reusable[$i]
+            $has = az apim api list -g $r.resourceGroup --service-name $r.name --query "[?name=='claude-foundry'].name" -o tsv 2>$null
+            $note = if ($has) { 'already has the Claude API - this would update it' } else { 'would add the Claude API' }
+            Write-Host ("       {0}. {1,-24} {2,-10} {3,-14} {4}" -f ($i + 1), $r.name, $r.sku.name, $r.location, $r.resourceGroup) -ForegroundColor White
+            Write-Host ("          {0}" -f $note) -ForegroundColor DarkGray
+        }
+        Write-Host ("       {0}. create a new one" -f ($reusable.Count + 1)) -ForegroundColor White
+        Write-Host ''
+
+        $pick = Read-Default -Prompt 'Which' -Default ([string]($reusable.Count + 1)) `
+            -Help 'Reusing avoids a second API Management bill. The Claude API, policies and named values are added to it.' -Validate {
+                param($x)
+                $n = 0
+                if ([int]::TryParse($x, [ref]$n) -and $n -ge 1 -and $n -le ($reusable.Count + 1)) { return $true }
+                Write-Warn2 "Enter a number between 1 and $($reusable.Count + 1)."
+                return $false
+            }
+
+        if ([int]$pick -le $reusable.Count) {
+            $chosen = $reusable[[int]$pick - 1]
+            $ExistingApim = $chosen.name
+            # The children are parented to the APIM, so the deployment has to
+            # target its resource group, not whatever was answered above.
+            if ($ResourceGroup -ne $chosen.resourceGroup) {
+                Write-Note "Deploying into '$($chosen.resourceGroup)' instead - that is where $($chosen.name) lives."
+                $ResourceGroup = $chosen.resourceGroup
+            }
+            $Location = $chosen.location
+            $Sku      = $chosen.sku.name
+            $PublisherEmail = $chosen.publisherEmail
+            # Stable, so re-running does not create a fresh Application Insights
+            # and Log Analytics workspace every time.
+            $NamePrefix = ($chosen.name -replace '^apim-', '')
+            Write-Ok "reusing $($chosen.name) ($($chosen.sku.name), $($chosen.resourceGroup))"
+
+            if ($chosen.identity.type -and $chosen.identity.type -notmatch 'SystemAssigned') {
+                Write-Warn2 "$($chosen.name) has identity '$($chosen.identity.type)'. Deploying sets SystemAssigned, which the gateway needs to call Foundry."
+            }
+        }
+    }
+}
+
 # No pre-flight check on v2 SKU availability. There is no reliable CLI call for
 # it - an earlier version used `az apim list-skus`, which does not exist, so the
 # error text landed in the variable and the script warned that East US 2 lacked
@@ -282,6 +344,7 @@ $Sku = if ($Sku) { $Sku } else {
         }
 }
 
+# Already fixed when reusing - the name is the existing instance's.
 $NamePrefix = if ($NamePrefix) { $NamePrefix } else {
     Read-Default -Prompt 'Name prefix' -Default "claudegw$(Get-Random -Minimum 100000 -Maximum 999999)" `
         -Help 'API Management names are globally unique DNS labels.'
@@ -324,7 +387,7 @@ $PremiumGroup  = Read-Default -Prompt 'Premium tier group'  -Default $PremiumGro
 
 # --------------------------------------------------------------- 5. summary
 
-$apimName = "apim-$NamePrefix"
+$apimName = if ($ExistingApim) { $ExistingApim } else { "apim-$NamePrefix" }
 Write-Head 'Summary'
 Write-Host ''
 $rows = [ordered]@{
@@ -332,7 +395,7 @@ $rows = [ordered]@{
     'Foundry account'       = "$FoundryAccount (rg $FoundryResourceGroup)"
     'Gateway resource group'= $ResourceGroup
     'Location'              = $Location
-    'API Management'        = "$apimName  ($Sku)"
+    'API Management'        = if ($ExistingApim) { "$apimName  ($Sku)  REUSING - not creating" } else { "$apimName  ($Sku)  new" }
     'Publisher email'       = $PublisherEmail
     ''                      = ''
     'Standard tier'         = "$('{0:n0}' -f $TpmStandard) tokens/min, $('{0:n0}' -f $QuotaStandard) tokens/day"
@@ -346,12 +409,20 @@ foreach ($k in $rows.Keys) {
     Write-Host ("  {0,-24} {1}" -f $k, $rows[$k])
 }
 Write-Host ''
-Write-Host '  Cost: API Management is the bulk of it - BasicV2 is roughly $250/month.' -ForegroundColor DarkGray
-Write-Host '  Provisioning takes 30-45 minutes, most of it API Management.' -ForegroundColor DarkGray
+if ($ExistingApim) {
+    Write-Host "  Reusing $apimName - no new API Management, no new bill." -ForegroundColor Green
+    Write-Host '  Adds the Claude API, its policies and named values. Takes a few minutes.' -ForegroundColor DarkGray
+    Write-Host '  Its SKU, location and publisher details are re-asserted unchanged.' -ForegroundColor DarkGray
+} else {
+    Write-Host '  Cost: API Management is the bulk of it - BasicV2 is roughly $250/month.' -ForegroundColor DarkGray
+    Write-Host '  Provisioning takes 30-45 minutes, most of it API Management.' -ForegroundColor DarkGray
+}
 Write-Host ''
 
 if ($WhatIfPreference) { Write-Warn2 'WhatIf - stopping before any change.'; return }
-if (-not (Read-YesNo 'Create these resources?' $true)) { Write-Host ''; Write-Host 'Cancelled.' -ForegroundColor Yellow; return }
+if (-not (Read-YesNo $(if ($ExistingApim) { 'Apply this to the existing gateway?' } else { 'Create these resources?' }) $true)) {
+    Write-Host ''; Write-Host 'Cancelled.' -ForegroundColor Yellow; return
+}
 
 # ---------------------------------------------------------------- 6. deploy
 
@@ -361,8 +432,27 @@ Write-Step 'Resource group'
 az group create -n $ResourceGroup -l $Location -o none
 Write-Ok $ResourceGroup
 
-Write-Step "API Management and Application Insights (30-45 min)"
+Write-Step $(if ($ExistingApim) { 'Claude API and policies (a few minutes)' } else { 'API Management and Application Insights (30-45 min)' })
 Write-Note 'Safe to leave running.'
+
+# Entitlement is owned by Sync-ClaudeAccess.ps1, not by this template. If the
+# gateway already exists, read the current allow lists and hand them back, so a
+# redeploy cannot reset them to empty and revoke everybody. `what-if` against
+# the live gateway showed exactly that happening.
+$allowStd = ''
+$allowPrm = ''
+if ($ExistingApim -or (az apim show -g $ResourceGroup -n $apimName --query name -o tsv 2>$null)) {
+    $allowStd = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id allow-standard --query value -o tsv 2>$null
+    $allowPrm = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id allow-premium  --query value -o tsv 2>$null
+    if (-not $allowStd) { $allowStd = '' }
+    if (-not $allowPrm) { $allowPrm = '' }
+    $keptStd = @($allowStd.Trim(',') -split ',' | Where-Object { $_ })
+    $keptPrm = @($allowPrm.Trim(',') -split ',' | Where-Object { $_ })
+    if ($keptStd.Count -or $keptPrm.Count) {
+        Write-Note "preserving entitlement: $($keptStd.Count) standard, $($keptPrm.Count) premium"
+    }
+}
+
 $deployName = "claude-gw-$(Get-Date -Format 'yyyyMMddHHmmss')"
 az deployment group create `
     --name $deployName `
@@ -370,11 +460,14 @@ az deployment group create `
     --template-file (Join-Path $root 'infra/main.bicep') `
     --parameters `
         namePrefix=$NamePrefix `
+        existingApimName=$ExistingApim `
         location=$Location `
         foundryAccountName=$FoundryAccount `
         foundryResourceGroup=$FoundryResourceGroup `
         publisherEmail=$PublisherEmail `
         apimSku=$Sku `
+        allowStandardValueExisting=$allowStd `
+        allowPremiumValueExisting=$allowPrm `
         tpmStandard=$TpmStandard `
         quotaStandard=$QuotaStandard `
         tpmPremium=$TpmPremium `
