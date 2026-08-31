@@ -5,10 +5,10 @@ answers and different owners:
 
 | # | Requirement | Short answer |
 |---|---|---|
-| [1](#1-history-memory-and-sessions) | Keep chat history, memory and sessions intact | **Claude Code: everything survives. Claude Desktop: conversations do not, and cannot be imported.** Plan around it. |
+| [1](#1-history-memory-and-sessions) | Keep chat history, memory and sessions intact | **Claude Code and Cowork memory survive intact. Desktop conversations do not, and cannot be imported — but they can be exported, and Claude.ai memory can be moved across as CLAUDE.md.** |
 | [2](#2-mass-deployment-through-mdm) | Bulk install and push user-level config via MDM | Fully supported. Managed settings override every user-level value. |
 | [3](#3-bulk-entitlement-from-a-csv-or-an-entra-group) | Bulk migration from C4E, CSV or Entra groups | `Import-ClaudeEntitlement.ps1`. Budget effort for identity resolution, not for the import. |
-| [4](#4-cutover-runbook) | How to actually run it | Pilot, dual-run, cut over, decommission. |
+| [4](#4-cutover-runbook) | How to actually run it | Export first, pilot, dual-run, cut over, decommission. |
 
 Every claim below was checked against Anthropic's documentation or against a
 live deployment. Where something is genuinely undocumented it says so rather
@@ -66,20 +66,89 @@ backend, until the account is deprovisioned.
 | Claude Code prompt history | Yes | None. `~/.claude/history.jsonl` |
 | CLAUDE.md memory, all scopes | Yes | None — and you can now deploy an org-wide one, see below |
 | Claude Code auto memory | Yes | None. `~/.claude/projects/<project>/memory/` |
+| **Cowork memory** | **Yes** | None — Cowork runs on Claude Code and reads the same files |
 | MCP servers, plugins, settings | Yes | None. `~/.claude.json`, `~/.claude/settings.json` |
-| **Claude Desktop conversations** | **No** | **Export before deprovisioning. No import path exists.** |
-| Claude.ai Projects and Artifacts | No | Not available in third-party mode |
-| Claude.ai server-side Memory | No | Not documented for third-party mode |
+| **Claude Desktop conversations** | **No** | **Export first. No import path into third-party mode.** |
+| **Claude.ai chat memory** | Not automatically | **Exportable, and it lands as CLAUDE.md.** See below |
+| Claude.ai Projects | No | Not available in third-party mode |
+| Claude.ai server-side Memory feature | No | No equivalent surface in third-party mode |
 
-**Export Claude.ai data before you deprovision anyone.** Anthropic's support
-article URLs moved while this was written, so rather than cite a link that
-rots: the export is requested from within Claude.ai's own settings, and a
-GDPR/CCPA request to `privacy@anthropic.com` is the fallback. Confirm the
-current mechanism yourself before the cutover date, and give people a window to
-export while their account is still live.
+### Exporting past conversations
 
-Treat the exported archive as a read-only reference. It does not load into
-Desktop on Foundry.
+This is a **central admin task on Team and Enterprise, not a per-user one** —
+which changes the runbook, because "tell everyone to export" does not work.
+
+| Plan | Who exports | Where |
+|------|-------------|-------|
+| Team, Enterprise | **Primary Owner only** | Organization settings → Data and privacy |
+| Free, Pro, Max | Each user | Settings → Privacy |
+
+Both run from the web app **or Claude Desktop**; neither works from iOS or
+Android. The export is processed asynchronously and a download link arrives by
+email.
+
+> **Export before you delete anything.** Anthropic's documentation is explicit:
+> messages, files and projects deleted from the account — manually *or by
+> enterprise retention settings* — are not included in exports initiated after
+> the deletion. A retention policy that trims at 90 days will already have
+> removed what you were hoping to archive. Run the export as the first step of
+> the migration, not the last.
+
+Audit logs are a separate export for Enterprise Primary Owners.
+
+Treat the archive as a read-only reference. It does not load into Desktop on
+Foundry.
+
+— [Export your organization's data](https://support.claude.com/en/articles/13346720-export-your-organization-s-data),
+[Export your Claude data](https://support.claude.com/en/articles/9450526-export-your-claude-data)
+
+### Memory: three things with the same name
+
+Most of the confusion here comes from "memory" meaning three separate
+mechanisms. They have three different answers.
+
+**1. Claude Code memory — survives untouched.** `CLAUDE.md` at every scope,
+`~/.claude/rules/`, and auto memory under
+`~/.claude/projects/<project>/memory/`. All local, all provider-independent.
+
+**2. Cowork memory — the same files, so it also survives.** Cowork sessions in
+Claude Desktop run on Claude Code and read `~/.claude/CLAUDE.md` and
+`~/.claude/rules/`. This is the part people expect to lose and do not.
+
+> One real difference: in Cowork sessions Claude Code deliberately **skips
+> `@`-imports inside user-scope memory files**, as a hardening measure. A
+> `CLAUDE.md` that pulls content in by reference will look empty in Cowork.
+> Keep the content inline.
+
+**3. Claude.ai chat memory — no automatic path, but not lost either.** There is
+no Anthropic account in third-party mode, so Claude's own memory import flow has
+nothing to import into. Anthropic does document a **prompt-based export**: you
+ask Claude to list everything it has stored about you, and it returns a single
+code block.
+
+That block is Markdown, and `CLAUDE.md` is Markdown, so it moves across
+directly:
+
+```powershell
+# paste the exported block, or point at the file you saved it to
+./scripts/Import-ClaudeMemory.ps1 -Path .\exported-memory.md
+```
+
+It strips the code fence, writes `~/.claude/CLAUDE.md`, keeps anything already
+in that file, and replaces its own block rather than stacking on a re-run.
+`-Scope managed` writes the fleet-wide file instead — for shared standards,
+rather than one person's memory.
+
+Two caveats worth passing on: memory import on the Claude.ai side is described
+as experimental, and Team and Enterprise organisations are currently on the
+legacy memory experience pending a rollout. Neither affects the
+export-to-CLAUDE.md route above, which is just text.
+
+— [Import and export your memory](https://support.claude.com/en/articles/12123587-import-and-export-your-memory-from-claude)
+
+**Claude Desktop's Chat surface has no memory feature in third-party mode.**
+There is no configuration key for it and no mention in the reference. The only
+memory that reaches Desktop is through Cowork, from Claude Code's files.
 
 ### Give people a reason not to mind
 
@@ -328,6 +397,12 @@ account is disabled, since token acquisition fails at that moment.
 
 ## 4. Cutover runbook
 
+**Export first, before anything is deleted.** On Team or Enterprise this is the
+Primary Owner, from Organization settings → Data and privacy. Do it at the
+*start* of the migration: anything already removed by a retention policy will
+not be in the archive. Ask people to run the memory export prompt in the same
+window, while their account is still live.
+
 **Pilot — one team, two weeks.** Deploy the gateway, entitle the team, push MDM
 to their machines only. Confirm `/status` shows the managed source, traffic
 carries `x-governed-by`, and budgets appear in Application Insights. Have them
@@ -338,31 +413,31 @@ volunteers rather than by everyone at once.
 is what makes the Desktop history gap survivable: people still have their old
 conversations to refer back to. Tell them the window and when it closes.
 
-**Export.** Before deprovisioning, give people a window to export their
-Claude.ai data, and confirm the current export mechanism yourself first.
+**Land the memory.** Run `Import-ClaudeMemory.ps1` for anyone who exported, or
+publish a shared `-Scope managed` CLAUDE.md for the house standards. Cowork
+picks up the same file.
 
 **Cut over.** Push MDM fleet-wide. Run the bulk import for the full population.
 Sync. Watch Application Insights for `403`s — that is your list of people the
 roster missed.
 
 **Decommission.** Deprovision first-party accounts only after the export window
-has closed. Then check the direct-access bypass: anyone holding
-`Cognitive Services User` on the Foundry account directly can skip the gateway
-and every budget with it. [SETUP.md §4.2](SETUP.md) has the audit commands.
+has closed and the archive has been verified as readable. Then check the
+direct-access bypass: anyone holding `Cognitive Services User` on the Foundry
+account directly can skip the gateway and every budget with it.
+[SETUP.md §4.2](SETUP.md) has the audit commands.
 
 ---
 
-## What we could not confirm
+## What is still genuinely unknown
 
-Stated plainly, because a migration plan built on a guess is worse than one
-with a known gap:
+Short list, stated plainly, because a migration plan built on a guess is worse
+than one with a known gap:
 
-- **The current Claude.ai data export mechanism.** Anthropic's support URLs
-  moved during writing. Verify in-app before you depend on it.
-- **Whether Projects and Artifacts are included in that export.** Not documented.
-- **Whether Claude.ai's server-side Memory has any third-party equivalent.**
-  Not documented. It almost certainly does not, since there is no account, but
-  that is inference.
+- **Whether Projects and Artifacts are included in the data export.** The
+  export article does not enumerate its contents beyond messages, files and
+  projects being subject to the deletion caveat. Open one archive during the
+  pilot and look, rather than assuming either way.
 - **Accepted values for `forceLoginMethod`.** It restricts login to claude.ai,
   the Console, or a gateway, and would stop someone signing in to a personal
   account — but the exact enum was not confirmed, so the generated policy does
