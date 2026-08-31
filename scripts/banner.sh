@@ -3,9 +3,10 @@
 # Project banner for the shell setup scripts. Source it, then call
 # claude_banner "Subtitle".
 #
-# Two renderings. The block-character version looks better but needs a terminal
-# on a UTF-8 locale; anywhere else it becomes mojibake, which is worse than
-# plain ASCII. The locale decides, and CLAUDE_BANNER_ASCII=1 forces the safe one.
+# The art is pure ASCII, so there is one rendering and no locale sniffing: it
+# looks the same on every terminal. It is emitted from a quoted heredoc rather
+# than printf, because the art contains an apostrophe - which would end a
+# single-quoted string - and a percent sign would otherwise need escaping.
 
 claude_banner() {
     local subtitle="${1:-Governed gateway for Claude on Microsoft Foundry}"
@@ -17,35 +18,18 @@ claude_banner() {
         cyan=""; dim=""; white=""; off=""
     fi
 
-    local unicode_ok=1
-    [ "${CLAUDE_BANNER_ASCII:-0}" = "1" ] && unicode_ok=0
-    case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
-        *UTF-8*|*utf8*|*UTF8*) ;;
-        *) unicode_ok=0 ;;
-    esac
-
     printf '\n%s' "$cyan"
-    if [ "$unicode_ok" = "1" ]; then
-        printf '   ▄▀█ ▀█ █ █ █▀█ █▀▀   █▀▀ █   ▄▀█ █ █ █▀▄ █▀▀   █▀▀ █▀█ █▀▄ █▀▀\n'
-        printf '   █▀█ █▄ █▄█ █▀▄ ██▄   █▄▄ █▄▄ █▀█ █▄█ █▄▀ ██▄   █▄▄ █▄█ █▄▀ ██▄\n'
-    else
-        # A boxed banner rather than a second figlet: ASCII figlet at this width
-        # renders "Azure Claude Code" almost illegibly, and a fallback nobody
-        # can read is worse than a plain one.
-        printf '  +----------------------------------------------------------------------+\n'
-        printf '  |                                                                      |\n'
-        printf '  |          A Z U R E     C L A U D E     C O D E                       |\n'
-        printf '  |                                                                      |\n'
-        printf '  +----------------------------------------------------------------------+\n'
-    fi
+    cat <<'ART'
+ _____               _            _____ _           _        _____       _     
+|   __|___ _ _ ___ _| |___ _ _   |     | |___ _ _ _| |___   |     |___ _| |___ 
+|   __| . | | |   | . |  _| | |  |   --| | .'| | | . | -_|  |   --| . | . | -_|
+|__|  |___|___|_|_|___|_| |_  |  |_____|_|__,|___|___|___|  |_____|___|___|___|
+                          |___|                                                 
+ART
     printf '%s' "$off"
 
-    printf '  %sS E T U P%s  %s%s%s\n' "$white" "$off" "$dim" "$subtitle" "$off"
-    if [ "$unicode_ok" = "1" ]; then
-        printf '  %s' "$dim"; printf '─%.0s' $(seq 1 72); printf '%s\n' "$off"
-    else
-        printf '  %s' "$dim"; printf -- '-%.0s' $(seq 1 72); printf '%s\n' "$off"
-    fi
-    printf '  %sDeveloper%s Naveen Gopalakrishna   %sgithub.com/naveenneog%s\n\n' \
+    printf '%sS E T U P%s  %s%s%s\n' "$white" "$off" "$dim" "$subtitle" "$off"
+    printf '%s' "$dim"; printf -- '-%.0s' $(seq 1 79); printf '%s\n' "$off"
+    printf '%sDeveloper%s Naveen Gopalakrishna   %sgithub.com/naveenneog%s\n\n' \
         "$dim" "$off" "$cyan" "$off"
 }

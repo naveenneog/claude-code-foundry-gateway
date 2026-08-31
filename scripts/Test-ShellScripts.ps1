@@ -65,11 +65,31 @@ function Assert-Contains($label, $text, $needle) {
 
 $bannerPath = '/' + ((Join-Path $PSScriptRoot 'banner.sh').Replace('\','/') -replace '^([A-Za-z]):','$1')
 
-$uni = & $bash -c "export LANG=en_US.UTF-8; . '$bannerPath'; claude_banner 'test'" 2>&1 | Out-String
-Assert-Contains 'banner.sh renders unicode' $uni 'Naveen Gopalakrishna'
+$utf8 = & $bash -c "export LANG=en_US.UTF-8; . '$bannerPath'; claude_banner 'test'" 2>&1 | Out-String
+Assert-Contains 'banner.sh renders' $utf8 'Naveen Gopalakrishna'
 
-$asc = & $bash -c "export CLAUDE_BANNER_ASCII=1; . '$bannerPath'; claude_banner 'test'" 2>&1 | Out-String
-Assert-Contains 'banner.sh ascii fallback'  $asc 'A Z U R E'
+# The art is pure ASCII specifically so there is only ever one rendering, on
+# every terminal and code page. Assert that at the byte level.
+#
+# An earlier version of this check ran the banner under LANG=C and compared the
+# output to a UTF-8 run, on the theory that a non-ASCII character would render
+# differently. It does not: bash emits the same bytes whatever the locale, so
+# that check passed happily with a U+2500 in the file. Inspecting the bytes is
+# the only thing that actually tests the property.
+foreach ($f in @(
+    @{ Name = 'banner.sh';      Path = (Join-Path $PSScriptRoot 'banner.sh') },
+    @{ Name = 'Show-Banner.ps1'; Path = (Join-Path $PSScriptRoot 'Show-Banner.ps1') }
+)) {
+    if (-not (Test-Path $f.Path)) { continue }
+    $bytes = [IO.File]::ReadAllBytes($f.Path)
+    $bad = @($bytes | Where-Object { $_ -gt 127 }).Count
+    if ($bad -eq 0) {
+        Write-Host ("  [OK]   {0} is pure ASCII" -f $f.Name) -ForegroundColor Green
+    } else {
+        Write-Host ("  [FAIL] {0} has {1} non-ASCII byte(s) - it will need a BOM, and the shell art will vary by console" -f $f.Name, $bad) -ForegroundColor Red
+        $bannerFail++
+    }
+}
 
 # The two entry-point scripts must actually reach the banner, not fall through
 # to the plain header because the source path was wrong.
