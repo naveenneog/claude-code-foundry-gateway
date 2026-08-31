@@ -1,6 +1,12 @@
 # Screenshot tooling
 
-Generates the annotated images in [`../docs/UI-GUIDE.md`](../docs/UI-GUIDE.md).
+Generates the annotated portal images used across the guides, mainly
+[`../docs/SETUP.md`](../docs/SETUP.md) and
+[`../docs/ONBOARDING.md`](../docs/ONBOARDING.md).
+
+For the terminal screenshots of the installer, see
+[`redact-terminal.mjs`](redact-terminal.mjs) instead — those are captured from
+real runs and redacted rather than generated.
 
 Two entry points:
 
@@ -49,7 +55,7 @@ Step ids:
 
 | id | Backs |
 |----|-------|
-| `a1`–`a8`, `b1`–`b5` | [UI guide](../docs/UI-GUIDE.md) |
+| `a1`–`a8`, `b1`–`b5` | [Setup guide](../docs/SETUP.md) |
 | `c2-entra-groups`, `c3-group-members`, `c4-tier-budget` | [Onboarding guide](../docs/ONBOARDING.md) |
 | `c5-metrics` | [Monitoring guide](../docs/MONITORING.md) |
 

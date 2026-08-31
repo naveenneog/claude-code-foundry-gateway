@@ -331,15 +331,17 @@ JWT Claude Code sends and prints the claims, without ever logging the token.
 | **Standing this up for the first time** | [Setup](docs/SETUP.md) → [Onboarding Part A](docs/ONBOARDING.md#part-a--platform-team) → [Monitoring](docs/MONITORING.md) |
 | **A developer who was just given access** | [Onboarding Part B](docs/ONBOARDING.md#part-b--developer) — nothing else |
 | **Deciding whether to do this at all** | [Comparison](docs/COMPARISON.md) → [Architecture](docs/ARCHITECTURE.md) |
+| **Moving a population off first-party Claude** | [Migration](docs/MIGRATION.md) → [Setup](docs/SETUP.md) |
 | **Fixing something that broke** | [Debug](docs/DEBUGGING.md) — it names the layer, then sends you on |
 | **Being asked "who spent what?"** | [Monitoring](docs/MONITORING.md) |
 
-**The four guides:**
+**The five guides:**
 
 | Guide | For | Covers |
 |-------|-----|--------|
 | [Setup](docs/SETUP.md) | platform team | prerequisites, **roles and permissions**, deployment, closing the bypass |
 | [Onboarding](docs/ONBOARDING.md) | platform team + developers | add a developer, change tiers, revoke; the developer's own setup |
+| [Migration](docs/MIGRATION.md) | platform team | moving off first-party Claude at scale: what survives, MDM push, bulk entitlement |
 | [Monitoring](docs/MONITORING.md) | whoever owns the spend | metrics, filters, chargeback, KQL, alerts |
 | [Debug](docs/DEBUGGING.md) | anyone | isolate a failure layer by layer |
 
