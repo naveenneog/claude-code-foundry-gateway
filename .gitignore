@@ -21,3 +21,5 @@ onboarding/claude-gateway.json
 
 # Raw transcripts are inputs to the rendered images; the images are what ship.
 docs/transcripts/
+
+!onboarding/README.md

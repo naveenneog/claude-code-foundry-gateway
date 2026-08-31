@@ -202,6 +202,16 @@ role assignment, applies the policy, creates the Entra groups, syncs
 entitlement, verifies the controls, and writes `onboarding/claude-gateway.json`
 — the file your developers' setup script reads.
 
+> **That file does not exist until you deploy.** It is not in the repository,
+> because it describes your specific gateway. The `onboarding/` folder is
+> created by the wizard, and
+> [onboarding/README.md](../onboarding/README.md) explains what lands there.
+>
+> It holds the gateway URL, tenant id, group names and tier limits — **no
+> secret**. Access is Entra group membership, enforced at the gateway, so the
+> file is safe to email or put on a share. Someone holding it without being in
+> the group still gets `403`.
+
 Re-runnable, so it is also how you change budgets later.
 
 Unattended:

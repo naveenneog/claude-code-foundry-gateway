@@ -92,7 +92,30 @@ if ($ConfigPath) {
     }
     catch { Write-Warn2 "Could not read $ConfigPath - $($_.Exception.Message)" }
 }
-if (-not $GatewayUrl) { throw 'Supply -ConfigPath, or -GatewayUrl and -TenantId.' }
+if (-not $GatewayUrl) {
+    Write-Host ''
+    Write-Bad 'No gateway configuration.'
+    Write-Host ''
+    Write-Host '  This script needs to know which gateway to point at. That comes from a' -ForegroundColor White
+    Write-Host '  small file called claude-gateway.json.' -ForegroundColor White
+    Write-Host ''
+    Write-Host '  Where to get it:' -ForegroundColor White
+    Write-Host '    Your platform team generates it when they deploy the gateway, and sends'
+    Write-Host '    it to you - usually attached to your onboarding email, or on an internal'
+    Write-Host '    share. It is not in this repository, because it describes your specific'
+    Write-Host '    deployment.'
+    Write-Host ''
+    Write-Host '  Then run:' -ForegroundColor White
+    Write-Host '    .\Setup-ClaudeWorkstation.ps1 -ConfigPath <path-to-claude-gateway.json>'
+    Write-Host ''
+    Write-Host '  Or skip the file and pass the two values directly:' -ForegroundColor White
+    Write-Host '    .\Setup-ClaudeWorkstation.ps1 -GatewayUrl https://<apim>.azure-api.net/claude -TenantId <tenant-id>'
+    Write-Host ''
+    Write-Host '  It contains no secret - just the gateway URL, tenant id and tier limits.' -ForegroundColor DarkGray
+    Write-Host '  Access comes from your Entra group membership, not from this file.' -ForegroundColor DarkGray
+    Write-Host ''
+    return
+}
 $GatewayUrl = $GatewayUrl.TrimEnd('/')
 Write-Ok "gateway: $GatewayUrl"
 if ($TenantId) { Write-Note "tenant : $TenantId" }

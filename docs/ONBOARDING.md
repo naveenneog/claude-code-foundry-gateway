@@ -108,11 +108,12 @@ Their object id must appear. Then confirm end to end:
 
 ### Step 5 — hand over Part B
 
-Send the developer [Part B](#part-b--developer). They need the gateway URL and
-the tenant id; nothing else, and no credential.
+Send the developer [Part B](#part-b--developer), plus
+**`onboarding/claude-gateway.json`** — the file the wizard wrote when you
+deployed. Their setup script reads the gateway URL, tenant and tier limits from
+it, so they type none of them.
 
-Or generate the whole thing — a formatted email, plus the config file their
-setup script reads:
+Or generate the whole handover — a formatted email with the config alongside it:
 
 ```powershell
 ./scripts/New-OnboardingEmail.ps1 `
@@ -341,7 +342,21 @@ Your gateway URL, tenant, and tier limits are in the `claude-gateway.json` your
 platform team sent you. The setup script reads it, so you do not need to type
 any of them.
 
+> **Do not have that file?** It is not in the repository — your platform team
+> generates it when they deploy the gateway, so ask them for it. It usually
+> arrives attached to your onboarding email.
+>
+> You can also skip it entirely and pass the two values directly:
+>
+> ```powershell
+> .\Setup-ClaudeWorkstation.ps1 -GatewayUrl https://<apim>.azure-api.net/claude -TenantId <tenant-id>
+> ```
+>
+> Neither value is a secret. Your access comes from Entra group membership.
+
 ## One command
+
+Put `claude-gateway.json` next to the script, then:
 
 ```powershell
 # Windows

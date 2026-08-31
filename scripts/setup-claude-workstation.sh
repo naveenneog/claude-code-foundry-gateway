@@ -125,7 +125,23 @@ if [ -n "$CONFIG" ]; then
 fi
 
 if [ -z "$GATEWAY_URL" ]; then
-  bad_ "No gateway URL. Pass --config, or --gateway-url and --tenant-id."
+  printf '\n'
+  bad_ "No gateway configuration."
+  printf '\n'
+  printf '  This script needs to know which gateway to point at. That comes from a\n'
+  printf '  small file called claude-gateway.json.\n\n'
+  printf '  Where to get it:\n'
+  printf '    Your platform team generates it when they deploy the gateway, and sends\n'
+  printf '    it to you - usually attached to your onboarding email, or on an internal\n'
+  printf '    share. It is not in this repository, because it describes your specific\n'
+  printf '    deployment.\n\n'
+  printf '  Then run:\n'
+  printf '    ./setup-claude-workstation.sh --config <path-to-claude-gateway.json>\n\n'
+  printf '  Or skip the file and pass the two values directly:\n'
+  printf '    ./setup-claude-workstation.sh --gateway-url https://<apim>.azure-api.net/claude \\\n'
+  printf '                                  --tenant-id <tenant-id>\n\n'
+  printf '  \033[90mIt contains no secret - just the gateway URL, tenant id and tier limits.\033[0m\n'
+  printf '  \033[90mAccess comes from your Entra group membership, not from this file.\033[0m\n\n'
   exit 1
 fi
 GATEWAY_URL="${GATEWAY_URL%/}"
