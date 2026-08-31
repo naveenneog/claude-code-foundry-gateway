@@ -1,0 +1,27 @@
+# Without this, correct line endings depend on each contributor's core.autocrlf.
+# A contributor with autocrlf=false on Windows would commit CRLF into a shell
+# script, and it would then fail on Linux and macOS with the unhelpful
+# "bad interpreter: /usr/bin/env bash^M".
+
+* text=auto
+
+# Must be LF wherever they are checked out - these run on macOS and Linux.
+*.sh        text eol=lf
+
+# Windows-only, and PowerShell is fine either way, but keep them stable.
+*.ps1       text eol=crlf
+*.psm1      text eol=crlf
+*.cmd       text eol=crlf
+*.bat       text eol=crlf
+
+*.json      text
+*.bicep     text
+*.md        text
+*.xml       text
+*.yml       text
+*.yaml      text
+
+*.png       binary
+*.jpg       binary
+*.gif       binary
+*.ico       binary
