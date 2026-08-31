@@ -43,5 +43,68 @@ foreach ($s in $scripts) {
 }
 
 Write-Host ''
-if ($fail -eq 0) { Write-Host 'All shell scripts parse.' -ForegroundColor Green }
-else { Write-Host "$fail script(s) have syntax errors." -ForegroundColor Red; exit 1 }
+if ($fail -ne 0) { Write-Host "$fail script(s) have syntax errors." -ForegroundColor Red; exit 1 }
+Write-Host 'All shell scripts parse.' -ForegroundColor Green
+
+# Parsing is not enough. A mangled $(dirname ...) once made the workstation
+# script source a banner path that did not exist: still valid bash, so -n
+# passed, but the banner silently never rendered. These checks run the banner
+# for real and assert something recognisable comes back.
+Write-Host ''
+Write-Host 'Runtime checks' -ForegroundColor Cyan
+
+$bannerFail = 0
+function Assert-Contains($label, $text, $needle) {
+    if ($text -match [regex]::Escape($needle)) {
+        Write-Host ("  [OK]   {0}" -f $label) -ForegroundColor Green
+    } else {
+        Write-Host ("  [FAIL] {0} - expected '{1}'" -f $label, $needle) -ForegroundColor Red
+        $script:bannerFail++
+    }
+}
+
+$bannerPath = '/' + ((Join-Path $PSScriptRoot 'banner.sh').Replace('\','/') -replace '^([A-Za-z]):','$1')
+
+$uni = & $bash -c "export LANG=en_US.UTF-8; . '$bannerPath'; claude_banner 'test'" 2>&1 | Out-String
+Assert-Contains 'banner.sh renders unicode' $uni 'Naveen Gopalakrishna'
+
+$asc = & $bash -c "export CLAUDE_BANNER_ASCII=1; . '$bannerPath'; claude_banner 'test'" 2>&1 | Out-String
+Assert-Contains 'banner.sh ascii fallback'  $asc 'A Z U R E'
+
+# The two entry-point scripts must actually reach the banner, not fall through
+# to the plain header because the source path was wrong.
+#
+# --help is not a usable probe: both scripts print usage and exit before the
+# banner, by design. So each is run just far enough to render it and stop.
+
+# The gateway installer prints the banner, then preflight. Closed stdin makes
+# it stop at the first prompt.
+$gw = Join-Path (Split-Path $PSScriptRoot -Parent) 'install-claude-gateway.sh'
+if (Test-Path $gw) {
+    $p = '/' + (($gw).Replace('\','/') -replace '^([A-Za-z]):','$1')
+    $out = & $bash -c "export LANG=en_US.UTF-8; timeout 25 bash '$p' </dev/null 2>&1 | head -20" 2>&1 | Out-String
+    Assert-Contains 'install-claude-gateway.sh shows the banner' $out 'github.com/naveenneog'
+}
+
+# The workstation script refuses to run on MINGW64 - correctly, it points
+# Windows users at the PowerShell version - and that check comes before the
+# banner. uname is shimmed to reach it. HOME is redirected at the same time so
+# a run that gets further than expected cannot touch the real profile.
+$ws = Join-Path $PSScriptRoot 'setup-claude-workstation.sh'
+if (Test-Path $ws) {
+    $p = '/' + (($ws).Replace('\','/') -replace '^([A-Za-z]):','$1')
+    $probe = @'
+tmp=$(mktemp -d); shim="$tmp/bin"; mkdir -p "$shim"
+printf '#!/bin/sh\nif [ "$1" = "-s" ]; then echo Linux; else /usr/bin/uname "$@"; fi\n' > "$shim/uname"
+chmod +x "$shim/uname"
+PATH="$shim:$PATH" HOME="$tmp/home" LANG=en_US.UTF-8 \
+  timeout 25 bash 'SCRIPT' --skip-install --skip-desktop --skip-vscode </dev/null 2>&1 | head -20
+rm -rf "$tmp"
+'@ -replace 'SCRIPT', $p
+    $out = & $bash -c $probe 2>&1 | Out-String
+    Assert-Contains 'setup-claude-workstation.sh shows the banner' $out 'github.com/naveenneog'
+}
+
+Write-Host ''
+if ($bannerFail -eq 0) { Write-Host 'Runtime checks passed.' -ForegroundColor Green; exit 0 }
+else { Write-Host "$bannerFail runtime check(s) failed." -ForegroundColor Red; exit 1 }

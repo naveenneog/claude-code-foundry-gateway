@@ -72,7 +72,12 @@ function Write-Note($t) { Write-Host "    $t" -ForegroundColor DarkGray }
 
 $problems = @()
 
-Write-Head 'Claude on Microsoft Foundry - workstation setup'
+$banner = Join-Path $PSScriptRoot 'Show-Banner.ps1'
+if (Test-Path $banner) {
+    . $banner
+    Show-ClaudeBanner -Subtitle 'Workstation setup - CLI, VS Code and Desktop'
+}
+else { Write-Head 'Claude on Microsoft Foundry - workstation setup' }
 
 # ----------------------------------------------------------------- 0. config
 

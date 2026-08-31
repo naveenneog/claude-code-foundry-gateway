@@ -117,11 +117,11 @@ function Read-YesNo {
 
 # --------------------------------------------------------------- 0. sign-in
 
-Write-Head 'Claude on Microsoft Foundry - governed gateway setup'
-Write-Host ''
+. (Join-Path $root 'scripts/Show-Banner.ps1')
+Show-ClaudeBanner -Subtitle 'Governed gateway for Claude on Microsoft Foundry'
+
 Write-Host ' Every prompt has a default. Press Enter to accept it.' -ForegroundColor DarkGray
 Write-Host ' Nothing is created until you confirm the summary.' -ForegroundColor DarkGray
-
 # Fail here, with a remedy, rather than part-way through a deployment.
 . (Join-Path $root 'scripts/Test-Prerequisites.ps1')
 if (-not (Test-ClaudePrerequisites -Mode Admin)) { return }

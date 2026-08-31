@@ -372,6 +372,28 @@ Issues and pull requests welcome. This accelerator was built and verified end to
 live Foundry deployment; if something does not work in your tenant, please open an issue with the
 failing command and its output.
 
+### Running the checks
+
+```powershell
+./scripts/Test-All.ps1                 # offline: encoding, shell scripts, both PowerShell hosts
+./scripts/Test-All.ps1 -IncludeAzure   # adds the checks that call Azure
+```
+
+Two things these guard that are easy to get wrong, and that a syntax check will not catch:
+
+**PowerShell scripts containing non-ASCII characters must be saved as UTF-8 *with* a BOM.**
+Windows PowerShell 5.1 reads `.ps1` files as ANSI unless a BOM says otherwise, so the banner's
+block characters are mangled at parse time — before anything is printed, and regardless of the
+console code page. PowerShell 7 reads UTF-8 either way, so this is invisible until someone runs
+it on 5.1. `./scripts/Repair-ScriptEncoding.ps1` fixes it; `-Check` just reports.
+
+**Keep `( )`, `|`, `&`, `<`, `>` and `^` out of `az --query`.** On Windows `az` is a `.cmd`
+shim, and PowerShell only quotes a native argument if it contains a space. A query such as
+`"[?contains(name,'x')].name"` has none, so it reaches `cmd.exe` bare and is re-parsed:
+`].name was unexpected at this time`. This affects PowerShell 5.1 and 7 equally. Worse, the
+error text is a non-empty string, so a plain `if ($result)` reads it as success. Filter in
+PowerShell instead. Brackets and braces are safe; bash is unaffected.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

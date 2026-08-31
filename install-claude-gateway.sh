@@ -100,8 +100,14 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-head_ "Claude on Microsoft Foundry - governed gateway setup"
-printf '\n %sEvery prompt has a default. Press Enter to accept it.%s\n' "$C_GREY" "$C_OFF"
+if [ -f "$HERE/scripts/banner.sh" ]; then
+  . "$HERE/scripts/banner.sh"
+  claude_banner "Governed gateway for Claude on Microsoft Foundry"
+else
+  head_ "Claude on Microsoft Foundry - governed gateway setup"
+  printf '\n'
+fi
+printf ' %sEvery prompt has a default. Press Enter to accept it.%s\n' "$C_GREY" "$C_OFF"
 printf ' %sNothing is created until you confirm the summary.%s\n' "$C_GREY" "$C_OFF"
 
 # Fail here, with a specific remedy, rather than part-way through a deployment.

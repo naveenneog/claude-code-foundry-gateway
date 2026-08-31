@@ -94,7 +94,14 @@ esac
 
 HELPER_DIR="$HOME/.claude-foundry"
 
-head_ "Claude on Microsoft Foundry - workstation setup"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ -f "$SCRIPT_DIR/banner.sh" ]; then
+  . "$SCRIPT_DIR/banner.sh"
+  claude_banner "Workstation setup - CLI, VS Code and Desktop"
+else
+  head_ "Claude on Microsoft Foundry - workstation setup"
+fi
 note_ "platform: $PLATFORM"
 
 # ------------------------------------------------------------------- config

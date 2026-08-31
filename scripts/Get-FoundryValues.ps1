@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Discovers every value needed to configure Claude Code for Microsoft Foundry.
 
