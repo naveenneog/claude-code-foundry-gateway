@@ -18,14 +18,48 @@ than guessing.
 
 ## 1. History, memory and sessions
 
-### The short version
+### What survives
 
-**Claude Code loses nothing. Claude Desktop and Cowork sessions do migrate —
-through an import wizard that is off by default and has to be switched on from
-both ends.**
+**Everything except attachments — but the import that moves it is off by
+default at both ends.** The work is switching it on before people cut over, not
+recovering data afterwards.
 
-The work is not recovering the data. It is making sure the two switches are on
-*before* people cut over, and knowing the one thing the import leaves behind.
+| Artefact | Survives? | What you do |
+|---|---|---|
+| Claude Code transcripts, prompt history, settings | Yes | Nothing. Local and provider-independent |
+| CLAUDE.md memory, `rules/`, auto memory | Yes | Nothing |
+| **Cowork memory** | Yes | Nothing — Cowork runs on Claude Code and reads the same files |
+| MCP servers and plugins | Yes | Nothing |
+| **Claude Desktop chats** | Via import | Switch on `claudeAiImport` **and** the claude.ai export toggle |
+| **Cowork and Code sessions on the machine** | Via import | Same — or `automatic3pImport` for a silent fleet-wide copy |
+| Claude.ai projects | Via import, as **Spaces** | Custom instructions are shown for review first |
+| Claude.ai chat memory | Via import | It is included in the export |
+| **Project knowledge files and attachments** | **No** | **The one real gap.** Only an org-level export has file contents |
+| Terminal Claude Code sessions | n/a | They never left `~/.claude` — nothing to move |
+
+### Why an import is needed at all
+
+Nothing crosses between the two modes on its own. Anthropic's architecture
+table for third-party mode:
+
+| Component | Standard Claude Desktop | Claude Desktop on 3P |
+|---|---|---|
+| Web application | Loaded from claude.ai | Bundled inside the desktop app |
+| User identity | Anthropic account | **Local device identity only** |
+| Conversation storage | **Anthropic backend** | **Local disk on the user's machine** |
+
+— [Claude Desktop on 3P: overview](https://claude.com/docs/third-party/claude-desktop/overview)
+
+The two modes keep separate storage roots, each with its own IndexedDB, which
+is observable on any machine that has run both:
+
+```
+%APPDATA%\Claude\                 first-party: Local Storage, IndexedDB, Session Storage
+%LOCALAPPDATA%\Claude-3p\         Foundry mode: its own Local Storage and IndexedDB
+```
+
+So a user switched to Foundry sees an empty Desktop until the import runs.
+That is why the switches below need to be on *before* they cut over, not after.
 
 ### How the import works
 
@@ -48,12 +82,11 @@ duplicate — which makes "import again just before cutover" a safe step.
 
 — [Import history from claude.ai](https://claude.com/docs/third-party/claude-desktop/import)
 
-### Two switches, both off by default
-
-Neither end is enabled out of the box, and both are administrator-controlled.
-This is the part that bites: a user who tries to import before the switches are
-on is told import is not enabled for this deployment, with no indication that
-it is a policy decision rather than a missing feature.
+**Two switches, both off by default.** Neither end is enabled out of the box,
+and both are administrator-controlled. This is the part that bites: a user who
+tries to import before the switches are on is told import is not enabled for
+this deployment, with no indication that it is a policy decision rather than a
+missing feature.
 
 **1. In your Desktop managed configuration**, set `claudeAiImport`:
 
@@ -88,48 +121,7 @@ So if a team has been treating a Claude project's knowledge base as a document
 store, plan to move those files separately. That is the item to surface early,
 not conversation history.
 
-### Why the storage still looks empty at first
-
-Anthropic's architecture table for third-party mode:
-
-| Component | Standard Claude Desktop | Claude Desktop on 3P |
-|---|---|---|
-| Web application | Loaded from claude.ai | Bundled inside the desktop app |
-| User identity | Anthropic account | **Local device identity only** |
-| Conversation storage | **Anthropic backend** | **Local disk on the user's machine** |
-
-— [claude.com/docs/third-party/claude-desktop/overview](https://claude.com/docs/third-party/claude-desktop/overview)
-
-The two modes use separate storage roots, each with its own IndexedDB, which is
-observable on any machine that has run both:
-
-```
-%APPDATA%\Claude\                 first-party: Local Storage, IndexedDB, Session Storage
-%LOCALAPPDATA%\Claude-3p\         Foundry mode: its own Local Storage and IndexedDB
-```
-
-Nothing crosses between them on its own. A user switched to Foundry sees an
-empty Desktop until the import runs — which is exactly why the switches above
-need to be on before, not after, they cut over.
-
-### What to do about it
-
-| Artefact | Survives? | Action |
-|---|---|---|
-| Claude Code session transcripts | Yes | None. `~/.claude/projects/<project>/*.jsonl` |
-| Claude Code prompt history | Yes | None. `~/.claude/history.jsonl` |
-| CLAUDE.md memory, all scopes | Yes | None — and you can now deploy an org-wide one, see below |
-| Claude Code auto memory | Yes | None. `~/.claude/projects/<project>/memory/` |
-| **Cowork memory** | Yes | None — Cowork runs on Claude Code and reads the same files |
-| MCP servers, plugins, settings | Yes | None. `~/.claude.json`, `~/.claude/settings.json` |
-| **Claude Desktop chats** | **Yes, via import** | Enable `claudeAiImport` + the claude.ai member-export toggle |
-| **Cowork and Code sessions on the machine** | **Yes, via import** | Same, or `automatic3pImport` for a silent fleet-wide copy |
-| Claude.ai projects | Yes, as **Spaces** | Custom instructions are shown for review before they take effect |
-| Claude.ai chat memory | Yes — it is in the export | Also landable as `CLAUDE.md`, see below |
-| **Project knowledge files and attachments** | **No** | **The real gap.** Only an org-level export includes file contents |
-| Terminal Claude Code sessions | Not via Desktop export | They never left `~/.claude` — nothing to move |
-
-### Exporting past conversations
+### Getting the claude.ai export
 
 This is a **central admin task on Team and Enterprise, not a per-user one** —
 which changes the runbook, because "tell everyone to export" does not work.
@@ -152,11 +144,12 @@ email.
 
 Audit logs are a separate export for Enterprise Primary Owners.
 
-Treat the archive as a read-only reference. It does not load into Desktop on
-Foundry.
+This archive is not just for the record: the `.zip` a member downloads is
+exactly what **Choose file…** takes in the import wizard's first step. Signing
+in to claude.ai from the wizard fetches the same thing without the round trip.
 
-— [Export your organization's data](https://support.claude.com/en/articles/13346720-export-your-organization-s-data),
-[Export your Claude data](https://support.claude.com/en/articles/9450526-export-your-claude-data)
+— [Export your organization's data](https://support.claude.com/en/articles/13346720-export-your-organization-s-data)
+· [Export your Claude data](https://support.claude.com/en/articles/9450526-export-your-claude-data)
 
 ### Memory: three things with the same name
 
@@ -209,7 +202,7 @@ export-to-CLAUDE.md route above, which is just text.
 There is no configuration key for it and no mention in the reference. The only
 memory that reaches Desktop is through Cowork, from Claude Code's files.
 
-### Give people a reason not to mind
+### An org-wide CLAUDE.md
 
 The migration is a good moment to deploy an organisation-wide CLAUDE.md, which
 first-party users never had. It sits above every user and project file:
@@ -225,6 +218,8 @@ first-party users never had. It sits above every user and project file:
 
 A `claudeMd` key in managed settings inlines the same content without shipping
 a file.
+
+— [Claude Code memory](https://code.claude.com/docs/en/memory)
 
 ### Where history lives afterwards: local or cloud
 
@@ -294,6 +289,10 @@ continuity, telemetry for the compliance record. The gateway already gives you
 token counts per person for chargeback without any of this — see
 [MONITORING.md](MONITORING.md).
 
+— [Claude Code monitoring and OpenTelemetry](https://code.claude.com/docs/en/monitoring-usage)
+· [Claude Code settings and `CLAUDE_CONFIG_DIR`](https://code.claude.com/docs/en/settings)
+· [Cowork monitoring](https://claude.com/docs/cowork/monitoring)
+
 ---
 
 ## 2. Mass deployment through MDM
@@ -328,6 +327,10 @@ Each emits `managed-settings.json`, a `.reg`, an Intune OMA-URI CSV, a
 > no longer read**. It is the natural place to guess, which is what makes it
 > worth stating.
 
+— [Deploy managed settings](https://code.claude.com/docs/en/managed-settings)
+· [Claude Desktop configuration reference](https://claude.com/docs/third-party/claude-desktop/configuration)
+· [Deploy Claude Desktop with MDM](https://claude.com/docs/third-party/claude-desktop/mdm)
+
 ### Three traps
 
 **Server-managed settings from the claude.ai console do not apply to you.**
@@ -335,6 +338,7 @@ Claude Code fetches that source only when the session authenticates to
 Anthropic's API directly. Pointing it at your own gateway makes it skip
 straight to MDM. For this deployment the console is not a lever; MDM or the
 file is.
+— [Server-managed settings](https://code.claude.com/docs/en/server-managed-settings)
 
 **The default is first-wins, not merge.** When several managed sources reach
 one machine, the highest-ranked source that supplies *any* policy key wins
@@ -347,6 +351,7 @@ remote  >  MDM / HKLM  >  managed-settings.json  >  HKCU
 Ship both a `.reg` and a `.json` and the `.reg` wins — the file is not merged
 in, it is discarded. Set `managedSourcesBehavior: "merge"` if you want them
 combined (Claude Code v2.1.242+).
+— [How Claude Code combines managed sources](https://code.claude.com/docs/en/managed-settings)
 
 **Cowork does not always see device policy.** Cowork sessions run on Claude
 Code and normally read the device's MDM policy — but not when your Desktop
@@ -354,6 +359,7 @@ configuration sets `requireCoworkFullVmSandbox`, because the VM has no device
 policy to read, and not for remote Cowork sessions on Anthropic-managed VMs. If
 you enforce the full VM sandbox, Cowork will not pick up the gateway
 configuration from MDM.
+— [Cowork overview](https://claude.com/docs/cowork/overview)
 
 ### Installing the binaries
 
@@ -366,12 +372,20 @@ configuration from MDM.
 No MSI is documented. WinGet and Homebrew do not auto-update; the native
 installer does. For a locked-down fleet that is usually the point.
 
+— [Claude Code overview and install](https://code.claude.com/docs/en/overview)
+· [MDM starter templates](https://github.com/anthropics/claude-code/tree/main/examples/mdm)
+
 ### Per-group policy
 
 One MDM profile applies to everyone it reaches, so different tiers need
 different profiles — which is straightforward in Intune or Jamf with group
 assignment. A self-hosted Claude apps gateway can deliver managed settings per
-IdP group, if you would rather not manage two profiles.
+IdP group, if you would rather not manage two profiles. A bootstrap server is
+the Desktop equivalent for role-based configuration too complex for per-group
+profiles.
+
+— [Claude apps gateway](https://code.claude.com/docs/en/claude-apps-gateway)
+· [Deploy Claude Desktop with a bootstrap server](https://claude.com/docs/third-party/claude-desktop/bootstrap)
 
 ### Verify it landed
 
@@ -506,3 +520,44 @@ on the Foundry account directly can skip the gateway and every budget with it.
   account — but the exact enum was not confirmed, so the generated policy does
   not set it. See
   [the settings reference](https://code.claude.com/docs/en/settings-reference).
+
+---
+
+## Anthropic references
+
+Everything above is grounded in these. Worth checking them directly before a
+cutover date: Claude Desktop on 3P is moving quickly, and the support site
+recently moved from `support.anthropic.com` to `support.claude.com`, so older
+links 404 rather than redirect.
+
+**Migrating the data**
+
+- [Import history from claude.ai](https://claude.com/docs/third-party/claude-desktop/import) — the wizard, what it carries, and what it leaves behind
+- [Export your organization's data](https://support.claude.com/en/articles/13346720-export-your-organization-s-data) — Primary Owner, Team and Enterprise
+- [Export your Claude data](https://support.claude.com/en/articles/9450526-export-your-claude-data) — individual plans
+- [Import and export your memory](https://support.claude.com/en/articles/12123587-import-and-export-your-memory-from-claude) — the prompt-based memory export
+
+**Claude Desktop on third-party**
+
+- [Overview](https://claude.com/docs/third-party/claude-desktop/overview) — architecture, and the storage change that underlies all of this
+- [Configuration reference](https://claude.com/docs/third-party/claude-desktop/configuration) — every managed key, including `claudeAiImport` and `otlpContentCapture`
+- [Deploy with MDM](https://claude.com/docs/third-party/claude-desktop/mdm) · [Deploy with a bootstrap server](https://claude.com/docs/third-party/claude-desktop/bootstrap)
+- [Deploy on Microsoft Foundry](https://claude.com/docs/third-party/claude-desktop/foundry)
+- [Write a credential helper](https://claude.com/docs/third-party/claude-desktop/credential-helper)
+- [Feature matrix vs Claude Enterprise](https://claude.com/docs/third-party/claude-desktop/feature-matrix)
+
+**Claude Code**
+
+- [Claude Code on Microsoft Foundry](https://code.claude.com/docs/en/microsoft-foundry) — `CLAUDE_CODE_USE_FOUNDRY` and Entra auth
+- [Deploy managed settings](https://code.claude.com/docs/en/managed-settings) — delivery mechanisms, precedence, first-wins
+- [Settings](https://code.claude.com/docs/en/settings) · [Settings reference](https://code.claude.com/docs/en/settings-reference)
+- [Memory](https://code.claude.com/docs/en/memory) — CLAUDE.md scopes, auto memory, Cowork behaviour
+- [Sessions](https://code.claude.com/docs/en/sessions) — where transcripts live and how long they are kept
+- [Connect to an LLM gateway](https://code.claude.com/docs/en/llm-gateway-connect)
+- [Monitoring and OpenTelemetry](https://code.claude.com/docs/en/monitoring-usage)
+- [Feature availability by provider](https://code.claude.com/docs/en/feature-availability)
+- [MDM starter templates](https://github.com/anthropics/claude-code/tree/main/examples/mdm) — Jamf, Intune, Group Policy
+
+**Cowork**
+
+- [Overview](https://claude.com/docs/cowork/overview) · [Monitoring](https://claude.com/docs/cowork/monitoring)
