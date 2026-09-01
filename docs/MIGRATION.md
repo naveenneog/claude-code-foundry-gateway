@@ -28,8 +28,10 @@ recovering data afterwards.
 |---|---|---|
 | Claude Code transcripts, prompt history, settings | Yes | Nothing. Local and provider-independent |
 | CLAUDE.md memory, `rules/`, auto memory | Yes | Nothing |
+| **Skills** (`skills/<name>/SKILL.md`) | Yes | Nothing for personal ones. Org-wide skills ship inside plugins — see below |
+| **Subagents and workflows** (`agents/*.md`, `workflows/*.js`) | Yes | Nothing |
 | **Cowork memory** | Yes | Nothing — Cowork runs on Claude Code and reads the same files |
-| MCP servers and plugins | Yes | Nothing |
+| **MCP servers and plugins** | Yes | Personal ones carry over. Admin-provisioned ones move to managed config — see below |
 | **Claude Desktop chats** | Via import | Switch on `claudeAiImport` **and** the claude.ai export toggle |
 | **Cowork and Code sessions on the machine** | Via import | Same — or `automatic3pImport` for a silent fleet-wide copy |
 | Claude.ai projects | Via import, as **Spaces** | Custom instructions are shown for review first |
@@ -201,6 +203,92 @@ export-to-CLAUDE.md route above, which is just text.
 **Claude Desktop's Chat surface has no memory feature in third-party mode.**
 There is no configuration key for it and no mention in the reference. The only
 memory that reaches Desktop is through Cowork, from Claude Code's files.
+
+### Skills, MCP servers and plugins
+
+Personal ones are files under `~/.claude/` and move with everything else. What
+changes is how the *organisation* provisions them: on first-party that is the
+claude.ai admin console, and on third-party it is managed configuration and the
+filesystem. The console stops being a lever — the same shift as managed
+settings.
+
+**Claude Code** keeps them where it always did:
+
+| Artefact | Location | Scope |
+|---|---|---|
+| Skill | `skills/<name>/SKILL.md` | project or global |
+| Rules | `rules/*.md` | project or global |
+| Subagent | `agents/*.md` | project or global |
+| Workflow | `workflows/*.js` | project or global |
+| MCP servers | `.mcp.json` (project), `~/.claude.json` (user), `managed-mcp.json` (admin) | all three |
+| Installed plugins | `~/.claude/plugins/` | user |
+
+`managed-mcp.json` sits beside `managed-settings.json` in the same system
+directory, so it deploys through the same MDM channel.
+
+**Claude Desktop on 3P** has three layers, highest precedence first:
+
+| Layer | Provisioned by | Delivered via |
+|---|---|---|
+| Managed MCP servers | Admin | `managedMcpServers` config key, with per-tool `toolPolicy` of `allow` / `ask` / `blocked` |
+| Organization plugins | Admin | A plugin marketplace in git or over HTTPS (recommended), or a system-wide directory |
+| User extensions | End user | The in-app Connectors and Plugins UI — which admins can disable |
+
+**Skills reach Desktop inside plugins.** A plugin bundles MCP connectors,
+skills, slash commands, hooks and sub-agents into one directory, so the
+marketplace is the distribution mechanism for all of them at once. The
+system-wide fallback, for devices that cannot reach git or an HTTPS host:
+
+```
+macOS     /Library/Application Support/Claude/org-plugins/
+Windows   C:\Program Files\Claude\org-plugins\
+```
+
+On Windows that is `Program Files`, not `ProgramData`, so only administrators
+can write it — the same reasoning as the managed settings path.
+
+Three keys control what users may add for themselves:
+
+| Key | Default | Effect |
+|---|---|---|
+| `isLocalDevMcpEnabled` | `true` | `false` stops users adding their own local MCP servers |
+| `isDesktopExtensionEnabled` | `false` | `true` allows `.mcpb` desktop extensions bundled in plugins |
+| `isDesktopExtensionSignatureRequired` | `false` | `true` rejects unsigned `.mcpb` extensions |
+
+> If you deploy a remote MCP server with OAuth, register the loopback redirect
+> URI `http://127.0.0.1:53280/callback` on the OAuth client. It is the same on
+> every device. A gateway in front of the server must answer an unauthenticated
+> request with `401`, not a `302` to a sign-in page, or Claude Desktop never
+> starts the flow.
+
+— [MCP, plugins, skills and hooks on 3P](https://claude.com/docs/third-party/claude-desktop/extensions)
+· [Managed MCP configuration](https://code.claude.com/docs/en/managed-mcp)
+· [The `.claude` directory](https://code.claude.com/docs/en/claude-directory)
+
+### How sessions are managed
+
+Sessions are files, and their lifecycle is configurable — including centrally,
+which is what makes this answerable for a compliance review rather than a
+per-developer habit.
+
+| To | Set | Where |
+|---|---|---|
+| Move storage off `~/.claude` | `CLAUDE_CONFIG_DIR` | environment variable |
+| Change the **30-day** transcript retention | `cleanupPeriodDays` | `settings.json`, so also managed settings |
+| Set an age limit for **Claude Desktop and Cowork** transcripts | `desktopSessionCleanupPeriodDays` | user settings, managed settings, or `--settings` |
+| Name the `<project>` directory yourself | `CLAUDE_CODE_PROJECT_DIR_NAME` | environment variable |
+| Suppress transcript writes entirely | `CLAUDE_CODE_SKIP_PROMPT_HISTORY` | environment variable |
+| Suppress writes for one non-interactive run | `--no-session-persistence` | CLI flag with `claude -p` |
+
+Transcripts are JSONL at `~/.claude/projects/<project>/<session-id>.jsonl`, and
+`<project>` is derived from the working directory path. Resume with
+`--continue`, `--resume`, or the `/resume` picker.
+
+`desktopSessionCleanupPeriodDays` is the one worth knowing: it is a **managed**
+setting, so Desktop and Cowork transcript retention is a policy you set once
+for the fleet rather than something each person configures.
+
+— [Manage sessions](https://code.claude.com/docs/en/sessions)
 
 ### An org-wide CLAUDE.md
 
@@ -375,6 +463,34 @@ installer does. For a locked-down fleet that is usually the point.
 — [Claude Code overview and install](https://code.claude.com/docs/en/overview)
 · [MDM starter templates](https://github.com/anthropics/claude-code/tree/main/examples/mdm)
 
+### Keeping the apps updated
+
+**Claude Desktop auto-updates by default, on macOS as on Windows, and third-party
+mode does not change that.** It is `disableAutoUpdates`, defaulting to `false`.
+
+| Key | Default | What it does |
+|---|---|---|
+| `disableAutoUpdates` | `false` | `true` stops updates entirely — you then push versions yourself |
+| `autoUpdaterEnforcementHours` | 72 | Hours before a downloaded update force-installs. Range 1–72 |
+| `updateViaUpdatesHost` | `false` | `true` reads the update feed from `releases.claude.com` instead |
+
+> **The trap.** A Foundry-only deployment often blocks `api.anthropic.com` at
+> the firewall, which is a reasonable thing to want — inference goes to your own
+> endpoint, so why allow it. But the update feed is served from there by
+> default, so blocking it silently stops updates. Set
+> `updateViaUpdatesHost` to `true` and allow `releases.claude.com` instead.
+>
+> This fails quietly: the app keeps working, it just stops updating, and nobody
+> notices until a version-gated feature or fix does not arrive.
+
+Claude Code is separate and depends on how it was installed: the native
+installer auto-updates in the background, WinGet and Homebrew do not. For a
+locked-down fleet that is usually the point — pin the version and roll it with
+everything else. `requiredMinimumVersion` in managed settings blocks an
+outdated binary from starting.
+
+— [Claude Desktop configuration: auto update](https://claude.com/docs/third-party/claude-desktop/configuration)
+
 ### Per-group policy
 
 One MDM profile applies to everyone it reaches, so different tiers need
@@ -540,7 +656,8 @@ links 404 rather than redirect.
 **Claude Desktop on third-party**
 
 - [Overview](https://claude.com/docs/third-party/claude-desktop/overview) — architecture, and the storage change that underlies all of this
-- [Configuration reference](https://claude.com/docs/third-party/claude-desktop/configuration) — every managed key, including `claudeAiImport` and `otlpContentCapture`
+- [Configuration reference](https://claude.com/docs/third-party/claude-desktop/configuration) — every managed key, including `claudeAiImport`, `otlpContentCapture` and the auto-update settings
+- [MCP, plugins, skills and hooks](https://claude.com/docs/third-party/claude-desktop/extensions) — how skills and connectors are provisioned without the claude.ai console
 - [Deploy with MDM](https://claude.com/docs/third-party/claude-desktop/mdm) · [Deploy with a bootstrap server](https://claude.com/docs/third-party/claude-desktop/bootstrap)
 - [Deploy on Microsoft Foundry](https://claude.com/docs/third-party/claude-desktop/foundry)
 - [Write a credential helper](https://claude.com/docs/third-party/claude-desktop/credential-helper)
@@ -552,7 +669,9 @@ links 404 rather than redirect.
 - [Deploy managed settings](https://code.claude.com/docs/en/managed-settings) — delivery mechanisms, precedence, first-wins
 - [Settings](https://code.claude.com/docs/en/settings) · [Settings reference](https://code.claude.com/docs/en/settings-reference)
 - [Memory](https://code.claude.com/docs/en/memory) — CLAUDE.md scopes, auto memory, Cowork behaviour
-- [Sessions](https://code.claude.com/docs/en/sessions) — where transcripts live and how long they are kept
+- [Sessions](https://code.claude.com/docs/en/sessions) — where transcripts live, retention, and how to change it
+- [The `.claude` directory](https://code.claude.com/docs/en/claude-directory) — every file, and what it is for
+- [Managed MCP configuration](https://code.claude.com/docs/en/managed-mcp)
 - [Connect to an LLM gateway](https://code.claude.com/docs/en/llm-gateway-connect)
 - [Monitoring and OpenTelemetry](https://code.claude.com/docs/en/monitoring-usage)
 - [Feature availability by provider](https://code.claude.com/docs/en/feature-availability)
