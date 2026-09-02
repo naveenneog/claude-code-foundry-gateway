@@ -20,7 +20,7 @@
 - [x] Ledger present: CHARTER, ROADMAP, STATUS, UNKNOWNS, CHANGELOG, two ADRs
 - [x] Tests relocated to `tests/` so the detector finds them honestly — see ADR-0001
 - [x] `./tests/Test-All.ps1` passes from its new location
-- [ ] `node .ironclad/gate.mjs --stage packet` exits 0
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0 — 23 passed, 1 warning (6 open unknowns), 0 failures
 
 ## Commands that prove it
 
