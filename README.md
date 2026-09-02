@@ -78,9 +78,52 @@ You do not need an app registration, a custom audience, or any client-side auth 
 
 ![Governance controls verified](docs/images/governance-checks.png)
 
-Works with both the CLI and the VS Code extension, streaming included:
+### The three clients
+
+One setup script configures all three against the gateway. None of them holds a
+credential; each authenticates as the signed-in user through Entra ID.
+
+**Claude Code CLI.** `/status` reports the provider and the settings sources it
+read, including the enterprise policy pushed by MDM:
+
+![claude /status showing API provider Microsoft Foundry, the gateway base URL, and setting sources including Enterprise managed settings (HKLM)](docs/images/client-cli-status.png)
+
+**VS Code extension**, streaming included, with no sign-in prompt:
 
 ![Claude Code in VS Code through the gateway](docs/images/vscode-through-gateway.png)
+
+**Claude Desktop**, Chat and Cowork, signed in against the gateway rather than
+an Anthropic account — the account row reads `Gateway`:
+
+![Claude Desktop Home tab with the Chat and Cowork selector, Claude Sonnet 5 selected, and the account row showing Gateway](docs/images/client-desktop-chat.png)
+
+**Claude Desktop, Code tab**, with session and token counts:
+
+![Claude Desktop Code tab showing sessions, messages, total tokens and active days](docs/images/client-desktop-code.png)
+
+### Running the installer
+
+The admin setup is interactive and shows a summary before it creates anything.
+
+![The installer checking prerequisites, confirming the Azure sign-in and subscription, then listing the Foundry accounts that have Claude deployments](docs/guide/run-1-prerequisites.png)
+
+Existing v2 API Management instances are offered for reuse, so a second gateway
+is not created by accident:
+
+![The installer listing existing v2 API Management instances with SKU, region and resource group, plus an option to create a new one](docs/guide/run-2-reuse-existing-apim.png)
+
+Every budget has a default already filled in:
+
+![Prompts for standard and premium tokens per minute and per day, the per-developer request ceiling, and the two Entra group names](docs/guide/run-3-budgets.png)
+
+Nothing is created before the summary is confirmed:
+
+![The summary listing subscription, Foundry account, resource group, API Management instance, both tier budgets and the Entra groups, ending with a confirmation prompt](docs/guide/run-4-summary.png)
+
+Identifiers in these screenshots are redacted. The redaction maps are
+[`guide/redact-terminal.mjs`](guide/redact-terminal.mjs) and
+[`guide/redact-clients.mjs`](guide/redact-clients.mjs); the raw captures are not
+in this repository.
 
 ---
 
