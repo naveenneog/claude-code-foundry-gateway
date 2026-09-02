@@ -8,7 +8,7 @@ fails the release stage while any remain. Detail for each one follows below.
 
 | ID | State | Question | Blocks |
 |---|---|---|---|
-| U1 | OPEN | Does APIM support a usable shared counter across all principals? | P11 |
+| U1 | OPEN | Does a constant counter-key share one counter across different principals? Narrowed — the rest closed from the policy reference | P11 |
 | U2 | OPEN | Do emitted token counts reconcile with the Azure invoice, and within what margin? | P12 |
 | U3 | OPEN | Does Claude in Chrome apply under a third-party provider at all? | parity matrix |
 | U4 | OPEN | Can a self-hosted Claude apps gateway serve a Foundry deployment, and is it worth operating? | P13 |
@@ -21,17 +21,38 @@ fails the release stage while any remain. Detail for each one follows below.
 
 ### U1 — Does APIM support a shared counter across all principals?
 
-**Question.** P11 needs an org-wide monthly ceiling that every developer's spend counts
-against. `llm-token-limit` takes a `counter-key`; whether a constant key gives a usable shared
-counter at Basic v2, and how it interacts with the per-principal counters already in the
-policy, is unverified.
+**Narrowed 2026-09-02.** Most of this closed against the
+[`llm-token-limit` reference](https://learn.microsoft.com/en-us/azure/api-management/llm-token-limit-policy)
+(retrieved 2026-09-02). What the documentation settles:
 
-**Why it matters.** If a shared counter is not usable, the org cap has to be enforced outside
-the request path — a scheduled job reading Application Insights and flipping a named value —
-which is a different design with a lag measured in minutes.
+| Sub-question | Answer |
+|---|---|
+| Is `Monthly` a valid `token-quota-period`? | Yes — `Hourly`, `Daily`, `Weekly`, `Monthly`, `Yearly`. The window starts at the UTC timestamp truncated to the unit |
+| Does a constant `counter-key` give one shared counter? | Documented yes: "For each key value, a single counter is used for all scopes at which the policy is configured" |
+| Can a third `llm-token-limit` sit alongside the two already in the policy? | Yes — "This policy can be used multiple times per policy definition" |
+| Is the cap exact? | No. "High-concurrency requests can temporarily exceed the configured token limit", and the remaining-quota figure "may be larger than expected based on actual token usage" |
 
-**How to close.** Deploy both shapes to the live gateway and measure. Do not infer from the
-policy reference.
+Two consequences for P11's design, both from the same page. The org ceiling is a **soft cap**
+that can overshoot under concurrency, so it cannot be sold as a hard spend guarantee. And if
+the same `counter-key` is ever used at more than one scope, `tokens-per-minute` must match
+across them or behaviour is undefined — so the org counter uses its own key at a single scope.
+
+**Still open, and it needs measuring rather than reading.** Whether a constant key genuinely
+shares one counter across *different authenticated principals*. The documentation implies it,
+but this repository has shipped documented-but-wrong behaviour before — `what-if` reporting a
+clean plan for a role assignment that then failed, and a v2 SKU whose policies attach happily
+while counting zero tokens.
+
+**The experiment.** Add a third `llm-token-limit` with `counter-key="org"` and a deliberately
+small `token-quota`. Have identity A exhaust it. Then call as identity B, which has spent none
+of its own budget, and confirm B is throttled. If B is served, the counter is per-principal
+regardless of the key and P11 has to move out of the request path into a scheduled job that
+reads Application Insights and flips a named value.
+
+**What that needs:** a second authenticated identity — the blocker, since one operator can
+only present one Entra token — plus a window in which a non-production gateway carries a test
+quota. `apim-hackgwfl4s7jvpxekno` in `rg-hackathon-gateway` is a non-production instance and is
+the right place to run it.
 
 ### U2 — Cost attribution accuracy against the Azure invoice
 
