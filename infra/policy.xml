@@ -79,7 +79,51 @@
             </when>
         </choose>
 
-        <!-- 5. Organisation-wide monthly ceiling.
+        <!-- 5. Model allowlist, per tier.
+             ==========================================================
+             Checked here, before anything is forwarded, because this is the
+             one capability control that can be enforced server-side. A model
+             list delivered to a client is a preference: Anthropic's own
+             guidance is that "a user who can run a modified Claude Code binary
+             can bypass any client-side control". This one is not client-side.
+
+             Sentinel commas make the match exact, so claude-opus-5 cannot
+             match claude-opus-5-mini and a narrow list cannot be widened by a
+             prefix.
+
+             An empty list, ",,", allows every model. That is the shipped
+             default: tiers differ by budget until an operator decides they
+             should differ by model. -->
+        <set-variable name="modelAllowed" value="@{
+            var allowed = (string)context.Variables["tier"] == "premium"
+                ? "{{models-premium}}" : "{{models-standard}}";
+            if (allowed == null || allowed.Trim(',').Length == 0) { return true; }
+            return allowed.Contains("," + (string)context.Variables["modelName"] + ",");
+        }" />
+        <choose>
+            <when condition="@(!(bool)context.Variables["modelAllowed"])">
+                <return-response>
+                    <set-status code="403" reason="Forbidden" />
+                    <set-header name="Content-Type" exists-action="override">
+                        <value>application/json</value>
+                    </set-header>
+                    <set-body>@{
+                        return new JObject(
+                            new JProperty("type", "error"),
+                            new JProperty("error", new JObject(
+                                new JProperty("type", "invalid_request_error"),
+                                new JProperty("code", "model_not_allowed"),
+                                new JProperty("message", "The model '" + (string)context.Variables["modelName"] +
+                                    "' is not available to the " + (string)context.Variables["tier"] +
+                                    " tier. Your access is unaffected - choose a model your tier allows, or ask your platform team to widen the list.")
+                            ))
+                        ).ToString();
+                    }</set-body>
+                </return-response>
+            </when>
+        </choose>
+
+        <!-- 6. Organisation-wide monthly ceiling.
              ==========================================================
              A constant counter-key is a single counter shared by every caller.
              Measured 2026-09-02 on a throwaway API: one caller drove the shared
@@ -112,7 +156,7 @@
             estimate-prompt-tokens="false"
             remaining-quota-tokens-header-name="x-org-quota-remaining" />
 
-        <!-- 6. Per-minute rate, by tier. This stays a branch because
+        <!-- 7. Per-minute rate, by tier. This stays a branch because
              tokens-per-minute is one of the attributes the llm-token-limit
              reference does not allow an expression for. Exceeding it returns
              429. -->
@@ -138,7 +182,7 @@
             </otherwise>
         </choose>
 
-        <!-- 6b. Daily token budget, keyed on oid so one developer cannot starve
+        <!-- 7b. Daily token budget, keyed on oid so one developer cannot starve
              the team. Exceeding it returns 403.
 
              quota-overrides gives one person a different daily budget without
@@ -177,7 +221,7 @@
             estimate-prompt-tokens="false"
             remaining-quota-tokens-header-name="x-quota-remaining-today" />
 
-        <!-- 7. Request-rate ceiling. Token budgets alone do not stop a runaway
+        <!-- 8. Request-rate ceiling. Token budgets alone do not stop a runaway
              agent loop making many small calls. -->
         <rate-limit-by-key
             calls="{{calls-per-minute}}"
@@ -185,7 +229,7 @@
             counter-key="@((string)context.Variables["userId"])"
             retry-after-header-name="Retry-After" />
 
-        <!-- 8. Chargeback telemetry to Application Insights, sliced by
+        <!-- 9. Chargeback telemetry to Application Insights, sliced by
              developer, tier, model and Claude Code session. Azure Monitor
              allows at most 5 custom dimensions here. -->
         <llm-emit-token-metric namespace="claudecode">
@@ -196,7 +240,7 @@
             <dimension name="SessionId" value="@((string)context.Variables["sessionId"])" />
         </llm-emit-token-metric>
 
-        <!-- 9. Swap the caller's token for the gateway's own identity. The
+        <!-- 10. Swap the caller's token for the gateway's own identity. The
              developer token is deliberately not forwarded: Foundry trusts only
              the gateway's managed identity. -->
         <authentication-managed-identity
@@ -208,7 +252,7 @@
         </set-header>
         <set-header name="x-api-key" exists-action="delete" />
 
-        <!-- 10. Attribution for Foundry-side logs. -->
+        <!-- 11. Attribution for Foundry-side logs. -->
         <set-header name="x-gateway-user" exists-action="override">
             <value>@((string)context.Variables["userUpn"])</value>
         </set-header>

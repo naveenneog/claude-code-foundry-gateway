@@ -262,6 +262,18 @@ values are read on the next request.
 | `quota-premium` | tokens/day, premium | 5,000,000 |
 | `quota-org` | tokens/month, everyone combined | 100,000,000 |
 | `quota-overrides` | per-developer daily budgets, `,oid=tokens,` | empty |
+| `models-standard` | models the standard tier may call, `,model,model,` | empty — all |
+| `models-premium` | as above, for premium | empty — all |
+
+The model allowlist is enforced **at the gateway**, before the request reaches
+Foundry, so it holds regardless of what a client is configured to send. Every
+other capability control — permission rules, hooks, Desktop tabs, MCP servers —
+is delivered to clients and is a management control rather than a security
+boundary: "a user who can run a modified Claude Code binary can bypass any
+client-side control"
+([reference](https://code.claude.com/docs/en/server-managed-settings), retrieved
+2026-09-03). `docs/adr/0004-policy-out-of-band.md` records why the split falls
+where it does.
 
 `quota-overrides` is written by `./scripts/Set-ClaudeBudget.ps1`, not by hand.
 It gives one person a different daily budget without moving them between tiers,

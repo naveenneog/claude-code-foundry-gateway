@@ -24,7 +24,7 @@ premise does not carry over.
 | Add, invite, deactivate members | Entra user lifecycle | Have — and richer than the first-party equivalent |
 | Billing access restricted to Owners | `Billing Reader` / Cost Management roles, separate from resource RBAC | Have |
 | Custom roles | Entra custom roles and Azure custom RBAC role definitions | Have |
-| Capability scoping per role — Chat, Cowork, Claude Code, web search, individual connectors | Desktop managed config (`chatTabEnabled`, `coworkTabEnabled`, `managedMcpServers`) plus the gateway model allowlist | Design — the keys exist; per-group delivery needs one MDM profile per tier, or a bootstrap server |
+| Capability scoping per role — Chat, Cowork, Claude Code, web search, individual connectors | Models: `models-standard` / `models-premium`, enforced at the gateway. Tabs and connectors: `New-ClaudeCodePolicy.ps1 -Tier`, delivered per tier by MDM | Have — P13. Models are a control; the rest are management controls, ADR-0004 |
 | Scoped admin permissions — Identity & Access, Billing, Analytics, Privacy, User Management, Libraries, Directory | Azure RBAC and Entra admin roles, each independently assignable | Have |
 | Additive permission model | Azure RBAC is additive, with explicit deny assignments available | Have |
 | Provisioning: SSO, domain capture, SCIM, JIT | Entra ID native | Have |
@@ -52,7 +52,7 @@ premise does not carry over.
 | Allow or block connectors | `managedMcpServers` with per-tool `toolPolicy` of allow / ask / blocked | Have |
 | Managed authorization, identity inherited from groups | Connector OAuth against Entra, or `headersHelper` for short-lived tokens | Have |
 | MCP allowlist | `managedMcpServers` plus `isLocalDevMcpEnabled: false` | Have |
-| Phased rollout by role | Per-group MDM profile, or a bootstrap server returning per-user configuration | Design — P13 |
+| Phased rollout by role | Per-tier MDM profile from `New-ClaudeCodePolicy.ps1 -Tier` | Have — P13 |
 | Plugin marketplace | A `marketplace.json` in git or over HTTPS, pinned to a revision | Design — P14 |
 
 ### Claude Code
@@ -60,7 +60,7 @@ premise does not carry over.
 | Claude Enterprise control | Azure equivalent | State |
 |---|---|---|
 | Managed policy settings across all clients | `managed-settings.json`, `HKLM\SOFTWARE\Policies\ClaudeCode`, macOS managed preferences | Have |
-| Server-managed settings without MDM | The claude.ai console does not apply to a gateway deployment. A self-hosted Claude apps gateway delivers policy per IdP group | **U4** |
+| Server-managed settings without MDM | A self-hosted Claude apps gateway delivers policy per IdP group and supports a Foundry upstream, but it replaces the request path and its shared credential removes per-developer attribution. Anthropic's own hosted server-managed settings are org-wide only — "per-group configurations are not yet supported" — and are skipped for third-party providers | N/A by decision — ADR-0004, U4 closed |
 
 ### Data and compliance
 
@@ -121,8 +121,11 @@ M0 is shipped. The table below is the queue; the checklist under it is what the 
 
 ### M2 — governance depth
 
-- [ ] P13 per-group capability scoping — acceptance: two tiers receive different Chat, Cowork,
-      Code and connector capability sets from policy alone. **Depends on U4**
+- [x] P13 per-group capability scoping — models are restricted per tier at the gateway, verified
+      live: a model outside the tier's list is refused before Foundry is called, one inside it
+      still works, and a longer name sharing a prefix does not slip through. Chat, Cowork, Code
+      and connectors ship as per-tier managed settings from `New-ClaudeCodePolicy.ps1 -Tier`, and
+      are documented as management controls rather than security boundaries. U4 closed, ADR-0004
 - [ ] P14 plugin marketplace — acceptance: a pinned marketplace delivers a signed plugin to a
       managed desktop, and an unsigned one is refused. **Blocked on U6**
 

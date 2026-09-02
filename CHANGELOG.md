@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Model allowlist per tier: `models-standard` and `models-premium`, enforced at the gateway before
+  the request reaches Foundry. Sentinel commas make the match exact, so `claude-opus-5` does not
+  admit `claude-opus-5-mini`; an empty value allows every deployed model. Verified live in all
+  three directions.
+- `New-ClaudeCodePolicy.ps1 -Tier standard|premium` generates one managed-settings profile per
+  entitlement tier, including `availableModels` and the Claude Desktop tab keys.
+- ADR-0004 and the closure of U4: the Claude apps gateway supports a Foundry upstream, but it is
+  an inference proxy holding a shared upstream credential, so adopting it would remove the
+  per-developer Entra identity that P10, P11 and P12 depend on. Policy stays out of band.
 - Per-developer daily budget overrides. `scripts/Set-ClaudeBudget.ps1` sets and clears them,
   `scripts/Get-ClaudeBudget.ps1` reports what the gateway would actually apply to each developer
   and what they have spent this month. Overrides apply on the next request — the policy resolves

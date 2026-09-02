@@ -290,6 +290,8 @@ Limits live in APIM named values, so changing one is a config edit, not a redepl
 | `tpm-premium` | 80,000 | premium tier tokens/minute |
 | `quota-premium` | 5,000,000 | premium tier tokens/day |
 | `quota-org` | 100,000,000 | tokens/month across everyone, shared |
+| `models-standard` | empty (all) | models the standard tier may call |
+| `models-premium` | empty (all) | models the premium tier may call |
 | `calls-per-minute` | 120 | request ceiling per developer |
 
 `quota-org` is one counter shared by every caller, so tier budgets cascade
@@ -343,6 +345,27 @@ month:
 ./scripts/Get-ClaudeBudget.ps1
 ./scripts/Get-ClaudeBudget.ps1 -User someone@contoso.com -AsJson
 ```
+
+`models-standard` and `models-premium` restrict which models a tier may call.
+They are checked at the gateway before the request reaches Foundry, so the
+restriction holds whatever the client is configured to send:
+
+```powershell
+az apim nv update -g rg-claude-gateway --service-name <apim-name> `
+    --named-value-id models-standard --value ",claude-sonnet-5,"
+```
+
+Sentinel commas make the match exact, so `claude-opus-5` does not admit
+`claude-opus-5-mini`. An empty value allows every deployed model.
+
+Every other capability control — permission rules, hooks, Desktop tabs,
+connectors — is delivered to the client by
+`./scripts/New-ClaudeCodePolicy.ps1 -Tier standard|premium` and is a management
+control, not a security boundary. Anthropic is direct about this: "a user who
+can run a modified Claude Code binary can bypass any client-side control"
+([reference](https://code.claude.com/docs/en/server-managed-settings), retrieved
+2026-09-03). What must hold — entitlement, budgets, models — is at the gateway.
+`docs/adr/0004-policy-out-of-band.md` has the reasoning.
 
 ```powershell
 az apim nv update -g rg-claude-gateway --service-name <apim-name> `

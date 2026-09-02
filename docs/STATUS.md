@@ -1,6 +1,6 @@
 # Status
 
-**Active packet:** P12 - programmatic cost control. Shipped and verified on the live gateway. P-0, P10 and P11 are complete.
+**Active packet:** P13 - per-group capability scoping. Shipped and verified on the live gateway. P-0 and P10 to P12 are complete.
 
 ## What is shipped (M0)
 
@@ -160,24 +160,76 @@ workspace fails while an idle gateway does not. Verified both ways.
 | UX | Accept | An administrator names a person by UPN, not object id, and guest accounts resolve through the same fallback `Import-ClaudeEntitlement` needed. The reader prints what would be applied and where it came from — `tier` or `override` |
 | Security | Accept | Read-mostly. The one write is a merge that refuses if another entry would disappear, which is the guard the entitlement allow list needed after a whole-value write revoked everyone. A warning, not a silent success, when an override is set for someone not entitled |
 
+## P13 acceptance criteria — per-group capability scoping
+
+Claude Enterprise scopes capability per role: Chat, Cowork, Claude Code, web search and
+individual connectors. U4 asked whether Anthropic's self-hosted Claude apps gateway should
+deliver that here. It is closed, and the answer shaped the packet.
+
+- [x] `models-standard` and `models-premium`, enforced in the gateway policy
+- [x] The check runs before the managed-identity swap, so a refused model never reaches Foundry
+- [x] The refusal is in Anthropic's error shape, names the model, and says access is unaffected
+- [x] `New-ClaudeCodePolicy.ps1 -Tier` generates one profile per entitlement tier
+- [x] Verified live: outside the list refused, inside it served, prefix does not widen the list
+- [x] Client-side controls are documented as management controls, not security boundaries
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+### What the research found
+
+The Claude apps gateway is real, documented, ships inside the `claude` binary, charges no licence
+fee, supports Microsoft Foundry as a first-class upstream, and selects managed settings by IdP
+group. On paper it is exactly what P13 asked for.
+
+It was still not adopted, because it is an inference proxy: "a self-hosted service that sits
+between your developers' Claude Code clients and your model provider". It holds the upstream
+credential itself. Under it, Foundry sees one shared gateway credential instead of each
+developer's Entra token — and that token is what P10 reports on, P11 caps and P12 overrides.
+Adopting it would have quietly deleted the previous three packets. Chaining it in front of API
+Management is not documented, so it was not assumed. ADR-0004 and U4 have the full reading.
+
+Two findings from the primary sources changed the shape of the work:
+
+| | |
+|---|---|
+| Anthropic's hosted server-managed settings are org-wide | "Settings apply uniformly to all users in the organization. Per-group configurations are not yet supported." Per-tier MDM profiles are therefore not a downgrade from the first-party option — for per-group scoping they are ahead of it |
+| Client-delivered controls are bypassable wherever they come from | "A user who can run a modified Claude Code binary can bypass any client-side control." That applies to policy delivered by the apps gateway too, so moving tabs and permissions server-side was never among the options |
+
+So the packet split on one line: whatever can be enforced at the gateway is enforced there, and
+everything else is described honestly. Models moved server-side. Tabs, permissions, hooks and
+connectors stayed client-side and are now labelled as management controls in the README,
+ONBOARDING and ADR-0004 — with a test asserting that labelling stays.
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | The alternative was better on paper and worse in fact. Rejecting it is the decision; ADR-0004 records why so it is not relitigated from the feature table |
+| Coder | Accept | The allowlist reuses the sentinel-comma convention already carrying entitlement and budget overrides, so there is one string format in the policy rather than three |
+| QA | Accept | Verified live in three directions, including the prefix case that a `Contains` without sentinels would have failed. An empty list allowing everything is asserted too, since that is the shipped default |
+| UX | Accept | The refusal names the model, the tier, and what to do. It also says access is unaffected — the third 403 in this gateway, and all three now distinguish themselves |
+| Security | Accept | The claim being made is narrow and true: models are a control, the rest is management. A packet that shipped Desktop tab toggles as though they were a security boundary would have been worse than shipping nothing |
+
 ## Commands that prove it
 
 ```powershell
-./tests/Test-All.ps1                                    # 8 checks, offline
-./tests/Test-All.ps1 -IncludeAzure                      # plus the five that call Azure
+./tests/Test-All.ps1                                    # 9 checks, offline
+./tests/Test-All.ps1 -IncludeAzure                      # plus the six that call Azure
 ./scripts/Get-ClaudeTelemetry.ps1                       # where this gateway logs, and whether metrics are on
 ./scripts/Get-ClaudeAnalytics.ps1 -Days 30              # the usage report
 ./scripts/Get-ClaudeBudget.ps1                          # effective limits and spend to date
+./scripts/New-ClaudeCodePolicy.ps1 -Tier premium        # one managed-settings profile per tier
 ./tests/Test-OrgCeilingLive.ps1 -ProveRefusal           # exhausts each budget, then restores it
 node .ironclad/gate.mjs --stage packet                  # definition of done
 ```
 
 ## Next
 
-P13 — per-group capability scoping: one policy profile per tier covering Chat, Cowork, Code and
-connectors. **U4** is open and decides its shape: whether a self-hosted Claude apps gateway can
-serve a Foundry deployment, or whether this is one Intune profile per tier.
+P14 — the plugin marketplace. **U6** is open and blocks it: what signs a plugin, who verifies it,
+and whether the same trust applies to marketplace-delivered plugins. That is a supply-chain
+question, so it is researched before anything is built, not after.
 
-U2 still blocks putting a currency figure on spend, so `Get-ClaudeBudget.ps1` reports tokens
-only. U8 still blocks the four productivity fields P10 returns as null. Open unknowns are in
-`docs/UNKNOWNS.md`.
+P15 — compliance retrieval — is behind **U7**, whether Log Analytics can honour selective deletion
+within its purge limits.
+
+U2 still blocks putting a currency figure on spend. U8 still blocks the four productivity fields
+P10 returns as null. U3 is unexamined. Open unknowns are in `docs/UNKNOWNS.md`.

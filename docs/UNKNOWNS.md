@@ -11,7 +11,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | U1 | CLOSED | Does a constant counter-key share one counter across callers? Yes — measured 2026-09-02 | P11 unblocked |
 | U2 | OPEN | Do emitted token counts reconcile with the Azure invoice, and within what margin? | P12 |
 | U3 | OPEN | Does Claude in Chrome apply under a third-party provider at all? | parity matrix |
-| U4 | OPEN | Can a self-hosted Claude apps gateway serve a Foundry deployment, and is it worth operating? | P13 |
+| U4 | CLOSED | Can a self-hosted Claude apps gateway serve a Foundry deployment, and is it worth operating? Yes and no — researched 2026-09-03 | P13 unblocked |
 | U6 | OPEN | What signs a plugin, and who verifies it? | P14 |
 | U7 | OPEN | Can Log Analytics honour selective deletion within its purge limits? | P15 |
 | U8 | OPEN | Which OTEL attributes split lines-of-code and tool decisions into their parts? | P10 productivity columns |
@@ -89,16 +89,59 @@ is unconfirmed.
 **How to close.** Check the Claude Desktop 3P configuration reference and the Chrome extension
 documentation. If it does not apply, record it as N/A rather than a gap.
 
-### U4 — Server-managed settings without MDM
+### U4 — Server-managed settings without MDM — CLOSED 2026-09-03
 
-**Question.** Claude Code documents a self-hosted "Claude apps gateway" that delivers managed
-settings per IdP group. Whether it can be run against a Foundry deployment, what it costs to
-operate, and whether it is worth it next to one Intune profile per tier, is unknown.
+**Answer: it can serve Foundry, and it is not the right component for this accelerator.**
 
-**Why it matters.** It decides P13: one profile per tier is simple and static; a gateway is
-dynamic but is a second always-on component, which the charter treats as needing justification.
+The Claude apps gateway is real, documented, and Microsoft Foundry is a first-class upstream. The
+page is titled "Claude apps gateway for Amazon Bedrock, Claude Platform on AWS, Google Cloud, and
+Microsoft Foundry" ([reference](https://code.claude.com/docs/en/claude-apps-gateway), retrieved
+2026-09-03). It ships inside the `claude` binary and runs with `claude gateway --config
+gateway.yaml`, so there is no separate product to buy, and there is "no separate license or
+per-seat fee".
 
-**How to close.** Read the Claude apps gateway documentation, then price the hosting.
+It does what this repository would want from it. Managed settings are selected by IdP group —
+"your IdP groups map to model allowlists and managed settings policies" — and it "delivers
+managed settings to signed-in clients itself, taking the place of server-managed settings from
+the claude.ai admin console". Model access is enforced server-side.
+
+**Why it is still not adopted here.** It is an inference proxy, not a policy service: "a
+self-hosted service that sits between your developers' Claude Code clients and your model
+provider". No policy-only mode is documented. It holds the upstream credential itself, and issues
+its own short-lived bearer tokens to developers.
+
+That is the one thing this accelerator will not give up. The gateway's value here is that every
+request carries the developer's own Entra token, is metered against their `oid`, and is only then
+swapped for the managed identity. Under the Claude apps gateway the provider sees one shared
+gateway credential, so per-developer attribution at the provider is gone — and with it P10, P11
+and P12.
+
+| | Claude apps gateway | This accelerator |
+|---|---|---|
+| Foundry upstream | Documented | Yes |
+| Developer identity reaching the provider boundary | One shared gateway credential | The developer's own Entra token, per request |
+| Per-group managed settings | Server-delivered | Per-tier MDM profile |
+| Per-group model allowlist | Server-side | Server-side, at the gateway policy |
+| Spend limits | Per user and group | Per user, per tier, and org-wide |
+| Always-on components | Gateway plus PostgreSQL plus load balancer | API Management only |
+| Network exposure | Private addresses only — "Claude Code only connects to a gateway whose address is private" | Public endpoint, Entra-authenticated |
+
+Chaining the two was considered and is **not documented**: the apps gateway's Foundry upstream
+takes a `resource` and its own credential, and nothing in the reference describes forwarding a
+caller's original Entra token to an intermediate API Management instance. That is left as an
+inference nobody should make.
+
+**The finding that decides P13.** Anthropic's own hosted server-managed settings state: "Settings
+apply uniformly to all users in the organization. Per-group configurations are not yet supported"
+([reference](https://code.claude.com/docs/en/server-managed-settings), retrieved 2026-09-03). So
+per-tier MDM profiles are not a downgrade from the hosted option — for per-group scoping they are
+ahead of it. P13 is one profile per tier, plus a server-side model allowlist at the gateway,
+where it cannot be bypassed by editing a client.
+
+**When the apps gateway is the right answer.** An organisation that has no API Management
+instance and no wish to run one, that needs data residency through its own cloud provider, and
+that does not need per-developer attribution at the provider boundary. That is a different
+customer from this repository's.
 
 ### U6 — Plugin signing and trust
 

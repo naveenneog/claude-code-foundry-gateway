@@ -53,6 +53,7 @@ try {
     Invoke-Check 'Analytics query contract'                'Test-Analytics.ps1' @{ SkipLive = $true }
     Invoke-Check 'Org spend ceiling'                       'Test-OrgCeiling.ps1' @{ SkipLive = $true }
     Invoke-Check 'Per-user budget control'                 'Test-BudgetControl.ps1' @{ SkipLive = $true }
+    Invoke-Check 'Capability scoping per tier'             'Test-CapabilityScoping.ps1' @{ SkipLive = $true }
 
     if ($IncludeAzure) {
         Invoke-Check 'Foundry discovery is selective'      'Test-Discovery.ps1'
@@ -60,6 +61,7 @@ try {
         Invoke-Check 'Analytics query against live data'   'Test-Analytics.ps1'
         Invoke-Check 'Org ceiling on the live gateway'     'Test-OrgCeilingLive.ps1'
         Invoke-Check 'Budget control on the live gateway'  'Test-BudgetControlLive.ps1'
+        Invoke-Check 'Model allowlist on the live gateway' 'Test-CapabilityScopingLive.ps1'
     }
 }
 finally { Pop-Location }

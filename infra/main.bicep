@@ -58,6 +58,12 @@ param quotaPremium int = 5000000
 @description('Organisation-wide ceiling: total tokens per month across every developer. This is a soft cap - the llm-token-limit policy allows high-concurrency requests to temporarily exceed it, so it bounds spend rather than guaranteeing it. The default is roughly one premium developer\'s month, which fails safe: raise it deliberately before a wider rollout.')
 param quotaOrg int = 100000000
 
+@description('Models the standard tier may call, comma-delimited with sentinel commas (",claude-sonnet-5,"). Empty means every deployed model. Enforced at the gateway, before the request reaches Foundry, so it cannot be bypassed by editing a client.')
+param modelsStandard string = ''
+
+@description('As modelsStandard, for the premium tier.')
+param modelsPremium string = ''
+
 @description('Request-rate ceiling per developer per minute. Stops a runaway agent loop that makes many small calls.')
 param callsPerMinute int = 120
 
@@ -262,6 +268,8 @@ var namedValues = [
   { key: 'quota-premium', value: string(quotaPremium) }
   { key: 'quota-org', value: string(quotaOrg) }
   { key: 'quota-overrides', value: quotaOverridesValue }
+  { key: 'models-standard', value: empty(modelsStandard) ? ',,' : modelsStandard }
+  { key: 'models-premium', value: empty(modelsPremium) ? ',,' : modelsPremium }
   { key: 'calls-per-minute', value: string(callsPerMinute) }
   { key: 'allow-standard', value: allowStandardValue }
   { key: 'allow-premium', value: allowPremiumValue }

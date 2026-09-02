@@ -55,6 +55,27 @@ param(
     [string]$OpusModel   = 'claude-opus-5',
     [string]$SonnetModel = 'claude-sonnet-5',
     [string]$HaikuModel,
+
+    # Which entitlement tier this profile is for. The tiers already differ by
+    # budget at the gateway; this is what makes them differ by capability.
+    #
+    # The profile is a management control, not a security boundary. Anthropic
+    # states that "a user who can run a modified Claude Code binary can bypass
+    # any client-side control", and that applies to everything here. The
+    # controls that must hold - entitlement, budgets, and the model allowlist -
+    # are enforced in the gateway policy instead. See docs/adr/0004.
+    [ValidateSet('standard', 'premium')]
+    [string]$Tier = 'standard',
+
+    # Models this tier may select. Defaults to the tier's own sensible set.
+    # Mirror it into the gateway's models-standard / models-premium named
+    # values, which is where it is actually enforced.
+    [string[]]$AvailableModels,
+
+    # Claude Desktop tabs, for the profile New-ClaudeDesktopPolicy consumes.
+    # Left unset, a tier gets everything its plan allows.
+    [ValidateSet('default', 'chat-only', 'no-cowork')]
+    [string]$DesktopTabs = 'default',
     [ValidateSet('none', 'basic', 'strict')]
     [string]$Hardening = 'basic',
 
@@ -105,6 +126,15 @@ if (-not $GatewayUrl) {
 }
 if (-not $HaikuModel) { $HaikuModel = $SonnetModel }
 
+# Default model set per tier. Standard gets the Sonnet-class model, premium gets
+# both. An operator can override with -AvailableModels; whatever is chosen has
+# to be mirrored into the gateway's models-{tier} named value, because that is
+# the copy that is enforced.
+if (-not $AvailableModels) {
+    $AvailableModels = if ($Tier -eq 'premium') { @($OpusModel, $SonnetModel, $HaikuModel) } else { @($SonnetModel, $HaikuModel) }
+}
+$AvailableModels = @($AvailableModels | Select-Object -Unique)
+
 # ------------------------------------------------------------------- policy
 
 # env is the mechanism that actually redirects Claude Code at the gateway.
@@ -120,6 +150,15 @@ $settings = [ordered]@{
         ANTHROPIC_DEFAULT_SONNET_MODEL = $SonnetModel
         ANTHROPIC_DEFAULT_HAIKU_MODEL  = $HaikuModel
     }
+    availableModels = @($AvailableModels)
+}
+
+# Claude Desktop reads its own keys. They are emitted here so one run produces
+# one tier's complete profile rather than two half-profiles that can drift.
+$desktop = [ordered]@{
+    chatTabEnabled                = $true
+    coworkTabEnabled              = ($DesktopTabs -eq 'default')
+    isClaudeCodeForDesktopEnabled = ($DesktopTabs -ne 'chat-only')
 }
 
 if ($Hardening -ne 'none') {
