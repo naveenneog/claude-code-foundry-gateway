@@ -13,7 +13,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | U3 | OPEN | Does Claude in Chrome apply under a third-party provider at all? | parity matrix |
 | U4 | CLOSED | Can a self-hosted Claude apps gateway serve a Foundry deployment, and is it worth operating? Yes and no — researched 2026-09-03 | P13 unblocked |
 | U6 | OPEN | What signs a plugin, and who verifies it? | P14 |
-| U7 | OPEN | Can Log Analytics honour selective deletion within its purge limits? | P15 |
+| U7 | CLOSED | Can Log Analytics honour selective deletion within its purge limits? Yes, within 30 days and Analytics-plan tables only — researched 2026-09-03 | P15 unblocked |
 | U8 | OPEN | Which OTEL attributes split lines-of-code and tool decisions into their parts? | P10 productivity columns |
 
 ---
@@ -153,14 +153,62 @@ established.
 **Why it matters.** P14 distributes executable extensions to every desktop. Getting the trust
 model wrong here is a supply-chain problem, not a documentation problem.
 
-### U7 — Selective deletion of captured content
+### U7 — Selective deletion of captured content — CLOSED 2026-09-03
 
 **Question.** The Compliance API supports deleting specific records. If content capture lands
 prompts and responses in Log Analytics, deleting one user's records on request is bounded by
 what Log Analytics supports for purge, and by its latency and quota.
 
-**Why it matters.** A retention promise that cannot be honoured on a subject-access request is
-a compliance liability rather than a feature.
+**Answer: yes, within limits that have to be written down rather than glossed.**
+
+Azure Monitor's Purge operation is Microsoft's documented GDPR erasure mechanism, and it is a
+real delete, not a hide: "Delete and purge operations are destructive and non-reversible"
+([Manage personal data in Azure Monitor Logs](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/personal-data-mgmt),
+retrieved 2026-09-03). It takes a per-column predicate, so one identified subject over a time
+range is expressible.
+
+The constraints are the part that matters, because they decide what may be promised.
+
+| Constraint | Documented value |
+|---|---|
+| Purge requests | **50 per hour**. The scope of that limit — workspace, subscription or tenant — is not documented |
+| Formal completion SLA | **30 days.** "There's no way to expedite the operation" |
+| Tables per request | **One.** Content spread across five tables needs five requests |
+| Table plans | Analytics only. "You can't purge data from tables that have the Basic and Auxiliary table plans" |
+| Predicate operators | `==`, `=~`, `in`, `in~`, `>`, `>=`, `<`, `<=`, `between`. Not arbitrary KQL — no joins, regex or `contains` |
+| Custom dimensions | Addressable through the filter's `key` property |
+| Permission | `Microsoft.OperationalInsights/workspaces/purge/action`, from the **Data Purger** role (`150f5e0c-0603-4f03-8c7f-cf70034c4e90`) or Log Analytics Contributor |
+| Sentinel data-lake mirrors | Cannot be selectively purged: "Specific records can't be purged from the Sentinel data lake" |
+| Resource locks | A `CanNotDelete` lock does **not** prevent purge |
+| Billing | Unaffected. "Deleting or purging data doesn't affect billing" |
+| Eligible use | GDPR only. Microsoft "reserves the right to reject" other purge requests |
+
+**What this rules out.** Any promise of deletion in hours or days. The Delete Data API is faster,
+typically minutes, but it only marks rows deleted "without physically removing them from
+storage", is limited to 10 requests per hour, and Microsoft points GDPR cases away from it: "If
+you need to comply with GDPR requirements, use the Purge API."
+
+**What it means for P15.** Microsoft's own first recommendation is not to capture the data:
+filtering or pseudonymising at ingestion is "*by far* the best option". That is already this
+repository's posture — content capture is opt-in behind `-CaptureContent` — and P15 should keep
+it that way rather than making capture the default and deletion the remedy.
+
+The design that follows:
+
+1. Content capture stays opt-in, and off by default.
+2. Capture into **one dedicated Analytics-plan table**, not scattered across Application Insights
+   tables, so a deletion is one purge request rather than five.
+3. Key rows on the Entra object id, which the gateway already emits, rather than on a UPN or
+   email — Microsoft's advice is to log an internal identifier and keep the identity lookup
+   somewhere separately deletable.
+4. Document the 30-day SLA and the Basic/Auxiliary exclusion as constraints of the offering, not
+   as footnotes.
+
+**The wording P15 may use, and no stronger:** records in the designated Analytics-plan table can
+be identified by subject id, purged with Microsoft's GDPR Purge operation per affected table, and
+tracked to completion — subject to 50 purge requests per hour and a 30-day completion SLA with no
+expedite. It does not cover Basic or Auxiliary tables, Sentinel data-lake mirrors, or exported
+copies.
 
 ### U8 — OTEL attribute names behind the split productivity metrics
 
