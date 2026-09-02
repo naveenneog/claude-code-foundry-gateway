@@ -260,6 +260,13 @@ values are read on the next request.
 | `tpm-premium` | tokens/minute, premium | 80,000 |
 | `quota-standard` | tokens/day, standard | 500,000 |
 | `quota-premium` | tokens/day, premium | 5,000,000 |
+| `quota-org` | tokens/month, everyone combined | 100,000,000 |
+
+`quota-org` is a single shared counter, so tier budgets sit underneath it. A
+developer inside their own budget is still refused once the organisation's is
+spent, and the reply says so — `"budget": "organisation"` rather than
+`"personal"`. It is a soft cap: high-concurrency requests can temporarily exceed
+it.
 
 Portal: **APIM → APIs → Named values → select → edit Value → Save**
 

@@ -51,11 +51,13 @@ try {
     Invoke-Check 'Preflight on both PowerShell hosts'      'Test-PreflightBothHosts.ps1'
     Invoke-Check 'Wizard reaches summary on PS 5.1'        'Test-On-PS51.ps1'
     Invoke-Check 'Analytics query contract'                'Test-Analytics.ps1' @{ SkipLive = $true }
+    Invoke-Check 'Org spend ceiling'                       'Test-OrgCeiling.ps1' @{ SkipLive = $true }
 
     if ($IncludeAzure) {
         Invoke-Check 'Foundry discovery is selective'      'Test-Discovery.ps1'
         Invoke-Check 'Wizard reuses an existing gateway'   'Test-ApimReuse.ps1'
         Invoke-Check 'Analytics query against live data'   'Test-Analytics.ps1'
+        Invoke-Check 'Org ceiling on the live gateway'     'Test-OrgCeilingLive.ps1'
     }
 }
 finally { Pop-Location }

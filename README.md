@@ -289,7 +289,31 @@ Limits live in APIM named values, so changing one is a config edit, not a redepl
 | `quota-standard` | 500,000 | standard tier tokens/day |
 | `tpm-premium` | 80,000 | premium tier tokens/minute |
 | `quota-premium` | 5,000,000 | premium tier tokens/day |
+| `quota-org` | 100,000,000 | tokens/month across everyone, shared |
 | `calls-per-minute` | 120 | request ceiling per developer |
+
+`quota-org` is one counter shared by every caller, so tier budgets cascade
+underneath it: a developer can be inside their own budget and still be refused
+because the organisation's is spent. It is a **soft cap** — the
+[`llm-token-limit` reference](https://learn.microsoft.com/en-us/azure/api-management/llm-token-limit-policy)
+states high-concurrency requests can temporarily exceed the configured limit, so
+it bounds spend rather than guaranteeing it.
+
+The default is roughly one premium developer's month. Raise it before a wider
+rollout.
+
+Both refusals are `403`. The gateway rewrites the reply so it says which budget
+ran out:
+
+```json
+{ "type": "error",
+  "error": { "type": "rate_limit_error",
+             "budget": "organisation",
+             "message": "The organisation's Claude budget for this period is spent. ..." } }
+```
+
+`budget` is `organisation` or `personal`. Successful replies carry
+`x-org-quota-remaining` and `x-quota-remaining-today`.
 
 ```powershell
 az apim nv update -g rg-claude-gateway --service-name <apim-name> `

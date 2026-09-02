@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Organisation-wide monthly spend ceiling: `quota-org`, enforced in the request path by an
+  `llm-token-limit` on a constant counter-key, checked before the per-tier budgets. Tier limits
+  still apply beneath it, so a developer can be inside their own budget and still be refused
+  because the organisation's is spent. It is a soft cap — the
+  [policy reference](https://learn.microsoft.com/en-us/azure/api-management/llm-token-limit-policy)
+  states high-concurrency requests can temporarily exceed the configured limit.
+- The gateway now says which budget ran out. Both refusals are `403` with the same
+  `LastError.Reason`, and `403` is also what the entitlement check returns, so a developer out of
+  budget previously read it as losing access. The reply is rewritten in Anthropic's error shape
+  carrying `"budget": "organisation"` or `"budget": "personal"`.
+- `tests/Test-OrgCeiling.ps1` and `tests/Test-OrgCeilingLive.ps1`. The second verifies a running
+  gateway; with `-ProveRefusal` it exhausts each budget, reads the message and restores the quota.
 - `analytics/claude-code-daily.kql` and `scripts/Get-ClaudeAnalytics.ps1`: Claude Code usage in
   the shape of the Claude Code Analytics API, built from the gateway's own telemetry. Anthropic's
   API does not cover Foundry — "Usage through ... Claude in Microsoft Foundry ... is not

@@ -33,8 +33,8 @@ premise does not carry over.
 
 | Claude Enterprise control | Azure equivalent | State |
 |---|---|---|
-| Org-wide monthly ceiling | No direct analogue. APIM quotas are per-principal per period; Cost Management budgets alert but do not block inference | **Gap — P11** |
-| Group-level limits cascading under the org cap | Tier named values (`tpm-standard`, `quota-premium`, …) | Design — tiers exist, cascade under an org cap does not |
+| Org-wide monthly ceiling | `llm-token-limit` on a constant counter-key, `quota-org`, monthly. Verified shared across callers | Have — P11. Soft cap |
+| Group-level limits cascading under the org cap | Tier named values (`tpm-standard`, `quota-premium`, …) checked after the org ceiling | Have — P11 |
 | Per-member limits | `llm-token-limit` keyed on `oid` | Have |
 | Programmatic cost control — read effective limits and MTD spend, set and clear per-user overrides | APIM named values plus Application Insights, behind an admin surface | **Gap — P12** |
 
@@ -108,9 +108,11 @@ M0 is shipped. The table below is the queue; the checklist under it is what the 
       that API's response shape. Verified live: 19 rows regrouped into 13 records, 167,713 input
       tokens, 22 sessions, 2 callers. `estimated_cost` carries `is_estimate` until U2 closes; the
       four OTEL-only productivity fields are null until U8 closes
-- [ ] P11 org-wide monthly ceiling — acceptance: aggregate spend across all principals stops at
-      the cap, verified live; tier limits still apply beneath it. U1 closed — a constant
-      counter-key is shared, so this sits in the request path
+- [x] P11 org-wide monthly ceiling — a constant-keyed `llm-token-limit` reading `quota-org`,
+      checked before the per-tier budgets, with tier limits still applying beneath it. Verified
+      live: exhausting the org budget refuses with `"budget": "organisation"`, exhausting a
+      personal budget refuses with `"budget": "personal"`, and raising either restores service
+      immediately. Soft cap — high-concurrency requests can temporarily exceed it
 - [ ] P12 programmatic cost control — acceptance: read effective limits and month-to-date spend
       per user, and set or clear a per-user override, without editing named values by hand
 

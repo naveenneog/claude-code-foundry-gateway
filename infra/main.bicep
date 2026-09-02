@@ -55,6 +55,9 @@ param tpmPremium int = 80000
 @description('Premium tier: tokens per day, per developer.')
 param quotaPremium int = 5000000
 
+@description('Organisation-wide ceiling: total tokens per month across every developer. This is a soft cap - the llm-token-limit policy allows high-concurrency requests to temporarily exceed it, so it bounds spend rather than guaranteeing it. The default is roughly one premium developer\'s month, which fails safe: raise it deliberately before a wider rollout.')
+param quotaOrg int = 100000000
+
 @description('Request-rate ceiling per developer per minute. Stops a runaway agent loop that makes many small calls.')
 param callsPerMinute int = 120
 
@@ -249,6 +252,7 @@ var namedValues = [
   { key: 'quota-standard', value: string(quotaStandard) }
   { key: 'tpm-premium', value: string(tpmPremium) }
   { key: 'quota-premium', value: string(quotaPremium) }
+  { key: 'quota-org', value: string(quotaOrg) }
   { key: 'calls-per-minute', value: string(callsPerMinute) }
   { key: 'allow-standard', value: allowStandardValue }
   { key: 'allow-premium', value: allowPremiumValue }

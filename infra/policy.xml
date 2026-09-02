@@ -79,9 +79,37 @@
             </when>
         </choose>
 
-        <!-- 5. Tiered token budgets, keyed on oid so one developer cannot
+        <!-- 5. Organisation-wide monthly ceiling.
+             ==========================================================
+             A constant counter-key is a single counter shared by every caller.
+             Measured 2026-09-02 on a throwaway API: one caller drove the shared
+             counter to zero and two callers who had spent nothing of their own
+             quota were then refused. See docs/UNKNOWNS.md U1.
+
+             This is a soft cap. The llm-token-limit reference states that
+             high-concurrency requests can temporarily exceed the configured
+             limit, so it bounds spend rather than guaranteeing it.
+
+             Checked before the per-tier budgets so that when the organisation is
+             out of budget, that is what the developer is told.
+
+             The budget variable names which ceiling is being checked. Both
+             refusals are 403 with Reason=OpenAITokenQuotaExceeded, so on-error
+             cannot tell them apart from context.LastError alone. Policies run in
+             order and the failing one halts the pipeline, so the last value set
+             here is the budget that refused. -->
+        <set-variable name="budget" value="organisation" />
+        <llm-token-limit
+            counter-key="claude-org"
+            token-quota="{{quota-org}}"
+            token-quota-period="Monthly"
+            estimate-prompt-tokens="false"
+            remaining-quota-tokens-header-name="x-org-quota-remaining" />
+
+        <!-- 6. Tiered token budgets, keyed on oid so one developer cannot
              starve the team. Rate limit exceeded returns 429; the daily
              quota returns 403. -->
+        <set-variable name="budget" value="personal" />
         <choose>
             <when condition="@((string)context.Variables["tier"] == "premium")">
                 <llm-token-limit
@@ -115,7 +143,7 @@
             </otherwise>
         </choose>
 
-        <!-- 6. Request-rate ceiling. Token budgets alone do not stop a runaway
+        <!-- 7. Request-rate ceiling. Token budgets alone do not stop a runaway
              agent loop making many small calls. -->
         <rate-limit-by-key
             calls="{{calls-per-minute}}"
@@ -123,7 +151,7 @@
             counter-key="@((string)context.Variables["userId"])"
             retry-after-header-name="Retry-After" />
 
-        <!-- 7. Chargeback telemetry to Application Insights, sliced by
+        <!-- 8. Chargeback telemetry to Application Insights, sliced by
              developer, tier, model and Claude Code session. Azure Monitor
              allows at most 5 custom dimensions here. -->
         <llm-emit-token-metric namespace="claudecode">
@@ -134,7 +162,7 @@
             <dimension name="SessionId" value="@((string)context.Variables["sessionId"])" />
         </llm-emit-token-metric>
 
-        <!-- 8. Swap the caller's token for the gateway's own identity. The
+        <!-- 9. Swap the caller's token for the gateway's own identity. The
              developer token is deliberately not forwarded: Foundry trusts only
              the gateway's managed identity. -->
         <authentication-managed-identity
@@ -146,7 +174,7 @@
         </set-header>
         <set-header name="x-api-key" exists-action="delete" />
 
-        <!-- 9. Attribution for Foundry-side logs. -->
+        <!-- 10. Attribution for Foundry-side logs. -->
         <set-header name="x-gateway-user" exists-action="override">
             <value>@((string)context.Variables["userUpn"])</value>
         </set-header>
@@ -172,5 +200,40 @@
         <set-header name="x-gateway-error" exists-action="override">
             <value>@(context.LastError?.Reason ?? "unknown")</value>
         </set-header>
+
+        <!-- A budget refusal and an entitlement refusal are both 403, so without
+             this a developer who has simply run out of budget reads it as losing
+             access and raises a ticket.
+
+             Measured 2026-09-02: llm-token-limit raises
+             Reason=OpenAITokenQuotaExceeded, Source=llm-token-limit, Scope=api,
+             and its own body is {"statusCode":403,"message":"Token quota is
+             exceeded..."} - not Anthropic's error shape, so the client shows it
+             raw. This replaces it with the shape Claude Code expects and names
+             which budget ran out. -->
+        <choose>
+            <when condition="@(context.LastError?.Reason == "OpenAITokenQuotaExceeded")">
+                <return-response>
+                    <set-status code="403" reason="Forbidden" />
+                    <set-header name="Content-Type" exists-action="override">
+                        <value>application/json</value>
+                    </set-header>
+                    <set-body>@{
+                        var which = (string)(context.Variables.GetValueOrDefault("budget", "personal"));
+                        var msg = which == "organisation"
+                            ? "The organisation's Claude budget for this period is spent. Your access is unaffected - this limit is shared, so it applies to everyone until the budget resets or your platform team raises quota-org."
+                            : "Your Claude budget for this period is spent. Your access is unaffected; the budget resets at the start of the next period. Ask your platform team if you need a larger tier.";
+                        return new JObject(
+                            new JProperty("type", "error"),
+                            new JProperty("error", new JObject(
+                                new JProperty("type", "rate_limit_error"),
+                                new JProperty("budget", which),
+                                new JProperty("message", msg)
+                            ))
+                        ).ToString();
+                    }</set-body>
+                </return-response>
+            </when>
+        </choose>
     </on-error>
 </policies>

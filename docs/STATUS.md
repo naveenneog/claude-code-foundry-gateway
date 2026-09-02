@@ -1,6 +1,6 @@
 # Status
 
-**Active packet:** P10 - analytics equivalent. Shipped and verified against live telemetry. P-0 (Ironclad adoption) is complete.
+**Active packet:** P11 - organisation-wide monthly ceiling. Shipped and verified on the live gateway. P10 and P-0 are complete.
 
 ## What is shipped (M0)
 
@@ -55,23 +55,77 @@ it is the only source of those numbers after a migration.
 | UX | Accept | `-Days` for a first look, `-Date` to match the API's one-day call, objects by default and `-AsJson` for the envelope. Errors name the fix, for example "Pass -AppInsightsName or set CLAUDE_APPINSIGHTS" |
 | Security | Accept | Read-only. No content capture — these are counters, not prompts. Tokens come from `az account get-access-token` per run and are not persisted. `actor` is an Entra UPN, which is already in the telemetry |
 
+## P11 acceptance criteria — organisation-wide monthly ceiling
+
+Claude Enterprise exposes an org-wide monthly spend ceiling with group and member limits
+cascading under it. APIM quotas are per-principal per period, and Cost Management budgets alert
+without blocking inference, so neither alone is equivalent.
+
+U1 established that a constant `counter-key` makes `llm-token-limit` a single counter shared by
+every caller. That is what makes an org ceiling possible in the request path.
+
+- [x] `quota-org` named value, monthly, on a constant counter-key
+- [x] Checked before the per-tier budgets, so the organisation's state is what the developer is
+      told about
+- [x] Per-tier minute and daily limits still apply beneath it
+- [x] The refusal names which budget ran out, in Anthropic's error shape
+- [x] Successful replies carry `x-org-quota-remaining` beside `x-quota-remaining-today`
+- [x] Verified on the live gateway, both branches, by `tests/Test-OrgCeilingLive.ps1 -ProveRefusal`
+- [x] Documented as a soft cap in the policy, the README and ONBOARDING
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+### What the work found
+
+Both refusals are `403` with `Reason=OpenAITokenQuotaExceeded`, `Source=llm-token-limit`,
+`Scope=api`. Measured on a throwaway API on 2026-09-02. Those values are identical for the org
+ceiling and the per-user daily quota, so `context.LastError` cannot distinguish them — and `403`
+is also what the entitlement check returns, so a developer who has simply run out of budget reads
+it as losing access.
+
+Two findings made the message possible:
+
+| | |
+|---|---|
+| `<on-error>` does fire on an `llm-token-limit` refusal | So the reply can be rewritten. Its own body is `{"statusCode":403,"message":"Token quota is exceeded..."}`, which is not Anthropic's error shape, so the client would otherwise show it raw |
+| Policies run in order and the failing one halts the pipeline | So a `budget` variable set before each limit names the one that refused. This is what `LastError` cannot supply |
+
+Measured end to end:
+
+```
+org exhausted      -> 403 {"error":{"type":"rate_limit_error","budget":"organisation", ...}}
+personal exhausted -> 403 {"error":{"type":"rate_limit_error","budget":"personal", ...}}
+raise either       -> 200 on the next request
+```
+
+Also found: setting a quota exactly equal to what has been spent does not refuse. The quota is
+exceeded when consumption passes it, not when it reaches it. The live test allows for that
+rather than sitting on the boundary.
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | One more policy in an existing pipeline. No new component, no scheduled job, no state outside APIM. The ceiling sits in the request path because U1 proved a shared counter exists there |
+| Coder | Accept | The ordering requirement — org before tier — is asserted by position in the file, not by a comment asking future editors to be careful |
+| QA | Accept | Shape asserted offline, behaviour asserted live, both branches proven. Negative-tested: making the org key per-caller, or removing the personal marker, each turns the suite red. The live script restores what it changes in a `finally` and prints the original values first |
+| UX | Accept | The developer is told which budget ran out and that their access is intact, which is the actual question behind the support ticket. The installer warns when the monthly ceiling is below one premium developer's daily quota |
+| Security | Accept | No change to authentication, entitlement or identity. The ceiling is enforced before the managed-identity swap, so an exhausted budget never reaches Foundry. The default fails safe at roughly one premium developer's month |
+
 ## Commands that prove it
 
 ```powershell
-./tests/Test-All.ps1                          # 6 checks, offline
-./tests/Test-All.ps1 -IncludeAzure            # plus the three that call Azure
-./scripts/Get-ClaudeAnalytics.ps1 -Days 30    # the report itself
-node .ironclad/gate.mjs --stage packet        # definition of done
+./tests/Test-All.ps1                                    # 7 checks, offline
+./tests/Test-All.ps1 -IncludeAzure                      # plus the four that call Azure
+./scripts/Get-ClaudeAnalytics.ps1 -Days 30              # the usage report
+./tests/Test-OrgCeilingLive.ps1 -ProveRefusal           # exhausts each budget, then restores it
+node .ironclad/gate.mjs --stage packet                  # definition of done
 ```
 
 ## Next
 
-P11 — the org-wide monthly spend ceiling. U1 is closed by measurement, so it sits in the request
-path: a constant `counter-key` is a single shared counter. Two things carry into the design. The
-cap is soft — the policy reference states high-concurrency requests can temporarily exceed it, so
-it must not be described as a hard spend guarantee. And refusal is `403`, the same code as the
-per-user daily quota, so the message has to distinguish the organisation's budget from the
-developer's or it will be read as an entitlement failure.
+P12 — programmatic cost control: read effective limits and month-to-date spend per user, and set
+or clear a per-user override, without editing named values by hand. P10 supplies month-to-date
+spend and P11 supplies the ceiling, so P12 is a surface over both rather than new enforcement.
 
-Open unknowns are in `docs/UNKNOWNS.md`. U2 blocks putting a currency figure on the estimate; U8
-blocks the four productivity fields P10 currently returns as null.
+U2 blocks putting a currency figure on that spend; until it closes the number stays labelled an
+estimate. Open unknowns are in `docs/UNKNOWNS.md`.

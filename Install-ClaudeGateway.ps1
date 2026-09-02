@@ -44,6 +44,7 @@ param(
     [int]$QuotaStandard,
     [int]$TpmPremium,
     [int]$QuotaPremium,
+    [int]$QuotaOrg,
     [int]$CallsPerMinute,
 
     [string]$StandardGroup = 'claude-code-standard',
@@ -370,6 +371,11 @@ Write-Step 'Premium tier'
 $TpmPremium   = if ($TpmPremium)   { $TpmPremium }   else { Read-Int 'Tokens per minute' 80000   'For heavy agentic use - Cowork and long Claude Code runs.' }
 $QuotaPremium = if ($QuotaPremium) { $QuotaPremium } else { Read-Int 'Tokens per day'    5000000 '' }
 
+Write-Step 'Organisation ceiling'
+$QuotaOrg = if ($QuotaOrg) { $QuotaOrg } else {
+    Read-Int 'Tokens per month, everyone combined' 100000000 'Total across all developers. The default is about one premium developer''s month, so raise it before a wider rollout.'
+}
+
 Write-Step 'Safety valve'
 $CallsPerMinute = if ($CallsPerMinute) { $CallsPerMinute } else {
     Read-Int 'Requests per minute, per developer' 120 'Catches a runaway loop making many small calls.'
@@ -377,6 +383,7 @@ $CallsPerMinute = if ($CallsPerMinute) { $CallsPerMinute } else {
 
 if ($TpmStandard -gt $TpmPremium) { Write-Warn2 'Standard tokens-per-minute is above premium. Intended?' }
 if ($QuotaStandard -gt $QuotaPremium) { Write-Warn2 'Standard daily quota is above premium. Intended?' }
+if ($QuotaOrg -lt $QuotaPremium) { Write-Warn2 'The monthly organisation ceiling is below one premium developer''s daily quota. One developer can exhaust it in a day.' }
 
 # ---------------------------------------------------------------- 4. groups
 
@@ -400,6 +407,7 @@ $rows = [ordered]@{
     ''                      = ''
     'Standard tier'         = "$('{0:n0}' -f $TpmStandard) tokens/min, $('{0:n0}' -f $QuotaStandard) tokens/day"
     'Premium tier'          = "$('{0:n0}' -f $TpmPremium) tokens/min, $('{0:n0}' -f $QuotaPremium) tokens/day"
+    'Organisation ceiling'  = "$('{0:n0}' -f $QuotaOrg) tokens/month, shared - soft cap"
     'Request ceiling'       = "$CallsPerMinute requests/min"
     ' '                     = ''
     'Entra groups'          = "$StandardGroup, $PremiumGroup"
@@ -503,6 +511,7 @@ az deployment group create `
         quotaStandard=$QuotaStandard `
         tpmPremium=$TpmPremium `
         quotaPremium=$QuotaPremium `
+        quotaOrg=$QuotaOrg `
         callsPerMinute=$CallsPerMinute `
     -o none
 
@@ -549,6 +558,7 @@ $config = [ordered]@{
         standard = @{ tokensPerMinute = $TpmStandard; tokensPerDay = $QuotaStandard }
         premium  = @{ tokensPerMinute = $TpmPremium;  tokensPerDay = $QuotaPremium }
     }
+    organisation = @{ tokensPerMonth = $QuotaOrg; shared = $true; softCap = $true }
     generated = (Get-Date -Format 'yyyy-MM-dd HH:mm')
 }
 $configPath = Join-Path $pkg 'claude-gateway.json'
