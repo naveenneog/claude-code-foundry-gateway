@@ -431,8 +431,8 @@ failing command and its output.
 ### Running the checks
 
 ```powershell
-./scripts/Test-All.ps1                 # offline: encoding, shell scripts, both PowerShell hosts
-./scripts/Test-All.ps1 -IncludeAzure   # adds the checks that call Azure
+./tests/Test-All.ps1                 # offline: encoding, shell scripts, both PowerShell hosts
+./tests/Test-All.ps1 -IncludeAzure   # adds the checks that call Azure
 ```
 
 Two things these guard that are easy to get wrong, and that a syntax check will not catch:
@@ -459,7 +459,7 @@ Both affect PowerShell 5.1 and 7 equally — it's a Windows property, not a host
 *quietly*: the error text is a non-empty string, so a plain `if ($result)` reads it as success.
 Filter in PowerShell, or call the REST API directly with `Invoke-RestMethod` — which is also the
 only way to follow Graph's `@odata.nextLink`, since paging URLs carry `&` too. Brackets and braces
-are safe; bash is unaffected. `./scripts/Test-AzArguments.ps1` enforces this.
+are safe; bash is unaffected. `./tests/Test-AzArguments.ps1` enforces this.
 
 ## License
 

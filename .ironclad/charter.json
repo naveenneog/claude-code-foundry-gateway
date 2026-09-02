@@ -1,0 +1,68 @@
+{
+  "_readme": "The machine-checkable half of this project's contract. Enforced by .ironclad/gate.mjs. Loosening anything here requires an ADR stating why.",
+  "version": 1,
+  "name": "claude-code-foundry-gateway",
+  "strictness": "standard",
+  "commands": {
+    "test": "pwsh -NoProfile -File ./tests/Test-All.ps1",
+    "lint": null,
+    "typecheck": null,
+    "build": "az bicep build --file infra/main.bicep --stdout",
+    "a11y": null,
+    "coverage": null
+  },
+  "quality": {
+    "maxFileLines": 700,
+    "maxTestFileLines": 800,
+    "maxDebtMarkers": 20,
+    "coverageFloor": null,
+    "minTestRatio": 0.15,
+    "fileSizeExceptions": []
+  },
+  "ledger": {
+    "requireRoadmap": true,
+    "requireStatus": true,
+    "requireChangelog": true,
+    "requireAdr": true,
+    "maxUncommittedFiles": 15,
+    "maxUncommittedLines": 500,
+    "maxCommitsWithoutAdr": 40,
+    "architectureSignificantPaths": [
+      "infra/**",
+      "Install-ClaudeGateway.ps1",
+      "scripts/Sync-ClaudeAccess.ps1",
+      "scripts/Import-ClaudeEntitlement.ps1"
+    ]
+  },
+  "architecture": {
+    "boundaries": [
+      {
+        "from": "infra/**",
+        "deny": [
+          "scripts/**"
+        ],
+        "why": "The Bicep template must deploy standalone, from the portal button or a pipeline, without any PowerShell in the path."
+      }
+    ]
+  },
+  "security": {
+    "secretAllowlist": [
+      {
+        "why": "Placeholder tenant and client ids in documentation and generated policy examples are all-zero or example values, never real credentials.",
+        "path": "docs/**"
+      },
+      {
+        "why": "Generated MDM policy examples carry example gateway URLs and zero-GUID tenant ids by construction.",
+        "path": "policy-claude-code/**"
+      }
+    ],
+    "auditDependencies": true
+  },
+  "tests": {
+    "skipAllowlist": []
+  },
+  "ignore": [
+    "onboarding/**"
+  ],
+  "commandTimeoutMs": 900000
+}

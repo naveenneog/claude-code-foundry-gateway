@@ -5,12 +5,13 @@
 # The Azure ones need a signed-in az and are skipped when there isn't one,
 # rather than reported as failures.
 #
-#   ./scripts/Test-All.ps1              offline checks
-#   ./scripts/Test-All.ps1 -IncludeAzure   plus the ones that call Azure
+#   ./tests/Test-All.ps1                offline checks
+#   ./tests/Test-All.ps1 -IncludeAzure  plus the ones that call Azure
 
 param([switch]$IncludeAzure)
 
 $root = Split-Path $PSScriptRoot -Parent
+$scriptsDir = Join-Path $root 'scripts'
 $results = @()
 
 function Invoke-Check {
@@ -21,7 +22,11 @@ function Invoke-Check {
     Write-Host " $Name" -ForegroundColor Cyan
     Write-Host ('=' * 72) -ForegroundColor DarkGray
 
+    # Tests live in tests/, but a few checks are tools that also ship to users
+    # and stay in scripts/ - Repair-ScriptEncoding is both a repair tool and a
+    # check. Look in both rather than duplicating the file.
     $path = Join-Path $PSScriptRoot $Script
+    if (-not (Test-Path $path)) { $path = Join-Path $scriptsDir $Script }
     if (-not (Test-Path $path)) {
         Write-Host "  skipped - $Script not found" -ForegroundColor Yellow
         $script:results += [pscustomobject]@{ Name = $Name; Result = 'SKIP' }

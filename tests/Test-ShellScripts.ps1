@@ -1,6 +1,10 @@
 # Syntax-checks and smoke-tests the bash workstation script from Windows,
 # using whichever bash is available (Git Bash or WSL).
 
+# This test lives in tests/, but the shell scripts and the banner it exercises
+# ship to users and live in scripts/.
+$scriptsDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts'
+
 $candidates = @(
     'C:\Program Files\Git\bin\bash.exe',
     'C:\Program Files\Git\usr\bin\bash.exe',
@@ -24,7 +28,7 @@ Write-Host "bash: $bash" -ForegroundColor Cyan
 Write-Host ''
 
 $scripts = @()
-$scripts += Get-ChildItem (Join-Path $PSScriptRoot '*.sh') -ErrorAction SilentlyContinue
+$scripts += Get-ChildItem (Join-Path $scriptsDir '*.sh') -ErrorAction SilentlyContinue
 $scripts += Get-ChildItem (Join-Path (Split-Path $PSScriptRoot -Parent) '*.sh') -ErrorAction SilentlyContinue
 $scripts = $scripts | Sort-Object FullName -Unique
 if (-not $scripts) { Write-Host 'No .sh files found.' -ForegroundColor Yellow; exit 0 }
@@ -63,7 +67,7 @@ function Assert-Contains($label, $text, $needle) {
     }
 }
 
-$bannerPath = '/' + ((Join-Path $PSScriptRoot 'banner.sh').Replace('\','/') -replace '^([A-Za-z]):','$1')
+$bannerPath = '/' + ((Join-Path $scriptsDir 'banner.sh').Replace('\','/') -replace '^([A-Za-z]):','$1')
 
 $utf8 = & $bash -c "export LANG=en_US.UTF-8; . '$bannerPath'; claude_banner 'test'" 2>&1 | Out-String
 Assert-Contains 'banner.sh renders' $utf8 'Naveen Gopalakrishna'
@@ -77,8 +81,8 @@ Assert-Contains 'banner.sh renders' $utf8 'Naveen Gopalakrishna'
 # that check passed happily with a U+2500 in the file. Inspecting the bytes is
 # the only thing that actually tests the property.
 foreach ($f in @(
-    @{ Name = 'banner.sh';      Path = (Join-Path $PSScriptRoot 'banner.sh') },
-    @{ Name = 'Show-Banner.ps1'; Path = (Join-Path $PSScriptRoot 'Show-Banner.ps1') }
+    @{ Name = 'banner.sh';      Path = (Join-Path $scriptsDir 'banner.sh') },
+    @{ Name = 'Show-Banner.ps1'; Path = (Join-Path $scriptsDir 'Show-Banner.ps1') }
 )) {
     if (-not (Test-Path $f.Path)) { continue }
     $bytes = [IO.File]::ReadAllBytes($f.Path)
@@ -110,7 +114,7 @@ if (Test-Path $gw) {
 # Windows users at the PowerShell version - and that check comes before the
 # banner. uname is shimmed to reach it. HOME is redirected at the same time so
 # a run that gets further than expected cannot touch the real profile.
-$ws = Join-Path $PSScriptRoot 'setup-claude-workstation.sh'
+$ws = Join-Path $scriptsDir 'setup-claude-workstation.sh'
 if (Test-Path $ws) {
     $p = '/' + (($ws).Replace('\','/') -replace '^([A-Za-z]):','$1')
     $probe = @'

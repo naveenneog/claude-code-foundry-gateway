@@ -2,7 +2,7 @@
 # prove the argument canary actually detects the difference between them.
 
 $root = Split-Path $PSScriptRoot -Parent
-$pre = Join-Path $PSScriptRoot 'Test-Prerequisites.ps1'
+$pre = Join-Path $root 'scripts/Test-Prerequisites.ps1'
 
 $hosts = @(
     @{ Name = 'PowerShell 7';           Exe = (Get-Command pwsh -ErrorAction SilentlyContinue).Source },
