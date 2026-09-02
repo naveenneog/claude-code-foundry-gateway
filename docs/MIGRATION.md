@@ -60,8 +60,8 @@ is observable on any machine that has run both:
 %LOCALAPPDATA%\Claude-3p\         Foundry mode: its own Local Storage and IndexedDB
 ```
 
-So a user switched to Foundry sees an empty Desktop until the import runs.
-That is why the switches below need to be on *before* they cut over, not after.
+So a user switched to Foundry sees an empty Desktop until the import runs. The
+switches described below therefore need to be on before they cut over.
 
 ### How the import works
 
@@ -85,10 +85,9 @@ duplicate — which makes "import again just before cutover" a safe step.
 — [Import history from claude.ai](https://claude.com/docs/third-party/claude-desktop/import)
 
 **Two switches, both off by default.** Neither end is enabled out of the box,
-and both are administrator-controlled. This is the part that bites: a user who
-tries to import before the switches are on is told import is not enabled for
-this deployment, with no indication that it is a policy decision rather than a
-missing feature.
+and both are administrator-controlled. A user who tries to import before the
+switches are on is told import is not enabled for this deployment, which reads
+as a missing feature rather than a policy decision.
 
 **1. In your Desktop managed configuration**, set `claudeAiImport`:
 
@@ -119,9 +118,8 @@ signing in and selecting a downloaded zip. The only export that includes file
 contents is the **organization-level export**, which only a workspace owner can
 request.
 
-So if a team has been treating a Claude project's knowledge base as a document
-store, plan to move those files separately. That is the item to surface early,
-not conversation history.
+A team using a Claude project's knowledge base as a document store needs those
+files moved separately, through an organization-level export.
 
 ### Getting the claude.ai export
 
@@ -267,9 +265,8 @@ Three keys control what users may add for themselves:
 
 ### How sessions are managed
 
-Sessions are files, and their lifecycle is configurable — including centrally,
-which is what makes this answerable for a compliance review rather than a
-per-developer habit.
+Sessions are files, and their lifecycle is configurable, including from managed
+settings.
 
 | To | Set | Where |
 |---|---|---|
@@ -284,9 +281,8 @@ Transcripts are JSONL at `~/.claude/projects/<project>/<session-id>.jsonl`, and
 `<project>` is derived from the working directory path. Resume with
 `--continue`, `--resume`, or the `/resume` picker.
 
-`desktopSessionCleanupPeriodDays` is the one worth knowing: it is a **managed**
-setting, so Desktop and Cowork transcript retention is a policy you set once
-for the fleet rather than something each person configures.
+`desktopSessionCleanupPeriodDays` is a managed setting, so Desktop and Cowork
+transcript retention is set once for the fleet rather than per person.
 
 — [Manage sessions](https://code.claude.com/docs/en/sessions)
 
@@ -411,9 +407,8 @@ Each emits `managed-settings.json`, a `.reg`, an Intune OMA-URI CSV, a
 | macOS | `com.anthropic.claudecode` managed preferences | `/Library/Managed Preferences/<user>/com.anthropic.claudefordesktop.plist` |
 | Linux | `/etc/claude-code/managed-settings.json` | `/etc/claude-desktop/managed-settings.json` |
 
-> `C:\ProgramData\ClaudeCode\managed-settings.json` is a **legacy path that is
-> no longer read**. It is the natural place to guess, which is what makes it
-> worth stating.
+> `C:\ProgramData\ClaudeCode\managed-settings.json` is a legacy path and is no
+> longer read.
 
 — [Deploy managed settings](https://code.claude.com/docs/en/managed-settings)
 · [Claude Desktop configuration reference](https://claude.com/docs/third-party/claude-desktop/configuration)

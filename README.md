@@ -24,8 +24,8 @@ One interactive command deploys the whole thing.
 | Should we do this at all? | [Comparison](docs/COMPARISON.md) |
 | We're moving off first-party Claude | [Migration](docs/MIGRATION.md) |
 
-**Most people reading this repository are developers, and their entire job is
-the first row.** The rest of this page is for whoever runs the gateway.
+The first row covers the developer setup: one command, no Azure rights. The
+rest of this page is the gateway side.
 
 ---
 

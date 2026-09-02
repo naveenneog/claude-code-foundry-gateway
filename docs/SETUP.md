@@ -287,16 +287,16 @@ looks for v2 instances you already own and offers to reuse one:
        3. create a new one
 ```
 
-Reuse is **strictly additive**. It adds the Claude API, its policies, named
-values and a logger, and does not touch the instance itself — no SKU change, no
-identity change, and none of your TLS or networking settings.
+Reuse is additive. It adds the Claude API, its policies, named values and a
+logger, and does not modify the instance itself — no SKU change, no identity
+change, and no change to TLS or networking settings.
 
-That last point is load-bearing. An ARM `PUT` asserts a whole resource, so a
-template that merely re-declared the service would reset every property it does
-not mention. Verified with `what-if` against a live gateway, that meant
-`customProperties` being cleared — re-enabling TLS 1.0, TLS 1.1 and SSL 3.0 —
-along with the NAT gateway switched off and both developer portals switched on.
-The template therefore only writes the service when it is creating it.
+An ARM `PUT` asserts a whole resource, so a template that re-declared the
+service would reset every property it does not mention. Checked with `what-if`
+against a live gateway, that meant `customProperties` being cleared, which
+re-enables TLS 1.0, TLS 1.1 and SSL 3.0, along with the NAT gateway switched
+off and both developer portals switched on. The template therefore only writes
+the service when it creates it.
 
 Two constraints:
 
@@ -346,7 +346,7 @@ az apim show -g <rg> -n <apim> --query "sku.name" -o tsv
 # expect: BasicV2, StandardV2 or PremiumV2
 ```
 
-### 4.2 Close the bypass — do not skip this
+### 4.2 Close the bypass
 
 The gateway only governs traffic that goes *through* it. Anyone holding
 **Cognitive Services User** directly on the Foundry account can point Claude

@@ -329,9 +329,7 @@ sync. Run the sync anyway to keep the allowlists clean.
 
 Moved to **[DEVELOPER.md](../DEVELOPER.md)**, at the root of the repository.
 
-It was buried here behind the platform-team half, which is the opposite of what
-a developer needs: their whole job is one command and no Azure rights at all.
-Sending them to a page that opens with role assignments and Bicep was costing
-them time and generating avoidable questions.
+The developer setup is one command and needs no Azure rights, so it is a
+separate page rather than the second half of this one.
 
 Send them that link. Nothing else on this page applies to them.

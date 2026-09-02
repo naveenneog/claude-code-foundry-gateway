@@ -60,9 +60,8 @@ removed from the Foundry role, there is no path to the model that does not pass 
 The `llm-token-limit`, `llm-emit-token-metric`, `llm-semantic-cache-*` and `llm-content-safety`
 policies support the **Anthropic Messages API** shape only on v2 tiers.
 
-On a classic tier the policy is accepted and appears to work. It simply counts zero tokens
-forever, so no budget ever trips. That failure is silent and expensive, which is why this
-accelerator refuses anything but a v2 SKU.
+On a classic tier the policy is accepted and appears to work. It counts zero tokens
+forever, so no budget ever trips. The accelerator therefore accepts only a v2 SKU.
 
 ## Why tiering is a group, not a config file
 

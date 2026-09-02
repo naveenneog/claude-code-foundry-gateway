@@ -191,7 +191,7 @@ requests
 | order by Blocked desc
 ```
 
-> **This cannot be split by user, and it is worth knowing why.**
+> **This cannot be split by user.**
 > APIM's `requests` telemetry carries only APIM's own dimensions — Service ID,
 > API Name, Operation Name, Region. The `User` dimension lives on
 > `customMetrics`, which is written by `llm-emit-token-metric`, and that policy
