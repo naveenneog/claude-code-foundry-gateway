@@ -18,8 +18,16 @@ retrieved 2026-09-02). Its fields:
 | Tool actions | `edit_tool`, `multi_edit_tool`, `write_tool`, `notebook_edit_tool`, each `accepted` / `rejected` |
 | Model breakdown | `model`, `tokens.input/output/cache_read/cache_creation`, `estimated_cost.amount` |
 
-A customer moving to Foundry loses that endpoint, because it is served by Anthropic's Admin API
-against an Anthropic organization.
+A customer moving to Foundry loses that endpoint. This is stated by Anthropic directly, not
+inferred: "This API only tracks Claude Code usage on the Claude API. Usage through Claude in
+Amazon Bedrock, **Claude in Microsoft Foundry**, Claude on Google Cloud, or Claude Platform on
+AWS is not included."
+([reference](https://platform.claude.com/docs/en/manage-claude/claude-code-analytics-api),
+retrieved 2026-09-02.)
+
+So the endpoint does not return partial data for a Foundry deployment — it returns none. There
+is no configuration that changes this, which removes the option of keeping the Anthropic API and
+supplementing it.
 
 The gateway already emits per-request telemetry to Application Insights via
 `llm-emit-token-metric`, dimensioned by `User`, `UserId`, `Tier`, `Model` and `SessionId`.
@@ -67,11 +75,12 @@ Field mapping, and what does not carry over:
 | `organization_id` | — | Replaced by tenant id |
 | `customer_type` | — | Meaningless here; always the Foundry deployment |
 | `terminal_type` | OTEL | Claude Code reports it |
-| `num_sessions` | gateway | Distinct `SessionId` per user per day |
+| `num_sessions` | gateway | Distinct `SessionId` per user per day, excluding the literal `"none"` and nulls |
 | `lines_of_code.*`, `commits_*`, `pull_requests_*` | OTEL only | Not visible to the gateway |
-| tool `accepted` / `rejected` | OTEL only | A rejection never leaves the client |
-| `tokens.*` | gateway | Authoritative, because it is what was served |
-| `estimated_cost` | derived | Tokens × Foundry list price. Accuracy is **U2**, open |
+| tool `accepted` / `rejected` | OTEL only | A rejection never leaves the client. Reported as one accepted/rejected pair, not split across the four tools — Claude Code emits a single `code_edit_tool.decision` counter |
+| `tokens.input`, `tokens.output`, `tokens.cache_read` | gateway | Authoritative, because it is what was served |
+| `tokens.cache_creation` | — | Foundry emits no equivalent metric. Measured 2026-09-02: the gateway's Application Insights carries `Prompt Tokens`, `Completion Tokens`, `Prompt Cached Tokens` and `Total Tokens` only |
+| `estimated_cost` | derived | The API reports **cents**; `analytics/claude-code-daily.kql` reports dollars in `estimated_cost_usd`. Accuracy is **U2**, open |
 
 ## Consequences
 

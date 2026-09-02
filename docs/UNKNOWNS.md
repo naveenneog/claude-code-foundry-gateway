@@ -14,6 +14,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | U4 | OPEN | Can a self-hosted Claude apps gateway serve a Foundry deployment, and is it worth operating? | P13 |
 | U6 | OPEN | What signs a plugin, and who verifies it? | P14 |
 | U7 | OPEN | Can Log Analytics honour selective deletion within its purge limits? | P15 |
+| U8 | OPEN | Which OTEL attributes split lines-of-code and tool decisions into their parts? | P10 productivity columns |
 
 ---
 
@@ -117,6 +118,25 @@ what Log Analytics supports for purge, and by its latency and quota.
 
 **Why it matters.** A retention promise that cannot be honoured on a subject-access request is
 a compliance liability rather than a feature.
+
+### U8 — OTEL attribute names behind the split productivity metrics
+
+**Question.** Claude Code's OpenTelemetry export publishes
+`claude_code.lines_of_code.count` and `claude_code.code_edit_tool.decision`
+([monitoring reference](https://code.claude.com/docs/en/monitoring-usage), retrieved
+2026-09-02). The Analytics API reports those split four ways — lines added, lines removed,
+tools accepted, tools rejected. The attribute that carries the split, and its exact values, has
+not been read from a live export because no OpenTelemetry collector is deployed in this
+environment.
+
+**Why it matters.** `analytics/claude-code-daily.kql` returns those four columns as null rather
+than guessing an attribute name. A wrong guess would return zero, which reads as "nobody
+rejected anything" instead of "not measured".
+
+**How to close.** Deploy an OpenTelemetry collector against one Claude Code install, run one
+session containing an accepted and a rejected edit, and read the attribute keys off the
+exported metric. Then replace the four `real(null)` literals with `sumif` over the real
+attribute.
 
 ---
 

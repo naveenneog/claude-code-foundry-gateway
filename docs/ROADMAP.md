@@ -69,7 +69,7 @@ premise does not carry over.
 | Custom data retention | `cleanupPeriodDays`, `desktopSessionCleanupPeriodDays`, and Log Analytics retention | Have |
 | Audit logs — admin actions, seat changes, connector approvals | Azure Activity Log and Entra audit logs | Have |
 | Compliance API — activity, chat history and file content by user and time, with selective deletion | Conversations are on local disk in third-party mode. Retrieval requires OTLP content capture into the customer's own collector | **Gap — P15** |
-| Analytics API | Gateway telemetry plus Claude Code OpenTelemetry | **Gap — P10** |
+| Analytics API | Anthropic's API does not cover Foundry at all. Replaced by `analytics/claude-code-daily.kql` and `scripts/Get-ClaudeAnalytics.ps1`, which emit the same field set from gateway telemetry | Have — P10 |
 | Customer-managed encryption keys | CMEK on Foundry, Log Analytics and Storage | Design |
 | US-only inference, ~10% surcharge | Region selection at deployment, no surcharge | Have — and cheaper |
 | HIPAA-ready with BAA | Covered by the Azure BAA | Have |
@@ -103,11 +103,14 @@ M0 is shipped. The table below is the queue; the checklist under it is what the 
 
 ### M1 — spend and analytics
 
-- [ ] P10 analytics equivalent — acceptance: a KQL function returns the Claude Code Analytics
-      API field set for a given day, sourced from gateway telemetry and Claude Code OTEL, with
-      `estimated_cost` labelled an estimate until U2 closes
+- [x] P10 analytics equivalent — `analytics/claude-code-daily.kql` returns the Claude Code
+      Analytics API field set for a given day, and `scripts/Get-ClaudeAnalytics.ps1` emits it in
+      that API's response shape. Verified live: 19 rows regrouped into 13 records, 167,713 input
+      tokens, 22 sessions, 2 callers. `estimated_cost` carries `is_estimate` until U2 closes; the
+      four OTEL-only productivity fields are null until U8 closes
 - [ ] P11 org-wide monthly ceiling — acceptance: aggregate spend across all principals stops at
-      the cap, verified live; tier limits still apply beneath it. U1 closed — a constant`n      counter-key is shared, so this sits in the request path
+      the cap, verified live; tier limits still apply beneath it. U1 closed — a constant
+      counter-key is shared, so this sits in the request path
 - [ ] P12 programmatic cost control — acceptance: read effective limits and month-to-date spend
       per user, and set or clear a per-user override, without editing named values by hand
 

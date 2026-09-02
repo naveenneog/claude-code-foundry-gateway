@@ -7,6 +7,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `analytics/claude-code-daily.kql` and `scripts/Get-ClaudeAnalytics.ps1`: Claude Code usage in
+  the shape of the Claude Code Analytics API, built from the gateway's own telemetry. Anthropic's
+  API does not cover Foundry — "Usage through ... Claude in Microsoft Foundry ... is not
+  included" ([reference](https://platform.claude.com/docs/en/manage-claude/claude-code-analytics-api),
+  retrieved 2026-09-02) — so after a migration this is the only source of those numbers.
+  Verified against live telemetry: 19 rows over 30 days regrouped into 13 records, 167,713 input
+  tokens, 22 sessions, 2 callers.
+- `tests/Test-Analytics.ps1`: asserts the query's contract offline, and with `-IncludeAzure`
+  submits it to Application Insights and checks each column carries data independently. Every
+  live assertion was negative-tested by breaking the query and confirming the suite turns red.
+- U8 in `docs/UNKNOWNS.md`: the OpenTelemetry attributes that split lines-of-code and tool
+  decisions are unverified, so those four fields return null rather than a guessed zero.
 - Ironclad engineering discipline: `.ironclad/charter.json`, a vendored `gate.mjs`, and the
   `docs/` ledger. See ADR-0001.
 - `docs/ROADMAP.md` with a parity matrix against Claude Enterprise and the M1–M3 packet queue.

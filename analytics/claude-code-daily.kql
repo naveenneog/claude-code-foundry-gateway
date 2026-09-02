@@ -1,0 +1,99 @@
+// Claude Code daily analytics - the Claude Code Analytics API field set, built
+// from telemetry an organisation already owns.
+//
+// Contract and field mapping: docs/adr/0002-analytics-two-sources.md
+// Source API: https://platform.claude.com/docs/en/manage-claude/claude-code-analytics-api
+//
+// Two sources, because they see different things.
+//
+//   gateway   API Management -> Application Insights customMetrics. Authoritative
+//             for what was served: tokens, model, tier, caller.
+//   otel      Claude Code -> your collector. The only source for lines of code,
+//             commits, pull requests and tool decisions - a rejected edit never
+//             becomes a request, so no gateway can see it.
+//
+// The otel half is unioned with isfuzzy=true, so this returns the gateway half
+// alone until an OpenTelemetry export is deployed, rather than failing.
+//
+// "date" is a reserved KQL keyword, so the column is written ['date']. The name
+// is kept because the Analytics API uses it.
+//
+// Verified against live telemetry 2026-09-02: 381 metric records carrying the
+// dimensions User, UserId, Model, Tier, SessionId.
+//
+// Substitute _day to select a date. Defaults to yesterday.
+let _day = startofday(ago(1d));
+let _next = _day + 1d;
+//
+// Gateway half.
+//
+// num_sessions excludes the literal "none": measured 2026-09-02, 38 of 371
+// records carried it, because not every surface sends x-claude-code-session-id.
+// Counting those as one session understates heavy users and invents a session
+// for light ones.
+//
+// isnotempty is not redundant. A null compares unequal to "none" in KQL, so
+// dcountif on the "none" test alone counts one distinct null per group and
+// reports a session that never happened if the dimension is ever missing.
+let gateway =
+    customMetrics
+    | where timestamp >= _day and timestamp < _next
+    | where name in ("Prompt Tokens", "Completion Tokens", "Prompt Cached Tokens")
+    | extend
+        actor = tostring(customDimensions.User),
+        model = tostring(customDimensions.Model),
+        sid = tostring(customDimensions.SessionId)
+    | summarize
+        tokens_input = todouble(sumif(valueSum, name == "Prompt Tokens")),
+        tokens_output = todouble(sumif(valueSum, name == "Completion Tokens")),
+        tokens_cache_read = todouble(sumif(valueSum, name == "Prompt Cached Tokens")),
+        num_sessions = dcountif(sid, isnotempty(sid) and sid != "none")
+        by ['date'] = startofday(timestamp), actor, model;
+//
+// OpenTelemetry half. Claude Code metric names verified against
+// https://code.claude.com/docs/en/monitoring-usage (retrieved 2026-09-02).
+//
+// The attributes that split lines_of_code into added and removed, and
+// code_edit_tool.decision into accept and reject, are not verified here - no
+// OTEL export exists in this environment to read them from. Recorded as U8 in
+// docs/UNKNOWNS.md. Until it closes they resolve to null, not to a guess.
+let otel =
+    union isfuzzy=true customMetrics
+    | where timestamp >= _day and timestamp < _next
+    | where name startswith "claude_code."
+    | extend actor = tostring(customDimensions["user.email"])
+    | summarize
+        commits = todouble(sumif(valueSum, name == "claude_code.commit.count")),
+        pull_requests = todouble(sumif(valueSum, name == "claude_code.pull_request.count")),
+        otel_cost_usd = todouble(sumif(valueSum, name == "claude_code.cost.usage")),
+        terminal_type = take_any(tostring(customDimensions["terminal.type"]))
+        by ['date'] = startofday(timestamp), actor
+    | extend
+        lines_added = real(null),
+        lines_removed = real(null),
+        tool_accepted = real(null),
+        tool_rejected = real(null);
+//
+// Join, keeping every gateway row. A developer whose OTEL export is broken
+// shows null productivity beside real spend, which is visible. Dropping the row
+// would report zero, which is not.
+gateway
+| join kind=leftouter otel on ['date'], actor
+| project
+    ['date'],
+    actor,
+    terminal_type,
+    num_sessions,
+    model,
+    tokens_input,
+    tokens_output,
+    tokens_cache_read,
+    lines_added,
+    lines_removed,
+    commits,
+    pull_requests,
+    tool_accepted,
+    tool_rejected,
+    estimated_cost_usd = otel_cost_usd,
+    cost_is_estimate = true
+| order by ['date'] desc, actor asc, model asc
