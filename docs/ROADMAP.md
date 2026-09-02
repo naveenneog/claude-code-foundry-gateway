@@ -84,7 +84,7 @@ M0 is shipped. The table below is the queue; the checklist under it is what the 
 | Packet | Milestone | Deliverable | Depends on |
 |---|---|---|---|
 | P10 | M1 | Analytics equivalent: Claude Code OTEL into Log Analytics, a documented schema, and a query surface matching the Claude Code Analytics API fields | ADR-0002 |
-| P11 | M1 | Org-wide monthly spend ceiling enforced at the gateway, with tier limits cascading under it | ADR pending |
+| P11 | M1 | Org-wide monthly spend ceiling enforced at the gateway, with tier limits cascading under it | U1 closed |
 | P12 | M1 | Admin surface to read effective limits and month-to-date spend, and to set or clear a per-user override | P11 |
 | P13 | M2 | Per-group capability scoping: one policy profile per tier, covering Chat, Cowork, Code and connectors | — |
 | P14 | M2 | Plugin marketplace: a template repository, a signing and review path, and the managed configuration to pin it | U6 |
@@ -107,7 +107,7 @@ M0 is shipped. The table below is the queue; the checklist under it is what the 
       API field set for a given day, sourced from gateway telemetry and Claude Code OTEL, with
       `estimated_cost` labelled an estimate until U2 closes
 - [ ] P11 org-wide monthly ceiling — acceptance: aggregate spend across all principals stops at
-      the cap, verified live; tier limits still apply beneath it. **Blocked on U1**
+      the cap, verified live; tier limits still apply beneath it. U1 closed — a constant`n      counter-key is shared, so this sits in the request path
 - [ ] P12 programmatic cost control — acceptance: read effective limits and month-to-date spend
       per user, and set or clear a per-user override, without editing named values by hand
 
