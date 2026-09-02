@@ -76,6 +76,9 @@ param allowStandardValueExisting string = ''
 @description('As allowStandardValueExisting, for the premium tier.')
 param allowPremiumValueExisting string = ''
 
+@description('Existing per-user daily quota overrides to preserve, in sentinel form (",oid=tokens,"). Install-ClaudeGateway.ps1 reads this off the gateway before redeploying so overrides set by Set-ClaudeBudget.ps1 survive. Empty means no overrides.')
+param quotaOverridesExisting string = ''
+
 @description('Name of an existing API Management instance to reuse. It must be a v2 SKU and must live in this resource group. Leave empty to create one named apim-{namePrefix}.')
 param existingApimName string = ''
 
@@ -95,6 +98,11 @@ var apiPath = 'claude'
 // installer reads the current values and passes them straight back.
 var allowStandardValue = empty(allowStandardValueExisting) ? ',${join(allowStandardOids, ',')},' : allowStandardValueExisting
 var allowPremiumValue = empty(allowPremiumValueExisting) ? ',${join(allowPremiumOids, ',')},' : allowPremiumValueExisting
+
+// Per-user daily quota overrides, in the same sentinel form and owned the same
+// way: Set-ClaudeBudget.ps1 writes them after the first deployment, so a
+// redeploy has to hand back what is already there rather than assert ',,'.
+var quotaOverridesValue = empty(quotaOverridesExisting) ? ',,' : quotaOverridesExisting
 
 resource foundry 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
   name: foundryAccountName
@@ -253,6 +261,7 @@ var namedValues = [
   { key: 'tpm-premium', value: string(tpmPremium) }
   { key: 'quota-premium', value: string(quotaPremium) }
   { key: 'quota-org', value: string(quotaOrg) }
+  { key: 'quota-overrides', value: quotaOverridesValue }
   { key: 'calls-per-minute', value: string(callsPerMinute) }
   { key: 'allow-standard', value: allowStandardValue }
   { key: 'allow-premium', value: allowPremiumValue }

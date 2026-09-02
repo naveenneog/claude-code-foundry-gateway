@@ -53,7 +53,8 @@ param(
     [int]$Days = 1,
     [switch]$AsJson,
     [string]$ResourceGroup = $(if ($env:CLAUDE_RG) { $env:CLAUDE_RG } else { 'rg-contosohub' }),
-    [string]$AppInsightsName = $(if ($env:CLAUDE_APPINSIGHTS) { $env:CLAUDE_APPINSIGHTS } else { 'appi-claude-gateway' })
+    [string]$ApimName,
+    [string]$AppInsightsName = $(if ($env:CLAUDE_APPINSIGHTS) { $env:CLAUDE_APPINSIGHTS } else { $null })
 )
 
 $ErrorActionPreference = 'Stop'
@@ -80,20 +81,22 @@ $text = $text -replace 'let _next = _day \+ 1d;', ("let _next = _day + {0}d;" -f
 
 # ARM, not "az monitor app-insights": that command lives in an optional
 # extension and prompts to install it on a machine without one.
+#
+# The workspace is resolved from the gateway's own diagnostic rather than by
+# name. The accelerator names it appi-{namePrefix} and namePrefix carries a
+# random suffix, so a redeploy can leave the old workspace behind and start
+# writing to a new one - which is what happened on 2026-08-31 on the reference
+# deployment. Reading the old one returned zero rows and looked like "nobody
+# used it". See scripts/Get-ClaudeTelemetry.ps1.
 $sub = az account show --query id -o tsv 2>$null
 if (-not $sub) { throw "Not signed in. Run: az login" }
-$armToken = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv 2>$null
-if (-not $armToken) { throw "Could not get an ARM token. Run: az login" }
 
-$componentUri = "https://management.azure.com/subscriptions/$($sub.Trim())/resourceGroups/$ResourceGroup" +
-                "/providers/Microsoft.Insights/components/$AppInsightsName" + '?api-version=2020-02-02'
-try {
-    $component = Invoke-RestMethod -Uri $componentUri -Headers @{ Authorization = 'Bearer ' + $armToken.Trim() }
+$telemetry = & (Join-Path $PSScriptRoot 'Get-ClaudeTelemetry.ps1') `
+                -ResourceGroup $ResourceGroup -ApimName $ApimName -AppInsightsName $AppInsightsName
+$appId = $telemetry.AppId
+if (-not $telemetry.MetricsEnabled) {
+    Write-Warning "Metrics are off on the $($telemetry.DiagnosticScope) diagnostic of $($telemetry.Gateway), so no token counts are being recorded. This report will be empty."
 }
-catch {
-    throw "Application Insights '$AppInsightsName' not found in '$ResourceGroup'. Pass -AppInsightsName or set CLAUDE_APPINSIGHTS."
-}
-$appId = $component.properties.AppId
 $tenantId = az account show --query tenantId -o tsv 2>$null
 
 $queryToken = az account get-access-token --resource https://api.applicationinsights.io --query accessToken -o tsv 2>$null

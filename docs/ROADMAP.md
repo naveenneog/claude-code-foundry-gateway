@@ -36,7 +36,7 @@ premise does not carry over.
 | Org-wide monthly ceiling | `llm-token-limit` on a constant counter-key, `quota-org`, monthly. Verified shared across callers | Have — P11. Soft cap |
 | Group-level limits cascading under the org cap | Tier named values (`tpm-standard`, `quota-premium`, …) checked after the org ceiling | Have — P11 |
 | Per-member limits | `llm-token-limit` keyed on `oid` | Have |
-| Programmatic cost control — read effective limits and MTD spend, set and clear per-user overrides | APIM named values plus Application Insights, behind an admin surface | **Gap — P12** |
+| Programmatic cost control — read effective limits and MTD spend, set and clear per-user overrides | `scripts/Get-ClaudeBudget.ps1` and `scripts/Set-ClaudeBudget.ps1` over APIM named values and Application Insights | Have — P12 |
 
 ### Models and features
 
@@ -113,8 +113,11 @@ M0 is shipped. The table below is the queue; the checklist under it is what the 
       live: exhausting the org budget refuses with `"budget": "organisation"`, exhausting a
       personal budget refuses with `"budget": "personal"`, and raising either restores service
       immediately. Soft cap — high-concurrency requests can temporarily exceed it
-- [ ] P12 programmatic cost control — acceptance: read effective limits and month-to-date spend
-      per user, and set or clear a per-user override, without editing named values by hand
+- [x] P12 programmatic cost control — `scripts/Get-ClaudeBudget.ps1` reports effective limits and
+      month-to-date spend per developer, `scripts/Set-ClaudeBudget.ps1` sets and clears a per-user
+      daily override without editing named values by hand. Verified live: an override changes what
+      the gateway applies on the next request, clearing it restores the tier default, and another
+      developer's override survives both
 
 ### M2 — governance depth
 

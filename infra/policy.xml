@@ -90,6 +90,12 @@
              high-concurrency requests can temporarily exceed the configured
              limit, so it bounds spend rather than guaranteeing it.
 
+             It is also per gateway. The same reference states the policy tracks
+             usage independently at each gateway and does not aggregate across
+             the instance, so a multi-region deployment enforces this ceiling
+             once per region. Basic v2 is single-region, so one gateway is one
+             ceiling; on a multi-region Premium instance, budget accordingly.
+
              Checked before the per-tier budgets so that when the organisation is
              out of budget, that is what the developer is told.
 
@@ -106,9 +112,10 @@
             estimate-prompt-tokens="false"
             remaining-quota-tokens-header-name="x-org-quota-remaining" />
 
-        <!-- 6. Tiered token budgets, keyed on oid so one developer cannot
-             starve the team. Rate limit exceeded returns 429; the daily
-             quota returns 403. -->
+        <!-- 6. Per-minute rate, by tier. This stays a branch because
+             tokens-per-minute is one of the attributes the llm-token-limit
+             reference does not allow an expression for. Exceeding it returns
+             429. -->
         <set-variable name="budget" value="personal" />
         <choose>
             <when condition="@((string)context.Variables["tier"] == "premium")">
@@ -119,12 +126,6 @@
                     retry-after-header-name="Retry-After"
                     remaining-tokens-header-name="x-ratelimit-remaining-tokens"
                     tokens-consumed-header-name="x-tokens-consumed" />
-                <llm-token-limit
-                    counter-key="@((string)context.Variables["userId"] + ":daily")"
-                    token-quota="{{quota-premium}}"
-                    token-quota-period="Daily"
-                    estimate-prompt-tokens="false"
-                    remaining-quota-tokens-header-name="x-quota-remaining-today" />
             </when>
             <otherwise>
                 <llm-token-limit
@@ -134,14 +135,47 @@
                     retry-after-header-name="Retry-After"
                     remaining-tokens-header-name="x-ratelimit-remaining-tokens"
                     tokens-consumed-header-name="x-tokens-consumed" />
-                <llm-token-limit
-                    counter-key="@((string)context.Variables["userId"] + ":daily")"
-                    token-quota="{{quota-standard}}"
-                    token-quota-period="Daily"
-                    estimate-prompt-tokens="false"
-                    remaining-quota-tokens-header-name="x-quota-remaining-today" />
             </otherwise>
         </choose>
+
+        <!-- 6b. Daily token budget, keyed on oid so one developer cannot starve
+             the team. Exceeding it returns 403.
+
+             quota-overrides gives one person a different daily budget without
+             moving them between tiers. It is comma-delimited, not JSON: a named
+             value substitutes its raw text into the expression, and JSON's own
+             double quotes would terminate the surrounding C# string literal.
+             Sentinel commas make the lookup exact, so one object id cannot
+             partially match another - the same reason allow-standard uses them.
+
+             Format: ,oid=tokens,oid=tokens,   Empty is ,,
+
+             token-quota takes an expression, which is what allows one policy to
+             serve both tiers and any override. Measured 2026-09-02: the
+             expression must return long. Int32 is rejected at deploy time with
+             "Expression return type 'System.Int32' is not allowed", and string
+             with "Cannot implicitly convert type 'string' to 'long'". -->
+        <set-variable name="effectiveQuota" value="@{
+            var oid = (string)context.Variables["userId"];
+            var tierQuota = (string)context.Variables["tier"] == "premium"
+                ? "{{quota-premium}}" : "{{quota-standard}}";
+            var map = "{{quota-overrides}}";
+            var marker = "," + oid + "=";
+            var i = map.IndexOf(marker);
+            if (i < 0) { return tierQuota; }
+            var start = i + marker.Length;
+            var end = map.IndexOf(",", start);
+            if (end < 0) { end = map.Length; }
+            var found = map.Substring(start, end - start);
+            long parsed;
+            return long.TryParse(found, out parsed) && parsed > 0 ? found : tierQuota;
+        }" />
+        <llm-token-limit
+            counter-key="@((string)context.Variables["userId"] + ":daily")"
+            token-quota="@(long.Parse((string)context.Variables["effectiveQuota"]))"
+            token-quota-period="Daily"
+            estimate-prompt-tokens="false"
+            remaining-quota-tokens-header-name="x-quota-remaining-today" />
 
         <!-- 7. Request-rate ceiling. Token budgets alone do not stop a runaway
              agent loop making many small calls. -->

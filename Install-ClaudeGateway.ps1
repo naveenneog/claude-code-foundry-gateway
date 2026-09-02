@@ -449,15 +449,22 @@ Write-Note 'Safe to leave running.'
 # the live gateway showed exactly that happening.
 $allowStd = ''
 $allowPrm = ''
+$quotaOvr = ''
 if ($ExistingApim -or (az apim show -g $ResourceGroup -n $apimName --query name -o tsv 2>$null)) {
     $allowStd = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id allow-standard --query value -o tsv 2>$null
     $allowPrm = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id allow-premium  --query value -o tsv 2>$null
+    $quotaOvr = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id quota-overrides --query value -o tsv 2>$null
     if (-not $allowStd) { $allowStd = '' }
     if (-not $allowPrm) { $allowPrm = '' }
+    if (-not $quotaOvr) { $quotaOvr = '' }
     $keptStd = @($allowStd.Trim(',') -split ',' | Where-Object { $_ })
     $keptPrm = @($allowPrm.Trim(',') -split ',' | Where-Object { $_ })
+    $keptOvr = @($quotaOvr.Trim(',') -split ',' | Where-Object { $_ })
     if ($keptStd.Count -or $keptPrm.Count) {
         Write-Note "preserving entitlement: $($keptStd.Count) standard, $($keptPrm.Count) premium"
+    }
+    if ($keptOvr.Count) {
+        Write-Note "preserving $($keptOvr.Count) per-user budget override(s)"
     }
 }
 
@@ -507,6 +514,7 @@ az deployment group create `
         grantFoundryRole=$($grantRole.ToString().ToLower()) `
         allowStandardValueExisting=$allowStd `
         allowPremiumValueExisting=$allowPrm `
+        quotaOverridesExisting=$quotaOvr `
         tpmStandard=$TpmStandard `
         quotaStandard=$QuotaStandard `
         tpmPremium=$TpmPremium `

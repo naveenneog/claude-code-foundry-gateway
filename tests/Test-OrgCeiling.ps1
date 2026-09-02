@@ -76,8 +76,17 @@ if ($orgLimit.Success) {
 
 # Per-tier limits must survive. An org ceiling that replaced them would let one
 # developer spend the whole organisation's budget.
+#
+# The daily quota is one policy rather than one per tier since P12: token-quota
+# takes an expression, so tier and any per-user override resolve inside it. The
+# check is that a per-user daily budget still exists and still depends on tier,
+# not that it is written twice.
 Assert 'per-tier minute limits still apply' (([regex]::Matches($policy, 'tokens-per-minute=')).Count -ge 2)
-Assert 'per-tier daily quotas still apply'  (([regex]::Matches($policy, 'token-quota-period="Daily"')).Count -ge 2)
+
+$daily = [regex]::Match($policy, '<llm-token-limit(?:(?!/>).)*?token-quota-period="Daily"(?:(?!/>).)*?/>', 'Singleline')
+Assert 'a daily quota still applies'        $daily.Success
+Assert 'the daily quota is per developer'   ($daily.Success -and $daily.Value -match 'counter-key=.*userId')
+Assert 'tier still sets the daily default'  ($policy -match '\{\{quota-premium\}\}' -and $policy -match '\{\{quota-standard\}\}')
 
 Write-Host ''
 Write-Host 'P11 org ceiling - refusal message' -ForegroundColor Cyan

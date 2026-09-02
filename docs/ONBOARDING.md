@@ -261,6 +261,13 @@ values are read on the next request.
 | `quota-standard` | tokens/day, standard | 500,000 |
 | `quota-premium` | tokens/day, premium | 5,000,000 |
 | `quota-org` | tokens/month, everyone combined | 100,000,000 |
+| `quota-overrides` | per-developer daily budgets, `,oid=tokens,` | empty |
+
+`quota-overrides` is written by `./scripts/Set-ClaudeBudget.ps1`, not by hand.
+It gives one person a different daily budget without moving them between tiers,
+and applies on their next request. `./scripts/Get-ClaudeBudget.ps1` shows what
+the gateway would actually apply to each developer, and what they have spent
+this month.
 
 `quota-org` is a single shared counter, so tier budgets sit underneath it. A
 developer inside their own budget is still refused once the organisation's is

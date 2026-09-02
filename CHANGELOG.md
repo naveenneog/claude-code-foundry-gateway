@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Per-developer daily budget overrides. `scripts/Set-ClaudeBudget.ps1` sets and clears them,
+  `scripts/Get-ClaudeBudget.ps1` reports what the gateway would actually apply to each developer
+  and what they have spent this month. Overrides apply on the next request — the policy resolves
+  them per call. Measured 2026-09-02: `token-quota` accepts a policy expression but it must
+  return `long`; `Int32` and `string` are both rejected at deploy time.
+- `scripts/Get-ClaudeTelemetry.ps1`: which Application Insights this gateway is actually writing
+  to, resolved from its diagnostic rather than from a name, and whether metrics are enabled on
+  it. See ADR-0003.
 - Organisation-wide monthly spend ceiling: `quota-org`, enforced in the request path by an
   `llm-token-limit` on a constant counter-key, checked before the per-tier budgets. Tier limits
   still apply beneath it, so a developer can be inside their own budget and still be refused
@@ -47,6 +55,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `New-ClaudeCodePolicy.ps1`: managed settings for Claude Code as JSON, `.reg`, Intune OMA-URI
   and `.mobileconfig`.
 - `tests/Test-AzArguments.ps1`: fails on any `az` argument that `cmd.exe` would re-parse.
+
+### Fixed
+
+- Usage reports read the Application Insights the gateway is currently writing to, instead of a
+  workspace named by convention. The reference deployment moved workspaces on 2026-08-31 and
+  nothing noticed: every P10 assertion still passed on data that had stopped two days earlier,
+  and `Get-ClaudeBudget.ps1` reported `0 used this month` on a gateway that had served hundreds
+  of requests that morning. `tests/Test-Analytics.ps1` now compares the newest metric against the
+  newest request in the same workspace, so a stale workspace fails while an idle gateway does
+  not. ADR-0003.
 
 ### Changed
 

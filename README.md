@@ -299,6 +299,12 @@ because the organisation's is spent. It is a **soft cap** — the
 states high-concurrency requests can temporarily exceed the configured limit, so
 it bounds spend rather than guaranteeing it.
 
+It is also enforced **per gateway**. The same reference states the policy tracks
+usage independently at each gateway and does not aggregate across the instance.
+Basic v2 is single-region, so one gateway is one ceiling. A multi-region Premium
+instance enforces `quota-org` once per region, so the effective ceiling is
+`quota-org` × regions.
+
 The default is roughly one premium developer's month. Raise it before a wider
 rollout.
 
@@ -314,6 +320,29 @@ ran out:
 
 `budget` is `organisation` or `personal`. Successful replies carry
 `x-org-quota-remaining` and `x-quota-remaining-today`.
+
+`quota-overrides` gives one developer a different daily budget without moving
+them between tiers:
+
+```powershell
+./scripts/Set-ClaudeBudget.ps1 -User someone@contoso.com -Tokens 2000000
+./scripts/Set-ClaudeBudget.ps1 -User someone@contoso.com -Clear
+./scripts/Set-ClaudeBudget.ps1 -List
+```
+
+It takes effect on the next request — the policy resolves it per call, so
+there is no redeployment and no restart. An override changes the daily quota
+only; tokens per minute stays at the tier value, because `llm-token-limit` does
+not accept an expression for `tokens-per-minute`. To change someone's rate, move
+them between tiers.
+
+To see what the gateway would actually apply, and what has been spent this
+month:
+
+```powershell
+./scripts/Get-ClaudeBudget.ps1
+./scripts/Get-ClaudeBudget.ps1 -User someone@contoso.com -AsJson
+```
 
 ```powershell
 az apim nv update -g rg-claude-gateway --service-name <apim-name> `

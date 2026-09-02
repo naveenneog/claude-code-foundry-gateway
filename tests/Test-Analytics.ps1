@@ -68,25 +68,25 @@ Assert 'marks cost as an estimate' ($text -match 'cost_is_estimate')
 Write-Host ''
 Write-Host 'P10 analytics - live' -ForegroundColor Cyan
 
-# The app id is resolved through ARM rather than "az monitor app-insights",
-# which belongs to an optional extension and prompts to install it on a machine
-# that does not have one. Same names and defaults as scripts/Show-Governance.ps1.
+# The app id is resolved from the gateway's own diagnostic, not from a name.
+# The accelerator names the workspace appi-{namePrefix} and namePrefix carries a
+# random suffix, so a redeploy can leave the old workspace in place and start
+# writing to a new one. That happened on the reference deployment on 2026-08-31,
+# and reading the old workspace returned zero rows - which looks like "nobody
+# used it", not "wrong workspace". See scripts/Get-ClaudeTelemetry.ps1.
 $rg = if ($env:CLAUDE_RG) { $env:CLAUDE_RG } else { 'rg-contosohub' }
-$ai = if ($env:CLAUDE_APPINSIGHTS) { $env:CLAUDE_APPINSIGHTS } else { 'appi-claude-gateway' }
+$ai = if ($env:CLAUDE_APPINSIGHTS) { $env:CLAUDE_APPINSIGHTS } else { '' }
 
 $appId = $env:CLAUDE_ANALYTICS_APPID
-if (-not $appId) {
-    $sub = az account show --query id -o tsv 2>$null
-    $arm = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv 2>$null
-    if ($sub -and $arm) {
-        $armUri = "https://management.azure.com/subscriptions/$($sub.Trim())/resourceGroups/$rg" +
-                  "/providers/Microsoft.Insights/components/$ai" + '?api-version=2020-02-02'
-        try {
-            $h = @{ Authorization = 'Bearer ' + $arm.Trim() }
-            $appId = (Invoke-RestMethod -Uri $armUri -Headers $h).properties.AppId
-        }
-        catch { $appId = $null }
+if (-not $appId -and -not $SkipLive) {
+    try {
+        $resolver = Join-Path $root 'scripts/Get-ClaudeTelemetry.ps1'
+        $t = if ($ai) { & $resolver -ResourceGroup $rg -AppInsightsName $ai } else { & $resolver -ResourceGroup $rg }
+        $appId = $t.AppId
+        $ai = $t.AppInsights
+        if (-not $t.MetricsEnabled) { Write-Host "  warning - metrics are off on the $($t.DiagnosticScope) diagnostic" -ForegroundColor Yellow }
     }
+    catch { $appId = $null }
 }
 $token = if ($SkipLive) { $null } else { az account get-access-token --resource https://api.applicationinsights.io --query accessToken -o tsv 2>$null }
 
@@ -122,11 +122,48 @@ else {
               -Headers $h -Body (@{ query = $probe } | ConvertTo-Json)
         $have = [int]$pr.tables[0].rows[0][0]
 
+        # Is this workspace still the live one? A gateway redeploy can start
+        # writing to a new Application Insights and leave the old one in place.
+        # Querying the stale one returns zero rows, which reads as "nobody used
+        # it" rather than "wrong workspace" - that happened here on 2026-08-31
+        # and went unnoticed because every assertion still passed.
+        #
+        # Requests and metrics come from the same gateway, so comparing them
+        # separates the two cases: both stale means an idle gateway, which is
+        # fine; requests recent but metrics stale means telemetry is broken.
+        $freshness = @'
+let m = toscalar(customMetrics | summarize max(timestamp));
+let r = toscalar(requests | summarize max(timestamp));
+print last_metric = m, last_request = r, lag_minutes = datetime_diff("minute", r, m)
+'@
+        $fr = Invoke-RestMethod -Uri $uri -Method Post -ContentType 'application/json' `
+              -Headers $h -Body (@{ query = $freshness } | ConvertTo-Json)
+        $fc = @($fr.tables[0].columns.name)
+        $frow = @($fr.tables[0].rows)[0]
+        $lag = $frow[$fc.IndexOf('lag_minutes')]
+        $lastMetric = $frow[$fc.IndexOf('last_metric')]
+        $lastRequest = $frow[$fc.IndexOf('last_request')]
+
+        if ($null -eq $lastRequest -or $lastRequest -eq '') {
+            Write-Host '         skipped freshness check - no requests logged in this workspace' -ForegroundColor Yellow
+        }
+        else {
+            # Two hours of slack: metric ingestion trails request logging, and a
+            # short idle period is normal.
+            #
+            # A lag of 0 is the common healthy case, so the empty check is done
+            # on the string form - comparing an integer 0 against '' does not
+            # mean what it looks like it means in PowerShell.
+            $lagOk = $false
+            if ($null -ne $lag -and "$lag".Trim().Length -gt 0) { $lagOk = ([double]$lag -lt 120) }
+            Assert 'metrics keep up with requests' $lagOk `
+                "last request $lastRequest, last metric $lastMetric - telemetry may be going somewhere else, or metrics are off on the diagnostic"
+        }
+
         if ($have -eq 0) {
             Write-Host '         skipped non-vacuity check - no gateway metrics in the last 30 days' -ForegroundColor Yellow
         }
-        else {
-            $wide = $q -replace 'let _day = startofday\(ago\(1d\)\);', 'let _day = startofday(ago(30d));' `
+        else {            $wide = $q -replace 'let _day = startofday\(ago\(1d\)\);', 'let _day = startofday(ago(30d));' `
                        -replace 'let _next = _day \+ 1d;', 'let _next = _day + 31d;'
             $wr = Invoke-RestMethod -Uri $uri -Method Post -ContentType 'application/json' `
                   -Headers $h -Body (@{ query = $wide } | ConvertTo-Json)

@@ -1,6 +1,6 @@
 # Status
 
-**Active packet:** P11 - organisation-wide monthly ceiling. Shipped and verified on the live gateway. P10 and P-0 are complete.
+**Active packet:** P12 - programmatic cost control. Shipped and verified on the live gateway. P-0, P10 and P11 are complete.
 
 ## What is shipped (M0)
 
@@ -111,21 +111,73 @@ rather than sitting on the boundary.
 | UX | Accept | The developer is told which budget ran out and that their access is intact, which is the actual question behind the support ticket. The installer warns when the monthly ceiling is below one premium developer's daily quota |
 | Security | Accept | No change to authentication, entitlement or identity. The ceiling is enforced before the managed-identity swap, so an exhausted budget never reaches Foundry. The default fails safe at roughly one premium developer's month |
 
+## P12 acceptance criteria — programmatic cost control
+
+Claude Enterprise's Admin API reads effective limits and month-to-date spend and sets or clears
+per-user overrides. P10 supplies the spend and P11 supplies the ceiling, so this adds one new
+capability — a per-user daily budget that is not "move them to the other tier" — and a surface
+over all three.
+
+- [x] `quota-overrides` named value, resolved per request by the policy
+- [x] `scripts/Set-ClaudeBudget.ps1` sets, clears and lists overrides by UPN or object id
+- [x] `scripts/Get-ClaudeBudget.ps1` reports effective limits and month-to-date spend
+- [x] Overrides survive a redeploy, the same way entitlement does
+- [x] A write merges rather than replaces, and refuses if another entry would be lost
+- [x] Verified live: an override changes what the gateway applies on the next request, clearing
+      it restores the tier default, and a second developer's override survives both
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+### What the work found
+
+| | |
+|---|---|
+| `token-quota` accepts an expression, but it must return `long` | `Int32` is rejected with "Expression return type 'System.Int32' is not allowed" and `string` with "Cannot implicitly convert type 'string' to 'long'", both at deploy time. `tokens-per-minute` accepts no expression at all, so a rate change still means a tier change |
+| A named value substitutes raw text into a policy expression | A JSON map would end the surrounding C# string literal on its first quote. The map is `,oid=tokens,` with sentinel commas, matching `allow-standard` |
+| The daily quota no longer needs a branch per tier | Tier and override both resolve inside one expression, so the two-branch `choose` now covers only `tokens-per-minute` |
+| ARM can return a pre-write value straight after a successful write | Seen once on `quota-overrides`. The live test polls rather than asserting on the first read |
+
+### The defect this packet uncovered
+
+`Get-ClaudeBudget.ps1` reported `0 used this month` for every developer on a gateway that had
+served hundreds of requests that morning.
+
+The gateway had moved Application Insights workspaces on 2026-08-31. P10 shipped with the old
+workspace's name as a default and every one of its tests still passed, because the data from
+before the move satisfied them. The non-vacuity guard was real, and it was still not enough: it
+proved the numbers were not empty, not that they were current.
+
+Fixed in ADR-0003 — the workspace is resolved from the gateway's diagnostic, and a detector
+compares the newest metric against the newest request in the same workspace so that a stale
+workspace fails while an idle gateway does not. Verified both ways.
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | No new store. Overrides live beside the limits they modify, and the resolution happens where the limit is applied. The daily quota lost a branch rather than gaining one |
+| Coder | Accept | `Get-ClaudeTelemetry.ps1` is one question with one answer, and three callers stopped carrying their own wrong default |
+| QA | Accept | The freshness detector exists because a passing suite hid a two-day outage. Negative-tested against the stale workspace, which fails with both timestamps named |
+| UX | Accept | An administrator names a person by UPN, not object id, and guest accounts resolve through the same fallback `Import-ClaudeEntitlement` needed. The reader prints what would be applied and where it came from — `tier` or `override` |
+| Security | Accept | Read-mostly. The one write is a merge that refuses if another entry would disappear, which is the guard the entitlement allow list needed after a whole-value write revoked everyone. A warning, not a silent success, when an override is set for someone not entitled |
+
 ## Commands that prove it
 
 ```powershell
-./tests/Test-All.ps1                                    # 7 checks, offline
-./tests/Test-All.ps1 -IncludeAzure                      # plus the four that call Azure
+./tests/Test-All.ps1                                    # 8 checks, offline
+./tests/Test-All.ps1 -IncludeAzure                      # plus the five that call Azure
+./scripts/Get-ClaudeTelemetry.ps1                       # where this gateway logs, and whether metrics are on
 ./scripts/Get-ClaudeAnalytics.ps1 -Days 30              # the usage report
+./scripts/Get-ClaudeBudget.ps1                          # effective limits and spend to date
 ./tests/Test-OrgCeilingLive.ps1 -ProveRefusal           # exhausts each budget, then restores it
 node .ironclad/gate.mjs --stage packet                  # definition of done
 ```
 
 ## Next
 
-P12 — programmatic cost control: read effective limits and month-to-date spend per user, and set
-or clear a per-user override, without editing named values by hand. P10 supplies month-to-date
-spend and P11 supplies the ceiling, so P12 is a surface over both rather than new enforcement.
+P13 — per-group capability scoping: one policy profile per tier covering Chat, Cowork, Code and
+connectors. **U4** is open and decides its shape: whether a self-hosted Claude apps gateway can
+serve a Foundry deployment, or whether this is one Intune profile per tier.
 
-U2 blocks putting a currency figure on that spend; until it closes the number stays labelled an
-estimate. Open unknowns are in `docs/UNKNOWNS.md`.
+U2 still blocks putting a currency figure on spend, so `Get-ClaudeBudget.ps1` reports tokens
+only. U8 still blocks the four productivity fields P10 returns as null. Open unknowns are in
+`docs/UNKNOWNS.md`.
