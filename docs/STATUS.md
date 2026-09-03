@@ -1,6 +1,6 @@
 # Status
 
-**Active packet:** P13 - per-group capability scoping. Shipped and verified on the live gateway. P-0 and P10 to P12 are complete.
+**Active packet:** P15 - compliance retrieval and deletion. P-0 and P10 to P13 are complete; P14 is the only packet left.
 
 ## What is shipped (M0)
 
@@ -209,27 +209,70 @@ ONBOARDING and ADR-0004 — with a test asserting that labelling stays.
 | UX | Accept | The refusal names the model, the tier, and what to do. It also says access is unaffected — the third 403 in this gateway, and all three now distinguish themselves |
 | Security | Accept | The claim being made is narrow and true: models are a control, the rest is management. A packet that shipped Desktop tab toggles as though they were a security boundary would have been worse than shipping nothing |
 
+## P15 acceptance criteria — compliance retrieval and deletion
+
+Claude Enterprise's Compliance API retrieves activity, chat history and file content by user and
+time, and supports selective deletion. U7 established what Azure can actually honour, and the
+numbers are the deliverable as much as the scripts are.
+
+- [x] `Find-ClaudeUserData.ps1` reports what is held about one subject, per table
+- [x] It reads each table's plan from the workspace, so "deletable" is measured, not assumed
+- [x] `Remove-ClaudeUserData.ps1` purges per table, and does nothing without `-Execute`
+- [x] Both state the limits: 50 requests an hour, 30-day SLA, Analytics plan only
+- [x] Content capture stays opt-in and off by default
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+### What the work found
+
+| | |
+|---|---|
+| The two APIs use different table names for the same data | Purging `customMetrics` returns "'customMetrics' is not a valid table". Queries go through Application Insights, which uses the classic schema; purge goes to the workspace, which uses `AppMetrics`, `AppRequests`, `AppTraces`. Found by trying it, not by reading it |
+| The workspace reports each table's plan | So `purgeable` is read from `Microsoft.OperationalInsights/workspaces/tables` rather than assumed. An unknown plan is treated as not purgeable, which is the safer direction for a compliance answer |
+| Captured content has a dedicated table | `AppGenAIContent`, carrying `InputMessages`, `OutputMessages`, `SystemInstructions`, `ToolCallArguments` and `ToolCallResult`. Analytics plan, so it is purgeable. That is the table a subject request is actually about |
+
+The live purge call could not be executed in this environment — the operation was blocked before
+it reached Azure. The request shape, endpoint and workspace resolution were verified up to that
+point, including by the rejection that exposed the table-name bug. The submit path itself is
+therefore **verified as far as Azure's own validation, and not beyond**. It is written down here
+rather than implied by a passing test.
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | Discovery and deletion are separate scripts, and deletion invokes discovery rather than reimplementing the predicate, so the two cannot disagree about scope |
+| Coder | Accept | The table map carries both names because the two APIs disagree. One name would have worked in testing and failed in production, which is what happened |
+| QA | Accept | The dry run is the default and was exercised against live data. The live submit is honestly recorded as unverified rather than asserted |
+| UX | Accept | The finder prints what is held and what can be removed; the purger prints what would go, the limits, and that purge is irreversible, before asking for `-Execute` |
+| Security | Accept | Read-only by default. The 30-day SLA and the Basic/Auxiliary exclusion are printed by the tool, so an operator cannot promise same-day deletion without contradicting their own console output. Microsoft's preferred control — not capturing content at all — remains the default |
+
 ## Commands that prove it
 
 ```powershell
-./tests/Test-All.ps1                                    # 9 checks, offline
+./tests/Test-All.ps1                                    # 10 checks, offline
 ./tests/Test-All.ps1 -IncludeAzure                      # plus the six that call Azure
 ./scripts/Get-ClaudeTelemetry.ps1                       # where this gateway logs, and whether metrics are on
 ./scripts/Get-ClaudeAnalytics.ps1 -Days 30              # the usage report
 ./scripts/Get-ClaudeBudget.ps1                          # effective limits and spend to date
 ./scripts/New-ClaudeCodePolicy.ps1 -Tier premium        # one managed-settings profile per tier
+./scripts/Find-ClaudeUserData.ps1 -User <upn>           # what is held about one person
 ./tests/Test-OrgCeilingLive.ps1 -ProveRefusal           # exhausts each budget, then restores it
 node .ironclad/gate.mjs --stage packet                  # definition of done
 ```
 
 ## Next
 
-P14 — the plugin marketplace. **U6** is open and blocks it: what signs a plugin, who verifies it,
-and whether the same trust applies to marketplace-delivered plugins. That is a supply-chain
-question, so it is researched before anything is built, not after.
+P14 — the plugin marketplace — is the only packet left, and U6 rewrote its acceptance criterion.
+Claude Code has no plugin signing scheme, so "signed accepted, unsigned refused" cannot be tested.
+What can be tested is immutable approved content: a plugin pinned to a commit sha or archive
+hash, a modified one refused on hash mismatch, marketplaces outside `strictKnownMarketplaces`
+rejected, and `isDesktopExtensionSignatureRequired` enforcing publisher signing for `.mcpb`
+bundles only. `docs/UNKNOWNS.md` U6 has the keys and the blast radius.
 
-P15 — compliance retrieval — is behind **U7**, whether Log Analytics can honour selective deletion
-within its purge limits.
+Three unknowns remain open. **U2** blocks putting a currency figure on spend. **U8** blocks the
+four productivity fields P10 returns as null. **U3** — whether Claude in Chrome applies under a
+third-party provider — is unexamined and affects only a parity-matrix row.
 
-U2 still blocks putting a currency figure on spend. U8 still blocks the four productivity fields
-P10 returns as null. U3 is unexamined. Open unknowns are in `docs/UNKNOWNS.md`.
+One thing outside the packet queue and worth doing: seven principals hold `Cognitive Services
+User` directly on the Foundry account, which bypasses every budget in this repository.
+`SETUP.md` section 4.2 has the audit commands.

@@ -12,7 +12,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | U2 | OPEN | Do emitted token counts reconcile with the Azure invoice, and within what margin? | P12 |
 | U3 | OPEN | Does Claude in Chrome apply under a third-party provider at all? | parity matrix |
 | U4 | CLOSED | Can a self-hosted Claude apps gateway serve a Foundry deployment, and is it worth operating? Yes and no — researched 2026-09-03 | P13 unblocked |
-| U6 | OPEN | What signs a plugin, and who verifies it? | P14 |
+| U6 | CLOSED | What signs a plugin, and who verifies it? Nothing, for Claude Code — researched 2026-09-03 | P14 rescoped |
 | U7 | CLOSED | Can Log Analytics honour selective deletion within its purge limits? Yes, within 30 days and Analytics-plan tables only — researched 2026-09-03 | P15 unblocked |
 | U8 | OPEN | Which OTEL attributes split lines-of-code and tool decisions into their parts? | P10 productivity columns |
 
@@ -143,15 +143,72 @@ instance and no wish to run one, that needs data residency through its own cloud
 that does not need per-developer attribution at the provider boundary. That is a different
 customer from this repository's.
 
-### U6 — Plugin signing and trust
+### U6 — Plugin signing and trust — CLOSED 2026-09-03
 
 **Question.** A plugin marketplace can be hosted in git or over HTTPS.
 `isDesktopExtensionSignatureRequired` exists for `.mcpb` extensions. What signs a plugin, who
-verifies it, and whether the same trust applies to marketplace-delivered plugins, is not
-established.
+verifies it, and whether the same trust applies to marketplace-delivered plugins?
 
-**Why it matters.** P14 distributes executable extensions to every desktop. Getting the trust
-model wrong here is a supply-chain problem, not a documentation problem.
+**Answer: nothing signs a Claude Code plugin. This changes P14's acceptance criterion.**
+
+P14 was written to accept "a pinned marketplace delivers a signed plugin to a managed desktop,
+and an unsigned one is refused". That test cannot be written, because for Claude Code there is no
+signature to check.
+
+| Artefact | Publisher signature | Integrity pinning |
+|---|---|---|
+| Claude Code plugin | **None documented** | Git source: full 40-character commit `sha`. HTTPS archive: `sha256`, and "Claude Code verifies every download against it and refuses the install on a mismatch" |
+| Claude Code marketplace catalog | **None documented** | Branch or tag `ref` only — **not** a commit sha |
+| Claude Desktop `.mcpb` | **Yes.** Detached PKCS#7/CMS over SHA-256, chain validated against the OS trust store | Signature covers bundle content |
+
+For Claude Code the documentation has no signature field, no publisher trust root, no signed-commit
+verification, no attestation check and no "require signed plugins" setting. Anthropic says so
+directly: "Anthropic doesn't control what MCP servers, files, or other software are included in
+plugins and can't verify that they work as intended"
+([reference](https://code.claude.com/docs/en/discover-plugins), retrieved 2026-09-03).
+
+Pinning a commit sha or an archive hash proves the content is the content that was reviewed. It
+does not prove who wrote it, and the expected hash is itself only as trustworthy as the catalog
+it is read from — and the catalog cannot be pinned to a commit, only to a branch or tag.
+
+**Claude Desktop is the exception.** `isDesktopExtensionSignatureRequired` "reject[s] desktop
+extensions that are not signed by a trusted publisher. Defaults to `false`"
+([reference](https://claude.com/docs/third-party/claude-desktop/configuration), retrieved
+2026-09-03). Bundles are signed with `mcpb sign` using an X.509 code-signing certificate, and
+verification validates the chain against the operating system's trust store — `security
+verify-cert -p codeSign` on macOS, `X509Chain` with OID 1.3.6.1.5.5.7.3.3 on Windows. There is no
+Anthropic CA. Whether an existing Authenticode or Apple Developer ID certificate is accepted is
+not documented.
+
+**Blast radius, which is why this matters.** A plugin contributes hooks, commands, agents and MCP
+servers, and runs as native code with the user's privileges. The only documented sandbox is the
+Bash tool sandbox: unavailable on native Windows without WSL2, and not documented as covering
+hook, MCP or LSP processes. There is no plugin-wide sandbox, and no Anthropic-operated vetted
+registry or approval workflow.
+
+**Admin controls that do exist**, all managed-settings keys:
+
+| Key | Effect |
+|---|---|
+| `strictKnownMarketplaces` | Only listed marketplaces may be used |
+| `extraKnownMarketplaces` | Provisions marketplaces; does not restrict others on its own |
+| `blockedMarketplaces` | Explicit blocklist |
+| `enabledPlugins` | `plugin@marketplace` to boolean. Managed `false` blocks installation and hides it |
+| `disableSideloadFlags` | Rejects `--plugin-dir`, `--plugin-url`, `--agents`, `--mcp-config` |
+| `disableCommandPluginSources` | Blocks command-source plugins |
+| `disableSkillShellExecution` | Blocks inline shell in skills and custom commands |
+| `allowedMcpServers`, `allowManagedMcpServersOnly` | Restricts MCP servers, including plugin-provided ones |
+
+**P14's acceptance criterion is therefore restated** as two claims that can each be tested:
+
+1. Claude Code — an approved plugin pinned to a commit sha or archive hash installs, and a
+   modified one is refused on hash mismatch. Marketplaces outside the allowlist are rejected.
+2. Claude Desktop — with `isDesktopExtensionSignatureRequired` set, a bundle signed by a trusted
+   publisher installs and an unsigned one does not.
+
+What must not be claimed is universal signed-plugin enforcement. It does not exist for Claude
+Code, and a marketplace does not add verification — it is a distribution convenience, and the
+same trust model applies to marketplace-delivered and locally installed plugins alike.
 
 ### U7 — Selective deletion of captured content — CLOSED 2026-09-03
 

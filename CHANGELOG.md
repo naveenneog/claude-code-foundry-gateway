@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Data subject request tooling. `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
+  telemetry holds about one person, per table, reading each table's plan from the workspace so it
+  states what is actually deletable. `scripts/Remove-ClaudeUserData.ps1` purges it with Azure
+  Monitor's GDPR Purge operation, one request per table, and does nothing without `-Execute`.
+  Both print the limits U7 established — 50 purge requests an hour, a 30-day completion SLA with
+  no expedite, and Analytics-plan tables only.
 - Model allowlist per tier: `models-standard` and `models-premium`, enforced at the gateway before
   the request reaches Foundry. Sentinel commas make the match exact, so `claude-opus-5` does not
   admit `claude-opus-5-mini`; an empty value allows every deployed model. Verified live in all

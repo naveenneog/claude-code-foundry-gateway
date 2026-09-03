@@ -53,7 +53,7 @@ premise does not carry over.
 | Managed authorization, identity inherited from groups | Connector OAuth against Entra, or `headersHelper` for short-lived tokens | Have |
 | MCP allowlist | `managedMcpServers` plus `isLocalDevMcpEnabled: false` | Have |
 | Phased rollout by role | Per-tier MDM profile from `New-ClaudeCodePolicy.ps1 -Tier` | Have — P13 |
-| Plugin marketplace | A `marketplace.json` in git or over HTTPS, pinned to a revision | Design — P14 |
+| Plugin marketplace | A `marketplace.json` in git or over HTTPS. Plugins pin to a commit sha or archive `sha256`; the catalog itself pins only to a branch or tag. No publisher signing for Claude Code plugins; `.mcpb` desktop bundles are the exception | Design — P14, rescoped by U6 |
 
 ### Claude Code
 
@@ -68,7 +68,7 @@ premise does not carry over.
 |---|---|---|
 | Custom data retention | `cleanupPeriodDays`, `desktopSessionCleanupPeriodDays`, and Log Analytics retention | Have |
 | Audit logs — admin actions, seat changes, connector approvals | Azure Activity Log and Entra audit logs | Have |
-| Compliance API — activity, chat history and file content by user and time, with selective deletion | Conversations are on local disk in third-party mode. Retrieval requires OTLP content capture into the customer's own collector | **Gap — P15** |
+| Compliance API — activity, chat history and file content by user and time, with selective deletion | `scripts/Find-ClaudeUserData.ps1` finds records by subject and window; `scripts/Remove-ClaudeUserData.ps1` purges them per table with Azure Monitor's GDPR Purge operation | Have — P15, within a 30-day SLA and Analytics-plan tables only |
 | Analytics API | Anthropic's API does not cover Foundry at all. Replaced by `analytics/claude-code-daily.kql` and `scripts/Get-ClaudeAnalytics.ps1`, which emit the same field set from gateway telemetry | Have — P10 |
 | Customer-managed encryption keys | CMEK on Foundry, Log Analytics and Storage | Design |
 | US-only inference, ~10% surcharge | Region selection at deployment, no surcharge | Have — and cheaper |
@@ -126,14 +126,21 @@ M0 is shipped. The table below is the queue; the checklist under it is what the 
       still works, and a longer name sharing a prefix does not slip through. Chat, Cowork, Code
       and connectors ship as per-tier managed settings from `New-ClaudeCodePolicy.ps1 -Tier`, and
       are documented as management controls rather than security boundaries. U4 closed, ADR-0004
-- [ ] P14 plugin marketplace — acceptance: a pinned marketplace delivers a signed plugin to a
-      managed desktop, and an unsigned one is refused. **Blocked on U6**
+- [ ] P14 plugin marketplace — acceptance, restated after U6 closed: (a) an approved Claude Code
+      plugin pinned to a commit sha or archive hash installs, a modified one is refused on hash
+      mismatch, and a marketplace outside `strictKnownMarketplaces` is rejected; (b) with
+      `isDesktopExtensionSignatureRequired` set, a signed `.mcpb` installs and an unsigned one does
+      not. The original wording — signed plugin accepted, unsigned refused — is not implementable:
+      Claude Code has no plugin signing scheme
 
 ### M3 — compliance retrieval
 
-- [ ] P15 compliance retrieval — acceptance: prompts and responses for a named user over a date
-      range can be retrieved and selectively deleted, within Log Analytics purge limits.
-      **Blocked on U7**
+- [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
+      telemetry holds about one person, per table, reading each table's plan from the workspace so
+      it states what is actually deletable rather than assuming. `scripts/Remove-ClaudeUserData.ps1`
+      purges it, one request per table, and does nothing without `-Execute`. Bounded by what U7
+      measured: 50 purge requests an hour, a 30-day completion SLA with no expedite, and
+      Analytics-plan tables only
 
 Explicitly out of scope for now: replicating the claude.ai admin console UI, and any attempt
 to close the preview-feature gap. Both are recorded in `docs/CHARTER.md` as non-goals.
