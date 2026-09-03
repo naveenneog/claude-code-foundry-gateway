@@ -9,7 +9,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | ID | State | Question | Blocks |
 |---|---|---|---|
 | U1 | CLOSED | Does a constant counter-key share one counter across callers? Yes — measured 2026-09-02 | P11 unblocked |
-| U2 | OPEN | Do emitted token counts reconcile with the Azure invoice, and within what margin? | P12 |
+| U2 | OPEN | Do emitted token counts reconcile with the Azure invoice? Blocked: this subscription exposes no cost data — measured 2026-09-03 | P12 cost figures |
 | U3 | OPEN | Does Claude in Chrome apply under a third-party provider at all? | parity matrix |
 | U4 | CLOSED | Can a self-hosted Claude apps gateway serve a Foundry deployment, and is it worth operating? Yes and no — researched 2026-09-03 | P13 unblocked |
 | U6 | CLOSED | What signs a plugin, and who verifies it? Nothing, for Claude Code — researched 2026-09-03 | P14 rescoped |
@@ -75,10 +75,37 @@ reports an `estimated_cost` in cents. Whether token counts multiplied by Foundry
 reconcile with the actual Azure invoice, and within what margin, is unmeasured.
 
 **Why it matters.** P12 exposes month-to-date spend. Reporting a figure that does not match
-the invoice is worse than reporting tokens alone.
+the invoice is worse than reporting tokens alone, which is why `Get-ClaudeBudget.ps1` reports
+tokens and sets `cost_reported: false`.
 
-**How to close.** Compare a full month of emitted metrics against the Foundry line on the
-Azure invoice.
+**Attempted 2026-09-03, and blocked by the environment, not by the method.** August is closed, so
+the reconciliation should have been possible. It is not, on this subscription:
+
+| Check | Result |
+|---|---|
+| `az consumption usage list` for August | 1,002 records returned |
+| Records carrying `pretaxCost` | **0 of 1,002** |
+| Records carrying `usageQuantity` | **0 of 1,002** |
+| `az billing account list` | empty |
+| Cost Management query API | blocked before reaching Azure |
+
+The subscription is an internal MCAPS allocation, which returns usage records with the cost and
+quantity fields empty. No amount of querying fixes that from inside the subscription.
+
+**How to close.** Run the reconciliation where the cost data is visible:
+
+1. On a subscription whose principal holds **Cost Management Reader**, or an EA/MCA
+   **Billing Reader** on the enrolment.
+2. Take one closed month of Foundry cost for the account, grouped by meter.
+3. Take the same month's tokens from the gateway's Application Insights — note that a redeploy
+   may have split them across two workspaces, as happened here on 2026-08-31, so check both with
+   `scripts/Get-ClaudeTelemetry.ps1`.
+4. Divide to get an effective price per million input and output tokens, and record the margin
+   against Foundry list price.
+
+Until that runs, `estimated_cost` keeps `is_estimate: true` and `Get-ClaudeBudget.ps1` keeps
+reporting tokens rather than money. Both are correct as they stand; what is missing is the
+evidence that would let them report money.
 
 ### U3 — Claude in Chrome under a third-party provider
 
