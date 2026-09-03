@@ -348,29 +348,52 @@ az apim show -g <rg> -n <apim> --query "sku.name" -o tsv
 
 ### 4.2 Close the bypass
 
-The gateway only governs traffic that goes *through* it. Anyone holding
-**Cognitive Services User** directly on the Foundry account can point Claude
-Code straight at Foundry and ignore every budget you just configured.
+The gateway only governs traffic that goes *through* it. A principal holding
+data-plane access directly on the Foundry account can point Claude Code straight
+at the endpoint and ignore entitlement, both budgets, the organisation ceiling
+and the model allowlist.
 
 ![The Foundry account's Access control (IAM) blade, where the role assignments live](guide/a5-foundry.png)
 
-```bash
-az role assignment list \
-  --scope $(az cognitiveservices account show -g <rg> -n <foundry> --query id -o tsv) \
-  --role "Cognitive Services User" \
-  --query "[].{principal:principalName, type:principalType, id:principalId}" -o table
+```powershell
+./scripts/Get-ClaudeBypass.ps1
 ```
 
-The only entry should be the gateway's principal id. Remove the rest:
+It lists every principal that can reach Foundry without passing through the
+gateway, excludes the gateway's own managed identity, and exits non-zero when it
+finds one, so it can run as a check rather than only as a report.
+
+Checking one role name by hand is not enough, for two reasons.
+
+**More than one role grants it.** The audit reads each assigned role's
+`dataActions` rather than matching names, because the set changes. On the
+reference deployment four roles grant Cognitive Services data actions, and
+**`Foundry User` grants the same `Microsoft.CognitiveServices/*` as `Cognitive
+Services User`** — a hand check for one name reported clean while three
+`Foundry User` assignments were live.
+
+**Inherited assignments count.** A role granted at subscription or resource group
+scope still applies to the Foundry account and does not appear unless you ask for
+it. The audit passes `--include-inherited`; a hand check usually does not.
+
+Findings are graded. `full` means `Microsoft.CognitiveServices/*` — a bypass.
+`partial` means data actions scoped to some paths, where whether the Anthropic
+route is covered depends on the role, so it is reported for review rather than
+asserted. `read` is read-only data-plane access, shown with `-IncludeRead`.
+
+Removing one:
 
 ```bash
 az role assignment delete --assignee <principal-id> \
-  --role "Cognitive Services User" --scope <foundry-resource-id>
+  --role "<role name>" --scope <scope shown by the audit>
 ```
 
-> Check inherited assignments too. A role granted at subscription or resource
-> group scope still applies to the Foundry account and will not appear unless
-> you look. Add `--include-inherited` to the list command.
+Use the scope the audit reports, not the Foundry account id: an inherited
+assignment has to be removed where it was granted.
+
+> Read each principal before removing it. A deployment pipeline, Defender, or
+> another application may hold the assignment legitimately. The finding is that
+> the access is ungoverned, not that it is wrong.
 
 ---
 

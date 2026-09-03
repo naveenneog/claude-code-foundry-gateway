@@ -358,6 +358,17 @@ az apim nv update -g rg-claude-gateway --service-name <apim-name> `
 Sentinel commas make the match exact, so `claude-opus-5` does not admit
 `claude-opus-5-mini`. An empty value allows every deployed model.
 
+None of this applies to traffic that skips the gateway. A principal with
+data-plane access directly on the Foundry account can call it straight:
+
+```powershell
+./scripts/Get-ClaudeBypass.ps1
+```
+
+It derives the roles that grant access from their `dataActions` rather than
+matching a name, includes inherited assignments, and exits non-zero when it finds
+a holder other than the gateway. `docs/SETUP.md` §4.2 has the detail.
+
 Every other capability control — permission rules, hooks, Desktop tabs,
 connectors — is delivered to the client by
 `./scripts/New-ClaudeCodePolicy.ps1 -Tier standard|premium` and is a management

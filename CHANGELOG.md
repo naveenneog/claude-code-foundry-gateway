@@ -7,6 +7,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- `scripts/Get-ClaudeBypass.ps1`: who can reach Foundry without passing through the gateway. It
+  derives the roles that grant data-plane access from their `dataActions` rather than matching a
+  name, includes inherited assignments, excludes the gateway's own identity, and exits non-zero on
+  a finding. On the reference deployment the documented one-role hand check reported clean while
+  11 assignments could call Foundry directly — three of them through `Foundry User`, which grants
+  the same `Microsoft.CognitiveServices/*` as `Cognitive Services User` and appeared in no
+  version of this documentation.
 - Data subject request tooling. `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
   telemetry holds about one person, per table, reading each table's plan from the workspace so it
   states what is actually deletable. `scripts/Remove-ClaudeUserData.ps1` purges it with Azure

@@ -35,7 +35,8 @@ premise does not carry over.
 |---|---|---|
 | Org-wide monthly ceiling | `llm-token-limit` on a constant counter-key, `quota-org`, monthly. Verified shared across callers | Have — P11. Soft cap |
 | Group-level limits cascading under the org cap | Tier named values (`tpm-standard`, `quota-premium`, …) checked after the org ceiling | Have — P11 |
-| Per-member limits | `llm-token-limit` keyed on `oid` | Have |
+| Per-member limits | `llm-token-limit` keyed on `oid`, with `quota-overrides` per developer | Have — P12 |
+| Nothing bypasses the ceiling | `scripts/Get-ClaudeBypass.ps1` finds principals with data-plane access directly on the Foundry account, which skip every control here | Have — P16 |
 | Programmatic cost control — read effective limits and MTD spend, set and clear per-user overrides | `scripts/Get-ClaudeBudget.ps1` and `scripts/Set-ClaudeBudget.ps1` over APIM named values and Application Insights | Have — P12 |
 
 ### Models and features
@@ -134,7 +135,6 @@ M0 is shipped. The table below is the queue; the checklist under it is what the 
       Claude Code has no plugin signing scheme
 
 ### M3 — compliance retrieval
-
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so
       it states what is actually deletable rather than assuming. `scripts/Remove-ClaudeUserData.ps1`
@@ -144,3 +144,10 @@ M0 is shipped. The table below is the queue; the checklist under it is what the 
 
 Explicitly out of scope for now: replicating the claude.ai admin console UI, and any attempt
 to close the preview-feature gap. Both are recorded in `docs/CHARTER.md` as non-goals.
+
+
+- [x] P16 close the bypass — `scripts/Get-ClaudeBypass.ps1` lists every principal that can reach
+      Foundry without passing through the gateway, deriving the roles from their `dataActions`
+      rather than a name and including inherited assignments. Measured on the reference deployment:
+      the documented one-role hand check reported clean while 11 assignments could call Foundry
+      directly, three of them through `Foundry User`
