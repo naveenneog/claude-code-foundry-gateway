@@ -42,6 +42,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+if ($To -notmatch '^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$') { throw 'Invalid recipient' }
+if ($DistributionUrl) {
+  $distribution = [uri]$DistributionUrl
+  if (-not $distribution.IsAbsoluteUri -or $distribution.Scheme -ne 'https' -or $distribution.UserInfo -or $distribution.Query -or $distribution.Fragment -or $DistributionUrl -match '[\r\n\\]') { throw 'Distribution URL must be HTTPS without credentials, query or fragment' }
+}
+
 if (-not (Test-Path $ConfigPath)) { throw "Config not found: $ConfigPath" }
 $cfg = Get-Content $ConfigPath -Raw | ConvertFrom-Json
 
@@ -55,8 +61,9 @@ $tpm = '{0:n0}' -f $tierCfg.tokensPerMinute
 $tpd = '{0:n0}' -f $tierCfg.tokensPerDay
 
 $cmd = if ($DistributionUrl) {
-    "irm $($DistributionUrl.TrimEnd('/'))/Setup-ClaudeWorkstation.ps1 -OutFile Setup-ClaudeWorkstation.ps1`n" +
-    ".\Setup-ClaudeWorkstation.ps1 -ConfigPath $($DistributionUrl.TrimEnd('/'))/claude-gateway.json"
+  $safeDistribution = $DistributionUrl.TrimEnd('/').Replace("'", "''")
+  "Invoke-WebRequest '$safeDistribution/Setup-ClaudeWorkstation.ps1' -OutFile Setup-ClaudeWorkstation.ps1 -MaximumRedirection 0`n" +
+  ".\Setup-ClaudeWorkstation.ps1 -ConfigPath '$safeDistribution/claude-gateway.json'"
 } else {
     ".\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json"
 }
@@ -132,6 +139,9 @@ Anything else, contact $SupportContact.
 
 # ------------------------------------------------------------------------ html
 
+$name = ConvertTo-HtmlText $name
+$SupportContact = ConvertTo-HtmlText $SupportContact
+$group = ConvertTo-HtmlText $group
 $html = @"
 <!doctype html>
 <html><head><meta charset="utf-8"></head>

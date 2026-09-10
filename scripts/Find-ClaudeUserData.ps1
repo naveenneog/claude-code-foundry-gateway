@@ -43,7 +43,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$User,
-    [int]$Since = 90,
+    [ValidateRange(1, 36500)][int]$Since = 90,
     [switch]$AsJson,
     [string]$ResourceGroup = $(if ($env:CLAUDE_RG) { $env:CLAUDE_RG } else { 'rg-contosohub' }),
     [string]$ApimName,
@@ -64,11 +64,14 @@ if ($oid -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}
     $resolved = az ad user show --id $oid --query id -o tsv 2>$null
     if (-not $resolved) {
         $escaped = $oid.Replace("'", "''")
-        $resolved = az ad user list --filter "mail eq '$escaped'" --query "[0].id" -o tsv 2>$null
+        $matches = @(az ad user list --filter "mail eq '$escaped'" --query "[].id" -o tsv 2>$null)
+        if ($LASTEXITCODE -ne 0 -or $matches.Count -ne 1) { throw 'Ambiguous subject or lookup failure; pass an object ID' }
+        $resolved = $matches[0]
     }
     if (-not $resolved) { throw "Could not resolve '$User' to an object id. Pass the object id directly." }
     $oid = $resolved.Trim()
 }
+if ($oid -notmatch '^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$') { throw 'Invalid resolved subject ID' }
 
 $telemetry = & (Join-Path $PSScriptRoot 'Get-ClaudeTelemetry.ps1') `
                 -ResourceGroup $ResourceGroup -ApimName $ApimName -AppInsightsName $AppInsightsName
@@ -79,9 +82,7 @@ $H = @{ Authorization = 'Bearer ' + $armToken.Trim() }
 
 # The workspace behind the Application Insights component. Purge is a workspace
 # operation, and classic component resources have been retired.
-$component = Invoke-RestMethod -Headers $H -Uri ("https://management.azure.com/subscriptions/$sub/resourceGroups/$ResourceGroup" +
-             "/providers/Microsoft.Insights/components/$($telemetry.AppInsights)" + '?api-version=2020-02-02')
-$workspaceId = $component.properties.WorkspaceResourceId
+$workspaceId = $telemetry.WorkspaceResourceId
 
 # Tables this accelerator can put a developer's identity into.
 #
@@ -108,17 +109,29 @@ $tables = @(
 $plans = @{}
 if ($workspaceId) {
     try {
-        $all = Invoke-RestMethod -Headers $H -Uri ("https://management.azure.com$workspaceId/tables" + '?api-version=2022-10-01')
-        foreach ($t in $all.value) { $plans[$t.name] = $t.properties.plan }
+        $next = "https://management.azure.com$workspaceId/tables" + '?api-version=2022-10-01'
+        $seen = @{}
+        do {
+            $target = [uri]$next
+            if ($target.Scheme -ne 'https' -or $target.Authority -ne 'management.azure.com' -or $target.UserInfo -or $target.Fragment) { throw 'Refusing untrusted table pagination' }
+            if ($seen.ContainsKey($next) -or $seen.Count -ge 10000) { throw 'Invalid table pagination cycle' }
+            $seen[$next] = $true
+            $all = Invoke-RestMethod -Headers $H -Uri $next -MaximumRedirection 0
+            if ($null -eq $all.value) { throw 'Incomplete table listing' }
+            foreach ($table in $all.value) { $plans[$table.name] = $table.properties.plan }
+            $next = $all.nextLink
+        } while ($next)
     }
-    catch { Write-Verbose "Could not read table plans: $($_.Exception.Message)" }
+    catch { throw 'Cannot read workspace table plans; compliance discovery is incomplete' }
 }
+else { throw 'Cannot resolve workspace; compliance discovery is incomplete' }
 
 $queryToken = az account get-access-token --resource https://api.applicationinsights.io --query accessToken -o tsv 2>$null
 $QH = @{ Authorization = 'Bearer ' + $queryToken.Trim() }
 
 $findings = @()
 foreach ($t in $tables) {
+    if (-not $plans.ContainsKey($t.Workspace)) { continue }
     $kql = @"
 $($t.Query)
 | where timestamp > ago($($Since)d)
@@ -137,8 +150,10 @@ AppGenAIContent
     }
     try {
         $r = Invoke-RestMethod -Uri "https://api.applicationinsights.io/v1/apps/$appId/query" -Method Post `
-             -ContentType 'application/json' -Headers $QH -Body (@{ query = $kql } | ConvertTo-Json)
+               -ContentType 'application/json' -Headers $QH -Body (@{ query = $kql } | ConvertTo-Json) -MaximumRedirection 0
+           if ($r.error -or -not $r.tables -or -not $r.tables[0].rows) { throw 'Incomplete query response' }
         $cols = @($r.tables[0].columns.name)
+           foreach ($column in 'rows', 'earliest', 'latest') { if ($cols -notcontains $column) { throw 'Missing compliance query column' } }
         $row = @($r.tables[0].rows)[0]
         $count = if ($row) { [long]$row[$cols.IndexOf('rows')] } else { 0 }
         if ($count -gt 0) {
@@ -160,9 +175,7 @@ AppGenAIContent
         }
     }
     catch {
-        # A table that does not exist in this workspace is not an error; it is
-        # a table the deployment does not use.
-        Write-Verbose "Skipped $($t.Query): $($_.Exception.Message)"
+        throw "Compliance query failed for $($t.Query); no complete result can be reported"
     }
 }
 

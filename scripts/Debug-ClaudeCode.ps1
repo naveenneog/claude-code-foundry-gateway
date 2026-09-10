@@ -41,6 +41,9 @@ param(
 
 $ErrorActionPreference = 'Continue'
 
+$destination = [uri]$GatewayBaseUrl
+if (-not $destination.IsAbsoluteUri -or $destination.Scheme -ne 'https' -or $destination.UserInfo -or $destination.Query -or $destination.Fragment -or $GatewayBaseUrl -match '[\r\n\\]') { throw 'Gateway URL must be HTTPS without credentials, query or fragment' }
+
 function Ok    ($m) { Write-Host "  [OK]   $m" -ForegroundColor Green }
 function Bad   ($m) { Write-Host "  [FAIL] $m" -ForegroundColor Red }
 function Warn  ($m) { Write-Host "  [WARN] $m" -ForegroundColor Yellow }
@@ -92,11 +95,11 @@ else {
 Write-Host ''
 Write-Host '2. Gateway' -ForegroundColor White
 $gatewayOk = $false
-if ($token) {
+if ($token -and -not $SkipLiveCall) {
     foreach ($m in $Models) {
         $body = @{ model = $m; max_tokens = 16; messages = @(@{ role = 'user'; content = 'say OK' }) } | ConvertTo-Json -Depth 5
         try {
-            $r = Invoke-WebRequest -Method Post -Uri ($GatewayBaseUrl.TrimEnd('/') + '/v1/messages') -TimeoutSec 90 `
+            $r = Invoke-WebRequest -Method Post -Uri ($GatewayBaseUrl.TrimEnd('/') + '/v1/messages') -TimeoutSec 90 -MaximumRedirection 0 `
                  -Headers @{ Authorization = "Bearer $token"; 'anthropic-version' = '2023-06-01'; 'Content-Type' = 'application/json' } `
                  -Body $body
             Ok "$m -> HTTP $($r.StatusCode)"

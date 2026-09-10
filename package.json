@@ -4,6 +4,7 @@
   "type": "module",
   "description": "Screenshot tooling for the Claude Code on Microsoft Foundry gateway accelerator. Not required to deploy the gateway.",
   "scripts": {
+    "test:scripts": "node --test tests/shell-ports.test.mjs tests/script-security.test.mjs",
     "guide:auth": "node guide/auth.mjs",
     "guide:capture": "node guide/capture.mjs",
     "guide:compose": "node guide/compose.mjs"

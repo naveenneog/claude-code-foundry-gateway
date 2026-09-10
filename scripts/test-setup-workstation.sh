@@ -13,7 +13,7 @@ bad()  { echo "  [FAIL] $1"; FAIL=$((FAIL+1)); }
 
 echo
 echo "=== 1. rejects unsupported platform with a useful message ==="
-out="$(bash "$SCRIPT" --gateway-url https://x/claude 2>&1 || true)"
+out="$(uname() { printf 'UnsupportedTestPlatform\n'; }; export -f uname; bash "$SCRIPT" --gateway-url https://x/claude 2>&1 || true)"
 if printf '%s' "$out" | grep -q 'Unsupported platform'; then
   if printf '%s' "$out" | grep -q 'Setup-ClaudeWorkstation.ps1'; then
     ok "rejects and points at the PowerShell version"

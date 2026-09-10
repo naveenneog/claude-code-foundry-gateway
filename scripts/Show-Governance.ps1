@@ -23,13 +23,15 @@
 param(
     [Parameter(Mandatory = $true)][string]$ApimName,
     [Parameter(Mandatory = $true)][string]$ResourceGroup,
-    [string]$SecondIdentityPath = "$env:TEMP\bob.json",
+    [string]$SecondIdentityPath,
     [string]$AppInsightsName = 'appi-claude-gateway',
     [string]$Model = 'claude-sonnet-5',
-    [switch]$SkipThrottleTest
+    [switch]$SkipThrottleTest,
+    [switch]$Execute
 )
 
-$ErrorActionPreference = 'Continue'
+$ErrorActionPreference = 'Stop'
+if ($ApimName -notmatch '^[a-zA-Z0-9][a-zA-Z0-9-]{1,62}[a-zA-Z0-9]$') { throw 'Invalid gateway resource name' }
 $gw = "https://$ApimName.azure-api.net/claude"
 
 # Windows PowerShell 5.1 throws on 4xx/5xx and has no -SkipHttpErrorCheck, so
@@ -39,6 +41,7 @@ function Invoke-Normalised {
 
     if ($PSVersionTable.PSVersion.Major -ge 6) { $Params['SkipHttpErrorCheck'] = $true }
     $Params['ErrorAction'] = 'Stop'
+    $Params['MaximumRedirection'] = 0
 
     try {
         $r = Invoke-WebRequest @Params
@@ -117,8 +120,9 @@ Show-Result -Label "$me is served" -Response (Send-Prompt -Token $mine) -Expect 
 Write-Host ""
 
 # --- 2 and 3. A second identity -------------------------------------------
-if (Test-Path $SecondIdentityPath) {
+if ($SecondIdentityPath -and (Test-Path $SecondIdentityPath)) {
     $second = Get-Content $SecondIdentityPath -Raw | ConvertFrom-Json
+    if ($second.tenant -notmatch '^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$') { throw 'Invalid second identity tenant' }
     $secondToken = (Invoke-RestMethod -Method Post `
         -Uri "https://login.microsoftonline.com/$($second.tenant)/oauth2/v2.0/token" `
         -ContentType 'application/x-www-form-urlencoded' `
@@ -131,11 +135,14 @@ if (Test-Path $SecondIdentityPath) {
 }
 
 # --- 4. Throttling ---------------------------------------------------------
-if (-not $SkipThrottleTest) {
+if ($Execute -and -not $SkipThrottleTest) {
     Write-Host "3. Per-minute token budget" -ForegroundColor Yellow
     Write-Host "         temporarily lowering tpm-standard to 100..." -ForegroundColor DarkGray
     $restore = az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id tpm-standard --query value -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or $restore -notmatch '^\d+$') { throw 'Cannot read original token limit' }
     az apim nv update -g $ResourceGroup --service-name $ApimName --named-value-id tpm-standard --value 100 -o none 2>$null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not change token limit' }
+    try {
     Start-Sleep -Seconds 25
 
     $throttled = $null
@@ -147,7 +154,11 @@ if (-not $SkipThrottleTest) {
     if ($throttled) { Show-Result -Label "budget exhausted -> throttled" -Response $throttled -Expect '429' }
     else { Write-Host "  [FAIL] never throttled after 15 calls" -ForegroundColor Red }
 
-    az apim nv update -g $ResourceGroup --service-name $ApimName --named-value-id tpm-standard --value $restore -o none 2>$null
+    }
+    finally {
+        az apim nv update -g $ResourceGroup --service-name $ApimName --named-value-id tpm-standard --value $restore -o none 2>$null
+        if ($LASTEXITCODE -ne 0) { throw 'CRITICAL: temporary token limit could not be restored; restore it manually' }
+    }
     Write-Host ("         tpm-standard restored to {0}" -f $restore) -ForegroundColor DarkGray
     Write-Host ""
 }
@@ -183,7 +194,5 @@ try {
 catch { Write-Host "         metric query failed: $($_.Exception.Message)" -ForegroundColor DarkYellow }
 
 Write-Host ""
-Write-Host "Every call above was authenticated as a named Entra identity," -ForegroundColor DarkGray
-Write-Host "metered against that identity, and served by the gateway's managed" -ForegroundColor DarkGray
-Write-Host "identity. No developer holds a Foundry credential." -ForegroundColor DarkGray
+Write-Host 'Only explicitly executed checks were observed. Run the bypass audit separately.' -ForegroundColor DarkGray
 Write-Host ""

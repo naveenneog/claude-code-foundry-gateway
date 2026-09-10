@@ -34,6 +34,7 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
+if ($Resource -notmatch '^[a-zA-Z0-9][a-zA-Z0-9-]{1,62}[a-zA-Z0-9]$') { throw 'Invalid Foundry resource name' }
 $BaseUrl = "https://$Resource.services.ai.azure.com/anthropic"
 $Scope   = 'https://cognitiveservices.azure.com'
 $results = [System.Collections.Generic.List[object]]::new()

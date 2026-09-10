@@ -39,7 +39,7 @@ fi
 ARGS=(account get-access-token --resource "$RESOURCE" --query accessToken -o tsv)
 [ -n "${CLAUDE_FOUNDRY_TENANT_ID:-}" ] && ARGS+=(--tenant "$CLAUDE_FOUNDRY_TENANT_ID")
 
-token="$(az "${ARGS[@]}" 2>/dev/null || true)"
+token="$(az "${ARGS[@]}" 2>/dev/null)" || token=""
 
 if [ -z "$token" ]; then
   if [ "${CLAUDE_HELPER_CONTEXT:-}" = "refresh" ]; then
@@ -50,14 +50,15 @@ if [ -z "$token" ]; then
 
   diag "No cached credential. Starting interactive sign-in."
   if [ -n "${CLAUDE_FOUNDRY_TENANT_ID:-}" ]; then
-    az login --tenant "$CLAUDE_FOUNDRY_TENANT_ID" >/dev/null 2>&1
+    az login --tenant "$CLAUDE_FOUNDRY_TENANT_ID" >/dev/null 2>&1 || exit 1
   else
-    az login >/dev/null 2>&1
+    az login >/dev/null 2>&1 || exit 1
   fi
-  token="$(az "${ARGS[@]}" 2>/dev/null || true)"
+  token="$(az "${ARGS[@]}" 2>/dev/null)" || token=""
 fi
 
 # Cheap sanity check - a JWT starts with the base64 of '{"', which is 'eyJ'.
+if [[ ! "$token" =~ ^[A-Za-z0-9_.-]+$ ]]; then diag 'Invalid token response.'; exit 1; fi
 case "$token" in
   eyJ*) printf '%s' "$token"; exit 0 ;;
   '')   diag "Could not acquire a token."; exit 1 ;;

@@ -142,7 +142,7 @@ foreach ($f in $purgeable) {
 
     $uri = "https://management.azure.com$workspaceId/purge?api-version=2023-09-01"
     try {
-        $resp = Invoke-WebRequest -Uri $uri -Method Post -Headers $H -Body $body -SkipHttpErrorCheck
+        $resp = Invoke-WebRequest -Uri $uri -Method Post -Headers $H -Body $body -UseBasicParsing -MaximumRedirection 0 -ErrorAction Stop
         if ([int]$resp.StatusCode -ge 400) {
             Write-Host ("  [FAIL] {0,-18} HTTP {1} {2}" -f $f.workspace_table, $resp.StatusCode, ($resp.Content -replace '\s+', ' ')) -ForegroundColor Red
             continue
@@ -153,7 +153,7 @@ foreach ($f in $purgeable) {
         $operations += [pscustomobject]@{ Table = $f.workspace_table; OperationId = $purgeId; StatusUrl = $status }
     }
     catch {
-        Write-Host ("  [FAIL] {0,-18} {1}" -f $f.table, $_.Exception.Message) -ForegroundColor Red
+        throw "Purge submission failed for $($f.table); earlier submissions may already have been accepted"
     }
 }
 
@@ -171,14 +171,16 @@ if ($Wait) {
     Write-Host ''
     Write-Host '  Polling. Purge can take up to 30 days, so this may not finish here.' -ForegroundColor DarkGray
     foreach ($op in $operations) {
-        if (-not $op.StatusUrl) { continue }
+        if (-not $op.StatusUrl) { throw 'Missing purge status URL; cannot verify completion' }
+        $statusTarget = [uri]$op.StatusUrl
+        if ($statusTarget.Scheme -ne 'https' -or $statusTarget.Authority -ne 'management.azure.com' -or $statusTarget.UserInfo -or $statusTarget.Fragment) { throw 'Refusing untrusted purge status URL' }
         $deadline = (Get-Date).AddMinutes(10)
         do {
             Start-Sleep -Seconds 10
-            try { $s = (Invoke-RestMethod -Uri $op.StatusUrl -Headers @{ Authorization = $H.Authorization }).status }
-            catch { $s = "unreadable: $($_.Exception.Message)" }
+            $s = (Invoke-RestMethod -Uri $op.StatusUrl -Headers @{ Authorization = $H.Authorization } -MaximumRedirection 0 -ErrorAction Stop).status
         } while ($s -eq 'pending' -and (Get-Date) -lt $deadline)
         Write-Host ("    {0,-18} {1}" -f $op.Table, $s) -ForegroundColor $(if ($s -eq 'completed') { 'Green' } else { 'Yellow' })
+        if ($s -ne 'completed') { throw 'Purge is not confirmed complete' }
     }
 }
 

@@ -261,7 +261,7 @@ $oma = @"
 Save "$base.intune-omauri.csv" $oma
 
 $plistEntries = ($settings.env.GetEnumerator() | ForEach-Object {
-    "            <key>$($_.Key)</key>`n            <string>$($_.Value)</string>"
+    "            <key>$([Security.SecurityElement]::Escape([string]$_.Key))</key>`n            <string>$([Security.SecurityElement]::Escape([string]$_.Value))</string>"
 }) -join "`n"
 
 $mobileconfig = @"

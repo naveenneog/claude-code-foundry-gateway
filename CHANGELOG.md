@@ -5,7 +5,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Administrative scripts default to `claude-code-standard-sombaner` and
+  `claude-code-premium-sombaner` for entitlement import and access sync. Explicit
+  group overrides and the `standard` / `premium` tier labels are unchanged.
+
 ### Added
+
+- Desktop interactive gateway sign-in in both workstation scripts through an
+  optional `desktopInteractive` onboarding block: tenant-pinned OIDC discovery,
+  browser/broker selection, session lifetime, access-token scopes, redirect port
+  and referrer hosts. Invalid settings and secrets fail before workstation changes;
+  helper mode remains the default. Approved public-client registration and live
+  Desktop sign-in remain deployment prerequisites.
+- Nineteen missing Bash administrative counterparts, sharing Node.js transport and
+  validation modules, with offline help and dry-run plans. Existing equivalents
+  are retained. See [command mapping](docs/SHELL-SCRIPTS.md).
+- Offline shell parity and security suites, plus mocked PowerShell regression
+  checks, integrated into the test runner and `npm run test:scripts`.
+- [Script security review](docs/SCRIPT-SECURITY-REVIEW.md): fixes, residual risks,
+  compatibility limits, and the environment-blocked packet gate. P17 is not signed off.
+- Script hardening: reject unsafe credential destinations and malformed token output;
+  fail closed on selected identity, telemetry and budget read failures; resolve both
+  entitlement groups before writes; use conditional budget/policy writes; escape
+  generated HTML/XML and quoted commands; make transcript capture offline; require
+  explicit governance throttle mutation and restore its original limit.
 
 - `scripts/Get-ClaudeBypass.ps1`: who can reach Foundry without passing through the gateway. It
   derives the roles that grant data-plane access from their `dataActions` rather than matching a

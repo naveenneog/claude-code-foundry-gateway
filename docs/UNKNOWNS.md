@@ -15,10 +15,47 @@ fails the release stage while any remain. Detail for each one follows below.
 | U6 | CLOSED | What signs a plugin, and who verifies it? Nothing, for Claude Code — researched 2026-09-03 | P14 rescoped |
 | U7 | CLOSED | Can Log Analytics honour selective deletion within its purge limits? Yes, within 30 days and Analytics-plan tables only — researched 2026-09-03 | P15 unblocked |
 | U8 | OPEN | Which OTEL attributes split lines-of-code and tool decisions into their parts? | P10 productivity columns |
+| U9 | OPEN | Do the new shell counterparts match live cloud behavior and Windows-generated artifacts on supported hosts? | P17 production sign-off |
+| U10 | OPEN | Which Desktop OIDC fields and Entra public-client settings support interactive gateway sign-in? | P17 workstation interactive sign-in |
 
 ---
 
 ## Detail
+
+### U10 - Interactive Desktop sign-in
+
+Recorded 2026-09-07 before implementation. The installed Desktop build exposes
+`inferenceGatewayOidc` and `inferenceGatewayOidcAuthFlow`. Read-only schema
+inspection of the locally installed Claude Desktop app on 2026-09-07 confirmed
+`clientId`, `issuer`, `authorizationUrl`, `tokenUrl`, `bearerTokenType`, `scopes`,
+`redirectPort`, `additionalRedirectReferrerHosts`, the `browser`/`broker` flow
+values, `inferenceCredentialKind: interactive`, and `inferenceSessionLifetimeSec`.
+Source: the configuration schema in the installed app's Resources/app.asar;
+public documentation retrieval was blocked by network policy. Offline resolver
+and profile fixtures now cover these fields. The gateway tenant does not identify an OAuth client
+registration. An administrator must supply an approved public-client ID and
+compatible redirect configuration. Detector: schema/fixture checks followed by
+an explicitly authorized Desktop sign-in using that registration. No application
+registration or consent changes are part of workstation setup.
+
+Still OPEN: live browser/broker sign-in, approved delegated permissions/consent,
+and registration-specific redirects have not been verified. The setup path is
+deliberately limited to tenant-specific public-cloud Entra endpoints and the
+Cognitive Services/AI token audiences already accepted by this gateway.
+
+### U9 - Shell and platform validation
+
+Assumption: structured Node.js requests can implement the existing administrative
+workflows without invoking PowerShell. Offline boundary and fixture tests pass, but
+they do not prove live Graph filter support, guest resolution parity, MDM delivery,
+purge completion, or behavior on Windows PowerShell 5.1. The packet gate cannot find
+`pwsh` on PATH; an isolated PowerShell runtime was used only for safe focused checks.
+
+Blast radius: incorrect discovery, failed administration, or mismatched generated
+policy behavior. Detector: run the unchanged full suite on its supported Windows
+host, then separately authorize disposable-resource comparisons for read, mutation,
+concurrent-update and failure cases. Do not perform these during an offline dry run.
+See [review evidence and residual risks](SCRIPT-SECURITY-REVIEW.md).
 
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 

@@ -39,6 +39,9 @@ param(
 $ErrorActionPreference = 'Stop'
 
 function Write-Diag($m) { [Console]::Error.WriteLine("[claude-helper] $m") }
+function Test-FoundryToken($Value) {
+    return ($Value -is [string] -and $Value -cmatch '\AeyJ[A-Za-z0-9_.-]+\z')
+}
 
 # interactive-start | refresh | (unset on older builds)
 $context = $env:CLAUDE_HELPER_CONTEXT
@@ -74,8 +77,7 @@ try {
         if ($LASTEXITCODE -ne 0 -or -not $token) { throw 'Could not acquire a token after sign-in.' }
     }
 
-    # Cheap sanity check. A JWT starts with the base64 of '{"' - 'eyJ'.
-    if ($token -notmatch '^eyJ') {
+    if (-not (Test-FoundryToken $token)) {
         throw "Token did not look like a JWT. On Git Bash a bare 'az' can resolve to the WSL shim - use az.cmd."
     }
 

@@ -1,6 +1,65 @@
 # Status
 
-**Active packet:** P16 - close the bypass. P-0, P10 to P13, P15 and P16 are complete; P14 is the only packet left.
+**Active packet:** P17 - shell counterparts and script security (implemented locally; sign-off blocked). P16 is complete; P14 remains deferred.
+
+## P17 Acceptance Criteria
+
+- [x] Nineteen missing shell counterparts; existing equivalents preserved
+- [x] Offline dry runs and help for every new command
+- [x] Security regression tests and fixes across PowerShell and Bash
+- [x] Review findings, platform limitations and validation evidence recorded
+- [x] Packet gate attempted without weakening its detectors
+- [ ] Required packet gate exits 0 and platform/live validation gaps are resolved
+
+Decision: ADR-0005. No live Azure writes or user-profile changes during validation.
+
+2026-09-07 follow-up: updated PowerShell and shell entitlement/sync defaults to
+the user's exact group names, `claude-code-standard-sombaner` and
+`claude-code-premium-sombaner`. The mocked import regression failed before the
+change; all 22 offline script tests pass afterward. No cloud changes. The current
+full packet gate can access Git and PowerShell 7, but fails `tests.run` because
+Windows PowerShell 5.1 is unavailable on this Mac. Its Bicep build passes.
+
+Evidence: [command mapping](SHELL-SCRIPTS.md), [security review](SCRIPT-SECURITY-REVIEW.md),
+and U9. Node tests, isolated PowerShell regressions, shell harness, encoding and
+syntax checks pass. The latest packet gate fails tests.run because Windows
+PowerShell 5.1 is unavailable; its Bicep build passes. No detector was disabled.
+P17 stays open.
+
+2026-09-07 interactive sign-in follow-up (ADR-0006): both workstation scripts
+now load `desktopInteractive`, retrieve and validate tenant-pinned OIDC metadata,
+and write Desktop interactive profiles without helper fields. Existing helper
+mode is preserved. The client ID must be supplied; no registration, consent,
+gateway policy, or live workstation changes were made. README documents every
+supported UI field and the distinction from CLI/VS Code authentication.
+
+Validation: the Bash resolver regression first failed for the missing function,
+then passed with synthetic metadata and both profile modes. All 23 offline Node
+tests pass; Bash syntax and editor diagnostics pass. An isolated PowerShell
+resolver check with mocked metadata and the no-action PowerShell dry run passed.
+The PowerShell regression is registered in Test-All; the packet gate progressed
+past it before failing at the existing Windows PowerShell 5.1 prerequisite.
+Latest full gate: 21 passed, 2 warnings, 1 failure, 2 skipped; Bicep build passed.
+Some direct test invocations were blocked by tool execution checks; no bypass or
+detector waiver was added. Live Desktop OAuth and Windows 5.1 remain unverified.
+
+Interactive follow-up review: Architect accepts the optional onboarding contract;
+Coder accepts the scoped profile override; UX accepts the documented fields and
+default helper mode; QA and Security retain BLOCK on production sign-off until
+the platform gate and registration-specific sign-in validation are complete.
+
+### P17 Council
+
+These are explicit review perspectives from the implementing assistant, not five
+independent reviewers or delegated agents.
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept local design | Shared built-in Node implementation behind small Bash wrappers; no additional service or dependency package |
+| Coder | Accept local changes | Focused negative tests cover fixed boundaries; functional counterparts have documented compatibility differences |
+| QA | BLOCK | Full packet gate and Windows/live validation are incomplete; no production sign-off |
+| UX | Accept with limits | All new commands expose help and offline plans; JSON, mutation defaults and platform differences are documented |
+| Security | BLOCK production sign-off | No confirmed Critical exploit in scoped review, but filesystem trust, partial mutations, concurrent administration and audit coverage limits require deployment-specific treatment |
 
 ## What is shipped (M0)
 

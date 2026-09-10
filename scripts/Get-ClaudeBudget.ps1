@@ -55,8 +55,9 @@ $base = "https://management.azure.com/subscriptions/$sub/resourceGroups/$Resourc
 $v = '?api-version=2024-05-01'
 
 function Get-Nv($name) {
-    try { return (Invoke-RestMethod -Uri "$base/namedValues/$name$v" -Headers $H).properties.value }
-    catch { return $null }
+    $value = (Invoke-RestMethod -Uri "$base/namedValues/$name$v" -Headers $H -MaximumRedirection 0 -ErrorAction Stop).properties.value
+    if ($null -eq $value) { throw 'Missing budget value; report is incomplete' }
+    return $value
 }
 
 $limits = @{}
@@ -95,10 +96,11 @@ try {
     $telemetry = & (Join-Path $PSScriptRoot 'Get-ClaudeTelemetry.ps1') -ResourceGroup $ResourceGroup -ApimName $ApimName -AppInsightsName $AppInsightsName
     $appId = $telemetry.AppId
     if (-not $telemetry.MetricsEnabled) {
-        Write-Warning "Metrics are off on the $($telemetry.DiagnosticScope) diagnostic, so no token counts are being recorded. Spend will read zero."
+        throw 'Metrics are disabled; cannot report reliable usage'
     }
 }
-catch { Write-Warning "Could not resolve Application Insights - reporting limits without spend. $($_.Exception.Message)" }
+catch { throw 'Could not resolve valid telemetry; budget report is incomplete' }
+if (-not $appId) { throw 'Missing Application Insights ID; budget report is incomplete' }
 
 if ($appId) {
     $qToken = az account get-access-token --resource https://api.applicationinsights.io --query accessToken -o tsv 2>$null
@@ -112,15 +114,17 @@ customMetrics
     try {
         $r = Invoke-RestMethod -Uri "https://api.applicationinsights.io/v1/apps/$appId/query" -Method Post `
              -ContentType 'application/json' -Headers @{ Authorization = 'Bearer ' + $qToken.Trim() } `
-             -Body (@{ query = $kql } | ConvertTo-Json)
+               -Body (@{ query = $kql } | ConvertTo-Json) -MaximumRedirection 0 -ErrorAction Stop
+           if ($r.error -or -not $r.tables) { throw 'Incomplete usage query response' }
         $cols = @($r.tables[0].columns.name)
+           foreach ($column in 'uid', 'tokens', 'upn') { if ($cols -notcontains $column) { throw 'Missing usage column' } }
         foreach ($row in $r.tables[0].rows) {
             $uid = [string]$row[$cols.IndexOf('uid')]
             $spend[$uid] = [long]$row[$cols.IndexOf('tokens')]
             $upnFor[$uid] = [string]$row[$cols.IndexOf('upn')]
         }
     }
-    catch { Write-Warning "Could not read spend: $($_.Exception.Message)" }
+    catch { throw 'Could not read complete spend; refusing to report zero usage' }
 }
 
 $records = @()

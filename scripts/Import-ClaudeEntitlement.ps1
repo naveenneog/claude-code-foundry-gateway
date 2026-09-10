@@ -59,8 +59,8 @@ param(
     [string]$FromGroup,
     [ValidateSet('standard', 'premium')]
     [string]$Tier = 'standard',
-    [string]$StandardGroup = 'claude-code-standard',
-    [string]$PremiumGroup = 'claude-code-premium',
+    [string]$StandardGroup = 'claude-code-standard-sombaner',
+    [string]$PremiumGroup = 'claude-code-premium-sombaner',
     [string]$UserColumn,
     [string]$TierColumn,
     [string]$ReportPath
@@ -97,7 +97,9 @@ $HE = @{ Authorization = "Bearer $token"; ConsistencyLevel = 'eventual' }
 function Get-GraphPaged($Uri, $Headers = $H) {
     $out = @()
     do {
-        $page = Invoke-RestMethod -Headers $Headers -Uri $Uri -Method Get
+        $target = [uri]$Uri
+        if ($target.Scheme -ne 'https' -or $target.Authority -ne 'graph.microsoft.com' -or $target.UserInfo -or $target.Fragment) { throw 'Refusing untrusted Graph pagination URL' }
+        $page = Invoke-RestMethod -Headers $Headers -Uri $Uri -Method Get -MaximumRedirection 0
         $out += $page.value
         $Uri = $page.'@odata.nextLink'
     } while ($Uri)
@@ -108,9 +110,10 @@ function Resolve-GroupId($NameOrId) {
     if ($NameOrId -match '^[0-9a-fA-F-]{36}$') {
         try { return (Invoke-RestMethod -Headers $H -Uri "$GRAPH/groups/$NameOrId`?`$select=id").id } catch { }
     }
-    $esc = $NameOrId.Replace("'", "''")
-    $r = Invoke-RestMethod -Headers $H -Uri "$GRAPH/groups?`$filter=displayName eq '$esc'&`$select=id,displayName"
+    $esc = [uri]::EscapeDataString("displayName eq '$($NameOrId.Replace("'", "''"))'")
+    $r = Invoke-RestMethod -Headers $H -Uri "$GRAPH/groups?`$filter=$esc&`$select=id,displayName"
     if (-not $r.value.Count) { return $null }
+    if ($r.value.Count -ne 1) { throw 'Ambiguous group name; pass its object ID' }
     return $r.value[0].id
 }
 
@@ -132,14 +135,18 @@ function Resolve-Principal($Value) {
 
     # 2. mail
     try {
-        $r = Invoke-RestMethod -Headers $H -Uri "$GRAPH/users?`$filter=mail eq '$esc'&`$select=id,userPrincipalName"
-        if ($r.value.Count) { return [pscustomobject]@{ Id = $r.value[0].id; Upn = $r.value[0].userPrincipalName; How = 'mail' } }
+        $filter = [uri]::EscapeDataString("mail eq '$esc'")
+        $r = Invoke-RestMethod -Headers $H -Uri "$GRAPH/users?`$filter=$filter&`$select=id,userPrincipalName"
+        if ($r.value.Count -gt 1) { return $null }
+        if ($r.value.Count -eq 1) { return [pscustomobject]@{ Id = $r.value[0].id; Upn = $r.value[0].userPrincipalName; How = 'mail' } }
     } catch { }
 
     # 3. otherMails - needs the eventual consistency header and $count
     try {
-        $r = Invoke-RestMethod -Headers $HE -Uri "$GRAPH/users?`$count=true&`$filter=otherMails/any(m:m eq '$esc')&`$select=id,userPrincipalName"
-        if ($r.value.Count) { return [pscustomobject]@{ Id = $r.value[0].id; Upn = $r.value[0].userPrincipalName; How = 'otherMails' } }
+        $filter = [uri]::EscapeDataString("otherMails/any(m:m eq '$esc')")
+        $r = Invoke-RestMethod -Headers $HE -Uri "$GRAPH/users?`$count=true&`$filter=$filter&`$select=id,userPrincipalName"
+        if ($r.value.Count -gt 1) { return $null }
+        if ($r.value.Count -eq 1) { return [pscustomobject]@{ Id = $r.value[0].id; Upn = $r.value[0].userPrincipalName; How = 'otherMails' } }
     } catch { }
 
     # 4. the guest form: someone@corp.com becomes someone_corp.com#EXT#@<tenant>

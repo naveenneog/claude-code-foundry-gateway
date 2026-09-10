@@ -83,7 +83,7 @@ if (-not $FoundryAccount) {
     $names = @($accounts -split '\r?\n' | Where-Object { $_ })
     if (-not $names.Count) { throw "No Cognitive Services account in $ResourceGroup. Pass -FoundryAccount." }
     if ($names.Count -gt 1) {
-        Write-Warning ("$ResourceGroup holds {0} Cognitive Services accounts and the gateway's backend could not be read. Auditing '{1}'. Pass -FoundryAccount to choose: {2}" -f $names.Count, $names[0], ($names -join ', '))
+        throw 'Multiple Foundry accounts found; pass -FoundryAccount to avoid auditing the wrong account'
     }
     $FoundryAccount = $names[0]
 }
@@ -103,7 +103,7 @@ if (-not $assignments) { throw "Could not read role assignments on $FoundryAccou
 $classification = @{}
 foreach ($roleName in ($assignments | Select-Object -ExpandProperty roleDefinitionName -Unique)) {
     $def = az role definition list --name $roleName -o json 2>$null | ConvertFrom-Json
-    if (-not $def) { $classification[$roleName] = @{ Grade = 'unknown'; Actions = 'role definition not readable' }; continue }
+    if ($LASTEXITCODE -ne 0 -or -not $def) { throw 'Cannot read role definition; bypass audit is incomplete' }
 
     $dataActions = @($def[0].permissions.dataActions) | Where-Object { $_ }
     $relevant = @($dataActions | Where-Object { $_ -like '*CognitiveServices*' -or $_ -eq '*' })

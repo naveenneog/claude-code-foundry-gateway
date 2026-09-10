@@ -51,12 +51,91 @@ param(
     [switch]$SkipDesktop,
     [switch]$SkipVSCode,
     [switch]$NoCowork,
+    [switch]$DryRun,
 
     # Where the credential helper is installed for Claude Desktop.
     [string]$HelperDir = (Join-Path $env:LOCALAPPDATA 'ClaudeFoundry')
 )
 
 $ErrorActionPreference = 'Stop'
+
+function Resolve-GatewayInteractive($Settings, [string]$Tenant) {
+    $guidPattern = '^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$'
+    if ($Tenant -notmatch $guidPattern) { throw 'Interactive sign-in requires a tenant GUID' }
+    if ($Settings -isnot [pscustomobject]) { throw 'desktopInteractive must be an object' }
+    $allowed = @('clientId', 'authFlow', 'sessionLifetimeSec', 'issuer', 'authorizationUrl', 'tokenUrl', 'bearerTokenType', 'scopes', 'redirectPort', 'additionalRedirectReferrerHosts')
+    $names = @($Settings.PSObject.Properties.Name)
+    foreach ($name in $names) {
+        if ($allowed -cnotcontains $name) { throw 'Unsupported desktopInteractive field; secrets are not accepted' }
+    }
+    foreach ($name in @('authFlow', 'issuer', 'authorizationUrl', 'tokenUrl', 'bearerTokenType')) {
+        if ($names -contains $name -and $Settings.$name -isnot [string]) { throw 'Interactive text settings must be strings' }
+    }
+    if ($Settings.clientId -isnot [string] -or $Settings.clientId -notmatch $guidPattern) { throw 'An approved public-client GUID is required' }
+    if ($names -contains 'authFlow' -and @('browser', 'broker') -cnotcontains $Settings.authFlow) { throw 'Invalid sign-in flow' }
+    if ($names -contains 'bearerTokenType' -and $Settings.bearerTokenType -cne 'access_token') { throw 'This gateway requires an access token' }
+    foreach ($name in @('sessionLifetimeSec', 'redirectPort')) {
+        if ($names -contains $name) {
+            $value = $Settings.$name
+            $maximum = if ($name -eq 'redirectPort') { 65535 } else { 2147483647 }
+            if (($value -isnot [int] -and $value -isnot [long] -and $value -isnot [double] -and $value -isnot [decimal]) -or
+                $value -lt 1 -or $value -gt $maximum -or [math]::Floor($value) -ne $value) { throw 'Invalid interactive numeric setting' }
+        }
+    }
+    if ($names -contains 'additionalRedirectReferrerHosts') {
+        if ($Settings.additionalRedirectReferrerHosts -isnot [string] -or
+            $Settings.additionalRedirectReferrerHosts -cnotmatch '^([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,63}( ([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,63})*$') { throw 'Redirect referrers must be space-separated hostnames, not URLs or wildcards' }
+    }
+    $scopes = 'openid profile https://cognitiveservices.azure.com/.default'
+    if ($names -contains 'scopes') {
+        if ($Settings.scopes -isnot [string]) { throw 'Scopes must be a space-separated string' }
+        $scopes = $Settings.scopes
+        $scopeList = $scopes.Split(' ')
+        foreach ($scope in $scopeList) {
+            if ($scope -cnotmatch '^(openid|profile|email|offline_access|https://(cognitiveservices|ai)\.azure\.com/(\.default|user_impersonation))$') { throw 'Scope is incompatible with this gateway' }
+        }
+        if (@($scopeList | Where-Object { $_.StartsWith('https://') }).Count -ne 1) { throw 'Exactly one gateway resource scope is required' }
+    }
+    $base = "https://login.microsoftonline.com/$($Tenant.ToLowerInvariant())"
+    $expected = @{ issuer = "$base/v2.0"; authorizationUrl = "$base/oauth2/v2.0/authorize"; tokenUrl = "$base/oauth2/v2.0/token" }
+    foreach ($name in $expected.Keys) {
+        if ($names -contains $name -and $Settings.$name -cne $expected[$name]) { throw 'OIDC endpoints must match the configured Entra tenant' }
+    }
+    try { $metadata = Invoke-RestMethod -Uri "$base/v2.0/.well-known/openid-configuration" -TimeoutSec 30 -MaximumRedirection 0 }
+    catch { throw 'Could not retrieve Entra OIDC metadata' }
+    if ($metadata.issuer -isnot [string] -or $metadata.authorization_endpoint -isnot [string] -or
+        $metadata.token_endpoint -isnot [string]) { throw 'Invalid Entra OIDC metadata' }
+    if ($metadata.issuer -cne $expected.issuer -or $metadata.authorization_endpoint -cne $expected.authorizationUrl -or
+        $metadata.token_endpoint -cne $expected.tokenUrl) { throw 'Untrusted Entra OIDC metadata' }
+    $oidc = [ordered]@{
+        clientId = $Settings.clientId
+        issuer = $metadata.issuer
+        authorizationUrl = $metadata.authorization_endpoint
+        tokenUrl = $metadata.token_endpoint
+        bearerTokenType = 'access_token'
+        scopes = $scopes
+    }
+    foreach ($name in @('redirectPort', 'additionalRedirectReferrerHosts')) {
+        if ($names -contains $name) { $oidc[$name] = $Settings.$name }
+    }
+    $result = [ordered]@{
+        inferenceCredentialKind = 'interactive'
+        inferenceGatewayOidcAuthFlow = $(if ($names -contains 'authFlow') { $Settings.authFlow } else { 'browser' })
+        inferenceGatewayOidc = $oidc
+    }
+    if ($names -contains 'sessionLifetimeSec') { $result['inferenceSessionLifetimeSec'] = $Settings.sessionLifetimeSec }
+    return $result
+}
+
+function Assert-HttpsUrl([string]$Value) {
+    $parsed = $null
+    if (-not [uri]::TryCreate($Value, [UriKind]::Absolute, [ref]$parsed) -or
+        $parsed.Scheme -ne 'https' -or $parsed.UserInfo -or $parsed.Fragment -or $parsed.Query -or $Value -match '[\r\n\\]') {
+        throw 'URL must be HTTPS without credentials, query or fragment'
+    }
+}
+if ($GatewayUrl) { Assert-HttpsUrl $GatewayUrl }
+if ($DryRun) { Write-Output 'Dry run: no installation, profile writes, authentication or inference performed.'; return }
 
 function Write-Head($t) {
     Write-Host ''
@@ -82,12 +161,15 @@ else { Write-Head 'Claude on Microsoft Foundry - workstation setup' }
 # ----------------------------------------------------------------- 0. config
 
 Write-Step 'Configuration'
+$interactiveProfile = $null
 if ($ConfigPath) {
     try {
         $raw = if ($ConfigPath -match '^https?://') {
-            (Invoke-WebRequest -Uri $ConfigPath -UseBasicParsing -TimeoutSec 30).Content
+            Assert-HttpsUrl $ConfigPath
+            (Invoke-WebRequest -Uri $ConfigPath -UseBasicParsing -TimeoutSec 30 -MaximumRedirection 0).Content
         } else { Get-Content $ConfigPath -Raw }
         $cfg = $raw | ConvertFrom-Json
+        if ($cfg -isnot [pscustomobject]) { throw 'Gateway configuration must be an object' }
         if (-not $GatewayUrl) { $GatewayUrl = $cfg.gatewayUrl }
         if (-not $TenantId)   { $TenantId = $cfg.tenantId }
         Write-Ok "loaded from $ConfigPath"
@@ -95,7 +177,10 @@ if ($ConfigPath) {
             Write-Note ("standard tier: {0:n0} tokens/min, {1:n0} tokens/day" -f $cfg.tiers.standard.tokensPerMinute, $cfg.tiers.standard.tokensPerDay)
         }
     }
-    catch { Write-Warn2 "Could not read $ConfigPath - $($_.Exception.Message)" }
+    catch { throw 'Could not safely read gateway configuration' }
+    if ($cfg.PSObject.Properties.Name -contains 'desktopInteractive') {
+        $interactiveProfile = Resolve-GatewayInteractive $cfg.desktopInteractive $TenantId
+    }
 }
 if (-not $GatewayUrl) {
     Write-Host ''
@@ -122,6 +207,7 @@ if (-not $GatewayUrl) {
     return
 }
 $GatewayUrl = $GatewayUrl.TrimEnd('/')
+Assert-HttpsUrl $GatewayUrl
 Write-Ok "gateway: $GatewayUrl"
 if ($TenantId) { Write-Note "tenant : $TenantId" }
 
@@ -317,6 +403,7 @@ if (-not $SkipDesktop) {
     }
 
     if ($desktopInstalled) {
+        if (-not $interactiveProfile) {
         # Credential helper. Uses the Azure CLI's own pre-consented client, so
         # this needs no app registration and no admin consent.
         New-Item -ItemType Directory -Force -Path $HelperDir | Out-Null
@@ -331,8 +418,9 @@ if (-not $SkipDesktop) {
             Write-Ok "credential helper -> $HelperDir"
         }
         else { Write-Warn2 'credential helper sources not found next to this script'; $problems += 'helper' }
+        }
 
-        if (Test-Path $helperCmd) {
+        if ($interactiveProfile -or (Test-Path $helperCmd)) {
             # Developer settings reveal Settings -> Connection and create the
             # profile library this writes into.
             $devSettings = Join-Path $env:APPDATA 'Claude\developer_settings.json'
@@ -357,6 +445,7 @@ if (-not $SkipDesktop) {
             }
 
             $meta = Get-Content $metaPath -Raw | ConvertFrom-Json
+            if ($meta.appliedId -notmatch '^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$') { throw 'Invalid appliedId in Desktop metadata' }
             $profilePath = Join-Path $lib "$($meta.appliedId).json"
             if (Test-Path $profilePath) { Copy-Item $profilePath "$profilePath.bak" -Force }
 
@@ -374,6 +463,12 @@ if (-not $SkipDesktop) {
                 isClaudeCodeForDesktopEnabled                 = $true
                 inferenceModelPricingEnabled                  = $true
             }
+            if ($interactiveProfile) {
+                foreach ($name in @('inferenceCredentialHelper', 'inferenceCredentialHelperTimeoutSec', 'inferenceCredentialHelperTtlSec', 'inferenceCredentialHelperSilentRefreshEnabled')) {
+                    $profile.Remove($name)
+                }
+                foreach ($name in $interactiveProfile.Keys) { $profile[$name] = $interactiveProfile[$name] }
+            }
             if (-not $NoCowork) { $profile['coworkTabEnabled'] = $true }
 
             $profile | ConvertTo-Json -Depth 6 | Set-Content $profilePath -Encoding UTF8
@@ -387,7 +482,7 @@ if (-not $SkipDesktop) {
 
 Write-Step 'Verifying'
 $token = az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv 2>$null
-if (-not $token) { Write-Bad 'could not acquire a token'; $problems += 'token' }
+if ($LASTEXITCODE -ne 0 -or -not $token -or $token -notmatch '^eyJ[A-Za-z0-9_.-]+$') { Write-Bad 'could not acquire a token'; $problems += 'token' }
 else {
     Write-Ok 'Entra token acquired'
     $body = @{ model = ($Models | Select-Object -First 1); max_tokens = 16
@@ -395,7 +490,7 @@ else {
     try {
         $resp = Invoke-WebRequest -Method Post -Uri "$GatewayUrl/v1/messages" -TimeoutSec 90 `
             -Headers @{ Authorization = "Bearer $token"; 'anthropic-version' = '2023-06-01'; 'Content-Type' = 'application/json' } `
-            -Body $body
+            -Body $body -MaximumRedirection 0 -UseBasicParsing
         Write-Ok "gateway responded  HTTP $($resp.StatusCode)"
         if ($resp.Headers['x-claude-tier']) {
             Write-Note "tier      $($resp.Headers['x-claude-tier'] -join '')"

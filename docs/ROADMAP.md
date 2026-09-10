@@ -2,6 +2,10 @@
 
 Milestones are ordered by what a customer is blocked on, not by difficulty.
 
+- [ ] P17: nineteen missing shell counterparts, offline dry runs, and security
+      regression coverage for scripts. Implemented locally; gate and production
+      sign-off remain blocked. See ADR-0005 and docs/SCRIPT-SECURITY-REVIEW.md.
+
 - **M0** shipped — the governed gateway, three clients, migration and MDM. Done.
 - **M1** closes the two gaps a customer notices first: spend ceilings and analytics.
 - **M2** closes governance depth: role-scoped capability, connectors, plugins.

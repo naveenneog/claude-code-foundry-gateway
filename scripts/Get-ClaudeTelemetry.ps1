@@ -53,7 +53,15 @@ $H = @{ Authorization = 'Bearer ' + $token.Trim() }
 $base = "https://management.azure.com/subscriptions/$sub/resourceGroups/$ResourceGroup/providers/Microsoft.ApiManagement/service/$ApimName"
 $v = '?api-version=2024-05-01'
 
-function Get-Arm($uri) { try { return Invoke-RestMethod -Uri $uri -Headers $H } catch { return $null } }
+function Get-Arm($uri) {
+    $target = [uri]$uri
+    if ($target.Scheme -ne 'https' -or $target.Authority -ne 'management.azure.com' -or $target.UserInfo -or $target.Fragment) { throw 'Refusing untrusted ARM URL' }
+    try { return Invoke-RestMethod -Uri $uri -Headers $H -MaximumRedirection 0 -ErrorAction Stop }
+    catch {
+        if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404) { return $null }
+        throw 'Telemetry discovery failed; no complete result can be reported'
+    }
+}
 
 $loggerId = $null
 $scope = $null
@@ -74,9 +82,11 @@ else {
 }
 
 $componentName = $null
+$componentId = $null
 if ($loggerId) {
     $logger = Get-Arm ("https://management.azure.com" + $loggerId + $v)
     if ($logger -and $logger.properties.resourceId) {
+        $componentId = $logger.properties.resourceId
         $componentName = ($logger.properties.resourceId -split '/')[-1]
     }
 }
@@ -85,8 +95,8 @@ if (-not $componentName) {
     throw "Could not work out which Application Insights $ApimName logs to. Pass -AppInsightsName."
 }
 
-$component = Get-Arm ("https://management.azure.com/subscriptions/$sub/resourceGroups/$ResourceGroup" +
-                      "/providers/Microsoft.Insights/components/$componentName" + '?api-version=2020-02-02')
+if (-not $componentId) { $componentId = "/subscriptions/$sub/resourceGroups/$ResourceGroup/providers/Microsoft.Insights/components/$componentName" }
+$component = Get-Arm ("https://management.azure.com$componentId" + '?api-version=2020-02-02')
 if (-not $component) { throw "Application Insights '$componentName' not found in $ResourceGroup." }
 
 if ($Quiet) { $component.properties.AppId; exit 0 }
@@ -97,6 +107,7 @@ if ($Quiet) { $component.properties.AppId; exit 0 }
     Gateway         = $ApimName
     AppInsights     = $componentName
     AppId           = $component.properties.AppId
+    WorkspaceResourceId = $component.properties.WorkspaceResourceId
     DiagnosticScope = $scope
     MetricsEnabled  = [bool]$metrics
 }

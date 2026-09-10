@@ -31,8 +31,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$ApimName,
     [Parameter(Mandatory = $true)][string]$ResourceGroup,
-    [string]$StandardGroup = 'claude-code-standard',
-    [string]$PremiumGroup = 'claude-code-premium',
+    [string]$StandardGroup = 'claude-code-standard-sombaner',
+    [string]$PremiumGroup = 'claude-code-premium-sombaner',
     [string[]]$AdditionalStandardOids = @(),
     [string[]]$AdditionalPremiumOids = @(),
     [switch]$AllowEmpty,
@@ -43,7 +43,7 @@ $ErrorActionPreference = 'Stop'
 
 function Get-GraphToken {
     $t = az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv 2>$null
-    if (-not $t) { throw "Could not acquire a Microsoft Graph token. Run: az login" }
+    if ($LASTEXITCODE -ne 0 -or -not $t) { throw "Could not acquire a Microsoft Graph token. Run: az login" }
     return $t.Trim()
 }
 
@@ -51,11 +51,9 @@ function Get-GroupMemberOids {
     param([string]$GroupName, [string]$Token)
 
     $gid = az ad group show --group $GroupName --query id -o tsv 2>$null
-    if (-not $gid) {
-        Write-Warning "Group '$GroupName' not found - treating as empty."
-        return @()
-    }
+    if ($LASTEXITCODE -ne 0 -or -not $gid) { throw 'Group lookup failed; refusing to change entitlements' }
     $gid = $gid.Trim()
+    if ($gid -notmatch '^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$') { throw 'Invalid group object ID' }
 
     # Transitive membership so nested groups work the way admins expect.
     #
@@ -77,8 +75,14 @@ function Get-GroupMemberOids {
            '?$select=id,displayName,userPrincipalName&$top=999'
 
     $members = @()
+    $visited = @{}
     do {
-        $page = Invoke-RestMethod -Uri $uri -Headers $headers -Method Get -ErrorAction Stop
+        $target = [uri]$uri
+        if ($target.Scheme -ne 'https' -or $target.Authority -ne 'graph.microsoft.com' -or $target.UserInfo -or $target.Fragment) { throw 'Refusing untrusted Graph pagination URL' }
+        if ($visited.ContainsKey($uri) -or $visited.Count -ge 10000) { throw 'Invalid Graph pagination cycle' }
+        $visited[$uri] = $true
+        $page = Invoke-RestMethod -Uri $uri -Headers $headers -Method Get -MaximumRedirection 0 -ErrorAction Stop
+        if ($null -eq $page.value) { throw 'Incomplete Graph group response' }
         foreach ($m in $page.value) {
             $members += [pscustomobject]@{
                 Oid  = $m.id
@@ -103,12 +107,14 @@ function Set-NamedValue {
     }
 
     $existing = az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id $Id -o json 2>$null
+    if ($LASTEXITCODE -ne 0) { throw 'Named value read failed; deploy named values before syncing' }
     if ($existing) {
         az apim nv update -g $ResourceGroup --service-name $ApimName --named-value-id $Id --value $Value -o none 2>$null
     }
     else {
         az apim nv create -g $ResourceGroup --service-name $ApimName --named-value-id $Id --display-name $Id --value $Value -o none 2>$null
     }
+    if ($LASTEXITCODE -ne 0) { throw 'Named value write failed; synchronization is incomplete' }
 }
 
 Write-Host ""
@@ -122,6 +128,7 @@ $tiers = @(
 )
 
 $seen = @{}
+$pending = @()
 $graphToken = Get-GraphToken
 
 foreach ($t in $tiers) {
@@ -137,6 +144,7 @@ foreach ($t in $tiers) {
     # stay unambiguous. Premium is processed first for that reason.
     $effective = @()
     foreach ($m in $members) {
+        if ($m.Oid -notmatch '^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$') { throw 'Invalid member object ID' }
         if ($seen.ContainsKey($m.Oid)) {
             Write-Host ("  {0,-9} {1}  (already {2}, skipped)" -f '', $m.Name, $seen[$m.Oid]) -ForegroundColor DarkGray
             continue
@@ -161,6 +169,7 @@ foreach ($t in $tiers) {
     if (-not $effective.Count -and -not $AllowEmpty -and -not $WhatIf) {
         $current = az apim nv show -g $ResourceGroup --service-name $ApimName `
             --named-value-id $t.NamedValue --query value -o tsv 2>$null
+        if ($LASTEXITCODE -ne 0) { throw 'Named value read failed; refusing an empty entitlement update' }
         if ($current -and $current.Trim().Trim(',')) {
             Write-Host ''
             Write-Warning ("$($t.Group) resolved to 0 members, but '$($t.NamedValue)' currently entitles " +
@@ -168,13 +177,14 @@ foreach ($t in $tiers) {
             Write-Host "  If the group really is empty, re-run with -AllowEmpty." -ForegroundColor DarkGray
             Write-Host "  Otherwise check the group name and that you can read its membership." -ForegroundColor DarkGray
             Write-Host ''
-            continue
+            throw 'Empty entitlement update requires -AllowEmpty; nothing has been written'
         }
     }
 
-    Set-NamedValue -Id $t.NamedValue -Value $value
+    $pending += @{ Id = $t.NamedValue; Value = $value }
     Write-Host ""
 }
+foreach ($update in $pending) { Set-NamedValue -Id $update.Id -Value $update.Value }
 
 Write-Host "Done. $($seen.Count) identity(ies) authorised." -ForegroundColor Green
 Write-Host "Anyone not listed receives HTTP 403 from the gateway." -ForegroundColor DarkGray

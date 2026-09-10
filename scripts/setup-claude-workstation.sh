@@ -28,7 +28,9 @@ set -uo pipefail
 GATEWAY_URL=""
 TENANT_ID=""
 CONFIG=""
+INTERACTIVE_PROFILE='{}'
 SKIP_INSTALL=0
+DRY_RUN=0
 SKIP_DESKTOP=0
 SKIP_VSCODE=0
 NO_COWORK=0
@@ -61,6 +63,12 @@ usage_() { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --config|--gateway-url|--tenant-id)
+      if [[ $# -lt 2 || -z "$2" || "$2" == --* ]]; then
+        printf 'Missing value for %s\n' "$1" >&2; exit 2
+      fi ;;
+  esac
+  case "$1" in
     --config)      CONFIG="${2:-}"; shift 2 ;;
     --gateway-url) GATEWAY_URL="${2:-}"; shift 2 ;;
     --tenant-id)   TENANT_ID="${2:-}"; shift 2 ;;
@@ -68,10 +76,68 @@ while [ $# -gt 0 ]; do
     --skip-desktop) SKIP_DESKTOP=1; shift ;;
     --skip-vscode)  SKIP_VSCODE=1; shift ;;
     --no-cowork)    NO_COWORK=1; shift ;;
+    --dry-run|--what-if) DRY_RUN=1; shift ;;
     -h|--help)      usage_ ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
+
+validate_url_() {
+  if [[ ! "$1" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?(/[^[:space:]\?\#\\]*)?$ ]]; then
+    echo 'URL must be HTTPS without credentials, query or fragment' >&2; exit 2
+  fi
+}
+resolve_gateway_interactive_() {
+  local config="$1" tenant="$2" base metadata
+  if [[ ! "$tenant" =~ ^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$ ]]; then
+    echo 'Interactive sign-in requires a tenant GUID' >&2; return 2
+  fi
+  tenant="$(printf '%s' "$tenant" | tr '[:upper:]' '[:lower:]')"
+  base="https://login.microsoftonline.com/$tenant"
+  if ! printf '%s' "$config" | jq -e --arg base "$base" '
+    def integer_between($low; $high): type == "number" and floor == . and . >= $low and . <= $high;
+    def optional($key; filter): (has($key) | not) or (.[$key] | filter);
+    type == "object" and
+    (keys - ["clientId", "authFlow", "sessionLifetimeSec", "issuer", "authorizationUrl", "tokenUrl", "bearerTokenType", "scopes", "redirectPort", "additionalRedirectReferrerHosts"] | length == 0) and
+    (.clientId | type == "string" and test("^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$")) and
+    optional("authFlow"; . == "browser" or . == "broker") and
+    optional("sessionLifetimeSec"; integer_between(1; 2147483647)) and
+    optional("redirectPort"; integer_between(1; 65535)) and
+    optional("bearerTokenType"; . == "access_token") and
+    optional("issuer"; . == $base + "/v2.0") and
+    optional("authorizationUrl"; . == $base + "/oauth2/v2.0/authorize") and
+    optional("tokenUrl"; . == $base + "/oauth2/v2.0/token") and
+    optional("additionalRedirectReferrerHosts"; type == "string" and
+      test("^([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}( ([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\\.)+[A-Za-z]{2,63})*$")) and
+    optional("scopes"; type == "string" and
+      (split(" ") | all(.[]; test("^(openid|profile|email|offline_access|https://(cognitiveservices|ai)\\.azure\\.com/(\\.default|user_impersonation))$"))) and
+      (split(" ") | map(select(startswith("https://"))) | length == 1))
+  ' >/dev/null 2>&1; then
+    echo 'Invalid desktopInteractive configuration; use an approved public client and gateway access-token scope' >&2; return 2
+  fi
+  metadata="$(curl --proto '=https' --max-time 30 -fsS "$base/v2.0/.well-known/openid-configuration" 2>/dev/null)" || {
+    echo 'Could not retrieve Entra OIDC metadata' >&2; return 1;
+  }
+  if ! printf '%s' "$metadata" | jq -e --arg base "$base" '
+    .issuer == $base + "/v2.0" and .authorization_endpoint == $base + "/oauth2/v2.0/authorize" and .token_endpoint == $base + "/oauth2/v2.0/token"
+  ' >/dev/null 2>&1; then
+    echo 'Untrusted Entra OIDC metadata' >&2; return 2
+  fi
+  printf '%s' "$config" | jq --argjson metadata "$metadata" '{
+    inferenceCredentialKind: "interactive",
+    inferenceGatewayOidcAuthFlow: (.authFlow // "browser"),
+    inferenceGatewayOidc: ({clientId, issuer: $metadata.issuer, authorizationUrl: $metadata.authorization_endpoint,
+      tokenUrl: $metadata.token_endpoint, bearerTokenType: "access_token",
+      scopes: (.scopes // "openid profile https://cognitiveservices.azure.com/.default")} +
+      (if has("redirectPort") then {redirectPort} else {} end) +
+      (if has("additionalRedirectReferrerHosts") then {additionalRedirectReferrerHosts} else {} end))
+  } + (if has("sessionLifetimeSec") then {inferenceSessionLifetimeSec: .sessionLifetimeSec} else {} end)'
+}
+[[ -z "$GATEWAY_URL" ]] || validate_url_ "$GATEWAY_URL"
+if [[ "$DRY_RUN" == 1 ]]; then
+  echo 'Dry run: would read configuration, install prerequisites, configure clients, sign in and verify inference. No actions performed.'
+  exit 0
+fi
 
 # ----------------------------------------------------------------- platform
 
@@ -109,24 +175,29 @@ note_ "platform: $PLATFORM"
 step_ "Configuration"
 if [ -n "$CONFIG" ]; then
   if [ -z "$(command -v jq || true)" ]; then
-    warn_ "jq not found - cannot read the config file"
-    note_ "install jq, or pass --gateway-url and --tenant-id directly"
+    bad_ "jq is required to validate the config file; install jq and retry"
+    exit 2
   else
     raw=""
     if printf '%s' "$CONFIG" | grep -qE '^https?://'; then
-      raw="$(curl -fsSL "$CONFIG" 2>/dev/null || true)"
+      validate_url_ "$CONFIG"
+      raw="$(curl --proto '=https' --max-time 30 -fsS "$CONFIG")" || exit 1
     else
       raw="$(cat "$CONFIG" 2>/dev/null || true)"
     fi
     if [ -n "$raw" ]; then
+      printf '%s' "$raw" | jq -e 'type == "object"' >/dev/null 2>&1 || { bad_ 'Invalid gateway JSON'; exit 2; }
       [ -z "$GATEWAY_URL" ] && GATEWAY_URL="$(printf '%s' "$raw" | jq -r '.gatewayUrl // empty')"
       [ -z "$TENANT_ID" ]   && TENANT_ID="$(printf '%s' "$raw" | jq -r '.tenantId // empty')"
+      if printf '%s' "$raw" | jq -e 'has("desktopInteractive")' >/dev/null; then
+        INTERACTIVE_PROFILE="$(resolve_gateway_interactive_ "$(printf '%s' "$raw" | jq -c '.desktopInteractive')" "$TENANT_ID")" || exit 2
+      fi
       ok_ "loaded from $CONFIG"
       tpm="$(printf '%s' "$raw" | jq -r '.tiers.standard.tokensPerMinute // empty')"
       tpd="$(printf '%s' "$raw" | jq -r '.tiers.standard.tokensPerDay // empty')"
       [ -n "$tpm" ] && note_ "standard tier: $tpm tokens/min, $tpd tokens/day"
     else
-      warn_ "could not read $CONFIG"
+      bad_ "could not read $CONFIG"; exit 2
     fi
   fi
 fi
@@ -152,6 +223,7 @@ if [ -z "$GATEWAY_URL" ]; then
   exit 1
 fi
 GATEWAY_URL="${GATEWAY_URL%/}"
+validate_url_ "$GATEWAY_URL"
 ok_ "gateway: $GATEWAY_URL"
 [ -n "$TENANT_ID" ] && note_ "tenant : $TENANT_ID"
 
@@ -215,8 +287,7 @@ else
     note_ "installing Azure CLI ..."; brew install azure-cli >/dev/null 2>&1
     have_ az && ok_ "Azure CLI installed" || problem_ "Azure CLI"
   else
-    note_ "installing Azure CLI ..."
-    curl -sL https://aka.ms/InstallAzureCLIDeb 2>/dev/null | sudo bash >/dev/null 2>&1 || true
+    note_ "Install Azure CLI using your distribution's approved package instructions."
     if have_ az; then ok_ "Azure CLI installed"; else
       bad_ "Azure CLI install failed"
       note_ "see https://learn.microsoft.com/cli/azure/install-azure-cli-linux"
@@ -391,8 +462,9 @@ if [ "$SKIP_DESKTOP" = "0" ]; then
   if [ "$desktop_present" = "1" ] && have_ jq; then
     # Credential helper. Uses the Azure CLI's own pre-consented client, so this
     # needs no app registration and no admin consent.
-    mkdir -p "$HELPER_DIR"
     HELPER="$HELPER_DIR/get-foundry-token.sh"
+    if [[ "$INTERACTIVE_PROFILE" == '{}' ]]; then
+    mkdir -p "$HELPER_DIR"
     src_helper="$(dirname "$0")/get-foundry-token.sh"
     if [ -f "$src_helper" ]; then
       cp "$src_helper" "$HELPER"
@@ -406,7 +478,7 @@ set -uo pipefail
 RESOURCE="https://cognitiveservices.azure.com"
 ARGS=(account get-access-token --resource "$RESOURCE" --query accessToken -o tsv)
 [ -n "${CLAUDE_FOUNDRY_TENANT_ID:-}" ] && ARGS+=(--tenant "$CLAUDE_FOUNDRY_TENANT_ID")
-token="$(az "${ARGS[@]}" 2>/dev/null || true)"
+token="$(az "${ARGS[@]}" 2>/dev/null)" || token=""
 if [ -z "$token" ]; then
   # CLAUDE_HELPER_CONTEXT is set by the app; during a silent refresh nobody is
   # watching, so fail fast rather than blocking on an interactive prompt.
@@ -417,8 +489,10 @@ if [ -z "$token" ]; then
   echo "[claude-helper] signing in..." >&2
   if [ -n "${CLAUDE_FOUNDRY_TENANT_ID:-}" ]; then az login --tenant "$CLAUDE_FOUNDRY_TENANT_ID" >/dev/null 2>&1
   else az login >/dev/null 2>&1; fi
-  token="$(az "${ARGS[@]}" 2>/dev/null || true)"
+  if [ "$?" -ne 0 ]; then echo "[claude-helper] sign-in failed" >&2; exit 1; fi
+  token="$(az "${ARGS[@]}" 2>/dev/null)" || token=""
 fi
+if [[ ! "$token" =~ ^eyJ[A-Za-z0-9_.-]+$ ]]; then echo "[claude-helper] invalid token" >&2; exit 1; fi
 case "$token" in
   eyJ*) printf '%s' "$token"; exit 0 ;;
   *)    echo "[claude-helper] could not acquire a token" >&2; exit 1 ;;
@@ -427,6 +501,7 @@ HELPEOF
     fi
     chmod +x "$HELPER"
     ok_ "credential helper -> $HELPER"
+    fi
 
     # Developer settings reveal Settings -> Connection and create the profile
     # library this writes into.
@@ -449,6 +524,9 @@ HELPEOF
     fi
 
     applied="$(jq -r '.appliedId' "$META")"
+    if [[ ! "$applied" =~ ^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$ ]]; then
+      echo 'Invalid appliedId in Desktop metadata' >&2; exit 1
+    fi
     PROFILE="$LIB/$applied.json"
     [ -f "$PROFILE" ] && cp "$PROFILE" "$PROFILE.bak"
 
@@ -458,6 +536,7 @@ HELPEOF
     jq -n \
       --arg url "$GATEWAY_URL" \
       --arg helper "$HELPER" \
+      --argjson interactive "$INTERACTIVE_PROFILE" \
       --argjson models "$models_json" \
       --argjson cowork "$cowork_val" '{
         inferenceProvider: "gateway",
@@ -473,7 +552,9 @@ HELPEOF
         isClaudeCodeForDesktopEnabled: true,
         inferenceModelPricingEnabled: true,
         coworkTabEnabled: $cowork
-      }' > "$PROFILE"
+      } | if $interactive == {} then . else
+        del(.inferenceCredentialHelper, .inferenceCredentialHelperTimeoutSec,
+          .inferenceCredentialHelperTtlSec, .inferenceCredentialHelperSilentRefreshEnabled) + $interactive end' > "$PROFILE"
 
     if [ "$NO_COWORK" = "1" ]; then ok_ "profile written"; else ok_ "profile written (Cowork enabled)"; fi
     note_ "Quit Claude Desktop completely, then reopen."
@@ -485,21 +566,21 @@ fi
 
 step_ "Verifying"
 if have_ az; then
-  TOKEN="$(az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv 2>/dev/null || true)"
+  TOKEN="$(az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv 2>/dev/null)" || TOKEN=""
 else
   TOKEN=""
 fi
 
-if [ -z "$TOKEN" ]; then
+if [[ ! "$TOKEN" =~ ^[A-Za-z0-9_.-]+$ ]]; then
   bad_ "could not acquire a token"; problem_ "token"
 else
   ok_ "Entra token acquired"
   body="$(jq -n --arg m "${MODELS[0]}" '{model:$m, max_tokens:16, messages:[{role:"user", content:"Reply with exactly: READY"}]}' 2>/dev/null \
           || printf '{"model":"%s","max_tokens":16,"messages":[{"role":"user","content":"Reply with exactly: READY"}]}' "${MODELS[0]}")"
   hdrs="$(mktemp)"
-  code="$(curl -sS -o /dev/null -D "$hdrs" -w '%{http_code}' \
+    code="$(printf 'Authorization: Bearer %s\n' "$TOKEN" | curl --proto '=https' -sS -o /dev/null -D "$hdrs" -w '%{http_code}' \
       -X POST "$GATEWAY_URL/v1/messages" \
-      -H "Authorization: Bearer $TOKEN" \
+      -H @- \
       -H "anthropic-version: 2023-06-01" \
       -H "Content-Type: application/json" \
       --max-time 90 -d "$body" 2>/dev/null || echo "000")"

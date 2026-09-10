@@ -71,13 +71,20 @@ $H = @{ Authorization = 'Bearer ' + $armToken.Trim(); 'Content-Type' = 'applicat
 $base = "https://management.azure.com/subscriptions/$sub/resourceGroups/$ResourceGroup/providers/Microsoft.ApiManagement/service/$ApimName"
 $v = '?api-version=2024-05-01'
 
+$snapshots = @{}
 function Get-Nv($name) {
-    try { return (Invoke-RestMethod -Uri "$base/namedValues/$name$v" -Headers $H).properties.value }
-    catch { return $null }
+    $response = Invoke-WebRequest -Uri "$base/namedValues/$name$v" -Headers $H -UseBasicParsing -MaximumRedirection 0 -ErrorAction Stop
+    $etag = @($response.Headers['ETag'])[0]
+    if (-not $etag) { throw 'Missing ETag; refusing an unprotected budget update' }
+    $snapshots[$name] = $etag
+    return ($response.Content | ConvertFrom-Json).properties.value
 }
 function Set-Nv($name, $value) {
+    if (-not $snapshots.ContainsKey($name)) { throw 'Budget must be read before update' }
     $b = @{ properties = @{ displayName = $name; value = "$value"; secret = $false } } | ConvertTo-Json -Depth 5
-    Invoke-RestMethod -Method Put -Uri "$base/namedValues/$name$v" -Headers $H -Body $b | Out-Null
+    $headers = $H.Clone()
+    $headers['If-Match'] = $snapshots[$name]
+    Invoke-RestMethod -Method Put -Uri "$base/namedValues/$name$v" -Headers $headers -Body $b -MaximumRedirection 0 -ErrorAction Stop | Out-Null
 }
 function Split-Sentinel($value) {
     if (-not $value) { return @() }
@@ -94,14 +101,14 @@ if ($null -eq $raw) {
 $map = [ordered]@{}
 foreach ($pair in (Split-Sentinel $raw)) {
     $bits = $pair -split '=', 2
-    if ($bits.Count -eq 2 -and $bits[1] -match '^\d+$') { $map[$bits[0]] = [long]$bits[1] }
-    else { Write-Warning "Ignoring malformed override entry '$pair'." }
+    if ($bits.Count -ne 2 -or $bits[0] -notmatch '^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$' -or $bits[1] -notmatch '^\d+$' -or [long]$bits[1] -lt 1 -or $map.Contains($bits[0])) { throw 'Malformed or duplicate override; refusing to discard data' }
+    $map[$bits[0]] = [long]$bits[1]
 }
 
 if ($List) {
     if (-not $map.Count) { Write-Host 'No per-user overrides. Everyone is on their tier default.' -ForegroundColor DarkGray; exit 0 }
     Write-Host ''
-    Write-Host ("{0,-40} {1,>14}" -f 'Object id', 'Tokens/day')
+    Write-Host ("{0,-40} {1,14}" -f 'Object id', 'Tokens/day')
     Write-Host ('-' * 56) -ForegroundColor DarkGray
     foreach ($k in $map.Keys) { Write-Host ("{0,-40} {1,14:n0}" -f $k, $map[$k]) }
     exit 0
@@ -109,18 +116,20 @@ if ($List) {
 
 # Resolve to an object id. A UPN is what an administrator has to hand; the
 # policy keys on oid.
-$oid = $User.Trim()
-if ($oid -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
-    $resolved = az ad user show --id $oid --query id -o tsv 2>$null
-    if (-not $resolved) {
-        # Guest accounts are stored under a mangled UPN, so a direct lookup
-        # misses them. Same four-strategy problem Import-ClaudeEntitlement hits.
-        $escaped = $oid.Replace("'", "''")
-        $resolved = az ad user list --filter "mail eq '$escaped'" --query "[0].id" -o tsv 2>$null
+function Resolve-BudgetUser([string]$Identity) {
+    $candidate = $Identity.Trim()
+    $pattern = '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$'
+    if ($candidate -match $pattern) { return $candidate.ToLowerInvariant() }
+    $resolved = @(az ad user show --id $candidate --query id -o tsv 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $resolved.Count -eq 0) {
+        $escaped = $candidate.Replace("'", "''")
+        $resolved = @(az ad user list --filter "mail eq '$escaped'" --query "[].id" -o tsv 2>$null)
+        if ($LASTEXITCODE -ne 0) { throw 'User lookup failed; pass a verified object ID' }
     }
-    if (-not $resolved) { throw "Could not resolve '$User' to an object id. Pass the object id directly." }
-    $oid = $resolved.Trim()
+    if ($resolved.Count -ne 1 -or $resolved[0].Trim() -notmatch $pattern) { throw 'User lookup must resolve exactly one object; pass its object ID' }
+    return $resolved[0].Trim().ToLowerInvariant()
 }
+$oid = Resolve-BudgetUser $User
 
 $entitled = (Split-Sentinel (Get-Nv 'allow-standard')) + (Split-Sentinel (Get-Nv 'allow-premium'))
 if ($entitled -notcontains $oid) {

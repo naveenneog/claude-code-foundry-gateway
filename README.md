@@ -23,6 +23,8 @@ One interactive command deploys the whole thing.
 | Who spent what? | [Monitoring](docs/MONITORING.md) |
 | Should we do this at all? | [Comparison](docs/COMPARISON.md) |
 | We're moving off first-party Claude | [Migration](docs/MIGRATION.md) |
+| Run administrative scripts from Bash | [Shell command mapping and previews](docs/SHELL-SCRIPTS.md) |
+| Review script security and validation limits | [Script security review](docs/SCRIPT-SECURITY-REVIEW.md) |
 
 The first row covers the developer setup: one command, no Azure rights. The
 rest of this page is the gateway side.
@@ -212,13 +214,46 @@ includes a deep link, and how to delegate this to a team lead without giving
 them any Azure rights.
 
 ```powershell
-az ad group member add --group claude-code-standard `
+az ad group member add --group claude-code-standard-sombaner `
     --member-id (az ad user show --id alice@contoso.com --query id -o tsv)
 
 ./scripts/Sync-ClaudeAccess.ps1 -ApimName <apim-name> -ResourceGroup <rg>
 ```
 
+**macOS and Linux (Bash)** — after adding the developer to the Entra group, sync
+membership to the gateway:
+
+```bash
+./scripts/sync-claude-access.sh \
+  --apim-name apim-claudegw143476 \
+  --resource-group rg-sombaner-foundry
+```
+
+Replace the APIM and resource-group values for another deployment. The shell
+script uses `--apim-name` and `--resource-group`, not the PowerShell parameters
+`-ApimName` and `-ResourceGroup`.
+
+Both scripts default to `claude-code-standard-sombaner` and
+`claude-code-premium-sombaner`. To override them in Bash, pass
+`--standard-group <group-name-or-id>` and `--premium-group <group-name-or-id>`.
+The live sync updates the gateway's entitlement lists; it does not add people
+to Entra groups.
+
+Preview the shell command without authentication, network access, or writes:
+
+```bash
+./scripts/sync-claude-access.sh \
+  --apim-name apim-claudegw143476 \
+  --resource-group rg-sombaner-foundry \
+  --dry-run
+```
+
+This offline preview validates arguments, not Azure permissions or resource
+existence. Use `./scripts/sync-claude-access.sh --help` for all options.
+
 **2. Send them the setup**
+
+**PowerShell:**
 
 ```powershell
 ./scripts/New-OnboardingEmail.ps1 `
@@ -226,8 +261,40 @@ az ad group member add --group claude-code-standard `
     -To alice@contoso.com -DisplayName Alice
 ```
 
-Produces a formatted email — HTML, plain text, and an `.eml` to send from
-Outlook. `-Send` tries Microsoft Graph and falls back cleanly.
+**macOS and Linux (Bash):**
+
+```bash
+./scripts/new-onboarding-email.sh \
+  --config-path ./onboarding/claude-gateway.json \
+  --to alice@contoso.com \
+  --display-name Alice
+```
+
+Replace the example recipient and display name with the developer's details.
+The Bash script requires Node.js with built-in `fetch` and the generated
+`onboarding/claude-gateway.json` from your deployment; it does not require
+PowerShell. Use double-dash flags such as `--config-path`, not `-ConfigPath`.
+
+Both commands generate HTML, plain text, and an `.eml` email with the gateway
+configuration attached. The Bash output defaults to `./onboarding`; use
+`--output-path <directory>` to choose another location. Send the generated email
+through Outlook and provide the developer with `setup-claude-workstation.sh`
+or your approved download location.
+
+**Credentials on macOS:** generating these files is local and needs no Azure
+sign-in. To send directly through Microsoft Graph, add `--send` in Bash or
+`-Send` in PowerShell; this requires an authenticated Azure CLI session with
+permission to send mail through Graph. Group-management permission alone does
+not establish permission to send mail. The PowerShell command falls back to
+local files on send failure; the Bash command reports an error, but retains
+the files generated before the send attempt.
+
+Developers authenticate with their own organisational Entra account through
+Azure CLI (`az login`), not the administrator's credentials. Do not put passwords,
+access tokens, or API keys in the email or gateway configuration.
+
+For an offline argument preview, append `--dry-run` to the Bash command. It
+does not read the configuration, generate files, or test mail permissions.
 
 **3. They run one command** — send them **[DEVELOPER.md](DEVELOPER.md)**, which
 is the whole of their side:
@@ -248,6 +315,60 @@ Desktop including Cowork — then makes a real call through the gateway to prove
 it works.
 
 No key, no Foundry role, and they appear in chargeback from their first request.
+
+### Desktop Interactive Sign-In
+
+Both workstation scripts accept an optional `desktopInteractive` block in the
+same onboarding JSON. Without it, Desktop keeps using the Azure CLI credential
+helper. This option changes Desktop only; CLI, VS Code and the setup verification
+call still use Azure CLI authentication.
+
+Example template, not a ready-to-use application registration:
+
+```json
+{
+  "gatewayUrl": "https://<apim>.azure-api.net/claude",
+  "tenantId": "<gateway-tenant-guid>",
+  "desktopInteractive": {
+    "clientId": "<approved-public-client-guid>",
+    "authFlow": "browser",
+    "sessionLifetimeSec": 3600,
+    "bearerTokenType": "access_token",
+    "scopes": "openid profile https://cognitiveservices.azure.com/.default"
+  }
+}
+```
+
+Use an organization-approved **public-client** registration with the required
+delegated API permission and consent, and redirect settings matching Desktop.
+The client ID cannot be discovered from the gateway URL or tenant. Do not use
+Azure CLI's client ID or add a client secret. Setup does not create registrations,
+grant consent, or change APIM audiences.
+
+| Desktop field | Onboarding configuration |
+|---|---|
+| Credential kind | Presence of `desktopInteractive` selects `interactive` |
+| Gateway base URL | Top-level `gatewayUrl` |
+| Sign-in session lifetime | Optional `sessionLifetimeSec`, positive integer seconds; omitted by default |
+| Gateway sign-in flow | `authFlow`: `browser` (default) or `broker`; broker requires a compatible Desktop/OS and Entra app configuration |
+| OIDC client ID | Required `clientId` |
+| Issuer, authorization and token URLs | Retrieved from tenant-specific Entra OIDC discovery; optional `issuer`, `authorizationUrl`, `tokenUrl` must match that tenant's endpoints |
+| Bearer token selection | `bearerTokenType`: `access_token` only; ID tokens are incompatible with this gateway's audiences |
+| Scopes | Space-separated `scopes`; defaults shown above. Must contain exactly one Cognitive Services or AI resource scope (`.default` or `user_impersonation`) |
+| Redirect port | Optional integer `redirectPort`, 1-65535; omit the property for Desktop's ephemeral-port behavior |
+| Additional redirect referrer hosts | Optional space-separated `additionalRedirectReferrerHosts`; add only approved hosts required by your IdP, without URLs or wildcards |
+
+Run the same setup commands above after updating your onboarding JSON. Bash
+requires `jq` already installed when reading a configuration file. Interactive
+settings are validated before installation, Azure login or profile writes.
+Discovery is restricted to the configured tenant at `login.microsoftonline.com`
+(public Azure); other authorities are not supported by this setup path.
+Interactive profiles omit credential-helper fields. Quit Desktop fully and reopen
+it to sign in. The session-lifetime setting does not override Entra session policy.
+
+`--dry-run` / `-DryRun` remain offline no-action previews; they do **not** read or
+validate this block. Offline fixtures verify configuration behavior, not successful
+OAuth sign-in with your application registration.
 
 Revoking is `az ad group member remove` + sync. Promotion to premium is a group
 change.
