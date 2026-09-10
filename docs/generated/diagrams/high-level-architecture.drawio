@@ -1,0 +1,113 @@
+<mxfile host="app.diagrams.net" modified="2026-09-10T04:46:00.000Z" agent="doc-agent" version="24.0.0" type="device">
+  <diagram name="High-Level Architecture" id="hla1">
+    <mxGraphModel dx="1400" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="lane_client" value="Developer Workstation" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=14;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="300" height="380" as="geometry" />
+        </mxCell>
+        <mxCell id="c_cli" value="Claude Code CLI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;arcSize=12;shadow=1;" vertex="1" parent="lane_client">
+          <mxGeometry x="30" y="50" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="c_vscode" value="VS Code Extension" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;arcSize=12;shadow=1;" vertex="1" parent="lane_client">
+          <mxGeometry x="30" y="130" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="c_desktop" value="Claude Desktop (Chat / Cowork)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;arcSize=12;shadow=1;" vertex="1" parent="lane_client">
+          <mxGeometry x="30" y="210" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="c_azlogin" value="DefaultAzureCredential (az login / broker)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;" vertex="1" parent="lane_client">
+          <mxGeometry x="30" y="290" width="240" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lane_entra" value="Microsoft Entra ID" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="40" y="480" width="300" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="e_groups" value="claude-code-standard / claude-code-premium (Entra ID groups)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;" vertex="1" parent="lane_entra">
+          <mxGeometry x="30" y="40" width="240" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="e_token" value="Entra ID token issuer (oid, upn claims)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;" vertex="1" parent="lane_entra">
+          <mxGeometry x="30" y="120" width="240" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lane_gw" value="Azure API Management v2 (the gateway)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#1a73c1;fontSize=14;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="420" y="60" width="380" height="620" as="geometry" />
+        </mxCell>
+        <mxCell id="g_policy" value="Claude API + governance policy.xml (validate-azure-ad-token, tier lookup, llm-token-limit, rate-limit-by-key, llm-emit-token-metric)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;shadow=1;" vertex="1" parent="lane_gw">
+          <mxGeometry x="30" y="50" width="320" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="g_namedvalues" value="Named values (tpm-*, quota-*, allow-*, models-*)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane_gw">
+          <mxGeometry x="30" y="180" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="g_mi" value="Gateway managed identity (Cognitive Services User)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="lane_gw">
+          <mxGeometry x="30" y="260" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="g_diag" value="Diagnostics (metrics: true)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="lane_gw">
+          <mxGeometry x="30" y="340" width="320" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="g_admin_scripts" value="Admin scripts (PowerShell + Bash): Sync-ClaudeAccess, Set-ClaudeBudget, Show-Governance, New-ClaudeCodePolicy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="lane_gw">
+          <mxGeometry x="30" y="410" width="320" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="g_installer" value="Install-ClaudeGateway.ps1 / install-claude-gateway.sh (deploys infra/main.bicep)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="lane_gw">
+          <mxGeometry x="30" y="500" width="320" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lane_obs" value="Observability" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="420" y="720" width="380" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="o_ai" value="Application Insights (customMetrics, claudecode namespace)" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;boundedLbl=1;" vertex="1" parent="lane_obs">
+          <mxGeometry x="30" y="40" width="150" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="o_la" value="Log Analytics workspace" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="lane_obs">
+          <mxGeometry x="200" y="40" width="150" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="o_kql" value="analytics/claude-code-daily.kql (chargeback + analytics reports)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="lane_obs">
+          <mxGeometry x="30" y="150" width="320" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lane_foundry" value="Microsoft Foundry (AIServices account)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="900" y="60" width="300" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="f_sonnet" value="Claude Sonnet 5 deployment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="lane_foundry">
+          <mxGeometry x="30" y="50" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="f_opus" value="Claude Opus 5 deployment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="lane_foundry">
+          <mxGeometry x="30" y="130" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="f_endpoint" value="/anthropic/v1/messages" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;" vertex="1" parent="lane_foundry">
+          <mxGeometry x="30" y="200" width="240" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lane_mdm" value="Fleet Management (optional)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=14;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="900" y="360" width="300" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="m_intune" value="Intune / Jamf / GPO (managed settings push)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=2;" vertex="1" parent="lane_mdm">
+          <mxGeometry x="30" y="40" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="m_policy" value="New-ClaudeCodePolicy output (managed-settings.json / plist)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="lane_mdm">
+          <mxGeometry x="30" y="110" width="240" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#6c8ebf;strokeWidth=2;html=1;" edge="1" parent="1" source="c_cli" target="g_policy"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#6c8ebf;strokeWidth=2;html=1;" edge="1" parent="1" source="c_vscode" target="g_policy"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#6c8ebf;strokeWidth=2;html=1;" edge="1" parent="1" source="c_desktop" target="g_policy"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" value="user Entra token" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#9673a6;strokeWidth=2;html=1;dashed=1;" edge="1" parent="1" source="c_azlogin" target="e_token"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" value="validate token" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#9673a6;strokeWidth=2;html=1;" edge="1" parent="1" source="g_policy" target="e_token"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" value="tier lookup" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#9673a6;strokeWidth=2;html=1;" edge="1" parent="1" source="g_policy" target="e_groups"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" value="syncs group membership" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d79b00;strokeWidth=2;html=1;" edge="1" parent="1" source="g_admin_scripts" target="e_groups"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" value="reads/writes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d79b00;strokeWidth=2;html=1;" edge="1" parent="1" source="g_admin_scripts" target="g_namedvalues"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" value="deploys infra" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d79b00;strokeWidth=2;html=1;" edge="1" parent="1" source="g_installer" target="g_diag"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" value="managed identity token" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#82b366;strokeWidth=2;html=1;" edge="1" parent="1" source="g_mi" target="f_endpoint"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e11" value="emits token metrics" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#b85450;strokeWidth=2;html=1;" edge="1" parent="1" source="g_diag" target="o_ai"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" value="logs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#b85450;strokeWidth=2;html=1;" edge="1" parent="1" source="g_diag" target="o_la"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e13" value="queries" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#b85450;strokeWidth=2;html=1;" edge="1" parent="1" source="o_kql" target="o_ai"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e14" value="requests claude-sonnet-5 / claude-opus-5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#82b366;strokeWidth=2;html=1;" edge="1" parent="1" source="g_policy" target="f_sonnet"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e15" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#82b366;strokeWidth=2;html=1;" edge="1" parent="1" source="g_policy" target="f_opus"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e16" value="pushes managed settings" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d79b00;strokeWidth=2;html=1;" edge="1" parent="1" source="m_policy" target="m_intune"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e17" value="applies to clients" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d79b00;strokeWidth=2;html=1;dashed=1;" edge="1" parent="1" source="m_intune" target="lane_client"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e18" value="generates" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d79b00;strokeWidth=2;html=1;" edge="1" parent="1" source="g_admin_scripts" target="m_policy"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

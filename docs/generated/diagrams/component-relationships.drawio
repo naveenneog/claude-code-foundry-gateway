@@ -1,0 +1,141 @@
+<mxfile host="app.diagrams.net" modified="2026-09-10T04:46:00.000Z" agent="doc-agent" version="24.0.0" type="device">
+  <diagram name="Component Relationships" id="cr1">
+    <mxGraphModel dx="1400" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="lane_ps" value="PowerShell Admin Scripts (scripts/*.ps1)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="360" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="ps1" value="Install-ClaudeGateway.ps1 / deploy.ps1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="lane_ps">
+          <mxGeometry x="20" y="40" width="320" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="ps2" value="Sync-ClaudeAccess.ps1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="lane_ps">
+          <mxGeometry x="20" y="95" width="320" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ps3" value="Set-ClaudeBudget.ps1 / Get-ClaudeBudget.ps1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="lane_ps">
+          <mxGeometry x="20" y="145" width="320" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ps4" value="Show-Governance.ps1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="lane_ps">
+          <mxGeometry x="20" y="195" width="320" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ps5" value="Get-ClaudeBypass.ps1 / Test-FoundryDirect.ps1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="lane_ps">
+          <mxGeometry x="20" y="245" width="320" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ps6" value="New-ClaudeCodePolicy.ps1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="lane_ps">
+          <mxGeometry x="20" y="295" width="320" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ps7" value="Setup-ClaudeWorkstation.ps1 / New-OnboardingEmail.ps1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="lane_ps">
+          <mxGeometry x="20" y="345" width="320" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lane_sh" value="Bash Counterparts (scripts/*.sh)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="440" y="40" width="360" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="sh1" value="install-claude-gateway.sh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="lane_sh">
+          <mxGeometry x="20" y="40" width="320" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="sh2" value="sync-claude-access.sh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="lane_sh">
+          <mxGeometry x="20" y="90" width="320" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="sh3" value="set-claude-budget.sh / get-claude-budget.sh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="lane_sh">
+          <mxGeometry x="20" y="140" width="320" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="sh4" value="show-governance.sh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="lane_sh">
+          <mxGeometry x="20" y="190" width="320" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="sh5" value="get-claude-bypass.sh / test-foundry-direct.sh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="lane_sh">
+          <mxGeometry x="20" y="240" width="320" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="sh6" value="new-claude-code-policy.sh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="lane_sh">
+          <mxGeometry x="20" y="290" width="320" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="sh7" value="setup-claude-workstation.sh / new-onboarding-email.sh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="lane_sh">
+          <mxGeometry x="20" y="340" width="320" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lane_lib" value="Shared Node.js Library (scripts/lib/*.mjs)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="840" y="40" width="340" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="lib1" value="cli.mjs\n(command registry + arg parsing)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="lane_lib">
+          <mxGeometry x="20" y="40" width="300" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="lib2" value="common.mjs\n(az CLI, HTTP, guid/oid validation, file I/O)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="lane_lib">
+          <mxGeometry x="20" y="105" width="300" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="lib3" value="gateway.mjs\n(APIM context, named values, budgets, sync)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="lane_lib">
+          <mxGeometry x="20" y="170" width="300" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="lib4" value="local.mjs\n(client config: CLI/VS Code/Desktop, plist/JSON)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="lane_lib">
+          <mxGeometry x="20" y="235" width="300" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="lib5" value="ports.mjs\n(entry-point dispatch per command)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="lane_lib">
+          <mxGeometry x="20" y="300" width="300" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="lib6" value="reports.mjs\n(analytics envelope, subject data reports)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="lane_lib">
+          <mxGeometry x="20" y="365" width="300" height="55" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lane_test" value="Test Suites (tests/*.ps1, tests/*.mjs)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="40" y="500" width="360" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="t1" value="Test-All.ps1 (offline suite orchestrator)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;" vertex="1" parent="lane_test">
+          <mxGeometry x="20" y="40" width="320" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="t2" value="Test-BudgetControl / Test-OrgCeiling / Test-Bypass (*Live variants call Azure)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;" vertex="1" parent="lane_test">
+          <mxGeometry x="20" y="90" width="320" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="t3" value="script-security.test.mjs / shell-ports.test.mjs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;" vertex="1" parent="lane_test">
+          <mxGeometry x="20" y="140" width="320" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lane_infra" value="Infra as Code (infra/*.bicep, policy.xml)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="440" y="500" width="360" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="i1" value="main.bicep (APIM, App Insights, Log Analytics, Claude API)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;" vertex="1" parent="lane_infra">
+          <mxGeometry x="20" y="40" width="320" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="i2" value="foundry-role.bicep (Cognitive Services User RBAC)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;" vertex="1" parent="lane_infra">
+          <mxGeometry x="20" y="95" width="320" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="i3" value="policy.xml (the governance policy, applied by Set-GatewayPolicy)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;" vertex="1" parent="lane_infra">
+          <mxGeometry x="20" y="145" width="320" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lane_analytics" value="Analytics &amp; Reporting" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=14;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="840" y="500" width="340" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="an1" value="analytics/claude-code-daily.kql (gateway + OTel union)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=2;" vertex="1" parent="lane_analytics">
+          <mxGeometry x="20" y="40" width="300" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="an2" value="Get-ClaudeAnalytics.ps1 / get-claude-analytics.sh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=2;" vertex="1" parent="lane_analytics">
+          <mxGeometry x="20" y="95" width="300" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="an3" value="onboarding/claude-gateway.json (generated handover artifact)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=2;" vertex="1" parent="lane_analytics">
+          <mxGeometry x="20" y="150" width="300" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="d1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d6b656;strokeWidth=2;html=1;" edge="1" parent="1" source="ps2" target="lib3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d6b656;strokeWidth=2;html=1;" edge="1" parent="1" source="sh2" target="lib3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d6b656;strokeWidth=2;html=1;" edge="1" parent="1" source="ps7" target="lib4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d6b656;strokeWidth=2;html=1;" edge="1" parent="1" source="sh7" target="lib4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d6b656;strokeWidth=2;html=1;" edge="1" parent="1" source="sh1" target="lib5"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d6b656;strokeWidth=2;html=1;" edge="1" parent="1" source="lib5" target="lib1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d6b656;strokeWidth=2;html=1;" edge="1" parent="1" source="lib3" target="lib2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d6b656;strokeWidth=2;html=1;" edge="1" parent="1" source="lib4" target="lib2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d6b656;strokeWidth=2;html=1;" edge="1" parent="1" source="lib6" target="lib3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#9673a6;strokeWidth=2;html=1;" edge="1" parent="1" source="ps1" target="i1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#9673a6;strokeWidth=2;html=1;" edge="1" parent="1" source="sh1" target="i1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#9673a6;strokeWidth=2;html=1;" edge="1" parent="1" source="i1" target="i3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d13" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#9673a6;strokeWidth=2;html=1;" edge="1" parent="1" source="i1" target="i2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d14" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d79b00;strokeWidth=2;html=1;" edge="1" parent="1" source="an2" target="an1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d15" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d79b00;strokeWidth=2;html=1;" edge="1" parent="1" source="ps1" target="an3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d16" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#b85450;strokeWidth=2;html=1;" edge="1" parent="1" source="t1" target="t2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d17" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#b85450;strokeWidth=2;html=1;" edge="1" parent="1" source="t1" target="t3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d18" value="validates" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#b85450;strokeWidth=2;html=1;dashed=1;" edge="1" parent="1" source="t2" target="lane_ps"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="d19" value="validates" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#b85450;strokeWidth=2;html=1;dashed=1;" edge="1" parent="1" source="t3" target="lane_sh"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
