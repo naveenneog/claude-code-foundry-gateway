@@ -1,0 +1,62 @@
+<mxfile host="app.diagrams.net" modified="2026-09-10T04:46:00.000Z" agent="doc-agent" version="24.0.0" type="device">
+  <diagram name="Deployment and Infrastructure" id="di1">
+    <mxGraphModel dx="1300" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="lane_rg" value="Azure Resource Group (rg-claude-gateway)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=14;fontStyle=1;startSize=30;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="820" height="560" as="geometry" />
+        </mxCell>
+        <mxCell id="apim" value="API Management (v2: Basic/Standard/Premium)\nsystem-assigned managed identity" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#1a73c1;strokeWidth=2;shadow=1;" vertex="1" parent="lane_rg">
+          <mxGeometry x="40" y="50" width="340" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="claudeapi" value="Claude API + operations\n(policy.xml governance policy)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#1a73c1;strokeWidth=2;" vertex="1" parent="lane_rg">
+          <mxGeometry x="40" y="150" width="340" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="nv" value="Named values\n(tpm-*, quota-*, allow-*, models-*, calls-per-minute)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="lane_rg">
+          <mxGeometry x="40" y="230" width="340" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="law" value="Log Analytics Workspace" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="lane_rg">
+          <mxGeometry x="440" y="50" width="180" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="appi" value="Application Insights\n(CustomMetricsOptedInType: WithDimensions)" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="lane_rg">
+          <mxGeometry x="640" y="50" width="180" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="diag" value="Diagnostic settings (metrics: true)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="lane_rg">
+          <mxGeometry x="440" y="150" width="380" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="rbac" value="Role assignment: Cognitive Services User\ngranted to APIM managed identity only\n(foundry-role.bicep)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="lane_rg">
+          <mxGeometry x="40" y="310" width="340" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="entra_grp" value="Entra ID groups\nclaude-code-standard-&lt;suffix&gt;\nclaude-code-premium-&lt;suffix&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;" vertex="1" parent="lane_rg">
+          <mxGeometry x="440" y="230" width="380" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="deploy_script" value="Install-ClaudeGateway.ps1 / install-claude-gateway.sh / deploy.ps1\n(idempotent, -WhatIf preview, reuse existing v2 APIM)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=2;" vertex="1" parent="lane_rg">
+          <mxGeometry x="40" y="410" width="780" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="cicd" value="No CI/CD pipeline required for gateway deploy - operator-run scripts.\nnpm test:scripts runs offline shell parity + security suites locally." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;" vertex="1" parent="lane_rg">
+          <mxGeometry x="40" y="480" width="780" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="foundry_ext" value="Microsoft Foundry account (AIServices)\nexisting resource, outside this deployment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="60" width="320" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="mdm_ext" value="Intune / GPO / Jamf\nmanaged-settings.json, plist, registry policy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="180" width="320" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="workstation_ext" value="Developer workstations\nWindows / macOS / Linux" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="300" width="320" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="de1" value="RBAC grant" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#82b366;strokeWidth=2;html=1;" edge="1" parent="1" source="rbac" target="foundry_ext"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de2" value="sync membership" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#9673a6;strokeWidth=2;html=1;" edge="1" parent="1" source="entra_grp" target="nv"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de3" value="deploys" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d79b00;strokeWidth=2;html=1;" edge="1" parent="1" source="deploy_script" target="apim"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de4" value="pushes policy" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#d79b00;strokeWidth=2;html=1;" edge="1" parent="1" source="mdm_ext" target="workstation_ext"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="de5" value="calls gateway" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#1a73c1;strokeWidth=2;html=1;" edge="1" parent="1" source="workstation_ext" target="apim"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
