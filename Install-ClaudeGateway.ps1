@@ -125,6 +125,7 @@ Write-Host ' Every prompt has a default. Press Enter to accept it.' -ForegroundC
 Write-Host ' Nothing is created until you confirm the summary.' -ForegroundColor DarkGray
 # Fail here, with a remedy, rather than part-way through a deployment.
 . (Join-Path $root 'scripts/Test-Prerequisites.ps1')
+. (Join-Path $root 'scripts/ClaudeModelDeployment.ps1')
 if (-not (Test-ClaudePrerequisites -Mode Admin)) { return }
 
 Write-Step 'Azure sign-in'
@@ -216,9 +217,40 @@ if (-not $FoundryAccount) {
     }
 
     if ($withClaude.Count -eq 0) {
-        Write-Bad 'No Foundry account with a Claude deployment found in this subscription.'
-        Write-Note 'Deploy claude-sonnet-5 and/or claude-opus-5 first - the gateway fronts a model, it cannot create one.'
-        throw 'No Claude deployment.'
+        # The gateway cannot create a model, but this installer is already
+        # signed in to the subscription where one could be created, so stopping
+        # here sends the operator away to do by hand what it could do now.
+        Write-Note 'No Foundry account in this subscription has a Claude deployment yet.'
+        Write-Host ''
+        $i = 1
+        foreach ($a in $accounts) { Write-Host ("      {0,2}. {1,-34} {2}" -f $i, $a.name, $a.loc); $i++ }
+        Write-Host ''
+        $pick = if ($accounts.Count -eq 1) { '1' } else { Read-Default -Prompt 'Deploy a model into which account' -Default '1' }
+        $target = $accounts[[int]$pick - 1]
+
+        $offer = @(Get-DeployableClaudeModel -Account $target.name -ResourceGroup $target.rg)
+        if (-not $offer.Count) {
+            Write-Bad "No Claude model is available to deploy on $($target.name) in $($target.loc)."
+            Write-Note 'Claude is not offered in every region. Create a Foundry account in a region that has it,'
+            Write-Note 'then run this again: az cognitiveservices account list-models -n <account> -g <rg> -o table'
+            throw 'No deployable Claude model.'
+        }
+
+        Write-Host ''
+        $i = 1
+        foreach ($m in $offer) { Write-Host ("      {0,2}. {1,-22} v{2,-12} {3}" -f $i, $m.model, $m.version, $m.sku); $i++ }
+        Write-Host ''
+        $mp = Read-Default -Prompt 'Model number' -Default '1'
+        $chosen = $offer[[int]$mp - 1]
+        $cap = Read-Default -Prompt 'Capacity (thousands of tokens per minute)' -Default "$($chosen.defaultUnits)" `
+            -Help 'Raise it later without redeploying the gateway. Too high fails on quota.'
+
+        Write-Note "deploying $($chosen.model) to $($target.name)..."
+        $made = New-ClaudeDeployment -Account $target.name -ResourceGroup $target.rg `
+            -Model $chosen.model -Version $chosen.version -Sku $chosen.sku -Capacity ([int]$cap)
+        Write-Ok "deployed $(Format-ClaudeDeployment $made)"
+
+        $withClaude += [pscustomobject]@{ Name = $target.name; Rg = $target.rg; Loc = $target.loc; Models = $made.name }
     }
 
     Write-Host ''
@@ -248,6 +280,43 @@ if (-not $FoundryResourceGroup) {
     throw 'Foundry resource group not resolved.'
 }
 Write-Ok "$FoundryAccount (rg $FoundryResourceGroup)"
+
+# ------------------------------------------------- 1b. which models to allow
+#
+# The tier allow lists are what the gateway enforces, so they have to come from
+# what is actually deployed. Hard-coding them produces a gateway that allowlists
+# a model the account does not serve, and the developer sees a refusal naming a
+# model that looks correct.
+$deployed = @(Get-ClaudeDeployment -Account $FoundryAccount -ResourceGroup $FoundryResourceGroup)
+$modelsStd = ''
+$modelsPrm = ''
+if ($deployed.Count) {
+    Write-Step 'Which models each tier may call'
+    Write-Host ''
+    $i = 1
+    foreach ($d in $deployed) { Write-Host ("      {0,2}. {1}" -f $i, (Format-ClaudeDeployment $d)); $i++ }
+    Write-Host ''
+
+    # Premium gets everything. Standard gets everything except Opus, which is
+    # five times the price of Sonnet per output token - that is the distinction
+    # the two tiers exist to make. Both are editable afterwards with
+    # Set-ClaudeCapability.ps1, so this only has to be a sensible start.
+    $all = @($deployed.name | Sort-Object -Unique)
+    $nonOpus = @($deployed | Where-Object { $_.model -notlike '*opus*' } | ForEach-Object { $_.name } | Sort-Object -Unique)
+    if (-not $nonOpus.Count) { $nonOpus = $all }
+
+    $stdPick = Read-Default -Prompt 'Models for the standard tier' -Default ($nonOpus -join ',') `
+        -Help 'Comma-separated deployment names. Opus is left out by default because it costs five times Sonnet per output token.'
+    $prmPick = Read-Default -Prompt 'Models for the premium tier' -Default ($all -join ',') `
+        -Help 'Comma-separated deployment names.'
+
+    $modelsStd = ',' + (($stdPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ',') + ','
+    $modelsPrm = ',' + (($prmPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ',') + ','
+    Write-Ok "standard $modelsStd  premium $modelsPrm"
+}
+else {
+    Write-Note "no Claude deployment visible on $FoundryAccount - leaving both tier model lists empty"
+}
 
 # ------------------------------------------------------------- 2. placement
 
@@ -450,21 +519,41 @@ Write-Note 'Safe to leave running.'
 $allowStd = ''
 $allowPrm = ''
 $quotaOvr = ''
+$buReg = ''
+$buMem = ''
+$buPar = ''
 if ($ExistingApim -or (az apim show -g $ResourceGroup -n $apimName --query name -o tsv 2>$null)) {
     $allowStd = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id allow-standard --query value -o tsv 2>$null
     $allowPrm = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id allow-premium  --query value -o tsv 2>$null
     $quotaOvr = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id quota-overrides --query value -o tsv 2>$null
+    # Business units, their membership and the parent map are owned by
+    # Set-ClaudeBusinessUnit.ps1 and Sync-ClaudeAccess.ps1 after the first
+    # deployment, exactly like entitlement above. Their template parameters
+    # default to ',,', so leaving them out of this read does not preserve them -
+    # it empties the registry and unassigns every developer on the next
+    # redeploy.
+    $buReg = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id bu-registry --query value -o tsv 2>$null
+    $buMem = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id bu-members  --query value -o tsv 2>$null
+    $buPar = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id bu-parents  --query value -o tsv 2>$null
     if (-not $allowStd) { $allowStd = '' }
     if (-not $allowPrm) { $allowPrm = '' }
     if (-not $quotaOvr) { $quotaOvr = '' }
+    if (-not $buReg) { $buReg = '' }
+    if (-not $buMem) { $buMem = '' }
+    if (-not $buPar) { $buPar = '' }
     $keptStd = @($allowStd.Trim(',') -split ',' | Where-Object { $_ })
     $keptPrm = @($allowPrm.Trim(',') -split ',' | Where-Object { $_ })
     $keptOvr = @($quotaOvr.Trim(',') -split ',' | Where-Object { $_ })
+    $keptBu  = @($buReg.Trim(',') -split ',' | Where-Object { $_ })
+    $keptMem = @($buMem.Trim(',') -split ',' | Where-Object { $_ })
     if ($keptStd.Count -or $keptPrm.Count) {
         Write-Note "preserving entitlement: $($keptStd.Count) standard, $($keptPrm.Count) premium"
     }
     if ($keptOvr.Count) {
         Write-Note "preserving $($keptOvr.Count) per-user budget override(s)"
+    }
+    if ($keptBu.Count) {
+        Write-Note "preserving $($keptBu.Count) business unit(s) and $($keptMem.Count) membership(s)"
     }
 }
 
@@ -515,6 +604,11 @@ az deployment group create `
         allowStandardValueExisting=$allowStd `
         allowPremiumValueExisting=$allowPrm `
         quotaOverridesExisting=$quotaOvr `
+        buRegistryExisting=$buReg `
+        buMembersExisting=$buMem `
+        buParentsExisting=$buPar `
+        modelsStandard=$modelsStd `
+        modelsPremium=$modelsPrm `
         tpmStandard=$TpmStandard `
         quotaStandard=$QuotaStandard `
         tpmPremium=$TpmPremium `

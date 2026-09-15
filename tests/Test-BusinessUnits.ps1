@@ -137,6 +137,20 @@ Assert 'they become named values'         ($bicep -match "key:\s*'bu-registry'" 
 Assert 'a redeploy preserves the registry' ($bicep -match 'empty\(buRegistryExisting\)\s*\?')
 Assert 'a redeploy preserves membership'   ($bicep -match 'empty\(buMembersExisting\)\s*\?')
 
+# The template being willing to preserve is half the contract. Every existing
+# "a redeploy preserves X" check asserted only the Bicep expression, so a
+# parameter the installer never passes still looked preserved - and the
+# business unit parameters were exactly that. The default is ',,', so a
+# redeploy would have emptied the registry, the membership map and the parent
+# map, silently unassigning everyone.
+$installer = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
+foreach ($nv in 'bu-registry', 'bu-members', 'bu-parents') {
+    Assert "the installer reads $nv off the gateway" ($installer -match [regex]::Escape("--named-value-id $nv"))
+}
+foreach ($p in 'buRegistryExisting', 'buMembersExisting', 'buParentsExisting') {
+    Assert "and hands $p back" ($installer -match ($p + '='))
+}
+
 Assert 'the policy resolves a business unit' ($policy -match '<set-variable name="businessUnit"')
 Assert 'it reads the membership map'         ($policy -match '\{\{bu-members\}\}')
 Assert 'the lookup is anchored on commas'    ($policy -match '","\s*\+\s*oid|"," \+ oid')

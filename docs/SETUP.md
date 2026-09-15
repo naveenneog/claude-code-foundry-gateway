@@ -13,12 +13,16 @@ Time: about 60 minutes, of which 40 is unattended APIM provisioning.
 
 | Resource | Requirement | Check |
 |----------|-------------|-------|
-| Microsoft Foundry account | An AI Services / Cognitive Services account with at least one Claude deployment | `az cognitiveservices account deployment list -g <rg> -n <account> -o table` |
-| Claude deployment | `claude-sonnet-5` and/or `claude-opus-5` | as above |
+| Microsoft Foundry account | An AI Services / Cognitive Services account | `az cognitiveservices account list -o table` |
+| Claude deployment | Optional. The installer deploys one if the account has none | `az cognitiveservices account deployment list -g <rg> -n <account> -o table` |
 | Subscription | Able to create API Management **v2** SKUs in the target region | see [Region](#region) |
 
-If the Foundry account does not exist yet, create the Claude deployment first.
-The gateway is a front door — it cannot create the model behind it.
+The gateway is a front door and cannot create a model, but the installer can
+deploy a model for you. If no account in the subscription has a Claude
+deployment, it lists the models the account is entitled to deploy, asks which one
+and at what capacity, and creates it before continuing. Claude is not offered in
+every region, so an account in a region without it fails with that stated rather
+than with a deployment error.
 
 ### Tooling
 
@@ -308,9 +312,12 @@ Two constraints:
   and region and tells you it has done so.
 
 Re-running against a gateway you already set up is the supported way to update
-policies or budgets. Entitlement is preserved: the wizard reads the current
-`allow-standard` and `allow-premium` values and passes them back, so a redeploy
-cannot silently revoke anyone.
+policies or budgets. Live state is preserved: the wizard reads the current
+`allow-standard`, `allow-premium`, `quota-overrides`, `bu-registry`,
+`bu-members` and `bu-parents` values off the gateway and passes them back, so a
+redeploy cannot silently revoke anyone or empty the chargeback registry. Each of
+those template parameters defaults to `,,`, so omitting one does not preserve
+it — it clears it.
 
 ---
 

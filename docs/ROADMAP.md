@@ -187,9 +187,9 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
 - [x] P20c teams and tiers — a team is a unit with a parent, charged to itself and to the unit above
       it; tier is a separate axis attached by nesting the team group inside the tier group. Depth is
       capped at two and cycles refused at write time. [ADR-0008](adr/0008-teams-and-tiers.md)
-- [ ] P26 model discovery at install — acceptance: `Install-ClaudeGateway.ps1` enumerates Claude
-      deployments across the signed-in subscription, lets the operator select one, and offers to
-      create a deployment when none exists. It currently assumes one is already there
+- [x] P26 model discovery at install — `Install-ClaudeGateway.ps1` lists Claude deployments with
+      SKU and capacity, lets the operator pick which models each tier may call, and offers to create
+      a deployment when the account has none. Quota failures are named separately from other errors
 - [ ] P27 per-surface telemetry — acceptance: usage from the Claude Code CLI, the VS Code extension
       and Claude Desktop is separable in the ledger and visible quickly. Needs a client dimension the
       gateway does not capture today, and measured ingestion lag. Constraint: reuse the existing LLM

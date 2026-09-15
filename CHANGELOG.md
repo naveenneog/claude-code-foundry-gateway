@@ -28,6 +28,22 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- The installer finds or creates a Claude deployment. It used to stop with "the
+  gateway fronts a model, it cannot create one" when no account had one, which
+  is true of the gateway and beside the point for an installer already signed in
+  to the subscription where the deployment would be made. It now lists the
+  models the account is entitled to deploy — read from the account, because what
+  is offerable depends on region and entitlement — asks which and at what
+  capacity, and creates it. `scripts/ClaudeModelDeployment.ps1` holds the logic.
+- Tier model lists come from what is actually deployed. The installer shows each
+  Claude deployment with its SKU and capacity and asks which models each tier may
+  call, defaulting premium to all of them and standard to everything except Opus,
+  which costs five times Sonnet per output token. Previously `modelsStandard` and
+  `modelsPremium` were never passed at all.
+- Quota is separated from other deployment failures.
+  `Get-DeploymentFailureReason` classifies Azure's error and says what to do —
+  ask for quota, lower the capacity, or change region — because a generic
+  "deployment failed" sends the operator to retry when none of those is a retry.
 - Teams. A team is a business unit that names a parent, decided in
   [ADR-0008](docs/adr/0008-teams-and-tiers.md). A request is charged to the team
   and to the business unit above it — two monthly counters, both soft. Verified
@@ -77,6 +93,17 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Fixed
 
+- A redeploy would have wiped every business unit, team and membership.
+  `Install-ClaudeGateway.ps1` reads `allow-standard`, `allow-premium` and
+  `quota-overrides` off the gateway and hands them back so a redeploy cannot
+  revoke anyone, but `bu-registry`, `bu-members` and `bu-parents` were never
+  added to that list. Their template parameters default to `,,`, so omitting
+  them does not preserve them — it clears them. Confirmed against the live
+  gateway with `what-if`: with the parameters omitted, all three were planned as
+  `,,`; with them supplied, each `after` matched the current value. Every
+  existing "a redeploy preserves X" check asserted only the Bicep expression and
+  never that the installer supplied the value, which is why this passed for
+  three releases — the tests now assert both ends.
 - Entitlement could have been granted to a group object. Graph
   `transitiveMembers` returns nested **group** objects as well as users, and
   `Get-GroupMemberOids` did not filter by type. Measured on

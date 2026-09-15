@@ -1,8 +1,8 @@
 # Status
 
-**Active packet:** P20c — teams and tiers. Shipped and verified live: one request decremented the
-team counter and its parent's. P21 remains open: budgets are set and reported in dollars but
-enforced as one blended token figure. Next in M4: P19, the durable identity projection.
+**Active packet:** P26 — the installer finds or creates a Claude deployment. Shipped. It also closed
+a redeploy that would have wiped every business unit, team and membership. Next in M4: P27,
+per-surface telemetry, which is a design discussion first.
 
 ## What is shipped (M0)
 
@@ -459,8 +459,58 @@ parent; tier is a separate axis attached by nesting the team group inside the ti
 | UX | Accept | Teams are indented under their parent in both the writer and the reader, and the depth cap explains itself at the point of refusal rather than in documentation |
 | Security | Accept | The typed cast closes a path where a group object could have been written into an entitlement list. No new identity surface: the same delegated Graph read as before |
 
-## Commands that prove it```powershell
-./tests/Test-All.ps1                                    # 17 checks, offline
+## P26 acceptance criteria — the installer finds or creates a model
+
+- [x] Claude deployments are listed with SKU and capacity, not just a name — a name alone does not
+      say whether the deployment can carry the traffic
+- [x] The operator chooses which models each tier may call, and the choice reaches the template.
+      `modelsStandard` and `modelsPremium` were previously never passed at all
+- [x] When no account has a Claude deployment, the installer offers to create one rather than
+      stopping. Verified live: `foundry-plus-resource` has no Claude deployment and returned 12
+      deployable Claude models, one row per model at its newest version
+- [x] Selection matches on the model and publisher format, never the deployment name. Verified live
+      on an account with **27 deployments**, of which 2 are Claude — OpenAI, OpenAI-OSS, Mistral and
+      DeepSeek were all excluded
+- [x] Quota is a distinct failure with its own advice, tested against both a quota error and an
+      authorisation error
+- [x] `./tests/Test-All.ps1` passes; 25 of 25 mutations caught
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+### What the work found
+
+**A redeploy would have wiped every business unit, team and membership.** The installer preserves
+`allow-standard`, `allow-premium` and `quota-overrides` by reading them off the gateway and handing
+them back. `bu-registry`, `bu-members` and `bu-parents` were never added to that list, and their
+template parameters default to `,,` — so omitting them clears them.
+
+Confirmed with `what-if` against the live gateway:
+
+| Parameters | Planned `bu-registry` |
+|---|---|
+| Omitted, as the installer did | `,,` — four units and two teams gone |
+| Supplied, as it now does | `,mcaps=…,gbb=…,ites-1=…,ites-2=…` unchanged |
+
+Every existing "a redeploy preserves X" assertion checked only the Bicep expression, never that the
+caller supplied the value. The template was willing to preserve and nothing proved anyone asked it
+to. Both ends are now asserted.
+
+| | |
+|---|---|
+| Azure lists a model once per version | `claude-sonnet-5` came back as v1 and v2. Offering the same model twice is a choice nobody wants; newest wins |
+| `$args` is an automatic variable | Assigning to it inside a function is at best confusing. Renamed |
+| A `quota` match on the installer proves nothing | The installer contains `quotaStandard`, `quotaOrg` and more, so the assertion passed on unrelated text. The classification moved into `Get-DeploymentFailureReason` and is tested against both error kinds |
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | The installer already holds the subscription context needed to create a deployment. Sending the operator elsewhere to do it by hand was a gap in the installer, not a property of the gateway |
+| Coder | Accept | Deployable models are read from the account rather than hard-coded, because what is offerable depends on region and entitlement, and a hard-coded list goes stale and then offers something that cannot be created |
+| QA | Accept | 25 mutations, all caught. The quota assertion was found matching unrelated text in the installer and was replaced with a function tested against a quota error and an authorisation error |
+| UX | Accept | SKU and capacity are shown because they are what an operator changes when a deployment cannot carry the load. Opus is excluded from standard by default with the reason given at the prompt |
+| Security | Accept | No new permission: creating a deployment needs the Cognitive Services contributor rights the operator already needs to stand up the gateway, and failure states which right was missing |
+
+## Commands that prove it```powershell./tests/Test-All.ps1                                    # 17 checks, offline
 ./tests/Test-All.ps1 -IncludeAzure                      # plus the seven that call Azure
 ./scripts/Get-ClaudeTelemetry.ps1                       # where this gateway logs, and whether metrics are on
 ./scripts/Get-ClaudeAnalytics.ps1 -Days 30              # the usage report

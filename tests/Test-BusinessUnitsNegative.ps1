@@ -119,6 +119,42 @@ $mutations = @(
        File  = 'scripts/Sync-ClaudeAccess.ps1'
        From  = 'Sort-ClaudeBuByDepth $registry -Parents $parents'
        To    = '$registry' }
+
+    # --- P26, the installer discovers or deploys a model ---
+
+    @{ Name  = 'a redeploy stops preserving the registry'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'buRegistryExisting=$buReg'
+       To    = 'tagsIgnored=$buReg' }
+
+    @{ Name  = 'a redeploy stops preserving the parent map'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = '--named-value-id bu-parents'
+       To    = '--named-value-id bu-nothing' }
+
+    @{ Suite = 'Test-ModelDeployment.ps1'
+       Name  = 'the Claude filter stops filtering'
+       File  = 'scripts/ClaudeModelDeployment.ps1'
+       From  = "`$script:ClaudeModelPattern = 'claude'"
+       To    = "`$script:ClaudeModelPattern = ''" }
+
+    @{ Suite = 'Test-ModelDeployment.ps1'
+       Name  = 'the deployment summary loses its capacity'
+       File  = 'scripts/ClaudeModelDeployment.ps1'
+       From  = '[{3}, capacity {4}]'
+       To    = '[{3}]' }
+
+    @{ Suite = 'Test-ModelDeployment.ps1'
+       Name  = 'quota stops being named as a distinct failure'
+       File  = 'scripts/ClaudeModelDeployment.ps1'
+       From  = "if (`$AzureOutput -match '(?i)quota|InsufficientQuota|exceeded') {"
+       To    = 'if ($false) {' }
+
+    @{ Suite = 'Test-ModelDeployment.ps1'
+       Name  = 'the tier lists stop coming from what is deployed'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = '$deployed = @(Get-ClaudeDeployment'
+       To    = '$deployed = @(' }
 )
 
 $missed = @()
@@ -131,6 +167,9 @@ try {
             Copy-Item (Join-Path $root $d) $sandbox -Recurse -Force
         }
     }
+    # The installer is asserted against too - it is what hands preserved state
+    # back to the template.
+    Copy-Item (Join-Path $root 'Install-ClaudeGateway.ps1') $sandbox -Force
     # Screenshots are a few megabytes and nothing here reads them, so the
     # markdown is copied without them.
     New-Item -ItemType Directory -Path (Join-Path $sandbox 'docs/adr') -Force | Out-Null
@@ -143,10 +182,11 @@ try {
 
     $suite = Join-Path $sandbox 'tests/Test-BusinessUnits.ps1'
     $teamSuite = Join-Path $sandbox 'tests/Test-Teams.ps1'
+    $modelSuite = Join-Path $sandbox 'tests/Test-ModelDeployment.ps1'
 
     # The copy must pass before any mutation, or a "caught" result below could
     # just mean the sandbox is broken.
-    foreach ($s in $suite, $teamSuite) {
+    foreach ($s in $suite, $teamSuite, $modelSuite) {
         & $s *>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  [SETUP] the unmutated copy of $(Split-Path $s -Leaf) already fails - the sandbox is wrong, not the code" -ForegroundColor Red
