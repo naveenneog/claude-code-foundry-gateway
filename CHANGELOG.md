@@ -9,6 +9,23 @@ Releases are tagged in git. `docs/ROADMAP.md` holds the forward plan and
 
 ## [Unreleased]
 
+Business-unit chargeback. Budgets are set and reported in dollars, but three
+limits apply to every figure here and are repeated in each command's output.
+
+The counter is blind to cached tokens: `llm-token-limit` "currently counts
+prompt and completion tokens only", and on thirty days of live usage cache reads
+were 6.8M tokens against 320K prompt and 152K completion — 38.7% of real cost
+weight at Claude's published rates. Budgets therefore bound less spend than they
+appear to, always in the direction of under-counting.
+
+Dollar figures are list price and do not reconcile to an Azure invoice, because
+Azure bills Claude as one aggregated Claude Consumption Unit meter and
+private-offer discounts apply before that conversion. **U2**.
+
+A budget is enforced as one blended token figure converted at write time,
+assuming a 20% output mix. That is what P21's acceptance criterion calls
+insufficient, so P21 stays open. Categorised enforcement is **U13**.
+
 ### Added
 
 - Business units. A business unit is an Entra security group registered with a
@@ -49,20 +66,6 @@ Releases are tagged in git. `docs/ROADMAP.md` holds the forward plan and
   requires each host to print `RESULT=True` or `RESULT=False`; matching the bare
   `RESULT=` label was not enough, because a failed dot-source is a
   non-terminating error and the child carried on to print an empty value.
-
-### Known limits
-
-- The business-unit counter is blind to cached tokens. `llm-token-limit`
-  "currently counts prompt and completion tokens only", and on thirty days of
-  live usage cache reads were 6.8M tokens against 320K prompt and 152K
-  completion — 38.7% of real cost weight at Claude's published rates. Budgets
-  therefore bound less spend than they appear to, and always in the direction of
-  under-counting. `P21` in `docs/ROADMAP.md` carries the gap.
-- Dollar figures are list price and do not reconcile to an Azure invoice. Azure
-  bills Claude as one aggregated Claude Consumption Unit meter and private-offer
-  discounts apply before that conversion. **U2**.
-- A budget is set in dollars but enforced as one blended token figure converted
-  at write time, assuming a 20% output mix. Categorised enforcement is **U13**.
 
 ## [1.5.0] - 2026-09-15
 
