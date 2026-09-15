@@ -180,20 +180,31 @@ Assert 'and not straight into docs'               ($capture -notmatch "OUT = pat
 $ignore = Get-Content (Join-Path $root '.gitignore') -Raw
 Assert 'the raw captures are git-ignored' ($ignore -match '(?m)^\.shots-entra/')
 
-# The redaction has to actually replace, not just cover: a black box over a name
-# is a picture nobody can learn the model from.
+# The redaction masks rather than covers: a black box over a name is a picture
+# nobody can learn the model from.
 $redact = Get-Content (Join-Path $root 'guide/redact-entra.mjs') -Raw
-Assert 'redaction substitutes example identities' ($redact -match '(?i)contoso\.com')
-Assert 'and covers the signed-in account'         ($redact -match '(?i)chip|signed-in account')
+# Identities are masked in the middle rather than replaced, so the screenshots
+# stay visibly real: a guide whose evidence is all placeholders asks the reader
+# to take it on trust. The mask has to be present and the domain has to survive.
+#
+# The mask is written \u2022 in the source rather than as a literal bullet, so
+# the file stays ASCII; the assertion matches that escape, not the character.
+Assert 'identities are masked'             ($redact -match '\\u2022')
+Assert 'the real domain survives the mask' ($redact -match '@microsoft\.com')
+Assert 'and the tenant is not hidden'      ($redact -match 'MICROSOFT NON-PRODUCTION')
+# A mask that leaves the local part readable is not a mask.
+foreach ($plain in 'naveen\.g@', 'nived\.v@', 'Saurabh\.Seth@', 'vrm@microsoft', 'navg@microsoft') {
+    Assert "it does not restate $($plain -replace '\\','')" ($redact -notmatch $plain)
+}
+# Display names must be masked too, not just addresses.
+foreach ($plain in 'Gopalakrishna', 'Velayudhan', 'Mudumbai') {
+    Assert "'$plain' is not left whole" ($redact -notmatch $plain)
+}
 # A capture with no redaction job is the file that gets copied into docs by
 # hand with a real name still on it, so it has to fail rather than be skipped.
 # The condition itself is asserted, not the word: matching "unhandled" passed
 # while the branch had been changed to if (false) and the exit was dead code.
 Assert 'an unredacted capture fails the run' ($redact -match 'if \(unhandled\.length\)[\s\S]{0,800}process\.exit\(1\)')
-# The script must not itself carry the real identities it is removing.
-foreach ($real in 'naveen\.g@', 'nived\.v@', 'Saurabh\.Seth@', 'vrm@microsoft', 'navg@microsoft') {
-    Assert "it does not restate $($real -replace '\\','')" ($redact -notmatch $real)
-}
 
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }

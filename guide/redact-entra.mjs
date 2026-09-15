@@ -4,9 +4,20 @@
 // grid, so boxes are pixel coordinates verified by looking at the result.
 // Under-covering is the only failure that matters, so boxes are padded outward.
 //
-// The replacement identities continue the table in render-terminal.mjs, so the
-// same person is the same example across the terminal output and the portal
-// screenshots - navg is Amara Okafor in both.
+// These are real people in a real Microsoft tenant, and the screenshots say so
+// on purpose - an accelerator whose evidence is all Contoso placeholders asks
+// the reader to take it on trust. So identities are masked in the middle rather
+// than replaced:
+//
+//   first two characters + bullets + last two characters, per name part
+//   email local part masked the same way, domain left intact
+//
+// What that keeps: the tenant is visibly Microsoft, the addresses are visibly
+// real, initials still match the names. What it removes: enough to identify or
+// contact anyone.
+//
+// Only the masked strings are committed. The originals live in the capture,
+// which is git-ignored, and are not restated here.
 //
 //   node guide/redact-entra.mjs
 
@@ -26,21 +37,23 @@ const LINK = '#0078d4';
 const TEXT = '#292827';
 const UI = 'Segoe UI, system-ui, sans-serif';
 
-// Real identity -> what appears in the documentation.
+// Masked forms of the four people in the All members capture, in row order.
+// The avatars are left alone: the initials still match the visible first
+// letters, so redrawing them would only make the picture inconsistent.
 const PEOPLE = [
-  { initials: 'AO', name: 'Amara Okafor',  mail: 'amara.okafor@contoso.com',  dot: '#da532c' },
-  { initials: 'PR', name: 'Priya Raman',   mail: 'priya.raman@contoso.com',   dot: '#8764b8' },
-  { initials: 'TN', name: 'Tomas Novak',   mail: 'tomas.novak@contoso.com',   dot: '#0f548c' },
-  { initials: 'LF', name: 'Lena Fischer',  mail: 'lena.fischer@contoso.com',  dot: '#5c2e91' },
+  { name: 'Na\u2022\u2022\u2022\u2022n Go\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022na', mail: 'na\u2022\u2022\u2022\u2022\u2022g@microsoft.com' },
+  { name: 'Ni\u2022\u2022d Ve\u2022\u2022\u2022\u2022\u2022\u2022an',                                 mail: 'ni\u2022\u2022\u2022\u2022v@microsoft.com' },
+  { name: 'Sa\u2022\u2022\u2022\u2022h Se\u2022\u2022',                                               mail: 'Sa\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022h@microsoft.com' },
+  { name: 'Vr\u2022\u2022a Ki\u2022\u2022\u2022\u2022e Mu\u2022\u2022\u2022\u2022ai',                 mail: 'vr\u2022@microsoft.com' },
 ];
 
-// The signed-in account chip, top right. Two lines, right-aligned against the
-// avatar, on the header blue.
+// The signed-in account chip, top right. The tenant name stays: it says this is
+// a real Microsoft non-production tenant, which is the point.
 const chip = (right, top, height) => ({
   rect: { x: right - 330, y: top, w: 330, h: height, fill: HEADER },
   texts: [
-    { x: right - 6, y: top + 30, anchor: 'end', size: 23, fill: '#ffffff', text: 'amara.okafor@contoso.com' },
-    { x: right - 6, y: top + 54, anchor: 'end', size: 16, fill: '#ffffff', weight: '600', text: 'CONTOSO ENGINEERING ...' },
+    { x: right - 6, y: top + 30, anchor: 'end', size: 23, fill: '#ffffff', text: 'na\u2022\u2022@microsoft.com' },
+    { x: right - 6, y: top + 54, anchor: 'end', size: 16, fill: '#ffffff', weight: '600', text: 'MICROSOFT NON-PRODUCTION ...' },
   ],
 });
 
@@ -53,12 +66,7 @@ const ROW_PITCH = 80;
 const memberRows = PEOPLE.flatMap((p, i) => {
   const cy = FIRST_USER_ROW + i * ROW_PITCH;
   return [
-    // Avatar: a filled circle carrying the initials, so the original initials
-    // do not survive next to a replaced name.
-    { rect: { x: 556, y: cy - 29, w: 60, h: 60, fill: ROW } },
-    { circle: { cx: 585, cy, r: 27, fill: p.dot } },
-    { x: 585, y: cy + 7, anchor: 'middle', size: 20, fill: '#ffffff', weight: '600', text: p.initials },
-    // Display name, a link.
+    // Display name, a link. The avatar to its left is untouched.
     { rect: { x: 628, y: cy - 20, w: 330, h: 40, fill: ROW } },
     { x: 632, y: cy + 8, size: 22, fill: LINK, text: p.name },
     // Email.

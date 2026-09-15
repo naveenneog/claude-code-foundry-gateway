@@ -171,10 +171,16 @@ $mutations = @(
        To    = '.shots-entra-disabled/' }
 
     @{ Suite = 'Test-Teams.ps1'
-       Name  = 'the redaction stops substituting identities'
+       Name  = 'the redaction stops masking identities'
        File  = 'guide/redact-entra.mjs'
-       From  = 'contoso.com'
-       To    = 'example.invalid' }
+       From  = "\u2022"
+       To    = "x" }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'a display name is left whole'
+       File  = 'guide/redact-entra.mjs'
+       From  = 'Go\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022na'
+       To    = 'Gopalakrishna' }
 
     @{ Suite = 'Test-Teams.ps1'
        Name  = 'an unredacted capture stops failing the run'

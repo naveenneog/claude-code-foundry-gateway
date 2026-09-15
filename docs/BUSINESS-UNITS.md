@@ -78,8 +78,10 @@ transitive view the sync reads:
 The difference between those two tabs is the whole model. Membership is
 maintained on the team, and the business unit gets it by containment.
 
-Names and addresses in these captures are examples; the groups and the structure
-are real.
+These are real accounts in a real Microsoft non-production tenant. Names and
+addresses are masked in the middle — enough removed to stop anyone being
+identified or contacted, enough kept that you can see this is a working
+deployment rather than a mock-up.
 
 These links open the **Members** blade of each group in the reference deployment;
 substitute your own group object ids.
@@ -117,6 +119,9 @@ capture them, `redact-entra.mjs` **exits non-zero and names the files it could
 not handle** rather than skipping them quietly — an unredacted capture sitting
 in a folder is the one that gets copied into the docs by hand with a real name
 still on it.
+
+Only the masked strings are committed. The originals exist only in the capture,
+which is git-ignored.
 
 ### Depth is two levels
 
