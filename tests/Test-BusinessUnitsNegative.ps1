@@ -177,6 +177,12 @@ $mutations = @(
        To    = 'example.invalid' }
 
     @{ Suite = 'Test-Teams.ps1'
+       Name  = 'an unredacted capture stops failing the run'
+       File  = 'guide/redact-entra.mjs'
+       From  = 'if (unhandled.length) {'
+       To    = 'if (false) {' }
+
+    @{ Suite = 'Test-Teams.ps1'
        Name  = 'the guide stops showing the portal captures'
        File  = 'docs/BUSINESS-UNITS.md'
        From  = 'entra-2-bu-all-members.png'

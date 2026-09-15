@@ -185,6 +185,11 @@ Assert 'the raw captures are git-ignored' ($ignore -match '(?m)^\.shots-entra/')
 $redact = Get-Content (Join-Path $root 'guide/redact-entra.mjs') -Raw
 Assert 'redaction substitutes example identities' ($redact -match '(?i)contoso\.com')
 Assert 'and covers the signed-in account'         ($redact -match '(?i)chip|signed-in account')
+# A capture with no redaction job is the file that gets copied into docs by
+# hand with a real name still on it, so it has to fail rather than be skipped.
+# The condition itself is asserted, not the word: matching "unhandled" passed
+# while the branch had been changed to if (false) and the exit was dead code.
+Assert 'an unredacted capture fails the run' ($redact -match 'if \(unhandled\.length\)[\s\S]{0,800}process\.exit\(1\)')
 # The script must not itself carry the real identities it is removing.
 foreach ($real in 'naveen\.g@', 'nived\.v@', 'Saurabh\.Seth@', 'vrm@microsoft', 'navg@microsoft') {
     Assert "it does not restate $($real -replace '\\','')" ($redact -notmatch $real)

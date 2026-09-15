@@ -111,6 +111,13 @@ screenshot of a group to get published by mistake. `.shots-entra/` is
 git-ignored — the unredacted captures carry real names and the signed-in
 account, and only the redacted output ships.
 
+Redaction boxes are pixel coordinates, so each capture needs its own entry in
+`JOBS`. The two shown above have one; the other four blades do not yet. If you
+capture them, `redact-entra.mjs` **exits non-zero and names the files it could
+not handle** rather than skipping them quietly — an unredacted capture sitting
+in a folder is the one that gets copied into the docs by hand with a real name
+still on it.
+
 ### Depth is two levels
 
 Organisation ceiling → business unit → team. No deeper.

@@ -84,6 +84,19 @@ const JOBS = [
 
 fs.mkdirSync(OUT, { recursive: true });
 
+// Every capture must have a redaction job. capture-entra.mjs takes six blades;
+// this file currently has coordinates for two of them, and a capture nobody has
+// positioned boxes for is exactly the file that gets copied into docs by hand
+// with a real name still on it. So it is an error, not a warning.
+//
+// Same reasoning as the named value guard in scripts/ApimNamedValue.ps1: the
+// dangerous failure is the silent one.
+const handled = new Set(JOBS.map((j) => j.file));
+const captured = fs.existsSync(SRC)
+  ? fs.readdirSync(SRC).filter((f) => f.toLowerCase().endsWith('.png'))
+  : [];
+const unhandled = captured.filter((f) => !handled.has(f));
+
 for (const job of JOBS) {
   const src = path.join(SRC, job.file);
   if (!fs.existsSync(src)) { console.log(`${job.out.padEnd(34)} skipped - source missing`); continue; }
@@ -112,3 +125,16 @@ for (const job of JOBS) {
 
   console.log(`${job.out.padEnd(34)} ${meta.width}x${meta.height}  ${job.parts.length} edit(s)`);
 }
+
+if (unhandled.length) {
+  console.error('');
+  console.error('Captures with no redaction job:');
+  for (const f of unhandled) console.error(`  ${f}`);
+  console.error('');
+  console.error('These still carry real names, addresses and the signed-in account.');
+  console.error('Add a job to JOBS with boxes positioned against the capture, or delete');
+  console.error('the file. Do not copy it into docs/guide/ by hand.');
+  process.exit(1);
+}
+
+console.log(`\n${JOBS.length} capture(s) redacted, ${captured.length} present, 0 unhandled.`);
