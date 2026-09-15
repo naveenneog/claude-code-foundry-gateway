@@ -60,6 +60,7 @@ try {
     Invoke-Check 'Compliance retrieval and deletion'       'Test-Compliance.ps1' @{ SkipLive = $true }
     Invoke-Check 'Chargeback ledger'                       'Test-Ledger.ps1' @{ SkipLive = $true }
     Invoke-Check 'Business unit chargeback'                'Test-BusinessUnits.ps1'
+    Invoke-Check 'Teams and the budget cascade'            'Test-Teams.ps1'
     Invoke-Check 'Business unit checks detect breakage'    'Test-BusinessUnitsNegative.ps1'
     Invoke-Check 'Foundry bypass audit'                    'Test-Bypass.ps1' @{ SkipLive = $true }
 

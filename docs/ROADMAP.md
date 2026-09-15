@@ -184,6 +184,18 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
 - [x] P22 business-unit soft cap — a unit that exhausts its budget is refused with a fourth, distinct
       `403` naming the unit, others are unaffected, and an unpriced unit is skipped rather than
       walled off
+- [x] P20c teams and tiers — a team is a unit with a parent, charged to itself and to the unit above
+      it; tier is a separate axis attached by nesting the team group inside the tier group. Depth is
+      capped at two and cycles refused at write time. [ADR-0008](adr/0008-teams-and-tiers.md)
+- [ ] P26 model discovery at install — acceptance: `Install-ClaudeGateway.ps1` enumerates Claude
+      deployments across the signed-in subscription, lets the operator select one, and offers to
+      create a deployment when none exists. It currently assumes one is already there
+- [ ] P27 per-surface telemetry — acceptance: usage from the Claude Code CLI, the VS Code extension
+      and Claude Desktop is separable in the ledger and visible quickly. Needs a client dimension the
+      gateway does not capture today, and measured ingestion lag. Constraint: reuse the existing LLM
+      log and counters rather than adding an always-on bill of materials
+- [ ] P28 bill of materials and flow diagram — acceptance: one picture of the six-hop request and
+      telemetry path naming the Azure resources actually used
 - [ ] P23 showback reporting — acceptance: as-of joins against effective-dated mapping history, so a
       mid-month transfer does not move last week's spend
 - [ ] P24 dashboard — acceptance: an Azure Workbook first, because it adds no always-on component.

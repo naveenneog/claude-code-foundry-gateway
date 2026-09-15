@@ -1,8 +1,8 @@
 # Status
 
-**Active packet:** P20–P22 — business units. Shipped and verified live. P21 remains open: budgets
-are set and reported in dollars but enforced as one blended token figure. Next in M4: P19, the
-durable identity projection.
+**Active packet:** P20c — teams and tiers. Shipped and verified live: one request decremented the
+team counter and its parent's. P21 remains open: budgets are set and reported in dollars but
+enforced as one blended token figure. Next in M4: P19, the durable identity projection.
 
 ## What is shipped (M0)
 
@@ -419,8 +419,47 @@ governed, and already has joiner/mover/leaver handling, so membership needs no s
 | UX | Accept | Every command states list price and the cache gap in its own output, so a figure cannot be read without them. An edit reports the previous value alongside the new one |
 | Security | Accept | No new identity path: membership is the same Graph read entitlement already does, under the same guard that refuses to empty a populated map. The refusal names the unit but not its members |
 
-## Commands that prove it
-```powershell
+## P20c acceptance criteria — teams and tiers
+
+[ADR-0008](adr/0008-teams-and-tiers.md) sets the model. A team is a business unit that names a
+parent; tier is a separate axis attached by nesting the team group inside the tier group.
+
+- [x] A request is charged to its team **and** to the unit above it. Verified live: one call
+      returned `x-bu-quota-remaining: 1666666644` (ITES 1) and
+      `x-bu-parent-quota-remaining: 5555555533` (MCAPS), with the org ceiling unchanged
+- [x] Depth is capped at two and cycles are refused when written, not discovered when a budget
+      stops cascading. Verified live: a third level was refused and **nothing was written** —
+      the registry still held four units and no partial entry
+- [x] Membership resolves to the most specific unit. Verified live: MCAPS transitively contains
+      four people, all four were claimed by their teams first, and MCAPS itself took none
+- [x] Tier resolves through nesting with no change to the tier mechanism. Verified live:
+      `claude-code-premium` resolved to 2 members via the nested team, `claude-code-standard` to 5
+- [x] Removing a business unit promotes its teams rather than leaving a dangling parent
+- [x] A parent's reported figure is the roll-up of its own members and its teams, matching what
+      its counter enforces
+- [x] `./tests/Test-All.ps1` passes; 19 of 19 mutations caught
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+### What the work found
+
+| | |
+|---|---|
+| `transitiveMembers` returns nested **groups**, not only users | Measured on `claude-code-standard` with one team nested inside: 7 objects, 2 of them `#microsoft.graph.group`. `Get-GroupMemberOids` did not filter by type, so a group's object id would have been entitled and would have eaten a 4,096-character budget that holds about 110 ids. The defect predates teams and was unreachable only because nothing was nested |
+| A client-side `@odata.type` filter would have been worse | Under the typed cast Graph omits that property, so the filter would have discarded every user. The cast `/transitiveMembers/microsoft.graph.user` filters server-side — measured 5 users, 0 groups |
+| A test can assert the comment instead of the behaviour | The ordering check matched the prose explaining "most specific" and passed while the sort had been replaced with a constant. Fixed by extracting `Sort-ClaudeBuByDepth` and asserting against real data |
+| A parent reads zero from the ledger | Members map to their team, so the roll-up has to be computed or the parent's percentage would contradict its own counter |
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | A team is not a new object — it is a unit with a parent, so the ledger, the reports and the refusal path were unchanged. Tier stays orthogonal, so re-organising one axis does not disturb the other |
+| Coder | Accept | The parent map is a second named value rather than a fourth registry field, because the group name may contain a colon and the budget is already found by splitting on the last one. A variable field count is where the previous defect in this area came from |
+| QA | Accept | 19 mutations, all caught. One assertion was found matching a comment rather than behaviour, which is the same failure mode recorded in P20–P22 and was fixed by making the ordering a function with a data-driven test |
+| UX | Accept | Teams are indented under their parent in both the writer and the reader, and the depth cap explains itself at the point of refusal rather than in documentation |
+| Security | Accept | The typed cast closes a path where a group object could have been written into an entitlement list. No new identity surface: the same delegated Graph read as before |
+
+## Commands that prove it```powershell
 ./tests/Test-All.ps1                                    # 17 checks, offline
 ./tests/Test-All.ps1 -IncludeAzure                      # plus the seven that call Azure
 ./scripts/Get-ClaudeTelemetry.ps1                       # where this gateway logs, and whether metrics are on

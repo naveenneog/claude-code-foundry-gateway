@@ -59,6 +59,10 @@ param(
     [string]$Group,
 
     [Parameter(ParameterSetName = 'Set')]
+    [AllowEmptyString()]
+    [string]$Parent,
+
+    [Parameter(ParameterSetName = 'Set')]
     [double]$MonthlyBudgetUsd,
 
     [Parameter(ParameterSetName = 'Set')]
@@ -94,19 +98,39 @@ if ($null -eq $raw) {
 }
 $registry = @(ConvertFrom-ClaudeBuRegistry $raw)
 
+$parentsRaw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents'
+if ($null -eq $parentsRaw) {
+    throw "bu-parents not found on $ApimName. Redeploy with the current template first."
+}
+$parents = ConvertFrom-ClaudeBuParents $parentsRaw
+
 function Show-Registry($units) {
     if (-not $units.Count) {
         Write-Host '  No business units defined.' -ForegroundColor DarkGray
         return
     }
     Write-Host ''
-    Write-Host ("  {0,-16} {1,-30} {2,18} {3,12}" -f 'Id', 'Entra group', 'Tokens/month', 'approx USD')
-    Write-Host ('  ' + ('-' * 80)) -ForegroundColor DarkGray
-    foreach ($u in $units) {
+    Write-Host ("  {0,-16} {1,-16} {2,-30} {3,18} {4,12}" -f 'Id', 'Parent', 'Entra group', 'Tokens/month', 'approx USD')
+    Write-Host ('  ' + ('-' * 98)) -ForegroundColor DarkGray
+    # Business units first, each followed by its teams, so the hierarchy reads
+    # top-down rather than in registry order.
+    $tops = @($units | Where-Object { -not $parents[$_.Id] })
+    $ordered = @()
+    foreach ($t in $tops) {
+        $ordered += $t
+        $ordered += @($units | Where-Object { $parents[$_.Id] -eq $t.Id })
+    }
+    # Anything whose parent is not itself in the registry still has to appear.
+    $ordered += @($units | Where-Object { $ordered -notcontains $_ })
+
+    foreach ($u in $ordered) {
         $usd = ConvertTo-ClaudeBuUsd -Tokens $u.TokensPerMonth -Model $Model -OutputShare $OutputShare
-        Write-Host ("  {0,-16} {1,-30} {2,18:n0} {3,12}" -f $u.Id, $u.Group, $u.TokensPerMonth, $(if ($null -ne $usd) { '$' + ('{0:n0}' -f $usd) } else { '-' }))
+        $p = if ($parents[$u.Id]) { $parents[$u.Id] } else { '-' }
+        $name = if ($parents[$u.Id]) { '  ' + $u.Id } else { $u.Id }
+        Write-Host ("  {0,-16} {1,-16} {2,-30} {3,18:n0} {4,12}" -f $name, $p, $u.Group, $u.TokensPerMonth, $(if ($null -ne $usd) { '$' + ('{0:n0}' -f $usd) } else { '-' }))
     }
     Write-Host ''
+    Write-Host '  An indented row is a team. Its spend is charged to it and to its parent.' -ForegroundColor DarkGray
     Write-Host '  Dollar figures are list price and exclude cached tokens. See docs/BUSINESS-UNITS.md.' -ForegroundColor DarkGray
 }
 
@@ -125,6 +149,13 @@ if ($Remove) {
     if (-not $existing.Count) { Write-Host "No business unit '$Id'. Nothing to remove." -ForegroundColor DarkGray; exit 0 }
     $registry = @($registry | Where-Object { $_.Id -ne $Id })
     $action = "removed (was $($existing[0].Group), $('{0:n0}' -f $existing[0].TokensPerMonth) tokens/month)"
+
+    # A team pointing at a unit that no longer exists would look up a quota of
+    # zero and quietly stop cascading. Promote those teams to top level and say
+    # so, rather than leaving a dangling parent.
+    $orphans = @($parents.Keys | Where-Object { $parents[$_] -eq $Id })
+    $parents.Remove($Id)
+    foreach ($o in $orphans) { $parents.Remove($o) }
 }
 else {
     if (-not $existing.Count -and -not $Group) {
@@ -136,6 +167,27 @@ else {
 
     $targetGroup = if ($Group) { $Group } else { $existing[0].Group }
     if ($targetGroup -match '[,:]') { throw "An Entra group name cannot contain a comma or a colon: '$targetGroup'." }
+
+    if ($PSBoundParameters.ContainsKey('Parent')) {
+        if ([string]::IsNullOrWhiteSpace($Parent)) {
+            $parents.Remove($Id)
+            $parentAction = 'no parent - this is now a top-level business unit'
+        }
+        else {
+            Test-ClaudeBuId $Parent
+            if ($Parent -eq $Id) { throw "A business unit cannot be its own parent." }
+            if (-not @($registry | Where-Object { $_.Id -eq $Parent }).Count) {
+                throw ("There is no business unit '$Parent' to be a parent. Create it first, then set -Parent on '$Id'. " +
+                       "Defined: " + (($registry.Id | Sort-Object) -join ', ') + ".")
+            }
+            $parents[$Id] = $Parent
+            # Depth and cycles are refused when written, because the policy
+            # charges a request to its unit and that unit's parent and has no
+            # loop - a third level would silently go uncharged. See ADR-0008.
+            Test-ClaudeBuDepth -Parents $parents
+            $parentAction = "team of '$Parent'"
+        }
+    }
 
     if ($PSBoundParameters.ContainsKey('MonthlyBudgetUsd')) {
         $conv = ConvertTo-ClaudeBuTokens -Usd $MonthlyBudgetUsd -Model $Model -OutputShare $OutputShare
@@ -171,8 +223,18 @@ foreach ($u in ($registry | Where-Object { $_.Id -ne $Id })) {
 
 Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry' -Value $value
 
+$parentValue = ConvertTo-ClaudeBuParents $parents
+if ($parentValue -ne $parentsRaw) {
+    Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents' -Value $parentValue
+}
+
 Write-Host ''
 Write-Host ("  {0} {1}" -f $Id, $action) -ForegroundColor Green
+if ($parentAction) { Write-Host ("  {0}" -f $parentAction) -ForegroundColor Green }
+if ($orphans -and $orphans.Count) {
+    Write-Host ("  {0} team(s) promoted to top level: {1}" -f $orphans.Count, ($orphans -join ', ')) -ForegroundColor Yellow
+    Write-Host "  They keep their own budgets and are no longer charged to a parent." -ForegroundColor DarkGray
+}
 if ($conv) {
     Write-Host ("  `${0:n0}/month -> {1:n0} tokens, at a blended `${2}/M for {3} assuming {4:p0} output." -f `
         $conv.Usd, $conv.TokensPerMonth, $conv.BlendedUsdPerM, $conv.Model, $conv.OutputShare) -ForegroundColor DarkGray

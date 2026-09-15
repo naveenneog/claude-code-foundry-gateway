@@ -156,10 +156,13 @@ Assert 'the budget marker names the unit'  ($policy -match '<set-variable name="
 # Scoped to the branch that builds the message. Taking the whole tail of the
 # policy from one index made this pass on any occurrence of "businessUnit"
 # anywhere below it, including the lookup 200 lines earlier.
+#
+# It names budgetUnit rather than businessUnit: with teams there are two budgets
+# in play, and the message has to say which one ran out. See ADR-0008.
 $i = $policy.IndexOf('which == "business unit"')
 $branch = if ($i -ge 0) { $policy.Substring($i, [Math]::Min(600, $policy.Length - $i)) } else { '' }
 Assert 'the refusal has a business unit branch' ($i -ge 0)
-Assert 'the refusal names the business unit'    ($branch -match 'context\.Variables[^"]*"businessUnit"')
+Assert 'the refusal names the budget that ran out' ($branch -match 'context\.Variables[^"]*"budgetUnit"')
 
 # Installing this must not refuse anyone who has no business unit yet.
 Assert 'unassigned is allowed by default' ($bicep -match "buUnassigned string = 'allow'")

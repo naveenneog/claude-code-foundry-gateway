@@ -32,7 +32,7 @@ $mutations = @(
 
     @{ Name  = 'the refusal stops naming the unit'
        File  = 'infra/policy.xml'
-       From  = '(string)(context.Variables.GetValueOrDefault("businessUnit", "unknown"))'
+       From  = '(string)(context.Variables.GetValueOrDefault("budgetUnit", "unknown"))'
        To    = '"your unit"' }
 
     @{ Name  = 'the registry parser splits on the first colon'
@@ -69,6 +69,56 @@ $mutations = @(
        File  = 'docs/BUSINESS-UNITS.md'
        From  = 'unassigned'
        To    = 'unallocated' }
+
+    # --- teams and the cascade (ADR-0008), checked by Test-Teams.ps1 ---
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'membership stops filtering to users'
+       File  = 'scripts/Sync-ClaudeAccess.ps1'
+       From  = 'transitiveMembers/microsoft.graph.user'
+       To    = 'transitiveMembers' }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the parent is no longer resolved'
+       File  = 'infra/policy.xml'
+       From  = '{{bu-parents}}'
+       To    = '' }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the parent counter disappears'
+       File  = 'infra/policy.xml'
+       From  = 'counter-key="@("bu-" + (string)context.Variables["parentUnit"])"'
+       To    = 'counter-key="@("static")"' }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the parent quota stops being monthly'
+       File  = 'infra/policy.xml'
+       From  = 'remaining-quota-tokens-header-name="x-bu-parent-quota-remaining"'
+       To    = 'remaining-quota-tokens-header-name="x-bu-other"' }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'an unpriced parent walls off its teams'
+       From  = 'parentQuota"] != "0"'
+       File  = 'infra/policy.xml'
+       To    = 'parentQuota"] != "x"' }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the depth cap is removed from the writer'
+       File  = 'scripts/Set-ClaudeBusinessUnit.ps1'
+       From  = 'Test-ClaudeBuDepth'
+       To    = 'Out-Null #' }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'teams stop being resolved before their parents'
+       File  = 'scripts/ClaudeBusinessUnit.ps1'
+       From  = 'Descending = $true'
+       To    = 'Descending = $false' }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the sync stops ordering by depth'
+       File  = 'scripts/Sync-ClaudeAccess.ps1'
+       From  = 'Sort-ClaudeBuByDepth $registry -Parents $parents'
+       To    = '$registry' }
 )
 
 $missed = @()
@@ -92,19 +142,23 @@ try {
     }
 
     $suite = Join-Path $sandbox 'tests/Test-BusinessUnits.ps1'
+    $teamSuite = Join-Path $sandbox 'tests/Test-Teams.ps1'
 
     # The copy must pass before any mutation, or a "caught" result below could
     # just mean the sandbox is broken.
-    & $suite *>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host '  [SETUP] the unmutated copy already fails - the sandbox is wrong, not the code' -ForegroundColor Red
-        exit 1
+    foreach ($s in $suite, $teamSuite) {
+        & $s *>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  [SETUP] the unmutated copy of $(Split-Path $s -Leaf) already fails - the sandbox is wrong, not the code" -ForegroundColor Red
+            exit 1
+        }
     }
     Write-Host '  [BASE]   the unmutated copy passes' -ForegroundColor DarkGray
 
     foreach ($m in $mutations) {
         $path = Join-Path $sandbox $m.File
         $original = [IO.File]::ReadAllText($path)
+        $runner = if ($m.Suite) { Join-Path $sandbox "tests/$($m.Suite)" } else { $suite }
 
         if (-not $original.Contains($m.From)) {
             Write-Host "  [SETUP] '$($m.From)' not found in $($m.File)" -ForegroundColor Yellow
@@ -116,7 +170,7 @@ try {
         # literal swap is what we want.
         [IO.File]::WriteAllText($path, $original.Replace($m.From, $m.To))
 
-        & $suite *>&1 | Out-Null
+        & $runner *>&1 | Out-Null
         $wentRed = ($LASTEXITCODE -ne 0)
 
         [IO.File]::WriteAllText($path, $original)

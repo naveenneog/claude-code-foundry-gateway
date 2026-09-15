@@ -28,6 +28,29 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- Teams. A team is a business unit that names a parent, decided in
+  [ADR-0008](docs/adr/0008-teams-and-tiers.md). A request is charged to the team
+  and to the business unit above it — two monthly counters, both soft. Verified
+  live: one request returned `x-bu-quota-remaining: 1666666644` for the team and
+  `x-bu-parent-quota-remaining: 5555555533` for its parent, alongside the
+  unchanged org ceiling.
+- `-Parent` on `Set-ClaudeBusinessUnit.ps1`, with `bu-parents` as a second named
+  value. Depth is capped at two and cycles are refused when written, because the
+  cascade is two policy elements with fixed counter keys and no loop — a third
+  level would go uncharged rather than fail. Removing a business unit promotes
+  its teams to top level instead of leaving a dangling parent.
+- Hierarchy in the reports. `Set-ClaudeBusinessUnit.ps1 -List` and
+  `Get-ClaudeBusinessUnit.ps1` indent teams under their parent, and a parent's
+  figure is the roll-up of its own members and its teams — which is what its
+  counter actually enforces.
+- Tier by nesting. A team gets a tier by putting the team group inside
+  `claude-code-standard` or `claude-code-premium`. Nothing in the tier mechanism
+  changed; entitlement was already resolved transitively.
+- `tests/Test-Teams.ps1`, and eight more mutations in
+  `tests/Test-BusinessUnitsNegative.ps1`, which now drives both suites.
+- `guide/capture-entra.mjs` screenshots the Entra group blades that back the
+  hierarchy. It exits non-zero on an expired session rather than saving the
+  sign-in page.
 - Business units. A business unit is an Entra security group registered with a
   monthly budget, decided in [ADR-0007](docs/adr/0007-business-unit-model.md).
   `scripts/Set-ClaudeBusinessUnit.ps1` adds, edits, lists and removes them;
@@ -54,6 +77,18 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Fixed
 
+- Entitlement could have been granted to a group object. Graph
+  `transitiveMembers` returns nested **group** objects as well as users, and
+  `Get-GroupMemberOids` did not filter by type. Measured on
+  `claude-code-standard` with one team nested inside it: seven objects returned,
+  two of them `#microsoft.graph.group`. Those object ids would have been written
+  into the entitlement list and the membership map, spending a 4,096-character
+  budget that holds about 110 ids, and inflating the count of developers mapped.
+  Now uses the typed cast `/transitiveMembers/microsoft.graph.user`, which
+  filters server-side — measured five users and no groups. Filtering on
+  `@odata.type` in the client would not have worked, because Graph omits that
+  property under a cast. The defect predates teams and was unreachable only
+  because nothing was nested.
 - `Set-ClaudeBudget.ps1 -List` crashed. `{n,>14}` is not valid .NET format
   syntax — the alignment sign belongs on the number, `{n,-14}` or `{n,14}`. It
   parses at read time and throws only when the line runs, so it shipped in

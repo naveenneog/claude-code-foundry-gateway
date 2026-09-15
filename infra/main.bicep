@@ -70,6 +70,9 @@ param buRegistryExisting string = ''
 @description('Business unit membership to preserve, in sentinel form (",oid=id,"). Sync-ClaudeAccess.ps1 owns this after the first deployment.')
 param buMembersExisting string = ''
 
+@description('Business unit parent map to preserve, in sentinel form (",team=parent,"). A unit that names a parent is a team, and a request is charged to the team and to its parent. Set-ClaudeBusinessUnit.ps1 owns this after the first deployment.')
+param buParentsExisting string = ''
+
 @description('What happens to a developer who belongs to no business unit. "allow" serves them and records the usage against no budget; "deny" refuses. The default is allow because no developer has a business unit at the moment this first deploys, and deny would refuse every request. Move to deny once assignment is complete - Get-ClaudeBusinessUnit.ps1 reports how many are unassigned.')
 @allowed([
   'allow'
@@ -123,6 +126,7 @@ var allowPremiumValue = empty(allowPremiumValueExisting) ? ',${join(allowPremium
 var quotaOverridesValue = empty(quotaOverridesExisting) ? ',,' : quotaOverridesExisting
 var buRegistryValue = empty(buRegistryExisting) ? ',,' : buRegistryExisting
 var buMembersValue = empty(buMembersExisting) ? ',,' : buMembersExisting
+var buParentsValue = empty(buParentsExisting) ? ',,' : buParentsExisting
 
 resource foundry 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
   name: foundryAccountName
@@ -286,6 +290,7 @@ var namedValues = [
   { key: 'models-premium', value: empty(modelsPremium) ? ',,' : modelsPremium }
   { key: 'bu-registry', value: buRegistryValue }
   { key: 'bu-members', value: buMembersValue }
+  { key: 'bu-parents', value: buParentsValue }
   { key: 'bu-unassigned', value: buUnassigned }
   { key: 'calls-per-minute', value: string(callsPerMinute) }
   { key: 'allow-standard', value: allowStandardValue }

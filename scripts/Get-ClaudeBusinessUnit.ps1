@@ -61,6 +61,7 @@ if (-not $ApimName) {
 
 $registry = @(ConvertFrom-ClaudeBuRegistry (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'))
 $members = ConvertFrom-ClaudeBuMembers (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-members')
+$parents = ConvertFrom-ClaudeBuParents (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents')
 $unassignedMode = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-unassigned'
 if (-not $unassignedMode) { $unassignedMode = 'allow' }
 
@@ -111,17 +112,38 @@ $records = @()
 foreach ($u in $registry) {
     if ($BusinessUnit -and $u.Id -ne $BusinessUnit) { continue }
     $memberCount = @($members.Keys | Where-Object { $members[$_] -eq $u.Id }).Count
-    $used = if ($spend.ContainsKey($u.Id)) { [long]$spend[$u.Id].Tokens } else { 0 }
+    $own = if ($spend.ContainsKey($u.Id)) { [long]$spend[$u.Id].Tokens } else { 0 }
+
+    # A team's members are mapped to the team, not to the business unit above
+    # it, so a parent read straight from the ledger would show zero while its
+    # counter was filling up. The gateway charges a request to its unit and to
+    # that unit's parent, so the parent's figure has to be the roll-up or the
+    # percentage would not match what enforcement is doing. See ADR-0008.
+    $childIds = @($parents.Keys | Where-Object { $parents[$_] -eq $u.Id })
+    $childTokens = 0
+    $childRequests = 0
+    foreach ($c in $childIds) {
+        if ($spend.ContainsKey($c)) {
+            $childTokens += [long]$spend[$c].Tokens
+            $childRequests += [int]$spend[$c].Requests
+        }
+    }
+    $used = $own + $childTokens
+    $memberCount += @($members.Keys | Where-Object { $members[$_] -in $childIds }).Count
+
     $records += [ordered]@{
         id              = $u.Id
+        parent          = $(if ($parents[$u.Id]) { $parents[$u.Id] } else { $null })
+        teams           = $childIds
         group           = $u.Group
         members         = $memberCount
         tokens_per_month = $u.TokensPerMonth
         budget_usd_estimate = ConvertTo-ClaudeBuUsd -Tokens $u.TokensPerMonth -Model $Model -OutputShare $OutputShare
         tokens_used     = $used
+        tokens_used_own = $own
         used_usd_estimate = ConvertTo-ClaudeBuUsd -Tokens $used -Model $Model -OutputShare $OutputShare
         percent_used    = $(if ($u.TokensPerMonth -gt 0) { [math]::Round(($used / $u.TokensPerMonth) * 100, 1) } else { $null })
-        requests        = $(if ($spend.ContainsKey($u.Id)) { $spend[$u.Id].Requests } else { 0 })
+        requests        = $(if ($spend.ContainsKey($u.Id)) { $spend[$u.Id].Requests } else { 0 }) + $childRequests
     }
 }
 
@@ -156,12 +178,28 @@ if (-not $records.Count) {
 }
 else {
     Write-Host ''
-    Write-Host ("  {0,-14} {1,-26} {2,7} {3,14} {4,14} {5,7}" -f 'Id', 'Entra group', 'Members', 'Budget', 'Used', 'Used %')
-    Write-Host ('  ' + ('-' * 92)) -ForegroundColor DarkGray
-    foreach ($r in $records) {
-        Write-Host ("  {0,-14} {1,-26} {2,7} {3,14:n0} {4,14:n0} {5,7}" -f `
-            $r.id, $r.group, $r.members, $r.tokens_per_month, $r.tokens_used,
+    Write-Host ("  {0,-16} {1,-26} {2,7} {3,14} {4,14} {5,7}" -f 'Id', 'Entra group', 'Members', 'Budget', 'Used', 'Used %')
+    Write-Host ('  ' + ('-' * 94)) -ForegroundColor DarkGray
+
+    # Business units first, each followed by its teams.
+    $tops = @($records | Where-Object { -not $_.parent })
+    $ordered = @()
+    foreach ($t in $tops) {
+        $ordered += $t
+        $ordered += @($records | Where-Object { $_.parent -eq $t.id })
+    }
+    $ordered += @($records | Where-Object { $ordered -notcontains $_ })
+
+    foreach ($r in $ordered) {
+        $name = if ($r.parent) { '  ' + $r.id } else { $r.id }
+        Write-Host ("  {0,-16} {1,-26} {2,7} {3,14:n0} {4,14:n0} {5,7}" -f `
+            $name, $r.group, $r.members, $r.tokens_per_month, $r.tokens_used,
             $(if ($null -ne $r.percent_used) { "$($r.percent_used)%" } else { '-' }))
+    }
+    if (@($records | Where-Object { $_.parent }).Count) {
+        Write-Host ''
+        Write-Host '  An indented row is a team. A parent row totals its own members and its teams,' -ForegroundColor DarkGray
+        Write-Host '  because the gateway charges a request to the team and to the unit above it.' -ForegroundColor DarkGray
     }
 }
 

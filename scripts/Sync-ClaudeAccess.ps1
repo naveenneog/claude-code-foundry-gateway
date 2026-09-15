@@ -59,7 +59,19 @@ function Get-GroupMemberOids {
     }
     $gid = $gid.Trim()
 
-    # Transitive membership so nested groups work the way admins expect.
+    # Transitive membership so nested groups work the way admins expect, and
+    # cast to microsoft.graph.user so only people come back.
+    #
+    # Measured 2026-09-15: transitiveMembers on claude-code-standard, which has
+    # one team group nested inside it, returned 7 objects - 5 users and 2
+    # #microsoft.graph.group. Without the cast those group object ids would be
+    # written into the entitlement list and the business unit map, spending the
+    # 4,096-character named value budget that holds roughly 110 object ids, and
+    # inflating the count of developers reported as mapped.
+    #
+    # The cast filters server-side. Filtering here on @odata.type would not
+    # work: under a cast Graph omits that property entirely, so the check would
+    # discard every user instead. Measured: the cast returns 5 users, 0 groups.
     #
     # Called through Invoke-RestMethod rather than `az rest`. On Windows az is
     # a .cmd shim, and PowerShell only wraps a native argument in quotes when it
@@ -75,7 +87,7 @@ function Get-GroupMemberOids {
     #
     # Single-quoted so PowerShell does not expand $select and $top itself.
     $headers = @{ Authorization = "Bearer $Token" }
-    $uri = "https://graph.microsoft.com/v1.0/groups/$gid/transitiveMembers" +
+    $uri = "https://graph.microsoft.com/v1.0/groups/$gid/transitiveMembers/microsoft.graph.user" +
            '?$select=id,displayName,userPrincipalName&$top=999'
 
     $members = @()
@@ -182,13 +194,24 @@ foreach ($t in $tiers) {
 # registry says which Entra group backs each business unit; this resolves those
 # groups to object ids and writes the ,oid=id, map the policy reads.
 #
-# A developer in two business-unit groups takes the first in registry order,
-# which is deterministic and visible in the registry itself. See ADR-0007.
+# A developer in two business-unit groups at the same depth takes the first in
+# registry order, which is deterministic and visible in the registry. See
+# ADR-0007.
+#
+# Teams are resolved before the business units that contain them. An Entra group
+# can contain another group, so claude-bu-mcaps transitively contains everyone in
+# claude-team-ites-1 and a developer matches both. Charging them to the most
+# specific unit is what makes the cascade meaningful: the team is charged, and
+# the parent is charged through the cascade rather than through membership. See
+# ADR-0008.
 
 . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
 
 $registryRaw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'
 $registry = @(ConvertFrom-ClaudeBuRegistry $registryRaw)
+
+$parentsRaw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents'
+$parents = ConvertFrom-ClaudeBuParents $parentsRaw
 
 if (-not $registry.Count) {
     Write-Host "No business units defined, so nothing to map." -ForegroundColor DarkGray
@@ -198,11 +221,16 @@ if (-not $registry.Count) {
 else {
     Write-Host "Business unit membership" -ForegroundColor Cyan
 
+    # Deepest first, so a team wins over the business unit that contains it.
+    $ordered = @(Sort-ClaudeBuByDepth $registry -Parents $parents)
+
     $buMap = [ordered]@{}
     $resolvedAny = $false
-    foreach ($bu in $registry) {
+    foreach ($bu in $ordered) {
         $buMembers = @(Get-GroupMemberOids -GroupName $bu.Group -Token $graphToken)
-        Write-Host ("  {0,-16} {1,-30} {2} member(s)" -f $bu.Id, $bu.Group, $buMembers.Count) -ForegroundColor Yellow
+        $depth = Resolve-ClaudeBuDepth -Id $bu.Id -Parents $parents
+        $label = if ($depth -gt 0) { "$($bu.Id)  (team of $($parents[$bu.Id]))" } else { $bu.Id }
+        Write-Host ("  {0,-26} {1,-30} {2} member(s)" -f $label, $bu.Group, $buMembers.Count) -ForegroundColor Yellow
         if ($buMembers.Count) { $resolvedAny = $true }
         foreach ($m in $buMembers) {
             # First business unit in registry order wins.

@@ -231,12 +231,66 @@
         <choose>
             <when condition="@((string)context.Variables["buQuota"] != "0")">
                 <set-variable name="budget" value="business unit" />
+                <set-variable name="budgetUnit" value="@((string)context.Variables["businessUnit"])" />
                 <llm-token-limit
                     counter-key="@("bu-" + (string)context.Variables["businessUnit"])"
                     token-quota="@(long.Parse((string)context.Variables["buQuota"]))"
                     token-quota-period="Monthly"
                     estimate-prompt-tokens="false"
                     remaining-quota-tokens-header-name="x-bu-quota-remaining" />
+            </when>
+        </choose>
+
+        <!-- 6b. The parent business unit, if this unit is a team. ADR-0008.
+             ==========================================================
+             A team is a unit that names a parent. The request is charged to the
+             team and to the business unit above it - two counters, both monthly,
+             both soft. A unit with no parent is charged once.
+
+             The cascade is two levels because it is written here as two policy
+             elements with statically written counter keys, and there is no loop.
+             Set-ClaudeBusinessUnit.ps1 refuses a deeper chain when it is
+             written, so a third level cannot silently go uncharged. -->
+        <set-variable name="parentUnit" value="@{
+            var unit = (string)context.Variables["businessUnit"];
+            var parents = "{{bu-parents}}";
+            var marker = "," + unit + "=";
+            var i = parents.IndexOf(marker);
+            if (i < 0) { return ""; }
+            var start = i + marker.Length;
+            var end = parents.IndexOf(",", start);
+            if (end < 0) { end = parents.Length; }
+            return parents.Substring(start, end - start);
+        }" />
+
+        <set-variable name="parentQuota" value="@{
+            var parent = (string)context.Variables["parentUnit"];
+            if (parent == "") { return "0"; }
+            var reg = "{{bu-registry}}";
+            var marker = "," + parent + "=";
+            var i = reg.IndexOf(marker);
+            if (i < 0) { return "0"; }
+            var start = i + marker.Length;
+            var end = reg.IndexOf(",", start);
+            if (end < 0) { end = reg.Length; }
+            var entry = reg.Substring(start, end - start);
+            var colon = entry.LastIndexOf(":");
+            if (colon < 0) { return "0"; }
+            var tokens = entry.Substring(colon + 1);
+            long parsed;
+            return long.TryParse(tokens, out parsed) && parsed > 0 ? tokens : "0";
+        }" />
+
+        <choose>
+            <when condition="@((string)context.Variables["parentUnit"] != "" &amp;&amp; (string)context.Variables["parentQuota"] != "0")">
+                <set-variable name="budget" value="business unit" />
+                <set-variable name="budgetUnit" value="@((string)context.Variables["parentUnit"])" />
+                <llm-token-limit
+                    counter-key="@("bu-" + (string)context.Variables["parentUnit"])"
+                    token-quota="@(long.Parse((string)context.Variables["parentQuota"]))"
+                    token-quota-period="Monthly"
+                    estimate-prompt-tokens="false"
+                    remaining-quota-tokens-header-name="x-bu-parent-quota-remaining" />
             </when>
         </choose>
 
@@ -421,7 +475,7 @@
                         var msg = which == "organisation"
                             ? "The organisation's Claude budget for this period is spent. Your access is unaffected - this limit is shared, so it applies to everyone until the budget resets or your platform team raises quota-org."
                             : which == "business unit"
-                                ? "The Claude budget for your business unit (" + (string)(context.Variables.GetValueOrDefault("businessUnit", "unknown")) + ") is spent for this period. Your access is unaffected - this budget is shared with your colleagues in that unit, and your platform team can raise it."
+                                ? "The Claude budget for your business unit (" + (string)(context.Variables.GetValueOrDefault("budgetUnit", "unknown")) + ") is spent for this period. Your access is unaffected - this budget is shared with your colleagues in that unit, and your platform team can raise it."
                                 : "Your Claude budget for this period is spent. Your access is unaffected; the budget resets at the start of the next period. Ask your platform team if you need a larger tier.";
                         return new JObject(
                             new JProperty("type", "error"),

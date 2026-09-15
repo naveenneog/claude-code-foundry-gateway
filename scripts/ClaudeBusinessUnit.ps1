@@ -146,6 +146,130 @@ function ConvertTo-ClaudeBuMembers {
     return ',' + (($Map.Keys | ForEach-Object { "$_=$($Map[$_])" }) -join ',') + ','
 }
 
+function ConvertFrom-ClaudeBuParents {
+    <#
+    .SYNOPSIS
+        Parses the ,team=parent, map that makes a unit a team.
+
+    .DESCRIPTION
+        A team is a business unit that names a parent. ADR-0008 keeps this in a
+        second named value rather than a fourth field in the registry entry,
+        because a group display name may contain a colon and the budget is
+        already found by splitting on the last one. A variable field count makes
+        that rule ambiguous.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true, Position = 0)][AllowEmptyString()][AllowNull()][string]$Value)
+
+    $map = [ordered]@{}
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $map }
+    foreach ($pair in ($Value.Trim(',') -split ',' | Where-Object { $_ })) {
+        $bits = $pair -split '=', 2
+        if ($bits.Count -eq 2 -and $bits[0] -and $bits[1]) { $map[$bits[0]] = $bits[1] }
+    }
+    return $map
+}
+
+function ConvertTo-ClaudeBuParents {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true, Position = 0)][AllowNull()]$Map)
+
+    if (-not $Map -or -not $Map.Keys.Count) { return ',,' }
+    return ',' + (($Map.Keys | ForEach-Object { "$_=$($Map[$_])" }) -join ',') + ','
+}
+
+function Resolve-ClaudeBuDepth {
+    <#
+    .SYNOPSIS
+        How many parents a unit has above it. 0 for a business unit, 1 for a
+        team inside one.
+
+    .DESCRIPTION
+        Walks the parent chain. Stops at $Limit hops and reports that depth
+        rather than looping, so a cycle returns a number the caller can refuse
+        instead of hanging.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Id,
+        [Parameter(Mandatory = $true)][AllowNull()]$Parents,
+        [int]$Limit = 10
+    )
+
+    $depth = 0
+    $cursor = $Id
+    $seen = @{ $Id = $true }
+    while ($Parents -and $Parents[$cursor] -and $depth -lt $Limit) {
+        $cursor = $Parents[$cursor]
+        $depth++
+        # A cycle would otherwise walk to $Limit and be reported as a depth,
+        # which reads as "too deep" when the real fault is that it never ends.
+        if ($seen.ContainsKey($cursor)) { return [int]::MaxValue }
+        $seen[$cursor] = $true
+    }
+    return $depth
+}
+
+function Test-ClaudeBuDepth {
+    <#
+    .SYNOPSIS
+        Throws unless every chain in the parent map is at most two levels and
+        free of cycles.
+
+    .DESCRIPTION
+        The cascade is written into the policy as two llm-token-limit elements
+        with statically written counter keys. There is no loop, so a third level
+        would not be charged at all. Refusing it here makes that a write-time
+        error with a message, rather than a budget that silently stops
+        cascading. ADR-0008 records why the cap is two.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][AllowNull()]$Parents)
+
+    if (-not $Parents) { return }
+    foreach ($id in @($Parents.Keys)) {
+        $depth = Resolve-ClaudeBuDepth -Id $id -Parents $Parents
+        if ($depth -eq [int]::MaxValue) {
+            throw ("The parent map has a cycle involving '$id'. A unit cannot be inside itself, directly " +
+                   "or through another unit.")
+        }
+        if ($depth -gt 1) {
+            throw ("'$id' is $depth levels below the top. The cascade is two levels - a business unit and " +
+                   "the teams inside it - because the gateway charges a request to its unit and that unit's " +
+                   "parent, and nothing deeper. Point '$id' at a business unit that has no parent of its own.")
+        }
+    }
+}
+
+function Sort-ClaudeBuByDepth {
+    <#
+    .SYNOPSIS
+        Orders units deepest first, so a team is resolved before the business
+        unit that contains it.
+
+    .DESCRIPTION
+        An Entra group can contain another group, so a business unit group
+        transitively contains everyone in its teams and a developer matches
+        both. Membership must resolve to the most specific unit; the parent is
+        reached through the cascade instead.
+
+        Sorting is stable, so units at the same depth keep registry order and
+        ADR-0007's "first match in registry order" still decides between them.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)][AllowEmptyCollection()][AllowNull()]$Units,
+        [Parameter(Mandatory = $true)][AllowNull()]$Parents
+    )
+
+    $items = @($Units) | Where-Object { $_ }
+    if (-not $items.Count) { return @() }
+    return @($items | Sort-Object -Property @{
+        Expression = { Resolve-ClaudeBuDepth -Id $_.Id -Parents $Parents }
+        Descending = $true
+    })
+}
+
 function ConvertTo-ClaudeBuTokens {
     <#
     .SYNOPSIS
