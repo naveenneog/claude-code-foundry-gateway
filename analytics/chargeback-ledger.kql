@@ -1,0 +1,94 @@
+// Chargeback ledger - one row per request, with who spent it.
+//
+// Design and the measurements behind it: docs/adr/0006-ledger-is-the-llm-log.md
+//
+// The spine is ApiManagementGatewayLlmLog, the built-in API Management LLM log.
+// It is used instead of custom metrics because Microsoft caps a custom metric
+// dimension at 100 unique values and a namespace at 1,000 active time series,
+// after which "any new dimension values or time series are not tracked, and the
+// corresponding metric data is silently discarded". One dimension per developer
+// reaches that at about a hundred people, and says nothing when it does.
+//
+// It is also the only APIM-native source that is correct for streamed requests.
+// Measured 2026-09-15: a streamed call reported 11 tokens through the quota
+// scalar where the completion was 41; this log recorded 11 prompt and 30
+// completion.
+//
+// The log has no caller in it, so identity comes from a trace the gateway emits
+// in outbound, joined on the request id. The key is carried rather than
+// inferred: CorrelationId here is a GUID, while Application Insights
+// operation_Id is a W3C trace id, and the two do not match.
+//
+// Substitute _from and _to to select a period. Defaults to the last day.
+let _from = ago(1d);
+let _to = now();
+//
+// Identity, one row per request. take_any rather than max: a request emits the
+// trace once, and if that ever changes, silently picking a winner would hide it.
+let identity =
+    AppTraces
+    | where TimeGenerated between (_from .. _to)
+    | where Properties.RequestId != ""
+    | project
+        rid   = tostring(Properties.RequestId),
+        actor = tostring(Properties.User),
+        user_id = tostring(Properties.UserId),
+        tier  = tostring(Properties.Tier),
+        requested_model = tostring(Properties.Model)
+    | summarize
+        actor = take_any(actor),
+        user_id = take_any(user_id),
+        tier = take_any(tier),
+        requested_model = take_any(requested_model)
+        by rid;
+//
+// Tokens, one row per request.
+//
+// Cache is absent from this table. The categories exist in the Anthropic
+// response body, but reading that body in an outbound policy buffers the
+// response and ends streaming, so they are not collected per request. They are
+// reported as unknown rather than zero, because zero is a claim and unknown is
+// the truth. Aggregate cache volume is still available from the
+// "Prompt Cached Tokens" metric, which is bounded but not per-user.
+ApiManagementGatewayLlmLog
+| where TimeGenerated between (_from .. _to)
+| project
+    timestamp = TimeGenerated,
+    rid = tostring(CorrelationId),
+    message_id = tostring(RequestId),
+    model = tostring(ModelName),
+    deployment = tostring(DeploymentName),
+    prompt_tokens = toreal(PromptTokens),
+    completion_tokens = toreal(CompletionTokens),
+    total_tokens = toreal(TotalTokens),
+    streamed = tobool(IsStreamCompletion)
+| join kind=leftouter identity on rid
+| extend
+    // Null, not zero. See above.
+    cache_read_tokens = real(null),
+    cache_write_5m_tokens = real(null),
+    cache_write_1h_tokens = real(null),
+    // Where the numbers on this row came from, so a report can say so. Today
+    // every row is sourced from the log; when a non-streamed request has its
+    // body parsed for cache categories this becomes "body" for those rows.
+    usage_source = "log",
+    cache_tokens_known = false
+| project
+    timestamp,
+    actor = coalesce(actor, "unattributed"),
+    user_id,
+    tier,
+    model = coalesce(model, requested_model),
+    deployment,
+    streamed,
+    prompt_tokens,
+    completion_tokens,
+    total_tokens,
+    cache_read_tokens,
+    cache_write_5m_tokens,
+    cache_write_1h_tokens,
+    cache_tokens_known,
+    usage_source,
+    message_id,
+    request_id = rid
+| order by timestamp desc

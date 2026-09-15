@@ -265,6 +265,41 @@
 
     <outbound>
         <base />
+
+        <!-- The chargeback ledger's identity half. ADR-0006.
+             ==========================================================
+             The per-request token record is ApiManagementGatewayLlmLog, which
+             is a log rather than a metric, so it has no cardinality cap and
+             does not silently discard data past a hundred developers. What it
+             does not have is a caller: its columns are tokens, model and ids.
+
+             This supplies the caller, keyed on context.RequestId so the two can
+             be joined. The key is carried deliberately rather than inferred:
+             the log's CorrelationId is a GUID, and Application Insights
+             operation_Id is a W3C trace id, so they do not match.
+
+             A trace is used rather than a metric dimension because the trace
+             policy is documented as not affected by Application Insights
+             sampling - every invocation is logged, which is what a billing
+             record needs.
+
+             The response body is deliberately NOT read here. Its usage block
+             carries the cache breakdown the log lacks, but reading it in
+             outbound buffers the response, which would end streaming for Claude
+             Code. Measured 2026-09-15: streaming is where the quota scalar is
+             already wrong, reporting 11 tokens for a 41-token completion, so
+             breaking streaming to recover a cache field is the wrong trade.
+             Cache per request stays unknown for streamed calls and is reported
+             as unknown rather than zero. -->
+        <trace source="claude-chargeback" severity="information">
+            <message>@("chargeback " + (string)context.Variables["userUpn"])</message>
+            <metadata name="RequestId" value="@(context.RequestId.ToString())" />
+            <metadata name="UserId" value="@((string)context.Variables["userId"])" />
+            <metadata name="User" value="@((string)context.Variables["userUpn"])" />
+            <metadata name="Tier" value="@((string)context.Variables["tier"])" />
+            <metadata name="Model" value="@((string)context.Variables["modelName"])" />
+        </trace>
+
         <set-header name="x-governed-by" exists-action="override">
             <value>apim-claude-gateway</value>
         </set-header>

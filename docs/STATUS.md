@@ -1,6 +1,6 @@
 # Status
 
-**Active packet:** P17 - named value writes fail loudly. Shipped. M4 business-unit chargeback is planned in ROADMAP; P18 and P20/P20b are next and gate the rest.
+**Active packet:** P18 - the chargeback ledger. Shipped and verified live. Next in M4: P20 and P20b, which gate the rest.
 
 ## What is shipped (M0)
 
@@ -321,10 +321,59 @@ over the limit ... roughly 107 fit", and an invalid write throws with the servic
 | UX | Accept | The refusal says how far over the limit it is and roughly how many entries fit, so an operator learns the real capacity instead of a rejected request |
 | Security | Accept | Entitlement failing loudly is the point: the old behaviour froze an allow list while reporting success, which is a stale-authorization bug wearing a green tick. The helper never echoes a value |
 
+## P18 acceptance criteria — the chargeback ledger
+
+- [x] `analytics/chargeback-ledger.kql`, one row per request with the caller attached
+- [x] Built on `ApiManagementGatewayLlmLog`, a log rather than a metric, so no cardinality cap
+- [x] Identity joined on `context.RequestId`, carried deliberately
+- [x] Streamed requests carry correct completion tokens
+- [x] Cache recorded as null with `cache_tokens_known = false`, never zero
+- [x] Message capture left off; the template deploys both halves of the switch
+- [x] Verified live, and both failure modes negative-tested
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+### What the work found
+
+**The quota scalar excludes cache tokens.** Two identical calls with a cacheable 10,000-token
+prompt wrote and then read 10,003 cache tokens; both metered 16. Documented behaviour — "counts
+prompt and completion tokens only" — but the consequence had not been drawn. Against thirty days of
+live usage here, weighted at Claude's published rates, **38.7% of the real cost weight is invisible
+to the per-user budget**. That is a property of the shipped P11 and P12 budgets, not of this packet,
+and it is why P21 may not express a dollar budget as a token quota.
+
+**The quota scalar is also wrong for streaming**, reporting 11 tokens for a 41-token completion. The
+built-in log gets the same request right. Since streaming is most of Claude Code, that alone
+justifies the move.
+
+**Neither APIM source carries the cache categories.** They are in the response body, but reading it
+in `outbound` buffers the response and ends streaming. The gap is recorded rather than closed.
+
+**Two switches, not one.** `GatewayLlmLogs` on the resource decides where rows land;
+`largeLanguageModel.logs` on the API diagnostic decides whether they are produced. Enabling only the
+first found an empty table with a full schema.
+
+### The test that measured nothing
+
+The first version asserted that the `actor` column was populated. The query fills it with
+`coalesce(actor, "unattributed")`, so it was always populated and the assertion passed while every
+row was in fact unattributed — the join had not worked at all. It was caught by reading the output
+rather than the exit code. The assertion now requires a real caller, and breaking the join key turns
+it red.
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | The ledger is a built-in log, so the scale fix costs no new component. The one thing written is the identity the log lacks |
+| Coder | Accept | The join key is carried rather than inferred, because the two candidate ids look similar and are not |
+| QA | Accept | Both failure modes negative-tested: a broken join gives 0 attributed, and a zero in place of null fails. The first version of this test was vacuous and is recorded above rather than quietly fixed |
+| UX | Accept | A row says whether it was streamed and where its numbers came from, so a report can state what it does not know instead of implying zero |
+| Security | Accept | `RequestMessages` and `ResponseMessages` are left unset and asserted off. Enabling LLM logs without that check would have turned on prompt capture, which P15 keeps opt-in |
+
 ## Commands that prove it
 
 ```powershell
-./tests/Test-All.ps1                                    # 12 checks, offline
+./tests/Test-All.ps1                                    # 13 checks, offline
 ./tests/Test-All.ps1 -IncludeAzure                      # plus the six that call Azure
 ./scripts/Get-ClaudeTelemetry.ps1                       # where this gateway logs, and whether metrics are on
 ./scripts/Get-ClaudeAnalytics.ps1 -Days 30              # the usage report

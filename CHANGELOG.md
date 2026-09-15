@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Chargeback ledger: `analytics/chargeback-ledger.kql`, one row per request with the caller
+  attached. Built on the API Management LLM log rather than custom metrics, because Microsoft caps a
+  metric dimension at 100 unique values and then, in its words, "silently discard[s]" the rest — one
+  dimension per developer reaches that at about a hundred people. The log is also the only
+  APIM-native source that is correct for streamed requests: measured 2026-09-15, a streamed call
+  reported 11 tokens through the quota scalar where the completion was 41. Identity is joined on
+  `context.RequestId`, carried deliberately because the log's `CorrelationId` is a GUID and
+  Application Insights `operation_Id` is a W3C trace id. Message capture stays off. ADR-0006.
+
 - `scripts/Get-ClaudeBypass.ps1`: who can reach Foundry without passing through the gateway. It
   derives the roles that grant data-plane access from their `dataActions` rather than matching a
   name, includes inherited assignments, excludes the gateway's own identity, and exits non-zero on

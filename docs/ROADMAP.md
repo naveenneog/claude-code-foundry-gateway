@@ -151,10 +151,13 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
 - [x] P17 named value writes fail loudly — a shared helper refuses an oversized value before the
       call and throws on a failed one, so a tier that outgrows a named value stops the sync instead
       of silently freezing entitlement. Covers the governance demo's restore path too
-- [ ] P18 scale the chargeback ledger — acceptance: a per-request ledger priced from the response
-      body's own usage block, proven for streaming completion, client disconnect, upstream timeout
-      after cost is incurred, retries and error paths that never reach outbound. Missing usage is
-      recorded as unknown, never zero. **U11, U12**
+- [x] P18 scale the chargeback ledger — `analytics/chargeback-ledger.kql` over the built-in
+      `ApiManagementGatewayLlmLog`, joined to identity by a trace the gateway emits. A log rather
+      than a metric, so no cardinality cap, and correct for streamed requests where the quota scalar
+      reports 11 tokens for a 41-token completion. Cache is recorded as null with
+      `cache_tokens_known = false`, and a test fails if it ever becomes zero. **U12 closed**, and
+      the acceptance wording changed: pricing from the response body was rejected because reading it
+      in outbound buffers the response and ends streaming. ADR-0006
 - [ ] P18b load envelope — acceptance: peak request rate, token rate, streaming concurrency and
       burst shape are stated numbers, and the quota chain is tested against them. **U9**
 - [ ] P19 scale identity resolution — acceptance: a durable entitlement projection synced from Graph

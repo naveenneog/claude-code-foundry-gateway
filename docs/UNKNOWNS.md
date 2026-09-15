@@ -18,7 +18,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | U9 | OPEN | Does `llm-token-limit` have a counter-key cardinality limit? Today's design implies one counter per developer | P22 at scale |
 | U10 | OPEN | What does Graph cost in latency and throttling when the volatile cache is cold? | P19 |
 | U11 | OPEN | What does the trace ledger cost to ingest, and does a cheaper table plan forfeit purge? | P18, conflicts with U7 |
-| U12 | OPEN | Does APIM telemetry preserve the Claude cache-creation TTL split, or only the response body? | P18, P21 |
+| U12 | CLOSED | Does APIM telemetry preserve the Claude cache TTL split? No, and the quota scalar excludes cache entirely — measured 2026-09-15 | P18 shipped |
 
 ---
 
@@ -338,7 +338,7 @@ and the choice has to be deliberate.
 **How to close.** Measure a real trace row, multiply by the load envelope from P18b, and price both
 plans against the retention and purge requirement.
 
-### U12 — Whether APIM telemetry preserves the cache TTL split
+### U12 — Whether APIM telemetry preserves the cache TTL split — CLOSED 2026-09-15
 
 **Question.** Claude prices three cache categories differently: read at 0.1x base input, a
 five-minute write at 1.25x and a one-hour write at 2x. Whether `llm-emit-token-metric` or the
@@ -356,8 +356,41 @@ returned a single scalar.
 so whether any existing quota silently mis-counts a cached workload. The reference states total
 input tokens is the sum of input, cache creation and cache read, so naive addition double-counts.
 
-**How to close.** Drive a request with prompt caching on and compare the response body against
-`x-tokens-consumed` and the emitted metric.
+**Answer, measured 2026-09-15.** No APIM-native source carries the cache categories per request,
+and the quota scalar does not count cache tokens at all.
+
+Two identical calls with a cacheable 10,000-token system prompt. The first wrote 10,003 cache
+tokens and the second read 10,003. Both were metered as **16** through `x-tokens-consumed` — the
+plain input and output only. This is documented behaviour: the reference says the policy "currently
+counts prompt and completion tokens only". What had not been drawn is the consequence.
+
+Against thirty days of live usage on this gateway — 6,803,708 cached tokens against 319,709 prompt
+and 151,594 completion — and weighting at Claude's published rates where output is 5x base input
+and a cache read is 0.1x:
+
+| Source of cost | Base-input equivalents | Share |
+|---|---:|---:|
+| Prompt | 319,709 | 18.2% |
+| Completion | 757,970 | 43.1% |
+| Cache reads | 680,371 | **38.7%** |
+
+**38.7% of the real cost weight is invisible to the quota.** Cache reads are the second largest
+cost driver here and the per-user daily budget does not see them.
+
+The built-in `ApiManagementGatewayLlmLog` does not carry them either: its columns are
+`PromptTokens`, `CompletionTokens` and `TotalTokens`, and a cached request recorded 9 and 30 while
+10,003 cache reads went unrecorded. APIM is clearly parsing the stream, because it gets streamed
+output tokens right where the quota scalar does not, so this is a projection gap rather than a
+parsing one.
+
+**What P18 did with it.** The ledger records cache as null with `cache_tokens_known = false`, and a
+test fails if that ever becomes zero. Reading the response body in `outbound` would recover the
+categories but buffers the response and ends streaming, which is not a trade worth making for a
+reporting field. See ADR-0006.
+
+**What stays open.** That the *budget* under-counts cached workloads is now a known behaviour rather
+than an unknown. Whether to correct for it — and how, without breaking streaming — is P21's problem,
+and it is why P21 may not express a dollar budget as a token quota.
 ### U8 — OTEL attribute names behind the split productivity metrics
 
 **Question.** Claude Code's OpenTelemetry export publishes

@@ -312,6 +312,18 @@ resource apiDiagnostic 'Microsoft.ApiManagement/service/apis/diagnostics@2024-05
     // metrics:true is what makes llm-emit-token-metric actually emit. Without
     // it the custom metric namespace never appears.
     metrics: true
+    // The per-request chargeback ledger. The table is
+    // ApiManagementGatewayLlmLog, which unlike a custom metric has no
+    // cardinality cap and is correct for streamed requests - measured
+    // 2026-09-15, where the quota scalar reported 11 tokens for a 41-token
+    // streamed completion and the log reported 11 prompt and 30 completion.
+    //
+    // requests and responses are deliberately left unset. The table has
+    // RequestMessages and ResponseMessages columns, and filling them would be
+    // content capture through the back door. P15 keeps that opt-in.
+    largeLanguageModel: {
+      logs: 'enabled'
+    }
     verbosity: 'information'
     httpCorrelationProtocol: 'W3C'
     sampling: {
@@ -322,9 +334,33 @@ resource apiDiagnostic 'Microsoft.ApiManagement/service/apis/diagnostics@2024-05
 }
 
 // ---------------------------------------------------------------------------
-// The gateway identity is the only principal that may call Foundry
+// Chargeback ledger - the resource log half
 // ---------------------------------------------------------------------------
 
+// GatewayLlmLogs is what populates ApiManagementGatewayLlmLog in the workspace.
+// The API diagnostic above turns LLM logging on; this decides where the rows
+// land. Both are needed - enabling only one and testing found an empty table.
+//
+// Only this category is enabled. GatewayLogs would add a row per request for
+// every API on the instance, which is an ingestion bill for data this ledger
+// does not read.
+resource llmLogs 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'claude-llm-logs'
+  scope: apim
+  properties: {
+    workspaceId: workspace.id
+    logAnalyticsDestinationType: 'Dedicated'
+    logs: [
+      {
+        category: 'GatewayLlmLogs'
+        enabled: true
+      }
+    ]
+  }
+}
+// ---------------------------------------------------------------------------
+// The gateway identity is the only principal that may call Foundry
+// ---------------------------------------------------------------------------
 // Conditional because Azure refuses a second role assignment for the same
 // principal, role and scope - even under a different name - and returns
 // RoleAssignmentExists. A gateway created by an earlier run, by deploy.ps1, or
