@@ -22,4 +22,11 @@ onboarding/claude-gateway.json
 # Raw transcripts are inputs to the rendered images; the images are what ship.
 docs/transcripts/
 
+# Unredacted screenshot sources. These are captures of a real tenant and carry
+# real names, addresses and the signed-in account. guide/redact-entra.mjs turns
+# them into the docs/guide/entra-*.png that ship; the originals never do.
+.shots-entra/
+shots/
+shots2/
+
 !onboarding/README.md

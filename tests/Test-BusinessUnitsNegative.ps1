@@ -155,6 +155,32 @@ $mutations = @(
        File  = 'Install-ClaudeGateway.ps1'
        From  = '$deployed = @(Get-ClaudeDeployment'
        To    = '$deployed = @(' }
+
+    # --- screenshot safety: raw captures must not be committable ---
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the capture writes straight into docs'
+       File  = 'guide/capture-entra.mjs'
+       From  = "const OUT = path.resolve('.shots-entra');"
+       To    = "const OUT = path.resolve('docs/guide');" }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the raw captures stop being git-ignored'
+       File  = '.gitignore'
+       From  = '.shots-entra/'
+       To    = '.shots-entra-disabled/' }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the redaction stops substituting identities'
+       File  = 'guide/redact-entra.mjs'
+       From  = 'contoso.com'
+       To    = 'example.invalid' }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the guide stops showing the portal captures'
+       File  = 'docs/BUSINESS-UNITS.md'
+       From  = 'entra-2-bu-all-members.png'
+       To    = 'nothing.png' }
 )
 
 $missed = @()
@@ -170,8 +196,13 @@ try {
     # The installer is asserted against too - it is what hands preserved state
     # back to the template.
     Copy-Item (Join-Path $root 'Install-ClaudeGateway.ps1') $sandbox -Force
+    # And the capture/redaction pipeline, plus the ignore rules that keep the
+    # unredacted captures out of a commit.
+    Copy-Item (Join-Path $root 'guide') $sandbox -Recurse -Force
+    Copy-Item (Join-Path $root '.gitignore') $sandbox -Force
     # Screenshots are a few megabytes and nothing here reads them, so the
-    # markdown is copied without them.
+    # markdown is copied without them - except the portal captures, whose
+    # presence is asserted.
     New-Item -ItemType Directory -Path (Join-Path $sandbox 'docs/adr') -Force | Out-Null
     Get-ChildItem (Join-Path $root 'docs') -Recurse -File -Filter *.md | ForEach-Object {
         $rel = $_.FullName.Substring((Join-Path $root 'docs').Length).TrimStart('\', '/')
@@ -179,6 +210,9 @@ try {
         New-Item -ItemType Directory -Path (Split-Path $dest -Parent) -Force | Out-Null
         Copy-Item $_.FullName $dest -Force
     }
+    New-Item -ItemType Directory -Path (Join-Path $sandbox 'docs/guide') -Force | Out-Null
+    Get-ChildItem (Join-Path $root 'docs/guide') -File -Filter 'entra-*.png' -ErrorAction SilentlyContinue |
+        ForEach-Object { Copy-Item $_.FullName (Join-Path $sandbox 'docs/guide') -Force }
 
     $suite = Join-Path $sandbox 'tests/Test-BusinessUnits.ps1'
     $teamSuite = Join-Path $sandbox 'tests/Test-Teams.ps1'

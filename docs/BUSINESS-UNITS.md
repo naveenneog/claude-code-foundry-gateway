@@ -64,9 +64,25 @@ changes, because entitlement is already resolved transitively.
 
 ### Seeing it in Entra
 
-The hierarchy is ordinary group nesting, so it is visible in the portal. These
-links open the **Members** blade of each group in the reference deployment
-(tenant `fdpo.onmicrosoft.com`); substitute your own group object ids.
+The hierarchy is ordinary group nesting, so it is visible in the portal.
+
+**Direct members** of a business unit are its teams, not people:
+
+![The claude-bu-mcaps group in the Azure portal, Direct members tab, showing two members: claude-team-ites-1 and claude-team-ites-2, both of type Group](guide/entra-1-bu-direct-members.png)
+
+**All members** resolves the nesting and shows the people underneath — the same
+transitive view the sync reads:
+
+![The same group on the All members tab, showing six members: the two team groups plus the four people inside them, each with type User and an email address](guide/entra-2-bu-all-members.png)
+
+The difference between those two tabs is the whole model. Membership is
+maintained on the team, and the business unit gets it by containment.
+
+Names and addresses in these captures are examples; the groups and the structure
+are real.
+
+These links open the **Members** blade of each group in the reference deployment;
+substitute your own group object ids.
 
 | Group | Role | Portal |
 |---|---|---|
@@ -77,20 +93,23 @@ links open the **Members** blade of each group in the reference deployment
 | `claude-code-standard` | Tier. Contains `claude-team-ites-1` and `claude-bu-gbb` | [Members](https://portal.azure.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Members/groupId/bac8d3f3-a87e-493b-b607-cca92d013d18) |
 | `claude-code-premium` | Tier. Contains `claude-team-ites-2` | [Members](https://portal.azure.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Members/groupId/78e38759-d8a3-4436-b0dd-699a5e0c31be) |
 
-To see what a person inherits, open their profile and use **Groups → transitive
-membership**, which is the same view the sync reads.
+To see what one person inherits, open their profile and use **Groups →
+transitive membership**, which is the view the sync reads.
 
-`guide/capture-entra.mjs` screenshots all six blades. It reuses the browser
-profile created by `guide/auth.mjs`, so sign in once first:
+`guide/capture-entra.mjs` screenshots all six blades and
+`guide/redact-entra.mjs` replaces the identities in them. Sign in once first:
 
 ```powershell
 node guide/auth.mjs              # complete MFA once; session is kept
-node guide/capture-entra.mjs     # writes docs/guide/entra-*.png
+node guide/capture-entra.mjs     # writes .shots-entra/
+node guide/redact-entra.mjs      # writes docs/guide/entra-*.png
 ```
 
 The capture exits non-zero if the session has expired rather than saving the
 sign-in page, because a screenshot of a login form looks enough like a
-screenshot of a group to get published by mistake.
+screenshot of a group to get published by mistake. `.shots-entra/` is
+git-ignored — the unredacted captures carry real names and the signed-in
+account, and only the redacted output ships.
 
 ### Depth is two levels
 

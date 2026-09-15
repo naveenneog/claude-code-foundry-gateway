@@ -163,6 +163,33 @@ Assert 'it shows nesting'                ($d -match '(?i)nest')
 Assert 'it states the two-level cap'     ($d -match '(?i)two level|two-level|depth')
 Assert 'the decision is recorded'        (Test-Path (Join-Path $root 'docs/adr/0008-teams-and-tiers.md'))
 
+# The portal captures show the model better than prose does: direct members are
+# the teams, all members resolves to the people.
+foreach ($shot in 'entra-1-bu-direct-members.png', 'entra-2-bu-all-members.png') {
+    Assert "the guide ships $shot" (Test-Path (Join-Path $root "docs/guide/$shot"))
+    Assert "and references it"     ($d -match [regex]::Escape($shot))
+}
+
+# These are captures of a real tenant. The capture step must land somewhere
+# git-ignored, so an unredacted identity cannot reach a commit by being one
+# `git add` away - only the redacted output ships.
+$capture = Get-Content (Join-Path $root 'guide/capture-entra.mjs') -Raw
+Assert 'the capture writes to the ignored folder' ($capture -match "resolve\('\.shots-entra'\)")
+Assert 'and not straight into docs'               ($capture -notmatch "OUT = path\.resolve\('docs/guide'\)")
+
+$ignore = Get-Content (Join-Path $root '.gitignore') -Raw
+Assert 'the raw captures are git-ignored' ($ignore -match '(?m)^\.shots-entra/')
+
+# The redaction has to actually replace, not just cover: a black box over a name
+# is a picture nobody can learn the model from.
+$redact = Get-Content (Join-Path $root 'guide/redact-entra.mjs') -Raw
+Assert 'redaction substitutes example identities' ($redact -match '(?i)contoso\.com')
+Assert 'and covers the signed-in account'         ($redact -match '(?i)chip|signed-in account')
+# The script must not itself carry the real identities it is removing.
+foreach ($real in 'naveen\.g@', 'nived\.v@', 'Saurabh\.Seth@', 'vrm@microsoft', 'navg@microsoft') {
+    Assert "it does not restate $($real -replace '\\','')" ($redact -notmatch $real)
+}
+
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Team contract holds.' -ForegroundColor Green
