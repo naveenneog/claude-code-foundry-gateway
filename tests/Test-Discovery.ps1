@@ -26,6 +26,9 @@ Write-Host "WITHCLAUDE=$($hits.Count)"
 $hits | ForEach-Object { Write-Host "HIT=$_" }
 '@
 
+$fail = 0
+$ran = 0
+
 foreach ($h in $hosts) {
     if (-not $h.Exe -or -not (Test-Path $h.Exe)) { continue }
     Write-Host ''
@@ -40,13 +43,22 @@ foreach ($h in $hosts) {
     Write-Host "  with Claude     : $with"
     foreach ($x in $hits) { Write-Host "    $x" -ForegroundColor Gray }
 
-    if ($with -lt 0 -or $cand -lt 0) { Write-Host '  FAIL - probe did not report' -ForegroundColor Red; continue }
+    if ($with -lt 0 -or $cand -lt 0) { Write-Host '  FAIL - probe did not report' -ForegroundColor Red; $fail++; continue }
     if ($with -eq $cand -and $cand -gt 1) {
         Write-Host '  FAIL - every candidate matched, which is the signature of the old bug' -ForegroundColor Red
-        continue
+        $fail++; continue
     }
     $bad = @($hits | Where-Object { $_ -notmatch 'claude' })
-    if ($bad.Count -gt 0) { Write-Host '  FAIL - a hit contains no claude model' -ForegroundColor Red; continue }
+    if ($bad.Count -gt 0) { Write-Host '  FAIL - a hit contains no claude model' -ForegroundColor Red; $fail++; continue }
     Write-Host '  PASS - discovery is selective and the models are real' -ForegroundColor Green
+    $ran++
 }
 Write-Host ''
+
+# Without this the script printed FAIL and then fell off the end, leaving
+# whatever exit code the last child process happened to set. Test-All read that
+# and reported PASS.
+if ($ran -eq 0) { Write-Host 'No PowerShell host was available - this check proved nothing.' -ForegroundColor Red; exit 1 }
+if ($fail) { Write-Host "$fail host(s) failed discovery." -ForegroundColor Red; exit 1 }
+Write-Host "Discovery is selective on $ran host(s)." -ForegroundColor Green
+exit 0

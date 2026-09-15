@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Set or clear one developer's daily Claude token budget.
 
@@ -101,7 +101,7 @@ foreach ($pair in (Split-Sentinel $raw)) {
 if ($List) {
     if (-not $map.Count) { Write-Host 'No per-user overrides. Everyone is on their tier default.' -ForegroundColor DarkGray; exit 0 }
     Write-Host ''
-    Write-Host ("{0,-40} {1,>14}" -f 'Object id', 'Tokens/day')
+    Write-Host ("{0,-40} {1,14}" -f 'Object id', 'Tokens/day')
     Write-Host ('-' * 56) -ForegroundColor DarkGray
     foreach ($k in $map.Keys) { Write-Host ("{0,-40} {1,14:n0}" -f $k, $map[$k]) }
     exit 0
