@@ -19,6 +19,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | U10 | OPEN | What does Graph cost in latency and throttling when the volatile cache is cold? | P19 |
 | U11 | OPEN | What does the trace ledger cost to ingest, and does a cheaper table plan forfeit purge? | P18, conflicts with U7 |
 | U12 | CLOSED | Does APIM telemetry preserve the Claude cache TTL split? No, and the quota scalar excludes cache entirely — measured 2026-09-15 | P18 shipped |
+| U13 | OPEN | Can APIM enforce a budget on categorised usage rather than one token total? `llm-token-limit` takes a single `token-quota` and counts prompt and completion only | P21 |
 
 ---
 
@@ -391,6 +392,35 @@ reporting field. See ADR-0006.
 **What stays open.** That the *budget* under-counts cached workloads is now a known behaviour rather
 than an unknown. Whether to correct for it — and how, without breaking streaming — is P21's problem,
 and it is why P21 may not express a dollar budget as a token quota.
+
+### U13 — Whether APIM can enforce a budget on categorised usage
+
+**Question.** P21 requires spend computed from categorised usage, because output is 5x base input
+and a cache read is 0.1x, so one token total cannot represent money. `llm-token-limit` takes a
+single `token-quota` attribute and, per the reference, "currently counts prompt and completion
+tokens only". Whether a categorised budget can be expressed in APIM at all is unknown.
+
+**What shipped instead.** `Set-ClaudeBusinessUnit.ps1` converts dollars to one blended token figure
+at write time, assuming 20% output — a deliberately conservative mix, adjustable with
+`-OutputShare`. Enforcement is a single monthly `llm-token-limit` keyed on the business unit.
+
+**Blast radius of the assumption.** Two errors, both in the same direction:
+
+| | |
+|---|---|
+| Output mix | A unit running heavier than 20% output exhausts its dollar budget before its token budget. A lighter one under-spends |
+| Cache | 38.7% of real cost weight on measured usage, invisible to the counter — see U12 |
+
+Real spend is therefore **higher** than the budget suggests, never lower, which is the safe
+direction for a soft cap but not acceptable for an invoice. `docs/BUSINESS-UNITS.md` and every
+command's output state both.
+
+**What would close it.** Three candidates, none measured: a second `llm-token-limit` weighted for
+output on the same counter-key; `azure-openai-emit-token-metric` feeding an out-of-band reconciler
+that adjusts the named value; or accepting blended enforcement and moving exactness to reporting
+only, where the ledger already has the categories. The third is cheapest and matches the "soft cap"
+semantics P20b has yet to define.
+
 ### U8 — OTEL attribute names behind the split productivity metrics
 
 **Question.** Claude Code's OpenTelemetry export publishes

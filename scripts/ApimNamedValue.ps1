@@ -71,6 +71,27 @@ function Test-ApimNamedValueLength {
            "A list this large needs a different store - see docs/ROADMAP.md P19.")
 }
 
+function Get-ApimNamedValue {
+    <#
+    .SYNOPSIS
+        Reads a named value, returning $null when it does not exist.
+
+    .DESCRIPTION
+        Paired with Set-ApimNamedValue so a caller that has to merge - an
+        entitlement list, a business unit registry - reads through the same
+        place it writes.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$ResourceGroup,
+        [Parameter(Mandatory = $true)][string]$ApimName,
+        [Parameter(Mandatory = $true)][string]$Id
+    )
+    $v = az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id $Id --query value -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $v) { return $null }
+    return $v
+}
+
 function Set-ApimNamedValue {
     <#
     .SYNOPSIS

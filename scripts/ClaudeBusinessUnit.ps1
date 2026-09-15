@@ -1,0 +1,218 @@
+<#
+.SYNOPSIS
+    Reading and writing the business unit registry.
+
+.DESCRIPTION
+    Dot-source this. It owns one format so the reader, the writer and the tests
+    cannot disagree about it.
+
+    The registry lives in the `bu-registry` API Management named value:
+
+        ,finance=Claude BU Finance:5000000,platform=Claude BU Platform:20000000,
+
+    Sentinel commas, matching `allow-standard` and `quota-overrides`, so a
+    lookup for ",finance=" cannot partially match ",finance-emea=".
+
+    Three fields per entry:
+
+      id      the stable identifier. It is what the counter key, the ledger and
+              every report use, and it never changes. See ADR-0007.
+      group   the Entra group whose members belong to this business unit. This
+              is a display name and may be renamed without touching the id.
+      tokens  the monthly budget, in tokens.
+
+    Why tokens and not dollars: a budget holder sets dollars, but the gateway
+    can only count tokens, so the conversion happens here, once, at write time.
+    The error in that conversion is real and documented - output is 5x base
+    input, a cache read is 0.1x, and the quota counter excludes cached tokens
+    entirely. Callers must say so rather than present the figure as money.
+#>
+
+# Claude's published list rates, per million tokens, retrieved 2026-09-15 from
+# https://platform.claude.com/docs/en/about-claude/pricing
+#
+# Only base input and output are stored. The cache rates are multipliers of base
+# input - read 0.1x, five-minute write 1.25x, one-hour write 2x - so recording
+# them separately would be three more numbers to keep current for no gain.
+#
+# Azure bills Claude as a single aggregated Claude Consumption Unit meter where
+# 100 CCU is $1.00, and private-offer discounts are applied before that
+# conversion, so these support list-price showback and not invoice-accurate
+# chargeback. U2 covers what would close that gap.
+$script:ClaudePriceBook = @{
+    'claude-opus-5'    = @{ InputPerM = 5.0; OutputPerM = 25.0 }
+    'claude-opus-4.8'  = @{ InputPerM = 5.0; OutputPerM = 25.0 }
+    'claude-sonnet-5'  = @{ InputPerM = 2.0; OutputPerM = 10.0 }
+    'claude-haiku-4.5' = @{ InputPerM = 1.0; OutputPerM = 5.0 }
+}
+$script:ClaudePriceBookDate = '2026-09-15'
+
+function Test-ClaudeBuId {
+    <#
+    .SYNOPSIS
+        Throws unless the identifier is safe to put in a counter key and a
+        comma-delimited map.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Id)
+
+    if ([string]::IsNullOrWhiteSpace($Id)) {
+        throw "A business unit identifier cannot be empty."
+    }
+    # Comma separates entries, equals separates id from value, colon separates
+    # group from budget. A space would make a counter key ambiguous to read.
+    if ($Id -notmatch '^[a-z0-9][a-z0-9-]*$') {
+        throw ("'$Id' is not a valid business unit identifier. Use lower-case letters, digits and " +
+               "hyphens, starting with a letter or digit - for example 'finance-emea'. " +
+               "It becomes a counter key and a map key, so it cannot contain a space, comma, equals or colon.")
+    }
+}
+
+function ConvertFrom-ClaudeBuRegistry {
+    <#
+    .SYNOPSIS
+        Parses the registry named value into objects.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true, Position = 0)][AllowEmptyString()][AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return @() }
+
+    $out = @()
+    foreach ($entry in ($Value.Trim(',') -split ',' | Where-Object { $_ })) {
+        $eq = $entry.IndexOf('=')
+        if ($eq -lt 1) { Write-Warning "Ignoring malformed registry entry '$entry'."; continue }
+        $id = $entry.Substring(0, $eq)
+        $rest = $entry.Substring($eq + 1)
+
+        # The group name may itself contain a colon, so split on the last one -
+        # the budget is always the final field.
+        $colon = $rest.LastIndexOf(':')
+        if ($colon -lt 0) { Write-Warning "Ignoring registry entry '$entry' with no budget."; continue }
+        $group = $rest.Substring(0, $colon)
+        $tokens = $rest.Substring($colon + 1)
+
+        if ($tokens -notmatch '^\d+$') { Write-Warning "Ignoring registry entry '$entry' with a non-numeric budget."; continue }
+
+        $out += [pscustomobject]@{
+            Id              = $id
+            Group           = $group
+            TokensPerMonth  = [long]$tokens
+        }
+    }
+    return $out
+}
+
+function ConvertTo-ClaudeBuRegistry {
+    <#
+    .SYNOPSIS
+        Renders business unit objects back into the named value format.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true, Position = 0)][AllowEmptyCollection()][AllowNull()]$BusinessUnits)
+
+    $items = @($BusinessUnits) | Where-Object { $_ }
+    if (-not $items.Count) { return ',,' }
+
+    $parts = foreach ($b in $items) {
+        Test-ClaudeBuId $b.Id
+        "$($b.Id)=$($b.Group):$([long]$b.TokensPerMonth)"
+    }
+    return ',' + ($parts -join ',') + ','
+}
+
+function ConvertFrom-ClaudeBuMembers {
+    <#
+    .SYNOPSIS
+        Parses the ,oid=bu, membership map.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true, Position = 0)][AllowEmptyString()][AllowNull()][string]$Value)
+
+    $map = [ordered]@{}
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $map }
+    foreach ($pair in ($Value.Trim(',') -split ',' | Where-Object { $_ })) {
+        $bits = $pair -split '=', 2
+        if ($bits.Count -eq 2) { $map[$bits[0]] = $bits[1] }
+    }
+    return $map
+}
+
+function ConvertTo-ClaudeBuMembers {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true, Position = 0)][AllowNull()]$Map)
+
+    if (-not $Map -or -not $Map.Keys.Count) { return ',,' }
+    return ',' + (($Map.Keys | ForEach-Object { "$_=$($Map[$_])" }) -join ',') + ','
+}
+
+function ConvertTo-ClaudeBuTokens {
+    <#
+    .SYNOPSIS
+        Converts a monthly dollar budget into a token budget.
+
+    .DESCRIPTION
+        A budget holder sets dollars; the gateway counts tokens. The conversion
+        happens here, once, at write time, rather than per request.
+
+        It assumes a mix, because a dollar does not buy a fixed number of tokens:
+        output costs five times base input. The default assumption is stated in
+        the output rather than buried, so an administrator can see what they are
+        being given.
+
+        This is a proxy, not an accounting identity. The quota counter also
+        excludes cached tokens entirely, which on thirty days of live usage was
+        38.7% of the real cost weight. Callers must present the result as an
+        approximation at list price.
+
+    .PARAMETER OutputShare
+        Fraction of tokens assumed to be output. Claude Code is output-light on
+        volume and output-heavy on cost; 0.2 is a deliberately conservative
+        default, meaning the budget runs out sooner rather than later.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][double]$Usd,
+        [string]$Model = 'claude-sonnet-5',
+        [double]$OutputShare = 0.2
+    )
+
+    if ($Usd -le 0) { throw "A monthly budget must be greater than zero." }
+    if ($OutputShare -lt 0 -or $OutputShare -ge 1) { throw "OutputShare must be between 0 and 1." }
+
+    $price = $script:ClaudePriceBook[$Model]
+    if (-not $price) {
+        throw ("No price for '$Model'. Known models: " + (($script:ClaudePriceBook.Keys | Sort-Object) -join ', ') + ".")
+    }
+
+    # Blended cost of one million mixed tokens at the assumed split.
+    $blendedPerM = ($price.InputPerM * (1 - $OutputShare)) + ($price.OutputPerM * $OutputShare)
+    $tokens = [long][math]::Floor(($Usd / $blendedPerM) * 1000000)
+
+    [pscustomobject]@{
+        Usd             = $Usd
+        Model           = $Model
+        OutputShare     = $OutputShare
+        BlendedUsdPerM  = [math]::Round($blendedPerM, 4)
+        TokensPerMonth  = $tokens
+        PriceBookDate   = $script:ClaudePriceBookDate
+        IsEstimate      = $true
+    }
+}
+
+function ConvertTo-ClaudeBuUsd {
+    <#
+    .SYNOPSIS
+        The reverse, for reporting a token budget back as an approximate figure.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][long]$Tokens,
+        [string]$Model = 'claude-sonnet-5',
+        [double]$OutputShare = 0.2
+    )
+    $price = $script:ClaudePriceBook[$Model]
+    if (-not $price) { return $null }
+    $blendedPerM = ($price.InputPerM * (1 - $OutputShare)) + ($price.OutputPerM * $OutputShare)
+    return [math]::Round(($Tokens / 1000000.0) * $blendedPerM, 2)
+}

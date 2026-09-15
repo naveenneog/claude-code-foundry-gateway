@@ -1,6 +1,8 @@
 # Status
 
-**Active packet:** P18 - the chargeback ledger. Shipped and verified live. Next in M4: P20 and P20b, which gate the rest.
+**Active packet:** P20–P22 — business units. Shipped and verified live. P21 remains open: budgets
+are set and reported in dollars but enforced as one blended token figure. Next in M4: P19, the
+durable identity projection.
 
 ## What is shipped (M0)
 
@@ -370,18 +372,66 @@ it red.
 | UX | Accept | A row says whether it was streamed and where its numbers came from, so a report can state what it does not know instead of implying zero |
 | Security | Accept | `RequestMessages` and `ResponseMessages` are left unset and asserted off. Enabling LLM logs without that check would have turned on prompt capture, which P15 keeps opt-in |
 
-## Commands that prove it
+## P20–P22 acceptance criteria — business units
 
+A business unit is an Entra security group registered with a monthly budget.
+[ADR-0007](adr/0007-business-unit-model.md) records why: a group already exists, is already
+governed, and already has joiner/mover/leaver handling, so membership needs no second roster.
+
+- [x] **P20** A stable identifier separate from the display name. The registry key is the
+      identifier; renaming the Entra group does not move spend to a new line
+- [x] **P20** Transfer is group membership, deletion returns members to `unassigned`, and a
+      developer in two business-unit groups takes the first in registry order
+- [x] **P22** A unit that exhausts its budget gets a fourth, distinct `403` naming the unit;
+      other units are unaffected; an unpriced unit is skipped rather than walled off
+- [x] Unassigned developers are allowed by default, because nobody has a unit on the deployment
+      that first installs this. `bu-unassigned=deny` is the target state once the report reads zero
+- [x] Verified live: add, list, edit and remove all work; sync mapped 3 developers to `platform`;
+      the report showed 544 tokens and 1 unassigned; `x-bu-quota-remaining: 2222222195` came back
+      on a real request
+- [x] No regression: an unassigned developer still received HTTP 200
+- [x] 66 assertions in `tests/Test-BusinessUnits.ps1`, and every one of the 11 things they guard
+      negative-tested by `tests/Test-BusinessUnitsNegative.ps1`
+- [x] `./tests/Test-All.ps1` passes offline and with `-IncludeAzure`
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+- [ ] **P21** remains open. The admin surface takes dollars and the report is categorised, but
+      enforcement converts to one blended token figure at write time. "One counter cannot represent
+      money" was P21's acceptance criterion and it is not met — see **U13**
+
+### What the work found
+
+| | |
+|---|---|
+| Five of ten mutations survived the first negative run | The colon-in-group-name case was never exercised, so `LastIndexOf` versus `IndexOf` made no difference to any assertion — the entire reason the split is on the last colon was untested |
+| `'38\.7|cache'` is an alternation | The word "cache" alone satisfied it while the measured figure was wrong. Split into two assertions |
+| A caveat in a `<# #>` help block is not a caveat | `-match` over raw file text cannot tell a comment from output. Comments are now stripped, and the terminal and JSON surfaces asserted separately — matching either one passed while the other had been deleted |
+| A refusal check scoped to the whole file tail | `$policy.Substring(IndexOf(...))` matched `businessUnit` 200 lines above the message. Now scoped to the branch that builds it |
+| `Test-Discovery.ps1` printed FAIL and exited 0 | It fell off the end without an exit code, so `Test-All` read whatever the last child process left. `Test-PreflightBothHosts.ps1` never checked its result at all — both were in a suite whose PASS was partly vacuous |
+| `RESULT=` is printed even when nothing ran | A failed dot-source is non-terminating, so the child carried on and printed an empty value. The check now requires `True` or `False` |
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | Membership comes from the group that already governs joiner/mover/leaver, so there is no second roster to reconcile. No new always-on component: three named values and a policy branch |
+| Coder | Accept | The registry format has one owner, `ClaudeBusinessUnit.ps1`, read by the writer, the reader, the sync and the test. Splitting on the last colon is now covered by a case that fails on the first |
+| QA | Accept | Eleven mutations, all caught — but only after five survived the first run and three assertions were found to measure nothing. That is recorded above rather than quietly fixed. Two unrelated suites that could not fail were repaired as a result |
+| UX | Accept | Every command states list price and the cache gap in its own output, so a figure cannot be read without them. An edit reports the previous value alongside the new one |
+| Security | Accept | No new identity path: membership is the same Graph read entitlement already does, under the same guard that refuses to empty a populated map. The refusal names the unit but not its members |
+
+## Commands that prove it
 ```powershell
-./tests/Test-All.ps1                                    # 13 checks, offline
-./tests/Test-All.ps1 -IncludeAzure                      # plus the six that call Azure
+./tests/Test-All.ps1                                    # 17 checks, offline
+./tests/Test-All.ps1 -IncludeAzure                      # plus the seven that call Azure
 ./scripts/Get-ClaudeTelemetry.ps1                       # where this gateway logs, and whether metrics are on
 ./scripts/Get-ClaudeAnalytics.ps1 -Days 30              # the usage report
 ./scripts/Get-ClaudeBudget.ps1                          # effective limits and spend to date
+./scripts/Get-ClaudeBusinessUnit.ps1                    # budgets, members and spend by business unit
 ./scripts/New-ClaudeCodePolicy.ps1 -Tier premium        # one managed-settings profile per tier
 ./scripts/Find-ClaudeUserData.ps1 -User <upn>           # what is held about one person
 ./scripts/Get-ClaudeBypass.ps1                          # who can skip the gateway entirely
 ./tests/Test-OrgCeilingLive.ps1 -ProveRefusal           # exhausts each budget, then restores it
+./tests/Test-BusinessUnitsNegative.ps1                  # breaks each business-unit check and confirms it goes red
 node .ironclad/gate.mjs --stage packet                  # definition of done
 ```
 

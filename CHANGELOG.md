@@ -9,7 +9,60 @@ Releases are tagged in git. `docs/ROADMAP.md` holds the forward plan and
 
 ## [Unreleased]
 
-Nothing yet. M4, business-unit chargeback, continues in `docs/ROADMAP.md`.
+### Added
+
+- Business units. A business unit is an Entra security group registered with a
+  monthly budget, decided in [ADR-0007](docs/adr/0007-business-unit-model.md).
+  `scripts/Set-ClaudeBusinessUnit.ps1` adds, edits, lists and removes them;
+  `scripts/Get-ClaudeBusinessUnit.ps1` reports budgets, members and spend;
+  `docs/BUSINESS-UNITS.md` is the guide. The registry key is a stable identifier
+  rather than the display name, so renaming a group in Entra does not move spend
+  to a new line.
+- Business-unit membership sync. `Sync-ClaudeAccess.ps1` now resolves each unit's
+  group to object ids and writes the `bu-members` map alongside the entitlement
+  list, under the same guard that refuses to overwrite a populated map with an
+  empty one.
+- Business-unit soft cap in `infra/policy.xml`. A unit with a budget gets a
+  monthly `llm-token-limit` keyed on its identifier, and exhausting it returns a
+  fourth distinct `403` that names the unit. A unit with no budget set is
+  skipped rather than refused, so an unpriced unit behaves like the organisation
+  ceiling alone. Developers in no unit are `unassigned`, allowed by default
+  because no one has a unit on the deployment that first installs this.
+- `tests/Test-BusinessUnits.ps1`, 66 assertions, and
+  `tests/Test-BusinessUnitsNegative.ps1`, which breaks each thing those
+  assertions guard and confirms the suite goes red. Both are wired into
+  `tests/Test-All.ps1`.
+- `tests/Test-FormatStrings.ps1`, a repo-wide check that every .NET format
+  string parses and runs.
+
+### Fixed
+
+- `Set-ClaudeBudget.ps1 -List` crashed. `{n,>14}` is not valid .NET format
+  syntax — the alignment sign belongs on the number, `{n,-14}` or `{n,14}`. It
+  parses at read time and throws only when the line runs, so it shipped in
+  v1.4.0 and was found by the new format-string check. Two other files carried
+  the same mistake.
+- `tests/Test-Discovery.ps1` printed `FAIL` and then fell off the end without
+  setting an exit code, so `Test-All.ps1` recorded whatever the last child
+  process had left behind — including `PASS` for a failed run.
+- `tests/Test-PreflightBothHosts.ps1` never checked its own result. It now
+  requires each host to print `RESULT=True` or `RESULT=False`; matching the bare
+  `RESULT=` label was not enough, because a failed dot-source is a
+  non-terminating error and the child carried on to print an empty value.
+
+### Known limits
+
+- The business-unit counter is blind to cached tokens. `llm-token-limit`
+  "currently counts prompt and completion tokens only", and on thirty days of
+  live usage cache reads were 6.8M tokens against 320K prompt and 152K
+  completion — 38.7% of real cost weight at Claude's published rates. Budgets
+  therefore bound less spend than they appear to, and always in the direction of
+  under-counting. `P21` in `docs/ROADMAP.md` carries the gap.
+- Dollar figures are list price and do not reconcile to an Azure invoice. Azure
+  bills Claude as one aggregated Claude Consumption Unit meter and private-offer
+  discounts apply before that conversion. **U2**.
+- A budget is set in dollars but enforced as one blended token figure converted
+  at write time, assuming a 20% output mix. Categorised enforcement is **U13**.
 
 ## [1.5.0] - 2026-09-15
 

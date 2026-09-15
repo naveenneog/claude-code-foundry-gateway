@@ -59,6 +59,8 @@ try {
     Invoke-Check 'Capability scoping per tier'             'Test-CapabilityScoping.ps1' @{ SkipLive = $true }
     Invoke-Check 'Compliance retrieval and deletion'       'Test-Compliance.ps1' @{ SkipLive = $true }
     Invoke-Check 'Chargeback ledger'                       'Test-Ledger.ps1' @{ SkipLive = $true }
+    Invoke-Check 'Business unit chargeback'                'Test-BusinessUnits.ps1'
+    Invoke-Check 'Business unit checks detect breakage'    'Test-BusinessUnitsNegative.ps1'
     Invoke-Check 'Foundry bypass audit'                    'Test-Bypass.ps1' @{ SkipLive = $true }
 
     if ($IncludeAzure) {

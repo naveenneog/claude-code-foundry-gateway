@@ -156,6 +156,90 @@
             estimate-prompt-tokens="false"
             remaining-quota-tokens-header-name="x-org-quota-remaining" />
 
+        <!-- 6. Business unit, and its budget. ADR-0007.
+             ==========================================================
+             A business unit is an Entra group registered with a budget. The
+             registry key is the stable identifier - it is what this counter,
+             the ledger and every report use - while the group behind it can be
+             renamed without orphaning the history.
+
+             A developer in no business unit is "unassigned". What happens then
+             is configurable and defaults to allow, because no developer has a
+             business unit at the moment this first deploys and a default of deny
+             would refuse every request on the deployment that installs it. The
+             target state is deny; Get-ClaudeBusinessUnit.ps1 reports how many
+             are still unassigned so that move is a decision with a number in
+             front of it.
+
+             Sentinel commas, so ",finance" cannot partially match
+             ",finance-emea". Same convention as the entitlement lists. -->
+        <set-variable name="businessUnit" value="@{
+            var oid = (string)context.Variables["userId"];
+            var map = "{{bu-members}}";
+            var marker = "," + oid + "=";
+            var i = map.IndexOf(marker);
+            if (i < 0) { return "unassigned"; }
+            var start = i + marker.Length;
+            var end = map.IndexOf(",", start);
+            if (end < 0) { end = map.Length; }
+            return map.Substring(start, end - start);
+        }" />
+
+        <choose>
+            <when condition="@((string)context.Variables["businessUnit"] == "unassigned" && "{{bu-unassigned}}" == "deny")">
+                <return-response>
+                    <set-status code="403" reason="Forbidden" />
+                    <set-header name="Content-Type" exists-action="override">
+                        <value>application/json</value>
+                    </set-header>
+                    <set-body>@{
+                        return new JObject(
+                            new JProperty("type", "error"),
+                            new JProperty("error", new JObject(
+                                new JProperty("type", "permission_error"),
+                                new JProperty("message", "You are not assigned to a business unit, so this request has no budget to charge. Ask your platform team to add you to a business unit group.")
+                            ))
+                        ).ToString();
+                    }</set-body>
+                </return-response>
+            </when>
+        </choose>
+
+        <!-- The business unit's own monthly budget. Its quota comes from the
+             registry, looked up by the same anchored scan.
+
+             Zero means no budget is set for this unit, and the limit is skipped
+             rather than refusing everything - an unpriced business unit should
+             behave like the organisation ceiling alone, not like a wall. -->
+        <set-variable name="buQuota" value="@{
+            var bu = (string)context.Variables["businessUnit"];
+            var reg = "{{bu-registry}}";
+            var marker = "," + bu + "=";
+            var i = reg.IndexOf(marker);
+            if (i < 0) { return "0"; }
+            var start = i + marker.Length;
+            var end = reg.IndexOf(",", start);
+            if (end < 0) { end = reg.Length; }
+            var entry = reg.Substring(start, end - start);
+            var colon = entry.LastIndexOf(":");
+            if (colon < 0) { return "0"; }
+            var tokens = entry.Substring(colon + 1);
+            long parsed;
+            return long.TryParse(tokens, out parsed) && parsed > 0 ? tokens : "0";
+        }" />
+
+        <choose>
+            <when condition="@((string)context.Variables["buQuota"] != "0")">
+                <set-variable name="budget" value="business unit" />
+                <llm-token-limit
+                    counter-key="@("bu-" + (string)context.Variables["businessUnit"])"
+                    token-quota="@(long.Parse((string)context.Variables["buQuota"]))"
+                    token-quota-period="Monthly"
+                    estimate-prompt-tokens="false"
+                    remaining-quota-tokens-header-name="x-bu-quota-remaining" />
+            </when>
+        </choose>
+
         <!-- 7. Per-minute rate, by tier. This stays a branch because
              tokens-per-minute is one of the attributes the llm-token-limit
              reference does not allow an expression for. Exceeding it returns
@@ -297,6 +381,7 @@
             <metadata name="UserId" value="@((string)context.Variables["userId"])" />
             <metadata name="User" value="@((string)context.Variables["userUpn"])" />
             <metadata name="Tier" value="@((string)context.Variables["tier"])" />
+            <metadata name="BusinessUnit" value="@((string)context.Variables["businessUnit"])" />
             <metadata name="Model" value="@((string)context.Variables["modelName"])" />
         </trace>
 
@@ -335,7 +420,9 @@
                         var which = (string)(context.Variables.GetValueOrDefault("budget", "personal"));
                         var msg = which == "organisation"
                             ? "The organisation's Claude budget for this period is spent. Your access is unaffected - this limit is shared, so it applies to everyone until the budget resets or your platform team raises quota-org."
-                            : "Your Claude budget for this period is spent. Your access is unaffected; the budget resets at the start of the next period. Ask your platform team if you need a larger tier.";
+                            : which == "business unit"
+                                ? "The Claude budget for your business unit (" + (string)(context.Variables.GetValueOrDefault("businessUnit", "unknown")) + ") is spent for this period. Your access is unaffected - this budget is shared with your colleagues in that unit, and your platform team can raise it."
+                                : "Your Claude budget for this period is spent. Your access is unaffected; the budget resets at the start of the next period. Ask your platform team if you need a larger tier.";
                         return new JObject(
                             new JProperty("type", "error"),
                             new JProperty("error", new JObject(

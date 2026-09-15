@@ -176,6 +176,67 @@ foreach ($t in $tiers) {
     Write-Host ""
 }
 
+# ------------------------------------------------------- business units
+#
+# Membership for chargeback, from the same groups mechanism as tiers. The
+# registry says which Entra group backs each business unit; this resolves those
+# groups to object ids and writes the ,oid=id, map the policy reads.
+#
+# A developer in two business-unit groups takes the first in registry order,
+# which is deterministic and visible in the registry itself. See ADR-0007.
+
+. (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
+
+$registryRaw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'
+$registry = @(ConvertFrom-ClaudeBuRegistry $registryRaw)
+
+if (-not $registry.Count) {
+    Write-Host "No business units defined, so nothing to map." -ForegroundColor DarkGray
+    Write-Host "  Add one with ./scripts/Set-ClaudeBusinessUnit.ps1." -ForegroundColor DarkGray
+    Write-Host ""
+}
+else {
+    Write-Host "Business unit membership" -ForegroundColor Cyan
+
+    $buMap = [ordered]@{}
+    $resolvedAny = $false
+    foreach ($bu in $registry) {
+        $buMembers = @(Get-GroupMemberOids -GroupName $bu.Group -Token $graphToken)
+        Write-Host ("  {0,-16} {1,-30} {2} member(s)" -f $bu.Id, $bu.Group, $buMembers.Count) -ForegroundColor Yellow
+        if ($buMembers.Count) { $resolvedAny = $true }
+        foreach ($m in $buMembers) {
+            # First business unit in registry order wins.
+            if (-not $buMap.Contains($m.Oid)) { $buMap[$m.Oid] = $bu.Id }
+        }
+    }
+
+    $buValue = ConvertTo-ClaudeBuMembers $buMap
+
+    # Same guard as entitlement: a lookup that resolved nothing must not wipe a
+    # map that currently assigns people, because the result is silent and the
+    # symptom is spend landing on no budget.
+    $currentBu = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-members'
+    $currentCount = @(ConvertFrom-ClaudeBuMembers $currentBu).Keys.Count
+
+    if (-not $buMap.Keys.Count -and -not $AllowEmpty -and -not $WhatIf -and $currentCount) {
+        Write-Host ''
+        Write-Warning ("Business unit groups resolved to 0 members, but 'bu-members' currently maps $currentCount. Not overwriting.")
+        Write-Host "  If they really are empty, re-run with -AllowEmpty." -ForegroundColor DarkGray
+        Write-Host ''
+    }
+    else {
+        Set-NamedValue -Id 'bu-members' -Value $buValue
+        Write-Host ("  {0} developer(s) mapped to a business unit." -f $buMap.Keys.Count) -ForegroundColor Green
+    }
+
+    $unmapped = @($seen.Keys | Where-Object { -not $buMap.Contains($_) })
+    if ($unmapped.Count) {
+        Write-Host ("  {0} entitled developer(s) belong to no business unit." -f $unmapped.Count) -ForegroundColor Yellow
+        Write-Host "  Their usage is recorded against 'unassigned' and counts against no budget." -ForegroundColor DarkGray
+    }
+    Write-Host ""
+}
+
 Write-Host "Done. $($seen.Count) identity(ies) authorised." -ForegroundColor Green
 Write-Host "Anyone not listed receives HTTP 403 from the gateway." -ForegroundColor DarkGray
 Write-Host ""

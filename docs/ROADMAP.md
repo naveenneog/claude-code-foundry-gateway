@@ -165,17 +165,25 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       identities. **U10, ADR-0005**
 - [ ] P19b shadow migration — acceptance: the new path runs beside the old one and is compared
       before it is trusted, and no rollback restores a spent allowance
-- [ ] P20 business-unit identity model — acceptance: a stable identifier separate from display name,
-      with ownership, exactly-one rules, and transfer and deletion semantics settled
+- [x] P20 business-unit identity model — a stable identifier separate from display name, settled in
+      [ADR-0007](adr/0007-business-unit-model.md). A business unit is an Entra group plus a budget;
+      transfer is group membership, deletion returns members to `unassigned`, and a developer in two
+      business-unit groups takes the first in registry order
 - [ ] P20b financial semantics — acceptance: internal tariff versus actual cost, billable
       categories, decimal arithmetic, price-book versions with effective intervals, and an agreed
       meaning for "soft cap". **U2**
 - [ ] P21 dollar budgets per business unit — acceptance: spend computed from categorised usage, not
       a single token total. Output is five times input and a cache read is a tenth of it, so one
-      counter cannot represent money
-- [ ] P22 business-unit soft cap — acceptance: a business unit that exhausts its budget is refused,
-      others are unaffected, and the refusal distinguishes itself from the four the gateway already
-      returns
+      counter cannot represent money.
+      **Partly shipped, and the gap is the acceptance criterion.** The admin surface takes dollars
+      and `Get-ClaudeBusinessUnit` reports categorised spend from the ledger, but enforcement
+      converts dollars to one blended token figure at write time and runs a single
+      `llm-token-limit`. Measured on thirty days of live usage, that counter is blind to 38.7% of
+      real cost weight because it counts prompt and completion only. Closing this needs categorised
+      enforcement, which APIM cannot express today — see **U13**
+- [x] P22 business-unit soft cap — a unit that exhausts its budget is refused with a fourth, distinct
+      `403` naming the unit, others are unaffected, and an unpriced unit is skipped rather than
+      walled off
 - [ ] P23 showback reporting — acceptance: as-of joins against effective-dated mapping history, so a
       mid-month transfer does not move last week's spend
 - [ ] P24 dashboard — acceptance: an Azure Workbook first, because it adds no always-on component.
