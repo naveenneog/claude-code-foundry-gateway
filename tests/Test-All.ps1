@@ -46,6 +46,7 @@ Push-Location $root
 try {
     # Must come first: a missing BOM mangles every other PowerShell check on 5.1.
     Invoke-Check 'Script encoding (PowerShell 5.1 safety)' 'Repair-ScriptEncoding.ps1' @{ Check = $true }
+    Invoke-Check 'Named value writes fail loudly'          'Test-NamedValueWrites.ps1' @{ SkipLive = $true }
     Invoke-Check 'Azure CLI arguments vs cmd.exe'          'Test-AzArguments.ps1'
     Invoke-Check 'Shell scripts - syntax and banner'       'Test-ShellScripts.ps1'
     Invoke-Check 'Preflight on both PowerShell hosts'      'Test-PreflightBothHosts.ps1'
@@ -64,6 +65,7 @@ try {
         Invoke-Check 'Org ceiling on the live gateway'     'Test-OrgCeilingLive.ps1'
         Invoke-Check 'Budget control on the live gateway'  'Test-BudgetControlLive.ps1'
         Invoke-Check 'Model allowlist on the live gateway' 'Test-CapabilityScopingLive.ps1'
+        Invoke-Check 'Named value writes against Azure'    'Test-NamedValueWrites.ps1'
     }
 }
 finally { Pop-Location }

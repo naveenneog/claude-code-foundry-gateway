@@ -134,6 +134,51 @@ M0 is shipped. The table below is the queue; the checklist under it is what the 
       not. The original wording — signed plugin accepted, unsigned refused — is not implementable:
       Claude Code has no plugin signing scheme
 
+### M4 — business-unit chargeback
+
+Three measurements reframed this milestone. Custom metric dimensions cap at 100 unique values and
+the namespace at 1,000 time series, after which data is "silently discarded". Named values cap at
+4,096 characters, so an allow list holds about 110 object ids. And the sync swallowed the resulting
+error. Together they made the accelerator a roughly 100-developer system, which is below the scale
+at which chargeback is a question worth asking.
+
+Azure-native allocation was considered and ruled out on evidence: Claude bills as a single
+aggregated Claude Consumption Unit meter with no per-user or per-model split, Cost Allocation rules
+redistribute by fixed percentages rather than actual usage, and Azure Budgets cannot block —
+"resources aren't affected, and your consumption isn't stopped". Microsoft's own Architecture Centre
+guidance is to capture a business-unit identifier at a gateway, which is what this does.
+
+- [x] P17 named value writes fail loudly — a shared helper refuses an oversized value before the
+      call and throws on a failed one, so a tier that outgrows a named value stops the sync instead
+      of silently freezing entitlement. Covers the governance demo's restore path too
+- [ ] P18 scale the chargeback ledger — acceptance: a per-request ledger priced from the response
+      body's own usage block, proven for streaming completion, client disconnect, upstream timeout
+      after cost is incurred, retries and error paths that never reach outbound. Missing usage is
+      recorded as unknown, never zero. **U11, U12**
+- [ ] P18b load envelope — acceptance: peak request rate, token rate, streaming concurrency and
+      burst shape are stated numbers, and the quota chain is tested against them. **U9**
+- [ ] P19 scale identity resolution — acceptance: a durable entitlement projection synced from Graph
+      off the request path, with a written failure contract for stale, unknown and revoked
+      identities. **U10, ADR-0005**
+- [ ] P19b shadow migration — acceptance: the new path runs beside the old one and is compared
+      before it is trusted, and no rollback restores a spent allowance
+- [ ] P20 business-unit identity model — acceptance: a stable identifier separate from display name,
+      with ownership, exactly-one rules, and transfer and deletion semantics settled
+- [ ] P20b financial semantics — acceptance: internal tariff versus actual cost, billable
+      categories, decimal arithmetic, price-book versions with effective intervals, and an agreed
+      meaning for "soft cap". **U2**
+- [ ] P21 dollar budgets per business unit — acceptance: spend computed from categorised usage, not
+      a single token total. Output is five times input and a cache read is a tenth of it, so one
+      counter cannot represent money
+- [ ] P22 business-unit soft cap — acceptance: a business unit that exhausts its budget is refused,
+      others are unaffected, and the refusal distinguishes itself from the four the gateway already
+      returns
+- [ ] P23 showback reporting — acceptance: as-of joins against effective-dated mapping history, so a
+      mid-month transfer does not move last week's spend
+- [ ] P24 dashboard — acceptance: an Azure Workbook first, because it adds no always-on component.
+      Managed Grafana where a team already runs it
+- [ ] P25 delayed kill switch — acceptance: the overshoot bound is stated and measured. Not a hard
+      cap, and not described as one
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so

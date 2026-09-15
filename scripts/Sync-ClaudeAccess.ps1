@@ -41,6 +41,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
+
 function Get-GraphToken {
     $t = az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv 2>$null
     if (-not $t) { throw "Could not acquire a Microsoft Graph token. Run: az login" }
@@ -102,13 +104,11 @@ function Set-NamedValue {
         return
     }
 
-    $existing = az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id $Id -o json 2>$null
-    if ($existing) {
-        az apim nv update -g $ResourceGroup --service-name $ApimName --named-value-id $Id --value $Value -o none 2>$null
-    }
-    else {
-        az apim nv create -g $ResourceGroup --service-name $ApimName --named-value-id $Id --display-name $Id --value $Value -o none 2>$null
-    }
+    # Writes through the shared helper, which refuses an oversized value and
+    # throws on a failed write. This used to shell out with `2>$null` and no
+    # exit check, so a named value too large to store failed silently and the
+    # sync went on reporting success while entitlement stopped updating.
+    Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $Id -Value $Value
 }
 
 Write-Host ""

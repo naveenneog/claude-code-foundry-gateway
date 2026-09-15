@@ -15,6 +15,10 @@ fails the release stage while any remain. Detail for each one follows below.
 | U6 | CLOSED | What signs a plugin, and who verifies it? Nothing, for Claude Code — researched 2026-09-03 | P14 rescoped |
 | U7 | CLOSED | Can Log Analytics honour selective deletion within its purge limits? Yes, within 30 days and Analytics-plan tables only — researched 2026-09-03 | P15 unblocked |
 | U8 | OPEN | Which OTEL attributes split lines-of-code and tool decisions into their parts? | P10 productivity columns |
+| U9 | OPEN | Does `llm-token-limit` have a counter-key cardinality limit? Today's design implies one counter per developer | P22 at scale |
+| U10 | OPEN | What does Graph cost in latency and throttling when the volatile cache is cold? | P19 |
+| U11 | OPEN | What does the trace ledger cost to ingest, and does a cheaper table plan forfeit purge? | P18, conflicts with U7 |
+| U12 | OPEN | Does APIM telemetry preserve the Claude cache-creation TTL split, or only the response body? | P18, P21 |
 
 ---
 
@@ -294,6 +298,66 @@ tracked to completion — subject to 50 purge requests per hour and a 30-day com
 expedite. It does not cover Basic or Auxiliary tables, Sentinel data-lake mirrors, or exported
 copies.
 
+### U9 — Counter-key cardinality in llm-token-limit
+
+**Question.** The per-user daily quota keys on `oid + ":daily"`. At 500,000 developers that implies
+500,000 distinct counters. Whether API Management supports that cardinality on Basic v2, how long
+inactive keys are retained, and what happens under memory pressure — rejection, throttling or
+eviction — is not documented.
+
+**Why it matters.** Eviction that restores a spent allowance is worse than no quota, because it
+looks like it is working. It decides whether per-user budgets survive at 500k or whether quota
+authority has to move to a durable service.
+
+**How to close.** The counter cache and the value cache are different mechanisms, so nothing about
+one can be inferred from the other. Ask Microsoft for Basic v2 behaviour, then load-test: create
+the target number of identities, exercise quota state, and revisit early identities after heavy key
+churn to confirm their consumption survived scale-out, policy deployment and period rollover.
+
+### U10 — Directory latency and throttling on a cold cache
+
+**Question.** `cache-lookup-value` is available on v2, but its built-in cache is "volatile and
+shared by all units in the same region". After a flush, every active developer is a miss at once.
+Microsoft Graph's throttling limits for that burst, and the p99 latency a miss adds, are unmeasured.
+
+**Why it matters.** It decides whether Graph can sit in the request path at all. It probably cannot,
+which is why ADR-0005 proposes a durable projection instead.
+
+**How to close.** Measure a cold-start burst against the real tenant, with request coalescing, and
+record the throttling response and `Retry-After` behaviour.
+
+### U11 — What the ledger costs to ingest
+
+**Question.** A per-request trace ledger at 500k scale is order 75 GB a month on rough numbers.
+Log Analytics bills ingestion per GB. Basic and Auxiliary table plans are cheaper.
+
+**Why it matters.** U7 established that Basic and Auxiliary tables **cannot be purged**. The cheaper
+plan forfeits the deletion promise P15 makes, so cost and compliance pull in opposite directions
+and the choice has to be deliberate.
+
+**How to close.** Measure a real trace row, multiply by the load envelope from P18b, and price both
+plans against the retention and purge requirement.
+
+### U12 — Whether APIM telemetry preserves the cache TTL split
+
+**Question.** Claude prices three cache categories differently: read at 0.1x base input, a
+five-minute write at 1.25x and a one-hour write at 2x. Whether `llm-emit-token-metric` or the
+built-in `ApiManagementGatewayLlmLog` table carries that split is not documented, and Microsoft's
+own AI Hub Gateway accelerator has a single `CostPerCachedInputUnit`.
+
+**Measured 2026-09-15.** The Anthropic response body does carry it in full:
+`input_tokens`, `cache_read_input_tokens`, `cache_creation.ephemeral_5m_input_tokens`,
+`cache_creation.ephemeral_1h_input_tokens`, `output_tokens`,
+`output_tokens_details.thinking_tokens`, plus `service_tier` and `inference_geo` — the last of which
+matters because data-zone deployments carry a 1.1x multiplier. APIM's own `x-tokens-consumed`
+returned a single scalar.
+
+**What stays open.** Whether that scalar includes cache tokens when caching is actually active, and
+so whether any existing quota silently mis-counts a cached workload. The reference states total
+input tokens is the sum of input, cache creation and cache read, so naive addition double-counts.
+
+**How to close.** Drive a request with prompt caching on and compare the response body against
+`x-tokens-consumed` and the emitted metric.
 ### U8 — OTEL attribute names behind the split productivity metrics
 
 **Question.** Claude Code's OpenTelemetry export publishes

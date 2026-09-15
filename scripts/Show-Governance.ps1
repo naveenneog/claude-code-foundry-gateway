@@ -30,6 +30,8 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
+
+. (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 $gw = "https://$ApimName.azure-api.net/claude"
 
 # Windows PowerShell 5.1 throws on 4xx/5xx and has no -SkipHttpErrorCheck, so
@@ -135,20 +137,28 @@ if (-not $SkipThrottleTest) {
     Write-Host "3. Per-minute token budget" -ForegroundColor Yellow
     Write-Host "         temporarily lowering tpm-standard to 100..." -ForegroundColor DarkGray
     $restore = az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id tpm-standard --query value -o tsv 2>$null
-    az apim nv update -g $ResourceGroup --service-name $ApimName --named-value-id tpm-standard --value 100 -o none 2>$null
+    if (-not $restore) { throw "Could not read tpm-standard, so it cannot be restored afterwards. Not lowering it." }
+    Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'tpm-standard' -Value '100'
     Start-Sleep -Seconds 25
 
-    $throttled = $null
-    foreach ($i in 1..15) {
-        $r = Send-Prompt -Token $mine
-        if ($r.StatusCode -eq 429) { $throttled = $r; break }
+    # The restore runs in a finally: this demo deliberately cripples the
+    # standard tier, and an interrupted or failed run used to leave it capped at
+    # 100 tokens per minute with nothing said, because the restore was written
+    # with errors suppressed and no exit check.
+    try {
+        $throttled = $null
+        foreach ($i in 1..15) {
+            $r = Send-Prompt -Token $mine
+            if ($r.StatusCode -eq 429) { $throttled = $r; break }
+        }
+
+        if ($throttled) { Show-Result -Label "budget exhausted -> throttled" -Response $throttled -Expect '429' }
+        else { Write-Host "  [FAIL] never throttled after 15 calls" -ForegroundColor Red }
     }
-
-    if ($throttled) { Show-Result -Label "budget exhausted -> throttled" -Response $throttled -Expect '429' }
-    else { Write-Host "  [FAIL] never throttled after 15 calls" -ForegroundColor Red }
-
-    az apim nv update -g $ResourceGroup --service-name $ApimName --named-value-id tpm-standard --value $restore -o none 2>$null
-    Write-Host ("         tpm-standard restored to {0}" -f $restore) -ForegroundColor DarkGray
+    finally {
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'tpm-standard' -Value $restore
+        Write-Host ("         tpm-standard restored to {0}" -f $restore) -ForegroundColor DarkGray
+    }
     Write-Host ""
 }
 

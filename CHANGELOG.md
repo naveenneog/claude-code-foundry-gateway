@@ -80,6 +80,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Named value writes fail loudly instead of silently. Every write used
+  `az apim nv update ... -o none 2>$null` with no exit check, and named values cap at 4,096
+  characters — measured 2026-09-15: 4,096 returns HTTP 201, 8,192 returns HTTP 400. An object id
+  plus separator is 37 characters, so a tier holds about 110 developers. Past that the write failed,
+  the error was discarded, and `Sync-ClaudeAccess.ps1` reported a successful sync while entitlement
+  silently stopped updating. `Show-Governance.ps1` was worse: it lowers `tpm-standard` to 100 to
+  demonstrate throttling, and a failed restore left the standard tier capped at 100 tokens per
+  minute. `scripts/ApimNamedValue.ps1` now refuses an oversized value before the call, throws on a
+  failed one, and the restore runs in a `finally`.
 - Usage reports read the Application Insights the gateway is currently writing to, instead of a
   workspace named by convention. The reference deployment moved workspaces on 2026-08-31 and
   nothing noticed: every P10 assertion still passed on data that had stopped two days earlier,

@@ -1,6 +1,6 @@
 # Status
 
-**Active packet:** P16 - close the bypass. P-0, P10 to P13, P15 and P16 are complete; P14 is the only packet left.
+**Active packet:** P17 - named value writes fail loudly. Shipped. M4 business-unit chargeback is planned in ROADMAP; P18 and P20/P20b are next and gate the rest.
 
 ## What is shipped (M0)
 
@@ -284,10 +284,47 @@ is that the access is ungoverned, which is the operator's decision to act on.
 | UX | Accept | Findings are graded rather than flattened, the removal command is printed with the scope the grant actually came from, and the output says to check a principal before deleting it |
 | Security | Accept | Read-only. It reports and refuses to remediate, which is right: several holders are legitimate platform identities, and an audit that deletes things is one nobody runs twice |
 
+## P17 acceptance criteria — named value writes fail loudly
+
+Every named value write in this repository was made with `az apim nv update ... -o none 2>$null` and
+no exit check. Named values cap at 4,096 characters, so past about 110 object ids the write failed,
+the error went to `$null`, and the caller reported success.
+
+- [x] `scripts/ApimNamedValue.ps1`, dot-sourced by both callers
+- [x] An oversized value is refused before the request, naming the limit and how many entries fit
+- [x] A failed write throws, carrying what the service actually said
+- [x] No script writes a named value with errors suppressed — asserted, not just replaced once
+- [x] The governance demo restores `tpm-standard` in a `finally`
+- [x] Verified live: a valid write lands and reads back identical
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+### What the work found
+
+The sync was the obvious victim: past ~110 members a tier stops updating while the run reports
+success. The second one was worse. `Show-Governance.ps1` lowers `tpm-standard` to 100 to demonstrate
+throttling, then restores it — with the same suppressed error and no `finally`. A failed or
+interrupted demo left the **standard tier capped at 100 tokens per minute**, silently. That restore
+now runs in a `finally`, and refuses to lower the value at all if it could not first read what to
+restore.
+
+Negative-tested end to end. A 150-entry allow list is refused with "5551 characters, which is 1455
+over the limit ... roughly 107 fit", and an invalid write throws with the service's own
+`ValidationError`. Neither created anything.
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | One helper, dot-sourced, matching the existing `Show-Banner.ps1` pattern. No new dependency |
+| Coder | Accept | The detector forbids the old shape repo-wide rather than fixing two call sites, so it cannot creep back. It skips comment lines, which it had to learn after flagging its own documentation |
+| QA | Accept | Both failure modes negative-tested against live Azure, and the live half asserts a read-back rather than trusting the exit code |
+| UX | Accept | The refusal says how far over the limit it is and roughly how many entries fit, so an operator learns the real capacity instead of a rejected request |
+| Security | Accept | Entitlement failing loudly is the point: the old behaviour froze an allow list while reporting success, which is a stale-authorization bug wearing a green tick. The helper never echoes a value |
+
 ## Commands that prove it
 
 ```powershell
-./tests/Test-All.ps1                                    # 11 checks, offline
+./tests/Test-All.ps1                                    # 12 checks, offline
 ./tests/Test-All.ps1 -IncludeAzure                      # plus the six that call Azure
 ./scripts/Get-ClaudeTelemetry.ps1                       # where this gateway logs, and whether metrics are on
 ./scripts/Get-ClaudeAnalytics.ps1 -Days 30              # the usage report
