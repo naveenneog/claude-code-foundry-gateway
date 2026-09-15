@@ -1,122 +1,228 @@
 # Changelog
 
 All notable changes to this project are recorded here.
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
+versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+Releases are tagged in git. `docs/ROADMAP.md` holds the forward plan and
+`docs/STATUS.md` the packet currently in flight.
 
 ## [Unreleased]
 
+Nothing yet. M4, business-unit chargeback, continues in `docs/ROADMAP.md`.
+
+## [1.5.0] - 2026-09-15
+
+The foundation for business-unit chargeback. Three independent limits were
+measured that together made the accelerator a roughly 100-developer system, which
+is below the scale at which chargeback is a question worth asking.
+
 ### Added
 
-- Chargeback ledger: `analytics/chargeback-ledger.kql`, one row per request with the caller
-  attached. Built on the API Management LLM log rather than custom metrics, because Microsoft caps a
-  metric dimension at 100 unique values and then, in its words, "silently discard[s]" the rest — one
-  dimension per developer reaches that at about a hundred people. The log is also the only
-  APIM-native source that is correct for streamed requests: measured 2026-09-15, a streamed call
-  reported 11 tokens through the quota scalar where the completion was 41. Identity is joined on
-  `context.RequestId`, carried deliberately because the log's `CorrelationId` is a GUID and
-  Application Insights `operation_Id` is a W3C trace id. Message capture stays off. ADR-0006.
-
-- `scripts/Get-ClaudeBypass.ps1`: who can reach Foundry without passing through the gateway. It
-  derives the roles that grant data-plane access from their `dataActions` rather than matching a
-  name, includes inherited assignments, excludes the gateway's own identity, and exits non-zero on
-  a finding. On the reference deployment the documented one-role hand check reported clean while
-  11 assignments could call Foundry directly — three of them through `Foundry User`, which grants
-  the same `Microsoft.CognitiveServices/*` as `Cognitive Services User` and appeared in no
-  version of this documentation.
-- Data subject request tooling. `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
-  telemetry holds about one person, per table, reading each table's plan from the workspace so it
-  states what is actually deletable. `scripts/Remove-ClaudeUserData.ps1` purges it with Azure
-  Monitor's GDPR Purge operation, one request per table, and does nothing without `-Execute`.
-  Both print the limits U7 established — 50 purge requests an hour, a 30-day completion SLA with
-  no expedite, and Analytics-plan tables only.
-- Model allowlist per tier: `models-standard` and `models-premium`, enforced at the gateway before
-  the request reaches Foundry. Sentinel commas make the match exact, so `claude-opus-5` does not
-  admit `claude-opus-5-mini`; an empty value allows every deployed model. Verified live in all
-  three directions.
-- `New-ClaudeCodePolicy.ps1 -Tier standard|premium` generates one managed-settings profile per
-  entitlement tier, including `availableModels` and the Claude Desktop tab keys.
-- ADR-0004 and the closure of U4: the Claude apps gateway supports a Foundry upstream, but it is
-  an inference proxy holding a shared upstream credential, so adopting it would remove the
-  per-developer Entra identity that P10, P11 and P12 depend on. Policy stays out of band.
-- Per-developer daily budget overrides. `scripts/Set-ClaudeBudget.ps1` sets and clears them,
-  `scripts/Get-ClaudeBudget.ps1` reports what the gateway would actually apply to each developer
-  and what they have spent this month. Overrides apply on the next request — the policy resolves
-  them per call. Measured 2026-09-02: `token-quota` accepts a policy expression but it must
-  return `long`; `Int32` and `string` are both rejected at deploy time.
-- `scripts/Get-ClaudeTelemetry.ps1`: which Application Insights this gateway is actually writing
-  to, resolved from its diagnostic rather than from a name, and whether metrics are enabled on
-  it. See ADR-0003.
-- Organisation-wide monthly spend ceiling: `quota-org`, enforced in the request path by an
-  `llm-token-limit` on a constant counter-key, checked before the per-tier budgets. Tier limits
-  still apply beneath it, so a developer can be inside their own budget and still be refused
-  because the organisation's is spent. It is a soft cap — the
-  [policy reference](https://learn.microsoft.com/en-us/azure/api-management/llm-token-limit-policy)
-  states high-concurrency requests can temporarily exceed the configured limit.
-- The gateway now says which budget ran out. Both refusals are `403` with the same
-  `LastError.Reason`, and `403` is also what the entitlement check returns, so a developer out of
-  budget previously read it as losing access. The reply is rewritten in Anthropic's error shape
-  carrying `"budget": "organisation"` or `"budget": "personal"`.
-- `tests/Test-OrgCeiling.ps1` and `tests/Test-OrgCeilingLive.ps1`. The second verifies a running
-  gateway; with `-ProveRefusal` it exhausts each budget, reads the message and restores the quota.
-- `analytics/claude-code-daily.kql` and `scripts/Get-ClaudeAnalytics.ps1`: Claude Code usage in
-  the shape of the Claude Code Analytics API, built from the gateway's own telemetry. Anthropic's
-  API does not cover Foundry — "Usage through ... Claude in Microsoft Foundry ... is not
-  included" ([reference](https://platform.claude.com/docs/en/manage-claude/claude-code-analytics-api),
-  retrieved 2026-09-02) — so after a migration this is the only source of those numbers.
-  Verified against live telemetry: 19 rows over 30 days regrouped into 13 records, 167,713 input
-  tokens, 22 sessions, 2 callers.
-- `tests/Test-Analytics.ps1`: asserts the query's contract offline, and with `-IncludeAzure`
-  submits it to Application Insights and checks each column carries data independently. Every
-  live assertion was negative-tested by breaking the query and confirming the suite turns red.
-- U8 in `docs/UNKNOWNS.md`: the OpenTelemetry attributes that split lines-of-code and tool
-  decisions are unverified, so those four fields return null rather than a guessed zero.
-- Ironclad engineering discipline: `.ironclad/charter.json`, a vendored `gate.mjs`, and the
-  `docs/` ledger. See ADR-0001.
-- `docs/ROADMAP.md` with a parity matrix against Claude Enterprise and the M1–M3 packet queue.
-- `docs/UNKNOWNS.md` with six open questions, each with what it blocks and how to close it.
-- ADR-0002: analytics comes from gateway telemetry and Claude Code OpenTelemetry, joined in Log
-  Analytics, because tool accept/reject and lines-of-code are client-side and never reach the
-  gateway.
-- `DEVELOPER.md`: the developer's setup on one page, and a router at the top of the README.
-- Client screenshots for the CLI, VS Code and Claude Desktop, and the installer run, all
-  redacted by `guide/redact-clients.mjs` and `guide/redact-terminal.mjs`.
-- `Import-ClaudeEntitlement.ps1`: bulk entitlement from a CSV or an Entra group, resolving
-  identifiers four ways because a directory holds a person under several addresses.
-- `Import-ClaudeMemory.ps1`: lands memory exported from claude.ai into `CLAUDE.md`.
-- `New-ClaudeCodePolicy.ps1`: managed settings for Claude Code as JSON, `.reg`, Intune OMA-URI
-  and `.mobileconfig`.
-- `tests/Test-AzArguments.ps1`: fails on any `az` argument that `cmd.exe` would re-parse.
+- Chargeback ledger: `analytics/chargeback-ledger.kql`, one row per request with
+  the caller attached. Built on the API Management LLM log rather than custom
+  metrics, because Microsoft caps a metric dimension at 100 unique values and
+  then, in its words, "silently discard[s]" the rest — one dimension per
+  developer reaches that at about a hundred people. The log is also the only
+  APIM-native source correct for streamed requests: measured 2026-09-15, a
+  streamed call reported 11 tokens through the quota scalar where the completion
+  was 41. Identity is joined on `context.RequestId`, carried deliberately because
+  the log's `CorrelationId` is a GUID and Application Insights `operation_Id` is
+  a W3C trace id. Message capture stays off. ADR-0006.
+- `scripts/ApimNamedValue.ps1`: writes a named value, refuses an oversized one
+  before the call, and throws on a failed one.
+- ADR-0005: identity resolution becomes a durable projection synced from Graph
+  off the request path, rather than a directory call on a cache miss. Reverses a
+  design proposed and rejected the same day.
+- ADR-0006: why the ledger is the built-in LLM log, and the four sources it was
+  chosen from.
+- U9 to U12 in `docs/UNKNOWNS.md`: counter-key cardinality at scale, Graph load
+  on a cold cache, ledger ingestion cost against the Basic-Logs purge conflict,
+  and cache accounting. U12 is closed below.
 
 ### Fixed
 
 - Named value writes fail loudly instead of silently. Every write used
-  `az apim nv update ... -o none 2>$null` with no exit check, and named values cap at 4,096
-  characters — measured 2026-09-15: 4,096 returns HTTP 201, 8,192 returns HTTP 400. An object id
-  plus separator is 37 characters, so a tier holds about 110 developers. Past that the write failed,
-  the error was discarded, and `Sync-ClaudeAccess.ps1` reported a successful sync while entitlement
-  silently stopped updating. `Show-Governance.ps1` was worse: it lowers `tpm-standard` to 100 to
-  demonstrate throttling, and a failed restore left the standard tier capped at 100 tokens per
-  minute. `scripts/ApimNamedValue.ps1` now refuses an oversized value before the call, throws on a
-  failed one, and the restore runs in a `finally`.
-- Usage reports read the Application Insights the gateway is currently writing to, instead of a
-  workspace named by convention. The reference deployment moved workspaces on 2026-08-31 and
-  nothing noticed: every P10 assertion still passed on data that had stopped two days earlier,
-  and `Get-ClaudeBudget.ps1` reported `0 used this month` on a gateway that had served hundreds
-  of requests that morning. `tests/Test-Analytics.ps1` now compares the newest metric against the
-  newest request in the same workspace, so a stale workspace fails while an idle gateway does
-  not. ADR-0003.
+  `az apim nv update ... -o none 2>$null` with no exit check, and named values
+  cap at 4,096 characters — measured: 4,096 returns HTTP 201, 8,192 returns HTTP
+  400. An object id plus separator is 37 characters, so a tier holds about 110
+  developers. Past that the write failed, the error was discarded, and
+  `Sync-ClaudeAccess.ps1` reported a successful sync while entitlement silently
+  stopped updating. `Show-Governance.ps1` was worse: it lowers `tpm-standard` to
+  100 to demonstrate throttling, and a failed restore left the standard tier
+  capped at 100 tokens per minute. The restore now runs in a `finally`.
 
 ### Changed
 
-- Tests moved from `scripts/` to `tests/`. `Test-Prerequisites.ps1` and `Test-FoundryDirect.ps1`
-  stayed, because they are runtime tooling rather than tests. See ADR-0001.
-- The installer reuses an existing v2 API Management instance instead of always creating one.
-- Documentation states what is true and cites a source, rather than telling the reader what
-  matters.
+- **Behaviour change.** `Sync-ClaudeAccess.ps1` now throws where it previously
+  continued. A sync that outgrows the 4,096-character limit fails instead of
+  reporting success, so automation that treated a zero exit code as "entitlement
+  is current" will now see the failure it was missing.
+
+### Known limitation
+
+- The per-user token budget does not count cache tokens. Measured 2026-09-15:
+  two identical calls with a cacheable 10,000-token prompt wrote and then read
+  10,003 cache tokens, and both metered 16. This is documented API Management
+  behaviour — the `llm-token-limit` policy "currently counts prompt and
+  completion tokens only" — but against thirty days of live usage, weighted at
+  Claude's published rates where output is 5x base input and a cache read is
+  0.1x, **38.7% of the real cost weight is invisible to the budget**. The ledger
+  records what the budget cannot see. Correcting the budget itself is M4 work.
+
+## [1.4.0] - 2026-09-03
+
+Claude Enterprise parity: analytics, spend control, capability scoping and
+compliance retrieval.
+
+### Added
+
+- `analytics/claude-code-daily.kql` and `scripts/Get-ClaudeAnalytics.ps1`: Claude
+  Code usage in the shape of the Claude Code Analytics API, built from the
+  gateway's own telemetry. Anthropic's API does not cover Foundry — "Usage
+  through ... Claude in Microsoft Foundry ... is not included"
+  ([reference](https://platform.claude.com/docs/en/manage-claude/claude-code-analytics-api),
+  retrieved 2026-09-02) — so after a migration this is the only source of those
+  numbers.
+- Organisation-wide monthly spend ceiling: `quota-org`, enforced in the request
+  path on a constant counter-key and checked before the per-tier budgets. A soft
+  cap; the policy reference states high-concurrency requests can temporarily
+  exceed the configured limit.
+- The gateway says which budget ran out. Both refusals are `403` with the same
+  `LastError.Reason`, and `403` is also what the entitlement check returns, so a
+  developer out of budget previously read it as losing access. The reply carries
+  `"budget": "organisation"` or `"budget": "personal"`.
+- Per-developer daily budget overrides: `scripts/Set-ClaudeBudget.ps1` sets and
+  clears them, `scripts/Get-ClaudeBudget.ps1` reports effective limits and spend
+  to date. Measured: `token-quota` accepts a policy expression but it must return
+  `long`; `Int32` and `string` are both rejected at deploy time.
+- Model allowlist per tier: `models-standard` and `models-premium`, enforced
+  before the request reaches Foundry. Sentinel commas make the match exact, so
+  `claude-opus-5` does not admit `claude-opus-5-mini`.
+- `New-ClaudeCodePolicy.ps1 -Tier standard|premium` generates one managed-settings
+  profile per entitlement tier.
+- Data subject request tooling: `scripts/Find-ClaudeUserData.ps1` reports what the
+  telemetry holds about one person and what is actually deletable;
+  `scripts/Remove-ClaudeUserData.ps1` purges it and does nothing without
+  `-Execute`. Both print the limits — 50 purge requests an hour, a 30-day
+  completion SLA with no expedite, Analytics-plan tables only.
+- `scripts/Get-ClaudeBypass.ps1`: who can reach Foundry without passing through
+  the gateway. It derives the roles granting data-plane access from their
+  `dataActions` rather than matching a name, and includes inherited assignments.
+  On the reference deployment the documented one-role hand check reported clean
+  while 11 assignments could call Foundry directly — three through `Foundry
+  User`, which grants the same `Microsoft.CognitiveServices/*` as `Cognitive
+  Services User`.
+- `scripts/Get-ClaudeTelemetry.ps1`: which Application Insights the gateway is
+  actually writing to, resolved from its diagnostic rather than a name.
+- ADR-0002 (analytics from two sources), ADR-0003 (telemetry located from the
+  gateway), ADR-0004 (policy delivered out of band).
 
 ### Fixed
 
-- `RoleAssignmentExists` when reusing a gateway that already held the Foundry role.
-- Entitlement sync failing on Windows because `&` in a Graph URL reached `cmd.exe`.
-- A redeploy resetting the entitlement allowlists to empty, revoking every user.
-- Reuse resetting API Management TLS settings, NAT gateway and developer portals to defaults.
+- Usage reports read the Application Insights the gateway is currently writing
+  to, instead of a workspace named by convention. The reference deployment moved
+  workspaces on 2026-08-31 and nothing noticed: every analytics assertion still
+  passed on data that had stopped two days earlier, and `Get-ClaudeBudget.ps1`
+  reported `0 used this month` on a gateway that had served hundreds of requests
+  that morning. ADR-0003.
+
+## [1.3.0] - 2026-09-02
+
+### Added
+
+- Ironclad engineering discipline: `.ironclad/charter.json`, a vendored
+  `gate.mjs`, and the `docs/` ledger — CHARTER, ROADMAP, STATUS, UNKNOWNS and
+  ADRs. See ADR-0001.
+- `docs/ROADMAP.md` with a parity matrix against Claude Enterprise.
+- `docs/UNKNOWNS.md`, so what is not known is written down before it is built on.
+- `DEVELOPER.md`: the developer's setup on one page, with a router at the top of
+  the README.
+- Client screenshots for the CLI, VS Code and Claude Desktop, redacted by
+  `guide/redact-clients.mjs` and `guide/redact-terminal.mjs`.
+
+### Changed
+
+- Tests moved from `scripts/` to `tests/`. `Test-Prerequisites.ps1` and
+  `Test-FoundryDirect.ps1` stayed, being runtime tooling rather than tests.
+  See ADR-0001.
+- Documentation states what is true and cites a source, rather than telling the
+  reader what matters.
+
+## [1.2.0] - 2026-08-31
+
+Robustness on Windows, and the first migration tooling.
+
+### Added
+
+- `Import-ClaudeEntitlement.ps1`: bulk entitlement from a CSV or an Entra group,
+  resolving identifiers four ways because a directory holds a person under
+  several addresses.
+- `Import-ClaudeMemory.ps1`: lands memory exported from claude.ai into
+  `CLAUDE.md`.
+- `New-ClaudeCodePolicy.ps1`: managed settings for Claude Code as JSON, `.reg`,
+  Intune OMA-URI and `.mobileconfig`.
+- `docs/MIGRATION.md`, covering what transfers from Claude Enterprise and what
+  does not.
+- `tests/Test-AzArguments.ps1`: fails on any `az` argument `cmd.exe` would
+  re-parse.
+- A project banner, and `.gitattributes` pinning line endings so shell scripts
+  survive a Windows contributor.
+
+### Changed
+
+- The installer reuses an existing v2 API Management instance instead of always
+  creating one.
+
+### Fixed
+
+- `az --query` mangled on Windows, because `az` is a `.cmd` shim and PowerShell
+  only quotes a native argument containing a space.
+- Entitlement sync failing on Windows because `&` in a Graph URL reached
+  `cmd.exe`; the sync also never paged, silently truncating at 999 members.
+- A redeploy resetting the entitlement allow lists to empty, revoking every user.
+- Reuse resetting API Management TLS settings, NAT gateway and developer portals
+  to defaults.
+- `RoleAssignmentExists` when reusing a gateway that already held the Foundry
+  role.
+- The migration guide's claim that Desktop and Cowork sessions do not transfer.
+  An import wizard exists.
+
+## [1.1.0] - 2026-08-28
+
+### Added
+
+- Interactive admin setup, one-command developer setup, and an onboarding email
+  template.
+- macOS and Linux versions of the admin and workstation scripts.
+- An end-to-end health check, `scripts/Debug-ClaudeCode.ps1`.
+- A preflight so setup fails early rather than midway.
+
+### Fixed
+
+- The health check detecting the main VS Code process rather than the extension
+  host.
+
+## [1.0.0] - 2026-08-19
+
+Initial release.
+
+### Added
+
+- Governed gateway for Claude Code on Microsoft Foundry: API Management Basic v2,
+  per-developer token budgets keyed on the Entra object id, tiering from Entra
+  group membership, and chargeback telemetry. The gateway holds the only Foundry
+  credential; developers authenticate with their own Entra token.
+- `Install-ClaudeGateway.ps1` and the Bicep template behind it.
+- `Sync-ClaudeAccess.ps1`, syncing Entra group membership into API Management
+  named values.
+- Task-shaped documentation, an annotated click-by-click UI guide, and the
+  Playwright tooling that generates its screenshots.
+
+[Unreleased]: https://github.com/naveenneog/claude-code-foundry-gateway/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/naveenneog/claude-code-foundry-gateway/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/naveenneog/claude-code-foundry-gateway/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/naveenneog/claude-code-foundry-gateway/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/naveenneog/claude-code-foundry-gateway/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/naveenneog/claude-code-foundry-gateway/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/naveenneog/claude-code-foundry-gateway/releases/tag/v1.0.0
