@@ -170,6 +170,36 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Fixed
 
+- Two documented claims about revocation were wrong.
+
+  `ONBOARDING.md` showed revocation as `az ad group member remove` against
+  `claude-code-standard` only, while its own checklist said "removed from both
+  groups". A premium developer, or one in both tiers, kept access. The step is
+  now `Set-ClaudeDeveloper.ps1 -Remove -Sync`, which clears both tier groups and
+  every business-unit group.
+
+  The same section said a departing employee's access "is revoked at that moment,
+  ahead of any sync" once their Entra account is disabled. Disabling an account
+  stops new tokens being issued; it does not invalidate one already issued. The
+  gateway checks the signature and claims with `validate-jwt` and does not call
+  Entra per request, so a token obtained shortly before the account was disabled
+  keeps working until it expires. The guide now says to remove membership and
+  sync as well.
+
+- `BUSINESS-UNITS.md` said changing a team's tier was "one membership edit in
+  Entra" and that "nothing in the gateway changes". It is two edits, and the
+  gateway's entitlement lists do change — when `Sync-ClaudeAccess.ps1` next runs.
+  That sync is not automatic; this accelerator ships it as a script to schedule,
+  so until it runs the old tier still applies.
+
+- `BUSINESS-UNITS.md` described a user's Groups blade as showing "two rows, one
+  per axis", and said a missing row was the fault. The blade lists direct
+  memberships. Measured on two accounts: one shows its team and its tier, because
+  that tier was assigned directly; the other shows only its team, and resolves to
+  the same tier and business unit transitively. The business unit never appears
+  there. The guide now gives `az ad user get-member-groups`, verified to return
+  the full transitive set.
+
 - A service principal in a tier group was never entitled, so adding one was a
   silent no-op and the gateway returned 403 for an identity the portal listed as
   a member. `Sync-ClaudeAccess.ps1` read membership through

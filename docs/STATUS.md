@@ -1,6 +1,6 @@
 # Status
 
-**Active packet:** P35 — the workload identity gap in the entitlement sync, and the tier and team portal captures. M4 is complete. Full regression including the Azure half passes: 29 checks, 71 of 71 mutations caught.
+**Active packet:** P35 — the workload identity gap in the entitlement sync, the tier and team portal captures, and three documented claims that were wrong. M4 is complete. Full regression including the Azure half passes: 29 checks, 75 of 75 mutations caught.
 
 ## P35 acceptance criteria — a service principal in a tier group is entitled
 
@@ -49,6 +49,24 @@ The first assertion written for the guide matched the phrase `service principal`
 in the alt text and twice in the prose. The mutation that removed the explanation was missed.
 This is the sixth time an assertion has matched prose rather than the claim; it now matches a
 sentence that occurs once.
+
+### Documentation review
+
+`guide/ask-astra.mjs` asks gpt-6-astra to judge a page on four fixed points — jargon used before
+it is explained, rationale placed ahead of the command, missing steps, and length that carries no
+instruction. Run against `BUSINESS-UNITS.md` and `ONBOARDING.md` it returned 22 and 24 items.
+
+Most were style. Four were factual errors, each verified against the live tenant before changing
+anything, and each now carries an assertion and a mutation:
+
+| Claim as written | Measured |
+|---|---|
+| A user's Groups blade shows "two rows, one per axis" | It lists direct memberships. One account shows two rows, another shows one; both resolve identically. The business unit never appears |
+| Changing a tier is "one membership edit" and "nothing in the gateway changes" | Two edits, and the entitlement lists change when the sync next runs. The sync is not automatic |
+| Revocation is `az ad group member remove` from `claude-code-standard` | Leaves a premium or dual-tier member entitled, and leaves business-unit membership behind |
+| A disabled Entra account revokes access "at that moment, ahead of any sync" | It stops new tokens. `validate-jwt` does not call Entra per request, so an issued token works until it expires |
+
+The last is the one worth keeping in view: it reads as a security control and is not one.
 
 ## P16 acceptance criteria — close the bypass
 

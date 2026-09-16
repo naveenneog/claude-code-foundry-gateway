@@ -223,6 +223,26 @@ Assert 'setup documents SKU sizing'               ($setup -match '(?i)how many d
 $onb = Get-Content (Join-Path $root 'docs/ONBOARDING.md') -Raw
 Assert 'onboarding documents tier limits'         ($onb -match 'Set-ClaudeTier')
 
+# Revocation. Two claims here are load-bearing and were both wrong before:
+#
+#  - removing one tier group leaves a premium developer entitled, so the
+#    documented command has to be the one that clears both tiers and every
+#    business unit rather than a single `az ad group member remove`
+#  - disabling an Entra account does not invalidate a token already issued.
+#    validate-jwt checks the signature and claims and does not call Entra per
+#    request, so the old text sent an admin away believing access had stopped
+#
+# Matched on the specific sentence, not on 'revoke' or 'token', because both
+# words appear either side of the correction.
+Assert 'revocation uses the command that clears every group' `
+    ($onb -match 'Set-ClaudeDeveloper\.ps1 -User [^\r\n]*-Remove -Sync')
+Assert 'and says a disabled account is not the revocation' `
+    ($onb -match 'does not invalidate one already issued')
+Assert 'and names why the gateway cannot tell' `
+    ($onb -match 'does not call Entra per request')
+Assert 'the checklist covers business unit groups' `
+    ($onb -match '(?m)^- \[ \] Removed from every business-unit and team group')
+
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Admin surface contract holds.' -ForegroundColor Green

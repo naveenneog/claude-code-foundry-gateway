@@ -233,6 +233,30 @@ $mutations = @(
        From  = 'workload identity, not a person'
        To    = 'thing' }
 
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'a tier change goes back to being instant'
+       File  = 'docs/BUSINESS-UNITS.md'
+       From  = 'takes effect when `Sync-ClaudeAccess.ps1` next runs'
+       To    = 'takes effect immediately' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'revocation goes back to clearing one group'
+       File  = 'docs/ONBOARDING.md'
+       From  = '-Remove -Sync'
+       To    = '-Remove' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a disabled account is called a revocation again'
+       File  = 'docs/ONBOARDING.md'
+       From  = 'does not invalidate one already issued'
+       To    = 'revokes every token at once' }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the guide stops saying the sync must be scheduled'
+       File  = 'docs/BUSINESS-UNITS.md'
+       From  = 'sync is not automatic'
+       To    = 'sync runs on its own' }
+
     # --- P24/P27, the Observe half ---
 
     @{ Suite = 'Test-Observability.ps1'

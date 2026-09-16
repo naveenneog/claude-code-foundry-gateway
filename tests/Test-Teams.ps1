@@ -191,6 +191,15 @@ Assert 'the guide covers the tier membership view' ($d -match 'claude-code-stand
 Assert 'it explains the service principal row'     ($d -match 'workload identity, not a person')
 Assert 'and says where its spend lands'            ($d -match '(?i)`unassigned`')
 
+# Entitlement is not live. A tier change is two edits in Entra and takes effect
+# only when the sync next runs, and this accelerator ships the sync as a script
+# to schedule rather than running it. Saying otherwise sends an admin looking
+# for a fault after a change that simply has not been applied yet.
+Assert 'the guide says a tier change needs the sync' `
+    ($d -match 'takes effect when `Sync-ClaudeAccess\.ps1` next runs')
+Assert 'and that the sync is not automatic' `
+    ($d -match 'sync is not automatic')
+
 # A tier group can hold a workload identity as well as people. Getting that
 # wrong is silent: Graph returns 200 and an empty collection rather than an
 # error, so the sync writes an entitlement list with the service principal

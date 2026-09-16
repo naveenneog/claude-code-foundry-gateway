@@ -59,8 +59,14 @@ A group can sit in more than one parent, which is what makes the two axes
 independent: `claude-team-ites-1` is inside `claude-bu-mcaps` for chargeback and
 inside `claude-code-standard` for entitlement.
 
-Changing a team's tier is one membership edit in Entra. Nothing in the gateway
-changes, because entitlement is already resolved transitively.
+Changing a team's tier is two membership edits in Entra: remove the team group
+from one tier group, add it to the other. Its business unit, budget and spend
+history are untouched, and no configuration in this repository changes.
+
+It takes effect when `Sync-ClaudeAccess.ps1` next runs, which is what rewrites
+the gateway's entitlement lists from Entra. That sync is not automatic — this
+accelerator ships it as a script for you to schedule, so until it runs the old
+tier still applies. See [ONBOARDING.md](ONBOARDING.md) for scheduling it.
 
 ### Seeing it in Entra
 
@@ -96,7 +102,8 @@ entitlement, at the same time:
 ![The Group memberships blade of claude-team-ites-1, listing two security groups it belongs to: claude-bu-mcaps and claude-code-standard, both assigned and cloud-sourced](guide/entra-3-team-memberships.png)
 
 Moving that team to the premium tier is removing one of those two rows and
-adding another. Its business unit, budget and spend history are untouched.
+adding another, then running the sync. Its business unit, budget and spend
+history are untouched.
 
 Read from the tier side, the same nesting looks like this. `claude-code-standard`
 holds two teams and three people added to the tier directly:

@@ -377,20 +377,26 @@ Entra group, and a branch in the policy's tier lookup. The policy structure is i
 
 ## 5. Revoke access
 
-```bash
-az ad group member remove --group claude-code-standard --member-id <oid>
+```powershell
+./scripts/Set-ClaudeDeveloper.ps1 -User developer@contoso.com -Remove -Sync `
+    -ApimName <apim> -ResourceGroup <rg>
 ```
 
-```powershell
-./scripts/Sync-ClaudeAccess.ps1 -ApimName <apim> -ResourceGroup <rg>
-```
+`-Remove` takes them out of both tier groups and every business-unit group, so a
+premium developer, or one who is in both tiers, is not left with access. `-Sync`
+runs the sync straight after. Confirm the object id appears in neither
+`allow-standard` nor `allow-premium` afterwards.
 
 The next request returns `403`. There is no credential to rotate and nothing to
 collect from the developer's machine, because none was ever issued.
 
-**When someone leaves the company** their Entra account is disabled and token
-acquisition fails immediately — access is revoked at that moment, ahead of any
-sync. Run the sync anyway to keep the allowlists clean.
+**When someone leaves the company**, disable the Entra account as part of normal
+offboarding — but do not treat that as the revocation. Disabling the account
+stops them acquiring a *new* token; it does not invalidate one already issued.
+The gateway checks the token's signature and claims with `validate-jwt`, which
+does not call Entra per request, so an access token obtained shortly before the
+account was disabled keeps working until it expires. Remove the group membership
+and run the sync as well.
 
 > **Also check the bypass.** Removing someone from the group does nothing if they
 > hold `Cognitive Services User` directly on the Foundry account. See
@@ -400,7 +406,8 @@ sync. Run the sync anyway to keep the allowlists clean.
 
 ## 6. Offboarding checklist
 
-- [ ] Removed from both `claude-code-*` groups
+- [ ] Removed from both `claude-code-*` tier groups
+- [ ] Removed from every business-unit and team group
 - [ ] `Sync-ClaudeAccess.ps1` run, allowlists confirmed clean
 - [ ] No direct `Cognitive Services User` on the Foundry account
 - [ ] Usage exported from [Monitoring](MONITORING.md) if it is being charged back
