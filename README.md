@@ -32,6 +32,12 @@ Check the [prerequisites](#prerequisites) first if it stops early.
 
 ### Running it day to day
 
+One command for whether anything needs attention:
+
+```powershell
+./scripts/Test-ClaudeHealth.ps1 -ResourceGroup <rg> -ApimName <apim>
+```
+
 Two words worth knowing before the table, because every command below uses them:
 
 - A **tier** is what a developer may do — which models, how many tokens a minute
@@ -486,7 +492,8 @@ scripts/
   setup-claude-workstation.sh  the same, for macOS and Linux
   get-foundry-token.*          credential helper for Claude Desktop
   New-OnboardingEmail.ps1      generate the developer's onboarding email
-  Debug-ClaudeCode.ps1         end-to-end health check, run this first
+  Test-ClaudeHealth.ps1        is the gateway healthy? one command, six checks
+  Debug-ClaudeCode.ps1         a developer's machine, layer by layer
   Sync-ClaudeAccess.ps1        Entra groups -> APIM named values
   Compare-ClaudeEntitlement.ps1  what the gateway enforces vs what Entra says
   ClaudeGraphMembership.ps1    the shared Graph membership read

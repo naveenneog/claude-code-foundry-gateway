@@ -168,6 +168,47 @@ Assert 'the README links the model guide'  ($readme -match '\[Models\]\(docs/MOD
 Assert 'and the plugin guide'              ($readme -match '\[Plugins\]\(docs/PLUGINS\.md\)')
 
 Write-Host ''
+Write-Host 'Health - one command for the whole gateway' -ForegroundColor Cyan
+
+$health = Join-Path $root 'scripts/Test-ClaudeHealth.ps1'
+Assert 'a health check exists' (Test-Path $health)
+$hc = Get-Content $health -Raw
+
+# It composes the shipped checks rather than reimplementing them. A second copy
+# of the logic drifts, and then the summary and the detail disagree.
+foreach ($s in 'Compare-ClaudeEntitlement.ps1', 'Measure-ClaudeCeiling.ps1', 'Get-ClaudeBypass.ps1') {
+    Assert "it runs $s" ($hc -match [regex]::Escape($s))
+}
+Assert 'and uses their exit codes'  ($hc -match '\$code = \$LASTEXITCODE')
+Assert 'named, not positional'      ($hc -match '\[hashtable\]\$ScriptArgs')
+
+# Write-Host does not travel on the success or error stream, so 2>&1 captured
+# nothing and the sub-checks printed sixty lines over the summary.
+Assert 'child output is captured, not printed' ($hc -match '& \$path @ScriptArgs \*>&1')
+Assert 'and can be shown on request'           ($hc -match 'if \(\$Detailed\) \{ Write-Host \$out')
+
+# The classic-tier case is the one that looks healthy and meters nothing.
+Assert 'a classic SKU fails the run' ($hc -match "\`$sku -in @\('BasicV2', 'StandardV2', 'PremiumV2'\)")
+Assert 'and says why it matters'     ($hc -match 'meter as zero tokens')
+
+# A deployed model with no price is served and reported at nothing.
+Assert 'unpriced models are a failure' ($hc -match 'deployed but unpriced')
+# Spend landing on no budget is worth surfacing but is not broken.
+Assert 'unassigned developers are a warning' ($hc -match "Add-Result 'Business units' 'warn'")
+
+Assert 'every finding carries its fix' ($hc -match 'if \(\$r\.fix\) \{ Write-Host')
+Assert 'it exits non-zero on a failure' ($hc -match '(?m)^if \(\$failed\.Count\) \{ exit 1 \}')
+Assert 'and can be made strict'         ($hc -match "if \(\`$FailOn -eq 'warn' -and \`$warned\.Count\) \{ exit 1 \}")
+Assert 'it can emit JSON for monitoring' ($hc -match 'healthy = \(\$failed\.Count -eq 0\)')
+
+# Nothing is written. A health check that changes state cannot be run freely.
+Assert 'it does not write named values' ($hc -notmatch 'Set-ApimNamedValue')
+Assert 'and says so'                    ($hc -match 'Nothing is written')
+
+$readme2 = Get-Content (Join-Path $root 'README.md') -Raw
+Assert 'the README points at it' ($readme2 -match 'Test-ClaudeHealth\.ps1')
+
+Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Models and plugins contract holds.' -ForegroundColor Green
 exit 0

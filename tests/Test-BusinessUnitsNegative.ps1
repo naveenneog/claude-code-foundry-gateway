@@ -558,6 +558,50 @@ $mutations = @(
        From  = 'The third is the one that fails quietly'
        To    = 'All four are obvious' }
 
+    # --- the health check ---
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'the health check reimplements a check instead of running it'
+       File  = 'scripts/Test-ClaudeHealth.ps1'
+       From  = "'Compare-ClaudeEntitlement.ps1'"
+       To    = "'Nothing.ps1'" }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'sub-check output floods the summary again'
+       File  = 'scripts/Test-ClaudeHealth.ps1'
+       From  = '& $path @ScriptArgs *>&1'
+       To    = '& $path @ScriptArgs 2>&1' }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'arguments go back to positional'
+       File  = 'scripts/Test-ClaudeHealth.ps1'
+       From  = '[hashtable]$ScriptArgs'
+       To    = '[string[]]$ScriptArgs' }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'a classic SKU stops failing the run'
+       File  = 'scripts/Test-ClaudeHealth.ps1'
+       From  = "`$sku -in @('BasicV2', 'StandardV2', 'PremiumV2')"
+       To    = "`$true" }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'an unpriced model stops being a failure'
+       File  = 'scripts/Test-ClaudeHealth.ps1'
+       From  = 'deployed but unpriced'
+       To    = 'some models' }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'the health check stops exiting non-zero'
+       File  = 'scripts/Test-ClaudeHealth.ps1'
+       From  = 'if ($failed.Count) { exit 1 }'
+       To    = 'if ($false) { exit 1 }' }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'the health check starts writing state'
+       File  = 'scripts/Test-ClaudeHealth.ps1'
+       From  = 'Nothing is written'
+       To    = 'Set-ApimNamedValue is used here' }
+
     @{ Suite = 'Test-Teams.ps1'
        Name  = 'the guide stops saying the sync must be scheduled'
        File  = 'docs/BUSINESS-UNITS.md'

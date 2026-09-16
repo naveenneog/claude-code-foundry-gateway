@@ -28,6 +28,19 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- `Test-ClaudeHealth.ps1` answers, in one command, whether the gateway needs
+  attention. Six read-only checks: the API Management tier is v2, entitlement is
+  in sync with the directory, no named value is near its limit, every deployed
+  Claude model is priced, nothing can reach Foundry around the gateway, and no
+  entitled developer is without a business unit.
+
+  It runs the shipped checks and reads their exit codes rather than
+  reimplementing them, so there is no second copy of the logic to drift. Each
+  finding carries the command that fixes it. `-AsJson` for monitoring, `-FailOn
+  warn` for a scheduled gate, `-Detailed` to see each check's own output.
+
+  Nothing is written, so it can be run freely.
+
 - `Add-ClaudeModel.ps1` makes a newly released Claude model usable in one
   command: it checks the model is deployed (and deploys it with `-Deploy`), adds
   it to the tier allow lists, writes its price, and prints what developers have

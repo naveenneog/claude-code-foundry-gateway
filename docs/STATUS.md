@@ -1,6 +1,6 @@
 # Status
 
-**Active packet:** P36 — adding a model, and plugin and marketplace governance. M4 is complete. Full regression including the Azure half passes: 31 checks, 124 of 124 mutations caught.
+**Active packet:** P36 — adding a model, and plugin and marketplace governance. M4 is complete. Full regression including the Azure half passes: 31 checks, 131 of 131 mutations caught.
 
 ## P36 acceptance criteria — the two things an admin does after go-live
 
@@ -9,9 +9,22 @@
 - [x] Retiring a model is one command too, and keeps its price so past months still reconcile
 - [x] Marketplace and extension controls are emitted for both clients from one input
 - [x] The limits of those controls are stated rather than implied
+- [x] One command answers whether the gateway needs attention at all
 - [x] `node .ironclad/gate.mjs --stage packet` exits 0
 
 ### What the work found
+
+**Forty-seven scripts, and no single answer to "is it healthy?"** `Test-ClaudeHealth.ps1` runs the
+read-only checks and reports one verdict with the fix beside each finding. It composes the shipped
+checks and reads their exit codes rather than reimplementing them, so there is no second copy to
+drift. On the reference deployment it reports four passes, one failure (11 principals can reach
+Foundry directly) and one warning (3 developers in no business unit).
+
+Two bugs in it, both found by running it. Splatting an array passes arguments **positionally**, so
+the entitlement check ran with the resource group as its first positional parameter and compared
+0 identities against 0 — reporting "In sync" while measuring nothing. And `Write-Host` does not
+travel on the success or error stream, so `2>&1` captured none of the sub-check output and sixty
+lines printed over the summary meant to replace them; `*>&1` captures it.
 
 **Four things have to agree for a model to work, and the third fails quietly.** Deployed, allowed,
 priced, selectable. A model with no price is served and reported at **$0**, which reads as nobody
