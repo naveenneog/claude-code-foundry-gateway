@@ -1,6 +1,54 @@
 # Status
 
-**Active packet:** P33 — add or remove one developer. Shipped and verified live end to end. Full regression including the Azure half passes: 29 checks, 60 of 60 mutations caught. Remaining in M4: P34 (Grafana, only on request) and P28 (the bill of materials diagram).
+**Active packet:** P35 — the workload identity gap in the entitlement sync, and the tier and team portal captures. M4 is complete. Full regression including the Azure half passes: 29 checks, 71 of 71 mutations caught.
+
+## P35 acceptance criteria — a service principal in a tier group is entitled
+
+A tier group can hold a workload identity as well as people. Adding one was a silent no-op:
+the portal listed it as a member and the gateway returned 403.
+
+- [x] The sync reads service principals as well as users
+- [x] The Graph request form is measured, not assumed — six combinations, one works
+- [x] Proven on the live gateway: premium 2 members to 3, total 7 authorised identities to 8
+- [x] A service principal in no business unit is attributed to `unassigned`, reported as 2 to 3
+- [x] Three mutations, one per component of the request, each failing the run on its own
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+### What the work found
+
+The sync used `transitiveMembers/microsoft.graph.user`, which excludes workload identities by
+construction. The obvious fix — add the `servicePrincipal` cast — returns an empty collection.
+
+| Request | Returned |
+|---|---|
+| `transitiveMembers` | 3 — service principal missing |
+| `transitiveMembers/microsoft.graph.user` | 2 |
+| `transitiveMembers/microsoft.graph.servicePrincipal` | 0 — missing |
+| the same, plus `ConsistencyLevel: eventual` | 0 — missing |
+| the same, plus `$count=true` | 0 — missing |
+| the same, plus **both** | 1 — found |
+
+Graph answers 200 with an empty collection in the four failing rows rather than erroring, so
+every wrong form reads as "this group holds no service principals".
+
+The first fix attempt added the cast alone, was run against the live tenant, and changed
+nothing — the sync still reported 2 members. That negative result is what produced the table.
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | Entitlement is identity-shaped, not person-shaped; a build agent calling the gateway is the ordinary case, not an edge one |
+| Coder | Accept | Both casts are issued identically rather than leaving one subtly different, so the next reader cannot conclude the header is optional |
+| QA | Accept | Caught only because the fix was run against live Entra and the count did not move. A source-only check would have passed on the broken version |
+| UX | Accept | The measured table is in the code comment, the changelog and here, because the failing forms return success and look correct |
+
+### Note
+
+The first assertion written for the guide matched the phrase `service principal`, which appears
+in the alt text and twice in the prose. The mutation that removed the explanation was missed.
+This is the sixth time an assertion has matched prose rather than the claim; it now matches a
+sentence that occurs once.
 
 ## P16 acceptance criteria — close the bypass
 

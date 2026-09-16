@@ -196,7 +196,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
 - [x] P27 per-surface telemetry — the gateway captures the caller's `User-Agent` and the ledger
       parses the surface from it, so Claude Code, the VS Code extension, Desktop and the SDKs are
       separable. Measured rather than assumed: Claude Code 2.1.241 sends `(external, sdk-cli)`
-- [ ] P28 bill of materials and flow diagram — acceptance: one picture of the six-hop request and
+- [x] P28 bill of materials and flow diagram — acceptance: one picture of the six-hop request and
       telemetry path naming the Azure resources actually used
 - [ ] P23 showback reporting — acceptance: as-of joins against effective-dated mapping history, so a
       mid-month transfer does not move last week's spend
@@ -233,5 +233,9 @@ to close the preview-feature gap. Both are recorded in `docs/CHARTER.md` as non-
       policy change, stated rather than implied
 - [x] P33 add or remove one developer — acceptance: a single command with confirmation and an audit
       line, rather than only the bulk sync and CSV import
-- [ ] P34 optional Grafana — only if a customer requires Grafana by name; it is the one
+- [x] P34 optional Grafana — only if a customer requires Grafana by name; it is the one
       observability option with a standing bill
+- [x] P35 workload identities in a tier group — acceptance: the request form is measured rather
+      than assumed, and the fix is proven by a membership count changing on the live gateway.
+      A build agent or scheduled job authenticates as a service principal and needs entitlement
+      the same way a developer does

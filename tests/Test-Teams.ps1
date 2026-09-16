@@ -166,12 +166,50 @@ Assert 'the decision is recorded'        (Test-Path (Join-Path $root 'docs/adr/0
 # The portal captures show the model better than prose does: direct members are
 # the teams, all members resolves to the people.
 foreach ($shot in 'entra-1-bu-direct-members.png', 'entra-2-bu-all-members.png',
-                  'entra-3-team-memberships.png', 'entra-4-bu-direct-person.png') {
+                  'entra-3-team-memberships.png', 'entra-4-bu-direct-person.png',
+                  'entra-5-team-ites-1-members.png', 'entra-6-team-ites-2-members.png',
+                  'entra-7-tier-standard-members.png', 'entra-8-tier-premium-members.png',
+                  'entra-9-user-groups.png') {
     Assert "the guide ships $shot" (Test-Path (Join-Path $root "docs/guide/$shot"))
     Assert "and references it"     ($d -match [regex]::Escape($shot))
 }
 
-# These are captures of a real tenant. The capture step must land somewhere
+# Every capture must have a redaction job, so a new screenshot cannot be dropped
+# into docs with a real name still on it. The guard inside redact-entra.mjs
+# enforces that at render time; this asserts each shipped file went through it.
+$redact = Get-Content (Join-Path $root 'guide/redact-entra.mjs') -Raw
+foreach ($shot in 'entra-5-team-ites-1-members.png', 'entra-6-team-ites-2-members.png',
+                  'entra-7-tier-standard-members.png', 'entra-8-tier-premium-members.png',
+                  'entra-9-user-groups.png') {
+    Assert "$shot has a redaction job" ($redact -match "out: '$([regex]::Escape($shot))'")
+}
+
+# The tier captures are the two-axis model seen from the entitlement side, and
+# the premium one is the only place a workload identity appears. Assert the
+# guide actually explains that rather than just embedding the picture.
+Assert 'the guide covers the tier membership view' ($d -match 'claude-code-standard` *\r?\n?holds|holds two teams and three people')
+Assert 'it explains the service principal row'     ($d -match 'workload identity, not a person')
+Assert 'and says where its spend lands'            ($d -match '(?i)`unassigned`')
+
+# A tier group can hold a workload identity as well as people. Getting that
+# wrong is silent: Graph returns 200 and an empty collection rather than an
+# error, so the sync writes an entitlement list with the service principal
+# missing and the gateway 403s an identity the portal shows as a member.
+#
+# These assert the call form, not the words. The comment above the call names
+# the cast and the header several times while explaining the measurement, so
+# matching on those strings would pass with the code deleted.
+$sync = Get-Content (Join-Path $root 'scripts/Sync-ClaudeAccess.ps1') -Raw
+Assert 'the sync asks for service principals' `
+    ($sync -match [regex]::Escape("Type = 'microsoft.graph.servicePrincipal'"))
+Assert 'it still asks for users' `
+    ($sync -match [regex]::Escape("Type = 'microsoft.graph.user'"))
+Assert 'it sends ConsistencyLevel eventual' `
+    ($sync -match [regex]::Escape("`$headers['ConsistencyLevel'] = 'eventual'"))
+Assert 'and counts, which that header requires' `
+    ($sync -match [regex]::Escape('&`$count=true"'))
+
+
 # git-ignored, so an unredacted identity cannot reach a commit by being one
 # `git add` away - only the redacted output ships.
 $capture = Get-Content (Join-Path $root 'guide/capture-entra.mjs') -Raw
@@ -194,11 +232,11 @@ Assert 'identities are masked'             ($redact -match '\\u2022')
 Assert 'the real domain survives the mask' ($redact -match '@microsoft\.com')
 Assert 'and the tenant is not hidden'      ($redact -match 'MICROSOFT NON-PRODUCTION')
 # A mask that leaves the local part readable is not a mask.
-foreach ($plain in 'naveen\.g@', 'nived\.v@', 'Saurabh\.Seth@', 'vrm@microsoft', 'navg@microsoft', 'sombanerjee@') {
+foreach ($plain in 'naveen\.g@', 'nived\.v@', 'Saurabh\.Seth@', 'vrm@microsoft', 'navg@microsoft', 'sombanerjee@', 'abpatra@', 'rajatsr@') {
     Assert "it does not restate $($plain -replace '\\','')" ($redact -notmatch $plain)
 }
 # Display names must be masked too, not just addresses.
-foreach ($plain in 'Gopalakrishna', 'Velayudhan', 'Mudumbai', 'Banerjee', 'Somnath') {
+foreach ($plain in 'Gopalakrishna', 'Velayudhan', 'Mudumbai', 'Banerjee', 'Somnath', 'Abhishek', 'Srivastava') {
     Assert "'$plain' is not left whole" ($redact -notmatch $plain)
 }
 # A capture with no redaction job is the file that gets copied into docs by

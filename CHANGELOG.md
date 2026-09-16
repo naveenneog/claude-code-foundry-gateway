@@ -28,6 +28,18 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- `Get-ClaudeBom.ps1` reads the live deployment and reports only this gateway's
+  own resources, separating what it created and bills for, what it reuses and
+  did not create, and what is configuration and carries no bill at all. On the
+  reference deployment that is 5 of 66 resources in the group, of which only
+  API Management meaningfully costs anything.
+- `docs/images/request-flow.png` — the six-hop request and telemetry path,
+  rendered from HTML rather than generated, because the value of the picture is
+  that the resource and table names on it are the real ones.
+- `Publish-ClaudeGrafana.ps1` — optional, for organisations that already run
+  Grafana. It reads the same saved KQL functions as the workbook, states that
+  Grafana is charged per instance per hour whether or not anyone opens it, and
+  will not create the instance.
 - `Set-ClaudeDeveloper.ps1` — add or remove one person. It edits the **Entra
   group**, not the gateway, because `Sync-ClaudeAccess.ps1` rebuilds the allow
   lists from group membership every run: a developer added straight to a named
@@ -157,6 +169,31 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   string parses and runs.
 
 ### Fixed
+
+- A service principal in a tier group was never entitled, so adding one was a
+  silent no-op and the gateway returned 403 for an identity the portal listed as
+  a member. `Sync-ClaudeAccess.ps1` read membership through
+  `transitiveMembers/microsoft.graph.user`, which by construction excludes
+  workload identities. Measured against `claude-code-premium`, which holds one
+  nested team and one service principal:
+
+  | Request | Returned |
+  |---|---|
+  | `transitiveMembers` | 3 — service principal missing |
+  | `transitiveMembers/microsoft.graph.user` | 2 |
+  | `transitiveMembers/microsoft.graph.servicePrincipal` | 0 — missing |
+  | the same, plus `ConsistencyLevel: eventual` | 0 — missing |
+  | the same, plus `$count=true` | 0 — missing |
+  | the same, plus **both** | 1 — found |
+
+  A service principal is returned only when the header and `$count` are both
+  present. With one or neither Graph answers 200 with an empty collection rather
+  than an error, so the sync read "no service principals" and wrote an
+  entitlement list without them. The sync now issues both casts with both set.
+  On the reference gateway the premium tier went from 2 members to 3 and the
+  total from 7 authorised identities to 8. A service principal in no business
+  unit is attributed to `unassigned`, which the same run reported rising from 2
+  to 3.
 
 - A redeploy would have wiped every business unit, team and membership.
   `Install-ClaudeGateway.ps1` reads `allow-standard`, `allow-premium` and

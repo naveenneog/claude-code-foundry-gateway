@@ -200,6 +200,39 @@ $mutations = @(
        From  = 'entra-3-team-memberships.png'
        To    = 'nothing.png' }
 
+    # The service principal gap. Each of these three is individually enough to
+    # make the servicePrincipal query return an empty collection with a 200, so
+    # each has to fail the run on its own.
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the sync stops asking for service principals'
+       File  = 'scripts/Sync-ClaudeAccess.ps1'
+       From  = "Type = 'microsoft.graph.servicePrincipal'"
+       To    = "Type = 'microsoft.graph.device'" }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the eventual consistency header is dropped'
+       File  = 'scripts/Sync-ClaudeAccess.ps1'
+       From  = "`$headers['ConsistencyLevel'] = 'eventual'"
+       To    = "`$headers['ConsistencyLevel'] = 'session'" }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the count the header requires is dropped'
+       File  = 'scripts/Sync-ClaudeAccess.ps1'
+       From  = '&`$count=true"'
+       To    = '"' }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the tier membership capture is dropped'
+       File  = 'docs/BUSINESS-UNITS.md'
+       From  = 'entra-7-tier-standard-members.png'
+       To    = 'nothing.png' }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the guide stops explaining the workload identity row'
+       File  = 'docs/BUSINESS-UNITS.md'
+       From  = 'workload identity, not a person'
+       To    = 'thing' }
+
     # --- P24/P27, the Observe half ---
 
     @{ Suite = 'Test-Observability.ps1'
@@ -373,6 +406,42 @@ $mutations = @(
        File  = 'scripts/Migrate-ClaudeWorkstation.ps1'
        From  = 'empty Desktop'
        To    = 'fresh start' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the BOM stops reading the live deployment'
+       File  = 'scripts/Get-ClaudeBom.ps1'
+       From  = 'az resource list'
+       To    = 'echo static #' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the BOM stops separating reused from created'
+       File  = 'scripts/Get-ClaudeBom.ps1'
+       From  = 'Reused, not created'
+       To    = 'Other things' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the diagram loses the real log table name'
+       File  = 'guide/render-architecture.mjs'
+       From  = 'ApiManagementGatewayLlmLog'
+       To    = 'the API log' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'Grafana stops declaring its standing cost'
+       File  = 'scripts/Publish-ClaudeGrafana.ps1'
+       From  = 'per instance per hour'
+       To    = 'per use' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'Grafana starts creating the instance'
+       File  = 'scripts/Publish-ClaudeGrafana.ps1'
+       From  = 'does not create a Grafana instance'
+       To    = 'will create a Grafana instance' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'Grafana panels stop reusing the saved function'
+       File  = 'scripts/Publish-ClaudeGrafana.ps1'
+       From  = 'ClaudeChargeback($__timeFrom, $__timeTo)'
+       To    = 'ApiManagementGatewayLlmLog' }
 )
 
 $missed = @()
@@ -388,10 +457,17 @@ try {
     # The installer is asserted against too - it is what hands preserved state
     # back to the template.
     Copy-Item (Join-Path $root 'Install-ClaudeGateway.ps1') $sandbox -Force
+    Copy-Item (Join-Path $root 'README.md') $sandbox -Force
     # And the capture/redaction pipeline, plus the ignore rules that keep the
     # unredacted captures out of a commit.
     Copy-Item (Join-Path $root 'guide') $sandbox -Recurse -Force
     Copy-Item (Join-Path $root '.gitignore') $sandbox -Force
+    # The rendered diagram, whose presence is asserted.
+    if (Test-Path (Join-Path $root 'docs/images')) {
+        New-Item -ItemType Directory -Path (Join-Path $sandbox 'docs/images') -Force | Out-Null
+        Get-ChildItem (Join-Path $root 'docs/images') -File -Filter '*.png' -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item $_.FullName (Join-Path $sandbox 'docs/images') -Force }
+    }
     # Screenshots are a few megabytes and nothing here reads them, so the
     # markdown is copied without them - except the portal captures, whose
     # presence is asserted.

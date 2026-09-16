@@ -13,7 +13,7 @@ An **Entra security group** with a **monthly budget**.
 
 | | |
 |---|---|
-| **Identifier** | `platform`. Stable. It is what the budget counter, the ledger and every report use |
+| **Identifier** | `platform`. Stable. It is what the budget counter and every report use, and the key each request is recorded under in the chargeback ledger — the gateway's own log of who spent what |
 | **Entra group** | `claude-code-standard`. Who belongs to the unit. Can be renamed without touching the identifier |
 | **Budget** | Set in dollars, stored in tokens, converted once when written |
 
@@ -78,6 +78,17 @@ transitive view the sync reads:
 The difference between those two tabs is the whole model. Membership is
 maintained on the team, and the business unit gets it by containment.
 
+The teams themselves are where people are actually added. ITES 1:
+
+![The claude-team-ites-1 group, Members tab, showing two members of type User with masked names and email addresses](guide/entra-5-team-ites-1-members.png)
+
+ITES 2, holding two different people:
+
+![The claude-team-ites-2 group, Members tab, showing two members of type User with masked names and email addresses](guide/entra-6-team-ites-2-members.png)
+
+Those four rows are the six rows on the business unit's All members tab, minus
+the two team groups. Nobody was added to `claude-bu-mcaps` directly.
+
 **Group memberships** on the team shows the two axes directly — ITES 1 is inside
 `claude-bu-mcaps` for chargeback and inside `claude-code-standard` for
 entitlement, at the same time:
@@ -87,9 +98,54 @@ entitlement, at the same time:
 Moving that team to the premium tier is removing one of those two rows and
 adding another. Its business unit, budget and spend history are untouched.
 
+Read from the tier side, the same nesting looks like this. `claude-code-standard`
+holds two teams and three people added to the tier directly:
+
+![The claude-code-standard group, Members tab, showing five members: two of type Group and three of type User with masked names and addresses](guide/entra-7-tier-standard-members.png)
+
+A tier can hold people, teams, or both. Mixing them is supported because
+entitlement is resolved transitively — a person in ITES 1 gets the standard tier
+through the team, and a person added to the tier row gets it directly.
+
+`claude-code-premium` holds one team and one service principal:
+
+![The claude-code-premium group, Members tab, showing two members: claude-team-ites-2 of type Group and claude-code-dev-bob of type Service principal](guide/entra-8-tier-premium-members.png)
+
+That second row is a workload identity, not a person, so its name is not masked.
+A build agent or scheduled job authenticates as a service principal and needs a
+tier like anyone else. It is not in a business unit, so its usage is recorded
+against the `unassigned` bucket unless you put it in one.
+
 A business unit does not have to contain teams. GBB holds one person directly:
 
 ![The claude-bu-gbb group, Direct members tab, showing a single member of type User](guide/entra-4-bu-direct-person.png)
+
+The same hierarchy read from one person's end. The Groups blade on a user
+account lists the groups that account belongs to **directly**:
+
+![The Groups blade of a user account, listing the security groups that account belongs to, with the display name masked in the title and breadcrumb](guide/entra-9-user-groups.png)
+
+The account in this capture belongs to its team and to a tier group directly, so
+both appear. That is not the general case. Measured on two accounts in this
+tenant:
+
+| Account | Direct memberships | Resolved transitively |
+|---|---|---|
+| in a team, and added to a tier directly | `claude-team-ites-1`, `claude-code-standard` | plus `claude-bu-mcaps` |
+| in a team only | `claude-team-ites-1` | plus `claude-code-standard`, `claude-bu-mcaps` |
+
+Both resolve to the same tier and the same business unit. The business unit never
+appears in the direct list, because it is always reached through the team.
+
+So a wrong tier or a wrong business unit cannot be diagnosed from this blade
+alone — a missing row here is not a fault. Read the transitive view instead:
+
+```powershell
+az ad user get-member-groups --id someone@contoso.com --query "[].displayName" -o tsv
+```
+
+That returns every group the gateway's sync will see, which is what entitlement
+and attribution are actually resolved from.
 
 These are real accounts in a real Microsoft non-production tenant. Names and
 addresses are masked in the middle — enough removed to stop anyone being
@@ -140,10 +196,10 @@ which is git-ignored.
 
 Organisation ceiling → business unit → team. No deeper.
 
-The cascade is written into the gateway policy as two counters with fixed keys,
-and there is no loop, so a third level would not be charged at all. Rather than
-let that happen quietly, `Set-ClaudeBusinessUnit.ps1` refuses a deeper chain when
-you write it, and refuses a cycle.
+Charging both levels is two counters in the gateway policy, with fixed keys and
+no loop, so a third level would not be charged at all. Rather than let that
+happen quietly, `Set-ClaudeBusinessUnit.ps1` refuses a deeper chain when you
+write it, and refuses a cycle.
 
 ### Creating a team
 
@@ -241,9 +297,11 @@ the sync:
 
 ![The sync resolving Entra groups to object ids and mapping developers to business units](guide/bu-4-sync.png)
 
-The sync reads the registry, resolves each unit's group, and writes the map the
-gateway reads. A developer in two business-unit groups takes the **first in
-registry order**, which is deterministic and visible in the list above.
+The sync reads the list of registered business units, resolves each unit's Entra
+group to the object ids of its members, and writes that mapping into the gateway
+for the policy to read. A developer in two business-unit groups takes the
+**first in registry order**, which is deterministic and visible in the list
+above.
 
 If a group resolves to zero members while the map currently assigns people, the
 sync **refuses to overwrite it** and says so. That guard exists because the
@@ -265,7 +323,8 @@ same data for a dashboard, and `-Days` overrides the default of month-to-date.
 ## Developers with no business unit
 
 Anyone entitled but not in a business-unit group is **unassigned**. What happens
-to them is set by the `bu-unassigned` named value:
+to them is set by `bu-unassigned`, one of the gateway's named values — API
+Management's own configuration store, which the policy reads at request time:
 
 | Value | Behaviour |
 |---|---|

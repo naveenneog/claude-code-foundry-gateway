@@ -47,6 +47,31 @@ const PEOPLE = [
   { name: 'Vr\u2022\u2022a Ki\u2022\u2022\u2022\u2022e Mu\u2022\u2022\u2022\u2022ai',                 mail: 'vr\u2022@microsoft.com' },
 ];
 
+// Keyed by the initials on each avatar, not by first name: the tests assert
+// that no real name survives in this file, and PowerShell -notmatch is
+// case-insensitive, so a key called bhishek would fail that check.
+const P = {
+  ng:  { name: 'Na\u2022\u2022\u2022\u2022n Go\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022na', mail: 'na\u2022\u2022\u2022\u2022\u2022g@microsoft.com' },
+  ss: { name: 'Sa\u2022\u2022\u2022\u2022h Se\u2022\u2022',                mail: 'Sa\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022h@microsoft.com' },
+  nv:   { name: 'Ni\u2022\u2022d Ve\u2022\u2022\u2022\u2022\u2022\u2022an',  mail: 'ni\u2022\u2022\u2022\u2022v@microsoft.com' },
+  vk:   { name: 'Vr\u2022\u2022a Ki\u2022\u2022\u2022\u2022e Mu\u2022\u2022\u2022\u2022ai', mail: 'vr\u2022@microsoft.com' },
+  ap:{ name: 'Ab\u2022\u2022\u2022\u2022\u2022\u2022k Pa\u2022\u2022a',   mail: 'ab\u2022\u2022\u2022ra@microsoft.com' },
+  rs:   { name: 'Ra\u2022\u2022t Sr\u2022\u2022\u2022\u2022\u2022\u2022va',  mail: 'ra\u2022\u2022\u2022sr@microsoft.com' },
+};
+
+// Measured on these captures: the name column starts at x=718, the email column
+// at x=1558, and rows are 80px apart. Only user rows are masked - a group row
+// carries a group name, which is not an identity.
+const NAME_X = 718, MAIL_X = 1558, PITCH = 80;
+function memberRow(cy, person) {
+  return [
+    { rect: { x: NAME_X - 14, y: cy - 20, w: 340, h: 40, fill: ROW } },
+    { x: NAME_X, y: cy + 8, size: 22, fill: LINK, text: person.name },
+    { rect: { x: MAIL_X - 6, y: cy - 20, w: 380, h: 40, fill: ROW } },
+    { x: MAIL_X, y: cy + 8, size: 22, fill: TEXT, text: person.mail },
+  ];
+}
+
 // The single member of claude-bu-gbb, masked the same way. That capture is
 // cropped above the account line, so its header needs nothing.
 const GBB_PERSON = {
@@ -56,8 +81,8 @@ const GBB_PERSON = {
 
 // The signed-in account chip, top right. The tenant name stays: it says this is
 // a real Microsoft non-production tenant, which is the point.
-const chip = (right, top, height) => ({
-  rect: { x: right - 330, y: top, w: 330, h: height, fill: HEADER },
+const chip = (right, top, height, width = 330) => ({
+  rect: { x: right - width, y: top, w: width, h: height, fill: HEADER },
   texts: [
     { x: right - 6, y: top + 30, anchor: 'end', size: 23, fill: '#ffffff', text: 'na\u2022\u2022@microsoft.com' },
     { x: right - 6, y: top + 54, anchor: 'end', size: 16, fill: '#ffffff', weight: '600', text: 'MICROSOFT NON-PRODUCTION ...' },
@@ -115,6 +140,60 @@ const JOBS = [
       { rect: { x: 1560, y: 680, w: 380, h: 40, fill: ROW } },
       { x: 1566, y: 708, size: 22, fill: TEXT, text: GBB_PERSON.mail },
     ],
+  },
+  {
+    file: 'ites-1.png',
+    out: 'entra-5-team-ites-1-members.png',
+    // A team with two people in it. Rows are 80px apart from y=735.
+    parts: (() => {
+      const c = chip(2195, 0, 60);
+      return [{ rect: c.rect }, ...c.texts,
+        ...memberRow(735, P.ng), ...memberRow(815, P.ss)];
+    })(),
+  },
+  {
+    file: 'ites-2.png',
+    out: 'entra-6-team-ites-2-members.png',
+    parts: (() => {
+      const c = chip(2214, 0, 78, 380);
+      return [{ rect: c.rect }, ...c.texts,
+        ...memberRow(735, P.nv), ...memberRow(815, P.vk)];
+    })(),
+  },
+  {
+    file: 'tier-standard.png',
+    out: 'entra-7-tier-standard-members.png',
+    // A tier holds a mix: two teams and three people added directly. Only the
+    // three user rows carry identities - rows 2 and 3 are group names.
+    parts: (() => {
+      const c = chip(2235, 0, 78, 380);
+      return [{ rect: c.rect }, ...c.texts,
+        ...memberRow(746, P.ap), ...memberRow(986, P.ng), ...memberRow(1066, P.rs)];
+    })(),
+  },
+  {
+    file: 'tier-premium.png',
+    out: 'entra-8-tier-premium-members.png',
+    // Nothing to mask in the table: the premium tier holds one team and one
+    // service principal. A service principal is a workload identity, not a
+    // person, so its name stays - it is the example of a CI job holding a tier.
+    parts: (() => { const c = chip(2199, 0, 78, 380); return [{ rect: c.rect }, ...c.texts]; })(),
+  },
+  {
+    file: 'navg-groups.png',
+    out: 'entra-9-user-groups.png',
+    // The same hierarchy read from the other end: one person's Groups blade,
+    // showing the team and the tier they landed in. The blade title and the
+    // breadcrumb both carry the display name.
+    parts: (() => {
+      const c = chip(2230, 0, 72, 380);
+      return [{ rect: c.rect }, ...c.texts,
+        { rect: { x: 140, y: 92, w: 300, h: 32, fill: ROW } },
+        { x: 146, y: 114, size: 22, fill: TEXT, text: P.ng.name },
+        { rect: { x: 98, y: 130, w: 470, h: 66, fill: ROW } },
+        { x: 103, y: 182, size: 44, fill: TEXT, weight: '600', text: P.ng.name },
+      ];
+    })(),
   },
 ];
 
