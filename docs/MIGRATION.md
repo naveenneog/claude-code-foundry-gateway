@@ -615,23 +615,47 @@ leaving behind.
 
 ### A developer's conversations
 
+One command wraps the whole workstation side, in the order the steps have to
+happen in:
+
 ```powershell
-./scripts/Backup-ClaudeCode.ps1
-./scripts/Restore-ClaudeCode.ps1 -Path ./claude-code-backups/<file>.zip        # dry run
-./scripts/Restore-ClaudeCode.ps1 -Path ./claude-code-backups/<file>.zip -Apply
+./scripts/Migrate-ClaudeWorkstation.ps1 -Status      # what is on this machine
+./scripts/Migrate-ClaudeWorkstation.ps1 -Backup      # Claude Code and Desktop
+./scripts/Migrate-ClaudeWorkstation.ps1 -Configure   # point it at the gateway
+./scripts/Migrate-ClaudeWorkstation.ps1 -Restore -Apply
 ```
 
-Runs on the developer's own machine against their own profile, and captures
-`~/.claude/projects` — the conversation transcripts — plus the command history,
-memory and preferences.
+**Back up before configuring.** Switching to the gateway moves Claude Desktop to
+a different profile root — `%LOCALAPPDATA%\Claude-3p` instead of
+`%APPDATA%\Claude` — so the first thing a developer sees afterwards is an empty
+Desktop. Having the backup makes that reversible.
 
-| Left out | Why |
+Underneath it are two scripts you can run directly.
+
+`Backup-ClaudeCode.ps1` captures `~/.claude/projects` — the Claude Code
+transcripts — plus command history, memory and preferences.
+
+`Backup-ClaudeDesktop.ps1` captures Claude Desktop, from either profile.
+
+| Left out of the Desktop backup | Why |
+|---|---|
+| `vm_bundles` | Virtual machine images. **10.6 GB measured**, against 4 MB of session data — copying the lot moves eleven gigabytes to save four megabytes |
+| `claude-code`, `claude-code-vm` | Bundled binaries, not data |
+| `Cache`, `Code Cache`, `GPUCache`, `blob_storage` | Regenerated on demand |
+| `Crashpad`, `sentry`, `logs` | Diagnostics, not history |
+
+| Left out of the Code backup | Why |
 |---|---|
 | `~/.claude.json` | Measured 2026-09-16, holds `oauth`, `key` and token material. A backup of credentials is a credential leak with a filename |
-| `cache/` | Regenerated on demand |
-| `plugins/` | Reinstallable, and large |
 | `file-history/` | Copies of source files. `-IncludeFileHistory` captures them |
-| `sessions/`, `session-env/` | Live state, not history |
+
+**Quit Claude Desktop first.** It holds its conversation database open while it
+runs. Measured with Desktop running, `LOCK`, `LOG` and `000003.log` could not be
+opened at all while `CURRENT` could — so a copy taken then captures part of a
+LevelDB, which is not a database and restores as corruption rather than as
+history. The backup refuses rather than producing one, and the restore refuses
+harder: writing into a database the app has open takes the history already on
+that machine with it.
 
 **Configuration and transcripts are scanned differently, on purpose.** A
 credential key in a config file is a finding — config has no reason to mention
@@ -645,10 +669,26 @@ is.
 
 The archive is prompts and source code. Treat it as source.
 
-The restore will not overwrite a project that already has conversations without
-`-Force`. Transcripts are append-only history, so replacing a populated folder
-with an older copy loses whatever happened in between, silently, and there is no
-undo.
+**What none of this can do: move claude.ai conversations.** In first-party mode
+they live on Anthropic's backend, not on the disk — measured, that profile's
+whole IndexedDB is 7 KB, which is a cache and not a history. The origins say so
+outright on a machine that has run both:
+
+```
+%APPDATA%\Claude\IndexedDB\https_claude.ai_0.indexeddb.leveldb     first-party
+%LOCALAPPDATA%\Claude-3p\IndexedDB\app_localhost_0.indexeddb.leveldb   3P
+```
+
+Moving that history across is the import wizard's job, from a claude.ai export —
+section 1 above, including the two switches that have to be on first. Where
+these backups matter is the *other* side of that migration: once the import has
+run, third-party mode keeps conversations on local disk with no server copy, so
+the machine holds the only copy of everything that came across. That is a risk
+the migration creates rather than one it inherits.
+
+Neither restore will overwrite existing data without `-Force`. Transcripts are
+append-only history, so replacing a populated folder with an older copy loses
+whatever happened in between, silently, with no undo.
 
 Both backup folders are git-ignored.
 

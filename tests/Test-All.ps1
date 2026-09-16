@@ -64,6 +64,7 @@ try {
     Invoke-Check 'Model discovery and deployment'          'Test-ModelDeployment.ps1'
     Invoke-Check 'Client attribution and the workbook'     'Test-Observability.ps1'
     Invoke-Check 'Business unit checks detect breakage'    'Test-BusinessUnitsNegative.ps1'
+    Invoke-Check 'Admin surface - SKU, groups, tiers'      'Test-AdminSurface.ps1'
     Invoke-Check 'Backup and restore'                      'Test-Backup.ps1'
     Invoke-Check 'Foundry bypass audit'                    'Test-Bypass.ps1' @{ SkipLive = $true }
 

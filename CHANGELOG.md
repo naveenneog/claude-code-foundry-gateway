@@ -28,6 +28,37 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- Claude Desktop backup and restore. `Backup-ClaudeDesktop.ps1` captures both
+  profile roots - `%APPDATA%\Claude` for first-party and
+  `%LOCALAPPDATA%\Claude-3p` for this gateway - and refuses while the app is
+  running, because it holds its conversation database open. Measured with
+  Desktop running, `LOCK`, `LOG` and `000003.log` could not be opened while
+  `CURRENT` could, so a copy taken then is part of a LevelDB and restores as
+  corruption. The restore refuses harder: writing into a live database takes the
+  history already on that machine with it.
+- The virtual machine bulk is excluded. Measured, a third-party profile is
+  11.4 GB of which `vm_bundles` alone is 10.6 GB, against 4 MB of session data.
+  A synthetic profile of 6 MB, nearly all bulk, produced a 2 KB archive.
+- `Migrate-ClaudeWorkstation.ps1` - the developer-side tool. `-Status` reports
+  what is on the machine, `-Backup` captures Claude Code and Desktop,
+  `-Configure` points everything at the gateway, `-Restore` puts it back. It
+  warns that configuring switches Desktop to a different profile root, so the
+  first thing seen afterwards is an empty Desktop - backing up first makes that
+  reversible.
+- The installer sizes the SKU. It asks how many developers and shows the
+  arithmetic against published included request volume, because Microsoft
+  publishes no requests-per-second per unit for the v2 tiers - the guidance is
+  to load test. On that basis Basic v2 covers about 900 developers, so it also
+  says what usually decides the tier instead: Basic v2 has no VNet integration
+  and no availability zones.
+- `Set-ClaudeTier.ps1` reads and changes tier limits and model allow lists,
+  checking models against what the Foundry account actually serves - a tier
+  allowing an undeployed model refuses the caller with a name that looks
+  correct. It states plainly that a third tier is a policy change, because the
+  policy names `standard` and `premium` in five places.
+- `Set-ClaudeBusinessUnit.ps1` verifies the Entra group exists before writing,
+  and offers near matches. A unit pointing at a missing group is created, syncs
+  to nobody, and reads as unused rather than broken.
 - The gateway records which client made the call. Nothing in API Management
   carried it — measured 2026-09-16, `AppRequests.Properties` held only API and
   service metadata, `ClientType` read `PC` and `ClientBrowser` was empty. The

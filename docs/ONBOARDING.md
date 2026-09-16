@@ -254,6 +254,30 @@ x-ratelimit-remaining-tokens: 79980
 This changes the budget for everyone in that tier. **No sync needed** — named
 values are read on the next request.
 
+`./scripts/Set-ClaudeTier.ps1` is the way to do it. It shows what is set now,
+prints before-and-after for anything it changes, and checks a model allowlist
+against what the Foundry account actually serves:
+
+```powershell
+./scripts/Set-ClaudeTier.ps1 -List
+./scripts/Set-ClaudeTier.ps1 -Tier standard -DailyQuota 750000
+./scripts/Set-ClaudeTier.ps1 -Tier premium -Models claude-opus-5,claude-sonnet-5
+./scripts/Set-ClaudeTier.ps1 -Tier standard -Models ''        # back to all models
+```
+
+The model check matters because the failure it prevents is confusing: a tier
+that allows a model the account does not serve refuses the caller with a model
+name that looks correct. `-SkipModelCheck` overrides it for a deployment you are
+about to create.
+
+**There are two tiers, and no script can make a third.** The gateway policy
+names `standard` and `premium` directly — resolving the tier from the allow
+lists, checking the model, the per-minute limit, the daily quota and the refusal
+message. A third tier is a policy change plus the named values to go with it,
+not a configuration change.
+
+These are the values behind it:
+
 | Named value | Meaning | Shipped default |
 |-------------|---------|----------------:|
 | `tpm-standard` | tokens/minute, standard | 20,000 |

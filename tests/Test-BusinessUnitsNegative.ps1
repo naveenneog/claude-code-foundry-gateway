@@ -293,6 +293,62 @@ $mutations = @(
        File  = 'scripts/Restore-ClaudeCode.ps1'
        From  = 'already have files on disk'
        To    = 'are present' }
+
+    # --- P30-P32 and the workstation tool ---
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the SKU suggestion loses its basis'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'v2-service-tiers-overview'
+       To    = 'some-blog-post' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the SKU stops being overridable'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = "Read-Default -Prompt 'API Management SKU' -Default `$suggested"
+       To    = "`$suggested # (" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the group is no longer verified'
+       File  = 'scripts/Set-ClaudeBusinessUnit.ps1'
+       From  = 'az ad group show --group $Group'
+       To    = 'echo skip #' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'tier models stop being checked against deployments'
+       File  = 'scripts/Set-ClaudeTier.ps1'
+       From  = 'Not deployed on'
+       To    = 'Probably fine on' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a third tier is silently accepted'
+       File  = 'scripts/Set-ClaudeTier.ps1'
+       From  = "ValidateSet('standard', 'premium')"
+       To    = "ValidateSet('standard', 'premium', 'lite')" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the Desktop backup stops refusing a running app'
+       File  = 'scripts/Backup-ClaudeDesktop.ps1'
+       From  = 'holds its conversation database open'
+       To    = 'is busy' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the Desktop backup starts copying the VM images'
+       File  = 'scripts/Backup-ClaudeDesktop.ps1'
+       From  = "'vm_bundles'     = 'virtual machine images, reinstallable - 10.6 GB measured'"
+       To    = "'nothing_much'   = 'x'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the Desktop backup stops reporting unreadable files'
+       File  = 'scripts/Backup-ClaudeDesktop.ps1'
+       From  = 'unreadable'
+       To    = 'skipped-quietly' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the migration tool stops warning about the empty Desktop'
+       File  = 'scripts/Migrate-ClaudeWorkstation.ps1'
+       From  = 'empty Desktop'
+       To    = 'fresh start' }
 )
 
 $missed = @()
@@ -333,10 +389,11 @@ try {
     $modelSuite = Join-Path $sandbox 'tests/Test-ModelDeployment.ps1'
     $obsSuite = Join-Path $sandbox 'tests/Test-Observability.ps1'
     $backupSuite = Join-Path $sandbox 'tests/Test-Backup.ps1'
+    $adminSuite = Join-Path $sandbox 'tests/Test-AdminSurface.ps1'
 
     # The copy must pass before any mutation, or a "caught" result below could
     # just mean the sandbox is broken.
-    foreach ($s in $suite, $teamSuite, $modelSuite, $obsSuite, $backupSuite) {
+    foreach ($s in $suite, $teamSuite, $modelSuite, $obsSuite, $backupSuite, $adminSuite) {
         & $s *>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  [SETUP] the unmutated copy of $(Split-Path $s -Leaf) already fails - the sandbox is wrong, not the code" -ForegroundColor Red

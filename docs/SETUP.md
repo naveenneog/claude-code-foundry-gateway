@@ -24,6 +24,28 @@ and at what capacity, and creates it before continuing. Claude is not offered in
 every region, so an account in a region without it fails with that stated rather
 than with a deployment error.
 
+### Choosing the SKU
+
+The installer asks **how many developers** will use the gateway and suggests a
+tier from it, showing the arithmetic so you can argue with it:
+
+```
+50 developers x 500 requests/day x 22 days = 550,000 requests/month
+Basic v2 includes 10,000,000 and Standard v2 50,000,000.
+```
+
+The basis is the included monthly request volume, because that is what Microsoft
+actually publishes. There is no documented requests-per-second per unit for the
+v2 tiers — the guidance is to load test your own workload — so a recommendation
+built on an RPS figure would be a guess in a table.
+([v2 tiers overview](https://learn.microsoft.com/azure/api-management/v2-service-tiers-overview))
+
+On that arithmetic Basic v2 covers roughly 900 developers, so **volume rarely
+decides this**. What usually moves an enterprise to Standard v2 is that Basic v2
+has no VNet integration and no availability zones. The installer says so rather
+than implying the request count is the deciding factor, and the suggestion is
+only a default — override it at the prompt.
+
 ### Tooling
 
 | Tool | Version | Why |

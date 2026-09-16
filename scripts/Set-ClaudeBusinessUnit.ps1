@@ -63,6 +63,9 @@ param(
     [string]$Parent,
 
     [Parameter(ParameterSetName = 'Set')]
+    [switch]$SkipGroupCheck,
+
+    [Parameter(ParameterSetName = 'Set')]
     [double]$MonthlyBudgetUsd,
 
     [Parameter(ParameterSetName = 'Set')]
@@ -167,6 +170,34 @@ else {
 
     $targetGroup = if ($Group) { $Group } else { $existing[0].Group }
     if ($targetGroup -match '[,:]') { throw "An Entra group name cannot contain a comma or a colon: '$targetGroup'." }
+
+    # Verify the group exists before writing the registry. A typo here is
+    # invisible afterwards: the unit is created, the sync resolves it to nobody,
+    # and the report shows a business unit with a budget and zero members, which
+    # reads as "nobody has used it yet" rather than "this group does not exist".
+    if ($Group -and -not $SkipGroupCheck) {
+        $gid = az ad group show --group $Group --query id -o tsv 2>$null
+        if (-not $gid) {
+            $hint = ''
+            # Offer near matches rather than only refusing. The usual mistake is
+            # a prefix people half-remember.
+            $stem = ($Group -split '[- ]')[0]
+            if ($stem.Length -ge 3) {
+                $tok = az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv 2>$null
+                if ($tok) {
+                    try {
+                        $u = "https://graph.microsoft.com/v1.0/groups?`$filter=startswith(displayName,'$stem')&`$select=displayName&`$top=10"
+                        $near = @((Invoke-RestMethod -Uri $u -Headers @{ Authorization = "Bearer $tok" }).value.displayName)
+                        if ($near.Count) { $hint = " Groups starting '$stem': " + ($near -join ', ') + "." }
+                    }
+                    catch { }
+                }
+            }
+            throw ("No Entra group '$Group'. Nothing has been written - a business unit pointing at a group " +
+                   "that does not exist resolves to zero members and reads as unused rather than broken." + $hint +
+                   " Pass -SkipGroupCheck to register it anyway, for a group that does not exist yet.")
+        }
+    }
 
     if ($PSBoundParameters.ContainsKey('Parent')) {
         if ([string]::IsNullOrWhiteSpace($Parent)) {

@@ -31,7 +31,14 @@ $expected = $v2[0].name
 Write-Host ("  expecting it to reuse: {0} ({1}, {2})" -f $expected, $v2[0].sku.name, $v2[0].resourceGroup) -ForegroundColor DarkGray
 
 $answers = Join-Path $env:TEMP 'wiz-reuse-answers.txt'
+# Positional, so the order below must match the order the wizard asks in. When
+# a prompt is added ahead of the reuse menu, every answer after it shifts and
+# the "1" lands somewhere else - which is how this test failed after the tier
+# model prompts were added.
+#
 # y        use this subscription
+# (blank)  models for the standard tier   - added with model discovery
+# (blank)  models for the premium tier    - added with model discovery
 # (blank)  resource group default
 # (blank)  location default
 # 1        reuse the first instance offered
@@ -41,8 +48,9 @@ $answers = Join-Path $env:TEMP 'wiz-reuse-answers.txt'
 y
 
 
-1
 
+
+1
 
 
 

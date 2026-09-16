@@ -1,0 +1,138 @@
+# P30-P32 and the workstation migration tool: the admin surface.
+#
+# Four things that share a property - each one guards against a mistake that is
+# invisible after it is made:
+#
+#   SKU sizing      a tier chosen with no basis, and no way to argue with it
+#   group check     a business unit pointing at a group that does not exist
+#                   resolves to zero members and reads as unused, not broken
+#   tier limits     a tier allowing a model the account does not serve refuses
+#                   the caller with a model name that looks correct
+#   Desktop backup  a conversation database copied while the app holds it open
+#                   is not a database, and restores as corruption
+#
+# Offline only; the live half ran against the reference gateway.
+
+$root = Split-Path $PSScriptRoot -Parent
+$installer = Join-Path $root 'Install-ClaudeGateway.ps1'
+$bu = Join-Path $root 'scripts/Set-ClaudeBusinessUnit.ps1'
+$tier = Join-Path $root 'scripts/Set-ClaudeTier.ps1'
+$bd = Join-Path $root 'scripts/Backup-ClaudeDesktop.ps1'
+$rd = Join-Path $root 'scripts/Restore-ClaudeDesktop.ps1'
+$mig = Join-Path $root 'scripts/Migrate-ClaudeWorkstation.ps1'
+
+$fail = 0
+function Assert($label, $condition, $detail = '') {
+    if ($condition) { Write-Host "  [OK]   $label" -ForegroundColor Green }
+    else { Write-Host "  [FAIL] $label$(if ($detail) { " - $detail" })" -ForegroundColor Red; $script:fail++ }
+}
+
+Write-Host ''
+Write-Host 'Admin - sizing the SKU (P30)' -ForegroundColor Cyan
+
+$i = Get-Content $installer -Raw
+Assert 'it asks how many developers'  ($i -match 'How many developers')
+Assert 'and shows the arithmetic'     ($i -match 'requests/month')
+# Microsoft publishes no requests-per-second per unit for v2 - the guidance is
+# to load test - so a recommendation built on an invented RPS is a guess in a
+# table. Included monthly volume is published, so that is the basis.
+Assert 'it sizes on published volume' ($i -match '10,000,000' -and $i -match '50,000,000')
+Assert 'it cites the source'          ($i -match 'v2-service-tiers-overview')
+# Volume rarely decides it. Saying so is more useful than a table implying it does.
+Assert 'it names the real decider'    ($i -match '(?i)VNet' -and $i -match '(?i)availability zone|zones')
+Assert 'the suggestion is overridable' ($i -match "Read-Default -Prompt 'API Management SKU' -Default \`$suggested")
+
+Write-Host ''
+Write-Host 'Admin - the group must exist (P31)' -ForegroundColor Cyan
+
+$b = Get-Content $bu -Raw
+Assert 'it verifies the group'        ($b -match 'az ad group show --group \$Group')
+Assert 'and refuses when absent'      ($b -match 'No Entra group')
+# A unit pointing at a missing group is created, syncs to nobody, and reads as
+# unused rather than broken. Saying that is the point of the message.
+Assert 'it says why that matters'     ($b -match 'reads as unused rather than broken')
+Assert 'it offers near matches'       ($b -match "Groups starting")
+Assert 'it checks before writing'     ($b.IndexOf('No Entra group') -lt $b.IndexOf('Set-ApimNamedValue'))
+Assert 'and can be overridden'        ($b -match '\$SkipGroupCheck')
+
+Write-Host ''
+Write-Host 'Admin - tier limits (P32)' -ForegroundColor Cyan
+
+Assert 'a tier script exists' (Test-Path $tier) $tier
+$t = Get-Content $tier -Raw
+Assert 'it lists the tiers'           ($t -match '\$List')
+Assert 'it sets tokens per minute'    ($t -match '\$TokensPerMinute')
+Assert 'and the daily quota'          ($t -match '\$DailyQuota')
+Assert 'and the model allow list'     ($t -match '\$Models')
+# A tier allowing an undeployed model refuses the caller with a name that looks
+# right, which is a long way to travel for a typo.
+Assert 'models are checked against what is deployed' ($t -match 'Get-ClaudeDeployment' -and $t -match 'Not deployed on')
+Assert 'and the check can be skipped' ($t -match '\$SkipModelCheck')
+Assert 'it shows before and after'    ($t -match '->')
+# The policy names standard and premium directly in five places, so a third
+# tier is a policy change. Claiming otherwise would create one the gateway
+# ignores.
+Assert 'it states a third tier needs policy work' ($t -match 'a third is a policy change|not a configuration')
+Assert 'it refuses a tier the policy does not know' ($t -match "ValidateSet\('standard', 'premium'\)")
+
+Write-Host ''
+Write-Host 'Admin - Claude Desktop conversations' -ForegroundColor Cyan
+
+Assert 'a Desktop backup exists'  (Test-Path $bd) $bd
+Assert 'a Desktop restore exists' (Test-Path $rd) $rd
+$d = Get-Content $bd -Raw
+
+Assert 'it knows both profile roots' ($d -match 'Claude-3p' -and $d -match "Join-Path \`$env:APPDATA 'Claude'")
+# The single correctness property. Measured with Desktop running: LOCK, LOG and
+# 000003.log could not be opened while CURRENT could, so a copy taken then is
+# part of a database and restores as corruption.
+Assert 'it refuses while Desktop is running' ($d -match 'Get-Process' -and $d -match 'holds its conversation database open')
+Assert 'and explains the consequence'        ($d -match 'restores as corruption')
+Assert 'it can be forced anyway'             ($d -match 'may not restore')
+# Measured: 11.4 GB total, vm_bundles 10.6 GB, session data 4 MB.
+# Asserted against the entry in the skip table, not the prose: matching
+# "vm_bundles" and "10.6 GB" also matched the comment explaining them, so the
+# check passed with the exclusion deleted.
+Assert 'it excludes the virtual machine bulk' ($d -match "'vm_bundles'\s*=\s*'")
+Assert 'and says how much that is'            ($d -match '10\.6 GB')
+Assert 'it captures the conversation store'   ($d -match 'IndexedDB' -and $d -match 'local-agent-mode-sessions')
+# First-party conversations are server-side; the local store measured 7 KB.
+Assert 'it states 1P chats are not local'     ($d -match 'Anthropic servers|Anthropic backend')
+Assert 'and points at the import wizard'      ($d -match 'MIGRATION\.md')
+# Copy-Item skips a locked file without comment.
+Assert 'it reports files it could not read'   ($d -match 'unreadable')
+
+$dr = Get-Content $rd -Raw
+Assert 'the restore is a dry run by default'  ($dr -match 'if \(-not \$Apply\)[\s\S]{0,400}exit 0')
+Assert 'it refuses to write into a live app'  ($dr -match 'take the history already on this machine')
+Assert 'and refuses to overwrite'             ($dr -match 'already have data')
+
+Write-Host ''
+Write-Host 'Admin - the workstation migration tool' -ForegroundColor Cyan
+
+Assert 'a migration tool exists' (Test-Path $mig) $mig
+$m = Get-Content $mig -Raw
+Assert 'it reports what is on the machine' ($m -match '\$Status')
+Assert 'it backs both products up'         ($m -match 'Backup-ClaudeCode' -and $m -match 'Backup-ClaudeDesktop')
+Assert 'it configures the gateway'         ($m -match 'Setup-ClaudeWorkstation')
+Assert 'it restores both'                  ($m -match 'Restore-ClaudeCode' -and $m -match 'Restore-ClaudeDesktop')
+# Configuring switches Desktop to a different profile root, so the first thing
+# a developer sees afterwards is an empty Desktop.
+Assert 'it warns that configuring empties Desktop' ($m -match 'empty Desktop')
+Assert 'it refuses to back up a running Desktop'   ($m -match 'Quit it first')
+
+Write-Host ''
+Write-Host 'Admin - documentation' -ForegroundColor Cyan
+
+$mig_doc = Get-Content (Join-Path $root 'docs/MIGRATION.md') -Raw
+Assert 'migration documents the workstation tool' ($mig_doc -match 'Migrate-ClaudeWorkstation')
+Assert 'and the Desktop backup'                   ($mig_doc -match 'Backup-ClaudeDesktop')
+$setup = Get-Content (Join-Path $root 'docs/SETUP.md') -Raw
+Assert 'setup documents SKU sizing'               ($setup -match '(?i)how many developers')
+$onb = Get-Content (Join-Path $root 'docs/ONBOARDING.md') -Raw
+Assert 'onboarding documents tier limits'         ($onb -match 'Set-ClaudeTier')
+
+Write-Host ''
+if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
+Write-Host 'Admin surface contract holds.' -ForegroundColor Green
+exit 0

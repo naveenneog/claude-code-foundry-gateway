@@ -404,8 +404,64 @@ if (-not $NamePrefix) {
 # The deployment itself is the authority: if the SKU is unavailable in the
 # region it fails immediately and says so.
 
-$Sku = if ($Sku) { $Sku } else {
-    Read-Default -Prompt 'API Management SKU' -Default 'BasicV2' `
+$Sku = if ($Sku) { $Sku }
+elseif ($ExistingApim) {
+    # Reusing an instance means its SKU is already decided. Asking how many
+    # developers there are and which tier to buy, when neither answer can
+    # change anything, is a question with no effect - and it shifted every
+    # later answer in the scripted reuse path by one.
+    $existingSku = az apim show -g $ResourceGroup -n $ExistingApim --query "sku.name" -o tsv 2>$null
+    if (-not $existingSku) { $existingSku = 'BasicV2' }
+    Write-Note "reusing $ExistingApim, which is $existingSku - SKU not asked"
+    $existingSku.Trim()
+}
+else {
+    # Sizing by developer count, using the only figure Microsoft actually
+    # publishes for v2. There is no documented requests-per-second per unit -
+    # the guidance is to load test - so a recommendation built on an invented
+    # RPS number would be a guess wearing a table's clothes. Included monthly
+    # request volume is published, so that is what the arithmetic uses.
+    #
+    #   Basic v2     10M requests/month, up to 10 units, no VNet, no zones
+    #   Standard v2  50M requests/month, up to 10 units, VNet, zones
+    #   Premium v2   unlimited,          up to 30 units, VNet injection, zones
+    #   - https://learn.microsoft.com/azure/api-management/v2-service-tiers-overview
+    $devs = Read-Default -Prompt 'How many developers will use this gateway' -Default '50' `
+        -Help 'Used to suggest a SKU. You can override the suggestion.'
+    $n = 0
+    if (-not [int]::TryParse($devs, [ref]$n) -or $n -lt 1) { $n = 50 }
+
+    # A deliberately generous assumption. Claude Code is chatty - a session is
+    # many calls - so 500 a day per developer errs towards recommending more
+    # rather than less, and the arithmetic is shown so it can be argued with.
+    $perDevPerDay = 500
+    $monthly = [long]$n * $perDevPerDay * 22
+
+    Write-Host ''
+    Write-Host ("      {0:n0} developers x {1} requests/day x 22 days = {2:n0} requests/month" -f $n, $perDevPerDay, $monthly) -ForegroundColor DarkGray
+    Write-Host ("      Basic v2 includes 10,000,000 and Standard v2 50,000,000." -f $monthly) -ForegroundColor DarkGray
+
+    # Volume rarely decides it, and saying so is more useful than a table that
+    # implies it does. Basic v2 covers roughly 900 developers on this
+    # assumption; what actually moves an enterprise off it is the absence of
+    # VNet integration and availability zones.
+    $suggested =
+        if ($monthly -gt 50000000) { 'PremiumV2' }
+        elseif ($monthly -gt 10000000) { 'StandardV2' }
+        else { 'BasicV2' }
+
+    Write-Host ''
+    if ($suggested -eq 'BasicV2') {
+        Write-Host '      Volume alone suggests BasicV2. Choose StandardV2 anyway if you need the' -ForegroundColor DarkGray
+        Write-Host '      gateway inside a VNet or spread across availability zones - BasicV2 has' -ForegroundColor DarkGray
+        Write-Host '      neither, and that is what usually decides this rather than request count.' -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host ("      {0} suggested on volume. It also brings VNet integration and zones." -f $suggested) -ForegroundColor DarkGray
+    }
+    Write-Host ''
+
+    Read-Default -Prompt 'API Management SKU' -Default $suggested `
         -Help 'Must be a v2 tier. Classic tiers attach the policies but meter zero Anthropic tokens, so budgets never trigger.' -Validate {
             param($x)
             if ($x -in @('BasicV2','StandardV2','PremiumV2')) { return $true }

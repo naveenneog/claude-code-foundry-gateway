@@ -221,3 +221,17 @@ to close the preview-feature gap. Both are recorded in `docs/CHARTER.md` as non-
       rather than a name and including inherited assignments. Measured on the reference deployment:
       the documented one-role hand check reported clean while 11 assignments could call Foundry
       directly, three of them through `Foundry User`
+- [x] P29 backup and restore — gateway configuration, Claude Code history and Claude Desktop
+      conversations, with a developer-side tool that wraps all three. Secrets absent by
+      construction; restores are dry runs; a running Desktop is refused
+- [x] P30 SKU sizing at install — the installer asks how many developers and sizes on published
+      included request volume, naming VNet and availability zones as the real decider
+- [x] P31 the Entra group must exist — a business unit pointing at a missing group syncs to nobody
+      and reads as unused rather than broken, so the write is refused with near matches offered
+- [x] P32 tier limits — `Set-ClaudeTier.ps1` reads and sets tokens per minute, the daily quota and
+      the model allow list, checking models against what the account serves. A third tier remains a
+      policy change, stated rather than implied
+- [ ] P33 add or remove one developer — acceptance: a single command with confirmation and an audit
+      line, rather than only the bulk sync and CSV import
+- [ ] P34 optional Grafana — only if a customer requires Grafana by name; it is the one
+      observability option with a standing bill
