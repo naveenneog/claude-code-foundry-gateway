@@ -243,6 +243,56 @@ $mutations = @(
        File  = 'infra/workbook.json'
        From  = 'client_surface'
        To    = 'model' }
+
+    # --- P29, backup and restore ---
+
+    @{ Suite = 'Test-Backup.ps1'
+       Name  = 'the backup starts reading secret values'
+       File  = 'scripts/Backup-ClaudeGateway.ps1'
+       From  = '$apim/namedValues?api-version=2024-05-01'
+       To    = '$apim/namedValues/x/listValue?api-version=2024-05-01' }
+
+    @{ Suite = 'Test-Backup.ps1'
+       Name  = 'the backup stops fetching workbook content'
+       File  = 'scripts/Backup-ClaudeGateway.ps1'
+       From  = 'canFetchContent=true'
+       To    = 'canFetchContent=false' }
+
+    @{ Suite = 'Test-Backup.ps1'
+       Name  = 'the restore stops being a dry run'
+       File  = 'scripts/Restore-ClaudeGateway.ps1'
+       From  = 'if (-not $Apply) {'
+       To    = 'if ($false) {' }
+
+    @{ Suite = 'Test-Backup.ps1'
+       Name  = 'the history restore stops being a dry run'
+       File  = 'scripts/Restore-ClaudeCode.ps1'
+       From  = 'if (-not $Apply) {'
+       To    = 'if ($false) {' }
+
+    @{ Suite = 'Test-Backup.ps1'
+       Name  = 'the restore stops refusing another gateway'
+       File  = 'scripts/Restore-ClaudeGateway.ps1'
+       From  = 'Add -Force if you mean it'
+       To    = 'carrying on' }
+
+    @{ Suite = 'Test-Backup.ps1'
+       Name  = 'the history backup stops excluding the credential file'
+       File  = 'scripts/Backup-ClaudeCode.ps1'
+       From  = 'oauth, key and token'
+       To    = 'nothing much' }
+
+    @{ Suite = 'Test-Backup.ps1'
+       Name  = 'config credentials stop blocking the backup'
+       File  = 'scripts/Backup-ClaudeCode.ps1'
+       From  = "Scan = 'block'"
+       To    = "Scan = 'report'" }
+
+    @{ Suite = 'Test-Backup.ps1'
+       Name  = 'the history restore stops refusing to overwrite'
+       File  = 'scripts/Restore-ClaudeCode.ps1'
+       From  = 'already have files on disk'
+       To    = 'are present' }
 )
 
 $missed = @()
@@ -282,10 +332,11 @@ try {
     $teamSuite = Join-Path $sandbox 'tests/Test-Teams.ps1'
     $modelSuite = Join-Path $sandbox 'tests/Test-ModelDeployment.ps1'
     $obsSuite = Join-Path $sandbox 'tests/Test-Observability.ps1'
+    $backupSuite = Join-Path $sandbox 'tests/Test-Backup.ps1'
 
     # The copy must pass before any mutation, or a "caught" result below could
     # just mean the sandbox is broken.
-    foreach ($s in $suite, $teamSuite, $modelSuite, $obsSuite) {
+    foreach ($s in $suite, $teamSuite, $modelSuite, $obsSuite, $backupSuite) {
         & $s *>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  [SETUP] the unmutated copy of $(Split-Path $s -Leaf) already fails - the sandbox is wrong, not the code" -ForegroundColor Red

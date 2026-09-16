@@ -579,7 +579,82 @@ account is disabled, since token acquisition fails at that moment.
 
 ---
 
-## 4. Cutover runbook
+## 4. Backing the gateway up, and putting it back
+
+Two different backups, because there are two different things worth keeping and
+they carry different risk.
+
+### The gateway's configuration
+
+```powershell
+./scripts/Backup-ClaudeGateway.ps1
+./scripts/Restore-ClaudeGateway.ps1 -Path ./backups/<file>.json          # dry run
+./scripts/Restore-ClaudeGateway.ps1 -Path ./backups/<file>.json -Apply
+```
+
+One file holds what makes the gateway behave the way it does: every named value
+— entitlement lists, per-tier limits, the organisation ceiling, per-user
+overrides, the business unit registry, the parent map, the membership map — plus
+the API policy, the saved KQL functions and the workbooks.
+
+**Secrets are not in it, by construction rather than by care.** API Management
+returns a secret named value's contents only from the `listValue` action; the
+backup reads the plain list, which omits them, so a secret cannot reach the file
+even by mistake. Their names are recorded, and the restore tells you which ones
+have to be set by hand.
+
+The restore is a dry run until `-Apply`, and it prints the before-and-after of
+every value it would change. It refuses to restore into a gateway other than the
+one the backup came from without `-Force` — that is how a migration works, but
+it is never what you want by accident, because it overwrites the target's
+entitlement and budgets with another deployment's.
+
+Restoring rebinds the workbooks to the workspace you are restoring *into*.
+Keeping the recorded source would point them at the workspace the migration is
+leaving behind.
+
+### A developer's conversations
+
+```powershell
+./scripts/Backup-ClaudeCode.ps1
+./scripts/Restore-ClaudeCode.ps1 -Path ./claude-code-backups/<file>.zip        # dry run
+./scripts/Restore-ClaudeCode.ps1 -Path ./claude-code-backups/<file>.zip -Apply
+```
+
+Runs on the developer's own machine against their own profile, and captures
+`~/.claude/projects` — the conversation transcripts — plus the command history,
+memory and preferences.
+
+| Left out | Why |
+|---|---|
+| `~/.claude.json` | Measured 2026-09-16, holds `oauth`, `key` and token material. A backup of credentials is a credential leak with a filename |
+| `cache/` | Regenerated on demand |
+| `plugins/` | Reinstallable, and large |
+| `file-history/` | Copies of source files. `-IncludeFileHistory` captures them |
+| `sessions/`, `session-env/` | Live state, not history |
+
+**Configuration and transcripts are scanned differently, on purpose.** A
+credential key in a config file is a finding — config has no reason to mention
+one — and it blocks the backup. A credential key in a *conversation* is normal:
+measured against real history, 12 of 93 transcripts matched, and every one was a
+conversation about rotating a key or handling a password rather than a live
+secret. Blocking on that would make the tool useless for the only thing it is
+for, so transcripts are reported and not blocked. History that discusses
+credentials cannot be cleaned mechanically — it can only be labelled for what it
+is.
+
+The archive is prompts and source code. Treat it as source.
+
+The restore will not overwrite a project that already has conversations without
+`-Force`. Transcripts are append-only history, so replacing a populated folder
+with an older copy loses whatever happened in between, silently, and there is no
+undo.
+
+Both backup folders are git-ignored.
+
+---
+
+## 5. Cutover runbook
 
 **Turn on both import switches first.** `claudeAiImport.enabled` in the Desktop
 managed configuration, and **Allow members to export their own data** on

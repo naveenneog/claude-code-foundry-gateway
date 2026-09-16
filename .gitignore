@@ -29,4 +29,12 @@ docs/transcripts/
 shots/
 shots2/
 
+# Gateway configuration backups. No secrets - Backup-ClaudeGateway.ps1 reads the
+# plain named value list, which omits them - but they still carry entitlement
+# object ids, the tenant id and the live budgets of a real deployment.
+backups/
+
+# Claude Code conversation backups. These are prompts and source code.
+claude-code-backups/
+
 !onboarding/README.md
