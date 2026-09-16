@@ -192,6 +192,11 @@ const JOBS = [
         { x: 146, y: 114, size: 22, fill: TEXT, text: P.ng.name },
         { rect: { x: 98, y: 130, w: 470, h: 66, fill: ROW } },
         { x: 103, y: 182, size: 44, fill: TEXT, weight: '600', text: P.ng.name },
+        // An unrelated group in this tenant is named after the account holder.
+        // Leaving it would undo the masking three lines above: the title reads
+        // "Na****n" and this row would spell the same first name out.
+        { rect: { x: 670, y: 1085, w: 190, h: 36, fill: ROW } },
+        { x: 674, y: 1110, size: 21, fill: TEXT, text: 'na\u2022\u2022\u2022\u2022-ai-gbb' },
       ];
     })(),
   },
