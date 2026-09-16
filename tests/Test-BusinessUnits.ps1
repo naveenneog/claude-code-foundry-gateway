@@ -182,6 +182,75 @@ Assert 'the refusal names the budget that ran out' ($branch -match 'context\.Var
 Assert 'unassigned is allowed by default' ($bicep -match "buUnassigned string = 'allow'")
 
 Write-Host ''
+Write-Host 'Business units - money (ADR-0010)' -ForegroundColor Cyan
+
+# Money is decimal. A rate of 0.000002 per token accumulated over millions of
+# tokens in binary floating point does not reproduce, and a chargeback figure
+# that changes between two runs of the same query cannot be argued with.
+#
+# Asserted behaviourally as well as on the source, because the type is the
+# mechanism and reproducibility is the property that matters.
+. $helper
+
+$conv = ConvertTo-ClaudeBuTokens -Usd 5000 -Model 'claude-sonnet-5'
+Assert 'a dollar budget converts as decimal'  ($conv.Usd -is [decimal])
+Assert 'and the blended rate is decimal'      ($conv.BlendedUsdPerM -is [decimal])
+
+$back = ConvertTo-ClaudeBuUsd -Tokens $conv.TokensPerMonth -Model 'claude-sonnet-5'
+Assert 'the conversion round-trips exactly'   ($back -eq [decimal]5000.00) "got $back"
+Assert 'and returns decimal, not double'      ($back -is [decimal])
+
+# Rounding once at the end, not per row. 1,389 tokens is $0.0050004, which
+# rounds up to a cent on its own; three of them rounded first total $0.03, while
+# the same 4,167 tokens priced once is $0.0150012 and rounds to $0.02. One cent
+# per three rows compounds across a month of them.
+$perRow = @(1..3 | ForEach-Object { ConvertTo-ClaudeBuUsd -Tokens 1389 -Model 'claude-sonnet-5' })
+$summedRows = [decimal]0; foreach ($r in $perRow) { $summedRows += $r }
+$summedOnce = ConvertTo-ClaudeBuUsd -Tokens 4167 -Model 'claude-sonnet-5'
+Assert 'rounding per row overstates the total' ($summedRows -eq [decimal]0.03) "got $summedRows"
+Assert 'rounding once gives the exact figure'  ($summedOnce -eq [decimal]0.02) "got $summedOnce"
+Assert 'and the two genuinely differ'          ($summedRows -ne $summedOnce)
+
+$h = Get-Content $helper -Raw
+Assert 'no money parameter is double' ($h -notmatch '\[double\]\$Usd' -and $h -notmatch '\[double\]\$OutputShare')
+
+# Asserted on the values, not the source. Matching "InputPerM = [decimal]"
+# anywhere passed with one model reverted to doubles, and the behavioural tests
+# above did not catch it either: PowerShell promotes to decimal when *either*
+# operand is decimal, so a double price book still produced decimal output as
+# long as OutputShare was decimal. That makes the price book's own type a
+# latent problem rather than a visible one - a caller passing a double
+# OutputShare would silently lose precision on that model alone.
+$badPrices = @()
+foreach ($model in $ClaudePriceBook.Keys) {
+    $entry = $ClaudePriceBook[$model]
+    if ($entry.InputPerM -isnot [decimal])  { $badPrices += "$model.InputPerM" }
+    if ($entry.OutputPerM -isnot [decimal]) { $badPrices += "$model.OutputPerM" }
+}
+Assert 'every price book rate is decimal' ($badPrices.Count -eq 0) ($badPrices -join ', ')
+Assert 'and the book is not empty'        ($ClaudePriceBook.Keys.Count -ge 4)
+
+$setSrc = Get-Content $setPath -Raw
+Assert 'the writer takes a decimal budget' ($setSrc -match '\[decimal\]\$MonthlyBudgetUsd')
+
+$adr10 = Join-Path $root 'docs/adr/0010-financial-semantics.md'
+Assert 'the financial decision is recorded' (Test-Path $adr10)
+$f10 = Get-Content $adr10 -Raw
+
+# The eight questions it exists to settle. Each is asserted on a sentence that
+# occurs once, not on the topic word, which appears throughout.
+Assert 'it settles tariff versus actual cost'   ($f10 -match 'They are\s+\*\*showback\*\*')
+Assert 'it refuses to sum token categories'     ($f10 -match 'never summed before pricing')
+Assert 'it prices the deployment, not the alias' ($f10 -match 'Pricing joins on `DeploymentName`')
+Assert 'it forbids floating point for money'    ($f10 -match 'Never `float` or `double`')
+Assert 'it rounds once, at the end'             ($f10 -match 'Round half away from zero')
+Assert 'the price book is time-versioned'       ($f10 -match 'in force at the request''s timestamp')
+Assert 'periods are UTC'                        ($f10 -match '(?m)^Periods are UTC')
+Assert 'corrections are new rows'               ($f10 -match 'A correction is a new row')
+Assert 'soft cap is not warn-only'              ($f10 -match 'Ours \*\*does\*\* block')
+Assert 'and enforcement is stated as uncategorised' ($f10 -match 'Reporting is categorised; enforcement is not')
+
+Write-Host ''
 Write-Host 'Business units - documentation' -ForegroundColor Cyan
 
 $docPath = Join-Path $root 'docs/BUSINESS-UNITS.md'

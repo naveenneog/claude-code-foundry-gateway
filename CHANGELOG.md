@@ -28,6 +28,24 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- [ADR-0010](docs/adr/0010-financial-semantics.md) settles the financial
+  semantics that P21 and P23 both depend on, each answer grounded in a
+  measurement already recorded here rather than a pricing page:
+
+  an internal tariff at **list price** rather than actual Azure cost, because the
+  CCU meter carries no per-user or per-model split and private-offer discounts
+  apply before conversion; all five token categories billable at their measured
+  multipliers — cache read 0.1x, five-minute write 1.25x, one-hour write 2x — and
+  never summed before pricing, since total input is defined as the sum of input,
+  cache creation and cache read; pricing joined on the **deployment** rather than
+  the model alias the client sent, with the `inference_geo` multiplier that
+  applies to the request; decimal arithmetic rounded **once**, at presentation; a
+  price book versioned by effective interval so a price change cannot rewrite a
+  month that was already signed off; UTC periods so the quota renewal and the
+  reporting month are the same boundary; an append-only ledger where corrections
+  are new rows; and **"soft cap" defined as approximate blocking, not warn-only**,
+  which is the term most likely to be read the wrong way by a finance owner.
+
 - `Compare-ClaudeEntitlement.ps1` resolves every identity twice — once from what
   the gateway is enforcing, once from the directory — and exits non-zero when
   the two disagree. It reports `missing` (added in the portal, still getting
@@ -236,6 +254,17 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   `tests/Test-All.ps1`.
 - `tests/Test-FormatStrings.ps1`, a repo-wide check that every .NET format
   string parses and runs.
+
+### Changed
+
+- Money moved from `[double]` to `[decimal]` in `ClaudeBusinessUnit.ps1`,
+  `Set-ClaudeBusinessUnit.ps1` and `Get-ClaudeBusinessUnit.ps1`, and token spend
+  is accumulated as `[long]` rather than `0.0`.
+
+  A rate of 0.000002 per token accumulated over millions of tokens in binary
+  floating point does not reproduce, and a chargeback figure that changes between
+  two runs of the same query cannot be argued with. After the change $5,000
+  converts to 1,388,888,888 tokens and back to exactly $5000.00.
 
 ### Fixed
 

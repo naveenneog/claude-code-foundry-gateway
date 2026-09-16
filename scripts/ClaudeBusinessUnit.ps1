@@ -40,10 +40,10 @@
 # conversion, so these support list-price showback and not invoice-accurate
 # chargeback. U2 covers what would close that gap.
 $script:ClaudePriceBook = @{
-    'claude-opus-5'    = @{ InputPerM = 5.0; OutputPerM = 25.0 }
-    'claude-opus-4.8'  = @{ InputPerM = 5.0; OutputPerM = 25.0 }
-    'claude-sonnet-5'  = @{ InputPerM = 2.0; OutputPerM = 10.0 }
-    'claude-haiku-4.5' = @{ InputPerM = 1.0; OutputPerM = 5.0 }
+    'claude-opus-5'    = @{ InputPerM = [decimal]5.0; OutputPerM = [decimal]25.0 }
+    'claude-opus-4.8'  = @{ InputPerM = [decimal]5.0; OutputPerM = [decimal]25.0 }
+    'claude-sonnet-5'  = @{ InputPerM = [decimal]2.0; OutputPerM = [decimal]10.0 }
+    'claude-haiku-4.5' = @{ InputPerM = [decimal]1.0; OutputPerM = [decimal]5.0 }
 }
 $script:ClaudePriceBookDate = '2026-09-15'
 
@@ -296,9 +296,9 @@ function ConvertTo-ClaudeBuTokens {
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)][double]$Usd,
+        [Parameter(Mandatory = $true)][decimal]$Usd,
         [string]$Model = 'claude-sonnet-5',
-        [double]$OutputShare = 0.2
+        [decimal]$OutputShare = 0.2
     )
 
     if ($Usd -le 0) { throw "A monthly budget must be greater than zero." }
@@ -333,10 +333,10 @@ function ConvertTo-ClaudeBuUsd {
     param(
         [Parameter(Mandatory = $true)][long]$Tokens,
         [string]$Model = 'claude-sonnet-5',
-        [double]$OutputShare = 0.2
+        [decimal]$OutputShare = 0.2
     )
     $price = $script:ClaudePriceBook[$Model]
     if (-not $price) { return $null }
     $blendedPerM = ($price.InputPerM * (1 - $OutputShare)) + ($price.OutputPerM * $OutputShare)
-    return [math]::Round(($Tokens / 1000000.0) * $blendedPerM, 2)
+    return [math]::Round(([decimal]$Tokens / [decimal]1000000) * $blendedPerM, 2)
 }

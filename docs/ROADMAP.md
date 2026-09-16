@@ -175,13 +175,20 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       directory using the policy's own premium-before-standard precedence and exits non-zero on
       disagreement. Negative-tested against the reference deployment: removing an identity from its
       group without syncing produced `stale (1)` and exit 1, and re-adding it returned it to clean.
-      The mid-period opening balance is deferred to P20b rather than decided here- [x] P20 business-unit identity model — a stable identifier separate from display name, settled in
+      The mid-period opening balance is deferred to P20b rather than decided here
+- [x] P20 business-unit identity model — a stable identifier separate from display name, settled in
       [ADR-0007](adr/0007-business-unit-model.md). A business unit is an Entra group plus a budget;
       transfer is group membership, deletion returns members to `unassigned`, and a developer in two
       business-unit groups takes the first in registry order
-- [ ] P20b financial semantics — acceptance: internal tariff versus actual cost, billable
-      categories, decimal arithmetic, price-book versions with effective intervals, and an agreed
-      meaning for "soft cap". **U2**
+- [x] P20b financial semantics — settled in [ADR-0010](adr/0010-financial-semantics.md): an
+      internal tariff at list price rather than actual Azure cost, because the CCU meter carries no
+      per-user or per-model split and private-offer discounts apply before conversion; all five
+      token categories billable at their measured multipliers and never summed before pricing;
+      pricing joined on the deployment rather than the client's model alias; decimal arithmetic
+      rounded once at presentation; a price book versioned by effective interval so a price change
+      cannot rewrite history; UTC periods; an append-only ledger where corrections are new rows; and
+      "soft cap" stated to mean approximate blocking rather than warn-only. The implementation was
+      moved from `[double]` to `[decimal]` to match. **U2** still blocks actual-cost chargeback
 - [ ] P21 dollar budgets per business unit — acceptance: spend computed from categorised usage, not
       a single token total. Output is five times input and a cache read is a tenth of it, so one
       counter cannot represent money.

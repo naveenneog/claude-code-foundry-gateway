@@ -44,7 +44,7 @@ param(
     [string]$ResourceGroup = $(if ($env:CLAUDE_RG) { $env:CLAUDE_RG } else { 'rg-contosohub' }),
     [string]$ApimName,
     [string]$Model = 'claude-sonnet-5',
-    [double]$OutputShare = 0.2
+    [decimal]$OutputShare = 0.2
 )
 
 $ErrorActionPreference = 'Stop'
@@ -99,8 +99,8 @@ AppTraces
         foreach ($row in $res.tables[0].rows) {
             $uid = [string]$row[$cols.IndexOf('user_id')]
             $bu = if ($members.Contains($uid)) { $members[$uid] } else { 'unassigned' }
-            if (-not $spend.ContainsKey($bu)) { $spend[$bu] = @{ Tokens = 0.0; Requests = 0 } }
-            $spend[$bu].Tokens += [double]$row[$cols.IndexOf('tokens')]
+            if (-not $spend.ContainsKey($bu)) { $spend[$bu] = @{ Tokens = [long]0; Requests = 0 } }
+            $spend[$bu].Tokens += [long]$row[$cols.IndexOf('tokens')]
             $spend[$bu].Requests += [int]$row[$cols.IndexOf('requests')]
         }
         $ledgerRead = $true

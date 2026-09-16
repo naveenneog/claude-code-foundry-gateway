@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Add, change or remove a business unit.
 
@@ -66,13 +66,13 @@ param(
     [switch]$SkipGroupCheck,
 
     [Parameter(ParameterSetName = 'Set')]
-    [double]$MonthlyBudgetUsd,
+    [decimal]$MonthlyBudgetUsd,
 
     [Parameter(ParameterSetName = 'Set')]
     [string]$Model = 'claude-sonnet-5',
 
     [Parameter(ParameterSetName = 'Set')]
-    [double]$OutputShare = 0.2,
+    [decimal]$OutputShare = 0.2,
 
     [Parameter(ParameterSetName = 'Remove', Mandatory = $true)]
     [switch]$Remove,

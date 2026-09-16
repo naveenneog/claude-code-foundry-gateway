@@ -1,6 +1,51 @@
 # Status
 
-**Active packet:** P18b and P19b — the load envelope, the measured scale ceilings, and the shadow migration path. M4 is complete. Full regression including the Azure half passes: 30 checks, 94 of 94 mutations caught.
+**Active packet:** P18b, P19b and P20b — the load envelope, the shadow migration path, and the financial semantics. M4 is complete. Full regression including the Azure half passes: 30 checks, 103 of 103 mutations caught.
+
+## P20b acceptance criteria — settle the financial semantics
+
+Money code that is wrong is worse than none, because the output looks authoritative. P21 and P23
+both compute dollars and neither should be built before the rules are the same in both.
+
+- [x] Eight questions answered in [ADR-0010](adr/0010-financial-semantics.md), each grounded in a recorded measurement
+- [x] The implementation moved to decimal to match the decision
+- [x] Rounding behaviour asserted on values, not on source text
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+### What the work found
+
+The ADR said money is decimal; the code was `[double]` throughout — `$Usd`, `$MonthlyBudgetUsd`,
+`$OutputShare` — and token spend was accumulated as `0.0`. Writing the decision without changing
+the code would have left a document contradicting the thing it describes, which is the failure this
+session has spent its time removing elsewhere.
+
+After the change, $5,000 converts to 1,388,888,888 tokens and back to exactly $5000.00.
+
+**A test that asserted nothing, caught before it shipped.** The first rounding assertion claimed
+that rounding per row differs from rounding once, using 333,333 tokens. Under decimal accumulation
+both came to 3.60, so the assertion asserted a difference that did not exist. The apparent
+difference in the earlier manual check — 3.5999999999999996 — came from `Measure-Object -Sum`
+promoting to double, not from the rounding at all.
+
+Replaced with an input where the rule genuinely bites: 1,389 tokens is $0.0050004 and rounds to a
+cent on its own, so three rounded rows total $0.03 while the same 4,167 tokens priced once is
+$0.0150012 and rounds to $0.02.
+
+**A mutation that proved the guard was weak.** Reverting one model's price to doubles was not
+caught. Two reasons, both worth recording: the source assertion matched the three other models that
+were still decimal, and PowerShell promotes to decimal when *either* operand is decimal, so a double
+price book still produced decimal output while `OutputShare` stayed decimal. The price book's type
+was a latent problem, not a visible one. The assertion now walks every entry and checks its runtime
+type.
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | The eight questions are the ones that have to agree across P21 and P23; settling them separately is why those two can now be built independently |
+| Coder | Accept | Decimal is the mechanism, but the property is reproducibility — a chargeback figure that changes between two runs cannot be argued with |
+| QA | Accept | Both defects here were tests that measured nothing, and both were found by running the mutation rather than by reading the assertion |
+| UX | Accept | "Soft cap" is the term most likely to be misread by a finance reader, and it now says which of the two meanings it has |
 
 ## P19b acceptance criteria — migrate without resetting allowances
 

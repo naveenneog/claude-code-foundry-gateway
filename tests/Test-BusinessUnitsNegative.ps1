@@ -70,6 +70,62 @@ $mutations = @(
        From  = 'unassigned'
        To    = 'unallocated' }
 
+    # --- P20b, the financial semantics ---
+
+    @{ Suite = 'Test-BusinessUnits.ps1'
+       Name  = 'money goes back to floating point'
+       File  = 'scripts/ClaudeBusinessUnit.ps1'
+       From  = '[Parameter(Mandatory = $true)][decimal]$Usd,'
+       To    = '[Parameter(Mandatory = $true)][double]$Usd,' }
+
+    @{ Suite = 'Test-BusinessUnits.ps1'
+       Name  = 'the price book goes back to doubles'
+       File  = 'scripts/ClaudeBusinessUnit.ps1'
+       From  = "'claude-sonnet-5'  = @{ InputPerM = [decimal]2.0; OutputPerM = [decimal]10.0 }"
+       To    = "'claude-sonnet-5'  = @{ InputPerM = 2.0; OutputPerM = 10.0 }" }
+
+    @{ Suite = 'Test-BusinessUnits.ps1'
+       Name  = 'the budget writer takes a double again'
+       File  = 'scripts/Set-ClaudeBusinessUnit.ps1'
+       From  = '[decimal]$MonthlyBudgetUsd,'
+       To    = '[double]$MonthlyBudgetUsd,' }
+
+    @{ Suite = 'Test-BusinessUnits.ps1'
+       Name  = 'the figure is presented as invoice-accurate'
+       File  = 'docs/adr/0010-financial-semantics.md'
+       From  = 'They are'
+       To    = 'They are not' }
+
+    @{ Suite = 'Test-BusinessUnits.ps1'
+       Name  = 'token categories are summed before pricing'
+       File  = 'docs/adr/0010-financial-semantics.md'
+       From  = 'never summed before pricing'
+       To    = 'summed before pricing' }
+
+    @{ Suite = 'Test-BusinessUnits.ps1'
+       Name  = 'pricing goes back to the client alias'
+       File  = 'docs/adr/0010-financial-semantics.md'
+       From  = 'Pricing joins on `DeploymentName`'
+       To    = 'Pricing joins on the model name' }
+
+    @{ Suite = 'Test-BusinessUnits.ps1'
+       Name  = 'the price book stops being time-versioned'
+       File  = 'docs/adr/0010-financial-semantics.md'
+       From  = "in force at the request's timestamp"
+       To    = 'in force today' }
+
+    @{ Suite = 'Test-BusinessUnits.ps1'
+       Name  = 'soft cap is described as warn-only'
+       File  = 'docs/adr/0010-financial-semantics.md'
+       From  = 'Ours **does** block'
+       To    = 'Ours warns only' }
+
+    @{ Suite = 'Test-BusinessUnits.ps1'
+       Name  = 'the enforcement gap stops being stated'
+       File  = 'docs/adr/0010-financial-semantics.md'
+       From  = 'Reporting is categorised; enforcement is not'
+       To    = 'Both are categorised' }
+
     # --- teams and the cascade (ADR-0008), checked by Test-Teams.ps1 ---
 
     @{ Suite = 'Test-Teams.ps1'
