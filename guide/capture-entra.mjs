@@ -27,12 +27,16 @@ const OUT = path.resolve('.shots-entra');
 const HEADED = process.argv.includes('--headed');
 
 const GROUPS = [
-  { id: 'df529b3b-df37-40ab-9593-f19b9219f855', name: 'claude-bu-mcaps',      file: 'mcaps-direct.png',   blade: 'Members' },
-  { id: 'cbe8263d-55fc-4080-b147-d1fc6fc36aed', name: 'claude-team-ites-1',   file: 'ites-1.png',         blade: 'Members' },
-  { id: 'a2a9bda1-06dd-4774-a50a-63e89e45ad32', name: 'claude-team-ites-2',   file: 'ites-2.png',         blade: 'Members' },
-  { id: '058d5d1d-1823-4b43-b884-0938694e462a', name: 'claude-bu-gbb',        file: 'gbb.png',            blade: 'Members' },
-  { id: 'bac8d3f3-a87e-493b-b607-cca92d013d18', name: 'claude-code-standard', file: 'tier-standard.png',  blade: 'Members' },
-  { id: '78e38759-d8a3-4436-b0dd-699a5e0c31be', name: 'claude-code-premium',  file: 'tier-premium.png',   blade: 'Members' },
+  { id: 'df529b3b-df37-40ab-9593-f19b9219f855', name: 'claude-bu-mcaps',      file: 'mcaps-direct.png',    blade: 'Members' },
+  { id: 'cbe8263d-55fc-4080-b147-d1fc6fc36aed', name: 'claude-team-ites-1',   file: 'ites-1.png',          blade: 'Members' },
+  { id: 'a2a9bda1-06dd-4774-a50a-63e89e45ad32', name: 'claude-team-ites-2',   file: 'ites-2.png',          blade: 'Members' },
+  { id: '058d5d1d-1823-4b43-b884-0938694e462a', name: 'claude-bu-gbb',        file: 'gbb.png',             blade: 'Members' },
+  { id: 'bac8d3f3-a87e-493b-b607-cca92d013d18', name: 'claude-code-standard', file: 'tier-standard.png',   blade: 'Members' },
+  { id: '78e38759-d8a3-4436-b0dd-699a5e0c31be', name: 'claude-code-premium',  file: 'tier-premium.png',    blade: 'Members' },
+  // The other direction: which groups this team belongs to. It shows the
+  // business unit and the tier group side by side, which is the two-axis model
+  // in one picture.
+  { id: 'cbe8263d-55fc-4080-b147-d1fc6fc36aed', name: 'claude-team-ites-1',   file: 'ites-1-memberships.png', blade: 'GroupMemberships' },
 ];
 
 fs.mkdirSync(OUT, { recursive: true });

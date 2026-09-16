@@ -165,7 +165,8 @@ Assert 'the decision is recorded'        (Test-Path (Join-Path $root 'docs/adr/0
 
 # The portal captures show the model better than prose does: direct members are
 # the teams, all members resolves to the people.
-foreach ($shot in 'entra-1-bu-direct-members.png', 'entra-2-bu-all-members.png') {
+foreach ($shot in 'entra-1-bu-direct-members.png', 'entra-2-bu-all-members.png',
+                  'entra-3-team-memberships.png', 'entra-4-bu-direct-person.png') {
     Assert "the guide ships $shot" (Test-Path (Join-Path $root "docs/guide/$shot"))
     Assert "and references it"     ($d -match [regex]::Escape($shot))
 }
@@ -193,11 +194,11 @@ Assert 'identities are masked'             ($redact -match '\\u2022')
 Assert 'the real domain survives the mask' ($redact -match '@microsoft\.com')
 Assert 'and the tenant is not hidden'      ($redact -match 'MICROSOFT NON-PRODUCTION')
 # A mask that leaves the local part readable is not a mask.
-foreach ($plain in 'naveen\.g@', 'nived\.v@', 'Saurabh\.Seth@', 'vrm@microsoft', 'navg@microsoft') {
+foreach ($plain in 'naveen\.g@', 'nived\.v@', 'Saurabh\.Seth@', 'vrm@microsoft', 'navg@microsoft', 'sombanerjee@') {
     Assert "it does not restate $($plain -replace '\\','')" ($redact -notmatch $plain)
 }
 # Display names must be masked too, not just addresses.
-foreach ($plain in 'Gopalakrishna', 'Velayudhan', 'Mudumbai') {
+foreach ($plain in 'Gopalakrishna', 'Velayudhan', 'Mudumbai', 'Banerjee', 'Somnath') {
     Assert "'$plain' is not left whole" ($redact -notmatch $plain)
 }
 # A capture with no redaction job is the file that gets copied into docs by

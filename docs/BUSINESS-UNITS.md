@@ -78,13 +78,26 @@ transitive view the sync reads:
 The difference between those two tabs is the whole model. Membership is
 maintained on the team, and the business unit gets it by containment.
 
+**Group memberships** on the team shows the two axes directly — ITES 1 is inside
+`claude-bu-mcaps` for chargeback and inside `claude-code-standard` for
+entitlement, at the same time:
+
+![The Group memberships blade of claude-team-ites-1, listing two security groups it belongs to: claude-bu-mcaps and claude-code-standard, both assigned and cloud-sourced](guide/entra-3-team-memberships.png)
+
+Moving that team to the premium tier is removing one of those two rows and
+adding another. Its business unit, budget and spend history are untouched.
+
+A business unit does not have to contain teams. GBB holds one person directly:
+
+![The claude-bu-gbb group, Direct members tab, showing a single member of type User](guide/entra-4-bu-direct-person.png)
+
 These are real accounts in a real Microsoft non-production tenant. Names and
 addresses are masked in the middle — enough removed to stop anyone being
 identified or contacted, enough kept that you can see this is a working
 deployment rather than a mock-up.
 
-These links open the **Members** blade of each group in the reference deployment;
-substitute your own group object ids.
+These links open the same blades in the reference deployment; substitute your own
+group object ids.
 
 | Group | Role | Portal |
 |---|---|---|
@@ -114,7 +127,7 @@ git-ignored — the unredacted captures carry real names and the signed-in
 account, and only the redacted output ships.
 
 Redaction boxes are pixel coordinates, so each capture needs its own entry in
-`JOBS`. The two shown above have one; the other four blades do not yet. If you
+`JOBS`. The four shown above have one; the remaining blades do not yet. If you
 capture them, `redact-entra.mjs` **exits non-zero and names the files it could
 not handle** rather than skipping them quietly — an unredacted capture sitting
 in a folder is the one that gets copied into the docs by hand with a real name

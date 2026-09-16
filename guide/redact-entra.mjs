@@ -47,6 +47,13 @@ const PEOPLE = [
   { name: 'Vr\u2022\u2022a Ki\u2022\u2022\u2022\u2022e Mu\u2022\u2022\u2022\u2022ai',                 mail: 'vr\u2022@microsoft.com' },
 ];
 
+// The single member of claude-bu-gbb, masked the same way. That capture is
+// cropped above the account line, so its header needs nothing.
+const GBB_PERSON = {
+  name: 'So\u2022\u2022\u2022th Ba\u2022\u2022\u2022\u2022ee',
+  mail: 'so\u2022\u2022\u2022\u2022\u2022\u2022\u2022ee@microsoft.com',
+};
+
 // The signed-in account chip, top right. The tenant name stays: it says this is
 // a real Microsoft non-production tenant, which is the point.
 const chip = (right, top, height) => ({
@@ -87,6 +94,27 @@ const JOBS = [
     file: 'mcaps-all.png',
     out: 'entra-2-bu-all-members.png',
     parts: (() => { const c = chip(2195, 0, 60); return [{ rect: c.rect }, ...c.texts, ...memberRows]; })(),
+  },
+  {
+    file: 'ites-1-memberships.png',
+    out: 'entra-3-team-memberships.png',
+    // The Group memberships blade of a team: it shows the team sitting in both
+    // its business unit and its tier group, which is the two-axis model in one
+    // picture. The object ids in that table are the same ones the guide already
+    // links to, so they stay.
+    parts: (() => { const c = chip(2195, 7, 60); return [{ rect: c.rect }, ...c.texts]; })(),
+  },
+  {
+    file: 'gbb.png',
+    out: 'entra-4-bu-direct-person.png',
+    // A business unit with a person in it rather than a team. The capture is
+    // cropped above the account line, so the header needs nothing.
+    parts: [
+      { rect: { x: 718, y: 680, w: 300, h: 40, fill: ROW } },
+      { x: 722, y: 708, size: 22, fill: LINK, text: GBB_PERSON.name },
+      { rect: { x: 1560, y: 680, w: 380, h: 40, fill: ROW } },
+      { x: 1566, y: 708, size: 22, fill: TEXT, text: GBB_PERSON.mail },
+    ],
   },
 ];
 

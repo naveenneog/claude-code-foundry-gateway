@@ -193,6 +193,12 @@ $mutations = @(
        File  = 'docs/BUSINESS-UNITS.md'
        From  = 'entra-2-bu-all-members.png'
        To    = 'nothing.png' }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the guide drops the two-axis capture'
+       File  = 'docs/BUSINESS-UNITS.md'
+       From  = 'entra-3-team-memberships.png'
+       To    = 'nothing.png' }
 )
 
 $missed = @()
