@@ -38,6 +38,8 @@ const REDACTIONS = [
   [/1018f813-18ba-4c7f-9bfa-362913e4befa/g, 'c4d8e017-6b92-41af-8e73-2fa9d35c6081'],
   [/5ca49aa0-68ef-4c77-8e45-1ca39f35ac98/g, 'a91b6f23-58d4-4c07-b6e2-93f7a5c1d840'],
   [/apim-claude-gw-fzgql9/g, 'apim-claude-gateway'],
+  [/log-claude-gw-fzgql9/g, 'log-claude-gateway'],
+  [/e839ff0f-532b-4828-a2b3-8c9a1b719d85/g, '00000000-0000-0000-0000-000000000000'],
   [/rg-contosohub/g, 'rg-claude-gateway'],
 ];
 
@@ -176,6 +178,60 @@ Business units on apim-claude-gw-fzgql9
 
   research removed (was claude-code-premium, 3,333,333,333 tokens/month)
   2 business unit(s) before, 1 after. Others untouched.`,
+  },
+  {
+    file: 'obs-1-publish-queries.png',
+    title: 'Publishing the queries as callable functions',
+    body: `PS C:\\claude-gateway> ./scripts/Publish-ClaudeQueries.ps1
+
+Workspace log-claude-gw-fzgql9 (rg-contosohub)
+  published ClaudeChargeback(p_from:datetime=datetime(null),p_to:datetime=datetime(null))
+            ClaudeChargeback() for the last day, ClaudeChargeback(ago(30d), now()) for a month.
+  published ClaudeCodeDaily(p_day:datetime=datetime(null))
+            ClaudeCodeDaily() for yesterday, ClaudeCodeDaily(datetime(2026-09-15)) for a date.
+
+  A saved function is workspace metadata - it stores nothing and costs nothing.
+  The .kql files in analytics/ stay the source; re-run this after editing one.`,
+  },
+  {
+    file: 'obs-2-publish-workbook.png',
+    title: 'Publishing the workbook',
+    body: `PS C:\\claude-gateway> ./scripts/Publish-ClaudeWorkbook.ps1
+
+Workbook 'Claude gateway' in rg-contosohub
+  published, bound to log-claude-gw-fzgql9
+  functions in use: ClaudeChargeback
+
+  Open it:
+    https://portal.azure.com/#@/resource/subscriptions/e839ff0f-532b-4828-a2b3-8c9a1b719d85/resourceGroups/rg-contosohub/providers/Microsoft.Insights/workbooks/5a1289ee-bf8e-5840-dba0-cb00933cc53f
+
+  Figures are list price and exclude cached tokens. See docs/MONITORING.md.`,
+  },
+  {
+    file: 'obs-3-workbook-guard.png',
+    title: 'It refuses rather than publish a broken dashboard',
+    body: `PS C:\\claude-gateway> ./scripts/Publish-ClaudeWorkbook.ps1 -WorkspaceName workspace-other
+
+Workbook 'Claude gateway' in rg-contosohub
+Exception:
+ | The workbook calls ClaudeChargeback, which workspace-other does not have. Run
+ | ./scripts/Publish-ClaudeQueries.ps1 first, or every tile will open on a resolver error.`,
+  },
+  {
+    file: 'obs-4-by-client.png',
+    title: 'Usage split by client, from the live gateway',
+    body: `PS C:\\claude-gateway> ClaudeChargeback(ago(2h), now())
+>>   | summarize Requests = count(), Tokens = sum(total_tokens) by client_surface, business_unit
+
+Surface        BU               Reqs   Tokens
+sdk-cli        ites-1              1     3493
+sdk            ites-1              1       28
+desktop        ites-1              1       28
+cli            ites-1              1       28
+vscode-ext     ites-1              1       28
+
+  Claude Code 2.1.241 identifies itself as "claude-cli/2.1.241 (external, sdk-cli)".
+  The surface is parsed from the agent string, not matched against a list.`,
   },
 ];
 

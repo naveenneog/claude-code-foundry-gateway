@@ -28,6 +28,30 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- The gateway records which client made the call. Nothing in API Management
+  carried it — measured 2026-09-16, `AppRequests.Properties` held only API and
+  service metadata, `ClientType` read `PC` and `ClientBrowser` was empty. The
+  chargeback trace now captures the `User-Agent`, truncated, and the ledger
+  parses the surface out of it. **Parsed, not matched against a list**: Claude
+  Code 2.1.241 identifies itself as `claude-cli/2.1.241 (external, sdk-cli)`,
+  and a list built on the obvious guess of `cli` mis-buckets the real CLI.
+  Verified live against the real CLI plus Desktop-, VS Code- and SDK-shaped
+  agents.
+- `scripts/Publish-ClaudeQueries.ps1` publishes the queries in `analytics/` as
+  callable workspace functions — `ClaudeChargeback()`, `ClaudeCodeDaily()`. The
+  `.kql` files stay the source; only the window lines are rewritten into
+  parameters, and it refuses to publish when it cannot find them, because a
+  function pinned to a fixed window answers every question wrongly and looks
+  right doing it. Verified the parameter is honoured: 44, 5, 44 and 0 rows
+  across four windows.
+- `infra/workbook.json` and `scripts/Publish-ClaudeWorkbook.ps1` — the Observe
+  pane. Consumption by business unit, by client, by developer, by model and over
+  time, plus what could not be attributed. It refuses when the definition is not
+  valid JSON or when the workspace lacks the functions it calls, either of which
+  produces a dashboard that opens on an error. The id is derived from the
+  resource group and display name, so re-running updates in place rather than
+  leaving a second copy. Neither a saved search nor a workbook stores or runs
+  anything, so no always-on component was added.
 - The installer finds or creates a Claude deployment. It used to stop with "the
   gateway fronts a model, it cannot create one" when no account had one, which
   is true of the gateway and beside the point for an installer already signed in

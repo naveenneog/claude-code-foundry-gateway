@@ -261,6 +261,90 @@ you alert on it.
 
 ## 7. Dashboard
 
+Two things ship: **saved KQL functions** and an **Azure Workbook**. Both are
+metadata — a saved search stores nothing and a workbook runs nothing, so each
+costs nothing to have. The only bill is the query when somebody opens it.
+
+### Publish the functions first
+
+The queries in `analytics/` are files you paste into the Logs blade. Published
+as functions they are callable by name, which is what the workbook, a Grafana
+panel or a colleague at a query prompt can reach without knowing this repository
+exists.
+
+```powershell
+./scripts/Publish-ClaudeQueries.ps1 -List     # what is published now
+./scripts/Publish-ClaudeQueries.ps1           # publish or refresh all
+./scripts/Publish-ClaudeQueries.ps1 -Query ClaudeChargeback
+./scripts/Publish-ClaudeQueries.ps1 -Remove   # take them away again
+```
+
+![Publishing both queries as workspace functions, each printing the parameters it takes and how to call it](guide/obs-1-publish-queries.png)
+
+| Function | Call it | Returns |
+|---|---|---|
+| `ClaudeChargeback(from, to)` | `ClaudeChargeback()` = last day, `ClaudeChargeback(ago(30d), now())` = a month | One row per request: caller, business unit, client, model, tokens |
+| `ClaudeCodeDaily(day)` | `ClaudeCodeDaily()` = yesterday | The Claude Code analytics shape, one row per developer per day |
+
+The `.kql` files stay the source. The publisher rewrites only the window lines
+at the top of each file into function parameters, and **refuses to publish if it
+cannot find them** — a function silently pinned to "yesterday" would answer
+every question wrongly and look right doing it. Re-run after editing a query.
+
+### Publish the workbook
+
+```powershell
+./scripts/Publish-ClaudeWorkbook.ps1 -List    # what is published now
+./scripts/Publish-ClaudeWorkbook.ps1          # publish or update
+./scripts/Publish-ClaudeWorkbook.ps1 -Name "Claude gateway - platform"
+./scripts/Publish-ClaudeWorkbook.ps1 -Remove
+```
+
+![Publishing the workbook, naming the workspace it is bound to, the functions it uses, and the portal link to open it](guide/obs-2-publish-workbook.png)
+
+The identifier is derived from the resource group and the display name, so
+re-running updates the workbook in place rather than leaving a second copy
+beside the first. Give it a different `-Name` to keep two — one for finance, one
+for the platform team.
+
+It refuses in two situations rather than publishing something broken: if the
+definition is not valid JSON, and if the workspace does not have the functions
+the workbook calls, which would open every tile on a resolver error.
+
+![The publisher refusing because the target workspace has no ClaudeChargeback function, and naming the script to run first](guide/obs-3-workbook-guard.png)
+
+Pass `-WorkspaceName` when the resource group holds more than one workspace. The
+script will not guess, because a workbook bound to the wrong workspace renders
+empty and reads as no usage.
+
+### What it shows
+
+| Tile | Answers |
+|---|---|
+| By business unit | Whose budget did this spend |
+| By client | Claude Code CLI, VS Code extension, Claude Desktop or SDK |
+| Developers by consumption | Who is using it, with their unit and tier |
+| Consumption over time | Trend per business unit |
+| Model mix | Where cost concentrates, and how much is streamed |
+| Attribution gaps | Requests with no caller, no business unit or no client |
+
+The client breakdown comes from the `User-Agent` the caller sends, captured on
+every request by the gateway policy. The surface is parsed out of the agent
+string rather than matched against a list: measured 2026-09-16, Claude Code
+2.1.241 identifies itself as `claude-cli/2.1.241 (external, sdk-cli)` — `sdk-cli`,
+not `cli` — so a hard-coded list of expected values mis-buckets the real CLI.
+
+![The chargeback function grouped by client surface and business unit, showing five clients against one team](guide/obs-4-by-client.png)
+
+The same query works at a Logs prompt, which is the point of publishing the
+function: no file to find, no repository to clone.
+
+Every currency figure in the workbook is **list price** and the counter is blind
+to cached tokens, which was 38.7% of real cost weight on thirty days of measured
+usage. The workbook says so on the pane rather than in a footnote.
+
+### If you would rather use the metrics explorer
+
 **Save to dashboard** on each chart. A useful board is four tiles:
 
 1. Total Tokens, Sum, split by **User** — chargeback
@@ -270,6 +354,10 @@ you alert on it.
 
 Share it to a resource group the finance or leadership stakeholders can read;
 they need no access to APIM or Foundry to see it.
+
+Note the ceiling: metric dimensions cap at 100 unique values, after which
+Microsoft "silently discard[s]" the rest. That is why per-developer chargeback
+uses the log rather than metrics — see [ADR-0006](adr/0006-ledger-is-the-llm-log.md).
 
 ---
 

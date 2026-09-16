@@ -34,11 +34,15 @@ let identity =
         actor = tostring(Properties.User),
         user_id = tostring(Properties.UserId),
         tier  = tostring(Properties.Tier),
+        business_unit = tostring(Properties.BusinessUnit),
+        client_raw = tostring(Properties.Client),
         requested_model = tostring(Properties.Model)
     | summarize
         actor = take_any(actor),
         user_id = take_any(user_id),
         tier = take_any(tier),
+        business_unit = take_any(business_unit),
+        client_raw = take_any(client_raw),
         requested_model = take_any(requested_model)
         by rid;
 //
@@ -73,11 +77,25 @@ ApiManagementGatewayLlmLog
     // body parsed for cache categories this becomes "body" for those rows.
     usage_source = "log",
     cache_tokens_known = false
+// Which client made the call. The surface is parsed out of the agent string
+// rather than matched against a list, because the list was wrong when it was
+// guessed: measured 2026-09-16, Claude Code 2.1.241 sends
+// "claude-cli/2.1.241 (external, sdk-cli)" - sdk-cli, not cli. Extracting
+// whatever sits after "external," survives a surface nobody has seen yet.
+| extend client_surface = case(
+    isempty(client_raw) or client_raw == "unknown", "unknown",
+    client_raw startswith "claude-cli/", coalesce(extract(@"\(external,\s*([^)]+)\)", 1, client_raw), "claude-cli"),
+    client_raw startswith "Claude/", "desktop",
+    client_raw startswith "Anthropic/" or client_raw startswith "anthropic-", "sdk",
+    "other")
 | project
     timestamp,
     actor = coalesce(actor, "unattributed"),
     user_id,
     tier,
+    business_unit = coalesce(business_unit, "unassigned"),
+    client_surface,
+    client_raw,
     model = coalesce(model, requested_model),
     deployment,
     streamed,

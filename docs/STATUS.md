@@ -1,8 +1,8 @@
 # Status
 
-**Active packet:** P26 — the installer finds or creates a Claude deployment. Shipped. It also closed
-a redeploy that would have wiped every business unit, team and membership. Next in M4: P27,
-per-surface telemetry, which is a design discussion first.
+**Active packet:** P24 and P27 — the Observe half. Shipped and verified live: the client surface is
+captured and separable, the queries are callable functions, and the workbook is published. Next in
+M4: P28, the bill of materials diagram.
 
 ## What is shipped (M0)
 
@@ -510,12 +510,54 @@ to. Both ends are now asserted.
 | UX | Accept | SKU and capacity are shown because they are what an operator changes when a deployment cannot carry the load. Opus is excluded from standard by default with the reason given at the prompt |
 | Security | Accept | No new permission: creating a deployment needs the Cognitive Services contributor rights the operator already needs to stand up the gateway, and failure states which right was missing |
 
+## P24/P27 acceptance criteria — the Observe half
+
+- [x] The client that made the call is recorded. Nothing in API Management carried it — measured
+      2026-09-16, `AppRequests.Properties` held only API and service metadata, `ClientType` read
+      `PC`, `ClientBrowser` was empty
+- [x] The surface is **parsed** from the agent string, not matched against a list. Verified live
+      with the real Claude Code CLI plus Desktop-, VS Code- and SDK-shaped agents, all five
+      distinguishable in one query
+- [x] The queries are callable functions. Verified the window parameter is honoured rather than
+      pinned: `ClaudeChargeback()` 44 rows, `(ago(2h), now())` 5, `(ago(30d), now())` 44,
+      `(ago(1m), now())` 0
+- [x] The publisher refuses when a window line has moved, rather than shipping a function that
+      ignores its arguments
+- [x] A workbook exists, bound to one workspace, updating in place on re-run
+- [x] It refuses to publish against a workspace without the functions. Verified: pointed at a
+      second workspace it named the missing function and the script to run first
+- [x] Every currency figure on the pane says list price and states the 38.7% cache gap
+- [x] No always-on component added — a saved search and a workbook both store and run nothing
+- [x] `./tests/Test-All.ps1` passes; 39 of 39 mutations caught
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+### What the work found
+
+| | |
+|---|---|
+| The obvious guess at the CLI's agent string was wrong | Claude Code 2.1.241 sends `claude-cli/2.1.241 (external, sdk-cli)` — `sdk-cli`, not `cli`. A classifier written from the guess would have bucketed the real CLI as "other" and looked correct doing it. The surface is now extracted from whatever follows `external,` |
+| A classifier in policy is a redeploy; in KQL it is a query edit | The policy captures the fact and the query interprets it, so a client that changes its agent string costs nothing to accommodate |
+| A portal link built from the management endpoint opens nothing | `https://management.azure.com/subscriptions/...` concatenated after `#@/resource` produced a link that looked plausible and went nowhere. The ARM path is now kept separate from the base URL |
+| A workbook bound to the wrong workspace reads as no usage | It renders empty rather than erroring, so both publishers refuse to guess when a resource group holds more than one |
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | Observe was the last box in the flow with nothing behind it. It is filled with metadata only — a saved search and a workbook — so the constraint of not adding an always-on bill of materials held |
+| Coder | Accept | The `.kql` files stay the single source; the publisher rewrites only the window lines and refuses if it cannot find them. A copy of the query inside the publisher would have been a second thing to keep current |
+| QA | Accept | 39 mutations, all caught. The parameter check was made non-vacuous by proving four different windows return four different counts — a pinned function returns the same number every time and passes a weaker test |
+| UX | Accept | Both publishers list, publish and remove, and refuse with the name of the script to run first rather than an Azure error. The caveats sit on the pane, not in a footnote |
+| Security | Accept | The agent string is a request header the caller already sends, truncated and stored beside data already held. No prompt content is captured and no new permission is needed |
+
 ## Commands that prove it```powershell./tests/Test-All.ps1                                    # 17 checks, offline
 ./tests/Test-All.ps1 -IncludeAzure                      # plus the seven that call Azure
 ./scripts/Get-ClaudeTelemetry.ps1                       # where this gateway logs, and whether metrics are on
 ./scripts/Get-ClaudeAnalytics.ps1 -Days 30              # the usage report
 ./scripts/Get-ClaudeBudget.ps1                          # effective limits and spend to date
 ./scripts/Get-ClaudeBusinessUnit.ps1                    # budgets, members and spend by business unit
+./scripts/Publish-ClaudeQueries.ps1 -List               # the callable KQL functions
+./scripts/Publish-ClaudeWorkbook.ps1 -List              # the Observe pane, and where it opens
 ./scripts/New-ClaudeCodePolicy.ps1 -Tier premium        # one managed-settings profile per tier
 ./scripts/Find-ClaudeUserData.ps1 -User <upn>           # what is held about one person
 ./scripts/Get-ClaudeBypass.ps1                          # who can skip the gateway entirely

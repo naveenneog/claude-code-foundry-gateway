@@ -1,0 +1,159 @@
+{
+  "version": "Notebook/1.0",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json",
+  "items": [
+    {
+      "type": 1,
+      "name": "header",
+      "content": {
+        "json": "## Claude gateway — usage and chargeback\n\nEvery figure below comes from `ClaudeChargeback()`, the saved function over the API Management LLM log joined to the caller. Publish or refresh it with `./scripts/Publish-ClaudeQueries.ps1`.\n\n**Read the numbers this way.** Tokens are counted, money is derived. Figures are **list price** and are not reconciled to an Azure invoice, because Azure bills Claude as one aggregated Claude Consumption Unit meter and private-offer discounts apply before that conversion. The budget counter is also **blind to cached tokens** — measured over thirty days on the reference gateway, cache reads were 38.7% of real cost weight. Real spend is therefore **higher** than anything shown here, never lower."
+      }
+    },
+    {
+      "type": 9,
+      "name": "parameters",
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "range",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Period",
+            "type": 4,
+            "isRequired": true,
+            "value": { "durationMs": 604800000 },
+            "typeSettings": {
+              "selectableValues": [
+                { "durationMs": 86400000 },
+                { "durationMs": 604800000 },
+                { "durationMs": 2592000000 }
+              ]
+            }
+          }
+        ],
+        "style": "pills"
+      }
+    },
+    {
+      "type": 1,
+      "name": "bu-heading",
+      "content": { "json": "### Whose budget did this spend" }
+    },
+    {
+      "type": 3,
+      "name": "by-business-unit",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ClaudeChargeback(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| summarize Requests = count(), Tokens = sum(total_tokens), People = dcount(user_id) by ['Business unit'] = business_unit\n| order by Tokens desc",
+        "size": 0,
+        "title": "By business unit",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "Tokens", "formatter": 4, "formatOptions": { "palette": "blue" } }
+          ]
+        }
+      }
+    },
+    {
+      "type": 3,
+      "name": "by-client",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ClaudeChargeback(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| summarize Requests = count(), Tokens = sum(total_tokens) by ['Client'] = client_surface\n| order by Tokens desc",
+        "size": 1,
+        "title": "By client — CLI, VS Code extension, Desktop, SDK",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "piechart"
+      }
+    },
+    {
+      "type": 1,
+      "name": "client-note",
+      "content": {
+        "json": "The client comes from the `User-Agent` the caller sends, captured on every request by the gateway policy. The surface is parsed out of the agent string rather than matched against a list — measured 2026-09-16, Claude Code 2.1.241 identifies itself as `claude-cli/2.1.241 (external, sdk-cli)`, so a hard-coded list of expected values would have mis-bucketed the real CLI. `unknown` means the caller sent no agent string."
+      }
+    },
+    {
+      "type": 1,
+      "name": "people-heading",
+      "content": { "json": "### Who is using it" }
+    },
+    {
+      "type": 3,
+      "name": "top-developers",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ClaudeChargeback(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| summarize Requests = count(), Tokens = sum(total_tokens), Clients = make_set(client_surface, 4) by Developer = actor, ['Business unit'] = business_unit, Tier = tier\n| order by Tokens desc\n| take 25",
+        "size": 0,
+        "title": "Developers by consumption",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 3,
+      "name": "over-time",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ClaudeChargeback(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| summarize Tokens = sum(total_tokens) by bin(timestamp, 1h), business_unit\n| render timechart",
+        "size": 0,
+        "title": "Consumption over time, by business unit",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "timechart"
+      }
+    },
+    {
+      "type": 1,
+      "name": "model-heading",
+      "content": { "json": "### What they are calling" }
+    },
+    {
+      "type": 3,
+      "name": "model-mix",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ClaudeChargeback(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| summarize Requests = count(), Prompt = sum(prompt_tokens), Completion = sum(completion_tokens) by Model = model, Streamed = streamed\n| order by Requests desc",
+        "size": 0,
+        "title": "Model mix",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 1,
+      "name": "attribution-heading",
+      "content": { "json": "### What the gateway could not attribute" }
+    },
+    {
+      "type": 3,
+      "name": "unattributed",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ClaudeChargeback(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| summarize\n    ['Requests'] = count(),\n    ['No caller'] = countif(actor == 'unattributed'),\n    ['No business unit'] = countif(business_unit == 'unassigned'),\n    ['No client'] = countif(client_surface == 'unknown')",
+        "size": 4,
+        "title": "Attribution gaps",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true
+        }
+      }
+    },
+    {
+      "type": 1,
+      "name": "footer",
+      "content": {
+        "json": "**No caller** means the identity trace did not join — investigate, because that spend belongs to somebody. **No business unit** is the count to drive to zero before switching `bu-unassigned` to `deny`; `./scripts/Get-ClaudeBusinessUnit.ps1` reports it too. **No client** means the caller sent no `User-Agent`.\n\nCache tokens are absent from every row by design and recorded as `cache_tokens_known = false` rather than zero — see [ADR-0006](https://github.com/naveenneog/claude-code-foundry-gateway/blob/main/docs/adr/0006-ledger-is-the-llm-log.md)."
+      }
+    }
+  ]
+}

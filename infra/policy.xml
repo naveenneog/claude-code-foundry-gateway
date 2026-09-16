@@ -437,6 +437,20 @@
             <metadata name="Tier" value="@((string)context.Variables["tier"])" />
             <metadata name="BusinessUnit" value="@((string)context.Variables["businessUnit"])" />
             <metadata name="Model" value="@((string)context.Variables["modelName"])" />
+            <!-- Which client made the call. Captured raw and truncated rather
+                 than classified here: a classifier in policy needs a redeploy
+                 every time a client changes its agent string, where the same
+                 rule in KQL is a query edit. Truncated because a user agent has
+                 no length limit and this is one field on every request.
+
+                 Nothing else in APIM carries it - measured 2026-09-16,
+                 AppRequests.Properties holds only API and service metadata,
+                 ClientType reads "PC" and ClientBrowser is empty. -->
+            <metadata name="Client" value="@{
+                var ua = context.Request.Headers.GetValueOrDefault("User-Agent", "");
+                if (string.IsNullOrEmpty(ua)) { return "unknown"; }
+                return ua.Length > 120 ? ua.Substring(0, 120) : ua;
+            }" />
         </trace>
 
         <set-header name="x-governed-by" exists-action="override">

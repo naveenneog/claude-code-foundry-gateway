@@ -199,6 +199,50 @@ $mutations = @(
        File  = 'docs/BUSINESS-UNITS.md'
        From  = 'entra-3-team-memberships.png'
        To    = 'nothing.png' }
+
+    # --- P24/P27, the Observe half ---
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the client is no longer captured'
+       File  = 'infra/policy.xml'
+       From  = '<metadata name="Client"'
+       To    = '<metadata name="ClientDisabled"' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the agent string stops being bounded'
+       File  = 'infra/policy.xml'
+       From  = 'ua.Length > 120 ? ua.Substring(0, 120) : ua'
+       To    = 'ua' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the surface goes back to a hard-coded list'
+       File  = 'analytics/chargeback-ledger.kql'
+       From  = 'coalesce(extract(@"\(external,\s*([^)]+)\)", 1, client_raw), "claude-cli")'
+       To    = '"cli"' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the publisher stops refusing a missing window line'
+       File  = 'scripts/Publish-ClaudeQueries.ps1'
+       From  = 'cannot become a parameter'
+       To    = 'is fine actually' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the workbook stops checking its functions exist'
+       File  = 'scripts/Publish-ClaudeWorkbook.ps1'
+       From  = 'does not have'
+       To    = 'is missing maybe' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the workbook drops the cache caveat'
+       File  = 'infra/workbook.json'
+       From  = '38.7'
+       To    = '0.0' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the workbook stops splitting by client'
+       File  = 'infra/workbook.json'
+       From  = 'client_surface'
+       To    = 'model' }
 )
 
 $missed = @()
@@ -229,16 +273,19 @@ try {
         Copy-Item $_.FullName $dest -Force
     }
     New-Item -ItemType Directory -Path (Join-Path $sandbox 'docs/guide') -Force | Out-Null
-    Get-ChildItem (Join-Path $root 'docs/guide') -File -Filter 'entra-*.png' -ErrorAction SilentlyContinue |
-        ForEach-Object { Copy-Item $_.FullName (Join-Path $sandbox 'docs/guide') -Force }
+    foreach ($pattern in 'entra-*.png', 'obs-*.png') {
+        Get-ChildItem (Join-Path $root 'docs/guide') -File -Filter $pattern -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item $_.FullName (Join-Path $sandbox 'docs/guide') -Force }
+    }
 
     $suite = Join-Path $sandbox 'tests/Test-BusinessUnits.ps1'
     $teamSuite = Join-Path $sandbox 'tests/Test-Teams.ps1'
     $modelSuite = Join-Path $sandbox 'tests/Test-ModelDeployment.ps1'
+    $obsSuite = Join-Path $sandbox 'tests/Test-Observability.ps1'
 
     # The copy must pass before any mutation, or a "caught" result below could
     # just mean the sandbox is broken.
-    foreach ($s in $suite, $teamSuite, $modelSuite) {
+    foreach ($s in $suite, $teamSuite, $modelSuite, $obsSuite) {
         & $s *>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  [SETUP] the unmutated copy of $(Split-Path $s -Leaf) already fails - the sandbox is wrong, not the code" -ForegroundColor Red

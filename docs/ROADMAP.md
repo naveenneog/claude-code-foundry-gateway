@@ -190,10 +190,12 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
 - [x] P26 model discovery at install — `Install-ClaudeGateway.ps1` lists Claude deployments with
       SKU and capacity, lets the operator pick which models each tier may call, and offers to create
       a deployment when the account has none. Quota failures are named separately from other errors
-- [ ] P27 per-surface telemetry — acceptance: usage from the Claude Code CLI, the VS Code extension
-      and Claude Desktop is separable in the ledger and visible quickly. Needs a client dimension the
-      gateway does not capture today, and measured ingestion lag. Constraint: reuse the existing LLM
-      log and counters rather than adding an always-on bill of materials
+- [x] P24 dashboard — an Azure Workbook, published by `Publish-ClaudeWorkbook.ps1` over saved KQL
+      functions. Neither stores nor runs anything, so no always-on component was added. Grafana
+      remains optional and unbuilt
+- [x] P27 per-surface telemetry — the gateway captures the caller's `User-Agent` and the ledger
+      parses the surface from it, so Claude Code, the VS Code extension, Desktop and the SDKs are
+      separable. Measured rather than assumed: Claude Code 2.1.241 sends `(external, sdk-cli)`
 - [ ] P28 bill of materials and flow diagram — acceptance: one picture of the six-hop request and
       telemetry path naming the Azure resources actually used
 - [ ] P23 showback reporting — acceptance: as-of joins against effective-dated mapping history, so a
