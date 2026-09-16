@@ -269,22 +269,44 @@ Unattended:
 
 ### Option B — non-interactive script
 
-`deploy.ps1` takes the same parameters without prompting. The wizard wraps the
-same Bicep and produces the same result; use `deploy.ps1` if you are scripting
-against it.
-
 ```powershell
 ./deploy.ps1 -FoundryAccount <your-foundry-account> -ResourceGroup rg-claude-gateway
+```
+
+Takes the same parameters without prompting, wraps the same Bicep, and — like
+the wizard — creates the Entra groups and runs the entitlement sync. Use it if
+you are scripting against the accelerator.
+
+It does **not** write `onboarding/claude-gateway.json`, the file your developers'
+setup script reads. Only the wizard writes that. Run the wizard once afterwards
+to produce it; it is re-runnable and will reuse what `deploy.ps1` created:
+
+```powershell
+./Install-ClaudeGateway.ps1 -FoundryAccount <account> -Yes
 ```
 
 ### Option C — portal
 
 Use the **Deploy to Azure** button in the README. You supply the Foundry account
-name; everything else is defaulted. Afterwards you still need to run:
+name; everything else is defaulted.
+
+The button deploys the template only. Three things the wizard does are left to
+you:
 
 ```powershell
+# 1. create the two tier groups, if they do not exist
+az ad group create --display-name claude-code-standard --mail-nickname claude-code-standard
+az ad group create --display-name claude-code-premium  --mail-nickname claude-code-premium
+
+# 2. push membership to the gateway
 ./scripts/Sync-ClaudeAccess.ps1 -ApimName <apim> -ResourceGroup <rg>
+
+# 3. write the developer handover file
+./Install-ClaudeGateway.ps1 -FoundryAccount <account> -Yes
 ```
+
+Step 3 is the wizard again. It reuses the instance the button created rather
+than deploying a second one.
 
 ### What gets created
 
@@ -364,25 +386,18 @@ Full command reference: [GOVERNANCE-CHECKS.md](GOVERNANCE-CHECKS.md).
 
 ### 4.1 Confirm the tier is v2
 
-The single most common silent failure. On a classic tier the policies attach,
-the API returns 200, and every token count is **zero** — so the budgets above
-never trigger.
-
-![API Management overview with the pricing tier showing Basic v2](guide/a3-apim-overview.png)
-
 ```bash
 az apim show -g <rg> -n <apim> --query "sku.name" -o tsv
 # expect: BasicV2, StandardV2 or PremiumV2
 ```
 
+This is the most common silent failure. On a classic tier the policies attach,
+the API returns 200, and every token count is **zero**, so none of the budgets
+above ever trigger.
+
+![API Management overview with the pricing tier showing Basic v2](guide/a3-apim-overview.png)
+
 ### 4.2 Close the bypass
-
-The gateway only governs traffic that goes *through* it. A principal holding
-data-plane access directly on the Foundry account can point Claude Code straight
-at the endpoint and ignore entitlement, both budgets, the organisation ceiling
-and the model allowlist.
-
-![The Foundry account's Access control (IAM) blade, where the role assignments live](guide/a5-foundry.png)
 
 ```powershell
 ./scripts/Get-ClaudeBypass.ps1
@@ -391,6 +406,14 @@ and the model allowlist.
 It lists every principal that can reach Foundry without passing through the
 gateway, excludes the gateway's own managed identity, and exits non-zero when it
 finds one, so it can run as a check rather than only as a report.
+
+The gateway only governs traffic that goes *through* it. Someone holding
+data-plane access directly on the Foundry account can point Claude Code at the
+endpoint and skip all of it: the group entitlement check, the per-developer and
+per-business-unit budgets, the organisation-wide spend ceiling, and the
+restriction on which models may be called.
+
+![The Foundry account's Access control (IAM) blade, where the role assignments live](guide/a5-foundry.png)
 
 Checking one role name by hand is not enough, for two reasons.
 

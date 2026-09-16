@@ -170,6 +170,17 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Fixed
 
+- `SETUP.md` Options B and C did not say what they leave undone. `deploy.ps1`
+  creates the Entra groups and runs the sync, but only `Install-ClaudeGateway.ps1`
+  writes `onboarding/claude-gateway.json`, which is the file the developer setup
+  script reads — it is the single writer in the repository. The portal button
+  deploys the template alone. Both routes now list the remaining commands.
+
+- Two verification sections put the rationale before the command. `SETUP.md` 4.1
+  and 4.2 now open with the command. 4.2 also named its controls as "entitlement,
+  both budgets, the organisation ceiling and the model allowlist"; "both budgets"
+  had no referent on that page.
+
 - Two documented claims about revocation were wrong.
 
   `ONBOARDING.md` showed revocation as `az ad group member remove` against

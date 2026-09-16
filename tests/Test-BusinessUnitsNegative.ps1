@@ -251,6 +251,18 @@ $mutations = @(
        From  = 'does not invalidate one already issued'
        To    = 'revokes every token at once' }
 
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the script route stops warning about the handover file'
+       File  = 'docs/SETUP.md'
+       From  = 'Only the wizard writes that'
+       To    = 'Every route writes that' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the portal route stops listing what it skips'
+       File  = 'docs/SETUP.md'
+       From  = 'Three things the wizard does are left to'
+       To    = 'Nothing is left to' }
+
     @{ Suite = 'Test-Teams.ps1'
        Name  = 'the guide stops saying the sync must be scheduled'
        File  = 'docs/BUSINESS-UNITS.md'
