@@ -1,14 +1,19 @@
 # Claude Code on Microsoft Foundry — Governed Gateway Accelerator
 
 Give your engineering team **Claude Code** running on **your own Claude deployment in Microsoft
-Foundry**, with per-developer budgets, tiering, and chargeback — and **no model credential on any
+Foundry**, with per-developer budgets, cost reporting by team — and **no model credential on any
 developer machine**.
 
-One interactive command deploys the whole thing.
+One interactive command deploys the whole thing, once you have the files:
 
 ```powershell
+git clone https://github.com/naveenneog/claude-code-foundry-gateway
+cd claude-code-foundry-gateway
 ./Install-ClaudeGateway.ps1          # macOS/Linux: ./install-claude-gateway.sh
 ```
+
+It asks what it needs, shows a summary, and creates nothing until you confirm.
+Check the [prerequisites](#prerequisites) first if it stops early.
 
 ---
 
@@ -21,28 +26,37 @@ One interactive command deploys the whole thing.
 | 👩‍💻 | **A developer** told to use Claude Code here | **[DEVELOPER.md](DEVELOPER.md)** — one command, no Azure rights, one page |
 | 🏗️ | **Standing it up** for the first time | [Setup](docs/SETUP.md) — about 60 minutes, 40 of it unattended |
 | 🛠️ | **Running it** day to day | the table below |
-| 🔀 | **Moving off** first-party Claude | [Migration](docs/MIGRATION.md) |
+| 🔀 | **Moving off** Claude bought directly from Anthropic | [Migration](docs/MIGRATION.md) |
 | 🤔 | **Deciding** whether to do this at all | [Comparison](docs/COMPARISON.md) |
 
 ### Running it day to day
 
-The command is the answer. These do not need another page.
+Two words worth knowing before the table, because every command below uses them:
+
+- A **tier** is what a developer may do — which models, how many tokens a minute
+  and a day. Two exist: `standard` and `premium`.
+- A **business unit** is whose budget the spend comes out of — a team or cost
+  centre, with a monthly figure. A **team** is a business unit inside another one.
+
+Tiers control limits. Business units allocate cost. A developer has one of each,
+and they are set independently.
 
 | I want to… | Command |
 |---|---|
 | Add a developer | `./scripts/Set-ClaudeDeveloper.ps1 -User x@y.com -Tier standard -Sync` |
 | Remove one | `./scripts/Set-ClaudeDeveloper.ps1 -User x@y.com -Remove -Sync` |
 | See who has what | `./scripts/Get-ClaudeBudget.ps1` |
-| Change what a tier may do | `./scripts/Set-ClaudeTier.ps1 -List` then `-Tier standard -DailyQuota 750000` |
+| See what the tiers allow | `./scripts/Set-ClaudeTier.ps1 -List` |
+| Change a tier's daily limit | `./scripts/Set-ClaudeTier.ps1 -Tier standard -DailyQuota 750000` |
 | Create a business unit or team | `./scripts/Set-ClaudeBusinessUnit.ps1 -Id mcaps -Group claude-bu-mcaps -MonthlyBudgetUsd 20000` |
 | See who spent what | `./scripts/Get-ClaudeBusinessUnit.ps1` |
-| Open the dashboard | `./scripts/Publish-ClaudeWorkbook.ps1 -List` |
+| Open the dashboard | `./scripts/Publish-ClaudeWorkbook.ps1 -List`, then open the link it prints |
 | Back up before a change | `./scripts/Backup-ClaudeGateway.ps1` |
 | Work out why something is refused | `./scripts/Debug-ClaudeCode.ps1` |
 
 Deeper detail lives in [Onboarding](docs/ONBOARDING.md) (people and tiers),
 [Monitoring](docs/MONITORING.md) (usage and cost), [Business
-units](docs/BUSINESS-UNITS.md) (chargeback) and [Debug](docs/DEBUGGING.md).
+units](docs/BUSINESS-UNITS.md) (cost allocation) and [Debug](docs/DEBUGGING.md).
 
 > **The one thing worth knowing before you start.** Entitlement comes from Entra
 > groups. Every script here edits the group and then publishes to the gateway —
@@ -53,6 +67,16 @@ units](docs/BUSINESS-UNITS.md) (chargeback) and [Debug](docs/DEBUGGING.md).
 [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fnaveenneog%2Fclaude-code-foundry-gateway%2Fmain%2Finfra%2Fazuredeploy.json)
 
 ![Architecture: the developer's Entra ID token reaches Azure API Management, which validates identity, applies tiered token budgets and emits chargeback metrics, then swaps in the gateway managed identity to call Microsoft Foundry](docs/images/architecture.png)
+
+### How one request flows
+
+![The six hops a request takes: sign in with Entra, admit against entitlement and four budgets at API Management, serve from Claude on Foundry, meter into the built-in LLM log, attribute via a trace carrying user and business unit, observe in a workbook. Below: the four budgets checked per request, what it costs, what it does not add, and the measured 38.7 per cent cache gap](docs/images/request-flow.png)
+
+What it deploys is small, and `./scripts/Get-ClaudeBom.ps1` reads it off a live
+gateway rather than repeating a design. On the reference deployment: **five
+resources**, of which only API Management meaningfully costs anything. The
+workbook and the saved KQL functions are definitions and bill nothing, and the
+Foundry account is yours and was there first.
 
 ---
 
@@ -156,7 +180,7 @@ in this repository.
 | Azure CLI, signed in | `az login` |
 | PowerShell 5.1+ or PowerShell 7+ | both supported |
 | Permission to create Entra ID groups | or create them yourself and pass `-SkipGroups` |
-| An APIM **v2** SKU is deployed | see the SKU note below |
+| An APIM **v2** SKU is deployed | the installer creates Basic v2, or reuses a v2 instance you already have. Classic tiers cannot meter Anthropic tokens — see the SKU note below |
 
 > ### ⚠️ The SKU matters more than anything else here
 > APIM's `llm-*` policies parse the **Anthropic Messages API** shape **only on v2 tiers**
@@ -302,7 +326,9 @@ Leave the role assigned only to the gateway's managed identity.
 
 ## Tuning budgets
 
-Limits live in APIM named values, so changing one is a config edit, not a redeployment:
+Limits are stored as APIM **named values** — configuration entries the gateway
+policy reads on every request. Editing one takes effect on the next call, with
+no redeployment:
 
 | Named value | Default | Meaning |
 |---|---|---|
@@ -427,7 +453,7 @@ alice@contoso.com         728 tokens
 |---|---|
 | APIM Basic v2, 1 unit | ~$250/month |
 | Log Analytics + Application Insights | ingestion-based, small at this volume |
-| Claude tokens | Foundry CCU billing, unchanged by the gateway |
+| Claude tokens | Billed through your existing Claude deployment in Foundry. The gateway does not change what a token costs |
 
 Tear it down:
 

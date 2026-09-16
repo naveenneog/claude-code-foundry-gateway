@@ -343,6 +343,30 @@ Every currency figure in the workbook is **list price** and the counter is blind
 to cached tokens, which was 38.7% of real cost weight on thirty days of measured
 usage. The workbook says so on the pane rather than in a footnote.
 
+### If you would rather use Grafana
+
+`./scripts/Publish-ClaudeGrafana.ps1` publishes the same panels to an existing
+Azure Managed Grafana instance, reading the same saved functions.
+
+```powershell
+./scripts/Publish-ClaudeGrafana.ps1 -List
+./scripts/Publish-ClaudeGrafana.ps1 -GrafanaName graf-platform
+```
+
+It is **optional, and the only observability option here with a standing bill**.
+Azure Managed Grafana is charged per instance per hour whether or not anyone
+opens it, where the workbook is a definition that bills only for the queries it
+runs. This exists for organisations that already run Grafana and want Claude
+spend on the same wall as everything else — not as the default.
+
+It will not create the instance. Standing one up is a decision with a cost
+attached and belongs wherever your other shared infrastructure is provisioned,
+not in a script run to publish a dashboard.
+
+`az grafana` needs the Managed Grafana extension (`az extension add --name
+amg`); `-List` says so and carries on rather than failing, because an optional
+thing being absent is not an error.
+
 ### If you would rather use the metrics explorer
 
 **Save to dashboard** on each chart. A useful board is four tiles:

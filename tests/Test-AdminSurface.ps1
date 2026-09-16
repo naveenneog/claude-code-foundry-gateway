@@ -160,6 +160,59 @@ $onb2 = Get-Content (Join-Path $root 'docs/ONBOARDING.md') -Raw
 Assert 'onboarding documents it'         ($onb2 -match 'Set-ClaudeDeveloper')
 
 Write-Host ''
+Write-Host 'Admin - bill of materials and the flow diagram (P28)' -ForegroundColor Cyan
+
+$bom = Join-Path $root 'scripts/Get-ClaudeBom.ps1'
+Assert 'a bill of materials script exists' (Test-Path $bom) $bom
+$bm = Get-Content $bom -Raw
+# A resource group holds more than one thing - 66 on the reference deployment,
+# five of them this gateway's. A hand-written list drifts from what is there.
+Assert 'it reads the live deployment'  ($bm -match 'az resource list')
+Assert 'it separates created from reused' ($bm -match 'Reused, not created')
+Assert 'and names what is only configuration' ($bm -match 'Configured, and free')
+# Prices are regional and change; a figure hard-coded in a script is wrong
+# somewhere by the time anyone reads it.
+Assert 'it describes cost rather than quoting a price' ($bm -match 'Prices are' -and $bm -notmatch '\$\d+\.\d\d per')
+Assert 'it can emit JSON'               ($bm -match '\$AsJson')
+
+$diagram = Join-Path $root 'docs/images/request-flow.png'
+Assert 'the flow diagram ships'         (Test-Path $diagram)
+$rd2 = Get-Content (Join-Path $root 'guide/render-architecture.mjs') -Raw
+# An image model cannot be relied on to spell ApiManagementGatewayLlmLog, and
+# the value of this picture is that the names on it are the real ones.
+Assert 'it is rendered, not generated'  ($rd2 -match 'Deterministic HTML')
+Assert 'it names the real log table'    ($rd2 -match 'ApiManagementGatewayLlmLog')
+Assert 'and carries the cache caveat'   ($rd2 -match '38\.7')
+$rm = Get-Content (Join-Path $root 'README.md') -Raw
+Assert 'the README shows it'            ($rm -match 'request-flow\.png')
+Assert 'and points at the live BOM'     ($rm -match 'Get-ClaudeBom')
+
+Write-Host ''
+Write-Host 'Admin - optional Grafana (P34)' -ForegroundColor Cyan
+
+$gf = Join-Path $root 'scripts/Publish-ClaudeGrafana.ps1'
+Assert 'a Grafana publisher exists' (Test-Path $gf) $gf
+$gv = Get-Content $gf -Raw
+# It is the only observability option with a standing bill, and the script says
+# so rather than leaving that to be discovered on an invoice.
+Assert 'it states the standing cost'   ($gv -match 'per instance per hour')
+Assert 'and points at the free option' ($gv -match 'Publish-ClaudeWorkbook')
+# Creating the instance is a decision with a cost attached.
+Assert 'it does not create the instance' ($gv -match 'does not create a Grafana instance')
+# One query definition, two consumers.
+Assert 'panels reuse the saved function' ($gv -match 'ClaudeChargeback\(\$__timeFrom')
+Assert 'and it refuses without them'     ($gv -match 'has no ClaudeChargeback function')
+# The amg extension is not installed by default, and its absence used to reach
+# ConvertFrom-Json as a parse error.
+Assert 'a missing extension is explained' ($gv -match 'az extension add --name amg')
+Assert 'and discovery degrades rather than failing' ($gv -match '-Soft')
+# Azure's own error here is a Python traceback; repeating it buries the point.
+Assert 'it trims Azure''s traceback'     ($gv -match 'Select-Object -Last 4')
+Assert 'it refuses an ambiguous workspace' ($gv -match 'renders empty')
+$mon2 = Get-Content (Join-Path $root 'docs/MONITORING.md') -Raw
+Assert 'monitoring documents it as optional' ($mon2 -match 'Publish-ClaudeGrafana')
+
+Write-Host ''
 Write-Host 'Admin - documentation' -ForegroundColor Cyan
 
 $mig_doc = Get-Content (Join-Path $root 'docs/MIGRATION.md') -Raw
