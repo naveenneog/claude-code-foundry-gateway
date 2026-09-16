@@ -100,6 +100,60 @@ foreach ($e in 'Scale-out', 'Policy deployment', 'Period rollover') {
 Assert 'it points at the projection decision' ($s -match 'adr/0005-identity-projection\.md')
 
 Write-Host ''
+Write-Host 'Scale - the shadow comparison (P19b)' -ForegroundColor Cyan
+
+$cmp = Join-Path $root 'scripts/Compare-ClaudeEntitlement.ps1'
+Assert 'a comparison script exists' (Test-Path $cmp)
+$p = Get-Content $cmp -Raw
+
+# Both sides must read the directory the same way. The membership read was
+# extracted precisely so the writer and the comparison cannot drift; a
+# comparison with its own Graph call reports its own bugs as drift.
+Assert 'the comparison reuses the shared membership read' `
+    ($p -match "ClaudeGraphMembership\.ps1'\)")
+$sync = Get-Content (Join-Path $root 'scripts/Sync-ClaudeAccess.ps1') -Raw
+Assert 'and so does the sync' ($sync -match "ClaudeGraphMembership\.ps1'\)")
+Assert 'neither still defines its own'  ($p -notmatch 'function Get-GroupMemberOids' -and $sync -notmatch 'function Get-GroupMemberOids')
+
+$shared = Join-Path $root 'scripts/ClaudeGraphMembership.ps1'
+Assert 'the shared helper exists' (Test-Path $shared)
+$sh = Get-Content $shared -Raw
+# The request form that took six measured combinations to find lives here now,
+# so these assert it in its new home rather than where it used to be.
+Assert 'it asks for service principals'   ($sh -match [regex]::Escape("Type = 'microsoft.graph.servicePrincipal'"))
+Assert 'it sends ConsistencyLevel eventual' ($sh -match [regex]::Escape("`$headers['ConsistencyLevel'] = 'eventual'"))
+Assert 'and counts, which that header requires' ($sh -match [regex]::Escape('&`$count=true"'))
+
+# Precedence has to match the policy or the comparison invents drift. The
+# policy tests premium first; so must this.
+Assert 'premium is resolved before standard' `
+    ($p -match "if \(\`$Premium -contains \`$Oid\)\s*\{\s*return 'premium' \}[\s\S]{0,120}if \(\`$Standard -contains \`$Oid\)")
+$policy = Get-Content (Join-Path $root 'infra/policy.xml') -Raw
+Assert 'which is the order the policy uses' `
+    ($policy -match 'allow-premium\}\}"\)\.Contains\(oid\)[\s\S]{0,200}allow-standard\}\}"\)\.Contains\(oid\)')
+
+# A secret named value returns no value. Treating it as empty would report
+# every entitled identity as missing - a page of false drift, not a finding.
+Assert 'a secret list stops the comparison' ($p -match 'if \(\$o\.secret\)[\s\S]{0,200}throw')
+
+# The three outcomes are not interchangeable: one is a developer waiting, one
+# is access that should have gone.
+foreach ($k in 'missing', 'stale', 'tier-drift') {
+    Assert "it distinguishes $k" ($p -match "'$k'")
+}
+Assert 'stale is described as access outliving removal' ($p -match 'Still entitled after removal')
+Assert 'it fails the run on drift' ($p -match 'if \(\$drift\.Count -and \$FailOnDrift\)[\s\S]{0,60}exit 1')
+
+$adr = Join-Path $root 'docs/adr/0009-shadow-migration.md'
+Assert 'the migration decision is recorded' (Test-Path $adr)
+$a = Get-Content $adr -Raw
+Assert 'authorization changes only at the canary' ($a -match '(?m)^Five phases\. Authorization does not change until phase 4')
+Assert 'a rollback does not return spent allowance' ($a -match 'restores authorization, never consumption')
+Assert 'counter keys are preserved, not migrated'  ($a -match 'Counter keys do not change during migration')
+Assert 'the opening balance is deferred, not fudged' ($a -match 'deferred to P20b')
+Assert 'and the comparison was negative-tested'   ($a -match 'produced `stale \(1\)` and exit 1')
+
+Write-Host ''
 Write-Host 'Scale - reachable from the README' -ForegroundColor Cyan
 
 # Documentation that nothing links to is documentation nobody reads. Six pages

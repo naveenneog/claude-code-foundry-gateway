@@ -79,11 +79,15 @@ Write-Host 'Teams - membership resolves to the most specific unit' -ForegroundCo
 $sync = Get-Content $syncPath -Raw
 
 # Measured 2026-09-15: transitiveMembers on a group containing a nested group
-# returned 7 objects, 2 of them #microsoft.graph.group. The typed cast returns
-# users only. Filtering client-side on @odata.type does not work, because Graph
-# omits that property under a cast.
-Assert 'membership is read as users only' ($sync -match 'transitiveMembers/microsoft\.graph\.user')
-Assert 'and a group object cannot be entitled' ($sync -notmatch 'transitiveMembers\?')
+# returned 7 objects, 2 of them #microsoft.graph.group. The typed cast excludes
+# them. Filtering client-side on @odata.type does not work, because Graph omits
+# that property under a cast.
+#
+# The read moved to scripts/ClaudeGraphMembership.ps1 so that the sync and
+# Compare-ClaudeEntitlement.ps1 cannot drift apart, so it is asserted there.
+$graph = Get-Content (Join-Path $root 'scripts/ClaudeGraphMembership.ps1') -Raw
+Assert 'membership is read through a typed cast' ($graph -match 'transitiveMembers/\$\(\$cast\.Type\)')
+Assert 'and a group object cannot be entitled' ($graph -notmatch 'transitiveMembers\?')
 
 # A developer in claude-team-ites-1 is transitively in claude-bu-mcaps too, so
 # order decides which unit they are charged to. Asserted against real data
@@ -209,14 +213,17 @@ Assert 'and that the sync is not automatic' `
 # the cast and the header several times while explaining the measurement, so
 # matching on those strings would pass with the code deleted.
 $sync = Get-Content (Join-Path $root 'scripts/Sync-ClaudeAccess.ps1') -Raw
-Assert 'the sync asks for service principals' `
-    ($sync -match [regex]::Escape("Type = 'microsoft.graph.servicePrincipal'"))
+$graphRead = Get-Content (Join-Path $root 'scripts/ClaudeGraphMembership.ps1') -Raw
+Assert 'the read asks for service principals' `
+    ($graphRead -match [regex]::Escape("Type = 'microsoft.graph.servicePrincipal'"))
 Assert 'it still asks for users' `
-    ($sync -match [regex]::Escape("Type = 'microsoft.graph.user'"))
+    ($graphRead -match [regex]::Escape("Type = 'microsoft.graph.user'"))
 Assert 'it sends ConsistencyLevel eventual' `
-    ($sync -match [regex]::Escape("`$headers['ConsistencyLevel'] = 'eventual'"))
+    ($graphRead -match [regex]::Escape("`$headers['ConsistencyLevel'] = 'eventual'"))
 Assert 'and counts, which that header requires' `
-    ($sync -match [regex]::Escape('&`$count=true"'))
+    ($graphRead -match [regex]::Escape('&`$count=true"'))
+Assert 'and the sync uses that read rather than its own' `
+    ($sync -match "ClaudeGraphMembership\.ps1'\)" -and $sync -notmatch 'function Get-GroupMemberOids')
 
 
 # git-ignored, so an unredacted identity cannot reach a commit by being one

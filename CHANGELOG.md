@@ -28,6 +28,44 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- `Compare-ClaudeEntitlement.ps1` resolves every identity twice — once from what
+  the gateway is enforcing, once from the directory — and exits non-zero when
+  the two disagree. It reports `missing` (added in the portal, still getting
+  403), `stale` (removed, still entitled) and `tier-drift`.
+
+  Tier is resolved with the policy's own precedence, premium before standard, so
+  an identity in both groups is premium on both sides. Resolving it the other
+  way would report drift the gateway does not have, and a noisy comparison stops
+  being read.
+
+  Negative-tested on the reference deployment rather than assumed to work:
+  removing an identity from its Entra group without running the sync produced
+  `stale (1)` and exit 1, and re-adding it returned the comparison to clean.
+
+  This is phase 2 of the migration in ADR-0009, and it is useful before any of
+  that is built: entitlement is not live, and this measures the gap between a
+  directory change and the sync.
+
+- `ClaudeGraphMembership.ps1` — the Graph membership read, extracted from
+  `Sync-ClaudeAccess.ps1` so the writer and the comparison cannot drift apart. A
+  comparison that reads the directory differently from the writer reports its own
+  bugs as drift. The request form it holds took six measured combinations to
+  find, which is exactly the kind of thing that gets reimplemented slightly wrong.
+
+- [ADR-0009](docs/adr/0009-shadow-migration.md) — how entitlement migrates.
+  Five phases with authorization unchanged until the canary, counter keys and
+  period boundaries preserved throughout, and a rollback that restores
+  authorization without restoring consumption.
+
+  Budgets are consumed state rather than configuration: a developer at 80% of a
+  monthly allowance carries a number that exists only in the gateway's counters,
+  and a migration that re-keys them hands that allowance back. A budget that has
+  stopped binding looks like a budget that is working.
+
+  The mid-period opening balance — full allowance or pro-rata — is a finance
+  question, so it is deferred to P20b and the current behaviour is stated rather
+  than left to be discovered.
+
 - `Measure-ClaudeCeiling.ps1` reports how close a gateway is to the limits that
   stop it scaling, and exits non-zero past a threshold so it runs as a check.
 

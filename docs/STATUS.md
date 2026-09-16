@@ -1,6 +1,51 @@
 # Status
 
-**Active packet:** P18b — the load envelope and the measured scale ceilings. M4 is complete. Full regression including the Azure half passes: 30 checks, 85 of 85 mutations caught.
+**Active packet:** P18b and P19b — the load envelope, the measured scale ceilings, and the shadow migration path. M4 is complete. Full regression including the Azure half passes: 30 checks, 94 of 94 mutations caught.
+
+## P19b acceptance criteria — migrate without resetting allowances
+
+- [x] The sequence is written down, with authorization unchanged until the canary — [ADR-0009](adr/0009-shadow-migration.md)
+- [x] Phase 2's comparison ships and runs against a live gateway
+- [x] It resolves tier with the policy's precedence, so it cannot invent drift
+- [x] It was negative-tested by creating real drift, not assumed to work
+- [x] A rollback restores authorization and never consumption; counter keys are preserved
+- [x] The mid-period opening balance is deferred to P20b rather than quietly decided
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+### What the work found
+
+The comparison had to be negative-tested, because a comparison that always says "in sync" is
+indistinguishable from one that is not measuring. Removing the test service principal from
+`claude-code-premium` in Entra, without running the sync, produced:
+
+```
+stale (1)
+  On the gateway, not in the directory. Still entitled after removal.
+  d6cd24b0-...  gateway: premium   directory: denied
+```
+
+and exit 1. Re-adding it returned the comparison to clean. That is also a demonstration of the
+revocation gap documented in ONBOARDING.md: removal from a group does not take effect until the
+sync runs.
+
+The Graph membership read moved to `ClaudeGraphMembership.ps1` and is now shared by the sync and
+the comparison. Two readers of the same directory that implement the read separately will drift,
+and this particular read took six measured combinations to get right.
+
+The extraction was caught by the existing tests, which is what should happen: five assertions in
+`Test-Teams.ps1` failed because they pointed at the old location. One mutation then had to be
+repointed as well — `transitiveMembers/microsoft.graph.user` now survives only inside the comment
+holding the measured table, so mutating it changed a comment and nothing failed. That is the
+seventh instance of an assertion or mutation matching prose rather than behaviour.
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | Phases are ordered by blast radius: everything before the canary is observation, so being wrong costs a report rather than a 403 |
+| Coder | Accept | Sharing the membership read is the whole point — a comparison with its own Graph call measures itself |
+| QA | Accept | Proven in both directions against live Entra. A clean result now means something because a dirty one was produced on purpose |
+| UX | Accept | `missing` and `stale` are named rather than both called drift; one is a developer waiting, the other is access that should have gone |
 
 ## P18b acceptance criteria — the load envelope
 

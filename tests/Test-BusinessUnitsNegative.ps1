@@ -74,8 +74,17 @@ $mutations = @(
 
     @{ Suite = 'Test-Teams.ps1'
        Name  = 'membership stops filtering to users'
-       File  = 'scripts/Sync-ClaudeAccess.ps1'
-       From  = 'transitiveMembers/microsoft.graph.user'
+       File  = 'scripts/ClaudeGraphMembership.ps1'
+       # The URI is built from $cast.Type now, so the old literal survives only
+       # in the comment holding the measured table. Mutating a comment proves
+       # nothing - this has to hit the cast the code actually issues.
+       From  = "Type = 'microsoft.graph.user';"
+       To    = "Type = 'microsoft.graph.device';" }
+
+    @{ Suite = 'Test-Teams.ps1'
+       Name  = 'the URI stops being built from the cast'
+       File  = 'scripts/ClaudeGraphMembership.ps1'
+       From  = 'transitiveMembers/$($cast.Type)'
        To    = 'transitiveMembers' }
 
     @{ Suite = 'Test-Teams.ps1'
@@ -205,19 +214,19 @@ $mutations = @(
     # each has to fail the run on its own.
     @{ Suite = 'Test-Teams.ps1'
        Name  = 'the sync stops asking for service principals'
-       File  = 'scripts/Sync-ClaudeAccess.ps1'
+       File  = 'scripts/ClaudeGraphMembership.ps1'
        From  = "Type = 'microsoft.graph.servicePrincipal'"
        To    = "Type = 'microsoft.graph.device'" }
 
     @{ Suite = 'Test-Teams.ps1'
        Name  = 'the eventual consistency header is dropped'
-       File  = 'scripts/Sync-ClaudeAccess.ps1'
+       File  = 'scripts/ClaudeGraphMembership.ps1'
        From  = "`$headers['ConsistencyLevel'] = 'eventual'"
        To    = "`$headers['ConsistencyLevel'] = 'session'" }
 
     @{ Suite = 'Test-Teams.ps1'
        Name  = 'the count the header requires is dropped'
-       File  = 'scripts/Sync-ClaudeAccess.ps1'
+       File  = 'scripts/ClaudeGraphMembership.ps1'
        From  = '&`$count=true"'
        To    = '"' }
 
@@ -312,6 +321,56 @@ $mutations = @(
        File  = 'docs/SCALE.md'
        From  = 'retains its consumed allowance'
        To    = 'can be created' }
+
+    # --- P19b, the shadow comparison ---
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the comparison forks its own directory read'
+       File  = 'scripts/Compare-ClaudeEntitlement.ps1'
+       From  = ". (Join-Path `$PSScriptRoot 'ClaudeGraphMembership.ps1')"
+       To    = "function Get-GroupMemberOids { @() } # (" }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'tier precedence stops matching the policy'
+       File  = 'scripts/Compare-ClaudeEntitlement.ps1'
+       From  = "if (`$Premium -contains `$Oid)  { return 'premium' }"
+       To    = "if (`$false) { return 'premium' }" }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'a secret list is compared as an empty one'
+       File  = 'scripts/Compare-ClaudeEntitlement.ps1'
+       From  = 'if ($o.secret)'
+       To    = 'if ($false)' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the comparison stops failing on drift'
+       File  = 'scripts/Compare-ClaudeEntitlement.ps1'
+       From  = 'if ($drift.Count -and $FailOnDrift)'
+       To    = 'if ($false)' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'stale access stops being named as outliving removal'
+       File  = 'scripts/Compare-ClaudeEntitlement.ps1'
+       From  = 'Still entitled after removal.'
+       To    = 'Not in the group.' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'a rollback is allowed to restore spent allowance'
+       File  = 'docs/adr/0009-shadow-migration.md'
+       From  = 'restores authorization, never consumption'
+       To    = 'restores everything' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'counter keys become migratable'
+       File  = 'docs/adr/0009-shadow-migration.md'
+       From  = 'Counter keys do not change during migration'
+       To    = 'Counter keys are re-keyed' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'authorization changes before the canary'
+       File  = 'docs/adr/0009-shadow-migration.md'
+       From  = 'Five phases. Authorization does not change until phase 4'
+       To    = 'Five phases. Authorization changes at phase 1' }
 
     @{ Suite = 'Test-Teams.ps1'
        Name  = 'the guide stops saying the sync must be scheduled'

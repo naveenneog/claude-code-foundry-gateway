@@ -167,9 +167,15 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
 - [ ] P19 scale identity resolution — acceptance: a durable entitlement projection synced from Graph
       off the request path, with a written failure contract for stale, unknown and revoked
       identities. **U10, ADR-0005**
-- [ ] P19b shadow migration — acceptance: the new path runs beside the old one and is compared
-      before it is trusted, and no rollback restores a spent allowance
-- [x] P20 business-unit identity model — a stable identifier separate from display name, settled in
+- [x] P19b shadow migration — the sequence is settled in
+      [ADR-0009](adr/0009-shadow-migration.md): five phases, authorization unchanged until the
+      canary at phase 4, counter keys and period boundaries preserved throughout, and a rollback
+      that restores authorization without restoring consumption. Phase 2's comparison ships as
+      `Compare-ClaudeEntitlement.ps1`, which resolves every identity from the gateway and from the
+      directory using the policy's own premium-before-standard precedence and exits non-zero on
+      disagreement. Negative-tested against the reference deployment: removing an identity from its
+      group without syncing produced `stale (1)` and exit 1, and re-adding it returned it to clean.
+      The mid-period opening balance is deferred to P20b rather than decided here- [x] P20 business-unit identity model — a stable identifier separate from display name, settled in
       [ADR-0007](adr/0007-business-unit-model.md). A business unit is an Entra group plus a budget;
       transfer is group membership, deletion returns members to `unassigned`, and a developer in two
       business-unit groups takes the first in registry order

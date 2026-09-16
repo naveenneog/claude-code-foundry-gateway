@@ -201,6 +201,17 @@ gets `403`:
 ./scripts/Sync-ClaudeAccess.ps1 -ApimName <apim> -ResourceGroup <rg>
 ```
 
+To check whether the gateway is already current, without reading two lists by
+eye:
+
+```powershell
+./scripts/Compare-ClaudeEntitlement.ps1 -ApimName <apim> -ResourceGroup <rg>
+```
+
+It resolves every identity from both sides and exits non-zero when they
+disagree. `missing` is someone added in the portal who will get `403` until the
+sync runs; `stale` is someone removed who can still call the gateway.
+
 > **Why there is no live lookup.** Resolving group membership at request time
 > would need the gateway to hold the Graph `GroupMember.Read.All` application
 > permission, which requires tenant admin consent. The sync approach needs no

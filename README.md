@@ -488,6 +488,8 @@ scripts/
   New-OnboardingEmail.ps1      generate the developer's onboarding email
   Debug-ClaudeCode.ps1         end-to-end health check, run this first
   Sync-ClaudeAccess.ps1        Entra groups -> APIM named values
+  Compare-ClaudeEntitlement.ps1  what the gateway enforces vs what Entra says
+  ClaudeGraphMembership.ps1    the shared Graph membership read
   Show-Governance.ps1          verify all four controls
   Set-ClaudeDeveloper.ps1      add or remove one developer, tiers and units
   Set-ClaudeTier.ps1           read and set a tier's limits and model list

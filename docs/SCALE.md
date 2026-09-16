@@ -107,5 +107,37 @@ limit, which is **U9**.
    composition **together**. Each is fine alone; the interaction is what fails.
 3. Only then size the projection in [ADR-0005](adr/0005-identity-projection.md).
 
-Migrating an existing deployment onto that projection without resetting anyone's
-consumed allowance is a separate problem, tracked as P19b.
+---
+
+## Getting there without resetting anyone's allowance
+
+Entitlement is live, and budgets are consumed state rather than configuration. A
+developer who has spent 80% of a monthly allowance is carrying a number that
+exists only in the gateway's counters, so a migration that re-keys or resets
+those counters hands the allowance back — and a budget that has stopped binding
+looks like a budget that is working.
+
+[ADR-0009](adr/0009-shadow-migration.md) sets out the five phases. Authorization
+does not change until phase 4, and a rollback restores authorization without
+restoring consumption.
+
+Phase 2 is the part that cannot be skipped, and it exists now:
+
+```powershell
+./scripts/Compare-ClaudeEntitlement.ps1 -ResourceGroup <rg> -ApimName <apim>
+```
+
+It resolves every identity twice — once from what the gateway is enforcing, once
+from the directory — and exits non-zero when the two disagree. Premium is tested
+before standard, the same order the policy uses, so it does not report drift the
+gateway does not have.
+
+| It reports | Meaning |
+|---|---|
+| `missing` | In the directory, not on the gateway. Gets 403 until the sync runs |
+| `stale` | On the gateway, not in the directory. Still entitled after removal |
+| `tier-drift` | Entitled on both sides, at different tiers |
+
+It is useful before any of that migration is built, because it answers a live
+support question: *is the sync current?* Entitlement is not live, and this
+measures the gap.
