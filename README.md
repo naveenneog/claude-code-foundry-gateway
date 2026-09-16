@@ -27,6 +27,7 @@ Check the [prerequisites](#prerequisites) first if it stops early.
 | 🏗️ | **Standing it up** for the first time | [Setup](docs/SETUP.md) — about 60 minutes, 40 of it unattended |
 | 🛠️ | **Running it** day to day | the table below |
 | 🔀 | **Moving off** Claude bought directly from Anthropic | [Migration](docs/MIGRATION.md) |
+| 📈 | **Sizing it** past a pilot, or asking what it can hold | [Scale](docs/SCALE.md) — the measured ceilings |
 | 🤔 | **Deciding** whether to do this at all | [Comparison](docs/COMPARISON.md) |
 
 ### Running it day to day
@@ -488,6 +489,15 @@ scripts/
   Debug-ClaudeCode.ps1         end-to-end health check, run this first
   Sync-ClaudeAccess.ps1        Entra groups -> APIM named values
   Show-Governance.ps1          verify all four controls
+  Set-ClaudeDeveloper.ps1      add or remove one developer, tiers and units
+  Set-ClaudeTier.ps1           read and set a tier's limits and model list
+  Set-ClaudeBusinessUnit.ps1   register a business unit, team or budget
+  Get-ClaudeBusinessUnit.ps1   spend per business unit, and who is unassigned
+  Measure-ClaudeCeiling.ps1    headroom against the measured scale limits
+  Get-ClaudeBypass.ps1         principals that can reach Foundry directly
+  Get-ClaudeBom.ps1            what this gateway created, reuses, and bills for
+  Backup-ClaudeGateway.ps1     configuration backup; Restore- is the pair
+  Migrate-ClaudeWorkstation.ps1  move one machine from first-party to gateway
   Get-FoundryValues.ps1        discover your Foundry values (-Mask to share)
   Set-GatewayPolicy.ps1        apply a policy file on its own
   Test-FoundryDirect.ps1       verify Foundry with the gateway bypassed
@@ -495,12 +505,18 @@ scripts/
 docs/
   SETUP.md                     prerequisites, roles, deployment
   ONBOARDING.md                add/change/revoke access; developer setup
+  BUSINESS-UNITS.md            business units, teams, tiers, dollar budgets
+  MIGRATION.md                 moving a population off first-party Claude
   MONITORING.md                metrics, chargeback, KQL, alerts
+  SCALE.md                     measured ceilings and the load envelope
   DEBUGGING.md                 isolate a failure layer by layer
   COMPARISON.md                Foundry vs Anthropic direct
   ARCHITECTURE.md              how it works, and why each piece is there
   GOVERNANCE-CHECKS.md         command reference for verifying controls
   TROUBLESHOOTING.md           symptom -> fix lookup
+  adr/                         architecture decision records
+  CHARTER.md ROADMAP.md STATUS.md UNKNOWNS.md
+                               the working record the build gate reads
 guide/
   capture.mjs                  Playwright capture of the portal flow
   compose.mjs                  banner treatment for existing stills
@@ -515,12 +531,14 @@ JWT Claude Code sends and prints the claims, without ever logging the token.
 ## Documentation
 
 The router is at the [top of this page](#start-here). Reading orders, for the
-two journeys that span several guides:
+journeys that span several guides:
 
 | You are… | Read, in order |
 |---|---|
 | **Standing this up for the first time** | [Setup](docs/SETUP.md) → [Onboarding](docs/ONBOARDING.md) → [Monitoring](docs/MONITORING.md) |
 | **Moving a population off first-party Claude** | [Migration](docs/MIGRATION.md) → [Setup](docs/SETUP.md) |
+| **Charging usage back to budget holders** | [Business units](docs/BUSINESS-UNITS.md) → [Monitoring](docs/MONITORING.md) |
+| **Sizing this past a pilot** | [Scale](docs/SCALE.md) → [ADR-0005](docs/adr/0005-identity-projection.md) |
 
 **The guides:**
 
@@ -529,8 +547,10 @@ two journeys that span several guides:
 | [Developer](DEVELOPER.md) | **developers** | one command, using it, what to do when it fails — nothing else |
 | [Setup](docs/SETUP.md) | platform team | prerequisites, **roles and permissions**, deployment, closing the bypass |
 | [Onboarding](docs/ONBOARDING.md) | platform team | add a developer, change tiers, revoke, offboard |
+| [Business units](docs/BUSINESS-UNITS.md) | platform team, FinOps | business units, teams, tiers, dollar budgets, who is unassigned |
 | [Migration](docs/MIGRATION.md) | platform team | moving off first-party Claude at scale: what survives, MDM push, bulk entitlement |
 | [Monitoring](docs/MONITORING.md) | whoever owns the spend | metrics, filters, chargeback, KQL, alerts |
+| [Scale](docs/SCALE.md) | platform team | measured ceilings, what runs out first, how to establish a capacity figure |
 | [Debug](docs/DEBUGGING.md) | anyone | isolate a failure layer by layer |
 
 **Reference, when you need it:**
@@ -540,6 +560,18 @@ two journeys that span several guides:
 - [Governance checks](docs/GOVERNANCE-CHECKS.md) — command reference for verifying controls
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — symptom → fix lookup, when you already know what broke
 - [Screenshot tooling](guide/README.md) — regenerate the screenshots against your own deployment
+
+**How this repository is run.** These are the working record rather than
+instructions for using the gateway, and they are kept current because the
+build gate reads them:
+
+- [Charter](docs/CHARTER.md) — the contract the gate enforces on every change
+- [Roadmap](docs/ROADMAP.md) — what is done, what is planned, and the acceptance criterion for each
+- [Status](docs/STATUS.md) — the packet in flight, with its measurements and review
+- [Unknowns](docs/UNKNOWNS.md) — questions that are open, and what each one blocks
+- [Decisions](docs/adr/) — the architecture decision records, including why entitlement
+  moves to a [durable projection](docs/adr/0005-identity-projection.md)
+- [Changelog](CHANGELOG.md) and [Releasing](docs/RELEASING.md)
 
 ---
 

@@ -28,6 +28,37 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- `Measure-ClaudeCeiling.ps1` reports how close a gateway is to the limits that
+  stop it scaling, and exits non-zero past a threshold so it runs as a check.
+
+  The figures it enforces were measured against a live instance rather than read
+  from a document, because the two have disagreed: a named value holds **4,096
+  characters** (4,097 returns `ValidationError`) and **110 object ids** (110 is
+  4,071 characters and is accepted; 111 is 4,108 and is rejected). The identity
+  ceiling is derived from those two rather than written as a literal, so it
+  stops being correct out loud if the service limit changes.
+
+  Per-entry cost is measured from the list being read, not assumed to be 37
+  characters. A `bu-members` entry carries `oid=unit` and costs 44, so assuming
+  the smaller figure overstates remaining room on the list that fills first.
+
+  On the reference deployment: 3, 5 and 5 entries against a 110 ceiling, and 22
+  of 5,000 named values.
+
+- `docs/SCALE.md` — the load envelope. It states what runs out first, why
+  sharding the list across named values is not the escape it appears to be, and
+  the five numbers a capacity figure needs that "500,000 employees" does not
+  supply: daily actives, peak requests per second, peak token rate, streaming
+  concurrency and burst shape.
+
+  It also states what has **not** been measured. The reference deployment's
+  ledger holds 111 requests across 2 days, so it cannot supply a traffic model,
+  and the page does not extrapolate one from it.
+
+  A capacity test that proves 500,000 counter keys can be created proves nothing
+  about whether allowance survives scale-out, policy deployment or period
+  rollover. The page says what the test has to demonstrate instead.
+
 - `Get-ClaudeBom.ps1` reads the live deployment and reports only this gateway's
   own resources, separating what it created and bills for, what it reuses and
   did not create, and what is configuration and carries no bill at all. On the
@@ -180,6 +211,23 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   and 4.2 now open with the command. 4.2 also named its controls as "entitlement,
   both budgets, the organisation ceiling and the model allowlist"; "both budgets"
   had no referent on that page.
+
+- Six pages under `docs/` were not linked from the README, including
+  `BUSINESS-UNITS.md`, which is a whole feature area. The documentation index
+  now carries every guide, a reading order for chargeback and for scale, and the
+  project's working record — charter, roadmap, status, unknowns and the decision
+  records — which were reachable only by knowing they existed.
+
+  A check derives the list from the directory rather than a written-out set, so
+  a new page under `docs/` either gets linked or fails the run. Negative-tested:
+  an unlinked page fails with its own name in the output.
+
+  The repository layout listing was also stale — it showed 5 of the 17 scripts
+  in `scripts/` and 8 of the 16 pages in `docs/`.
+
+- The roadmap listed P24 twice, once ticked in the delivered section and once
+  open in the planned section. The gate counts those markers, so the open
+  duplicate was reported as outstanding work that had shipped.
 
 - Two documented claims about revocation were wrong.
 

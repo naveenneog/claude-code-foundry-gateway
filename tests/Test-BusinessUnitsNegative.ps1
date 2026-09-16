@@ -263,6 +263,56 @@ $mutations = @(
        From  = 'Three things the wizard does are left to'
        To    = 'Nothing is left to' }
 
+    # --- P18b, the load envelope ---
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the identity ceiling becomes a pasted literal'
+       File  = 'scripts/Measure-ClaudeCeiling.ps1'
+       From  = '$MaxIdentities = [int][math]::Floor(($MaxChars - 1) / $OidCost)'
+       To    = '$MaxIdentities = 110' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'per-entry cost goes back to being assumed'
+       File  = 'scripts/Measure-ClaudeCeiling.ps1'
+       From  = '$per = if ($items.Count) { [int][math]::Ceiling($chars / $items.Count) } else { $OidCost }'
+       To    = '$per = $OidCost' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'a secret list is counted as empty headroom'
+       File  = 'scripts/Measure-ClaudeCeiling.ps1'
+       From  = 'if ($entry.secret)'
+       To    = 'if ($false)' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the ceiling report stops failing the run'
+       File  = 'scripts/Measure-ClaudeCeiling.ps1'
+       From  = 'if ($worst -ge $FailAtPercent)'
+       To    = 'if ($false)' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'an unknown SKU is given a guessed cap'
+       File  = 'scripts/Measure-ClaudeCeiling.ps1'
+       From  = 'Unknown SKU'
+       To    = 'Assuming 5000 for SKU' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the envelope stops admitting what it has not measured'
+       File  = 'docs/SCALE.md'
+       From  = '111 requests across 2 days'
+       To    = 'ample production traffic' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'sharding is presented as the answer'
+       File  = 'docs/SCALE.md'
+       From  = 'Sharding does not rescue it'
+       To    = 'Sharding solves it' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'a capacity test goes back to counting keys'
+       File  = 'docs/SCALE.md'
+       From  = 'retains its consumed allowance'
+       To    = 'can be created' }
+
     @{ Suite = 'Test-Teams.ps1'
        Name  = 'the guide stops saying the sync must be scheduled'
        File  = 'docs/BUSINESS-UNITS.md'
@@ -526,10 +576,11 @@ try {
     $obsSuite = Join-Path $sandbox 'tests/Test-Observability.ps1'
     $backupSuite = Join-Path $sandbox 'tests/Test-Backup.ps1'
     $adminSuite = Join-Path $sandbox 'tests/Test-AdminSurface.ps1'
+    $scaleSuite = Join-Path $sandbox 'tests/Test-Scale.ps1'
 
     # The copy must pass before any mutation, or a "caught" result below could
     # just mean the sandbox is broken.
-    foreach ($s in $suite, $teamSuite, $modelSuite, $obsSuite, $backupSuite, $adminSuite) {
+    foreach ($s in $suite, $teamSuite, $modelSuite, $obsSuite, $backupSuite, $adminSuite, $scaleSuite) {
         & $s *>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  [SETUP] the unmutated copy of $(Split-Path $s -Leaf) already fails - the sandbox is wrong, not the code" -ForegroundColor Red

@@ -1,6 +1,56 @@
 # Status
 
-**Active packet:** P35 — the workload identity gap in the entitlement sync, the tier and team portal captures, and three documented claims that were wrong. M4 is complete. Full regression including the Azure half passes: 29 checks, 77 of 77 mutations caught.
+**Active packet:** P18b — the load envelope and the measured scale ceilings. M4 is complete. Full regression including the Azure half passes: 30 checks, 85 of 85 mutations caught.
+
+## P18b acceptance criteria — the load envelope
+
+"500,000 employees" is not a capacity specification. It gives no rate, no concurrency and no
+shape, so it cannot be designed against or tested.
+
+- [x] Every ceiling the tooling enforces is measured, not copied from a document
+- [x] The identity ceiling is derived from the character limit rather than written as a literal
+- [x] `Measure-ClaudeCeiling.ps1` reports a live gateway's headroom and exits non-zero past a threshold
+- [x] The five numbers a capacity figure actually needs are named
+- [x] What has not been measured is stated rather than filled in
+- [x] A capacity test is defined by what it must prove, not by how many keys it creates
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+### What the work found
+
+| Measured on BasicV2 | Result |
+|---|---|
+| Named value of 4,096 characters | Accepted, HTTP 201 |
+| 4,097 characters | Rejected, HTTP 400 `ValidationError` |
+| 110 object ids (4,071 characters) | Accepted |
+| 111 object ids (4,108 characters) | Rejected |
+
+So a tier holds **110 developers**, which ADR-0005 already stated and this confirms exactly.
+
+Two things the measurement changed:
+
+**Per-entry cost is not constant.** A `bu-members` entry carries `oid=unit` and costs 44 characters
+against a bare object id's 37. Assuming 37 overstates remaining room by about 19% on the list that
+fills first, so the script measures the real cost from the data it is reading.
+
+**Sharding looks like it works and does not.** 5,000 named values x 110 identities is 550,000,
+which clears a 500,000 requirement on paper. It requires the policy to scan every shard on every
+request. The arithmetic was never the constraint: materialising 500,000 records in a data store is
+unremarkable, and materialising them in API Management policy configuration is what cannot work.
+
+### What was deliberately not done
+
+The traffic half is empty. The reference deployment's ledger holds **111 requests across 2 days**,
+and an envelope extrapolated from that would read as evidence while being none. The page states the
+method and the traffic-independent ceilings, and says why it stops there.
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | Confirms ADR-0005's premise by measurement rather than restating it, and closes off sharding as the escape a reviewer would otherwise propose |
+| Coder | Accept | The ceiling is derived from the limit, so it stops being correct out loud rather than silently if the service changes |
+| QA | Accept | The README reachability check was negative-tested: an unlinked page fails with its own name. Six pages were unreachable before it existed |
+| UX | Accept | The report names what runs out first rather than listing limits, and the failure path says writes fail outright instead of truncating |
 
 ## P35 acceptance criteria — a service principal in a tier group is entitled
 

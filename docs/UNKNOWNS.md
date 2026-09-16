@@ -315,6 +315,11 @@ one can be inferred from the other. Ask Microsoft for Basic v2 behaviour, then l
 the target number of identities, exercise quota state, and revisit early identities after heavy key
 churn to confirm their consumption survived scale-out, policy deployment and period rollover.
 
+The structural half of this is measured and written up in [SCALE.md](SCALE.md): a named value holds
+4,096 characters and 110 object ids, so the entitlement path runs out long before counter
+cardinality is reached. That does not close U9 — it means U9 only starts to matter once entitlement
+has moved to the projection in [ADR-0005](adr/0005-identity-projection.md).
+
 ### U10 — Directory latency and throttling on a cold cache
 
 **Question.** `cache-lookup-value` is available on v2, but its built-in cache is "volatile and

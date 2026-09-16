@@ -158,8 +158,12 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       `cache_tokens_known = false`, and a test fails if it ever becomes zero. **U12 closed**, and
       the acceptance wording changed: pricing from the response body was rejected because reading it
       in outbound buffers the response and ends streaming. ADR-0006
-- [ ] P18b load envelope — acceptance: peak request rate, token rate, streaming concurrency and
-      burst shape are stated numbers, and the quota chain is tested against them. **U9**
+- [x] P18b load envelope — `docs/SCALE.md` states the measured ceilings and the five numbers a
+      capacity figure needs, and `scripts/Measure-ClaudeCeiling.ps1` reports a live gateway's
+      headroom against them, exiting non-zero past a threshold. Measured on BasicV2: a named value
+      holds 4,096 characters (4,097 is rejected) and 110 object ids (111 is rejected). The traffic
+      half is deliberately not filled in — the reference deployment holds 111 requests across 2
+      days, which is not a traffic model. **U9 still open**
 - [ ] P19 scale identity resolution — acceptance: a durable entitlement projection synced from Graph
       off the request path, with a written failure contract for stale, unknown and revoked
       identities. **U10, ADR-0005**
@@ -200,8 +204,6 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       telemetry path naming the Azure resources actually used
 - [ ] P23 showback reporting — acceptance: as-of joins against effective-dated mapping history, so a
       mid-month transfer does not move last week's spend
-- [ ] P24 dashboard — acceptance: an Azure Workbook first, because it adds no always-on component.
-      Managed Grafana where a team already runs it
 - [ ] P25 delayed kill switch — acceptance: the overshoot bound is stated and measured. Not a hard
       cap, and not described as one
 ### M3 — compliance retrieval
