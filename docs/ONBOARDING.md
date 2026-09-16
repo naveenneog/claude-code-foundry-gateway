@@ -38,6 +38,39 @@ Three consequences:
 
 ## 1. Add a developer
 
+One command. It edits the **Entra group**, because that is the durable change —
+`Sync-ClaudeAccess.ps1` rebuilds `allow-standard` and `allow-premium` from group
+membership every time it runs, so a developer added straight to a named value
+works until the next sync and then silently stops.
+
+```powershell
+./scripts/Set-ClaudeDeveloper.ps1 -User amara@contoso.com -Tier standard -Sync
+./scripts/Set-ClaudeDeveloper.ps1 -User amara@contoso.com -Tier premium -BusinessUnit mcaps -Sync
+./scripts/Set-ClaudeDeveloper.ps1 -User amara@contoso.com -Remove -Sync
+```
+
+`-Sync` publishes to the gateway as well. Without it the change is in the
+directory but not yet at the gateway, and the script says so rather than
+implying it is done.
+
+Moving someone between tiers removes them from the one they left. Leaving them
+in both is not an error — the policy checks premium first — but it makes the
+lists unreadable and the applied tier hard to predict from the portal.
+
+`-Remove` clears **every** business unit as well as both tiers. Removing
+entitlement but leaving someone in a business unit group leaves a member on a
+budget who can no longer call the gateway, which reads as a team that has
+stopped working rather than an offboarding that was only half done.
+
+Guests work by the address you invited them with. A guest's UPN is not their
+email — in this tenant `amara@contoso.com` is stored as
+`amara_contoso.com#EXT#@tenant.onmicrosoft.com` — and the script tries the
+object id, the mail attribute and the UPN in turn.
+
+The sections below cover the same job done by hand, and the portal walkthrough.
+
+## 1a. Add a developer by hand
+
 ### Step 1 — find their object id
 
 ```bash

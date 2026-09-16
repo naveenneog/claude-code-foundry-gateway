@@ -345,6 +345,30 @@ $mutations = @(
        To    = 'skipped-quietly' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the developer script writes to the gateway instead of Entra'
+       File  = 'scripts/Set-ClaudeDeveloper.ps1'
+       From  = 'groups/$groupId/members'
+       To    = 'namedValues/allow' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'removal stops clearing business units'
+       File  = 'scripts/Set-ClaudeDeveloper.ps1'
+       From  = 'Every unit is cleared'
+       To    = 'Only some are cleared' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'membership goes back to the transitive check'
+       File  = 'scripts/Set-ClaudeDeveloper.ps1'
+       From  = '/memberOf?'
+       To    = '/checkMemberObjects?' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'query values stop being URL-encoded'
+       File  = 'scripts/Set-ClaudeDeveloper.ps1'
+       From  = 'eq%20''$enc'''
+       To    = 'eq%20''$q''' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the migration tool stops warning about the empty Desktop'
        File  = 'scripts/Migrate-ClaudeWorkstation.ps1'
        From  = 'empty Desktop'

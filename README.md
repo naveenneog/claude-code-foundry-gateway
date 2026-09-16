@@ -14,18 +14,39 @@ One interactive command deploys the whole thing.
 
 ## Start here
 
-| What you need | Go to |
-|---|---|
-| **Someone told me to use Claude Code here** — I just want it working | **[DEVELOPER.md](DEVELOPER.md)** — one command, no Azure rights, one page |
-| I'm standing this up for a team | [Setup](docs/SETUP.md) |
-| Add, remove, or re-tier someone | [Onboarding](docs/ONBOARDING.md) |
-| Something is broken | [Debug](docs/DEBUGGING.md) — start with the health check |
-| Who spent what? | [Monitoring](docs/MONITORING.md) |
-| Should we do this at all? | [Comparison](docs/COMPARISON.md) |
-| We're moving off first-party Claude | [Migration](docs/MIGRATION.md) |
+**Which are you?**
 
-The first row covers the developer setup: one command, no Azure rights. The
-rest of this page is the gateway side.
+| | | |
+|---|---|---|
+| 👩‍💻 | **A developer** told to use Claude Code here | **[DEVELOPER.md](DEVELOPER.md)** — one command, no Azure rights, one page |
+| 🏗️ | **Standing it up** for the first time | [Setup](docs/SETUP.md) — about 60 minutes, 40 of it unattended |
+| 🛠️ | **Running it** day to day | the table below |
+| 🔀 | **Moving off** first-party Claude | [Migration](docs/MIGRATION.md) |
+| 🤔 | **Deciding** whether to do this at all | [Comparison](docs/COMPARISON.md) |
+
+### Running it day to day
+
+The command is the answer. These do not need another page.
+
+| I want to… | Command |
+|---|---|
+| Add a developer | `./scripts/Set-ClaudeDeveloper.ps1 -User x@y.com -Tier standard -Sync` |
+| Remove one | `./scripts/Set-ClaudeDeveloper.ps1 -User x@y.com -Remove -Sync` |
+| See who has what | `./scripts/Get-ClaudeBudget.ps1` |
+| Change what a tier may do | `./scripts/Set-ClaudeTier.ps1 -List` then `-Tier standard -DailyQuota 750000` |
+| Create a business unit or team | `./scripts/Set-ClaudeBusinessUnit.ps1 -Id mcaps -Group claude-bu-mcaps -MonthlyBudgetUsd 20000` |
+| See who spent what | `./scripts/Get-ClaudeBusinessUnit.ps1` |
+| Open the dashboard | `./scripts/Publish-ClaudeWorkbook.ps1 -List` |
+| Back up before a change | `./scripts/Backup-ClaudeGateway.ps1` |
+| Work out why something is refused | `./scripts/Debug-ClaudeCode.ps1` |
+
+Deeper detail lives in [Onboarding](docs/ONBOARDING.md) (people and tiers),
+[Monitoring](docs/MONITORING.md) (usage and cost), [Business
+units](docs/BUSINESS-UNITS.md) (chargeback) and [Debug](docs/DEBUGGING.md).
+
+> **The one thing worth knowing before you start.** Entitlement comes from Entra
+> groups. Every script here edits the group and then publishes to the gateway —
+> editing the gateway directly works until the next sync and then silently stops.
 
 ---
 

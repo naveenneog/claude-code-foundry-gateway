@@ -231,7 +231,7 @@ to close the preview-feature gap. Both are recorded in `docs/CHARTER.md` as non-
 - [x] P32 tier limits — `Set-ClaudeTier.ps1` reads and sets tokens per minute, the daily quota and
       the model allow list, checking models against what the account serves. A third tier remains a
       policy change, stated rather than implied
-- [ ] P33 add or remove one developer — acceptance: a single command with confirmation and an audit
+- [x] P33 add or remove one developer — acceptance: a single command with confirmation and an audit
       line, rather than only the bulk sync and CSV import
 - [ ] P34 optional Grafana — only if a customer requires Grafana by name; it is the one
       observability option with a standing bill

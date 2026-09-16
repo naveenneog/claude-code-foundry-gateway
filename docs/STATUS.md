@@ -1,8 +1,6 @@
 # Status
 
-**Active packet:** P29-P32 — backup and restore, and the admin surface. Shipped and verified live.
-Full regression including the Azure half passes: 29 checks, 56 of 56 mutations caught. Next in M4:
-P33, a single-developer add and remove.
+**Active packet:** P33 — add or remove one developer. Shipped and verified live end to end. Full regression including the Azure half passes: 29 checks, 60 of 60 mutations caught. Remaining in M4: P34 (Grafana, only on request) and P28 (the bill of materials diagram).
 
 ## P16 acceptance criteria — close the bypass
 

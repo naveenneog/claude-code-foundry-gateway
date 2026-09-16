@@ -28,6 +28,16 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- `Set-ClaudeDeveloper.ps1` — add or remove one person. It edits the **Entra
+  group**, not the gateway, because `Sync-ClaudeAccess.ps1` rebuilds the allow
+  lists from group membership every run: a developer added straight to a named
+  value works until the next sync and then silently stops. `-Sync` publishes in
+  the same command; without it the script says the change is in the directory
+  but not yet at the gateway. Removing clears every business unit as well as
+  both tiers, because leaving someone on a budget they can no longer spend reads
+  as a broken team rather than a half-finished offboarding.
+- A decision tree at the top of the README, routing by who you are, with the
+  nine commands for running it day to day inline rather than behind another page.
 - Claude Desktop backup and restore. `Backup-ClaudeDesktop.ps1` captures both
   profile roots - `%APPDATA%\Claude` for first-party and
   `%LOCALAPPDATA%\Claude-3p` for this gateway - and refuses while the app is

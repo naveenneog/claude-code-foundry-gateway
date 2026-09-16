@@ -122,6 +122,44 @@ Assert 'it warns that configuring empties Desktop' ($m -match 'empty Desktop')
 Assert 'it refuses to back up a running Desktop'   ($m -match 'Quit it first')
 
 Write-Host ''
+Write-Host 'Admin - one developer (P33)' -ForegroundColor Cyan
+
+$dev = Join-Path $root 'scripts/Set-ClaudeDeveloper.ps1'
+Assert 'a developer script exists' (Test-Path $dev) $dev
+$dv = Get-Content $dev -Raw
+
+# The whole reason it exists rather than a named value write: the sync rebuilds
+# allow-standard and allow-premium from group membership, so a developer added
+# straight to the named value works until the next sync and then stops.
+Assert 'it edits the Entra group'      ($dv -match 'groups/\$groupId/members')
+Assert 'and says why, not the gateway' ($dv -match 'rebuilds' -and $dv -match 'silently stops')
+Assert 'it can add to a tier'          ($dv -match '\$Tier')
+Assert 'and to a business unit'        ($dv -match '\$BusinessUnit')
+Assert 'and remove'                    ($dv -match '\$Remove')
+# Leaving someone on a budget they can no longer spend reads as a broken team
+# rather than a half-finished offboarding.
+Assert 'removal clears every business unit' ($dv -match 'Every unit is cleared')
+# checkMemberObjects answers transitively. With teams nested in business units
+# and those nested in tier groups, it reports membership you cannot remove.
+# Asserted on the call form: the comment explaining why it is not used contains
+# the word, so matching the word passes on a script that calls it.
+Assert 'membership is checked directly'  ($dv -match '/memberOf\?' -and $dv -notmatch 'checkMemberObjects"|/checkMemberObjects')
+Assert 'and the reason is recorded'      ($dv -match 'Request_ResourceNotFound')
+# A guest UPN contains #EXT#, and '#' starts a fragment.
+# The property is that no raw value reaches a filter, not that the encoder is
+# mentioned somewhere - the script encodes in two places and removing one left
+# the other to satisfy a looser check.
+Assert 'query values are URL-encoded'    ($dv -match 'EscapeDataString')
+Assert 'and no raw value reaches a filter' ($dv -notmatch "eq%20'\`$q'" -and $dv -notmatch "eq '\`$q'")
+Assert 'and the reason is recorded'      ($dv -match 'starts a fragment')
+# The group edit is durable; the gateway still needs the sync.
+Assert 'it publishes or says how'        ($dv -match 'Sync-ClaudeAccess')
+Assert 'and warns when it has not'       ($dv -match 'not at the gateway')
+
+$onb2 = Get-Content (Join-Path $root 'docs/ONBOARDING.md') -Raw
+Assert 'onboarding documents it'         ($onb2 -match 'Set-ClaudeDeveloper')
+
+Write-Host ''
 Write-Host 'Admin - documentation' -ForegroundColor Cyan
 
 $mig_doc = Get-Content (Join-Path $root 'docs/MIGRATION.md') -Raw
