@@ -94,25 +94,45 @@ a running app notices a changed managed configuration at its next re-check
 
 ## Checking it applied
 
-Claude Code prints its sources:
+**Claude Code.** Open an interactive session and type `/status`. The
+`Setting sources` line names the source in force — `Enterprise managed settings
+(file)` for the JSON file. If no managed source is listed, the policy is not
+being read: usually the wrong directory, or another managed source winning.
+Claude Code uses **one** managed source by default rather than merging them, so
+deploying the file *and* the registry key means one of them is ignored.
 
-```
-/status
-```
-
-`Setting sources` shows `Enterprise managed settings (file)` when the file is in
-force. If that line is missing, the file is not being read — usually the wrong
-directory, or another managed source winning. Claude Code uses **one** managed
-source by default rather than merging them.
+**Claude Desktop.** Quit and reopen the app — configuration is read at launch.
+With `-BlockUserPlugins`, the add-marketplace and upload routes are hidden in
+the plugin browser. On Linux a rejected `managed-settings.json` is logged to
+`main.log` in the app's logs directory (`~/.config/Claude/logs/`, or
+`~/.config/Claude-3p/logs/` in third-party mode); search it for
+`managed-settings.json`, which also names any key that failed schema validation.
 
 ---
 
 ## Running your own marketplace
 
-A marketplace is a GitHub repository. Pointing `-Marketplace` at one you control
-is what makes the allowlist useful: the review of what goes in is yours, and the
-allowlist then pins Claude to it.
+A marketplace is a GitHub repository with a catalog file at
+`.claude-plugin/marketplace.json` listing the plugins it offers:
 
-Nothing in this accelerator publishes a marketplace or reviews a plugin. Those
-are decisions about what your organisation trusts, and this page does not make
-them for you.
+```json
+{
+  "name": "approved-plugins",
+  "owner": { "name": "Acme Platform Team" },
+  "plugins": [
+    { "name": "code-formatter", "source": "./plugins/code-formatter" }
+  ]
+}
+```
+
+Create it, then pass the repository as `-Marketplace 'owner/repo'` — the same
+string you would type into `/plugin marketplace add`. The
+[marketplace documentation](https://code.claude.com/docs/en/plugin-marketplaces)
+has the full schema.
+
+Pointing the allowlist at a repository you control is what makes it useful: the
+review of what goes in is yours, and the allowlist then pins Claude to it.
+
+This accelerator does not publish a marketplace or review a plugin. Those are
+decisions about what your organisation trusts, and this page does not make them
+for you.

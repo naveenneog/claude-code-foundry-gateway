@@ -153,7 +153,15 @@ Assert 'it states these are not data boundaries' ($pl -match 'feature-availabili
 Assert 'and that already-registered marketplaces survive' ($pl -match 'does not revoke what is already\s+there')
 Assert 'it names the three silent Desktop failures' `
     ($pl -match 'Desktop values are strings' -and $pl -match 'Desktop reads no subkeys' -and $pl -match 'must be root-owned')
-Assert 'and how to check the policy applied' ($pl -match 'Enterprise managed settings \(file\)')
+Assert 'and how to check the policy applied' ($pl -match 'Enterprise managed settings\s+\(file\)')
+# A verification step for one client only leaves the other half unchecked, and
+# a behavioural check alone cannot tell a rejected policy from an applied one
+# that happens to allow the thing you tried.
+Assert 'Desktop has its own verification'  ($pl -match 'Quit and reopen the app')
+Assert 'including where a rejection is logged' ($pl -match 'main\.log')
+# An arbitrary repository is not a marketplace.
+Assert 'it says a marketplace needs a catalog file' ($pl -match '\.claude-plugin/marketplace\.json')
+Assert 'and links the marketplace documentation'    ($pl -match 'code\.claude\.com/docs/en/plugin-marketplaces')
 
 $readme = Get-Content (Join-Path $root 'README.md') -Raw
 Assert 'the README links the model guide'  ($readme -match '\[Models\]\(docs/MODELS\.md\)')
