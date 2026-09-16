@@ -28,6 +28,23 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- `Measure-ClaudeOvershoot.ps1` measures how far spend runs past a budget before
+  a kill switch stops it, because a budget enforced outside the request path
+  cannot be a hard cap and the gap should be a number rather than a shrug.
+
+  Measured on the reference deployment: telemetry lag **193s worst**, 87s median
+  over 102 requests; named-value propagation **17s**; with a 300s job interval
+  that is a **511s window**, plus requests already admitted and still streaming.
+
+  The worst case feeds the bound, not the median — telemetry lag ranged 56s to
+  193s, and a bound on the median would be wrong about half the time in the
+  direction that matters. Propagation is observed through a gateway response
+  header rather than by reading the named value back, because ARM returns the
+  new value immediately and that says nothing about when the policy sees it.
+
+  Nothing is left changed: the override map is restored in a `finally`, and a
+  failed restore says so loudly.
+
 - [ADR-0010](docs/adr/0010-financial-semantics.md) settles the financial
   semantics that P21 and P23 both depend on, each answer grounded in a
   measurement already recorded here rather than a pricing page:

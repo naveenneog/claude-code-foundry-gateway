@@ -1,6 +1,53 @@
 # Status
 
-**Active packet:** P18b, P19b and P20b — the load envelope, the shadow migration path, and the financial semantics. M4 is complete. Full regression including the Azure half passes: 30 checks, 103 of 103 mutations caught.
+**Active packet:** P18b, P19b, P20b and P25 — the load envelope, the shadow migration path, the financial semantics, and the measured overshoot bound. M4 is complete. Full regression including the Azure half passes: 30 checks, 111 of 111 mutations caught.
+
+## P25 acceptance criteria — state the overshoot, and stop calling it a hard cap
+
+- [x] The bound is measured on a live deployment, not asserted
+- [x] The worst case is used, not the median
+- [x] Terms that cannot be measured here are named rather than filled in
+- [x] Nothing is left changed: the override is restored in a `finally`
+- [x] It is not described as a hard cap anywhere
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+### What the work found
+
+| Term | Measured |
+|---|---|
+| Telemetry lag | 193s worst, 87s median, over 102 requests |
+| Propagation | 17s |
+| Job interval | 300s, a parameter |
+| **Window** | **511s** |
+
+Roughly eight and a half minutes of continued spending after a threshold is crossed, plus
+in-flight requests.
+
+**Two bugs in the measurement itself, both found by running it.**
+
+The first version polled: make a call, then query the ledger every few seconds until it appeared.
+It reported *"not visible within 420s"*. The real lag was around 80 seconds. The poll loop wrapped
+its query in `catch { }`, so a failing query and an empty result were indistinguishable, and the
+answer came out four times too large. Replaced with `ingestion_time()`, which measures it directly
+and gives a distribution instead of one sample.
+
+The second was resolving the Log Analytics workspace with `[0].customerId`. The reference resource
+group holds **three** workspaces and `[0]` was not the gateway's, so the first run reported "no
+requests in the last 24h" against a ledger holding 29. This is the same shape as the bypass audit
+picking the wrong Foundry account with `[0].name`. It now refuses an ambiguous group and names the
+workspaces.
+
+Both failures shared a property worth naming: each returned a plausible number rather than an
+error. A measurement that cannot fail loudly is not a measurement.
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | The bound is the honest description of what the architecture can do; naming it a hard cap would be a claim the request path cannot support |
+| Coder | Accept | Propagation had to be observed through the gateway — ARM returns the new value instantly and says nothing about when the policy sees it |
+| QA | Accept | Both defects produced believable numbers. The silent catch is now asserted against, and `[0]` selection is asserted against by name |
+| UX | Accept | The window is reported in seconds with its terms itemised, so an operator can see which one to shorten |
 
 ## P20b acceptance criteria — settle the financial semantics
 

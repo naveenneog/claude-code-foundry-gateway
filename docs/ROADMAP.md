@@ -217,8 +217,14 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       telemetry path naming the Azure resources actually used
 - [ ] P23 showback reporting — acceptance: as-of joins against effective-dated mapping history, so a
       mid-month transfer does not move last week's spend
-- [ ] P25 delayed kill switch — acceptance: the overshoot bound is stated and measured. Not a hard
-      cap, and not described as one
+- [x] P25 delayed kill switch — the overshoot bound is measured rather than asserted.
+      `scripts/Measure-ClaudeOvershoot.ps1` reports it from the live deployment: telemetry lag
+      worst 193s and median 87s over 102 requests, read from `ingestion_time()` rather than polled;
+      named-value propagation 17s, observed through a gateway response header rather than by
+      reading the value back from ARM; plus whatever job interval you choose. On the reference
+      deployment with a 300s job that is a **511s window**, and in-flight requests on top. It is
+      not called a hard cap, because a hard cap needs admission-time reservation that the quota
+      policies do not offer
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so

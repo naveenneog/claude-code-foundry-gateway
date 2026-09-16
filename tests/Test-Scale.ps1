@@ -154,6 +154,48 @@ Assert 'the opening balance is deferred, not fudged' ($a -match 'deferred to P20
 Assert 'and the comparison was negative-tested'   ($a -match 'produced `stale \(1\)` and exit 1')
 
 Write-Host ''
+Write-Host 'Scale - the overshoot bound (P25)' -ForegroundColor Cyan
+
+$ovs = Join-Path $root 'scripts/Measure-ClaudeOvershoot.ps1'
+Assert 'an overshoot measurement exists' (Test-Path $ovs)
+$o = Get-Content $ovs -Raw
+
+# Lag is read from the data, not polled for. The polling version reported "not
+# visible within 420s" against a real lag near 80 seconds, because it caught and
+# discarded its own query errors - a failing query and an empty result were
+# indistinguishable.
+Assert 'lag is measured with ingestion_time'  ($o -match "datetime_diff\('second', ingestion_time\(\), TimeGenerated\)")
+Assert 'and the query is not silently caught' ($o -notmatch '(?s)Invoke-RestMethod[^\r\n]*loganalytics[\s\S]{0,400}\}\s*catch\s*\{\s*\}')
+
+# The bound takes the worst case. A median bound is wrong about half the time,
+# in the direction that matters.
+Assert 'the bound uses the worst lag'   ($o -match 'worst = max\(lag\)')
+Assert 'and the median is reported too' ($o -match 'p50 = percentile\(lag, 50\)')
+Assert 'the worst case feeds the window' ($o -match '\$result\.telemetry_seconds = \[int\]\$row\[2\]')
+
+# Propagation has to be observed through the gateway. Reading the named value
+# back from ARM returns the new value at once and says nothing about when the
+# policy sees it.
+Assert 'propagation is observed at the gateway' ($o -match "x-quota-remaining-today")
+Assert 'and it polls until the policy serves it' ($o -match '\[long\]\$rem -le \$probe')
+
+# Three workspaces in the reference group, and [0] was not the gateway's. The
+# first run reported zero requests against a ledger holding 29.
+Assert 'an ambiguous workspace is refused' ($o -match "workspaces in '\`$ResourceGroup'")
+Assert 'and it never takes the first one'  ($o -notmatch '\[0\]\.customerId')
+
+# Whatever happens, the override must not be left behind.
+Assert 'the override is restored in a finally' ($o -match '(?s)finally\s*\{[\s\S]{0,400}Set-Nv ''quota-overrides'' \$saved')
+Assert 'and a failed restore is loud'          ($o -match 'RESTORE FAILED')
+
+Assert 'an incomplete measurement fails the run' ($o -match 'if \(-not \$result\.complete\)[\s\S]{0,40}exit 1')
+
+Assert 'the measured bound is documented'  ($s -match 'delayed kill switch, not a hard cap')
+Assert 'with the measured terms'           ($s -match '\*\*193s worst\*\*' -and $s -match '\*\*17s\*\*' -and $s -match '\*\*511s\*\*')
+Assert 'it says why the median is not used' ($s -match 'A bound built on the median would be wrong')
+Assert 'and what a hard cap would need'     ($s -match 'admission-time budget reservation')
+
+Write-Host ''
 Write-Host 'Scale - reachable from the README' -ForegroundColor Cyan
 
 # Documentation that nothing links to is documentation nobody reads. Six pages

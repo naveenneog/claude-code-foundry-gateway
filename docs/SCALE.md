@@ -109,6 +109,46 @@ limit, which is **U9**.
 
 ---
 
+## The budget is a delayed kill switch, not a hard cap
+
+A budget enforced outside the request path cannot stop spending at the moment a
+threshold is crossed. Four things elapse first:
+
+```powershell
+./scripts/Measure-ClaudeOvershoot.ps1 -ResourceGroup <rg> -ApimName <apim> `
+    -WorkspaceName <workspace>
+```
+
+Measured on the reference deployment, 2026-09-16:
+
+| Term | Measured | How |
+|---|---|---|
+| Telemetry lag | **193s worst**, 87s median over 102 requests | `ingestion_time() - TimeGenerated` on the ledger |
+| Job interval | 300s | Your choice. Whatever watches the ledger runs on a timer |
+| Propagation | **17s** | Write an override, poll the gateway until the policy serves the new number |
+| In-flight requests | not measured | A property of your traffic. This deployment has no traffic model |
+| **Window** | **511s** | |
+
+So spending continues for **roughly eight and a half minutes** after the
+threshold is crossed, plus whatever was already admitted and is still streaming.
+Multiply by your peak token rate for the overshoot in tokens.
+
+Two details worth keeping:
+
+**The worst case is the bound, not the median.** Telemetry lag ranged 56s to
+193s across the sample. A bound built on the median would be wrong about half
+the time, in the direction that matters.
+
+**Propagation is measured through the gateway, not the ARM API.** Reading a named
+value back returns the new value immediately, which says nothing about when the
+policy sees it. The measurement polls a response header instead.
+
+A genuine hard cap needs admission-time budget reservation: the decision has to
+be made before the request is served, against state the gateway already holds.
+API Management's quota policies do not offer that, so this is not called one.
+
+---
+
 ## Getting there without resetting anyone's allowance
 
 Entitlement is live, and budgets are consumed state rather than configuration. A

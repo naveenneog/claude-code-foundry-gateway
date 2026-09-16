@@ -428,6 +428,56 @@ $mutations = @(
        From  = 'Five phases. Authorization does not change until phase 4'
        To    = 'Five phases. Authorization changes at phase 1' }
 
+    # --- P25, the overshoot bound ---
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the bound goes back to the median'
+       File  = 'scripts/Measure-ClaudeOvershoot.ps1'
+       From  = '$result.telemetry_seconds = [int]$row[2]'
+       To    = '$result.telemetry_seconds = [int]$row[1]' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'lag stops being read from ingestion time'
+       File  = 'scripts/Measure-ClaudeOvershoot.ps1'
+       From  = "datetime_diff('second', ingestion_time(), TimeGenerated)"
+       To    = '0' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the workspace is guessed again'
+       File  = 'scripts/Measure-ClaudeOvershoot.ps1'
+       From  = "workspaces in '`$ResourceGroup'"
+       To    = 'ignored' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'propagation stops being observed at the gateway'
+       File  = 'scripts/Measure-ClaudeOvershoot.ps1'
+       From  = '[long]$rem -le $probe'
+       To    = '$true' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the override stops being restored'
+       File  = 'scripts/Measure-ClaudeOvershoot.ps1'
+       From  = "Set-Nv 'quota-overrides' `$saved"
+       To    = "`$null" }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'an incomplete measurement passes silently'
+       File  = 'scripts/Measure-ClaudeOvershoot.ps1'
+       From  = 'if (-not $result.complete)'
+       To    = 'if ($false)' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the kill switch is called a hard cap'
+       File  = 'docs/SCALE.md'
+       From  = 'delayed kill switch, not a hard cap'
+       To    = 'hard cap' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the measured bound loses its numbers'
+       File  = 'docs/SCALE.md'
+       From  = '**511s**'
+       To    = 'some seconds' }
+
     @{ Suite = 'Test-Teams.ps1'
        Name  = 'the guide stops saying the sync must be scheduled'
        File  = 'docs/BUSINESS-UNITS.md'

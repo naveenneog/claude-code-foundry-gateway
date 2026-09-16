@@ -496,6 +496,7 @@ scripts/
   Set-ClaudeBusinessUnit.ps1   register a business unit, team or budget
   Get-ClaudeBusinessUnit.ps1   spend per business unit, and who is unassigned
   Measure-ClaudeCeiling.ps1    headroom against the measured scale limits
+  Measure-ClaudeOvershoot.ps1  how far spend runs past a budget, measured
   Get-ClaudeBypass.ps1         principals that can reach Foundry directly
   Get-ClaudeBom.ps1            what this gateway created, reuses, and bills for
   Backup-ClaudeGateway.ps1     configuration backup; Restore- is the pair
