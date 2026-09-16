@@ -127,12 +127,22 @@ M0 is shipped. The table below is the queue; the checklist under it is what the 
       still works, and a longer name sharing a prefix does not slip through. Chat, Cowork, Code
       and connectors ship as per-tier managed settings from `New-ClaudeCodePolicy.ps1 -Tier`, and
       are documented as management controls rather than security boundaries. U4 closed, ADR-0004
-- [ ] P14 plugin marketplace — acceptance, restated after U6 closed: (a) an approved Claude Code
-      plugin pinned to a commit sha or archive hash installs, a modified one is refused on hash
-      mismatch, and a marketplace outside `strictKnownMarketplaces` is rejected; (b) with
+- [ ] P14 plugin marketplace — the configuration half shipped as P36; what remains is the
+      verification, which needs a real marketplace repository and a client machine: (a) an approved
+      Claude Code plugin pinned to a commit sha or archive hash installs, a modified one is refused
+      on hash mismatch, and a marketplace outside `strictKnownMarketplaces` is rejected; (b) with
       `isDesktopExtensionSignatureRequired` set, a signed `.mcpb` installs and an unsigned one does
       not. The original wording — signed plugin accepted, unsigned refused — is not implementable:
       Claude Code has no plugin signing scheme
+- [x] P36 adding a model, and plugin governance — `Add-ClaudeModel.ps1` lists, deploys, allows,
+      prices and retires a Claude model in one command, with the price book moved out of the code
+      into `config/price-book.json` so a new model is not a code change. `New-ClaudeCodePolicy.ps1`
+      now emits marketplace and extension controls for both clients — `strictKnownMarketplaces` for
+      Claude Code, `allowedPluginMarketplaces`, `userPluginMarketplacesEnabled`,
+      `userPluginUploadsEnabled` and `isDesktopExtensionSignatureRequired` for Claude Desktop — and
+      writes the Desktop profile, which the script built and discarded before. Documented in
+      [MODELS.md](MODELS.md) and [PLUGINS.md](PLUGINS.md), both stating that the plugin keys are
+      feature-availability controls rather than data boundaries
 
 ### M4 — business-unit chargeback
 

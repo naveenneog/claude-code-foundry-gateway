@@ -99,6 +99,26 @@ param(
     [string]$OtlpEndpoint,
     [switch]$CaptureContent,
 
+    # ---------------------------------------------------- plugins and skills
+    #
+    # A plugin is code that runs with the developer's own permissions and can
+    # add tools, skills, hooks and MCP servers to a session. A marketplace is
+    # where plugins are installed from. Left alone, a developer may add any
+    # marketplace and install anything in it.
+    #
+    # Naming a marketplace here allows that one and no other. Give it as
+    # owner/repo on GitHub - the same string you would type into
+    # /plugin marketplace add.
+    [string[]]$Marketplace,
+
+    # Hide the in-app routes by which a Claude Desktop user adds a marketplace
+    # of their own or uploads a plugin file.
+    [switch]$BlockUserPlugins,
+
+    # Refuse Claude Desktop extensions that are not signed by a trusted
+    # publisher. Off by default in the product.
+    [switch]$RequireSignedExtensions,
+
     [string]$OutputPath = './policy-claude-code'
 )
 
@@ -182,6 +202,55 @@ if ($Hardening -eq 'strict') {
     $settings['allowManagedPermissionRulesOnly'] = $true
 }
 
+# ------------------------------------------------------- plugins and skills
+#
+# A plugin runs with the developer's own permissions and can add tools, skills,
+# hooks and MCP servers to a session, so where plugins come from is worth
+# pinning.
+#
+# Claude Code and Claude Desktop use different keys for the same idea, and both
+# are emitted so one run produces one coherent profile:
+#
+#   strictKnownMarketplaces     Claude Code. Plugins may come only from the
+#                               marketplaces listed here
+#   allowedPluginMarketplaces   Claude Desktop. The marketplaces the
+#                               organisation provisions
+#
+# Both take a source object rather than a bare string, because a marketplace is
+# identified by where it lives.
+if ($Marketplace) {
+    $sources = @($Marketplace | ForEach-Object {
+        $repo = $_.Trim()
+        if ($repo -notmatch '^[^/\s]+/[^/\s]+$') {
+            throw ("Marketplace '$repo' is not owner/repo. Give it the way you would type it into " +
+                   "'/plugin marketplace add', for example acme-corp/approved-plugins.")
+        }
+        [ordered]@{ source = 'github'; repo = $repo }
+    })
+    $settings['strictKnownMarketplaces'] = $sources
+    $desktop['allowedPluginMarketplaces'] = $sources
+}
+
+if ($BlockUserPlugins) {
+    # Feature-availability controls, not data boundaries. Anthropic states that
+    # marketplaces already registered on the machine - including any registered
+    # outside the app, such as by the Claude Code CLI or by editing Claude
+    # Code's plugin files - are not removed or blocked by these keys.
+    #
+    # So this hides the routes in; it does not revoke what is already there.
+    # strictKnownMarketplaces above is the one that constrains what loads.
+    $desktop['userPluginMarketplacesEnabled'] = $false
+    $desktop['userPluginUploadsEnabled'] = $false
+    # Those two apply only while the app runs in third-party mode, so the mode
+    # has to be pinned or a user can sign in to claude.ai and leave the policy
+    # behind.
+    $desktop['disableDeploymentModeChooser'] = $true
+}
+
+if ($RequireSignedExtensions) {
+    $desktop['isDesktopExtensionSignatureRequired'] = $true
+}
+
 # ------------------------------------------------- conversation history mode
 
 switch ($ConversationStorage) {
@@ -236,6 +305,54 @@ function Save($path, $content, $encoding = 'UTF8') {
 }
 
 Save "$base.managed-settings.json" $json
+
+# ------------------------------------------------- Claude Desktop, 3P mode
+#
+# Desktop reads a different store under different key names, so its profile is
+# written separately rather than folded into the Claude Code file. Before this
+# the $desktop block above was built and then discarded, so the tab settings
+# this script has always accepted never reached a machine.
+#
+# Two shapes, because the encoding rules differ:
+#
+#   Linux    /etc/claude-desktop/managed-settings.json, native JSON, keys at
+#            the top level. Must be root-owned and not group- or world-writable
+#            or the whole file is rejected and local settings are disabled too
+#   Windows  HKLM\SOFTWARE\Policies\Claude, REG_SZ values directly under the
+#            key - the app never reads subkeys - with array and object values
+#            carried as JSON encoded into a string
+#
+# macOS takes the same keys in the com.anthropic.claudefordesktop managed
+# preferences domain.
+$desktopBase = Join-Path $OutputPath 'claude-desktop'
+Save "$desktopBase.managed-settings.json" ($desktop | ConvertTo-Json -Depth 8)
+
+$desktopRegLines = foreach ($k in $desktop.Keys) {
+    $v = $desktop[$k]
+    # Every value is written as a string, including booleans, per the
+    # configuration reference. Arrays and objects become a JSON string.
+    #
+    # -InputObject rather than the pipeline: piping a one-element array to
+    # ConvertTo-Json unwraps it, and allowedPluginMarketplaces is object[].
+    # A single allowed marketplace would have been written as an object and
+    # read as the wrong type.
+    $s = if ($v -is [bool]) { if ($v) { 'true' } else { 'false' } }
+         elseif ($v -is [string]) { $v }
+         else { ConvertTo-Json -InputObject $v -Depth 8 -Compress }
+    '"{0}"="{1}"' -f $k, ($s -replace '\\', '\\\\' -replace '"', '\"')
+}
+$desktopReg = @"
+Windows Registry Editor Version 5.00
+
+; Claude Desktop managed configuration, third-party mode.
+; Values sit directly under the policy key: the app does not read subkeys.
+; When HKLM is present the app ignores HKCU entirely.
+; Configuration is read at launch, so quit and reopen Desktop after deploying.
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Claude]
+$($desktopRegLines -join "`r`n")
+"@
+Save "$desktopBase.reg" $desktopReg 'Unicode'
 
 # .reg carries the whole JSON as one REG_SZ named Settings. Backslashes and
 # quotes are escaped for the .reg format, and the file must be UTF-16 or

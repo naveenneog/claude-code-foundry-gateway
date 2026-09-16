@@ -38,3 +38,9 @@ backups/
 claude-code-backups/
 
 !onboarding/README.md
+
+# The price book is per-deployment and may hold negotiated rates rather than
+# list price, which is commercially sensitive. config/price-book.example.json
+# ships instead, and scripts/ClaudeBusinessUnit.ps1 falls back to built-in list
+# rates when no file is present.
+config/price-book.json

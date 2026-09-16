@@ -497,6 +497,7 @@ scripts/
   Get-ClaudeBusinessUnit.ps1   spend per business unit, and who is unassigned
   Measure-ClaudeCeiling.ps1    headroom against the measured scale limits
   Measure-ClaudeOvershoot.ps1  how far spend runs past a budget, measured
+  Add-ClaudeModel.ps1          deploy-check, allow, price a new Claude model
   Get-ClaudeBypass.ps1         principals that can reach Foundry directly
   Get-ClaudeBom.ps1            what this gateway created, reuses, and bills for
   Backup-ClaudeGateway.ps1     configuration backup; Restore- is the pair
@@ -511,6 +512,8 @@ docs/
   BUSINESS-UNITS.md            business units, teams, tiers, dollar budgets
   MIGRATION.md                 moving a population off first-party Claude
   MONITORING.md                metrics, chargeback, KQL, alerts
+  MODELS.md                    adding a new Claude model end to end
+  PLUGINS.md                   marketplaces, plugins and extensions
   SCALE.md                     measured ceilings and the load envelope
   DEBUGGING.md                 isolate a failure layer by layer
   COMPARISON.md                Foundry vs Anthropic direct
@@ -542,6 +545,7 @@ journeys that span several guides:
 | **Moving a population off first-party Claude** | [Migration](docs/MIGRATION.md) → [Setup](docs/SETUP.md) |
 | **Charging usage back to budget holders** | [Business units](docs/BUSINESS-UNITS.md) → [Monitoring](docs/MONITORING.md) |
 | **Sizing this past a pilot** | [Scale](docs/SCALE.md) → [ADR-0005](docs/adr/0005-identity-projection.md) |
+| **Adding a model Anthropic just released** | [Models](docs/MODELS.md) |
 
 **The guides:**
 
@@ -553,6 +557,8 @@ journeys that span several guides:
 | [Business units](docs/BUSINESS-UNITS.md) | platform team, FinOps | business units, teams, tiers, dollar budgets, who is unassigned |
 | [Migration](docs/MIGRATION.md) | platform team | moving off first-party Claude at scale: what survives, MDM push, bulk entitlement |
 | [Monitoring](docs/MONITORING.md) | whoever owns the spend | metrics, filters, chargeback, KQL, alerts |
+| [Models](docs/MODELS.md) | platform team | adding a new Claude model: deploy, allow, price, and what developers change |
+| [Plugins](docs/PLUGINS.md) | platform team | marketplaces, plugin and extension controls for Code and Desktop, and their limits |
 | [Scale](docs/SCALE.md) | platform team | measured ceilings, what runs out first, how to establish a capacity figure |
 | [Debug](docs/DEBUGGING.md) | anyone | isolate a failure layer by layer |
 

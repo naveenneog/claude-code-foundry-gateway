@@ -28,6 +28,53 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- `Add-ClaudeModel.ps1` makes a newly released Claude model usable in one
+  command: it checks the model is deployed (and deploys it with `-Deploy`), adds
+  it to the tier allow lists, writes its price, and prints what developers have
+  to change — the model name, and nothing else.
+
+  Four things have to agree for a model to work, and the third fails quietly:
+
+  | | Where | If missed |
+  |---|---|---|
+  | Deployed | the Foundry account | Foundry refuses |
+  | Allowed | `models-standard` / `models-premium` | the gateway 403s |
+  | **Priced** | `config/price-book.json` | **served, and reported at $0** |
+  | Selectable | `availableModels`, if pinned | the client hides it |
+
+  An unpriced model is refused unless `-SkipPrice` is passed, and `-List` marks
+  it red. `-Remove` retires a model and deliberately keeps its price, because a
+  report covering a past month still needs the rate that applied then.
+
+  Only Claude deployments are listed. The reference account also carries GPT,
+  Sora and embedding deployments; showing them as unpriced would be true and
+  useless.
+
+- The price book moved out of the code into `config/price-book.json`, so a new
+  model is no longer a code change. The file is git-ignored — it may hold
+  negotiated rates rather than list price, which is commercially sensitive — and
+  `config/price-book.example.json` ships instead. With no file, the built-in list
+  rates apply, so a fresh clone works. A malformed file throws rather than
+  falling back, and rates are cast to decimal on load because `ConvertFrom-Json`
+  produces doubles and ADR-0010 requires decimal end to end.
+
+- `New-ClaudeCodePolicy.ps1` gained `-Marketplace`, `-BlockUserPlugins` and
+  `-RequireSignedExtensions`. A plugin runs with the developer's own permissions
+  and can add tools, skills, hooks and MCP servers, so where plugins come from is
+  worth pinning. Claude Code and Claude Desktop use different key names for the
+  same idea, and both are emitted from one input:
+
+  `strictKnownMarketplaces` for Claude Code; `allowedPluginMarketplaces`,
+  `userPluginMarketplacesEnabled`, `userPluginUploadsEnabled`,
+  `disableDeploymentModeChooser` and `isDesktopExtensionSignatureRequired` for
+  Claude Desktop.
+
+  Both guides state the limit plainly: these are feature-availability controls,
+  not data boundaries. Marketplaces already registered — including any registered
+  outside the app, such as by the Claude Code CLI — are not removed by them.
+
+- `docs/MODELS.md` and `docs/PLUGINS.md`.
+
 - `Measure-ClaudeOvershoot.ps1` measures how far spend runs past a budget before
   a kill switch stops it, because a budget enforced outside the request path
   cannot be a hard cap and the gap should be a number rather than a shrug.
@@ -284,6 +331,23 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   converts to 1,388,888,888 tokens and back to exactly $5000.00.
 
 ### Fixed
+
+- `New-ClaudeCodePolicy.ps1` built a Claude Desktop settings block and then
+  discarded it. Its own comment said the keys were "emitted here so one run
+  produces one tier's complete profile rather than two half-profiles that can
+  drift", and nothing ever wrote them, so every Desktop tab setting the script
+  has accepted since it was written reached no machine. It now writes
+  `claude-desktop.managed-settings.json` and `claude-desktop.reg`.
+
+  The registry form follows the documented encoding: every value is a string,
+  including booleans; arrays and objects are a JSON document encoded into one
+  string; values sit directly under `HKLM\SOFTWARE\Policies\Claude` because the
+  app reads no subkeys; and the file is UTF-16.
+
+- A one-element marketplace list was written as an object rather than an array.
+  `allowedPluginMarketplaces` is `object[]`, and piping a one-element array to
+  `ConvertTo-Json` unwraps it, so a single allowed marketplace produced `{...}`
+  instead of `[{...}]`. Fixed with `-InputObject`.
 
 - `SETUP.md` Options B and C did not say what they leave undone. `deploy.ps1`
   creates the Entra groups and runs the sync, but only `Install-ClaudeGateway.ps1`

@@ -47,6 +47,47 @@ $script:ClaudePriceBook = @{
 }
 $script:ClaudePriceBookDate = '2026-09-15'
 
+# A new Claude model should not need a code change to become chargeable. The
+# table above is the fallback; config/price-book.json overrides it when present,
+# and Add-ClaudeModel.ps1 writes that file.
+#
+# Rates are cast to decimal on load. ConvertFrom-Json produces doubles, and
+# ADR-0010 requires money to be decimal end to end - a double here would reach
+# the blended rate and stop the figures reproducing.
+$script:ClaudePriceBookPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'config/price-book.json'
+
+function Import-ClaudePriceBook {
+    param([string]$Path = $script:ClaudePriceBookPath)
+
+    if (-not (Test-Path $Path)) { return $false }
+
+    $doc = Get-Content $Path -Raw | ConvertFrom-Json
+    if (-not $doc.models) { throw "Price book '$Path' has no 'models' object. Delete it to fall back to the built-in rates." }
+
+    $book = @{}
+    foreach ($p in $doc.models.PSObject.Properties) {
+        $m = $p.Value
+        if ($null -eq $m.inputPerM -or $null -eq $m.outputPerM) {
+            throw "Price book '$Path': model '$($p.Name)' is missing inputPerM or outputPerM."
+        }
+        $book[$p.Name] = @{
+            InputPerM  = [decimal]$m.inputPerM
+            OutputPerM = [decimal]$m.outputPerM
+        }
+    }
+    if ($book.Keys.Count -eq 0) { throw "Price book '$Path' lists no models. Delete it to fall back to the built-in rates." }
+
+    $script:ClaudePriceBook = $book
+    if ($doc.date) { $script:ClaudePriceBookDate = [string]$doc.date }
+    return $true
+}
+
+# Loaded at dot-source time so every caller sees the same rates. A malformed
+# file throws rather than silently leaving the built-in table in place: a price
+# book that is being ignored is worse than one that is missing, because the
+# figures still look right.
+Import-ClaudePriceBook | Out-Null
+
 function Test-ClaudeBuId {
     <#
     .SYNOPSIS

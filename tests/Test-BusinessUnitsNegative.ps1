@@ -478,6 +478,86 @@ $mutations = @(
        From  = '**511s**'
        To    = 'some seconds' }
 
+    # --- adding a model, and plugin governance ---
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'an unpriced model is accepted silently'
+       File  = 'scripts/Add-ClaudeModel.ps1'
+       From  = "if (-not `$SkipPrice -and -not (`$PSBoundParameters.ContainsKey('InputPerMillion')"
+       To    = "if (`$false -and -not (`$PSBoundParameters.ContainsKey('InputPerMillion')" }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'an undeployed model is added anyway'
+       File  = 'scripts/Add-ClaudeModel.ps1'
+       From  = 'is not deployed on Foundry account'
+       To    = 'is fine on account' }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'the model list stops filtering to Claude'
+       File  = 'scripts/Add-ClaudeModel.ps1'
+       From  = "ClaudeModelDeployment.ps1"
+       To    = "ApimNamedValue.ps1" }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'removing a model empties the list without sentinels'
+       File  = 'scripts/Add-ClaudeModel.ps1'
+       From  = "else { ',,' }"
+       To    = "else { '' }" }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'price book rates stop being decimal'
+       File  = 'scripts/ClaudeBusinessUnit.ps1'
+       From  = 'InputPerM  = [decimal]$m.inputPerM'
+       To    = 'InputPerM  = $m.inputPerM' }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'a malformed price book is silently ignored'
+       File  = 'scripts/ClaudeBusinessUnit.ps1'
+       From  = 'Delete it to fall back to the built-in rates'
+       To    = 'Ignoring it' }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'the live price book stops being git-ignored'
+       File  = '.gitignore'
+       From  = 'config/price-book.json'
+       To    = '# config/price-book.json' }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'Desktop loses its marketplace allowlist'
+       File  = 'scripts/New-ClaudeCodePolicy.ps1'
+       From  = "`$desktop['allowedPluginMarketplaces'] = `$sources"
+       To    = "`$null = `$sources" }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'the deployment mode stops being pinned'
+       File  = 'scripts/New-ClaudeCodePolicy.ps1'
+       From  = "`$desktop['disableDeploymentModeChooser'] = `$true"
+       To    = "`$null = `$true" }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'a one-entry marketplace list collapses to an object'
+       File  = 'scripts/New-ClaudeCodePolicy.ps1'
+       From  = 'ConvertTo-Json -InputObject $v -Depth 8 -Compress'
+       To    = '($v | ConvertTo-Json -Depth 8 -Compress)' }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'the desktop profile stops being written'
+       File  = 'scripts/New-ClaudeCodePolicy.ps1'
+       From  = 'Save "$desktopBase.managed-settings.json"'
+       To    = '# Save "$desktopBase.managed-settings.json"' }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'plugin controls are presented as a boundary'
+       File  = 'docs/PLUGINS.md'
+       From  = 'feature-availability controls, not data boundaries'
+       To    = 'hard security boundaries' }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'the guide stops naming the quiet pricing failure'
+       File  = 'docs/MODELS.md'
+       From  = 'The third is the one that fails quietly'
+       To    = 'All four are obvious' }
+
     @{ Suite = 'Test-Teams.ps1'
        Name  = 'the guide stops saying the sync must be scheduled'
        File  = 'docs/BUSINESS-UNITS.md'
@@ -713,6 +793,13 @@ try {
     # unredacted captures out of a commit.
     Copy-Item (Join-Path $root 'guide') $sandbox -Recurse -Force
     Copy-Item (Join-Path $root '.gitignore') $sandbox -Force
+    # config/ carries the shipped example only. A developer's own
+    # config/price-book.json overrides the built-in rates, and copying it in
+    # would make the built-in table dead code inside the sandbox - the mutation
+    # that reverts it to doubles then changes nothing and reads as uncaught.
+    New-Item -ItemType Directory -Path (Join-Path $sandbox 'config') -Force | Out-Null
+    Get-ChildItem (Join-Path $root 'config') -File -Filter '*.example.json' -ErrorAction SilentlyContinue |
+        ForEach-Object { Copy-Item $_.FullName (Join-Path $sandbox 'config') -Force }
     # The rendered diagram, whose presence is asserted.
     if (Test-Path (Join-Path $root 'docs/images')) {
         New-Item -ItemType Directory -Path (Join-Path $sandbox 'docs/images') -Force | Out-Null
@@ -742,10 +829,11 @@ try {
     $backupSuite = Join-Path $sandbox 'tests/Test-Backup.ps1'
     $adminSuite = Join-Path $sandbox 'tests/Test-AdminSurface.ps1'
     $scaleSuite = Join-Path $sandbox 'tests/Test-Scale.ps1'
+    $mpSuite = Join-Path $sandbox 'tests/Test-ModelsAndPlugins.ps1'
 
     # The copy must pass before any mutation, or a "caught" result below could
     # just mean the sandbox is broken.
-    foreach ($s in $suite, $teamSuite, $modelSuite, $obsSuite, $backupSuite, $adminSuite, $scaleSuite) {
+    foreach ($s in $suite, $teamSuite, $modelSuite, $obsSuite, $backupSuite, $adminSuite, $scaleSuite, $mpSuite) {
         & $s *>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  [SETUP] the unmutated copy of $(Split-Path $s -Leaf) already fails - the sandbox is wrong, not the code" -ForegroundColor Red

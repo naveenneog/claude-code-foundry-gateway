@@ -66,6 +66,7 @@ try {
     Invoke-Check 'Business unit checks detect breakage'    'Test-BusinessUnitsNegative.ps1'
     Invoke-Check 'Admin surface - SKU, groups, tiers'      'Test-AdminSurface.ps1'
     Invoke-Check 'Scale ceilings and the load envelope'    'Test-Scale.ps1'
+    Invoke-Check 'Adding models, and plugin governance'    'Test-ModelsAndPlugins.ps1'
     Invoke-Check 'Backup and restore'                      'Test-Backup.ps1'
     Invoke-Check 'Foundry bypass audit'                    'Test-Bypass.ps1' @{ SkipLive = $true }
 

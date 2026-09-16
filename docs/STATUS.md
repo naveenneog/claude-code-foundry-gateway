@@ -1,6 +1,54 @@
 # Status
 
-**Active packet:** P18b, P19b, P20b and P25 — the load envelope, the shadow migration path, the financial semantics, and the measured overshoot bound. M4 is complete. Full regression including the Azure half passes: 30 checks, 111 of 111 mutations caught.
+**Active packet:** P36 — adding a model, and plugin and marketplace governance. M4 is complete. Full regression including the Azure half passes: 31 checks, 124 of 124 mutations caught.
+
+## P36 acceptance criteria — the two things an admin does after go-live
+
+- [x] A new model is one command: deploy-check, deploy, allow, price, and what developers change
+- [x] The price book is configuration rather than code, and git-ignored because it may hold negotiated rates
+- [x] Retiring a model is one command too, and keeps its price so past months still reconcile
+- [x] Marketplace and extension controls are emitted for both clients from one input
+- [x] The limits of those controls are stated rather than implied
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+### What the work found
+
+**Four things have to agree for a model to work, and the third fails quietly.** Deployed, allowed,
+priced, selectable. A model with no price is served and reported at **$0**, which reads as nobody
+using it rather than as a configuration gap. `-List` marks it red and the command refuses to add
+one unless `-SkipPrice` is passed.
+
+**The Desktop profile was built and thrown away.** `New-ClaudeCodePolicy.ps1` assembled a `$desktop`
+block — and its own comment said the keys were "emitted here so one run produces one tier's
+complete profile" — but nothing ever wrote it. Every Desktop tab setting the script has accepted
+since it was written reached no machine. It now writes `claude-desktop.managed-settings.json` and
+`claude-desktop.reg`.
+
+**A one-element array became an object.** `allowedPluginMarketplaces` is `object[]`. Piping a
+one-element array to `ConvertTo-Json` unwraps it, so a single allowed marketplace was written as
+`{...}` instead of `[{...}]` and would have been read as the wrong type. `-InputObject` fixes it.
+
+**My own docstring claimed a feature that did not exist.** It said the command "offers to deploy it
+when it is not" deployed; the code only threw. Astra's review caught it. `-Deploy` now exists and
+uses the existing helper, so a quota refusal is still reported as quota rather than as a retry.
+
+### Two more tests that measured nothing
+
+The mutation reverting one model's price to doubles stopped being caught once the sandbox began
+copying `config/`, because a developer's own `price-book.json` overrides the built-in table and
+made it dead code inside the sandbox. The sandbox now copies only `*.example.json`.
+
+The assertion that the Desktop profile is written matched the string anywhere in the file, so
+commenting out the `Save` left it passing. Anchored at line start.
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | The price book belongs in configuration: a model release is an operational event, not a reason to edit and redeploy code |
+| Coder | Accept | Both clients are emitted from one input, because two files kept in step by hand drift and govern half a fleet each |
+| QA | Accept | Three defects here were found by running the thing rather than reading it, and two were tests that passed while measuring nothing |
+| UX | Accept | `-List` answers "where am I" before anything changes, and the unpriced case is the one it shouts about |
 
 ## P25 acceptance criteria — state the overshoot, and stop calling it a hard cap
 

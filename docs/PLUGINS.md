@@ -1,0 +1,118 @@
+# Plugins, marketplaces and extensions
+
+A plugin is code that runs with the developer's own permissions. It can add
+tools, skills, hooks and MCP servers to a session. A marketplace is where
+plugins are installed from.
+
+Left alone, a developer may add any marketplace and install anything in it. This
+page is how to narrow that, and — importantly — what these controls do not do.
+
+```powershell
+./scripts/New-ClaudeCodePolicy.ps1 -GatewayUrl <url> -Tier premium `
+    -Marketplace 'acme-corp/approved-plugins' `
+    -BlockUserPlugins -RequireSignedExtensions
+```
+
+That writes both profiles: `claude-code.*` for Claude Code, and
+`claude-desktop.*` for Claude Desktop. They use different key names for the same
+idea, which is why one command emits both rather than leaving you to keep two
+files in step.
+
+---
+
+## What each switch sets
+
+| Switch | Claude Code | Claude Desktop |
+|---|---|---|
+| `-Marketplace owner/repo` | `strictKnownMarketplaces` | `allowedPluginMarketplaces` |
+| `-BlockUserPlugins` | — | `userPluginMarketplacesEnabled: false`, `userPluginUploadsEnabled: false`, `disableDeploymentModeChooser: true` |
+| `-RequireSignedExtensions` | — | `isDesktopExtensionSignatureRequired: true` |
+
+`-Marketplace` takes `owner/repo` — the same string you would type into
+`/plugin marketplace add`. Anything else is refused at generation time rather
+than producing a profile that silently matches nothing.
+
+`disableDeploymentModeChooser` comes with `-BlockUserPlugins` because the two
+plugin keys apply only while the app runs in third-party mode. Without it a user
+can sign in to claude.ai and leave the policy behind.
+
+---
+
+## What these controls are not
+
+**They are feature-availability controls, not data boundaries.** Anthropic
+states that marketplaces already registered on a machine — including any
+registered outside the app, for example by the Claude Code CLI or by editing
+Claude Code's plugin files — are not removed or blocked by
+`userPluginMarketplacesEnabled`.
+
+So `-BlockUserPlugins` hides the routes in. It does not revoke what is already
+there. `strictKnownMarketplaces` is the one that constrains what loads.
+
+This sits under the same limit as every other client-side setting here:
+Anthropic states that a user who can run a modified Claude Code binary can
+bypass any client-side control. The controls that must hold — entitlement,
+budgets and the model allowlist — are enforced at the gateway instead, which is
+[ADR-0004](adr/0004-policy-out-of-band.md).
+
+Treat the plugin settings as a way to make the approved path the easy one, not
+as something that stops a determined user.
+
+---
+
+## Where the policy goes
+
+Claude Code and Claude Desktop read different stores. The generated files map
+onto them:
+
+| File | Deploy to |
+|---|---|
+| `claude-code.managed-settings.json` | `C:\Program Files\ClaudeCode\` · `/Library/Application Support/ClaudeCode/` · `/etc/claude-code/` |
+| `claude-code.reg` | `HKLM\SOFTWARE\Policies\ClaudeCode` |
+| `claude-code.mobileconfig` | macOS, `com.anthropic.claudecode` |
+| `claude-desktop.managed-settings.json` | `/etc/claude-desktop/managed-settings.json` |
+| `claude-desktop.reg` | `HKLM\SOFTWARE\Policies\Claude` |
+
+Three details that cause silent failures, all from the
+[configuration reference](https://claude.com/docs/third-party/claude-desktop/configuration):
+
+- **Desktop values are strings**, including booleans and arrays. Arrays and
+  objects are a JSON document encoded into one string. The generated `.reg`
+  does this; hand-editing usually does not.
+- **Desktop reads no subkeys.** Values sit directly under
+  `HKLM\SOFTWARE\Policies\Claude`. A value nested one level down is invisible.
+- **The Linux file must be root-owned** and not group- or world-writable, and
+  `/etc/claude-desktop` must be too. A file failing that check is rejected
+  entirely — and local settings are disabled as well, so the app ends up with
+  neither.
+
+Desktop reads its configuration **at launch**. Quit and reopen after deploying;
+a running app notices a changed managed configuration at its next re-check
+(10 minutes by default) and then asks for a restart.
+
+---
+
+## Checking it applied
+
+Claude Code prints its sources:
+
+```
+/status
+```
+
+`Setting sources` shows `Enterprise managed settings (file)` when the file is in
+force. If that line is missing, the file is not being read — usually the wrong
+directory, or another managed source winning. Claude Code uses **one** managed
+source by default rather than merging them.
+
+---
+
+## Running your own marketplace
+
+A marketplace is a GitHub repository. Pointing `-Marketplace` at one you control
+is what makes the allowlist useful: the review of what goes in is yours, and the
+allowlist then pins Claude to it.
+
+Nothing in this accelerator publishes a marketplace or reviews a plugin. Those
+are decisions about what your organisation trusts, and this page does not make
+them for you.
