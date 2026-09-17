@@ -4,6 +4,12 @@ Give your engineering team **Claude Code** running on **your own Claude deployme
 Foundry**, with per-developer budgets, cost reporting by team — and **no model credential on any
 developer machine**.
 
+The alternative is not that developers go without Claude. It is that they sign in to Anthropic
+with personal or work accounts, on a service the organisation has no agreement with: the spend
+arrives as expenses rather than a bill you can attribute, and access does not end when someone
+leaves. This puts the same three clients — the CLI, the VS Code extension and Desktop — behind
+the login developers already have.
+
 One interactive command deploys the whole thing, once you have the files:
 
 ```powershell
