@@ -620,6 +620,16 @@ if ($ExistingApim -or (az apim show -g $ResourceGroup -n $apimName --query name 
     $buReg = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id bu-registry --query value -o tsv 2>$null
     $buMem = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id bu-members  --query value -o tsv 2>$null
     $buPar = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id bu-parents  --query value -o tsv 2>$null
+    # Which entitlement path this gateway is on. An operator who has migrated to
+    # the projection has flipped this deliberately; a redeploy that did not read
+    # it back would return them to the named-value lists silently, and those
+    # lists stopped being maintained the moment they migrated. The developer
+    # population would shrink to whatever was last written to them, with no
+    # error anywhere. Same failure mode as the business unit registry above.
+    $entSrc = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id entitlement-source --query value -o tsv 2>$null
+    $entUrl = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id entitlement-resolver-url --query value -o tsv 2>$null
+    $entAud = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id entitlement-resolver-audience --query value -o tsv 2>$null
+    $entTtl = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id entitlement-cache-seconds --query value -o tsv 2>$null
     if (-not $allowStd) { $allowStd = '' }
     if (-not $allowPrm) { $allowPrm = '' }
     if (-not $quotaOvr) { $quotaOvr = '' }
@@ -639,6 +649,9 @@ if ($ExistingApim -or (az apim show -g $ResourceGroup -n $apimName --query name 
     }
     if ($keptBu.Count) {
         Write-Note "preserving $($keptBu.Count) business unit(s) and $($keptMem.Count) membership(s)"
+    }
+    if ($entSrc -eq 'projection') {
+        Write-Note "preserving entitlement source: projection (resolver $entUrl)"
     }
 }
 
@@ -700,6 +713,10 @@ az deployment group create `
         quotaPremium=$QuotaPremium `
         quotaOrg=$QuotaOrg `
         callsPerMinute=$CallsPerMinute `
+        entitlementSource=$(if ($entSrc) { $entSrc } else { 'named-value' }) `
+        entitlementResolverUrl=$(if ($entUrl) { $entUrl } else { 'https://resolver-not-deployed.invalid' }) `
+        entitlementResolverAudience=$(if ($entAud) { $entAud } else { 'https://resolver-not-deployed.invalid' }) `
+        entitlementCacheSeconds=$(if ($entTtl) { $entTtl } else { 3600 }) `
     -o none
 
 if ($LASTEXITCODE -ne 0) { throw 'Deployment failed. See the error above.' }

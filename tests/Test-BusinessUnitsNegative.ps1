@@ -921,6 +921,48 @@ $mutations = @(
        To    = 'nothing to bind, continuing' }
 
     @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the entitlement source switch disappears'
+       File  = 'infra/policy.xml'
+       From  = '{{entitlement-source}}'
+       To    = '{{allow-standard}}' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the named-value path stops being guarded'
+       File  = 'infra/policy.xml'
+       From  = 'when condition="@(!(bool)context.Variables["entResolved"])"'
+       To    = 'when condition="@(true)"' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'a resolver outage is called a forbidden'
+       File  = 'infra/policy.xml'
+       From  = 'not a problem with your access'
+       To    = 'you are not entitled' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the managed identity token failure reaches the developer'
+       File  = 'infra/policy.xml'
+       From  = 'context.Variables.ContainsKey("entResolving")'
+       To    = 'context.Variables.ContainsKey("neverSet")' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the resolver audience collapses into the url'
+       File  = 'infra/policy.xml'
+       From  = 'resource="{{entitlement-resolver-audience}}"'
+       To    = 'resource="{{entitlement-resolver-url}}"' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the switch defaults to the projection'
+       File  = 'infra/main.bicep'
+       From  = "param entitlementSource string = 'named-value'"
+       To    = "param entitlementSource string = 'projection'" }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'a redeploy silently un-migrates the gateway'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'named-value-id entitlement-source --query value'
+       To    = 'named-value-id bu-parents --query value' }
+
+    @{ Suite = 'Test-Scale.ps1'
        Name  = 'the Basic v2 networking floor is dropped'
        File  = 'docs/adr/0013-gateway-outlives-instance.md'
        From  = 'Basic v2 cannot run the design in ADR-0011 at any size'

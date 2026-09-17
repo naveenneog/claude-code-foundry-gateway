@@ -82,6 +82,24 @@ param buUnassigned string = 'allow'
 @description('Request-rate ceiling per developer per minute. Stops a runaway agent loop that makes many small calls.')
 param callsPerMinute int = 120
 
+@description('Where the gateway reads entitlement from. Leave on named-value until a projection exists and the shadow comparison reports no drift - see docs/adr/0013-gateway-outlives-instance.md.')
+@allowed([
+  'named-value'
+  'projection'
+])
+param entitlementSource string = 'named-value'
+
+@description('Base URL of the entitlement resolver. Only read when entitlementSource is projection. The placeholder is deliberate - an empty named value is awkward to reason about, and this one is obviously unset if it ever appears in a trace.')
+param entitlementResolverUrl string = 'https://resolver-not-deployed.invalid'
+
+@description('Entra audience the gateway asks for a managed identity token against, when calling the resolver. Separate from the URL on purpose: the two often differ, and conflating them produces a token the resolver rejects.')
+param entitlementResolverAudience string = 'https://resolver-not-deployed.invalid'
+
+@description('How long the gateway may serve an identity the directory has already changed, in seconds. This is the staleness bound, and it also sets the resolver cost, because cost follows cache misses rather than requests.')
+@minValue(60)
+@maxValue(86400)
+param entitlementCacheSeconds int = 3600
+
 @description('Object ids allowed at the standard tier. Normally left empty and populated by Sync-ClaudeAccess.ps1 from an Entra group.')
 param allowStandardOids array = []
 
@@ -295,6 +313,20 @@ var namedValues = [
   { key: 'calls-per-minute', value: string(callsPerMinute) }
   { key: 'allow-standard', value: allowStandardValue }
   { key: 'allow-premium', value: allowPremiumValue }
+  // Where the gateway reads entitlement from. 'named-value' is the list path
+  // this has always used; 'projection' is the resolver path from ADR-0011.
+  //
+  // Both paths live in the policy from this deployment onward, so moving a
+  // gateway that is already carrying traffic is a change to this value and not
+  // a policy deployment - see ADR-0013. The default keeps every existing
+  // deployment on exactly the path it is on today.
+  { key: 'entitlement-source', value: entitlementSource }
+  { key: 'entitlement-resolver-url', value: entitlementResolverUrl }
+  { key: 'entitlement-resolver-audience', value: entitlementResolverAudience }
+  // How long the gateway may serve an identity the directory has already
+  // changed. This is the staleness bound ADR-0005 requires, and it is also what
+  // sets the resolver's cost, because cost follows cache misses.
+  { key: 'entitlement-cache-seconds', value: string(entitlementCacheSeconds) }
 ]
 
 resource apimNamedValues 'Microsoft.ApiManagement/service/namedValues@2024-05-01' = [

@@ -52,9 +52,16 @@ Assert 'the refusal is in Anthropic shape'   ($refusal -match '"type", "error"')
 
 # The gate has to sit ahead of the managed-identity swap, otherwise a rejected
 # model has already been sent upstream.
+#
+# Specifically the swap that calls Foundry. There is a second
+# authentication-managed-identity earlier in the policy, for the entitlement
+# resolver, and it is not the one this is about - taking the first occurrence
+# made this assertion fail the moment that block was added, for a reason that
+# had nothing to do with model scoping. The Foundry one is identified by its
+# audience rather than by position.
 $gateAt = $policy.IndexOf('modelAllowed')
-$msiAt = $policy.IndexOf('authentication-managed-identity')
-Assert 'the model is checked before Foundry is called' (($gateAt -ge 0) -and ($msiAt -ge 0) -and ($gateAt -lt $msiAt)) "gate at $gateAt, managed identity at $msiAt"
+$msiAt = $policy.IndexOf('output-token-variable-name="msi-token"')
+Assert 'the model is checked before Foundry is called' (($gateAt -ge 0) -and ($msiAt -ge 0) -and ($gateAt -lt $msiAt)) "gate at $gateAt, Foundry managed identity at $msiAt"
 
 Write-Host ''
 Write-Host 'P13 capability scoping - settings, delivered per tier' -ForegroundColor Cyan

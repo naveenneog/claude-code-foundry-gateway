@@ -50,13 +50,137 @@
             catch { return "unknown"; }
         }" />
 
+        <!-- 2b. Where entitlement comes from.
+             
+             Both paths are here from this deployment onward, chosen by a named
+             value, so moving a gateway that is already carrying traffic is a
+             configuration change rather than a policy deployment. ADR-0013
+             records why: a policy that grows the resolver path later has to be
+             redeployed and re-verified against production traffic, on the day
+             nobody wants to be changing it.
+             
+             entitlement-source is 'named-value' everywhere until an operator
+             changes it, so this block resolves to nothing on every existing
+             deployment and the list path below runs exactly as it always has. -->
+        <set-variable name="entResolved" value="@(false)" />
+        <set-variable name="entResolving" value="@(false)" />
+        <choose>
+            <when condition="@("{{entitlement-source}}" == "projection")">
+                <choose>
+                    <!-- Configured to use the projection with no resolver behind
+                         it. This is a misconfiguration rather than an outage, and
+                         it is worth its own message: the operator who flipped
+                         entitlement-source is the only person who can fix it, and
+                         a generic "unavailable" sends them looking at the wrong
+                         thing. -->
+                    <when condition="@("{{entitlement-resolver-url}}".Contains("resolver-not-deployed"))">
+                        <return-response>
+                            <set-status code="503" reason="Service Unavailable" />
+                            <set-header name="Content-Type" exists-action="override">
+                                <value>application/json</value>
+                            </set-header>
+                            <set-body>@{
+                                return new JObject(
+                                    new JProperty("type", "error"),
+                                    new JProperty("error", new JObject(
+                                        new JProperty("type", "api_error"),
+                                        new JProperty("message",
+                                            "This gateway is configured to read entitlement from the projection, but no " +
+                                            "resolver is deployed. Set entitlement-resolver-url, or set entitlement-source " +
+                                            "back to named-value. No developer access has changed.")))
+                                ).ToString();
+                            }</set-body>
+                        </return-response>
+                    </when>
+                    <otherwise>
+                        <!-- Marked so on-error can tell an entitlement failure
+                             from any other, and answer 503 rather than 500.
+                             send-request's ignore-error covers a transport
+                             failure but not a managed-identity token failure,
+                             which throws out of the whole block. -->
+                        <set-variable name="entResolving" value="@(true)" />
+                        <cache-lookup-value key="@("ent:" + (string)context.Variables["userId"])" variable-name="entRecord" />
+                        <choose>
+                            <when condition="@(!context.Variables.ContainsKey("entRecord"))">
+                                <send-request mode="new" response-variable-name="entResponse" timeout="5" ignore-error="true">
+                                    <set-url>@("{{entitlement-resolver-url}}" + "/entitlement/" + (string)context.Variables["userId"])</set-url>
+                                    <set-method>GET</set-method>
+                                    <authentication-managed-identity resource="{{entitlement-resolver-audience}}" />
+                                </send-request>
+                                <choose>
+                                    <when condition="@(context.Variables.ContainsKey("entResponse") &amp;&amp; ((IResponse)context.Variables["entResponse"]).StatusCode == 200)">
+                                        <set-variable name="entRecord" value="@(((IResponse)context.Variables["entResponse"]).Body.As&lt;string&gt;(preserveContent: true))" />
+                                        <cache-store-value key="@("ent:" + (string)context.Variables["userId"])" value="@((string)context.Variables["entRecord"])" duration="@(int.Parse("{{entitlement-cache-seconds}}"))" />
+                                    </when>
+                                </choose>
+                            </when>
+                        </choose>
+                        <choose>
+                            <when condition="@(context.Variables.ContainsKey("entRecord"))">
+                                <set-variable name="tier" value="@{
+                                    var rec = JObject.Parse((string)context.Variables["entRecord"]);
+                                    var t = (string)rec["tier"];
+                                    return (t == "premium" || t == "standard") ? t : "denied";
+                                }" />
+                                <set-variable name="businessUnit" value="@{
+                                    var rec = JObject.Parse((string)context.Variables["entRecord"]);
+                                    var u = (string)rec["businessUnit"];
+                                    return string.IsNullOrEmpty(u) ? "unassigned" : u;
+                                }" />
+                                <set-variable name="entResolved" value="@(true)" />
+                                <set-variable name="entResolving" value="@(false)" />
+                            </when>
+                            <otherwise>
+                                <!-- The resolver did not answer and nothing
+                                     cached is within the staleness bound.
+                                     
+                                     ADR-0005 forbids treating this as
+                                     user-not-found. A 403 would tell an entitled
+                                     developer they have no access and send them
+                                     to their platform team with the wrong
+                                     problem. This is the gateway failing, not the
+                                     developer, so it says so and answers 503 -
+                                     which also puts it in availability metrics
+                                     rather than hiding it in the normal 403
+                                     rate. -->
+                                <return-response>
+                                    <set-status code="503" reason="Service Unavailable" />
+                                    <set-header name="Content-Type" exists-action="override">
+                                        <value>application/json</value>
+                                    </set-header>
+                                    <set-header name="Retry-After" exists-action="override">
+                                        <value>5</value>
+                                    </set-header>
+                                    <set-body>@{
+                                        return new JObject(
+                                            new JProperty("type", "error"),
+                                            new JProperty("error", new JObject(
+                                                new JProperty("type", "api_error"),
+                                                new JProperty("message",
+                                                    "The entitlement service did not answer and no recent answer is cached. " +
+                                                    "This is not a problem with your access - your platform team can see it in " +
+                                                    "the gateway's availability metrics. Retry shortly.")))
+                                        ).ToString();
+                                    }</set-body>
+                                </return-response>
+                            </otherwise>
+                        </choose>
+                    </otherwise>
+                </choose>
+            </when>
+        </choose>
+
         <!-- 3. Resolve the tier from Entra group membership. -->
-        <set-variable name="tier" value="@{
-            var oid = "," + (string)context.Variables["userId"] + ",";
-            if (("{{allow-premium}}").Contains(oid))  { return "premium"; }
-            if (("{{allow-standard}}").Contains(oid)) { return "standard"; }
-            return "denied";
-        }" />
+        <choose>
+            <when condition="@(!(bool)context.Variables["entResolved"])">
+                <set-variable name="tier" value="@{
+                    var oid = "," + (string)context.Variables["userId"] + ",";
+                    if (("{{allow-premium}}").Contains(oid))  { return "premium"; }
+                    if (("{{allow-standard}}").Contains(oid)) { return "standard"; }
+                    return "denied";
+                }" />
+            </when>
+        </choose>
 
         <!-- 4. Reject anyone not in a Claude Code group. -->
         <choose>
@@ -173,17 +297,21 @@
 
              Sentinel commas, so ",finance" cannot partially match
              ",finance-emea". Same convention as the entitlement lists. -->
-        <set-variable name="businessUnit" value="@{
-            var oid = (string)context.Variables["userId"];
-            var map = "{{bu-members}}";
-            var marker = "," + oid + "=";
-            var i = map.IndexOf(marker);
-            if (i < 0) { return "unassigned"; }
-            var start = i + marker.Length;
-            var end = map.IndexOf(",", start);
-            if (end < 0) { end = map.Length; }
-            return map.Substring(start, end - start);
-        }" />
+        <choose>
+            <when condition="@(!(bool)context.Variables["entResolved"])">
+                <set-variable name="businessUnit" value="@{
+                    var oid = (string)context.Variables["userId"];
+                    var map = "{{bu-members}}";
+                    var marker = "," + oid + "=";
+                    var i = map.IndexOf(marker);
+                    if (i < 0) { return "unassigned"; }
+                    var start = i + marker.Length;
+                    var end = map.IndexOf(",", start);
+                    if (end < 0) { end = map.Length; }
+                    return map.Substring(start, end - start);
+                }" />
+            </when>
+        </choose>
 
         <choose>
             <when condition="@((string)context.Variables["businessUnit"] == "unassigned" && "{{bu-unassigned}}" == "deny")">
@@ -477,6 +605,40 @@
              exceeded..."} - not Anthropic's error shape, so the client shows it
              raw. This replaces it with the shape Claude Code expects and names
              which budget ran out. -->
+        <choose>
+            <when condition="@(context.Variables.ContainsKey("entResolving") &amp;&amp; (bool)context.Variables["entResolving"])">
+                <!-- Anything that threw while resolving entitlement from the
+                     projection. send-request's ignore-error covers a transport
+                     failure, but a managed-identity token failure throws out of
+                     the whole block and would otherwise reach the developer as
+                     an unexplained 500.
+                     
+                     Answered here as 503 for the same reason as the inline path:
+                     this is the gateway failing, not the developer, and it must
+                     not read as a loss of access. -->
+                <return-response>
+                    <set-status code="503" reason="Service Unavailable" />
+                    <set-header name="Content-Type" exists-action="override">
+                        <value>application/json</value>
+                    </set-header>
+                    <set-header name="Retry-After" exists-action="override">
+                        <value>5</value>
+                    </set-header>
+                    <set-body>@{
+                        return new JObject(
+                            new JProperty("type", "error"),
+                            new JProperty("error", new JObject(
+                                new JProperty("type", "api_error"),
+                                new JProperty("message",
+                                    "The entitlement service could not be reached: " +
+                                    (context.LastError?.Reason ?? "unknown") +
+                                    ". This is not a problem with your access. Retry shortly.")))
+                        ).ToString();
+                    }</set-body>
+                </return-response>
+            </when>
+        </choose>
+
         <choose>
             <when condition="@(context.LastError?.Reason == "OpenAITokenQuotaExceeded")">
                 <return-response>

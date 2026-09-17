@@ -443,6 +443,44 @@ Assert 'and the two first-day decisions'        ($scale -match '(?i)Two things t
 Assert 'and links the decision record'          ($scale -match '0013-gateway-outlives-instance')
 
 Write-Host ''
+Write-Host 'Scale - the entitlement source is a switch, not a rewrite (P19a)' -ForegroundColor Cyan
+
+$pol = Get-Content (Join-Path $root 'infra/policy.xml') -Raw
+
+# Both paths ship together so a migration is a named-value change rather than a
+# policy deployment against a gateway carrying live traffic - ADR-0013.
+Assert 'the policy reads an entitlement source'  ($pol -match '\{\{entitlement-source\}\}')
+Assert 'and still has the named-value path'      ($pol -match '\{\{allow-premium\}\}.*Contains\(oid\)|Contains\(oid\)')
+Assert 'the list path is guarded, not deleted'   ($pol -match '(?s)when condition="@\(!\(bool\)context\.Variables\["entResolved"\]\)"')
+Assert 'the projection path caches the record'   ($pol -match 'cache-store-value key="@\("ent:"')
+Assert 'and the window is configurable'          ($pol -match '\{\{entitlement-cache-seconds\}\}')
+# The audience and the URL are different things; a token for the URL is rejected.
+Assert 'the token audience is its own value'     ($pol -match 'resource="\{\{entitlement-resolver-audience\}\}"')
+
+# ADR-0005: a lookup failure is not a user-not-found. 403 would tell an entitled
+# developer they had lost access.
+Assert 'a resolver failure answers 503'          ($pol -match '(?s)entitlement service did not answer[\s\S]{0,400}|503')
+Assert 'and says it is not the developer'        ($pol -match 'not a problem with your access')
+Assert 'a missing resolver is named as such'     ($pol -match 'resolver is deployed\. Set entitlement-resolver-url')
+Assert 'and says access has not changed'         ($pol -match 'No developer access has changed')
+# send-request's ignore-error does not cover a managed-identity token failure,
+# which throws out of the block and would otherwise reach the developer as 500.
+Assert 'on-error catches the entitlement phase'  ($pol -match 'context\.Variables\.ContainsKey\("entResolving"\)')
+
+$bicep = Get-Content (Join-Path $root 'infra/main.bicep') -Raw
+Assert 'the template creates the switch'         ($bicep -match "key: 'entitlement-source'")
+Assert 'and defaults it to the list path'        ($bicep -match "param entitlementSource string = 'named-value'")
+Assert 'the switch is constrained'               ($bicep -match "(?s)@allowed\(\[\s*'named-value'\s*'projection'\s*\]\)")
+
+# A redeploy that did not read the source back would return a migrated operator
+# to lists that stopped being maintained the moment they migrated.
+$inst = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
+Assert 'a redeploy preserves the source'         ($inst -match "named-value-id entitlement-source --query value")
+Assert 'and hands it back to the template'       ($inst -match 'entitlementSource=\$\(if \(\$entSrc\)')
+Assert 'the resolver settings survive too'       ($inst -match 'entitlementResolverUrl=\$\(if \(\$entUrl\)')
+Assert 'and it says so when migrated'            ($inst -match 'preserving entitlement source: projection')
+
+Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Scale contract holds.' -ForegroundColor Green
 exit 0
