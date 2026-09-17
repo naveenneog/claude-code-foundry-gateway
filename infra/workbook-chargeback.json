@@ -1,0 +1,257 @@
+{
+  "version": "Notebook/1.0",
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json",
+  "items": [
+    {
+      "type": 1,
+      "name": "header",
+      "content": {
+        "json": "## Claude gateway — chargeback in money\n\nWhat each business unit and each developer cost, for the selected period. Every figure comes from `ClaudeCost()`, the saved function over the API Management LLM log, the identity trace and the gateway's cached-token metric. Publish or refresh it with `./scripts/Publish-ClaudeQueries.ps1`, which also regenerates the price table from `config/price-book.json` and the membership table from the gateway itself.\n\n**Read the money this way.** Tokens are counted; dollars are derived from list price and are **not** reconciled to an Azure invoice — Azure bills Claude as one aggregated Claude Consumption Unit meter, and private-offer discounts apply before that conversion. Use these figures for showback and for comparing units against each other, not as an invoice.\n\n**Real spend is higher than shown, never lower.** Cache *reads* are priced here at a tenth of base input. Cache *writes* are not counted at all: the 5-minute and 1-hour categories exist only in the Anthropic response body, and reading that body in an outbound policy ends streaming."
+      }
+    },
+    {
+      "type": 9,
+      "name": "parameters",
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "range",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Period",
+            "type": 4,
+            "isRequired": true,
+            "value": { "durationMs": 2592000000 },
+            "typeSettings": {
+              "selectableValues": [
+                { "durationMs": 86400000 },
+                { "durationMs": 604800000 },
+                { "durationMs": 2592000000 },
+                { "durationMs": 7776000000 }
+              ]
+            }
+          },
+          {
+            "id": "bu",
+            "version": "KqlParameterItem/1.0",
+            "name": "BusinessUnit",
+            "label": "Business unit",
+            "type": 2,
+            "isRequired": true,
+            "value": "All",
+            "query": "datatable(x: string) ['All']\n| union (ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO})) | distinct x = business_unit)\n| order by x asc",
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces",
+            "typeSettings": { "additionalResourceOptions": [] }
+          }
+        ],
+        "style": "pills"
+      }
+    },
+    {
+      "type": 3,
+      "name": "kpi",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let t = ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| summarize spend = round(sum(usd), 2), inp = sum(prompt_tokens), outp = sum(completion_tokens), cache = sum(cache_read_tokens), devs = todouble(dcountif(user_id, user_id != ''));\nt | project Metric = 'Estimated spend (USD)', Value = spend\n| union (t | project Metric = 'Input tokens', Value = inp)\n| union (t | project Metric = 'Output tokens', Value = outp)\n| union (t | project Metric = 'Cache read tokens', Value = cache)\n| union (t | project Metric = 'Developers', Value = devs)",
+        "size": 4,
+        "title": "Totals for the period",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "titleContent": { "columnMatch": "Metric", "formatter": 1 },
+          "leftContent": {
+            "columnMatch": "Value",
+            "formatter": 12,
+            "formatOptions": { "palette": "auto" },
+            "numberFormat": { "unit": 0, "options": { "style": "decimal", "maximumFractionDigits": 2 } }
+          },
+          "showBorder": true
+        }
+      }
+    },
+    {
+      "type": 1,
+      "name": "cache-note",
+      "content": {
+        "json": "Cache reads are usually the largest number on this page and are easy to miss — measured 2026-09-17 on the reference gateway they were **98% of estimated spend** for the month to date. They are billed at a tenth of base input, so a large token count is a small but real cost. The per-developer budget counter does not see them at all."
+      }
+    },
+    {
+      "type": 1,
+      "name": "time-heading",
+      "content": { "json": "### Spend over time" }
+    },
+    {
+      "type": 3,
+      "name": "spend-over-time",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| summarize USD = round(sum(usd), 4) by day, business_unit\n| order by day asc\n| render areachart",
+        "size": 0,
+        "title": "Estimated spend by day, stacked by business unit",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "areachart"
+      }
+    },
+    {
+      "type": 1,
+      "name": "bu-heading",
+      "content": { "json": "### Spend by business unit" }
+    },
+    {
+      "type": 3,
+      "name": "spend-by-bu-chart",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| summarize USD = round(sum(usd), 2) by ['Business unit'] = business_unit\n| order by USD desc",
+        "size": 1,
+        "title": "Estimated spend by business unit",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart"
+      }
+    },
+    {
+      "type": 3,
+      "name": "spend-by-bu-table",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| summarize\n    ['Estimated spend (USD)'] = round(sum(usd), 2),\n    ['Metered (USD)'] = round(sum(prompt_usd) + sum(completion_usd), 2),\n    ['Cache read (USD)'] = round(sum(cache_read_usd), 2),\n    ['Input tokens'] = tolong(sum(prompt_tokens)),\n    ['Output tokens'] = tolong(sum(completion_tokens)),\n    ['Cache read tokens'] = tolong(sum(cache_read_tokens)),\n    ['Developers'] = dcountif(user_id, user_id != ''),\n    ['Requests'] = tolong(sum(requests))\n    by ['Business unit'] = business_unit, ['Parent'] = business_unit_parent\n| order by ['Estimated spend (USD)'] desc",
+        "size": 0,
+        "title": "Business units, with the parent each rolls up to",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "Estimated spend (USD)", "formatter": 4, "formatOptions": { "palette": "green" } },
+            { "columnMatch": "Cache read (USD)", "formatter": 4, "formatOptions": { "palette": "orange" } }
+          ]
+        }
+      }
+    },
+    {
+      "type": 1,
+      "name": "people-heading",
+      "content": { "json": "### Spend by developer" }
+    },
+    {
+      "type": 3,
+      "name": "spend-by-person",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| summarize\n    ['Estimated spend (USD)'] = round(sum(usd), 2),\n    ['Cache read (USD)'] = round(sum(cache_read_usd), 2),\n    ['Input tokens'] = tolong(sum(prompt_tokens)),\n    ['Output tokens'] = tolong(sum(completion_tokens)),\n    ['Cache read tokens'] = tolong(sum(cache_read_tokens)),\n    ['Requests'] = tolong(sum(requests)),\n    ['Models'] = make_set(model, 4)\n    by Developer = actor, ['Business unit'] = business_unit, Tier = tier\n| order by ['Estimated spend (USD)'] desc\n| take 100",
+        "size": 0,
+        "title": "Developers, most expensive first",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "Estimated spend (USD)", "formatter": 4, "formatOptions": { "palette": "green" } }
+          ]
+        }
+      }
+    },
+    {
+      "type": 1,
+      "name": "model-heading",
+      "content": { "json": "### Spend by model" }
+    },
+    {
+      "type": 3,
+      "name": "spend-by-model",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| summarize\n    ['Estimated spend (USD)'] = round(sum(usd), 2),\n    ['Input tokens'] = tolong(sum(prompt_tokens)),\n    ['Output tokens'] = tolong(sum(completion_tokens)),\n    ['Cache read tokens'] = tolong(sum(cache_read_tokens)),\n    ['Priced'] = iff(countif(not(priced_ok)) == 0, 'yes', 'NO — not in price book')\n    by Model = model\n| order by ['Estimated spend (USD)'] desc",
+        "size": 0,
+        "title": "Models, most expensive first",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "Estimated spend (USD)", "formatter": 4, "formatOptions": { "palette": "green" } }
+          ]
+        }
+      }
+    },
+    {
+      "type": 1,
+      "name": "surface-heading",
+      "content": { "json": "### Spend by client surface" }
+    },
+    {
+      "type": 3,
+      "name": "spend-by-surface",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| where '{BusinessUnit}' == 'All' or business_unit == '{BusinessUnit}'\n| summarize USD = round(sum(usd), 2) by ['Client surface'] = client_surface\n| order by USD desc",
+        "size": 1,
+        "title": "Estimated spend by client surface",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart"
+      }
+    },
+    {
+      "type": 1,
+      "name": "surface-note",
+      "content": {
+        "json": "The surface comes from the `User-Agent` the caller sends, parsed rather than matched against a list — measured 2026-09-16, Claude Code 2.1.241 identifies itself as `claude-cli/2.1.241 (external, sdk-cli)`, so a hard-coded list would have mis-bucketed the real CLI.\n\n**`cache (no surface)` is not a client.** The cached-token metric carries no user agent, so cache spend cannot be attributed to a surface. It is shown as its own bar rather than spread across the others in proportion to requests, because that allocation would be invented and cache is the largest component."
+      }
+    },
+    {
+      "type": 1,
+      "name": "quality-heading",
+      "content": { "json": "### Whether these numbers can be trusted" }
+    },
+    {
+      "type": 3,
+      "name": "quality",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let g = ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| summarize unpriced = round(sumif(usd, not(priced_ok)), 2), nodev = round(sumif(usd, actor == 'unattributed'), 2), nounit = round(sumif(usd, business_unit == 'unassigned'), 2), moved = round(sumif(usd, attribution == 'moved'), 2);\ng | project Metric = 'Spend on unpriced models (USD)', Value = unpriced\n| union (g | project Metric = 'Spend with no developer (USD)', Value = nodev)\n| union (g | project Metric = 'Spend with no business unit (USD)', Value = nounit)\n| union (g | project Metric = 'Spend that moved unit (USD)', Value = moved)",
+        "size": 4,
+        "title": "Attribution and pricing gaps — always for all units, ignoring the filter",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "titleContent": { "columnMatch": "Metric", "formatter": 1 },
+          "leftContent": {
+            "columnMatch": "Value",
+            "formatter": 12,
+            "formatOptions": { "palette": "auto" },
+            "numberFormat": { "unit": 0, "options": { "style": "decimal", "maximumFractionDigits": 2 } }
+          },
+          "showBorder": true
+        }
+      }
+    },
+    {
+      "type": 3,
+      "name": "provenance",
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "ClaudeCost(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| summarize\n    ['Price book read'] = take_any(price_book_date),\n    ['Membership read'] = take_any(membership_date),\n    ['Cache write counted'] = iff(take_any(cache_write_known), 'yes', 'no — spend is higher than shown')",
+        "size": 0,
+        "title": "What these figures were built from",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      }
+    },
+    {
+      "type": 1,
+      "name": "footer",
+      "content": {
+        "json": "**Unpriced models** are counted at zero dollars, so any figure above zero here means the totals on this page understate spend. Add the model with `./scripts/Add-ClaudeModel.ps1`, which refuses a model it has no price for.\n\n**No developer** means the identity trace did not join; that spend belongs to somebody. **No business unit** is the number to drive to zero before switching `bu-unassigned` to `deny`.\n\n**Moved unit** is spend the gateway stamped against one unit that today's membership assigns to another — normal after a reorganisation, and the reason this page follows today's membership rather than the stamp. `business_unit_at_time` on `ClaudeCost()` keeps the original stamp for audit.\n\n**Price book** and **membership read** are the dates those two generated tables were built. Both are baked in when the function is published, so re-run `./scripts/Publish-ClaudeQueries.ps1` after changing prices or moving people, or this page will answer with yesterday's org chart."
+      }
+    }
+  ]
+}

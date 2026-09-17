@@ -32,6 +32,10 @@ const portal = (p) => `https://portal.azure.com/#@${TENANT}/resource${p}`;
 const apimId = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}`;
 const aiId = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Insights/components/appi-claude-gateway`;
 const foundryId = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.CognitiveServices/accounts/${RESOURCE}`;
+// Printed by Publish-ClaudeWorkbook.ps1 when it publishes the chargeback
+// workbook. It is a generated guid rather than a name, so it cannot be derived.
+const WORKBOOK_ID = process.env.CHARGEBACK_WORKBOOK_ID ?? '';
+const workbookId = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Insights/workbooks/${WORKBOOK_ID}`;
 
 const STEPS = [
   {
@@ -167,6 +171,42 @@ const STEPS = [
     settle: 17000,
     banner: { title: 'Chargeback — set aggregation to Sum', note: 'Avg is tokens per request, not consumption' },
   },
+  // The money workbook. Published by ./scripts/Publish-ClaudeWorkbook.ps1 with
+  // -WorkbookFile infra/workbook-chargeback.json, which prints the resource id;
+  // set CHARGEBACK_WORKBOOK_ID to it. Workbooks run every tile's query on open,
+  // so these settle far longer than a blade that only renders ARM properties.
+  {
+    id: 'd1-chargeback-totals',
+    url: () => portal(workbookId),
+    needsAuth: true,
+    settle: 38000,
+    banner: {
+      title: 'Chargeback workbook — what the period cost',
+      note: 'Spend, input, output and cache-read tokens, then spend per day by business unit',
+    },
+  },
+  {
+    id: 'd2-chargeback-units',
+    url: () => portal(workbookId),
+    needsAuth: true,
+    settle: 38000,
+    scrollTo: 1700,
+    banner: {
+      title: 'Chargeback workbook — by business unit and by developer',
+      note: 'Metered and cache-read priced separately, and the parent each unit rolls up to',
+    },
+  },
+  {
+    id: 'd3-chargeback-models',
+    url: () => portal(workbookId),
+    needsAuth: true,
+    settle: 38000,
+    scrollTo: 3400,
+    banner: {
+      title: 'Chargeback workbook — by model, surface, and what cannot be trusted',
+      note: 'Unpriced models, spend with no owner, and the dates behind the figures',
+    },
+  },
 ];
 
 async function isSignedIn(page) {
@@ -210,12 +250,32 @@ for (const step of wanted) {
     continue;
   }
 
+  if (step.id.startsWith('d') && !WORKBOOK_ID) {
+    skipped.push(step.id);
+    console.log(`skip ${step.id}  (set CHARGEBACK_WORKBOOK_ID - Publish-ClaudeWorkbook.ps1 prints it)`);
+    continue;
+  }
+
   const url = typeof step.url === 'function' ? step.url() : step.url;
   console.log(`shot ${step.id}  ${step.banner?.title ?? ''}`);
 
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForTimeout(step.settle ?? 8000);
+
+    // A workbook is one long page, so the lower sections are captured by
+    // scrolling the blade's own scroll container rather than the window - the
+    // portal renders into a nested pane and window.scrollTo moves nothing.
+    if (step.scrollTo) {
+      await page.evaluate((y) => {
+        const scrollable = [...document.querySelectorAll('div')].find(
+          (d) => d.scrollHeight > d.clientHeight + 200 && d.clientHeight > 400,
+        );
+        if (scrollable) scrollable.scrollTop = y;
+        else window.scrollTo(0, y);
+      }, step.scrollTo);
+      await page.waitForTimeout(2500);
+    }
 
     const highlights = await resolveTargets(page, step.targets ?? []);
     const buf = await page.screenshot({ type: 'png' });

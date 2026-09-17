@@ -58,6 +58,29 @@ Step ids:
 | `a1`–`a8`, `b1`–`b5` | [Setup guide](../docs/SETUP.md) |
 | `c2-entra-groups`, `c3-group-members`, `c4-tier-budget` | [Onboarding guide](../docs/ONBOARDING.md) |
 | `c5-metrics` | [Monitoring guide](../docs/MONITORING.md) |
+| `d1`–`d3` | [Monitoring guide](../docs/MONITORING.md) — the chargeback workbook |
+
+The `d*` steps need the workbook to exist and its id passed in, because the id
+is a generated guid rather than a name and cannot be derived:
+
+```powershell
+# Publish it, then use the guid the publisher prints.
+./scripts/Publish-ClaudeWorkbook.ps1 -ResourceGroup rg-contosohub `
+    -WorkbookFile infra/workbook-chargeback.json -Name 'Claude gateway - chargeback'
+
+$env:CHARGEBACK_WORKBOOK_ID = "<guid it printed>"
+node guide/capture.mjs d1-chargeback-totals d2-chargeback-units d3-chargeback-models
+```
+
+Set `AZURE_TENANT` before `auth.mjs` as well as before `capture.mjs`. Without
+it the portal signs in to whichever directory the account defaults to, which
+for an account in more than one tenant is rarely the one holding the gateway —
+the capture then shows an empty blade rather than failing.
+
+A workbook runs every tile's query when it opens, so the `d*` steps settle far
+longer than a blade that only renders ARM properties, and `d2`/`d3` scroll the
+portal's own pane — `window.scrollTo` moves nothing, because the portal renders
+into a nested scroll container.
 
 Steps that need a portal session are **skipped, not failed**, when the profile
 is not signed in. A run with no session still produces the public-page

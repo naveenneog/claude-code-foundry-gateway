@@ -56,6 +56,16 @@ $headers = @{ Authorization = "Bearer $(Get-Token)"; 'Content-Type' = 'applicati
 # Kept apart on purpose: the ARM path is what a portal deep link needs, and
 # concatenating the management.azure.com base into one produces a link that
 # looks plausible and opens nothing.
+#
+# The tenant matters too. "#@/resource/..." - the form this script used to
+# emit - has an empty tenant, so the portal opens the resource in whichever
+# directory the browser last used. For an account in more than one tenant that
+# is usually the wrong one, and the blade then reports that the resource does
+# not exist. Naming the tenant makes the link work for whoever it is sent to,
+# not only for the person who generated it.
+$TenantId = az account show --query tenantId -o tsv 2>$null
+if ($TenantId) { $TenantId = $TenantId.Trim() }
+$portalBase = "https://portal.azure.com/#@$TenantId/resource"
 $armPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup"
 $rgScope = "https://management.azure.com$armPath"
 
@@ -72,7 +82,7 @@ if ($List) {
     Write-Host ("  {0,-34} {1}" -f 'Display name', 'Opens at')
     Write-Host ('  ' + ('-' * 100)) -ForegroundColor DarkGray
     foreach ($w in $ours) {
-        Write-Host ("  {0,-34} https://portal.azure.com/#@/resource{1}" -f $w.properties.displayName, $w.id)
+        Write-Host ("  {0,-34} {1}{2}" -f $w.properties.displayName, $portalBase, $w.id)
     }
     Write-Host ''
     exit 0
@@ -91,6 +101,14 @@ if (-not $WorkspaceName) {
 }
 
 $workspaceId = "$rgScope/providers/Microsoft.OperationalInsights/workspaces/$WorkspaceName"
+# The same workspace as a bare ARM resource id, with no management endpoint in
+# front of it. $workspaceId above is a REST URL and is correct for calling the
+# API; it is wrong everywhere the *portal* is the reader. A workbook's sourceId
+# and a tile's crossComponentResources are resource ids, and given a URL the
+# portal cannot resolve it - the workbook then opens with "No Log Analytics
+# workspace resources are selected" on every tile, which reads as a broken
+# dashboard rather than a malformed id.
+$workspaceArmId = "$armPath/providers/Microsoft.OperationalInsights/workspaces/$WorkspaceName"
 
 # Deterministic id from the display name, so re-running updates the workbook in
 # place rather than leaving a second copy beside the first.
@@ -110,6 +128,12 @@ if ($Remove) {
 }
 
 if (-not (Test-Path $WorkbookFile)) { throw "Missing workbook definition: $WorkbookFile" }
+# Resolve before reading. Test-Path resolves a relative path against the
+# PowerShell location, but [IO.File] uses the .NET current directory, which is
+# where the process started and is rarely the same. A relative -WorkbookFile
+# therefore passed the check above and then failed the read with a path nobody
+# typed.
+$WorkbookFile = (Resolve-Path $WorkbookFile).ProviderPath
 $json = [IO.File]::ReadAllText($WorkbookFile)
 
 # Fail before publishing rather than after: an invalid definition produces a
@@ -117,6 +141,50 @@ $json = [IO.File]::ReadAllText($WorkbookFile)
 # that refused.
 try { $null = $json | ConvertFrom-Json }
 catch { throw "$WorkbookFile is not valid JSON, so it would publish a workbook that cannot open. $($_.Exception.Message)" }
+
+# Bind every query tile to the workspace.
+#
+# sourceId below scopes the workbook, but it does not tell an individual tile
+# which resource to run its query against. Without that, a tile renders "No Log
+# Analytics workspace resources are selected. Please select Log Analytics
+# workspace." and the dashboard looks broken on first open - the operator is
+# expected to pick the workspace by hand, every time, on a workbook that already
+# knows which one it belongs to.
+#
+# Injected here rather than written into the .json so the definition stays
+# portable: the file ships with no subscription or workspace id in it, and each
+# deployment publishes the same file against its own workspace.
+$wb = $json | ConvertFrom-Json
+$bound = 0
+function Set-WorkbookScope($node) {
+    if ($null -eq $node) { return }
+    if ($node -is [System.Collections.IEnumerable] -and $node -isnot [string]) {
+        foreach ($child in $node) { Set-WorkbookScope $child }
+        return
+    }
+    if ($node -isnot [psobject]) { return }
+
+    foreach ($prop in @($node.PSObject.Properties)) {
+        # A query that targets a workspace needs the workspace naming it.
+        if ($prop.Name -eq 'resourceType' -and $prop.Value -eq 'microsoft.operationalinsights/workspaces') {
+            if ($node.PSObject.Properties.Name -contains 'crossComponentResources') {
+                $node.crossComponentResources = @($workspaceArmId)
+            } else {
+                $node | Add-Member -NotePropertyName 'crossComponentResources' -NotePropertyValue @($workspaceArmId)
+            }
+            $script:bound++
+        }
+        if ($prop.Value -is [psobject] -or ($prop.Value -is [System.Collections.IEnumerable] -and $prop.Value -isnot [string])) {
+            Set-WorkbookScope $prop.Value
+        }
+    }
+}
+Set-WorkbookScope $wb.items
+if (-not $bound) {
+    throw ("$WorkbookFile has no tile targeting a Log Analytics workspace, so nothing would query anything. " +
+           "Every query item needs resourceType 'microsoft.operationalinsights/workspaces'.")
+}
+$json = $wb | ConvertTo-Json -Depth 40 -Compress:$false
 
 # The workbook calls the saved functions. Publishing it against a workspace
 # where they do not exist gives every tile a "failed to resolve" error, which
@@ -139,7 +207,7 @@ $body = @{
         serializedData = $json
         version        = '1.0'
         category       = 'workbook'
-        sourceId       = $workspaceId
+        sourceId       = $workspaceArmId
     }
 } | ConvertTo-Json -Depth 6
 
@@ -149,7 +217,17 @@ Write-Host ("  published, bound to {0}" -f $WorkspaceName) -ForegroundColor Gree
 Write-Host ("  functions in use: {0}" -f ($needed -join ', ')) -ForegroundColor DarkGray
 Write-Host ''
 Write-Host '  Open it:' -ForegroundColor DarkGray
-Write-Host ("    https://portal.azure.com/#@/resource$armPath/providers/Microsoft.Insights/workbooks/$guid") -ForegroundColor Cyan
+Write-Host ("    $portalBase$armPath/providers/Microsoft.Insights/workbooks/$guid") -ForegroundColor Cyan
 Write-Host ''
-Write-Host '  Figures are list price and exclude cached tokens. See docs/MONITORING.md.' -ForegroundColor DarkGray
+# Derived from the file just published, not stated as a blanket fact. Two
+# workbooks ship and they differ: the usage workbook counts no cache at all,
+# while the chargeback workbook prices cache reads. A fixed sentence was true
+# for one and false for the other, and the false one understated the largest
+# component on the page.
+if ($json -match 'cache_read_usd') {
+    Write-Host '  Figures are list price. Cache reads are priced; cache writes are not counted' -ForegroundColor DarkGray
+    Write-Host '  at all, so real spend is higher than shown. See docs/MONITORING.md.' -ForegroundColor DarkGray
+} else {
+    Write-Host '  Figures are list price and exclude cached tokens. See docs/MONITORING.md.' -ForegroundColor DarkGray
+}
 Write-Host ''

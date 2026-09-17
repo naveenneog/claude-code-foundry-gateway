@@ -72,7 +72,9 @@ and they are set independently.
 | Change a tier's daily limit | `./scripts/Set-ClaudeTier.ps1 -Tier standard -DailyQuota 750000` |
 | Create a business unit or team | `./scripts/Set-ClaudeBusinessUnit.ps1 -Id mcaps -Group claude-bu-mcaps -MonthlyBudgetUsd 20000` |
 | See who spent what | `./scripts/Get-ClaudeBusinessUnit.ps1` |
+| Manage units and budgets in one place | `./scripts/Manage-ClaudeBusinessUnits.ps1` |
 | Open the dashboard | `./scripts/Publish-ClaudeWorkbook.ps1 -List`, then open the link it prints |
+| See what it cost, in money | `./scripts/Publish-ClaudeWorkbook.ps1 -WorkbookFile infra/workbook-chargeback.json -Name 'Claude gateway - chargeback'` |
 | Back up before a change | `./scripts/Backup-ClaudeGateway.ps1` |
 | Work out why something is refused | `./scripts/Debug-ClaudeCode.ps1` |
 
@@ -499,7 +501,13 @@ infra/
   main.bicep                   gateway, observability, API, policy, RBAC
   foundry-role.bicep           Cognitive Services User for the gateway identity
   policy.xml                   the governance policy
+  workbook.json                portal dashboard - usage, in tokens
+  workbook-chargeback.json     portal dashboard - chargeback, in money
   azuredeploy.json             compiled ARM, for the Deploy to Azure button
+analytics/
+  chargeback-ledger.kql        ClaudeChargeback() - one row per request
+  chargeback-cost.kql          ClaudeCost() - the same, priced in dollars
+  claude-code-daily.kql        ClaudeCodeDaily() - a day at a glance
 Install-ClaudeGateway.ps1        interactive admin setup - start here (Windows)
 install-claude-gateway.sh        the same, for macOS and Linux
 scripts/

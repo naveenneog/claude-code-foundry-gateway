@@ -13,6 +13,16 @@ import path from 'node:path';
 const PROFILE = path.resolve('.pw-profile');
 const DEADLINE_MS = 4 * 60 * 1000;
 
+// Which directory to sign in to. Without this the portal opens whichever
+// tenant the account defaults to, which is rarely the one holding the gateway:
+// an account in both a corporate tenant and a sandbox lands in the corporate
+// one, where the subscription is not, and every capture then shows an empty
+// blade. Set AZURE_TENANT to the tenant the gateway lives in.
+const TENANT = process.env.AZURE_TENANT ?? '';
+const url = TENANT
+  ? `https://portal.azure.com/#@${TENANT}/`
+  : 'https://portal.azure.com/';
+
 const ctx = await chromium.launchPersistentContext(PROFILE, {
   channel: 'msedge',
   headless: false,
@@ -21,7 +31,9 @@ const ctx = await chromium.launchPersistentContext(PROFILE, {
 });
 
 const page = ctx.pages()[0] ?? (await ctx.newPage());
-await page.goto('https://portal.azure.com/', { waitUntil: 'domcontentloaded' });
+if (TENANT) console.log(`Signing in to directory ${TENANT}`);
+else console.log('No AZURE_TENANT set - signing in to the account default directory.');
+await page.goto(url, { waitUntil: 'domcontentloaded' });
 
 console.log('Waiting for sign-in to complete...');
 console.log('If prompted, approve the request in Microsoft Authenticator.');

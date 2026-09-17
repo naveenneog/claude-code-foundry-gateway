@@ -37,6 +37,7 @@ param(
     [switch]$Remove,
     [string]$ResourceGroup = $(if ($env:CLAUDE_RG) { $env:CLAUDE_RG } else { 'rg-contosohub' }),
     [string]$WorkspaceName,
+    [string]$ApimName,
     [string]$SubscriptionId
 )
 
@@ -68,7 +69,103 @@ $QUERIES = @(
         }
         Help    = 'ClaudeCodeDaily() for yesterday, ClaudeCodeDaily(datetime(2026-09-15)) for a date.'
     }
+    @{
+        Alias   = 'ClaudeCost'
+        File    = 'analytics/chargeback-cost.kql'
+        Display = 'Claude chargeback in money'
+        Params  = 'p_from:datetime=datetime(null),p_to:datetime=datetime(null)'
+        Rewrite = [ordered]@{
+            'let _from = ago(1d);' = 'let _from = iff(isnull(p_from), ago(1d), p_from);'
+            'let _to = now();'     = 'let _to = iff(isnull(p_to), now(), p_to);'
+        }
+        # Two tables are generated into this one rather than typed into the file.
+        # See New-GeneratedBlock for why each refuses to publish empty.
+        Generate = @('PRICE-BOOK', 'MEMBERSHIP')
+        Help    = 'ClaudeCost() for the last day, ClaudeCost(startofmonth(now()), now()) for the month to date.'
+    }
 )
+
+function New-GeneratedBlock {
+    <#
+        Replaces a marked block in a .kql file with a table built from live
+        configuration, and refuses if the markers are gone.
+
+        The refusal matters more than the substitution. Both tables have a
+        placeholder that parses and runs: an empty price table prices every
+        model at null, and an empty membership table attributes every request to
+        whatever the gateway stamped at the time. Neither errors. A publish that
+        quietly skipped the substitution would produce a function that returns a
+        confident, wrong number - which is the failure this whole file is
+        written to avoid.
+    #>
+    param([string]$Kql, [string]$Marker, [string]$Block, [string]$File)
+
+    $begin = "// $Marker-BEGIN"
+    $end = "// $Marker-END"
+    $s = $Kql.IndexOf($begin)
+    $e = $Kql.IndexOf($end)
+    if ($s -lt 0 -or $e -lt 0 -or $e -lt $s) {
+        throw ("$File no longer contains the $begin / $end markers, so its $Marker table cannot be generated. " +
+               "Publishing anyway would leave the placeholder in place, and the placeholder returns a wrong " +
+               "answer rather than an error.")
+    }
+    return $Kql.Substring(0, $s) + $Block + "`n" + $Kql.Substring($e)
+}
+
+function New-PriceBlock {
+    $path = Join-Path $root 'config/price-book.json'
+    if (-not (Test-Path $path)) { $path = Join-Path $root 'config/price-book.example.json' }
+    $pb = Get-Content $path -Raw | ConvertFrom-Json
+    $models = @($pb.models.PSObject.Properties)
+    if (-not $models.Count) { throw "The price book at $path has no models, so nothing could be priced." }
+
+    $rows = @($models | ForEach-Object {
+        '    "{0}", {1}, {2}' -f $_.Name, $_.Value.inputPerM, $_.Value.outputPerM
+    }) -join ",`n"
+
+    return ("let price_book_date = `"{0}`";`n" -f $pb.date) +
+           "let price = datatable(model: string, input_per_m: real, output_per_m: real) [`n$rows`n];"
+}
+
+function New-MembershipBlock {
+    param([string]$Apim)
+
+    if (-not $Apim) {
+        $Apim = az apim list -g $ResourceGroup --query "[0].name" -o tsv 2>$null
+        if ($Apim) { $Apim = $Apim.Trim() }
+    }
+    if (-not $Apim) {
+        throw ("No API Management instance found in $ResourceGroup, so business unit membership could not be read. " +
+               "ClaudeCost attributes spend to the unit a developer belongs to today; without the mapping it would " +
+               "fall back to whatever was stamped at request time and disagree with Get-ClaudeBusinessUnit.ps1. " +
+               "Pass -ApimName.")
+    }
+
+    $members = az apim nv show -g $ResourceGroup --service-name $Apim --named-value-id 'bu-members' --query value -o tsv 2>$null
+    $parents = az apim nv show -g $ResourceGroup --service-name $Apim --named-value-id 'bu-parents' --query value -o tsv 2>$null
+
+    $parentOf = @{}
+    foreach ($e in @(($parents -as [string]).Trim(',') -split ',' | Where-Object { $_ })) {
+        if ($e -match '^(.+?)=(.+)$') { $parentOf[$Matches[1]] = $Matches[2] }
+    }
+
+    $rows = @(foreach ($e in @(($members -as [string]).Trim(',') -split ',' | Where-Object { $_ })) {
+        if ($e -match '^(.+?)=(.+)$') {
+            $oid = $Matches[1]; $unit = $Matches[2]
+            '    "{0}", "{1}", "{2}"' -f $oid, $unit, $(if ($parentOf[$unit]) { $parentOf[$unit] } else { '' })
+        }
+    })
+
+    # An empty mapping is published deliberately as an empty table rather than
+    # refused: a gateway with no business units yet is a legitimate state, and
+    # every row then reports attribution "stamped", which is accurate. What is
+    # refused above is being unable to *ask* - that is not the same as the
+    # answer being none.
+    $body = if ($rows.Count) { ($rows -join ",`n") } else { '    "", "", ""' }
+
+    return ("let membership_date = `"{0}`";`n" -f (Get-Date -Format 'yyyy-MM-dd')) +
+           "let membership = datatable(oid: string, unit: string, parent: string) [`n$body`n];"
+}
 
 function Get-Token {
     $t = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv 2>$null
@@ -149,6 +246,16 @@ foreach ($q in $selected) {
                    "Update the Rewrite table in this script to match the file.")
         }
         $kql = $kql.Replace($from, $q.Rewrite[$from])
+    }
+
+    foreach ($marker in @($q.Generate)) {
+        if (-not $marker) { continue }
+        $block = switch ($marker) {
+            'PRICE-BOOK' { New-PriceBlock }
+            'MEMBERSHIP' { New-MembershipBlock -Apim $ApimName }
+            default      { throw "Unknown generated block '$marker' in $($q.Alias)." }
+        }
+        $kql = New-GeneratedBlock -Kql $kql -Marker $marker -Block $block -File $q.File
     }
 
     $body = @{

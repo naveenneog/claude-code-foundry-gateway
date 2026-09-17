@@ -114,6 +114,103 @@ Assert 'it can list and remove'         ($w -match '\$List' -and $w -match '\$Re
 Assert 'the portal link uses the ARM path' ($w -match '\$armPath/providers/Microsoft\.Insights/workbooks')
 
 Write-Host ''
+Write-Host 'Observe - chargeback in money' -ForegroundColor Cyan
+
+$cost = Get-Content (Join-Path $root 'analytics/chargeback-cost.kql') -Raw
+
+# ADR-0010: categories are priced separately and never summed before pricing,
+# because a blended rate applied to a cache read overstates it tenfold.
+Assert 'prompt and completion are priced apart' (
+    $cost -match 'prompt_usd\s*=' -and $cost -match 'completion_usd\s*=')
+Assert 'cache read is priced at a tenth of input' ($cost -match 'cache_read_multiplier\s*=\s*0\.1')
+Assert 'and multiplied by the input rate'          ($cost -match 'input_per_m \* cache_read_multiplier')
+
+# Rates and membership are generated, never typed. Asserted by the markers the
+# publisher requires, so a hand-pasted table cannot satisfy this.
+Assert 'the price table is generated'  ($cost -match '(?m)^// PRICE-BOOK-BEGIN' -and $cost -match '(?m)^// PRICE-BOOK-END')
+Assert 'the membership table too'      ($cost -match '(?m)^// MEMBERSHIP-BEGIN' -and $cost -match '(?m)^// MEMBERSHIP-END')
+Assert 'both carry the date they were read' (
+    $cost -match 'price_book_date' -and $cost -match 'membership_date')
+
+# The measured disagreement this function exists to reconcile.
+Assert 'it attributes to today s unit'  ($cost -match '(?m)^\s*business_unit = coalesce\(iff\(unit_now')
+Assert 'and keeps the stamp for audit'  ($cost -match 'business_unit_at_time')
+Assert 'and marks spend that moved'     ($cost -match '"moved"')
+
+# An unpriced model must cost null, not zero - zero is a claim.
+Assert 'an unpriced model is not priced at zero' ($cost -match 'iff\(isnull\(input_per_m\), real\(null\)')
+Assert 'and the row says so'                     ($cost -match 'priced_ok = isnotnull\(input_per_m\)')
+
+# Cache has no surface on the metric, so it must not be spread across surfaces.
+Assert 'cache is not allocated to a surface' ($cost -match 'cache \(no surface\)')
+Assert 'and cache write is still declared missing' ($cost -match 'cache_write_known = false')
+
+$pq = Get-Content (Join-Path $root 'scripts/Publish-ClaudeQueries.ps1') -Raw
+Assert 'the publisher generates both tables' ($pq -match "Generate\s*=\s*@\('PRICE-BOOK', 'MEMBERSHIP'\)")
+# The placeholder parses and runs, so a skipped substitution returns a wrong
+# number rather than an error. Refusing is the whole point.
+Assert 'and refuses when a marker is gone'   ($pq -match 'cannot be generated')
+Assert 'membership is read from the gateway' ($pq -match "named-value-id 'bu-members'")
+Assert 'and it refuses when it cannot ask'   ($pq -match 'business unit membership could not be read')
+
+$wbc = Get-Content (Join-Path $root 'infra/workbook-chargeback.json') -Raw
+Assert 'a chargeback workbook ships'     ($wbc -match 'ClaudeCost\(')
+Assert 'it totals money'                 ($wbc -match 'Estimated spend \(USD\)')
+Assert 'it breaks down by business unit' ($wbc -match 'by \[.Business unit.\] = business_unit')
+Assert 'and by developer'                ($wbc -match 'by Developer = actor')
+Assert 'and by model'                    ($wbc -match 'by Model = model')
+Assert 'and by client surface'           ($wbc -match 'by \[.Client surface.\] = client_surface')
+Assert 'it separates cache from metered' ($wbc -match 'Cache read \(USD\)')
+Assert 'it states the figure is list price' ($wbc -match 'not.{0,4} reconciled to an Azure invoice')
+Assert 'and that real spend is higher'      ($wbc -match 'higher than shown, never lower')
+Assert 'it surfaces unpriced spend'         ($wbc -match 'Spend on unpriced models')
+Assert 'and spend that moved unit'          ($wbc -match 'Spend that moved unit')
+Assert 'and the dates behind the numbers'   ($wbc -match 'Price book' -and $wbc -match 'Membership read')
+try { $null = $wbc | ConvertFrom-Json; $wbcOk = $true } catch { $wbcOk = $false }
+Assert 'the workbook is valid JSON' $wbcOk 'it would publish and fail to open'
+
+# A relative -WorkbookFile passed Test-Path and then failed the read, because
+# [IO.File] uses the .NET current directory rather than the PowerShell location.
+Assert 'the workbook path is resolved before reading' ($w -match 'Resolve-Path \$WorkbookFile')
+
+# The portal reads resource ids, not REST URLs. Given the management endpoint in
+# front of the id it resolves nothing and every tile reports that no workspace
+# is selected, which reads as a broken dashboard rather than a malformed id.
+Assert 'a bare ARM workspace id is derived'  ($w -match '(?m)^\$workspaceArmId = "\$armPath/providers/Microsoft\.OperationalInsights')
+Assert 'and the workbook is sourced from it' ($w -match 'sourceId\s+= \$workspaceArmId')
+Assert 'the REST id keeps the endpoint'      ($w -match '(?m)^\$workspaceId = "\$rgScope/providers')
+
+# sourceId scopes the workbook; it does not tell a tile what to query.
+Assert 'every workspace tile is bound'  ($w -match "crossComponentResources' -NotePropertyValue @\(\`$workspaceArmId\)")
+Assert 'binding uses the ARM id too'    ($w -notmatch 'crossComponentResources = @\(\$workspaceId\)')
+Assert 'and a workbook that binds nothing is refused' ($w -match 'no tile targeting a Log Analytics workspace')
+# Two workbooks differ in how they treat cache, so the closing note is derived
+# from the file rather than stated as a blanket fact.
+Assert 'the cache note follows the file' ($w -match "if \(\`$json -match 'cache_read_usd'\)")
+
+# A tiles visualisation renders one tile per ROW, not one per column. Given a
+# single row of many columns the portal cannot infer a layout and the section
+# renders "Could not create tiles. Use tile settings to configure this section."
+# Both workbooks shipped that way. Checked structurally rather than by wording,
+# because the query text that produces the right shape has no fixed form.
+foreach ($f in 'infra/workbook.json', 'infra/workbook-chargeback.json') {
+    $doc = Get-Content (Join-Path $root $f) -Raw | ConvertFrom-Json
+    $tiles = @($doc.items | Where-Object { $_.content.visualization -eq 'tiles' })
+    Assert "$f has a tiles section" ($tiles.Count -gt 0)
+    foreach ($t in $tiles) {
+        $ts = $t.content.tileSettings
+        Assert "$f/$($t.name) maps a tile title" (
+            $ts -and $ts.titleContent -and $ts.titleContent.columnMatch) 'tiles need titleContent.columnMatch'
+        Assert "$f/$($t.name) maps a tile value" (
+            $ts -and $ts.leftContent -and $ts.leftContent.columnMatch) 'tiles need leftContent.columnMatch'
+        # One row per tile means the query projects a label column, so the
+        # column named by titleContent has to be produced by it.
+        Assert "$f/$($t.name) projects that column" (
+            $t.content.query -match [regex]::Escape($ts.titleContent.columnMatch))
+    }
+}
+
+Write-Host ''
 Write-Host 'Observe - documentation' -ForegroundColor Cyan
 
 $mon = Get-Content (Join-Path $root 'docs/MONITORING.md') -Raw

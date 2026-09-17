@@ -756,6 +756,98 @@ $mutations = @(
        From  = '38.7'
        To    = '0.0' }
 
+    # Money. ADR-0010: categories priced separately, never summed before pricing.
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'cache read is priced at the full input rate'
+       File  = 'analytics/chargeback-cost.kql'
+       From  = 'let cache_read_multiplier = 0.1;'
+       To    = 'let cache_read_multiplier = 1.0;' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'an unpriced model is costed at zero'
+       File  = 'analytics/chargeback-cost.kql'
+       From  = 'priced_ok = isnotnull(input_per_m)'
+       To    = 'priced_ok = true' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'spend stops following today s membership'
+       File  = 'analytics/chargeback-cost.kql'
+       From  = 'business_unit = coalesce(iff(unit_now'
+       To    = 'business_unit = coalesce(iff(false' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'cache is spread across client surfaces'
+       File  = 'analytics/chargeback-cost.kql'
+       From  = 'client_surface = "cache (no surface)"'
+       To    = 'client_surface = "claude-cli"' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the price table stops being generated'
+       File  = 'analytics/chargeback-cost.kql'
+       From  = '// PRICE-BOOK-BEGIN'
+       To    = '// PRICE-BOOK-PASTED' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the publisher stops refusing a missing marker'
+       File  = 'scripts/Publish-ClaudeQueries.ps1'
+       From  = 'cannot be generated'
+       To    = 'was skipped' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'membership failure degrades instead of refusing'
+       File  = 'scripts/Publish-ClaudeQueries.ps1'
+       From  = 'business unit membership could not be read'
+       To    = 'membership was skipped' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the money workbook drops the list price caveat'
+       File  = 'infra/workbook-chargeback.json'
+       From  = 'higher than shown, never lower'
+       To    = 'accurate to the invoice' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the money workbook stops showing developers'
+       File  = 'infra/workbook-chargeback.json'
+       From  = 'by Developer = actor'
+       To    = 'by Developer = tier' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'a tiles section goes back to one row of columns'
+       File  = 'infra/workbook-chargeback.json'
+       From  = '"titleContent": { "columnMatch": "Metric", "formatter": 1 },'
+       To    = '' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the usage workbook loses its tile mapping'
+       File  = 'infra/workbook.json'
+       From  = '"titleContent": { "columnMatch": "Metric", "formatter": 1 },'
+       To    = '' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the workbook path stops being resolved'
+       File  = 'scripts/Publish-ClaudeWorkbook.ps1'
+       From  = '$WorkbookFile = (Resolve-Path $WorkbookFile).ProviderPath'
+       To    = '$WorkbookFile = $WorkbookFile' }
+
+    # Both halves of the "no workspace selected" bug.
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the workbook is sourced from a REST url again'
+       File  = 'scripts/Publish-ClaudeWorkbook.ps1'
+       From  = 'sourceId       = $workspaceArmId'
+       To    = 'sourceId       = $workspaceId' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'tiles stop being bound to the workspace'
+       File  = 'scripts/Publish-ClaudeWorkbook.ps1'
+       From  = "-NotePropertyName 'crossComponentResources' -NotePropertyValue @(`$workspaceArmId)"
+       To    = "-NotePropertyName 'unusedBinding' -NotePropertyValue @(`$workspaceArmId)" }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'a workbook binding nothing publishes anyway'
+       File  = 'scripts/Publish-ClaudeWorkbook.ps1'
+       From  = 'no tile targeting a Log Analytics workspace'
+       To    = 'nothing to bind, continuing' }
+
     @{ Suite = 'Test-Observability.ps1'
        Name  = 'the workbook stops splitting by client'
        File  = 'infra/workbook.json'

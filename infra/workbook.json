@@ -137,13 +137,20 @@
       "name": "unattributed",
       "content": {
         "version": "KqlItem/1.0",
-        "query": "ClaudeChargeback(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| summarize\n    ['Requests'] = count(),\n    ['No caller'] = countif(actor == 'unattributed'),\n    ['No business unit'] = countif(business_unit == 'unassigned'),\n    ['No client'] = countif(client_surface == 'unknown')",
+        "query": "let g = ClaudeChargeback(datetime({TimeRange:startISO}), datetime({TimeRange:endISO}))\n| summarize reqs = todouble(count()), nocaller = todouble(countif(actor == 'unattributed')), nounit = todouble(countif(business_unit == 'unassigned')), noclient = todouble(countif(client_surface == 'unknown'));\ng | project Metric = 'Requests', Value = reqs\n| union (g | project Metric = 'No caller', Value = nocaller)\n| union (g | project Metric = 'No business unit', Value = nounit)\n| union (g | project Metric = 'No client', Value = noclient)",
         "size": 4,
         "title": "Attribution gaps",
         "queryType": 0,
         "resourceType": "microsoft.operationalinsights/workspaces",
         "visualization": "tiles",
         "tileSettings": {
+          "titleContent": { "columnMatch": "Metric", "formatter": 1 },
+          "leftContent": {
+            "columnMatch": "Value",
+            "formatter": 12,
+            "formatOptions": { "palette": "auto" },
+            "numberFormat": { "unit": 0, "options": { "style": "decimal", "maximumFractionDigits": 0 } }
+          },
           "showBorder": true
         }
       }

@@ -1,0 +1,176 @@
+// Chargeback in money - one row per day, identity, business unit, model and surface.
+//
+// ClaudeChargeback() answers "who spent this" in tokens. This answers "what did
+// it cost", which is the question a business unit owner actually asks, and it is
+// the fact table behind the consolidated workbook.
+//
+// Money is derived, never metered. Azure bills Claude as one aggregated Claude
+// Consumption Unit meter, so no Azure source can return dollars per developer or
+// per model - see docs/adr/0010-financial-semantics.md and U2. Every figure here
+// is list price and is not reconciled to an invoice.
+//
+// The price table below is GENERATED from config/price-book.json, and the
+// membership table from the gateway's own bu-members and bu-parents named
+// values, both by ./scripts/Publish-ClaudeQueries.ps1. Do not edit either by
+// hand: rates pasted into a query lose the date they were read on, and a stale
+// rate is indistinguishable from a current one. The publisher refuses to
+// publish if it cannot find the markers.
+//
+// Why membership is carried at all, when the trace already stamps a business
+// unit on every request: the two answer different questions, and measured
+// 2026-09-17 on the reference gateway they disagreed. One identity held 6,245
+// tokens stamped ites-1, 544 stamped unassigned and 158 stamped platform - the
+// same developer, across edits to the unit configuration. Attributing by the
+// stamp says what the gateway charged at the time. Attributing by today's
+// membership says what the unit owes under the current org chart, which is the
+// billing question, and is what Get-ClaudeBusinessUnit.ps1 reports: it totalled
+// all 6,947 against ites-1.
+//
+// So business_unit follows today's membership, which keeps this function and
+// that report in agreement, and business_unit_at_time keeps the stamp for the
+// audit question. A tile on the workbook shows where they differ, because that
+// difference is spend that moved between units.
+//
+// Substitute _from and _to to select a period. Defaults to the last day.
+let _from = ago(1d);
+let _to = now();
+// PRICE-BOOK-BEGIN
+let price_book_date = "unpublished";
+let price = datatable(model: string, input_per_m: real, output_per_m: real) [
+    "", real(null), real(null)
+];
+// PRICE-BOOK-END
+// MEMBERSHIP-BEGIN
+let membership_date = "unpublished";
+let membership = datatable(oid: string, unit: string, parent: string) [
+    "", "", ""
+];
+// MEMBERSHIP-END
+//
+// Cache read is a third category at a tenth of base input, per Claude's
+// published rates. ADR-0010 requires the categories to be priced separately and
+// never summed before pricing, because a blended rate applied to a cache read
+// overstates it tenfold.
+let cache_read_multiplier = 0.1;
+//
+// Model names on the wire carry a deployment suffix the price book does not
+// have - measured 2026-09-17, the console reports claude-haiku-4-5-20251001
+// where the book holds claude-haiku-4.5. Normalising both sides to letters and
+// digits lets a dated deployment match its family without a hand-maintained
+// alias list. An unmatched model still falls through to a null price rather
+// than a zero one: zero is a claim, null is the truth, and the workbook counts
+// the nulls on their own tile.
+let norm = (m: string) { tolower(replace_regex(m, @"[^A-Za-z0-9]", "")) };
+let priced = price | extend k = norm(model);
+//
+// Today's mapping, keyed by object id. A team rolls up to its parent, so a unit
+// owner sees their teams' spend inside their own total the way the console
+// report presents it.
+let unit_now = membership | where oid != "" | project oid, unit_now = unit, parent_now = parent;
+//
+// Metered tokens. The spine is ClaudeChargeback() rather than a second copy of
+// the log-plus-trace join, so identity resolution and client-surface parsing
+// have exactly one definition and cannot drift between the two functions.
+let metered =
+    ClaudeChargeback(_from, _to)
+    | summarize
+        prompt_tokens = sum(prompt_tokens),
+        completion_tokens = sum(completion_tokens),
+        requests = count()
+        by day = startofday(timestamp), user_id, actor, business_unit_at_time = business_unit, tier, model, client_surface
+    | extend k = norm(model)
+    | join kind=leftouter priced on k
+    | extend
+        prompt_usd = iff(isnull(input_per_m), real(null), (prompt_tokens / 1000000.0) * input_per_m),
+        completion_usd = iff(isnull(output_per_m), real(null), (completion_tokens / 1000000.0) * output_per_m)
+    | extend
+        cache_read_tokens = 0.0,
+        cache_read_usd = 0.0,
+        category = "metered",
+        priced_ok = isnotnull(input_per_m)
+    | project day, user_id, actor, business_unit_at_time, tier, model, client_surface,
+              requests, prompt_tokens, completion_tokens, cache_read_tokens,
+              prompt_usd, completion_usd, cache_read_usd, category, priced_ok;
+//
+// Cache reads come from the gateway's own llm-emit-token-metric, which is the
+// only source carrying them per identity. Measured 2026-09-17 on the reference
+// gateway: the dimensions are Model, Tier, UserId, User, SessionId and Region.
+//
+// There is no BusinessUnit dimension and no client surface, so neither can be
+// read off the metric. The business unit is recovered by mapping the identity
+// through the trace, which does carry it. The surface cannot be recovered at
+// all, and is reported as its own value rather than being spread across the
+// surfaces in proportion to requests - an allocation nobody measured is a
+// fabrication, and cache was 38.7% of cost weight on the reference gateway, so
+// fabricating it would move the largest number on the page.
+let unit_of =
+    AppTraces
+    | where TimeGenerated between (_from .. _to)
+    | where Properties.UserId != ""
+    | summarize
+        business_unit_at_time = take_any(tostring(Properties.BusinessUnit)),
+        actor = take_any(tostring(Properties.User))
+        by user_id = tostring(Properties.UserId);
+let cached =
+    AppMetrics
+    | where TimeGenerated between (_from .. _to)
+    | where Name == "Prompt Cached Tokens"
+    | extend user_id = tostring(Properties.UserId),
+             model = tostring(Properties.Model),
+             tier = tostring(Properties.Tier)
+    | where user_id != ""
+    | summarize cache_read_tokens = sum(Sum) by day = startofday(TimeGenerated), user_id, model, tier
+    | where cache_read_tokens > 0
+    | join kind=leftouter unit_of on user_id
+    | extend k = norm(model)
+    | join kind=leftouter priced on k
+    | extend cache_read_usd = iff(isnull(input_per_m), real(null),
+                                  (cache_read_tokens / 1000000.0) * input_per_m * cache_read_multiplier)
+    | extend
+        business_unit_at_time = coalesce(business_unit_at_time, "unassigned"),
+        actor = coalesce(actor, "unattributed"),
+        client_surface = "cache (no surface)",
+        requests = 0,
+        prompt_tokens = 0.0,
+        completion_tokens = 0.0,
+        prompt_usd = 0.0,
+        completion_usd = 0.0,
+        category = "cache_read",
+        priced_ok = isnotnull(input_per_m)
+    | project day, user_id, actor, business_unit_at_time, tier, model, client_surface,
+              requests, prompt_tokens, completion_tokens, cache_read_tokens,
+              prompt_usd, completion_usd, cache_read_usd, category, priced_ok;
+//
+// One fact table. Summing usd across every row is correct because the two
+// categories are disjoint: a metered row carries no cache and a cache row
+// carries no metered tokens.
+union metered, cached
+| extend usd = coalesce(prompt_usd, 0.0) + coalesce(completion_usd, 0.0) + coalesce(cache_read_usd, 0.0)
+| join kind=leftouter unit_now on $left.user_id == $right.oid
+// Today's unit wins, and a team rolls up to its parent. An identity that today's
+// mapping does not know falls back to the stamp rather than to "unassigned":
+// a developer who has left still spent the money, and dropping their unit would
+// quietly move historic spend off the unit that incurred it.
+| extend
+    business_unit = coalesce(iff(unit_now == "", "", unit_now), business_unit_at_time, "unassigned"),
+    business_unit_parent = iff(isempty(parent_now), "", parent_now),
+    attribution = case(
+        isempty(unit_now), "stamped",
+        unit_now == business_unit_at_time, "current",
+        "moved")
+| extend
+    actor = coalesce(actor, "unattributed"),
+    price_book_date = price_book_date,
+    membership_date = membership_date,
+    // Cache WRITE is still missing entirely. The 5-minute and 1-hour categories
+    // exist only in the Anthropic response body, and reading that body in an
+    // outbound policy buffers the response and ends streaming. So real spend is
+    // higher than this, never lower - carried as a column so a report cannot
+    // quietly drop the caveat.
+    cache_write_known = false
+| project day, actor, user_id, business_unit, business_unit_parent, business_unit_at_time,
+          attribution, tier, model, client_surface, category,
+          requests, prompt_tokens, completion_tokens, cache_read_tokens,
+          prompt_usd, completion_usd, cache_read_usd, usd,
+          priced_ok, price_book_date, membership_date, cache_write_known
+| order by day desc, usd desc

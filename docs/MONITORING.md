@@ -343,6 +343,76 @@ Every currency figure in the workbook is **list price** and the counter is blind
 to cached tokens, which was 38.7% of real cost weight on thirty days of measured
 usage. The workbook says so on the pane rather than in a footnote.
 
+### The chargeback workbook — the same question in money
+
+The workbook above counts tokens. A business unit owner asks what it cost, so a
+second workbook answers in dollars:
+
+```powershell
+# The function first. This one also bakes in the price book and the current
+# business unit membership, so it needs the gateway as well as the workspace.
+./scripts/Publish-ClaudeQueries.ps1 -ResourceGroup rg-contosohub `
+    -ApimName apim-claude-gw-fzgql9 -WorkspaceName log-claude-gw-fzgql9
+
+./scripts/Publish-ClaudeWorkbook.ps1 -ResourceGroup rg-contosohub `
+    -WorkspaceName log-claude-gw-fzgql9 `
+    -WorkbookFile infra/workbook-chargeback.json `
+    -Name 'Claude gateway - chargeback'
+```
+
+| Tile | Answers |
+|---|---|
+| Totals for the period | Spend, input, output and cache-read tokens, and how many developers |
+| Spend over time | Daily spend stacked by business unit |
+| Spend by business unit | What each unit and team cost, metered and cache priced apart |
+| Spend by developer | Who inside a unit drove it, most expensive first |
+| Spend by model | Where cost concentrates, and whether the model is in the price book |
+| Spend by client surface | CLI, Desktop, SDK — and cache, which has no surface |
+| Attribution and pricing gaps | Spend with no owner, no unit, an unknown price, or that moved unit |
+
+Pick a unit from the **Business unit** pill to filter every tile to it. The gaps
+tile deliberately ignores that filter, because a gap you have filtered out of
+view is a gap you will not fix.
+
+**Cache is usually the largest number on the page.** Measured 2026-09-17 on the
+reference gateway, cache reads were 98% of estimated spend for the month to
+date — 1,236,027 cached tokens against 6,245 metered ones. They are billed at a
+tenth of base input, so a very large token count is a small but real cost, and
+the per-developer budget counter cannot see any of it.
+
+#### Which business unit a request counts against
+
+The gateway stamps a business unit on every request, and that stamp is kept.
+But the workbook totals by the unit a developer belongs to **today**, because
+"what does this unit owe" must not change answer depending on when somebody was
+moved between teams.
+
+The two genuinely disagree. Measured 2026-09-17 on the reference gateway, one
+identity held 6,245 tokens stamped `ites-1`, 544 stamped `unassigned` and 158
+stamped `platform` — all the same developer, across edits to the configuration.
+Totalling by today's membership puts all 6,947 against `ites-1`, which is what
+`./scripts/Get-ClaudeBusinessUnit.ps1` reports, so the workbook and the console
+agree. The **Spend that moved unit** figure on the gaps tile is exactly that
+difference, and `business_unit_at_time` on `ClaudeCost()` keeps the original
+stamp for anyone who needs to audit what was charged at the time.
+
+Because membership is baked in when the function is published, **re-run
+`Publish-ClaudeQueries.ps1` after moving people between units**, or the workbook
+answers with yesterday's org chart. The **Membership read** tile shows the date
+it is working from.
+
+#### What it still cannot tell you
+
+Cache *writes* are not counted at all. The 5-minute and 1-hour categories exist
+only in the Anthropic response body, and reading that body in an outbound policy
+buffers the response and ends streaming. Real spend is therefore higher than the
+workbook shows, never lower.
+
+Unpriced models are counted at **zero dollars** and flagged rather than guessed.
+If **Spend on unpriced models** is above zero, the totals understate spend — add
+the model with `./scripts/Add-ClaudeModel.ps1`, which refuses a model it has no
+price for.
+
 ### If you would rather use Grafana
 
 `./scripts/Publish-ClaudeGrafana.ps1` publishes the same panels to an existing
