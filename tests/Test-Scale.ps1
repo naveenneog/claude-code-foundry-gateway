@@ -383,6 +383,27 @@ Assert 'the decision records are linked as a set' ($readme -match '\]\(docs/adr/
 Assert 'and the scale guide is in the index'      ($readme -match '\[Scale\]\(docs/SCALE\.md\)')
 
 Write-Host ''
+Write-Host 'Scale - the status page tells the truth about P19' -ForegroundColor Cyan
+
+$status = Get-Content (Join-Path $root 'docs/STATUS.md') -Raw
+
+# The failure this guards: a status page that reports a decision as though it
+# were a delivery. P19 has an ADR, a costing, a deployed-and-verified template
+# and a measured capacity result - and none of that raises the ceiling by one
+# developer, because nothing populates the projection and nothing reads it.
+Assert 'it says P19 is not finished'            ($status -match '(?i)Not finished')
+Assert 'and gives the ceiling that still binds' ($status -match 'about 93 developers')
+Assert 'it names population as missing'         ($status -match '(?s)not built[\s\S]{0,400}Population')
+Assert 'and the resolver'                       ($status -match '(?s)not built[\s\S]{0,700}resolver')
+Assert 'and the policy path'                    ($status -match '(?s)not built[\s\S]{0,1000}cache-lookup-value')
+# What is genuinely retired should be said too, or the entry reads as no
+# progress at all.
+Assert 'it records the storage risk as retired' ($status -match '(?i)Storage risk[\s\S]{0,140}Retired')
+Assert 'with the measurement behind it'         ($status -match '1 RU flat')
+# The open input is a decision, not an engineering task, and it blocks the rest.
+Assert 'it names the one open input'            ($status -match '(?i)how long the gateway may keep serving')
+
+Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Scale contract holds.' -ForegroundColor Green
 exit 0

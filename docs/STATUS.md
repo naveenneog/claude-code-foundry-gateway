@@ -1,6 +1,45 @@
 # Status
 
-**Active packet:** P37 — cache reads attributed to business units, the P19 platform decision, and two corrections to the scale record. M4 is complete. Full regression including the Azure half passes: 31 checks, 143 of 143 mutations caught.
+**Active packet:** P38 — the consolidated chargeback workbook, three budget and deployment controls that failed silently, and the Claude Desktop gateway sign-in step. Full regression including the Azure half passes: 32 checks, 193 of 193 mutations caught.
+
+## Where P19 stands, 2026-09-17
+
+**Not finished, and the shipped product still holds about 93 developers.** That number is
+measured, not estimated: `Measure-ClaudeCeiling.ps1` against the reference gateway reports
+`bu-members` at 218 of 4,096 characters with room for 88 more entries. Nothing about the 500,000
+requirement is in the running product today.
+
+What is settled:
+
+| | |
+|---|---|
+| **Platform** | Cosmos DB serverless plus a Function resolver — [ADR-0011](adr/0011-projection-platform.md) |
+| **Cost** | $11.11/month at 500,000 developers, computed by `Measure-ClaudeProjectionCost.ps1`, after deploying corrected the first figure |
+| **Shape** | Two orthogonal switches rather than a size ladder — [ADR-0012](adr/0012-store-and-availability.md) |
+| **Storage risk** | Retired. Point reads measured **1 RU flat** at ~1, 500, 20,000 and 100,000 records, 24–47 ms. The collection growing does not make a lookup cost more |
+| **Migration** | Shadow comparison built and negative-tested — [ADR-0009](adr/0009-shadow-migration.md) |
+
+What is not built, and is what a 500,000-developer deployment needs:
+
+- **Population.** Nothing writes the projection from Entra. Backfill was measured at ~190
+  records/second, so 500,000 identities is about 45 minutes — a number, not a design.
+- **The resolver.** No Function exists. It must be Flex Consumption, because Y1 Consumption has no
+  VNet integration and the Cosmos account comes back with public access disabled.
+- **The policy path.** `cache-lookup-value` plus `send-request` to the resolver, with the failure
+  contract ADR-0005 requires: bounded stale authorization, deny past the limit, and never treat a
+  lookup failure as user-not-found.
+- **The switches.** `-EntitlementStore` and `-ProjectionHa` are described in ADR-0012 and
+  implemented nowhere.
+
+The infrastructure template exists and has been deployed once and verified, then torn down —
+`infra/projection.bicep`, partitioned on `/oid`. There is no Cosmos account or Function in the
+reference resource group today; `az cosmosdb list` and `az functionapp list` both return nothing
+belonging to this accelerator.
+
+**The one open input is still not a technical one:** how long the gateway may keep serving someone
+the directory has already revoked. That number sets the cache window, and the cache window sets the
+cost — 15 minutes is $15.69/month, 4 hours is $0.84. It costs nothing to decide and the design
+cannot be finished without it.
 
 ## The P19 platform decision, 2026-09-17
 
@@ -78,7 +117,7 @@ Three decisions, and only one of them is technical:
 
 | | |
 |---|---|
-| **When** | Not yet. Eight identities against a ~93 ceiling. `Test-ClaudeHealth.ps1` flags at 80% |
+| **When** | Not yet, on the reference gateway: 8 identities against a ~93 ceiling, and `Test-ClaudeHealth.ps1` flags at 80%. For an organisation that already has more than about 90 developers, the answer is *before rollout*, because the ceiling is reached on the first day rather than gradually |
 | **The staleness window** | How long the gateway may keep serving someone the directory has already revoked. Today's implicit answer is "until the next sync", unbounded and unstated. Costs nothing to decide and is the input the design needs |
 | **What hosts it** | The billable one. Raising the APIM SKU is the tempting wrong answer — Standard v2 raises the *count* of named values, not the 4,096-character limit per value, which is what binds |
 
