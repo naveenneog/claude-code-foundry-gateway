@@ -504,6 +504,54 @@ $mutations = @(
        From  = '**511s**'
        To    = 'some seconds' }
 
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the binding ceiling goes back to the tier figure'
+       File  = 'docs/SCALE.md'
+       From  = 'business-unit membership runs out first'
+       To    = 'tier lists run out first' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the token-claim dead end stops being recorded'
+       File  = 'docs/SCALE.md'
+       From  = '### Why not put the tier in the token'
+       To    = '### An aside' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the reason the claim cannot be added is dropped'
+       File  = 'docs/SCALE.md'
+       From  = 'do not own that registration'
+       To    = 'could configure it' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the cost model stops charging per cache miss'
+       File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
+       From  = '$missesPerMonth     = [long]($DailyActive * $missesPerActiveDay * $WorkingDaysPerMonth)'
+       To    = '$missesPerMonth     = [long]($DailyActive * $WorkingDaysPerMonth)' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the free execution grant disappears'
+       File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
+       From  = '[long]$FreeExecutionsPerMonth = 1000000'
+       To    = '[long]$FreeGrant = 1000000' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'rates become constants with no read date'
+       File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
+       From  = 'read 2026-09-17'
+       To    = 'read recently' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the serverless latency trade stops being recorded'
+       File  = 'docs/adr/0011-projection-platform.md'
+       From  = 'no guaranteed throughput or latency'
+       To    = 'predictable performance' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the cache window becomes a budget decision'
+       File  = 'docs/adr/0011-projection-platform.md'
+       From  = 'choose the window on the revocation requirement'
+       To    = 'choose the window on the invoice' }
+
     # --- adding a model, and plugin governance ---
 
     @{ Suite = 'Test-ModelsAndPlugins.ps1'

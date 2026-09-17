@@ -1,6 +1,67 @@
 # Status
 
-**Active packet:** P37 — cache reads attributed to business units. M4 is complete. Full regression including the Azure half passes: 31 checks, 135 of 135 mutations caught.
+**Active packet:** P37 — cache reads attributed to business units, the P19 platform decision, and two corrections to the scale record. M4 is complete. Full regression including the Azure half passes: 31 checks, 143 of 143 mutations caught.
+
+## The P19 platform decision, 2026-09-17
+
+The operator chose **Cosmos DB serverless with an Azure Function resolver**, recorded as
+[ADR-0011](adr/0011-projection-platform.md). ADR-0005 decided what entitlement becomes and
+deliberately did not name a platform; this names it and prices it.
+
+**The standing-cost objection does not survive the arithmetic.** At the full requirement — 500,000
+developers, 50,000 active on a working day, a 60-minute cache window — it is **$3.81 a month**:
+$1.56 Functions, $2.20 Cosmos request units, $0.05 storage. Computed by
+`scripts/Measure-ClaudeProjectionCost.ps1`, not quoted, because the number that decides it is the
+cache miss rate and nobody can look that up.
+
+The reason it is that small: the resolver is called **once per cache window per active developer**,
+not once per request. A developer making 500 calls an hour and one making 5 cost the same.
+
+| Cache window | Misses per month | Per month | A revoked developer keeps working for up to |
+|---|---:|---:|---|
+| 240 minutes | 2,200,000 | $0.84 | 4 hours |
+| 60 minutes | 8,800,000 | $3.81 | 1 hour |
+| 15 minutes | 35,200,000 | $15.69 | 15 minutes |
+
+Every row is affordable, so **the window is a revocation decision, not a budget one**. That reframes
+the one question still open from ADR-0005: it was never going to be settled by cost.
+
+**What it costs in latency, not money.** Serverless offers no guaranteed throughput or latency, and
+caps at 5,000 RU/s per physical partition — against an average under 15 RU/s at full scale, so
+headroom is not the concern. It is survivable only because the resolver sits behind the APIM cache,
+which is why ADR-0005 put it there. Functions Consumption cold starts land in p99 on a miss; the
+escape is a Premium plan with a warm instance, and that does carry a standing bill.
+
+**Still not decided:** the staleness window itself, and when to build. Eight identities against a
+binding ceiling of about 93 — `Test-ClaudeHealth.ps1` flags at 80%.
+
+### Two corrections to SCALE.md, 2026-09-17
+
+**The binding ceiling was the wrong number.** The page headlined *"the binding limit is 110
+developers per tier"* while its own table already gave the business-unit map as about 93. Both
+figures were right; the prose picked the larger one. A `bu-members` entry is `oid=unit,` — 38
+characters plus the unit name, against 37 for a bare object id — so with a six-character unit id it
+holds 93 and a longer name holds fewer. Business-unit membership runs out first, and planning
+against 110 over-plans by roughly a fifth. Measured on the live gateway: `allow-*` 38 characters per
+entry, `bu-members` 44.
+
+**The token-claim alternative was never written down.** The first thing a reviewer proposes for P19
+is to put the tier in an Entra app role or the `groups` claim and drop the lookup entirely — no
+projection, no resolver, no standing cost. It cannot work: the policy validates the audience
+`https://cognitiveservices.azure.com`, a first-party Microsoft resource, and app roles and the
+groups claim are configured on the application registration that the token is issued for. Nobody
+here owns that registration, so there is nowhere to put the claim. Recorded so it is not
+re-proposed each review.
+
+### What P19 actually needs from the operator
+
+Three decisions, and only one of them is technical:
+
+| | |
+|---|---|
+| **When** | Not yet. Eight identities against a ~93 ceiling. `Test-ClaudeHealth.ps1` flags at 80% |
+| **The staleness window** | How long the gateway may keep serving someone the directory has already revoked. Today's implicit answer is "until the next sync", unbounded and unstated. Costs nothing to decide and is the input the design needs |
+| **What hosts it** | The billable one. Raising the APIM SKU is the tempting wrong answer — Standard v2 raises the *count* of named values, not the 4,096-character limit per value, which is what binds |
 
 ## P37 acceptance criteria — chargeback counts cache reads
 

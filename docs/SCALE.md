@@ -22,13 +22,48 @@ It exits non-zero when a list is past 80% of its limit, so it runs as a check.
 | Entries in the business-unit map | **about 93** | Derived. An entry is `oid=unit,`, so it costs more than a bare object id. The script measures the real cost from your own data |
 | Named values per instance | 5,000 Basic/Basic v2, 10,000 Standard/Standard v2, 18,000 Premium/Premium v2 | [Published](https://learn.microsoft.com/azure/api-management/service-limits) |
 
-The binding limit is **110 developers per tier**. Everything else on the
-instance has orders of magnitude more headroom.
+The binding limit is **business-unit membership, at about 93 developers** — not
+the 110 a tier list holds. A `bu-members` entry is `oid=unit,`: 38 characters
+plus the business-unit name, against 37 for a bare object id. With a
+six-character unit id that is 44 characters and the map holds 93; a **longer unit
+name** costs more and holds fewer.
+
+So business-unit membership runs out first, and planning against 110 over-plans
+by roughly a fifth. Everything else on the instance has orders of magnitude more
+headroom.
+
+`Measure-ClaudeCeiling.ps1` derives this from your own data rather than assuming
+either figure, because the cost per entry depends on names you choose.
 
 A write that would exceed 4,096 characters **fails outright**. It does not
 truncate, so entitlement does not silently lose its tail — but the sync has to
 notice the failure, which is why `ApimNamedValue.ps1` checks the size before
 writing and throws rather than discarding the exit code.
+
+### Why not put the tier in the token
+
+The obvious alternative is to stop looking entitlement up at all: put the tier in
+an Entra **app role** or a **groups** claim, and let the gateway read it straight
+off the validated token. No projection, no resolver, no standing cost, and it
+scales to any number of developers.
+
+It cannot work here, and the reason is worth keeping written down because it is
+the first thing a reviewer proposes.
+
+Claude Code acquires a token for the **Foundry data plane**, so the gateway
+validates the audience `https://cognitiveservices.azure.com` (and
+`https://ai.azure.com`). Those are first-party Microsoft resources. App roles and
+the `groups` claim are configured on the *application registration* that the
+token is issued for — `optionalClaims` and `appRoles` in its manifest — and you
+**do not own that registration**. There is nowhere to put the claim.
+
+Changing the audience to an application you do own would mean Claude Code
+requesting a token for it, which is not configurable: the client asks for the
+Foundry data plane because that is what it is calling.
+
+That is why entitlement is a lookup rather than a claim, and why
+[ADR-0005](adr/0005-identity-projection.md) is about *where the lookup reads
+from* rather than whether there is one.
 
 ### Sharding does not rescue it
 
@@ -106,6 +141,19 @@ limit, which is **U9**.
 2. Load-test API Management, Foundry capacity, telemetry ingestion and quota
    composition **together**. Each is fine alone; the interaction is what fails.
 3. Only then size the projection in [ADR-0005](adr/0005-identity-projection.md).
+
+The projection runs on Cosmos DB serverless with a Function resolver, decided in
+[ADR-0011](adr/0011-projection-platform.md). What it costs is computed rather
+than quoted:
+
+```powershell
+./scripts/Measure-ClaudeProjectionCost.ps1 -Developers 500000 -DailyActive 50000
+```
+
+At the full 500,000-developer requirement that is **$3.81 a month** — the
+resolver is called once per cache window per active developer, not once per
+request, so the cache absorbs almost all of it. The standing-cost objection to
+ADR-0005 does not survive the arithmetic.
 
 ---
 

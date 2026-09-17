@@ -73,8 +73,19 @@ Write-Host 'Scale - the envelope' -ForegroundColor Cyan
 Assert 'the envelope is documented' (Test-Path $scale)
 $s = Get-Content $scale -Raw
 
-Assert 'it names the binding limit'      ($s -match '110 developers per tier')
-Assert 'it states writes fail, not truncate' ($s -match 'fails outright')
+Assert 'it names the tier list ceiling'  ($s -match '110 object ids is 4,071 characters')
+# 110 is right for a tier list and wrong as *the* ceiling. A bu-members entry is
+# "oid=unit," - 38 characters plus the unit name - so it holds about 93 with a
+# six-character unit id, and fewer with a longer one. Business-unit membership
+# therefore runs out first, and an operator planning against 110 over-plans by
+# roughly a fifth.
+#
+# \s+ between words and a tolerant gap for markdown emphasis: the sentence wraps
+# and carries ** around "longer unit name", so a plain phrase match fails for
+# reasons that have nothing to do with the claim.
+Assert 'it names the lower business-unit ceiling' ($s -match '(?m)about 93')
+Assert 'and says that one binds first'            ($s -match 'business-unit membership\s+runs out first')
+Assert 'and that it varies with the unit name'    ($s -match 'longer unit\W+name')Assert 'it states writes fail, not truncate' ($s -match 'fails outright')
 Assert 'it rejects sharding as the escape'   ($s -match 'Sharding does not rescue it')
 Assert 'and says why, not just that'         ($s -match 'in \*\*API Management policy configuration\*\* is what cannot work')
 
@@ -98,6 +109,16 @@ foreach ($e in 'Scale-out', 'Policy deployment', 'Period rollover') {
 }
 
 Assert 'it points at the projection decision' ($s -match 'adr/0005-identity-projection\.md')
+
+# The first thing a reviewer proposes is "put the tier in a token claim and skip
+# the lookup". It cannot work here and that has to be written down, or it gets
+# re-proposed every review: the policy validates tokens for
+# https://cognitiveservices.azure.com, a first-party Microsoft resource, and
+# app roles and the groups claim are configured on the application registration.
+# Nobody here owns that registration, so there is nowhere to put the claim.
+Assert 'the closed token-claim path is recorded' ($s -match '(?m)^### Why not put the tier in the token')
+Assert 'it names the audience that closes it'    ($s -match 'cognitiveservices\.azure\.com')
+Assert 'and why the claim cannot be added'       ($s -match 'do not own that registration')
 
 Write-Host ''
 Write-Host 'Scale - the shadow comparison (P19b)' -ForegroundColor Cyan
@@ -194,6 +215,62 @@ Assert 'the measured bound is documented'  ($s -match 'delayed kill switch, not 
 Assert 'with the measured terms'           ($s -match '\*\*193s worst\*\*' -and $s -match '\*\*17s\*\*' -and $s -match '\*\*511s\*\*')
 Assert 'it says why the median is not used' ($s -match 'A bound built on the median would be wrong')
 Assert 'and what a hard cap would need'     ($s -match 'admission-time budget reservation')
+
+Write-Host ''
+Write-Host 'Scale - what the projection costs (ADR-0011)' -ForegroundColor Cyan
+
+$cost = Join-Path $root 'scripts/Measure-ClaudeProjectionCost.ps1'
+Assert 'a cost model exists' (Test-Path $cost)
+
+# Behavioural. The claim that decides P19 is that the bill is small at the full
+# requirement, so assert the number rather than the prose describing it.
+$big = & $cost -Developers 500000 -DailyActive 50000 -CacheMinutes 60 -AsJson | ConvertFrom-Json
+Assert '500k developers cost single-digit dollars' ($big.monthly_usd.total -lt 10 -and $big.monthly_usd.total -gt 0) "got $($big.monthly_usd.total)"
+Assert 'and the projection is under a gigabyte'    ($big.derived.storage_gb -lt 1) "got $($big.derived.storage_gb)"
+
+# Cost follows cache misses, not requests. If that ever inverts, the model is
+# measuring the wrong thing and every figure built on it is wrong.
+$short = & $cost -Developers 500000 -DailyActive 50000 -CacheMinutes 15 -AsJson | ConvertFrom-Json
+Assert 'a shorter cache window costs more' ($short.monthly_usd.total -gt $big.monthly_usd.total)
+Assert 'and it scales with the window, four to one' `
+    ([math]::Abs(($short.derived.misses_per_month / $big.derived.misses_per_month) - 4) -lt 0.01)
+
+# A pilot must cost nothing measurable, or the pay-per-use claim is not true.
+$small = & $cost -Developers 8 -DailyActive 8 -AsJson | ConvertFrom-Json
+Assert 'a small pilot is free' ($small.monthly_usd.total -eq 0) "got $($small.monthly_usd.total)"
+
+# Rates change and are regional. They must be parameters with a read date, not
+# constants buried in arithmetic - the same reason the token price book moved to
+# config/price-book.json.
+$c = Get-Content $cost -Raw
+Assert 'rates are parameters'      ($c -match '\[decimal\]\$UsdPerMillionRu')
+Assert 'and carry a read date'     ($c -match 'read 2026-09-17')
+
+# The free grant, asserted by its effect rather than by its name. Renaming only
+# the parameter leaves the body referencing an undefined variable, which
+# PowerShell coerces to 0 - the grant silently disappears while the identifier
+# is still present in the file, so a name match passes on broken code.
+#
+# 28,409 active developers is about 5M executions, comfortably past the 1M
+# grant, so the grant has to be visible in the arithmetic.
+$above = & $cost -Developers 500000 -DailyActive 28409 -AsJson | ConvertFrom-Json
+$execs = $above.derived.misses_per_month
+$expected = [math]::Round((($execs - 1000000) / 1000000) * 0.20, 2)
+Assert 'the free execution grant is subtracted' `
+    ($above.monthly_usd.functions -eq $expected) "got $($above.monthly_usd.functions), expected $expected from $execs executions"
+
+$a11 = Join-Path $root 'docs/adr/0011-projection-platform.md'
+Assert 'the platform decision is recorded' (Test-Path $a11)
+$d11 = Get-Content $a11 -Raw
+Assert 'it names both components'  ($d11 -match 'Cosmos DB serverless' -and $d11 -match 'Functions on the Consumption plan')
+Assert 'it states the total'       ($d11 -match '\*\*\$3\.81\*\*')
+# Serverless is cheap and gives no latency guarantee. Recording the price
+# without the trade would be selling it.
+Assert 'it records the latency trade' ($d11 -match 'no guaranteed throughput or latency')
+Assert 'and the serverless ceiling'   ($d11 -match '5,000 RU/s')
+# The window is a revocation decision, not a budget one.
+Assert 'it says to choose the window on revocation' ($d11 -match 'choose the window on the revocation requirement')
+Assert 'and leaves that number open' ($d11 -match 'remains open')
 
 Write-Host ''
 Write-Host 'Scale - reachable from the README' -ForegroundColor Cyan

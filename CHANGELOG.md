@@ -28,6 +28,27 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- **The P19 platform is decided and priced.** Cosmos DB serverless with an Azure
+  Function resolver, recorded in
+  [ADR-0011](docs/adr/0011-projection-platform.md).
+  `scripts/Measure-ClaudeProjectionCost.ps1` computes the running cost rather
+  than quoting one, because the figure that decides it is the cache miss rate and
+  nobody can look that up.
+
+  At the full requirement — 500,000 developers, 50,000 active daily, a 60-minute
+  cache window — it is **$3.81 a month**: $1.56 Functions, $2.20 Cosmos request
+  units, $0.05 storage. The resolver is called once per cache window per active
+  developer, not once per request, so a developer making 500 calls an hour and
+  one making 5 cost the same.
+
+  Halving the window to 15 minutes costs $15.69. Every plausible setting is
+  affordable, so the cache window is a **revocation decision, not a budget one**
+  — which settles how the question still open from ADR-0005 should be answered.
+
+  What it costs instead is a guarantee: serverless offers no guaranteed
+  throughput or latency, and Functions Consumption cold starts land in p99 on a
+  miss. Both are stated rather than left to be discovered.
+
 - **Cache reads are now charged back.** `Get-ClaudeBusinessUnit.ps1` attributes
   them per business unit and shows them in their own **Cache read** column,
   priced at 0.1x base input.
@@ -368,6 +389,20 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   converts to 1,388,888,888 tokens and back to exactly $5000.00.
 
 ### Fixed
+
+- `SCALE.md` headlined the wrong ceiling. It said *"the binding limit is 110
+  developers per tier"* while its own table already gave the business-unit map as
+  about 93. A `bu-members` entry is `oid=unit,` — 38 characters plus the unit
+  name, against 37 for a bare object id — so business-unit membership runs out
+  first, and planning against 110 over-plans by roughly a fifth. Measured on the
+  live gateway: 38 characters per entry on the tier lists, 44 on `bu-members`.
+
+- `SCALE.md` now records why the tier cannot be carried in the token. Putting it
+  in an Entra app role or the `groups` claim would remove the lookup entirely,
+  which is the first alternative anyone proposes for P19. It cannot work: the
+  policy validates the audience `https://cognitiveservices.azure.com`, a
+  first-party Microsoft resource, and both are configured on the application
+  registration the token is issued for — which nobody here owns.
 
 - `New-ClaudeCodePolicy.ps1` built a Claude Desktop settings block and then
   discarded it. Its own comment said the keys were "emitted here so one run

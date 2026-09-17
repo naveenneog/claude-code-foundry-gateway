@@ -504,6 +504,7 @@ scripts/
   Get-ClaudeBusinessUnit.ps1   spend per business unit, and who is unassigned
   Measure-ClaudeCeiling.ps1    headroom against the measured scale limits
   Measure-ClaudeOvershoot.ps1  how far spend runs past a budget, measured
+  Measure-ClaudeProjectionCost.ps1  what the P19 entitlement projection would cost
   Add-ClaudeModel.ps1          deploy-check, allow, price a new Claude model
   Get-ClaudeBypass.ps1         principals that can reach Foundry directly
   Get-ClaudeBom.ps1            what this gateway created, reuses, and bills for
