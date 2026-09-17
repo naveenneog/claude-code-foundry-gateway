@@ -196,6 +196,21 @@ Assert 'unpriced models are a failure' ($hc -match 'deployed but unpriced')
 # Spend landing on no budget is worth surfacing but is not broken.
 Assert 'unassigned developers are a warning' ($hc -match "Add-Result 'Business units' 'warn'")
 
+# quota-org is evaluated before the per-unit quota and on the same monthly
+# period, so a ceiling below the sum of the unit budgets makes every one of them
+# unreachable while each still reports headroom. Nothing used to notice.
+Assert 'the ceiling is compared to the unit budgets' ($hc -match "Add-Result 'Organisation ceiling'")
+Assert 'and an unreachable budget fails the run'     ($hc -match "'Organisation ceiling' 'fail'")
+Assert 'it says no unit budget can bind'             ($hc -match 'no unit budget can ever bind')
+# Teams are charged to their parent as well, so counting both double counts.
+Assert 'only top-level units are summed'             ($hc -match '\$reg \| Where-Object \{ -not \$par\[\$_\.Id\] \}')
+
+$sbu = Get-Content (Join-Path $root 'scripts/Set-ClaudeBusinessUnit.ps1') -Raw
+Assert 'setting a budget checks the ceiling too' ($sbu -match "Id 'quota-org'")
+Assert 'and warns when it cannot be reached'     ($sbu -match 'ceiling is smaller than what the units are allowed')
+Assert 'it sums only top-level units'            ($sbu -match '\$registry \| Where-Object \{ -not \$parents\[\$_\.Id\] \}')
+Assert 'and names the command that raises it'    ($sbu -match 'named-value-id quota-org')
+
 Assert 'every finding carries its fix' ($hc -match 'if \(\$r\.fix\) \{ Write-Host')
 Assert 'it exits non-zero on a failure' ($hc -match '(?m)^if \(\$failed\.Count\) \{ exit 1 \}')
 Assert 'and can be made strict'         ($hc -match "if \(\`$FailOn -eq 'warn' -and \`$warned\.Count\) \{ exit 1 \}")

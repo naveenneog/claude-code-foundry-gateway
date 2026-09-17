@@ -413,6 +413,51 @@ If **Spend on unpriced models** is above zero, the totals understate spend — a
 the model with `./scripts/Add-ClaudeModel.ps1`, which refuses a model it has no
 price for.
 
+#### The ceiling above the unit budgets
+
+`quota-org` is checked **before** the per-unit quota and renews on the same
+monthly period, so whichever is smaller is the one that actually binds. A
+ceiling below the sum of the unit budgets makes every one of those budgets
+unreachable: the gateway denies the whole organisation first, and each unit
+still reports plenty of headroom.
+
+Measured on the reference gateway 2026-09-17: `quota-org` was 100,000,000
+tokens a month — about $360 at the blended Sonnet rate — while two top-level
+units were allowed 6,944,444,443 between them. Every unit budget was decorative.
+
+`./scripts/Set-ClaudeBusinessUnit.ps1` now says so when it writes a budget, and
+`./scripts/Test-ClaudeHealth.ps1` fails the run on it. Only top-level units are
+summed, because a team is charged to its parent as well as to itself and
+counting both would double count.
+
+```powershell
+az apim nv update -g rg-contosohub --service-name apim-claude-gw-fzgql9 `
+    --named-value-id quota-org --value 6944444443
+```
+
+#### What a dollar budget does and does not stop
+
+A budget is set in dollars and enforced in tokens: `-MonthlyBudgetUsd 2000`
+becomes 555,555,555 tokens at a blended $3.60/M for Sonnet assuming 20% output.
+Pass `-Model claude-opus-5` if the unit mostly uses Opus, or the conversion
+under-charges them by about two and a half times.
+
+The counter is **blind to cached tokens**, and on the reference gateway cache
+made real spend **41.5×** the portion the budget counts ($0.0364 metered against
+$1.4753 cache over thirty days). A $2,000 budget set naively therefore permits
+far more than $2,000 of real spend. Two honest ways to handle that:
+
+- treat the dollar budget as **showback**, and enforce with the per-user daily
+  quota, which is the only limit that stops a single runaway agent loop; or
+- divide the token figure by **your own** measured ratio — read it from the
+  chargeback workbook rather than reusing 41.5, which is one gateway's caching
+  profile and not a constant.
+
+The largest lever that caching cannot defeat is the **model allow list**: Opus
+is two and a half times Sonnet on both input and output, and
+`./scripts/Set-ClaudeTier.ps1 -Tier standard -Models claude-sonnet-5` keeps it
+for the premium tier only.
+
 ### If you would rather use Grafana
 
 `./scripts/Publish-ClaudeGrafana.ps1` publishes the same panels to an existing

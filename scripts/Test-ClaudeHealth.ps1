@@ -169,6 +169,46 @@ try {
     Add-Result 'Business units' 'warn' 'could not read the chargeback report' ''
 }
 
+# --- 7. the ceiling above those budgets ------------------------------------
+#
+# quota-org is evaluated before the per-unit quota and on the same monthly
+# period, so the smaller of the two is the one that binds. A ceiling below the
+# sum of the unit budgets makes every one of those budgets unreachable: the
+# gateway denies the whole organisation first, and each unit still reports
+# plenty of headroom. Nothing else in this check would notice.
+try {
+    $orgRaw = & (Join-Path $root 'scripts/Get-ClaudeBudget.ps1') -ResourceGroup $ResourceGroup -ApimName $ApimName -AsJson 2>$null 6>$null |
+              Out-String | ConvertFrom-Json
+    $orgTokens = [long]$orgRaw.organisation.tokens_per_month
+
+    . (Join-Path $root 'scripts/ApimNamedValue.ps1')
+    . (Join-Path $root 'scripts/ClaudeBusinessUnit.ps1')
+    $reg = @(ConvertFrom-ClaudeBuRegistry (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'))
+    $par = ConvertFrom-ClaudeBuParents (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents')
+
+    if (-not $reg.Count) {
+        Add-Result 'Organisation ceiling' 'pass' 'no business unit budgets to exceed it' ''
+    }
+    elseif ($orgTokens -le 0) {
+        Add-Result 'Organisation ceiling' 'warn' 'quota-org is unset or zero' 'Set it to at least the sum of the unit budgets.'
+    }
+    else {
+        # Teams are charged to their parent as well, so only top-level units draw.
+        $top = @($reg | Where-Object { -not $par[$_.Id] })
+        $sum = ($top | Measure-Object -Property TokensPerMonth -Sum).Sum
+        if ($sum -gt $orgTokens) {
+            Add-Result 'Organisation ceiling' 'fail' `
+                ("quota-org is {0:n0} tokens/month but {1} top-level unit(s) are allowed {2:n0}, so no unit budget can ever bind" -f $orgTokens, $top.Count, $sum) `
+                ("Raise it: az apim nv update -g $ResourceGroup --service-name $ApimName --named-value-id quota-org --value $sum")
+        } else {
+            Add-Result 'Organisation ceiling' 'pass' `
+                ("{0:n0} tokens/month, above the {1:n0} committed to units" -f $orgTokens, $sum) ''
+        }
+    }
+} catch {
+    Add-Result 'Organisation ceiling' 'warn' "could not compare the ceiling to the unit budgets: $($_.Exception.Message)" ''
+}
+
 # --- report ----------------------------------------------------------------
 
 $failed = @($results | Where-Object { $_.status -eq 'fail' })

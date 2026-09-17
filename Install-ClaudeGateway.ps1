@@ -562,8 +562,37 @@ if (-not (Read-YesNo $(if ($ExistingApim) { 'Apply this to the existing gateway?
 Write-Head 'Deploying'
 
 Write-Step 'Resource group'
-az group create -n $ResourceGroup -l $Location -o none
-Write-Ok $ResourceGroup
+# A resource group cannot be moved, and every resource below takes its location
+# from the group - main.bicep defaults `location` to resourceGroup().location.
+#
+# The previous version ran `az group create` unconditionally and printed OK
+# whatever happened. Against a group that already existed in another region that
+# printed a red InvalidResourceGroupLocation error immediately followed by [OK],
+# and then deployed the whole gateway into the group's region while -Location
+# was quietly ignored. Nobody reading that output would know which region they
+# had ended up in.
+$rgLocation = az group show -n $ResourceGroup --query location -o tsv 2>$null
+if ($rgLocation) {
+    $rgLocation = $rgLocation.Trim()
+    $same = ($rgLocation -replace '\s', '').ToLower() -eq ($Location -replace '\s', '').ToLower()
+    if ($same) {
+        Write-Ok "$ResourceGroup (exists, $rgLocation)"
+    }
+    else {
+        Write-Ok "$ResourceGroup (exists)"
+        Write-Warn2 "It is in '$rgLocation', not the '$Location' you asked for."
+        Write-Note  "A resource group cannot be moved, and everything here takes its location from"
+        Write-Note  "the group - so the gateway will be created in '$rgLocation' and -Location is"
+        Write-Note  "ignored. Deploying into '$Location' means using a different group name."
+    }
+}
+else {
+    az group create -n $ResourceGroup -l $Location -o none
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not create resource group '$ResourceGroup' in '$Location'. See the error above."
+    }
+    Write-Ok "$ResourceGroup (created in $Location)"
+}
 
 Write-Step $(if ($ExistingApim) { 'Claude API and policies (a few minutes)' } else { 'API Management and Application Insights (30-45 min)' })
 Write-Note 'Safe to leave running.'
@@ -792,7 +821,12 @@ Write-Host ''
 Write-Host '  Next:' -ForegroundColor White
 Write-Host ''
 Write-Host '   1. Entitle a developer'
-Write-Host "        az ad group member add --group $StandardGroup --member-id <object-id>"
+Write-Host "        ./scripts/Set-ClaudeDeveloper.ps1 -User dev@contoso.com -Tier standard ``"
+Write-Host "            -ApimName $apimName -ResourceGroup $ResourceGroup"
+Write-Host '      Takes an email, a UPN or an object id, adds them to the group and'
+Write-Host '      publishes in one step. The raw route needs an object id, not an email:'
+Write-Host '        $oid = az ad user show --id dev@contoso.com --query id -o tsv'
+Write-Host "        az ad group member add --group $StandardGroup --member-id `$oid"
 Write-Host "        ./scripts/Sync-ClaudeAccess.ps1 -ApimName $apimName -ResourceGroup $ResourceGroup"
 Write-Host '      Portal route: docs/ONBOARDING.md section 2'
 Write-Host ''

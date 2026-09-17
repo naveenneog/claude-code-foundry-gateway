@@ -273,6 +273,35 @@ if ($conv) {
 }
 Write-Host ("  {0} business unit(s) before, {1} after. Others untouched." -f $before, $registry.Count) -ForegroundColor DarkGray
 
+# A business unit budget above the organisation ceiling can never be reached.
+#
+# quota-org is checked before the per-unit quota and renews monthly on the same
+# period, so whichever is smaller is the one that actually binds. Setting a unit
+# to $2,000 against an org ceiling worth $360 produces a budget that looks set,
+# reports correctly, and denies everybody long before the unit is anywhere near
+# it - and nothing said so. Warned rather than refused, because raising the
+# ceiling afterwards is a legitimate order to do this in.
+$orgRaw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'quota-org'
+$orgQuota = 0L
+if ($orgRaw -and [long]::TryParse(($orgRaw -replace '[^\d]', ''), [ref]$orgQuota) -and $orgQuota -gt 0) {
+    # Teams are charged to their parent as well as to themselves, so counting
+    # both would double count. Only top-level units draw on the org ceiling.
+    # $parents is a hashtable keyed by unit id - same test as the listing above.
+    $topLevel = @($registry | Where-Object { -not $parents[$_.Id] })
+    $committed = ($topLevel | Measure-Object -Property TokensPerMonth -Sum).Sum
+
+    if ($committed -gt $orgQuota) {
+        Write-Host ''
+        Write-Host ("  The organisation ceiling is smaller than what the units are allowed.") -ForegroundColor Yellow
+        Write-Host ("    quota-org      {0,18:n0} tokens/month" -f $orgQuota) -ForegroundColor Yellow
+        Write-Host ("    units total    {0,18:n0} tokens/month across {1} top-level unit(s)" -f $committed, $topLevel.Count) -ForegroundColor Yellow
+        Write-Host "  quota-org is checked first, so it denies everyone before a unit reaches its own" -ForegroundColor DarkGray
+        Write-Host "  budget. Raise it to at least the total above, or the unit budgets are decorative:" -ForegroundColor DarkGray
+        Write-Host ("    az apim nv update -g {0} --service-name {1} ``" -f $ResourceGroup, $ApimName) -ForegroundColor DarkGray
+        Write-Host ("      --named-value-id quota-org --value {0}" -f $committed) -ForegroundColor DarkGray
+    }
+}
+
 if (-not $Remove -and $Group) {
     Write-Host ''
     Write-Host "  Membership comes from the Entra group. Run the sync to pick it up:" -ForegroundColor DarkGray

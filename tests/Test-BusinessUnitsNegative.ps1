@@ -700,6 +700,60 @@ $mutations = @(
        From  = 'deployed but unpriced'
        To    = 'some models' }
 
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the resource group is created blind again'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'az group show -n $ResourceGroup --query location'
+       To    = 'az group show -n $ResourceGroup --query name' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a mismatched region stops being mentioned'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'using a different group name'
+       To    = 'carrying on' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a failed group create is reported as success'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'Could not create resource group'
+       To    = 'Created resource group' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'LLM logging is turned off at the API'
+       File  = 'infra/main.bicep'
+       From  = 'largeLanguageModel: {'
+       To    = 'notTheLlmDiagnostic: {' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the ledger rows stop reaching the workspace'
+       File  = 'infra/main.bicep'
+       From  = "category: 'GatewayLlmLogs'"
+       To    = "category: 'GatewayLogs'" }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'an unreachable unit budget stops being a failure'
+       File  = 'scripts/Test-ClaudeHealth.ps1'
+       From  = "Add-Result 'Organisation ceiling' 'fail'"
+       To    = "Add-Result 'Organisation ceiling' 'warn'" }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'the ceiling sum counts teams twice'
+       File  = 'scripts/Test-ClaudeHealth.ps1'
+       From  = '$top = @($reg | Where-Object { -not $par[$_.Id] })'
+       To    = '$top = @($reg)' }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'setting a budget stops checking the ceiling'
+       File  = 'scripts/Set-ClaudeBusinessUnit.ps1'
+       From  = 'ceiling is smaller than what the units are allowed'
+       To    = 'ceiling note suppressed' }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'the budget warning counts teams twice'
+       File  = 'scripts/Set-ClaudeBusinessUnit.ps1'
+       From  = '$topLevel = @($registry | Where-Object { -not $parents[$_.Id] })'
+       To    = '$topLevel = @($registry)' }
+
     @{ Suite = 'Test-ModelsAndPlugins.ps1'
        Name  = 'the health check stops exiting non-zero'
        File  = 'scripts/Test-ClaudeHealth.ps1'

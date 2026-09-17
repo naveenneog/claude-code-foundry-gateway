@@ -289,6 +289,33 @@ Assert 'and that variant selects its own art' ($bn -match "(?m)^\s*\`$art = if \
 Assert 'and names the console in full'        ($bn -match 'Foundry Claude Management Console')
 
 Write-Host ''
+Write-Host 'Admin - the resource group it deploys into' -ForegroundColor Cyan
+
+$inst = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
+
+# A group cannot be moved and main.bicep defaults location to the group's, so a
+# pre-existing group in another region silently decides where the gateway lands.
+Assert 'it looks before creating'          ($inst -match 'az group show -n \$ResourceGroup --query location')
+Assert 'and compares with the request'     ($inst -match '(?m)^\s*\$same = .*ToLower\(\) -eq .*ToLower\(\)')
+Assert 'it says the group wins'            ($inst -match "-Location is\W+.{0,40}ignored|ignored\. Deploying into")
+Assert 'and names the only way round it'   ($inst -match 'using a different group name')
+# The old version printed OK whatever az returned, so a failed create read as a
+# success and the next 30 minutes deployed into a group that was never made.
+Assert 'a failed create stops the run'     ($inst -match "Could not create resource group")
+Assert 'and OK is not printed regardless'  ($inst -notmatch "(?m)^az group create -n \`$ResourceGroup -l \`$Location -o none\r?\nWrite-Ok")
+
+$bicep = Get-Content (Join-Path $root 'infra/main.bicep') -Raw
+Assert 'the template takes the group location' ($bicep -match 'param location string = resourceGroup\(\)\.location')
+# BCP037 warns that largeLanguageModel is not in the type definition. Measured
+# 2026-09-17 against the live gateway: ARM accepts and applies it on the
+# API-scoped diagnostic, returning {"logs":"enabled"}. The warning is stale
+# typing, not a deployment failure - and removing the property would empty the
+# ledger, so it is asserted rather than left to look like dead code.
+Assert 'LLM logging is turned on at the API' ($bicep -match '(?m)^\s*largeLanguageModel: \{')
+Assert 'and the rows are routed to the workspace' ($bicep -match "category: 'GatewayLlmLogs'")
+Assert 'both halves are recorded as required'     ($bicep -match 'Both are needed')
+
+Write-Host ''
 Write-Host 'Admin - documentation' -ForegroundColor Cyan
 
 $mig_doc = Get-Content (Join-Path $root 'docs/MIGRATION.md') -Raw
