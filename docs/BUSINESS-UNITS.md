@@ -245,6 +245,27 @@ tokens against 320 thousand prompt and 152 thousand completion, which at Claude'
 published rates is **38.7% of the real cost weight**. Real spend is therefore
 **higher** than any figure here, not lower.
 
+**Cache reads are now reported, separately.** The per-request log genuinely
+lacks the columns, but the gateway's own emitted metric carries
+`Prompt Cached Tokens` with a `UserId` dimension — the same object id the
+business-unit map keys on — so `Get-ClaudeBusinessUnit.ps1` attributes it per
+business unit and shows it in its own **Cache read** column, priced at 0.1x base
+input.
+
+Three things to hold apart, because they are easy to conflate:
+
+| | Reported | Counted by the budget |
+|---|---|---|
+| Prompt and completion | yes | yes |
+| Cache read | **yes**, from the gateway metric | no |
+| Cache write, 5-minute and 1-hour | no | no |
+
+Cache read sits in its own column rather than inside `tokens_used` precisely
+because the quota cannot see it. Folding it into the same number would imply the
+budget counts it. Cache *write* remains unattributed: those two categories exist
+only in the Anthropic response body, and reading that in an outbound policy
+buffers the response and ends streaming.
+
 Figures are also at **list price**. Azure bills Claude as a single aggregated
 Claude Consumption Unit meter, and private-offer discounts are applied before
 that conversion, so none of this reconciles to an invoice. See `U2` in

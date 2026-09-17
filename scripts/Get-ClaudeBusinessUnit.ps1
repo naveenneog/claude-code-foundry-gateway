@@ -81,16 +81,38 @@ try {
     $ws = $comp.properties.WorkspaceResourceId
     if ($ws) {
         $window = if ($Days) { "ago($($Days)d)" } else { 'startofmonth(now())' }
+        # Cache read is not in the per-request log: measured, its token columns
+        # are PromptTokens, CompletionTokens and TotalTokens only, and a request
+        # that read 10,003 cached tokens recorded none of them.
+        #
+        # The gateway's own llm-emit-token-metric does emit it, carrying a
+        # UserId dimension - the same object id the business-unit map keys on.
+        # Measured 2026-09-17 on the reference workspace: AppMetrics holds
+        # 6,833,717 cached tokens against UserId 43cc5304. So cache is attributed
+        # here at per-user granularity rather than per request, which is the
+        # granularity chargeback bills at anyway.
+        #
+        # union rather than join, in both directions: a caller can have metered
+        # requests whose trace never landed, and a metric row whose request did
+        # not. Either side alone would silently drop one of them.
         $kql = @"
-let members = ApiManagementGatewayLlmLog
+let metered = ApiManagementGatewayLlmLog
 | where TimeGenerated >= $window
 | project rid = tostring(CorrelationId), prompt = toreal(PromptTokens), completion = toreal(CompletionTokens);
-AppTraces
+let attributed = AppTraces
 | where TimeGenerated >= $window
 | where Properties.RequestId != ""
 | project rid = tostring(Properties.RequestId), user_id = tostring(Properties.UserId)
-| join kind=inner members on rid
-| summarize tokens = sum(prompt + completion), requests = count() by user_id
+| join kind=inner metered on rid
+| summarize tokens = sum(prompt + completion), requests = count() by user_id;
+let cached = AppMetrics
+| where TimeGenerated >= $window
+| where Name == "Prompt Cached Tokens"
+| summarize cache_read = sum(Sum) by user_id = tostring(Properties.UserId);
+union
+    (attributed | extend cache_read = 0.0),
+    (cached | extend tokens = 0.0, requests = 0)
+| summarize tokens = sum(tokens), requests = sum(requests), cache_read = sum(cache_read) by user_id
 "@
         $qt = (az account get-access-token --resource https://api.applicationinsights.io --query accessToken -o tsv).Trim()
         $res = Invoke-RestMethod -Uri "https://api.loganalytics.io/v1$ws/query" -Method Post -ContentType 'application/json' `
@@ -99,9 +121,10 @@ AppTraces
         foreach ($row in $res.tables[0].rows) {
             $uid = [string]$row[$cols.IndexOf('user_id')]
             $bu = if ($members.Contains($uid)) { $members[$uid] } else { 'unassigned' }
-            if (-not $spend.ContainsKey($bu)) { $spend[$bu] = @{ Tokens = [long]0; Requests = 0 } }
+            if (-not $spend.ContainsKey($bu)) { $spend[$bu] = @{ Tokens = [long]0; Requests = 0; CacheRead = [long]0 } }
             $spend[$bu].Tokens += [long]$row[$cols.IndexOf('tokens')]
             $spend[$bu].Requests += [int]$row[$cols.IndexOf('requests')]
+            $spend[$bu].CacheRead += [long]$row[$cols.IndexOf('cache_read')]
         }
         $ledgerRead = $true
     }
@@ -131,6 +154,11 @@ foreach ($u in $registry) {
     $used = $own + $childTokens
     $memberCount += @($members.Keys | Where-Object { $members[$_] -in $childIds }).Count
 
+    $ownCache = if ($spend.ContainsKey($u.Id)) { [long]$spend[$u.Id].CacheRead } else { 0 }
+    $childCache = 0
+    foreach ($c in $childIds) { if ($spend.ContainsKey($c)) { $childCache += [long]$spend[$c].CacheRead } }
+    $cacheRead = $ownCache + $childCache
+
     $records += [ordered]@{
         id              = $u.Id
         parent          = $(if ($parents[$u.Id]) { $parents[$u.Id] } else { $null })
@@ -142,6 +170,12 @@ foreach ($u in $registry) {
         tokens_used     = $used
         tokens_used_own = $own
         used_usd_estimate = ConvertTo-ClaudeBuUsd -Tokens $used -Model $Model -OutputShare $OutputShare
+        # Cache read, attributed from the gateway's own emitted metric. Kept as
+        # its own line rather than folded into tokens_used, because the quota
+        # that enforces the budget still cannot see it - reporting it inside the
+        # same number would imply the budget counts it.
+        tokens_cache_read = $cacheRead
+        cache_read_usd_estimate = ConvertTo-ClaudeCacheUsd -Tokens $cacheRead -Model $Model
         percent_used    = $(if ($u.TokensPerMonth -gt 0) { [math]::Round(($used / $u.TokensPerMonth) * 100, 1) } else { $null })
         requests        = $(if ($spend.ContainsKey($u.Id)) { $spend[$u.Id].Requests } else { 0 }) + $childRequests
     }
@@ -160,10 +194,18 @@ $envelope = [ordered]@{
     }
     cost_basis = [ordered]@{
         source          = 'list price'
-        price_book_date = '2026-09-15'
+        price_book_date = $ClaudePriceBookDate
         model_assumed   = $Model
         output_share    = $OutputShare
-        excludes_cached_tokens = $true
+        # Cache read is now attributed, from the gateway's emitted metric, at
+        # per-user granularity. Cache *write* is not: the 5-minute and 1-hour
+        # categories exist only in the Anthropic response body, and reading that
+        # in an outbound policy buffers the response and ends streaming.
+        cache_read_known       = $true
+        excludes_cache_write   = $true
+        # The budget still cannot see any cache category. Reporting it and
+        # enforcing it are different mechanisms - U13.
+        budget_counts_cache    = $false
         reconciled_to_invoice  = $false
     }
     ledger_read = $ledgerRead
@@ -178,8 +220,8 @@ if (-not $records.Count) {
 }
 else {
     Write-Host ''
-    Write-Host ("  {0,-16} {1,-26} {2,7} {3,14} {4,14} {5,7}" -f 'Id', 'Entra group', 'Members', 'Budget', 'Used', 'Used %')
-    Write-Host ('  ' + ('-' * 94)) -ForegroundColor DarkGray
+    Write-Host ("  {0,-16} {1,-24} {2,6} {3,13} {4,13} {5,6} {6,13}" -f 'Id', 'Entra group', 'Members', 'Budget', 'Used', 'Used %', 'Cache read')
+    Write-Host ('  ' + ('-' * 96)) -ForegroundColor DarkGray
 
     # Business units first, each followed by its teams.
     $tops = @($records | Where-Object { -not $_.parent })
@@ -192,9 +234,10 @@ else {
 
     foreach ($r in $ordered) {
         $name = if ($r.parent) { '  ' + $r.id } else { $r.id }
-        Write-Host ("  {0,-16} {1,-26} {2,7} {3,14:n0} {4,14:n0} {5,7}" -f `
+        Write-Host ("  {0,-16} {1,-24} {2,6} {3,13:n0} {4,13:n0} {5,6} {6,13:n0}" -f `
             $name, $r.group, $r.members, $r.tokens_per_month, $r.tokens_used,
-            $(if ($null -ne $r.percent_used) { "$($r.percent_used)%" } else { '-' }))
+            $(if ($null -ne $r.percent_used) { "$($r.percent_used)%" } else { '-' }),
+            $r.tokens_cache_read)
     }
     if (@($records | Where-Object { $_.parent }).Count) {
         Write-Host ''
@@ -211,6 +254,8 @@ if ($unassigned.Count -and $unassignedMode -eq 'allow') {
 }
 
 Write-Host ''
-Write-Host '  Figures are at list price and exclude cached tokens, so real spend is higher' -ForegroundColor DarkGray
-Write-Host '  than shown. They are not reconciled to an Azure invoice. See docs/BUSINESS-UNITS.md.' -ForegroundColor DarkGray
+Write-Host '  Figures are at list price and are not reconciled to an Azure invoice.' -ForegroundColor DarkGray
+Write-Host '  Cache reads are attributed from the gateway metric and shown above; the two' -ForegroundColor DarkGray
+Write-Host '  cache write categories are not, so real spend is still somewhat higher than' -ForegroundColor DarkGray
+Write-Host '  shown. The budget itself counts neither. See docs/BUSINESS-UNITS.md.' -ForegroundColor DarkGray
 if (-not $ledgerRead) { Write-Host '  Spend could not be read from the ledger.' -ForegroundColor Yellow }

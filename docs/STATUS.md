@@ -1,6 +1,67 @@
 # Status
 
-**Active packet:** P36 — adding a model, and plugin and marketplace governance. M4 is complete. Full regression including the Azure half passes: 31 checks, 131 of 131 mutations caught.
+**Active packet:** P37 — cache reads attributed to business units. M4 is complete. Full regression including the Azure half passes: 31 checks, 135 of 135 mutations caught.
+
+## P37 acceptance criteria — chargeback counts cache reads
+
+Chargeback omitted cache entirely. On measured usage cache is 38.7% of real cost weight, and the
+omission is **uneven**: a team reusing a large cached prompt is under-charged against one that does
+not. That is the distortion that makes a chargeback figure arguable, which is the one thing it
+cannot afford to be.
+
+- [x] Cache read is attributed to a business unit, from a source that carries the object id
+- [x] It is reported beside the metered total, not inside it
+- [x] Priced at its own rate (0.1x base input), not the blended mix
+- [x] What is still missing is stated rather than implied
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+### What the work found
+
+**The recorded blocker was drawn too broadly.** U12 said "no APIM-native source carries the cache
+categories". True per request — the log's token columns are `PromptTokens`, `CompletionTokens` and
+`TotalTokens`, and that was properly measured. Not true in aggregate: the gateway's own
+`llm-emit-token-metric` emits `Prompt Cached Tokens` carrying a `UserId` dimension.
+
+Measured live 2026-09-17 before building anything:
+
+| | Result |
+|---|---|
+| `AppMetrics`, `Prompt Cached Tokens`, 30 days | 162 rows, **6,833,717** tokens |
+| Dimensions on the metric | `UserId`, `User`, `Tier`, `Model`, `SessionId` |
+| `UserId` value | `43cc5304-...` — the same object id `bu-members` keys on |
+
+So the join was available all along. The comment in `chargeback-ledger.kql` claiming the metric was
+"bounded but **not per-user**" was simply wrong, and that one wrong clause is what kept the gap open.
+
+**What the report now shows**, on the reference deployment over 30 days:
+
+```
+Id        Members   Budget           Used   Used %   Cache read
+mcaps           4  5,555,555,555    6,105      0%    6,833,717
+  ites-1        2  1,666,666,666    6,105      0%    6,833,717
+```
+
+6,105 metered tokens against 6,833,717 cache reads. The scale of what was invisible is the finding.
+
+**Cache read sits in its own column, not inside `tokens_used`.** The quota still cannot see it, and
+folding it into the same number would imply the budget counts it. Three states are now distinct:
+reported and counted, reported and not counted, neither.
+
+### What is still missing
+
+Cache *write* — the 5-minute and 1-hour categories at 1.25x and 2x. They exist only in the Anthropic
+response body, and reading that in an outbound policy buffers the response and ends streaming. The
+report says so rather than implying cache is solved. Enforcement is unchanged and still blind to
+every cache category, which is U13.
+
+### Council
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | Per-user is the granularity chargeback bills at, so an aggregate metric is not a compromise here — it is the right shape |
+| Coder | Accept | `union` in both directions rather than a join: a caller can have a metered request whose trace never landed, or a metric row whose request did not |
+| QA | Accept | Two of the first four assertions passed while measuring nothing — `cache_read` matched three other fields, and "cache write" matched the comment. Both now assert the field and its value |
+| UX | Accept | A separate column makes the previously invisible number the most striking thing in the report, which is what it should be |
 
 ## P36 acceptance criteria — the two things an admin does after go-live
 

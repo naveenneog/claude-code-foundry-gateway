@@ -365,6 +365,28 @@ function ConvertTo-ClaudeBuTokens {
     }
 }
 
+function ConvertTo-ClaudeCacheUsd {
+    <#
+    .SYNOPSIS
+        Prices cache-read tokens, which are 0.1x the base input rate.
+
+    .DESCRIPTION
+        Priced on its own rather than folded into the blended figure, because
+        the blend assumes an input/output mix and a cache read is neither. It
+        is a third category at a tenth of base input, and ADR-0010 requires the
+        categories to be priced separately and never summed before pricing.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][long]$Tokens,
+        [string]$Model = 'claude-sonnet-5'
+    )
+    $price = $script:ClaudePriceBook[$Model]
+    if (-not $price) { return $null }
+    # 0.1x base input, per Claude's published cache rates.
+    return [math]::Round(([decimal]$Tokens / [decimal]1000000) * $price.InputPerM * [decimal]0.1, 2)
+}
+
 function ConvertTo-ClaudeBuUsd {
     <#
     .SYNOPSIS

@@ -121,9 +121,15 @@ if (Test-Path $getPath) {
     $shown = ($emitted -split "`n" | Where-Object { $_ -match 'Write-Host' }) -join "`n"
 
     Assert 'the terminal states list price'  ($shown -match '(?i)list price')
-    Assert 'the terminal states cache is excluded' ($shown -match '(?i)exclude.{0,20}cach')
+    # The caveat changed rather than went away. Cache *read* is now attributed
+    # from the gateway metric; the two cache *write* categories are not, and the
+    # budget still counts neither. Asserting the old "excludes cached tokens"
+    # wording here would now be asserting something untrue.
+    Assert 'the terminal still states what cache is missing' ($shown -match '(?i)cache write')
+    Assert 'and that the budget counts no cache'             ($shown -match '(?i)budget itself counts neither')
     Assert 'the JSON records list price'     ($emitted -match "(?i)source\s*=\s*'list price'")
-    Assert 'the JSON records the cache gap'  ($emitted -match '(?i)excludes_cached_tokens')
+    Assert 'the JSON records the remaining cache gap' ($emitted -match '(?i)excludes_cache_write')
+    Assert 'and that enforcement is still blind to cache' ($emitted -match '(?i)budget_counts_cache')
 }
 
 Write-Host ''
@@ -249,6 +255,36 @@ Assert 'periods are UTC'                        ($f10 -match '(?m)^Periods are U
 Assert 'corrections are new rows'               ($f10 -match 'A correction is a new row')
 Assert 'soft cap is not warn-only'              ($f10 -match 'Ours \*\*does\*\* block')
 Assert 'and enforcement is stated as uncategorised' ($f10 -match 'Reporting is categorised; enforcement is not')
+
+Write-Host ''
+Write-Host 'Business units - cache in chargeback' -ForegroundColor Cyan
+
+# Cache is 38.7% of real cost weight on measured usage, and it is uneven: a team
+# reusing a large cached prompt is under-charged against one that does not. A
+# chargeback figure that omits it is not just low, it is unfair in a way that
+# makes it arguable - which is the one thing chargeback cannot afford to be.
+#
+# The per-request log genuinely lacks the columns; that was measured. But the
+# gateway's own llm-emit-token-metric emits "Prompt Cached Tokens" carrying
+# UserId, which is exactly what the business-unit map keys on. Measured
+# 2026-09-17 on the reference workspace: AppMetrics holds 6,833,717 cached
+# tokens for UserId 43cc5304, so the join is available.
+$getSrc = Get-Content $getPath -Raw
+Assert 'the report reads the cached-token metric' ($getSrc -match 'Name == "Prompt Cached Tokens"')
+Assert 'and keys it on the object id'              ($getSrc -match 'cache_read = sum\(Sum\) by user_id = tostring\(Properties\.UserId\)')
+# The field assignment, not the word. "cache_read" also appears in
+# cache_read_usd_estimate and cache_read_known, so matching it anywhere passed
+# with the field renamed away.
+Assert 'cache is a field of its own, beside tokens_used' ($getSrc -match 'tokens_cache_read = \$cacheRead')
+Assert 'and is priced at the cache rate, not the blend' ($getSrc -match 'ConvertTo-ClaudeCacheUsd -Tokens \$cacheRead')
+
+# Cache write stays unattributed - it exists only in the response body, and
+# reading that in outbound ends streaming. The report has to say so rather than
+# imply cache is now fully counted. Asserted on the key and its value, because
+# the phrase "cache write" also appears in the comment explaining it.
+Assert 'the JSON names cache read as known'     ($getSrc -match 'cache_read_known\s*=\s*\$true')
+Assert 'and cache write as still excluded'      ($getSrc -match 'excludes_cache_write\s*=\s*\$true')
+Assert 'and the budget as blind to both'        ($getSrc -match 'budget_counts_cache\s*=\s*\$false')
 
 Write-Host ''
 Write-Host 'Business units - documentation' -ForegroundColor Cyan

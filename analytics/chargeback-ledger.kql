@@ -52,8 +52,14 @@ let identity =
 // response body, but reading that body in an outbound policy buffers the
 // response and ends streaming, so they are not collected per request. They are
 // reported as unknown rather than zero, because zero is a claim and unknown is
-// the truth. Aggregate cache volume is still available from the
-// "Prompt Cached Tokens" metric, which is bounded but not per-user.
+// the truth.
+//
+// Cache *read* volume is available elsewhere, and per-user: the gateway's own
+// llm-emit-token-metric emits "Prompt Cached Tokens" carrying a UserId
+// dimension. Measured 2026-09-17, AppMetrics held 6,833,717 cached tokens
+// against one object id. Get-ClaudeBusinessUnit.ps1 joins it for chargeback.
+// It is not joined here because this function is per request and that metric is
+// an aggregate - mixing the two would put a per-user total on a single row.
 ApiManagementGatewayLlmLog
 | where TimeGenerated between (_from .. _to)
 | project

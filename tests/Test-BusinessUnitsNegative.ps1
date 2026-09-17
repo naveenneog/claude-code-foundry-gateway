@@ -52,8 +52,8 @@ $mutations = @(
 
     @{ Name  = 'the cache caveat retreats into a comment'
        File  = 'scripts/Get-ClaudeBusinessUnit.ps1'
-       From  = 'and exclude cached tokens'
-       To    = 'and are approximate' }
+       From  = 'cache write categories are not'
+       To    = 'everything is counted' }
 
     @{ Name  = 'the guide understates the measured cache gap'
        File  = 'docs/BUSINESS-UNITS.md'
@@ -125,6 +125,32 @@ $mutations = @(
        File  = 'docs/adr/0010-financial-semantics.md'
        From  = 'Reporting is categorised; enforcement is not'
        To    = 'Both are categorised' }
+
+    # --- cache in chargeback ---
+
+    @{ Suite = 'Test-BusinessUnits.ps1'
+       Name  = 'chargeback stops reading the cached-token metric'
+       File  = 'scripts/Get-ClaudeBusinessUnit.ps1'
+       From  = 'Name == "Prompt Cached Tokens"'
+       To    = 'Name == "Nothing"' }
+
+    @{ Suite = 'Test-BusinessUnits.ps1'
+       Name  = 'cache is folded into the metered total'
+       File  = 'scripts/Get-ClaudeBusinessUnit.ps1'
+       From  = 'tokens_cache_read = $cacheRead'
+       To    = 'tokens_cacheread = $cacheRead' }
+
+    @{ Suite = 'Test-BusinessUnits.ps1'
+       Name  = 'the report stops admitting cache write is missing'
+       File  = 'scripts/Get-ClaudeBusinessUnit.ps1'
+       From  = 'excludes_cache_write   = $true'
+       To    = 'excludes_cache_write   = $false' }
+
+    @{ Suite = 'Test-BusinessUnits.ps1'
+       Name  = 'the report claims the budget counts cache'
+       File  = 'scripts/Get-ClaudeBusinessUnit.ps1'
+       From  = 'budget_counts_cache    = $false'
+       To    = 'budgetcountscache      = $false' }
 
     # --- teams and the cascade (ADR-0008), checked by Test-Teams.ps1 ---
 

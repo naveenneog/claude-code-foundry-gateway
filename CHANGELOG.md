@@ -28,6 +28,30 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- **Cache reads are now charged back.** `Get-ClaudeBusinessUnit.ps1` attributes
+  them per business unit and shows them in their own **Cache read** column,
+  priced at 0.1x base input.
+
+  Chargeback previously omitted cache entirely. On measured usage that is 38.7%
+  of real cost weight, and the omission is uneven — a team reusing a large cached
+  prompt was under-charged against one that does not.
+
+  The recorded blocker turned out to be too broad. "No APIM-native source carries
+  the cache categories" is true per request; the gateway's own
+  `llm-emit-token-metric` emits `Prompt Cached Tokens` carrying a `UserId`
+  dimension, which is the same object id `bu-members` keys on. Measured
+  2026-09-17: 6,833,717 cached tokens across 162 rows, against a `UserId` already
+  in the business-unit map. On the reference deployment the report now shows
+  6,105 metered tokens beside 6,833,717 cache reads.
+
+  Cache read is reported **beside** `tokens_used`, not inside it, because the
+  quota still cannot see it — folding it in would imply the budget counts it.
+
+  Still missing, and stated in the output: cache *write*, the 5-minute and 1-hour
+  categories, which exist only in the response body. Reading that in an outbound
+  policy buffers the response and ends streaming. Enforcement remains blind to
+  every cache category — U13, unchanged.
+
 - `Test-ClaudeHealth.ps1` answers, in one command, whether the gateway needs
   attention. Six read-only checks: the API Management tier is v2, entitlement is
   in sync with the directory, no named value is near its limit, every deployed

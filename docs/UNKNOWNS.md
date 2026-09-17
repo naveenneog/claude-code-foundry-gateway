@@ -398,6 +398,34 @@ reporting field. See ADR-0006.
 than an unknown. Whether to correct for it — and how, without breaking streaming — is P21's problem,
 and it is why P21 may not express a dollar budget as a token quota.
 
+**Correction, 2026-09-17.** "No APIM-native source carries the cache categories" is true **per
+request**, which is what the measurement above established. It is not true in aggregate.
+`infra/policy.xml` emits `llm-emit-token-metric` with dimensions `User`, `UserId`, `Tier`, `Model`
+and `SessionId`, and that emitter produces a **`Prompt Cached Tokens`** metric.
+`analytics/claude-code-daily.kql` already reads it, summarised `by date, actor, model`, and
+`tests/Test-Analytics.ps1` asserts it is greater than zero against live data.
+
+So the comment in `analytics/chargeback-ledger.kql` — "available from the `Prompt Cached Tokens`
+metric, which is bounded but **not per-user**" — is wrong. The metric carries `User` and `UserId`,
+which is what chargeback keys on.
+
+| | Cache read | Cache write 5m / 1h |
+|---|---|---|
+| Per request, `ApiManagementGatewayLlmLog` | absent — measured | absent |
+| Aggregated, `Prompt Cached Tokens` metric | **present**, by user, model, day | absent |
+| Anthropic response body | present | present, but reading it in `outbound` ends streaming |
+
+**What this unblocks.** Chargeback bills per developer per period, not per request, so the aggregate
+metric is at the granularity the report needs. Joining it closes the larger part of the 38.7% gap,
+leaving only the two cache *write* categories unattributed. It is a reporting change, not a policy
+change, so it does not touch streaming.
+
+**What it does not unblock.** Enforcement. `llm-token-limit` counts prompt and completion only, so a
+budget stays blind to cache. That is U13, unchanged.
+
+**Recorded, not built.** Found 2026-09-17 in a session that could not run the test suite or the
+gate. This repository does not accept code that has not been through RED.
+
 ### U13 — Whether APIM can enforce a budget on categorised usage
 
 **Question.** P21 requires spend computed from categorised usage, because output is 5x base input
