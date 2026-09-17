@@ -15,6 +15,21 @@ cd claude-code-foundry-gateway
 It asks what it needs, shows a summary, and creates nothing until you confirm.
 Check the [prerequisites](#prerequisites) first if it stops early.
 
+> **How many developers this holds today: about 90.**
+>
+> Entitlement lives in API Management named values, which cap at 4,096
+> characters — measured, not published. Business-unit membership fills first, at
+> roughly 93 developers; the tier lists hold 110 each. Below that it works as
+> shipped. Above it, writes fail outright rather than silently truncating.
+>
+> Going further is designed, costed and reviewed — a durable projection on
+> Cosmos DB serverless at about $11 a month for 500,000 developers — but **it
+> is not built**. See [Scale](docs/SCALE.md) for the ceilings and
+> [ADR-0011](docs/adr/0011-projection-platform.md) for the costing.
+>
+> `./scripts/Measure-ClaudeCeiling.ps1` reports your own headroom and fails at
+> 80%.
+
 ---
 
 ## Start here

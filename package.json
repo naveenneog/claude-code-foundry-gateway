@@ -11,5 +11,9 @@
   "devDependencies": {
     "playwright": "^1.62.1",
     "sharp": "^0.34.4"
+  },
+  "dependencies": {
+    "@azure/cosmos": "^4.10.1",
+    "@azure/identity": "^4.13.3"
   }
 }

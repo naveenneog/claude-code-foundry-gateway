@@ -67,6 +67,24 @@ param(
     [decimal]$UsdPerMillionExecutions = 0.20,
     [long]$FreeExecutionsPerMonth = 1000000,
 
+    # Private networking. Measured 2026-09-17: deploying the projection to the
+    # reference subscription produced an account with publicNetworkAccess
+    # Disabled, enforced above the resource group - an update to enable it
+    # reported success and changed nothing.
+    #
+    # An accelerator aimed at organisations with six-figure developer counts has
+    # to assume that baseline rather than the absence of it, so this defaults on.
+    #
+    # It has two consequences, and the second is the expensive one:
+    #   - Cosmos needs a private endpoint, billed per hour whether used or not
+    #   - the resolver needs VNet integration, which the Consumption (Y1) plan
+    #     does not support. Flex Consumption does, and keeps per-execution
+    #     billing. https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan
+    [bool]$PrivateNetworking = $true,
+    # https://azure.microsoft.com/pricing/details/private-link/
+    [decimal]$UsdPerEndpointHour = 0.01,
+    [int]$PrivateEndpoints = 1,
+
     [switch]$AsJson
 )
 
@@ -89,7 +107,14 @@ $cosmosRuUsd = [math]::Round(($ruConsumed / 1000000) * $UsdPerMillionRu, 2)
 $storageGb   = [math]::Round(([decimal]$Developers * $BytesPerRecord) / 1073741824, 4)
 $storageUsd  = [math]::Round($storageGb * $UsdPerGbMonth, 2)
 
-$totalUsd = $functionUsd + $cosmosRuUsd + $storageUsd
+# The private endpoint is the only line here that bills whether anyone calls the
+# gateway or not. Everything else is pay-per-use, so this is the floor - and at
+# a small deployment it is the whole bill.
+$networkUsd = if ($PrivateNetworking) {
+    [math]::Round([decimal]$PrivateEndpoints * $UsdPerEndpointHour * 730, 2)
+} else { [decimal]0 }
+
+$totalUsd = $functionUsd + $cosmosRuUsd + $storageUsd + $networkUsd
 
 # Peak demand against the serverless ceiling. Serverless caps at 5,000 RU/s per
 # physical partition and, unlike provisioned throughput, offers no guaranteed
@@ -113,13 +138,14 @@ if ($AsJson) {
         }
         monthly_usd = [ordered]@{
             functions = $functionUsd; cosmos_request_units = $cosmosRuUsd
-            cosmos_storage = $storageUsd; total = $totalUsd
+            cosmos_storage = $storageUsd; private_endpoint = $networkUsd; total = $totalUsd
         }
         rates_read = '2026-09-17, published US list price'
         caveats = @(
             'Serverless offers no guaranteed throughput or latency.',
             'Cache misses, not requests, drive the cost.',
-            'Excludes egress, Log Analytics ingestion and the Function App storage account.'
+            'Excludes egress, Log Analytics ingestion and the Function App storage account.',
+            'Private networking assumed on: Consumption (Y1) has no VNet integration, so the resolver needs Flex Consumption.'
         )
     } | ConvertTo-Json -Depth 6
     exit 0
@@ -135,6 +161,9 @@ Write-Host ''
 Write-Host ("  {0,-26} {1,10}" -f 'Azure Function (Consumption)', ('$' + ('{0:n2}' -f $functionUsd)))
 Write-Host ("  {0,-26} {1,10}" -f 'Cosmos DB request units', ('$' + ('{0:n2}' -f $cosmosRuUsd)))
 Write-Host ("  {0,-26} {1,10}" -f 'Cosmos DB storage', ('$' + ('{0:n2}' -f $storageUsd)))
+if ($PrivateNetworking) {
+    Write-Host ("  {0,-26} {1,10}" -f 'Private endpoint', ('$' + ('{0:n2}' -f $networkUsd))) -ForegroundColor Yellow
+}
 Write-Host ('  ' + ('-' * 38)) -ForegroundColor DarkGray
 Write-Host ("  {0,-26} {1,10}" -f 'Total per month', ('$' + ('{0:n2}' -f $totalUsd))) -ForegroundColor Green
 Write-Host ''

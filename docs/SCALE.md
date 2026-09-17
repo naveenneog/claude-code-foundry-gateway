@@ -150,10 +150,13 @@ than quoted:
 ./scripts/Measure-ClaudeProjectionCost.ps1 -Developers 500000 -DailyActive 50000
 ```
 
-At the full 500,000-developer requirement that is **$3.81 a month** — the
+At the full 500,000-developer requirement that is **$11.11 a month** — the
 resolver is called once per cache window per active developer, not once per
-request, so the cache absorbs almost all of it. The standing-cost objection to
-ADR-0005 does not survive the arithmetic.
+request, so the cache absorbs almost all of it. Most of that total is a private
+endpoint, which bills at rest; see
+[ADR-0011](adr/0011-projection-platform.md) for why private networking is
+assumed rather than optional. The standing-cost objection to ADR-0005 does not
+survive the arithmetic either way.
 
 ---
 

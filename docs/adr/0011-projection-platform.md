@@ -31,12 +31,35 @@ subscription per month.
 
 | | Per month |
 |---|---:|
-| Azure Function, Consumption | $1.56 |
+| Azure Function | $1.56 |
 | Cosmos DB request units | $2.20 |
 | Cosmos DB storage (0.19 GB) | $0.05 |
-| **Total** | **$3.81** |
+| Private endpoint | $7.30 |
+| **Total** | **$11.11** |
 
 Rates are published US list, read 2026-09-17, and are regional.
+
+### The private endpoint is not optional, and that was found by deploying
+
+This ADR first said **$3.81** on Functions Consumption with no private networking. Deploying the
+template to the reference subscription proved that wrong.
+
+The account came back with `publicNetworkAccess: Disabled`, enforced above the resource group —
+`az cosmosdb update --public-network-access ENABLED` reported success and changed nothing. Nothing
+in `infra/projection.bicep` asks for that; the governance baseline imposes it.
+
+An accelerator aimed at organisations with six-figure developer counts must assume that baseline
+rather than its absence. Two consequences:
+
+1. **Cosmos needs a private endpoint** — $7.30 a month, billed whether anyone calls the gateway or
+   not. It is the first line in this accelerator that bills at rest, and at a small deployment it is
+   the entire bill.
+2. **The resolver cannot run on Consumption.** The Y1 Consumption plan has no VNet integration.
+   [Flex Consumption](https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan) does,
+   and keeps per-execution billing, so the cost line is unchanged — but the plan this ADR originally
+   named could not have reached the database at all.
+
+Neither was visible from a pricing page. Both came from deploying the thing.
 
 **The cost is small because the resolver is called per cache miss, not per request.** A developer
 misses once per cache window while they are active, so someone making 500 calls an hour and someone
@@ -55,9 +78,12 @@ priced. Computed, not estimated:
 
 | Cache window | Misses per month | Per month | Revoked developer keeps working for up to |
 |---|---:|---:|---|
-| 240 minutes | 2,200,000 | **$0.84** | 4 hours |
-| 60 minutes | 8,800,000 | **$3.81** | 1 hour |
-| 15 minutes | 35,200,000 | **$15.69** | 15 minutes |
+| 240 minutes | 2,200,000 | **$8.14** | 4 hours |
+| 60 minutes | 8,800,000 | **$11.11** | 1 hour |
+| 15 minutes | 35,200,000 | **$22.99** | 15 minutes |
+
+Note how little of that moves. Most of the bill is the private endpoint, which is fixed, so
+quartering the staleness window does not even triple the total.
 
 Every row is affordable. **So choose the window on the revocation requirement, not the invoice** —
 the money is not the constraint at any setting anyone would pick, and pretending otherwise would be

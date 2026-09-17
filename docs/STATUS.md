@@ -9,8 +9,8 @@ The operator chose **Cosmos DB serverless with an Azure Function resolver**, rec
 deliberately did not name a platform; this names it and prices it.
 
 **The standing-cost objection does not survive the arithmetic.** At the full requirement — 500,000
-developers, 50,000 active on a working day, a 60-minute cache window — it is **$3.81 a month**:
-$1.56 Functions, $2.20 Cosmos request units, $0.05 storage. Computed by
+developers, 50,000 active on a working day, a 60-minute cache window — it is **$11.11 a month**:
+$1.56 Functions, $2.20 Cosmos request units, $0.05 storage, $7.30 private endpoint. Computed by
 `scripts/Measure-ClaudeProjectionCost.ps1`, not quoted, because the number that decides it is the
 cache miss rate and nobody can look that up.
 
@@ -19,12 +19,31 @@ not once per request. A developer making 500 calls an hour and one making 5 cost
 
 | Cache window | Misses per month | Per month | A revoked developer keeps working for up to |
 |---|---:|---:|---|
-| 240 minutes | 2,200,000 | $0.84 | 4 hours |
-| 60 minutes | 8,800,000 | $3.81 | 1 hour |
-| 15 minutes | 35,200,000 | $15.69 | 15 minutes |
+| 240 minutes | 2,200,000 | $8.14 | 4 hours |
+| 60 minutes | 8,800,000 | $11.11 | 1 hour |
+| 15 minutes | 35,200,000 | $22.99 | 15 minutes |
 
-Every row is affordable, so **the window is a revocation decision, not a budget one**. That reframes
-the one question still open from ADR-0005: it was never going to be settled by cost.
+Every row is affordable, and most of each row is a fixed endpoint charge, so **the window is a
+revocation decision, not a budget one**. That reframes the one question still open from ADR-0005: it
+was never going to be settled by cost.
+
+### The first draft of the costing was wrong, and deploying found it
+
+ADR-0011 originally said $3.81 on Functions Consumption with no private networking. Deploying
+`infra/projection.bicep` to the reference subscription returned an account with
+`publicNetworkAccess: Disabled`, enforced above the resource group — an update to enable it reported
+success and changed nothing. Nothing in the template asks for that; the governance baseline imposes
+it.
+
+Two consequences, and an accelerator aimed at six-figure organisations has to assume both:
+
+- Cosmos needs a **private endpoint**, $7.30 a month, billed whether anyone calls the gateway or
+  not. It is the first line in this accelerator that bills at rest.
+- The resolver **cannot run on Consumption**: the Y1 plan has no VNet integration. Flex Consumption
+  does and keeps per-execution billing, so the cost line is unchanged — but the plan originally
+  named could not have reached the database at all.
+
+Neither was visible from a pricing page.
 
 **What it costs in latency, not money.** Serverless offers no guaranteed throughput or latency, and
 caps at 5,000 RU/s per physical partition — against an average under 15 RU/s at full scale, so

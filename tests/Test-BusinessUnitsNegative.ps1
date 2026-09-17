@@ -552,6 +552,42 @@ $mutations = @(
        From  = 'choose the window on the revocation requirement'
        To    = 'choose the window on the invoice' }
 
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the README stops stating what it holds today'
+       File  = 'README.md'
+       From  = 'How many developers this holds today'
+       To    = 'Scale' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the README implies the projection is shipped'
+       File  = 'README.md'
+       From  = 'is not built**'
+       To    = 'is included**' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'private networking stops being priced'
+       File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
+       From  = '[bool]$PrivateNetworking = $true'
+       To    = '[bool]$PrivateNetworking = $false' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the endpoint charge stops reaching the total'
+       File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
+       From  = '$totalUsd = $functionUsd + $cosmosRuUsd + $storageUsd + $networkUsd'
+       To    = '$totalUsd = $functionUsd + $cosmosRuUsd + $storageUsd' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the Consumption plan limitation is dropped'
+       File  = 'docs/adr/0011-projection-platform.md'
+       From  = 'Y1 Consumption plan has no VNet integration'
+       To    = 'Y1 Consumption plan works fine' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the deployment finding stops being recorded'
+       File  = 'docs/adr/0011-projection-platform.md'
+       From  = 'publicNetworkAccess: Disabled'
+       To    = 'public access open' }
+
     # --- adding a model, and plugin governance ---
 
     @{ Suite = 'Test-ModelsAndPlugins.ps1'

@@ -36,18 +36,29 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   nobody can look that up.
 
   At the full requirement — 500,000 developers, 50,000 active daily, a 60-minute
-  cache window — it is **$3.81 a month**: $1.56 Functions, $2.20 Cosmos request
-  units, $0.05 storage. The resolver is called once per cache window per active
-  developer, not once per request, so a developer making 500 calls an hour and
-  one making 5 cost the same.
+  cache window — it is **$11.11 a month**: $1.56 Functions, $2.20 Cosmos request
+  units, $0.05 storage, $7.30 private endpoint. The resolver is called once per
+  cache window per active developer, not once per request, so a developer making
+  500 calls an hour and one making 5 cost the same.
 
-  Halving the window to 15 minutes costs $15.69. Every plausible setting is
+  Halving the window to 15 minutes costs $22.99, and most of that is the fixed
+  endpoint charge. Every plausible setting is
   affordable, so the cache window is a **revocation decision, not a budget one**
   — which settles how the question still open from ADR-0005 should be answered.
 
   What it costs instead is a guarantee: serverless offers no guaranteed
-  throughput or latency, and Functions Consumption cold starts land in p99 on a
-  miss. Both are stated rather than left to be discovered.
+  throughput or latency, and Functions cold starts land in p99 on a miss. Both
+  are stated rather than left to be discovered.
+
+- `infra/projection.bicep` deploys the projection: a serverless Cosmos account
+  with local auth disabled, partitioned on `/oid` so every identity is its own
+  logical partition. Partitioning on `/tenantId` — the obvious reading of
+  ADR-0005 — would put all 500,000 records in one logical partition, which looks
+  correct at eight developers and hits a 20 GB wall later.
+
+  Deployed to the reference subscription to prove it works, which is how the
+  private-networking constraint above was found. Nothing reads it yet; that is
+  ADR-0009 phase 1, schema first with authorization unchanged.
 
 - **Cache reads are now charged back.** `Get-ClaudeBusinessUnit.ps1` attributes
   them per business unit and shows them in their own **Cache read** column,
@@ -403,6 +414,12 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   policy validates the audience `https://cognitiveservices.azure.com`, a
   first-party Microsoft resource, and both are configured on the application
   registration the token is issued for — which nobody here owns.
+
+- The README never said how many developers the accelerator actually holds. A
+  reader had to reach `docs/SCALE.md` to find out, and the 500,000 figure the
+  design discusses reads as a capability when it is a target. It now states the
+  measured ceiling — about 90, business-unit membership first — and that the
+  projection which lifts it is designed and costed but **not built**.
 
 - `New-ClaudeCodePolicy.ps1` built a Claude Desktop settings block and then
   discarded it. Its own comment said the keys were "emitted here so one run

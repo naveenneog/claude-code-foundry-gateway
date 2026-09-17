@@ -225,8 +225,18 @@ Assert 'a cost model exists' (Test-Path $cost)
 # Behavioural. The claim that decides P19 is that the bill is small at the full
 # requirement, so assert the number rather than the prose describing it.
 $big = & $cost -Developers 500000 -DailyActive 50000 -CacheMinutes 60 -AsJson | ConvertFrom-Json
-Assert '500k developers cost single-digit dollars' ($big.monthly_usd.total -lt 10 -and $big.monthly_usd.total -gt 0) "got $($big.monthly_usd.total)"
+Assert '500k developers cost tens of dollars, not thousands' ($big.monthly_usd.total -lt 50 -and $big.monthly_usd.total -gt 0) "got $($big.monthly_usd.total)"
 Assert 'and the projection is under a gigabyte'    ($big.derived.storage_gb -lt 1) "got $($big.derived.storage_gb)"
+
+# The private endpoint is the only line that bills at rest, and it was found by
+# deploying rather than by reading a pricing page: the reference subscription
+# enforces publicNetworkAccess Disabled above the resource group. An accelerator
+# for large enterprises has to assume that baseline, so it defaults on.
+Assert 'private networking is priced in'  ($big.monthly_usd.private_endpoint -gt 0)
+Assert 'and defaults to on'               ((Get-Content $cost -Raw) -match '\[bool\]\$PrivateNetworking = \$true')
+$open = & $cost -Developers 500000 -DailyActive 50000 -PrivateNetworking:$false -AsJson | ConvertFrom-Json
+Assert 'turning it off removes exactly that line' `
+    ([math]::Round($big.monthly_usd.total - $open.monthly_usd.total, 2) -eq $big.monthly_usd.private_endpoint)
 
 # Cost follows cache misses, not requests. If that ever inverts, the model is
 # measuring the wrong thing and every figure built on it is wrong.
@@ -237,7 +247,7 @@ Assert 'and it scales with the window, four to one' `
 
 # A pilot must cost nothing measurable, or the pay-per-use claim is not true.
 $small = & $cost -Developers 8 -DailyActive 8 -AsJson | ConvertFrom-Json
-Assert 'a small pilot is free' ($small.monthly_usd.total -eq 0) "got $($small.monthly_usd.total)"
+Assert 'a small pilot pays only the endpoint' ($small.monthly_usd.total -eq $small.monthly_usd.private_endpoint) "got $($small.monthly_usd.total)"
 
 # Rates change and are regional. They must be parameters with a read date, not
 # constants buried in arithmetic - the same reason the token price book moved to
@@ -263,7 +273,9 @@ $a11 = Join-Path $root 'docs/adr/0011-projection-platform.md'
 Assert 'the platform decision is recorded' (Test-Path $a11)
 $d11 = Get-Content $a11 -Raw
 Assert 'it names both components'  ($d11 -match 'Cosmos DB serverless' -and $d11 -match 'Functions on the Consumption plan')
-Assert 'it states the total'       ($d11 -match '\*\*\$3\.81\*\*')
+Assert 'it states the total'       ($d11 -match '\*\*\$11\.11\*\*')
+Assert 'and records the deployment finding' ($d11 -match 'publicNetworkAccess: Disabled')
+Assert 'and that Consumption cannot reach it' ($d11 -match 'Y1 Consumption plan has no VNet integration')
 # Serverless is cheap and gives no latency guarantee. Recording the price
 # without the trade would be selling it.
 Assert 'it records the latency trade' ($d11 -match 'no guaranteed throughput or latency')
@@ -274,6 +286,15 @@ Assert 'and leaves that number open' ($d11 -match 'remains open')
 
 Write-Host ''
 Write-Host 'Scale - reachable from the README' -ForegroundColor Cyan
+
+# The operating envelope belongs where someone evaluating the accelerator will
+# see it, not three pages into SCALE.md. Without it a reader reasonably assumes
+# the 500,000 figure the design discusses is what the thing does today.
+$readmeTop = (Get-Content (Join-Path $root 'README.md') -Raw)
+Assert 'the README states the current ceiling'   ($readmeTop -match 'How many developers this holds today')
+Assert 'and gives the measured number'           ($readmeTop -match 'roughly 93 developers')
+Assert 'and says the larger design is not built' ($readmeTop -match 'is not built\*\*')
+Assert 'and points at how to check your own'     ($readmeTop -match 'Measure-ClaudeCeiling\.ps1')
 
 # Documentation that nothing links to is documentation nobody reads. Six pages
 # were unreachable from the README before this check existed, including the
