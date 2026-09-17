@@ -53,7 +53,9 @@ function Show-ClaudeBanner {
 '@
 
     $art = if ($Variant -eq 'console') { $consoleArt } else { $setupArt }
-    $label = if ($Variant -eq 'console') { 'C O N S O L E' } else { 'S E T U P' }
+    # Spelled out because the art reads "FOUNDRY CMC" and an operator has no way
+    # to expand that on sight.
+    $label = if ($Variant -eq 'console') { 'Foundry Claude Management Console' } else { 'S E T U P' }
 
     # Measured from the art rather than hard-coded, so the rule stays flush if
     # the art is ever swapped again. TrimEnd because some lines are padded out

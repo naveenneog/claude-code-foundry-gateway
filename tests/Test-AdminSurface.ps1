@@ -286,6 +286,7 @@ $variant = if ($mc -match 'Show-ClaudeBanner -Variant (\w+)') { $Matches[1] } el
 Assert 'with a variant the banner accepts' (
     $variant -and $bn -match "ValidateSet\([^)]*'$variant'") "asked for '$variant'"
 Assert 'and that variant selects its own art' ($bn -match "(?m)^\s*\`$art = if \(\`$Variant -eq 'console'\)")
+Assert 'and names the console in full'        ($bn -match 'Foundry Claude Management Console')
 
 Write-Host ''
 Write-Host 'Admin - documentation' -ForegroundColor Cyan

@@ -864,6 +864,12 @@ $mutations = @(
        To    = "`$art = if (`$false)" }
 
     @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the console name shrinks back to an initialism'
+       File  = 'scripts/Show-Banner.ps1'
+       From  = "'Foundry Claude Management Console'"
+       To    = "'C M C'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the console reimplements the write'
        File  = 'scripts/Manage-ClaudeBusinessUnits.ps1'
        From  = "'Set-ClaudeBusinessUnit.ps1'"
