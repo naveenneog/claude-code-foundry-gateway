@@ -158,7 +158,7 @@ Write-Host ''
 Write-Host ("  Cache misses     {0:n0}/month  ({1} per active developer per day)" -f $missesPerMonth, $missesPerActiveDay)
 Write-Host ("  Projection size  {0:n2} GB" -f $storageGb)
 Write-Host ''
-Write-Host ("  {0,-26} {1,10}" -f 'Azure Function (Consumption)', ('$' + ('{0:n2}' -f $functionUsd)))
+Write-Host ("  {0,-26} {1,10}" -f $(if ($PrivateNetworking) { 'Azure Function (Flex)' } else { 'Azure Function (Consumption)' }), ('$' + ('{0:n2}' -f $functionUsd)))
 Write-Host ("  {0,-26} {1,10}" -f 'Cosmos DB request units', ('$' + ('{0:n2}' -f $cosmosRuUsd)))
 Write-Host ("  {0,-26} {1,10}" -f 'Cosmos DB storage', ('$' + ('{0:n2}' -f $storageUsd)))
 if ($PrivateNetworking) {
