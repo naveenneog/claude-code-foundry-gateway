@@ -20,6 +20,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | U11 | OPEN | What does the trace ledger cost to ingest, and does a cheaper table plan forfeit purge? | P18, conflicts with U7 |
 | U12 | CLOSED | Does APIM telemetry preserve the Claude cache TTL split? No, and the quota scalar excludes cache entirely — measured 2026-09-15 | P18 shipped |
 | U13 | OPEN | Can APIM enforce a budget on categorised usage rather than one token total? `llm-token-limit` takes a single `token-quota` and counts prompt and completion only | P21 |
+| U14 | OPEN | What does the projection resolver add to p99 on a cache miss? ADR-0011 records the trade — Flex Consumption cold start plus a private-endpoint Cosmos read — and nothing has measured it | P19, [ADR-0013](adr/0013-gateway-outlives-instance.md) |
 
 ---
 

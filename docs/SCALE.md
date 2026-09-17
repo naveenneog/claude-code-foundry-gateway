@@ -231,6 +231,49 @@ API Management's quota policies do not offer that, so this is not called one.
 
 ## Deploying today, and scaling later
 
+### Two things to get right on the first day
+
+Both cost nothing now and are expensive to retrofit. Reasoning and the sources
+are in [ADR-0013](adr/0013-gateway-outlives-instance.md).
+
+**Give developers a custom domain, not the instance hostname.** The onboarding
+file carries `https://<instance>.azure-api.net/claude`, which puts the instance
+name into the configuration on every machine. Any later move that creates a new
+instance — Standard v2 to Premium v2, or v2 to classic for multi-region — then
+changes the URL for every developer. Behind `https://claude.<company>.com/claude`
+the same move is a DNS change nobody notices. At 200 developers retrofitting
+this is a bad afternoon; at 200,000 it is a migration nobody attempts, which
+means the first day's choice is the permanent one.
+
+**Know which SKU the design needs, which is not a developer-count question.**
+Read from Microsoft Learn on 2026-09-17:
+
+| | Basic v2 | Standard v2 | Premium v2 | Premium (classic) |
+|---|---|---|---|---|
+| Maximum units | 10 | 10 | 30 | multiple |
+| Availability zones | no | no | **yes** | **yes** |
+| Multi-region | no | no | **no** | **yes** |
+| Virtual network integration | **no** | **yes** | yes, plus injection | injection |
+| In-place move | ↔ Standard v2 | ↔ Basic v2 | not documented | classic family only |
+
+Two of those cells matter more than the rest:
+
+- **Basic v2 has no virtual network integration**, and the projection sits
+  behind a private endpoint because the Cosmos account comes back with public
+  access disabled. So **Basic v2 cannot run the ADR-0011 design at any size** —
+  not at 200,000 developers and not at 20. The floor for the projection is
+  Standard v2, and the failure on Basic v2 looks like a networking error rather
+  than an entitlement one.
+- **Premium v2 does not do multi-region.** Only Premium classic does. Reading
+  "Premium" as "the resilient one" and picking v2 for disaster recovery gets
+  availability zones and a single region.
+
+Basic v2 to Standard v2 is an in-place change with no gateway downtime and no
+URL change. Everything else means a new instance — survivable only behind the
+custom domain above.
+
+### Standing up the projection
+
 The projection is **not wired into the installer**. Running
 `Install-ClaudeGateway.ps1` today deploys the gateway and nothing else, which is
 deliberate: wiring it in would give every deployment a Cosmos account nothing

@@ -404,6 +404,45 @@ Assert 'with the measurement behind it'         ($status -match '1 RU flat')
 Assert 'it names the one open input'            ($status -match '(?i)how long the gateway may keep serving')
 
 Write-Host ''
+Write-Host 'Scale - the gateway outlives the instance (ADR-0013)' -ForegroundColor Cyan
+
+$adr13 = Get-Content (Join-Path $root 'docs/adr/0013-gateway-outlives-instance.md') -Raw
+
+# The SKU floor is a networking fact, not a headcount one. A Basic v2 gateway
+# cannot join a virtual network, and the projection sits behind a private
+# endpoint because the Cosmos account comes back with public access disabled.
+Assert 'it records the tier capabilities'       ($adr13 -match 'Virtual network integration')
+Assert 'Basic v2 cannot run the design'         ($adr13 -match '(?i)Basic v2 cannot run the design in ADR-0011 at any size')
+Assert 'and Standard v2 is named as the floor'  ($adr13 -match '(?i)floor for the projection is\s+\*\*Standard v2|SKU floor for the projection is \*\*Standard v2')
+Assert 'Premium v2 multi-region is corrected'   ($adr13 -match '(?i)Premium v2 does not do multi-region')
+Assert 'and Premium classic is named instead'   ($adr13 -match '(?i)Only Premium classic does')
+Assert 'the in-place path is recorded'          ($adr13 -match '(?i)Basic v2 and Standard v2')
+Assert 'and that it does not interrupt traffic' ($adr13 -match 'will not experience gateway')
+
+# The requirement: 200 developers today reaching 200,000 without reconfiguring
+# the 200. The hostname is the thing that blocks it.
+Assert 'developers get a custom domain'    ($adr13 -match '(?i)custom domain, never the instance hostname')
+Assert 'and the reason is the instance name in the URL' ($adr13 -match '(?i)instance name is in the hostname|instance name into the configuration')
+
+# Not modifying the gateway is the constraint, so both paths ship on day one and
+# the switch is configuration.
+Assert 'both entitlement paths ship together' ($adr13 -match '(?i)carries both entitlement paths')
+Assert 'and the switch is a named value'      ($adr13 -match 'entitlement-source')
+Assert 'the migration is a flip, not a deploy' ($adr13 -match '(?i)no gateway change, and the rollback')
+
+# Billing continuity is the other half of the requirement.
+Assert 'the counter key does not change'  ($adr13 -match '(?i)counter key is the object id, and it does not change')
+Assert 'and spend history is located'     ($adr13 -match '(?i)Log Analytics, which survives any tier change')
+
+Assert 'the unknown it leaves is recorded' (
+    (Get-Content (Join-Path $root 'docs/UNKNOWNS.md') -Raw) -match '\| U14 \| OPEN')
+
+$scale = Get-Content (Join-Path $root 'docs/SCALE.md') -Raw
+Assert 'the scale guide carries the SKU table'  ($scale -match '(?s)Basic v2[\s\S]{0,200}Premium \(classic\)')
+Assert 'and the two first-day decisions'        ($scale -match '(?i)Two things to get right on the first day')
+Assert 'and links the decision record'          ($scale -match '0013-gateway-outlives-instance')
+
+Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Scale contract holds.' -ForegroundColor Green
 exit 0

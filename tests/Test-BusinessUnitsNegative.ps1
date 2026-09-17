@@ -920,6 +920,48 @@ $mutations = @(
        From  = 'no tile targeting a Log Analytics workspace'
        To    = 'nothing to bind, continuing' }
 
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the Basic v2 networking floor is dropped'
+       File  = 'docs/adr/0013-gateway-outlives-instance.md'
+       From  = 'Basic v2 cannot run the design in ADR-0011 at any size'
+       To    = 'Basic v2 is fine for small deployments' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'Premium v2 is credited with multi-region'
+       File  = 'docs/adr/0013-gateway-outlives-instance.md'
+       From  = 'Premium v2 does not do multi-region'
+       To    = 'Premium v2 does multi-region' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the custom domain recommendation disappears'
+       File  = 'docs/adr/0013-gateway-outlives-instance.md'
+       From  = 'custom domain, never the instance hostname'
+       To    = 'instance hostname' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the entitlement switch stops being configuration'
+       File  = 'docs/adr/0013-gateway-outlives-instance.md'
+       From  = 'entitlement-source'
+       To    = 'a later policy change' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'billing continuity stops being stated'
+       File  = 'docs/adr/0013-gateway-outlives-instance.md'
+       From  = 'counter key is the object id, and it does not change'
+       To    = 'counter key may be revisited' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the scale guide loses the first-day decisions'
+       File  = 'docs/SCALE.md'
+       From  = 'Two things to get right on the first day'
+       To    = 'Some notes' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the status page calls P19 finished'
+       File  = 'docs/STATUS.md'
+       From  = 'Not finished'
+       To    = 'Delivered' }
+
     @{ Suite = 'Test-Observability.ps1'
        Name  = 'the Desktop gateway sign-in step disappears'
        File  = 'DEVELOPER.md'
