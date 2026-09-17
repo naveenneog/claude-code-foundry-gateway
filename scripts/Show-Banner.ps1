@@ -14,7 +14,14 @@
 function Show-ClaudeBanner {
     [CmdletBinding()]
     param(
-        [string]$Subtitle = 'Governed gateway for Claude on Microsoft Foundry'
+        [string]$Subtitle = 'Governed gateway for Claude on Microsoft Foundry',
+
+        # Which face to show. 'setup' is the deployment path; 'console' is the
+        # day-to-day administration surface, which is a different job and worth
+        # looking like one - an operator who sees the setup banner every time
+        # they change a budget stops reading banners.
+        [ValidateSet('setup', 'console')]
+        [string]$Variant = 'setup'
     )
 
     $cyan = "`e[36m"; $dim = "`e[90m"; $white = "`e[97m"; $off = "`e[0m"
@@ -24,7 +31,7 @@ function Show-ClaudeBanner {
         $cyan = "$esc[36m"; $dim = "$esc[90m"; $white = "$esc[97m"; $off = "$esc[0m"
     }
 
-    $art = @'
+    $setupArt = @'
  _____               _            _____ _           _        _____       _     
 |   __|___ _ _ ___ _| |___ _ _   |     | |___ _ _ _| |___   |     |___ _| |___ 
 |   __| . | | |   | . |  _| | |  |   --| | .'| | | . | -_|  |   --| . | . | -_|
@@ -32,15 +39,31 @@ function Show-ClaudeBanner {
                           |___|                                                 
 '@
 
+    # FOUNDRY CMC - Claude Management Console. Same constraint as the art above:
+    # pure ASCII, so there is one rendering and nothing to detect or fall back
+    # from, on any console and any code page.
+    $consoleArt = @'
+ _______  _______  __   __  __    _  ______   ______    __   __    _______  __   __  _______ 
+|       ||       ||  | |  ||  |  | ||      | |    _ |  |  | |  |  |       ||  |_|  ||       |
+|    ___||   _   ||  | |  ||   |_| ||  _    ||   | ||  |  |_|  |  |       ||       ||       |
+|   |___ |  | |  ||  |_|  ||       || | |   ||   |_||_ |       |  |       ||       ||       |
+|    ___||  |_|  ||       ||  _    || |_|   ||    __  ||_     _|  |      _||       ||      _|
+|   |    |       ||       || | |   ||       ||   |  | |  |   |    |     |_ | ||_|| ||     |_ 
+|___|    |_______||_______||_|  |__||______| |___|  |_|  |___|    |_______||_|   |_||_______|
+'@
+
+    $art = if ($Variant -eq 'console') { $consoleArt } else { $setupArt }
+    $label = if ($Variant -eq 'console') { 'C O N S O L E' } else { 'S E T U P' }
+
     # Measured from the art rather than hard-coded, so the rule stays flush if
-    # the art is ever swapped again. TrimEnd because two lines are padded out
+    # the art is ever swapped again. TrimEnd because some lines are padded out
     # with trailing spaces.
     $width = ($art -split "`r?`n" | ForEach-Object { $_.TrimEnd().Length } |
               Measure-Object -Maximum).Maximum
 
     Write-Host ''
     Write-Host ("{0}{1}{2}" -f $cyan, $art, $off)
-    Write-Host ("{0}S E T U P{1}  {2}{3}{1}" -f $white, $off, $dim, $Subtitle)
+    Write-Host ("{0}{1}{2}  {3}{4}{2}" -f $white, $label, $off, $dim, $Subtitle)
     Write-Host ("{0}{1}{2}" -f $dim, ('-' * $width), $off)
     Write-Host ("{0}Developer{1} Naveen Gopalakrishna   {2}github.com/naveenneog{1}" -f $dim, $off, $cyan)
     Write-Host ''

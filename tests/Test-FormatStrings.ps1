@@ -70,7 +70,40 @@ $ok = $true
 try { [string]::Format($allowed, 'a', 'b') | Out-Null } catch { $ok = $false }
 Assert 'the pattern it allows does not' $ok
 
+# Dot-sourced helpers behind a Test-Path guard.
+#
+# Same failure shape as the above: it parses, it reviews clean, and it does
+# nothing. The guard exists so a trimmed-down copy of the repo still runs, but
+# it also swallows a typo in the filename - the script carries on with the
+# helper's functions undefined. Manage-ClaudeBusinessUnits.ps1 shipped pointing
+# at ClaudeBanner.ps1, which has never existed, and the console simply printed
+# no banner. Nothing failed, so nothing reported it.
+Write-Host ''
+Write-Host 'Dot-sourced helper paths' -ForegroundColor Cyan
+
+$missing = @()
+$checked = 0
+foreach ($f in $files) {
+    $n = 0
+    foreach ($line in (Get-Content $f.FullName)) {
+        $n++
+        if ($line.TrimStart().StartsWith('#')) { continue }
+
+        # $x = Join-Path $PSScriptRoot 'Name.ps1'  - the only form used here.
+        # Resolved against the *script's* directory, not the test's, which is
+        # what $PSScriptRoot means at that line.
+        $m = [regex]::Match($line, "Join-Path\s+\`$PSScriptRoot\s+'(?<f>[^']+\.ps1)'")
+        if (-not $m.Success) { continue }
+        $checked++
+        $target = Join-Path $f.DirectoryName $m.Groups['f'].Value
+        if (-not (Test-Path $target)) { $missing += "$($f.Name):$n  -> $($m.Groups['f'].Value)" }
+    }
+}
+
+Assert 'every dot-sourced helper path resolves' ($missing.Count -eq 0) ($missing -join ' | ')
+Assert 'the scan found paths to check' ($checked -gt 0) 'regex matched nothing, so this check guards nothing'
+
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
-Write-Host ("Format strings hold across {0} script(s)." -f $files.Count) -ForegroundColor Green
+Write-Host ("Format strings hold across {0} script(s); {1} helper path(s) resolve." -f $files.Count, $checked) -ForegroundColor Green
 exit 0

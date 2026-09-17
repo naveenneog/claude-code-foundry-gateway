@@ -241,6 +241,53 @@ Assert 'the identifier is validated at the prompt' ($inst -match "\`$buId -notma
 Assert 'and it delegates the write'                ($inst -match 'scripts/Set-ClaudeBusinessUnit\.ps1.*-Id \$buId')
 
 Write-Host ''
+Write-Host 'Admin - the chargeback console' -ForegroundColor Cyan
+
+$console = Join-Path $root 'scripts/Manage-ClaudeBusinessUnits.ps1'
+Assert 'a management console exists' (Test-Path $console)
+$mc = Get-Content $console -Raw
+
+# It is a menu over the shipped commands, not a second implementation. A
+# parallel implementation drifts, and then the console and the documented
+# command disagree about what happened.
+foreach ($s in 'Get-ClaudeBusinessUnit.ps1', 'Set-ClaudeBusinessUnit.ps1',
+                'Set-ClaudeDeveloper.ps1', 'Sync-ClaudeAccess.ps1') {
+    Assert "it delegates to $s" ($mc -match [regex]::Escape("'$s'"))
+}
+Assert 'and writes nothing itself' ($mc -notmatch 'Set-ApimNamedValue')
+
+# Entitlement is not live. Forgetting the sync is the most common way a change
+# looks like it did not work, so the console owns it rather than the operator.
+Assert 'a change syncs automatically'   ($mc -match '(?m)^function Complete-Change')
+Assert 'and batching is possible'       ($mc -match '\[switch\]\$NoSync')
+Assert 'with the gateway marked behind' ($mc -match '\$script:pending = \$true')
+Assert 'and a warning on the way out'   ($mc -match "(?s)'q' \{[\s\S]{0,300}Sync before leaving")
+
+# A budget is a named value the policy reads, not directory membership, so it
+# does not need a membership sync - and saying so avoids an unnecessary one.
+Assert 'a budget change does not force a sync' ($mc -match 'Budgets take effect on the next request')
+
+# One mistyped group must not end a session halfway through moving a team.
+Assert 'a failed option does not exit the console' ($mc -match '(?s)catch \{[\s\S]{0,500}That did not work')
+
+# A menu needs a keyboard, and UserInteractive lies under -NonInteractive.
+Assert 'it detects a missing terminal by trying' ($mc -match '(?m)^function Read-Choice')
+Assert 'and names the direct commands instead'   ($mc -match 'For scripts and pipelines, call the commands directly')
+
+# The console is a different job from the installer and says so on entry.
+# Asserted by effect: the helper file has to exist and the variant has to be one
+# the helper accepts, because Test-Path swallows a wrong name silently and an
+# unknown variant would throw only when someone ran it.
+$bannerPath = Join-Path $root 'scripts/Show-Banner.ps1'
+Assert 'the console dot-sources a banner that exists' (
+    $mc -match "Join-Path \`$PSScriptRoot 'Show-Banner\.ps1'" -and (Test-Path $bannerPath))
+$bn = Get-Content $bannerPath -Raw
+$variant = if ($mc -match 'Show-ClaudeBanner -Variant (\w+)') { $Matches[1] } else { '' }
+Assert 'with a variant the banner accepts' (
+    $variant -and $bn -match "ValidateSet\([^)]*'$variant'") "asked for '$variant'"
+Assert 'and that variant selects its own art' ($bn -match "(?m)^\s*\`$art = if \(\`$Variant -eq 'console'\)")
+
+Write-Host ''
 Write-Host 'Admin - documentation' -ForegroundColor Cyan
 
 $mig_doc = Get-Content (Join-Path $root 'docs/MIGRATION.md') -Raw

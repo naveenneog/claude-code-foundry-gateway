@@ -515,6 +515,7 @@ scripts/
   Show-Governance.ps1          verify all four controls
   Set-ClaudeDeveloper.ps1      add or remove one developer, tiers and units
   Set-ClaudeTier.ps1           read and set a tier's limits and model list
+  Manage-ClaudeBusinessUnits.ps1  one console: units, teams, budgets, people
   Set-ClaudeBusinessUnit.ps1   register a business unit, team or budget
   Get-ClaudeBusinessUnit.ps1   spend per business unit, and who is unassigned
   Measure-ClaudeCeiling.ps1    headroom against the measured scale limits

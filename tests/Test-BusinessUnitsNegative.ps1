@@ -836,6 +836,51 @@ $mutations = @(
        From  = "`$buId -notmatch '^[a-z0-9][a-z0-9-]*`$'"
        To    = '$false' }
 
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the console stops syncing after a change'
+       File  = 'scripts/Manage-ClaudeBusinessUnits.ps1'
+       From  = 'function Complete-Change'
+       To    = 'function Complete-Nothing' }
+
+    # The bug this pair was written for: a Test-Path guard turns a wrong helper
+    # name into silence, so the console ran for a whole session with no banner
+    # and nothing failed.
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the console dot-sources a banner that is not there'
+       File  = 'scripts/Manage-ClaudeBusinessUnits.ps1'
+       From  = "Join-Path `$PSScriptRoot 'Show-Banner.ps1'"
+       To    = "Join-Path `$PSScriptRoot 'ClaudeBanner.ps1'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the console asks for a variant the banner rejects'
+       File  = 'scripts/Manage-ClaudeBusinessUnits.ps1'
+       From  = 'Show-ClaudeBanner -Variant console'
+       To    = 'Show-ClaudeBanner -Variant admin' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the banner stops choosing art by variant'
+       File  = 'scripts/Show-Banner.ps1'
+       From  = "`$art = if (`$Variant -eq 'console')"
+       To    = "`$art = if (`$false)" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the console reimplements the write'
+       File  = 'scripts/Manage-ClaudeBusinessUnits.ps1'
+       From  = "'Set-ClaudeBusinessUnit.ps1'"
+       To    = "'Nothing.ps1'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'one mistyped value ends the session'
+       File  = 'scripts/Manage-ClaudeBusinessUnits.ps1'
+       From  = 'That did not work'
+       To    = 'Fatal' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'an unsynced change leaves quietly'
+       File  = 'scripts/Manage-ClaudeBusinessUnits.ps1'
+       From  = 'Sync before leaving'
+       To    = 'Goodbye' }
+
     # --- P30-P32 and the workstation tool ---
 
     @{ Suite = 'Test-AdminSurface.ps1'

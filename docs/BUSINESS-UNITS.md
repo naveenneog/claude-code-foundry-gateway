@@ -274,6 +274,46 @@ that conversion, so none of this reconciles to an invoice. See `U2` in
 Every command repeats these caveats in its own output, so nobody reads a number
 without them.
 
+## Managing it all in one place
+
+Most chargeback work is a short session — add a team, move two people into it,
+check the budget — and doing that as five separate commands means remembering
+five sets of parameters and a sync at the end. There is a console for it:
+
+```powershell
+./scripts/Manage-ClaudeBusinessUnits.ps1 -ApimName <apim> -ResourceGroup <rg>
+```
+
+```
+  Chargeback - apim-claude-gw (rg-claude)
+
+    1  List business units, teams and budgets
+    2  Add a business unit
+    3  Add a team inside a business unit
+    4  Change a budget
+    5  Add a developer to a unit or team
+    6  Remove a developer
+    7  Show consumption and who is unassigned
+    8  Sync now
+    q  Quit
+```
+
+It runs the same commands documented below — it is a menu, not a second
+implementation — and it **syncs automatically** after anything that changes
+membership or the registry. Entitlement is not live, and forgetting the sync is
+the most common reason a change appears not to have worked.
+
+Changing a budget does not trigger a sync, because a budget is a named value the
+policy reads rather than directory membership. The console says so instead of
+running one for the sake of it.
+
+`-NoSync` batches several edits and leaves you to sync once at the end; the menu
+then shows that the gateway is still serving the previous answer, and offers to
+sync on the way out.
+
+For pipelines, call the commands directly — the console refuses cleanly when
+there is no terminal and names the command for each option.
+
 ## Adding a business unit
 
 The installer offers to create your first ones at the end of a run, once the
