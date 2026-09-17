@@ -47,9 +47,17 @@ while (Date.now() - started < DEADLINE_MS) {
 
   if (/portal\.azure\.com/.test(url) && !/login\.microsoftonline/.test(url)) {
     // Portal shell has actually rendered, not just the URL.
+    //
+    // The element check used to be the only test and it was too narrow: a
+    // signed-in session reported NOT signed in because none of those three
+    // selectors matched the current portal build, and the operator was sent to
+    // authenticate again on a profile that was already good. The brand text is
+    // checked too, so a renamed shell element no longer reads as a failure.
     const shell = await page.locator('#azure-portal-shell, [id*="ShellRoot"], header')
       .first().isVisible().catch(() => false);
-    if (shell) { signedIn = true; break; }
+    const branded = await page.locator('text=Microsoft Azure').first()
+      .isVisible().catch(() => false);
+    if (shell || branded) { signedIn = true; break; }
   }
 
   const txt = await page.locator('body').innerText().catch(() => '');

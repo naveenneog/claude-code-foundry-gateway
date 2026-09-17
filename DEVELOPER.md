@@ -79,6 +79,28 @@ Bar`**. There is no sign-in step; your Entra credential is already resolved.
 
 ![claude /status showing API provider: Microsoft Foundry](docs/guide/b5-cli-status.png)
 
+**In Claude Desktop** — this one has a sign-in step, and the option you need is
+not the obvious one.
+
+1. **Quit Desktop completely**, including the tray or menu-bar icon. It reads
+   its configuration at startup, so a running instance will not pick this up.
+2. Reopen it. You get the **Sign In** screen.
+3. Choose **"Or sign in with Gateway"** at the bottom.
+
+![Claude Desktop sign-in, with Continue with Google and Continue with email above a small Or sign in with Gateway link at the bottom](docs/guide/b6-desktop-gateway-signin.png)
+
+**Do not use "Continue with Google" or "Continue with email".** Those sign you
+into Anthropic's own service with a personal or work Anthropic account. It will
+appear to work — you get a working Claude — but your organisation's access rules
+and usage tracking do not apply, and Anthropic bills that usage separately from
+your organisation's Azure agreement.
+
+Check **Settings → Connection**: it should name your gateway URL. If it shows an
+Anthropic account instead, sign out and start again at step 1.
+
+If there is no **Connection** entry under Settings at all, the setup script has
+not run on this machine — it writes the developer setting that reveals it.
+
 **Your budget is on every response:**
 
 ```
@@ -91,9 +113,9 @@ backs off on its own — you may only notice a pause. Exhausting the daily quota
 returns `403` until the period rolls over; ask the platform team if you need the
 premium tier.
 
-Your usage is attributed to you by name in chargeback. Nothing is anonymous —
-but nothing is inspected either. Only token counts are recorded, never your
-prompts.
+Your usage is recorded against your name so your organisation can allocate its
+cost. Nothing is anonymous — but nothing is inspected either. Only token counts
+are recorded, never your prompts.
 
 ---
 
@@ -106,9 +128,51 @@ prompts.
 | `429` | Per-minute budget hit. Resets within a minute; Claude Code retries automatically |
 | `DeploymentNotFound` | A model alias points at something we do not host. Use only `claude-sonnet-5` / `claude-opus-5` |
 | Extension prompts for Anthropic sign-in | Settings not picked up — reload the VS Code window |
+| Desktop asks for an Anthropic password | You picked Google or email. Sign out, quit completely, reopen, choose **Or sign in with Gateway** |
+| Desktop works but your usage never appears in your team's report | Same cause — you are signed into Anthropic, not the gateway. Check **Settings → Connection** names your gateway URL |
+| No **Settings → Connection** in Desktop | Developer settings missing. Re-run the setup script; it writes `allowDevTools: true` |
 | Panel fails but the CLI works | The extension host is running an older build. **Developer: Reload Window** in each open window |
 
 Anything else → [docs/DEBUGGING.md](docs/DEBUGGING.md), or your platform team.
+
+---
+
+## FAQ
+
+**Do I need an Anthropic account?**
+No. You never create one and you never sign in to one. Your Entra ID is the
+credential. If a screen is asking for an Anthropic password, you are on the
+wrong path — see the Desktop sign-in step above.
+
+**I signed in with Google by mistake. What now?**
+Sign out in Desktop, quit it completely including the tray icon, open it again
+and choose **Or sign in with Gateway**. Nothing is broken. That session was
+served by Anthropic rather than your gateway, so its cost was not recorded
+against your organisation and your prompts went to Anthropic's service.
+
+**Why is there a developer-mode step at all?**
+Desktop only shows **Settings → Connection** when a developer setting is turned
+on, and the gateway configuration has nowhere to live without it. The setup
+script writes it for you; there is nothing to switch on by hand.
+
+**Do I have to re-run the setup when my token expires?**
+No. The credential helper refreshes it silently. You only re-run setup if the
+gateway URL changes or you move to a different machine.
+
+**What does my platform team see?**
+Token counts, the model, which client you used, and your name. Not your prompts
+and not the replies. Usage is recorded against your name, and its cost is
+allocated to the department or team your platform team has assigned you to.
+
+**I get 403 and I am definitely in the group.**
+Group membership is not available to the gateway the instant it changes — a sync
+has to run. If your platform team has confirmed your membership and you still
+get `403`, ask them to check the sync completed.
+
+**Can I use a personal Anthropic subscription alongside this?**
+On a different machine or profile, yes — but not through this configuration. If
+you sign the same Desktop into an Anthropic account, it stops using the gateway
+until you sign back in with Gateway.
 
 ---
 

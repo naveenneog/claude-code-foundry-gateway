@@ -921,6 +921,36 @@ $mutations = @(
        To    = 'nothing to bind, continuing' }
 
     @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the Desktop gateway sign-in step disappears'
+       File  = 'DEVELOPER.md'
+       From  = 'Or sign in with Gateway'
+       To    = 'Sign in' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the warning off Google and email is dropped'
+       File  = 'DEVELOPER.md'
+       From  = 'Do not use'
+       To    = 'You may also use' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'a running Desktop is said to be fine'
+       File  = 'DEVELOPER.md'
+       From  = 'Quit Desktop completely'
+       To    = 'Leave Desktop running' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'the developer FAQ disappears'
+       File  = 'DEVELOPER.md'
+       From  = '## FAQ'
+       To    = '## Notes' }
+
+    @{ Suite = 'Test-Observability.ps1'
+       Name  = 'chargeback jargon returns to the developer guide'
+       File  = 'DEVELOPER.md'
+       From  = 'so your organisation can allocate its'
+       To    = 'in chargeback' }
+
+    @{ Suite = 'Test-Observability.ps1'
        Name  = 'the workbook stops splitting by client'
        File  = 'infra/workbook.json'
        From  = 'client_surface'
@@ -1182,6 +1212,9 @@ try {
     # back to the template.
     Copy-Item (Join-Path $root 'Install-ClaudeGateway.ps1') $sandbox -Force
     Copy-Item (Join-Path $root 'README.md') $sandbox -Force
+    # The developer-facing guide, which carries the Desktop gateway sign-in step
+    # and the FAQ, both of which are asserted against.
+    Copy-Item (Join-Path $root 'DEVELOPER.md') $sandbox -Force
     # And the capture/redaction pipeline, plus the ignore rules that keep the
     # unredacted captures out of a commit.
     Copy-Item (Join-Path $root 'guide') $sandbox -Recurse -Force
@@ -1210,7 +1243,7 @@ try {
         Copy-Item $_.FullName $dest -Force
     }
     New-Item -ItemType Directory -Path (Join-Path $sandbox 'docs/guide') -Force | Out-Null
-    foreach ($pattern in 'entra-*.png', 'obs-*.png') {
+    foreach ($pattern in 'entra-*.png', 'obs-*.png', 'b6-*.png', 'd[0-9]-*.png') {
         Get-ChildItem (Join-Path $root 'docs/guide') -File -Filter $pattern -ErrorAction SilentlyContinue |
             ForEach-Object { Copy-Item $_.FullName (Join-Path $sandbox 'docs/guide') -Force }
     }

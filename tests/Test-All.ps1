@@ -47,6 +47,7 @@ try {
     # Must come first: a missing BOM mangles every other PowerShell check on 5.1.
     Invoke-Check 'Script encoding (PowerShell 5.1 safety)' 'Repair-ScriptEncoding.ps1' @{ Check = $true }
     Invoke-Check 'Format strings parse and run'            'Test-FormatStrings.ps1'
+Invoke-Check 'Screenshots and the docs that show them' 'Test-Screenshots.ps1'
     Invoke-Check 'Named value writes fail loudly'          'Test-NamedValueWrites.ps1' @{ SkipLive = $true }
     Invoke-Check 'Release log hygiene'                     'Test-ReleaseLog.ps1'
     Invoke-Check 'Azure CLI arguments vs cmd.exe'          'Test-AzArguments.ps1'

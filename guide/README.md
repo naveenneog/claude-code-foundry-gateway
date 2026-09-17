@@ -86,6 +86,33 @@ Steps that need a portal session are **skipped, not failed**, when the profile
 is not signed in. A run with no session still produces the public-page
 screenshots and reports which ones it skipped.
 
+## What is not committed, and why
+
+Captures mask email addresses in the DOM before the screenshot is taken — same
+rule as `redact-entra.mjs`, first two characters and last two of the local part,
+domain intact — so a workbook showing developers by spend is safe to ship.
+
+**That is not enough for every blade**, and three were captured during this work
+and deleted rather than committed:
+
+| Blade | What was in the frame |
+|---|---|
+| Entra → Groups → All groups | 4,858 real groups from the tenant, most unrelated to this |
+| A group's Members list | display names and object ids beside the addresses |
+| Application Insights overview | the instrumentation key and connection string |
+
+Masking addresses does not cover a display name, an object id or a key. Those
+blades are **taken against your own tenant** and kept locally — see
+[`../docs/ONBOARDING.md`](../docs/ONBOARDING.md), which tells the reader to do
+exactly that.
+
+A second trap: a portal deep link often lands on the resource **Overview**
+rather than the blade named in the URL. Several captures came back showing
+Overview under a banner describing a policy or a role assignment, which is worse
+than having no picture — it is a caption that does not match its image. Open
+every new capture and check it shows what its banner claims before committing
+it.
+
 ## Composing
 
 ```bash

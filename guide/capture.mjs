@@ -179,7 +179,9 @@ const STEPS = [
     id: 'd1-chargeback-totals',
     url: () => portal(workbookId),
     needsAuth: true,
-    settle: 38000,
+    settle: 20000,
+    click: 'text=Open Workbook',
+    afterClick: 30000,
     banner: {
       title: 'Chargeback workbook — what the period cost',
       note: 'Spend, input, output and cache-read tokens, then spend per day by business unit',
@@ -189,7 +191,9 @@ const STEPS = [
     id: 'd2-chargeback-units',
     url: () => portal(workbookId),
     needsAuth: true,
-    settle: 38000,
+    settle: 20000,
+    click: 'text=Open Workbook',
+    afterClick: 30000,
     scrollTo: 1700,
     banner: {
       title: 'Chargeback workbook — by business unit and by developer',
@@ -200,7 +204,9 @@ const STEPS = [
     id: 'd3-chargeback-models',
     url: () => portal(workbookId),
     needsAuth: true,
-    settle: 38000,
+    settle: 20000,
+    click: 'text=Open Workbook',
+    afterClick: 30000,
     scrollTo: 3400,
     banner: {
       title: 'Chargeback workbook — by model, surface, and what cannot be trusted',
@@ -263,6 +269,19 @@ for (const step of wanted) {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForTimeout(step.settle ?? 8000);
 
+    // A workbook resource id opens the ARM overview blade, not the rendered
+    // workbook - the content sits behind an "Open Workbook" button. Clicking it
+    // is what the operator does, so the capture does it too.
+    if (step.click) {
+      const target = page.locator(step.click).first();
+      if (await target.isVisible().catch(() => false)) {
+        await target.click().catch(() => {});
+        await page.waitForTimeout(step.afterClick ?? 25000);
+      } else {
+        console.log(`  note: ${step.click} not visible, capturing the page as it is`);
+      }
+    }
+
     // A workbook is one long page, so the lower sections are captured by
     // scrolling the blade's own scroll container rather than the window - the
     // portal renders into a nested pane and window.scrollTo moves nothing.
@@ -278,6 +297,39 @@ for (const step of wanted) {
     }
 
     const highlights = await resolveTargets(page, step.targets ?? []);
+
+    // Mask identities in the DOM before the pixels exist.
+    //
+    // annotate()'s maskIdentity covers the portal account block in the corner,
+    // which is all the earlier captures needed. A workbook puts real people in
+    // the middle of a table, and d2 shipped a live UPN the first time this ran.
+    //
+    // Same rule as redact-entra.mjs so the two agree: first two characters,
+    // bullets, last two characters of the local part, domain left intact. That
+    // keeps the tenant visibly real - an accelerator whose evidence is all
+    // Contoso placeholders asks the reader to take it on trust - while removing
+    // enough to identify or contact anyone. Done in the DOM rather than with
+    // pixel boxes because here the text is still addressable, so nothing
+    // depends on a coordinate that a layout change would quietly move off.
+    if (step.maskIdentity !== false) {
+      await page.evaluate(() => {
+        const maskLocal = (s) =>
+          s.length <= 4 ? s[0] + '\u2022'.repeat(Math.max(1, s.length - 1))
+                        : s.slice(0, 2) + '\u2022'.repeat(s.length - 4) + s.slice(-2);
+        const re = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+        const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        const hits = [];
+        while (walk.nextNode()) if (re.test(walk.currentNode.nodeValue)) hits.push(walk.currentNode);
+        for (const n of hits) {
+          n.nodeValue = n.nodeValue.replace(re, (m) => {
+            const at = m.lastIndexOf('@');
+            return maskLocal(m.slice(0, at)) + m.slice(at);
+          });
+        }
+        return hits.length;
+      }).catch(() => {});
+    }
+
     const buf = await page.screenshot({ type: 'png' });
 
     await annotate(buf, path.join(OUT, `${step.id}.png`), {

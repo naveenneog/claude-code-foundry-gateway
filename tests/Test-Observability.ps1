@@ -211,6 +211,32 @@ foreach ($f in 'infra/workbook.json', 'infra/workbook-chargeback.json') {
 }
 
 Write-Host ''
+Write-Host 'Developer guide - signing Desktop into the gateway' -ForegroundColor Cyan
+
+$dev = Get-Content (Join-Path $root 'DEVELOPER.md') -Raw
+
+# The failure this documents is silent: Google or email signs the developer into
+# Anthropic's own service, which works, so nothing looks wrong - but the
+# organisation's controls do not apply and Anthropic bills it separately.
+Assert 'it names the gateway sign-in option' ($dev -match 'Or sign in with Gateway')
+Assert 'and warns off Google and email'      ($dev -match '(?s)Do not use.{0,40}Continue with Google')
+Assert 'it says a full quit is required'     ($dev -match '(?i)Quit Desktop completely')
+Assert 'including the tray icon'             ($dev -match '(?i)tray or menu-bar icon')
+Assert 'it gives a way to check'             ($dev -match 'Settings.{0,6}Connection')
+Assert 'and ships the screenshot'            (Test-Path (Join-Path $root 'docs/guide/b6-desktop-gateway-signin.png'))
+Assert 'the guide shows it'                  ($dev -match 'b6-desktop-gateway-signin\.png')
+
+# Asked for by name. A developer hitting this reaches for a FAQ, not a table.
+Assert 'there is a FAQ'                      ($dev -match '(?m)^## FAQ')
+Assert 'it answers the Anthropic account question' ($dev -match '(?i)Do I need an Anthropic account')
+Assert 'and how to recover from the wrong one'     ($dev -match '(?i)signed in with Google by mistake')
+Assert 'and why developer mode exists'             ($dev -match '(?i)developer-mode step')
+
+# Astra review: the reader is a developer, not an operator of this accelerator.
+Assert 'it avoids unexplained chargeback jargon' ($dev -notmatch '(?i)charged back|in chargeback')
+Assert 'and says where the cost lands in plain terms' ($dev -match '(?i)allocate its cost|allocated to the department')
+
+Write-Host ''
 Write-Host 'Observe - documentation' -ForegroundColor Cyan
 
 $mon = Get-Content (Join-Path $root 'docs/MONITORING.md') -Raw

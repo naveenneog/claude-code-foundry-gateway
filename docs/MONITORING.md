@@ -374,6 +374,19 @@ Pick a unit from the **Business unit** pill to filter every tile to it. The gaps
 tile deliberately ignores that filter, because a gap you have filtered out of
 view is a gap you will not fix.
 
+![The chargeback workbook open on the totals for the period: estimated spend, input, output and cache-read tokens, and the developer count, above a daily spend chart stacked by business unit](guide/d1-chargeback-totals.png)
+
+Cache read is the largest of those four numbers by three orders of magnitude,
+which is the point of showing it beside the others rather than inside them.
+
+![The same workbook scrolled to spend by developer and spend by model, each row showing metered and cache-read dollars apart, and a Priced column marking a model the price book does not know](guide/d2-chargeback-units.png)
+
+The **Priced** column is the one to watch. `claude-sonnet-4-5` appears there with
+no price, which means any spend on it is counted at zero and the totals above
+understate the bill.
+
+![The workbook scrolled to spend by client surface and the attribution and pricing gaps tiles](guide/d3-chargeback-models.png)
+
 **Cache is usually the largest number on the page.** Measured 2026-09-17 on the
 reference gateway, cache reads were 98% of estimated spend for the month to
 date — 1,236,027 cached tokens against 6,245 metered ones. They are billed at a
