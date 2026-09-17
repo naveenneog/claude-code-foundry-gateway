@@ -209,6 +209,42 @@ try {
     Add-Result 'Organisation ceiling' 'warn' "could not compare the ceiling to the unit budgets: $($_.Exception.Message)" ''
 }
 
+# --- 8. how long the ceiling lasts at full tilt ----------------------------
+#
+# The per-developer limit is daily and the organisation ceiling is monthly, so
+# the two are only comparable once multiplied out. Some over-subscription is
+# normal - nobody expects every developer to spend their whole allowance every
+# day - but when the daily allowances together outrun the monthly ceiling, the
+# per-developer quota can never be the binding control: the organisation is
+# denied first, and raising somebody's tier changes nothing except how fast.
+#
+# Warned rather than failed, because deliberately over-subscribing is a
+# legitimate way to run this.
+try {
+    $budget = & (Join-Path $root 'scripts/Get-ClaudeBudget.ps1') -ResourceGroup $ResourceGroup -ApimName $ApimName -AsJson 2>$null 6>$null |
+              Out-String | ConvertFrom-Json
+    $orgMonth = [long]$budget.organisation.tokens_per_month
+    $devs = @($budget.developers)
+    $perDay = ($devs | ForEach-Object { [long]$_.effective.tokens_per_day } | Measure-Object -Sum).Sum
+
+    if (-not $devs.Count -or $perDay -le 0 -or $orgMonth -le 0) {
+        Add-Result 'Ceiling headroom' 'pass' 'nothing entitled yet, or no ceiling set' ''
+    }
+    else {
+        $days = [math]::Round($orgMonth / $perDay, 1)
+        $detail = "{0} developer(s) may spend {1:n0} tokens/day against a {2:n0}/month ceiling" -f $devs.Count, $perDay, $orgMonth
+        if ($days -lt 28) {
+            Add-Result 'Ceiling headroom' 'warn' `
+                ("$detail - all of it in $days day(s), after which everyone is refused") `
+                ("Raise quota-org, lower quota-standard/quota-premium, or accept that the organisation ceiling is the real limit rather than the per-developer one.")
+        } else {
+            Add-Result 'Ceiling headroom' 'pass' ("$detail - lasts $days day(s) at full tilt") ''
+        }
+    }
+} catch {
+    Add-Result 'Ceiling headroom' 'warn' "could not compare daily allowances to the ceiling: $($_.Exception.Message)" ''
+}
+
 # --- report ----------------------------------------------------------------
 
 $failed = @($results | Where-Object { $_.status -eq 'fail' })

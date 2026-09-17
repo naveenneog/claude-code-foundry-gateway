@@ -458,6 +458,23 @@ is two and a half times Sonnet on both input and output, and
 `./scripts/Set-ClaudeTier.ps1 -Tier standard -Models claude-sonnet-5` keeps it
 for the premium tier only.
 
+#### How long the ceiling lasts
+
+The per-developer limit is **daily** and the organisation ceiling is **monthly**,
+so the two only become comparable once multiplied out. Some over-subscription is
+normal — nobody expects every developer to spend their whole allowance every day
+— but when the daily allowances together outrun the monthly ceiling, the
+per-developer quota can never be the binding control. The organisation is denied
+first, and moving somebody to a higher tier changes nothing except how fast.
+
+Measured on the reference gateway 2026-09-17: three premium developers at
+5,000,000 tokens a day and five standard at 500,000 come to **17,500,000 a day**
+against a 100,000,000 month — the whole ceiling in **5.7 days**.
+
+`./scripts/Test-ClaudeHealth.ps1` reports this as **Ceiling headroom**. It warns
+rather than fails, because deliberately over-subscribing is a legitimate way to
+run this — but it says so rather than leaving you to multiply it out yourself.
+
 ### If you would rather use Grafana
 
 `./scripts/Publish-ClaudeGrafana.ps1` publishes the same panels to an existing

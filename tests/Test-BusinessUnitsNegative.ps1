@@ -731,6 +731,24 @@ $mutations = @(
        To    = "category: 'GatewayLogs'" }
 
     @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'daily allowances stop being compared to the ceiling'
+       File  = 'scripts/Test-ClaudeHealth.ps1'
+       From  = "Add-Result 'Ceiling headroom'"
+       To    = "Add-Result 'Something else'" }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'the headroom days stop being worked out'
+       File  = 'scripts/Test-ClaudeHealth.ps1'
+       From  = '$days = [math]::Round($orgMonth / $perDay, 1)'
+       To    = '$days = 999' }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
+       Name  = 'over-subscription becomes a hard failure'
+       File  = 'scripts/Test-ClaudeHealth.ps1'
+       From  = "Add-Result 'Ceiling headroom' 'warn' ``"
+       To    = "Add-Result 'Ceiling headroom' 'fail' ``" }
+
+    @{ Suite = 'Test-ModelsAndPlugins.ps1'
        Name  = 'an unreachable unit budget stops being a failure'
        File  = 'scripts/Test-ClaudeHealth.ps1'
        From  = "Add-Result 'Organisation ceiling' 'fail'"

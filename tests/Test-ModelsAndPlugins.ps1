@@ -205,6 +205,17 @@ Assert 'it says no unit budget can bind'             ($hc -match 'no unit budget
 # Teams are charged to their parent as well, so counting both double counts.
 Assert 'only top-level units are summed'             ($hc -match '\$reg \| Where-Object \{ -not \$par\[\$_\.Id\] \}')
 
+# The per-developer limit is daily and the ceiling is monthly, so they are only
+# comparable multiplied out. Measured on the reference gateway: 8 developers may
+# spend 17,500,000 a day against a 100,000,000 month, which is 5.7 days.
+Assert 'daily allowances are compared to the ceiling' ($hc -match "Add-Result 'Ceiling headroom'")
+Assert 'it multiplies the daily allowance out'        ($hc -match '\$orgMonth / \$perDay')
+Assert 'and says how long the ceiling lasts'          ($hc -match 'after which everyone is refused')
+# Deliberate over-subscription is a legitimate way to run this, so it is not a
+# failure - but it must still be said.
+Assert 'over-subscription warns rather than fails'    ($hc -match "Add-Result 'Ceiling headroom' 'warn'")
+Assert 'and it never fails the run'                   ($hc -notmatch "Add-Result 'Ceiling headroom' 'fail'")
+
 $sbu = Get-Content (Join-Path $root 'scripts/Set-ClaudeBusinessUnit.ps1') -Raw
 Assert 'setting a budget checks the ceiling too' ($sbu -match "Id 'quota-org'")
 Assert 'and warns when it cannot be reached'     ($sbu -match 'ceiling is smaller than what the units are allowed')
