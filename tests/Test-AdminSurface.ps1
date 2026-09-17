@@ -213,6 +213,34 @@ $mon2 = Get-Content (Join-Path $root 'docs/MONITORING.md') -Raw
 Assert 'monitoring documents it as optional' ($mon2 -match 'Publish-ClaudeGrafana')
 
 Write-Host ''
+Write-Host 'Admin - business units at install' -ForegroundColor Cyan
+
+$inst = Get-Content $installer -Raw
+
+# The first question after a deploy was always "so where do I set up
+# chargeback". The installer already asks for tiers and budgets, so stopping
+# short of the thing those budgets are charged to was an odd seam.
+Assert 'the installer offers a business unit' ($inst -match "Write-Step 'Business units \(optional\)'")
+Assert 'it can be declined'                   ($inst -match "Read-YesNo 'Create a business unit now\?' \`$false")
+Assert 'and more than one can be added'       ($inst -match "while \(Read-YesNo 'Create a business unit now\?'")
+
+# -Yes drives unattended installs and CI. A business unit is a naming decision
+# about somebody else's organisation; inventing one unattended leaves a registry
+# entry nobody asked for. Asserted on the guard, not on the word.
+Assert 'unattended installs skip it entirely' `
+    ($inst -match "(?s)if \(-not \`$Yes\) \{\s*\r?\n\s*Write-Step 'Business units \(optional\)'")
+
+# Set-ClaudeBusinessUnit refuses a unit whose group does not exist, because it
+# syncs to nobody and reads as unused rather than broken. The installer creates
+# the group first, and stops rather than writing a unit it knows will be empty.
+Assert 'it creates the Entra group first'  ($inst -match 'az ad group create --display-name \$buGroup')
+Assert 'and refuses to write a unit without one' ($inst -match "(?s)Could not create '\`$buGroup'[\s\S]{0,200}continue")
+
+# The identifier keys the budget counter, the ledger and every report.
+Assert 'the identifier is validated at the prompt' ($inst -match "\`$buId -notmatch '\^\[a-z0-9\]\[a-z0-9-\]\*\`$'")
+Assert 'and it delegates the write'                ($inst -match 'scripts/Set-ClaudeBusinessUnit\.ps1.*-Id \$buId')
+
+Write-Host ''
 Write-Host 'Admin - documentation' -ForegroundColor Cyan
 
 $mig_doc = Get-Content (Join-Path $root 'docs/MIGRATION.md') -Raw

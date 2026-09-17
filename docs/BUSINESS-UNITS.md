@@ -276,6 +276,16 @@ without them.
 
 ## Adding a business unit
 
+The installer offers to create your first ones at the end of a run, once the
+Entra groups exist. It creates the group for you and then calls the same command
+shown below, so there is one code path rather than two.
+
+Decline and nothing is written. An unattended install (`-Yes`) skips the prompt
+entirely: a business unit is a naming decision about your own organisation, and
+inventing one unasked leaves a registry entry nobody wanted.
+
+To add one at any time:
+
 ```powershell
 ./scripts/Set-ClaudeBusinessUnit.ps1 -Id platform `
     -Group "claude-code-standard" -MonthlyBudgetUsd 5000

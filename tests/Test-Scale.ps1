@@ -285,6 +285,73 @@ Assert 'it says to choose the window on revocation' ($d11 -match 'choose the win
 Assert 'and leaves that number open' ($d11 -match 'remains open')
 
 Write-Host ''
+Write-Host 'Scale - the projection template' -ForegroundColor Cyan
+
+$proj = Join-Path $root 'infra/projection.bicep'
+Assert 'the projection template exists' (Test-Path $proj)
+$pb = Get-Content $proj -Raw
+
+# The partition key is the whole design. /oid gives one logical partition per
+# identity and a 1-RU point read. /tenantId - which the ADR-0005 wording invites -
+# puts all 500,000 in a single logical partition against a 20 GB cap, and looks
+# perfectly healthy at eight developers.
+Assert 'it partitions on the object id' ($pb -match "paths:\s*\[\s*'/oid'\s*\]")
+Assert 'and not on the tenant'          ($pb -notmatch "paths:\s*\[\s*'/tenantId'\s*\]")
+
+# Serverless, so an accelerator shipped to a customer with eight developers
+# bills them nothing and the same template serves 500,000.
+Assert 'the account is serverless' ($pb -match "name:\s*'EnableServerless'")
+
+# The gateway reaches Foundry with a managed identity. A connection-string key
+# on the projection would reintroduce exactly the credential this accelerator
+# exists to remove.
+Assert 'local auth is disabled' ($pb -match 'disableLocalAuth:\s*true')
+
+# It must not be in the default install path. Wiring it in would give every
+# customer a Cosmos account nothing reads plus a private endpoint billing at
+# rest, for a feature that does nothing until the resolver exists.
+$mainBicep = Get-Content (Join-Path $root 'infra/main.bicep') -Raw
+$installer2 = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
+Assert 'the installer does not deploy it yet' `
+    ($mainBicep -notmatch 'projection\.bicep' -and $installer2 -notmatch 'projection\.bicep')
+Assert 'and the guide says why'  ($s -match 'not wired into the installer')
+Assert 'and how to deploy it alone' ($s -match 'template-file infra/projection\.bicep')
+
+Write-Host ''
+Write-Host 'Scale - the projection, measured (P19)' -ForegroundColor Cyan
+
+# The claim the whole design rests on: a lookup is a point read whose cost does
+# not follow collection size. Measured from inside the VNet, because the data
+# plane is unreachable from outside it.
+Assert 'the capacity result is recorded'    ($s -match 'The projection, measured 2026-09-17')
+Assert 'it reports the measured sizes'      ($s -match '\| \*\*100,000\*\* \| \*\*1\*\* \|')
+Assert 'and says why it stays flat'         ($s -match 'every identity is its own logical partition')
+# Writes are slow and that is a migration-window fact, not a request-path one.
+Assert 'the backfill rate is stated'        ($s -match '190 records a second')
+Assert 'and what it means for a backfill'   ($s -match 'roughly 45 minutes')
+
+$net = Join-Path $root 'infra/projection-network.bicep'
+Assert 'the private networking template exists' (Test-Path $net)
+$nb = Get-Content $net -Raw
+# A private endpoint without the DNS zone resolves to the public address, which
+# then refuses - the failure reads as a firewall problem rather than a DNS one.
+Assert 'it creates the private DNS zone'  ($nb -match "privatelink\.documents\.azure\.com")
+Assert 'and links the zone to the endpoint' ($nb -match 'privateDnsZoneGroups')
+Assert 'the endpoint targets the SQL group' ($nb -match "groupIds:\s*\[\s*'Sql'\s*\]")
+# The runner is a test fixture and bills while it exists.
+Assert 'the in-VNet runner is optional'   ($nb -match 'param runnerEnabled bool')
+Assert 'and never restarts'               ($nb -match "restartPolicy: 'Never'")
+
+$a12 = Join-Path $root 'docs/adr/0012-store-and-availability.md'
+Assert 'the tiering decision is recorded' (Test-Path $a12)
+$d12 = Get-Content $a12 -Raw
+Assert 'it rejects a size-based second tier' ($d12 -match 'no engineering discontinuity at 1,000')
+Assert 'and names the real second axis'      ($d12 -match 'single-region only')
+Assert 'the two switches are independent'    ($d12 -match '-EntitlementStore' -and $d12 -match '-ProjectionHa')
+Assert 'the default stays the cheap one'     ($d12 -match 'default: named-values')
+Assert 'and multi-region is labelled as billing at rest' ($d12 -match 'standing cost')
+
+Write-Host ''
 Write-Host 'Scale - reachable from the README' -ForegroundColor Cyan
 
 # The operating envelope belongs where someone evaluating the accelerator will

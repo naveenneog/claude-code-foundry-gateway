@@ -91,6 +91,13 @@ $COST = @{
     'Microsoft.Insights/workbooks'                               = 'nothing - a definition, billed only by the queries it runs'
     'microsoft.alertsmanagement/smartDetectorAlertRules'         = 'nothing - created with Application Insights, free'
     'Microsoft.CognitiveServices/accounts'                       = 'per token, on your existing Foundry agreement'
+    # The entitlement projection, ADR-0011. Serverless bills per request unit
+    # and per GB with no minimum, so an empty one is free - but a private
+    # endpoint, which the governance baseline forces, bills per hour at rest.
+    'Microsoft.DocumentDB/databaseAccounts'                      = 'per request unit and GB, no minimum - but its private endpoint bills hourly at rest'
+    'Microsoft.Network/privateEndpoints'                         = 'per hour, whether used or not - the only line here that bills at rest'
+    'Microsoft.Web/sites'                                        = 'per execution and GB-second, after a monthly free grant'
+    'Microsoft.Web/serverfarms'                                  = 'per hour on Flex Consumption only when instances run'
 }
 
 $created = @($mine | Where-Object { $_.type -ne 'Microsoft.CognitiveServices/accounts' } | Sort-Object type)

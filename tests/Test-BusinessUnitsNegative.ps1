@@ -812,6 +812,30 @@ $mutations = @(
        From  = 'already have files on disk'
        To    = 'are present' }
 
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the installer stops offering a business unit'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = "Write-Step 'Business units (optional)'"
+       To    = "Write-Step 'Skipped'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'an unattended install starts inventing business units'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = "if (-not `$Yes) {`r`n    Write-Step 'Business units (optional)'"
+       To    = "if (`$true) {`r`n    Write-Step 'Business units (optional)'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a business unit can point at a group that does not exist'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'az ad group create --display-name $buGroup'
+       To    = 'echo skip #' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the unit identifier stops being validated'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = "`$buId -notmatch '^[a-z0-9][a-z0-9-]*`$'"
+       To    = '$false' }
+
     # --- P30-P32 and the workstation tool ---
 
     @{ Suite = 'Test-AdminSurface.ps1'

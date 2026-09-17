@@ -117,6 +117,35 @@ The obvious test - create 500,000 counter keys and see whether the service
 accepts them - answers the wrong question. Accepting a key is not the same as
 accounting correctly against it.
 
+### The projection, measured 2026-09-17
+
+`guide/loadtest-projection.mjs`, run from a container inside the VNet because the
+data plane is not reachable from outside it:
+
+| Collection size | RU per point read | Latency |
+|---|---:|---|
+| ~1, near-empty | 1 | 24.5 ms |
+| 500 | 1 | 25–54 ms |
+| 20,000 | 1 | 23–25 ms |
+| **100,000** | **1** | 24–47 ms |
+
+Flat across a hundred-thousand-fold growth, reading records written first, last
+and in the middle. That is the claim the whole design rests on: a lookup is a
+point read whose cost does not follow the size of the collection, and it holds
+because every identity is its own logical partition.
+
+Had the container been partitioned on `/tenantId`, all 100,000 would have shared
+one partition and this table would not be flat.
+
+**Writes are a different story, and the migration plan needs it.** Bulk loading
+managed about **190 records a second**, so backfilling 500,000 identities takes
+roughly 45 minutes. Pushing concurrency up did not help: 6,400 in-flight
+requests produced `TimeoutError` rather than more throughput. That is a
+backfill-window number, not a request-path one — nothing in the gateway waits on
+it — but ADR-0009's phase 1 has to budget for it.
+
+### What a counter test still has to prove
+
 The test is whether **every identity retains its consumed allowance** across:
 
 | Event | Why it is a risk |
@@ -197,6 +226,64 @@ policy sees it. The measurement polls a response header instead.
 A genuine hard cap needs admission-time budget reservation: the decision has to
 be made before the request is served, against state the gateway already holds.
 API Management's quota policies do not offer that, so this is not called one.
+
+---
+
+## Deploying today, and scaling later
+
+The projection is **not wired into the installer**. Running
+`Install-ClaudeGateway.ps1` today deploys the gateway and nothing else, which is
+deliberate: wiring it in would give every deployment a Cosmos account nothing
+reads plus a private endpoint billing at rest, for a feature that does nothing
+until the resolver exists.
+
+To stand one up on its own:
+
+```powershell
+az deployment group create -g <rg> `
+  --template-file infra/projection.bicep `
+  --parameters namePrefix=<your-prefix>
+```
+
+### What happens when you outgrow the named values
+
+Nothing silent. `ApimNamedValue.ps1` checks the size before writing, so the sync
+**refuses and says so** rather than truncating:
+
+```
+Named value 'allow-standard' is 4441 characters, which is 345 over the API
+Management limit of 4096. It holds 120 entries of about 38 characters; roughly
+107 fit. Nothing was written. A list this large needs a different store - see
+docs/ROADMAP.md P19.
+```
+
+Entitlement stays exactly as it was. Nobody loses access; the next developer
+just cannot be added until the store changes.
+
+`Test-ClaudeHealth.ps1` reports headroom and fails at 80%, so the warning
+arrives around 74 developers rather than at the wall.
+
+### Why growing later is not a rebuild
+
+The thing that would be painful to migrate is not in the layer being replaced.
+
+| | Lives in | Touched by the migration |
+|---|---|---|
+| Who is entitled, and their tier | Entra groups | **no** — groups stay the source of truth |
+| Business units and budgets | `bu-registry`, named values | **no** — one entry per unit, not per developer |
+| Consumed budget this period | API Management quota counters | **no** — [ADR-0009](adr/0009-shadow-migration.md) preserves the keys |
+| Spend history and chargeback | Log Analytics ledger | **no** |
+| The oid → tier, oid → unit maps | `allow-*`, `bu-members` | **yes** — these three, and only these |
+
+The named values are a *projection* of Entra, rebuilt from it on every sync. So
+moving to Cosmos changes where the gateway reads, not what is true. The same
+`Sync-ClaudeAccess.ps1` that writes the named values writes the projection.
+
+A rollback restores authorization without restoring consumption, which is the
+rule that makes the move safe to reverse mid-flight.
+[ADR-0009](adr/0009-shadow-migration.md) has the five phases; phase 2, the
+comparison that proves both paths agree before either is trusted, ships today as
+`Compare-ClaudeEntitlement.ps1`.
 
 ---
 

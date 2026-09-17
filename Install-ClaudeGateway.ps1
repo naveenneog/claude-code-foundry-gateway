@@ -699,6 +699,57 @@ Write-Step 'Sync entitlement'
 & (Join-Path $root 'scripts/Sync-ClaudeAccess.ps1') -ApimName $apimName -ResourceGroup $ResourceGroup `
     -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
 
+# ------------------------------------------------------- 7b. business units
+#
+# Offered here because the installer already asks for tiers and budgets, and
+# stopping short of the thing those budgets are charged to is an odd seam - the
+# first question after a deploy was always "so where do I set up chargeback".
+#
+# Skipped by default under -Yes: a business unit is a naming decision about the
+# customer's own organisation, and guessing one unattended leaves a registry
+# entry nobody asked for.
+if (-not $Yes) {
+    Write-Step 'Business units (optional)'
+    Write-Note 'A business unit is an Entra group with a monthly budget. Usage is charged to it.'
+    Write-Note 'Skip this and add them later with ./scripts/Set-ClaudeBusinessUnit.ps1.'
+
+    while (Read-YesNo 'Create a business unit now?' $false) {
+        $buId = Read-Default -Prompt 'Identifier' -Default 'platform' `
+            -Help 'Short and stable - it keys the budget counter and every report. Lower case, no spaces.'
+
+        # Validated here rather than at the write, so a bad name is caught while
+        # the operator is still looking at the prompt that produced it.
+        if ($buId -notmatch '^[a-z0-9][a-z0-9-]*$') {
+            Write-Warn2 "'$buId' is not usable. Use lower case letters, digits and hyphens."
+            continue
+        }
+
+        $buGroup = Read-Default -Prompt 'Entra group' -Default "claude-bu-$buId" `
+            -Help 'Who belongs to the unit. Created here if it does not exist.'
+
+        $existing = az ad group show --group $buGroup --query id -o tsv 2>$null
+        if (-not $existing) {
+            $newId = (az ad group create --display-name $buGroup --mail-nickname $buGroup -o json 2>$null | ConvertFrom-Json).id
+            if ($newId) { Write-Ok "$buGroup created" }
+            else {
+                # Set-ClaudeBusinessUnit refuses a unit pointing at a group that
+                # does not exist, because it would sync to nobody and read as
+                # unused rather than broken. Stop here rather than write one.
+                Write-Warn2 "Could not create '$buGroup' - your tenant may restrict group creation."
+                Write-Note 'Ask an admin to create it, then run Set-ClaudeBusinessUnit.ps1.'
+                continue
+            }
+        }
+        else { Write-Ok "$buGroup exists" }
+
+        $buBudget = Read-Int -Prompt 'Monthly budget, US dollars' -Default 5000 `
+            -Help 'Converted to tokens on write. List price, and the counter cannot see cached tokens.'
+
+        & (Join-Path $root 'scripts/Set-ClaudeBusinessUnit.ps1') -Id $buId -Group $buGroup `
+            -MonthlyBudgetUsd $buBudget -ApimName $apimName -ResourceGroup $ResourceGroup
+    }
+}
+
 # --------------------------------------------------------------- 8. package
 
 Write-Step 'Onboarding package'
