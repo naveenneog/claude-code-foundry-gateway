@@ -26,6 +26,9 @@ docs/transcripts/
 # real names, addresses and the signed-in account. guide/redact-entra.mjs turns
 # them into the docs/guide/entra-*.png that ship; the originals never do.
 .shots-entra/
+# Any raw capture staged for the banner treatment. The redacted copy goes to
+# docs/guide; the original never lands in a commit.
+.shots-*.png
 shots/
 shots2/
 
