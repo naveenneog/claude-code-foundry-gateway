@@ -309,7 +309,6 @@ arrives around 74 developers rather than at the wall.
 ### Why growing later is not a rebuild
 
 The thing that would be painful to migrate is not in the layer being replaced.
-
 | | Lives in | Touched by the migration |
 |---|---|---|
 | Who is entitled, and their tier | Entra groups | **no** — groups stay the source of truth |
@@ -362,3 +361,99 @@ gateway does not have.
 It is useful before any of that migration is built, because it answers a live
 support question: *is the sync current?* Entitlement is not live, and this
 measures the gap.
+
+---
+
+## The move itself, step by step
+
+What a POC customer runs to get from the named-value lists to the projection.
+Every step is reversible, and the gateway keeps serving throughout.
+
+**Before you start**, settle the two decisions that cannot be retrofitted —
+a custom domain and whether you need a second region. See
+[DECISIONS.md](DECISIONS.md). Doing this migration first and those afterwards
+means doing it twice.
+
+### 0. Check you are on a tier that can run it
+
+```powershell
+az apim show -g <rg> -n <apim> --query sku.name -o tsv
+```
+
+Basic v2 cannot join a virtual network and so cannot reach the projection. Move
+to Standard v2 first — in place, no downtime, no change of address.
+
+**Rollback:** none needed. Nothing has changed yet.
+
+### 1. Confirm the switch is present
+
+```powershell
+az apim nv show -g <rg> --service-name <apim> --named-value-id entitlement-source --query value -o tsv
+```
+
+Expect `named-value`. If the named value is absent, the gateway is running a
+policy from before the switch existed — redeploy with
+`Install-ClaudeGateway.ps1`, which preserves everything else.
+
+**Rollback:** none. This step only reads.
+
+### 2. Stand up the projection
+
+```powershell
+az deployment group create -g <rg> `
+  --template-file infra/projection.bicep `
+  --parameters namePrefix=<your-prefix>
+```
+
+**Rollback:** delete the account. Nothing reads it yet.
+
+### 3. Populate it, and leave the lists alone
+
+The lists keep serving every request while the projection fills. Backfill was
+measured at about 190 records a second, so 500,000 identities takes roughly 45
+minutes.
+
+**Rollback:** delete and repopulate. No developer is affected either way.
+
+### 4. Run the comparison until it reports nothing
+
+```powershell
+./scripts/Compare-ClaudeEntitlement.ps1 -ResourceGroup <rg> -ApimName <apim>
+```
+
+This is the step that must not be rushed. It exits non-zero while the two
+sources disagree, and each disagreement is a developer who would gain or lose
+access at the moment you flip.
+
+**Rollback:** not applicable — nothing has changed. Fix the drift and run again.
+
+### 5. Flip one value
+
+```powershell
+az apim nv update -g <rg> --service-name <apim> `
+  --named-value-id entitlement-source --value projection
+```
+
+Propagation to the running policy was measured at 9–18 seconds.
+
+**Rollback:** set it back to `named-value`. The lists were never deleted, so the
+gateway returns to exactly the behaviour it had before. This is the whole reason
+both paths ship together.
+
+### 6. Watch, then stop maintaining the lists
+
+Give it a working day. `./scripts/Test-ClaudeHealth.ps1` and the chargeback
+workbook both keep working unchanged — the counter key is the object id in both
+paths, so nobody's month restarts and no spend history moves.
+
+Only once you are satisfied should the sync stop writing the named-value lists.
+Until then they are your rollback.
+
+### What does not change
+
+| | |
+|---|---|
+| The gateway address | unchanged, so no developer reconfigures anything |
+| Per-developer counters | keyed on the object id in both paths — allowances do not reset |
+| Spend history | in Log Analytics, untouched by any of this |
+| The policy | not redeployed at any point in this list |

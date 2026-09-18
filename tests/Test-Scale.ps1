@@ -481,6 +481,40 @@ Assert 'the resolver settings survive too'       ($inst -match 'entitlementResol
 Assert 'and it says so when migrated'            ($inst -match 'preserving entitlement source: projection')
 
 Write-Host ''
+Write-Host 'Scale - the decisions, and the move itself (P19e)' -ForegroundColor Cyan
+
+$dec = Get-Content (Join-Path $root 'docs/DECISIONS.md') -Raw
+
+# Two of the nine cannot be retrofitted, and both cost nothing on day one. A
+# decisions page that buries them among the reversible ones is not doing its job.
+Assert 'the decisions page exists'          ($dec.Length -gt 0)
+Assert 'it separates what cannot be deferred' ($dec -match '(?i)expensive to defer')
+Assert 'the custom domain is one of them'   ($dec -match '(?i)company web address')
+Assert 'and the region family the other'    ($dec -match '(?i)survive an Azure region failing')
+Assert 'each option says what the default does' ($dec -match '(?i)Default today:')
+# Numbers are computed elsewhere; the page must not become a second source.
+Assert 'the window costs point at the script'  ($dec -match 'Measure-ClaudeProjectionCost\.ps1')
+Assert 'and are labelled as computed'          ($dec -match '(?i)not quoted')
+Assert 'the budget entry states the cache gap' ($dec -match '41\.5')
+Assert 'and what to say instead'               ($dec -match '(?i)attribute the cost.{0,40}cap it')
+
+$scale2 = Get-Content (Join-Path $root 'docs/SCALE.md') -Raw
+Assert 'the move is written as steps'       ($scale2 -match '(?i)The move itself, step by step')
+Assert 'every step carries a rollback'      (
+    ([regex]::Matches($scale2, '(?m)^\*\*Rollback:\*\*')).Count -ge 5)
+Assert 'it checks the tier first'           ($scale2 -match '(?s)step by step[\s\S]{0,2000}Basic v2 cannot join')
+Assert 'the comparison gates the flip'      ($scale2 -match '(?i)Run the comparison until it reports nothing')
+Assert 'the flip is one named value'        ($scale2 -match 'named-value-id entitlement-source --value projection')
+Assert 'and rolling back is the same value' ($scale2 -match '(?i)set it back to .named-value')
+Assert 'the lists are kept as the rollback' ($scale2 -match '(?i)Until then they are your rollback')
+Assert 'it states what does not change'     ($scale2 -match '(?i)What does not change')
+Assert 'including the developer address'    ($scale2 -match '(?i)no developer reconfigures anything')
+Assert 'and that allowances do not reset'   ($scale2 -match '(?i)allowances do not reset')
+
+$rm2 = Get-Content (Join-Path $root 'README.md') -Raw
+Assert 'the README offers the decisions'    ($rm2 -match '\[Decisions\]\(docs/DECISIONS\.md\)')
+
+Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Scale contract holds.' -ForegroundColor Green
 exit 0

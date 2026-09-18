@@ -921,6 +921,36 @@ $mutations = @(
        To    = 'nothing to bind, continuing' }
 
     @{ Suite = 'Test-Scale.ps1'
+       Name  = 'a migration step loses its rollback'
+       File  = 'docs/SCALE.md'
+       From  = '**Rollback:** set it back to `named-value`'
+       To    = 'Once flipped, it is flipped' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the lists are deleted before the watch period'
+       File  = 'docs/SCALE.md'
+       From  = 'Until then they are your rollback'
+       To    = 'They can be removed at any point' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the comparison stops gating the flip'
+       File  = 'docs/SCALE.md'
+       From  = 'Run the comparison until it reports nothing'
+       To    = 'Optionally run the comparison' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the decisions page hides what cannot be deferred'
+       File  = 'docs/DECISIONS.md'
+       From  = 'The two that are expensive to defer'
+       To    = 'Some other settings' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the budget page drops the measured cache gap'
+       File  = 'docs/DECISIONS.md'
+       From  = '41.5'
+       To    = '1.1' }
+
+    @{ Suite = 'Test-Scale.ps1'
        Name  = 'the entitlement source switch disappears'
        File  = 'infra/policy.xml'
        From  = '{{entitlement-source}}'

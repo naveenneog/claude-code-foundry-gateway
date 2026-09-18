@@ -49,6 +49,7 @@ Check the [prerequisites](#prerequisites) first if it stops early.
 | 🛠️ | **Running it** day to day | the table below |
 | 🔀 | **Moving off** Claude bought directly from Anthropic | [Migration](docs/MIGRATION.md) |
 | 📈 | **Sizing it** past a pilot, or asking what it can hold | [Scale](docs/SCALE.md) — the measured ceilings |
+| ✅ | **Choosing** — the nine decisions, two of which cannot be retrofitted | [Decisions](docs/DECISIONS.md) |
 | 🤔 | **Deciding** whether to do this at all | [Comparison](docs/COMPARISON.md) |
 
 ### Running it day to day
@@ -553,6 +554,7 @@ docs/
   MODELS.md                    adding a new Claude model end to end
   PLUGINS.md                   marketplaces, plugins and extensions
   SCALE.md                     measured ceilings and the load envelope
+  DECISIONS.md                 the nine choices, and which two cannot wait
   DEBUGGING.md                 isolate a failure layer by layer
   COMPARISON.md                Foundry vs Anthropic direct
   ARCHITECTURE.md              how it works, and why each piece is there
