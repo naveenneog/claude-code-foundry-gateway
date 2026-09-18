@@ -316,6 +316,46 @@ Assert 'and the rows are routed to the workspace' ($bicep -match "category: 'Gat
 Assert 'both halves are recorded as required'     ($bicep -match 'Both are needed')
 
 Write-Host ''
+Write-Host 'Admin - the choices are asked, not documented' -ForegroundColor Cyan
+
+# These were a page an operator was expected to read, decide from, and then come
+# back and set named values by hand. Asked at deployment instead, with the cost
+# of each option computed at the developer count they just gave.
+Assert 'the installer asks the revocation window' ($inst -match 'Revocation window in minutes')
+Assert 'and costs each option'                    ($inst -match 'Measure-ClaudeProjectionCost\.ps1')
+Assert 'at the count they gave'                   ($inst -match '-Developers \$devCount -CacheMinutes')
+# The cost model is the single source; restating figures would make two.
+Assert 'it does not restate a price table'        ($inst -notmatch '(?m)^\s*Write-Host.*\$11\.11')
+Assert 'it says what dominates the bill'          ($inst -match 'charged whether anyone')
+# Immediate revocation is not a free choice - it makes the resolver a
+# per-request dependency, so it is named and refused rather than silently absent.
+Assert 'immediate is named and explained'         ($inst -match 'not supported - every request would call the resolver')
+
+Assert 'it asks what a budget does'               ($inst -match 'Team budget behaviour \(report/stop\)')
+Assert 'and says what each deploys'               ($inst -match 'Deploys the quota policy as enforcing')
+Assert 'and warns stop triggers late'             ($inst -match 'triggers far later than the dollars suggest')
+Assert 'choosing stop is echoed at the end'       ($inst -match "budgetMode -eq 'stop'")
+
+Assert 'it asks about unassigned developers'      ($inst -match 'Developers with no team \(allow/deny\)')
+Assert 'and it reaches the template'              ($inst -match 'buUnassigned=\$\(if \(\$unassignedMode\)')
+
+# The one that cannot be retrofitted cheaply.
+Assert 'it asks which address developers get'     ($inst -match 'Developer address \(azure/custom\)')
+Assert 'and names the consequence of the default' ($inst -match 'reconfiguring')
+Assert 'and says this one is expensive to change' ($inst -match 'expensive to change afterwards')
+Assert 'choosing custom prints the steps'         ($inst -match "addressMode -eq 'custom'")
+
+# Whether the SKU just chosen can be changed later, which differs by tier.
+Assert 'it says whether the SKU is reversible'    ($inst -match 'can be changed later: BasicV2 and StandardV2')
+Assert 'and when it is a one-time pick'           ($inst -match 'effectively a one-time pick')
+
+$costModel = Get-Content (Join-Path $root 'scripts/Measure-ClaudeProjectionCost.ps1') -Raw
+# The default was a fixed 50,000 active, so costing 500 developers reported
+# 50,000 of them active and overstated a small deployment a hundredfold.
+Assert 'active developers scale with the population' ($costModel -match '\$Developers \* 0\.1')
+Assert 'and an impossible figure is refused'         ($costModel -match 'is larger than Developers')
+
+Write-Host ''
 Write-Host 'Admin - documentation' -ForegroundColor Cyan
 
 $mig_doc = Get-Content (Join-Path $root 'docs/MIGRATION.md') -Raw

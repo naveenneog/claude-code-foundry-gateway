@@ -43,7 +43,12 @@
 [CmdletBinding()]
 param(
     [int]$Developers = 500000,
-    [int]$DailyActive = 50000,
+    # Zero means "derive it", which is the case that matters: the previous
+    # default was a fixed 50,000, so asking for 500 developers costed 50,000
+    # active ones and overstated a small deployment by a hundredfold. The
+    # headline figure it was taken from - 500,000 developers, 50,000 active - is
+    # a tenth, so that is the share used when nobody says otherwise.
+    [int]$DailyActive = 0,
     [int]$ActiveHoursPerDay = 8,
     [int]$WorkingDaysPerMonth = 22,
     [int]$CacheMinutes = 60,
@@ -89,6 +94,16 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Derive the active population when it was not given, and refuse a figure that
+# cannot be true. More active developers than developers is always a mistake,
+# and silently costing it produces a number nobody can sanity-check.
+if (-not $PSBoundParameters.ContainsKey('DailyActive') -or $DailyActive -le 0) {
+    $DailyActive = [int][math]::Max(1, [math]::Round($Developers * 0.1))
+}
+if ($DailyActive -gt $Developers) {
+    throw "DailyActive ($DailyActive) is larger than Developers ($Developers). Nothing was costed."
+}
 
 # A developer misses the cache once per window while they are active, so the
 # window length is what sets the miss count - not how much they use Claude.

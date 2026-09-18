@@ -920,6 +920,54 @@ $mutations = @(
        From  = 'no tile targeting a Log Analytics workspace'
        To    = 'nothing to bind, continuing' }
 
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the revocation window goes back to being documented'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'Revocation window in minutes'
+       To    = 'Cache seconds' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the options stop being costed at their scale'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = '-Developers $devCount -CacheMinutes'
+       To    = '-Developers 500000 -CacheMinutes' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'stop is offered without saying it triggers late'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'triggers far later than the dollars suggest'
+       To    = 'refuses at the figure you set' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the address choice loses its consequence'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'expensive to change afterwards'
+       To    = 'easy to change later' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the unassigned answer stops reaching the template'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'buUnassigned=$(if ($unassignedMode)'
+       To    = 'buUnassignedUnused=$(if ($unassignedMode)' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the SKU reversibility note disappears'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'can be changed later: BasicV2 and StandardV2'
+       To    = 'is fine: BasicV2 and StandardV2' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'active developers stop scaling with the population'
+       File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
+       From  = '$Developers * 0.1'
+       To    = '50000' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'more active developers than developers is costed anyway'
+       File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
+       From  = 'is larger than Developers'
+       To    = 'was noted against Developers' }
+
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'a migration step loses its rollback'
        File  = 'docs/SCALE.md'

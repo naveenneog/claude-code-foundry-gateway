@@ -427,9 +427,10 @@ else {
     #   Premium v2   unlimited,          up to 30 units, VNet injection, zones
     #   - https://learn.microsoft.com/azure/api-management/v2-service-tiers-overview
     $devs = Read-Default -Prompt 'How many developers will use this gateway' -Default '50' `
-        -Help 'Used to suggest a SKU. You can override the suggestion.'
+        -Help 'Used to suggest a SKU, and to cost the choices below at your scale. You can override the suggestion.'
     $n = 0
     if (-not [int]::TryParse($devs, [ref]$n) -or $n -lt 1) { $n = 50 }
+    $script:DeveloperEstimate = $n
 
     # A deliberately generous assumption. Claude Code is chatty - a session is
     # many calls - so 500 a day per developer errs towards recommending more
@@ -470,6 +471,20 @@ else {
         }
 }
 
+# How reversible that choice was. Learn documents upgrade and downgrade between
+# Basic v2 and Standard v2 only, with no gateway downtime and no change of
+# address. Premium v2 is not a documented in-place target from either, so
+# reaching it means a new instance - which is survivable only if developers were
+# never configured against the instance hostname. See ADR-0013.
+Write-Host ''
+if ($Sku -in @('BasicV2', 'StandardV2')) {
+    Write-Note "$Sku can be changed later: BasicV2 and StandardV2 upgrade and downgrade in place,"
+    Write-Note 'with no downtime and no change of address. Moving beyond StandardV2 cannot.'
+} else {
+    Write-Note "$Sku is effectively a one-time pick: it is not a documented in-place target,"
+    Write-Note 'so changing tier later means a new instance and a new gateway address.'
+}
+
 # Already fixed when reusing - the name is the existing instance's.
 $NamePrefix = if ($NamePrefix) { $NamePrefix } else {
     Read-Default -Prompt 'Name prefix' -Default "claudegw$(Get-Random -Minimum 100000 -Maximum 999999)" `
@@ -479,6 +494,125 @@ $NamePrefix = if ($NamePrefix) { $NamePrefix } else {
 $PublisherEmail = if ($PublisherEmail) { $PublisherEmail } else {
     Read-Default -Prompt 'Publisher email' -Default $acct.user.name -Help 'Shown on the API Management instance.'
 }
+
+# ------------------------------------------------- 1c. governance choices
+#
+# These were a page of documentation and an operator was expected to read it,
+# decide, and then come back and set named values by hand. They are asked here
+# instead, with the cost of each option computed at the developer count given
+# above rather than quoted from a table written for somebody else's scale.
+
+Write-Head 'Choices'
+
+$devCount = if ($script:DeveloperEstimate) { $script:DeveloperEstimate } else { 50 }
+
+# Revocation window. The gateway holds an entitlement answer rather than asking
+# on every request, so someone removed from the directory keeps working for up
+# to this long. Shorter is safer and costs more, because cost follows cache
+# misses. The figures come from the shipped cost model so there is one source.
+$windows = @(
+    @{ Label = 'Immediate - no caching at all'; Minutes = 0 }
+    @{ Label = '15 minutes';                    Minutes = 15 }
+    @{ Label = '1 hour';                        Minutes = 60 }
+    @{ Label = '4 hours';                       Minutes = 240 }
+)
+Write-Host ''
+Write-Host "  If you remove someone, how long may they keep working?" -ForegroundColor White
+Write-Host "  Costed for $devCount developer(s), once the projection is in use." -ForegroundColor DarkGray
+Write-Host ''
+foreach ($w in $windows) {
+    if ($w.Minutes -eq 0) {
+        Write-Host ("    {0,-32} not supported - every request would call the resolver," -f $w.Label) -ForegroundColor DarkGray
+        Write-Host ("    {0,-32} which is a dependency on its uptime for every call" -f '') -ForegroundColor DarkGray
+        continue
+    }
+    $c = $null
+    try {
+        $c = & (Join-Path $PSScriptRoot 'scripts/Measure-ClaudeProjectionCost.ps1') `
+                -Developers $devCount -CacheMinutes $w.Minutes -AsJson 2>$null 6>$null |
+             Out-String | ConvertFrom-Json
+    } catch { }
+    if ($c) {
+        Write-Host ("    {0,-32} `${1,-8} per month" -f $w.Label, $c.monthly_usd.total) -ForegroundColor DarkGray
+    } else {
+        Write-Host ("    {0,-32} (cost model unavailable)" -f $w.Label) -ForegroundColor DarkGray
+    }
+}
+Write-Host ''
+Write-Host '    Most of that is the private endpoint, which is charged whether anyone' -ForegroundColor DarkGray
+Write-Host '    calls the resolver or not. Shortening the window moves the rest.' -ForegroundColor DarkGray
+
+$revoke = Read-Default -Prompt 'Revocation window in minutes' -Default '60' `
+    -Help 'Applies once you move to the projection. Changeable later with one command.' -Validate {
+        param($x)
+        $v = 0
+        if ([int]::TryParse($x, [ref]$v) -and $v -ge 60 -and $v -le 1440) { return $true }
+        Write-Warn2 'Between 60 and 1440 minutes. Below an hour the resolver becomes a per-request dependency.'
+        return $false
+    }
+$entitlementCacheSeconds = [int]$revoke * 60
+
+# What a team budget does when it is reached.
+Write-Host ''
+Write-Host '  When a team reaches its budget, what should happen?' -ForegroundColor White
+Write-Host ''
+Write-Host '    report     the budget is reported and nothing is blocked. Deploys the' -ForegroundColor DarkGray
+Write-Host '               per-team counter and the chargeback workbook only.' -ForegroundColor DarkGray
+Write-Host '    stop       the same, plus the gateway refuses the team once the monthly' -ForegroundColor DarkGray
+Write-Host '               token figure is reached. Deploys the quota policy as enforcing.' -ForegroundColor DarkGray
+Write-Host ''
+Write-Host '    Worth knowing before choosing stop: the counter cannot see cached tokens,' -ForegroundColor DarkGray
+Write-Host '    and on measured usage cache was the majority of real cost. A stop set from' -ForegroundColor DarkGray
+Write-Host '    a dollar figure therefore triggers far later than the dollars suggest.' -ForegroundColor DarkGray
+
+$budgetMode = Read-Default -Prompt 'Team budget behaviour (report/stop)' -Default 'report' `
+    -Help 'Either way the spend is attributed. This chooses whether it also refuses.' -Validate {
+        param($x)
+        if ($x -in @('report','stop')) { return $true }
+        Write-Warn2 'Must be report or stop.'
+        return $false
+    }
+
+# Whether somebody with no team may use it at all.
+Write-Host ''
+Write-Host '  May a developer with no team assigned use the gateway?' -ForegroundColor White
+Write-Host ''
+Write-Host '    allow      they are served, and their spend is recorded against no team.' -ForegroundColor DarkGray
+Write-Host '    deny       they are refused until somebody assigns them.' -ForegroundColor DarkGray
+Write-Host ''
+Write-Host '    Start on allow unless every developer already has a team. deny on day one' -ForegroundColor DarkGray
+Write-Host '    refuses people who have done nothing wrong.' -ForegroundColor DarkGray
+
+$unassignedMode = Read-Default -Prompt 'Developers with no team (allow/deny)' -Default 'allow' `
+    -Help 'Get-ClaudeBusinessUnit.ps1 reports how many are unassigned, so you can switch this when it reaches zero.' -Validate {
+        param($x)
+        if ($x -in @('allow','deny')) { return $true }
+        Write-Warn2 'Must be allow or deny.'
+        return $false
+    }
+
+# The address developers are configured against. This one cannot be retrofitted
+# cheaply, which is why it is asked rather than defaulted silently.
+Write-Host ''
+Write-Host '  What address will developers be configured against?' -ForegroundColor White
+Write-Host ''
+Write-Host ("    azure      https://{0}.azure-api.net/claude" -f $NamePrefix) -ForegroundColor DarkGray
+Write-Host '               No extra cost, nothing to set up. The instance name is part of' -ForegroundColor DarkGray
+Write-Host '               the address, so replacing the gateway later means reconfiguring' -ForegroundColor DarkGray
+Write-Host '               every developer machine.' -ForegroundColor DarkGray
+Write-Host '    custom     https://claude.<your-company>.com/claude' -ForegroundColor DarkGray
+Write-Host '               Costs a DNS record and a certificate. Replacing the gateway' -ForegroundColor DarkGray
+Write-Host '               later becomes a DNS change nobody notices.' -ForegroundColor DarkGray
+Write-Host ''
+Write-Host '    This is the one choice on this page that is expensive to change afterwards.' -ForegroundColor DarkGray
+
+$addressMode = Read-Default -Prompt 'Developer address (azure/custom)' -Default 'azure' `
+    -Help 'Choosing custom does not configure it here - it records the intent and prints the steps at the end.' -Validate {
+        param($x)
+        if ($x -in @('azure','custom')) { return $true }
+        Write-Warn2 'Must be azure or custom.'
+        return $false
+    }
 
 # ---------------------------------------------------------------- 3. limits
 
@@ -716,7 +850,8 @@ az deployment group create `
         entitlementSource=$(if ($entSrc) { $entSrc } else { 'named-value' }) `
         entitlementResolverUrl=$(if ($entUrl) { $entUrl } else { 'https://resolver-not-deployed.invalid' }) `
         entitlementResolverAudience=$(if ($entAud) { $entAud } else { 'https://resolver-not-deployed.invalid' }) `
-        entitlementCacheSeconds=$(if ($entTtl) { $entTtl } else { 3600 }) `
+        entitlementCacheSeconds=$(if ($entitlementCacheSeconds) { $entitlementCacheSeconds } elseif ($entTtl) { $entTtl } else { 3600 }) `
+        buUnassigned=$(if ($unassignedMode) { $unassignedMode } else { 'allow' }) `
     -o none
 
 if ($LASTEXITCODE -ne 0) { throw 'Deployment failed. See the error above.' }
@@ -837,8 +972,24 @@ Write-Host "  Tenant    $($acct.tenantId)" -ForegroundColor Green
 Write-Host ''
 Write-Host '  Next:' -ForegroundColor White
 Write-Host ''
-Write-Host '   1. Entitle a developer'
-Write-Host "        ./scripts/Set-ClaudeDeveloper.ps1 -User dev@contoso.com -Tier standard ``"
+if ($budgetMode -eq 'stop') {
+    Write-Host '   0. You chose stop for team budgets' -ForegroundColor Yellow
+    Write-Host '        The per-team quota is deployed and enforcing. Set a figure per team:'
+    Write-Host "        ./scripts/Set-ClaudeBusinessUnit.ps1 -Id <team> -MonthlyBudgetUsd <n> -ApimName $apimName -ResourceGroup $ResourceGroup"
+    Write-Host '        Until a team has one, nothing refuses it. The counter does not see'
+    Write-Host '        cached tokens, so it triggers later than the dollar figure suggests.'
+    Write-Host ''
+}
+if ($addressMode -eq 'custom') {
+    Write-Host '   0. You chose a company address' -ForegroundColor Yellow
+    Write-Host '        Nothing here configured it. Add the hostname and certificate to the'
+    Write-Host '        gateway, point DNS at it, then hand developers that address instead:'
+    Write-Host "        az apim update -g $ResourceGroup -n $apimName --set hostnameConfigurations=..."
+    Write-Host '        Do it before onboarding anyone, or they are configured against the'
+    Write-Host '        Azure address and have to be reconfigured later.'
+    Write-Host ''
+}
+Write-Host '   1. Entitle a developer'Write-Host "        ./scripts/Set-ClaudeDeveloper.ps1 -User dev@contoso.com -Tier standard ``"
 Write-Host "            -ApimName $apimName -ResourceGroup $ResourceGroup"
 Write-Host '      Takes an email, a UPN or an object id, adds them to the group and'
 Write-Host '      publishes in one step. The raw route needs an object id, not an email:'
