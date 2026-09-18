@@ -355,6 +355,18 @@ $costModel = Get-Content (Join-Path $root 'scripts/Measure-ClaudeProjectionCost.
 Assert 'active developers scale with the population' ($costModel -match '\$Developers \* 0\.1')
 Assert 'and an impossible figure is refused'         ($costModel -match 'is larger than Developers')
 
+# The installer took a developer count, sized the SKU from it, and never checked
+# it against the store that actually holds identities. A population above the
+# named-value ceiling deployed happily and hit the wall weeks later, as a sync
+# refusing to write, by which time the gateway was in production.
+Assert 'the declared population is checked'      ($inst -match 'This holds about \{0\} developers today')
+Assert 'against a derived ceiling, not a literal' ($inst -match '(?m)^\s*\$buCeiling = \[int\]\[math\]::Floor')
+Assert 'it says a bigger SKU does not help'      ($inst -match 'raising the SKU does not move it')
+Assert 'and names what would'                    ($inst -match 'docs/adr/0011')
+Assert 'it says the move is configuration'       ($inst -match 'configuration change rather than a redeployment')
+Assert 'and the operator can still proceed'      ($inst -match 'Continue anyway \(yes/no\)')
+Assert 'or stop before anything is created'      ($inst -match 'Stopped before deploying. Nothing was created')
+
 Write-Host ''
 Write-Host 'Admin - documentation' -ForegroundColor Cyan
 

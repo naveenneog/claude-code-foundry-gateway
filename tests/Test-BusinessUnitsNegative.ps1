@@ -921,6 +921,24 @@ $mutations = @(
        To    = 'nothing to bind, continuing' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the declared population is never checked against the store'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'This holds about {0} developers today'
+       To    = 'Sizing looks fine for {0} developers' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the ceiling becomes a pasted number in the installer'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = '$buCeiling = [int][math]::Floor(($maxChars - 1) / 44)'
+       To    = '$buCeiling = 93' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a bigger SKU is offered as the fix for the ceiling'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'raising the SKU does not move it'
+       To    = 'a larger SKU raises it' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the revocation window goes back to being documented'
        File  = 'Install-ClaudeGateway.ps1'
        From  = 'Revocation window in minutes'
