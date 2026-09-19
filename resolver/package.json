@@ -1,0 +1,15 @@
+{
+  "name": "claude-gateway-entitlement-resolver",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.mjs",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.5.0",
+    "@azure/cosmos": "^4.1.1",
+    "@azure/identity": "^4.4.1"
+  }
+}
