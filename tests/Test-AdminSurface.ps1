@@ -368,6 +368,77 @@ Assert 'and the operator can still proceed'      ($inst -match 'Continue anyway 
 Assert 'or stop before anything is created'      ($inst -match 'Stopped before deploying. Nothing was created')
 
 Write-Host ''
+Write-Host 'Admin - the direct Foundry path' -ForegroundColor Cyan
+
+$direct = Join-Path $root 'scripts/Setup-ClaudeFoundryDirect.ps1'
+Assert 'a direct setup script ships' (Test-Path $direct)
+$ds = Get-Content $direct -Raw
+
+Assert 'it offers device code'        ($ds -match '--use-device-code')
+Assert 'and interactive sign-in'      ($ds -match "ValidateSet\('device', 'interactive', 'current'\)")
+Assert 'it takes a tenant'            ($ds -match '\[string\]\$TenantId')
+Assert 'and an app registration'      ($ds -match '\[string\]\$ClientId')
+# Signing in to the wrong directory fails later and less clearly.
+#
+# Asserted on the throw, not the words. "wrong tenant" also appears in the help
+# text further down, and -match is case-insensitive, so matching the phrase was
+# satisfied by the explanation while the refusal itself was gone.
+Assert 'it refuses the wrong tenant'  ($ds -match "(?m)^\s*throw 'Wrong tenant\.'")
+# A config that cannot authenticate is harder to diagnose than a refusal.
+$tokenAt = $ds.IndexOf('Data-plane token')
+$writeAt = $ds.IndexOf('Claude Code settings')
+Assert 'it gets a token before writing' (
+    $tokenAt -ge 0 -and $writeAt -ge 0 -and $tokenAt -lt $writeAt) "token at $tokenAt, write at $writeAt"
+
+# The resource, not a base URL. Both present ends the session.
+Assert 'it sets the resource, not a url' ($ds -match "ANTHROPIC_FOUNDRY_RESOURCE = \`$Resource")
+Assert 'and strips a gateway base url'   ($ds -match "Properties.Remove\('ANTHROPIC_FOUNDRY_BASE_URL'\)")
+
+# The model list, which is the part that fails mid-session when it is wrong.
+Assert 'it configures the model list'   ($ds -match "'availableModels'")
+Assert 'and enforces it'                ($ds -match "'enforceAvailableModels'")
+Assert 'a disabled deployment is skipped' ($ds -match "provisioningState=='Succeeded'")
+Assert 'haiku points at a real deployment' ($ds -match "ANTHROPIC_DEFAULT_HAIKU_MODEL'\] = \`$sonnet")
+Assert 'it backs up what was there'     ($ds -match '\.bak')
+
+# Reading the configuration off a machine, including one that has none.
+Assert 'it can export the configuration' ($ds -match '\[switch\]\$ShowConfig')
+Assert 'and explains a machine with none' ($ds -match 'never been pointed at Foundry')
+
+# A config file, so a developer is handed one thing rather than told four
+# values to type. Same shape and idea as the gateway's claude-gateway.json.
+Assert 'it reads a config file'          ($ds -match '\[string\]\$ConfigPath')
+Assert 'and can write one'               ($ds -match '\[string\]\$WriteConfig')
+Assert 'the file is tagged with its mode' ($ds -match "mode\s+= 'foundry-direct'")
+# The gateway file has the same extension and a different meaning. Applying one
+# as the other fails with an error that never names the file that was wrong.
+Assert 'a gateway config is refused'     ($ds -match 'looks like a gateway config')
+Assert 'and names the script that wants it' ($ds -match 'Use Setup-ClaudeWorkstation\.ps1 with it instead')
+Assert 'explicit arguments still win'    ($ds -match '(?m)^\s*if \(-not \$Resource -and \$cfg\.foundryResource\)')
+
+$fd = Get-Content (Join-Path $root 'docs/FOUNDRY-DIRECT.md') -Raw
+Assert 'the direct path is documented'   ($fd.Length -gt 0)
+Assert 'it says what it is for'          ($fd -match '(?i)evaluating Foundry, not for running a team')
+# The uncomfortable part: this repository ships an audit that looks for exactly
+# what this script configures, and a health check that fails on it. A document
+# that does not reconcile those leaves an operator to discover it as a bug.
+Assert 'it names the bypass audit'       ($fd -match 'Get-ClaudeBypass\.ps1')
+Assert 'and that the health check fails' ($fd -match '(?i)fails the\W+run')
+Assert 'and calls that correct'          ($fd -match '(?i)correct rather than a false positive')
+Assert 'and refuses suppression'         ($fd -match '(?i)does not work is suppressing')
+# Revocation works differently here, and assuming otherwise leaves access open.
+Assert 'it says group removal does nothing' ($fd -match '(?i)taking\W+somebody out of')
+Assert 'and names the real revocation'      ($fd -match '(?i)remove the role assignment')
+Assert 'the mutual exclusion is documented' ($fd -match 'mutually\W+exclusive')
+Assert 'the config file is documented'      ($fd -match 'claude-foundry-direct\.json')
+Assert 'with its schema'                    ($fd -match '"foundryResource"')
+Assert 'and why mode is in it'              ($fd -match '(?i)mode.{0,30}earns its place')
+Assert 'and that it holds no credential'    ($fd -match '(?i)Nothing in the file is a credential')
+
+$rmd = Get-Content (Join-Path $root 'README.md') -Raw
+Assert 'the README links the direct guide' ($rmd -match '\[Foundry direct\]\(docs/FOUNDRY-DIRECT\.md\)')
+
+Write-Host ''
 Write-Host 'Admin - documentation' -ForegroundColor Cyan
 
 $mig_doc = Get-Content (Join-Path $root 'docs/MIGRATION.md') -Raw

@@ -50,6 +50,7 @@ Check the [prerequisites](#prerequisites) first if it stops early.
 | 🔀 | **Moving off** Claude bought directly from Anthropic | [Migration](docs/MIGRATION.md) |
 | 📈 | **Sizing it** past a pilot, or asking what it can hold | [Scale](docs/SCALE.md) — the measured ceilings |
 | ✅ | **Choosing** — the nine decisions, two of which cannot be retrofitted | [Decisions](docs/DECISIONS.md) |
+| 🧪 | **Evaluating Foundry** before building any of this | [Foundry direct](docs/FOUNDRY-DIRECT.md) — no gateway, and no controls either |
 | 🤔 | **Deciding** whether to do this at all | [Comparison](docs/COMPARISON.md) |
 
 ### Running it day to day
@@ -519,6 +520,7 @@ Install-ClaudeGateway.ps1        interactive admin setup - start here (Windows)
 install-claude-gateway.sh        the same, for macOS and Linux
 scripts/
   Setup-ClaudeWorkstation.ps1  one-command developer setup (Windows)
+  Setup-ClaudeFoundryDirect.ps1  the same machine, straight at Foundry, no gateway
   setup-claude-workstation.sh  the same, for macOS and Linux
   get-foundry-token.*          credential helper for Claude Desktop
   New-OnboardingEmail.ps1      generate the developer's onboarding email
@@ -555,6 +557,7 @@ docs/
   PLUGINS.md                   marketplaces, plugins and extensions
   SCALE.md                     measured ceilings and the load envelope
   DECISIONS.md                 the nine choices, and which two cannot wait
+  FOUNDRY-DIRECT.md            Claude Code straight at Foundry, and what it costs you
   DEBUGGING.md                 isolate a failure layer by layer
   COMPARISON.md                Foundry vs Anthropic direct
   ARCHITECTURE.md              how it works, and why each piece is there

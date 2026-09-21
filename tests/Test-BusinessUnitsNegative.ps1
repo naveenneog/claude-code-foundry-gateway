@@ -921,6 +921,66 @@ $mutations = @(
        To    = 'nothing to bind, continuing' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a gateway config is applied as a direct one'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = 'looks like a gateway config'
+       To    = 'will be treated as direct' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the config file loses its mode tag'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = "mode            = 'foundry-direct'"
+       To    = "note            = 'foundry-direct'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the guide stops saying the file holds no credential'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'Nothing in the file is a credential'
+       To    = 'Treat the file as a credential' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the direct path sets a base url instead of the resource'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = 'ANTHROPIC_FOUNDRY_RESOURCE = $Resource'
+       To    = 'ANTHROPIC_FOUNDRY_BASE_URL = $Resource' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a disabled deployment is offered as a model'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = "properties.provisioningState=='Succeeded'"
+       To    = "properties.provisioningState!='Nothing'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the wrong tenant is accepted'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = "throw 'Wrong tenant.'"
+       To    = "Note 'Tenant differs, continuing'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the direct guide stops naming the bypass audit'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'Get-ClaudeBypass.ps1'
+       To    = 'some other script' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the health check finding is called a false positive'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'correct rather than a false positive'
+       To    = 'a false positive' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'suppressing the finding becomes an option'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'does not work is suppressing'
+       To    = 'also works is suppressing' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the direct guide claims group removal revokes'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'remove the role assignment'
+       To    = 'remove them from the group' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the declared population is never checked against the store'
        File  = 'Install-ClaudeGateway.ps1'
        From  = 'This holds about {0} developers today'
