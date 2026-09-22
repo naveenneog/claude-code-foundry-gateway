@@ -398,7 +398,68 @@ Assert 'and strips a gateway base url'   ($ds -match "Properties.Remove\('ANTHRO
 Assert 'it configures the model list'   ($ds -match "'availableModels'")
 Assert 'and enforces it'                ($ds -match "'enforceAvailableModels'")
 Assert 'a disabled deployment is skipped' ($ds -match "provisioningState=='Succeeded'")
-Assert 'haiku points at a real deployment' ($ds -match "ANTHROPIC_DEFAULT_HAIKU_MODEL'\] = \`$sonnet")
+# Deployment names are chosen by whoever made them, so the name is not evidence
+# of which Claude it is. Anchoring the aliases on properties.model.name is the
+# difference between working everywhere and working only where someone happened
+# to name the deployment after its model.
+Assert 'discovery asks for the model too'  ($ds -match 'model:properties\.model\.name')
+Assert 'aliases resolve from the model'    ($ds -match '\$_\.model -and \$_\.model -match \$Family')
+Assert 'and fall back to the name'         ($ds -match '\$_\.name -match \$Family')
+Assert 'a real haiku deployment is preferred' ($ds -match "if \(\`$haiku\) \{ \`$haiku \} elseif \(\`$sonnet\)")
+Assert 'haiku points at a real deployment' ($ds -match "ANTHROPIC_DEFAULT_HAIKU_MODEL'\] = \`$small")
+# Assuming a deployment name writes a config that fails minutes later as
+# DeploymentNotFound, which reads as a Claude Code bug rather than a setting.
+Assert 'it refuses to invent a deployment' ($ds -match 'Cannot configure \$Resource without knowing')
+Assert 'and never assumes a model name'    ($ds -notmatch "\`$Models = @\('claude-sonnet-5'\)")
+Assert 'it names the way past discovery'   ($ds -match '-Models <name>')
+# Signing in proves nothing; every account gets a token. The evidence is a real
+# call, and it has to happen before the write or a machine that cannot reach
+# Foundry is left holding a config that points somewhere it cannot go.
+Assert 'access is proved by a real call'   ($ds -match "Step 'Access check'")
+Assert 'and before anything is written'    ($ds.IndexOf("Step 'Access check'") -lt $ds.IndexOf("Step 'Claude Code settings'"))
+Assert 'a failed check writes nothing'     ($ds -match '(?i)Nothing was written\. This machine is unchanged')
+Assert 'and stops the run'                 ($ds -match 'throw "Cannot reach \$Resource as the signed-in principal')
+# The old handler printed a list of maybes, and two of them were wrong. Read
+# the token and ask Azure instead.
+Assert 'a refusal is diagnosed, not listed' ($ds -match 'function Resolve-FoundryDenial')
+Assert 'the token is decoded'               ($ds -match 'function ConvertFrom-JwtPayload')
+Assert 'so the real principal is named'     ($ds -match '(?i)The call was made as')
+Assert 'a 404 is not an auth problem'       ($ds -match '(?i)Authentication succeeded\.')
+Assert 'and lists the deployments that exist' ($ds -match '(?i)Anthropic deployments that do exist here')
+# Foundry User and Cognitive Services User carry the same data action, so no
+# role name may be hardcoded as the required one.
+Assert 'role capability is asked of Azure'  ($ds -match 'permissions\[0\]\.dataActions')
+Assert 'and matched on the data action'     ($ds.Contains("'Microsoft.CognitiveServices/*'"))
+# A substring test would accept Azure AI Developer, which is confined to
+# accounts/OpenAI/* and serves no Claude at all.
+Assert 'an OpenAI-scoped role is rejected'  ($ds -match "actions -contains 'Microsoft\.CognitiveServices/\*'")
+Assert 'and named when it is the cause'     ($ds -match "'Azure AI Developer', 'Cognitive Services OpenAI User'")
+Assert 'with why it does not serve Claude'  ($ds -match '(?i)is scoped to accounts/OpenAI/\* only')
+Assert 'project scope is offered as a cause' ($ds -match '(?i)on a project inside this account')
+# One sign-in, all three clients. Desktop cannot read ~/.claude/settings.json,
+# so it needs the base URL and the credential helper instead.
+Assert 'it configures VS Code too'          ($ds -match "Step 'VS Code'")
+Assert 'as an array of name/value pairs'    ($ds -match "name = 'ANTHROPIC_FOUNDRY_RESOURCE'; value = \`$Resource")
+Assert 'and says a reload is needed'        ($ds -match '(?i)Developer: Reload Window')
+Assert 'it configures Claude Desktop too'   ($ds -match "Step 'Claude Desktop'")
+Assert 'it reuses the gateway helper'       ($ds -match 'get-foundry-token\.cmd')
+Assert 'pointed at the direct base url'     ($ds -match 'inferenceGatewayBaseUrl\s+= \$baseUrl')
+# Desktop rewrites its configuration on exit, so writing underneath a running
+# instance is discarded the moment the developer quits.
+Assert 'a running Desktop is detected'      ($ds -match "Get-Process -Name 'Claude'")
+Assert 'and the operator is asked first'    ($ds -match '(?i)Close it and continue')
+Assert 'with a reason given'                ($ds -match '(?i)rewrites its configuration when it')
+Assert 'declining leaves Desktop alone'     ($ds -match '(?i)Left running\. Desktop was not configured')
+Assert 'unattended runs can force it'       ($ds -match '\[switch\]\$Force')
+Assert 'processes are stopped by id'        ($ds -match 'Stop-Process -Id \$p\.Id')
+Assert 'and a survivor is reported'         ($ds -match '(?i)still running\. Quit it from the tray icon')
+Assert 'developer mode is turned on'        ($ds -match "'allowDevTools'")
+Assert 'checking the value, not the file'   ($ds -match '\$devDoc\.allowDevTools -eq \$true')
+Assert 'either client can be skipped'       (($ds -match '\[switch\]\$SkipDesktop') -and ($ds -match '\[switch\]\$SkipVSCode'))
+
+$ws = Get-Content (Join-Path $root 'scripts/Setup-ClaudeWorkstation.ps1') -Raw
+Assert 'the gateway path checks it too'     ($ws -match '\$devDoc\.allowDevTools -eq \$true')
+Assert 'and keeps the other keys'           ($ws -match "Add-Member -NotePropertyName 'allowDevTools'")
 Assert 'it backs up what was there'     ($ds -match '\.bak')
 
 # Reading the configuration off a machine, including one that has none.
@@ -418,6 +479,68 @@ Assert 'explicit arguments still win'    ($ds -match '(?m)^\s*if \(-not \$Resour
 
 $fd = Get-Content (Join-Path $root 'docs/FOUNDRY-DIRECT.md') -Raw
 Assert 'the direct path is documented'   ($fd.Length -gt 0)
+# The failure every direct-path developer meets first. The message names a
+# principal, and on this path the principal is often not the person reading it.
+# Ordered as it actually occurs: wrong tenant beats missing role in the wild.
+Assert 'the 401 is documented'                ($fd -match '(?i)401 Principal does not have access')
+Assert 'the wrong tenant is named first'      ($fd -match '(?i)No `AZURE_TENANT_ID`, and the resource is in another tenant')
+Assert 'and an empty list is read correctly'  ($fd -match '(?i)wrong tenant, not that you lack a role')
+Assert 'the credential chain is explained'    ($fd -match '(?i)ahead of the signed-in CLI user')
+Assert 'it says what to check first'          ($fd -match 'AZURE_CLIENT_ID\|AZURE_TENANT_ID')
+Assert 'and how to grant the role'            ($fd -match '(?i)az role assignment create --assignee')
+Assert 'a reload is needed after'             ($fd -match '(?i)extension host reads the environment once')
+Assert 'and the gateway path is exempt'       ($fd -match '(?i)developers need no role on the Foundry resource')
+# Why the aliases cannot be taken from the deployment name.
+Assert 'names are not model names'            ($fd -match '(?i)Deployment names are not model names')
+Assert 'with a worked example'                ($fd -match '\| `claude-primary` \| `claude-opus-5` \|')
+Assert 'and discovery failure stops'          ($fd -match '(?i)\*\*stops\*\* rather than guessing')
+# A pasted catalogue passes enforceAvailableModels and fails per model.
+Assert 'availableModels is deployment names'  ($fd -match '(?i)availableModels holds deployment names, not model names')
+Assert 'and the query to get them is given'   ($fd -match 'deployment:name, model:properties\.model\.name')
+# Entitlement here is an Azure role on a group, not an Entra app permission.
+Assert 'the role for a group is documented'   ($fd -match '(?i)Which role, and which scope')
+Assert 'assigned to a group, not per person'  ($fd -match '--assignee-principal-type Group')
+Assert 'and why that flag is needed'          ($fd -match '(?i)attempts a Graph lookup that frequently fails')
+Assert 'no app registration is needed'        ($fd -match '(?i)no Entra app registration')
+Assert 'the OpenAI-scoped trap is named'      ($fd -match '\| Azure AI Developer \|')
+Assert 'and Cognitive Services OpenAI User'   ($fd -match '\| Cognitive Services OpenAI User \|')
+Assert 'with the reason they fail'            ($fd -match '(?i)not served under `accounts/OpenAI/`')
+Assert 'account scope, not project'           ($fd -match '(?i)Scope it at the account')
+Assert 'and how to find a project-scoped one' ($fd -match '(?i)scope ending in `/projects/')
+# One command, and it names the layer rather than the symptom.
+Assert 'a single health check is documented' ($fd -match '(?i)One command that checks the whole chain')
+Assert 'and it configures nothing'            ($fd -match '(?i)configures nothing, so it is safe')
+Assert 'the device-code check is offered'     ($fd -match '(?i)-ClientId <client-id> -TenantId')
+Assert 'and marked as beyond RBAC'            ($fd -match '(?i)no role\s*\n?assignment can fix')
+
+$td = Get-Content (Join-Path $root 'scripts/Test-FoundryDirect.ps1') -Raw
+Assert 'the health check names the principal' ($td -match '(?i)Token belongs to a signed-in user')
+Assert 'and checks the tenant owns it'        ($td -match '(?i)Resource is in the signed-in tenant')
+Assert 'and that a role reaches Claude'       ($td -match '(?i)A role reaches the Claude data plane')
+Assert 'on the unrestricted data action'      ($td.Contains("'Microsoft.CognitiveServices/*'"))
+Assert 'it compares all three clients'        (($td -match '(?i)Claude CLI points at this resource') -and
+                                               ($td -match '(?i)VS Code agrees with the CLI') -and
+                                               ($td -match '(?i)Claude Desktop points at this resource'))
+Assert 'a gateway machine is said to be one'  ($td -match '(?i)not the direct path')
+Assert 'the mutually exclusive pair is caught' ($td -match '(?i)mutually exclusive')
+Assert 'device-code init is checked'          ($td -match 'oauth2/v2\.0/devicecode')
+Assert 'and the AADSTS code is surfaced'      ($td -match "AADSTS\\d\+")
+Assert 'and named as not RBAC'                ($td -match '(?i)app registration or tenant, not RBAC')
+# The Desktop 400. Documented separately because it is the one failure here
+# that a role assignment cannot touch.
+Assert 'the device-code 400 is documented'    ($fd -match '(?i)Foundry Entra device init failed: HTTP 400')
+Assert 'and ruled out as an RBAC problem'     ($fd -match '(?i)No role assignment can fix this')
+Assert 'the request it makes is shown'        ($fd -match 'oauth2/v2\.0/devicecode')
+Assert 'and that it precedes any token'       ($fd -match '(?i)before any token exists')
+Assert 'the three AADSTS causes are listed'   (($fd -match 'AADSTS7000218') -and
+                                               ($fd -match 'AADSTS700016') -and
+                                               ($fd -match 'AADSTS90002'))
+Assert 'the public-client toggle is named'    ($fd -match 'isFallbackPublicClient')
+Assert 'the CLI client id is offered'         ($fd -match '04b07795-8ddb-461a-bbee-02f9e1bf7b46')
+Assert 'and its caveat given'                 ($fd -match '(?i)blocked?k? it with Conditional Access|block it with Conditional Access')
+Assert 'the helper-script escape is named'    ($fd -match '(?i)never calls `/devicecode`')
+# Troubleshooting belongs in its own section, not buried in the model list.
+Assert 'diagnostics is its own section'       ($fd -match '(?m)^## 4\. Diagnostics')
 Assert 'it says what it is for'          ($fd -match '(?i)evaluating Foundry, not for running a team')
 # The uncomfortable part: this repository ships an audit that looks for exactly
 # what this script configures, and a health check that fails on it. A document
@@ -450,10 +573,24 @@ Assert 'and said to be an array'            ($fd -match '(?i)array of name/value
 Assert 'it says VS Code usually needs nothing' ($fd -match '(?i)Usually nothing to do')
 Assert 'the login prompt can be turned off'    ($fd -match 'claudeCode\.disableLoginPrompt')
 Assert 'and a reload is required'              ($fd -match '(?i)Developer: Reload Window')
+# Where the files actually are. Both are called settings.json and only one of
+# them follows the OS config directory, which is the whole confusion.
+Assert 'the Claude settings path is given'     ($fd.Contains('%USERPROFILE%\.claude\settings.json'))
+Assert 'on macOS and Linux too'                ($fd -match '~/\.claude/settings\.json')
+Assert 'and noted as the same everywhere'      ($fd -match '(?i)Same location on every platform')
+Assert 'the VS Code path is given'             ($fd.Contains('%APPDATA%\Code\User\settings.json'))
+Assert 'and its macOS location'                ($fd -match 'Library/Application Support/Code/User/settings\.json')
+Assert 'and its Linux location'                ($fd -match 'XDG_CONFIG_HOME:-~/\.config\}/Code/User/settings\.json')
+Assert 'the two files are distinguished'       ($fd -match '(?i)different file\*\* in a\s*\n?\*\*different place')
+Assert 'the Settings UI is ruled out'          ($fd -match '(?i)not the Settings UI')
+Assert 'the local override is named'           ($fd -match 'settings\.local\.json')
+Assert 'and the state file is not config'      ($fd -match '(?i)Not configuration; do not hand-edit')
 
 $dev2 = Get-Content (Join-Path $root 'DEVELOPER.md') -Raw
 Assert 'the gateway appendix shows the shape too' ($dev2 -match '"claudeCode\.environmentVariables": \[')
 Assert 'and no longer implies duplication'        ($dev2 -notmatch 'VS Code needs the same values again')
+Assert 'it gives the VS Code settings path'       ($dev2.Contains('%APPDATA%\Code\User\settings.json'))
+Assert 'and the Claude settings path'             ($dev2.Contains('%USERPROFILE%\.claude\settings.json'))
 
 $rmd = Get-Content (Join-Path $root 'README.md') -Raw
 Assert 'the README links the direct guide' ($rmd -match '\[Foundry direct\]\(docs/FOUNDRY-DIRECT\.md\)')

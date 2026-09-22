@@ -337,11 +337,23 @@ if (-not $SkipDesktop) {
             # profile library this writes into.
             $devSettings = Join-Path $env:APPDATA 'Claude\developer_settings.json'
             New-Item -ItemType Directory -Force -Path (Split-Path $devSettings) | Out-Null
-            if (-not (Test-Path $devSettings)) {
-                '{ "allowDevTools": true }' | Set-Content $devSettings -Encoding UTF8
+            # Presence is not the same as enabled. A file left behind with
+            # allowDevTools false reported "already enabled" and turned nothing
+            # on, and the developer then could not find Settings -> Connection.
+            $devOn = $false
+            $devDoc = $null
+            if (Test-Path $devSettings) {
+                try { $devDoc = Get-Content $devSettings -Raw | ConvertFrom-Json } catch { $devDoc = $null }
+                if ($devDoc -and $devDoc.allowDevTools -eq $true) { $devOn = $true }
+            }
+            if ($devOn) { Write-Ok 'developer settings already enabled' }
+            else {
+                # Keep any other keys the app has put there.
+                if (-not $devDoc) { $devDoc = [pscustomobject]@{} }
+                $devDoc | Add-Member -NotePropertyName 'allowDevTools' -NotePropertyValue $true -Force
+                $devDoc | ConvertTo-Json -Depth 5 | Set-Content $devSettings -Encoding UTF8
                 Write-Ok 'developer settings enabled'
             }
-            else { Write-Ok 'developer settings already enabled' }
 
             $lib = Join-Path $env:LOCALAPPDATA 'Claude-3p\configLibrary'
             $metaPath = Join-Path $lib '_meta.json'

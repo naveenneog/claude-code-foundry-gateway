@@ -30,7 +30,12 @@
 param(
     [Parameter(Mandatory = $true)][string]$Resource,
     [string]$ResourceGroup,
-    [string]$Model = 'claude-sonnet-5'
+    [string]$Model = 'claude-sonnet-5',
+    # Supply the client id from Claude Desktop's Connection screen to test the
+    # device-code flow it uses. That flow fails before any token exists, so no
+    # role assignment can fix it and the other checks here cannot see it.
+    [string]$ClientId,
+    [string]$TenantId
 )
 
 $ErrorActionPreference = 'Continue'
@@ -69,6 +74,75 @@ if ($token) {
 }
 else {
     Add-Result 'Entra ID token acquired' $false "Could not get a token for $Scope."
+}
+
+# 2b. Who does that token actually belong to? -------------------------------
+# The refusal Foundry returns names a "Principal", and the Azure Identity chain
+# puts environment variables ahead of the signed-in CLI user - so the principal
+# is often not the person reading the message.
+$claims = $null
+if ($token) {
+    try {
+        $p = $token.Split('.')[1].Replace('-', '+').Replace('_', '/')
+        switch ($p.Length % 4) { 2 { $p += '==' } 3 { $p += '=' } 1 { $p += '===' } }
+        $claims = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p)) | ConvertFrom-Json
+    } catch { $claims = $null }
+}
+if ($claims) {
+    $who = if ($claims.upn) { $claims.upn }
+           elseif ($claims.unique_name) { $claims.unique_name }
+           elseif ($claims.appid) { "application $($claims.appid)" }
+           else { '<unnamed>' }
+    $isUser = [bool]($claims.upn -or $claims.unique_name)
+    Add-Result 'Token belongs to a signed-in user' $isUser "$who  tenant=$($claims.tid)"
+    if (-not $isUser) {
+        Write-Host '         A service principal is ahead of your CLI sign-in. Check:' -ForegroundColor DarkGray
+        Write-Host '         Get-ChildItem Env: | Where-Object Name -match ''AZURE_CLIENT_ID''' -ForegroundColor DarkGray
+    }
+}
+
+# 2c. Is the resource in that token's tenant? -------------------------------
+# A token for the wrong tenant is valid and useless: the resource's tenant has
+# never heard of the principal, and says so in a way that reads like RBAC.
+$rgFound = az cognitiveservices account list --query "[?name=='$Resource'].resourceGroup | [0]" -o tsv 2>$null
+if ($rgFound) { $rgFound = $rgFound.Trim() }
+if ($claims) {
+    Add-Result 'Resource is in the signed-in tenant' ([bool]$rgFound) $(
+        if ($rgFound) { "resource group $rgFound" }
+        else { "$Resource is not visible from tenant $($claims.tid) - sign in to the tenant that owns it" })
+}
+
+# 2d. Does the principal hold a role that reaches Claude? -------------------
+# Azure AI Developer and Cognitive Services OpenAI User are confined to
+# accounts/OpenAI/*, and Claude is not served there - so they look like the
+# obvious AI roles and grant nothing on this endpoint.
+if ($claims -and $rgFound) {
+    $scopeId = az cognitiveservices account show -n $Resource -g $rgFound --query id -o tsv 2>$null
+    if ($scopeId) { $scopeId = $scopeId.Trim() }
+    $held = @()
+    if ($scopeId -and $claims.oid) {
+        $raw = az role assignment list --assignee $claims.oid --scope $scopeId --include-inherited `
+                  --query "[].roleDefinitionName" -o tsv 2>$null
+        if ($raw) { $held = @($raw -split "`r?`n" | Where-Object { $_ } | ForEach-Object { $_.Trim() } | Sort-Object -Unique) }
+    }
+    $capable = @()
+    foreach ($r in $held) {
+        $da = az role definition list --name $r --query "[0].permissions[0].dataActions" -o tsv 2>$null
+        if (-not $da) { continue }
+        $acts = @($da -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        if ($acts -contains 'Microsoft.CognitiveServices/*') { $capable += $r }
+    }
+    if ($capable.Count -gt 0) {
+        Add-Result 'A role reaches the Claude data plane' $true ($capable -join ', ')
+    }
+    elseif ($held.Count -gt 0) {
+        Add-Result 'A role reaches the Claude data plane' $false `
+            ("held: $($held -join ', ') - none carries Microsoft.CognitiveServices/*")
+    }
+    else {
+        Add-Result 'A role reaches the Claude data plane' $false `
+            'no role assignment on this resource for that principal'
+    }
 }
 
 # 3. Deployments present ----------------------------------------------------
@@ -140,6 +214,101 @@ if ($cli) {
     }
     catch {
         Add-Result 'Claude Code end-to-end on Foundry' $false $_.Exception.Message
+    }
+}
+
+# 8. The three clients agree -----------------------------------------------
+# Claude Desktop cannot read ~/.claude/settings.json, and VS Code can hold its
+# own copy. A stale value in either outlives a correct CLI configuration and
+# looks like an intermittent fault.
+$expected = "https://$Resource.services.ai.azure.com/anthropic"
+$cliFile  = Join-Path $env:USERPROFILE '.claude\settings.json'
+$codeFile = Join-Path $env:APPDATA 'Code\User\settings.json'
+
+$cliTarget = $null
+if (Test-Path $cliFile) {
+    try {
+        $c = Get-Content $cliFile -Raw | ConvertFrom-Json
+        $cliTarget = if ($c.env.ANTHROPIC_FOUNDRY_RESOURCE) { "resource:$($c.env.ANTHROPIC_FOUNDRY_RESOURCE)" }
+                     elseif ($c.env.ANTHROPIC_FOUNDRY_BASE_URL) { $c.env.ANTHROPIC_FOUNDRY_BASE_URL }
+        # Both set at once ends the session outright.
+        if ($c.env.ANTHROPIC_FOUNDRY_RESOURCE -and $c.env.ANTHROPIC_FOUNDRY_BASE_URL) {
+            Add-Result 'CLI settings are not self-contradictory' $false `
+                'both ANTHROPIC_FOUNDRY_RESOURCE and ANTHROPIC_FOUNDRY_BASE_URL are set - mutually exclusive'
+        }
+    } catch { }
+}
+Add-Result 'Claude CLI is configured' ([bool]$cliTarget) $(if ($cliTarget) { "$cliFile -> $cliTarget" } else { "nothing Foundry-related in $cliFile" })
+# Configured is not the same as configured for this resource. A machine on the
+# gateway passes every check above - the token, the role and the endpoint are
+# all genuinely fine - and is still not on the direct path.
+if ($cliTarget) {
+    $onDirect = ($cliTarget -eq "resource:$Resource") -or ($cliTarget -eq $expected)
+    Add-Result 'Claude CLI points at this resource' $onDirect $(
+        if ($onDirect) { 'direct path' }
+        elseif ($cliTarget -match 'azure-api\.net') { "this machine is on the gateway ($cliTarget), not the direct path" }
+        else { "points at $cliTarget" })
+}
+
+if (Test-Path $codeFile) {
+    try {
+        $v = (Get-Content $codeFile -Raw | ConvertFrom-Json).'claudeCode.environmentVariables'
+        if ($v) {
+            $res = ($v | Where-Object name -eq 'ANTHROPIC_FOUNDRY_RESOURCE').value
+            $url = ($v | Where-Object name -eq 'ANTHROPIC_FOUNDRY_BASE_URL').value
+            $codeTarget = if ($res) { "resource:$res" } else { $url }
+            $agrees = (-not $codeTarget) -or ($codeTarget -eq $cliTarget)
+            Add-Result 'VS Code agrees with the CLI' $agrees $(
+                if ($agrees) { 'same target' } else { "VS Code -> $codeTarget, CLI -> $cliTarget" })
+        }
+    } catch { }
+}
+
+$lib = Join-Path $env:LOCALAPPDATA 'Claude-3p\configLibrary'
+$metaFile = Join-Path $lib '_meta.json'
+if (Test-Path $metaFile) {
+    try {
+        $meta = Get-Content $metaFile -Raw | ConvertFrom-Json
+        $pf = Join-Path $lib "$($meta.appliedId).json"
+        if (Test-Path $pf) {
+            $dp = Get-Content $pf -Raw | ConvertFrom-Json
+            $agrees = $dp.inferenceGatewayBaseUrl -eq $expected
+            Add-Result 'Claude Desktop points at this resource' $agrees $(
+                if ($agrees) { 'direct path' }
+                elseif ($dp.inferenceGatewayBaseUrl -match 'azure-api\.net') { "on the gateway ($($dp.inferenceGatewayBaseUrl)), not the direct path" }
+                else { "Desktop -> $($dp.inferenceGatewayBaseUrl)" })
+            if ($dp.inferenceCredentialHelper -and -not (Test-Path $dp.inferenceCredentialHelper)) {
+                Add-Result 'Desktop credential helper exists' $false $dp.inferenceCredentialHelper
+            }
+        }
+    } catch { }
+}
+
+# 9. Entra device-code init, only when a client id is given -----------------
+# Claude Desktop's native Foundry Entra mode posts to /devicecode before any
+# token exists. A 400 there is an app registration problem and no role
+# assignment can affect it, which is why it needs its own check.
+if ($ClientId) {
+    $tid = if ($TenantId) { $TenantId } elseif ($claims) { $claims.tid } else { $null }
+    if (-not $tid) { Write-Host '  [SKIP] Entra device-code init - pass -TenantId' -ForegroundColor Yellow }
+    else {
+        $dcScope = 'https://cognitiveservices.azure.com/.default offline_access'
+        try {
+            $r = Invoke-WebRequest "https://login.microsoftonline.com/$tid/oauth2/v2.0/devicecode" `
+                    -Method POST -ContentType 'application/x-www-form-urlencoded' `
+                    -Body "client_id=$ClientId&scope=$([uri]::EscapeDataString($dcScope))" `
+                    -UseBasicParsing -TimeoutSec 30 -SkipHttpErrorCheck
+            if ($r.StatusCode -eq 200) {
+                Add-Result 'Entra device-code init (Desktop)' $true "client $ClientId accepted"
+            }
+            else {
+                $err = $null
+                try { $err = ($r.Content | ConvertFrom-Json).error_description } catch { }
+                $aadsts = if ($err -match '(AADSTS\d+)') { $Matches[1] } else { "HTTP $($r.StatusCode)" }
+                Add-Result 'Entra device-code init (Desktop)' $false "$aadsts - app registration or tenant, not RBAC"
+            }
+        }
+        catch { Add-Result 'Entra device-code init (Desktop)' $false $_.Exception.Message }
     }
 }
 

@@ -921,6 +921,210 @@ $mutations = @(
        To    = 'nothing to bind, continuing' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the device-code 400 is blamed on RBAC'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'No role assignment can fix this'
+       To    = 'Grant the missing role' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the public-client toggle is dropped'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'isFallbackPublicClient'
+       To    = 'signInAudience' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'diagnostics is folded back into the model list'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = '## 4. Diagnostics'
+       To    = '### More about models' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the health check stops naming the principal'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'Token belongs to a signed-in user'
+       To    = 'Token acquired' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the health check accepts an OpenAI-scoped role'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = "acts -contains 'Microsoft.CognitiveServices/*'"
+       To    = "acts -match 'Microsoft.CognitiveServices'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the health check stops checking device-code init'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'oauth2/v2.0/devicecode'
+       To    = 'oauth2/v2.0/token' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a gateway machine is reported as being on the direct path'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'not the direct path'
+       To    = 'direct path' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'an OpenAI-scoped role is accepted as data-capable'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = "actions -contains 'Microsoft.CognitiveServices/*'"
+       To    = "actions -match 'Microsoft.CognitiveServices'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the OpenAI role trap is dropped from the guide'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = '| Azure AI Developer |'
+       To    = '| Some Other Role |' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the group assignment loses its principal type'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = '--assignee-principal-type Group'
+       To    = '--assignee-type Group' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'project scope stops being called out'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'Scope it at the account'
+       To    = 'Scope it anywhere convenient' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the access check moves back after the write'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = "Step 'Access check'"
+       To    = "Step 'Round trip'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a failed access check writes the settings anyway'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = 'Nothing was written. This machine is unchanged.'
+       To    = 'Settings were still written.' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a refusal goes back to a list of maybes'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = 'function Resolve-FoundryDenial'
+       To    = 'function Show-PossibleCauses' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the required role is hardcoded again'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = 'permissions[0].dataActions'
+       To    = 'permissions[0].actions' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a 404 is treated as an authorisation failure'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = 'Authentication succeeded.'
+       To    = 'Authorisation failed.' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'Desktop is configured under a running instance'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = 'Close it and continue'
+       To    = 'Continue anyway' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'declining to close Desktop configures it regardless'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = 'Left running. Desktop was not configured'
+       To    = 'Left running. Writing anyway' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'Desktop is pointed at a gateway instead of the resource'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = 'inferenceGatewayBaseUrl                       = $baseUrl'
+       To    = 'inferenceGatewayBaseUrl                       = $GatewayUrl' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'developer mode is decided by the file existing'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = '$devDoc -and $devDoc.allowDevTools -eq $true'
+       To    = '$devDoc' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the gateway path trusts the file existing too'
+       File  = 'scripts/Setup-ClaudeWorkstation.ps1'
+       From  = '$devDoc -and $devDoc.allowDevTools -eq $true'
+       To    = '$devDoc' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the wrong-tenant cause is demoted below the role'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'No `AZURE_TENANT_ID`, and the resource is in another tenant'
+       To    = 'You are missing a role' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'an empty resource list is read as a missing role'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'wrong tenant, not that you lack a role'
+       To    = 'you lack a role on it' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the credential chain order stops being stated'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'ahead of the signed-in CLI user'
+       To    = 'considered alongside the signed-in user' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'availableModels stops being deployment names'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'availableModels holds deployment names, not model names'
+       To    = 'availableModels lists the Claude models you may use' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'discovery stops asking for the model'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = 'model:properties.model.name'
+       To    = 'model:name' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'aliases go back to matching the deployment name'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = '$_.model -and $_.model -match $Family'
+       To    = '$false' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a real haiku deployment stops being preferred'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = 'if ($haiku) { $haiku } elseif ($sonnet)'
+       To    = 'if ($false) { $haiku } elseif ($sonnet)' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a missing deployment list is assumed instead of refused'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = 'throw "Cannot configure $Resource without knowing'
+       To    = '$Models = @(''claude-sonnet-5''); Note "Cannot configure $Resource without knowing' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the VS Code settings path is dropped from the direct guide'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = '%APPDATA%\Code\User\settings.json'
+       To    = 'the usual place' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the two settings.json files stop being distinguished'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'different file** in a'
+       To    = 'same file in a' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the Settings UI stops being ruled out'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'not the Settings UI'
+       To    = 'or the Settings UI' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the state file stops being marked as not configuration'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'Not configuration; do not hand-edit'
+       To    = 'Edit it if you need to' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the gateway appendix loses the VS Code path'
+       File  = 'DEVELOPER.md'
+       From  = '%APPDATA%\Code\User\settings.json'
+       To    = 'your VS Code settings' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the VS Code setting is shown as a map'
        File  = 'docs/FOUNDRY-DIRECT.md'
        From  = 'array of name/value objects'

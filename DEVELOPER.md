@@ -196,8 +196,16 @@ npm install -g @anthropic-ai/claude-code
 code --install-extension anthropic.claude-code
 ```
 
-**3. Write** `~/.claude/settings.json` (`%USERPROFILE%\.claude\settings.json` on
-Windows), taking the gateway URL from your `claude-gateway.json`:
+**3. Write Claude Code's settings file.** It lives in your home directory, so
+the path is the same on every platform:
+
+| | Path |
+|---|---|
+| Windows | `%USERPROFILE%\.claude\settings.json` |
+| macOS | `~/.claude/settings.json` |
+| Linux | `~/.claude/settings.json` |
+
+Take the gateway URL from your `claude-gateway.json`:
 
 ```json
 {
@@ -225,7 +233,18 @@ Two traps the script handles for you:
 `~/.claude/settings.json`, and its own setting description says to prefer it
 over VS Code settings.
 
-Two cases where you do open **Preferences: Open User Settings (JSON)**:
+Two cases where you do open VS Code's own settings. It is a **different file in
+a different place** — the shared name is all they have in common:
+
+| | Path |
+|---|---|
+| Windows | `%APPDATA%\Code\User\settings.json` |
+| macOS | `~/Library/Application Support/Code/User/settings.json` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/Code/User/settings.json` |
+
+Or reach it without the path: **Ctrl+Shift+P → Preferences: Open User Settings
+(JSON)**. Use the JSON editor rather than the Settings UI — the setting below is
+an array of objects and the UI will not edit it properly.
 
 If you need a VS Code-only override, `claudeCode.environmentVariables` is an
 **array of name/value objects**, not a map — verified against extension 2.1.263,

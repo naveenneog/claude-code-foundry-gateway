@@ -55,6 +55,12 @@ param(
     [string[]]$Models,
     [switch]$SkipVerify,
     [switch]$ShowConfig,
+    # Claude Desktop holds its configuration in memory and rewrites it on exit,
+    # so it has to be closed before we write. Default is to ask; -Force closes
+    # it without asking, for unattended runs.
+    [switch]$SkipDesktop,
+    [switch]$SkipVSCode,
+    [switch]$Force,
     # A file or URL holding the answers, so a developer is handed one thing
     # rather than asked to type four. Same shape and same idea as the gateway's
     # claude-gateway.json - see docs/FOUNDRY-DIRECT.md for the schema.
@@ -70,6 +76,182 @@ function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "  [OK]   $m" -ForegroundColor Green }
 function Bad($m)  { Write-Host "  [FAIL] $m" -ForegroundColor Red }
 function Note($m) { Write-Host "         $m" -ForegroundColor DarkGray }
+
+# Which deployment is Opus, and which is Sonnet? Deployment names are chosen by
+# whoever created them, so the name is not evidence. properties.model.name is.
+# Matching on the name alone works only where someone happened to name the
+# deployment after its model, and silently sets nothing where they did not -
+# at which point Claude Code falls back to its own built-in model names, none
+# of which exist on a Foundry resource.
+function Find-Deployment {
+    param([object[]]$Pool, [string]$Family)
+    $hit = $Pool | Where-Object { $_.model -and $_.model -match $Family } | Select-Object -First 1
+    if (-not $hit) { $hit = $Pool | Where-Object { $_.name -match $Family } | Select-Object -First 1 }
+    if ($hit) { $hit.name } else { $null }
+}
+
+# The error Foundry returns on a refused call names a "Principal" and nothing
+# else, and on this path the principal is very often not the person reading the
+# message - the Azure Identity chain puts environment variables ahead of the
+# signed-in CLI user. Reading the token is the only way to see who actually
+# called. Everything below is measured; nothing is guessed.
+function ConvertFrom-JwtPayload {
+    param([string]$Token)
+    try {
+        $p = $Token.Split('.')[1]
+        $p = $p.Replace('-', '+').Replace('_', '/')
+        switch ($p.Length % 4) { 2 { $p += '==' } 3 { $p += '=' } 1 { $p += '===' } }
+        [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($p)) | ConvertFrom-Json
+    } catch { $null }
+}
+
+function Resolve-FoundryDenial {
+    param([string]$Token, [string]$Resource, [string]$Deployment, [int]$Status)
+
+    $claims = ConvertFrom-JwtPayload -Token $Token
+    if (-not $claims) { Note 'Could not read the token, so this cannot be diagnosed further.'; return }
+
+    $who = if ($claims.upn) { $claims.upn }
+           elseif ($claims.unique_name) { $claims.unique_name }
+           elseif ($claims.app_displayname) { "$($claims.app_displayname) (application)" }
+           elseif ($claims.appid) { "application $($claims.appid)" }
+           else { '<unnamed principal>' }
+
+    Write-Host '  The call was made as:' -ForegroundColor White
+    Note "  principal : $who"
+    Note "  object id : $($claims.oid)"
+    Note "  tenant    : $($claims.tid)"
+    Note "  audience  : $($claims.aud)"
+
+    # A 404 is never an authorisation problem. Azure has accepted the caller and
+    # is saying the deployment is not there, so walking the role ladder below
+    # would be noise dressed up as diagnosis.
+    if ($Status -eq 404) {
+        Write-Host ''
+        Write-Host "  Authentication succeeded. '$Deployment' is not a deployment on this resource." -ForegroundColor Yellow
+        $rg404 = az cognitiveservices account list --query "[?name=='$Resource'].resourceGroup | [0]" -o tsv 2>$null
+        if ($rg404) {
+            $rg404 = $rg404.Trim()
+            $real = az cognitiveservices account deployment list --name $Resource --resource-group $rg404 `
+                        --query "[?properties.model.format=='Anthropic' && properties.provisioningState=='Succeeded'].name" -o tsv 2>$null
+            if ($real) {
+                Note 'Anthropic deployments that do exist here:'
+                foreach ($n in ($real -split "`r?`n" | Where-Object { $_ })) { Note "  $($n.Trim())" }
+                Note ''
+                Note 'Re-run without -Models and these are discovered automatically.'
+            }
+            else {
+                Note 'This resource has no Succeeded Anthropic deployment at all.'
+                Note 'Deploy a Claude model on it before configuring a client.'
+            }
+        }
+        return
+    }
+
+    # The az CLI's own token carries an appid alongside the user claims, so appid
+    # alone does not mean a service principal. Absence of any user claim does.
+    if ($claims.appid -and -not $claims.upn -and -not $claims.unique_name) {
+        Write-Host ''
+        Write-Host '  That is a service principal, not you.' -ForegroundColor Yellow
+        Note 'Something in the environment is ahead of your signed-in CLI user.'
+        Note 'Check, then clear it or grant it access:'
+        Note '  Get-ChildItem Env: | Where-Object Name -match ''AZURE_CLIENT_ID|AZURE_CLIENT_SECRET'''
+    }
+
+    # Is the resource even in the tenant this token was minted for? An account
+    # in the wrong tenant produces a valid token for a principal that tenant
+    # has never heard of, which is exactly what the message describes.
+    $rg = az cognitiveservices account list --query "[?name=='$Resource'].resourceGroup | [0]" -o tsv 2>$null
+    if ($rg) { $rg = $rg.Trim() }
+    Write-Host ''
+    if (-not $rg) {
+        Write-Host "  $Resource is not visible from tenant $($claims.tid)." -ForegroundColor Yellow
+        Note 'This is a tenant problem, not a role problem. No role assignment in'
+        Note 'this tenant can grant access to a resource in another one.'
+        Note ''
+        Note 'Sign in to the tenant that owns it, then record it so every session uses it:'
+        Note '  az login --tenant <owning-tenant-guid>'
+        Note "  .\Setup-ClaudeFoundryDirect.ps1 -Resource $Resource -TenantId <owning-tenant-guid>"
+        return
+    }
+    Ok "$Resource found in resource group $rg"
+
+    # Both Foundry User and Cognitive Services User carry the same data action,
+    # so naming one role is misleading. Ask what this principal actually holds,
+    # at this scope, and whether any of it reaches the data plane.
+    $scope = az cognitiveservices account show -n $Resource -g $rg --query id -o tsv 2>$null
+    if ($scope) { $scope = $scope.Trim() }
+    $roles = @()
+    if ($scope -and $claims.oid) {
+        $raw = az role assignment list --assignee $claims.oid --scope $scope --include-inherited `
+                  --query "[].roleDefinitionName" -o tsv 2>$null
+        if ($raw) { $roles = @($raw -split "`r?`n" | Where-Object { $_ } | ForEach-Object { $_.Trim() } | Sort-Object -Unique) }
+    }
+
+    Write-Host ''
+    if ($roles.Count -eq 0) {
+        Write-Host '  This principal holds no role on the resource.' -ForegroundColor Yellow
+        Note 'Either of these grants the data plane - they carry the same data action:'
+        Note ('  az role assignment create --assignee ' + $claims.oid)
+        Note ('    --role "Cognitive Services User" --scope ' + $scope)
+        Note ''
+        Note 'A new assignment can take a few minutes to take effect.'
+        return
+    }
+
+    Write-Host '  Roles held at this scope:' -ForegroundColor White
+    foreach ($r in $roles) { Note "  $r" }
+
+    # Rather than hard-coding which role names count, ask Azure which of the
+    # roles actually held carry a Cognitive Services data action.
+    $dataCapable = @()
+    foreach ($r in $roles) {
+        $da = az role definition list --name $r --query "[0].permissions[0].dataActions" -o tsv 2>$null
+        if (-not $da) { continue }
+        # Must be the unrestricted wildcard. A substring test for
+        # "Microsoft.CognitiveServices" also matches
+        # Microsoft.CognitiveServices/accounts/OpenAI/*, which is what Azure AI
+        # Developer and Cognitive Services OpenAI User hold - and Claude is not
+        # served under accounts/OpenAI, so those grant nothing here. Measured
+        # across the built-in roles: five carry the unrestricted form.
+        $actions = @($da -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        if ($actions -contains 'Microsoft.CognitiveServices/*') { $dataCapable += $r }
+    }
+
+    Write-Host ''
+    if ($dataCapable.Count -gt 0) {
+        $verb = if ($dataCapable.Count -eq 1) { 'grants' } else { 'grant' }
+        Write-Host "  $($dataCapable -join ' and ') $verb data-plane access." -ForegroundColor Yellow
+        Note 'So the role name is not the problem. What is left, in order:'
+        Note ''
+        Note '  - The assignment is new. Propagation takes a few minutes; try again.'
+        Note '  - The assignment may be on a project inside this account rather'
+        Note '    than on the account itself. A role on a project does not cover'
+        Note '    the account-level endpoint this client calls. Check the scope:'
+        Note ('      az role assignment list --assignee ' + $claims.oid + ' --all -o table')
+        Note '  - The resource may restrict network access. Check its firewall and'
+        Note '    whether it requires a private endpoint:'
+        Note "      az cognitiveservices account show -n $Resource -g $rg --query properties.networkAcls"
+    }
+    else {
+        Write-Host '  None of those roles reaches Claude on this resource.' -ForegroundColor Yellow
+        # The two most plausible-looking AI roles are both scoped to OpenAI
+        # models. Claude is not served under accounts/OpenAI, so they grant
+        # nothing here and the refusal looks identical to holding no role.
+        $openAiOnly = $roles | Where-Object { $_ -in @('Azure AI Developer', 'Cognitive Services OpenAI User', 'Cognitive Services OpenAI Contributor') }
+        if ($openAiOnly) {
+            Note ($openAiOnly -join ' and ') 
+            Note 'is scoped to accounts/OpenAI/* only. Claude on Foundry is not served'
+            Note 'there, so it grants nothing on this endpoint even though it reads as'
+            Note 'the obvious AI role.'
+            Note ''
+        }
+        Note 'Add a role carrying the unrestricted Microsoft.CognitiveServices data'
+        Note 'action. Cognitive Services User is the least-privilege one:'
+        Note ('  az role assignment create --assignee ' + $claims.oid)
+        Note ('    --role "Cognitive Services User" --scope ' + $scope)
+    }
+}
 
 # ---------------------------------------------------------------- 0. the file
 #
@@ -268,6 +450,7 @@ Ok 'acquired'
 # ---------------------------------------------------------------- 4. the models
 Step 'Claude deployments'
 $baseUrl = "https://$Resource.services.ai.azure.com/anthropic"
+$deployments = @()
 if (-not $Models -or $Models.Count -eq 0) {
     # Discovered rather than assumed. A deployment name that does not exist
     # fails later as DeploymentNotFound, mid-session, which reads like a bug in
@@ -277,28 +460,94 @@ if (-not $Models -or $Models.Count -eq 0) {
     # and then refuses every call, which is the same failure wearing a different
     # hat. Measured on the reference resource, two of the deployments on it are
     # Disabled.
+    #
+    # Both the name and the model are taken. The name is what Claude Code sends;
+    # the model is the only thing that says which Claude it actually is. Naming
+    # a deployment after its model is a convention, not a rule - see below.
     $rg = az cognitiveservices account list --query "[?name=='$Resource'].resourceGroup | [0]" -o tsv 2>$null
     if ($rg) { $rg = $rg.Trim() }
     $found = $null
     if ($rg) {
         $found = az cognitiveservices account deployment list --name $Resource --resource-group $rg `
-                    --query "[?properties.model.format=='Anthropic' && properties.provisioningState=='Succeeded'].name" `
-                    -o tsv 2>$null
+                    --query "[?properties.model.format=='Anthropic' && properties.provisioningState=='Succeeded'].{name:name, model:properties.model.name}" `
+                    -o json 2>$null
     }
-    if ($found) {
-        $Models = @($found -split "`r?`n" | Where-Object { $_ } | ForEach-Object { $_.Trim() })
+    if ($found) { try { $deployments = @($found | ConvertFrom-Json) } catch { $deployments = @() } }
+
+    if ($deployments.Count -gt 0) {
+        $Models = @($deployments | ForEach-Object { $_.name })
         Ok ("$($Models.Count) found on $Resource")
-        foreach ($m in $Models) { Note "  $m" }
+        foreach ($d in $deployments) {
+            if ($d.name -eq $d.model) { Note "  $($d.name)" }
+            else { Note "  $($d.name)  ->  $($d.model)" }
+        }
     }
     else {
-        $Models = @('claude-sonnet-5')
-        Note 'Could not list deployments - you may lack reader rights on the resource,'
-        Note 'or it is in a subscription this account cannot see.'
-        Note "Assuming: $($Models -join ', '). Pass -Models to set them explicitly."
+        # Assuming a name here writes a deployment that may not exist into the
+        # settings file, and the run then "succeeds" into a DeploymentNotFound
+        # several minutes later. Refusing costs one more command and says the
+        # true thing.
+        Bad "No Anthropic deployments could be listed on $Resource."
+        Write-Host ''
+        Note 'Either this account cannot read the resource, or the resource has none.'
+        Note 'Check which it is:'
+        Note "  az cognitiveservices account deployment list --name $Resource --resource-group <rg> -o table"
+        Write-Host ''
+        Note 'If you already know the deployment names, pass them and skip discovery:'
+        Note "  .\Setup-ClaudeFoundryDirect.ps1 -Resource $Resource -Models <name>[,<name>]"
+        Write-Host ''
+        throw "Cannot configure $Resource without knowing its deployment names."
     }
 }
 else {
+    # Supplied by hand, so there is no model to read. Aliases fall back to
+    # matching the name, which is why -Models is the less reliable route.
+    $deployments = @($Models | ForEach-Object { [pscustomobject]@{ name = $_; model = $_ } })
     Ok ($Models -join ', ')
+}
+
+# ---------------------------------------------------------------- 5. prove access
+# Signing in proves nothing. Every signed-in account gets a token, including one
+# for a tenant that has never heard of this resource - which is exactly the case
+# that produces "Principal does not have access to API/Operation" later, in
+# Claude Code, where it reads as a broken install.
+#
+# The only evidence that this machine can use this resource is a real call, and
+# it belongs here rather than at the end: a machine that cannot reach Foundry is
+# then left exactly as it was found, instead of carrying a settings file that
+# points somewhere it cannot go.
+$probeModel = Find-Deployment -Pool $deployments -Family 'sonnet'
+if (-not $probeModel) { $probeModel = $deployments[0].name }
+
+if (-not $SkipVerify) {
+    Step 'Access check'
+    Note "calling $probeModel on $Resource"
+    $probeBody = @{
+        model      = $probeModel
+        max_tokens = 16
+        messages   = @(@{ role = 'user'; content = 'Reply with exactly: FOUNDRY-OK' })
+    } | ConvertTo-Json -Depth 6
+
+    try {
+        $probe = Invoke-RestMethod -Method Post -Uri "$baseUrl/v1/messages" `
+                    -Headers @{ Authorization = "Bearer $token"; 'anthropic-version' = '2023-06-01' } `
+                    -ContentType 'application/json' -Body $probeBody -ErrorAction Stop
+        Ok ('Foundry answered: ' + $probe.content[0].text)
+    }
+    catch {
+        $status = 0
+        if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
+        Bad "The call failed: $($_.Exception.Message)"
+        if ($_.ErrorDetails.Message) { Note $_.ErrorDetails.Message }
+        Write-Host ''
+        Resolve-FoundryDenial -Token $token -Resource $Resource -Deployment $probeModel -Status $status
+        Write-Host ''
+        Note 'Nothing was written. This machine is unchanged.'
+        throw "Cannot reach $Resource as the signed-in principal."
+    }
+}
+else {
+    Note 'Access check skipped (-SkipVerify). Settings are being written unverified.'
 }
 
 # ---------------------------------------------------------------- 5. write it
@@ -328,14 +577,22 @@ $envBlock = [ordered]@{
 if ($TenantId) { $envBlock['AZURE_TENANT_ID'] = $TenantId }
 if ($ClientId) { $envBlock['AZURE_CLIENT_ID'] = $ClientId }
 
-$sonnet = $Models | Where-Object { $_ -match 'sonnet' } | Select-Object -First 1
-$opus   = $Models | Where-Object { $_ -match 'opus' }   | Select-Object -First 1
+$sonnet = Find-Deployment -Pool $deployments -Family 'sonnet'
+$opus   = Find-Deployment -Pool $deployments -Family 'opus'
+$haiku  = Find-Deployment -Pool $deployments -Family 'haiku'
+
 if ($opus)   { $envBlock['ANTHROPIC_DEFAULT_OPUS_MODEL'] = $opus }
-if ($sonnet) {
-    $envBlock['ANTHROPIC_DEFAULT_SONNET_MODEL'] = $sonnet
-    # Claude Code uses a small model for background work. Pointing it at a
-    # deployment that exists stops mid-session DeploymentNotFound errors.
-    $envBlock['ANTHROPIC_DEFAULT_HAIKU_MODEL'] = $sonnet
+if ($sonnet) { $envBlock['ANTHROPIC_DEFAULT_SONNET_MODEL'] = $sonnet }
+
+# Claude Code uses a small model for background work. Prefer a real Haiku
+# deployment; most resources have none, so fall back to Sonnet rather than
+# leaving it pointed at a deployment that does not exist.
+$small = if ($haiku) { $haiku } elseif ($sonnet) { $sonnet } else { $Models[0] }
+$envBlock['ANTHROPIC_DEFAULT_HAIKU_MODEL'] = $small
+
+if (-not $sonnet -and -not $opus) {
+    Note 'No deployment on this resource identifies as Sonnet or Opus.'
+    Note "Aliases left unset; the small-model alias points at $small."
 }
 
 $settings | Add-Member -NotePropertyName 'env' -NotePropertyValue ([pscustomobject]$envBlock) -Force
@@ -351,33 +608,171 @@ if ($settings.env.PSObject.Properties.Name -contains 'ANTHROPIC_FOUNDRY_BASE_URL
 $settings | ConvertTo-Json -Depth 8 | Set-Content $settingsPath -Encoding UTF8
 Ok $settingsPath
 
-# ---------------------------------------------------------------- 6. prove it
-if (-not $SkipVerify) {
-    Step 'Round trip'
-    $model = if ($sonnet) { $sonnet } else { $Models[0] }
-    $body = @{
-        model      = $model
-        max_tokens = 16
-        messages   = @(@{ role = 'user'; content = 'Reply with exactly: FOUNDRY-OK' })
-    } | ConvertTo-Json -Depth 6
-
-    try {
-        $r = Invoke-RestMethod -Method Post -Uri "$baseUrl/v1/messages" `
-                -Headers @{ Authorization = "Bearer $token"; 'anthropic-version' = '2023-06-01' } `
-                -ContentType 'application/json' -Body $body -ErrorAction Stop
-        Ok ("Foundry answered: " + $r.content[0].text)
+# ---------------------------------------------------------------- 6. VS Code
+# The extension reads the same ~/.claude/settings.json and its own setting
+# description says to prefer it, so this is belt and braces rather than
+# required. It matters on a machine where someone has previously set these in
+# VS Code by hand: a stale gateway URL there outlives the file we just wrote.
+if (-not $SkipVSCode) {
+    Step 'VS Code'
+    $codeSettings = Join-Path $env:APPDATA 'Code\User\settings.json'
+    if (-not (Test-Path (Split-Path $codeSettings))) {
+        Note 'VS Code user settings folder not found - skipping.'
     }
-    catch {
-        Bad "The call failed: $($_.Exception.Message)"
-        if ($_.ErrorDetails.Message) { Note $_.ErrorDetails.Message }
-        Note ''
-        Note 'Most common causes, in order:'
-        Note '  403  you lack Cognitive Services User on the resource'
-        Note '  404  the deployment name does not exist - check -Models'
-        Note '  401  the token is for the wrong tenant'
-        throw 'Verification failed. Settings were still written.'
+    else {
+        $doc = $null
+        if (Test-Path $codeSettings) {
+            Copy-Item $codeSettings "$codeSettings.bak" -Force
+            try { $doc = Get-Content $codeSettings -Raw | ConvertFrom-Json } catch {
+                Note 'settings.json could not be parsed (comments are allowed there, JSON does not'
+                Note 'permit them). Leaving it alone; the CLI settings file is what matters.'
+                $doc = $null
+            }
+        }
+        else { $doc = [pscustomobject]@{} }
+
+        if ($doc) {
+            # An array of {name, value}, per the extension's own schema. A map
+            # is accepted by the JSON editor and silently does nothing.
+            $vars = @(
+                @{ name = 'CLAUDE_CODE_USE_FOUNDRY';    value = '1' }
+                @{ name = 'ANTHROPIC_FOUNDRY_RESOURCE'; value = $Resource }
+            )
+            if ($TenantId) { $vars += @{ name = 'AZURE_TENANT_ID'; value = $TenantId } }
+            foreach ($k in @('ANTHROPIC_DEFAULT_OPUS_MODEL','ANTHROPIC_DEFAULT_SONNET_MODEL','ANTHROPIC_DEFAULT_HAIKU_MODEL')) {
+                if ($envBlock[$k]) { $vars += @{ name = $k; value = $envBlock[$k] } }
+            }
+            $doc | Add-Member -NotePropertyName 'claudeCode.environmentVariables' -NotePropertyValue $vars -Force
+            $doc | ConvertTo-Json -Depth 8 | Set-Content $codeSettings -Encoding UTF8
+            Ok $codeSettings
+            Note 'Run "Developer: Reload Window" in VS Code - the extension host reads'
+            Note 'configuration at startup and will not see this in an open window.'
+        }
     }
 }
+
+# ---------------------------------------------------------------- 7. Desktop
+# Claude Desktop cannot read ~/.claude/settings.json. It takes a base URL and a
+# credential helper, which is the same helper the gateway path uses - it prints
+# an Entra token for the Cognitive Services data plane, and both paths accept
+# exactly that.
+if (-not $SkipDesktop) {
+    Step 'Claude Desktop'
+
+    $desktopInstalled = $false
+    try {
+        if (Get-AppxPackage -Name '*Claude*' -ErrorAction SilentlyContinue) { $desktopInstalled = $true }
+    } catch { }
+    $running = @(Get-Process -Name 'Claude' -ErrorAction SilentlyContinue)
+    if ($running.Count -gt 0) { $desktopInstalled = $true }
+
+    if (-not $desktopInstalled) {
+        Note 'Claude Desktop is not installed on this machine - skipping.'
+    }
+    else {
+        # It rewrites its configuration on exit, so anything written underneath
+        # a running instance is lost the moment the user quits.
+        if ($running.Count -gt 0) {
+            $close = $Force
+            if (-not $close) {
+                Write-Host ''
+                Write-Host '  Claude Desktop is running. It rewrites its configuration when it' -ForegroundColor Yellow
+                Write-Host '  exits, so anything written now would be discarded.' -ForegroundColor Yellow
+                $answer = Read-Host '  Close it and continue? [y/N]'
+                $close = ($answer -match '^(y|yes)$')
+            }
+            if (-not $close) {
+                Note 'Left running. Desktop was not configured; the CLI and VS Code were.'
+                Note 'Re-run with -Force, or close Desktop and run again.'
+                $desktopInstalled = $false
+            }
+            else {
+                foreach ($p in $running) {
+                    try { Stop-Process -Id $p.Id -Force -ErrorAction Stop } catch { Note "could not stop pid $($p.Id): $($_.Exception.Message)" }
+                }
+                Start-Sleep -Seconds 2
+                $still = @(Get-Process -Name 'Claude' -ErrorAction SilentlyContinue)
+                if ($still.Count -gt 0) {
+                    Bad 'Claude Desktop is still running. Quit it from the tray icon, then re-run.'
+                    $desktopInstalled = $false
+                }
+                else { Ok 'closed' }
+            }
+        }
+    }
+
+    if ($desktopInstalled) {
+        $helperDir = Join-Path $env:USERPROFILE '.claude-foundry'
+        New-Item -ItemType Directory -Force -Path $helperDir | Out-Null
+        $helperCmd = Join-Path $helperDir 'get-foundry-token.cmd'
+        $srcPs1 = Join-Path $PSScriptRoot 'get-foundry-token.ps1'
+        $srcCmd = Join-Path $PSScriptRoot 'get-foundry-token.cmd'
+        if ((Test-Path $srcPs1) -and (Test-Path $srcCmd)) {
+            Copy-Item $srcPs1 (Join-Path $helperDir 'get-foundry-token.ps1') -Force
+            Copy-Item $srcCmd $helperCmd -Force
+            Ok "credential helper -> $helperDir"
+        }
+        else {
+            Bad 'get-foundry-token.ps1/.cmd not found next to this script.'
+            Note 'Desktop needs them to fetch a token. The CLI and VS Code are configured.'
+            $helperCmd = $null
+        }
+
+        if ($helperCmd) {
+            # Presence is not the same as enabled - a file left with
+            # allowDevTools false hides Settings -> Connection entirely.
+            $devSettings = Join-Path $env:APPDATA 'Claude\developer_settings.json'
+            New-Item -ItemType Directory -Force -Path (Split-Path $devSettings) | Out-Null
+            $devDoc = $null
+            if (Test-Path $devSettings) { try { $devDoc = Get-Content $devSettings -Raw | ConvertFrom-Json } catch { $devDoc = $null } }
+            if ($devDoc -and $devDoc.allowDevTools -eq $true) { Ok 'developer mode already on' }
+            else {
+                if (-not $devDoc) { $devDoc = [pscustomobject]@{} }
+                $devDoc | Add-Member -NotePropertyName 'allowDevTools' -NotePropertyValue $true -Force
+                $devDoc | ConvertTo-Json -Depth 5 | Set-Content $devSettings -Encoding UTF8
+                Ok 'developer mode enabled'
+            }
+
+            $lib = Join-Path $env:LOCALAPPDATA 'Claude-3p\configLibrary'
+            $metaPath = Join-Path $lib '_meta.json'
+            if (-not (Test-Path $metaPath)) {
+                New-Item -ItemType Directory -Force -Path $lib | Out-Null
+                $id = [guid]::NewGuid().ToString()
+                @{ appliedId = $id; entries = @(@{ id = $id; name = 'Default' }) } |
+                    ConvertTo-Json -Depth 5 | Set-Content $metaPath -Encoding UTF8
+                Note 'created the profile library'
+            }
+            $meta = Get-Content $metaPath -Raw | ConvertFrom-Json
+            $profilePath = Join-Path $lib "$($meta.appliedId).json"
+            if (Test-Path $profilePath) { Copy-Item $profilePath "$profilePath.bak" -Force }
+
+            # Same shape the gateway path writes; only the base URL differs.
+            $desktopProfile = [ordered]@{
+                inferenceProvider                             = 'gateway'
+                inferenceGatewayBaseUrl                       = $baseUrl
+                inferenceGatewayAuthScheme                    = 'bearer'
+                inferenceCredentialKind                       = 'helper-script'
+                inferenceCredentialHelper                     = $helperCmd
+                inferenceCredentialHelperTimeoutSec           = 60
+                inferenceCredentialHelperTtlSec               = 1800
+                inferenceCredentialHelperSilentRefreshEnabled = $true
+                inferenceModels                               = @($Models | ForEach-Object { @{ name = $_ } })
+                chatTabEnabled                                = $true
+                isClaudeCodeForDesktopEnabled                 = $true
+                inferenceModelPricingEnabled                  = $true
+            }
+            $desktopProfile | ConvertTo-Json -Depth 6 | Set-Content $profilePath -Encoding UTF8
+            Ok $profilePath
+            if ($TenantId) {
+                # The helper needs the tenant for guests and multi-tenant
+                # accounts; without it a bare az login lands in the home tenant.
+                [Environment]::SetEnvironmentVariable('CLAUDE_FOUNDRY_TENANT_ID', $TenantId, 'User')
+                Note "CLAUDE_FOUNDRY_TENANT_ID set for your user account"
+            }
+        }
+    }
+}
+
 
 Write-Host ''
 Write-Host 'Done.' -ForegroundColor Green

@@ -143,13 +143,61 @@ Two details that are easy to get wrong:
 - **Only `Succeeded` deployments are offered.** A disabled deployment lists
   normally and then refuses every call. Measured on the reference resource,
   two of its deployments are in that state.
-- **Haiku points at the Sonnet deployment.** Claude Code uses a small model for
+- **Haiku points at a real deployment.** Claude Code uses a small model for
   background work; left unset it asks for one that does not exist and the
   session fails with `DeploymentNotFound` partway through, which reads as a
-  bug rather than a setting.
+  bug rather than a setting. A genuine Haiku deployment is used if the resource
+  has one, and Sonnet otherwise.
 
-Override with `-Models claude-sonnet-5, claude-opus-5` when you do not have
-reader rights on the resource and discovery cannot run.
+### Deployment names are not model names
+
+The aliases are resolved from each deployment's `properties.model.name`, not
+from what the deployment is called. Deployment names are chosen by whoever
+created them, so a resource can perfectly well carry:
+
+| Deployment name | Model |
+|---|---|
+| `claude-primary` | `claude-opus-5` |
+| `claude-fast` | `claude-sonnet-5` |
+
+Matching on the name would set no alias at all here, Claude Code would fall back
+to its own built-in model names, and none of those exist on a Foundry resource.
+The reference resource happens to name its deployments after their models, which
+is a convention and not a rule.
+
+If discovery cannot run — no reader rights on the resource, or it is in a
+subscription this account cannot see — the script **stops** rather than guessing
+a name. A guessed name writes a settings file that looks fine and fails minutes
+later. Supply the names instead:
+
+```powershell
+.\Setup-ClaudeFoundryDirect.ps1 -Resource <resource> -Models claude-sonnet-5,claude-opus-5
+```
+
+Passing `-Models` skips discovery, so aliases fall back to matching the name.
+That is the less reliable route; prefer discovery where you can.
+
+### availableModels holds deployment names, not model names
+
+`availableModels` is the list of **deployments on your resource**, not the list
+of Claude models Anthropic publishes. Pasting a catalogue in looks harmless and
+is not, because `enforceAvailableModels` then permits names that were never
+deployed and each one fails as `DeploymentNotFound` when selected.
+
+Seen in the wild, on a resource whose deployments were never checked:
+
+```json
+"availableModels": ["claude-opus-5", "claude-sonnet-5", "claude-opus-4-8",
+                    "claude-opus-4-6", "claude-sonnet-4-5", "claude-haiku-4-5"]
+```
+
+Discovery writes what is really there. If you are editing by hand, this is the
+list to copy:
+
+```powershell
+az cognitiveservices account deployment list --name <resource> --resource-group <rg> `
+  --query "[?properties.model.format=='Anthropic' && properties.provisioningState=='Succeeded'].{deployment:name, model:properties.model.name}" -o table
+```
 
 ### The setting that ends a session
 
@@ -161,7 +209,217 @@ The base URL is the gateway path; the resource is this one. The script removes
 a base URL left behind by a gateway setup, which is what makes it safe to run on
 a machine that was previously on the gateway.
 
-## 4. What you give up, and what you inherit
+## 4. Diagnostics
+
+Everything in this section is measured against a live resource. Run the one
+command first - it names the layer that is broken, which is the part the
+error messages do not.
+
+### One command that checks the whole chain
+
+Before reading any of the failure notes below, run this. It checks fourteen
+things in the order they actually break, and names the layer rather than the
+symptom:
+
+```powershell
+./scripts/Test-FoundryDirect.ps1 -Resource <resource> -ResourceGroup <rg>
+
+# Add the client id from Claude Desktop's Connection screen to test its
+# device-code flow as well - that one fails before any token exists.
+./scripts/Test-FoundryDirect.ps1 -Resource <resource> -ResourceGroup <rg> `
+  -ClientId <client-id> -TenantId <tenant-guid>
+```
+
+It configures nothing, so it is safe on someone else's machine. What it
+separates:
+
+| Check | Catches |
+|---|---|
+| Token belongs to a signed-in user | a service principal from `.env` ahead of your CLI sign-in |
+| Resource is in the signed-in tenant | a valid token for a tenant that does not own the resource |
+| A role reaches the Claude data plane | a role scoped to `accounts/OpenAI/*`, which serves no Claude |
+| Messages API responds | the endpoint itself |
+| CLI / VS Code / Desktop point at this resource | one client left on an old target |
+| Entra device-code init | an app registration problem, not RBAC |
+
+The last one matters because it is the only failure here that no role
+assignment can fix.
+
+### 401 Principal does not have access to API/Operation
+
+The most common failure on this path, and the message is precise: the token was
+accepted, and the **principal it belongs to** has no access to that resource. It
+is not saying your credentials are wrong.
+
+There are three ways to end up here, in the order they actually occur.
+
+**1. No `AZURE_TENANT_ID`, and the resource is in another tenant.** This is the
+usual one. Without it the Azure Identity chain mints a token for whichever
+tenant your `az` session defaults to, presents it to a resource in a different
+tenant, and that tenant has never heard of the principal. Observed on a resource
+that returned zero rows from the signing-in account's tenant:
+
+```powershell
+# Does your account see it at all?
+az cognitiveservices account list --query "[?name=='<resource>'].name" -o tsv
+```
+
+Nothing back means you are in the wrong tenant, not that you lack a role. Sign
+in to the owning tenant and record it in the settings file, where it applies to
+every session rather than only this shell:
+
+```powershell
+az login --tenant <owning-tenant-guid>
+```
+
+```json
+"env": { "AZURE_TENANT_ID": "<owning-tenant-guid>" }
+```
+
+The setup script always writes this, which is why generating the file beats
+copying one from a colleague — a hand-made file usually omits it.
+
+**2. A stray `AZURE_CLIENT_ID`.** Claude Code does not use the `az` session
+directly; it walks the Azure Identity chain, and **environment variables are
+ahead of the signed-in CLI user in that chain**. A leftover variable in a `.env`
+file or the machine environment silently authenticates as that service
+principal instead of you:
+
+```powershell
+Get-ChildItem Env: | Where-Object Name -match 'AZURE_CLIENT_ID|AZURE_TENANT_ID|AZURE_CLIENT_SECRET|AZURE_USERNAME'
+```
+
+Clear it, or grant that principal the role.
+
+**3. Right tenant, no role.** Only now is a role assignment the answer:
+
+```powershell
+az role assignment create --assignee <client-id-or-your-object-id> `
+  --role "Cognitive Services User" `
+  --scope $(az cognitiveservices account show -n <resource> -g <rg> --query id -o tsv)
+```
+
+Whichever applies, restart the terminal **and** reload the VS Code window
+afterwards — the extension host reads the environment once, at startup.
+
+Isolate auth from everything else before launching Claude:
+
+```powershell
+$t = az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv
+curl -s -o NUL -w "%{http_code}\n" -X POST `
+  "https://<resource>.services.ai.azure.com/anthropic/v1/messages" `
+  -H "Authorization: Bearer $t" -H "anthropic-version: 2023-06-01" `
+  -H "content-type: application/json" `
+  -d '{\"model\":\"<a-deployment-name>\",\"max_tokens\":16,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}'
+```
+
+On the gateway path none of this applies: API Management holds the role through
+its managed identity, so developers need no role on the Foundry resource at all.
+
+### Foundry Entra device init failed: HTTP 400
+
+Claude Desktop only. **No role assignment can fix this**, and a correct set of
+roles is entirely consistent with seeing it.
+
+Desktop's native Foundry Entra mode runs its own device-code flow. Read from
+`app.asar` in Desktop 2.110.1.0, it posts:
+
+```
+POST https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/devicecode
+     client_id=<clientId>&scope=https://cognitiveservices.azure.com/.default offline_access
+```
+
+That happens **before any token exists**, so Azure RBAC has not been consulted
+and cannot be the cause. The failure is the client id and tenant typed into
+Desktop's Connection screen.
+
+Three causes, measured against Entra:
+
+| Cause | Code |
+|---|---|
+| App registration has *Allow public client flows* = No | `AADSTS7000218` |
+| Client id does not exist in that tenant | `AADSTS700016` |
+| Tenant GUID is wrong or unknown | `AADSTS90002` |
+
+Get the actual code rather than guessing between them:
+
+```powershell
+./scripts/Test-FoundryDirect.ps1 -Resource <resource> -ResourceGroup <rg> `
+  -ClientId <client-id> -TenantId <tenant-guid>
+```
+
+Fixes, in order of effort:
+
+- **Use the Azure CLI's client id**, `04b07795-8ddb-461a-bbee-02f9e1bf7b46`. It
+  is already a public client and pre-consented in essentially every tenant, so
+  there is nothing to register. Verified to return 200 for the exact scope
+  Desktop requests. Some tenants block it with Conditional Access.
+- **Fix the existing app**, if the toggle is the problem:
+  ```powershell
+  az ad app show   --id <client-id> --query isFallbackPublicClient   # expect true
+  az ad app update --id <client-id> --set isFallbackPublicClient=true
+  ```
+- **Register one**, where the organisation wants its own:
+  ```powershell
+  az ad app create --display-name "Claude Desktop - Foundry" --is-fallback-public-client true
+  # 7d312290-... Microsoft Cognitive Services, 5f1e8914-... user_impersonation
+  az ad app permission add --id <app-id> `
+    --api 7d312290-28c8-473c-a0ed-8e53749b6d6d `
+    --api-permissions 5f1e8914-a52b-429f-9324-91b92b81adaf=Scope
+  az ad app permission admin-consent --id <app-id>
+  ```
+
+**Or avoid the flow entirely.** `Setup-ClaudeFoundryDirect.ps1` configures
+Desktop with `inferenceCredentialKind: helper-script`, which takes its token
+from the Azure CLI. It never calls `/devicecode`, so none of the above applies.
+
+### Which role, and which scope
+Entitlement on this path is an Azure role assignment. Give it to an Entra
+**group** and manage people by membership — there is no Entra app registration,
+no API permission and no admin consent involved, because sign-in reuses the
+Azure CLI's own pre-consented client.
+
+```powershell
+az role assignment create `
+  --assignee-object-id  $(az ad group show --group "claude-direct-users" --query id -o tsv) `
+  --assignee-principal-type Group `
+  --role "Cognitive Services User" `
+  --scope $(az cognitiveservices account show -n <resource> -g <rg> --query id -o tsv)
+```
+
+`--assignee-principal-type Group` is not optional in practice: without it the
+CLI attempts a Graph lookup that frequently fails for groups.
+
+Measured across the built-in roles, five carry the unrestricted
+`Microsoft.CognitiveServices/*` data action that the `/anthropic` endpoint
+needs. **Cognitive Services User** is the least-privilege one; Foundry User,
+Foundry Project Manager, Foundry Owner and Cognitive Services Data Contributor
+(Preview) also work.
+
+These two look right and are not:
+
+| Role | Data actions | Serves Claude |
+|---|---|---|
+| Azure AI Developer | `accounts/OpenAI/*`, `SpeechServices/*`, `ContentSafety/*`, `MaaS/*` | No |
+| Cognitive Services OpenAI User | `accounts/OpenAI/*` | No |
+
+Claude on Foundry is not served under `accounts/OpenAI/`, so neither grants
+anything here — and the refusal is the same unhelpful *"Principal does not have
+access to API/Operation"*. Cognitive Services Data Reader fails too: it holds
+`Microsoft.CognitiveServices/*/read`, and inference is a POST.
+
+**Scope it at the account.** A role on a *project inside* the account does not
+cover the account-level endpoint these clients call. If someone holds a role
+that should work and still gets 401, check where it is actually assigned:
+
+```powershell
+az role assignment list --assignee <object-id> --all `
+  --query "[?contains(roleDefinitionName,'Foundry') || contains(roleDefinitionName,'Cognitive')].{role:roleDefinitionName, scope:scope}" -o table
+```
+
+A scope ending in `/projects/<name>` is the explanation.
+
+## 5. What you give up, and what you inherit
 
 Every control in this repository governs traffic **through the gateway**.
 Configuring a client directly does not weaken those controls — it steps around
@@ -198,7 +456,7 @@ can bypass the gateway. Two ways to keep both true:
 What does not work is suppressing the finding. The control and the exception
 then disagree, and the disagreement outlives whoever understood it.
 
-## 5. Reading the configuration off a machine
+## 6. Reading the configuration off a machine
 
 There is no hidden config file for this path. The machine state is
 `~/.claude/settings.json`, and the portable form is the
@@ -227,7 +485,7 @@ A machine showing only those folders has never been pointed at Foundry or a
 gateway. There is nothing on it to export, so configure it rather than trying to
 copy from it.
 
-## 6. Configuring it by hand
+## 7. Configuring it by hand
 
 Only needed if you cannot run the script, or you are checking what it did. Read
 from the installed extension and the live resource on 2026-09-22, not from
@@ -292,8 +550,28 @@ code --install-extension anthropic.claude-code
 
 ### Step 5 — write the settings
 
-`%USERPROFILE%\.claude\settings.json` on Windows, `~/.claude/settings.json`
-elsewhere:
+Claude Code's own settings file. Same location on every platform, because it
+sits in your home directory rather than the operating system's configuration
+directory:
+
+| | Path |
+|---|---|
+| Windows | `%USERPROFILE%\.claude\settings.json` |
+| macOS | `~/.claude/settings.json` |
+| Linux | `~/.claude/settings.json` |
+
+Create the folder if it is not there. Claude Code makes it on first run, but
+only writes `settings.json` once something configures it — a machine that has
+never been pointed at Foundry or a gateway will have the folder and no file.
+
+Two neighbours you will see and should leave alone:
+
+- `~/.claude/settings.local.json` — a per-machine override that wins over the
+  file above. If a setting seems to be ignored, look here first.
+- `~/.claude.json` — a *file*, not the folder. Session and project state, tens
+  of kilobytes of it. Not configuration; do not hand-edit it.
+
+Contents:
 
 ```json
 {
@@ -325,8 +603,18 @@ Three things that are easy to get wrong:
 **Usually nothing to do.** The extension reads the same
 `~/.claude/settings.json`, and its own setting description says to prefer it.
 
-Two cases where you do touch VS Code settings — **Preferences: Open User
-Settings (JSON)**:
+Two cases where you do touch VS Code settings. This is a **different file** in a
+**different place** — the shared name is the only thing they have in common:
+
+| | Path |
+|---|---|
+| Windows | `%APPDATA%\Code\User\settings.json` |
+| macOS | `~/Library/Application Support/Code/User/settings.json` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/Code/User/settings.json` |
+
+Or open it without typing a path: **Ctrl+Shift+P → Preferences: Open User
+Settings (JSON)**. Use the JSON editor, not the Settings UI — the setting below
+is an array of objects, which the UI will not let you edit properly.
 
 **If you need a VS Code-only override**, `claudeCode.environmentVariables` is an
 **array of name/value objects**, not a map. Verified against extension
@@ -367,7 +655,7 @@ If you want to test the endpoint without involving Claude Code at all:
 ./scripts/Test-FoundryDirect.ps1 -Resource <resource> -ResourceGroup <rg>
 ```
 
-## 7. Undoing it
+## 8. Undoing it
 
 ```powershell
 # The script backs up whatever was there before overwriting
@@ -389,3 +677,4 @@ file.
 - [Debugging](DEBUGGING.md) — isolating a failure layer by layer
 - [Comparison](COMPARISON.md) — Foundry through the gateway against Anthropic direct
 - `./scripts/Test-FoundryDirect.ps1` — verifies the direct path without configuring anything
+
