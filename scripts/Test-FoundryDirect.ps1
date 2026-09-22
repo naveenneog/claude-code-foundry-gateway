@@ -524,6 +524,53 @@ if (Test-Path $cliFile) {
     } catch { }
 }
 Add-Result 'Claude CLI is configured' ([bool]$cliTarget) $(if ($cliTarget) { "$cliFile -> $cliTarget" } else { "nothing Foundry-related in $cliFile" })
+
+# Every model name in the settings file must be a deployment on the resource.
+# Hand-written configuration is where invented names come from: measured on a
+# machine whose settings named claude-sonnet-5, claude-opus-5 and
+# claude-haiku-4-5 against a resource carrying none of them. Claude Code
+# refuses with "not available on your foundry deployment", which reads as the
+# resource being wrong rather than the file.
+if ($cliTarget -and $live -and @($live).Count -gt 0) {
+    $realNames = @($live | ForEach-Object { $_.name })
+    $configured = @()
+    try {
+        $cdoc = Get-Content $cliFile -Raw | ConvertFrom-Json
+        foreach ($k in @('ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL')) {
+            if ($cdoc.env.$k) { $configured += [pscustomobject]@{ Where = $k; Name = $cdoc.env.$k } }
+        }
+        foreach ($m in @($cdoc.availableModels)) {
+            if ($m) { $configured += [pscustomobject]@{ Where = 'availableModels'; Name = $m } }
+        }
+    } catch { }
+
+    if ($configured.Count -gt 0) {
+        $invented = @($configured | Where-Object { $realNames -notcontains $_.Name })
+        Add-Result 'Every configured model exists on the resource' ($invented.Count -eq 0) $(
+            if ($invented.Count -eq 0) { "$(@($configured | Select-Object -ExpandProperty Name -Unique).Count) name(s), all deployed" }
+            else { "$(@($invented | Select-Object -ExpandProperty Name -Unique).Count) name(s) are not deployed here" })
+        foreach ($i in $invented) { Note "  $($i.Where) = $($i.Name)" }
+        if ($invented.Count -gt 0) {
+            Note ''
+            Note ('deployed here: ' + ($realNames -join ', '))
+            $rs2 = $Resource
+            $tn2 = $TenantId
+            $setup2 = Join-Path (Split-Path $PSCommandPath -Parent) 'Setup-ClaudeFoundryDirect.ps1'
+            $cmd2 = ".\Setup-ClaudeFoundryDirect.ps1 -Resource $rs2"
+            if ($tn2) { $cmd2 += " -TenantId $tn2" }
+            Add-Repair -What 'rewrite the model names from what is deployed' `
+                -Why 'the settings file names models this resource does not carry' `
+                -Command "$cmd2 -Force" `
+                -Do {
+                    if (-not (Test-Path $setup2)) { return $false }
+                    $a = @('-Resource', $rs2, '-Force')
+                    if ($tn2) { $a += @('-TenantId', $tn2) }
+                    & $setup2 @a | Out-Null
+                    return $?
+                }.GetNewClosure()
+        }
+    }
+}
 # Configured is not the same as configured for this resource. A machine on the
 # gateway passes every check above - the token, the role and the endpoint are
 # all genuinely fine - and is still not on the direct path.

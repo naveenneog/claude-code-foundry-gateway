@@ -921,6 +921,24 @@ $mutations = @(
        To    = 'nothing to bind, continuing' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'configured model names stop being checked'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'Every configured model exists on the resource'
+       To    = 'Model names are configured' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the available list is exempt from that check'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = "Where = 'availableModels'"
+       To    = "Where = 'ignored'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'an invented name stops being named'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = '$($i.Where) = $($i.Name)'
+       To    = 'one or more names are wrong' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the credential chain can no longer be pinned'
        File  = 'scripts/Test-FoundryDirect.ps1'
        From  = 'AZURE_TOKEN_CREDENTIALS'

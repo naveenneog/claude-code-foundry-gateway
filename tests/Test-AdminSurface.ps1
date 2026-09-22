@@ -621,6 +621,16 @@ Assert 'because it expires'                      ($td -match '(?i)expires in abo
 Assert 'the pin is documented'                   ($fd -match "SetEnvironmentVariable\('AZURE_TOKEN_CREDENTIALS','AzureCliCredential','User'\)")
 Assert 'and cited'                               ($fd -match 'credential-chains#defaultazurecredential-overview')
 Assert 'with the token override ruled out'       ($fd -match '(?i)Do not set `ANTHROPIC_FOUNDRY_AUTH_TOKEN`')
+# Hand-written configuration is where invented model names come from. Claude
+# Code refuses with "not available on your foundry deployment", which reads as
+# the resource being wrong rather than the file. Reproduced on a healthy
+# resource by writing a config in that style.
+Assert 'configured models are checked as real'   ($td -match '(?i)Every configured model exists on the resource')
+Assert 'covering all three aliases'              ($td -match "ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL'")
+Assert 'and the available list'                  ($td -match "Where = 'availableModels'")
+Assert 'each invented name is named'             ($td -match '\$\(\$i\.Where\) = \$\(\$i\.Name\)')
+Assert 'with what is really deployed'            ($td -match "'deployed here: '")
+Assert 'and a repair that discovers them'        ($td -match '(?i)rewrite the model names from what is deployed')
 # Every resource carries different deployments. Nothing on the direct path may
 # assume a model name - measured on a resource holding only claude-opus-4-7,
 # where a hardcoded claude-sonnet-5 failed the Messages check on a resource
