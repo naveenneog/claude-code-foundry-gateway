@@ -921,6 +921,138 @@ $mutations = @(
        To    = 'nothing to bind, continuing' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the credential chain can no longer be pinned'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'AZURE_TOKEN_CREDENTIALS'
+       To    = 'AZURE_TOKEN_UNUSED' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the expiring token override stops being warned against'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'expires in about an hour'
+       To    = 'lasts indefinitely' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'an existing credential pin is overwritten'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = "GetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS', 'User')"
+       To    = "GetEnvironmentVariable('NOTHING_AT_ALL', 'User')" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the guide drops the credential-chain citation'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'credential-chains#defaultazurecredential-overview'
+       To    = 'credential-chains' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the check only looks in the active subscription'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'function Find-FoundryAccount'
+       To    = 'function Find-FoundryAccountUnused' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'discovery switches the CLI context behind your back'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = "Changing someone's CLI context as a side"
+       To    = "Switching context here is fine as a side" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the deployment lookup stops naming its subscription'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = "depSub = @('--subscription'"
+       To    = "depSub = @('--output'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the admin check stops pinning later calls'
+       File  = 'scripts/Test-FoundryDirectAdmin.ps1'
+       From  = '-g $ResourceGroup @subPin'
+       To    = '-g $ResourceGroup' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the admin check repairs without asking'
+       File  = 'scripts/Test-FoundryDirectAdmin.ps1'
+       From  = 'Re-run with -Fix to apply these'
+       To    = 'Repairs were applied automatically' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a repair no longer shows its command'
+       File  = 'scripts/Test-FoundryDirectAdmin.ps1'
+       From  = '      $($r.Command)'
+       To    = '      (details hidden)' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the admin check starts repairing network posture'
+       File  = 'scripts/Test-FoundryDirectAdmin.ps1'
+       From  = 'security decision, not a configuration fault'
+       To    = 'repaired here as well' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the developer check stops resolving the endpoint'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'The endpoint name resolves'
+       To    = 'The endpoint name looks plausible' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a stale session stops being offered a refresh'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'az account clear; az login --tenant'
+       To    = 'az login --tenant' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'propagation stops being named after a grant'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'granted recently, it can take a few minutes'
+       To    = 'granted, it applies at once' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the admin check accepts an OpenAI-scoped role'
+       File  = 'scripts/Test-FoundryDirectAdmin.ps1'
+       From  = "acts -contains 'Microsoft.CognitiveServices/*'"
+       To    = "acts -match 'Microsoft.CognitiveServices'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the admin check counts disabled deployments as usable'
+       File  = 'scripts/Test-FoundryDirectAdmin.ps1'
+       From  = "provisioningState -eq 'Succeeded'"
+       To    = "provisioningState -ne 'Nonsense'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'person-by-person entitlement stops being flagged'
+       File  = 'scripts/Test-FoundryDirectAdmin.ps1'
+       From  = 'granted person by person'
+       To    = 'granted directly' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the admin check stops looking at network reachability'
+       File  = 'scripts/Test-FoundryDirectAdmin.ps1'
+       From  = 'publicNetworkAccess'
+       To    = 'provisioningState' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the Sonnet alias goes unset on an Opus-only resource'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = 'ANTHROPIC_DEFAULT_SONNET_MODEL''] = if ($sonnet) { $sonnet } else { $fallback }'
+       To    = 'ANTHROPIC_DEFAULT_SONNET_MODEL''] = $sonnet' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a substituted alias stops being reported'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = 'those aliases point at $fallback'
+       To    = 'aliases resolved' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the health check invents a model name again'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'will not invent a name'
+       To    = 'falls back to claude-sonnet-5' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the round trip runs without a discovered model'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'if ($token -and $Model) {'
+       To    = 'if ($token) {' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the health check stops running the Desktop helper'
        File  = 'scripts/Test-FoundryDirect.ps1'
        From  = 'Desktop helper returns a token'
@@ -1157,8 +1289,8 @@ $mutations = @(
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the credential chain order stops being stated'
        File  = 'docs/FOUNDRY-DIRECT.md'
-       From  = 'ahead of the signed-in CLI user'
-       To    = 'considered alongside the signed-in user' }
+       From  = 'sit ahead of the Azure CLI in it'
+       To    = 'are considered alongside the Azure CLI' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'availableModels stops being deployment names'
@@ -1181,8 +1313,8 @@ $mutations = @(
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'a real haiku deployment stops being preferred'
        File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
-       From  = 'if ($haiku) { $haiku } elseif ($sonnet)'
-       To    = 'if ($false) { $haiku } elseif ($sonnet)' }
+       From  = 'if ($haiku)  { $haiku }  else { $fallback }'
+       To    = 'if ($false)  { $haiku }  else { $fallback }' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'a missing deployment list is assumed instead of refused'
@@ -1881,3 +2013,4 @@ Write-Host 'Every mutation was caught.' -ForegroundColor Green
 # last thing it ran was a suite that was supposed to go red. Falling off the
 # end here would report that as this script's own failure.
 exit 0
+

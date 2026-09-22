@@ -581,18 +581,28 @@ $sonnet = Find-Deployment -Pool $deployments -Family 'sonnet'
 $opus   = Find-Deployment -Pool $deployments -Family 'opus'
 $haiku  = Find-Deployment -Pool $deployments -Family 'haiku'
 
-if ($opus)   { $envBlock['ANTHROPIC_DEFAULT_OPUS_MODEL'] = $opus }
-if ($sonnet) { $envBlock['ANTHROPIC_DEFAULT_SONNET_MODEL'] = $sonnet }
+# Every alias has to name a deployment that exists here. Leaving one unset does
+# not mean "unused" - Claude Code falls back to its own built-in model name for
+# that family, and that name is not a deployment on anybody's Foundry resource.
+# Measured on a resource carrying only claude-opus-4-7: the Sonnet alias went
+# unset and every turn that selected Sonnet failed with DeploymentNotFound.
+$fallback = if ($sonnet) { $sonnet } elseif ($opus) { $opus } else { $deployments[0].name }
+$envBlock['ANTHROPIC_DEFAULT_OPUS_MODEL']   = if ($opus)   { $opus }   else { $fallback }
+$envBlock['ANTHROPIC_DEFAULT_SONNET_MODEL'] = if ($sonnet) { $sonnet } else { $fallback }
+# Claude Code uses a small model for background work.
+$envBlock['ANTHROPIC_DEFAULT_HAIKU_MODEL']  = if ($haiku)  { $haiku }  else { $fallback }
 
-# Claude Code uses a small model for background work. Prefer a real Haiku
-# deployment; most resources have none, so fall back to Sonnet rather than
-# leaving it pointed at a deployment that does not exist.
-$small = if ($haiku) { $haiku } elseif ($sonnet) { $sonnet } else { $Models[0] }
-$envBlock['ANTHROPIC_DEFAULT_HAIKU_MODEL'] = $small
+$substituted = @()
+if (-not $opus)   { $substituted += 'opus' }
+if (-not $sonnet) { $substituted += 'sonnet' }
+if (-not $haiku)  { $substituted += 'haiku' }
+if ($substituted.Count -gt 0) {
+    Note "no $($substituted -join ', ') deployment here - those aliases point at $fallback"
+}
 
 if (-not $sonnet -and -not $opus) {
-    Note 'No deployment on this resource identifies as Sonnet or Opus.'
-    Note "Aliases left unset; the small-model alias points at $small."
+    Note 'Nothing here identifies as Sonnet or Opus by model or by name.'
+    Note "Every alias points at $fallback, which does exist."
 }
 
 $settings | Add-Member -NotePropertyName 'env' -NotePropertyValue ([pscustomobject]$envBlock) -Force
@@ -623,9 +633,17 @@ if (-not $SkipVSCode) {
         $doc = $null
         if (Test-Path $codeSettings) {
             Copy-Item $codeSettings "$codeSettings.bak" -Force
-            try { $doc = Get-Content $codeSettings -Raw | ConvertFrom-Json } catch {
-                Note 'settings.json could not be parsed (comments are allowed there, JSON does not'
-                Note 'permit them). Leaving it alone; the CLI settings file is what matters.'
+            # settings.json is JSONC - VS Code ships it with comments, and
+            # ConvertFrom-Json refuses them. Strip comments and trailing commas
+            # rather than abandoning a file that is valid for its own editor.
+            $rawCode = Get-Content $codeSettings -Raw
+            $noBlock = [regex]::Replace($rawCode, '/\*[\s\S]*?\*/', '')
+            $noLine  = ($noBlock -split "`r?`n" | ForEach-Object { if ($_ -match '^\s*//') { '' } else { $_ } }) -join "`n"
+            $clean   = [regex]::Replace($noLine, ',(\s*[}\]])', '$1')
+            try { $doc = $clean | ConvertFrom-Json } catch {
+                Note 'settings.json could not be parsed even after removing comments.'
+                Note 'Leaving it alone; the CLI settings file is what matters, and the'
+                Note 'extension reads that.'
                 $doc = $null
             }
         }

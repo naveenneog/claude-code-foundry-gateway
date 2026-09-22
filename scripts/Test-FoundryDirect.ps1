@@ -21,7 +21,8 @@
     Resource group of the Foundry account. Optional; enables the deployment check.
 
 .PARAMETER Model
-    Deployment name to exercise. Defaults to claude-sonnet-5.
+    Deployment name to exercise. Defaults to one discovered on the resource -
+    every resource carries different deployments, so nothing is assumed.
 
 .EXAMPLE
     .\Test-ClaudeFoundry.ps1 -Resource ai-contosohub530569751908 -ResourceGroup rg-contosohub
@@ -30,7 +31,11 @@
 param(
     [Parameter(Mandatory = $true)][string]$Resource,
     [string]$ResourceGroup,
-    [string]$Model = 'claude-sonnet-5',
+    # Defaults to a deployment discovered on the resource. A hardcoded name
+    # reports a 404 as though the endpoint were broken - measured on a resource
+    # carrying only claude-opus-4-7, where the default claude-sonnet-5 failed
+    # the Messages API check while the resource was entirely healthy.
+    [string]$Model,
     # Supply the client id from Claude Desktop's Connection screen to test the
     # device-code flow it uses. That flow fails before any token exists, so no
     # role assignment can fix it and the other checks here cannot see it.
@@ -39,7 +44,16 @@ param(
     # Which shape this machine is supposed to be in. Run against a healthy
     # gateway machine without this, the client checks report failures for
     # pointing at the gateway - which is correct and also not a fault.
-    [ValidateSet('direct', 'gateway')][string]$Expect = 'direct'
+    [ValidateSet('direct', 'gateway')][string]$Expect = 'direct',
+    # Pins the subscription to look in. Without it the resource is searched
+    # for across every subscription this account can see - measured at 86 on
+    # one account, where the active one was not the one holding the resource.
+    [string]$SubscriptionId,
+    # Read-only by default. -Fix proposes each repair and asks first; -Force
+    # skips the asking. Nothing here changes Azure - these are local repairs
+    # to this machine, plus sign-ins.
+    [switch]$Fix,
+    [switch]$Force
 )
 
 $ErrorActionPreference = 'Continue'
@@ -59,7 +73,7 @@ Write-Host ""
 Write-Host "Claude Code on Microsoft Foundry - verification" -ForegroundColor Cyan
 Write-Host "Resource : $Resource"
 Write-Host "Endpoint : $BaseUrl"
-Write-Host "Model    : $Model"
+Write-Host "Model    : $(if ($Model) { $Model } else { '(discovered from the resource)' })"
 # Two client versions moved under us in a single day - Desktop 2.110.1.0 to
 # 2.2553.1.0, the CLI 2.1.241 to 2.1.272. The measured facts this suite relies
 # on (the VS Code setting being an array of name/value objects, the Desktop
@@ -76,6 +90,95 @@ try {
 Write-Host "Expect   : $Expect"
 Write-Host "Versions : CLI $verCli | Desktop $verDesk | extension $verExt"
 Write-Host ""
+function Note($m) { Write-Host "         $m" -ForegroundColor DarkGray }
+
+# Finding the resource without changing anything.
+#
+# az cognitiveservices account list only sees the active subscription. An
+# account with rights over many of them - 86 on one measured here - reports a
+# resource in a neighbouring subscription as "not visible in this tenant",
+# which reads as a permissions fault and is not one. So: look in the pinned
+# subscription if one was named, then the active one, then across every
+# subscription the account can reach.
+#
+# Nothing here runs 'az account set'. Changing someone's CLI context as a side
+# effect of a read-only check is rude and hard to notice; switching is offered
+# as a repair instead.
+function Find-FoundryAccount {
+    param([string]$Name, [string]$Sub)
+
+    if ($Sub) {
+        $rg = az cognitiveservices account list --subscription $Sub --query "[?name=='$Name'].resourceGroup | [0]" -o tsv 2>$null
+        if ($rg) { return [pscustomobject]@{ Rg = $rg.Trim(); Sub = $Sub; Where = 'pinned subscription' } }
+        return $null
+    }
+
+    $rg = az cognitiveservices account list --query "[?name=='$Name'].resourceGroup | [0]" -o tsv 2>$null
+    if ($rg) {
+        $cur = az account show --query id -o tsv 2>$null
+        return [pscustomobject]@{ Rg = $rg.Trim(); Sub = $cur.Trim(); Where = 'active subscription' }
+    }
+
+    # Resource Graph searches every subscription in the signed-in tenant in one
+    # call. Without the extension, fall back to walking them.
+    $q = "resources | where type =~ 'microsoft.cognitiveservices/accounts' and name =~ '$Name' | project resourceGroup, subscriptionId"
+    $hit = $null
+    $raw = az graph query -q $q --first 5 -o json 2>$null | ConvertFrom-Json
+    if ($raw -and $raw.data -and @($raw.data).Count -gt 0) { $hit = @($raw.data)[0] }
+    if (-not $hit) {
+        $subs = az account list --all --query "[].id" -o tsv 2>$null
+        foreach ($s in @($subs -split "`r?`n" | Where-Object { $_ })) {
+            $r2 = az cognitiveservices account list --subscription $s.Trim() --query "[?name=='$Name'].resourceGroup | [0]" -o tsv 2>$null
+            if ($r2) { $hit = [pscustomobject]@{ resourceGroup = $r2.Trim(); subscriptionId = $s.Trim() }; break }
+        }
+    }
+    if ($hit) {
+        return [pscustomobject]@{ Rg = $hit.resourceGroup; Sub = $hit.subscriptionId; Where = 'another subscription' }
+    }
+    return $null
+}
+
+# Repairs are collected and applied at the end, so the whole picture is read
+# before anything changes. Each carries the command it would run.
+$repairs = [System.Collections.Generic.List[object]]::new()
+function Add-Repair {
+    param([string]$What, [string]$Why, [scriptblock]$Do, [string]$Command)
+    $repairs.Add([pscustomobject]@{ What = $What; Why = $Why; Do = $Do; Command = $Command })
+}
+
+# 0. Can this machine reach the endpoint at all? -----------------------------
+# Before any token is discussed. A resolver failure presents inside Claude Code
+# as "Can't reach the API server (ENOTFOUND)", which reads like an outage and
+# is usually a resource name that does not exist. Measured on a developer
+# machine configured with a placeholder resource name.
+$endpointHost = "$Resource.services.ai.azure.com"
+$dnsOk = $false
+try {
+    $null = [System.Net.Dns]::GetHostEntry($endpointHost)
+    $dnsOk = $true
+} catch { }
+Add-Result 'The endpoint name resolves' $dnsOk $(
+    if ($dnsOk) { $endpointHost }
+    else { "$endpointHost does not resolve - the resource name is wrong, or DNS is blocked" })
+if (-not $dnsOk) {
+    Note 'Claude Code reports this as ENOTFOUND and blames your internet.'
+    Note 'Check the name against what Azure actually has:'
+    Note '  az cognitiveservices account list --query "[].name" -o tsv'
+}
+
+# A corporate proxy changes which certificate is presented, and an intercepted
+# handshake fails in a way that reads like an auth problem.
+$proxyVars = @()
+foreach ($n in @('HTTPS_PROXY', 'HTTP_PROXY', 'ALL_PROXY')) {
+    $v = [Environment]::GetEnvironmentVariable($n)
+    if ($v) { $proxyVars += "$n=$v" }
+}
+if ($proxyVars.Count -gt 0) {
+    Write-Host '  [NOTE] a proxy is configured for this shell' -ForegroundColor Yellow
+    Note ($proxyVars -join '; ')
+    Note 'If calls fail on TLS or certificates, the proxy is intercepting. NO_PROXY'
+    Note 'should include services.ai.azure.com and login.microsoftonline.com.'
+}
 
 # 1. Azure CLI sign-in ------------------------------------------------------
 $account = az account show -o json 2>$null | ConvertFrom-Json
@@ -84,6 +187,13 @@ if ($account) {
 }
 else {
     Add-Result 'Azure CLI signed in' $false "Run 'az login' (or 'az login --identity' on Azure compute)."
+    $t0 = $TenantId
+    Add-Repair -What 'sign in to Azure' -Why 'no CLI session on this machine' `
+        -Command $(if ($t0) { "az login --tenant $t0" } else { 'az login' }) `
+        -Do {
+            if ($t0) { az login --tenant $t0 -o none } else { az login -o none }
+            return ($LASTEXITCODE -eq 0)
+        }.GetNewClosure()
 }
 
 # 2. Entra ID data-plane token ---------------------------------------------
@@ -120,15 +230,139 @@ if ($claims) {
     }
 }
 
+# 2b-ii. Would Claude Code use that same identity? ---------------------------
+# Everything above tests the token the Azure CLI hands out. Claude Code does
+# not ask the CLI - it walks the Azure Identity chain, and several credentials
+# sit ahead of the CLI in it. So the Messages API check can pass on this very
+# machine while Claude Code is refused, and the refusal names a "principal"
+# the developer has never heard of.
+$ahead = @()
+foreach ($n in @('AZURE_CLIENT_ID','AZURE_CLIENT_SECRET','AZURE_CLIENT_CERTIFICATE_PATH','AZURE_USERNAME','AZURE_FEDERATED_TOKEN_FILE')) {
+    if ([Environment]::GetEnvironmentVariable($n)) { $ahead += "$n is set" }
+}
+# Azure VMs answer IMDS; Arc-enabled servers and App Service use IDENTITY_ENDPOINT.
+foreach ($n in @('IDENTITY_ENDPOINT','MSI_ENDPOINT','IMDS_ENDPOINT')) {
+    if ([Environment]::GetEnvironmentVariable($n)) { $ahead += "$n is set (managed identity)" }
+}
+if ($ahead.Count -eq 0) {
+    # Ask for a token, not for instance metadata. The metadata endpoint can
+    # answer on a machine that has no usable identity at all, which turns this
+    # check into a false alarm; only a token that is actually issued can
+    # outrank the CLI. Measured: the metadata endpoint returned 200 on a
+    # workstation whose token endpoint returned 400 and where Claude Code was
+    # working perfectly through the CLI credential.
+    try {
+        $mi = Invoke-RestMethod -TimeoutSec 4 -ErrorAction Stop -Headers @{ Metadata = 'true' } `
+                -Uri 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://cognitiveservices.azure.com'
+        if ($mi.access_token) {
+            $miWho = '<unreadable>'
+            try {
+                $mp = $mi.access_token.Split('.')[1].Replace('-', '+').Replace('_', '/')
+                switch ($mp.Length % 4) { 2 { $mp += '==' } 3 { $mp += '=' } 1 { $mp += '===' } }
+                $mc = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($mp)) | ConvertFrom-Json
+                $miWho = if ($mc.appid) { "application $($mc.appid)" } else { $mc.oid }
+            } catch { }
+            $ahead += "a managed identity on this machine issues tokens ($miWho)"
+        }
+    } catch { }
+}
+Add-Result 'Nothing outranks your CLI sign-in' ($ahead.Count -eq 0) $(
+    if ($ahead.Count -eq 0) { 'Claude Code will use the same account the checks above used' }
+    else { ($ahead -join '; ') + ' - Claude Code may authenticate as that instead of you' })
+if ($ahead.Count -gt 0) {
+    Write-Host '         The checks above use the Azure CLI token. Claude Code does not.' -ForegroundColor DarkGray
+    Write-Host '         If Claude Code reports 401 while those pass, this is why.' -ForegroundColor DarkGray
+    Write-Host '' -ForegroundColor DarkGray
+
+    # The supported way to pin the chain to one credential, rather than
+    # deleting an identity the machine may need for other things.
+    # Documented at learn.microsoft.com/azure/developer/javascript/sdk/
+    # authentication/credential-chains: AZURE_TOKEN_CREDENTIALS takes dev,
+    # prod, or a credential name. Individual names need @azure/identity 4.11.0
+    # or later; dev is understood by earlier versions and also excludes
+    # managed identity, so it is the safer of the two when the bundled
+    # version is unknown.
+    $already = [Environment]::GetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS', 'User')
+    if ($already) {
+        Note "AZURE_TOKEN_CREDENTIALS is already set to $already"
+    }
+    else {
+        Note 'Pin the credential chain to your CLI sign-in instead of removing the identity:'
+        Note '  AZURE_TOKEN_CREDENTIALS=AzureCliCredential   (needs @azure/identity 4.11.0+)'
+        Note '  AZURE_TOKEN_CREDENTIALS=dev                  (older versions; also excludes MI)'
+        Add-Repair -What 'pin Claude Code to your Azure CLI sign-in' `
+            -Why 'a managed identity or environment credential is ahead of you in the chain' `
+            -Command "[Environment]::SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','AzureCliCredential','User')" `
+            -Do {
+                [Environment]::SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS', 'AzureCliCredential', 'User')
+                return $true
+            }
+    }
+    Note ''
+    Note 'The other route is to grant that principal the role, which is right only if'
+    Note 'the machine identity is meant to have Claude access.'
+    Note 'Do not set ANTHROPIC_FOUNDRY_AUTH_TOKEN to work around this: it pins a token'
+    Note 'that expires in about an hour, and the failure returns looking unrelated.'
+}
+
 # 2c. Is the resource in that token's tenant? -------------------------------
 # A token for the wrong tenant is valid and useless: the resource's tenant has
 # never heard of the principal, and says so in a way that reads like RBAC.
-$rgFound = az cognitiveservices account list --query "[?name=='$Resource'].resourceGroup | [0]" -o tsv 2>$null
-if ($rgFound) { $rgFound = $rgFound.Trim() }
+$found = Find-FoundryAccount -Name $Resource -Sub $SubscriptionId
+$rgFound = $null
+if ($found) { $rgFound = $found.Rg }
 if ($claims) {
     Add-Result 'Resource is in the signed-in tenant' ([bool]$rgFound) $(
-        if ($rgFound) { "resource group $rgFound" }
+        if ($rgFound) { "resource group $($found.Rg), $($found.Where)" }
         else { "$Resource is not visible from tenant $($claims.tid) - sign in to the tenant that owns it" })
+
+    # Found, but somewhere other than where the CLI is pointed. Everything
+    # downstream that takes a subscription implicitly would look in the wrong
+    # place, so pin it rather than leaving it to chance.
+    if ($rgFound -and $found.Where -eq 'another subscription') {
+        $activeSub = az account show --query id -o tsv 2>$null
+        if ($activeSub) { $activeSub = $activeSub.Trim() }
+        if ($activeSub -ne $found.Sub) {
+            $subName = az account list --all --query "[?id=='$($found.Sub)'].name | [0]" -o tsv 2>$null
+            if ($subName) { $subName = $subName.Trim() } else { $subName = $found.Sub }
+            Write-Host '  [NOTE] the resource is not in your active subscription' -ForegroundColor Yellow
+            Note "found in $subName ($($found.Sub))"
+            Note 'Checks here name it explicitly, so they are correct either way. Claude'
+            Note 'Code does not use subscriptions at all - it calls the endpoint directly -'
+            Note 'so this matters for az commands you run by hand, not for the client.'
+            $fs = $found.Sub
+            Add-Repair -What 'pin the Azure CLI to that subscription' `
+                -Why 'az commands you run by hand would otherwise look in the wrong one' `
+                -Command "az account set --subscription $fs" `
+                -Do {
+                    az account set --subscription $fs 2>$null
+                    return ($LASTEXITCODE -eq 0)
+                }.GetNewClosure()
+        }
+    }
+
+    if (-not $rgFound) {
+        # Two different faults wear this: signed in to the wrong tenant, or a
+        # CLI session old enough that a recent role grant is not reflected.
+        # Signing in again settles both, and costs a browser round trip.
+        $t1 = $TenantId
+        if (-not $t1) { $t1 = '<owning-tenant-guid>' }
+        Note 'Either you are in the wrong tenant, or this session predates the change.'
+        if ($TenantId) {
+            $tt = $TenantId
+            Add-Repair -What "sign in again to tenant $tt" `
+                -Why 'the resource is not visible from the tenant this session is in' `
+                -Command "az account clear; az login --tenant $tt" `
+                -Do {
+                    az account clear -o none 2>$null
+                    az login --tenant $tt -o none
+                    return ($LASTEXITCODE -eq 0)
+                }.GetNewClosure()
+        }
+        else {
+            Note "  az login --tenant $t1        (pass -TenantId to have this offered as a repair)"
+        }
+    }
 }
 
 # 2d. Does the principal hold a role that reaches Claude? -------------------
@@ -136,7 +370,9 @@ if ($claims) {
 # accounts/OpenAI/*, and Claude is not served there - so they look like the
 # obvious AI roles and grant nothing on this endpoint.
 if ($claims -and $rgFound) {
-    $scopeId = az cognitiveservices account show -n $Resource -g $rgFound --query id -o tsv 2>$null
+    $subArg = @()
+    if ($found -and $found.Sub) { $subArg = @('--subscription', $found.Sub) }
+    $scopeId = az cognitiveservices account show -n $Resource -g $rgFound @subArg --query id -o tsv 2>$null
     if ($scopeId) { $scopeId = $scopeId.Trim() }
     $held = @()
     if ($scopeId -and $claims.oid) {
@@ -157,19 +393,42 @@ if ($claims -and $rgFound) {
     elseif ($held.Count -gt 0) {
         Add-Result 'A role reaches the Claude data plane' $false `
             ("held: $($held -join ', ') - none carries Microsoft.CognitiveServices/*")
+        # A role granted minutes ago is a different fault from no role at all,
+        # and the two are indistinguishable from here. Say so rather than
+        # sending someone to ask for access they already have.
+        Note 'If a role was granted recently, it can take a few minutes to take effect,'
+        Note 'and an old CLI session will not pick it up. Signing in again settles it.'
     }
     else {
         Add-Result 'A role reaches the Claude data plane' $false `
             'no role assignment on this resource for that principal'
+        Note 'Ask an admin to run, against this resource:'
+        Note "  ./scripts/Test-FoundryDirectAdmin.ps1 -Resource $Resource -GrantTo <your-object-id> -Fix"
     }
 }
 
 # 3. Deployments present ----------------------------------------------------
+# The resource group is taken from discovery when the caller did not name one,
+# so a resource in a neighbouring subscription still gets checked properly.
+if (-not $ResourceGroup -and $found) { $ResourceGroup = $found.Rg }
+$depSub = @()
+if ($found -and $found.Sub) { $depSub = @('--subscription', $found.Sub) }
 if ($ResourceGroup) {
-    $deps = az cognitiveservices account deployment list -n $Resource -g $ResourceGroup -o json 2>$null | ConvertFrom-Json
+    $deps = az cognitiveservices account deployment list -n $Resource -g $ResourceGroup @depSub -o json 2>$null | ConvertFrom-Json
     $claude = @($deps | Where-Object { $_.properties.model.format -eq 'Anthropic' })
     if ($claude.Count -gt 0) {
         Add-Result 'Claude deployments found' $true (($claude.name) -join ', ')
+        # Exercise something that is actually here. Testing a name this script
+        # invented turns a healthy resource into a 404 and sends the reader
+        # looking for a fault in the endpoint.
+        if (-not $Model) {
+            $live = @($claude | Where-Object { $_.properties.provisioningState -eq 'Succeeded' })
+            if ($live.Count -eq 0) { $live = $claude }
+            $pick = $live | Where-Object { $_.properties.model.name -match 'sonnet' } | Select-Object -First 1
+            if (-not $pick) { $pick = $live | Select-Object -First 1 }
+            $Model = $pick.name
+            Write-Host "         testing with $Model" -ForegroundColor DarkGray
+        }
     }
     else {
         Add-Result 'Claude deployments found' $false 'No Anthropic-format deployments on this resource.'
@@ -177,11 +436,18 @@ if ($ResourceGroup) {
 }
 else {
     Write-Host "  [SKIP] Claude deployments found" -ForegroundColor Yellow
-    Write-Host "         Pass -ResourceGroup to enable this check." -ForegroundColor DarkGray
+    Write-Host "         Pass -ResourceGroup to enable this check, or -Model to name one." -ForegroundColor DarkGray
+}
+if (-not $Model) {
+    Write-Host '  [SKIP] Messages API responds (Entra ID)' -ForegroundColor Yellow
+    Write-Host '         No deployment discovered, and none named with -Model. This check' -ForegroundColor DarkGray
+    Write-Host '         will not invent a name: every resource carries different' -ForegroundColor DarkGray
+    Write-Host '         deployments, and a guessed one returns 404 on a healthy resource.' -ForegroundColor DarkGray
+    Write-Host '         Pass -ResourceGroup to discover them, or -Model to name one.' -ForegroundColor DarkGray
 }
 
 # 4. Messages API round trip ------------------------------------------------
-if ($token) {
+if ($token -and $Model) {
     $body = @{
         model      = $Model
         max_tokens = 32
@@ -268,11 +534,39 @@ if ($cliTarget) {
         if ($onDirect -eq $wanted) { "$Expect path" }
         elseif ($cliTarget -match 'azure-api\.net') { "on the gateway ($cliTarget), not the direct path" }
         else { "points at $cliTarget" })
+    # Rewriting settings by hand is how a placeholder ends up in them. Offer
+    # the setup script, which discovers the deployments rather than assuming.
+    if (($onDirect -ne $wanted) -and $wanted) {
+        $rs = $Resource
+        $tn = $TenantId
+        $setup = Join-Path (Split-Path $PSCommandPath -Parent) 'Setup-ClaudeFoundryDirect.ps1'
+        $cmd = ".\Setup-ClaudeFoundryDirect.ps1 -Resource $rs"
+        if ($tn) { $cmd += " -TenantId $tn" }
+        Add-Repair -What 'point every client at this resource' `
+            -Why "the CLI is configured for $cliTarget" -Command "$cmd -Force" `
+            -Do {
+                if (-not (Test-Path $setup)) { return $false }
+                $a = @('-Resource', $rs, '-Force')
+                if ($tn) { $a += @('-TenantId', $tn) }
+                & $setup @a | Out-Null
+                return ($LASTEXITCODE -eq 0 -or $?)
+            }.GetNewClosure()
+    }
 }
 
 if (Test-Path $codeFile) {
     try {
-        $v = (Get-Content $codeFile -Raw | ConvertFrom-Json).'claudeCode.environmentVariables'
+        # VS Code settings.json is JSONC - it ships with comments in it, and
+        # ConvertFrom-Json refuses them. Strip line and block comments, and
+        # trailing commas, rather than abandoning the check on a file that is
+        # perfectly valid for its own editor.
+        $rawCode = Get-Content $codeFile -Raw
+        $noBlock = [regex]::Replace($rawCode, '/\*[\s\S]*?\*/', '')
+        $noLine  = ($noBlock -split "`r?`n" | ForEach-Object {
+            if ($_ -match '^\s*//') { '' } else { $_ }
+        }) -join "`n"
+        $clean = [regex]::Replace($noLine, ',(\s*[}\]])', '$1')
+        $v = ($clean | ConvertFrom-Json).'claudeCode.environmentVariables'
         if ($v) {
             $res = ($v | Where-Object name -eq 'ANTHROPIC_FOUNDRY_RESOURCE').value
             $url = ($v | Where-Object name -eq 'ANTHROPIC_FOUNDRY_BASE_URL').value
@@ -329,6 +623,16 @@ if (Test-Path $metaFile) {
                         Add-Result 'Desktop helper knows its tenant' $helperEnvOk $(
                             if ($helperEnvOk) { "CLAUDE_FOUNDRY_TENANT_ID=$tenantForHelper" }
                             else { 'CLAUDE_FOUNDRY_TENANT_ID is not set - a guest or multi-tenant account will get a home-tenant token the gateway refuses' })
+                        if (-not $helperEnvOk -and $TenantId) {
+                            $tset = $TenantId
+                            Add-Repair -What 'record the tenant for the Desktop helper' `
+                                -Why 'without it a guest or multi-tenant account signs in to the wrong directory' `
+                                -Command "[Environment]::SetEnvironmentVariable('CLAUDE_FOUNDRY_TENANT_ID','$tset','User')" `
+                                -Do {
+                                    [Environment]::SetEnvironmentVariable('CLAUDE_FOUNDRY_TENANT_ID', $tset, 'User')
+                                    return $true
+                                }.GetNewClosure()
+                        }
                     }
 
                     $out = ''
@@ -384,22 +688,53 @@ if ($ClientId) {
     if (-not $tid) { Write-Host '  [SKIP] Entra device-code init - pass -TenantId' -ForegroundColor Yellow }
     else {
         $dcScope = 'https://cognitiveservices.azure.com/.default offline_access'
+        $dcUri  = "https://login.microsoftonline.com/$tid/oauth2/v2.0/devicecode"
+        $dcBody = "client_id=$ClientId&scope=$([uri]::EscapeDataString($dcScope))"
+        # -SkipHttpErrorCheck is PowerShell 7 and later. Windows PowerShell 5.1
+        # is what most developers run, and there it throws on 4xx - which is the
+        # very response this check exists to read. Measured on 5.1.26100.9444:
+        # "A parameter cannot be found that matches parameter name
+        # 'SkipHttpErrorCheck'", turning a working diagnosis into a failure of
+        # the diagnostic itself.
+        $status = 0
+        $content = ''
         try {
-            $r = Invoke-WebRequest "https://login.microsoftonline.com/$tid/oauth2/v2.0/devicecode" `
-                    -Method POST -ContentType 'application/x-www-form-urlencoded' `
-                    -Body "client_id=$ClientId&scope=$([uri]::EscapeDataString($dcScope))" `
-                    -UseBasicParsing -TimeoutSec 30 -SkipHttpErrorCheck
-            if ($r.StatusCode -eq 200) {
-                Add-Result 'Entra device-code init (Desktop)' $true "client $ClientId accepted"
+            $p = @{ Uri = $dcUri; Method = 'POST'; ContentType = 'application/x-www-form-urlencoded'
+                    Body = $dcBody; UseBasicParsing = $true; TimeoutSec = 30 }
+            if ($PSVersionTable.PSVersion.Major -ge 6) { $p['SkipHttpErrorCheck'] = $true }
+            $r = Invoke-WebRequest @p
+            $status = [int]$r.StatusCode
+            $content = $r.Content
+        }
+        catch {
+            # 5.1 lands here for every non-2xx, so read the body off the
+            # exception rather than reporting the exception as the fault.
+            # On 5.1 the response body arrives in ErrorDetails; the stream is
+            # often already consumed by the time we get here, which loses the
+            # AADSTS code that is the entire value of this check.
+            if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $content = $_.ErrorDetails.Message }
+            if ($_.Exception.Response) {
+                try { $status = [int]$_.Exception.Response.StatusCode } catch { }
+                if (-not $content) {
+                    try {
+                        $s = $_.Exception.Response.GetResponseStream()
+                        $content = (New-Object IO.StreamReader($s)).ReadToEnd()
+                    } catch { }
+                }
             }
-            else {
-                $err = $null
-                try { $err = ($r.Content | ConvertFrom-Json).error_description } catch { }
-                $aadsts = if ($err -match '(AADSTS\d+)') { $Matches[1] } else { "HTTP $($r.StatusCode)" }
-                Add-Result 'Entra device-code init (Desktop)' $false "$aadsts - app registration or tenant, not RBAC"
+            if (-not $status) {
+                Add-Result 'Entra device-code init (Desktop)' $false $_.Exception.Message
             }
         }
-        catch { Add-Result 'Entra device-code init (Desktop)' $false $_.Exception.Message }
+        if ($status -eq 200) {
+            Add-Result 'Entra device-code init (Desktop)' $true "client $ClientId accepted"
+        }
+        elseif ($status) {
+            $err = $null
+            try { $err = ($content | ConvertFrom-Json).error_description } catch { }
+            $aadsts = if ($err -match '(AADSTS\d+)') { $Matches[1] } else { "HTTP $status" }
+            Add-Result 'Entra device-code init (Desktop)' $false "$aadsts - app registration or tenant, not RBAC"
+        }
     }
 }
 
@@ -411,6 +746,48 @@ if ($failed -eq 0) {
 }
 else {
     Write-Host "$failed of $($results.Count) checks failed." -ForegroundColor Red
+}
+
+# Repairs --------------------------------------------------------------------
+# After the summary, so the whole picture is read before anything changes.
+# Nothing here alters Azure: these are local files, a user environment
+# variable, and sign-ins. Granting a role is an admin action and lives in
+# Test-FoundryDirectAdmin.ps1.
+if ($repairs.Count -gt 0) {
+    Write-Host ''
+    Write-Host "  $($repairs.Count) repair(s) available" -ForegroundColor Cyan
+    foreach ($r in $repairs) {
+        Write-Host "    - $($r.What)" -ForegroundColor White
+        Write-Host "      $($r.Why)" -ForegroundColor DarkGray
+        Write-Host "      $($r.Command)" -ForegroundColor DarkGray
+    }
+    Write-Host ''
+    if (-not $Fix) {
+        Write-Host '  Re-run with -Fix to apply these, or copy the commands above.' -ForegroundColor DarkGray
+    }
+    else {
+        $applied = 0
+        foreach ($r in $repairs) {
+            $go = $Force
+            if (-not $go) {
+                $ans = Read-Host "  Apply: $($r.What)? [y/N]"
+                $go = ($ans -match '^(y|yes)$')
+            }
+            if (-not $go) { Write-Host '    skipped' -ForegroundColor DarkGray; continue }
+            $ok = $false
+            try { $ok = [bool](& $r.Do) } catch { $ok = $false }
+            if ($ok) { Write-Host '    done' -ForegroundColor Green; $applied++ }
+            else {
+                Write-Host '    failed' -ForegroundColor Red
+                Write-Host "      $($r.Command)" -ForegroundColor DarkGray
+            }
+        }
+        if ($applied -gt 0) {
+            Write-Host ''
+            Write-Host "  $applied repair(s) applied. Open a new terminal before re-running:" -ForegroundColor DarkGray
+            Write-Host '  a running shell keeps the environment it started with.' -ForegroundColor DarkGray
+        }
+    }
 }
 Write-Host ""
 exit $failed

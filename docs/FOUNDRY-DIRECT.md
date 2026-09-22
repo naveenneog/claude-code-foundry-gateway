@@ -217,18 +217,33 @@ error messages do not.
 
 ### One command that checks the whole chain
 
-Before reading any of the failure notes below, run this. It checks fourteen
-things in the order they actually break, and names the layer rather than the
-symptom:
+Two scripts, and they answer different questions. Run the admin one first:
+there is no point debugging a developer's machine against a resource that was
+never ready.
 
 ```powershell
-./scripts/Test-FoundryDirect.ps1 -Resource <resource> -ResourceGroup <rg>
+# Admin: is this resource set up so developers can use it? Changes nothing.
+./scripts/Test-FoundryDirectAdmin.ps1 -Resource <resource>
 
-# Add the client id from Claude Desktop's Connection screen to test its
-# device-code flow as well - that one fails before any token exists.
-./scripts/Test-FoundryDirect.ps1 -Resource <resource> -ResourceGroup <rg> `
-  -ClientId <client-id> -TenantId <tenant-guid>
+# Developer: is this machine configured, and does it work?
+./scripts/Test-FoundryDirect.ps1 -Resource <resource> -ResourceGroup <rg>
 ```
+
+The admin check reports what an admin can fix without touching anyone's laptop:
+
+| Check | Catches |
+|---|---|
+| Resource is visible in this tenant | a resource nobody signed in here can reach |
+| Anthropic deployments exist | nothing usable, or only `Disabled` ones |
+| missing model families | a resource with no Sonnet, where clients must not assume one |
+| a role reaches the Claude data plane | roles scoped to `accounts/OpenAI/*`, which serve no Claude |
+| groups against people | entitlement granted person by person, which does not scale |
+| reachable from developer machines | `publicNetworkAccess` off, or a deny-by-default firewall |
+| Desktop app registration | not a public client, so device code returns `AADSTS7000218` |
+
+Run against a real resource it found three things its owner did not know:
+`Azure AI Developer` assigned to someone who therefore had no access at all,
+twelve entitlements with not one group among them, and no Haiku deployment.
 
 It configures nothing, so it is safe on someone else's machine. What it
 separates:
@@ -279,17 +294,41 @@ az login --tenant <owning-tenant-guid>
 The setup script always writes this, which is why generating the file beats
 copying one from a colleague — a hand-made file usually omits it.
 
-**2. A stray `AZURE_CLIENT_ID`.** Claude Code does not use the `az` session
-directly; it walks the Azure Identity chain, and **environment variables are
-ahead of the signed-in CLI user in that chain**. A leftover variable in a `.env`
-file or the machine environment silently authenticates as that service
-principal instead of you:
+**2. A stray `AZURE_CLIENT_ID`, or a managed identity on the machine.** Claude
+Code does not use the `az` session directly; it walks the Azure Identity chain,
+and **several credentials sit ahead of the Azure CLI in it**. A leftover
+variable, or an Azure VM's own identity, silently authenticates as something
+else:
 
 ```powershell
-Get-ChildItem Env: | Where-Object Name -match 'AZURE_CLIENT_ID|AZURE_TENANT_ID|AZURE_CLIENT_SECRET|AZURE_USERNAME'
+Get-ChildItem Env: | Where-Object Name -match 'AZURE_CLIENT_ID|AZURE_CLIENT_SECRET|AZURE_USERNAME|IDENTITY_ENDPOINT|MSI_ENDPOINT'
 ```
 
-Clear it, or grant that principal the role.
+This is the failure where the health check passes and Claude Code still gets
+401: the check reads the `az` token, and Claude Code never asked for it.
+
+Rather than deleting an identity the machine may need for other work, pin the
+chain to your sign-in:
+
+```powershell
+# Individual credential names need @azure/identity 4.11.0 or later
+[Environment]::SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','AzureCliCredential','User')
+
+# Older versions understand dev, which also excludes managed identity
+[Environment]::SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','dev','User')
+```
+
+Then open a new terminal and restart VS Code or Desktop — a running process
+keeps the environment it started with. Source:
+[Credential chains in the Azure Identity library for JavaScript](https://learn.microsoft.com/azure/developer/javascript/sdk/authentication/credential-chains#defaultazurecredential-overview).
+
+Granting that principal the role is the other route, and is right only where
+the machine identity is genuinely meant to have Claude access.
+
+**Do not set `ANTHROPIC_FOUNDRY_AUTH_TOKEN` to get past this.** It works,
+because it pins a token the client then uses verbatim — and that token expires
+in about an hour, after which the failure comes back looking unrelated to
+anything you changed.
 
 **3. Right tenant, no role.** Only now is a role assignment the answer:
 

@@ -405,8 +405,8 @@ Assert 'a disabled deployment is skipped' ($ds -match "provisioningState=='Succe
 Assert 'discovery asks for the model too'  ($ds -match 'model:properties\.model\.name')
 Assert 'aliases resolve from the model'    ($ds -match '\$_\.model -and \$_\.model -match \$Family')
 Assert 'and fall back to the name'         ($ds -match '\$_\.name -match \$Family')
-Assert 'a real haiku deployment is preferred' ($ds -match "if \(\`$haiku\) \{ \`$haiku \} elseif \(\`$sonnet\)")
-Assert 'haiku points at a real deployment' ($ds -match "ANTHROPIC_DEFAULT_HAIKU_MODEL'\] = \`$small")
+Assert 'a real haiku deployment is preferred' ($ds.Contains("if (`$haiku)  { `$haiku }  else { `$fallback }"))
+Assert 'haiku points at a real deployment' ($ds -match "ANTHROPIC_DEFAULT_HAIKU_MODEL'\]\s+=")
 # Assuming a deployment name writes a config that fails minutes later as
 # DeploymentNotFound, which reads as a Claude Code bug rather than a setting.
 Assert 'it refuses to invent a deployment' ($ds -match 'Cannot configure \$Resource without knowing')
@@ -488,8 +488,8 @@ Assert 'the direct path is documented'   ($fd.Length -gt 0)
 Assert 'the 401 is documented'                ($fd -match '(?i)401 Principal does not have access')
 Assert 'the wrong tenant is named first'      ($fd -match '(?i)No `AZURE_TENANT_ID`, and the resource is in another tenant')
 Assert 'and an empty list is read correctly'  ($fd -match '(?i)wrong tenant, not that you lack a role')
-Assert 'the credential chain is explained'    ($fd -match '(?i)ahead of the signed-in CLI user')
-Assert 'it says what to check first'          ($fd -match 'AZURE_CLIENT_ID\|AZURE_TENANT_ID')
+Assert 'the credential chain is explained'    ($fd -match '(?i)sit ahead of the Azure CLI in it')
+Assert 'it says what to check first'          ($fd -match 'AZURE_CLIENT_ID\|AZURE_CLIENT_SECRET')
 Assert 'and how to grant the role'            ($fd -match '(?i)az role assignment create --assignee')
 Assert 'a reload is needed after'             ($fd -match '(?i)extension host reads the environment once')
 Assert 'and the gateway path is exempt'       ($fd -match '(?i)developers need no role on the Foundry resource')
@@ -549,6 +549,96 @@ Assert 'client versions are reported'           ($td -match '(?i)Versions : CLI'
 Assert 'including the VS Code extension'        ($td -match 'code --list-extensions --show-versions')
 # Omitting a check silently reads as a pass.
 Assert 'a skipped VS Code check says so'        ($td -match '(?i)No user settings file at')
+# The developer script answers "is this machine configured?". An admin needs
+# the question before it: is there anything here to configure against?
+$ad = Get-Content (Join-Path $root 'scripts/Test-FoundryDirectAdmin.ps1') -Raw
+Assert 'an admin readiness check ships'         ($ad.Length -gt 0)
+Assert 'it changes nothing'                     ($ad -match '(?i)Read-only\. It creates nothing')
+Assert 'it names the tenant it looked in'       ($ad -match '(?i)not visible from tenant')
+Assert 'it reports usable deployments only'     ($ad -match "provisioningState -eq 'Succeeded'")
+Assert 'and warns about the others'             ($ad -match '(?i)list normally and refuse every call')
+Assert 'it names missing model families'        ($ad -match '(?i)no \$\(\$missing -join')
+Assert 'it asks Azure which roles reach Claude' ($ad.Contains("acts -contains 'Microsoft.CognitiveServices/*'"))
+Assert 'and names the OpenAI-scoped trap'       ($ad -match "'Azure AI Developer', 'Cognitive Services OpenAI User'")
+Assert 'it counts groups against people'        ($ad -match "principalType -eq 'Group'")
+Assert 'and says person-by-person will not scale' ($ad -match '(?i)granted person by person')
+Assert 'it checks the resource is reachable'    ($ad -match 'publicNetworkAccess')
+Assert 'and notices a deny-by-default firewall' ($ad -match "defaultAction -eq 'Deny'")
+Assert 'the Desktop app registration is optional' ($ad -match '(?i)isFallbackPublicClient')
+Assert 'it hands over the developer command'    ($ad -match 'Setup-ClaudeFoundryDirect\.ps1 -Resource \$Resource -TenantId')
+# Repairs are opt-in and shown before they run. A repair you cannot read is a
+# repair you cannot refuse.
+Assert 'the admin check can repair'             ($ad -match '\[switch\]\$Fix')
+Assert 'but changes nothing by default'         ($ad -match '(?i)Re-run with -Fix to apply these')
+Assert 'each repair shows its command'          ($ad -match '\$\(\$r\.Command\)')
+Assert 'and is confirmed one at a time'         ($ad -match '(?i)Apply: \$\(\$r\.What\)\? \[y/N\]')
+Assert 'unattended runs can skip the asking'    ($ad -match '\[switch\]\$Force')
+Assert 'it grants at the account scope'         ($ad -match '--assignee-principal-type \$ptype')
+Assert 'a principal can be named to entitle'    ($ad -match '\[string\]\$GrantTo')
+Assert 'it fixes the public-client flag'        ($ad -match 'az ad app update --id \$cid --set isFallbackPublicClient=true')
+Assert 'and never repairs network posture'      ($ad -match '(?i)security decision, not a configuration fault')
+Assert 'propagation is called out after a grant' ($ad -match '(?i)take a few minutes to')
+
+# The developer side repairs this machine, not Azure.
+Assert 'the developer check can repair too'     ($td -match '\[switch\]\$Fix')
+Assert 'it resolves the endpoint first'         ($td -match '(?i)The endpoint name resolves')
+Assert 'and explains the ENOTFOUND it causes'   ($td -match '(?i)Claude Code reports this as ENOTFOUND')
+Assert 'a proxy is reported'                    ($td -match '(?i)a proxy is configured for this shell')
+Assert 'with the hosts it must not intercept'   ($td -match 'services\.ai\.azure\.com and login\.microsoftonline\.com')
+Assert 'a stale session can be refreshed'       ($td -match 'az account clear; az login --tenant')
+Assert 'recent grants are named as a cause'     ($td -match '(?i)granted recently, it can take a few minutes')
+Assert 'and it points at the admin script'      ($td -match 'Test-FoundryDirectAdmin\.ps1 -Resource \$Resource -GrantTo')
+Assert 'a wrong target offers the setup script' ($td -match '(?i)point every client at this resource')
+Assert 'and a new terminal is required after'   ($td -match '(?i)a running shell keeps the environment it started with')
+# az cognitiveservices account list only sees the active subscription. An
+# account with rights over many - 86 measured on one - gets "not visible in
+# this tenant" for a resource one subscription away, which is not a
+# permissions fault and reads exactly like one.
+Assert 'the subscription can be pinned'         ($td -match '\[string\]\$SubscriptionId')
+Assert 'and the resource is found without it'   ($td.Contains('function Find-FoundryAccount {'))
+Assert 'searching every subscription'           ($td -match "type =~ 'microsoft\.cognitiveservices/accounts'")
+Assert 'with a fallback when graph is absent'   ($td -match 'az account list --all --query "\[\]\.id"')
+Assert 'the discovery never switches context'   ($td -match '(?i)Changing someone.s CLI context as a side')
+Assert 'switching is offered as a repair'       ($td -match 'az account set --subscription \$fs')
+Assert 'downstream calls name the subscription' ($td -match "subArg = @\('--subscription'")
+Assert 'and so does the deployment lookup'      ($td -match "depSub = @\('--subscription'")
+Assert 'it says the client ignores subscriptions' ($td -match '(?i)Code does not use subscriptions at all')
+
+Assert 'the admin check pins a subscription too' ($ad -match '\[string\]\$SubscriptionId')
+Assert 'and searches across them'                ($ad -match "type =~ 'microsoft\.cognitiveservices/accounts'")
+Assert 'naming the one it found'                 ($ad -match '(?i)not in your active subscription')
+Assert 'and pinning every later call'            ($ad -match '-g \$ResourceGroup @subPin')
+# The failure where every check passes and Claude Code is still refused: the
+# checks read the az token, and Claude Code never asks for it. Pinning the
+# chain is documented, and better than deleting an identity the machine needs.
+Assert 'the credential chain can be pinned'      ($td -match 'AZURE_TOKEN_CREDENTIALS')
+Assert 'to the CLI credential by name'           ($td -match 'AzureCliCredential')
+Assert 'with the version it needs'               ($td -match '(?i)@azure/identity 4\.11\.0')
+Assert 'and dev as the older fallback'           ($td -match '(?i)dev\s+\(older versions; also excludes MI\)')
+Assert 'an existing setting is not overwritten'  ($td -match "GetEnvironmentVariable\('AZURE_TOKEN_CREDENTIALS', 'User'\)")
+Assert 'the token override is warned against'    ($td -match 'ANTHROPIC_FOUNDRY_AUTH_TOKEN')
+Assert 'because it expires'                      ($td -match '(?i)expires in about an hour')
+Assert 'the pin is documented'                   ($fd -match "SetEnvironmentVariable\('AZURE_TOKEN_CREDENTIALS','AzureCliCredential','User'\)")
+Assert 'and cited'                               ($fd -match 'credential-chains#defaultazurecredential-overview')
+Assert 'with the token override ruled out'       ($fd -match '(?i)Do not set `ANTHROPIC_FOUNDRY_AUTH_TOKEN`')
+# Every resource carries different deployments. Nothing on the direct path may
+# assume a model name - measured on a resource holding only claude-opus-4-7,
+# where a hardcoded claude-sonnet-5 failed the Messages check on a resource
+# that was entirely healthy.
+Assert 'the test model is discovered'           ($td -match '(?i)testing with \$Model')
+Assert 'and nothing is assumed when it cannot be' ($td -match '(?i)will not invent a name')
+Assert 'the round trip is skipped without one'  ($td -match 'if \(\$token -and \$Model\)')
+Assert 'no model name is hardcoded in the check' (-not ([regex]::Matches(
+    (($td -split "`r?`n") | Where-Object { $_ -notmatch '^\s*#' -and $_ -notmatch '^\s{4}\S.*claude-' }) -join "`n",
+    "'claude-(sonnet|opus|haiku)-[0-9]") ).Count)
+
+$sd2 = Get-Content (Join-Path $root 'scripts/Setup-ClaudeFoundryDirect.ps1') -Raw
+Assert 'every alias names a real deployment'    ($sd2 -match '\$fallback = if \(\$sonnet\)')
+Assert 'including one with no Sonnet at all'    ($sd2.Contains('ANTHROPIC_DEFAULT_SONNET_MODEL''] = if ($sonnet) { $sonnet } else { $fallback }'))
+Assert 'and a substitution is reported'         ($sd2 -match '(?i)those aliases point at \$fallback')
+Assert 'the setup assumes no model name'        (-not ([regex]::Matches(
+    (($sd2 -split "`r?`n") | Where-Object { $_ -notmatch '^\s*#' }) -join "`n",
+    "= 'claude-(sonnet|opus|haiku)-[0-9]") ).Count)
 # The Desktop 400. Documented separately because it is the one failure here
 # that a role assignment cannot touch.
 Assert 'the device-code 400 is documented'    ($fd -match '(?i)Foundry Entra device init failed: HTTP 400')
