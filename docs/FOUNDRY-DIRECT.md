@@ -227,7 +227,147 @@ A machine showing only those folders has never been pointed at Foundry or a
 gateway. There is nothing on it to export, so configure it rather than trying to
 copy from it.
 
-## 6. Undoing it
+## 6. Configuring it by hand
+
+Only needed if you cannot run the script, or you are checking what it did. Read
+from the installed extension and the live resource on 2026-09-22, not from
+memory.
+
+### Step 1 — sign in, naming the tenant
+
+```powershell
+# Device code: no browser on this machine
+az login --use-device-code --tenant <tenant-guid>
+
+# Or a browser on this machine
+az login --tenant <tenant-guid>
+
+az account show --query "{tenant:tenantId, user:user.name}" -o table
+```
+
+Name the tenant. An account in more than one directory, or a guest, signs in to
+the wrong one by default, and the Foundry resource is then invisible behind an
+error that never mentions tenants.
+
+### Step 2 — make sure you can actually reach the resource
+
+Unlike the gateway path, entitlement here is an Azure **role**, not group
+membership. Without it every call returns 403 no matter what is configured:
+
+```powershell
+az role assignment create `
+  --assignee <your-object-id> `
+  --role "Cognitive Services User" `
+  --scope /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<resource>
+```
+
+Then prove the token works before configuring anything:
+
+```powershell
+az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv
+```
+
+If that fails, nothing below will work, and the failure is easier to read here.
+
+### Step 3 — find the deployment names
+
+```powershell
+az cognitiveservices account deployment list `
+  --name <resource> --resource-group <rg> `
+  --query "[?properties.model.format=='Anthropic' && properties.provisioningState=='Succeeded'].name" -o tsv
+```
+
+Use what this prints. A name that does not exist, or one that exists but is
+disabled, fails as `DeploymentNotFound` partway through a session rather than at
+startup.
+
+### Step 4 — install the clients
+
+Needs Node.js 18+, VS Code 1.94+ and the Azure CLI.
+
+```powershell
+npm install -g @anthropic-ai/claude-code
+code --install-extension anthropic.claude-code
+```
+
+### Step 5 — write the settings
+
+`%USERPROFILE%\.claude\settings.json` on Windows, `~/.claude/settings.json`
+elsewhere:
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_USE_FOUNDRY": "1",
+    "ANTHROPIC_FOUNDRY_RESOURCE": "ai-contosohub530569751908",
+    "AZURE_TENANT_ID": "16b3c013-d300-468d-ac64-7eda0820b6d3",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-sonnet-5"
+  },
+  "availableModels": ["claude-opus-5", "claude-sonnet-5"],
+  "enforceAvailableModels": true
+}
+```
+
+Three things that are easy to get wrong:
+
+- `ANTHROPIC_FOUNDRY_RESOURCE` is the account **name**. Not a URL, not a
+  resource id.
+- Do **not** also set `ANTHROPIC_FOUNDRY_BASE_URL`. They are mutually exclusive
+  and the session ends with `baseURL and resource are mutually exclusive`. If
+  this machine was ever on a gateway, delete that line.
+- Point **haiku** at the Sonnet deployment. Claude Code asks for a small model
+  for background work, and most resources have no Haiku deployment.
+
+### Step 6 — VS Code
+
+**Usually nothing to do.** The extension reads the same
+`~/.claude/settings.json`, and its own setting description says to prefer it.
+
+Two cases where you do touch VS Code settings — **Preferences: Open User
+Settings (JSON)**:
+
+**If you need a VS Code-only override**, `claudeCode.environmentVariables` is an
+**array of name/value objects**, not a map. Verified against extension
+2.1.263, whose schema requires both properties:
+
+```json
+"claudeCode.environmentVariables": [
+  { "name": "CLAUDE_CODE_USE_FOUNDRY",    "value": "1" },
+  { "name": "ANTHROPIC_FOUNDRY_RESOURCE", "value": "ai-contosohub530569751908" },
+  { "name": "AZURE_TENANT_ID",            "value": "16b3c013-d300-468d-ac64-7eda0820b6d3" }
+]
+```
+
+**If the extension keeps prompting you to sign in to Anthropic**, tell it not
+to. Authentication is happening outside it, through Entra:
+
+```json
+"claudeCode.disableLoginPrompt": true
+```
+
+Reload the window afterwards — **Developer: Reload Window**. The extension host
+reads configuration at startup, so a changed setting is not picked up by an
+already-running window.
+
+### Step 7 — check it
+
+```powershell
+claude auth status                    # expect apiProvider: foundry
+claude -p "Reply with exactly: OK"
+```
+
+In VS Code: **Ctrl+Shift+P → Claude Code: Open in Side Bar**. There should be
+no sign-in prompt — your Entra credential is already resolved.
+
+If you want to test the endpoint without involving Claude Code at all:
+
+```powershell
+./scripts/Test-FoundryDirect.ps1 -Resource <resource> -ResourceGroup <rg>
+```
+
+## 7. Undoing it
 
 ```powershell
 # The script backs up whatever was there before overwriting

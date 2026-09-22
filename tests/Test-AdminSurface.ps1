@@ -435,6 +435,26 @@ Assert 'with its schema'                    ($fd -match '"foundryResource"')
 Assert 'and why mode is in it'              ($fd -match '(?i)mode.{0,30}earns its place')
 Assert 'and that it holds no credential'    ($fd -match '(?i)Nothing in the file is a credential')
 
+# Manual steps, for people who cannot run the script or want to check it.
+Assert 'it documents configuring by hand'   ($fd -match '(?i)Configuring it by hand')
+Assert 'the role assignment is step two'    ($fd -match 'Cognitive Services User')
+Assert 'and it says a role is not a group'  ($fd -match '(?i)an Azure \*\*role\*\*, not group')
+# The VS Code setting is an array of name/value pairs. Read from the installed
+# extension's own schema, which requires both properties - a map looks
+# reasonable, is accepted by the JSON editor, and does nothing.
+Assert 'the VS Code setting shape is shown' ($fd -match '"claudeCode\.environmentVariables": \[')
+Assert 'and given as name and value pairs'  ($fd -match '\{ "name": "CLAUDE_CODE_USE_FOUNDRY"')
+Assert 'and said to be an array'            ($fd -match '(?i)array of name/value objects')
+# The extension prefers settings.json, so duplicating into VS Code is usually
+# unnecessary - the opposite of what the gateway appendix used to imply.
+Assert 'it says VS Code usually needs nothing' ($fd -match '(?i)Usually nothing to do')
+Assert 'the login prompt can be turned off'    ($fd -match 'claudeCode\.disableLoginPrompt')
+Assert 'and a reload is required'              ($fd -match '(?i)Developer: Reload Window')
+
+$dev2 = Get-Content (Join-Path $root 'DEVELOPER.md') -Raw
+Assert 'the gateway appendix shows the shape too' ($dev2 -match '"claudeCode\.environmentVariables": \[')
+Assert 'and no longer implies duplication'        ($dev2 -notmatch 'VS Code needs the same values again')
+
 $rmd = Get-Content (Join-Path $root 'README.md') -Raw
 Assert 'the README links the direct guide' ($rmd -match '\[Foundry direct\]\(docs/FOUNDRY-DIRECT\.md\)')
 

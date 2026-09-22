@@ -221,9 +221,32 @@ Two traps the script handles for you:
 - Point the **haiku** alias at Sonnet. Most tenants have no Haiku deployment,
   and the failure otherwise surfaces mid-task as `DeploymentNotFound`
 
-**4. VS Code needs the same values again.** The extension host does not inherit
-shell environment, so add `claudeCode.environmentVariables` in **Preferences:
-Open User Settings (JSON)** with the same names and values.
+**4. VS Code usually needs nothing more.** The extension reads the same
+`~/.claude/settings.json`, and its own setting description says to prefer it
+over VS Code settings.
+
+Two cases where you do open **Preferences: Open User Settings (JSON)**:
+
+If you need a VS Code-only override, `claudeCode.environmentVariables` is an
+**array of name/value objects**, not a map — verified against extension 2.1.263,
+whose schema requires both properties:
+
+```json
+"claudeCode.environmentVariables": [
+  { "name": "CLAUDE_CODE_USE_FOUNDRY",     "value": "1" },
+  { "name": "ANTHROPIC_FOUNDRY_BASE_URL",  "value": "https://<your-gateway>.azure-api.net/claude" }
+]
+```
+
+If the extension keeps asking you to sign in to Anthropic, tell it not to —
+authentication is happening outside it, through Entra:
+
+```json
+"claudeCode.disableLoginPrompt": true
+```
+
+Either way, **Developer: Reload Window** afterwards. The extension host reads
+configuration at startup and will not pick up a change in a running window.
 
 **5. Check it:**
 

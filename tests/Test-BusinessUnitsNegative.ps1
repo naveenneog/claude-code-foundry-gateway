@@ -921,6 +921,30 @@ $mutations = @(
        To    = 'nothing to bind, continuing' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the VS Code setting is shown as a map'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'array of name/value objects'
+       To    = 'map of names to values' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the manual steps drop the role assignment'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'Cognitive Services User'
+       To    = 'Reader' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the reload after changing VS Code settings is dropped'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'Developer: Reload Window'
+       To    = 'it applies immediately' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the gateway appendix goes back to implying duplication'
+       File  = 'DEVELOPER.md'
+       From  = '"claudeCode.environmentVariables": ['
+       To    = 'VS Code needs the same values again: [' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'a gateway config is applied as a direct one'
        File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
        From  = 'looks like a gateway config'
