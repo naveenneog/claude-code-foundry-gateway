@@ -1109,6 +1109,18 @@ Assert 'with the measured figures'               ($sbg -match '6\.8M')
 Assert 'and which way the error runs'            ($sbg -match 'budget runs higher than the figure suggests')
 Assert 'the period name is not taken on trust'   ($sbg -match 'TokensPerMonth is named for its first caller')
 
+# The developer guide is the page a developer actually opens, and it is the one
+# that has to explain the failure they will actually hit.
+$dev2 = Get-Content (Join-Path $root 'DEVELOPER.md') -Raw
+Assert 'the developer guide lists its sections'  ($dev2 -match '(?m)^\*\*In this article\*\*')
+Assert 'and states what is needed first'         ($dev2 -match '(?m)^## Prerequisites')
+Assert 'it says no Azure role is needed'         ($dev2 -match 'no Azure role, no API key')
+Assert 'the preflight is offered to developers'  ($dev2 -match 'Onboard-ClaudeDeveloper\.ps1 -ConfigPath \.\\claude-gateway\.json -PreflightOnly')
+Assert 'with what each check catches'            ($dev2 -match 'a proxy that cuts the response once it starts streaming')
+Assert 'and it is said to write nothing'         ($dev2 -match 'it writes nothing either way')
+Assert 'the streaming failure is called out'     ($dev2 -match 'every prompt dies with `ECONNRESET`')
+Assert 'and routed to a proxy exclusion'         ($dev2 -match 'a proxy exclusion rather than a firewall rule')
+
 $onb2 = Get-Content (Join-Path $root 'docs/ONBOARDING.md') -Raw
 Assert 'onboarding documents the preflight'      ($onb2 -match '(?m)^## 7\. Checking a machine before you promise a date')
 Assert 'with the four checks named'              ($onb2 -match '\| 3 \| network \|')

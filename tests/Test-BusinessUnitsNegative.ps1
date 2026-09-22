@@ -2489,6 +2489,24 @@ $mutations = @(
        File  = 'scripts/Set-ClaudeBudget.ps1'
        From  = 'TokensPerMonth is named for its first caller'
        To    = 'TokensPerMonth is monthly' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the developer guide loses its preflight'
+       File  = 'DEVELOPER.md'
+       From  = '-ConfigPath .\claude-gateway.json -PreflightOnly'
+       To    = '-ConfigPath .\claude-gateway.json' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the streaming failure stops being named for developers'
+       File  = 'DEVELOPER.md'
+       From  = 'every prompt dies with `ECONNRESET`'
+       To    = 'it fails' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a reset is routed to a firewall rule again'
+       File  = 'DEVELOPER.md'
+       From  = 'a proxy exclusion rather than a firewall rule'
+       To    = 'a firewall rule' }
 )
 
 $missed = @()

@@ -11,6 +11,23 @@ takes, and you already are.
 Nothing on this page needs administrator rights. If you are the person *setting
 the gateway up*, you want [docs/SETUP.md](docs/SETUP.md) instead.
 
+**In this article**
+
+1. [One command](#one-command)
+2. [Using it](#using-it)
+3. [If something is wrong](#if-something-is-wrong)
+4. [FAQ](#faq)
+5. [Appendix — configuring it by hand](#appendix--configuring-it-by-hand)
+
+## Prerequisites
+
+| | |
+|---|---|
+| **`claude-gateway.json`** | from your platform team. It carries the gateway URL, tenant and tier limits |
+| **Azure CLI** | the setup installs it if it is missing |
+| **Entitlement** | membership of the group your platform team put you in. Nothing else — no Azure role, no API key |
+| **PowerShell 5.1 or 7** | on Windows. macOS and Linux use the shell script |
+
 ---
 
 ## One command
@@ -65,6 +82,38 @@ Re-run the script any time; it reconciles rather than duplicating.
 > pacman or zypper. If `npm install -g` fails on Linux it is almost always a
 > non-writable global prefix rather than anything to do with Claude:
 > `npm config set prefix ~/.npm-global && export PATH=~/.npm-global/bin:$PATH`
+
+### Check first, if you would rather not find out afterwards
+
+The setup above configures and then proves it works. If you would rather know
+*before* anything is written — or if the setup failed and you want the reason
+rather than the symptom — run the checks on their own:
+
+```powershell
+.\scripts\Onboard-ClaudeDeveloper.ps1 -ConfigPath .\claude-gateway.json -PreflightOnly
+```
+
+![The preflight running four checks — tooling, identity, network and access — and reporting that nothing was written](docs/guide/onboard-preflight.png)
+
+Four checks, and it writes nothing either way:
+
+| # | Check | What it catches |
+|---|---|---|
+| 1 | tooling | no Azure CLI |
+| 2 | identity | not signed in, or signed in to a different tenant than the file names |
+| 3 | network | a blocked host, and separately a proxy that cuts the response once it starts streaming |
+| 4 | access | a token the model refuses, or a model name that is not deployed |
+
+Drop `-PreflightOnly` and it checks, configures and verifies in one go — and
+stops before writing anything if a check fails.
+
+> [!TIP]
+> Check 3 is the one worth knowing about. Claude streams its answers, and many
+> corporate proxies cannot forward a stream — so every host is reachable, the
+> setup looks correct, and every prompt dies with `ECONNRESET`. If that is what
+> you are seeing, the fix is a proxy exclusion rather than a firewall rule, and
+> [docs/NETWORK.md](docs/NETWORK.md) has the exact wording to send your network
+> team.
 
 ---
 
