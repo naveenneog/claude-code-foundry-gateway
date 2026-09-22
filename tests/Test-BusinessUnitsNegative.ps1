@@ -2428,6 +2428,36 @@ $mutations = @(
        File  = 'scripts/Onboard-ClaudeDeveloper.ps1'
        From  = 'was skipped at your request, so it still points where it did'
        To    = 'is misconfigured' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'redundancy stops being costed at all'
+       File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
+       From  = '[switch]$CompareRedundancy'
+       To    = '[switch]$CompareRedundancyUnused,' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'zone redundancy is presented as a published price'
+       File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
+       From  = 'Derived at 1.25x provisioned'
+       To    = 'Read from the price list' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the billing model change stops being the headline'
+       File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
+       From  = 'The switch is the billing model, not a feature flag'
+       To    = 'Redundancy is a setting' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a stale price is shown when the API is down'
+       File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
+       From  = 'No figures are shown rather than stale ones'
+       To    = 'Falling back to the table above' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the standing cost of provisioned is dropped'
+       File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
+       From  = 'so an idle projection stops being free'
+       To    = 'so it is much the same' }
 )
 
 $missed = @()

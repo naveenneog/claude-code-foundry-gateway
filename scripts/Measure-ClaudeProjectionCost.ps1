@@ -90,7 +90,23 @@ param(
     [decimal]$UsdPerEndpointHour = 0.01,
     [int]$PrivateEndpoints = 1,
 
-    [switch]$AsJson
+    [switch]$AsJson,
+
+    # Where to price. Redundancy choices are regional - serverless in
+    # westeurope is $0.305 per million request units against $0.25 in eastus2 -
+    # so the comparison is worthless without one.
+    [string]$Region = 'eastus2',
+
+    # Show what each redundancy choice costs and what it buys, rather than
+    # costing only the shape that is deployed. This is a decision an
+    # organisation makes once, usually without a number in front of it.
+    [switch]$CompareRedundancy,
+
+    # Provisioned throughput to price the redundant options at. 400 RU/s is the
+    # minimum Cosmos sells and already far more than this projection uses -
+    # measured below at well under 1 RU/s average - so the redundant options are
+    # priced at the floor rather than at anything derived from the workload.
+    [int]$Throughput = 400
 )
 
 $ErrorActionPreference = 'Stop'
@@ -196,4 +212,72 @@ Write-Host '  Rates are published US list, read 2026-09-17, and are regional. Ex
 Write-Host '  egress, Log Analytics ingestion and the Function App storage account.' -ForegroundColor DarkGray
 Write-Host ''
 
+# ---------------------------------------------------------------- redundancy
+#
+# What the three choices cost, and what each one buys. This is decided once,
+# usually without a number in front of whoever decides it, and the number is
+# not intuitive: the difference is not a percentage on a small bill, it is the
+# difference between a bill that exists only when someone signs in and one that
+# arrives every month whether or not anyone does.
+#
+# Priced live rather than quoted. The figures above are a dated snapshot, which
+# is honest for a worked example and wrong for a decision.
+if ($CompareRedundancy) {
+    . (Join-Path $PSScriptRoot 'AzureRetailPrice.ps1')
+
+    $serverless = Get-AzureRetailPrice -ServiceName 'Azure Cosmos DB' -Region $Region -MeterName '1M RUs'
+    $provisioned = Get-AzureRetailPrice -ServiceName 'Azure Cosmos DB' -Region $Region -MeterName '100 RU/s' -SkuName 'RUs'
+    $multiMaster = Get-AzureRetailPrice -ServiceName 'Azure Cosmos DB' -Region $Region -MeterName '100 Multi-master RU/s'
+
+    Write-Host '  Redundancy, and what each choice costs' -ForegroundColor Cyan
+    if (-not $serverless -or -not $provisioned -or -not $multiMaster) {
+        Write-Host '  Could not read live prices - the retail price API was unreachable.' -ForegroundColor Yellow
+        Write-Host '  No figures are shown rather than stale ones.' -ForegroundColor DarkGray
+        Write-Host ''
+    }
+    else {
+        $units = [math]::Ceiling($Throughput / 100)
+        $singleMonthly = [math]::Round($provisioned.UnitPrice * $units * 730, 2)
+        $multiMonthly = [math]::Round($multiMaster.UnitPrice * $units * 730, 2)
+        # Zone redundancy has no meter of its own - measured: zero meters in
+        # this service mention zone or availability. It is a multiplier on
+        # provisioned throughput, so it is derived and labelled as derived
+        # rather than presented as a published price.
+        $zoneMonthly = [math]::Round($singleMonthly * 1.25, 2)
+
+        Write-Host ("  Priced in {0} for {1} RU/s, at 730 hours." -f $Region, $Throughput) -ForegroundColor DarkGray
+        Write-Host ''
+        Write-Host ("  {0,-14} {1,12}  {2}" -f 'Choice', 'Per month', 'What it gives, and what it costs you')
+        Write-Host ('  ' + ('-' * 104)) -ForegroundColor DarkGray
+
+        Write-Host ("  {0,-14} {1,12}  {2}" -f 'single', ('$' + ('{0:n2}' -f ($cosmosRuUsd + $storageUsd))), 'serverless - billed per request unit, nothing at rest') -ForegroundColor Green
+        Write-Host ("  {0,-14} {1,12}  {2}" -f '', '', 'No SLA on throughput or latency. Cannot be made redundant.')
+        Write-Host ("  {0,-14} {1,12}  {2}" -f '', '', 'That figure is your measured usage above, not a fixed charge.') -ForegroundColor DarkGray
+
+        Write-Host ("  {0,-14} {1,12}  {2}" -f 'zone', ('$' + ('{0:n2}' -f $zoneMonthly)), 'survives one datacentre failing, inside one region') -ForegroundColor Yellow
+        Write-Host ("  {0,-14} {1,12}  {2}" -f '', '', 'Provisioned throughput, so this is charged whether used or not.')
+        Write-Host ("  {0,-14} {1,12}  {2}" -f '', '', 'Derived at 1.25x provisioned - zone redundancy has no meter of its own.') -ForegroundColor DarkGray
+
+        Write-Host ("  {0,-14} {1,12}  {2}" -f 'multi-region', ('$' + ('{0:n2}' -f ($multiMonthly * 2))), 'survives a region failing; writes accepted in both') -ForegroundColor Yellow
+        Write-Host ("  {0,-14} {1,12}  {2}" -f '', '', ("Multi-master at `${0:n2} per region, shown for two." -f $multiMonthly))
+        Write-Host ("  {0,-14} {1,12}  {2}" -f '', '', 'Add egress between regions, which is not priced here.') -ForegroundColor DarkGray
+
+        Write-Host ''
+        Write-Host '  The switch is the billing model, not a feature flag.' -ForegroundColor Cyan
+        Write-Host '  Serverless cannot be zone-redundant or multi-region. Choosing either moves the' -ForegroundColor DarkGray
+        Write-Host '  account to provisioned throughput, which bills for capacity rather than use -' -ForegroundColor DarkGray
+        Write-Host '  so an idle projection stops being free. Changing it later means a new account' -ForegroundColor DarkGray
+        Write-Host '  and a migration, because the capability is fixed when the account is created.' -ForegroundColor DarkGray
+        Write-Host ''
+        Write-Host '  Worth weighing against what the projection is for: entitlement is cached at' -ForegroundColor DarkGray
+        Write-Host ("  the gateway for {0} minutes, so a resolver outage is not felt until a record" -f $CacheMinutes) -ForegroundColor DarkGray
+        Write-Host '  expires. That is the argument for single, and it is an argument about your' -ForegroundColor DarkGray
+        Write-Host '  tolerance rather than about Cosmos.' -ForegroundColor DarkGray
+        Write-Host ''
+        Write-Host ("  Live list prices for {0}, read just now from prices.azure.com." -f $Region) -ForegroundColor DarkGray
+        Write-Host ''
+    }
+}
+
 exit 0
+

@@ -1074,6 +1074,25 @@ Assert 'the gateway is verified by its own check' ($ob -match "Join-Path \`$scri
 Assert 'and the direct path by its own'          ($ob -match '& \$check -Resource \$cfg\.foundryResource -Expect direct')
 Assert 'a skipped client is not reported as a fault' ($ob -match 'was skipped at your request, so it still points where it did')
 
+# Redundancy, costed. The decision is made once and usually without a number
+# in front of whoever makes it, and the number is not intuitive - the gap is
+# not a percentage, it is the difference between a bill that exists only when
+# someone signs in and one that arrives every month regardless.
+$mpc = Get-Content (Join-Path $root 'scripts/Measure-ClaudeProjectionCost.ps1') -Raw
+Assert 'redundancy choices can be compared'      ($mpc -match '\[switch\]\$CompareRedundancy,')
+Assert 'priced in a named region'                ($mpc -match 'Redundancy choices are regional')
+Assert 'with a worked regional difference'       ($mpc -match 'westeurope is \$0\.305')
+Assert 'prices are read live for the comparison' ($mpc -match "Get-AzureRetailPrice -ServiceName 'Azure Cosmos DB' -Region \`$Region -MeterName '1M RUs'")
+Assert 'and no figures are shown when it fails'  ($mpc -match 'No figures are shown rather than stale ones')
+# Zone redundancy is a multiplier, not a published meter - measured: zero
+# meters in this service mention zone or availability. Presenting a derived
+# number as a read one is the thing to avoid.
+Assert 'zone redundancy is marked as derived'    ($mpc -match 'Derived at 1\.25x provisioned')
+Assert 'the billing model change is the headline' ($mpc -match 'The switch is the billing model, not a feature flag')
+Assert 'an idle projection stops being free'     ($mpc -match 'so an idle projection stops being free')
+Assert 'and the change is said to need migration' ($mpc -match 'Changing it later means a new account')
+Assert 'the cache window is offered as the counter-argument' ($mpc -match 'a resolver outage is not felt until a record')
+
 $onb2 = Get-Content (Join-Path $root 'docs/ONBOARDING.md') -Raw
 Assert 'onboarding documents the preflight'      ($onb2 -match '(?m)^## 7\. Checking a machine before you promise a date')
 Assert 'with the four checks named'              ($onb2 -match '\| 3 \| network \|')
