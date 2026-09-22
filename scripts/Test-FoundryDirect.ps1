@@ -35,7 +35,11 @@ param(
     # device-code flow it uses. That flow fails before any token exists, so no
     # role assignment can fix it and the other checks here cannot see it.
     [string]$ClientId,
-    [string]$TenantId
+    [string]$TenantId,
+    # Which shape this machine is supposed to be in. Run against a healthy
+    # gateway machine without this, the client checks report failures for
+    # pointing at the gateway - which is correct and also not a fault.
+    [ValidateSet('direct', 'gateway')][string]$Expect = 'direct'
 )
 
 $ErrorActionPreference = 'Continue'
@@ -56,6 +60,21 @@ Write-Host "Claude Code on Microsoft Foundry - verification" -ForegroundColor Cy
 Write-Host "Resource : $Resource"
 Write-Host "Endpoint : $BaseUrl"
 Write-Host "Model    : $Model"
+# Two client versions moved under us in a single day - Desktop 2.110.1.0 to
+# 2.2553.1.0, the CLI 2.1.241 to 2.1.272. The measured facts this suite relies
+# on (the VS Code setting being an array of name/value objects, the Desktop
+# profile key names) were read from particular builds, so a later failure can
+# only be correlated if the versions are in the report.
+$verCli = if (Get-Command claude -ErrorAction SilentlyContinue) { (claude --version 2>$null | Out-String).Trim() } else { 'absent' }
+$verDesk = 'absent'
+try { $pk = Get-AppxPackage -Name '*Claude*' -ErrorAction SilentlyContinue; if ($pk) { $verDesk = $pk.Version } } catch { }
+$verExt = 'absent'
+try {
+    $ext = (code --list-extensions --show-versions 2>$null | Select-String 'anthropic.claude-code')
+    if ($ext) { $verExt = ($ext -split '@')[-1] }
+} catch { }
+Write-Host "Expect   : $Expect"
+Write-Host "Versions : CLI $verCli | Desktop $verDesk | extension $verExt"
 Write-Host ""
 
 # 1. Azure CLI sign-in ------------------------------------------------------
@@ -244,9 +263,10 @@ Add-Result 'Claude CLI is configured' ([bool]$cliTarget) $(if ($cliTarget) { "$c
 # all genuinely fine - and is still not on the direct path.
 if ($cliTarget) {
     $onDirect = ($cliTarget -eq "resource:$Resource") -or ($cliTarget -eq $expected)
-    Add-Result 'Claude CLI points at this resource' $onDirect $(
-        if ($onDirect) { 'direct path' }
-        elseif ($cliTarget -match 'azure-api\.net') { "this machine is on the gateway ($cliTarget), not the direct path" }
+    $wanted = ($Expect -eq 'direct')
+    Add-Result 'Claude CLI points where expected' ($onDirect -eq $wanted) $(
+        if ($onDirect -eq $wanted) { "$Expect path" }
+        elseif ($cliTarget -match 'azure-api\.net') { "on the gateway ($cliTarget), not the direct path" }
         else { "points at $cliTarget" })
 }
 
@@ -261,7 +281,20 @@ if (Test-Path $codeFile) {
             Add-Result 'VS Code agrees with the CLI' $agrees $(
                 if ($agrees) { 'same target' } else { "VS Code -> $codeTarget, CLI -> $cliTarget" })
         }
-    } catch { }
+        else {
+            Write-Host '  [SKIP] VS Code agrees with the CLI' -ForegroundColor Yellow
+            Write-Host '         No claudeCode.environmentVariables set. That is the normal case -' -ForegroundColor DarkGray
+            Write-Host '         the extension reads ~/.claude/settings.json and prefers it.' -ForegroundColor DarkGray
+        }
+    } catch {
+        Write-Host '  [SKIP] VS Code agrees with the CLI' -ForegroundColor Yellow
+        Write-Host '         settings.json could not be parsed - JSON with comments is valid there.' -ForegroundColor DarkGray
+    }
+}
+else {
+    # Silently omitting a check reads as a pass. Say it was not run.
+    Write-Host '  [SKIP] VS Code agrees with the CLI' -ForegroundColor Yellow
+    Write-Host "         No user settings file at $codeFile" -ForegroundColor DarkGray
 }
 
 $lib = Join-Path $env:LOCALAPPDATA 'Claude-3p\configLibrary'
@@ -273,15 +306,73 @@ if (Test-Path $metaFile) {
         if (Test-Path $pf) {
             $dp = Get-Content $pf -Raw | ConvertFrom-Json
             $agrees = $dp.inferenceGatewayBaseUrl -eq $expected
-            Add-Result 'Claude Desktop points at this resource' $agrees $(
-                if ($agrees) { 'direct path' }
+            $wantedD = ($Expect -eq 'direct')
+            Add-Result 'Claude Desktop points where expected' ($agrees -eq $wantedD) $(
+                if ($agrees -eq $wantedD) { "$Expect path" }
                 elseif ($dp.inferenceGatewayBaseUrl -match 'azure-api\.net') { "on the gateway ($($dp.inferenceGatewayBaseUrl)), not the direct path" }
                 else { "Desktop -> $($dp.inferenceGatewayBaseUrl)" })
-            if ($dp.inferenceCredentialHelper -and -not (Test-Path $dp.inferenceCredentialHelper)) {
-                Add-Result 'Desktop credential helper exists' $false $dp.inferenceCredentialHelper
+            if ($dp.inferenceCredentialHelper) {
+                if (-not (Test-Path $dp.inferenceCredentialHelper)) {
+                    Add-Result 'Desktop credential helper exists' $false $dp.inferenceCredentialHelper
+                }
+                else {
+                    # Existing is not working. The helper that broke Desktop on
+                    # 2026-09-22 was present, executable, and named in the
+                    # profile - it simply could not find az, because Desktop
+                    # spawns it with the environment the app started with. That
+                    # failure passed every check in this file. So run it.
+                    $helperEnvOk = $true
+                    if ($dp.inferenceCredentialHelper -match 'helper|foundry') {
+                        $tenantForHelper = [Environment]::GetEnvironmentVariable('CLAUDE_FOUNDRY_TENANT_ID', 'User')
+                        if (-not $tenantForHelper) { $tenantForHelper = $env:CLAUDE_FOUNDRY_TENANT_ID }
+                        $helperEnvOk = [bool]$tenantForHelper
+                        Add-Result 'Desktop helper knows its tenant' $helperEnvOk $(
+                            if ($helperEnvOk) { "CLAUDE_FOUNDRY_TENANT_ID=$tenantForHelper" }
+                            else { 'CLAUDE_FOUNDRY_TENANT_ID is not set - a guest or multi-tenant account will get a home-tenant token the gateway refuses' })
+                    }
+
+                    $out = ''
+                    try { $out = (& $dp.inferenceCredentialHelper 2>&1 | Out-String) } catch { $out = $_.Exception.Message }
+                    $gotToken = ($out -match '(?m)^eyJ')
+                    Add-Result 'Desktop helper returns a token' $gotToken $(
+                        if ($gotToken) { 'JWT on stdout' }
+                        else { ($out -split "`r?`n" | Where-Object { $_ } | Select-Object -First 1) })
+
+                    # And the way Desktop actually calls it. A helper that only
+                    # works because this shell has the Azure CLI on PATH will
+                    # fail the moment Desktop runs it.
+                    if ($gotToken) {
+                        $stripped = (($env:Path -split ';') | Where-Object { $_ -and $_ -notmatch 'Azure\\CLI2' }) -join ';'
+                        $q = '"' + $dp.inferenceCredentialHelper + '"'
+                        $out2 = cmd /c "set ""PATH=$stripped"" && $q 2>&1"
+                        $survives = (@($out2) -match '^eyJ').Count -gt 0
+                        Add-Result 'and without the CLI on PATH' $survives $(
+                            if ($survives) { 'resolves az independently of PATH' }
+                            else { 'helper depends on PATH - Desktop inherits a stale environment and will fail' })
+                    }
+                }
             }
         }
     } catch { }
+}
+# 8b. What the model list actually does -------------------------------------
+# enforceAvailableModels reads like it refuses an unlisted model. Measured on
+# 2026-09-22 against CLI 2.1.272, it does not: asking for gpt-4o, and for a
+# Claude model absent from the list, both returned claude-sonnet-5 with no
+# error. That is safe - nothing unlisted is ever called - but it is silent, so
+# the check asserts substitution rather than refusal.
+if ($cli -and $Expect -eq 'direct' -and $cliTarget -eq "resource:$Resource") {
+    try {
+        $sub = claude -p 'Reply with exactly: SUB' --model gpt-4o --output-format json 2>$null | Out-String | ConvertFrom-Json
+        $usedName = ($sub.modelUsage.PSObject.Properties | Select-Object -First 1).Name
+        $allowed = @()
+        try { $allowed = @((Get-Content $cliFile -Raw | ConvertFrom-Json).availableModels) } catch { }
+        $constrained = ($usedName -and ($allowed -contains $usedName))
+        Add-Result 'an unlisted model is substituted, not served' $constrained $(
+            if ($constrained) { "asked for gpt-4o, served $usedName - silently, with no error" }
+            else { "asked for gpt-4o and got $usedName, which is not in availableModels" })
+    }
+    catch { Write-Host '  [SKIP] model substitution - could not complete a turn' -ForegroundColor Yellow }
 }
 
 # 9. Entra device-code init, only when a client id is given -----------------

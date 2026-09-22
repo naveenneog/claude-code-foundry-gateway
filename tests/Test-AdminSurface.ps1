@@ -521,14 +521,34 @@ Assert 'the health check names the principal' ($td -match '(?i)Token belongs to 
 Assert 'and checks the tenant owns it'        ($td -match '(?i)Resource is in the signed-in tenant')
 Assert 'and that a role reaches Claude'       ($td -match '(?i)A role reaches the Claude data plane')
 Assert 'on the unrestricted data action'      ($td.Contains("'Microsoft.CognitiveServices/*'"))
-Assert 'it compares all three clients'        (($td -match '(?i)Claude CLI points at this resource') -and
+Assert 'it compares all three clients'        (($td -match '(?i)Claude CLI points where expected') -and
                                                ($td -match '(?i)VS Code agrees with the CLI') -and
-                                               ($td -match '(?i)Claude Desktop points at this resource'))
+                                               ($td -match '(?i)Claude Desktop points where expected'))
 Assert 'a gateway machine is said to be one'  ($td -match '(?i)not the direct path')
 Assert 'the mutually exclusive pair is caught' ($td -match '(?i)mutually exclusive')
 Assert 'device-code init is checked'          ($td -match 'oauth2/v2\.0/devicecode')
 Assert 'and the AADSTS code is surfaced'      ($td -match "AADSTS\\d\+")
 Assert 'and named as not RBAC'                ($td -match '(?i)app registration or tenant, not RBAC')
+# Existing is not working. The helper that broke Desktop was present, named in
+# the profile, and executable - it simply could not find az. That passed every
+# check in the file, so the check now runs it.
+Assert 'the helper is executed, not just found' ($td -match '(?i)Desktop helper returns a token')
+Assert 'and run the way Desktop runs it'        ($td -match '(?i)and without the CLI on PATH')
+Assert 'with the CLI stripped from PATH'        ($td.Contains("-notmatch 'Azure\\CLI2'"))
+Assert 'the tenant variable is checked'         ($td -match '(?i)Desktop helper knows its tenant')
+Assert 'and why it matters is stated'           ($td -match '(?i)home-tenant token the gateway refuses')
+# Measured: enforceAvailableModels substitutes silently rather than refusing.
+Assert 'the model list behaviour is asserted'   ($td -match '(?i)an unlisted model is substituted, not served')
+Assert 'and described as silent'                ($td -match '(?i)silently, with no error')
+# A gateway machine is not a broken machine.
+Assert 'the expected shape is a parameter'      ($td -match "\[ValidateSet\('direct', 'gateway'\)\]\[string\]\`$Expect")
+Assert 'and both clients honour it'             (($td -match 'Claude CLI points where expected') -and
+                                                 ($td -match 'Claude Desktop points where expected'))
+# Two client versions moved in one day; a later failure needs correlating.
+Assert 'client versions are reported'           ($td -match '(?i)Versions : CLI')
+Assert 'including the VS Code extension'        ($td -match 'code --list-extensions --show-versions')
+# Omitting a check silently reads as a pass.
+Assert 'a skipped VS Code check says so'        ($td -match '(?i)No user settings file at')
 # The Desktop 400. Documented separately because it is the one failure here
 # that a role assignment cannot touch.
 Assert 'the device-code 400 is documented'    ($fd -match '(?i)Foundry Entra device init failed: HTTP 400')

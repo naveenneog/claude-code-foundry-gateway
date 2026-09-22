@@ -921,6 +921,42 @@ $mutations = @(
        To    = 'nothing to bind, continuing' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the health check stops running the Desktop helper'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'Desktop helper returns a token'
+       To    = 'Desktop helper is present' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the helper is no longer run without the CLI on PATH'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'and without the CLI on PATH'
+       To    = 'and again for luck' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the tenant variable stops being checked'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'Desktop helper knows its tenant'
+       To    = 'Desktop helper tenant, informational' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the model list is claimed to refuse rather than substitute'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'an unlisted model is substituted, not served'
+       To    = 'an unlisted model is refused' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a gateway machine cannot be declared expected'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = "[ValidateSet('direct', 'gateway')][string]`$Expect = 'direct'"
+       To    = "[string]`$Expect = 'direct'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a missing VS Code config is silently omitted again'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'No user settings file at'
+       To    = 'skipped:' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the helper goes back to trusting PATH'
        File  = 'scripts/get-foundry-token.ps1'
        From  = "Microsoft SDKs\Azure\CLI2\wbin\az.cmd"
