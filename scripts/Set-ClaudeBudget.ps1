@@ -26,11 +26,33 @@
 .PARAMETER Tokens
     New daily token budget for that developer.
 
+.PARAMETER DailyUsd
+    The same budget expressed as money, converted with the price book before it
+    is written. The gateway counts tokens, not dollars, so what is stored is
+    still a token figure - this only removes the arithmetic, and the conversion
+    is the same one business-unit budgets use so the two cannot drift.
+
+    Read the result as an approximation at list price, in one direction. The
+    counter cannot see cached tokens: `llm-token-limit` counts prompt and
+    completion only, and on thirty days of measured usage cache reads were 6.8M
+    tokens against 320K prompt and 152K completion. A budget set from a dollar
+    figure therefore allows more real spend than the figure suggests, never
+    less.
+
+.PARAMETER Model
+    Which model's rates to convert at. Rates differ fivefold between Opus and
+    Sonnet on output, so a dollar budget means a different number of tokens
+    depending on what the person actually calls.
+
 .PARAMETER Clear
     Remove the override so the tier default applies again.
 
 .EXAMPLE
     ./scripts/Set-ClaudeBudget.ps1 -User someone@contoso.com -Tokens 2000000
+
+.EXAMPLE
+    # the same thing, in money
+    ./scripts/Set-ClaudeBudget.ps1 -User someone@contoso.com -DailyUsd 25
 
 .EXAMPLE
     ./scripts/Set-ClaudeBudget.ps1 -User someone@contoso.com -Clear
@@ -41,11 +63,21 @@
 [CmdletBinding(DefaultParameterSetName = 'Set')]
 param(
     [Parameter(ParameterSetName = 'Set', Mandatory = $true)]
+    [Parameter(ParameterSetName = 'SetUsd', Mandatory = $true)]
     [Parameter(ParameterSetName = 'Clear', Mandatory = $true)]
     [string]$User,
 
     [Parameter(ParameterSetName = 'Set', Mandatory = $true)]
     [long]$Tokens,
+
+    [Parameter(ParameterSetName = 'SetUsd', Mandatory = $true)]
+    [decimal]$DailyUsd,
+
+    [Parameter(ParameterSetName = 'SetUsd')]
+    [string]$Model = 'claude-sonnet-5',
+
+    [Parameter(ParameterSetName = 'SetUsd')]
+    [decimal]$OutputShare = 0.2,
 
     [Parameter(ParameterSetName = 'Clear', Mandatory = $true)]
     [switch]$Clear,
@@ -58,6 +90,36 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Money, converted once and by the same function business-unit budgets use.
+# Two implementations of "what is a dollar worth in tokens" is how a per-person
+# budget and a per-team budget come to disagree about the same money.
+if ($PSCmdlet.ParameterSetName -eq 'SetUsd') {
+    . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
+    # TokensPerMonth is named for its first caller. The arithmetic is
+    # period-agnostic - dollars divided by a blended rate per million - so the
+    # same call answers "tokens for $25 a day" and the period is whatever the
+    # caller meant. Named locally for what it is here, so the daily budget
+    # written below is not read as a monthly one.
+    $conv = ConvertTo-ClaudeBuTokens -Usd $DailyUsd -Model $Model -OutputShare $OutputShare
+    $Tokens = [long]$conv.TokensPerMonth
+
+    Write-Host ''
+    Write-Host ("  `${0} a day at {1} rates" -f $DailyUsd, $Model) -ForegroundColor Cyan
+    Write-Host ("    blended     `${0} per million tokens, assuming {1:P0} output" -f $conv.BlendedUsdPerM, $OutputShare) -ForegroundColor DarkGray
+    Write-Host ("    budget      {0:n0} tokens per day" -f $Tokens) -ForegroundColor DarkGray
+    Write-Host ("    price book  {0}" -f $conv.PriceBookDate) -ForegroundColor DarkGray
+    Write-Host ''
+    # Stated at the point of decision rather than in a document nobody opens
+    # while running this. The error is one-directional, which is the part worth
+    # knowing: a budget set from money always permits more real spend than the
+    # money implies, never less.
+    Write-Host '  This is list price, and the counter cannot see cached tokens - llm-token-limit' -ForegroundColor Yellow
+    Write-Host '  counts prompt and completion only. On measured usage cache reads were 6.8M' -ForegroundColor Yellow
+    Write-Host '  tokens against 320K prompt and 152K completion, so real spend against this' -ForegroundColor Yellow
+    Write-Host '  budget runs higher than the figure suggests. Never lower.' -ForegroundColor Yellow
+    Write-Host ''
+}
 
 $sub = az account show --query id -o tsv 2>$null
 if (-not $sub) { throw 'Not signed in. Run: az login' }

@@ -2458,6 +2458,37 @@ $mutations = @(
        File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
        From  = 'so an idle projection stops being free'
        To    = 'so it is much the same' }
+
+    # A developer budget in money.
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a developer budget can no longer be set in money'
+       File  = 'scripts/Set-ClaudeBudget.ps1'
+       From  = '[decimal]$DailyUsd'
+       To    = '[decimal]$DailyUsdUnused,' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the dollar conversion is reimplemented locally'
+       File  = 'scripts/Set-ClaudeBudget.ps1'
+       From  = 'ConvertTo-ClaudeBuTokens -Usd $DailyUsd'
+       To    = 'ConvertTo-SomethingElse -Usd $DailyUsd' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the cache blind spot is dropped from the budget prompt'
+       File  = 'scripts/Set-ClaudeBudget.ps1'
+       From  = 'counts prompt and completion only'
+       To    = 'counts everything' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the direction of the budget error stops being stated'
+       File  = 'scripts/Set-ClaudeBudget.ps1'
+       From  = 'budget runs higher than the figure suggests'
+       To    = 'budget is approximate' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the borrowed period name is taken on trust'
+       File  = 'scripts/Set-ClaudeBudget.ps1'
+       From  = 'TokensPerMonth is named for its first caller'
+       To    = 'TokensPerMonth is monthly' }
 )
 
 $missed = @()

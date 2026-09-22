@@ -1093,6 +1093,22 @@ Assert 'an idle projection stops being free'     ($mpc -match 'so an idle projec
 Assert 'and the change is said to need migration' ($mpc -match 'Changing it later means a new account')
 Assert 'the cache window is offered as the counter-argument' ($mpc -match 'a resolver outage is not felt until a record')
 
+# A per-developer budget in money. Business units could already be budgeted in
+# dollars and individuals could not, so the same decision was arithmetic in one
+# place and not the other.
+$sbg = Get-Content (Join-Path $root 'scripts/Set-ClaudeBudget.ps1') -Raw
+Assert 'a developer budget can be set in money'  ($sbg -match '\[decimal\]\$DailyUsd,')
+Assert 'converted by the business-unit function' ($sbg -match 'ConvertTo-ClaudeBuTokens -Usd \$DailyUsd')
+Assert 'and not by a second implementation'      ($sbg -match 'is how a per-person')
+Assert 'the model is a parameter, not assumed'   ($sbg -match '\[string\]\$Model = ''claude-sonnet-5''')
+Assert 'the conversion shows its working'        ($sbg -match 'per million tokens, assuming')
+Assert 'with the price book date'                ($sbg -match 'price book  \{0\}')
+# The error is one-directional and that is the part worth knowing.
+Assert 'the cache blind spot is stated at the prompt' ($sbg -match 'counts prompt and completion only')
+Assert 'with the measured figures'               ($sbg -match '6\.8M')
+Assert 'and which way the error runs'            ($sbg -match 'budget runs higher than the figure suggests')
+Assert 'the period name is not taken on trust'   ($sbg -match 'TokensPerMonth is named for its first caller')
+
 $onb2 = Get-Content (Join-Path $root 'docs/ONBOARDING.md') -Raw
 Assert 'onboarding documents the preflight'      ($onb2 -match '(?m)^## 7\. Checking a machine before you promise a date')
 Assert 'with the four checks named'              ($onb2 -match '\| 3 \| network \|')
