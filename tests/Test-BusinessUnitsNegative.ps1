@@ -2210,6 +2210,106 @@ $mutations = @(
        File  = 'docs/NETWORK.md'
        From  = 'takes **`dev`**, not a credential name'
        To    = 'takes a credential name' }
+
+    # A Desktop that is configured correctly and will not open passed every
+    # other check, because they all read files.
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the health check stops testing that Desktop can start'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = "Add-Result 'Claude Desktop can start'"
+       To    = "Add-Result 'Claude Desktop is installed'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the sharing violation stops being named'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'ERROR_SHARING_VIOLATION'
+       To    = 'an unknown fault' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a running Desktop is reported as stuck'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = '$running.Count -eq 0'
+       To    = '$running.Count -ge 0' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'reinstalling is offered as the remedy again'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'Reinstalling does not help'
+       To    = 'Reinstalling fixes it' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the lock owner goes back to needing handle.exe'
+       File  = 'scripts/Get-FileLockOwner.ps1'
+       From  = 'RmGetList'
+       To    = 'RmGetListUnused' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a kernel-held file stops being explained'
+       File  = 'scripts/Get-FileLockOwner.ps1'
+       From  = 'locked, and no process owns it'
+       To    = 'locked by something' }
+
+    # Documentation evidence. A measured claim with no shown evidence is a
+    # claim nobody checks.
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the network doc loses its healthy screenshot'
+       File  = 'docs/NETWORK.md'
+       From  = '](guide/network-check.png)'
+       To    = '](guide/missing.png)' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the network doc loses its reset screenshot'
+       File  = 'docs/NETWORK.md'
+       From  = '](guide/network-reset.png)'
+       To    = '](guide/missing.png)' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the reset capture is no longer said to be real'
+       File  = 'docs/NETWORK.md'
+       From  = 'reproduced, not staged'
+       To    = 'illustrative' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the two network asks are conflated again'
+       File  = 'docs/NETWORK.md'
+       From  = 'gets the ticket closed as'
+       To    = 'is usually fine as' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the network doc drops its prerequisites'
+       File  = 'docs/NETWORK.md'
+       From  = 'necessary and not sufficient'
+       To    = 'all you need' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the README stops showing the priced BOM'
+       File  = 'README.md'
+       From  = '](docs/guide/bom-prices.png)'
+       To    = '](docs/guide/missing.png)' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'redaction stops preserving column alignment'
+       File  = 'scripts/Capture-Transcripts.ps1'
+       From  = 'Same length as the original, deliberately'
+       To    = 'Shortened for readability' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the cutting proxy is left running after capture'
+       File  = 'scripts/Capture-Transcripts.ps1'
+       From  = 'Stop-Process -Id $proxy.Id'
+       To    = 'Write-Host $proxy.Id' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a blocked host renders the same as a reachable one'
+       File  = 'scripts/render-terminal.mjs'
+       From  = '/\bBLOCKED\b/.test(line)'
+       To    = '/\bNEVERMATCHES\b/.test(line)' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the reason for colouring verdicts is dropped'
+       File  = 'scripts/render-terminal.mjs'
+       From  = 'a failure that looks like a success'
+       To    = 'colour is nice to have' }
 )
 
 $missed = @()
@@ -2257,7 +2357,7 @@ try {
         Copy-Item $_.FullName $dest -Force
     }
     New-Item -ItemType Directory -Path (Join-Path $sandbox 'docs/guide') -Force | Out-Null
-    foreach ($pattern in 'entra-*.png', 'obs-*.png', 'b6-*.png', 'd[0-9]-*.png') {
+    foreach ($pattern in 'entra-*.png', 'obs-*.png', 'b6-*.png', 'd[0-9]-*.png', 'network-*.png', 'bom-*.png') {
         Get-ChildItem (Join-Path $root 'docs/guide') -File -Filter $pattern -ErrorAction SilentlyContinue |
             ForEach-Object { Copy-Item $_.FullName (Join-Path $sandbox 'docs/guide') -Force }
     }

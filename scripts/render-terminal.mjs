@@ -81,6 +81,28 @@ function colourise(text) {
         return e.replace(/(\[WARN\])/, '<span style="color:#e5c07b;font-weight:600">$1</span>');
       if (/^\s+\[FAIL\]/.test(line))
         return e.replace(/(\[FAIL\])/, '<span style="color:#e06c75;font-weight:600">$1</span>');
+
+      // The network check reports verdicts as words rather than bracketed
+      // markers, so the rules above do not reach it and a blocked host renders
+      // the same as a reachable one. Colour carries most of the meaning in a
+      // screenshot, and a failure that looks like a success is worse than no
+      // screenshot.
+      if (/\breachable\b/.test(line) && !/BLOCKED/.test(line))
+        return e.replace(/(reachable)/, '<span style="color:#98c379;font-weight:600">$1</span>');
+      if (/\bBLOCKED\b/.test(line))
+        return e.replace(/(BLOCKED)/, '<span style="color:#e06c75;font-weight:600">$1</span>');
+      if (/^\s+(RESET|BUFFERED|TLS NOT TRUSTED)\b/.test(line))
+        return e.replace(/^(\s+)(RESET|BUFFERED|TLS NOT TRUSTED)/,
+          '$1<span style="color:#e06c75;font-weight:600">$2</span>');
+      if (/^\s+works - /.test(line))
+        return `<span style="color:#98c379">${e}</span>`;
+      if (/^\s+(This is not an allowlist problem|Every host is reachable and)/.test(line))
+        return `<span style="color:#e5c07b;font-weight:600">${e}</span>`;
+      // Money, so a bill of materials reads as figures rather than prose.
+      if (/USD\s[\d.]+/.test(line))
+        return e.replace(/(USD\s[\d.,]+[^\s]*)/g, '<span style="color:#98c379">$1</span>');
+      if (/^\s+rate unknown/.test(line))
+        return `<span style="color:#e5c07b">${e}</span>`;
       // Prompts: "  Label [default]: typed"
       const p = /^(\s+)(.*?)(\[[^\]]*\]):(.*)$/.exec(line);
       if (p) {

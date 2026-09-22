@@ -55,6 +55,51 @@ The preflight in both setup scripts reports whether the platform is affected.
 | The panel fails but the CLI works | The extension host is running an older build than the one installed on disk — it does not pick up auto-updates until the window reloads. A long-lived window can be several versions behind. **Developer: Reload Window**, and quit VS Code entirely if that is not enough. `Debug-ClaudeCode.ps1` reports this. |
 | Windows: a credential script returns *"Windows Subsystem for Linux has no installed distributions"* | Inside Git Bash a bare `az` resolves to the WSL shim. Use `az.cmd`. Note `command -v az.cmd` also fails because bash ignores `PATHEXT`, so probe by running the candidate and checking the result starts with `eyJ`. |
 
+## Claude Desktop
+
+| Symptom | Cause → Fix |
+|---|---|
+| Nothing happens when you open it, and no error is shown | Its app container cannot be created. See below. |
+| Connection dropped (ECONNRESET) while every host is reachable | Not an allowlist problem — see [NETWORK.md §6](NETWORK.md#6-econnreset-is-not-an-allowlist-problem). |
+
+### Desktop does not open at all
+
+Nothing appears, no window, no error, and no `claude` process. The deployment
+log — **Event Viewer → Applications and Services → Microsoft → Windows →
+AppXDeploymentServer/Operational** — shows:
+
+```
+Error while deleting file ...\Packages\Claude_pzs8sxrjxfjjc\SystemAppData\Helium\UserClasses.dat
+Error Code : 0x20.
+```
+
+`0x20` is `ERROR_SHARING_VIOLATION`. The package's own registry hives —
+`User.dat` and `UserClasses.dat` — are held open, so the app container cannot
+be built and the launch fails as `0x80070020`.
+
+**There is nothing to close.** Restart Manager attributes those handles to
+`System` (pid 4) and `Registry` (pid 276): the kernel has the hive loaded. It
+is in the AppX app-hive namespace rather than under `HKEY_USERS`, so
+`reg unload` cannot reach it either.
+
+Measured as ineffective against this state: `Reset-AppxPackage`, removing and
+re-registering the package, stopping the Cowork service, and Developer Mode —
+which was already on. **Reinstalling does not help, because the lock outlives
+the package.**
+
+**Sign out and back in, or restart.** That is the only thing that drops the
+hive.
+
+To confirm it is this and not something else:
+
+```powershell
+# names the holder, using the Restart Manager API - no Sysinternals needed
+./scripts/Get-FileLockOwner.ps1 -Path "$env:LOCALAPPDATA\Packages\Claude_pzs8sxrjxfjjc\SystemAppData\Helium\UserClasses.dat"
+```
+
+`Test-FoundryDirect.ps1` checks for this without launching anything: a lock on
+those files while no Claude process is running is the signature.
+
 ## Monitoring
 
 | Symptom | Cause → Fix |

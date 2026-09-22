@@ -434,6 +434,24 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Fixed
 
+- **A correctly configured Claude Desktop that would not open passed every
+  check.** All the Desktop checks read files, so a configuration that was right
+  everywhere reported healthy while the app did nothing when launched.
+
+  The cause was named wrongly first. `0x80070020` creating the app container
+  looked like a container fault needing a reboot; the deployment log actually
+  says `Error while deleting file ...UserClasses.dat. Error Code : 0x20`, and
+  `0x20` is `ERROR_SHARING_VIOLATION`. The package's own registry hives are
+  held open. `scripts/Get-FileLockOwner.ps1` — Restart Manager, so no
+  Sysinternals download and no elevation — attributes the handles to `System`
+  (pid 4) and `Registry` (pid 276): the kernel has the hive loaded. It sits in
+  the AppX app-hive namespace rather than under `HKEY_USERS`, so `reg unload`
+  cannot reach it, and **reinstalling does not help because the lock outlives
+  the package**. Signing out or restarting is the only remedy.
+
+  `Test-FoundryDirect.ps1` now detects it without launching anything: a lock on
+  those hives while no Claude process is running is the signature.
+
 - **The gateway price was overstated by 67%.** Quoted as ~$250/month in eight
   places; the measured list price is **$150.00** — `Basic v2 Unit` at
   $0.20548/hour over 730 hours, identical in eastus, eastus2 and westeurope.

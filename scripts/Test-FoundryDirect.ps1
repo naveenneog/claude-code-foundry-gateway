@@ -760,7 +760,54 @@ if (Test-Path $metaFile) {
         }
     } catch { }
 }
-# 8b. What the model list actually does -------------------------------------
+
+# 8a2. Can Desktop actually start? ------------------------------------------
+# Every check above reads Desktop's configuration. A perfectly configured
+# Desktop that will not launch passes all of them, which is the failure this
+# adds - measured on 2026-09-22, where the app was correct in every file and
+# simply did not open.
+#
+# The deployment log gave 0x80070020 creating the app container, and 0x20 is
+# ERROR_SHARING_VIOLATION: the package's own registry hives, User.dat and
+# UserClasses.dat under SystemAppData\Helium, were held open. That was worth
+# getting right, because the first diagnosis - a container fault needing a
+# reboot - named the wrong cause and the right remedy by luck.
+#
+# Restart Manager attributes the handles to System (pid 4) and Registry
+# (pid 276). The kernel has the hive loaded, so there is no process to close,
+# and it is in the AppX app-hive namespace rather than under HKEY_USERS, so it
+# cannot be unloaded with reg unload either. Signing out or restarting drops
+# it; nothing short of that does.
+#
+# Detected without launching anything: a lock on those files while no Claude
+# process is running is the signature.
+$pkg = $null
+try { $pkg = Get-AppxPackage -Name '*Claude*' -ErrorAction SilentlyContinue } catch { }
+if ($pkg) {
+    $running = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '^claude' })
+    if ($running.Count -eq 0) {
+        $hive = Join-Path $env:LOCALAPPDATA "Packages\$($pkg.PackageFamilyName)\SystemAppData\Helium"
+        $stuck = @()
+        foreach ($n in 'User.dat', 'UserClasses.dat') {
+            $f = Join-Path $hive $n
+            if (-not (Test-Path $f)) { continue }
+            try { $s = [IO.File]::Open($f, 'Open', 'ReadWrite', 'None'); $s.Close() }
+            catch { $stuck += $n }
+        }
+        Add-Result 'Claude Desktop can start' ($stuck.Count -eq 0) $(
+            if ($stuck.Count -eq 0) { 'no stale lock on the package hive' }
+            else { ($stuck -join ' and ') + ' held open while Desktop is not running' })
+        if ($stuck.Count) {
+            Note 'Desktop will fail to open with 0x80070020 creating its app container.'
+            Note 'The hive is held by the kernel, so no process can be closed and'
+            Note 'reg unload cannot reach it. Sign out and back in, or restart.'
+            Note 'Reinstalling does not help - the lock outlives the package.'
+            Note '  ./scripts/Get-FileLockOwner.ps1 names the holder'
+        }
+    }
+}
+
+# 8b. What the model list actually does -------------------------------------
 # enforceAvailableModels reads like it refuses an unlisted model. Measured on
 # 2026-09-22 against CLI 2.1.272, it does not: asking for gpt-4o, and for a
 # Claude model absent from the list, both returned claude-sonnet-5 with no

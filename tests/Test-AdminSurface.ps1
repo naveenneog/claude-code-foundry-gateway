@@ -619,7 +619,7 @@ Assert 'an existing setting is not overwritten'  ($td -match "GetEnvironmentVari
 Assert 'the token override is warned against'    ($td -match 'ANTHROPIC_FOUNDRY_AUTH_TOKEN')
 Assert 'because it expires'                      ($td -match '(?i)expires in about an hour')
 Assert 'the pin is documented'                   ($fd.Contains("SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','dev','User')"))
-Assert 'and cited'                               ($fd -match 'credential-chains#defaultazurecredential-overview')
+Assert 'and cited'                               ($fd -match 'credential-chains#defaultazurecredential-overview')Assert 'and cited'                               ($fd -match 'credential-chains#defaultazurecredential-overview')
 Assert 'with the token override ruled out'       ($fd -match '(?i)Do not set `ANTHROPIC_FOUNDRY_AUTH_TOKEN`')
 # Hand-written configuration is where invented model names come from. Claude
 # Code refuses with "not available on your foundry deployment", which reads as
@@ -989,6 +989,70 @@ Assert 'ECONNRESET has its own section'          ($nw -match '(?m)^## 6\. ECONNR
 Assert 'with the streaming comparison'           ($nw -match '# Streaming - what the clients actually do')
 Assert 'and the body-file quoting trap'          ($nw -match 'Request body could not be parsed as JSON')
 Assert 'the table routes reset to exclusion'     ($nw -match 'they are already allowed')
+
+# Learn-style structure and the screenshots. A document that claims to be
+# measured and shows no evidence is a document nobody checks, and a screenshot
+# reference that rots to a broken image is worse than none.
+Assert 'the network doc lists its sections'      ($nw -match '(?m)^\*\*In this article\*\*')
+Assert 'and states prerequisites'                ($nw -match '(?m)^## Prerequisites')
+Assert 'it says network access is not sufficient' ($nw -match 'necessary and not sufficient')
+Assert 'the healthy run is shown'                ($nw -match '!\[[^\]]*\]\(guide/network-check\.png\)')
+Assert 'and the reset run is shown'              ($nw -match '!\[[^\]]*\]\(guide/network-reset\.png\)')
+Assert 'the reset capture is said to be real'    ($nw -match 'reproduced, not staged')
+Assert 'the two asks are distinguished'          ($nw -match 'gets the ticket closed as')
+Assert 'and it ends with next steps'             ($nw -match '(?m)^## Next steps')
+foreach ($img in @('network-check.png', 'network-reset.png', 'bom-prices.png')) {
+    Assert "the screenshot $img exists" (Test-Path (Join-Path $root "docs/guide/$img"))
+}
+$rdm = Get-Content (Join-Path $root 'README.md') -Raw
+Assert 'the README shows the priced BOM'         ($rdm -match '!\[[^\]]*\]\(docs/guide/bom-prices\.png\)')
+Assert 'and says tokens are excluded from it'    ($rdm -match 'omitted the largest line')
+
+# The capture pipeline. Both of these were wrong first and the screenshots
+# showed it: a shorter replacement left every rendered table ragged, and the
+# network check's verdicts carried no colour because they are words rather
+# than the bracketed markers the renderer knew about.
+$cap = Get-Content (Join-Path $root 'scripts/Capture-Transcripts.ps1') -Raw
+Assert 'redaction preserves column alignment'    ($cap -match 'Same length as the original, deliberately')
+Assert 'the reset capture is scripted'           ($cap -match 'hostile-proxy\.mjs')
+Assert 'and the proxy is stopped afterwards'     ($cap -match 'Stop-Process -Id \$proxy\.Id')
+Assert 'colour loss is explained, not ignored'   ($cap -match 'writes through the console API')
+$rt = Get-Content (Join-Path $root 'scripts/render-terminal.mjs') -Raw
+Assert 'the renderer colours BLOCKED'            ($rt.Contains('/\bBLOCKED\b/.test(line)'))
+Assert 'and a reset verdict'                     ($rt.Contains('RESET|BUFFERED|TLS NOT TRUSTED'))
+Assert 'so a failure does not look like a pass'  ($rt -match 'a failure that looks like a success')
+
+# Claude Desktop that is configured correctly and will not open. Every other
+# Desktop check reads a file, so all of them passed while the app did not
+# start. The cause was named wrongly first - a container fault needing a
+# reboot - and the measurement corrected it: 0x20 is a sharing violation, and
+# Restart Manager attributes the handle to the kernel.
+$lo = Get-Content (Join-Path $root 'scripts/Get-FileLockOwner.ps1') -Raw
+Assert 'a lock-owner tool ships'                 ($lo -match '(?m)^\s*\[CmdletBinding\(\)\]')
+Assert 'it uses Restart Manager, not a download' ($lo -match 'RmGetList\(')
+Assert 'and says why, not handle.exe'            ($lo -match 'needs no privilege')
+Assert 'a kernel-held file is explained'         ($lo -match 'locked, and no process owns it')
+Assert 'with no process to close'                ($lo -match 'There is no process to close')
+
+Assert 'the health check tests Desktop can start' ($td -match "Add-Result 'Claude Desktop can start'")
+Assert 'without launching it'                    ($td -match 'Detected without launching anything')
+Assert 'it names the sharing violation'          ($td -match 'ERROR_SHARING_VIOLATION')
+Assert 'and corrects the first diagnosis'        ($td -match 'named the wrong cause')
+Assert 'the holder is identified as the kernel'  ($td -match 'System \(pid 4\) and Registry')
+Assert 'reg unload is ruled out'                 ($td -match 'cannot be unloaded with reg unload')
+Assert 'and reinstalling is ruled out'           ($td -match 'Reinstalling does not help')
+Assert 'the remedy given is signing out'         ($td -match 'Sign out and back in, or restart')
+# The signature is a lock while nothing is running. Checking the lock alone
+# would fail every time Desktop is legitimately open.
+Assert 'a running Desktop is not reported stuck' ($td -match '\$running\.Count -eq 0')
+
+$ts = Get-Content (Join-Path $root 'docs/TROUBLESHOOTING.md') -Raw
+Assert 'the silent Desktop failure is documented' ($ts -match '(?m)^### Desktop does not open at all')
+Assert 'it names the log to read'                ($ts -match 'AppXDeploymentServer/Operational')
+Assert 'and decodes the error code'              ($ts -match '`0x20` is `ERROR_SHARING_VIOLATION`')
+Assert 'it says there is nothing to close'       ($ts -match '\*\*There is nothing to close\.\*\*')
+Assert 'and lists what was tried and failed'     ($ts -match 'Measured as ineffective against this state')
+Assert 'reinstalling is ruled out explicitly'    ($ts -match 'the lock outlives')
 
 # The gateway price. It was quoted as ~$250/month in eight places and the
 # measured list price is $150.00 - Basic v2 Unit at $0.20548/hour over 730

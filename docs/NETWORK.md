@@ -14,6 +14,37 @@ authorities, `example.com`, endpoints for clouds you are not using. Allowing
 all of them is both over-permissive and beside the point. What they need at
 runtime is **three**.
 
+**In this article**
+
+1. [The complete list](#1-the-complete-list)
+2. [What differs between the clients](#2-what-differs-between-the-clients)
+3. [Administration, and what developers do not need](#3-administration-and-what-developers-do-not-need)
+4. [The instance metadata service](#4-the-instance-metadata-service)
+5. [How this was measured](#5-how-this-was-measured)
+6. [ECONNRESET is not an allowlist problem](#6-econnreset-is-not-an-allowlist-problem)
+
+## Prerequisites
+
+| | |
+|---|---|
+| **Azure CLI** | signed in with `az login`, in the tenant that owns the Foundry resource |
+| **A Foundry resource or a gateway** | whichever path you deploy — you need one, not both |
+| **PowerShell** | 5.1 or 7. Every script here runs on both |
+| **A role that reaches Claude** | one of the five in [FOUNDRY-DIRECT.md §4](FOUNDRY-DIRECT.md#4-diagnostics). Network access is necessary and not sufficient |
+
+To check a machine before changing anything:
+
+```powershell
+./scripts/Test-ClaudeNetwork.ps1 -IncludeOptional
+```
+
+![Test-ClaudeNetwork.ps1 reporting each destination, who needs it, who terminated TLS, and a streaming round trip that succeeded](guide/network-check.png)
+
+> [!NOTE]
+> The run above is from a real machine. `registry.npmjs.org` is genuinely
+> blocked on it, which is why that row is red — the CLI still works, because
+> the npm registry is needed to *install* and not to *run*.
+
 ---
 
 ## 1. The complete list
@@ -72,6 +103,11 @@ Anthropic — a stronger statement than any client setting, because your network
 enforces it rather than the client asserting it.
 
 ### Two entries that look sufficient and are not
+
+> [!IMPORTANT]
+> These are the two most common reasons an allowlist looks complete and is not.
+> Both were measured, and both produce failures that name neither the host nor
+> the rule.
 
 **`cognitiveservices.azure.com` is a token audience, not an endpoint.** It is
 the string in the OAuth scope — measured, from Claude Desktop:
@@ -203,6 +239,12 @@ $env:HTTPS_PROXY = 'http://127.0.0.1:8888'
 claude -p "hello"
 ```
 
+> [!NOTE]
+> The observer forwards CONNECT to the real host and pipes the bytes untouched.
+> It never terminates TLS, so it can record the hostname and nothing else —
+> which is all a firewall rule needs, and the reason it is safe to run against
+> a production endpoint.
+
 ## 6. ECONNRESET is not an allowlist problem
 
 ```
@@ -212,6 +254,15 @@ claude -p "hello"
 The host resolved, the port opened, TLS completed, and the connection was cut
 **after the response started streaming**. The host was never blocked, so adding
 it again changes nothing.
+
+![Test-ClaudeNetwork.ps1 behind a proxy that cuts the stream: every destination reachable, and the streaming round trip reset](guide/network-reset.png)
+
+> [!WARNING]
+> Every destination in that run is reachable and the call still fails. This is
+> the state that sends people back to a firewall list that was never wrong.
+> The capture is reproduced, not staged — `scripts/hostile-proxy.mjs`
+> establishes the connection and then resets it, which is what an inspecting
+> proxy does to server-sent events.
 
 Claude Code streams answers as server-sent events. A proxy that buffers a
 response in order to inspect it cannot forward them, and many resolve that by
@@ -259,6 +310,22 @@ is not one.
 `Test-ClaudeNetwork.ps1` makes this call and reports which row applies, instead
 of reporting that every host is reachable — which, in the reset case, is both
 true and useless.
+
+> [!TIP]
+> The ask to a network team is different for each row. A blocked host needs to
+> be **allowed**. A reset stream needs those hosts **excluded from TLS
+> inspection** — they are already allowed, and asking for them to be allowed
+> again gets the ticket closed as "already done".
+
+## Next steps
+
+| Goal | Where |
+|---|---|
+| Configure a developer machine on the direct path | [FOUNDRY-DIRECT.md §2](FOUNDRY-DIRECT.md#2-running-it) |
+| Diagnose a 401, a device-code 400, or a missing model | [FOUNDRY-DIRECT.md §4](FOUNDRY-DIRECT.md#4-diagnostics) |
+| Look up a gateway status code | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) |
+| Work out why Claude Desktop will not open | [TROUBLESHOOTING.md](TROUBLESHOOTING.md#desktop-does-not-open-at-all) |
+| See what the deployment costs | `./scripts/Get-ClaudeBom.ps1 -WithPrices` |
 
 ## See also
 

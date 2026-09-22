@@ -50,6 +50,11 @@ param(
     [string]$StandardGroup = 'claude-code-standard',
     [string]$PremiumGroup = 'claude-code-premium',
 
+    # How developers sign in. Written into claude-gateway.json and honoured by
+    # Onboard-ClaudeDeveloper.ps1; it configures nothing on this machine.
+    [ValidateSet('interactive', 'device', 'helper')]
+    [string]$AuthMode,
+
     # Accept every default without prompting.
     [switch]$Yes
 )
@@ -663,6 +668,35 @@ $addressMode = Read-Default -Prompt 'Developer address (azure/custom)' -Default 
         return $false
     }
 
+# How developers sign in. Asked here rather than left to each workstation,
+# because a fleet where half the machines authenticate one way and half another
+# is a fleet with two support paths and two sets of symptoms. It configures
+# nothing now - it is written into claude-gateway.json and honoured by
+# Onboard-ClaudeDeveloper.ps1 on each machine.
+Write-Host ''
+Write-Host '  How will developers sign in?' -ForegroundColor White
+Write-Host ''
+Write-Host '    interactive  az login opens a browser on the machine. The right default for' -ForegroundColor DarkGray
+Write-Host '                 a laptop, and impossible on a jump box, VDI session or SSH.' -ForegroundColor DarkGray
+Write-Host '    device       az login --use-device-code prints a code to enter in a browser' -ForegroundColor DarkGray
+Write-Host '                 elsewhere. Works everywhere, including where no browser exists.' -ForegroundColor DarkGray
+Write-Host '    helper       a credential helper script fetches the token on demand. Needed' -ForegroundColor DarkGray
+Write-Host '                 for Claude Desktop, which cannot read the other two; the setup' -ForegroundColor DarkGray
+Write-Host '                 installs it either way. Choose this to make it the route for' -ForegroundColor DarkGray
+Write-Host '                 every client rather than only Desktop.' -ForegroundColor DarkGray
+Write-Host ''
+Write-Host '    Changeable later by reissuing the file and re-running the onboarding script.' -ForegroundColor DarkGray
+
+$AuthMode = if ($AuthMode) { $AuthMode } else {
+    Read-Default -Prompt 'Developer sign-in (interactive/device/helper)' -Default 'interactive' `
+        -Help 'Pick device if any developer works on a machine with no browser - it costs nothing on a laptop.' -Validate {
+            param($x)
+            if ($x -in @('interactive','device','helper')) { return $true }
+            Write-Warn2 'Must be interactive, device or helper.'
+            return $false
+        }
+}
+
 # ---------------------------------------------------------------- 3. limits
 
 Write-Head 'Budgets'
@@ -719,6 +753,7 @@ $rows = [ordered]@{
     'Request ceiling'       = "$CallsPerMinute requests/min"
     ' '                     = ''
     'Entra groups'          = "$StandardGroup, $PremiumGroup"
+    'Developer sign-in'     = $AuthMode
 }
 foreach ($k in $rows.Keys) {
     if ([string]::IsNullOrWhiteSpace($k)) { Write-Host '' ; continue }
@@ -987,12 +1022,22 @@ $pkg = Join-Path $root 'onboarding'
 New-Item -ItemType Directory -Force -Path $pkg | Out-Null
 
 $config = [ordered]@{
+    # Tagged with what it is. The direct path writes the same shape with
+    # mode 'foundry-direct', and the two files have the same extension and
+    # opposite meanings - applying one as the other produces a machine pointed
+    # at something that is not a gateway, and an error naming neither file.
+    mode          = 'gateway'
     gatewayUrl    = $gatewayUrl
     tenantId      = $acct.tenantId
     apimName      = $apimName
     resourceGroup = $ResourceGroup
     standardGroup = $StandardGroup
     premiumGroup  = $PremiumGroup
+    # How developers sign in. Decided once, here, rather than left to whoever
+    # runs the setup script on each machine - a fleet where half the
+    # workstations authenticate differently is a fleet with two support paths.
+    # Changeable later by reissuing this file; it configures nothing itself.
+    authMode      = $AuthMode
     tiers = @{
         standard = @{ tokensPerMinute = $TpmStandard; tokensPerDay = $QuotaStandard }
         premium  = @{ tokensPerMinute = $TpmPremium;  tokensPerDay = $QuotaPremium }

@@ -21,8 +21,13 @@ function Remove-Identifiers {
     $Text = $Text -replace '(?i)naveen\.g@microsoft\.com', 'admin@contoso.com'
     $Text = $Text -replace '(?i)navg@microsoft\.com', 'admin@contoso.com'
     $Text = $Text -replace 'MCAPS-Hybrid-REQ-[0-9-]+-\w+', 'Contoso-Production'
-    $Text = $Text -replace 'ai-contosohub530569751908', 'ai-contoso-foundry'
-    $Text = $Text -replace 'apim-claude-gw-fzgql9', 'apim-claude-gw'
+    $Text = $Text -replace 'ai-contosohub530569751908', 'ai-contoso-foundry-011234'
+    # Same length as the original, deliberately. These transcripts are rendered
+    # into screenshots, and the scripts pad their columns before this runs - a
+    # shorter replacement leaves every table in the documentation ragged from
+    # that column onward. Matching the width keeps the alignment the script
+    # produced.
+    $Text = $Text -replace 'apim-claude-gw-fzgql9', 'apim-claude-gw-contos'
     $Text = $Text -replace '16b3c013-d300-468d-ac64-7eda0820b6d3', '11111111-2222-3333-4444-555555555555'
     $Text = $Text -replace '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '00000000-0000-0000-0000-000000000000'
     $Text = $Text -replace 'rg-contosohub', 'rg-contoso-ai'
@@ -52,6 +57,13 @@ function Save-Transcript {
 
     $ps = (Get-Command pwsh -ErrorAction SilentlyContinue) ?? (Get-Command powershell)
     $argLine = ($Arguments | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }) -join ' '
+    # Captured without colour, and it cannot be otherwise: Write-Host
+    # -ForegroundColor writes through the console API rather than emitting SGR,
+    # so nothing reaches a redirected stream. Setting
+    # $PSStyle.OutputRendering = 'Ansi' was tried and does not help - it governs
+    # formatted output, not Write-Host. render-terminal.mjs colours the [OK],
+    # [WARN] and [FAIL] markers itself, which reproduces what the operator saw
+    # from the same signal rather than inventing one.
     $text = cmd /c "`"$($ps.Source)`" -NoProfile -File `"$ScriptPath`" $argLine" | Out-String -Width 96
 
     $text = Remove-Identifiers $text
@@ -117,6 +129,46 @@ Save-Transcript 'onboarding-email' `
 Save-Transcript 'governance-checks' `
     (Join-Path $root 'scripts/Debug-ClaudeCode.ps1') `
     @('-GatewayBaseUrl', 'https://apim-claude-gw-fzgql9.azure-api.net/claude', '-SkipLiveCall')
+
+# 5. The network check, on a machine where everything works.
+Save-Transcript 'network-check' `
+    (Join-Path $root 'scripts/Test-ClaudeNetwork.ps1') @('-IncludeOptional')
+
+# 6. The same check behind a proxy that cuts the response mid-stream.
+#
+#    This is the screenshot that is hard to obtain and most worth having: every
+#    host reads as reachable and the call still fails, which is the state that
+#    sends people back to a firewall list that was never wrong. Reproduced
+#    rather than staged - hostile-proxy.mjs establishes the connection and then
+#    resets it, which is what an inspecting proxy does to server-sent events.
+$node = Get-Command node -ErrorAction SilentlyContinue
+if ($node) {
+    Write-Host 'starting the cutting proxy for the reset capture ...' -ForegroundColor Cyan
+    $proxy = Start-Process -FilePath $node.Source `
+        -ArgumentList @((Join-Path $root 'scripts/hostile-proxy.mjs'), '--port', '8873', '--after', '2048') `
+        -PassThru -WindowStyle Hidden
+    Start-Sleep -Seconds 3
+    $savedHttps = $env:HTTPS_PROXY
+    $savedHttp = $env:HTTP_PROXY
+    try {
+        $env:HTTPS_PROXY = 'http://127.0.0.1:8873'
+        $env:HTTP_PROXY = 'http://127.0.0.1:8873'
+        Save-Transcript 'network-reset' `
+            (Join-Path $root 'scripts/Test-ClaudeNetwork.ps1') @()
+    }
+    finally {
+        $env:HTTPS_PROXY = $savedHttps
+        $env:HTTP_PROXY = $savedHttp
+        if ($proxy -and -not $proxy.HasExited) { Stop-Process -Id $proxy.Id -Force -ErrorAction SilentlyContinue }
+    }
+}
+else {
+    Write-Host 'skipping the reset capture - node is not installed' -ForegroundColor Yellow
+}
+
+# 7. The bill of materials, with prices read live rather than quoted.
+Save-Transcript 'bom-prices' `
+    (Join-Path $root 'scripts/Get-ClaudeBom.ps1') @('-WithPrices')
 
 Write-Host ''
 Write-Host "transcripts in $out" -ForegroundColor Green

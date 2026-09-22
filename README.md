@@ -487,6 +487,21 @@ alice@contoso.com         728 tokens
 | Log Analytics + Application Insights | ingestion-based, small at this volume |
 | Claude tokens | Billed through your existing Claude deployment in Foundry. The gateway does not change what a token costs |
 
+Those are list prices for the reference deployment. For the one you actually
+have, read them rather than trusting the table:
+
+```powershell
+./scripts/Get-ClaudeBom.ps1 -WithPrices
+```
+
+![Get-ClaudeBom.ps1 -WithPrices listing each deployed resource with its live list price, and stating that Claude tokens are excluded](docs/guide/bom-prices.png)
+
+It reads `prices.azure.com` for the SKUs you deployed in the region you
+deployed them, and separates what the accelerator **created** from what it
+**reuses** and what is only **configuration**. Claude token rates are excluded
+and it says so: they are not published in that API, and a total that quietly
+omitted the largest line would be worse than no total.
+
 Tear it down:
 
 ```powershell
