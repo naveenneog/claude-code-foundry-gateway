@@ -1,4 +1,4 @@
-# P30-P32 and the workstation migration tool: the admin surface.
+﻿# P30-P32 and the workstation migration tool: the admin surface.
 #
 # Four things that share a property - each one guards against a mistake that is
 # invisible after it is made:
@@ -612,13 +612,13 @@ Assert 'and pinning every later call'            ($ad -match '-g \$ResourceGroup
 # checks read the az token, and Claude Code never asks for it. Pinning the
 # chain is documented, and better than deleting an identity the machine needs.
 Assert 'the credential chain can be pinned'      ($td -match 'AZURE_TOKEN_CREDENTIALS')
-Assert 'to the CLI credential by name'           ($td -match 'AzureCliCredential')
-Assert 'with the version it needs'               ($td -match '(?i)@azure/identity 4\.11\.0')
-Assert 'and dev as the older fallback'           ($td -match '(?i)dev\s+\(older versions; also excludes MI\)')
+Assert 'to the value the client accepts'         ($td.Contains("SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','dev','User')"))
+Assert 'with the rejected value recorded'        ($td -match '(?i)AzureCliCredential ->')
+Assert 'and why prod is not it either'           ($td -match 'prod excludes the developer credentials')
 Assert 'an existing setting is not overwritten'  ($td -match "GetEnvironmentVariable\('AZURE_TOKEN_CREDENTIALS', 'User'\)")
 Assert 'the token override is warned against'    ($td -match 'ANTHROPIC_FOUNDRY_AUTH_TOKEN')
 Assert 'because it expires'                      ($td -match '(?i)expires in about an hour')
-Assert 'the pin is documented'                   ($fd -match "SetEnvironmentVariable\('AZURE_TOKEN_CREDENTIALS','AzureCliCredential','User'\)")
+Assert 'the pin is documented'                   ($fd.Contains("SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','dev','User')"))
 Assert 'and cited'                               ($fd -match 'credential-chains#defaultazurecredential-overview')
 Assert 'with the token override ruled out'       ($fd -match '(?i)Do not set `ANTHROPIC_FOUNDRY_AUTH_TOKEN`')
 # Hand-written configuration is where invented model names come from. Claude
@@ -867,6 +867,142 @@ Assert 'and names why the gateway cannot tell' `
     ($onb -match 'does not call Entra per request')
 Assert 'the checklist covers business unit groups' `
     ($onb -match '(?m)^- \[ \] Removed from every business-unit and team group')
+
+# Pricing. The bill of materials used to print the shape of each line rather
+# than a figure, on the grounds that a hard-coded price goes stale. Prices are
+# published though, so the figure is now read live - and the whole value of
+# doing that rests on the lookup failing loudly. Three measured ways the Azure
+# retail price API hands back a wrong number quietly, each asserted separately
+# because each needs a different defence and losing any one of them prices real
+# infrastructure at zero.
+$rp = Get-Content (Join-Path $root 'scripts/AzureRetailPrice.ps1') -Raw
+Assert 'the price module records that contains() fails silently' `
+    ($rp -match 'contains\(\) is not supported and does not error')
+Assert 'and that a Free Tier row shadows the real meter' `
+    ($rp -match 'A Free Tier row shadows the real meter')
+Assert 'and that tiered meters start at zero' `
+    ($rp -match 'Tiered meters start at zero')
+Assert 'free-tier rows are excluded unless asked for' `
+    ($rp.Contains("notlike '*Free*'"))
+Assert 'the marginal tier is the default quote' `
+    ($rp -match "\[ValidateSet\('Marginal', 'First'\)\]")
+Assert 'a miss returns null and never zero' `
+    ($rp -match 'It never returns 0')
+# PowerShell unrolls a collection on return, so an empty result reached the
+# caller as $null and made 'no meters here' identical to 'API unreachable' -
+# the one distinction the module exists to keep. Measured on 'Private Link'.
+Assert 'an empty result survives the return' `
+    ($rp -match 'Returned with the comma operator')
+Assert 'and is returned with the comma operator' `
+    ($rp.Contains('return , $items'))
+Assert 'Claude tokens are excluded from the live lookup' `
+    ($rp -match 'Claude token rates are NOT in this API')
+
+$bom = Get-Content (Join-Path $root 'scripts/Get-ClaudeBom.ps1') -Raw
+Assert 'the bill of materials can read live prices' ($bom -match '\[switch\]\$WithPrices')
+Assert 'it prices the region the deployment is in' ($bom -match 'az group show -n \$ResourceGroup --query location')
+Assert 'Cosmos is priced by capability, not by SKU' ($bom -match "capabilities \| Where-Object \{ \`$_\.name -eq 'EnableServerless' \}")
+Assert 'the APIM SKU is translated to its meter name' ($bom -match 'spell the same SKU differently')
+Assert 'an unpriced line says so rather than reading as free' ($bom -match 'rate unknown')
+Assert 'and the total excludes Claude tokens explicitly' ($bom -match 'not priced here')
+Assert 'hourly meters are stated per month at 730 hours' ($bom -match 'month at 730 h')
+
+# Network access. Two facts here were measured against the wire and both
+# contradict what an allowlist author would reasonably assume, which is why
+# they are asserted rather than left to prose.
+$net = Get-Content (Join-Path $root 'scripts/Test-ClaudeNetwork.ps1') -Raw
+Assert 'a network check ships'                   ($net -match '(?m)^\s*\$targets = New-Object')
+Assert 'it tests the measured Foundry host'      ($net -match '\$FoundryResource\.services\.ai\.azure\.com')
+Assert 'and says the audience is not an endpoint' ($net -match 'token \*audience\*')
+Assert 'the gateway suffix is called out'        ($net -match 'the suffix is azure-api\.net')
+Assert 'each destination names what it breaks'   ($net -match 'Breaks = \$t\.Breaks')
+Assert 'reachability is not treated as working'  ($net -match 'Reachability is not the same as working')
+Assert 'a streaming round trip is made'          ($net -match '"stream":true')
+Assert 'and it is not buffered by the client'    ($net -match '--no-buffer')
+Assert 'a reset is distinguished from a block'   ($net -match "Verdict = 'reset'")
+Assert 'and named as not an allowlist problem'   ($net -match 'This is not an allowlist problem')
+Assert 'the fix asked for is exclusion'          ($net -match 'excluded from TLS inspection rather than merely allowed')
+Assert 'a buffered stream is caught too'         ($net -match "Verdict = 'buffered'")
+Assert 'auth failures are not blamed on network' ($net -match 'the network is fine; this is a role or a firewall')
+Assert 'the tested path is always named'         ($net -match '\$roundTrip\.TestedPath')
+# An explicit argument that happens to be empty is a choice, not an omission.
+# Testing truthiness re-filled it from settings and sent the round trip to the
+# gateway while the report named a resource.
+Assert 'an explicit argument beats the config'   ($net.Contains("PSBoundParameters.ContainsKey('FoundryResource')"))
+Assert 'IMDS behaviour is measured'              ($net -match '169\.254\.169\.254')
+Assert 'refused is told from dropped'            ($net -match "Behaviour = 'dropped'")
+Assert 'because dropped costs a timeout'         ($net -match 'waits \{0\} ms\+ for this before falling back')
+
+# The credential pin. The documented value was wrong and -Fix applied it, so a
+# working machine could be broken by running the repair. Claude Code validates
+# this itself before @azure/identity sees it and takes only dev or prod.
+$tfd = Get-Content (Join-Path $root 'scripts/Test-FoundryDirect.ps1') -Raw
+Assert 'the credential pin uses dev'             ($tfd.Contains("SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','dev','User')"))
+Assert 'and records why a name is refused'       ($tfd -match "Valid values are 'prod' or 'dev'")
+Assert 'and that prod is not the answer either'  ($tfd -match 'prod excludes the developer credentials')
+Assert 'an unusable existing value is flagged'   ($tfd -match "notin @\('dev', 'prod'\)")
+$fdn = Get-Content (Join-Path $root 'docs/FOUNDRY-DIRECT.md') -Raw
+Assert 'the guide gives dev, not a name'         ($fdn.Contains("SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','dev','User')"))
+Assert 'and says a credential name is rejected'  ($fdn -match '\*\*Use `dev`\. A credential name is rejected\*\*')
+Assert 'a Cloud PC is named as the common case'  ($fdn -match 'On a Cloud PC, a Dev Box or any Azure VM this is the default')
+Assert 'the direct guide points at the network doc' ($fdn -match '\*\*\[NETWORK\.md\]\(NETWORK\.md\)\*\*')
+Assert 'and does not restate the whole list'     (-not ($fdn -match '(?m)^\*\*Required for administration only\*\*'))
+
+# The allowlist document. It exists because a list read off a vendor page and a
+# list observed on the wire are different lists, and the difference is what
+# breaks deployments.
+$nw = Get-Content (Join-Path $root 'docs/NETWORK.md') -Raw
+Assert 'a network document ships'                ($nw -match '(?m)^# Network access')
+Assert 'it gives one complete list'              ($nw -match '(?m)^## 1\. The complete list')
+# The whole point of the table is that a reader can tell which client needs a
+# host without reading prose, so the per-client columns are load-bearing.
+Assert 'the table names each client'             ($nw -match '\| CLI \| VS Code \| Desktop \|')
+Assert 'the direct host is marked for all three' ($nw -match '`<resource>\.services\.ai\.azure\.com` \| 443 \| ✅ \| ✅ \| ✅')
+Assert 'the gateway host is marked for all three' ($nw -match '`<apim-name>\.azure-api\.net` \| 443 \| ✅ \| ✅ \| ✅')
+Assert 'Entra is marked for all three'           ($nw -match '`login\.microsoftonline\.com` \| 443 \| ✅ \| ✅ \| ✅')
+Assert 'npm is marked CLI only'                  ($nw -match '`registry\.npmjs\.org` \| 443 \| ✅ \| — \| —')
+Assert 'the marketplace is marked VS Code only'  ($nw -match '`marketplace\.visualstudio\.com` \| 443 \| — \| ✅ \| —')
+Assert 'the Store is marked Desktop only'        ($nw -match 'Microsoft Store endpoints \| 443 \| — \| — \| ✅')
+Assert 'running is separated from installing'    ($nw -match '\*\*Rows 1–3 are the only ones needed to \*run\*\*\*')
+Assert 'the audience trap is named'              ($nw -match 'is a token audience, not an endpoint')
+Assert 'with the measured scope as evidence'     ($nw -match 'cognitiveservices\.azure\.com/\.default')
+Assert 'the azure-api.net suffix is called out'  ($nw -match 'is not matched by any `\*\.azure\.com` rule')
+Assert 'each client is covered separately'       ($nw -match '(?m)^## 2\. What differs between the clients')
+Assert 'the extension is said to bundle its own' ($nw -match 'It does \*\*not\*\* use the CLI on `PATH`')
+Assert 'and the version drift is given'          ($nw -match 'extension 2\.1\.263 alongside CLI')
+Assert 'Desktop device code is documented'       ($nw -match 'oauth2/v2\.0/devicecode')
+Assert 'and said to precede any token'           ($nw -match 'before any token exists')
+# Desktop could not be launched on the measurement machine. Saying so is the
+# difference between a measured document and one that looks measured.
+Assert 'Desktop is marked as not captured live'  ($nw -match "runtime egress was \*\*not\*\* captured live")
+Assert 'with the reason given'                   ($nw -match '0x80070020')
+Assert 'and the AppX loopback caveat'            ($nw -match 'CheckNetIsolation LoopbackExempt')
+Assert 'admin hosts are separated from runtime'  ($nw -match '(?m)^## 3\. Administration')
+Assert 'and what to leave blocked is stated'     ($nw -match '(?m)^### Deliberately left blocked')
+Assert 'blocking Anthropic is framed as proof'   ($nw -match 'your network')
+Assert 'IMDS gets its three behaviours'          ($nw -match 'silently dropped')
+Assert 'with the value the client accepts'       ($nw -match "takes \*\*``dev``\*\*, not a credential name")
+Assert 'the method is published'                 ($nw -match '(?m)^## 5\. How this was measured')
+Assert 'with the observer named'                 ($nw -match 'observe-egress\.mjs')
+Assert 'and it is said not to terminate TLS'     ($nw -match 'never terminates TLS')
+Assert 'ECONNRESET has its own section'          ($nw -match '(?m)^## 6\. ECONNRESET is not an allowlist problem')
+Assert 'with the streaming comparison'           ($nw -match '# Streaming - what the clients actually do')
+Assert 'and the body-file quoting trap'          ($nw -match 'Request body could not be parsed as JSON')
+Assert 'the table routes reset to exclusion'     ($nw -match 'they are already allowed')
+
+# The gateway price. It was quoted as ~$250/month in eight places and the
+# measured list price is $150.00 - Basic v2 Unit at $0.20548/hour over 730
+# hours, identical in eastus, eastus2 and westeurope. A 67% overstatement
+# matters here because COMPARISON.md uses the figure to advise small teams that
+# the gateway is not worth it.
+$cmp = Get-Content (Join-Path $root 'docs/COMPARISON.md') -Raw
+$setupDoc = Get-Content (Join-Path $root 'docs/SETUP.md') -Raw
+$inst = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
+Assert 'the installer quotes the measured price' ($inst -match '\$150/month at list price')
+Assert 'and no longer the overstated one'        (-not ($inst -match '\$250'))
+Assert 'the setup table agrees'                  ($setupDoc -match '~\$150/mo')
+Assert 'and the comparison does too'             ($cmp -match '~\$150/month at list price')
+Assert 'the break-even advice uses it'           ($cmp -match 'the \$150/month gateway')
 
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }

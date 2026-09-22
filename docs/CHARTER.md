@@ -19,7 +19,7 @@ a second control plane to operate.
 
 | Constraint | Consequence |
 |---|---|
-| Overhead cost stays low | API Management Basic v2 (~$250/month) is the floor. New components must justify themselves against it, and prefer serverless or existing Azure services over anything always-on. |
+| Overhead cost stays low | API Management Basic v2 (~$150/month at list price) is the floor. New components must justify themselves against it, and prefer serverless or existing Azure services over anything always-on. |
 | Switchover must be simple | A customer moving off Claude Enterprise should not re-tool. Entra groups, Intune and Azure Monitor are the control surfaces, not a bespoke admin app. |
 | Security parity is not negotiable | Anything that weakens the current posture — no credential on a developer machine, entitlement by group membership, the gateway as the only principal with data-plane access — is out of scope regardless of what it buys. |
 | Research over recall | Every limit, API shape, price and policy behaviour is verified against a cited source or a live run before it lands in a design. |
@@ -33,3 +33,4 @@ a second control plane to operate.
   research with a citation, or recorded as an explicit assumption with a detector.
 - Documentation states what is true and cites its source. It does not tell the reader what to
   think.
+

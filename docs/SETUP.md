@@ -312,7 +312,7 @@ than deploying a second one.
 
 | Resource | Purpose | Rough cost |
 |----------|---------|-----------:|
-| API Management, Basic v2 | the gateway | ~$250/mo |
+| API Management, Basic v2 | the gateway | ~$150/mo |
 | Application Insights | token metrics and chargeback | usage-based |
 | Log Analytics workspace | backing store for the above | usage-based |
 | 2 Entra groups | entitlement | free |

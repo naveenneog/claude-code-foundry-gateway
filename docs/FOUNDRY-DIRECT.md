@@ -311,16 +311,34 @@ Rather than deleting an identity the machine may need for other work, pin the
 chain to your sign-in:
 
 ```powershell
-# Individual credential names need @azure/identity 4.11.0 or later
-[Environment]::SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','AzureCliCredential','User')
-
-# Older versions understand dev, which also excludes managed identity
 [Environment]::SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','dev','User')
 ```
+
+**Use `dev`. A credential name is rejected**, even though the Azure Identity
+documentation lists individual names as valid from `@azure/identity` 4.11.0.
+That is true of the library, but Claude Code validates the value itself before
+the library sees it, against a shorter list. Measured on CLI 2.1.272:
+
+| Value | Result |
+|---|---|
+| `AzureCliCredential` | `API Error: Invalid value for AZURE_TOKEN_CREDENTIALS = AzureCliCredential. Valid values are 'prod' or 'dev'.` |
+| `dev` | works — excludes managed identity, selects the CLI sign-in |
+| `prod` | fails — `prod` excludes the developer credentials, which is the sign-in you are trying to select |
+
+`dev` is the value in every case. There is no version of Claude Code where a
+credential name is the better answer, because the check is the client's own and
+not the library's.
 
 Then open a new terminal and restart VS Code or Desktop — a running process
 keeps the environment it started with. Source:
 [Credential chains in the Azure Identity library for JavaScript](https://learn.microsoft.com/azure/developer/javascript/sdk/authentication/credential-chains#defaultazurecredential-overview).
+
+> **On a Cloud PC, a Dev Box or any Azure VM this is the default, not an edge
+> case.** Those machines run on Azure, so the instance metadata service answers
+> and a managed identity is found ahead of your `az login` every time. Measured
+> on a Windows 365 Cloud PC: `169.254.169.254` returns instance metadata in
+> 10 ms. `Test-ClaudeNetwork.ps1` reports which of the three behaviours -
+> answers, refused, dropped - applies to a given machine.
 
 Granting that principal the role is the other route, and is right only where
 the machine identity is genuinely meant to have Claude access.
@@ -457,6 +475,36 @@ az role assignment list --assignee <object-id> --all `
 ```
 
 A scope ending in `/projects/<name>` is the explanation.
+
+### Network access
+
+An allowlist written from documentation is a guess. **[NETWORK.md](NETWORK.md)**
+carries the measured list as a single table, marked with which of the three
+clients — CLI, VS Code extension, Claude Desktop — needs each host, and
+separating what is needed to *run* from what is needed to *install*.
+
+```powershell
+./scripts/Test-ClaudeNetwork.ps1                  # required destinations
+./scripts/Test-ClaudeNetwork.ps1 -IncludeOptional # plus install and telemetry
+```
+
+Only three hosts are needed to run any of the clients:
+`<resource>.services.ai.azure.com` on the direct path or
+`<apim-name>.azure-api.net` on the gateway path, plus
+`login.microsoftonline.com` for sign-in.
+
+Two entries commonly on an allowlist that do not do what they appear to:
+
+- **`cognitiveservices.azure.com` is the token audience, not an endpoint.** It
+  is the string in the OAuth scope. No client connects to it. The host they
+  dial is `<resource>.services.ai.azure.com`.
+- **`*.azure-api.net` is not matched by any `*.azure.com` rule.** Different
+  suffix. On the gateway path it is the entry that matters most.
+
+If you see `Connection dropped (ECONNRESET)` while every host is reachable, the
+allowlist is not the problem — see
+[NETWORK.md §6](NETWORK.md#6-econnreset-is-not-an-allowlist-problem).
+
 
 ## 5. What you give up, and what you inherit
 

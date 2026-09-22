@@ -142,7 +142,7 @@ An honest architecture review has to cover this side too.
 | **New model lag** | Anthropic ships to its own API first; Foundry follows | Keep a small direct-API path for evaluation |
 | **Beta feature lag** | Newer beta headers and endpoints may not be exposed | Test before depending on one |
 | **Not every model** | Your region and Marketplace entitlement decide what you can deploy. Marketplace purchases disabled in the tenant blocks deployment entirely | Check `az cognitiveservices model list` early |
-| **Gateway cost** | APIM Basic v2 is ~$250/month before any tokens | Only worth it at team scale; a 5-person team is likely below the line |
+| **Gateway cost** | APIM Basic v2 is ~$150/month at list price before any tokens | Only worth it at team scale; a 5-person team is likely below the line |
 | **Gateway latency** | one extra hop | co-locate APIM and Foundry in the same region |
 | **New single point of failure** | gateway down = everyone down | Standard v2 / Premium v2 for SLA and multi-region |
 | **Membership is not live** | entitlement changes apply when the sync runs | schedule the sync |
@@ -166,7 +166,7 @@ Do you need per-developer budgets or chargeback?
 
 ### Rules of thumb
 
-- **Under ~5 developers**, the $250/month gateway probably exceeds the spend it
+- **Under ~5 developers**, the $150/month gateway probably exceeds the spend it
   governs. Use A or B and revisit.
 - **Regulated industry, or residency requirements** — go to Foundry, and verify
   the hosting option per section 4.
@@ -207,3 +207,5 @@ from documentation:
 | Give people access | [Onboarding guide](ONBOARDING.md) |
 | Watch the spend | [Monitoring guide](MONITORING.md) |
 | Fix something | [Debug guide](DEBUGGING.md) |
+
+

@@ -1,0 +1,267 @@
+# Network access
+
+What to allow on a firewall or proxy so that Claude Code, the VS Code extension
+and Claude Desktop work against Microsoft Foundry.
+
+Every host in this document was observed on the wire from the clients
+themselves. None of it is taken from a vendor page. The method and the evidence
+are in [§5](#5-how-this-was-measured), including the parts that could not be
+measured here and are marked as such.
+
+The reason for measuring rather than listing: the three clients mention **214
+distinct hostnames** between them — documentation links, certificate
+authorities, `example.com`, endpoints for clouds you are not using. Allowing
+all of them is both over-permissive and beside the point. What they need at
+runtime is **three**.
+
+---
+
+## 1. The complete list
+
+One row per destination, marked with which client needs it. **CLI** is Claude
+Code on the command line, **VS Code** is the `anthropic.claude-code`
+extension, **Desktop** is the Claude Desktop app.
+
+### Needed on a developer's machine
+
+| # | Destination | Port | CLI | VS Code | Desktop | Needed for |
+|---|---|---|:--:|:--:|:--:|---|
+| 1 | `<resource>.services.ai.azure.com` | 443 | ✅ | ✅ | ✅ | inference — **direct path** |
+| 2 | `<apim-name>.azure-api.net` | 443 | ✅ | ✅ | ✅ | inference — **gateway path** |
+| 3 | `login.microsoftonline.com` | 443 | ✅ | ✅ | ✅ | Entra sign-in and token refresh |
+| 4 | `registry.npmjs.org` | 443 | ✅ | — | — | installing and updating the CLI |
+| 5 | `marketplace.visualstudio.com` | 443 | — | ✅ | — | installing and updating the extension |
+| 6 | `*.vsassets.io` | 443 | — | ✅ | — | downloading the extension package |
+| 7 | `main.vscode-cdn.net` | 443 | — | ✅ | — | VS Code's own CDN |
+| 8 | Microsoft Store endpoints | 443 | — | — | ✅ | installing and updating Desktop (MSIX) |
+
+Rows 1 and 2 are alternatives: allow the one matching the path you deploy. Row
+3 is needed in both. **Rows 1–3 are the only ones needed to *run*** — 4 to 8
+are install and update, and an already-installed client keeps working without
+them.
+
+`*.vsassets.io` covers the publisher-scoped gallery hosts observed during a
+real install: `anthropic.gallery.vsassets.io` and
+`anthropic.gallerycdn.vsassets.io`.
+
+### Needed only on an administrator's machine
+
+Not required by any developer, on any client.
+
+| # | Destination | Port | Needed for |
+|---|---|---|---|
+| 9 | `management.azure.com` | 443 | resource and deployment discovery, deployment, diagnostics |
+| 10 | `graph.microsoft.com` | 443 | resolving Entra group membership during entitlement sync |
+
+### Observed, not required
+
+| # | Destination | Port | CLI | VS Code | Desktop | What it is |
+|---|---|---|:--:|:--:|:--:|---|
+| 11 | `dc.services.visualstudio.com` | 443 | ○ | ○ | ○ | Azure CLI telemetry — `az config set core.collect_telemetry=false` |
+| 12 | `mobile.events.data.microsoft.com` | 443 | — | ○ | — | VS Code telemetry |
+| 13 | `169.254.169.254` | 80 | ○ | ○ | ○ | instance metadata — link-local, see [§4](#the-instance-metadata-service) |
+
+○ = seen on the wire, safe to block.
+
+### Deliberately left blocked
+
+`api.anthropic.com`, `code.claude.com`, `*.datadoghq.com`, `claude.ai`. None is
+needed on any client in Foundry mode. If the clients work while these are
+blocked, that is the demonstration that no prompt or completion leaves to
+Anthropic — a stronger statement than any client setting, because your network
+enforces it rather than the client asserting it.
+
+### Two entries that look sufficient and are not
+
+**`cognitiveservices.azure.com` is a token audience, not an endpoint.** It is
+the string in the OAuth scope — measured, from Claude Desktop:
+
+```js
+["https://cognitiveservices.azure.com/.default", "offline_access"]
+```
+
+No client opens a connection to it. An allowlist containing it without a
+wildcard appears to cover Foundry and covers nothing. The host all three
+clients dial is row 1, built in each from the same shape:
+
+```js
+function (e) { return `${e}.services.ai.azure.com` }
+```
+
+**`*.azure-api.net` is not matched by any `*.azure.com` rule.** Different
+suffix. On the gateway path row 2 is the single most important entry, and the
+one most often missing, because every other host in the deployment is under
+`azure.com` and this one is not.
+
+
+---
+
+## 2. What differs between the clients
+
+All three build the same request. The VS Code extension ships its own copy of
+the Claude Code binary rather than calling the one on `PATH`, and Desktop
+reimplements the same endpoint construction — so their **runtime** requirements
+are identical, and they differ only in how they are installed and signed in.
+
+### Claude Code — CLI
+
+Rows 1–3 to run, row 4 to install. Measured: one prompt in gateway mode opened
+**exactly one** outbound connection, to the gateway. No telemetry, no call to
+`api.anthropic.com`, no call to `code.claude.com`.
+
+### Claude Code — VS Code extension
+
+Rows 1–3 to run, rows 5–7 to install.
+
+The extension carries a 208 MB `claude.exe` under `resources/native-binary/`.
+It does **not** use the CLI on `PATH`, so the two versions drift: measured on
+one machine, extension 2.1.263 alongside CLI 2.1.272. Configuration that works
+in one can fail in the other, and updating one does not update the other.
+
+Its bundled binary was run through the observer and produced the same egress as
+the CLI.
+
+### Claude Desktop
+
+Rows 1–3 to run, row 8 to install. Desktop signs in with the OAuth **device
+code** flow, against endpoints it builds as:
+
+```js
+`${base}/${tenant}/oauth2/v2.0/devicecode`
+`${base}/${tenant}/oauth2/v2.0/authorize`
+```
+
+where `base` defaults to `https://login.microsoftonline.com`. That is row 3, so
+no additional host is involved — but the device-code endpoint is reached
+**before any token exists**, which is why a failure there is not an RBAC
+problem. See [FOUNDRY-DIRECT.md §4](FOUNDRY-DIRECT.md#4-diagnostics).
+
+> Desktop's runtime egress was **not** captured live for this document. The
+> installed package would not launch on the measurement machine — an AppX
+> container fault, `0x80070020`, unrelated to networking. Its endpoints are
+> read out of the shipped `app.asar` rather than observed, and match the other
+> two clients exactly. Treat them as high-confidence but not measured.
+>
+> Desktop also runs inside an AppX container, which blocks loopback by default.
+> A proxy on `127.0.0.1` will not see its traffic without
+> `CheckNetIsolation LoopbackExempt -a -n=Claude_pzs8sxrjxfjjc`.
+
+---
+
+## 3. Administration, and what developers do not need
+
+Rows 9 and 10 are needed on the machine that runs setup, the entitlement sync
+or the health checks. They are **not** needed on a developer's machine to use
+any of the three clients.
+
+## 4. The instance metadata service
+
+Row 13, `169.254.169.254:80`, is link-local and not a firewall rule, but it
+decides which identity the clients use. The Azure identity chain probes it
+**before** falling back to your `az login`, so on any Azure-hosted machine — a
+Cloud PC, a Dev Box, an Azure VM — a managed identity is found first and used
+instead of the person sitting at the keyboard.
+
+Measured on a Windows 365 Cloud PC: it answers with instance metadata in 10 ms.
+
+Three behaviours, all different:
+
+| Behaviour | Consequence |
+|---|---|
+| refused | healthy — the chain falls through to the CLI immediately |
+| answers | a managed identity is used instead of your sign-in; pin with `AZURE_TOKEN_CREDENTIALS=dev` |
+| silently dropped | every token acquisition waits for a timeout first; ask for it to be refused rather than dropped |
+
+`AZURE_TOKEN_CREDENTIALS` takes **`dev`**, not a credential name. Measured on
+CLI 2.1.272: `AzureCliCredential` is rejected with
+`Valid values are 'prod' or 'dev'`.
+
+
+## 5. How this was measured
+
+```powershell
+./scripts/Test-ClaudeNetwork.ps1                  # required destinations
+./scripts/Test-ClaudeNetwork.ps1 -IncludeOptional # plus install and telemetry
+```
+
+The check resolves each host, opens the port, completes a TLS handshake,
+reports who issued the certificate, and then makes a **real streaming Messages
+call**. That last step is the point: see [§6](#6-econnreset-is-not-an-allowlist-problem).
+
+Two tools built for this, kept because the question recurs:
+
+| Tool | What it does |
+|---|---|
+| `scripts/observe-egress.mjs` | An HTTP proxy that records every host a client attempts and forwards it. Tunnels rather than intercepts — it never terminates TLS, so it can see hostnames and nothing else. |
+| `scripts/extract-hosts.mjs` | Pulls every hostname out of a large binary, for the candidate list that the proxy then narrows. |
+
+Run a client through the observer to reproduce any of this:
+
+```powershell
+node scripts/observe-egress.mjs --port 8888 --out egress.json
+$env:HTTPS_PROXY = 'http://127.0.0.1:8888'
+claude -p "hello"
+```
+
+## 6. ECONNRESET is not an allowlist problem
+
+```
+✳ Connection dropped (ECONNRESET) · Retrying in 22s · attempt 8/10
+```
+
+The host resolved, the port opened, TLS completed, and the connection was cut
+**after the response started streaming**. The host was never blocked, so adding
+it again changes nothing.
+
+Claude Code streams answers as server-sent events. A proxy that buffers a
+response in order to inspect it cannot forward them, and many resolve that by
+cutting the connection rather than returning an error that names a cause.
+
+The test that separates a blocked host from a broken stream is a non-streaming
+call against a streaming one:
+
+```powershell
+$res = '<your-resource>'
+$tok = az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv
+
+# Non-streaming
+'{"model":"<deployment>","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}' |
+  Set-Content $env:TEMP\a.json -Encoding ascii
+curl.exe -sS -w "`n[http=%{http_code}]" -X POST `
+  "https://$res.services.ai.azure.com/anthropic/v1/messages" `
+  -H "Authorization: Bearer $tok" -H "content-type: application/json" `
+  -H "anthropic-version: 2023-06-01" -d "@$env:TEMP\a.json"
+
+# Streaming - what the clients actually do
+'{"model":"<deployment>","max_tokens":32,"stream":true,"messages":[{"role":"user","content":"count to five"}]}' |
+  Set-Content $env:TEMP\b.json -Encoding ascii
+curl.exe -sS -N --no-buffer -w "`n[http=%{http_code}]" -X POST `
+  "https://$res.services.ai.azure.com/anthropic/v1/messages" `
+  -H "Authorization: Bearer $tok" -H "content-type: application/json" `
+  -H "anthropic-version: 2023-06-01" -d "@$env:TEMP\b.json"
+```
+
+Write the body to a file and pass `-d "@file"`. Inlining JSON through
+PowerShell into `curl.exe` mangles the quoting and returns
+`Request body could not be parsed as JSON`, which reads like a server fault and
+is not one.
+
+| What you see | What it is | Who fixes it |
+|---|---|---|
+| both fail, `Could not resolve host` | DNS or the allowlist | network — add the host |
+| both fail, timeout | traffic dropped rather than refused | network — add the host |
+| non-streaming works, streaming resets | TLS inspection breaking server-sent events | network — **exclude** these hosts from inspection; they are already allowed |
+| non-streaming works, streaming returns 200 with no events | a proxy buffering the whole response | same exclusion |
+| `certificate verify failed` | inspecting proxy whose CA is not trusted here | install the corporate root, or set `NODE_EXTRA_CA_CERTS` |
+| `401` / `403` | network is fine | see [FOUNDRY-DIRECT.md §4](FOUNDRY-DIRECT.md#4-diagnostics) |
+| `404` | network is fine; the model is not a deployment | see [FOUNDRY-DIRECT.md §3](FOUNDRY-DIRECT.md#3-the-model-list) |
+
+`Test-ClaudeNetwork.ps1` makes this call and reports which row applies, instead
+of reporting that every host is reachable — which, in the reset case, is both
+true and useless.
+
+## See also
+
+- [FOUNDRY-DIRECT.md](FOUNDRY-DIRECT.md) — the direct path, and its diagnostics
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — gateway status codes
+- [DEVELOPER.md](../DEVELOPER.md) — developer setup and FAQ

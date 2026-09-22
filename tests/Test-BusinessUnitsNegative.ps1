@@ -1,4 +1,4 @@
-# Negative test for the business unit checks.
+﻿# Negative test for the business unit checks.
 #
 # A check that passes is worth nothing until it has been seen to fail. This
 # breaks each thing Test-BusinessUnits.ps1 claims to guard, one at a time,
@@ -1934,6 +1934,282 @@ $mutations = @(
        File  = 'scripts/Publish-ClaudeGrafana.ps1'
        From  = 'ClaudeChargeback($__timeFrom, $__timeTo)'
        To    = 'ApiManagementGatewayLlmLog' }
+
+    # Pricing. Every one of these turns a known price into a wrong price or a
+    # missing price into an apparent zero, which is the only way this feature
+    # does harm: a bill of materials that under-reports is worse than one that
+    # declines to quote.
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the silent contains() trap stops being recorded'
+       File  = 'scripts/AzureRetailPrice.ps1'
+       From  = 'contains() is not supported and does not error'
+       To    = 'contains() works fine' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the Free Tier shadow stops being recorded'
+       File  = 'scripts/AzureRetailPrice.ps1'
+       From  = 'A Free Tier row shadows the real meter'
+       To    = 'Each meter is published once' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'free-tier rows are no longer excluded'
+       File  = 'scripts/AzureRetailPrice.ps1'
+       From  = "notlike '*Free*'"
+       To    = "notlike '*NeverMatches*'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the tiered-meter trap stops being recorded'
+       File  = 'scripts/AzureRetailPrice.ps1'
+       From  = 'Tiered meters start at zero'
+       To    = 'Meters have one price' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the caller can no longer choose the tier'
+       File  = 'scripts/AzureRetailPrice.ps1'
+       From  = "[ValidateSet('Marginal', 'First')]"
+       To    = '[AllowNull()]' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a missed lookup stops promising not to return zero'
+       File  = 'scripts/AzureRetailPrice.ps1'
+       From  = 'It never returns 0'
+       To    = 'It returns 0' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'an empty result unrolls to null again'
+       File  = 'scripts/AzureRetailPrice.ps1'
+       From  = 'return , $items'
+       To    = 'return $items' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the comma-operator reason is dropped'
+       File  = 'scripts/AzureRetailPrice.ps1'
+       From  = 'Returned with the comma operator'
+       To    = 'Returned directly' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the module stops saying Claude is not in the API'
+       File  = 'scripts/AzureRetailPrice.ps1'
+       From  = 'Claude token rates are NOT in this API'
+       To    = 'Claude token rates are in this API' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the bill of materials loses its price switch'
+       File  = 'scripts/Get-ClaudeBom.ps1'
+       From  = '[switch]$WithPrices'
+       To    = '[switch]$Unused' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'prices stop following the region deployed into'
+       File  = 'scripts/Get-ClaudeBom.ps1'
+       From  = 'az group show -n $ResourceGroup --query location'
+       To    = 'az account show --query location' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'Cosmos is priced by SKU instead of capability'
+       File  = 'scripts/Get-ClaudeBom.ps1'
+       From  = "$_.name -eq 'EnableServerless'"
+       To    = "$_.name -eq 'Standard'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the ARM-to-meter SKU spelling note is dropped'
+       File  = 'scripts/Get-ClaudeBom.ps1'
+       From  = 'spell the same SKU differently'
+       To    = 'agree on SKU names' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'an unpriced line stops saying so'
+       File  = 'scripts/Get-ClaudeBom.ps1'
+       From  = 'rate unknown'
+       To    = 'no charge' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the JSON total stops excluding Claude tokens'
+       File  = 'scripts/Get-ClaudeBom.ps1'
+       From  = 'not priced here'
+       To    = 'fully priced' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the monthly basis stops being stated'
+       File  = 'scripts/Get-ClaudeBom.ps1'
+       From  = 'month at 730 h'
+       To    = 'month' }
+
+    # Network access. The allowlist is the one artefact here that a third party
+    # acts on directly, so each claim has to be shown to be load-bearing.
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the network check stops testing the measured host'
+       File  = 'scripts/Test-ClaudeNetwork.ps1'
+       From  = '$FoundryResource.services.ai.azure.com'
+       To    = '$FoundryResource.cognitiveservices.azure.com' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'reachability is treated as working again'
+       File  = 'scripts/Test-ClaudeNetwork.ps1'
+       From  = 'Reachability is not the same as working'
+       To    = 'Reachability is what matters' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the round trip stops streaming'
+       File  = 'scripts/Test-ClaudeNetwork.ps1'
+       From  = '"stream":true'
+       To    = '"stream":false' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the client buffers the stream it is testing'
+       File  = 'scripts/Test-ClaudeNetwork.ps1'
+       From  = '--no-buffer'
+       To    = '--silent' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a reset stops being told from a block'
+       File  = 'scripts/Test-ClaudeNetwork.ps1'
+       From  = "Verdict = 'reset'"
+       To    = "Verdict = 'blocked'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a reset is blamed on the allowlist again'
+       File  = 'scripts/Test-ClaudeNetwork.ps1'
+       From  = 'This is not an allowlist problem'
+       To    = 'Check the allowlist' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the fix asked for reverts to allowing'
+       File  = 'scripts/Test-ClaudeNetwork.ps1'
+       From  = 'excluded from TLS inspection rather than merely allowed'
+       To    = 'added to the allowlist' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'an auth failure is blamed on the network'
+       File  = 'scripts/Test-ClaudeNetwork.ps1'
+       From  = 'the network is fine; this is a role or a firewall'
+       To    = 'the host is blocked' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the config silently overrides an explicit argument'
+       File  = 'scripts/Test-ClaudeNetwork.ps1'
+       From  = "PSBoundParameters.ContainsKey('FoundryResource')"
+       To    = "PSBoundParameters.ContainsKey('Nothing')" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the path actually tested stops being named'
+       File  = 'scripts/Test-ClaudeNetwork.ps1'
+       From  = '$roundTrip.TestedPath'
+       To    = '$roundTrip.Verdict' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a dropped IMDS stops being told from a refused one'
+       File  = 'scripts/Test-ClaudeNetwork.ps1'
+       From  = "Behaviour = 'dropped'"
+       To    = "Behaviour = 'refused'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the credential pin reverts to a rejected value'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = "SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','dev','User')"
+       To    = "SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','AzureCliCredential','User')" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the guide reverts to the rejected value'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = "SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','dev','User')"
+       To    = "SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','AzureCliCredential','User')" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the Cloud PC case stops being named'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = 'On a Cloud PC, a Dev Box or any Azure VM this is the default'
+       To    = 'This is rare' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the audience trap is dropped from the network doc'
+       File  = 'docs/NETWORK.md'
+       From  = 'is a token audience, not an endpoint'
+       To    = 'is the Foundry endpoint' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the azure-api.net suffix warning is dropped'
+       File  = 'docs/NETWORK.md'
+       From  = 'is not matched by any `*.azure.com` rule'
+       To    = 'is covered by `*.azure.com`' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the extension is said to reuse the CLI on PATH'
+       File  = 'docs/NETWORK.md'
+       From  = 'It does **not** use the CLI on `PATH`'
+       To    = 'It uses the CLI on `PATH`' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'Desktop is presented as measured when it was not'
+       File  = 'docs/NETWORK.md'
+       From  = 'runtime egress was **not** captured live'
+       To    = 'runtime egress was captured live' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the AppX loopback caveat disappears'
+       File  = 'docs/NETWORK.md'
+       From  = 'CheckNetIsolation LoopbackExempt'
+       To    = 'netsh winhttp' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the observer is implied to read request bodies'
+       File  = 'docs/NETWORK.md'
+       From  = 'never terminates TLS'
+       To    = 'decrypts each request' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the direct guide stops pointing at the network doc'
+       File  = 'docs/FOUNDRY-DIRECT.md'
+       From  = '**[NETWORK.md](NETWORK.md)**'
+       To    = 'the network documentation' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the gateway price drifts back to the overstated figure'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = '$150/month at list price'
+       To    = '$250/month' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the break-even advice uses the wrong price'
+       File  = 'docs/COMPARISON.md'
+       From  = 'the $150/month gateway'
+       To    = 'the $250/month gateway' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the table stops naming which client needs what'
+       File  = 'docs/NETWORK.md'
+       From  = '| CLI | VS Code | Desktop |'
+       To    = '| Needed by |' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'npm is claimed to be needed by every client'
+       File  = 'docs/NETWORK.md'
+       From  = '`registry.npmjs.org` | 443 | ✅ | — | —'
+       To    = '`registry.npmjs.org` | 443 | ✅ | ✅ | ✅' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the marketplace is claimed to be needed by the CLI'
+       File  = 'docs/NETWORK.md'
+       From  = '`marketplace.visualstudio.com` | 443 | — | ✅ | —'
+       To    = '`marketplace.visualstudio.com` | 443 | ✅ | ✅ | —' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'running stops being separated from installing'
+       File  = 'docs/NETWORK.md'
+       From  = '**Rows 1–3 are the only ones needed to *run***'
+       To    = 'Every row is required' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the device-code order stops being stated'
+       File  = 'docs/NETWORK.md'
+       From  = 'before any token exists'
+       To    = 'after the token is issued' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the network doc reverts to a rejected credential value'
+       File  = 'docs/NETWORK.md'
+       From  = 'takes **`dev`**, not a credential name'
+       To    = 'takes a credential name' }
 )
 
 $missed = @()

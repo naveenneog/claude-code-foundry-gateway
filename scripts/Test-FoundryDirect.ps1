@@ -276,25 +276,39 @@ if ($ahead.Count -gt 0) {
 
     # The supported way to pin the chain to one credential, rather than
     # deleting an identity the machine may need for other things.
-    # Documented at learn.microsoft.com/azure/developer/javascript/sdk/
-    # authentication/credential-chains: AZURE_TOKEN_CREDENTIALS takes dev,
-    # prod, or a credential name. Individual names need @azure/identity 4.11.0
-    # or later; dev is understood by earlier versions and also excludes
-    # managed identity, so it is the safer of the two when the bundled
-    # version is unknown.
+    #
+    # `dev`, not `AzureCliCredential`. The Azure documentation lists individual
+    # credential names as valid from @azure/identity 4.11.0, and that is true of
+    # the library - but Claude Code validates the value itself against a shorter
+    # list before the library ever sees it. Measured on CLI 2.1.272:
+    #
+    #   AzureCliCredential -> API Error: Invalid value for AZURE_TOKEN_CREDENTIALS
+    #                         = AzureCliCredential. Valid values are 'prod' or 'dev'.
+    #   dev                -> works
+    #   prod               -> fails; prod excludes the developer credentials,
+    #                         which is the CLI sign-in we are trying to select
+    #
+    # This script used to recommend AzureCliCredential and -Fix used to set it,
+    # which turned a working machine into a broken one. `dev` excludes managed
+    # identity, which is the whole purpose here.
     $already = [Environment]::GetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS', 'User')
     if ($already) {
         Note "AZURE_TOKEN_CREDENTIALS is already set to $already"
+        if ($already -notin @('dev', 'prod')) {
+            Note "  That value is not one Claude Code accepts; it takes 'dev' or 'prod'."
+            Note "  Every call will fail with 'Invalid value for AZURE_TOKEN_CREDENTIALS'."
+        }
     }
     else {
         Note 'Pin the credential chain to your CLI sign-in instead of removing the identity:'
-        Note '  AZURE_TOKEN_CREDENTIALS=AzureCliCredential   (needs @azure/identity 4.11.0+)'
-        Note '  AZURE_TOKEN_CREDENTIALS=dev                  (older versions; also excludes MI)'
+        Note '  AZURE_TOKEN_CREDENTIALS=dev    (excludes managed identity; the value to use)'
+        Note "  Claude Code accepts only 'dev' or 'prod' - a credential name is rejected,"
+        Note '  even though @azure/identity 4.11.0+ understands one.'
         Add-Repair -What 'pin Claude Code to your Azure CLI sign-in' `
             -Why 'a managed identity or environment credential is ahead of you in the chain' `
-            -Command "[Environment]::SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','AzureCliCredential','User')" `
+            -Command "[Environment]::SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','dev','User')" `
             -Do {
-                [Environment]::SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS', 'AzureCliCredential', 'User')
+                [Environment]::SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS', 'dev', 'User')
                 return $true
             }
     }

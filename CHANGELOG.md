@@ -28,6 +28,39 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- **What to allow on a firewall, measured rather than listed.**
+  `docs/NETWORK.md` gives one table per destination, marked with which of the
+  three clients — CLI, VS Code extension, Claude Desktop — needs it, and
+  separating what is needed to *run* from what is needed to *install*. Three
+  hosts are needed to run: the Foundry host on the direct path or API
+  Management on the gateway path, plus `login.microsoftonline.com`.
+
+  Two entries that commonly appear on an allowlist and do not do what they
+  look like. `cognitiveservices.azure.com` is the **token audience**, the
+  string in the OAuth scope — no client connects to it, so an allowlist
+  holding it without a wildcard appears to cover Foundry and covers nothing.
+  All three build `${resource}.services.ai.azure.com`. And `*.azure-api.net`
+  is **not matched by any `*.azure.com` rule**: different suffix, and on the
+  gateway path it is the entry that matters most.
+
+  `scripts/Test-ClaudeNetwork.ps1` checks it, and makes a real **streaming**
+  call rather than stopping at reachability, because the two are not the same
+  question. `scripts/observe-egress.mjs` records what a client attempts and
+  forwards it, tunnelling rather than intercepting so it never terminates TLS.
+
+- **Live infrastructure prices in the bill of materials.**
+  `Get-ClaudeBom.ps1 -WithPrices` reads `prices.azure.com` for the SKUs
+  actually deployed in the region actually deployed. Claude token rates are
+  deliberately excluded: measured across 6,734 `Foundry Models` meters in four
+  regions, **none is a Claude meter**. They stay in `config/price-book.json`
+  with the date they were read.
+
+  `scripts/AzureRetailPrice.ps1` defends the three ways that API returns a
+  wrong number quietly. `contains()` is unsupported and returns an empty set
+  rather than erroring. A `Free Tier` row shadows the real meter — Cosmos
+  `100 RU/s` is published at both $0.008 and $0. Tiered meters start at zero.
+  A lookup that finds nothing returns `$null` and never `0`.
+
 - **The P19 platform is decided and priced.** Cosmos DB serverless with an Azure
   Function resolver, recorded in
   [ADR-0011](docs/adr/0011-projection-platform.md).
@@ -400,6 +433,31 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   converts to 1,388,888,888 tokens and back to exactly $5000.00.
 
 ### Fixed
+
+- **The gateway price was overstated by 67%.** Quoted as ~$250/month in eight
+  places; the measured list price is **$150.00** — `Basic v2 Unit` at
+  $0.20548/hour over 730 hours, identical in eastus, eastus2 and westeurope.
+  `COMPARISON.md` used the figure to advise small teams the gateway was not
+  worth it, so the error changed a recommendation.
+
+- **The documented credential pin was a value the client rejects.**
+  `AZURE_TOKEN_CREDENTIALS=AzureCliCredential` is refused by Claude Code with
+  `Valid values are 'prod' or 'dev'` — the client validates it before
+  `@azure/identity` sees it, whatever the library supports. `-Fix` applied that
+  value, so running the repair broke a working machine. It is now `dev`.
+  `prod` is not an alternative: it excludes the developer credentials, which is
+  the sign-in being selected.
+
+  This matters more than it looks. On a Cloud PC, a Dev Box or any Azure VM the
+  instance metadata service answers — measured at 10 ms on a Windows 365 Cloud
+  PC — so a managed identity is found ahead of the developer's `az login` every
+  time. The pin is the default case there, not an edge case.
+
+- **The network check reported the wrong path as healthy.** An explicitly
+  supplied empty argument was indistinguishable from an omitted one, so the
+  configuration refilled it and the round trip tested the gateway while the
+  report named a resource. Detected through `PSBoundParameters` now, and the
+  path tested is always printed.
 
 - `SCALE.md` headlined the wrong ceiling. It said *"the binding limit is 110
   developers per tier"* while its own table already gave the business-unit map as

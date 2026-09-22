@@ -1,7 +1,7 @@
 # Drives the wizard down the reuse branch.
 #
 # Reuse exists because every earlier run generated a random name prefix and so
-# always built a new API Management instance - roughly $250/month each. That is
+# always built a new API Management instance - about $150/month each at list price. That is
 # how a duplicate gateway appeared in the test tenant.
 #
 # Two things have to hold, and both have been wrong at some point:
@@ -134,3 +134,4 @@ Write-Host ''
 Write-Host 'Reuse path works.' -ForegroundColor Green
 Write-Host ''
 exit 0
+

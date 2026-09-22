@@ -483,7 +483,7 @@ alice@contoso.com         728 tokens
 
 | Item | Approx |
 |---|---|
-| APIM Basic v2, 1 unit | ~$250/month |
+| APIM Basic v2, 1 unit | ~$150/month at list price |
 | Log Analytics + Application Insights | ingestion-based, small at this volume |
 | Claude tokens | Billed through your existing Claude deployment in Foundry. The gateway does not change what a token costs |
 
@@ -558,6 +558,7 @@ docs/
   SCALE.md                     measured ceilings and the load envelope
   DECISIONS.md                 the nine choices, and which two cannot wait
   FOUNDRY-DIRECT.md            Claude Code straight at Foundry, and what it costs you
+  NETWORK.md                   what to allow on a firewall, measured per client
   DEBUGGING.md                 isolate a failure layer by layer
   COMPARISON.md                Foundry vs Anthropic direct
   ARCHITECTURE.md              how it works, and why each piece is there
@@ -611,6 +612,7 @@ journeys that span several guides:
 - [Architecture](docs/ARCHITECTURE.md) — request path, identity model, design decisions
 - [Governance checks](docs/GOVERNANCE-CHECKS.md) — command reference for verifying controls
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — symptom → fix lookup, when you already know what broke
+- [Network access](docs/NETWORK.md) — what to allow on a firewall, measured from the clients rather than listed
 - [Screenshot tooling](guide/README.md) — regenerate the screenshots against your own deployment
 
 **How this repository is run.** These are the working record rather than
@@ -682,3 +684,4 @@ are safe; bash is unaffected. `./tests/Test-AzArguments.ps1` enforces this.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+

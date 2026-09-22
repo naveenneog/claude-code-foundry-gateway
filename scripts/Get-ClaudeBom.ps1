@@ -22,16 +22,20 @@
 .EXAMPLE
     ./scripts/Get-ClaudeBom.ps1
     ./scripts/Get-ClaudeBom.ps1 -AsJson
+    ./scripts/Get-ClaudeBom.ps1 -WithPrices
 #>
 [CmdletBinding()]
 param(
     [string]$ResourceGroup = $(if ($env:CLAUDE_RG) { $env:CLAUDE_RG } else { 'rg-contosohub' }),
     [string]$ApimName,
+    [switch]$WithPrices,
+    [string]$Region,
     [switch]$AsJson
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
+. (Join-Path $PSScriptRoot 'AzureRetailPrice.ps1')
 
 if (-not $ApimName) {
     $found = @((az apim list -g $ResourceGroup --query "[].name" -o tsv 2>$null) -split "`n" | Where-Object { $_ })
@@ -102,13 +106,112 @@ $COST = @{
 
 $created = @($mine | Where-Object { $_.type -ne 'Microsoft.CognitiveServices/accounts' } | Sort-Object type)
 
+# Which published meter each deployed resource bills on. The shapes above say
+# what you are charged for; these say what the rate is, read live from
+# https://prices.azure.com for the region the thing is actually in.
+#
+# Only the meters that dominate the bill are mapped. A resource with no entry
+# reports its shape and no figure, which is honest - a bill of materials that
+# omits a line silently understates the total, so anything unmapped is printed
+# and marked rather than dropped.
+#
+# Claude tokens are deliberately absent. They are not published in this API -
+# measured across 6,734 'Foundry Models' meters in four regions, none of which
+# is a Claude meter - and they are usually the largest number on the bill. See
+# config/price-book.json, and Measure-ClaudeUsage for what was actually spent.
+function Get-ResourceMeter {
+    param($Resource, $Account)
+    switch ($Resource.type) {
+        'Microsoft.ApiManagement/service' {
+            if (-not $Resource.sku) { return $null }
+            # ARM and the price list spell the same SKU differently: ARM says
+            # 'BasicV2', the meter is 'Basic v2 Unit'. Passing the ARM name
+            # through finds nothing, and a lookup that finds nothing on the
+            # single largest line of the bill is worth spelling out rather than
+            # leaving to a lucky match.
+            $sku = $Resource.sku -replace 'V2$', ' v2'
+            return @{ Service = 'API Management'; Meter = "$sku Unit"; Per = 'hour'; Monthly = $true }
+        }
+        'Microsoft.DocumentDB/databaseAccounts' {
+            $serverless = $false
+            if ($Account -and $Account.capabilities) {
+                $serverless = @($Account.capabilities | Where-Object { $_.name -eq 'EnableServerless' }).Count -gt 0
+            }
+            if ($serverless) {
+                return @{ Service = 'Azure Cosmos DB'; Meter = '1M RUs'; Per = 'million request units'; Monthly = $false }
+            }
+            return @{ Service = 'Azure Cosmos DB'; Meter = '100 RU/s'; Per = 'hour per 100 RU/s'; Monthly = $false }
+        }
+        'Microsoft.OperationalInsights/workspaces' {
+            return @{ Service = 'Log Analytics'; Meter = 'Analytics Logs Data Ingestion'; Per = 'GB ingested'; Monthly = $false }
+        }
+        'Microsoft.Web/sites' {
+            return @{ Service = 'Functions'; Meter = 'On Demand Execution Time'; Per = 'GB-second'; Monthly = $false }
+        }
+        default { return $null }
+    }
+}
+
+$prices = @{}
+$priceRegion = $Region
+$priceNote = $null
+if ($WithPrices) {
+    if (-not $priceRegion) {
+        $priceRegion = az group show -n $ResourceGroup --query location -o tsv 2>$null
+        if ($priceRegion) { $priceRegion = $priceRegion.Trim() }
+    }
+    if (-not $priceRegion) {
+        $priceNote = "could not read the region of '$ResourceGroup'; pass -Region"
+    }
+    else {
+        # Cosmos bills differently by capability, not by SKU, so the account has
+        # to be read before its meter can be chosen.
+        $cosmosAccounts = @{}
+        foreach ($r in @($created | Where-Object { $_.type -eq 'Microsoft.DocumentDB/databaseAccounts' })) {
+            try {
+                $cosmosAccounts[$r.name] = az cosmosdb show -g $ResourceGroup -n $r.name --query "{capabilities:capabilities}" -o json 2>$null | ConvertFrom-Json
+            }
+            catch { }
+        }
+        foreach ($r in $created) {
+            $acct = if ($cosmosAccounts.ContainsKey($r.name)) { $cosmosAccounts[$r.name] } else { $null }
+            $map = Get-ResourceMeter -Resource $r -Account $acct
+            if (-not $map) { continue }
+            $p = Get-AzureRetailPrice -ServiceName $map.Service -Region $priceRegion -MeterName $map.Meter
+            if ($null -eq $p) {
+                $reason = Get-AzureRetailPriceUnavailableReason
+                $prices[$r.name] = @{ Known = $false; Why = $(if ($reason) { 'price API unreachable' } else { "no '$($map.Meter)' meter in $priceRegion" }) }
+                continue
+            }
+            $entry = @{
+                Known    = $true
+                Unit     = $p.UnitPrice
+                Measure  = $p.UnitOfMeasure
+                Currency = $p.Currency
+                Per      = $map.Per
+                Tier     = $p.TierMinimum
+                Monthly  = $(if ($map.Monthly) { ConvertTo-MonthlyPrice -HourlyPrice $p.UnitPrice } else { $null })
+            }
+            $prices[$r.name] = $entry
+        }
+    }
+}
+
 if ($AsJson) {
     [ordered]@{
         resourceGroup = $ResourceGroup
         apim          = $ApimName
-        created       = @($created | ForEach-Object { [ordered]@{ type = $_.type; name = $_.name; sku = $_.sku; cost = $COST[$_.type] } })
+        priceRegion   = $priceRegion
+        created       = @($created | ForEach-Object {
+                $n = $_.name
+                [ordered]@{
+                    type  = $_.type; name = $n; sku = $_.sku; cost = $COST[$_.type]
+                    price = $(if ($prices.ContainsKey($n)) { $prices[$n] } else { $null })
+                }
+            })
         reused        = @(if ($foundry) { [ordered]@{ type = 'Microsoft.CognitiveServices/accounts'; name = $foundry; note = 'pre-existing; the gateway calls it and did not create it' } })
         configured    = [ordered]@{ namedValues = $nv.Count; savedFunctions = $fn; apiPolicy = 'infra/policy.xml' }
+        tokens        = 'not priced here; Claude rates are not published in the Azure retail price API. See config/price-book.json.'
         groupTotal    = @($all).Count
     } | ConvertTo-Json -Depth 8
     exit 0
@@ -125,6 +228,33 @@ Write-Host ('  ' + ('-' * 118)) -ForegroundColor DarkGray
 foreach ($r in $created) {
     $short = ($r.type -split '/')[-1]
     Write-Host ("  {0,-46} {1,-12} {2}" -f $r.type, $(if ($r.sku) { $r.sku } else { '-' }), $COST[$r.type])
+    if ($WithPrices -and $prices.ContainsKey($r.name)) {
+        $p = $prices[$r.name]
+        if (-not $p.Known) {
+            Write-Host ("  {0,-46} {1,-12} {2}" -f '', '', "rate unknown - $($p.Why)") -ForegroundColor Yellow
+        }
+        elseif ($p.Monthly) {
+            $line = "{0} {1:N5} per {2}  =  {0} {3:N2}/month at 730 h" -f $p.Currency, $p.Unit, $p.Measure, $p.Monthly
+            Write-Host ("  {0,-46} {1,-12} {2}" -f '', '', $line) -ForegroundColor Green
+        }
+        else {
+            $line = "{0} {1} per {2}" -f $p.Currency, $p.Unit, $p.Per
+            if ($p.Tier -gt 0) { $line += "  (first $($p.Tier) included)" }
+            Write-Host ("  {0,-46} {1,-12} {2}" -f '', '', $line) -ForegroundColor Green
+        }
+    }
+}
+if ($WithPrices) {
+    Write-Host ''
+    if ($priceNote) {
+        Write-Host "  $priceNote" -ForegroundColor Yellow
+    }
+    else {
+        Write-Host ("  List prices for {0}, read from prices.azure.com just now. No agreement, discount" -f $priceRegion) -ForegroundColor DarkGray
+        Write-Host '  or reservation is applied, so treat these as an upper bound on infrastructure.' -ForegroundColor DarkGray
+    }
+    Write-Host '  Claude tokens are not in this total. Their rates are not published in that API,' -ForegroundColor DarkGray
+    Write-Host '  and on a busy deployment they are the largest line on the bill by a wide margin.' -ForegroundColor DarkGray
 }
 
 Write-Host ''
@@ -147,5 +277,10 @@ Write-Host ("  {0,-46} {1}" -f 'Role assignment', 'Cognitive Services User, gate
 Write-Host ''
 Write-Host '  Most of this accelerator is configuration rather than infrastructure, which is' -ForegroundColor DarkGray
 Write-Host '  why the footprint is one API Management instance plus telemetry. Prices are' -ForegroundColor DarkGray
-Write-Host '  regional and change; see the Azure pricing calculator rather than a figure here.' -ForegroundColor DarkGray
+if ($WithPrices) {
+    Write-Host '  regional and change, so they are read live rather than quoted; re-run to refresh.' -ForegroundColor DarkGray
+}
+else {
+    Write-Host '  regional and change; pass -WithPrices to read them live for this region.' -ForegroundColor DarkGray
+}
 Write-Host ''

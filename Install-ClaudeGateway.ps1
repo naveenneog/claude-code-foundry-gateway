@@ -335,7 +335,7 @@ $Location = Read-Default -Prompt 'Location' -Default $Location
 
 # ------------------------------------------------- reuse an existing gateway
 #
-# API Management is the entire cost of this accelerator - roughly $250/month
+# API Management is the entire cost of this accelerator - about $150/month at list price
 # for BasicV2 - and creating a second one by accident is easy to do and easy to
 # miss. Earlier versions always generated a random name prefix, so every run
 # built a new instance even when a perfectly good one already existed.
@@ -730,7 +730,7 @@ if ($ExistingApim) {
     Write-Host '  Adds the Claude API, its policies and named values. Takes a few minutes.' -ForegroundColor DarkGray
     Write-Host '  Its SKU, location and publisher details are re-asserted unchanged.' -ForegroundColor DarkGray
 } else {
-    Write-Host '  Cost: API Management is the bulk of it - BasicV2 is roughly $250/month.' -ForegroundColor DarkGray
+    Write-Host '  Cost: API Management is the bulk of it - BasicV2 is about $150/month at list price.' -ForegroundColor DarkGray
     Write-Host '  Provisioning takes 30-45 minutes, most of it API Management.' -ForegroundColor DarkGray
 }
 Write-Host ''
@@ -1054,3 +1054,4 @@ Write-Host '   3. Close the direct-access bypass - see docs/SETUP.md section 4.1
 Write-Host '      Anyone holding Cognitive Services User on the Foundry account'
 Write-Host '      can skip the gateway entirely and ignore these budgets.'
 Write-Host ''
+

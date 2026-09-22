@@ -292,7 +292,7 @@ printf '  %-24s %s requests/min\n'              "Request ceiling" "$CALLS_PER_MI
 echo
 printf '  %-24s %s\n' "Entra groups" "$STANDARD_GROUP, $PREMIUM_GROUP"
 echo
-printf '  %sCost: API Management is the bulk of it - BasicV2 is roughly $250/month.%s\n' "$C_GREY" "$C_OFF"
+printf '  %sCost: API Management is the bulk of it - BasicV2 is about $150/month at list price.%s\n' "$C_GREY" "$C_OFF"
 printf '  %sProvisioning takes 30-45 minutes, most of it API Management.%s\n' "$C_GREY" "$C_OFF"
 echo
 
@@ -401,3 +401,4 @@ printf '   %s3. Close the direct-access bypass - see docs/SETUP.md section 4.1%s
 echo "      Anyone holding Cognitive Services User on the Foundry account"
 echo "      can skip the gateway entirely and ignore these budgets."
 echo
+
