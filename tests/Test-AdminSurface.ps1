@@ -911,6 +911,7 @@ Assert 'hourly meters are stated per month at 730 hours' ($bom -match 'month at 
 # contradict what an allowlist author would reasonably assume, which is why
 # they are asserted rather than left to prose.
 $net = Get-Content (Join-Path $root 'scripts/Test-ClaudeNetwork.ps1') -Raw
+$net2 = $net
 Assert 'a network check ships'                   ($net -match '(?m)^\s*\$targets = New-Object')
 Assert 'it tests the measured Foundry host'      ($net -match '\$FoundryResource\.services\.ai\.azure\.com')
 Assert 'and says the audience is not an endpoint' ($net -match 'token \*audience\*')
@@ -1053,6 +1054,25 @@ Assert 'skipping the checks is discouraged'      ($ob -match 'turns a clear fail
 Assert 'each mode checks only its own hosts'     ($ob -match 'would make an irrelevant')
 Assert 'a managed identity is pinned for you'    ($ob.Contains("SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS', 'dev', 'User')"))
 Assert 'and an unusable existing pin is flagged' ($ob -match "which Claude Code rejects")
+# Found by running the round trip rather than by reading: switching a machine
+# back to the gateway failed as "claude-sonnet-5 is not a deployment" because
+# the round-trip URL was built from the host and lost the path the API is
+# published under. A 404 from the wrong URL is indistinguishable from a model
+# that is not deployed.
+Assert 'the gateway round trip keeps its path'   ($net2 -match '\[string\]\$GatewayUrl,')
+Assert 'and says why a host is not enough'       ($net2 -match 'reaches the instance and')
+Assert 'the host is derived from the url'        ($net2 -match '# The host is derived from the URL rather than asked for twice')
+Assert 'onboarding passes the whole url'         ($ob -match "netArgs\['GatewayUrl'\] = \`$cfg\.gatewayUrl")
+# Array splatting binds positionally, so a switch passed as a string landed on
+# whichever parameter was first in position and failed its ValidateSet - an
+# error naming a configuration value the file never contained.
+Assert 'setup arguments are splatted by name'    ($ob -match '\$setupArgs = @\{ ConfigPath = \$ConfigPath \}')
+Assert 'with the reason recorded'                ($ob -match 'Array splatting binds positionally')
+# Two paths, two health checks. Passing a placeholder resource made the gateway
+# route fail DNS on a hostname nobody meant to use.
+Assert 'the gateway is verified by its own check' ($ob -match "Join-Path \`$scriptDir 'Debug-ClaudeCode\.ps1'")
+Assert 'and the direct path by its own'          ($ob -match '& \$check -Resource \$cfg\.foundryResource -Expect direct')
+Assert 'a skipped client is not reported as a fault' ($ob -match 'was skipped at your request, so it still points where it did')
 
 $onb2 = Get-Content (Join-Path $root 'docs/ONBOARDING.md') -Raw
 Assert 'onboarding documents the preflight'      ($onb2 -match '(?m)^## 7\. Checking a machine before you promise a date')

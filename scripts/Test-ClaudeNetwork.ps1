@@ -34,6 +34,12 @@
 .PARAMETER GatewayHost
     The API Management host. Read from the Claude settings when omitted.
 
+.PARAMETER GatewayUrl
+    The full gateway base URL, path included. A host alone is enough to test
+    reachability and not enough to call the API: the gateway publishes Claude
+    under a path, and a round trip built from the host reaches the instance and
+    misses the API, which comes back 404 and reads as a missing deployment.
+
 .PARAMETER IncludeOptional
     Also test destinations that are not required - telemetry, update checks.
     Blocking these is a supported configuration; they are listed so that an
@@ -51,6 +57,7 @@
 param(
     [string]$FoundryResource,
     [string]$GatewayHost,
+    [string]$GatewayUrl,
     [switch]$IncludeOptional,
     [switch]$SkipRoundTrip,
     [switch]$AsJson
@@ -75,14 +82,18 @@ $cfg = Read-ClaudeEnv
 # a truthiness check - which silently re-filled it from settings and pointed the
 # round trip at the gateway while the report named a resource.
 $explicitResource = $PSBoundParameters.ContainsKey('FoundryResource')
-$explicitGateway = $PSBoundParameters.ContainsKey('GatewayHost')
+$explicitGateway = $PSBoundParameters.ContainsKey('GatewayHost') -or $PSBoundParameters.ContainsKey('GatewayUrl')
 
 if (-not $explicitResource -and $cfg -and $cfg.PSObject.Properties['ANTHROPIC_FOUNDRY_RESOURCE']) {
     $FoundryResource = $cfg.ANTHROPIC_FOUNDRY_RESOURCE
 }
 if (-not $explicitGateway -and $cfg -and $cfg.PSObject.Properties['ANTHROPIC_FOUNDRY_BASE_URL']) {
-    $u = $cfg.ANTHROPIC_FOUNDRY_BASE_URL
-    if ($u -match '^https?://([^/]+)') { $GatewayHost = $Matches[1] }
+    $GatewayUrl = $cfg.ANTHROPIC_FOUNDRY_BASE_URL
+}
+# The host is derived from the URL rather than asked for twice, so the two can
+# never disagree about which instance is being tested.
+if ($GatewayUrl -and -not $GatewayHost -and $GatewayUrl -match '^https?://([^/]+)') {
+    $GatewayHost = $Matches[1]
 }
 
 # Each destination carries what breaks without it, so that an allowlist review
@@ -343,8 +354,14 @@ if (-not $SkipRoundTrip) {
         $url = "https://$FoundryResource.services.ai.azure.com/anthropic/v1/messages"
         $testedPath = 'direct'
     }
-    elseif ($GatewayHost -and $cfg -and $cfg.PSObject.Properties['ANTHROPIC_FOUNDRY_BASE_URL']) {
-        $url = ($cfg.ANTHROPIC_FOUNDRY_BASE_URL.TrimEnd('/')) + '/v1/messages'
+    elseif ($GatewayUrl) {
+        # The full URL, path included. Built from the host alone this reaches
+        # the API Management instance and misses the API published under it,
+        # which answers 404 - indistinguishable, from here, from a model that
+        # is not deployed. Measured: switching a machine back to the gateway
+        # failed as "claude-sonnet-5 is not a deployment" when the model was
+        # deployed and the path was simply absent.
+        $url = ($GatewayUrl.TrimEnd('/')) + '/v1/messages'
         $testedPath = 'gateway'
     }
     elseif ($GatewayHost) {

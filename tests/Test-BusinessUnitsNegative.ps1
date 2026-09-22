@@ -2396,6 +2396,38 @@ $mutations = @(
        File  = 'Install-ClaudeGateway.ps1'
        From  = "mode          = 'gateway'"
        To    = "modeUnused    = 'gateway'" }
+
+    # The three bugs the gateway-direct-gateway round trip exposed. Each one
+    # produced an error naming something that was not wrong.
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the gateway round trip loses its path again'
+       File  = 'scripts/Test-ClaudeNetwork.ps1'
+       From  = '[string]$GatewayUrl'
+       To    = '[string]$GatewayUrlUnused' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'onboarding passes only the gateway host'
+       File  = 'scripts/Onboard-ClaudeDeveloper.ps1'
+       From  = "netArgs['GatewayUrl'] = `$cfg.gatewayUrl"
+       To    = "netArgs['GatewayHost'] = `$cfg.gatewayUrl" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'setup arguments go back to positional splatting'
+       File  = 'scripts/Onboard-ClaudeDeveloper.ps1'
+       From  = '$setupArgs = @{ ConfigPath = $ConfigPath }'
+       To    = '$setupArgs = @(''-ConfigPath'', $ConfigPath)' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the gateway is verified with the direct check again'
+       File  = 'scripts/Onboard-ClaudeDeveloper.ps1'
+       From  = "Join-Path `$scriptDir 'Debug-ClaudeCode.ps1'"
+       To    = "Join-Path `$scriptDir 'Test-FoundryDirect.ps1'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a deliberately skipped client reads as a fault'
+       File  = 'scripts/Onboard-ClaudeDeveloper.ps1'
+       From  = 'was skipped at your request, so it still points where it did'
+       To    = 'is misconfigured' }
 )
 
 $missed = @()

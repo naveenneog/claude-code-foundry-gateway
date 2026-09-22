@@ -221,7 +221,7 @@ if (-not $SkipPreflight) {
             $netArgs['GatewayHost'] = ''
         }
         else {
-            if ($cfg.gatewayUrl -match '^https?://([^/]+)') { $netArgs['GatewayHost'] = $Matches[1] }
+            if ($cfg.gatewayUrl) { $netArgs['GatewayUrl'] = $cfg.gatewayUrl }
             $netArgs['FoundryResource'] = ''
         }
         $net = $null
@@ -340,15 +340,21 @@ if (-not (Test-Path $setup)) { throw "Cannot find $setup" }
 
 # Delegated, not reimplemented. Two scripts that configure the same machine
 # differently is how a fleet ends up in two states that nobody can reproduce.
-$args = @('-ConfigPath', $ConfigPath)
-if ($SkipDesktop) { $args += '-SkipDesktop' }
-if ($SkipVSCode) { $args += '-SkipVSCode' }
-if ($mode -eq 'foundry-direct' -and $Unattended) { $args += '-Force' }
+#
+# A hashtable, not an array. Array splatting binds positionally, so a switch
+# passed as the string '-SkipDesktop' does not become a switch - the next value
+# lands on whatever parameter is first in position, which here was -Auth, and
+# the run failed against that parameter's ValidateSet. The error named a
+# configuration value the file never contained.
+$setupArgs = @{ ConfigPath = $ConfigPath }
+if ($SkipDesktop) { $setupArgs['SkipDesktop'] = $true }
+if ($SkipVSCode) { $setupArgs['SkipVSCode'] = $true }
+if ($mode -eq 'foundry-direct' -and $Unattended) { $setupArgs['Force'] = $true }
 
-Note "$(Split-Path $setup -Leaf) $($args -join ' ')"
+Note "$(Split-Path $setup -Leaf) -ConfigPath $ConfigPath$(($setupArgs.Keys | Where-Object { $_ -ne 'ConfigPath' } | Sort-Object | ForEach-Object { " -$_" }) -join '')"
 
 if ($PSCmdlet.ShouldProcess($env:COMPUTERNAME, "configure for $mode")) {
-    & $setup @args
+    & $setup @setupArgs
     if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
         Write-Host ''
         Write-Host '  Setup reported a failure. See its output above.' -ForegroundColor Red
@@ -376,24 +382,52 @@ if ($PSCmdlet.ShouldProcess($env:COMPUTERNAME, "configure for $mode")) {
 # ------------------------------------------------------------------ verify
 Head 'Verifying'
 
-$check = Join-Path $scriptDir 'Test-FoundryDirect.ps1'
-if (-not (Test-Path $check)) {
-    Warn 'Test-FoundryDirect.ps1 is not beside this script; skipping verification'
-}
-elseif (-not $PSCmdlet.ShouldProcess($env:COMPUTERNAME, 'verify')) {
-    Note 'skipped under -WhatIf'
+# Each path gets its own health check. Test-FoundryDirect needs a Foundry
+# resource name; the gateway config does not carry one, and passing a
+# placeholder made the first check fail DNS on a hostname nobody meant to use -
+# a confusing way to end a successful install. Debug-ClaudeCode is the gateway's
+# own check and takes the URL.
+$verified = $true
+if ($mode -eq 'gateway') {
+    $check = Join-Path $scriptDir 'Debug-ClaudeCode.ps1'
+    if (-not (Test-Path $check)) {
+        Warn 'Debug-ClaudeCode.ps1 is not beside this script; skipping verification'
+        $verified = $false
+    }
+    elseif (-not $PSCmdlet.ShouldProcess($env:COMPUTERNAME, 'verify')) {
+        Note 'skipped under -WhatIf'
+        $verified = $false
+    }
+    else {
+        & $check -GatewayBaseUrl $cfg.gatewayUrl
+    }
 }
 else {
-    $expect = if ($mode -eq 'gateway') { 'gateway' } else { 'direct' }
-    $res = if ($mode -eq 'foundry-direct') { $cfg.foundryResource } else { 'unused' }
-    & $check -Resource $res -Expect $expect
-    if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-        Write-Host ''
-        Write-Host '  Configured, but the health check found problems. See above.' -ForegroundColor Yellow
-        Write-Host '  The configuration was written - these are things to fix, not a failed install.' -ForegroundColor DarkGray
-        Write-Host ''
-        exit 1
+    $check = Join-Path $scriptDir 'Test-FoundryDirect.ps1'
+    if (-not (Test-Path $check)) {
+        Warn 'Test-FoundryDirect.ps1 is not beside this script; skipping verification'
+        $verified = $false
     }
+    elseif (-not $PSCmdlet.ShouldProcess($env:COMPUTERNAME, 'verify')) {
+        Note 'skipped under -WhatIf'
+        $verified = $false
+    }
+    else {
+        & $check -Resource $cfg.foundryResource -Expect direct
+    }
+}
+
+if ($verified -and $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+    Write-Host ''
+    Write-Host '  Configured, but the health check found problems. See above.' -ForegroundColor Yellow
+    Write-Host '  The configuration was written - these are things to fix, not a failed install.' -ForegroundColor DarkGray
+    # A client you told it to leave alone is still on the old target, and the
+    # health check has no way to know that was deliberate. Saying so here stops
+    # an expected result reading as a fault.
+    if ($SkipDesktop) { Write-Host '  Claude Desktop was skipped at your request, so it still points where it did.' -ForegroundColor DarkGray }
+    if ($SkipVSCode) { Write-Host '  VS Code was skipped at your request, so it still points where it did.' -ForegroundColor DarkGray }
+    Write-Host ''
+    exit 1
 }
 
 Write-Host ''
