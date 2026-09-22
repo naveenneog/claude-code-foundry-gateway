@@ -646,6 +646,38 @@ Assert 'the FAQ covers the override'             ($devFaq -match '(?i)I fixed my
 Assert 'with the four places in order'           ($devFaq -match '(?i)`\.claude/settings\.local\.json` in the project folder')
 Assert 'and why the local one catches people'    ($devFaq -match '(?i)per-machine and usually untracked')
 Assert 'it says a new session is needed'         ($devFaq -match '(?i)a running one keeps what it loaded')
+
+# ---------------------------------------------------------------- projection
+Write-Host ''
+Write-Host 'Admin - the entitlement projection' -ForegroundColor Cyan
+$sp = Get-Content (Join-Path $root 'scripts/Sync-ClaudeProjection.ps1') -Raw
+Assert 'a projection sync ships'                 ($sp.Length -gt 0)
+Assert 'it reads the same groups as the gateway' ($sp -match 'Get-GroupMemberOids')
+Assert 'premium wins over standard'              ($sp -match "(?i)premium is read first and wins")
+Assert 'every record carries its tenant'         ($sp -match 'tenantId\s+= \$TenantId')
+Assert 'and refuses to stamp another tenant'     ($sp -match '(?i)would be written and then never honoured')
+Assert 'it is a point write by partition key'    ($sp -match "x-ms-documentdb-partitionkey")
+Assert 'using Entra, not a key'                  ($sp -match 'type=aad&ver=1\.0&sig=')
+# An empty resolve looks identical to a directory that cannot be read, and
+# acting on it revokes everyone.
+Assert 'an empty resolve does not wipe'          ($sp -match '(?i)Removing them all would revoke everyone')
+Assert 'unless the operator insists'             ($sp -match '\[switch\]\$AllowEmpty')
+Assert 'orphans are removed by default'          ($sp -match '(?i)Keeping them would leave')
+Assert 'and keeping them is reported'            ($sp -match '(?i)orphan\(s\) kept')
+# A 403 from Cosmos has more than one cause, needing different people to fix.
+Assert 'a firewall 403 is told from a role one'  ($sp -match "(?i)firewall\|public internet\|blocked by your")
+Assert 'naming the address it came from'         ($sp -match '(?i)This machine came from')
+Assert 'and that policy may have set it'         ($sp -match '(?i)Azure Policy can set that without anyone')
+Assert 'it says authorisation has not moved'     ($sp -match '(?i)changes nothing about who the gateway lets in')
+Assert 'and it is PowerShell 5.1 safe'           (-not ($sp -replace '(?m)^\s*#.*$','' -match '\?\?'))
+
+$pb = Get-Content (Join-Path $root 'infra/projection.bicep') -Raw
+Assert 'network access is a stated choice'       ($pb -match "@allowed\(\[\s*'public'")
+Assert 'rather than left for policy to decide'   ($pb -match '(?i)an Azure Policy will otherwise')
+Assert 'redundancy is a stated choice'           ($pb -match "'multi-region'")
+Assert 'and it names the billing consequence'    ($pb -match '(?i)redundancy is wanted, throughput becomes a')
+Assert 'serverless cannot be made redundant'     ($pb -match '(?i)Serverless cannot be zone redundant')
+Assert 'the billing model is reported'           ($pb -match 'output billingModel string')
 # Every resource carries different deployments. Nothing on the direct path may
 # assume a model name - measured on a resource holding only claude-opus-4-7,
 # where a hardcoded claude-sonnet-5 failed the Messages check on a resource
