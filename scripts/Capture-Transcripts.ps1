@@ -170,6 +170,12 @@ else {
 Save-Transcript 'bom-prices' `
     (Join-Path $root 'scripts/Get-ClaudeBom.ps1') @('-WithPrices')
 
+# 8. Developer onboarding, checks only - the survey a developer runs before
+#    anything is written, and the one an administrator runs across a fleet.
+Save-Transcript 'onboard-preflight' `
+    (Join-Path $root 'scripts/Onboard-ClaudeDeveloper.ps1') `
+    @('-ConfigPath', (Join-Path $root 'onboarding/claude-gateway.json'), '-PreflightOnly')
+
 Write-Host ''
 Write-Host "transcripts in $out" -ForegroundColor Green
 Get-ChildItem $out -Filter *.txt | ForEach-Object { "  {0,-26} {1} lines" -f $_.Name, (Get-Content $_.FullName).Count }

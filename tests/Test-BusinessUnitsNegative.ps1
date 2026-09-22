@@ -2310,6 +2310,92 @@ $mutations = @(
        File  = 'scripts/render-terminal.mjs'
        From  = 'a failure that looks like a success'
        To    = 'colour is nice to have' }
+
+    # Onboarding. The ordering is the feature: every one of these turns a
+    # refusal into a machine that is configured and does not work.
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a failed check no longer stops the write'
+       File  = 'scripts/Onboard-ClaudeDeveloper.ps1'
+       From  = 'Nothing has been written'
+       To    = 'Continuing anyway' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the tenant stops being compared to the file'
+       File  = 'scripts/Onboard-ClaudeDeveloper.ps1'
+       From  = '$acct.tenantId -ne $cfg.tenantId'
+       To    = '$false' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'onboarding reimplements the network check'
+       File  = 'scripts/Onboard-ClaudeDeveloper.ps1'
+       From  = "Join-Path `$scriptDir 'Test-ClaudeNetwork.ps1'"
+       To    = "Join-Path `$scriptDir 'Nothing.ps1'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'onboarding stops verifying what it configured'
+       File  = 'scripts/Onboard-ClaudeDeveloper.ps1'
+       From  = "Join-Path `$scriptDir 'Test-FoundryDirect.ps1'"
+       To    = "Join-Path `$scriptDir 'Nothing.ps1'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a reset is blamed on the allowlist during onboarding'
+       File  = 'scripts/Onboard-ClaudeDeveloper.ps1'
+       From  = 'Not an allowlist problem - every host above is reachable'
+       To    = 'Check the allowlist' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the mode is guessed rather than read'
+       File  = 'scripts/Onboard-ClaudeDeveloper.ps1'
+       From  = '# Read the mode rather than guessing it'
+       To    = '# Guess the mode' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a file that configures neither path is accepted'
+       File  = 'scripts/Onboard-ClaudeDeveloper.ps1'
+       From  = 'Cannot tell what this file configures'
+       To    = 'Assuming gateway' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the other path becomes a required host again'
+       File  = 'scripts/Onboard-ClaudeDeveloper.ps1'
+       From  = 'would make an irrelevant'
+       To    = 'is useful because it would make an important' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'onboarding pins a credential value the client rejects'
+       File  = 'scripts/Onboard-ClaudeDeveloper.ps1'
+       From  = "SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS', 'dev', 'User')"
+       To    = "SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS', 'AzureCliCredential', 'User')" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the onboarding preflight stops being documented'
+       File  = 'docs/ONBOARDING.md'
+       From  = 'a proxy that cuts the response once it streams'
+       To    = 'a network problem' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the onboarding screenshot is dropped'
+       File  = 'docs/ONBOARDING.md'
+       From  = '](guide/onboard-preflight.png)'
+       To    = '](guide/missing.png)' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the installer stops asking how developers sign in'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'How will developers sign in?'
+       To    = 'Sign-in is configured per machine.' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the sign-in answer never reaches the handover file'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'authMode      = $AuthMode'
+       To    = 'authModeUnused = $AuthMode' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the handover file stops saying what it is'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = "mode          = 'gateway'"
+       To    = "modeUnused    = 'gateway'" }
 )
 
 $missed = @()
@@ -2357,7 +2443,7 @@ try {
         Copy-Item $_.FullName $dest -Force
     }
     New-Item -ItemType Directory -Path (Join-Path $sandbox 'docs/guide') -Force | Out-Null
-    foreach ($pattern in 'entra-*.png', 'obs-*.png', 'b6-*.png', 'd[0-9]-*.png', 'network-*.png', 'bom-*.png') {
+    foreach ($pattern in 'entra-*.png', 'obs-*.png', 'b6-*.png', 'd[0-9]-*.png', 'network-*.png', 'bom-*.png', 'onboard-*.png') {
         Get-ChildItem (Join-Path $root 'docs/guide') -File -Filter $pattern -ErrorAction SilentlyContinue |
             ForEach-Object { Copy-Item $_.FullName (Join-Path $sandbox 'docs/guide') -Force }
     }

@@ -434,3 +434,67 @@ The developer setup is one command and needs no Azure rights, so it is a
 separate page rather than the second half of this one.
 
 Send them that link. Nothing else on this page applies to them.
+
+## 7. Checking a machine before you promise a date
+
+A developer who is in the right group, on the right tenant, with the right
+role can still fail — because their machine sits behind a proxy that breaks
+streaming, or carries a managed identity that Azure prefers to their sign-in.
+Neither is visible from the portal, and both produce errors that name
+something else.
+
+`Onboard-ClaudeDeveloper.ps1` reads the file you hand out and checks the
+machine against it. With `-PreflightOnly` it writes nothing, so it is safe to
+run across a fleet before committing to a rollout.
+
+```powershell
+./scripts/Onboard-ClaudeDeveloper.ps1 -ConfigPath .\claude-gateway.json -PreflightOnly
+```
+
+![Onboard-ClaudeDeveloper.ps1 -PreflightOnly running four checks — tooling, identity, network and access — and reporting that nothing was written](guide/onboard-preflight.png)
+
+Four checks, cheapest question first:
+
+| # | Check | Catches |
+|---|---|---|
+| 1 | tooling | no Azure CLI, or a PowerShell that cannot run the rest |
+| 2 | identity | not signed in, or signed in to a different tenant than the file names |
+| 3 | network | a blocked host, and separately a proxy that cuts the response once it streams |
+| 4 | access | a token that the model refuses, or a model name that is not a deployment |
+
+> [!IMPORTANT]
+> Nothing is written unless all four pass. That ordering is the whole point:
+> the setup scripts configure correctly, and a correct configuration on a
+> machine that cannot reach the endpoint still fails — at which point the
+> evidence is a 401 or a hang, and the reconfiguration you try next is not the
+> problem.
+
+Without `-PreflightOnly` it checks, configures by delegating to the right
+setup script for the file's mode, pins the credential chain if this machine
+has a managed identity, and then verifies with the health check.
+
+```powershell
+./scripts/Onboard-ClaudeDeveloper.ps1 -ConfigPath .\claude-gateway.json
+```
+
+> [!TIP]
+> It is safe to re-run. That is how a machine moves between the gateway and
+> the direct path, and how a reissued file — a new gateway address, a
+> different sign-in mode — gets picked up. Re-running with the same file
+> changes nothing.
+
+### What the file decides
+
+Both paths use the same shape, distinguished by `mode`:
+
+| Field | `gateway` | `foundry-direct` |
+|---|---|---|
+| `mode` | `gateway` | `foundry-direct` |
+| target | `gatewayUrl` | `foundryResource` |
+| `tenantId` | checked against the signed-in session | same |
+| `authMode` / `auth` | `interactive`, `device` or `helper` | `interactive`, `device` or `current` |
+
+> [!NOTE]
+> A file written before `mode` existed still works — the mode is inferred from
+> whether it carries `gatewayUrl` or `foundryResource`, and the inference is
+> printed. Reissue the file to remove the warning.

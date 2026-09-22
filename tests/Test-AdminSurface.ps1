@@ -1022,6 +1022,54 @@ Assert 'the renderer colours BLOCKED'            ($rt.Contains('/\bBLOCKED\b/.te
 Assert 'and a reset verdict'                     ($rt.Contains('RESET|BUFFERED|TLS NOT TRUSTED'))
 Assert 'so a failure does not look like a pass'  ($rt -match 'a failure that looks like a success')
 
+# Developer onboarding. The value is the ordering: a correct configuration on a
+# machine that cannot use it still fails, and by then the evidence names
+# something else. So the checks run first and nothing is written if they fail.
+$ob = Get-Content (Join-Path $root 'scripts/Onboard-ClaudeDeveloper.ps1') -Raw
+Assert 'an onboarding script ships'              ($ob -match '(?m)^\s*\[CmdletBinding\(SupportsShouldProcess\)\]')
+Assert 'it reads the file the team hands out'    ($ob -match '\[Parameter\(Mandatory = \$true\)\]\[string\]\$ConfigPath')
+Assert 'and accepts a URL as well as a path'     ($ob -match "ConfigPath -match '\^https\?://'")
+Assert 'the mode is read, not guessed'           ($ob -match '# Read the mode rather than guessing it')
+Assert 'an untagged file is inferred and said so' ($ob.Contains("inferred '$" + "mode' from its contents"))
+Assert 'a file that is neither is refused'       ($ob -match 'Cannot tell what this file configures')
+Assert 'preflight checks tooling'                ($ob -match 'Preflight 1 of 4 - tooling')
+Assert 'and identity'                            ($ob -match 'Preflight 2 of 4 - identity')
+Assert 'and network'                             ($ob -match 'Preflight 3 of 4 - network')
+Assert 'and access'                              ($ob -match 'Preflight 4 of 4 - access')
+Assert 'the tenant is compared to the file'      ($ob -match '\$acct\.tenantId -ne \$cfg\.tenantId')
+# Delegated so a developer and an administrator looking at the same machine
+# cannot get different answers out of two implementations.
+Assert 'the network check is delegated'          ($ob -match "Join-Path \`$scriptDir 'Test-ClaudeNetwork\.ps1'")
+Assert 'and the setup is delegated too'          ($ob -match "Join-Path \`$scriptDir 'Setup-ClaudeWorkstation\.ps1'")
+Assert 'and the verification'                    ($ob -match "Join-Path \`$scriptDir 'Test-FoundryDirect\.ps1'")
+Assert 'nothing is written when a check fails'   ($ob -match 'Nothing has been written')
+Assert 'and the machine is said to be unchanged' ($ob -match 'configuration on this machine is unchanged')
+Assert 'a reset is not blamed on the allowlist'  ($ob -match 'Not an allowlist problem - every host above is reachable')
+Assert 'preflight alone writes nothing'          ($ob -match '-PreflightOnly, so nothing was written')
+Assert 'skipping the checks is discouraged'      ($ob -match 'turns a clear failure into an')
+# The other path's host is not this path's problem. Without this, a machine
+# moving off the gateway fails onboarding because the gateway it is leaving is
+# unreachable.
+Assert 'each mode checks only its own hosts'     ($ob -match 'would make an irrelevant')
+Assert 'a managed identity is pinned for you'    ($ob.Contains("SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS', 'dev', 'User')"))
+Assert 'and an unusable existing pin is flagged' ($ob -match "which Claude Code rejects")
+
+$onb2 = Get-Content (Join-Path $root 'docs/ONBOARDING.md') -Raw
+Assert 'onboarding documents the preflight'      ($onb2 -match '(?m)^## 7\. Checking a machine before you promise a date')
+Assert 'with the four checks named'              ($onb2 -match '\| 3 \| network \|')
+Assert 'and what each one catches'               ($onb2 -match 'a proxy that cuts the response once it streams')
+Assert 'it shows the run'                        ($onb2 -match '!\[[^\]]*\]\(guide/onboard-preflight\.png\)')
+Assert 'it says re-running is safe'              ($onb2 -match 'Re-running with the same file')
+Assert 'and gives the config shape per mode'     ($onb2 -match '(?m)^### What the file decides')
+Assert "the onboarding screenshot exists"        (Test-Path (Join-Path $root 'docs/guide/onboard-preflight.png'))
+
+$inst2 = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
+Assert 'the installer asks how developers sign in' ($inst2 -match 'How will developers sign in\?')
+Assert 'and says which route suits no browser'   ($inst2 -match 'including where no browser exists')
+Assert 'the answer reaches the handover file'    ($inst2 -match 'authMode      = \$AuthMode')
+Assert 'and the file says what it is'            ($inst2 -match "mode          = 'gateway'")
+Assert 'with why that tag matters'               ($inst2 -match 'opposite meanings')
+
 # Claude Desktop that is configured correctly and will not open. Every other
 # Desktop check reads a file, so all of them passed while the app did not
 # start. The cause was named wrongly first - a container fault needing a
