@@ -131,6 +131,8 @@ are recorded, never your prompts.
 | Desktop asks for an Anthropic password | You picked Google or email. Sign out, quit completely, reopen, choose **Or sign in with Gateway** |
 | Desktop works but your usage never appears in your team's report | Same cause — you are signed into Anthropic, not the gateway. Check **Settings → Connection** names your gateway URL |
 | No **Settings → Connection** in Desktop | Developer settings missing. Re-run the setup script; it writes `allowDevTools: true` |
+| `401 Principal does not have access to API/Operation` | On the **direct** path only, and it names a *principal* — which is often not you. Usually a stray `AZURE_CLIENT_ID` in a `.env`, or the resource is in another tenant. See [Diagnostics](docs/FOUNDRY-DIRECT.md#4-diagnostics) |
+| `Foundry Entra device init failed: HTTP 400` | Desktop's own device-code flow. This happens **before any token exists**, so no role assignment can fix it — it is the client id or tenant in the Connection screen. See [Diagnostics](docs/FOUNDRY-DIRECT.md#4-diagnostics) |
 | Panel fails but the CLI works | The extension host is running an older build. **Developer: Reload Window** in each open window |
 
 Anything else → [docs/DEBUGGING.md](docs/DEBUGGING.md), or your platform team.
@@ -272,4 +274,146 @@ configuration at startup and will not pick up a change in a running window.
 ```powershell
 claude auth status     # expect apiProvider: foundry
 claude -p "Reply with exactly: OK"
+```
+
+**6. Claude Desktop, if you use it.** Desktop cannot read
+`~/.claude/settings.json`. It takes a base URL and a credential helper — a small
+script that prints an Entra token — and keeps both in its own profile library.
+
+Quit it completely first, including the tray icon. It rewrites its
+configuration on exit, so anything written underneath a running instance is
+discarded:
+
+```powershell
+Get-Process -Name 'Claude' -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.Id -Force }
+Start-Sleep 2
+@(Get-Process -Name 'Claude' -ErrorAction SilentlyContinue).Count    # must be 0
+```
+
+To start from nothing, delete the library and let these steps recreate it:
+
+```powershell
+Remove-Item "$env:LOCALAPPDATA\Claude-3p\configLibrary" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:APPDATA\Claude\developer_settings.json" -Force -ErrorAction SilentlyContinue
+```
+
+Developer settings, or there is no **Settings → Connection** to look at:
+
+```powershell
+New-Item -ItemType Directory -Force -Path "$env:APPDATA\Claude" | Out-Null
+'{ "allowDevTools": true }' | Set-Content "$env:APPDATA\Claude\developer_settings.json" -Encoding UTF8
+```
+
+**Where the helper comes from.** `get-foundry-token.ps1` and
+`get-foundry-token.cmd` ship in the repo's `scripts` folder and are **copied,
+not generated** — they must be sitting next to `Setup-ClaudeWorkstation.ps1`
+when you run it. Fetch the folder, not the one file: on its own the setup warns
+and carries on, leaving the CLI and VS Code working and Desktop with no
+credential at all.
+
+They also have to **stay** installed. Desktop re-runs the helper every
+`inferenceCredentialHelperTtlSec` seconds — 1800 by default — to refresh the
+token, so deleting them breaks Desktop at the next refresh rather than
+immediately, which reads as an intermittent fault. Point the profile at the
+**`.cmd`**; it is a shim that runs the `.ps1` beside it.
+
+Prove the helper works before Desktop depends on it. `CLAUDE_FOUNDRY_TENANT_ID`matters for guests and anyone in more than one directory — without it a bare
+`az login` lands in the home tenant and the token is refused downstream:
+
+```powershell
+[Environment]::SetEnvironmentVariable('CLAUDE_FOUNDRY_TENANT_ID','<tenant-guid>','User')
+$env:CLAUDE_FOUNDRY_TENANT_ID = '<tenant-guid>'
+$t = & "$env:LOCALAPPDATA\ClaudeFoundry\get-foundry-token.cmd"
+if ($t -match '^eyJ') { "OK - JWT, $($t.Length) chars" } else { 'FAILED - run az login --tenant <tenant-guid>' }
+```
+
+Then the profile. Desktop keys the file by a GUID it records in `_meta.json`, so
+the two must agree — a mismatch leaves it silently on the default profile:
+
+```powershell
+$lib = "$env:LOCALAPPDATA\Claude-3p\configLibrary"
+New-Item -ItemType Directory -Force -Path $lib | Out-Null
+$id = [guid]::NewGuid().ToString()
+
+@{ appliedId = $id; entries = @(@{ id = $id; name = 'Default' }) } |
+  ConvertTo-Json -Depth 5 | Set-Content "$lib\_meta.json" -Encoding UTF8
+
+@{
+  inferenceProvider                             = 'gateway'
+  inferenceGatewayBaseUrl                       = 'https://<your-gateway>.azure-api.net/claude'
+  inferenceGatewayAuthScheme                    = 'bearer'
+  inferenceCredentialKind                       = 'helper-script'
+  inferenceCredentialHelper                     = "$env:LOCALAPPDATA\ClaudeFoundry\get-foundry-token.cmd"
+  inferenceCredentialHelperTimeoutSec           = 60
+  inferenceCredentialHelperTtlSec               = 1800
+  inferenceCredentialHelperSilentRefreshEnabled = $true
+  inferenceModels                               = @(@{ name = 'claude-sonnet-5' }, @{ name = 'claude-opus-5' })
+  chatTabEnabled                                = $true
+  isClaudeCodeForDesktopEnabled                 = $true
+  inferenceModelPricingEnabled                  = $true
+  coworkTabEnabled                              = $true
+} | ConvertTo-Json -Depth 6 | Set-Content "$lib\$id.json" -Encoding UTF8
+```
+
+Reopen Desktop. **Settings → Connection** should name your gateway. Two things
+that bite:
+
+- Use the **`.cmd`**, not the `.ps1`. Desktop runs the file directly, and the
+  `.cmd` shim invokes `powershell.exe` with the right arguments.
+- If Desktop asks for an Anthropic password you have taken the wrong sign-in.
+  Quit completely, reopen, and choose **Or sign in with Gateway**.
+
+### Letting Desktop do the sign-in itself
+
+Everything above hands the sign-in to the Azure CLI. Desktop can instead run
+its own browser sign-in, under **Settings → Connection → Configure third-party
+inference**. It needs an app registration, which the helper route does not, so
+take this one only if you would rather Desktop owned the credential.
+
+| Field | Value |
+|---|---|
+| Client ID | your app registration |
+| Issuer URL | `https://login.microsoftonline.com/<tenant-guid>/v2.0` |
+| Authorization URL | leave blank — discovered from the issuer |
+| Token URL | leave blank — discovered from the issuer |
+| Bearer token | **Access token** |
+| Scopes | `https://cognitiveservices.azure.com/.default offline_access` |
+| Redirect port | (ephemeral) |
+| Redirect host | `127.0.0.1` |
+
+Two fields decide whether this works at all:
+
+- **Clear the default Scopes.** `openid profile email offline_access` yields a
+  Microsoft Graph audience, and the gateway's `validate-azure-ad-token` accepts
+  only `https://cognitiveservices.azure.com` or `https://ai.azure.com`. The
+  sign-in succeeds and every call then returns 401.
+- **Access token**, not ID token. An ID token's audience is your client id, so
+  the gateway refuses it for the same reason.
+
+The authorization code flow needs a redirect URI, so unlike the helper route
+this does need a registration:
+
+```powershell
+az ad app create --display-name "Claude Desktop - Gateway" `
+  --is-fallback-public-client true `
+  --public-client-redirect-uris "http://localhost"
+
+# 7d312290-... Microsoft Cognitive Services, 5f1e8914-... user_impersonation
+az ad app permission add --id <app-id> `
+  --api 7d312290-28c8-473c-a0ed-8e53749b6d6d `
+  --api-permissions 5f1e8914-a52b-429f-9324-91b92b81adaf=Scope
+az ad app permission admin-consent --id <app-id>
+```
+
+### Signing in without a browser
+
+`az login` opens a browser, which a jump box, VDI session or SSH connection
+does not have. Both the setup script and the credential helper can print a code
+to use on another machine instead:
+
+```powershell
+.\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json -Auth device
+
+# and for the helper, which signs in again when its cached token expires
+[Environment]::SetEnvironmentVariable('CLAUDE_FOUNDRY_AUTH','device','User')
 ```

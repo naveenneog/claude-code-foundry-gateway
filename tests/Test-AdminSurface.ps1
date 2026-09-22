@@ -443,6 +443,9 @@ Assert 'as an array of name/value pairs'    ($ds -match "name = 'ANTHROPIC_FOUND
 Assert 'and says a reload is needed'        ($ds -match '(?i)Developer: Reload Window')
 Assert 'it configures Claude Desktop too'   ($ds -match "Step 'Claude Desktop'")
 Assert 'it reuses the gateway helper'       ($ds -match 'get-foundry-token\.cmd')
+# One helper location. Two means a machine that has run both scripts keeps two
+# copies and a profile can point at the stale one.
+Assert 'in the same place as the gateway'   ($ds -match "Join-Path \`$env:LOCALAPPDATA 'ClaudeFoundry'")
 Assert 'pointed at the direct base url'     ($ds -match 'inferenceGatewayBaseUrl\s+= \$baseUrl')
 # Desktop rewrites its configuration on exit, so writing underneath a running
 # instance is discarded the moment the developer quits.
@@ -541,6 +544,66 @@ Assert 'and its caveat given'                 ($fd -match '(?i)blocked?k? it wit
 Assert 'the helper-script escape is named'    ($fd -match '(?i)never calls `/devicecode`')
 # Troubleshooting belongs in its own section, not buried in the model list.
 Assert 'diagnostics is its own section'       ($fd -match '(?m)^## 4\. Diagnostics')
+# A developer reads DEVELOPER.md, not the admin guide, so both errors have to
+# be findable there or the diagnosis might as well not exist. Read locally
+# rather than relying on a variable defined further down this file.
+$devGuide = Get-Content (Join-Path $root 'DEVELOPER.md') -Raw
+Assert 'the developer guide lists the 401'    ($devGuide -match 'Principal does not have access to API/Operation')
+Assert 'and the device-code 400'              ($devGuide -match 'Foundry Entra device init failed')
+Assert 'and links to the diagnostics'         ($devGuide -match 'FOUNDRY-DIRECT\.md#4-diagnostics')
+Assert 'saying the 400 is not a role'         ($devGuide -match '(?i)no role assignment can fix it')
+# Desktop by hand. It cannot read settings.json, so the manual route is a
+# genuinely different set of steps rather than a variation on the CLI one.
+Assert 'Desktop can be configured by hand'    ($devGuide -match '(?i)Claude Desktop, if you use it')
+Assert 'it says Desktop ignores settings.json' ($devGuide -match '(?i)cannot read\s*\n?`~/\.claude/settings\.json`')
+Assert 'it is quit before writing'            ($devGuide -match '(?i)rewrites its\s*\n?configuration on exit')
+Assert 'and stopped by id'                    ($devGuide -match 'Stop-Process -Id \$_\.Id')
+Assert 'a full reset is offered'              ($devGuide -match 'Remove-Item "\$env:LOCALAPPDATA\\Claude-3p\\configLibrary"')
+Assert 'developer mode comes first'           ($devGuide -match '(?i)there is no \*\*Settings')
+Assert 'the helper is proved before use'      ($devGuide -match '(?i)Prove the helper works before Desktop depends on it')
+Assert 'the tenant variable is explained'     ($devGuide -match 'CLAUDE_FOUNDRY_TENANT_ID')
+Assert 'the meta GUID must match'             ($devGuide -match '(?i)leaves it silently on the default profile')
+Assert 'and the cmd shim is required'         ($devGuide -match '(?i)Use the \*\*`\.cmd`\*\*, not the `\.ps1`')
+# Desktop can own the sign-in itself instead of shelling out to the Azure CLI.
+# The default scopes in that screen produce a Graph-audience token, which the
+# gateway policy refuses - so the scope has to be written down.
+Assert 'the OAuth route is documented'        ($devGuide -match '(?i)Letting Desktop do the sign-in itself')
+Assert 'the required audience is named'       ($devGuide -match 'https://cognitiveservices\.azure\.com/\.default offline_access')
+Assert 'and the default scopes ruled out'     ($devGuide -match '(?i)Microsoft Graph audience')
+Assert 'an access token, not an id token'     ($devGuide -match '(?i)Access token\*\*, not ID token')
+Assert 'and it says a registration is needed' ($devGuide -match '(?i)needs a redirect URI, so unlike the helper')
+# A browser is not available on a jump box, and the gateway script offered no
+# alternative - it announced "a browser window will open" and then hung.
+$wsg = Get-Content (Join-Path $root 'scripts/Setup-ClaudeWorkstation.ps1') -Raw
+Assert 'the gateway offers device code'       ($wsg -match "\[ValidateSet\('interactive', 'device'\)\]")
+Assert 'and passes it to az'                  ($wsg -match "loginArgs \+= '--use-device-code'")
+Assert 'the browser default says the way out' ($wsg -match '(?i)re-run with -Auth device')
+$hlp = Get-Content (Join-Path $root 'scripts/get-foundry-token.ps1') -Raw
+Assert 'the helper can too'                   ($hlp -match 'CLAUDE_FOUNDRY_AUTH')
+Assert 'without polluting stdout'             ($hlp -match '(?i)stdout carries the token and nothing else')
+Assert 'and it is documented'                 ($devGuide -match '(?i)Signing in without a browser')
+# The helper is copied from beside the script, not generated, and it has to
+# stay installed - Desktop re-runs it on every refresh.
+Assert 'the helper origin is documented'      ($devGuide -match '(?i)\*\*copied,\s*\n?not generated\*\*')
+Assert 'and the whole folder is needed'       ($devGuide -match '(?i)Fetch the folder, not the one file')
+Assert 'and that it must stay installed'      ($devGuide -match '(?i)breaks Desktop at the next refresh')
+Assert 'the missing-helper warning is useful' ($wsg -match '(?i)copied, not generated, so Claude Desktop cannot be')
+Assert 'and says what still worked'           ($wsg -match '(?i)The CLI and VS Code are unaffected')
+Assert 'no profile is written without it'     ($wsg -match '(?m)^\s*if \(Test-Path \$helperCmd\) \{')
+$shim = Get-Content (Join-Path $root 'scripts/get-foundry-token.cmd') -Raw
+Assert 'the shim names the real directory'    ($shim -match 'LOCALAPPDATA%\\ClaudeFoundry')
+Assert 'and refuses without its partner'      ($shim -match 'if not exist "%HELPER%"')
+# Desktop spawns the helper with the environment the app was started with, so
+# a PATH entry added since launch is invisible. Measured: az resolvable in a
+# shell, and the helper still reported "not found on PATH" under Desktop.
+Assert 'the helper does not trust PATH'       ($hlp.Contains('Microsoft SDKs\Azure\CLI2\wbin\az.cmd'))
+Assert 'it searches the real install roots'   (($hlp -match '\$env:ProgramFiles') -and
+                                               ($hlp -match '\$\{env:ProgramFiles\(x86\)\}'))
+Assert 'and says when it fell back'           ($hlp -match '(?i)az not on PATH; using')
+Assert 'the fallback is reported on stderr'   ($hlp -match 'function Write-Diag')
+Assert 'a genuine absence names the fix'      ($hlp -match '(?i)quit Claude Desktop completely')
+Assert 'and why restarting helps'             ($hlp -match '(?i)inherits the environment')
+Assert 'no stale handle survives the change'  ($hlp -notmatch '\$az\.Source')
 Assert 'it says what it is for'          ($fd -match '(?i)evaluating Foundry, not for running a team')
 # The uncomfortable part: this repository ships an audit that looks for exactly
 # what this script configures, and a health check that fails on it. A document

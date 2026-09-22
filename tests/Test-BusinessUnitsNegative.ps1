@@ -921,6 +921,66 @@ $mutations = @(
        To    = 'nothing to bind, continuing' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the helper goes back to trusting PATH'
+       File  = 'scripts/get-foundry-token.ps1'
+       From  = "Microsoft SDKs\Azure\CLI2\wbin\az.cmd"
+       To    = "az.cmd" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the missing-CLI message stops naming the restart'
+       File  = 'scripts/get-foundry-token.ps1'
+       From  = 'quit Claude Desktop completely'
+       To    = 'install the Azure CLI' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a missing helper still configures Desktop'
+       File  = 'scripts/Setup-ClaudeWorkstation.ps1'
+       From  = 'if (Test-Path $helperCmd) {'
+       To    = 'if ($true) {' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the shim points at the wrong install directory'
+       File  = 'scripts/get-foundry-token.cmd'
+       From  = '%LOCALAPPDATA%\ClaudeFoundry\'
+       To    = 'C:\ProgramData\claude\' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the gateway loses its device-code option'
+       File  = 'scripts/Setup-ClaudeWorkstation.ps1'
+       From  = "loginArgs += '--use-device-code'"
+       To    = "loginArgs += '-o none'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the helper loses its device-code option'
+       File  = 'scripts/get-foundry-token.ps1'
+       From  = 'CLAUDE_FOUNDRY_AUTH'
+       To    = 'CLAUDE_FOUNDRY_UNUSED' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the OAuth scope reverts to the Graph default'
+       File  = 'DEVELOPER.md'
+       From  = 'https://cognitiveservices.azure.com/.default offline_access' 
+       To    = 'openid profile email offline_access' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the direct path installs a second helper directory'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = "Join-Path `$env:LOCALAPPDATA 'ClaudeFoundry'"
+       To    = "Join-Path `$env:USERPROFILE '.claude-foundry'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the developer guide loses the device-code 400'
+       File  = 'DEVELOPER.md'
+       From  = 'Foundry Entra device init failed'
+       To    = 'Desktop connection failed' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the developer guide blames the 400 on a role'
+       File  = 'DEVELOPER.md'
+       From  = 'no role assignment can fix it'
+       To    = 'ask for the missing role' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the device-code 400 is blamed on RBAC'
        File  = 'docs/FOUNDRY-DIRECT.md'
        From  = 'No role assignment can fix this'

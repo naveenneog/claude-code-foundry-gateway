@@ -51,6 +51,10 @@ param(
     [switch]$SkipDesktop,
     [switch]$SkipVSCode,
     [switch]$NoCowork,
+    # Interactive opens a browser, which is the right default on a laptop and
+    # impossible on a jump box, VDI session or anything reached over SSH.
+    # Device code prints a code to paste into a browser elsewhere.
+    [ValidateSet('interactive', 'device')][string]$Auth = 'interactive',
 
     # Where the credential helper is installed for Claude Desktop.
     [string]$HelperDir = (Join-Path $env:LOCALAPPDATA 'ClaudeFoundry')
@@ -211,11 +215,23 @@ if ($acct -and $TenantId -and $acct.tenantId -ne $TenantId) {
     $needLogin = $true
 }
 if ($needLogin) {
-    Write-Note 'A browser window will open.'
-    if ($TenantId) { az login --tenant $TenantId -o none } else { az login -o none }
+    $loginArgs = @('login', '-o', 'none')
+    if ($TenantId) { $loginArgs += @('--tenant', $TenantId) }
+    if ($Auth -eq 'device') {
+        $loginArgs += '--use-device-code'
+        Write-Note 'A code will be printed. Open the URL on any machine with a browser.'
+    }
+    else {
+        Write-Note 'A browser window will open. On a machine without one, re-run with -Auth device.'
+    }
+    az @loginArgs
     $acct = az account show -o json 2>$null | ConvertFrom-Json
 }
-if (-not $acct) { Write-Bad 'Sign-in failed.'; $problems += 'sign-in' }
+if (-not $acct) {
+    Write-Bad 'Sign-in failed.'
+    if ($Auth -ne 'device') { Write-Note 'If no browser opened, re-run with -Auth device.' }
+    $problems += 'sign-in'
+}
 else {
     Write-Ok $acct.user.name
     Write-Note "tenant $($acct.tenantId)"
@@ -330,7 +346,13 @@ if (-not $SkipDesktop) {
             Copy-Item $srcCmd $helperCmd -Force
             Write-Ok "credential helper -> $HelperDir"
         }
-        else { Write-Warn2 'credential helper sources not found next to this script'; $problems += 'helper' }
+        else {
+            Write-Warn2 'get-foundry-token.ps1 and .cmd are not next to this script.'
+            Write-Note 'They are copied, not generated, so Claude Desktop cannot be'
+            Write-Note 'configured without them. The CLI and VS Code are unaffected.'
+            Write-Note 'Fetch the whole scripts folder rather than this file alone.'
+            $problems += 'helper'
+        }
 
         if (Test-Path $helperCmd) {
             # Developer settings reveal Settings -> Connection and create the

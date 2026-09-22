@@ -33,7 +33,13 @@ param(
     # Pin a tenant when the developer is a guest, or is signed in to several.
     # A bare az login lands guests in their home directory and the resulting
     # token is rejected downstream.
-    [string]$TenantId = $env:CLAUDE_FOUNDRY_TENANT_ID
+    [string]$TenantId = $env:CLAUDE_FOUNDRY_TENANT_ID,
+
+    # Interactive opens a browser. On a jump box or VDI session there is none,
+    # and the helper would otherwise block forever on a prompt nobody can
+    # answer. Set CLAUDE_FOUNDRY_AUTH=device there.
+    [ValidateSet('interactive', 'device')][string]$Auth = $(
+        if ($env:CLAUDE_FOUNDRY_AUTH -eq 'device') { 'device' } else { 'interactive' })
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,15 +53,43 @@ $interactiveAllowed = ($context -ne 'refresh')
 try {
     # Windows PowerShell 5.1 compatible on purpose: the .cmd shim invokes
     # powershell.exe, which is 5.1 on most endpoints. No ?? , no ternary.
-    $az = Get-Command az.cmd -ErrorAction SilentlyContinue
-    if (-not $az) { $az = Get-Command az -ErrorAction SilentlyContinue }
-    if (-not $az) { throw 'Azure CLI not found on PATH.' }
+    #
+    # PATH alone is not enough. Claude Desktop spawns this helper with the
+    # environment block it was itself started with, so a PATH entry added after
+    # the app launched - including the machine-wide one the Azure CLI installer
+    # writes - is invisible here. Measured: az.cmd present in machine PATH and
+    # resolvable in a shell, and the helper still reported "not found on PATH"
+    # when run by Desktop. So fall back to where the CLI actually installs.
+    $azPath = $null
+    $cmd = Get-Command az.cmd -ErrorAction SilentlyContinue
+    if (-not $cmd) { $cmd = Get-Command az -ErrorAction SilentlyContinue }
+    if ($cmd) { $azPath = $cmd.Source }
+
+    if (-not $azPath) {
+        $roots = @()
+        if ($env:ProgramFiles)        { $roots += $env:ProgramFiles }
+        if (${env:ProgramFiles(x86)}) { $roots += ${env:ProgramFiles(x86)} }
+        if ($env:LOCALAPPDATA)        { $roots += (Join-Path $env:LOCALAPPDATA 'Programs') }
+        foreach ($r in $roots) {
+            $candidate = Join-Path $r 'Microsoft SDKs\Azure\CLI2\wbin\az.cmd'
+            if (Test-Path $candidate) { $azPath = $candidate; break }
+        }
+        if ($azPath) { Write-Diag "az not on PATH; using $azPath" }
+    }
+
+    if (-not $azPath) {
+        Write-Diag 'Azure CLI not found on PATH or in the usual install locations.'
+        Write-Diag 'If it is installed, quit Claude Desktop completely - including the'
+        Write-Diag 'tray icon - and reopen it. A child process inherits the environment'
+        Write-Diag 'the app started with, so a PATH change made since then is not visible.'
+        throw 'Azure CLI not found.'
+    }
 
     # Not $args - that is an automatic variable.
     $tokenArgs = @('account', 'get-access-token', '--resource', $Resource, '--query', 'accessToken', '-o', 'tsv')
     if ($TenantId) { $tokenArgs += @('--tenant', $TenantId) }
 
-    $token = & $az.Source @tokenArgs 2>$null
+    $token = & $azPath @tokenArgs 2>$null
 
     if ($LASTEXITCODE -ne 0 -or -not $token) {
         if (-not $interactiveAllowed) {
@@ -67,10 +101,15 @@ try {
         Write-Diag 'No cached credential. Starting interactive sign-in.'
         $loginArgs = @('login')
         if ($TenantId) { $loginArgs += @('--tenant', $TenantId) }
-        & $az.Source @loginArgs 1>$null 2>$null
+        if ($Auth -eq 'device') {
+            # stderr, because stdout carries the token and nothing else.
+            $loginArgs += '--use-device-code'
+            Write-Diag 'Device code sign-in - the code appears below.'
+        }
+        & $azPath @loginArgs 1>$null 2>$null
         if ($LASTEXITCODE -ne 0) { throw 'az login failed.' }
 
-        $token = & $az.Source @tokenArgs 2>$null
+        $token = & $azPath @tokenArgs 2>$null
         if ($LASTEXITCODE -ne 0 -or -not $token) { throw 'Could not acquire a token after sign-in.' }
     }
 

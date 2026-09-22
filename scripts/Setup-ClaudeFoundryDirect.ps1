@@ -702,7 +702,10 @@ if (-not $SkipDesktop) {
     }
 
     if ($desktopInstalled) {
-        $helperDir = Join-Path $env:USERPROFILE '.claude-foundry'
+        # The same location the gateway path uses. Two helper directories means
+        # a machine that has run both scripts has two copies, and a profile can
+        # end up pointing at the stale one.
+        $helperDir = Join-Path $env:LOCALAPPDATA 'ClaudeFoundry'
         New-Item -ItemType Directory -Force -Path $helperDir | Out-Null
         $helperCmd = Join-Path $helperDir 'get-foundry-token.cmd'
         $srcPs1 = Join-Path $PSScriptRoot 'get-foundry-token.ps1'
