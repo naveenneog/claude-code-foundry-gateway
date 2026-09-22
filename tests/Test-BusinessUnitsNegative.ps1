@@ -2507,6 +2507,24 @@ $mutations = @(
        File  = 'DEVELOPER.md'
        From  = 'a proxy exclusion rather than a firewall rule'
        To    = 'a firewall rule' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the sign-in choice stops being decided once'
+       File  = 'docs/SETUP.md'
+       From  = 'decided here, once, for everyone'
+       To    = 'set per machine' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'device stops being recommended for a browserless box'
+       File  = 'docs/SETUP.md'
+       From  = 'the only option that works without a browser'
+       To    = 'one option' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the wizard choice table loses the sign-in row'
+       File  = 'docs/SETUP.md'
+       From  = '| Developer sign-in | `interactive` / `device` / `helper` |'
+       To    = '| Developer sign-in | see the script |' }
 )
 
 $missed = @()

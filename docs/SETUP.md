@@ -5,6 +5,14 @@ the gateway once for the organisation.
 
 Time: about 60 minutes, of which 40 is unattended APIM provisioning.
 
+**In this article**
+
+1. [Prerequisites](#1-prerequisites)
+2. [Permissions and roles](#2-permissions-and-roles)
+3. [Deploy](#3-deploy)
+4. [Verify before announcing](#4-verify-before-announcing)
+5. [Next](#5-next)
+
 ---
 
 ## 1. Prerequisites
@@ -235,6 +243,29 @@ it. These become APIM named values, so they are changeable later without
 redeploying.
 
 ![Prompts for standard and premium tokens per minute and per day, the per-developer request ceiling, and the two Entra group names, each showing its default](guide/run-3-budgets.png)
+
+**The choices the wizard asks you to make.** Four of them are not budgets and
+are not changeable in the same way, so each is asked with its consequence and,
+where it costs money, with the figure at your stated developer count:
+
+| Choice | Options | Why it is asked rather than defaulted |
+|---|---|---|
+| Revocation window | 15 min / 1 hour / 4 hours | How long a removed developer keeps working. Costed at your scale; most of the figure is the private endpoint, which is charged whether used or not. |
+| Team budget | `report` / `stop` | `report` attributes spend and blocks nothing. `stop` also refuses a team at its limit — and triggers later than the dollar figure suggests, because the counter cannot see cached tokens. |
+| Unassigned developers | `allow` / `deny` | `deny` on day one refuses people who have done nothing wrong. Start on `allow` and switch when `Get-ClaudeBusinessUnit.ps1` reports zero unassigned. |
+| Developer sign-in | `interactive` / `device` / `helper` | How developers authenticate. Written into `claude-gateway.json` and applied by the onboarding script on each machine. |
+| Developer address | `azure` / `custom` | The only one that is expensive to change afterwards — the instance name is part of the address, so replacing the gateway later means reconfiguring every machine. |
+
+> [!IMPORTANT]
+> **Developer sign-in is decided here, once, for everyone.** A fleet where half
+> the workstations authenticate one way and half another is a fleet with two
+> support paths and two sets of symptoms. Choose `device` if *any* developer
+> works on a jump box, a VDI session or over SSH — it costs nothing on a laptop
+> and is the only option that works without a browser. `helper` routes every
+> client through the credential helper that Claude Desktop needs anyway.
+>
+> It is changeable later by reissuing `claude-gateway.json` and re-running
+> `Onboard-ClaudeDeveloper.ps1`, which is safe to run repeatedly.
 
 **4. The summary, before anything is created.** Reusing is called out
 explicitly, along with what will and will not be touched.

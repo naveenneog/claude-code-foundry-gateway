@@ -1121,6 +1121,18 @@ Assert 'and it is said to write nothing'         ($dev2 -match 'it writes nothin
 Assert 'the streaming failure is called out'     ($dev2 -match 'every prompt dies with `ECONNRESET`')
 Assert 'and routed to a proxy exclusion'         ($dev2 -match 'a proxy exclusion rather than a firewall rule')
 
+# The setup guide is where an administrator meets the decisions the wizard
+# asks. Four of them are not budgets and are not changeable the same way.
+$set2 = Get-Content (Join-Path $root 'docs/SETUP.md') -Raw
+Assert 'the setup guide lists its sections'      ($set2 -match '(?m)^\*\*In this article\*\*')
+Assert 'the wizard choices are tabulated'        ($set2 -match '\| Developer sign-in \| `interactive` / `device` / `helper` \|')
+Assert 'sign-in is said to be decided once'      ($set2 -match 'decided here, once, for everyone')
+Assert 'with the reason a fleet should not split' ($set2 -match 'support paths and two sets of symptoms')
+Assert 'device is recommended for no browser'    ($set2 -match 'the only option that works without a browser')
+Assert 'and it is said to be changeable later'   ($set2 -match 'reissuing `claude-gateway\.json`')
+Assert 'the address choice is flagged expensive' ($set2 -match 'expensive to change afterwards')
+Assert 'and stop is said to trigger late'        ($set2 -match 'triggers later than the dollar figure suggests')
+
 $onb2 = Get-Content (Join-Path $root 'docs/ONBOARDING.md') -Raw
 Assert 'onboarding documents the preflight'      ($onb2 -match '(?m)^## 7\. Checking a machine before you promise a date')
 Assert 'with the four checks named'              ($onb2 -match '\| 3 \| network \|')
