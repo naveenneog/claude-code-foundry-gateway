@@ -141,6 +141,35 @@ Anything else → [docs/DEBUGGING.md](docs/DEBUGGING.md), or your platform team.
 
 ## FAQ
 
+**I fixed my settings and Claude Code still uses the old model. Why?**
+Something higher in the precedence order is overriding the file you edited.
+Claude Code reads four places, lowest to highest:
+
+| | File |
+|---|---|
+| 1 | `~/.claude/settings.json` — what the setup script writes |
+| 2 | `.claude/settings.json` in the project folder |
+| 3 | `.claude/settings.local.json` in the project folder |
+| 4 | command-line arguments |
+
+A **correct** user file is simply ignored while a project one sets the same
+values, and nothing tells you that is happening — the error names a model you
+cannot find anywhere in the configuration you are reading. It is the local file
+that catches people out, because it is per-machine and usually untracked, so it
+is not in the repository anyone is looking at.
+
+Find them all:
+
+```powershell
+Get-ChildItem -Path . -Recurse -Force -Include settings.json,settings.local.json -Filter * -ErrorAction SilentlyContinue |
+  Where-Object FullName -match '\\\.claude\\'
+Get-Item "$env:USERPROFILE\.claude\settings*.json"
+```
+
+`./scripts/Test-FoundryDirect.ps1` reports this as **"Nothing overrides the
+settings just checked"**. Rename or empty the offending file and start a new
+session — a running one keeps what it loaded.
+
 **Do I need an Anthropic account?**
 No. You never create one and you never sign in to one. Your Entra ID is the
 credential. If a screen is asking for an Anthropic password, you are on the

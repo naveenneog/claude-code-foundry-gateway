@@ -525,6 +525,46 @@ if (Test-Path $cliFile) {
 }
 Add-Result 'Claude CLI is configured' ([bool]$cliTarget) $(if ($cliTarget) { "$cliFile -> $cliTarget" } else { "nothing Foundry-related in $cliFile" })
 
+# A file further up the precedence order silently wins, and this check would
+# otherwise read the user file, call it correct, and be looking at settings
+# nothing uses. Measured: a project .claude/settings.local.json overrode a
+# correct user file, and the symptom was a model name nobody could find in
+# any configuration they were looking at.
+#
+# Claude Code's order, lowest to highest: user (~/.claude/settings.json),
+# shared project (.claude/settings.json), local project
+# (.claude/settings.local.json), then command-line arguments.
+$overrides = @()
+foreach ($cand in @(
+    @{ Path = (Join-Path $PWD '.claude\settings.json');       What = 'project (shared)' },
+    @{ Path = (Join-Path $PWD '.claude\settings.local.json'); What = 'project (local)' },
+    @{ Path = (Join-Path $env:USERPROFILE '.claude\settings.local.json'); What = 'user (local)' }
+)) {
+    if (-not (Test-Path $cand.Path)) { continue }
+    $ov = $null
+    try { $ov = Get-Content $cand.Path -Raw | ConvertFrom-Json } catch { }
+    if (-not $ov) { continue }
+    $names = @()
+    if ($ov.env) { $names += @($ov.env.PSObject.Properties.Name | Where-Object { $_ -match 'ANTHROPIC_|CLAUDE_CODE_USE_FOUNDRY|AZURE_' }) }
+    if ($ov.PSObject.Properties.Name -contains 'availableModels') { $names += 'availableModels' }
+    if ($ov.PSObject.Properties.Name -contains 'model') { $names += 'model' }
+    if ($names.Count -gt 0) { $overrides += [pscustomobject]@{ Path = $cand.Path; What = $cand.What; Keys = $names } }
+}
+Add-Result 'Nothing overrides the settings just checked' ($overrides.Count -eq 0) $(
+    if ($overrides.Count -eq 0) { "$cliFile is the file in force" }
+    else { "$($overrides.Count) file(s) higher in the precedence order set Foundry values" })
+foreach ($o in $overrides) {
+    Note "  $($o.What): $($o.Path)"
+    Note "    sets $(($o.Keys | Sort-Object -Unique) -join ', ')"
+}
+if ($overrides.Count -gt 0) {
+    Note ''
+    Note 'Lowest to highest: ~/.claude/settings.json, .claude/settings.json,'
+    Note '.claude/settings.local.json, then command-line arguments. A correct user'
+    Note 'file is simply ignored while one of these is present, and the error names'
+    Note 'a model you cannot find in the configuration you are reading.'
+}
+
 # Every model name in the settings file must be a deployment on the resource.
 # Hand-written configuration is where invented names come from: measured on a
 # machine whose settings named claude-sonnet-5, claude-opus-5 and

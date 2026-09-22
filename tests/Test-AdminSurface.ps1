@@ -631,6 +631,21 @@ Assert 'and the available list'                  ($td -match "Where = 'available
 Assert 'each invented name is named'             ($td -match '\$\(\$i\.Where\) = \$\(\$i\.Name\)')
 Assert 'with what is really deployed'            ($td -match "'deployed here: '")
 Assert 'and a repair that discovers them'        ($td -match '(?i)rewrite the model names from what is deployed')
+# A file higher in the precedence order silently wins. Without this the check
+# reads the user file, calls it correct, and is looking at settings nothing
+# uses - which is how a model name appears that is in no file being read.
+Assert 'overriding settings files are found'     ($td -match '(?i)Nothing overrides the settings just checked')
+Assert 'including the project local one'         ($td -match "settings\.local\.json'\); What = 'project \(local\)'")
+Assert 'and the shared project one'              ($td.Contains(".claude\settings.json');       What = 'project (shared)'"))
+Assert 'the precedence order is stated'          ($td -match '(?i)Lowest to highest: ~/\.claude/settings\.json')
+Assert 'and only Foundry keys are reported'      ($td -match "ANTHROPIC_\|CLAUDE_CODE_USE_FOUNDRY\|AZURE_")
+
+# Read locally: $devGuide is assigned further down this file.
+$devFaq = Get-Content (Join-Path $root 'DEVELOPER.md') -Raw
+Assert 'the FAQ covers the override'             ($devFaq -match '(?i)I fixed my settings and Claude Code still uses the old model')
+Assert 'with the four places in order'           ($devFaq -match '(?i)`\.claude/settings\.local\.json` in the project folder')
+Assert 'and why the local one catches people'    ($devFaq -match '(?i)per-machine and usually untracked')
+Assert 'it says a new session is needed'         ($devFaq -match '(?i)a running one keeps what it loaded')
 # Every resource carries different deployments. Nothing on the direct path may
 # assume a model name - measured on a resource holding only claude-opus-4-7,
 # where a hardcoded claude-sonnet-5 failed the Messages check on a resource

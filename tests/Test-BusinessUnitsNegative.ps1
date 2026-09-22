@@ -921,6 +921,30 @@ $mutations = @(
        To    = 'nothing to bind, continuing' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'an overriding settings file goes unnoticed'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'Nothing overrides the settings just checked'
+       To    = 'The settings file was read' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the project-local override stops being looked for'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = "What = 'project (local)'"
+       To    = "What = 'ignored'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the precedence order stops being spelled out'
+       File  = 'scripts/Test-FoundryDirect.ps1'
+       From  = 'Lowest to highest: ~/.claude/settings.json'
+       To    = 'Several files may apply' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the FAQ drops the settings override'
+       File  = 'DEVELOPER.md'
+       From  = 'I fixed my settings and Claude Code still uses the old model'
+       To    = 'My settings changed' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'configured model names stop being checked'
        File  = 'scripts/Test-FoundryDirect.ps1'
        From  = 'Every configured model exists on the resource'
