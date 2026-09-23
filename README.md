@@ -571,6 +571,7 @@ docs/
   BUSINESS-UNITS.md            business units, teams, tiers, dollar budgets
   MIGRATION.md                 moving a population off first-party Claude
   MONITORING.md                metrics, chargeback, KQL, alerts
+  TURNSTILE.md                 Turnstile as the FinOps console, admin-only
   MODELS.md                    adding a new Claude model end to end
   PLUGINS.md                   marketplaces, plugins and extensions
   SCALE.md                     measured ceilings and the load envelope
@@ -605,7 +606,7 @@ journeys that span several guides:
 |---|---|
 | **Standing this up for the first time** | [Setup](docs/SETUP.md) → [Onboarding](docs/ONBOARDING.md) → [Monitoring](docs/MONITORING.md) |
 | **Moving a population off first-party Claude** | [Migration](docs/MIGRATION.md) → [Setup](docs/SETUP.md) |
-| **Charging usage back to budget holders** | [Business units](docs/BUSINESS-UNITS.md) → [Monitoring](docs/MONITORING.md) |
+| **Charging usage back to budget holders** | [Business units](docs/BUSINESS-UNITS.md) → [Monitoring](docs/MONITORING.md) → [Turnstile](docs/TURNSTILE.md) |
 | **Sizing this past a pilot** | [Scale](docs/SCALE.md) → [ADR-0005](docs/adr/0005-identity-projection.md) |
 | **Adding a model Anthropic just released** | [Models](docs/MODELS.md) |
 
@@ -619,6 +620,7 @@ journeys that span several guides:
 | [Business units](docs/BUSINESS-UNITS.md) | platform team, FinOps | business units, teams, tiers, dollar budgets, who is unassigned |
 | [Migration](docs/MIGRATION.md) | platform team | moving off first-party Claude at scale: what survives, MDM push, bulk entitlement |
 | [Monitoring](docs/MONITORING.md) | whoever owns the spend | metrics, filters, chargeback, KQL, alerts |
+| [Turnstile](docs/TURNSTILE.md) | FinOps, platform team | a FinOps console for Claude spend: units, teams and budgets synced from the gateway, per-person usage, admin-only through Entra |
 | [Models](docs/MODELS.md) | platform team | adding a new Claude model: deploy, allow, price, and what developers change |
 | [Plugins](docs/PLUGINS.md) | platform team | marketplaces, plugin and extension controls for Code and Desktop, and their limits |
 | [Scale](docs/SCALE.md) | platform team | measured ceilings, what runs out first, how to establish a capacity figure |

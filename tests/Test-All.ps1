@@ -71,6 +71,9 @@ Invoke-Check 'Resolver - the entitlement read path'   'Test-Resolver.ps1'
     Invoke-Check 'Secure projection and the migration'     'Test-SecureProjection.ps1'
     Invoke-Check 'Adding models, and plugin governance'    'Test-ModelsAndPlugins.ps1'
     Invoke-Check 'Backup and restore'                      'Test-Backup.ps1'
+    Invoke-Check 'Turnstile - usage mapping and its rules' 'Test-Turnstile.ps1'
+    Invoke-Check 'Turnstile - governance and connection'   'Test-TurnstileGovernance.ps1'
+    Invoke-Check 'Turnstile checks detect breakage'        'Test-TurnstileNegative.ps1'
     Invoke-Check 'Foundry bypass audit'                    'Test-Bypass.ps1' @{ SkipLive = $true }
 
     if ($IncludeAzure) {

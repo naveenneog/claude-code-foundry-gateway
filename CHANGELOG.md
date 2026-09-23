@@ -28,6 +28,23 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- **Turnstile as the FinOps console, admin-only, with the gateway still the one enforcer.**
+  `docs/TURNSTILE.md` is the walkthrough; every step was run live on 2026-09-23.
+  - `New-ClaudeTurnstileEntraApp.ps1` creates the single-tenant application, the `Turnstile.Admin`
+    role, the `Turnstile.Manage` scope pre-authorized for the Azure CLI, assignment required and the
+    admin group. Removing the group's assignment made Entra refuse a token (`AADSTS50105`).
+  - `Connect-ClaudeTurnstile.ps1` discovers a Turnstile deployment and stores it in one named
+    value, `turnstile-integration`; `Sync-ClaudeTurnstileGovernance.ps1` maps units to
+    organizations, teams to departments and budgets both ways, writing nothing back without
+    `-Apply`; `Export-ClaudeTurnstileUsage.ps1` sends requests and hourly cache reads through the
+    Event Hubs REST API with an Entra token.
+  - Turnstile's own `UsageProcessor` accepted 561 of 561 exported events unaltered; the same 557
+    sent twice were stored once. A budget set in Turnstile refused the next gateway request.
+  - `Get-ClaudeTurnstileBom.ps1` prices the Turnstile deployment from live list prices: $158.84 a
+    month at rest in Central US.
+  - Uses the fork naveenneog/turnstile, branch `claude-gateway`: Entra admin-only sign-in and
+    bearer tokens, an enterprise catalog API, and a deployer that runs on Windows.
+
 - **The projection deploys with no public endpoint anywhere, and was deployed
   and migrated to end to end.** On 2026-09-23, on a Premium v2 gateway in Canada
   Central with the Cosmos account in East US 2, it was populated, compared,

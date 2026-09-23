@@ -235,6 +235,15 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       deployment with a 300s job that is a **511s window**, and in-flight requests on top. It is
       not called a hard cap, because a hard cap needs admission-time reservation that the quota
       policies do not offer
+- [x] P39 Turnstile as the FinOps console — units, teams and budgets synced from the gateway, every
+      request and hour of cache reads exported and accepted exactly by Turnstile's own ingest code,
+      budgets optionally edited in Turnstile and enforced by the gateway, admin-only through
+      Microsoft Entra. [TURNSTILE.md](TURNSTILE.md)
+- [ ] P40 scheduled export and sync — acceptance: an hourly job running as a managed identity with
+      no secret, proven by a run that sends usage and a sync that reads budgets, and by the
+      identity being refused once its grant is removed
+- [ ] P41 upstream the fork — acceptance: the four branches of naveenneog/turnstile offered to
+      xuleihive/turnstile as pull requests, each with its tests and mutations
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so

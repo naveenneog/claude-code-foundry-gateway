@@ -1,6 +1,44 @@
 # Status
 
-**Active packet:** P38 — the consolidated chargeback workbook, three budget and deployment controls that failed silently, and the Claude Desktop gateway sign-in step. Full regression including the Azure half passes: 32 checks, 193 of 193 mutations caught.
+**Active packet:** P39 — Turnstile as the FinOps console, admin-only through Microsoft Entra, with the gateway still the one enforcer ([TURNSTILE.md](TURNSTILE.md)). Every step was run live on 2026-09-23; 15 of 15 Turnstile mutations caught.
+
+## P39 acceptance criteria — Turnstile, from the gateway
+
+- [x] Units, teams and budgets appear in Turnstile, read from the gateway rather than configured twice
+- [x] Every request and every hour of cache reads reaches Turnstile exactly: its own ingest code accepts every event unaltered
+- [x] Sending the same window twice counts once
+- [x] A budget edited in Turnstile is enforced by the gateway, and only after `-Apply`
+- [x] Only an assigned administrator can use Turnstile, and the refusal comes from Entra
+- [x] Nothing about the Turnstile deployment is written into a script: it is discovered, stored on the gateway, and changed by the same command
+- [x] What it costs is read from what is deployed and today's list prices
+- [ ] Scheduled export and sync as a workload identity (P40)
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+| Measured | Result |
+|---|---|
+| Turnstile's `UsageProcessor` at `4e93935` on the exported file | 561 of 561 accepted, none skipped, altered or estimated; $2.972987 sent and stored |
+| The same 557 events sent twice to the live hub | 1,114 messages in, 557 calls and $2.972581 stored |
+| Budget set to 1,000 in Turnstile, `-Apply` | 57 s; the next request 403 `rate_limit_error` naming the unit; restored, then 200 |
+| Admin group's assignment removed | `AADSTS50105` 5 s later; restored, a token again 22 s later |
+| 30-day backfill, hourly against day slices | 586.5 s against 66.9 s |
+| Turnstile at rest, Central US list prices | $158.84 a month, $62.05 of it a usage observer this integration does not use |
+
+**Found by running it.** Turnstile skips an event with any field it does not define, zeroes a row
+with a null count, and pins its reconciliation window on an estimated row it cannot match; the
+export checks all three before sending. The batch check's estimated-row guard was untested until
+its mutation went uncaught. Upstream Turnstile's catalog is demo data, its sign-in accepts any
+organization, and its deployer does not run on Windows; the fork fixes each, in four branches to be
+offered upstream (P41). Two working notes were wrong and never reached the guide: object-id rows
+are 3, not 20, and an 85 s refusal delay was not reproduced — the refusal came on the first
+request after `-Apply` returned.
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | Turnstile stays out of the request path; a Turnstile outage cannot refuse a Claude call |
+| Coder | Accept | The connection lives in one quote-free named value, because `cmd.exe` strips quotes from JSON arguments |
+| QA | Accept | 15 mutations, all caught, after one gap was closed |
+| UX | Accept | One command per step, each safe to re-run, with a portal path beside the script |
+| Security | Accept | Single tenant, assignment required, role checked on every token; pictures redacted in the page and refused if a real value survives |
 
 ## Where P19 stands, 2026-09-23
 

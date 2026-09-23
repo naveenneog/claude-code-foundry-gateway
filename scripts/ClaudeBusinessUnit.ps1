@@ -414,3 +414,39 @@ function ConvertTo-ClaudeBuUsd {
     $blendedPerM = ($price.InputPerM * (1 - $OutputShare)) + ($price.OutputPerM * $OutputShare)
     return [math]::Round(([decimal]$Tokens / [decimal]1000000) * $blendedPerM, 2)
 }
+
+function ConvertTo-ClaudeRequestUsd {
+    <#
+    .SYNOPSIS
+        Prices one request at list price, each token category at its own rate.
+
+    .DESCRIPTION
+        A request's categories are known, so it is priced exactly rather than
+        through the blended mix a budget uses: input at base input, output at
+        the output rate, cache read at 0.1x base input. ADR-0010: categories
+        are priced separately and never summed before pricing, and money stays
+        decimal.
+
+        Rounded to six places because one short request costs a fraction of a
+        cent, and two places would price most requests at zero. Returns $null
+        for a model the price book does not know, so an unpriced request reads
+        as unpriced rather than as free.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Model,
+        [long]$InputTokens = 0,
+        [long]$OutputTokens = 0,
+        [long]$CacheReadTokens = 0
+    )
+    if ($InputTokens -lt 0 -or $OutputTokens -lt 0 -or $CacheReadTokens -lt 0) {
+        throw "A token count cannot be negative (input $InputTokens, output $OutputTokens, cache read $CacheReadTokens)."
+    }
+    $price = $script:ClaudePriceBook[$Model]
+    if (-not $price) { return $null }
+    $perToken = [decimal]1000000
+    $usd = (([decimal]$InputTokens / $perToken) * $price.InputPerM) +
+           (([decimal]$OutputTokens / $perToken) * $price.OutputPerM) +
+           (([decimal]$CacheReadTokens / $perToken) * $price.InputPerM * [decimal]0.1)
+    return [math]::Round($usd, 6)
+}
