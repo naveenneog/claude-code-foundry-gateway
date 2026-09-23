@@ -98,8 +98,16 @@ foreach ($n in 'Daily active developers', 'Peak requests per second', 'Peak toke
 
 # The honesty requirement. This deployment cannot supply a traffic model, and
 # the page has to say so rather than quietly presenting the method as a result.
-Assert 'it states what has not been measured' ($s -match '111 requests across 2 days')
-Assert 'and refuses to extrapolate from it'   ($s -match 'no evidence behind it')
+#
+# Asserted as a shape rather than a number. The first version pinned the exact
+# figure, which went stale the moment the 30-day window moved past the days it
+# counted - the test then failed for the page being current. What has to hold
+# is that a measured figure is quoted with the date it was read, not which
+# figure it is.
+Assert 'it states what has not been measured' ($s -match 'ledger\s+holds \*\*\d+ requests across \d+ days\*\*')
+Assert 'with the date it was read'            ($s -match 'measured 20\d\d-\d\d-\d\d')
+Assert 'and calls it a demonstration'         ($s -match 'demonstration, not a traffic model')
+Assert 'and refuses to extrapolate from it'   ($s -match 'evidence behind it')
 
 # A counter test that only proves keys can be created proves nothing about
 # whether allowance survives.

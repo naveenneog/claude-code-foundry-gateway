@@ -389,8 +389,8 @@ $mutations = @(
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'the envelope stops admitting what it has not measured'
        File  = 'docs/SCALE.md'
-       From  = '111 requests across 2 days'
-       To    = 'ample production traffic' }
+       From  = 'demonstration, not a traffic model'
+       To    = 'a representative production sample' }
 
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'sharding is presented as the answer'

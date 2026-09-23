@@ -101,9 +101,10 @@ of how people work, and they have to be observed.
 ### What this repository has not measured
 
 The reference deployment cannot supply them. Over the last 30 days its ledger
-holds **111 requests across 2 days**, from a handful of developers. That is a
-demonstration, not a traffic model, and extrapolating a 500,000-seat envelope
-from it would produce a number with no evidence behind it.
+holds **730 requests across 6 days**, busiest day 250, from a handful of
+developers — measured 2026-09-23. That is a demonstration, not a traffic model,
+and extrapolating a 500,000-seat envelope from it would produce a number with no
+evidence behind it.
 
 So this page states the method and the structural ceilings, which are
 traffic-independent and were measured, and stops there. **U9** and **U10** in
