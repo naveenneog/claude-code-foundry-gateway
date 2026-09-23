@@ -104,7 +104,13 @@ function Get-GroupMemberOids {
             # A page is capped at 999, so a larger group arrives over several
             # requests. The previous version ignored nextLink and silently synced
             # only the first 999 members.
-            $uri = $page.'@odata.nextLink'
+            #
+            # Read through PSObject rather than as a property: the last page has
+            # no nextLink, and under Set-StrictMode - which a caller can impose,
+            # as Install-ClaudeGateway.ps1 briefly did - reading a missing
+            # property throws and the whole sync stops.
+            $next = $page.PSObject.Properties['@odata.nextLink']
+            $uri = if ($next) { $next.Value } else { $null }
         } while ($uri)
     }
 

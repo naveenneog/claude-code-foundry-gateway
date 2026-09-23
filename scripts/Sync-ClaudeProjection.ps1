@@ -42,8 +42,15 @@ param(
 
     [string]$ConfigPath,
 
-    # Business unit groups, as bu-registry records them: id=group-name.
+    # Business unit groups, as bu-registry records them: id=group-name, in
+    # precedence order. Prefer -ApimName and -ResourceGroup instead, which read
+    # the registry and its parents from the gateway exactly as
+    # Sync-ClaudeAccess.ps1 does.
     [string[]]$BusinessUnitGroups,
+
+    # The gateway whose business-unit registry this projection must agree with.
+    [string]$ApimName,
+    [string]$ResourceGroup,
 
     # A resync after a directory outage can legitimately resolve fewer people.
     # A resync that resolves nobody is almost always a failure to read Graph,
@@ -55,7 +62,14 @@ param(
     # resolver treats an absent record as not entitled. Keeping them would leave
     # access behind after a removal, which is the failure this whole accelerator
     # is built to avoid.
-    [switch]$KeepOrphans
+    [switch]$KeepOrphans,
+
+    # Resolve membership and write it to a snapshot file instead of to Cosmos.
+    # For a projection with no public endpoint: the operator's own sign-in
+    # reads Graph here, and sync/src/apply-projection.mjs applies the file from
+    # inside the network with an identity that can write only the container.
+    # No credential crosses into the network - only object ids and tiers.
+    [string]$ExportPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -106,14 +120,17 @@ if ($acct.tenantId -ne $TenantId) {
 $graphToken = az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv 2>$null
 if (-not $graphToken) { Bad 'Could not get a Microsoft Graph token.'; exit 1 }
 
-$cosmosToken = az account get-access-token --resource https://cosmos.azure.com --query accessToken -o tsv 2>$null
-if (-not $cosmosToken) { Bad 'Could not get a Cosmos data-plane token.'; exit 1 }
+$cosmosToken = $null
+if (-not $ExportPath) {
+    $cosmosToken = az account get-access-token --resource https://cosmos.azure.com --query accessToken -o tsv 2>$null
+    if (-not $cosmosToken) { Bad 'Could not get a Cosmos data-plane token.'; exit 1 }
+}
 # Resolved once, here, rather than inside a message: a command substitution in
 # a string still runs under -WhatIf, and a redirect inside it makes PowerShell
 # prompt about writing a file that has nothing to do with this script.
 $signedInOid = az ad signed-in-user show --query id -o tsv 2>$null
 if ($signedInOid) { $signedInOid = $signedInOid.Trim() } else { $signedInOid = '<your-object-id>' }
-Ok 'Graph and Cosmos tokens acquired'
+Ok $(if ($ExportPath) { 'Graph token acquired (export only - Cosmos is not contacted)' } else { 'Graph and Cosmos tokens acquired' })
 
 # ---------------------------------------------------------------- 2. resolve
 Step 'Reading group membership'
@@ -134,17 +151,38 @@ foreach ($t in @(
     }
 }
 
+# Business units, with exactly the precedence Sync-ClaudeAccess.ps1 writes into
+# bu-members: deepest first, so a team wins over the unit that contains it, then
+# registry order, and the first match wins. This used to apply
+# -BusinessUnitGroups in the order given with the last match winning, so anyone
+# in a team and its parent was charged to a different unit here than on the
+# named-value path - and the migration would have moved their spend at the flip
+# without a single entitlement difference to show for it.
+$units = @()
 if ($BusinessUnitGroups) {
-    Step 'Reading business unit membership'
     foreach ($spec in $BusinessUnitGroups) {
         $parts = $spec -split '=', 2
         if ($parts.Count -ne 2) { Write-Warning "Skipping '$spec' - expected id=group-name"; continue }
-        $unit = $parts[0].Trim(); $grp = $parts[1].Trim()
-        $bm = @(Get-GroupMemberOids -GroupName $grp -Token $graphToken)
-        Write-Host ("  {0,-22} {1,-30} {2} member(s)" -f $unit, $grp, $bm.Count)
+        $units += [pscustomobject]@{ Id = $parts[0].Trim(); Group = $parts[1].Trim() }
+    }
+}
+elseif ($ApimName -and $ResourceGroup) {
+    . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
+    . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
+    $registry = @(ConvertFrom-ClaudeBuRegistry (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'))
+    $parents = ConvertFrom-ClaudeBuParents (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents')
+    $units = @(Sort-ClaudeBuByDepth $registry -Parents $parents)
+}
+
+if ($units.Count) {
+    Step 'Reading business unit membership'
+    $assigned = @{}
+    foreach ($u in $units) {
+        $bm = @(Get-GroupMemberOids -GroupName $u.Group -Token $graphToken)
+        Write-Host ("  {0,-22} {1,-30} {2} member(s)" -f $u.Id, $u.Group, $bm.Count)
         foreach ($m in $bm) {
-            if ($byOid.ContainsKey($m.Oid)) { $byOid[$m.Oid].BusinessUnit = $unit }
-            else { Note "  $($m.Name) is in $unit but no tier - not entitled, so not projected" }
+            if (-not $byOid.ContainsKey($m.Oid)) { Note "  $($m.Name) is in $($u.Id) but no tier - not entitled, so not projected"; continue }
+            if (-not $assigned.ContainsKey($m.Oid)) { $byOid[$m.Oid].BusinessUnit = $u.Id; $assigned[$m.Oid] = $true }
         }
     }
 }
@@ -152,6 +190,27 @@ if ($BusinessUnitGroups) {
 $resolved = @($byOid.Values)
 Write-Host ''
 Ok "$($resolved.Count) entitled identity(ies) resolved"
+
+if ($ExportPath) {
+    Step 'Writing the snapshot'
+    $snapshot = [ordered]@{
+        kind           = 'claude-entitlement-snapshot'
+        tenantId       = $TenantId
+        generatedAt    = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+        mappingVersion = [int][double]::Parse((Get-Date -UFormat %s))
+        groups         = [ordered]@{ standard = $StandardGroup; premium = $PremiumGroup; businessUnits = @($BusinessUnitGroups) }
+        records        = @($resolved | ForEach-Object { [ordered]@{ oid = $_.Oid; tier = $_.Tier; businessUnit = $_.BusinessUnit } })
+    }
+    # Without a byte-order mark: Windows PowerShell 5.1 adds one to UTF8 and
+    # JSON.parse in Node refuses it.
+    $full = if ([IO.Path]::IsPathRooted($ExportPath)) { $ExportPath } else { Join-Path (Get-Location) $ExportPath }
+    $full = [IO.Path]::GetFullPath($full)
+    [IO.File]::WriteAllText($full, ($snapshot | ConvertTo-Json -Depth 6), (New-Object System.Text.UTF8Encoding($false)))
+    Ok "$($resolved.Count) record(s) written to $full"
+    Note 'Nothing was written to Cosmos. Apply it from inside the network:'
+    Note "  node sync/src/apply-projection.mjs --cosmos https://$Account.documents.azure.com:443/ --tenant $TenantId --snapshot <file>"
+    exit 0
+}
 
 # ---------------------------------------------------------------- 3. existing
 Step 'Reading what the projection holds now'

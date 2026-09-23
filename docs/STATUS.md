@@ -2,7 +2,32 @@
 
 **Active packet:** P38 — the consolidated chargeback workbook, three budget and deployment controls that failed silently, and the Claude Desktop gateway sign-in step. Full regression including the Azure half passes: 32 checks, 193 of 193 mutations caught.
 
-## Where P19 stands, 2026-09-17
+## Where P19 stands, 2026-09-23
+
+**Not finished, but no longer only designed.** The default install still holds about 93
+developers, because the projection is not the default and has not been load-tested at 500,000.
+What changed is that the whole path now exists and was run: deployed with no public endpoint,
+populated, compared, flipped to, failed over, rolled back and flipped to again, on a Premium v2
+gateway in Canada Central with the Cosmos account in East US 2
+([SECURE-PROJECTION.md](SECURE-PROJECTION.md)).
+
+| | |
+|---|---|
+| **Built and run** | `infra/resolver.bicep` (the resolver's template, which did not exist), `infra/projection-network.bicep` for an existing VNet, the in-network writer `sync/`, and the projection-against-gateway comparison |
+| **Found by running it** | A missing record answered 503 instead of 403; the two syncs charged nested teams to different business units; `Sort-Object` reordered units of equal depth; a gateway redeploy would have removed its VNet integration; the Deploy to Azure template was the first commit's. All fixed |
+| **Cost** | $69.09 a month at 500,000 developers, $65.28 of it at rest — five private endpoints, five zones, one warm resolver instance |
+| **U15** | Closed: a management-group Modify policy, `CosmosDB_PublicNetwork_Modify` |
+
+Still missing before 500,000 can be claimed:
+
+- **Counters at that cardinality (U9).** Not yet measured. The resolver's p99 on a miss (U14)
+  is: 301 ms, with 389 ms the slowest of 150 ([SCALE.md](SCALE.md)).
+- **Foundry quota.** One capacity unit is 1 request and 1,000 tokens per minute (measured), so
+  the model deployment, not the gateway, is the first limit — see [SCALE.md](SCALE.md).
+- **Making it the default** (`cos-default`) and a one-command move for existing gateways
+  (`cos-upgrade`).
+
+## Where P19 stood, 2026-09-17 (superseded by the section above)
 
 **Not finished, and the shipped product still holds about 93 developers.** That number is
 measured, not estimated: `Measure-ClaudeCeiling.ps1` against the reference gateway reports

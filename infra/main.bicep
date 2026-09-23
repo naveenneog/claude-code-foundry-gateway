@@ -34,6 +34,48 @@ param apimSku string = 'BasicV2'
 @minValue(1)
 param apimCapacity int = 1
 
+// Network and portal state the gateway already has. This template writes the
+// service whenever it created it, and an ARM PUT replaces what it does not
+// state: a what-if against a Premium v2 gateway with outbound VNet integration
+// (2026-09-23) predicted virtualNetworkType External -> None, the
+// virtualNetworkConfiguration deleted, publicNetworkAccess and customProperties
+// removed, and both portals Disabled -> Enabled. A private deployment would
+// then fail every request after an ordinary re-run. Install-ClaudeGateway.ps1
+// reads the live values and passes them back, the same way it preserves the
+// named values; a new gateway gets the defaults below, which are what Azure
+// gives a new v2 instance.
+@description('Keep the gateway\'s VNet mode. External with a Microsoft.Web/serverFarms subnet is outbound integration (Standard v2, Premium v2).')
+@allowed([
+  'None'
+  'External'
+  'Internal'
+])
+param apimVirtualNetworkType string = 'None'
+
+@description('Subnet for apimVirtualNetworkType. Empty when None.')
+param apimSubnetId string = ''
+
+@allowed([
+  'Enabled'
+  'Disabled'
+])
+param apimPublicNetworkAccess string = 'Enabled'
+
+@allowed([
+  'Enabled'
+  'Disabled'
+])
+param apimDeveloperPortalStatus string = 'Disabled'
+
+@allowed([
+  'Enabled'
+  'Disabled'
+])
+param apimLegacyPortalStatus string = 'Disabled'
+
+@description('Protocol and cipher settings the gateway already has. Empty for a new gateway.')
+param apimCustomProperties object = {}
+
 @description('Deployment name of the Sonnet-class model in Foundry.')
 param sonnetDeployment string = 'claude-sonnet-5'
 
@@ -213,10 +255,20 @@ resource apimNew 'Microsoft.ApiManagement/service@2024-05-01' = if (createApim) 
   identity: {
     type: 'SystemAssigned'
   }
-  properties: {
+  properties: union({
     publisherEmail: publisherEmail
     publisherName: publisherName
-  }
+    virtualNetworkType: apimVirtualNetworkType
+    publicNetworkAccess: apimPublicNetworkAccess
+    developerPortalStatus: apimDeveloperPortalStatus
+    legacyPortalStatus: apimLegacyPortalStatus
+  }, empty(apimSubnetId) ? {} : {
+    virtualNetworkConfiguration: {
+      subnetResourceId: apimSubnetId
+    }
+  }, empty(apimCustomProperties) ? {} : {
+    customProperties: apimCustomProperties
+  })
 }
 
 resource apim 'Microsoft.ApiManagement/service@2024-05-01' existing = {

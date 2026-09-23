@@ -99,7 +99,10 @@ function Get-GraphPaged($Uri, $Headers = $H) {
     do {
         $page = Invoke-RestMethod -Headers $Headers -Uri $Uri -Method Get
         $out += $page.value
-        $Uri = $page.'@odata.nextLink'
+        # Through PSObject: the last page has no nextLink, and reading a
+        # missing property throws under a caller's Set-StrictMode.
+        $next = $page.PSObject.Properties['@odata.nextLink']
+        $Uri = if ($next) { $next.Value } else { $null }
     } while ($Uri)
     return $out
 }

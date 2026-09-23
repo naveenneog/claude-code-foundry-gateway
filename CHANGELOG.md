@@ -28,6 +28,54 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- **The projection deploys with no public endpoint anywhere, and was deployed
+  and migrated to end to end.** On 2026-09-23, on a Premium v2 gateway in Canada
+  Central with the Cosmos account in East US 2, it was populated, compared,
+  flipped to, failed over, rolled back and flipped to again.
+  `docs/SECURE-PROJECTION.md` is the walkthrough.
+  - `infra/resolver.bicep` existed only as a reference in
+    `resolver/src/index.mjs`. It is now a Flex Consumption app whose built-in
+    authentication admits one caller, the gateway's managed identity, checked
+    on application id and object id. Its app registration requires
+    assignment, so nothing else can obtain a token for it (`AADSTS50105`). It
+    reads one container, and it uses no keys anywhere: storage, Cosmos and
+    Application Insights are all Entra-only. Inbound can be private (measured:
+    `403 Web App - Unavailable` from outside, `200` through the integrated
+    gateway), or public for Basic v2 gateways.
+  - `infra/projection-network.bicep` takes an existing VNet and the subnets a
+    network team hands over. It creates only the endpoints, zones and links, and
+    adds the resolver's `Microsoft.App/environments` subnet and the zones for its
+    endpoint and storage. Redeploying it over resources created by hand adopted
+    them without duplicates.
+  - `sync/` writes the projection from inside the network, as its own identity
+    with write access to one container. `Sync-ClaudeProjection.ps1 -ExportPath`
+    resolves Entra with the operator's sign-in and writes a snapshot of object
+    ids and tiers, so no credential crosses into the network. `--graph` reads
+    Entra with the job's own identity where a tenant administrator has granted
+    `GroupMember.Read.All` (refused here with `Authorization_RequestDenied`).
+    Measured: 8 records in 1.5 seconds, then 8 unchanged on the re-run.
+  - `Compare-ClaudeEntitlement.ps1 -ExportGatewayPath` plus
+    `apply-projection.mjs --compare` compare the projection with the gateway.
+    Each difference is named `would-lose-access`, `would-gain-access`,
+    `tier-drift` or `unit-drift`. The migration's step 4 had compared the lists
+    with the directory only, which says whether the lists are current and
+    nothing about the projection.
+  - `scripts/ClaudeRunner.ps1` gets files into the in-network runner. Measured
+    on `az container exec`: no shell, URL-decoded (a `+` arrives as a space),
+    and under 5,000 characters or refused with `InvalidCommandLength`. So files
+    travel as base64url in chunks, checked by SHA-256.
+  - `docs/AUTHENTICATION.md`: which credentials reach the gateway, measured.
+    People by Azure CLI sign-in, with both audiences; Claude Code CLI 2.1.272
+    end to end; a managed identity inside the VNet (150 of 150); a service
+    principal (refused, then entitled 39 seconds after its record was written,
+    with a 24-hour token); and 401 for a wrong audience, a garbled token or none.
+    It says plainly that device code and workload identity federation were not
+    run, and that the entitlement check, not token expiry, is what revokes
+    access.
+  - `tests/Test-SecureProjection.ps1`: 84 assertions and 31 mutations. The
+    business-unit order runs the real function over 300 units; the sync rules
+    run under `node --test` (20 cases).
+
 - **What to allow on a firewall, measured rather than listed.**
   `docs/NETWORK.md` gives one table per destination, marked with which of the
   three clients — CLI, VS Code extension, Claude Desktop — needs it, and
@@ -433,6 +481,87 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   converts to 1,388,888,888 tokens and back to exactly $5000.00.
 
 ### Fixed
+
+- **Re-running the installer reset the revocation window to an hour.** That is
+  how long a removed developer keeps working. The wizard's answer, 60 minutes
+  by default and the only answer under `-Yes`, always won over the value it had
+  just read back, so three consecutive re-runs each deployed
+  `entitlementCacheSeconds=3600` whatever the gateway had. Found because a
+  1-second window stayed an hour: the installer's own verification cached an
+  entry for 3,600 seconds. A gateway that already has a window now keeps it,
+  and the wizard says so. The lookup goes through `Invoke-AzOptional`: on
+  Windows PowerShell 5.1 an az call for a gateway that does not exist yet
+  raised `NativeCommandError` under `2>$null`, and `ErrorActionPreference Stop`
+  ended the wizard before its summary. The same helper now guards the two
+  existing-gateway checks on the deploy path, which had the same exposure on
+  5.1 for every new gateway.
+
+- **The installer stopped at the entitlement sync on every run, after
+  deploying the gateway.** Introduced earlier the same day, by the fix that made
+  the confirmation screen price the chosen SKU: that fix dot-sourced
+  `AzureRetailPrice.ps1`, which ran `Set-StrictMode -Version Latest` at top
+  level. Strict mode then reached `Sync-ClaudeAccess.ps1`, where reading
+  `'@odata.nextLink'` on the last Graph page threw
+  (`The property '@odata.nextLink' cannot be found on this object`). The
+  library now sets strict mode inside each function only, and both Graph pagers
+  read the link in a way strict mode tolerates. Checks run the library in a
+  fresh shell and the real paging function under strict mode, and fail any
+  dot-sourced library that sets strict mode for its caller. A full re-run
+  against the Premium v2 gateway then finished with exit code 0.
+
+- **An identity with no projection record got 503, "this is not a problem with
+  your access", and `Retry-After: 5`.** The policy handled only the resolver's
+  200, so its 404 fell through to the branch for an unreachable resolver. Every
+  unentitled attempt read as an outage, invited a retry and went uncached.
+  Measured before and after on a live gateway: it is now `403 permission_error`,
+  cached for at most 60 seconds (the second call took 567 ms). A resolver that
+  does not answer still gets 503 until the positive cache runs out. Measured:
+  served for 120 seconds with the resolver stopped, then 503.
+
+- **The two syncs charged nested teams to different business units.**
+  `Sync-ClaudeAccess.ps1` writes `bu-members` deepest first, with the first
+  match winning. `Sync-ClaudeProjection.ps1` applied units in the order given,
+  with the last match winning. Anyone in a team and its parent would have moved
+  unit at the flip, with no entitlement difference to show for it. The
+  projection now reads the registry and parents from the gateway and applies
+  the same rule.
+
+- **`Sort-ClaudeBuByDepth` did not keep registry order, although it said it
+  did.** `Sort-Object` is not stable. Sorting 2,000 items on a three-valued key
+  reordered equal items 960 times in PowerShell 7.6 and 1,011 times in 5.1, and
+  a five-unit registry came back in a different order in 5.1. So ADR-0007's
+  "first match in registry order" depended on the shell that ran the sync.
+  Registry position is now an explicit second key.
+
+- **Re-running the installer would have removed a gateway's VNet integration.**
+  `main.bicep` writes the service whenever it created it, and stated only the
+  publisher. An ARM what-if against the Premium v2 gateway predicted
+  `virtualNetworkType` External -> None, the subnet deleted,
+  `publicNetworkAccess` and `customProperties` removed, and both portals
+  switched on. Every request to a private deployment would then fail. The
+  installer now reads that state over ARM and hands it back, and refuses to
+  redeploy a gateway it cannot read. With it, the same what-if predicts none of
+  those changes.
+
+- **The Deploy to Azure button deployed the first commit's gateway.**
+  `infra/azuredeploy.json` had not been rebuilt since, so it lacked the
+  entitlement switch, business units and everything else added since. It is
+  rebuilt, and a check compiles `main.bicep` and compares.
+
+- **The projection's cost was understated.** It priced one private endpoint and
+  no warm instance: $11.11 a month at 500,000 developers. As deployed, it is
+  $69.09, of which $65.28 bills at rest: five endpoints, five DNS zones, and one
+  warm resolver instance.
+
+- **U15 had wrongly ruled out Azure Policy.** The control is
+  `CosmosDB_PublicNetwork_Modify` in a management-group initiative that
+  `az policy assignment list` did not show. The resource's activity log named
+  it. The same initiative made the resolver's storage private.
+
+- **The migration runbook described a path that could not be run.** It said
+  Basic v2 cannot use the projection (a public resolver works), stood it up
+  with one template out of three, had no command to populate it, and compared
+  the wrong things. Each step now matches what was run.
 
 - **The installer's own verification reported a healthy new gateway as failed,
   and priced every gateway as Basic v2.** Found by a Premium v2 install in

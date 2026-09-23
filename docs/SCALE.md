@@ -98,6 +98,21 @@ It gives no rate, no concurrency and no shape. Five numbers do:
 Only the first is a property of the organisation. The other four are properties
 of how people work, and they have to be observed.
 
+### What one unit of Foundry capacity buys
+
+Measured 2026-09-23: a Global Standard `claude-haiku-4-5` deployment at capacity
+10 reported its `rateLimits` as `request` 10 and `token` 10,000 per 60 seconds.
+One unit of capacity is therefore **1 request and 1,000 tokens per minute**, and
+the installer's "capacity in thousands of tokens per minute" is half of it.
+
+Claude Code makes many small requests, so the request limit binds first. As an
+illustration only: 50,000 daily actives at 500 requests a day over an 8-hour day
+average about 52,000 requests a minute, which is 52,000 units of capacity before
+any peak. The subscription this was built in had a quota of 80 units for that
+model in that region, and quota is per subscription, region and model, so a
+second deployment adds none. At this scale Foundry quota, requested from
+Microsoft, is the limit to plan first. The gateway and the projection are not.
+
 ### What this repository has not measured
 
 The reference deployment cannot supply them. Over the last 30 days its ledger
@@ -145,6 +160,28 @@ requests produced `TimeoutError` rather than more throughput. That is a
 backfill-window number, not a request-path one — nothing in the gateway waits on
 it — but ADR-0009's phase 1 has to budget for it.
 
+### The lookup through the gateway, measured 2026-09-23
+
+What a cache miss adds to a request, end to end. The client was inside the
+gateway's VNet and signed in as a managed identity entitled only through the
+projection. It asked for a model its tier may not call, so the gateway resolved
+entitlement and refused **without calling the model**. Response time was
+therefore the gateway plus the lookup and nothing else. The gateway was Premium
+v2 in Canada Central; the Cosmos account was in East US 2, behind a private
+endpoint in the same VNet; the resolver had one always-ready instance.
+
+| 150 requests each | min | p50 | p95 | p99 | max |
+|---|---:|---:|---:|---:|---:|
+| Cache hit (60-second window, back to back) | 4 ms | 5 ms | 10 ms | 172 ms | 336 ms |
+| Cache miss (1-second window, 1.2 s apart) | 67 ms | **91 ms** | **149 ms** | **301 ms** | 389 ms |
+
+The resolver's own metrics counted exactly 150 executions in the miss window,
+all on the warm instance, so every miss was a real lookup. A miss adds about
+86 ms at the median and 139 ms at p95. The slowest, 389 ms, is a small fraction
+of the 5-second limit the gateway gives the resolver. Not yet measured: the
+first lookup after idle with **no** always-ready instance, which pays a cold
+start.
+
 ### What a counter test still has to prove
 
 The test is whether **every identity retains its consumed allowance** across:
@@ -180,10 +217,11 @@ than quoted:
 ./scripts/Measure-ClaudeProjectionCost.ps1 -Developers 500000 -DailyActive 50000
 ```
 
-At the full 500,000-developer requirement that is **$11.11 a month** — the
-resolver is called once per cache window per active developer, not once per
-request, so the cache absorbs almost all of it. Most of that total is a private
-endpoint, which bills at rest; see
+At the full 500,000-developer requirement that is **$69.09 a month**, of which
+$65.28 bills at rest: five private endpoints, five private DNS zones and one warm
+resolver instance, as deployed on 2026-09-23. The usage lines are under $4,
+because the resolver is called once per cache window per active developer, not
+once per request, so the cache absorbs almost all of it. See
 [ADR-0011](adr/0011-projection-platform.md) for why private networking is
 assumed rather than optional. The standing-cost objection to ADR-0005 does not
 survive the arithmetic either way.
@@ -381,8 +419,11 @@ means doing it twice.
 az apim show -g <rg> -n <apim> --query sku.name -o tsv
 ```
 
-Basic v2 cannot join a virtual network and so cannot reach the projection. Move
-to Standard v2 first — in place, no downtime, no change of address.
+Basic v2 cannot join a virtual network, so it cannot reach a resolver that has
+no public endpoint. Two ways forward: deploy the resolver with
+`inboundAccess=public`, where the Entra token check is then the only control, or
+move to Standard v2 or Premium v2 and keep everything private.
+[Deploy the projection privately](SECURE-PROJECTION.md) covers both.
 
 **Rollback:** none needed. Nothing has changed yet.
 
@@ -400,31 +441,65 @@ policy from before the switch existed — redeploy with
 
 ### 2. Stand up the projection
 
+The store, its private network, the resolver and its identity. Steps 1 to 7 of
+[Deploy the projection privately](SECURE-PROJECTION.md) do this, starting with:
+
 ```powershell
 az deployment group create -g <rg> `
   --template-file infra/projection.bicep `
-  --parameters namePrefix=<your-prefix>
+  --parameters namePrefix=<your-prefix> networkAccess=private-only
 ```
 
-**Rollback:** delete the account. Nothing reads it yet.
+Then point the gateway at the resolver, which still changes nobody's access:
+
+```powershell
+Set-ApimNamedValue -ResourceGroup <rg> -ApimName <apim> -Id entitlement-resolver-url -Value 'https://func-resolver-<prefix>.azurewebsites.net/api'
+Set-ApimNamedValue -ResourceGroup <rg> -ApimName <apim> -Id entitlement-resolver-audience -Value 'api://<resolver-app-id>'
+```
+
+**Rollback:** delete the resources. Nothing reads them yet.
 
 ### 3. Populate it, and leave the lists alone
 
-The lists keep serving every request while the projection fills. Backfill was
-measured at about 190 records a second, so 500,000 identities takes roughly 45
-minutes.
+The lists keep serving every request while the projection fills. The account
+has no public endpoint, so the write runs inside the network: resolve the
+groups with your own sign-in, then apply the snapshot from the runner with its
+own identity, which can write only this container.
+
+```powershell
+./scripts/Sync-ClaudeProjection.ps1 -Account cosmos-<prefix> -ApimName <apim> -ResourceGroup <rg> -ExportPath snapshot.json
+# then, in the runner:
+node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.documents.azure.com:443/ --tenant <tenant-id> --snapshot /work/snapshot.json
+```
+
+`-ApimName` and `-ResourceGroup` make the projection assign business units from
+the gateway's own registry, deepest first and first match winning, which is how
+the named-value path does it. Before 2026-09-23 the projection sync let the last
+match win, so anyone in a team and its parent would have been charged to a
+different unit after the flip. Backfill was measured at about 190 records a
+second, so 500,000 identities takes roughly 45 minutes.
 
 **Rollback:** delete and repopulate. No developer is affected either way.
 
 ### 4. Run the comparison until it reports nothing
 
+Two comparisons, and both must be clean:
+
 ```powershell
-./scripts/Compare-ClaudeEntitlement.ps1 -ResourceGroup <rg> -ApimName <apim>
+# The lists against the directory: are the lists current?
+./scripts/Compare-ClaudeEntitlement.ps1 -ResourceGroup <rg> -ApimName <apim> -ExportGatewayPath gateway-decisions.json
+
+# The projection against the lists: would anyone gain or lose access at the flip?
+# In the runner, with the exported file copied in:
+node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.documents.azure.com:443/ --tenant <tenant-id> --compare /work/gateway-decisions.json
 ```
 
-This is the step that must not be rushed. It exits non-zero while the two
-sources disagree, and each disagreement is a developer who would gain or lose
-access at the moment you flip.
+This is the step that must not be rushed. The first comparison on its own says
+only whether the lists are current; the second is the one that reads the
+records the resolver would serve. It names every difference as
+`would-lose-access`, `would-gain-access`, `tier-drift` or `unit-drift` and exits
+non-zero while there are any. Measured on 2026-09-23: 8 identities compared,
+0 differences.
 
 **Rollback:** not applicable — nothing has changed. Fix the drift and run again.
 
@@ -435,7 +510,22 @@ az apim nv update -g <rg> --service-name <apim> `
   --named-value-id entitlement-source --value projection
 ```
 
-Propagation to the running policy was measured at 9–18 seconds.
+Propagation to the running policy was measured at 9–18 seconds on Basic v2. On
+Premium v2 the write itself took 38 to 41 seconds, and the flip took effect
+within 44 seconds of starting it.
+
+What each developer then experiences, measured on 2026-09-23:
+
+| Situation | Response |
+|---|---|
+| Record present | Served, and cached for `entitlement-cache-seconds`. Still served after removal from the named-value list, which is how to confirm the projection is the source |
+| No record | `403 permission_error`, cached for at most 60 seconds |
+| Resolver down, answer still cached | Served until the window ends |
+| Resolver down, window ended | `503` with `Retry-After: 5`, and a message saying it is not the developer's access |
+
+Before 2026-09-23 the policy answered a missing record with that 503, so every
+unentitled attempt read as an outage and invited a retry. Redeploy the current
+policy before flipping.
 
 **Rollback:** set it back to `named-value`. The lists were never deleted, so the
 gateway returns to exactly the behaviour it had before. This is the whole reason
@@ -448,7 +538,9 @@ workbook both keep working unchanged — the counter key is the object id in bot
 paths, so nobody's month restarts and no spend history moves.
 
 Only once you are satisfied should the sync stop writing the named-value lists.
-Until then they are your rollback.
+Until then they are your rollback. A rollback is only as good as the lists:
+measured, rolling back after the lists had stopped being maintained refused an
+entitled developer with 403 until `Sync-ClaudeAccess.ps1` ran again.
 
 ### What does not change
 

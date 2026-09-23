@@ -559,10 +559,16 @@ $mutations = @(
        To    = 'Scale' }
 
     @{ Suite = 'Test-Scale.ps1'
-       Name  = 'the README implies the projection is shipped'
+       Name  = 'the lookup cost loses its measured p99'
+       File  = 'docs/SCALE.md'
+       From  = '**301 ms**'
+       To    = '**30 ms**' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the README implies the projection is the default and load-tested'
        File  = 'README.md'
-       From  = 'is not built**'
-       To    = 'is included**' }
+       From  = '**It is not the default, and it is not yet'
+       To    = '**It is the default, and it is' }
 
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'private networking stops being priced'
@@ -575,6 +581,78 @@ $mutations = @(
        File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
        From  = '$totalUsd = $functionUsd + $cosmosRuUsd + $storageUsd + $networkUsd'
        To    = '$totalUsd = $functionUsd + $cosmosRuUsd + $storageUsd' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'only the Cosmos endpoint is priced again'
+       File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
+       From  = '[int]$PrivateEndpoints = 5,'
+       To    = '[int]$PrivateEndpoints = 1,' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the private DNS zones stop being priced'
+       File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
+       From  = '[int]$PrivateDnsZones = 5,'
+       To    = '[int]$PrivateDnsZones = 0,' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the warm resolver instance stops reaching the total'
+       File  = 'scripts/Measure-ClaudeProjectionCost.ps1'
+       From  = '+ $networkUsd + $dnsUsd + $alwaysReadyUsd'
+       To    = '+ $networkUsd + $dnsUsd' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'a redeploy resets the VNet mode'
+       File  = 'infra/main.bicep'
+       From  = 'virtualNetworkType: apimVirtualNetworkType'
+       To    = "virtualNetworkType: 'None'" }
+
+    @{ Suite = 'Test-On-PS51.ps1'
+       Name  = 'the revocation-window lookup ends the wizard on 5.1 again'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = '$liveWindow = Invoke-AzOptional { az apim nv show -g $ResourceGroup --service-name $windowTarget --named-value-id entitlement-cache-seconds --query value -o tsv }'
+       To    = '$liveWindow = az apim nv show -g $ResourceGroup --service-name $windowTarget --named-value-id entitlement-cache-seconds --query value -o tsv 2>$null' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'a re-run resets the revocation window to an hour again'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = '$entitlementCacheSeconds = $liveWindowSeconds'
+       To    = '$entitlementCacheSeconds = 3600' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'the installer stops handing the network state back'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = "`$preserveArgs = @('--parameters', ""@`$preserveFile"")"
+       To    = '$preserveArgs = @()' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'the installer redeploys a gateway it could not read'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = "throw 'Refusing to redeploy a gateway whose network state could not be read.'"
+       To    = "Write-Host ''" }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'the Deploy to Azure template drifts from main.bicep'
+       File  = 'infra/azuredeploy.json'
+       From  = '"apimVirtualNetworkType"'
+       To    = '"apimVirtualNetworkMode"' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'the authentication page claims a service principal token is short'
+       File  = 'docs/AUTHENTICATION.md'
+       From  = '**1,445 minutes, about 24 hours**'
+       To    = '**60 minutes**' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'the private deployment page loses the storage endpoints reason'
+       File  = 'docs/SECURE-PROJECTION.md'
+       From  = 'All three are needed'
+       To    = 'Blob is enough' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'the private deployment page quotes the old cost'
+       File  = 'docs/SECURE-PROJECTION.md'
+       From  = '**$69.09**'
+       To    = '**$11.11**' }
 
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'the Consumption plan limitation is dropped'
@@ -2226,6 +2304,164 @@ $mutations = @(
        To    = "'API Management and Application Insights (30-45 min)'" }
 
     @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the installer blames the bill on one endpoint again'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'Most of that bills at rest - the private endpoints, their DNS zones and a'
+       To    = 'Most of that is the private endpoint, and a' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the price library sets strict mode for its caller again'
+       File  = 'scripts/AzureRetailPrice.ps1'
+       From  = '# No Set-StrictMode here. This file is dot-sourced'
+       To    = "Set-StrictMode -Version Latest`r`n# This file is dot-sourced" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'Graph paging reads nextLink as a property again'
+       File  = 'scripts/ClaudeGraphMembership.ps1'
+       From  = '$uri = if ($next) { $next.Value } else { $null }'
+       To    = "`$uri = `$page.'@odata.nextLink'" }
+
+    # The secure projection. Each mutation removes one control or restores one
+    # defect measured on the live deployment; Test-SecureProjection.ps1 must go red.
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'the resolver stops requiring authentication'
+       File  = 'infra/resolver.bicep'
+       From  = 'requireAuthentication: true'
+       To    = 'requireAuthentication: false' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'an unauthenticated caller is sent to a sign-in page'
+       File  = 'infra/resolver.bicep'
+       From  = "unauthenticatedClientAction: 'Return401'"
+       To    = "unauthenticatedClientAction: 'RedirectToLoginPage'" }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'any application in the tenant may call the resolver'
+       File  = 'infra/resolver.bicep'
+       From  = 'allowedApplications: allowedCallerAppIds'
+       To    = 'allowedApplications: []' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'the resolver storage accepts keys again'
+       File  = 'infra/resolver.bicep'
+       From  = 'allowSharedKeyAccess: false'
+       To    = 'allowSharedKeyAccess: true' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'telemetry accepts unauthenticated senders'
+       File  = 'infra/resolver.bicep'
+       From  = 'DisableLocalAuth: true'
+       To    = 'DisableLocalAuth: false' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'the resolver is given write access'
+       File  = 'infra/resolver.bicep'
+       From  = "cosmosDataReader = '00000000-0000-0000-0000-000000000001'"
+       To    = "cosmosDataReader = '00000000-0000-0000-0000-000000000002'" }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'the resolver can read the whole account'
+       File  = 'infra/resolver.bicep'
+       From  = "scope: '`${cosmos.id}/dbs/`${databaseName}/colls/`${containerName}'"
+       To    = 'scope: cosmos.id' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'a private resolver keeps a public endpoint'
+       File  = 'infra/resolver.bicep'
+       From  = "publicNetworkAccess: isPrivate ? 'Disabled' : 'Enabled'"
+       To    = "publicNetworkAccess: 'Enabled'" }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'the resolver subnet gets the Premium-plan delegation'
+       File  = 'infra/projection-network.bicep'
+       From  = "serviceName: 'Microsoft.App/environments'"
+       To    = "serviceName: 'Microsoft.Web/serverFarms'" }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'an existing VNet is ignored and a new one created'
+       File  = 'infra/projection-network.bicep'
+       From  = 'var createVnet = empty(vnetId)'
+       To    = 'var createVnet = true' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'a missing record becomes an outage again'
+       File  = 'infra/policy.xml'
+       From  = 'StatusCode == 404)'
+       To    = 'StatusCode == 418)' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'a refusal is cached for an hour'
+       File  = 'infra/policy.xml'
+       From  = 'Math.Min(60, int.Parse'
+       To    = 'Math.Max(3600, int.Parse' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'an export asks for a Cosmos token it cannot use'
+       File  = 'scripts/Sync-ClaudeProjection.ps1'
+       From  = 'if (-not $ExportPath) {'
+       To    = 'if ($true) {' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'the projection charges the last business unit again'
+       File  = 'scripts/Sync-ClaudeProjection.ps1'
+       From  = 'if (-not $assigned.ContainsKey($m.Oid)) { $byOid[$m.Oid].BusinessUnit = $u.Id; $assigned[$m.Oid] = $true }'
+       To    = '$byOid[$m.Oid].BusinessUnit = $u.Id' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'the projection ignores team depth'
+       File  = 'scripts/Sync-ClaudeProjection.ps1'
+       From  = '$units = @(Sort-ClaudeBuByDepth $registry -Parents $parents)'
+       To    = '$units = @($registry)' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'units at one depth lose registry order'
+       File  = 'scripts/ClaudeBusinessUnit.ps1'
+       From  = "Sort-Object -Property @{ Expression = 'Depth'; Descending = `$true }, @{ Expression = 'Position'; Ascending = `$true }"
+       To    = "Sort-Object -Property @{ Expression = 'Depth'; Descending = `$true }" }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'a snapshot is applied without validation'
+       File  = 'sync/src/apply-projection.mjs'
+       From  = 'const problems = validateSnapshot(snap, { tenantId });'
+       To    = 'const problems = [];' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'the in-network sync charges the last business unit'
+       File  = 'sync/src/plan.mjs'
+       From  = 'if (!assigned.has(m.oid)) { rec.businessUnit = unit.id; assigned.add(m.oid); }'
+       To    = 'rec.businessUnit = unit.id;' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'an unreadable directory revokes everyone'
+       File  = 'sync/src/plan.mjs'
+       From  = 'if (resolved.length === 0 && existing.size > 0 && !allowEmpty) {'
+       To    = 'if (false) {' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'Graph silently drops service principals'
+       File  = 'sync/src/graph.mjs'
+       From  = "ConsistencyLevel: 'eventual'"
+       To    = "Prefer: 'none'" }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'files travel as plain base64 again'
+       File  = 'scripts/ClaudeRunner.ps1'
+       From  = ".Replace('+', '-').Replace('/', '_')"
+       To    = '' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'chunks exceed the exec limit'
+       File  = 'scripts/ClaudeRunner.ps1'
+       From  = '4990 - $overhead'
+       To    = '20000' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'the gateway decisions cannot be exported'
+       File  = 'scripts/Compare-ClaudeEntitlement.ps1'
+       From  = '[string]$ExportGatewayPath'
+       To    = '[string]$ExportGatewayPathUnused' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the break-even advice uses the wrong price'
        File  = 'docs/COMPARISON.md'
        From  = 'the $150/month gateway'
@@ -2664,7 +2900,7 @@ $caught = 0
 
 try {
     New-Item -ItemType Directory -Path $sandbox -Force | Out-Null
-    foreach ($d in 'infra', 'scripts', 'tests', 'analytics') {
+    foreach ($d in 'infra', 'scripts', 'tests', 'analytics', 'sync', 'resolver') {
         if (Test-Path (Join-Path $root $d)) {
             Copy-Item (Join-Path $root $d) $sandbox -Recurse -Force
         }

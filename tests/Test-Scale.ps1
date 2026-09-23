@@ -233,7 +233,11 @@ Assert 'a cost model exists' (Test-Path $cost)
 # Behavioural. The claim that decides P19 is that the bill is small at the full
 # requirement, so assert the number rather than the prose describing it.
 $big = & $cost -Developers 500000 -DailyActive 50000 -CacheMinutes 60 -AsJson | ConvertFrom-Json
-Assert '500k developers cost tens of dollars, not thousands' ($big.monthly_usd.total -lt 50 -and $big.monthly_usd.total -gt 0) "got $($big.monthly_usd.total)"
+# Under $100: the usage lines are about $4, and the rest is what the private
+# shape bills at rest - five endpoints, five zones and one warm resolver
+# instance, as deployed and measured 2026-09-23. The earlier $11.11 priced one
+# endpoint and no warm instance.
+Assert '500k developers cost tens of dollars, not thousands' ($big.monthly_usd.total -lt 100 -and $big.monthly_usd.total -gt 0) "got $($big.monthly_usd.total)"
 Assert 'and the projection is under a gigabyte'    ($big.derived.storage_gb -lt 1) "got $($big.derived.storage_gb)"
 
 # The private endpoint is the only line that bills at rest, and it was found by
@@ -242,9 +246,17 @@ Assert 'and the projection is under a gigabyte'    ($big.derived.storage_gb -lt 
 # for large enterprises has to assume that baseline, so it defaults on.
 Assert 'private networking is priced in'  ($big.monthly_usd.private_endpoint -gt 0)
 Assert 'and defaults to on'               ((Get-Content $cost -Raw) -match '\[bool\]\$PrivateNetworking = \$true')
+Assert 'every endpoint the deployment has is counted' ((Get-Content $cost -Raw) -match '\[int\]\$PrivateEndpoints = 5,')
+Assert 'and every zone'                   ($big.monthly_usd.private_dns_zones -eq 2.5) "got $($big.monthly_usd.private_dns_zones)"
 $open = & $cost -Developers 500000 -DailyActive 50000 -PrivateNetworking:$false -AsJson | ConvertFrom-Json
-Assert 'turning it off removes exactly that line' `
-    ([math]::Round($big.monthly_usd.total - $open.monthly_usd.total, 2) -eq $big.monthly_usd.private_endpoint)
+Assert 'turning it off removes exactly the network lines' `
+    ([math]::Round($big.monthly_usd.total - $open.monthly_usd.total, 2) -eq [math]::Round($big.monthly_usd.private_endpoint + $big.monthly_usd.private_dns_zones, 2))
+# A warm instance is a cold-start decision, not a network one, and it is the
+# single largest line at rest.
+$cold = & $cost -Developers 500000 -DailyActive 50000 -AlwaysReadyInstances 0 -AsJson | ConvertFrom-Json
+Assert 'a warm resolver instance is priced'  ($big.monthly_usd.resolver_always_ready -eq 26.28) "got $($big.monthly_usd.resolver_always_ready)"
+Assert 'and choosing none removes exactly it' `
+    ([math]::Round($big.monthly_usd.total - $cold.monthly_usd.total, 2) -eq $big.monthly_usd.resolver_always_ready)
 
 # Cost follows cache misses, not requests. If that ever inverts, the model is
 # measuring the wrong thing and every figure built on it is wrong.
@@ -253,9 +265,11 @@ Assert 'a shorter cache window costs more' ($short.monthly_usd.total -gt $big.mo
 Assert 'and it scales with the window, four to one' `
     ([math]::Abs(($short.derived.misses_per_month / $big.derived.misses_per_month) - 4) -lt 0.01)
 
-# A pilot must cost nothing measurable, or the pay-per-use claim is not true.
+# A pilot pays only what bills at rest - the usage lines round to nothing - or
+# the pay-per-use claim is not true.
 $small = & $cost -Developers 8 -DailyActive 8 -AsJson | ConvertFrom-Json
-Assert 'a small pilot pays only the endpoint' ($small.monthly_usd.total -eq $small.monthly_usd.private_endpoint) "got $($small.monthly_usd.total)"
+Assert 'a small pilot pays only what bills at rest' ($small.monthly_usd.total -eq $small.monthly_usd.at_rest) "got $($small.monthly_usd.total) against $($small.monthly_usd.at_rest)"
+Assert 'and at rest is the three standing lines'    ($small.monthly_usd.at_rest -eq [math]::Round($small.monthly_usd.private_endpoint + $small.monthly_usd.private_dns_zones + $small.monthly_usd.resolver_always_ready, 2))
 
 # Rates change and are regional. They must be parameters with a read date, not
 # constants buried in arithmetic - the same reason the token price book moved to
@@ -333,6 +347,11 @@ Write-Host 'Scale - the projection, measured (P19)' -ForegroundColor Cyan
 # plane is unreachable from outside it.
 Assert 'the capacity result is recorded'    ($s -match 'The projection, measured 2026-09-17')
 Assert 'it reports the measured sizes'      ($s -match '\| \*\*100,000\*\* \| \*\*1\*\* \|')
+# U14, closed 2026-09-23: through the gateway, a miss against a hit, with the
+# model call taken out so the lookup is all that differs.
+Assert 'the lookup cost is recorded'        ($s -match 'The lookup through the gateway, measured 2026-09-23')
+Assert 'with miss percentiles'              ($s -match '\| Cache miss \(1-second window, 1\.2 s apart\) \| 67 ms \| \*\*91 ms\*\* \| \*\*149 ms\*\* \| \*\*301 ms\*\* \| 389 ms \|')
+Assert 'and says what it did not measure'   ($s -match 'Not yet measured: the\s+first lookup after idle')
 Assert 'and says why it stays flat'         ($s -match 'every identity is its own logical partition')
 # Writes are slow and that is a migration-window fact, not a request-path one.
 Assert 'the backfill rate is stated'        ($s -match '190 records a second')
@@ -368,7 +387,7 @@ Write-Host 'Scale - reachable from the README' -ForegroundColor Cyan
 $readmeTop = (Get-Content (Join-Path $root 'README.md') -Raw)
 Assert 'the README states the current ceiling'   ($readmeTop -match 'How many developers this holds today')
 Assert 'and gives the measured number'           ($readmeTop -match 'roughly 93 developers')
-Assert 'and says the larger design is not built' ($readmeTop -match 'is not built\*\*')
+Assert 'and says the larger design is not the default yet' ($readmeTop -match 'It is not the default, and it is not yet\s*\r?\n?>?\s*load-tested at 500,000\*\*')
 Assert 'and points at how to check your own'     ($readmeTop -match 'Measure-ClaudeCeiling\.ps1')
 
 # Documentation that nothing links to is documentation nobody reads. Six pages
@@ -401,8 +420,13 @@ $status = Get-Content (Join-Path $root 'docs/STATUS.md') -Raw
 # developer, because nothing populates the projection and nothing reads it.
 Assert 'it says P19 is not finished'            ($status -match '(?i)Not finished')
 Assert 'and gives the ceiling that still binds' ($status -match 'about 93 developers')
-Assert 'it names population as missing'         ($status -match '(?s)not built[\s\S]{0,400}Population')
-Assert 'and the resolver'                       ($status -match '(?s)not built[\s\S]{0,700}resolver')
+# Superseded 2026-09-23: population and the resolver now exist and were run
+# end to end, so the page must say what is still missing instead.
+Assert 'it says the path was run, not just designed' ($status -match 'deployed with no public endpoint')
+Assert 'and that it is not the default'         ($status -match 'the projection is not the default')
+Assert 'it names what is still missing'         ($status -match '(?s)Still missing before 500,000[\s\S]{0,300}Counters at that cardinality \(U9\)\.\*\* Not yet measured')
+Assert 'and reports U14 as measured'            ($status -match "resolver's p99 on a miss \(U14\)\s+is: 301 ms")
+Assert 'including Foundry quota'                ($status -match '(?s)Still missing before 500,000[\s\S]{0,700}Foundry quota')
 Assert 'and the policy path'                    ($status -match '(?s)not built[\s\S]{0,1000}cache-lookup-value')
 # What is genuinely retired should be said too, or the entry reads as no
 # progress at all.
@@ -443,7 +467,7 @@ Assert 'the counter key does not change'  ($adr13 -match '(?i)counter key is the
 Assert 'and spend history is located'     ($adr13 -match '(?i)Log Analytics, which survives any tier change')
 
 Assert 'the unknown it leaves is recorded' (
-    (Get-Content (Join-Path $root 'docs/UNKNOWNS.md') -Raw) -match '\| U14 \| OPEN')
+    (Get-Content (Join-Path $root 'docs/UNKNOWNS.md') -Raw) -match '\| U14 \| CLOSED \| What does the projection resolver add to p99 on a cache miss\? Measured 2026-09-23')
 
 $scale = Get-Content (Join-Path $root 'docs/SCALE.md') -Raw
 Assert 'the scale guide carries the SKU table'  ($scale -match '(?s)Basic v2[\s\S]{0,200}Premium \(classic\)')

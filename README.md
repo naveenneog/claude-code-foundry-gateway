@@ -28,10 +28,13 @@ Check the [prerequisites](#prerequisites) first if it stops early.
 > roughly 93 developers; the tier lists hold 110 each. Below that it works as
 > shipped. Above it, writes fail outright rather than silently truncating.
 >
-> Going further is designed, costed and reviewed — a durable projection on
-> Cosmos DB serverless at about $11 a month for 500,000 developers — but **it
-> is not built**. See [Scale](docs/SCALE.md) for the ceilings and
-> [ADR-0011](docs/adr/0011-projection-platform.md) for the costing.
+> Going further is built: a durable projection on Cosmos DB serverless, read by
+> a resolver Function, with no public endpoint anywhere. It was deployed and
+> migrated to end to end on 2026-09-23, and costs $69 a month at 500,000
+> developers, $65 of it at rest. **It is not the default, and it is not yet
+> load-tested at 500,000** — see [Deploy the projection privately](docs/SECURE-PROJECTION.md),
+> [Scale](docs/SCALE.md) for the ceilings and the migration, and
+> [ADR-0011](docs/adr/0011-projection-platform.md) for the platform choice.
 >
 > `./scripts/Measure-ClaudeCeiling.ps1` reports your own headroom and fails at
 > 80%.
@@ -619,6 +622,8 @@ journeys that span several guides:
 | [Models](docs/MODELS.md) | platform team | adding a new Claude model: deploy, allow, price, and what developers change |
 | [Plugins](docs/PLUGINS.md) | platform team | marketplaces, plugin and extension controls for Code and Desktop, and their limits |
 | [Scale](docs/SCALE.md) | platform team | measured ceilings, what runs out first, how to establish a capacity figure |
+| [Deploy the projection privately](docs/SECURE-PROJECTION.md) | platform and network teams | the projection with no public endpoint: subnets, identities, steps, verification, cost |
+| [Authentication types](docs/AUTHENTICATION.md) | platform and security teams | which credentials reach the gateway, measured: people, managed identities, service principals, lifetimes, what revokes access |
 | [Debug](docs/DEBUGGING.md) | anyone | isolate a failure layer by layer |
 
 **Reference, when you need it:**

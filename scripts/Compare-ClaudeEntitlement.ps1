@@ -46,7 +46,15 @@ param(
     [string]$StandardGroup = 'claude-code-standard',
     [string]$PremiumGroup = 'claude-code-premium',
     [switch]$AsJson,
-    [bool]$FailOnDrift = $true
+    [bool]$FailOnDrift = $true,
+
+    # Also write what the gateway enforces - both lists and the business-unit
+    # map - to a file for sync/src/apply-projection.mjs --compare, which checks
+    # the projection against it from inside the network. That is the check the
+    # migration needs before the flip: this script on its own compares the
+    # gateway with the directory, which says whether the lists are current, not
+    # whether the projection agrees with them.
+    [string]$ExportGatewayPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -88,6 +96,25 @@ Write-Host "  APIM : $ApimName ($ResourceGroup)"
 # Side one: what the gateway is enforcing right now.
 $gwPremium  = Get-ListOids 'allow-premium'
 $gwStandard = Get-ListOids 'allow-standard'
+
+if ($ExportGatewayPath) {
+    . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
+    $buRaw = az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id bu-members --query value -o tsv 2>$null
+    $buMap = ConvertFrom-ClaudeBuMembers "$buRaw"
+    $units = [ordered]@{}
+    foreach ($k in @($buMap.Keys)) { $units[$k] = $buMap[$k] }
+    $decisions = [ordered]@{
+        kind          = 'claude-gateway-decisions'
+        apim          = $ApimName
+        generatedAt   = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+        premium       = @($gwPremium)
+        standard      = @($gwStandard)
+        businessUnits = $units
+    }
+    $full = if ([IO.Path]::IsPathRooted($ExportGatewayPath)) { $ExportGatewayPath } else { Join-Path (Get-Location) $ExportGatewayPath }
+    [IO.File]::WriteAllText([IO.Path]::GetFullPath($full), ($decisions | ConvertTo-Json -Depth 5), (New-Object System.Text.UTF8Encoding($false)))
+    Write-Host "  Gateway decisions written to $full" -ForegroundColor DarkGray
+}
 
 # Side two: what the directory says now.
 $token = Get-GraphToken

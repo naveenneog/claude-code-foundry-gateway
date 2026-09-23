@@ -112,6 +112,28 @@
                                         <set-variable name="entRecord" value="@(((IResponse)context.Variables["entResponse"]).Body.As&lt;string&gt;(preserveContent: true))" />
                                         <cache-store-value key="@("ent:" + (string)context.Variables["userId"])" value="@((string)context.Variables["entRecord"])" duration="@(int.Parse("{{entitlement-cache-seconds}}"))" />
                                     </when>
+                                    <!-- 404 is the resolver's answer for an identity with no
+                                         record: not entitled, the same as being in neither
+                                         list. It is an answer, not a failure, so it becomes
+                                         the ordinary 403 below.
+
+                                         Before this branch existed a 404 fell through to the
+                                         503 for an unreachable resolver. Measured on a live
+                                         gateway 2026-09-23: an identity removed from the
+                                         projection got 503 with Retry-After 5 and "this is not
+                                         a problem with your access" - so every unentitled
+                                         attempt read as an outage and invited a retry, and
+                                         none of it was cached, so each retry reached the
+                                         resolver again.
+
+                                         Cached for at most a minute, and never longer than the
+                                         positive window: long enough that a refused caller
+                                         cannot hammer the resolver, short enough that someone
+                                         just added to a group is let in promptly. -->
+                                    <when condition="@(context.Variables.ContainsKey("entResponse") &amp;&amp; ((IResponse)context.Variables["entResponse"]).StatusCode == 404)">
+                                        <set-variable name="entRecord" value="@("{'tier':'none','businessUnit':''}")" />
+                                        <cache-store-value key="@("ent:" + (string)context.Variables["userId"])" value="@((string)context.Variables["entRecord"])" duration="@(Math.Min(60, int.Parse("{{entitlement-cache-seconds}}")))" />
+                                    </when>
                                 </choose>
                             </when>
                         </choose>

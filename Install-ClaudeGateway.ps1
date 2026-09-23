@@ -69,6 +69,23 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 
+# An az call for something that may not exist yet. az reports that on stderr,
+# and Windows PowerShell 5.1 turns stderr into a NativeCommandError even under
+# 2>$null - which, with ErrorActionPreference Stop, ends the script. Measured
+# 2026-09-23: reading a new gateway's revocation window stopped the wizard on
+# 5.1 with ResourceNotFound. Returns the output, or $null when az failed.
+function Invoke-AzOptional([scriptblock]$Command) {
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & $Command 2>$null
+        if ($LASTEXITCODE -ne 0) { return $null }
+        return $out
+    }
+    catch { return $null }
+    finally { $ErrorActionPreference = $saved }
+}
+
 # ------------------------------------------------------------------ output
 
 function Write-Head($t) {
@@ -639,18 +656,36 @@ foreach ($w in $windows) {
     }
 }
 Write-Host ''
-Write-Host '    Most of that is the private endpoint, which is charged whether anyone' -ForegroundColor DarkGray
-Write-Host '    calls the resolver or not. Shortening the window moves the rest.' -ForegroundColor DarkGray
+Write-Host '    Most of that bills at rest - the private endpoints, their DNS zones and a' -ForegroundColor DarkGray
+Write-Host '    warm resolver instance - whether anyone calls the resolver or not.' -ForegroundColor DarkGray
+Write-Host '    Shortening the window moves only the rest.' -ForegroundColor DarkGray
 
-$revoke = Read-Default -Prompt 'Revocation window in minutes' -Default '60' `
-    -Help 'Applies once you move to the projection. Changeable later with one command.' -Validate {
-        param($x)
-        $v = 0
-        if ([int]::TryParse($x, [ref]$v) -and $v -ge 60 -and $v -le 1440) { return $true }
-        Write-Warn2 'Between 60 and 1440 minutes. Below an hour the resolver becomes a per-request dependency.'
-        return $false
-    }
-$entitlementCacheSeconds = [int]$revoke * 60
+# A re-run used to reset this. The prompt's answer always won over the value
+# read back from the gateway, so every re-run deployed
+# entitlementCacheSeconds=3600 - measured on three consecutive re-runs,
+# 2026-09-23 - and a gateway set to a shorter window went back to an hour
+# without anyone choosing it. This is how long a removed developer keeps
+# working, so it is kept when the gateway already has one, and said so.
+$windowTarget = if ($ExistingApim) { $ExistingApim } else { "apim-$NamePrefix" }
+$liveWindow = Invoke-AzOptional { az apim nv show -g $ResourceGroup --service-name $windowTarget --named-value-id entitlement-cache-seconds --query value -o tsv }
+$liveWindowSeconds = 0
+if ($liveWindow -and [int]::TryParse("$liveWindow".Trim(), [ref]$liveWindowSeconds) -and $liveWindowSeconds -gt 0) {
+    $entitlementCacheSeconds = $liveWindowSeconds
+    Write-Host ''
+    Write-Host ("    Keeping this gateway's revocation window: {0} seconds." -f $liveWindowSeconds) -ForegroundColor Green
+    Write-Host ("    Change it with: Set-ApimNamedValue -ResourceGroup {0} -ApimName {1} -Id entitlement-cache-seconds -Value <seconds>" -f $ResourceGroup, $windowTarget) -ForegroundColor DarkGray
+}
+else {
+    $revoke = Read-Default -Prompt 'Revocation window in minutes' -Default '60' `
+        -Help 'Applies once you move to the projection. Changeable later with one command.' -Validate {
+            param($x)
+            $v = 0
+            if ([int]::TryParse($x, [ref]$v) -and $v -ge 60 -and $v -le 1440) { return $true }
+            Write-Warn2 'Between 60 and 1440 minutes. Below an hour the resolver becomes a per-request dependency.'
+            return $false
+        }
+    $entitlementCacheSeconds = [int]$revoke * 60
+}
 
 # What a team budget does when it is reached.
 Write-Host ''
@@ -887,7 +922,7 @@ $quotaOvr = ''
 $buReg = ''
 $buMem = ''
 $buPar = ''
-if ($ExistingApim -or (az apim show -g $ResourceGroup -n $apimName --query name -o tsv 2>$null)) {
+if ($ExistingApim -or (Invoke-AzOptional { az apim show -g $ResourceGroup -n $apimName --query name -o tsv })) {
     $allowStd = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id allow-standard --query value -o tsv 2>$null
     $allowPrm = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id allow-premium  --query value -o tsv 2>$null
     $quotaOvr = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id quota-overrides --query value -o tsv 2>$null
@@ -936,6 +971,51 @@ if ($ExistingApim -or (az apim show -g $ResourceGroup -n $apimName --query name 
 }
 
 $deployName = "claude-gw-$(Get-Date -Format 'yyyyMMddHHmmss')"
+
+# The service's own network and portal state, read back for the same reason as
+# the named values above. The template writes the service whenever it owns it,
+# and an ARM PUT replaces what it does not state: a what-if against a Premium v2
+# gateway with outbound VNet integration (2026-09-23) predicted
+# virtualNetworkType External -> None, the subnet removed, publicNetworkAccess
+# and customProperties dropped, and both portals switched on. A gateway made
+# private would then fail every request after an ordinary re-run.
+#
+# Read over ARM at 2024-05-01 because az apim show does not return the portal
+# fields, and passed as a parameter file because customProperties is an object
+# and an inline JSON argument does not survive the az.cmd shim.
+$preserveArgs = @()
+$liveId = Invoke-AzOptional { az apim show -g $ResourceGroup -n $apimName --query id -o tsv }
+if ($liveId) {
+    $armToken = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv 2>$null
+    $live = $null
+    try { $live = (Invoke-RestMethod -Uri "https://management.azure.com$($liveId.Trim())?api-version=2024-05-01" -Headers @{ Authorization = "Bearer $armToken" }).properties } catch { $live = $null }
+    if ($live) {
+        $preserve = @{
+            '$schema'      = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
+            contentVersion = '1.0.0.0'
+            parameters     = @{
+                apimVirtualNetworkType    = @{ value = $(if ($live.virtualNetworkType) { "$($live.virtualNetworkType)" } else { 'None' }) }
+                apimSubnetId              = @{ value = "$($live.virtualNetworkConfiguration.subnetResourceId)" }
+                apimPublicNetworkAccess   = @{ value = $(if ($live.publicNetworkAccess) { "$($live.publicNetworkAccess)" } else { 'Enabled' }) }
+                apimDeveloperPortalStatus = @{ value = $(if ($live.developerPortalStatus) { "$($live.developerPortalStatus)" } else { 'Disabled' }) }
+                apimLegacyPortalStatus    = @{ value = $(if ($live.legacyPortalStatus) { "$($live.legacyPortalStatus)" } else { 'Disabled' }) }
+                apimCustomProperties      = @{ value = $(if ($live.customProperties) { $live.customProperties } else { @{} }) }
+            }
+        }
+        $preserveFile = Join-Path ([IO.Path]::GetTempPath()) "claude-gw-preserve-$deployName.json"
+        [IO.File]::WriteAllText($preserveFile, ($preserve | ConvertTo-Json -Depth 8), (New-Object System.Text.UTF8Encoding($false)))
+        $preserveArgs = @('--parameters', "@$preserveFile")
+        if ($live.virtualNetworkType -and "$($live.virtualNetworkType)" -ne 'None') {
+            Write-Note "preserving VNet mode: $($live.virtualNetworkType) ($(("$($live.virtualNetworkConfiguration.subnetResourceId)" -split '/')[-1]))"
+        }
+        if ("$($live.publicNetworkAccess)" -eq 'Disabled') { Write-Note 'preserving public network access: Disabled' }
+    }
+    else {
+        Write-Warn2 'Could not read the gateway''s network settings, so a redeploy could reset them. Stopping.'
+        Write-Note  "Check you can read it: az apim show -g $ResourceGroup -n $apimName"
+        throw 'Refusing to redeploy a gateway whose network state could not be read.'
+    }
+}
 
 # Azure rejects a second Cognitive Services User assignment for the same
 # principal at the same scope, even under a different name, with
@@ -998,6 +1078,7 @@ az deployment group create `
         entitlementResolverAudience=$(if ($entAud) { $entAud } else { 'https://resolver-not-deployed.invalid' }) `
         entitlementCacheSeconds=$(if ($entitlementCacheSeconds) { $entitlementCacheSeconds } elseif ($entTtl) { $entTtl } else { 3600 }) `
         buUnassigned=$(if ($unassignedMode) { $unassignedMode } else { 'allow' }) `
+    @preserveArgs `
     -o none
 
 if ($LASTEXITCODE -ne 0) { throw 'Deployment failed. See the error above.' }

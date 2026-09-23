@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Reads Azure list prices from the public retail price API.
 
@@ -46,7 +46,12 @@
     that prices eight resources makes one call per distinct service.
 #>
 
-Set-StrictMode -Version Latest
+# No Set-StrictMode here. This file is dot-sourced, and a top-level
+# Set-StrictMode then applies to the caller's scope and everything it calls.
+# Measured 2026-09-23: once Install-ClaudeGateway.ps1 dot-sourced this to price
+# the SKU, strict mode reached Sync-ClaudeAccess.ps1, where reading
+# '@odata.nextLink' on the last Graph page threw, and every install stopped
+# after deploying the gateway. Each function sets it for its own scope instead.
 
 $script:RetailPriceEndpoint = 'https://prices.azure.com/api/retail/prices'
 $script:RetailPriceCache = @{}
@@ -74,6 +79,8 @@ function Get-AzureRetailMeter {
         [Parameter(Mandatory = $true)][string]$Region,
         [int]$TimeoutSec = 90
     )
+
+    Set-StrictMode -Version Latest
 
     # Returned with the comma operator throughout. PowerShell unrolls a
     # collection on return, so `return $items` on an empty array reaches the
@@ -154,6 +161,8 @@ function Get-AzureRetailPrice {
         [ValidateSet('Marginal', 'First')][string]$Tier = 'Marginal'
     )
 
+    Set-StrictMode -Version Latest
+
     $meters = Get-AzureRetailMeter -ServiceName $ServiceName -Region $Region
     if ($null -eq $meters) { return $null }
 
@@ -191,6 +200,7 @@ function Get-AzureRetailPriceUnavailableReason {
     .SYNOPSIS
         Why the last lookup could not reach the API, if it could not.
     #>
+    Set-StrictMode -Version Latest
     return $script:RetailPriceUnavailable
 }
 
@@ -209,5 +219,7 @@ function ConvertTo-MonthlyPrice {
         [Parameter(Mandatory = $true)][decimal]$HourlyPrice,
         [int]$Units = 1
     )
+
+    Set-StrictMode -Version Latest
     return [math]::Round($HourlyPrice * 730 * $Units, 2)
 }

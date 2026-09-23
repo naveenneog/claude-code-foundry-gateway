@@ -88,7 +88,25 @@ param(
     [bool]$PrivateNetworking = $true,
     # https://azure.microsoft.com/pricing/details/private-link/
     [decimal]$UsdPerEndpointHour = 0.01,
-    [int]$PrivateEndpoints = 1,
+    # Five, as deployed and measured 2026-09-23 (docs/SECURE-PROJECTION.md):
+    # Cosmos, the resolver's own inbound endpoint, and the resolver's storage
+    # account three times - blob, queue and table - because an Azure Policy
+    # made that account private and the Functions host needs all three. This
+    # used to be 1, which priced only the Cosmos endpoint.
+    [int]$PrivateEndpoints = 5,
+    # One zone per endpoint type: documents, azurewebsites, blob, queue, table.
+    # $0.50 per zone per month for the first 25, retail API 2026-09-23.
+    [int]$PrivateDnsZones = 5,
+    [decimal]$UsdPerZoneMonth = 0.50,
+
+    # Instances kept warm so the first lookup after idle does not pay a cold
+    # start against the gateway's 5-second timeout. 0 removes the line and
+    # accepts the cold start. Flex Consumption bills a warm instance at the
+    # always-ready baseline rate per GB-second whether it is used or not:
+    # $0.000005, retail API 2026-09-23, canadacentral.
+    [int]$AlwaysReadyInstances = 1,
+    [decimal]$InstanceMemoryGb = 2,
+    [decimal]$UsdPerAlwaysReadyGbSecond = 0.000005,
 
     [switch]$AsJson,
 
@@ -138,14 +156,19 @@ $cosmosRuUsd = [math]::Round(($ruConsumed / 1000000) * $UsdPerMillionRu, 2)
 $storageGb   = [math]::Round(([decimal]$Developers * $BytesPerRecord) / 1073741824, 4)
 $storageUsd  = [math]::Round($storageGb * $UsdPerGbMonth, 2)
 
-# The private endpoint is the only line here that bills whether anyone calls the
-# gateway or not. Everything else is pay-per-use, so this is the floor - and at
-# a small deployment it is the whole bill.
+# The private endpoints, their DNS zones and a warm resolver instance are the
+# lines that bill whether anyone calls the gateway or not. Everything else is
+# pay-per-use, so these are the floor - and at a small deployment they are the
+# whole bill.
 $networkUsd = if ($PrivateNetworking) {
     [math]::Round([decimal]$PrivateEndpoints * $UsdPerEndpointHour * 730, 2)
 } else { [decimal]0 }
+$dnsUsd = if ($PrivateNetworking) {
+    [math]::Round([decimal]$PrivateDnsZones * $UsdPerZoneMonth, 2)
+} else { [decimal]0 }
+$alwaysReadyUsd = [math]::Round([decimal]$AlwaysReadyInstances * $InstanceMemoryGb * 730 * 3600 * $UsdPerAlwaysReadyGbSecond, 2)
 
-$totalUsd = $functionUsd + $cosmosRuUsd + $storageUsd + $networkUsd
+$totalUsd = $functionUsd + $cosmosRuUsd + $storageUsd + $networkUsd + $dnsUsd + $alwaysReadyUsd
 
 # Peak demand against the serverless ceiling. Serverless caps at 5,000 RU/s per
 # physical partition and, unlike provisioned throughput, offers no guaranteed
@@ -169,13 +192,16 @@ if ($AsJson) {
         }
         monthly_usd = [ordered]@{
             functions = $functionUsd; cosmos_request_units = $cosmosRuUsd
-            cosmos_storage = $storageUsd; private_endpoint = $networkUsd; total = $totalUsd
+            cosmos_storage = $storageUsd; private_endpoint = $networkUsd
+            private_dns_zones = $dnsUsd; resolver_always_ready = $alwaysReadyUsd
+            at_rest = ($networkUsd + $dnsUsd + $alwaysReadyUsd); total = $totalUsd
         }
-        rates_read = '2026-09-17, published US list price'
+        rates_read = '2026-09-17 (usage) and 2026-09-23 (endpoints, zones, always ready), published US list price'
         caveats = @(
             'Serverless offers no guaranteed throughput or latency.',
-            'Cache misses, not requests, drive the cost.',
-            'Excludes egress, Log Analytics ingestion and the Function App storage account.',
+            'Cache misses, not requests, drive the usage lines.',
+            'Endpoints, zones and the always-ready instance bill at rest; they are the floor.',
+            'Excludes egress, private endpoint data processing and Log Analytics ingestion.',
             'Private networking assumed on: Consumption (Y1) has no VNet integration, so the resolver needs Flex Consumption.'
         )
     } | ConvertTo-Json -Depth 6
@@ -193,7 +219,11 @@ Write-Host ("  {0,-26} {1,10}" -f $(if ($PrivateNetworking) { 'Azure Function (F
 Write-Host ("  {0,-26} {1,10}" -f 'Cosmos DB request units', ('$' + ('{0:n2}' -f $cosmosRuUsd)))
 Write-Host ("  {0,-26} {1,10}" -f 'Cosmos DB storage', ('$' + ('{0:n2}' -f $storageUsd)))
 if ($PrivateNetworking) {
-    Write-Host ("  {0,-26} {1,10}" -f 'Private endpoint', ('$' + ('{0:n2}' -f $networkUsd))) -ForegroundColor Yellow
+    Write-Host ("  {0,-26} {1,10}" -f "Private endpoints ($PrivateEndpoints)", ('$' + ('{0:n2}' -f $networkUsd))) -ForegroundColor Yellow
+    Write-Host ("  {0,-26} {1,10}" -f "Private DNS zones ($PrivateDnsZones)", ('$' + ('{0:n2}' -f $dnsUsd))) -ForegroundColor Yellow
+}
+if ($AlwaysReadyInstances -gt 0) {
+    Write-Host ("  {0,-26} {1,10}" -f "Resolver kept warm ($AlwaysReadyInstances x $InstanceMemoryGb GB)", ('$' + ('{0:n2}' -f $alwaysReadyUsd))) -ForegroundColor Yellow
 }
 Write-Host ('  ' + ('-' * 38)) -ForegroundColor DarkGray
 Write-Host ("  {0,-26} {1,10}" -f 'Total per month', ('$' + ('{0:n2}' -f $totalUsd))) -ForegroundColor Green
@@ -208,8 +238,9 @@ Write-Host ("  Average {0:n2} RU/s against a serverless ceiling of {1:n0} RU/s p
 Write-Host '  Serverless gives no guaranteed throughput or latency. That is priced in' -ForegroundColor DarkGray
 Write-Host '  here and is the reason the record is cached rather than read per call.' -ForegroundColor DarkGray
 Write-Host ''
-Write-Host '  Rates are published US list, read 2026-09-17, and are regional. Excludes' -ForegroundColor DarkGray
-Write-Host '  egress, Log Analytics ingestion and the Function App storage account.' -ForegroundColor DarkGray
+Write-Host '  Rates are published US list, read 2026-09-17 and 2026-09-23, and are regional.' -ForegroundColor DarkGray
+Write-Host '  Yellow lines bill at rest. Excludes egress, endpoint data processing and' -ForegroundColor DarkGray
+Write-Host '  Log Analytics ingestion.' -ForegroundColor DarkGray
 Write-Host ''
 
 # ---------------------------------------------------------------- redundancy

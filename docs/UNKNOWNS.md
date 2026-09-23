@@ -20,8 +20,8 @@ fails the release stage while any remain. Detail for each one follows below.
 | U11 | OPEN | What does the trace ledger cost to ingest, and does a cheaper table plan forfeit purge? | P18, conflicts with U7 |
 | U12 | CLOSED | Does APIM telemetry preserve the Claude cache TTL split? No, and the quota scalar excludes cache entirely — measured 2026-09-15 | P18 shipped |
 | U13 | OPEN | Can APIM enforce a budget on categorised usage rather than one token total? `llm-token-limit` takes a single `token-quota` and counts prompt and completion only | P21 |
-| U14 | OPEN | What does the projection resolver add to p99 on a cache miss? ADR-0011 records the trade — Flex Consumption cold start plus a private-endpoint Cosmos read — and nothing has measured it | P19, [ADR-0013](adr/0013-gateway-outlives-instance.md) |
-| U15 | OPEN | What forces `publicNetworkAccess: Disabled` on every Cosmos account in this subscription? Narrowed 2026-09-23 to a control that acts **at creation**, returns success, and silently overrides the requested value — and is not Azure Policy, a deny assignment, or a feature flag. See below | P19 population, `cos-default`, `cos-upgrade` |
+| U14 | CLOSED | What does the projection resolver add to p99 on a cache miss? Measured 2026-09-23 from inside the VNet, 150 misses against 150 hits: p50 91 against 5 ms, p95 149 against 10, p99 301 against 172, max 389 - a Canada Central gateway reading Cosmos in East US 2, with one always-ready instance. Cold start with none is not measured | P19, [ADR-0013](adr/0013-gateway-outlives-instance.md) |
+| U15 | CLOSED | What forces `publicNetworkAccess: Disabled` on every Cosmos account in this subscription? Azure Policy: `CosmosDB_PublicNetwork_Modify` in the management-group initiative `MCAPSGovDeployPolicies`, which `az policy assignment list` did not show - found through the resource activity log, 2026-09-23 | nothing: the projection is deployed private by design ([SECURE-PROJECTION.md](SECURE-PROJECTION.md)) |
 
 ---
 
@@ -484,12 +484,43 @@ attribute.
 therefore cannot reach the projection from a laptop, which is what blocks
 populating it, `cos-default` and `cos-upgrade`.
 
-**Narrowed 2026-09-23.** The important part is what this is *not*, because each
+**Answered 2026-09-23 — it is Azure Policy after all, assigned where it could
+not be listed.** The initiative `MCAPSGovDeployPolicies`, assigned at a management
+group above the subscription, contains
+`CosmosDB_PublicNetwork_Modify`. Its rule: if the resource is a
+`Microsoft.DocumentDB/databaseAccounts` whose `publicNetworkAccess` is neither
+`Disabled` nor `SecuredByPerimeter`, and it does not carry the rule's exclusion
+tag, then `addOrReplace` `publicNetworkAccess` with `Disabled` for api-version
+2021-04-15 or later. A Modify effect rewrites the request before the resource
+provider sees it, which is exactly the symptom: the value is replaced at
+creation, success is reported, and the requested value is never accepted.
+
+The same initiative holds `CosmosDB_LocalAuth_Modify`,
+`StorageAccount_PublicNetwork_Modify`, `StorageAccount_DisableLocalAuth_Modify`,
+`KeyVault_PublicNetwork_Modify`, `AIFoundryHub_PublicNetwork_Modify` and
+`CognitiveServices_LocalAuth_Modify`, among 36. The resolver's storage account
+came up private for the same reason.
+
+**Why the narrowing below ruled it out, wrongly.** `az policy assignment list
+--disable-scope-strict-match` at subscription scope returned only the three
+Defender assignments; the management-group assignment is not in its output even
+though it applies. The resource's own activity log is what named it: an entry
+`Microsoft.Authorization/policies/modify/action` whose `policies` property gives
+the assignment and definition ids. Read that first when a setting comes back
+different from what was asked for.
+
+**What it means for the accelerator.** Nothing needs an exemption. The
+projection is deployed with no public endpoint by design and was verified end to
+end ([SECURE-PROJECTION.md](SECURE-PROJECTION.md)), and the templates now state
+`publicNetworkAccess` themselves rather than leaving it to whatever a policy
+decides.
+
+**Narrowed earlier on 2026-09-23.** The important part is what this is *not*, because each
 of those is a place an operator would otherwise spend a day:
 
 | Ruled out | How |
 |---|---|
-| Azure Policy | Three assignments on the subscription, all Defender-related. `az policy assignment list --disable-scope-strict-match` returns the same three, so nothing is inherited from a management group either. `az policy state list` reports nothing. |
+| Azure Policy — **wrong, see above** | Three assignments on the subscription, all Defender-related. `az policy assignment list --disable-scope-strict-match` returns the same three, so nothing is inherited from a management group either. `az policy state list` reports nothing. The management-group assignment was not in that output. |
 | A deny assignment | Three exist, all `Container Apps Managed Resource Group`, and all scoped to resource groups this deployment does not use. |
 | A feature registration | No `Microsoft.DocumentDB` feature is registered; the only network-shaped ones are `NotRegistered` previews. |
 | Something about the existing account | A **brand-new** account created with `--public-network-access Enabled` came back `Disabled` in the create response itself. |

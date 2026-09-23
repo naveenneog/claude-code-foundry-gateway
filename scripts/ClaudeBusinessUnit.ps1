@@ -294,8 +294,15 @@ function Sort-ClaudeBuByDepth {
         both. Membership must resolve to the most specific unit; the parent is
         reached through the cascade instead.
 
-        Sorting is stable, so units at the same depth keep registry order and
-        ADR-0007's "first match in registry order" still decides between them.
+        Units at the same depth keep registry order, so ADR-0007's "first match
+        in registry order" still decides between them. That order is kept by an
+        explicit second key, the unit's position in the registry. Sort-Object
+        is not stable: measured 2026-09-23, sorting 2,000 items on a key with
+        three values reordered equal items 960 times in PowerShell 7.6 and
+        1,011 times in 5.1, and a five-unit registry came back in a different
+        order in 5.1 than in 7.6 - so two administrators running the same sync
+        from different shells charged the same developer to different units.
+        -Stable would fix 7 and does not exist in 5.1.
     #>
     [CmdletBinding()]
     param(
@@ -303,12 +310,16 @@ function Sort-ClaudeBuByDepth {
         [Parameter(Mandatory = $true)][AllowNull()]$Parents
     )
 
-    $items = @($Units) | Where-Object { $_ }
+    $items = @(@($Units) | Where-Object { $_ })
     if (-not $items.Count) { return @() }
-    return @($items | Sort-Object -Property @{
-        Expression = { Resolve-ClaudeBuDepth -Id $_.Id -Parents $Parents }
-        Descending = $true
-    })
+    $position = 0
+    $keyed = foreach ($u in $items) {
+        [pscustomobject]@{ Unit = $u; Position = $position; Depth = (Resolve-ClaudeBuDepth -Id $u.Id -Parents $Parents) }
+        $position++
+    }
+    return @($keyed |
+        Sort-Object -Property @{ Expression = 'Depth'; Descending = $true }, @{ Expression = 'Position'; Ascending = $true } |
+        ForEach-Object { $_.Unit })
 }
 
 function ConvertTo-ClaudeBuTokens {

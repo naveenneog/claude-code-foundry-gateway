@@ -61,6 +61,28 @@ rather than its absence. Two consequences:
 
 Neither was visible from a pricing page. Both came from deploying the thing.
 
+### Deployed privately, 2026-09-23
+
+The whole path was deployed and migrated to on that date
+([SECURE-PROJECTION.md](../SECURE-PROJECTION.md)), and the deployment added three
+lines that bill at rest which the table above does not have:
+
+| At rest | Per month |
+|---|---:|
+| Private endpoints: Cosmos, the resolver itself, and its storage account's blob, queue and table | 5 × $7.30 = $36.50 |
+| Private DNS zones for them | 5 × $0.50 = $2.50 |
+| One warm resolver instance (2 GB at the always-ready baseline rate) | $26.28 |
+
+The storage endpoints were not optional either: a management-group policy set
+the resolver's storage account private at creation, as it did the Cosmos
+account, and the Functions host needs blob, queue and table. The warm instance
+is a choice. Without it the first lookup after idle pays a cold start against
+the gateway's 5-second timeout.
+
+`Measure-ClaudeProjectionCost.ps1` now prices all of it: **$69.09 a month** at
+the requirement above, $65.28 of it at rest. The conclusion stands. The usage
+lines are still under $4, because the cache, not the request rate, sets them.
+
 **The cost is small because the resolver is called per cache miss, not per request.** A developer
 misses once per cache window while they are active, so someone making 500 calls an hour and someone
 making 5 cost the same. At a 60-minute window over an 8-hour day that is 8 lookups per active

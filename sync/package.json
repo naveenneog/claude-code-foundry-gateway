@@ -1,0 +1,14 @@
+{
+  "name": "claude-gateway-projection-sync",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "src/apply-projection.mjs",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@azure/cosmos": "^4.1.1",
+    "@azure/identity": "^4.4.1"
+  }
+}

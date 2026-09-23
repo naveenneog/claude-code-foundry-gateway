@@ -326,7 +326,7 @@ Assert 'and costs each option'                    ($inst -match 'Measure-ClaudeP
 Assert 'at the count they gave'                   ($inst -match '-Developers \$devCount -CacheMinutes')
 # The cost model is the single source; restating figures would make two.
 Assert 'it does not restate a price table'        ($inst -notmatch '(?m)^\s*Write-Host.*\$11\.11')
-Assert 'it says what dominates the bill'          ($inst -match 'charged whether anyone')
+Assert 'it says what dominates the bill'          ($inst -match 'Most of that bills at rest - the private endpoints, their DNS zones and a')
 # Immediate revocation is not a free choice - it makes the resolver a
 # per-request dependency, so it is named and refused rather than silently absent.
 Assert 'immediate is named and explained'         ($inst -match 'not supported - every request would call the resolver')
@@ -1298,6 +1298,36 @@ $fused = @(Get-ChildItem -Path $root, (Join-Path $root 'scripts') -Filter '*.ps1
 })
 Assert 'no two statements are fused on one line' ($fused.Count -eq 0) ($fused -join ', ')
 Assert 'the installer no longer promises 30-45 minutes' (-not ($inst -match '30-45 min'))
+
+# A library that is dot-sourced must not change its caller. Measured
+# 2026-09-23: AzureRetailPrice.ps1 ran Set-StrictMode -Version Latest at top
+# level; once the installer dot-sourced it to price the SKU, strict mode reached
+# Sync-ClaudeAccess.ps1, reading '@odata.nextLink' on the last Graph page threw,
+# and every install stopped after deploying the gateway.
+$libs = @(Get-ChildItem -Path $root, (Join-Path $root 'scripts') -Filter '*.ps1' | ForEach-Object {
+    [regex]::Matches((Get-Content $_.FullName -Raw), "\. \(Join-Path [^)]*'(?:scripts/)?([\w-]+\.ps1)'\)") | ForEach-Object { $_.Groups[1].Value }
+} | Sort-Object -Unique)
+$leaky = @($libs | Where-Object {
+    $f = Join-Path (Join-Path $root 'scripts') $_
+    (Test-Path $f) -and ((Get-Content $f -Raw) -match '(?m)^Set-StrictMode')
+})
+Assert 'dot-sourced libraries were found to check' ($libs.Count -ge 4) "found $($libs.Count)"
+Assert 'none of them sets strict mode for its caller' ($leaky.Count -eq 0) ($leaky -join ', ')
+$priceLib = Join-Path $root 'scripts/AzureRetailPrice.ps1'
+$probeOut = pwsh -NoProfile -Command "Set-StrictMode -Off; . '$priceLib'; `$o = [pscustomobject]@{ a = 1 }; try { `$null = `$o.missing; 'not strict' } catch { 'strict' }" 2>&1 | Out-String
+Assert 'dot-sourcing the price library leaves the caller as it was' ($probeOut.Trim() -eq 'not strict') $probeOut.Trim()
+
+# And the paging reads nextLink safely even if a caller does impose strict
+# mode: run the real function, strict, against a last page that has none.
+$graphLib = Join-Path $root 'scripts/ClaudeGraphMembership.ps1'
+$pagingOut = pwsh -NoProfile -Command (@"
+Set-StrictMode -Version Latest
+. '$graphLib'
+function az { `$global:LASTEXITCODE = 0; return '11111111-1111-1111-1111-111111111111' }
+function Invoke-RestMethod { param(`$Uri, `$Headers, `$Method, `$ErrorAction) return [pscustomobject]@{ value = @([pscustomobject]@{ id = 'u1'; userPrincipalName = 'a@x'; displayName = 'a' }) } }
+try { `$m = @(Get-GroupMemberOids -GroupName 'g' -Token 't'); "members `$(`$m.Count)" } catch { "threw: `$(`$_.Exception.Message)" }
+"@) 2>&1 | Out-String
+Assert 'Graph paging survives strict mode on the last page' ($pagingOut.Trim() -eq 'members 2') $pagingOut.Trim()
 
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
