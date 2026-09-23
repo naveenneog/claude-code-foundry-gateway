@@ -434,6 +434,33 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Fixed
 
+- **The installer could not deploy a Claude model, and the model it would have
+  deployed was the wrong one.** Both defects were found by deploying into a new
+  Foundry account on 2026-09-23.
+
+  Azure now refuses an Anthropic deployment without
+  `properties.modelProviderData` (organisation name, industry, two-letter
+  country code) and answers `InvalidModelProviderData`.
+  `az cognitiveservices account deployment create` has no parameter for it, so
+  every deployment the installer attempted failed. `New-ClaudeDeployment` now
+  sends an Azure Resource Manager `PUT` at api-version `2025-12-01`, carrying the
+  data. It copies the data from an existing Claude deployment in the subscription
+  when there is one. Otherwise it stops and names the three fields before
+  touching Azure. It then waits for provisioning to reach `Succeeded`, `Failed`
+  or `Canceled` instead of returning at `Creating`. The installer asks for the
+  values only when none can be copied, and `-ModelOrganizationName`,
+  `-ModelIndustry` and `-ModelCountryCode` supply them unattended.
+
+  The picker chose the highest version string. `claude-haiku-4-5` is listed as
+  version `2` (hosted on Azure, `isDefaultVersion` true) and as `20251001`
+  (hosted on Anthropic), and `'20251001'` sorts above `'2'`, so the picker
+  offered the Anthropic-hosted version. It now picks the version Azure marks as
+  default, then an Azure-hosted one, then the highest. The menu shows where each
+  version is hosted. The fixed path deployed `claude-haiku-4-5` version `2` in
+  66 seconds. `tests/Test-ModelDeployment.ps1` runs the real selection and
+  refusal code against that catalogue shape through a stand-in `az`, and six
+  mutations restore the old behaviour.
+
 - **A correctly configured Claude Desktop that would not open passed every
   check.** All the Desktop checks read files, so a configuration that was right
   everywhere reported healthy while the app did nothing when launched.

@@ -55,6 +55,13 @@ param(
     [ValidateSet('interactive', 'device', 'helper')]
     [string]$AuthMode,
 
+    # The organisation details Anthropic requires on a Claude deployment. Only
+    # used when the subscription has no Claude deployment to copy them from.
+    [string]$ModelOrganizationName,
+    [string]$ModelIndustry,
+    [ValidatePattern('^[A-Za-z]{2}$')]
+    [string]$ModelCountryCode,
+
     # Accept every default without prompting.
     [switch]$Yes
 )
@@ -243,16 +250,55 @@ if (-not $FoundryAccount) {
 
         Write-Host ''
         $i = 1
-        foreach ($m in $offer) { Write-Host ("      {0,2}. {1,-22} v{2,-12} {3}" -f $i, $m.model, $m.version, $m.sku); $i++ }
+        foreach ($m in $offer) {
+            # Where it is hosted is shown because it is not obvious from the
+            # version and it is what a data protection review asks: the same
+            # model can be published as Azure-hosted and Anthropic-hosted.
+            $where = if ($m.hostedOn) { "hosted on $($m.hostedOn)" } else { '' }
+            Write-Host ("      {0,2}. {1,-22} v{2,-12} {3,-16} {4}" -f $i, $m.model, $m.version, $m.sku, $where); $i++
+        }
         Write-Host ''
         $mp = Read-Default -Prompt 'Model number' -Default '1'
         $chosen = $offer[[int]$mp - 1]
         $cap = Read-Default -Prompt 'Capacity (thousands of tokens per minute)' -Default "$($chosen.defaultUnits)" `
             -Help 'Raise it later without redeploying the gateway. Too high fails on quota.'
 
+        # Anthropic requires the organisation's details on every Claude
+        # deployment, and Azure refuses one without them. This branch runs only
+        # when the subscription has no Claude deployment at all, so there is
+        # nothing to copy them from and they have to be asked - once. Every later
+        # deployment copies them from this one.
+        $providerData = Get-ClaudeProviderData -Account $target.name -ResourceGroup $target.rg
+        if (-not $providerData) {
+            Write-Host ''
+            Write-Note 'Anthropic asks for three details the first time Claude is deployed in a subscription.'
+            Write-Note 'They are recorded on the deployment and copied from it after this.'
+            $org = if ($ModelOrganizationName) { $ModelOrganizationName } else {
+                Read-Default -Prompt 'Organisation name' -Default '' -Validate {
+                    param($x)
+                    if ($x.Trim()) { return $true }
+                    Write-Warn2 'The organisation name is required.'
+                    return $false
+                }
+            }
+            $industry = if ($ModelIndustry) { $ModelIndustry } else { Read-Default -Prompt 'Industry' -Default 'technology' }
+            $country = if ($ModelCountryCode) { $ModelCountryCode } else {
+                Read-Default -Prompt 'Country (two-letter code)' -Default 'US' -Validate {
+                    param($x)
+                    if ($x -match '^[A-Za-z]{2}$') { return $true }
+                    Write-Warn2 'Two letters, for example US, CA or GB.'
+                    return $false
+                }
+            }
+            if (-not "$org".Trim()) {
+                throw 'Claude deployment needs an organisation name. Pass -ModelOrganizationName for an unattended install.'
+            }
+            $providerData = @{ organizationName = "$org".Trim(); industry = "$industry".Trim(); countryCode = "$country".Trim().ToUpper() }
+        }
+
         Write-Note "deploying $($chosen.model) to $($target.name)..."
         $made = New-ClaudeDeployment -Account $target.name -ResourceGroup $target.rg `
-            -Model $chosen.model -Version $chosen.version -Sku $chosen.sku -Capacity ([int]$cap)
+            -Model $chosen.model -Version $chosen.version -Sku $chosen.sku -Capacity ([int]$cap) -ProviderData $providerData
         Write-Ok "deployed $(Format-ClaudeDeployment $made)"
 
         $withClaude += [pscustomobject]@{ Name = $target.name; Rg = $target.rg; Loc = $target.loc; Models = $made.name }

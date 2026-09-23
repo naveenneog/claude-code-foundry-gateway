@@ -150,6 +150,11 @@ function Get-DeployableClaudeModel {
         $skus = @($_.skus | Where-Object { $_.name })
         $preferred = @($skus | Where-Object { $_.name -eq 'GlobalStandard' })
         $sku = if ($preferred.Count) { $preferred[0] } elseif ($skus.Count) { $skus[0] } else { $null }
+        $hostedOn = $null
+        if ($_.PSObject.Properties['capabilities'] -and $_.capabilities -and $_.capabilities.PSObject.Properties['hostedOn']) {
+            $hostedOn = $_.capabilities.hostedOn
+        }
+        $isDefault = [bool]($_.PSObject.Properties['isDefaultVersion'] -and $_.isDefaultVersion)
         [pscustomobject]@{
             model    = $_.name
             version  = $_.version
@@ -157,14 +162,89 @@ function Get-DeployableClaudeModel {
             sku      = $(if ($sku) { $sku.name } else { $null })
             maxUnits = $(if ($sku) { $sku.capacity.maximum } else { $null })
             defaultUnits = $(if ($sku) { $sku.capacity.default } else { $null })
+            hostedOn = $hostedOn
+            isDefault = $isDefault
         }
     } | Where-Object { $_.sku } |
-        # One row per model. Azure lists every version separately - measured
-        # 2026-09-15, claude-sonnet-5 came back as v1 and v2 - and offering the
-        # same model twice is a choice nobody wants to make. Newest wins.
+        # One row per model, and the row is the version Azure marks as the
+        # default - not the one whose version string sorts highest.
+        #
+        # Sorting was the first version of this and it was wrong in a way that
+        # matters. A model can be offered twice with different hosting: measured
+        # 2026-09-23, claude-haiku-4-5 is published as version 2 (hostedOn azure,
+        # isDefaultVersion true) and 20251001 (hostedOn anthropic, isDefaultVersion
+        # false). As strings '20251001' sorts above '2', so the picker chose the
+        # Anthropic-hosted version - silently moving inference to a different
+        # operator, which is exactly what a data protection review asks about. The
+        # portal defaults to the Azure-hosted version; so does this now.
         Group-Object model | ForEach-Object {
-            @($_.Group | Sort-Object { $_.version } -Descending)[0]
+            $g = @($_.Group)
+            $pick = @($g | Where-Object { $_.isDefault })
+            if (-not $pick.Count) { $pick = @($g | Where-Object { $_.hostedOn -eq 'azure' }) }
+            if (-not $pick.Count) { $pick = @($g | Sort-Object { $_.version } -Descending) }
+            $pick[0]
         } | Sort-Object model -Descending)
+}
+
+# ARM version that carries modelProviderData on a deployment. Read and written
+# at this version; older versions return the deployment without it.
+$script:DeploymentApiVersion = '2025-12-01'
+
+function Get-ClaudeProviderData {
+    <#
+    .SYNOPSIS
+        The organisation details Anthropic requires on every Claude deployment,
+        copied from a deployment that already has them.
+
+    .DESCRIPTION
+        Measured 2026-09-23: Azure refuses an Anthropic model deployment without
+        properties.modelProviderData - industry, organizationName and countryCode -
+        and fails with InvalidModelProviderData. These are the answers the portal
+        asks for the first time Claude is deployed in a subscription.
+        `az cognitiveservices account deployment create` has no parameter for
+        them, which is why this module now deploys through ARM directly.
+
+        Every existing Claude deployment records the answers, so they are copied
+        rather than asked again: first from the target account, then from any
+        other account in the subscription. Returns $null when there is none to
+        copy, and the caller has to ask.
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$Account,
+        [string]$ResourceGroup
+    )
+
+    $sub = az account show --query id -o tsv 2>$null
+    $tok = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv 2>$null
+    if (-not $sub -or -not $tok) { return $null }
+    $headers = @{ Authorization = 'Bearer ' + $tok.Trim() }
+
+    $accounts = @()
+    if ($Account -and $ResourceGroup) { $accounts += [pscustomobject]@{ name = $Account; rg = $ResourceGroup } }
+    $all = az cognitiveservices account list -o json 2>$null | ConvertFrom-Json
+    foreach ($a in @($all)) {
+        if ($a.name -eq $Account) { continue }
+        $accounts += [pscustomobject]@{ name = $a.name; rg = $a.resourceGroup }
+    }
+
+    foreach ($a in ($accounts | Select-Object -First 30)) {
+        $uri = "https://management.azure.com/subscriptions/$($sub.Trim())/resourceGroups/$($a.rg)/providers/Microsoft.CognitiveServices/accounts/$($a.name)/deployments?api-version=$script:DeploymentApiVersion"
+        try { $list = Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 60 } catch { continue }
+        foreach ($d in @($list.value)) {
+            if ($d.properties.model.format -ne $script:ClaudeFormat) { continue }
+            $pd = $d.properties.modelProviderData
+            if ($pd -and $pd.organizationName -and $pd.industry -and $pd.countryCode) {
+                return @{
+                    organizationName = [string]$pd.organizationName
+                    industry         = [string]$pd.industry
+                    countryCode      = [string]$pd.countryCode
+                    copiedFrom       = "$($a.name)/$($d.name)"
+                }
+            }
+        }
+    }
+    return $null
 }
 
 function Get-DeploymentFailureReason {
@@ -213,6 +293,17 @@ function New-ClaudeDeployment {
         Quota is the failure worth naming. A subscription can be perfectly
         healthy and still refuse, and "deployment failed" sends the operator to
         the wrong place - the answer is a quota request, not a retry.
+
+        Deployed through ARM rather than `az cognitiveservices account deployment
+        create`, because Azure now requires modelProviderData on every Anthropic
+        deployment and the CLI cannot send it - it fails with
+        InvalidModelProviderData, measured 2026-09-23. The provider data is
+        copied from an existing Claude deployment when there is one; pass
+        -ProviderData when there is not.
+
+    .PARAMETER ProviderData
+        A hashtable with organizationName, industry and countryCode - the answers
+        Anthropic asks for the first time Claude is deployed in a subscription.
     #>
     [CmdletBinding()]
     param(
@@ -222,33 +313,74 @@ function New-ClaudeDeployment {
         [string]$DeploymentName,
         [string]$Version,
         [string]$Sku = 'GlobalStandard',
-        [int]$Capacity = 50
+        [int]$Capacity = 50,
+        [hashtable]$ProviderData,
+        [int]$TimeoutSeconds = 600
     )
 
     if (-not $DeploymentName) { $DeploymentName = $Model }
 
-    # Not $args: that is an automatic variable in PowerShell and assigning to it
-    # is at best confusing and at worst silently wrong inside a function.
-    $azArgs = @(
-        'cognitiveservices', 'account', 'deployment', 'create',
-        '-n', $Account, '-g', $ResourceGroup,
-        '--deployment-name', $DeploymentName,
-        '--model-name', $Model,
-        '--model-format', $script:ClaudeFormat,
-        '--sku-name', $Sku,
-        '--sku-capacity', $Capacity
-    )
-    if ($Version) { $azArgs += @('--model-version', $Version) }
+    # No version given: take the one Azure marks as default, which is the
+    # Azure-hosted one where both exist. Leaving it to the service is not the
+    # same thing - an explicit version is what makes the result reproducible.
+    if (-not $Version) {
+        $offer = @(Get-DeployableClaudeModel -Account $Account -ResourceGroup $ResourceGroup | Where-Object { $_.model -eq $Model })
+        if ($offer.Count) { $Version = $offer[0].version }
+    }
+    if (-not $Version) { throw "No deployable version of '$Model' was found on $Account." }
 
-    $out = & az @azArgs -o json 2>&1
-    $joined = ($out | Out-String)
+    if (-not $ProviderData) { $ProviderData = Get-ClaudeProviderData -Account $Account -ResourceGroup $ResourceGroup }
+    if (-not $ProviderData -or -not $ProviderData.organizationName -or -not $ProviderData.industry -or -not $ProviderData.countryCode) {
+        throw ("Deploying '$Model' needs the organisation details Anthropic asks for the first time Claude is " +
+               "deployed in a subscription: organizationName, industry and countryCode. None could be copied " +
+               "from an existing Claude deployment. Pass -ProviderData @{ organizationName = '<your organisation>'; " +
+               "industry = 'technology'; countryCode = 'US' }.")
+    }
 
-    if ($LASTEXITCODE -ne 0) {
-        $why = Get-DeploymentFailureReason -AzureOutput $joined -Model $Model -Account $Account -Sku $Sku -Capacity $Capacity
+    $sub = az account show --query id -o tsv 2>$null
+    $tok = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv 2>$null
+    if (-not $sub -or -not $tok) { throw 'Not signed in to Azure. Run: az login' }
+    $headers = @{ Authorization = 'Bearer ' + $tok.Trim() }
+    $uri = "https://management.azure.com/subscriptions/$($sub.Trim())/resourceGroups/$ResourceGroup/providers/" +
+           "Microsoft.CognitiveServices/accounts/$Account/deployments/$DeploymentName`?api-version=$script:DeploymentApiVersion"
+
+    $body = @{
+        sku        = @{ name = $Sku; capacity = $Capacity }
+        properties = @{
+            model             = @{ format = $script:ClaudeFormat; name = $Model; version = $Version }
+            modelProviderData = @{
+                organizationName = $ProviderData.organizationName
+                industry         = $ProviderData.industry
+                countryCode      = $ProviderData.countryCode
+            }
+        }
+    } | ConvertTo-Json -Depth 6
+
+    try {
+        $null = Invoke-RestMethod -Method Put -Uri $uri -Headers $headers -Body $body -ContentType 'application/json' -TimeoutSec 120
+    }
+    catch {
+        # PowerShell 5.1 puts the response body in ErrorDetails rather than the
+        # exception, and the body is where Azure says why.
+        $detail = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+        $why = Get-DeploymentFailureReason -AzureOutput $detail -Model $Model -Account $Account -Sku $Sku -Capacity $Capacity
         throw $why.Message
     }
 
-    $created = try { $joined | ConvertFrom-Json } catch { $null }
-    if (-not $created) { throw "Deployment of '$Model' reported success but returned nothing to confirm it." }
-    return (@($created) | ConvertTo-FlatDeployment)
+    # The PUT returns while the deployment is still being created. Returning
+    # then would hand the caller a deployment that cannot serve yet, and the
+    # first call through the gateway would fail for a reason nobody changed.
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $state = $null
+    $current = $null
+    do {
+        Start-Sleep -Seconds 5
+        try { $current = Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 60 } catch { $current = $null }
+        $state = if ($current) { $current.properties.provisioningState } else { $null }
+    } while ($state -notin @('Succeeded', 'Failed', 'Canceled') -and (Get-Date) -lt $deadline)
+
+    if ($state -ne 'Succeeded') {
+        throw "Deployment of '$Model' to $Account ended in state '$state' after $TimeoutSeconds seconds."
+    }
+    return (@($current) | ConvertTo-FlatDeployment)
 }

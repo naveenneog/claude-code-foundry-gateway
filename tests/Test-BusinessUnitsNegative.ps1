@@ -2540,6 +2540,50 @@ $mutations = @(
        From  = 'is empty — even over all time — while the gateway is plainly serving'
        To    = 'is empty' }
 
+    # Two defects in the deploy path, both measured against the live catalogue.
+    # Each mutation restores the old behaviour; the behavioural tests must go red.
+    @{ Suite = 'Test-ModelDeployment.ps1'
+       Name  = 'the picker goes back to sorting version strings'
+       File  = 'scripts/ClaudeModelDeployment.ps1'
+       From  = '$pick = @($g | Where-Object { $_.isDefault })'
+       To    = '$pick = @($g | Sort-Object { $_.version } -Descending)' }
+
+    @{ Suite = 'Test-ModelDeployment.ps1'
+       Name  = 'a deployment is attempted without provider data'
+       File  = 'scripts/ClaudeModelDeployment.ps1'
+       From  = 'if (-not $ProviderData -or -not $ProviderData.organizationName -or -not $ProviderData.industry -or -not $ProviderData.countryCode) {'
+       To    = 'if ($false) {' }
+
+    @{ Suite = 'Test-ModelDeployment.ps1'
+       Name  = 'the provider data is left out of the request'
+       File  = 'scripts/ClaudeModelDeployment.ps1'
+       From  = 'modelProviderData = @{'
+       To    = 'unusedProviderData = @{' }
+
+    @{ Suite = 'Test-ModelDeployment.ps1'
+       Name  = 'the deployment stops waiting for provisioning'
+       File  = 'scripts/ClaudeModelDeployment.ps1'
+       From  = "while (`$state -notin @('Succeeded', 'Failed', 'Canceled')"
+       To    = 'while ($false' }
+
+    @{ Suite = 'Test-ModelDeployment.ps1'
+       Name  = 'the installer stops passing provider data'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = '-Capacity ([int]$cap) -ProviderData $providerData'
+       To    = '-Capacity ([int]$cap)' }
+
+    @{ Suite = 'Test-ModelDeployment.ps1'
+       Name  = 'the manual deployment goes back to an inline body'
+       File  = 'docs/SETUP.md'
+       From  = "--body '@deployment.json'"
+       To    = '--body $body' }
+
+    @{ Suite = 'Test-ModelDeployment.ps1'
+       Name  = 'the picker stops showing where a version is hosted'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = '"hosted on $($m.hostedOn)"'
+       To    = "''" }
+
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the sign-in choice stops being decided once'
        File  = 'docs/SETUP.md'

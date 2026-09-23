@@ -104,12 +104,67 @@ if (Get-Command Get-DeploymentFailureReason -ErrorAction SilentlyContinue) {
 else { Assert 'deployment failures are classified' $false 'Get-DeploymentFailureReason missing' }
 
 Write-Host ''
+Write-Host 'Model deployment - which version, and what Anthropic now requires' -ForegroundColor Cyan
+
+# Behavioural, not textual. A local `az` function shadows the CLI for the rest
+# of this script, so the real selection code runs against the exact catalogue
+# shape measured on 2026-09-23: claude-haiku-4-5 published twice, version 2
+# hosted on Azure and marked default, 20251001 hosted on Anthropic and not.
+# As strings '20251001' sorts above '2'; the old picker chose it.
+function az {
+  $line = $args -join ' '
+  if ($line -like 'cognitiveservices account list-models*') {
+      return (@(
+          @{ name = 'claude-haiku-4-5'; version = '20251001'; format = 'Anthropic'; isDefaultVersion = $false
+             capabilities = @{ hostedOn = 'anthropic' }; skus = @(@{ name = 'GlobalStandard'; capacity = @{ default = 10; maximum = 100 } }) },
+          @{ name = 'claude-haiku-4-5'; version = '2'; format = 'Anthropic'; isDefaultVersion = $true
+             capabilities = @{ hostedOn = 'azure' }; skus = @(@{ name = 'GlobalStandard'; capacity = @{ default = 10; maximum = 100 } }) }
+      ) | ConvertTo-Json -Depth 6)
+  }
+  return $null
+}
+$offered = @(Get-DeployableClaudeModel -Account 'acct' -ResourceGroup 'rg' | Where-Object { $_.model -eq 'claude-haiku-4-5' })
+Assert 'one row per model is offered'                 ($offered.Count -eq 1) "got $($offered.Count)"
+Assert 'and it is the version Azure marks as default' ($offered.Count -eq 1 -and $offered[0].version -eq '2') "got $($offered[0].version)"
+Assert 'which is the Azure-hosted one'                ($offered.Count -eq 1 -and $offered[0].hostedOn -eq 'azure')
+
+# Anthropic deployments without modelProviderData are refused by Azure with
+# InvalidModelProviderData, and the CLI cannot send it. With nothing to copy,
+# the call must stop and say which three fields, before touching Azure at all.
+function Get-ClaudeProviderData { return $null }
+$threw = $null
+try { $null = New-ClaudeDeployment -Account 'acct' -ResourceGroup 'rg' -Model 'claude-haiku-4-5' -Version '2' } catch { $threw = $_.Exception.Message }
+Assert 'a deployment with no provider data is refused' ([bool]$threw)
+Assert 'naming all three fields it needs' ($threw -match 'organizationName' -and $threw -match 'industry' -and $threw -match 'countryCode')
+Remove-Item Function:\az -ErrorAction SilentlyContinue
+Remove-Item Function:\Get-ClaudeProviderData -ErrorAction SilentlyContinue
+
+$hs = Get-Content $helper -Raw
+Assert 'deployments go through ARM, not the CLI that cannot send it' (-not $hs.Contains("'deployment', 'create'"))
+Assert 'the provider data is sent'               ($hs -match 'modelProviderData = @\{')
+Assert 'at an API version that carries it'       ($hs -match "DeploymentApiVersion = '2025-12-01'")
+Assert 'it is copied from an existing deployment first' ($hs -match 'function Get-ClaudeProviderData')
+Assert 'the caller waits for the deployment to finish' ($hs -match "notin @\('Succeeded', 'Failed', 'Canceled'\)")
+Assert 'PowerShell 5.1 error bodies are read'    ($hs -match 'ErrorDetails\.Message')
+
+$ins = Get-Content $installer -Raw
+Assert 'the installer asks for them only when none can be copied' ($ins -match 'if \(-not \$providerData\)')
+Assert 'and passes them to the deployment'       ($ins -match '-ProviderData \$providerData')
+Assert 'an unattended install can supply them'   ($ins -match '\[string\]\$ModelOrganizationName')
+Assert 'the picker shows where a version is hosted' ($ins -match 'hosted on \$\(\$m\.hostedOn\)')
+
+Write-Host ''
 Write-Host 'Model deployment - documentation' -ForegroundColor Cyan
 
 $setup = Join-Path $root 'docs/SETUP.md'
 $d = Get-Content $setup -Raw
 Assert 'setup explains model selection' ($d -match '(?i)deployment')
 Assert 'and that the installer can create one' ($d -match '(?i)deploy a model|create a deployment|deploys it for you')
+Assert 'setup says which version is offered and why' ($d -match "'20251001'`` sorts above ``'2'")
+Assert 'and names the organisation details Azure requires' ($d -match 'InvalidModelProviderData')
+# Measured 2026-09-23: an inline JSON body fails through az.cmd on PowerShell
+# 7.6 and 5.1; a body file works on both.
+Assert 'the manual deployment sends its body from a file' ($d -match "--body '@deployment\.json'" -and $d -notmatch '--body \$body')
 
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }

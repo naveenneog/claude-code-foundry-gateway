@@ -32,6 +32,42 @@ and at what capacity, and creates it before continuing. Claude is not offered in
 every region, so an account in a region without it fails with that stated rather
 than with a deployment error.
 
+Two details of that deployment are easy to get wrong by hand:
+
+- **Which version.** A model can be listed more than once. `claude-haiku-4-5`,
+  for example, appears as version `2` (hosted on Azure, the default) and
+  `20251001` (hosted on Anthropic). The installer offers the version Azure marks
+  as default and shows where each is hosted. Choosing the highest version string
+  picks `20251001`, because `'20251001'` sorts above `'2'`.
+- **Organisation details.** Azure refuses an Anthropic deployment that does not
+  carry your organisation name, industry and two-letter country code
+  (`InvalidModelProviderData`), and `az cognitiveservices account deployment
+  create` has no way to send them. The installer creates the deployment through
+  Azure Resource Manager instead. It copies the three values from an existing
+  Claude deployment in the subscription when there is one, and otherwise asks for
+  them. Unattended installs pass `-ModelOrganizationName`, `-ModelIndustry` and
+  `-ModelCountryCode`.
+
+To deploy by hand, send the same body the installer sends. Write it to a file
+first: on Windows `az` is a batch file, and a JSON body passed inline loses its
+quotes on the way in, which fails with `the following arguments are required:
+--url`. The form below was run in PowerShell 7.6 and Windows PowerShell 5.1.
+Quote `'@deployment.json'`, because PowerShell reads a bare `@deployment` as
+splatting.
+
+```powershell
+@{
+  sku        = @{ name = 'GlobalStandard'; capacity = 1 }
+  properties = @{
+    model             = @{ format = 'Anthropic'; name = 'claude-haiku-4-5'; version = '2' }
+    modelProviderData = @{ organizationName = 'Contoso'; industry = 'technology'; countryCode = 'US' }
+  }
+} | ConvertTo-Json -Depth 6 | Set-Content deployment.json
+
+az rest --method put --headers Content-Type=application/json --body '@deployment.json' `
+  --url "https://management.azure.com/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account>/deployments/claude-haiku-4-5?api-version=2025-12-01"
+```
+
 ### Choosing the SKU
 
 The installer asks **how many developers** will use the gateway and suggests a
