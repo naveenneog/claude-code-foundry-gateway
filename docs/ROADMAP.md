@@ -239,9 +239,9 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       request and hour of cache reads exported and accepted exactly by Turnstile's own ingest code,
       budgets optionally edited in Turnstile and enforced by the gateway, admin-only through
       Microsoft Entra. [TURNSTILE.md](TURNSTILE.md)
-- [ ] P40 scheduled export and sync — acceptance: an hourly job running as a managed identity with
-      no secret, proven by a run that sends usage and a sync that reads budgets, and by the
-      identity being refused once its grant is removed
+- [x] P40 scheduled export and sync — an hourly Container Apps job running as a managed identity
+      with no secret. Run live: a pass sent usage, a changed budget reached Turnstile attributed to
+      the job's identity, and removing its Event Hubs grant made the next run fail with 401
 - [ ] P41 upstream the fork — acceptance: the four branches of naveenneog/turnstile offered to
       xuleihive/turnstile as pull requests, each with its tests and mutations
 ### M3 — compliance retrieval

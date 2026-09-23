@@ -68,7 +68,13 @@ if (-not $SkipGovernance) {
         & $sync -AccessToken $token.Trim() -ResourceGroup $ResourceGroup -ApimName $ApimName
     }
     $governance = if ($result.Direction -eq 'FromTurnstile') { "from Turnstile: $($result.Changes) change(s), $($result.Applied) applied" }
-    else { "to Turnstile: $($result.Catalog); $(@($result.Budgets).Count) budget(s)" }
+    else {
+        # Counted by outcome: Turnstile answers an unchanged budget with 200 and no change, and
+        # refuses a team budget above its unit's, so a bare count would hide both.
+        $set = @($result.Budgets | Where-Object { "$_" -like 'set *' }).Count
+        $refused = @($result.Budgets | Where-Object { "$_" -like 'refused *' })
+        "to Turnstile: $($result.Catalog); budgets set $set, refused $($refused.Count)" + $(if ($refused.Count) { " ($($refused -join '; '))" } else { '' })
+    }
 }
 
 [pscustomobject][ordered]@{

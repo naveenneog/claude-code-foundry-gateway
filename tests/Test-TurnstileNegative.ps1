@@ -55,6 +55,10 @@ $mutations = @(
        File  = 'scripts/Invoke-ClaudeTurnstileSchedule.ps1'; From = 'get-access-token --resource $resource'; To = 'get-access-token --scope $resource' }
     @{ Suite = $governance; Name = 'the identity cannot read the Application Insights resource'
        File  = 'scripts/Connect-ClaudeTurnstile.ps1'; From = "if (`$component.id) { Add-Role 'Reader' `$component.id }"; To = '' }
+    @{ Suite = $governance; Name = 'the job''s start script keeps Windows line endings'
+       File  = 'infra/turnstile-schedule.bicep'; From = "replace(bootstrap, '\r', '')"; To = 'bootstrap' }
+    @{ Suite = $governance; Name = 'a pass hides refused budgets in a count'
+       File  = 'scripts/Invoke-ClaudeTurnstileSchedule.ps1'; From = "refused `$(`$refused.Count)"; To = "`$(@(`$result.Budgets).Count) budget(s)" }
     @{ Suite = $bridge; Name = 'the guide drops the measured resend'
        File  = 'docs/TURNSTILE.md'; From = '1,114'; To = '1114' }
 )

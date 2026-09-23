@@ -128,7 +128,10 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
           command: [
             '/bin/bash'
             '-c'
-            bootstrap
+            // A Windows checkout gives this multi-line string CRLF line endings, and bash reads
+            // "pipefail\r" as an invalid option. Measured on the first run; stripped here so the
+            // template deploys the same from any checkout.
+            replace(bootstrap, '\r', '')
           ]
           resources: {
             cpu: json('0.5')

@@ -48,7 +48,11 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
     sync on a schedule: an Azure Container Apps job signed in as its own managed identity, with no
     secret, running a pinned commit ([ADR-0014](docs/adr/0014-turnstile-beside-the-gateway.md)).
     A workload identity is now also granted Reader on the gateway's Application Insights
-    resource, which the export reads to find the ledger.
+    resource, which the export reads to find the ledger. Run live on 2026-09-23: a pass took 143 s,
+    a changed budget reached Turnstile attributed to the job's identity, and removing its Event
+    Hubs grant made the next run fail with 401. The first runs found two faults, both handled: the
+    start script carried CRLF from a Windows checkout, and governance automation had stopped
+    Turnstile's PostgreSQL server.
 
 - **The projection deploys with no public endpoint anywhere, and was deployed
   and migrated to end to end.** On 2026-09-23, on a Premium v2 gateway in Canada

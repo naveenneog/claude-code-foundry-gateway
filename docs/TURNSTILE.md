@@ -343,6 +343,52 @@ Measured round trip, with the `sales-emea` budget set to 1,000 tokens in Turnsti
 Structure never comes back from Turnstile. A unit needs an Entra group, and groups belong to the
 gateway, so a unit added in Turnstile is not created in the gateway.
 
+## Run it on a schedule
+
+The export and the sync run every hour as an Azure Container Apps job signed in as its own
+managed identity. No secret exists anywhere: not in the template, the job or a key vault
+([ADR-0014](adr/0014-turnstile-beside-the-gateway.md)).
+
+```powershell
+./scripts/Register-ClaudeTurnstileSchedule.ps1 -RunNow
+```
+
+It deploys `infra/turnstile-schedule.bicep` into the gateway's resource group, grants the job's
+identity through `Connect-ClaudeTurnstile.ps1 -ExporterPrincipalId`, waits for the grants to
+take effect, and starts one run.
+
+| Granted to the job's identity | On |
+|---|---|
+| Azure Event Hubs Data Sender | Turnstile's hub |
+| API Management Service Reader Role | The gateway, to read its named values |
+| Reader | The gateway's Application Insights resource, where the export finds the ledger |
+| Log Analytics Reader | The workspace behind it |
+| `Turnstile.Admin` app role, assigned directly | Turnstile, for the sync. A workload identity cannot join a group |
+
+Each run starts from `mcr.microsoft.com/azure-cli`, adds PowerShell from its published release,
+fetches this repository at the commit it was registered with, signs in as its identity and runs
+`Invoke-ClaudeTurnstileSchedule.ps1`: the export's own window, then the sync in the direction the
+connection says budgets are authored. The commit is a full commit id that must already be on the
+remote. To run newer scripts, register again.
+
+Measured on 2026-09-23 against the reference gateway:
+
+| Check | Result |
+|---|---|
+| A run | Succeeded in 143 s, 54 s of it the pass: 2 requests sent in one batch, and the catalog of 3 organizations and 5 departments written by `app:<job identity>` |
+| A budget changed in the gateway | The next run wrote it to Turnstile, attributed to `app:<job identity>` |
+| Azure Event Hubs Data Sender removed | The next run failed: `401 ... Unauthorized access for 'Send' operation` |
+| Cost | $0.0021 a run at Container Apps list price with no free grant applied: $1.54 a month, hourly |
+
+The first two runs failed, and both causes are now handled:
+
+- The start script stopped with `set: pipefail\r: invalid option name`. A Windows checkout gives
+  the template's multi-line string CRLF line endings, which bash does not accept. The template now
+  strips them.
+- A run failed with 504 from Turnstile: governance automation in the test subscription had
+  stopped Turnstile's PostgreSQL server, and every Turnstile function was timing out at 30 s. See
+  [Troubleshooting](#troubleshooting).
+
 ## Admin-only access
 
 Three layers, each measured.
@@ -413,6 +459,9 @@ through it, so for this integration it does nothing. The deployer always creates
 | A department that is not in the registry | Usage keeps the unit it was charged to. Measured: 9 rows from 2026-09-15 under a unit since removed | Nothing to fix; history is not rewritten |
 | A few requests have no person in Turnstile | Turnstile discovers a person only from an email id under a known department. Measured: 3 requests at 09:11–09:12 on 2026-09-15 carry object ids, because they were logged before the gateway recorded the caller's UPN; every request from 09:24 on carries it | Nothing to fix for new traffic |
 | A 30-day export takes ten minutes | 738 hourly slices, each with its own queries and tokens | `-SliceMinutes 1440` |
+| Turnstile requests hang and end in 504, and its functions all run 30 s | Its PostgreSQL server is stopped. Measured: governance automation in the test subscription stopped it | `az postgres flexible-server show --query state`, then `az postgres flexible-server start`: 127 s measured |
+| The scheduled job stops at once with `set: pipefail\r` | CRLF line endings in the start script, from a Windows checkout of a changed template | Keep `replace(bootstrap, '\r', '')` in the template |
+| A scheduled run reports `refused` budgets | A team budget above its unit's, which Turnstile refuses | Expected; the gateway still enforces both |
 | The Entra capture stops with `MFA` | The blade needs a fresh multifactor sign-in, which pushed a request to your phone | `node guide/auth.mjs`, then capture again |
 
 ## FAQ
@@ -428,8 +477,8 @@ status, latency and cost.
 **Can Turnstile add a person to a unit?** No. Membership is the Entra group's; add the person
 there and run `Sync-ClaudeAccess.ps1` ([BUSINESS-UNITS.md](BUSINESS-UNITS.md)).
 
-**What happens if Turnstile is down?** Nothing for developers. The export fails and the next run,
-whose window overlaps, sends what was missed.
+**What happens if Turnstile is down?** Nothing for developers. The scheduled run fails and the
+next one, whose window overlaps, sends what was missed.
 
 **Does a budget edited in Turnstile take effect if nobody runs the sync?** No. The gateway
 enforces its own registry. Run the sync with `-Apply`, on a schedule if Turnstile is where budgets
@@ -457,6 +506,8 @@ deployer does not run on Windows. The fork's branches, merged in `claude-gateway
 | `scripts/Sync-ClaudeTurnstileGovernance.ps1` | Units, teams and budgets to Turnstile; `-Direction FromTurnstile [-Apply]` for budgets back |
 | `scripts/Export-ClaudeTurnstileUsage.ps1` | Usage to Turnstile's hub; `-From`, `-To`, `-SliceMinutes`, `-ThrottleLimit`, `-OutFile` |
 | `scripts/Get-ClaudeTurnstileBom.ps1` | What the Turnstile deployment costs to keep |
+| `scripts/Register-ClaudeTurnstileSchedule.ps1`, `infra/turnstile-schedule.bicep` | The hourly job, its identity and its grants; `-RunNow`, `-Cron`, `-NoGovernance`, `-RepositoryRef` |
+| `scripts/Invoke-ClaudeTurnstileSchedule.ps1` | One scheduled pass, which the job runs and you can run by hand |
 | `scripts/ClaudeTurnstile.ps1`, `scripts/ClaudeTurnstileGovernance.ps1` | The mapping and the checks, shared by all of the above |
 | `tests/Test-Turnstile.ps1`, `tests/Test-TurnstileGovernance.ps1` | Offline checks of the mapping, the rules and this page |
 | `tests/turnstile/check_contract.py` | Runs exported events through Turnstile's own ingest code |

@@ -178,6 +178,8 @@ Assert 'it refuses a commit that was never pushed'           ($register -match '
 Assert 'deployment parameters go through a file'            ($register -match '--parameters "@\$file"')
 Assert 'the sync uses an application token, not a scope'     ($pass -match 'get-access-token --resource \$resource' -and $pass -match '-AccessToken \$token\.Trim\(\)')
 Assert 'the identity reads the Application Insights resource' ($connect -match "if \(\`$component\.id\) \{ Add-Role 'Reader' \`$component\.id \}")
+Assert 'the start script survives a Windows checkout'        ($job -match "replace\(bootstrap, '\\r', ''\)")
+Assert 'a pass reports budgets refused, not just counted'    ($pass -match "like 'refused \*'" -and $pass -match 'refused \$\(\$refused\.Count\)')
 if (Get-Command az -ErrorAction SilentlyContinue) {
     az bicep build --file $scheduleTemplate --stdout *> $null
     Assert 'the schedule template compiles'                  ($LASTEXITCODE -eq 0)
