@@ -2164,10 +2164,66 @@ $mutations = @(
        To    = 'the network documentation' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
-       Name  = 'the gateway price drifts back to the overstated figure'
+       Name  = 'the confirmation prices Basic v2 whatever was chosen'
        File  = 'Install-ClaudeGateway.ps1'
-       From  = '$150/month at list price'
-       To    = '$250/month' }
+       From  = "`$apimMeter = (`$Sku -replace 'V2`$', ' v2') + ' Unit'"
+       To    = "`$apimMeter = 'Basic v2 Unit'" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the confirmation prices the wrong region'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = "-ServiceName 'API Management' -Region `$Location -MeterName `$apimMeter"
+       To    = "-ServiceName 'API Management' -Region 'eastus' -MeterName `$apimMeter" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the overstated gateway price comes back'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = 'The $Sku price in $Location could not be read'
+       To    = 'The $Sku price in $Location (about $250/month) could not be read' }
+
+    # Show-Governance reported a healthy new gateway as failed. Each mutation
+    # restores one of the causes; the lifted resolvers must go red.
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the governance check assumes a model again'
+       File  = 'scripts/Show-Governance.ps1'
+       From  = '    [string]$Model,'
+       To    = "    [string]`$Model = 'claude-sonnet-5'," }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the governance check ignores the caller''s tier'
+       File  = 'scripts/Show-Governance.ps1'
+       From  = '--named-value-id "models-$tier"'
+       To    = '--named-value-id "models-standard"' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'an unrestricted tier finds no model'
+       File  = 'scripts/Show-Governance.ps1'
+       From  = "`$claude = @(`$deployments | Where-Object { `$_.name -like 'claude-*' } | Sort-Object name)"
+       To    = '$claude = @()' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the metric query goes to the service-level component'
+       File  = 'scripts/Show-Governance.ps1'
+       From  = 'if ($api) { $paths += "/apis/$($api.name)/diagnostics/applicationinsights" }'
+       To    = '' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'a failed check hides which refusal it was'
+       File  = 'scripts/Show-Governance.ps1'
+       From  = '$code = if ($e.code) { $e.code } else { $e.type }'
+       To    = '$code = $e.type' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'two statements are fused on one line again'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = "Write-Host '   1. Entitle a developer'"
+       To    = "Write-Host '   1. Entitle a developer'Write-Host ''" }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the installer promises 30-45 minutes again'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = "'API Management and Application Insights (a few minutes)'"
+       To    = "'API Management and Application Insights (30-45 min)'" }
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the break-even advice uses the wrong price'

@@ -811,8 +811,24 @@ if ($ExistingApim) {
     Write-Host '  Adds the Claude API, its policies and named values. Takes a few minutes.' -ForegroundColor DarkGray
     Write-Host '  Its SKU, location and publisher details are re-asserted unchanged.' -ForegroundColor DarkGray
 } else {
-    Write-Host '  Cost: API Management is the bulk of it - BasicV2 is about $150/month at list price.' -ForegroundColor DarkGray
-    Write-Host '  Provisioning takes 30-45 minutes, most of it API Management.' -ForegroundColor DarkGray
+    # Priced for the SKU and region being created. This line used to say
+    # 'BasicV2 is about $150/month' whatever was chosen, so a Premium v2
+    # install in Canada Central - $2,800/month, measured 2026-09-23 - was
+    # approved against a figure nineteen times too low.
+    . (Join-Path $root 'scripts/AzureRetailPrice.ps1')
+    $apimMeter = ($Sku -replace 'V2$', ' v2') + ' Unit'
+    $apimPrice = $null
+    try { $apimPrice = Get-AzureRetailPrice -ServiceName 'API Management' -Region $Location -MeterName $apimMeter } catch { $apimPrice = $null }
+    if ($apimPrice) {
+        $apimMonthly = ConvertTo-MonthlyPrice -HourlyPrice $apimPrice.UnitPrice
+        Write-Host ("  Cost: API Management is the bulk of it - {0} in {1} is {2} {3:N0}/month at list price" -f $Sku, $Location, $apimPrice.Currency, $apimMonthly) -ForegroundColor DarkGray
+        Write-Host ("        (one unit, 730 hours, Azure retail prices read {0})." -f $apimPrice.RetrievedUtc.Substring(0, 10)) -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host "  Cost: API Management is the bulk of it. The $Sku price in $Location could not be read" -ForegroundColor DarkGray
+        Write-Host '        from the Azure retail prices API; check https://azure.microsoft.com/pricing/details/api-management/' -ForegroundColor DarkGray
+    }
+    Write-Host '  Provisioning takes minutes on the v2 tiers - a Premium v2 install measured 5.5 minutes end to end.' -ForegroundColor DarkGray
 }
 Write-Host ''
 
@@ -858,7 +874,7 @@ else {
     Write-Ok "$ResourceGroup (created in $Location)"
 }
 
-Write-Step $(if ($ExistingApim) { 'Claude API and policies (a few minutes)' } else { 'API Management and Application Insights (30-45 min)' })
+Write-Step $(if ($ExistingApim) { 'Claude API and policies (a few minutes)' } else { 'API Management and Application Insights (a few minutes)' })
 Write-Note 'Safe to leave running.'
 
 # Entitlement is owned by Sync-ClaudeAccess.ps1, not by this template. If the
@@ -1129,7 +1145,8 @@ if ($addressMode -eq 'custom') {
     Write-Host '        Azure address and have to be reconfigured later.'
     Write-Host ''
 }
-Write-Host '   1. Entitle a developer'Write-Host "        ./scripts/Set-ClaudeDeveloper.ps1 -User dev@contoso.com -Tier standard ``"
+Write-Host '   1. Entitle a developer'
+Write-Host "        ./scripts/Set-ClaudeDeveloper.ps1 -User dev@contoso.com -Tier standard ``"
 Write-Host "            -ApimName $apimName -ResourceGroup $ResourceGroup"
 Write-Host '      Takes an email, a UPN or an object id, adds them to the group and'
 Write-Host '      publishes in one step. The raw route needs an object id, not an email:'

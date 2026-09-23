@@ -434,6 +434,30 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Fixed
 
+- **The installer's own verification reported a healthy new gateway as failed,
+  and priced every gateway as Basic v2.** Found by a Premium v2 install in
+  canadacentral on 2026-09-23.
+
+  `Show-Governance.ps1` asked for a fixed `claude-sonnet-5`. The new account
+  deployed only `claude-haiku-4-5`, so the gateway answered `403
+  model_not_allowed`, and the check printed `[FAIL]` with an empty tier. It
+  queried a fixed `appi-claude-gateway` component, which did not exist (`404`).
+  On the reference gateway that name belonged to the service-level diagnostic's
+  component, which held 0 tokens over 7 days while the Claude API's own
+  component held 168,438. So the chargeback check there had always reported "no
+  metrics yet". The model now comes from the caller's tier list, or from a Claude
+  deployment on the account when the tier is unrestricted. The component comes
+  from the Claude API's `applicationinsights` diagnostic, falling back to the
+  service-level one. A failed check prints the gateway's error code.
+
+  The confirmation screen said "BasicV2 is about $150/month" whatever was chosen.
+  The Premium v2 run was approved against it at $2,800/month. It now reads the
+  chosen SKU's price in the chosen region from the Azure retail prices API, and
+  says so when it cannot. The "30-45 minutes" estimate is gone: the whole
+  Premium v2 install took 5 minutes 23 seconds. The closing instructions printed
+  `1. Entitle a developer Write-Host ./scripts/...` because two statements
+  shared a line. A check across every script now refuses that.
+
 - **The installer could not deploy a Claude model, and the model it would have
   deployed was the wrong one.** Both defects were found by deploying into a new
   Foundry account on 2026-09-23.

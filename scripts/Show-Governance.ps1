@@ -24,8 +24,10 @@ param(
     [Parameter(Mandatory = $true)][string]$ApimName,
     [Parameter(Mandatory = $true)][string]$ResourceGroup,
     [string]$SecondIdentityPath = "$env:TEMP\bob.json",
-    [string]$AppInsightsName = 'appi-claude-gateway',
-    [string]$Model = 'claude-sonnet-5',
+    # Both resolved from the gateway when omitted. Fixed defaults were wrong on
+    # real gateways - see Resolve-GovernanceModel and Resolve-GatewayAppInsights.
+    [string]$AppInsightsName,
+    [string]$Model,
     [switch]$SkipThrottleTest
 )
 
@@ -33,6 +35,86 @@ $ErrorActionPreference = 'Continue'
 
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 $gw = "https://$ApimName.azure-api.net/claude"
+
+function Get-GatewayArm {
+    param([string]$Path)
+    $id = az apim show -g $ResourceGroup -n $ApimName --query id -o tsv 2>$null
+    if (-not $id) { return $null }
+    $raw = az rest --method get --url "https://management.azure.com$id$($Path)?api-version=2024-05-01" -o json 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $raw) { return $null }
+    return ($raw | Out-String | ConvertFrom-Json)
+}
+
+function Get-ClaudeApi {
+    $apis = Get-GatewayArm '/apis'
+    return @($apis.value | Where-Object { $_.properties.path -eq 'claude' })[0]
+}
+
+function Resolve-GatewayAppInsights {
+    <#
+        The component that receives the token metric is the one the Claude API's
+        own applicationinsights diagnostic names; an API-level diagnostic
+        overrides the service-level one. The default this script used to have,
+        'appi-claude-gateway', was the service-level component on the reference
+        gateway and held 0 tokens over 7 days while the API-level one held
+        168,438 (measured 2026-09-23); on a newly installed gateway it did not
+        exist at all and the query returned 404.
+    #>
+    $api = Get-ClaudeApi
+    $paths = @()
+    if ($api) { $paths += "/apis/$($api.name)/diagnostics/applicationinsights" }
+    $paths += '/diagnostics/applicationinsights'
+    foreach ($p in $paths) {
+        $d = Get-GatewayArm $p
+        $loggerId = "$($d.properties.loggerId)"
+        if (-not $loggerId) { continue }
+        $raw = az rest --method get --url "https://management.azure.com$($loggerId)?api-version=2024-05-01" -o json 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $raw) { continue }
+        $resourceId = "$(($raw | Out-String | ConvertFrom-Json).properties.resourceId)"
+        if ($resourceId) { return $resourceId }
+    }
+    return $null
+}
+
+function Resolve-GovernanceModel {
+    <#
+        A model the caller's tier is allowed and the account deploys. The fixed
+        default, 'claude-sonnet-5', made the first check fail on every gateway
+        whose account does not deploy it: the gateway answered 403
+        model_not_allowed and a healthy install was reported as failed
+        (measured on a new gateway, 2026-09-23).
+    #>
+    $oid = az ad signed-in-user show --query id -o tsv 2>$null
+    $premium = az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id allow-premium --query value -o tsv 2>$null
+    $tier = if ($oid -and "$premium" -like "*,$oid,*") { 'premium' } else { 'standard' }
+    $listed = az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id "models-$tier" --query value -o tsv 2>$null
+    $first = @("$listed".Trim(',') -split ',' | Where-Object { $_ })[0]
+    if ($first) { return $first }
+
+    # An empty list means the tier is not restricted, so any deployment will do.
+    $api = Get-ClaudeApi
+    if ("$($api.properties.serviceUrl)" -match '^https://([^./]+)\.') {
+        $account = $Matches[1]
+        # Filtered here rather than in --query: az is a .cmd shim on Windows and
+        # cmd.exe re-parses JMESPath punctuation.
+        $accountRg = @(az cognitiveservices account list -o json 2>$null | Out-String | ConvertFrom-Json |
+            Where-Object { $_.name -eq $account } | ForEach-Object { $_.resourceGroup })[0]
+        if ($accountRg) {
+            $deployments = az cognitiveservices account deployment list -g $accountRg -n $account -o json 2>$null | Out-String | ConvertFrom-Json
+            $claude = @($deployments | Where-Object { $_.name -like 'claude-*' } | Sort-Object name)
+            if ($claude.Count) { return $claude[0].name }
+        }
+    }
+    return $null
+}
+
+if (-not $Model) {
+    $Model = Resolve-GovernanceModel
+    if (-not $Model) {
+        $Model = 'claude-sonnet-5'
+        Write-Host "  (could not read which model this gateway allows; asking for $Model - pass -Model to choose)" -ForegroundColor DarkYellow
+    }
+}
 
 # Windows PowerShell 5.1 throws on 4xx/5xx and has no -SkipHttpErrorCheck, so
 # responses are normalised to one shape that both editions can work with.
@@ -104,11 +186,26 @@ function Show-Result {
     if ($Response.StatusCode -eq 429) {
         Write-Host ("         Retry-After: {0}s" -f (Get-Header $Response 'Retry-After')) -ForegroundColor DarkGray
     }
+
+    # A bare status left the operator guessing which layer refused. The
+    # gateway's own refusals carry a code (model_not_allowed, permission_error)
+    # that says what to change.
+    if (-not $ok -and $Response.Content) {
+        try {
+            $e = ($Response.Content | ConvertFrom-Json).error
+            $code = if ($e.code) { $e.code } else { $e.type }
+            $msg = "$($e.message)"
+            if ($msg.Length -gt 150) { $msg = $msg.Substring(0, 150) + '...' }
+            if ($code -or $msg) { Write-Host ("         {0}: {1}" -f $code, $msg) -ForegroundColor DarkYellow }
+        }
+        catch { }
+    }
 }
 
 Write-Host ""
 Write-Host "Claude Code governance - control checks" -ForegroundColor Cyan
 Write-Host "  gateway : $gw"
+Write-Host "  model   : $Model"
 Write-Host ""
 
 # --- 1. Entitled developer -------------------------------------------------
@@ -165,14 +262,22 @@ if (-not $SkipThrottleTest) {
 # --- 5. Chargeback ---------------------------------------------------------
 Write-Host "4. Chargeback attribution (last hour)" -ForegroundColor Yellow
 $sub = az account show --query id -o tsv
-$ai = "/subscriptions/$sub/resourceGroups/$ResourceGroup/providers/Microsoft.Insights/components/$AppInsightsName"
+$ai = if ($AppInsightsName) {
+    "/subscriptions/$sub/resourceGroups/$ResourceGroup/providers/Microsoft.Insights/components/$AppInsightsName"
+}
+else { Resolve-GatewayAppInsights }
+if ($ai) { Write-Host ("         component: {0}" -f ($ai -split '/')[-1]) -ForegroundColor DarkGray }
+else {
+    Write-Host "         could not find the Application Insights component the gateway's Claude API" -ForegroundColor DarkYellow
+    Write-Host "         writes to; pass -AppInsightsName" -ForegroundColor DarkYellow
+}
 $tok = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv
 $ts = "$((Get-Date).ToUniversalTime().AddHours(-1).ToString('yyyy-MM-ddTHH:mm:ssZ'))/$((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))"
 $filter = [uri]::EscapeDataString("User eq '*'")
 $uri = "https://management.azure.com$ai/providers/Microsoft.Insights/metrics?api-version=2019-07-01" +
        "&metricnamespace=claudecode&metricnames=Total%20Tokens&timespan=$ts&interval=PT1H&aggregation=Total&`$filter=$filter"
 
-try {
+if ($ai) { try {
     $m = Invoke-RestMethod -Uri $uri -Headers @{ Authorization = "Bearer $tok" }
     $rows = @()
     foreach ($metric in $m.value) {
@@ -190,7 +295,7 @@ try {
     }
     else { Write-Host "         (no dimensioned metrics yet - allow ~3 min after traffic)" -ForegroundColor DarkGray }
 }
-catch { Write-Host "         metric query failed: $($_.Exception.Message)" -ForegroundColor DarkYellow }
+catch { Write-Host "         metric query failed: $($_.Exception.Message)" -ForegroundColor DarkYellow } }
 
 Write-Host ""
 Write-Host "Every call above was authenticated as a named Entra identity," -ForegroundColor DarkGray

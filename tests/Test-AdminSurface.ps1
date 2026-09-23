@@ -1193,11 +1193,111 @@ Assert 'reinstalling is ruled out explicitly'    ($ts -match 'the lock outlives'
 $cmp = Get-Content (Join-Path $root 'docs/COMPARISON.md') -Raw
 $setupDoc = Get-Content (Join-Path $root 'docs/SETUP.md') -Raw
 $inst = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
-Assert 'the installer quotes the measured price' ($inst -match '\$150/month at list price')
+# The confirmation screen used to say 'BasicV2 is about $150/month' whatever SKU
+# was chosen - a Premium v2 run in canadacentral (measured $2,800/month on
+# 2026-09-23) was approved against it. It now prices the chosen SKU in the
+# chosen region. The meter expression is evaluated here for every SKU against
+# the meter names the retail API publishes.
+$meterExpr = [regex]::Match($inst, '(?m)^\s*\$apimMeter = (.+)$').Groups[1].Value.Trim()
+$meterOk = [bool]$meterExpr
+foreach ($pair in @(@('BasicV2', 'Basic v2 Unit'), @('StandardV2', 'Standard v2 Unit'), @('PremiumV2', 'Premium v2 Unit'))) {
+    $Sku = $pair[0]
+    try { if ((Invoke-Expression $meterExpr) -ne $pair[1]) { $meterOk = $false } } catch { $meterOk = $false }
+}
+Remove-Variable Sku -ErrorAction SilentlyContinue
+Assert 'the installer prices the SKU being created'   $meterOk "expression: $meterExpr"
+Assert 'in the region being created'                  ($inst -match "Get-AzureRetailPrice -ServiceName 'API Management' -Region \`$Location -MeterName \`$apimMeter")
+Assert 'and says so when the price cannot be read'    ($inst -match 'could not be read')
+Assert 'no fixed Basic v2 figure on the confirmation' (-not ($inst -match "Write-Host '  Cost: API Management is the bulk of it - BasicV2"))
 Assert 'and no longer the overstated one'        (-not ($inst -match '\$250'))
 Assert 'the setup table agrees'                  ($setupDoc -match '~\$150/mo')
 Assert 'and the comparison does too'             ($cmp -match '~\$150/month at list price')
 Assert 'the break-even advice uses it'           ($cmp -match 'the \$150/month gateway')
+
+# The installer's own verification reported a healthy new gateway as failed,
+# twice over (measured on a Premium v2 install, 2026-09-23). Show-Governance
+# asked for a fixed 'claude-sonnet-5' - the gateway answered 403
+# model_not_allowed because the account deployed only claude-haiku-4-5 - and
+# queried a fixed 'appi-claude-gateway', which did not exist (404). On the
+# reference gateway that same name was the service-level component, holding 0
+# tokens over 7 days while the API-level one held 168,438.
+#
+# The functions are lifted out of the script by its syntax tree and run against
+# a stand-in az, so these are the real resolvers, not a description of them.
+$govPath = Join-Path $root 'scripts/Show-Governance.ps1'
+$govText = Get-Content $govPath -Raw
+$govAst = [System.Management.Automation.Language.Parser]::ParseFile($govPath, [ref]$null, [ref]$null)
+$govFns = @($govAst.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true))
+foreach ($fn in $govFns) {
+    if ($fn.Name -in 'Get-GatewayArm', 'Get-ClaudeApi', 'Resolve-GatewayAppInsights', 'Resolve-GovernanceModel', 'Get-Header', 'Show-Result') {
+        . ([scriptblock]::Create($fn.Extent.Text))
+    }
+}
+Assert 'no model is assumed'                   (-not ($govText -match "\[string\]\`$Model = 'claude-sonnet-5'"))
+Assert 'no Application Insights name is assumed' (-not ($govText -match "AppInsightsName = 'appi-claude-gateway'"))
+
+$ResourceGroup = 'rg'; $ApimName = 'apim-x'
+$script:fake = @{
+    premium = ',someone-else,'; standardModels = ',claude-haiku-4-5,'
+    apiDiag = $true; serviceDiag = $true
+}
+$apimBase = '/subscriptions/s/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim-x'
+function az {
+    $global:LASTEXITCODE = 0
+    $line = $args -join ' '
+    switch -Wildcard ($line) {
+        # Most specific first: in a wildcard '?' matches any one character, so
+        # '.../apis?*' would also match '.../apis/<name>/diagnostics/...'.
+        'ad signed-in-user show*'                  { return 'me-oid' }
+        '*--named-value-id allow-premium*'         { return $script:fake.premium }
+        '*--named-value-id models-standard*'       { return $script:fake.standardModels }
+        '*--named-value-id models-premium*'        { return ',claude-opus-5,' }
+        'apim show*'                               { return $apimBase }
+        "*$apimBase/apis/claude-foundry/diagnostics/applicationinsights?*" {
+            if ($script:fake.apiDiag) { return "{`"properties`":{`"loggerId`":`"$apimBase/loggers/api-logger`"}}" }
+            $global:LASTEXITCODE = 3; return $null }
+        "*$apimBase/diagnostics/applicationinsights?*" {
+            if ($script:fake.serviceDiag) { return "{`"properties`":{`"loggerId`":`"$apimBase/loggers/svc-logger`"}}" }
+            $global:LASTEXITCODE = 3; return $null }
+        "*$apimBase/loggers/api-logger?*"          { return '{"properties":{"resourceId":"/x/components/appi-api-level"}}' }
+        "*$apimBase/loggers/svc-logger?*"          { return '{"properties":{"resourceId":"/x/components/appi-service-level"}}' }
+        "*$apimBase/apis?api-version*"             { return '{"value":[{"name":"claude-foundry","properties":{"path":"claude","serviceUrl":"https://ai-acct.services.ai.azure.com/anthropic"}}]}' }
+        'cognitiveservices account list*'          { return '[{"name":"ai-other","resourceGroup":"rg-o"},{"name":"ai-acct","resourceGroup":"rg-ai"}]' }
+        'cognitiveservices account deployment list*' { return '[{"name":"gpt-4o"},{"name":"claude-sonnet-5"},{"name":"claude-haiku-4-5"}]' }
+    }
+    return $null
+}
+$okFns = [bool](Get-Command Resolve-GovernanceModel -ErrorAction SilentlyContinue) -and [bool](Get-Command Resolve-GatewayAppInsights -ErrorAction SilentlyContinue)
+Assert 'the resolvers exist in the script' $okFns
+if ($okFns) {
+    Assert 'the model comes from what the tier allows'  ((Resolve-GovernanceModel) -eq 'claude-haiku-4-5')
+    $script:fake.premium = ',me-oid,'
+    Assert 'and from the premium list for a premium caller' ((Resolve-GovernanceModel) -eq 'claude-opus-5')
+    $script:fake.premium = ',someone-else,'; $script:fake.standardModels = ',,'
+    Assert 'an unrestricted tier uses a Claude deployment on the account' ((Resolve-GovernanceModel) -eq 'claude-haiku-4-5')
+    Assert 'the component is the one the Claude API writes to' ((Resolve-GatewayAppInsights) -eq '/x/components/appi-api-level')
+    $script:fake.apiDiag = $false
+    Assert 'falling back to the service-level diagnostic' ((Resolve-GatewayAppInsights) -eq '/x/components/appi-service-level')
+    $script:fake.serviceDiag = $false
+    Assert 'and nothing, rather than a guess, when neither exists' ($null -eq (Resolve-GatewayAppInsights))
+}
+Remove-Item Function:\az -ErrorAction SilentlyContinue
+
+if (Get-Command Show-Result -ErrorAction SilentlyContinue) {
+    $refusal = [pscustomobject]@{ StatusCode = 403; Headers = @{}; Content = '{"type":"error","error":{"type":"invalid_request_error","code":"model_not_allowed","message":"The model is not available to the standard tier."}}' }
+    $shown = (Show-Result -Label 'probe' -Response $refusal -Expect '200' 6>&1 | Out-String)
+    Assert 'a failed check says which refusal it was' ($shown -match 'model_not_allowed: The model is not available')
+}
+else { Assert 'a failed check says which refusal it was' $false 'Show-Result not found' }
+
+# One statement per line. `Write-Host 'a'Write-Host "b"` parses as one
+# Write-Host printing the second command as text; the installer's closing
+# instructions read '1. Entitle a developer Write-Host ./scripts/...'.
+$fused = @(Get-ChildItem -Path $root, (Join-Path $root 'scripts') -Filter '*.ps1' | ForEach-Object {
+    Select-String -Path $_.FullName -Pattern "['`"]Write-(Host|Ok|Note|Warn2|Step)\b" | ForEach-Object { "$($_.Filename):$($_.LineNumber)" }
+})
+Assert 'no two statements are fused on one line' ($fused.Count -eq 0) ($fused -join ', ')
+Assert 'the installer no longer promises 30-45 minutes' (-not ($inst -match '30-45 min'))
 
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
