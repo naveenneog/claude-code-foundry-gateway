@@ -109,6 +109,7 @@ those files while no Claude process is running is the signature.
 | `az monitor metrics list` says the metric does not exist | The CLI drops `--namespace` for custom namespaces. Query the REST API; `Show-Governance.ps1` shows the call. |
 | Metrics lag | Custom metric ingestion takes a few minutes. Generate traffic, then wait before querying. |
 | A service principal is missing from the group sync | Delegated tokens cannot list service principal members without `Application.Read.All`. Pass CI identities explicitly with `-AdditionalPremiumOids` / `-AdditionalStandardOids`. |
+| `ApiManagementGatewayLlmLog` is empty — even over all time — while the gateway is plainly serving | You are reading a different workspace. A resource group often holds several, and the first one listed need not be the gateway's; on the reference deployment three share the group and the first is not it. Ask the gateway where it writes rather than guessing: `az monitor diagnostic-settings list --resource <apim-resource-id> --query "[].workspaceId" -o tsv`. The scripts here ask the gateway, match the workspace named after it, or refuse to guess — none takes the first one listed. |
 
 ## Still stuck?
 

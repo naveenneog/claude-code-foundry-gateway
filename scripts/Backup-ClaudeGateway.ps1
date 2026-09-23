@@ -105,9 +105,42 @@ catch { Write-Warning "Could not read the API policy for '$ApiId': $($_.Exceptio
 
 # --- saved KQL functions ----------------------------------------------------
 $functions = @()
+$workspaceHow = if ($WorkspaceName) { 'as given' } else { $null }
+$workspaceElsewhere = $null
 if (-not $WorkspaceName) {
-    $ws = @((az monitor log-analytics workspace list -g $ResourceGroup --query "[].name" -o tsv 2>$null) -split "`n" | Where-Object { $_ })
-    if ($ws.Count -eq 1) { $WorkspaceName = $ws[0].Trim() }
+    # Ask the gateway where it writes, rather than guessing from what else is in
+    # the resource group. The diagnostic setting on the API Management instance
+    # is what routes the ledger rows, so it is the authority.
+    #
+    # Measured on the reference deployment: three workspaces in one group, and
+    # the first one listed is not the gateway's. Choosing by count left this
+    # backup unable to choose at all, so it skipped the saved functions - and
+    # both workbooks call them, nineteen times between them. A restore from
+    # such a file brings the workbooks back without the functions their queries
+    # need, and every tile opens on an error.
+    #
+    # Only a workspace in the gateway's own resource group is taken, because
+    # that is where Restore-ClaudeGateway.ps1 publishes the functions back.
+    $apimResourceId = $apim -replace '^https://management\.azure\.com', ''
+    $diagWs = @((az monitor diagnostic-settings list --resource $apimResourceId --query "[].workspaceId" -o tsv 2>$null) -split "`n" |
+            ForEach-Object { $_.Trim() } | Where-Object { $_ } | Sort-Object -Unique)
+    $sameGroup = @($diagWs | Where-Object {
+            $_ -match "/resourceGroups/$([regex]::Escape($ResourceGroup))/providers/Microsoft\.OperationalInsights/workspaces/[^/]+$"
+        })
+    if ($sameGroup.Count -eq 1) {
+        $WorkspaceName = ($sameGroup[0] -split '/')[-1]
+        $workspaceHow = 'named by the gateway diagnostic setting'
+    }
+    elseif ($diagWs.Count -gt 0 -and $sameGroup.Count -eq 0) {
+        $workspaceElsewhere = $diagWs -join ', '
+    }
+    else {
+        $ws = @((az monitor log-analytics workspace list -g $ResourceGroup --query "[].name" -o tsv 2>$null) -split "`n" | Where-Object { $_ })
+        if ($ws.Count -eq 1) {
+            $WorkspaceName = $ws[0].Trim()
+            $workspaceHow = 'the only one in the group'
+        }
+    }
 }
 if ($WorkspaceName) {
     try {
@@ -123,12 +156,17 @@ if ($WorkspaceName) {
                 query              = $f.properties.query
             }
         }
-        Write-Host ("  functions      {0} from {1}" -f $functions.Count, $WorkspaceName) -ForegroundColor Green
+        Write-Host ("  functions      {0} from {1} - {2}" -f $functions.Count, $WorkspaceName, $workspaceHow) -ForegroundColor Green
     }
     catch { Write-Warning "Could not read saved functions from '$WorkspaceName': $($_.Exception.Message)" }
 }
+elseif ($workspaceElsewhere) {
+    Write-Host "  functions      skipped - the gateway writes to $workspaceElsewhere," -ForegroundColor Yellow
+    Write-Host "                 outside '$ResourceGroup', and restore publishes into the gateway's own group." -ForegroundColor Yellow
+    Write-Host '                 Pass -WorkspaceName to choose.' -ForegroundColor Yellow
+}
 else {
-    Write-Host "  functions      skipped - no single workspace found, pass -WorkspaceName" -ForegroundColor Yellow
+    Write-Host "  functions      skipped - no diagnostic setting names a workspace, and '$ResourceGroup' does not hold exactly one. Pass -WorkspaceName" -ForegroundColor Yellow
 }
 
 # --- workbooks --------------------------------------------------------------

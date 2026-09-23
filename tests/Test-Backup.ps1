@@ -44,6 +44,18 @@ Assert 'it never calls the listValue action' ($b -notmatch '/listValue')
 Assert 'and records which were secret' ($b -match 'secretsSkipped')
 Assert 'it captures the policy'    ($b -match 'policies/policy')
 Assert 'and the saved functions'   ($b -match 'savedSearches')
+# The workspace is asked of the gateway, not chosen by counting. Measured on the
+# reference deployment: three workspaces in one group, so a count-based choice
+# chose nothing and every backup left the saved functions out - which both
+# workbooks call, nineteen times between them. A restore from such a file
+# brought the workbooks back with every tile on an error.
+#
+# Asserted on the call and the filter, not the comment above them, which is the
+# mistake the first listValue assertion made.
+Assert 'the workspace is asked of the gateway'   ($b.Contains('az monitor diagnostic-settings list --resource $apimResourceId'))
+Assert 'and restricted to its own resource group' ($b.Contains('/resourceGroups/$([regex]::Escape($ResourceGroup))/providers/Microsoft\.OperationalInsights/workspaces/'))
+Assert 'a workspace elsewhere is reported'       ($b -match "and restore publishes into the gateway's own group")
+Assert 'and the source of the choice is printed' ($b -match 'named by the gateway diagnostic setting')
 Assert 'and the workbooks'         ($b -match 'workbooks\?api-version')
 # The list omits serializedData without saying so. A backup of the list alone
 # restores an empty workbook and fails at the far end of a migration.

@@ -2508,6 +2508,38 @@ $mutations = @(
        From  = 'a proxy exclusion rather than a firewall rule'
        To    = 'a firewall rule' }
 
+    # The backup chose its workspace by counting, so on a group holding three it
+    # chose nothing and left out the functions both workbooks call.
+    @{ Suite = 'Test-Backup.ps1'
+       Name  = 'the backup goes back to choosing a workspace by count'
+       File  = 'scripts/Backup-ClaudeGateway.ps1'
+       From  = 'az monitor diagnostic-settings list --resource $apimResourceId'
+       To    = 'az monitor diagnostic-settings list --resource $unused' }
+
+    @{ Suite = 'Test-Backup.ps1'
+       Name  = 'a workspace in another group is taken as if it were local'
+       File  = 'scripts/Backup-ClaudeGateway.ps1'
+       From  = '/resourceGroups/$([regex]::Escape($ResourceGroup))/providers/Microsoft\.OperationalInsights/workspaces/'
+       To    = '/resourceGroups/[^/]+/providers/Microsoft\.OperationalInsights/workspaces/' }
+
+    @{ Suite = 'Test-Backup.ps1'
+       Name  = 'where the gateway writes stops being reported'
+       File  = 'scripts/Backup-ClaudeGateway.ps1'
+       From  = 'and restore publishes into the gateway''s own group'
+       To    = 'so it was skipped' }
+
+    @{ Suite = 'Test-Backup.ps1'
+       Name  = 'the backup stops saying how it chose the workspace'
+       File  = 'scripts/Backup-ClaudeGateway.ps1'
+       From  = 'named by the gateway diagnostic setting'
+       To    = 'chosen' }
+
+    @{ Suite = 'Test-AdminSurface.ps1'
+       Name  = 'the empty-ledger trap drops out of troubleshooting'
+       File  = 'docs/TROUBLESHOOTING.md'
+       From  = 'is empty — even over all time — while the gateway is plainly serving'
+       To    = 'is empty' }
+
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the sign-in choice stops being decided once'
        File  = 'docs/SETUP.md'

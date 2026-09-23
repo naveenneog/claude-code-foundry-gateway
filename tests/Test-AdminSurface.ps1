@@ -991,6 +991,10 @@ Assert 'with the streaming comparison'           ($nw -match '# Streaming - what
 Assert 'and the body-file quoting trap'          ($nw -match 'Request body could not be parsed as JSON')
 Assert 'the table routes reset to exclusion'     ($nw -match 'they are already allowed')
 
+$tsw = Get-Content (Join-Path $root 'docs/TROUBLESHOOTING.md') -Raw
+Assert 'an empty ledger is traced to the workspace' ($tsw -match 'is empty — even over all time — while the gateway is plainly serving')
+Assert 'and the gateway is asked, not guessed'   ($tsw.Contains('az monitor diagnostic-settings list --resource <apim-resource-id> --query "[].workspaceId" -o tsv'))
+
 # Learn-style structure and the screenshots. A document that claims to be
 # measured and shows no evidence is a document nobody checks, and a screenshot
 # reference that rots to a broken image is worse than none.
