@@ -11,7 +11,7 @@
 - [x] Only an assigned administrator can use Turnstile, and the refusal comes from Entra
 - [x] Nothing about the Turnstile deployment is written into a script: it is discovered, stored on the gateway, and changed by the same command
 - [x] What it costs is read from what is deployed and today's list prices
-- [ ] Scheduled export and sync as a workload identity (P40)
+- [ ] Scheduled export and sync as a workload identity (P40). The job, its registration and 22 offline mutations are in place ([ADR-0014](adr/0014-turnstile-beside-the-gateway.md)); the live run is not yet made
 - [x] `node .ironclad/gate.mjs --stage packet` exits 0
 
 | Measured | Result |

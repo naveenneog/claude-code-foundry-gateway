@@ -33,7 +33,8 @@ Turnstile can enforce budgets itself, for traffic routed through its own API Man
 Claude traffic is not routed that way, so Turnstile's budget page shows **Soft budget · Alerts
 only** for it. Two enforcers would give two answers to "is this person over budget", and the
 answer that refuses requests must be the gateway's, because the gateway also enforces tiers and
-access that Turnstile does not know about.
+access that Turnstile does not know about. The decision is recorded in
+[ADR-0014](adr/0014-turnstile-beside-the-gateway.md).
 
 ## How it fits together
 

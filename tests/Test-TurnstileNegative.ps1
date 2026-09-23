@@ -43,6 +43,18 @@ $mutations = @(
        File  = 'guide/capture-turnstile-entra.mjs'; From = "const PUBLIC_GUIDS = ['04b07795-8ddb-461a-bbee-02f9e1bf7b46'];"; To = "const PUBLIC_GUIDS = ['04b07795-8ddb-461a-bbee-02f9e1bf7b46', '5a7c9e21-3b4d-4f6a-8c2e-9d1b7f3a6e45'];" }
     @{ Suite = $bridge; Name = 'the guide drops the one-enforcer rule'
        File  = 'docs/TURNSTILE.md'; From = 'One enforcer'; To = 'Enforcement' }
+    @{ Suite = $governance; Name = 'a failed scheduled run is retried'
+       File  = 'infra/turnstile-schedule.bicep'; From = 'replicaRetryLimit: 0'; To = 'replicaRetryLimit: 3' }
+    @{ Suite = $governance; Name = 'the job''s logs need the workspace key'
+       File  = 'infra/turnstile-schedule.bicep'; From = "destination: 'azure-monitor'"; To = "destination: 'log-analytics'" }
+    @{ Suite = $governance; Name = 'the job may run a branch rather than a commit'
+       File  = 'scripts/Register-ClaudeTurnstileSchedule.ps1'; From = "if (`$RepositoryRef -notmatch '^[0-9a-f]{40}$') { throw"; To = 'if ($false) { throw' }
+    @{ Suite = $governance; Name = 'the job may run a commit that was never pushed'
+       File  = 'scripts/Register-ClaudeTurnstileSchedule.ps1'; From = 'if (-not $onRemote.Count) { throw'; To = 'if ($false) { throw' }
+    @{ Suite = $governance; Name = 'the scheduled sync asks for a delegated scope'
+       File  = 'scripts/Invoke-ClaudeTurnstileSchedule.ps1'; From = 'get-access-token --resource $resource'; To = 'get-access-token --scope $resource' }
+    @{ Suite = $governance; Name = 'the identity cannot read the Application Insights resource'
+       File  = 'scripts/Connect-ClaudeTurnstile.ps1'; From = "if (`$component.id) { Add-Role 'Reader' `$component.id }"; To = '' }
     @{ Suite = $bridge; Name = 'the guide drops the measured resend'
        File  = 'docs/TURNSTILE.md'; From = '1,114'; To = '1114' }
 )
@@ -51,7 +63,7 @@ $missed = @()
 $caught = 0
 try {
     New-Item -ItemType Directory -Path $sandbox -Force | Out-Null
-    foreach ($d in 'scripts', 'tests', 'analytics', 'guide') { Copy-Item (Join-Path $root $d) $sandbox -Recurse -Force }
+    foreach ($d in 'scripts', 'tests', 'analytics', 'guide', 'infra') { Copy-Item (Join-Path $root $d) $sandbox -Recurse -Force }
     New-Item -ItemType Directory -Path (Join-Path $sandbox 'docs') -Force | Out-Null
     Copy-Item (Join-Path $root 'docs/TURNSTILE.md') (Join-Path $sandbox 'docs') -Force
     New-Item -ItemType Directory -Path (Join-Path $sandbox 'config') -Force | Out-Null

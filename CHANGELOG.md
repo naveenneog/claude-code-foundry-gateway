@@ -44,6 +44,11 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
     month at rest in Central US.
   - Uses the fork naveenneog/turnstile, branch `claude-gateway`: Entra admin-only sign-in and
     bearer tokens, an enterprise catalog API, and a deployer that runs on Windows.
+  - `Register-ClaudeTurnstileSchedule.ps1` and `infra/turnstile-schedule.bicep` put the export and
+    sync on a schedule: an Azure Container Apps job signed in as its own managed identity, with no
+    secret, running a pinned commit ([ADR-0014](docs/adr/0014-turnstile-beside-the-gateway.md)).
+    A workload identity is now also granted Reader on the gateway's Application Insights
+    resource, which the export reads to find the ledger.
 
 - **The projection deploys with no public endpoint anywhere, and was deployed
   and migrated to end to end.** On 2026-09-23, on a Premium v2 gateway in Canada

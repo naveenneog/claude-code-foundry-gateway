@@ -161,6 +161,29 @@ Assert 'a portal picture with a real value left is not saved' ($portal -match "(
 Assert 'a multifactor prompt stops the portal capture'       ($portal -match "return 'mfa'" -and $portal -match "state === 'mfa'.{0,200}break")
 
 Write-Host ''
+Write-Host 'Turnstile - the schedule' -ForegroundColor Cyan
+
+$scheduleTemplate = Join-Path $root 'infra/turnstile-schedule.bicep'
+$job = Get-Content $scheduleTemplate -Raw
+$register = Get-Content (Join-Path $root 'scripts/Register-ClaudeTurnstileSchedule.ps1') -Raw
+$pass = Get-Content (Join-Path $root 'scripts/Invoke-ClaudeTurnstileSchedule.ps1') -Raw
+
+Assert 'the job holds no secret'                             (-not ($job -match '(?i)secrets:|password|listKeys|sharedKey|clientSecret'))
+Assert 'it signs in as its own managed identity'             ($job -match "type: 'UserAssigned'" -and $job -match 'az login --identity --client-id "\$\{AZURE_CLIENT_ID\}"')
+Assert 'it grants nothing itself; Connect does, in one place' (-not ($job -match 'roleAssignments') -and $register -match 'Connect-ClaudeTurnstile\.ps1''\) .*-ExporterPrincipalId \$principalId')
+Assert 'a failed run is not retried; the next one overlaps'  ($job -match 'replicaRetryLimit: 0')
+Assert 'its logs need no workspace key'                      ($job -match "destination: 'azure-monitor'")
+Assert 'what it runs is a commit id, not a branch'           ($register -match "RepositoryRef -notmatch '\^\[0-9a-f\]\{40\}\$'\) \{ throw" -and $job -match 'git fetch -q --depth 1 "\$\{REPO_URL\}" "\$\{REPO_REF\}"')
+Assert 'it refuses a commit that was never pushed'           ($register -match 'branch -r --contains' -and $register -match 'if \(-not \$onRemote\.Count\) \{ throw')
+Assert 'deployment parameters go through a file'            ($register -match '--parameters "@\$file"')
+Assert 'the sync uses an application token, not a scope'     ($pass -match 'get-access-token --resource \$resource' -and $pass -match '-AccessToken \$token\.Trim\(\)')
+Assert 'the identity reads the Application Insights resource' ($connect -match "if \(\`$component\.id\) \{ Add-Role 'Reader' \`$component\.id \}")
+if (Get-Command az -ErrorAction SilentlyContinue) {
+    az bicep build --file $scheduleTemplate --stdout *> $null
+    Assert 'the schedule template compiles'                  ($LASTEXITCODE -eq 0)
+}
+
+Write-Host ''
 if ($fail) { Write-Host "$fail check(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Every Turnstile governance check passed.' -ForegroundColor Green
 exit 0

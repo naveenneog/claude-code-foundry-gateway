@@ -18,7 +18,8 @@
     Access is Microsoft Entra only. The identity that will run the export and the sync
     (you, or a workload identity for a schedule) is granted what it needs and nothing
     else: Azure Event Hubs Data Sender on that one hub and the Turnstile admin app role.
-    A workload identity also gets read access to the gateway's workspace and named values.
+    A workload identity also gets read access to the gateway's named values, its Application
+    Insights resource and the workspace behind it.
 
 .PARAMETER TurnstileResourceGroup
     The resource group the Turnstile deployment created.
@@ -170,8 +171,11 @@ if ($ExporterPrincipalId) {
     $apimId = az apim show -g $ResourceGroup -n $ApimName --query id -o tsv
     Add-Role 'API Management Service Reader Role' $apimId
     $telemetryName = & (Join-Path $PSScriptRoot 'Get-ClaudeTelemetry.ps1') -ResourceGroup $ResourceGroup -ApimName $ApimName
-    $workspace = az resource show -g $ResourceGroup -n $telemetryName.AppInsights --resource-type Microsoft.Insights/components --query properties.WorkspaceResourceId -o tsv
-    if ($workspace) { Add-Role 'Log Analytics Reader' $workspace }
+    # The export finds the ledger through the Application Insights resource the gateway logs
+    # to, so the identity reads that one resource as well as the workspace behind it.
+    $component = az resource show -g $ResourceGroup -n $telemetryName.AppInsights --resource-type Microsoft.Insights/components --query "{id:id, workspace:properties.WorkspaceResourceId}" -o json | ConvertFrom-Json
+    if ($component.id) { Add-Role 'Reader' $component.id }
+    if ($component.workspace) { Add-Role 'Log Analytics Reader' $component.workspace }
 
     # The Turnstile admin app role, assigned directly: a workload identity cannot join a group.
     $turnstileSp = az ad sp show --id $clientId --query id -o tsv
