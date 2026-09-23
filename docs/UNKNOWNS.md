@@ -21,6 +21,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | U12 | CLOSED | Does APIM telemetry preserve the Claude cache TTL split? No, and the quota scalar excludes cache entirely — measured 2026-09-15 | P18 shipped |
 | U13 | OPEN | Can APIM enforce a budget on categorised usage rather than one token total? `llm-token-limit` takes a single `token-quota` and counts prompt and completion only | P21 |
 | U14 | OPEN | What does the projection resolver add to p99 on a cache miss? ADR-0011 records the trade — Flex Consumption cold start plus a private-endpoint Cosmos read — and nothing has measured it | P19, [ADR-0013](adr/0013-gateway-outlives-instance.md) |
+| U15 | OPEN | What forces `publicNetworkAccess: Disabled` on every Cosmos account in this subscription? Narrowed 2026-09-23 to a control that acts **at creation**, returns success, and silently overrides the requested value — and is not Azure Policy, a deny assignment, or a feature flag. See below | P19 population, `cos-default`, `cos-upgrade` |
 
 ---
 
@@ -473,6 +474,45 @@ rejected anything" instead of "not measured".
 session containing an accepted and a rejected edit, and read the attribute keys off the
 exported metric. Then replace the four `real(null)` literals with `sumif` over the real
 attribute.
+
+---
+
+## U15 — what forces Cosmos public access off
+
+**Symptom.** Every Cosmos account in this subscription comes up with
+`publicNetworkAccess: Disabled`, including one nobody here created. The sync
+therefore cannot reach the projection from a laptop, which is what blocks
+populating it, `cos-default` and `cos-upgrade`.
+
+**Narrowed 2026-09-23.** The important part is what this is *not*, because each
+of those is a place an operator would otherwise spend a day:
+
+| Ruled out | How |
+|---|---|
+| Azure Policy | Three assignments on the subscription, all Defender-related. `az policy assignment list --disable-scope-strict-match` returns the same three, so nothing is inherited from a management group either. `az policy state list` reports nothing. |
+| A deny assignment | Three exist, all `Container Apps Managed Resource Group`, and all scoped to resource groups this deployment does not use. |
+| A feature registration | No `Microsoft.DocumentDB` feature is registered; the only network-shaped ones are `NotRegistered` previews. |
+| Something about the existing account | A **brand-new** account created with `--public-network-access Enabled` came back `Disabled` in the create response itself. |
+| An async revert | The create and update responses *themselves* carry `Disabled`. Nothing sets it and then changes it back — it is never accepted. |
+
+**So the control acts at creation, inside the resource provider, and reports
+success while ignoring the requested value.** That shape — silent, at creation,
+invisible to the policy surface — is consistent with a tenant-level
+secure-by-default governance control rather than anything expressed in ARM.
+
+**What to do about it.** Do not hunt for a policy to exempt; there is not one
+to find at subscription scope. Either:
+
+- run the sync somewhere the projection is reachable — an Azure context inside
+  the VNet, which is how the load test reached the data plane
+  (`infra/projection-network.bicep` stands up exactly that), or
+- ask whoever owns tenant governance for an exemption, naming the account.
+
+**Still unmeasured.** Which control it is, and whether it is the same one on a
+customer tenant. An operator on a normal subscription may not hit this at all —
+the accelerator should not assume either way, which is why
+`infra/projection.bicep` makes network access an explicit choice rather than a
+default.
 
 ---
 
