@@ -89,12 +89,14 @@ not a safe default for customer traffic. Read the
 ## Contributor checks
 
 ```powershell
-./tests/Test-All.ps1
-./tests/Test-All.ps1 -IncludeAzure
+pwsh -NoProfile -File .\tests\Test-All.ps1
+pwsh -NoProfile -File .\tests\Test-All.ps1 -IncludeAzure
 node .ironclad/gate.mjs --stage packet
 ```
 
-The first suite is offline; the second adds live Azure checks and is not a
+The suite runner requires PowerShell 7; the explicit `pwsh` prefix also works
+when your current terminal is Windows PowerShell 5.1. The first suite is offline;
+the second adds live Azure checks and is not a
 routine production health check. The packet gate is the definition of done.
 There is no portal substitute for the local test suite; use the verification
 steps in each deployment guide for live resources.
