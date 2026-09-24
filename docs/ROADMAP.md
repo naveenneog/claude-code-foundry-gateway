@@ -242,8 +242,13 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
 - [x] P40 scheduled export and sync — an hourly Container Apps job running as a managed identity
       with no secret. Run live: a pass sent usage, a changed budget reached Turnstile attributed to
       the job's identity, and removing its Event Hubs grant made the next run fail with 401
-- [ ] P41 upstream the fork — acceptance: the four branches of naveenneog/turnstile offered to
-      xuleihive/turnstile as pull requests, each with its tests and mutations
+- [x] P41 upstream the fork — the four branches of naveenneog/turnstile offered to
+      xuleihive/turnstile as draft pull requests #25 to #28, each with its tests, mutations and
+      live evidence
+- [ ] P42 the AI Gateway tier — acceptance: Claude Code, the VS Code extension and Claude Desktop
+      through an AI Gateway tier instance, its cost limit refusing a request with
+      `LlmCostQuotaExceeded`, and the hybrid behind this gateway measured. Blocked by U16: the
+      instance deployed but served no model route. [AI-GATEWAY-TIER.md](AI-GATEWAY-TIER.md)
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so

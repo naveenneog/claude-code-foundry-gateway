@@ -376,6 +376,7 @@ Measured on 2026-09-23 against the reference gateway:
 | Check | Result |
 |---|---|
 | A run | Succeeded in 143 s, 54 s of it the pass: 2 requests sent in one batch, and the catalog of 3 organizations and 5 departments written by `app:<job identity>` |
+| On its schedule | Every hourly run from 20:07 to 01:07 UTC succeeded while nobody watched: passes of 28 to 34 s, each window overlapping the last by an hour |
 | A budget changed in the gateway | The next run wrote it to Turnstile, attributed to `app:<job identity>` |
 | Azure Event Hubs Data Sender removed | The next run failed: `401 ... Unauthorized access for 'Send' operation` |
 | Cost | $0.0021 a run at Container Apps list price with no free grant applied: $1.54 a month, hourly |

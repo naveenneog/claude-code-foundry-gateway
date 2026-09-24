@@ -22,6 +22,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | U13 | OPEN | Can APIM enforce a budget on categorised usage rather than one token total? `llm-token-limit` takes a single `token-quota` and counts prompt and completion only | P21 |
 | U14 | CLOSED | What does the projection resolver add to p99 on a cache miss? Measured 2026-09-23 from inside the VNet, 150 misses against 150 hits: p50 91 against 5 ms, p95 149 against 10, p99 301 against 172, max 389 - a Canada Central gateway reading Cosmos in East US 2, with one always-ready instance. Cold start with none is not measured | P19, [ADR-0013](adr/0013-gateway-outlives-instance.md) |
 | U15 | CLOSED | What forces `publicNetworkAccess: Disabled` on every Cosmos account in this subscription? Azure Policy: `CosmosDB_PublicNetwork_Modify` in the management-group initiative `MCAPSGovDeployPolicies`, which `az policy assignment list` did not show - found through the resource activity log, 2026-09-23 | nothing: the projection is deployed private by design ([SECURE-PROJECTION.md](SECURE-PROJECTION.md)) |
+| U16 | OPEN | Why does an AI Gateway tier instance deployed through ARM, in the published sample's shape, serve no model route? Measured 2026-09-23 in East US 2: its status endpoint answered 200, and every model route 404 with or without a key for more than six hours, for a Claude and an OpenAI model ([AI-GATEWAY-TIER.md](AI-GATEWAY-TIER.md)) | P42 |
 
 ---
 

@@ -28,6 +28,14 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- **The API Management AI Gateway tier (preview), assessed beside this gateway.**
+  `docs/AI-GATEWAY-TIER.md`. Its dollar budgets count per API key, not per person; enforcement for
+  Entra principals is announced as coming. Deployed in 133 s as `Microsoft.ApiManagement/service`
+  with the `AIGateway` SKU; ARM accepted a Foundry provider, Claude and OpenAI models, and token
+  and cost limits, but the runtime served no model route (U16), so Claude clients and the limits'
+  enforcement are untested. The Turnstile fork's four branches are offered upstream as draft pull
+  requests xuleihive/turnstile#25 to #28.
+
 - **Turnstile as the FinOps console, admin-only, with the gateway still the one enforcer.**
   `docs/TURNSTILE.md` is the walkthrough; every step was run live on 2026-09-23.
   - `New-ClaudeTurnstileEntraApp.ps1` creates the single-tenant application, the `Turnstile.Admin`
