@@ -21,6 +21,11 @@ are replaced by example ones: the units are `sales` (teams `sales-emea`, `sales-
 
 ## Live evidence and sign-in without additional grants
 
+For numbered Azure portal/application-GUI steps and equivalent commands, see
+[Turnstile manual operations](TURNSTILE-MANUAL.md). Its new Azure portal screenshots are
+explicitly pending: the copied capture profile reached sign-in and capture stopped without
+attempting to sign in. Existing Graph captures are not presented as portal screenshots.
+
 The pictures below are fresh captures from the **reference deployment**, not examples copied
 from upstream Turnstile. Names, email addresses, tenant/object ids and resource names are
 replaced **before pixels are saved**. Charts keep their measured values. This is why the

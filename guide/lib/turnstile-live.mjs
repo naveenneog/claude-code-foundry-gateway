@@ -59,10 +59,8 @@ export class Redactor {
       ['[A-Za-z0-9._%+-]+@(?!(?:contoso|example)\\.(?:com|onmicrosoft\\.com)\\b)[A-Za-z0-9.-]+\\.[A-Za-z]{2,}', 'gi', 'developer@contoso.com'],
       ['(?<=login_code=)[A-Za-z0-9_-]+', 'g', '[single-use-code-removed]'],
       ['C:\\\\Users\\\\[^\\\\\\s]+', 'gi', 'C:\\Users\\example'],
-      ['\\b[a-z0-9-]*tsclaude[a-z0-9-]*\\b', 'gi', 'turnstile-contoso'],
-      ['\\brg-turnstile-(?!example\\b)[a-z0-9-]+\\b', 'gi', 'rg-turnstile-example'],
-      ['\\b(apim|log|appi|func)-claude-gw-[a-z0-9-]+\\b', 'gi', '$1-claude-reference'],
-      ['\\bjob-turnstile-apply-(?!example\\b)[a-z0-9-]+\\b', 'gi', 'job-turnstile-apply-example'],
+      ['\\b[a-z0-9-]+\\.(?:azurewebsites\\.net|azure-api\\.net|servicebus\\.windows\\.net|services\\.ai\\.azure\\.com|cognitiveservices\\.azure\\.com|vault\\.azure\\.net)\\b', 'gi', 'service.contoso.example'],
+      ['(?<=/resourceGroups/)[^/\\s"]+', 'gi', 'rg-contoso'],
       ['\\b(?!contoso\\.)[a-z0-9-]+\\.onmicrosoft\\.com\\b', 'gi', 'contoso.onmicrosoft.com'],
     ];
   }
@@ -80,7 +78,7 @@ export class Redactor {
     if ([...text.matchAll(guid)].some(([g]) => g.toLowerCase() !== publicGuid && !g.startsWith('00000000-0000-0000-0000-'))) problems.push('object id');
     if (/[A-Za-z0-9._%+-]+@(?!(?:contoso|example)\.(?:com|onmicrosoft\.com)\b)[A-Za-z0-9.-]+\.[A-Za-z]{2,}/i.test(text)) problems.push('email');
     if (/eyJ[\w-]{12,}\.[\w-]+\.[\w-]+|login_code=[A-Za-z0-9_-]{20,}/.test(text)) problems.push('credential');
-    if (/\b[a-z0-9-]*tsclaude[a-z0-9-]*\b|\brg-turnstile-(?!example\b)[a-z0-9-]+|\b(?:apim|log|appi|func)-claude-gw-[a-z0-9-]+|\bjob-turnstile-apply-(?!example\b)[a-z0-9-]+/i.test(text))
+    if (/\b[a-z0-9-]+\.(?:azurewebsites\.net|azure-api\.net|servicebus\.windows\.net|services\.ai\.azure\.com|cognitiveservices\.azure\.com|vault\.azure\.net)\b/i.test(text))
       problems.push('deployment resource');
     return problems;
   }
@@ -170,8 +168,9 @@ export function snapshotText(snapshot) {
   return result.join('\n');
 }
 
-export async function capturePage(page, name, source, redactor, metadata, locator = null) {
-  await page.evaluate(({ rules, publicGuid }) => {
+export async function capturePixels(page, name, redactor, locator = null) {
+  for (const frame of page.frames()) await frame.evaluate(({ rules, publicGuid }) => {
+    if (!document.body) return;
     const replace = (value) => {
       for (const [source, flags, to] of rules) value = value.replace(new RegExp(source, flags), to);
       return value.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
@@ -205,12 +204,20 @@ export async function capturePage(page, name, source, redactor, metadata, locato
   }, { rules: redactor.rules(), publicGuid });
   const clip = locator ? await locator.boundingBox() : null;
   const cdp = await page.context().newCDPSession(page);
+  const sessions = [cdp];
+  for (const frame of page.frames().filter((frame) => frame !== page.mainFrame())) {
+    try { sessions.push(await page.context().newCDPSession(frame)); }
+    catch (error) {
+      if (!String(error).includes('does not have a separate CDP session')) throw error;
+    }
+  }
   try {
     // Pause page scripts, not the backend. Check the rendered DOM after the pause and
     // rasterize that same state through CDP: a React refresh cannot restore identifiers
     // between the leak check and the photograph. Resume before any further interaction.
-    await cdp.send('Emulation.setScriptExecutionDisabled', { value: true });
-    const text = snapshotText(await cdp.send('DOMSnapshot.captureSnapshot', { computedStyles: ['display', 'visibility'] }));
+    for (const session of sessions) await session.send('Emulation.setScriptExecutionDisabled', { value: true });
+    const text = (await Promise.all(sessions.map(async (session) =>
+      snapshotText(await session.send('DOMSnapshot.captureSnapshot', { computedStyles: ['display', 'visibility'] }))))).join('\n');
     const findings = redactor.leaks(text);
     if (text.trim().length < 80) throw new Error(`Refusing ${name}: empty or incomplete page`);
     if (findings.length) {
@@ -221,11 +228,18 @@ export async function capturePage(page, name, source, redactor, metadata, locato
       format: 'png', fromSurface: true, captureBeyondViewport: !!clip,
       ...(clip ? { clip: { ...clip, scale: 1 } } : {}),
     });
-    recordCapture(name, Buffer.from(screenshot.data, 'base64'), source, redactor, metadata);
+    return Buffer.from(screenshot.data, 'base64');
   } finally {
-    await cdp.send('Emulation.setScriptExecutionDisabled', { value: false });
-    await cdp.detach();
+    for (const session of sessions) {
+      await session.send('Emulation.setScriptExecutionDisabled', { value: false });
+      await session.detach();
+    }
   }
+}
+
+export async function capturePage(page, name, source, redactor, metadata, locator = null) {
+  const pixels = await capturePixels(page, name, redactor, locator);
+  recordCapture(name, pixels, source, redactor, metadata);
 }
 
 export async function renderTranscript(page, name, title, body, source, redactor, metadata) {

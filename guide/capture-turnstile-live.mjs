@@ -32,6 +32,16 @@ const pairs = [
   [reference.resource_group, 'rg-claude-gateway'], [reference.apim, 'apim-claude-gateway'],
   [new URL(base).hostname, 'api-turnstile-contoso.azurewebsites.net'],
 ];
+// Discover integration resource names too; do not bake one deployment's names into masks.
+for (const field of namedValue('turnstile-integration').split(';')) {
+  const at = field.indexOf('=');
+  if (at < 0) continue;
+  const key = field.slice(0, at);
+  const value = field.slice(at + 1);
+  if (/namespace|resourcegroup/i.test(key) && value) pairs.push([value, `${key}-contoso`]);
+  for (const match of value.matchAll(/\/resourceGroups\/([^/]+)|\/namespaces\/([^/]+)/gi))
+    pairs.push([match[1] ?? match[2], 'resource-contoso']);
+}
 let redactor = new Redactor(pairs);
 const ownerSource = (route) => ({ route, identity_kind: 'owner_cli_code' });
 const commandSource = (command) => ({ command, identity_kind: 'owner_cli' });

@@ -3,8 +3,10 @@ import { test } from 'node:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { Redactor, catalogWrite, snapshotText } from '../guide/lib/turnstile-live.mjs';
+import { chromium } from 'playwright';
+import { Redactor, catalogWrite, snapshotText, capturePixels } from '../guide/lib/turnstile-live.mjs';
 import { executionMode, managerClaims } from '../guide/capture-turnstile-manager.mjs';
+import { chosenOption } from '../guide/lib/azure-targets.mjs';
 
 export function manifestProblems(images, entries, readImage) {
   const problems = [];
@@ -125,4 +127,45 @@ test('the frozen rendered-DOM detector joins split SVG labels and checks display
   assert.ok(text.includes('person@private.example.org'));
   assert.ok(text.includes('another@private.example.org'));
   assert.ok(new Redactor().leaks(text).includes('email'));
+});
+
+test('legacy capture and inspector tools do not embed deployment targets or historical transcripts', () => {
+  for (const file of [
+    'guide/capture.mjs', 'guide/capture-entra.mjs', 'guide/render-terminal.mjs',
+    'guide/render-turnstile.mjs', 'scripts/Capture-Transcripts.ps1', 'scripts/inspect-proxy.mjs',
+  ]) {
+    const source = fs.readFileSync(file, 'utf8');
+    assert.doesNotMatch(source, /https:\/\/[a-z0-9-]+\.(?:services\.ai\.azure\.com|azure-api\.net)/i, file);
+    const privateIds = [...source.matchAll(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi)]
+      .map(([value]) => value.toLowerCase())
+      .filter((value) => value !== '04b07795-8ddb-461a-bbee-02f9e1bf7b46' && !value.startsWith('00000000-0000-0000-0000-'));
+    assert.deepEqual(privateIds, [], file);
+  }
+  assert.doesNotMatch(fs.readFileSync('guide/render-terminal.mjs', 'utf8'), /const shots\s*=\s*\[/);
+});
+
+test('discovery accepts only real selections and refuses ambiguous unattended choices', () => {
+  const options = [{ id: 'resource-a', name: 'A' }, { id: 'resource-b', name: 'B' }];
+  assert.equal(chosenOption(options, 'B', undefined, true).id, 'resource-b');
+  assert.equal(chosenOption(options, undefined, 'resource-a', true).name, 'A');
+  assert.equal(chosenOption(options, undefined, undefined, false), null);
+  assert.throws(() => chosenOption(options, undefined, undefined, true), /explicit parameter/);
+  assert.throws(() => chosenOption(options, 'missing', undefined, true), /missing or ambiguous/);
+  assert.throws(() => chosenOption([...options, { id: 'another', name: 'A' }], 'A', undefined, true), /ambiguous/);
+});
+
+test('capture redacts child frames and refuses to rely on an uninspected iframe', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<main>Controlled browser fixture for capture validation, not live deployment evidence.</main>
+      <iframe srcdoc="<p>Private Person person@private.example.org aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee</p>"></iframe>`);
+    await page.frames()[1].waitForLoadState();
+    const pixels = await capturePixels(page, 'fixture-not-published.png', new Redactor([['Private Person', 'Example Owner']]));
+    assert.ok(pixels.length > 100);
+    const text = await page.frames()[1].locator('body').innerText();
+    assert.ok(text.includes('Example Owner'));
+    assert.ok(text.includes('developer@contoso.com'));
+    assert.ok(!text.includes('aaaaaaaa'));
+  } finally { await browser.close(); }
 });
