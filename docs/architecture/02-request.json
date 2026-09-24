@@ -63,7 +63,7 @@
       "Log Analytics",
       "[[chargeback]]",
       "Workbook and saved functions",
-      "Optional Grafana, Turnstile or terminal FinOps"
+      "Optional Grafana, Turnstile or AUM"
     ] },
     { "id": "org", "x": 16, "y": 408, "w": 290, "h": 154, "tone": "blue", "compact": true, "title": "1 · Organisation / month", "lines": ["[[org]]", "One shared counter on this gateway"] },
     { "id": "team", "x": 336, "y": 408, "w": 290, "h": 154, "tone": "blue", "compact": true, "title": "2 · Assigned team / month", "lines": ["Budget in [[bu-registry]]", "[[bu-members]] or projection selects the team or direct unit."] },
@@ -76,7 +76,7 @@
       "Default: API Management + Application Insights + Log Analytics; workbook and saved functions are definitions.",
       "Projection: Cosmos DB + resolver Function + host storage + private networking; a separately run directory writer.",
       "Turnstile: App Service + PostgreSQL + Event Hubs, supporting Functions / Storage / Key Vault, and Container Apps jobs.",
-      "Terminal FinOps: a local client of existing APIs, not a new inference service. Tier TPM and request-rate controls stay at the gateway: [[tpm-standard]], [[tpm-premium]], [[calls]]."
+      "AUM (Azure Usage Management): terminal FinOps console, command aum; local admin APIs, not an inference service. Rate controls remain [[tpm-standard]], [[tpm-premium]], [[calls]]."
     ] }
   ],
   "edges": [

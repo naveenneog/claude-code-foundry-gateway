@@ -74,3 +74,16 @@ An unrendered source, an orphan image, a removed code label or a new Azure resou
 type passes the tests; a source can read/write outside the checkout; a rendered
 caption loses an identifier; or adding an ordinary feature diagram requires changing
 the generator. Each is a regression, not a reason to weaken the check.
+
+## Terminal integration and AUM naming
+
+The terminal implementation merged to main at `c7f0a29`. Importing it invalidated the
+old terminal diagram manifest because the checker found the local implementation instead
+of its pinned snapshot. The regenerated diagram now binds implementation labels directly
+to local source files and links to ADR-0018 and `docs/CLI-FINOPS.md`.
+
+The owner named the product AUM - Azure Usage Management, with command `aum` and a deprecated
+`claude-finops` alias. The entry points were verified on branch `aum` at `a1f0836` and
+recorded as naming evidence; this architecture uses the new name while explicitly stating
+that the naming packet is not yet integrated. The terminal SVGs under `docs/images/finops`
+remain snapshot baselines, outside the architecture-orphan check's scope.

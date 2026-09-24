@@ -54,6 +54,13 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   pre-authorized on Turnstile's API: the token is exchanged for a code that works once, within a
   minute. For tenants whose web sign-in has no consent yet (**U19**).
   [ADR-0016](docs/adr/0016-delegated-management.md).
+- **A terminal FinOps console, `claude-finops`.** Nine views in the terminal and the same actions as
+  commands for scripts, over Turnstile's API, the gateway directly, or example data. Budget
+  changes are previewed, rechecked against the server, never retried, and removal needs typed
+  confirmation; the full chargeback export covers every unit and team, and CSV cells that start
+  like a formula are escaped. Managers see only their scope and read only. Sign-in uses the Azure
+  CLI and no token is stored. Accessible themes, no motion, and plain linear output.
+  `docs/CLI-FINOPS.md`, [ADR-0018](docs/adr/0018-terminal-finops.md) (**U20**).
 - **A projection record authorizes for two hours at most, and a burst of misses gets an answer.**
   Each complete directory observation stamps every member it keeps with a reconciliation generation
   and an absolute expiry, two hours by default and at most. The resolver and the gateway's cache

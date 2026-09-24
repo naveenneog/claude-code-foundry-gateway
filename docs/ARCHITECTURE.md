@@ -3,7 +3,7 @@
 This article explains how Claude Code, the Claude VS Code extension and Claude Desktop use
 the customer's Claude deployment in Microsoft Foundry through Azure API Management. It
 also explains the optional entitlement projection, Turnstile governance console and
-terminal FinOps client. It is a concept article; use the linked how-to guides to deploy or
+AUM (Azure Usage Management), the terminal FinOps console. It is a concept article; use the linked how-to guides to deploy or
 operate each part.
 
 ## Overview
@@ -24,7 +24,7 @@ Source: [01-system.json](architecture/01-system.json).
 | **Default: named values** | API Management v2, Application Insights and Log Analytics. Foundry already exists. Workbooks and saved KQL functions are published separately as definitions. | Entra groups are synchronized to gateway named values. No resolver, Cosmos database or Turnstile service is required. |
 | **Projection** | Cosmos DB, a resolver Function, Function host/deployment storage, private endpoints and DNS. A writer runs separately to reconcile the directory. | The writer and resolver have different identities and container-scoped data roles. The private-inbound path requires Standard v2 or Premium v2 outbound VNet integration. |
 | **Turnstile** | A separate fork deployment: App Service, PostgreSQL, Event Hubs and supporting Functions, Storage, Key Vault and networking. This repository adds the manual apply and hourly export Container Apps jobs. | Entra app roles control console access. The console starts one apply job; the job, not the console, writes gateway named values. |
-| **Terminal FinOps** | A local Python terminal application; no new inference service or mandatory Azure resource. **Pending merge** in this revision. | It uses Turnstile's HTTP API or Direct Azure with the operator's Azure CLI sign-in. A fake backend is for tests, never an outage fallback. |
+| **AUM (Azure Usage Management)** | A local Python terminal FinOps console, command `aum`; no new inference service or mandatory Azure resource. The terminal release is merged; the naming packet is staged on branch `aum`. | It uses Turnstile's HTTP API or Direct Azure with the operator's Azure CLI sign-in. A fake backend is for tests, never an outage fallback. |
 
 Projection and Turnstile are independent options. Turning on one does not imply the other.
 The default deployment has no additional application database, processor or queue, but
@@ -287,13 +287,20 @@ reader and policy are deployed. See
 [the migration and measurement guide](SCALE.md) and
 [ADR-0017](adr/0017-projection-freshness-and-admission.md).
 
-## Terminal FinOps (pending merge)
+## AUM (Azure Usage Management) - terminal FinOps console
 
-![Terminal FinOps architecture: Textual UI and Typer commands share one engine, which selects Turnstile HTTP, Direct Azure through ARM and Log Analytics with a PowerShell bridge, or a fake test backend.](images/architecture/terminal-finops.png)
+![AUM (Azure Usage Management), terminal FinOps console, command aum: Textual UI and Typer commands share one engine, which selects Turnstile HTTP, Direct Azure through ARM and Log Analytics with a PowerShell bridge, or a fake test backend.](images/architecture/terminal-finops.png)
 
-Source: [06-finops.json](architecture/06-finops.json), verified against
-[`claude-finops` at 00f296a](https://github.com/naveenneog/claude-code-foundry-gateway/tree/00f296a98811a3db113449877c5f3e7a4c07f76a/cli/finops).
-This code is not in the base checkout. Re-render and update this section after merge.
+Source: [06-finops.json](architecture/06-finops.json), verified against the local
+[`cli/finops`](../cli/finops) implementation merged to main at `c7f0a29`. The design is
+recorded in [ADR-0018](adr/0018-terminal-finops.md).
+
+The product is **AUM - Azure Usage Management**, a terminal FinOps console with command
+**`aum`**. The naming packet on branch `aum` adds that command and retains `claude-finops`
+as a deprecated alias. Its entry points were verified at `a1f0836`; that packet is not
+yet merged into this checkout. The terminal implementation itself is no longer pending.
+Follow the [AUM terminal guide](CLI-FINOPS.md), whose existing URL remains valid as a
+pointer when the guide moves to `docs/AUM.md`.
 
 The Textual `FinOpsApp` and Typer commands share `Engine` for period selection, scope,
 budget validation, previews and explicit writes. The backend is a choice, not an
@@ -309,9 +316,8 @@ automatic fallback:
 
 A preview is not a write. A saved Turnstile value is not a completed gateway apply.
 Turnstile person budgets are not the gateway's per-person daily overrides. These distinctions
-belong in both terminal faces. The pending
-[terminal how-to](https://github.com/naveenneog/claude-code-foundry-gateway/blob/00f296a98811a3db113449877c5f3e7a4c07f76a/docs/CLI-FINOPS.md)
-describes installation and commands.
+belong in both terminal faces. The [AUM how-to](CLI-FINOPS.md) describes installation,
+configuration, commands and the first release's scope.
 
 ## Budget enforcement modes (pending merge)
 
@@ -387,12 +393,16 @@ escapes and unrepresented Azure resource types. Its isolated mutations prove tho
 editing the real sources; commented Bicep examples and line-ending conversion are
 positive controls.
 
-The Turnstile fork and unmerged CLI labels carry small, pinned upstream code witnesses
-inside their specs. They are an explicitly versioned external contract, **not a live
-check of another repository's branch**. For this repository's pending CLI files, the
-checker automatically prefers the actual file once merged, which invalidates the old
-manifest and requires re-rendering. Review and repin fork witnesses when that dependency
-changes.
+The Turnstile fork carries small, pinned upstream code witnesses inside its spec. These
+are an explicitly versioned external contract, **not a live check of another repository's
+branch**. AUM's implementation labels now refer to local code; the merge invalidated the
+old manifest as intended. The command rename is separately recorded as pinned naming
+evidence until its packet merges. Re-render after that integration, and review and repin
+fork witnesses when the external dependency changes.
+
+The architecture image ownership check covers `docs/images/architecture/` and the two
+legacy PNG aliases, not `docs/images/finops/*.svg`. Those SVGs are terminal snapshot-test
+baselines; an unreferenced baseline is not an orphan architecture diagram.
 
 Hashes detect drift; they cannot prove that an explanation is semantically correct.
 Review behavior against the implementation whenever a feature changes a component,

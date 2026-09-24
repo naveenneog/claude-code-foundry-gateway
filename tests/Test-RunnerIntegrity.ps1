@@ -34,11 +34,6 @@ Write-Host 'Test-All - every registered check runs, or the run fails' -Foregroun
 Assert 'Test-All registers at least ten offline checks' ($registered.Count -ge 10) "found $($registered.Count)"
 if ($registered.Count -lt 3) { Write-Host ''; Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
 
-# The check that aborted on 2026-09-24, or a stand-in if it is ever renamed.
-$victim = $registered | Where-Object Script -eq 'Test-On-PS51.ps1' | Select-Object -First 1
-if (-not $victim) { $victim = $registered[2] }
-$other = $registered | Where-Object Script -ne $victim.Script | Select-Object -Last 1
-
 $scratch = Join-Path ([IO.Path]::GetTempPath()) ('runner-integrity-' + [guid]::NewGuid().ToString('N'))
 $testsDir = Join-Path $scratch 'tests'
 New-Item -ItemType Directory -Path $testsDir, (Join-Path $scratch 'scripts') -Force | Out-Null
@@ -64,13 +59,28 @@ function Invoke-Scenario {
 # The incident's own error: Set-Content on a file another process holds.
 $lockedWrite = "`$held = [IO.File]::Open('$locked', 'OpenOrCreate', 'ReadWrite', 'None')`r`n" +
     "try { 'y' | Set-Content -LiteralPath '$locked' -Encoding ASCII } finally { `$held.Dispose() }`r`nexit 0"
-$all = $registered.Count
-$victimFail = 'FAIL\s+' + [regex]::Escape($victim.Name)
 
 try {
+    # A check may be skipped on purpose when its prerequisite is absent (the
+    # terminal FinOps check without its Python venv). That is allowed only as an
+    # explicit SKIP in the summary; what is never allowed is a check with no
+    # result at all, which is how the 2026-09-24 run lost 23 checks.
     $r = Invoke-Scenario -RunnerText $source
+    $skipped = @($registered | Where-Object { $r.Output -match ('SKIP\s+' + [regex]::Escape($_.Name)) })
+    $unreported = @($registered | Where-Object { $r.Output -notmatch ('(PASS|FAIL|SKIP)\s+' + [regex]::Escape($_.Name)) })
+    $all = $registered.Count - $skipped.Count
     Assert 'with every check passing, the run passes' ($r.Exit -eq 0) "exit $($r.Exit)"
-    Assert 'with every check passing, every registered check ran' ($r.Ran.Count -eq $all) "$($r.Ran.Count) of $all"
+    Assert 'every registered check has a result in the summary' ($unreported.Count -eq 0) (($unreported | ForEach-Object Name) -join ', ')
+    Assert 'every check not explicitly skipped ran' ($r.Ran.Count -eq $all) "$($r.Ran.Count) of $all"
+    if ($skipped.Count) { Assert 'a skipped check is counted in the final lines' ($r.Output -match "$($skipped.Count) check\(s\) skipped") }
+
+    # The check that aborted on 2026-09-24, or a stand-in if it is ever renamed;
+    # both subjects are checks that actually run here.
+    $ran = @($registered | Where-Object { $r.Ran -contains $_.Script })
+    $victim = $ran | Where-Object Script -eq 'Test-On-PS51.ps1' | Select-Object -First 1
+    if (-not $victim) { $victim = $ran[[Math]::Min(2, $ran.Count - 1)] }
+    $other = $ran | Where-Object Script -ne $victim.Script | Select-Object -Last 1
+    $victimFail = 'FAIL\s+' + [regex]::Escape($victim.Name)
 
     $r = Invoke-Scenario -RunnerText $source -Behaviour @{ $victim.Script = $lockedWrite }
     Assert 'a check stopped by a locked file fails the run' ($r.Exit -ne 0) "exit $($r.Exit)"

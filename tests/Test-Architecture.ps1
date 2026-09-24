@@ -161,6 +161,12 @@ try {
         [IO.File]::WriteAllText($p, $text, $script:utf8)
     } 'IDENTIFIER_MISSING'
 
+    Invoke-Mutation 'merged AUM engine labels are checked against local code' 'cli/finops/src/claude_finops/engine.py' {
+        param($p)
+        $text = [IO.File]::ReadAllText($p).Replace('class Engine:', 'class RenamedEngine:')
+        [IO.File]::WriteAllText($p, $text, $script:utf8)
+    } 'IDENTIFIER_MISSING'
+
     Invoke-Mutation 'renaming an Entra app role is caught' 'scripts/New-ClaudeTurnstileEntraApp.ps1' {
         param($p)
         $text = [IO.File]::ReadAllText($p).Replace('Turnstile.Manager', 'Turnstile.RenamedManager')
@@ -243,6 +249,16 @@ try {
         Assert 'commented-out resource examples do not invent deployments' ($commented.Code -eq 0) $commented.Output
     }
     finally { Remove-Item -LiteralPath $commentFile -Force }
+
+    $baselines = Join-Path $fixture 'docs/images/finops'
+    New-Item $baselines -ItemType Directory -Force | Out-Null
+    $baselineSvg = Join-Path $baselines 'unreferenced-test-baseline.svg'
+    try {
+        [IO.File]::WriteAllText($baselineSvg, '<svg xmlns="http://www.w3.org/2000/svg"/>', $script:utf8)
+        $baselineScope = Invoke-ArchitectureCheck $fixture
+        Assert 'unreferenced FinOps snapshot baselines are not architecture orphans' ($baselineScope.Code -eq 0) $baselineScope.Output
+    }
+    finally { Remove-Item -LiteralPath $baselineSvg -Force }
 
     $normalizedPath = Join-Path $fixture 'infra/policy.xml'
     $before = [IO.File]::ReadAllBytes($normalizedPath)

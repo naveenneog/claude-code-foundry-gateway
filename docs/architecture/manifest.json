@@ -7,7 +7,7 @@
       "inputs": {
         "analytics/chargeback-cost.kql": "8d8a66a8980348851f37889579bf019666b229105bb4e64caae02c474de080b1",
         "analytics/chargeback-ledger.kql": "65b0b2942ed548bfb1bd2a192de6854aa86464c441401d9e5ba1a605c2ba692b",
-        "docs/architecture/01-system.json": "e703b69b1b63dbbc48eb4c0a21b0777fb21dad9c6a607b54a7060f87eb781643",
+        "docs/architecture/01-system.json": "586a1269d58d1cf109cd345588176533f8687f1c015fb725ddfe1f63f045cf83",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "71ff5fcca04223038e4f92b4ab1cc06861ab64f318e3e94e9dca37e2382434e0",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -35,11 +35,11 @@
       "outputs": [
         {
           "path": "docs/images/architecture/system-overview.png",
-          "sha256": "c95ad1094e97e2056d3c4312cdf39f3c16dbebc27b20fcd46528dcdef023c61a"
+          "sha256": "df3f27b6ada0eb796a3875396e7bef0d11282620cae044242c0411dea2dd94a7"
         },
         {
           "path": "docs/images/architecture.png",
-          "sha256": "c95ad1094e97e2056d3c4312cdf39f3c16dbebc27b20fcd46528dcdef023c61a"
+          "sha256": "df3f27b6ada0eb796a3875396e7bef0d11282620cae044242c0411dea2dd94a7"
         }
       ]
     },
@@ -48,7 +48,7 @@
       "source": "docs/architecture/02-request.json",
       "inputs": {
         "analytics/chargeback-ledger.kql": "65b0b2942ed548bfb1bd2a192de6854aa86464c441401d9e5ba1a605c2ba692b",
-        "docs/architecture/02-request.json": "d37f039756e8d5ebc5185da2aa90b27016b8cd1ea5d23d0ee4033feea73f6faf",
+        "docs/architecture/02-request.json": "aa2fd88b0f80e9539e2be40381710c0c9aa6b807579498093bafee1633d0ccbd",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "71ff5fcca04223038e4f92b4ab1cc06861ab64f318e3e94e9dca37e2382434e0",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -65,11 +65,11 @@
       "outputs": [
         {
           "path": "docs/images/architecture/request-path.png",
-          "sha256": "fa9a1ca00949f5da12bd1ff154c4a04a6768bd027a492f8c0b7e214b8c1cfe0f"
+          "sha256": "768ef1974f6f94b2aed31a3c32a12fbed3c0b0cc4491816bcc668ff5773510cd"
         },
         {
           "path": "docs/images/request-flow.png",
-          "sha256": "fa9a1ca00949f5da12bd1ff154c4a04a6768bd027a492f8c0b7e214b8c1cfe0f"
+          "sha256": "768ef1974f6f94b2aed31a3c32a12fbed3c0b0cc4491816bcc668ff5773510cd"
         }
       ]
     },
@@ -151,19 +151,28 @@
       "source": "docs/architecture/06-finops.json",
       "inputs": {
         "analytics/chargeback-ledger.kql": "65b0b2942ed548bfb1bd2a192de6854aa86464c441401d9e5ba1a605c2ba692b",
-        "docs/architecture/06-finops.json": "f093cd27869a9193c16fc3d92163d94a5c4314255b98f6fd6e6a42b4b322aca4",
+        "cli/finops/pyproject.toml": "692e2352b8859d1e71ebd1cb5af319df29abea1de73f2f1fd5e947d8ce073165",
+        "cli/finops/src/claude_finops/cli.py": "df9184c655841fd4daa658aff9e6d2f5b0427250e2d29411084cead3f16cf6ca",
+        "cli/finops/src/claude_finops/direct.py": "b6f63377f2ac839936e210b1e19a8577c6addbd01865756a128f91f8cd3d5076",
+        "cli/finops/src/claude_finops/engine.py": "1e5ad9d934367e46411752f72c06e53e54f18ad0eda9ed4d09aad4c84342f080",
+        "cli/finops/src/claude_finops/fake.py": "ad70af940650b1621bb95c66d5b7caabea9cc8dc8dfd48de111bdde9a87868f5",
+        "cli/finops/src/claude_finops/scope.py": "9e17c5590ba07b3ad72f384cd544f68a5eee5ef5cee39fb02e188419231b1e19",
+        "cli/finops/src/claude_finops/tui.py": "8d68ec5b3e3a5eedea3e27d03c858356347dfaa6e3b42f753c6618c0f9732c0f",
+        "cli/finops/src/claude_finops/turnstile.py": "20ac813e313ace9f693b8eab50efc51b53a9b9505896161b8bae2a8dde53cf45",
+        "docs/architecture/06-finops.json": "495142474a36bd13c94de9693a401c97f6b8032c452b26133d8511fcb57a6076",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "71ff5fcca04223038e4f92b4ab1cc06861ab64f318e3e94e9dca37e2382434e0",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ApimNamedValue.ps1": "4e12f047b61c586f215a66f73535708488c917b69e2163e6fa6f19253b77fe08",
+        "scripts/Invoke-ClaudeFinOps.ps1": "33e003342bf91dd4fb03c242fb4a112f40f155c9182f4c193fdd9683bbe6d4cf",
         "scripts/New-ClaudeTurnstileEntraApp.ps1": "0262606c6f2b747ae4dff7534c15d113099ff6fae06b40580eb62daffaf1db1d",
         "scripts/Set-ClaudeTier.ps1": "6cee327ee047365894c21e2237ec37b9d35bda5885298098ff4d80a77132f092"
       },
       "outputs": [
         {
           "path": "docs/images/architecture/terminal-finops.png",
-          "sha256": "6050aac732d9d90804ab3c52a56a28b3a918932a5e3548135a11ce7584554370"
+          "sha256": "68a8b19d2bb3afe6010b705b7fda92a75e62eca9e028e19d1454ad95599cb8d2"
         }
       ]
     },

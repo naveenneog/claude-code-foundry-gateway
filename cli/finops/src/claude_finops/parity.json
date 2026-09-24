@@ -1,0 +1,23 @@
+{
+  "reference": "naveenneog/turnstile claude-gateway c17f4bc26a658033a52359e5f523ecae75971e08",
+  "pages": {
+    "Executive Overview": {"tab": "overview", "reads": ["overview", "distribution", "budgets"], "writes": []},
+    "Budget Management": {"tab": "budgets", "reads": ["budgets"], "writes": ["budget", "budget_remove"]},
+    "People panel": {"tab": "people", "reads": ["people"], "writes": ["budget", "budget_remove"]},
+    "Gateway governance": {"tab": "governance", "reads": ["catalog", "tiers", "apply"], "writes": ["catalog", "tiers", "apply"]},
+    "Usage Breakdown": {"tab": "usage", "reads": ["distribution"], "writes": []},
+    "Usage Trends": {"tab": "trends", "reads": ["trends"], "writes": []},
+    "Request Trace": {"tab": "requests", "reads": ["requests", "request"], "writes": []},
+    "Anomaly Governance findings": {"tab": "anomalies", "reads": ["anomalies"], "writes": []},
+    "Settings": {"tab": "settings", "reads": ["whoami"], "writes": []}
+  },
+  "deferred": {
+    "Approvals": "P47: outside release API contract",
+    "FinOps Assistant": "Assistant API outside release scope",
+    "Bulk person allocation and model policy": "Not in enumerated release endpoints",
+    "Anomaly rule editing and audit finding disposition": "Separate governance endpoints, not the read-only usage anomalies API",
+    "Enforcement modes": "Owned by the parallel modes packet; not guessed from Turnstile's block/audit fields",
+    "Boosts with expiry and Entra membership moves": "No expiry or directory-write API in this release",
+    "Advanced model gateway pages": "Turnstile model gateway, not Claude gateway governance"
+  }
+}

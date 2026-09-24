@@ -2,41 +2,26 @@
   "version": 1,
   "id": "terminal-finops",
   "kind": "flow",
-  "title": "claude-finops: two faces, one engine, three backends",
-  "subtitle": "Pending merge · source pinned to the claude-finops branch at 00f296a. This is an administrative client of existing services, not another gateway in the inference path.",
+  "title": "AUM (Azure Usage Management)",
+  "subtitle": "Terminal FinOps console, command aum. Textual and Typer share one engine and three backends. This is an administrative client, not another gateway in the inference path.",
   "width": 1280,
   "height": 1154,
   "outputs": ["docs/images/architecture/terminal-finops.png"],
-  "sources": ["scripts/New-ClaudeTurnstileEntraApp.ps1", "scripts/Set-ClaudeTier.ps1", "scripts/ApimNamedValue.ps1", "analytics/chargeback-ledger.kql"],
-  "upstream": {
-    "tui": {
-      "repository": "naveenneog/claude-code-foundry-gateway", "revision": "00f296a98811a3db113449877c5f3e7a4c07f76a",
-      "path": "cli/finops/src/claude_finops/tui.py",
-      "excerpt": "from textual.app import App, ComposeResult\nclass FinOpsApp(App):\n    TITLE = \"claude-finops\""
-    },
-    "engine": {
-      "repository": "naveenneog/claude-code-foundry-gateway", "revision": "00f296a98811a3db113449877c5f3e7a4c07f76a",
-      "path": "cli/finops/src/claude_finops/engine.py",
-      "excerpt": "class Engine:\n    def __init__(self, backend, month=None):\n        self.backend = backend"
-    },
-    "backends": {
-      "repository": "naveenneog/claude-code-foundry-gateway", "revision": "00f296a98811a3db113449877c5f3e7a4c07f76a",
-      "path": "cli/finops/src/claude_finops/backend.py",
-      "excerpt": "from .fake import FakeBackend\nfrom .direct import DirectBackend\nfrom .turnstile import TurnstileBackend"
-    },
-    "bridge": {
-      "repository": "naveenneog/claude-code-foundry-gateway", "revision": "00f296a98811a3db113449877c5f3e7a4c07f76a",
-      "path": "cli/finops/src/claude_finops/direct.py",
-      "excerpt": "self.bridge = self.root / \"scripts\" / \"Invoke-ClaudeFinOps.ps1\"\naccess = az(\"account\", \"get-access-token\", \"--resource\", \"https://api.loganalytics.io\","
-    }
+  "sources": ["scripts/New-ClaudeTurnstileEntraApp.ps1", "scripts/Set-ClaudeTier.ps1", "scripts/ApimNamedValue.ps1", "analytics/chargeback-ledger.kql", "cli/finops/pyproject.toml", "cli/finops/src/claude_finops/cli.py", "cli/finops/src/claude_finops/direct.py", "cli/finops/src/claude_finops/scope.py"],
+  "namingEvidence": {
+    "repository": "naveenneog/claude-code-foundry-gateway",
+    "revision": "a1f0836d14e41dc4c19e986bf033edf739fd0325",
+    "path": "cli/finops/pyproject.toml",
+    "status": "AUM command naming is staged on branch aum; the terminal implementation merged at c7f0a29.",
+    "excerpt": "[project.scripts]\naum = \"claude_finops.cli:main\"\nclaude-finops = \"claude_finops.cli:legacy_main\""
   },
   "identifiers": {
-    "app": { "label": "FinOpsApp", "upstream": "tui", "match": "class FinOpsApp(App):" },
-    "engine": { "label": "Engine", "upstream": "engine", "match": "class Engine:" },
-    "turnstile": { "label": "TurnstileBackend", "upstream": "backends", "match": "from .turnstile import TurnstileBackend" },
-    "direct": { "label": "DirectBackend", "upstream": "backends", "match": "from .direct import DirectBackend" },
-    "fake": { "label": "FakeBackend", "upstream": "backends", "match": "from .fake import FakeBackend" },
-    "bridge": { "label": "Invoke-ClaudeFinOps.ps1", "upstream": "bridge", "match": "self.bridge = self.root / \"scripts\" / \"Invoke-ClaudeFinOps.ps1\"" },
+    "app": { "label": "FinOpsApp", "source": "cli/finops/src/claude_finops/tui.py", "match": "class FinOpsApp(App):" },
+    "engine": { "label": "Engine", "source": "cli/finops/src/claude_finops/engine.py", "match": "class Engine:" },
+    "turnstile": { "label": "TurnstileBackend", "source": "cli/finops/src/claude_finops/turnstile.py", "match": "class TurnstileBackend(Backend):" },
+    "direct": { "label": "DirectBackend", "source": "cli/finops/src/claude_finops/direct.py", "match": "class DirectBackend(Backend):" },
+    "fake": { "label": "FakeBackend", "source": "cli/finops/src/claude_finops/fake.py", "match": "class FakeBackend(Backend):" },
+    "bridge": { "label": "Invoke-ClaudeFinOps.ps1", "source": "scripts/Invoke-ClaudeFinOps.ps1", "kind": "file" },
     "scope": { "label": "Turnstile.Manage", "source": "scripts/New-ClaudeTurnstileEntraApp.ps1", "match": "[string]$ScopeValue = 'Turnstile.Manage'" },
     "ledger": { "label": "chargeback-ledger.kql", "source": "analytics/chargeback-ledger.kql", "kind": "file" }
   },
@@ -48,7 +33,7 @@
   ],
   "nodes": [
     { "id": "ui", "x": 16, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Textual terminal UI", "lines": ["[[app]]: tabs, search, preview and explicit apply", "Keyboard-first; 80 x 24 and larger terminals"] },
-    { "id": "commands", "x": 692, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Typer commands", "lines": ["Scriptable nouns and verbs over the same operations", "JSON, plain text and chargeback CSV output"] },
+    { "id": "commands", "x": 692, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Command aum · Typer", "lines": ["Scriptable nouns and verbs over the same operations", "claude-finops is retained as a deprecated alias by the naming packet."] },
     { "id": "engine", "x": 248, "y": 272, "w": 784, "h": 202, "tone": "blue", "title": "One [[engine]]", "lines": [
       "Current month, caller identity and scope; shared validation and budget arithmetic",
       "Preview first. Explicit apply; confirm destructive changes.",
@@ -99,5 +84,5 @@
     { "from": "direct", "to": "azure", "kind": "identity", "points": [[640, 800], [640, 830], [830, 830], [830, 1000], [822, 1000]] },
     { "from": "fake", "to": "fixtures", "kind": "data", "points": [[1082, 800], [1082, 830], [1272, 830], [1272, 1000], [1264, 1000]] }
   ],
-  "notice": "Pending does not mean deployed. Re-render after the CLI merges. A Turnstile person budget is not an APIM daily quota override, and a saved console value is not proof that the gateway has applied it. Cost is estimated, not an Azure invoice."
+  "notice": "Terminal implementation merged at c7f0a29; AUM command naming is staged on branch aum. A Turnstile person budget is not an APIM daily quota override. A saved value does not prove gateway enforcement. Cost is estimated, not an Azure invoice."
 }
