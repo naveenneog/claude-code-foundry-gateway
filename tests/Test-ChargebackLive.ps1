@@ -69,6 +69,9 @@ try {
     $refused=$false;try{Test-ClaudeChargebackConfiguration $c}catch{$refused=$_.Exception.Message -match 'domain'}
     if(-not $refused){throw 'Empty allowed-domain list was not refused.'}
     $results.Add('empty allowed domains refused')
+    $c=ConvertTo-ClaudeChargebackConfiguration $script:expected
+    $c.AllowedDomains=@((@($c.AllowedDomains)+@('contoso.com'))|Sort-Object -Unique)
+    Save-Probe $c 'allowed-domain list update (delivery remains disabled)'
 }
 finally {
     $current=Get-ClaudeReportConfiguration $StorageAccount

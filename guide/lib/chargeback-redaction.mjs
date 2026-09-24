@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import sharp from 'sharp';
 
 export function validateCaptureProfile(root, profile) {
   const expected = resolve(root, '.pw-profile');
@@ -90,11 +91,19 @@ export async function redactPortalPage(page, pairs) {
     chip.textContent = 'Contoso administrator  |  CONTOSO';
     chip.style.cssText = 'position:fixed;right:0;top:0;width:440px;height:48px;background:#fff;color:#242424;z-index:2147483647;font:14px Segoe UI,Arial;display:flex;align-items:center;justify-content:center';
     document.body.append(chip);
-    const note = document.createElement('div');
-    note.textContent = 'Live Azure portal - identifiers and identities replaced with Contoso placeholders';
-    note.style.cssText = 'position:fixed;left:0;bottom:0;right:0;background:#fff;color:#242424;z-index:2147483647;border-top:1px solid #ddd;padding:6px 16px;font:12px Segoe UI,Arial';
-    document.body.append(note);
   });
   await page.waitForTimeout(350);
-  for (const frame of page.frames()) assertRedacted(await frame.locator('body').innerText(), pairs);
+  for (const frame of page.frames()) {
+    assertRedacted(await frame.locator('body').innerText(), pairs);
+    const values = await frame.locator('input,textarea').evaluateAll(elements => elements.map(element => element.value).join('\n'));
+    assertRedacted(values, pairs);
+  }
+}
+
+export async function saveRedactedScreenshot(page, path, caption = 'Live Azure portal - identifiers and identities replaced with Contoso placeholders', fullPage = false) {
+  const pixels = await page.screenshot({ fullPage });
+  const { width, height } = await sharp(pixels).metadata();
+  const label = caption.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  const footer = Buffer.from(`<svg width="${width}" height="30"><rect width="100%" height="100%" fill="white"/><text x="16" y="20" font-family="Segoe UI,Arial" font-size="12" fill="#242424">${label}</text></svg>`);
+  await sharp(pixels).extend({ bottom: 30, background: '#ffffff' }).composite([{ input: footer, left: 0, top: height }]).png().toFile(path);
 }

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { reportRedactions, redactReportText, assertRedacted, validateCaptureProfile } from '../guide/lib/chargeback-redaction.mjs';
+import { reportRedactions, redactReportText, redactPortalPage, assertRedacted, validateCaptureProfile } from '../guide/lib/chargeback-redaction.mjs';
 import { resolve } from 'node:path';
+import { chromium } from 'playwright';
 
 const inventory = {
   ResourceGroup: 'rg-private-example', ApimName: 'apim-private-example',
@@ -41,4 +42,18 @@ test('only the copied profile inside the worktree may be opened', () => {
   const root = resolve('.');
   assert.equal(validateCaptureProfile(root, resolve(root, '.pw-profile')), resolve(root, '.pw-profile'));
   assert.throws(() => validateCaptureProfile(root, resolve(root, '..', 'other', '.pw-profile')), /worktree/);
+});
+test('browser redaction covers visible text, input values and subsequent rendering', async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<h1>stprivateexample</h1><input value="11111111-1111-4111-8111-111111111111"><p>operator@example.invalid</p>');
+    const pairs = reportRedactions(inventory);
+    await redactPortalPage(page, pairs);
+    assertRedacted(await page.locator('body').innerText(), pairs);
+    assertRedacted(await page.locator('input').inputValue(), pairs);
+    await page.evaluate(() => { const p = document.createElement('p'); p.textContent = 'Example Operator'; document.body.append(p); });
+    await page.waitForTimeout(350);
+    assertRedacted(await page.locator('body').innerText(), pairs);
+  } finally { await browser.close(); }
 });
