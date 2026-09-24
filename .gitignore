@@ -54,3 +54,7 @@ claude-code-backups/
 # ships instead, and scripts/ClaudeBusinessUnit.ps1 falls back to built-in list
 # rates when no file is present.
 config/price-book.json
+
+# Personal usage reports and private live evidence. Only Contoso fixtures ship.
+/chargeback-reports/
+.chargeback-*/
