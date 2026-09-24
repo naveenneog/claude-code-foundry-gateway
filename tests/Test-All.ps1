@@ -6,7 +6,7 @@ param(
     [switch]$IncludeAzure,
     [switch]$Serial,
     [ValidateRange(1, 16)][int]$ThrottleLimit,
-    [ValidateRange(1, 3600)][int]$CheckTimeoutSeconds = 1200
+    [ValidateRange(1, 3600)][int]$CheckTimeoutSeconds = 600
 )
 
 $ErrorActionPreference = 'Stop'

@@ -152,6 +152,7 @@ try {
     $r = Invoke-Scenario $mini -Options @()
     $cpuLimit = [math]::Max(1, [math]::Min(4, [Environment]::ProcessorCount))
     Assert 'the default follows logical CPUs and is capped at four' ($r.Exit -eq 0 -and $r.Output -match "throttle $cpuLimit;" -and (Get-MaxOverlap $r.Ran) -le $cpuLimit)
+    Assert 'the default deadline leaves room inside the packet command budget' ($r.Output -match 'per-check timeout 600 s')
     foreach ($option in @(@('-ThrottleLimit', '0'), @('-CheckTimeoutSeconds', '0'))) {
         $r = Invoke-Scenario $mini -Options $option
         Assert "$($option[0]) rejects zero" ($r.Exit -ne 0 -and $r.Ran.Count -eq 0)
@@ -213,6 +214,16 @@ Start-Sleep -Seconds 300
     $childId = if (Test-Path $childPidFile) { [int](Get-Content $childPidFile) } else { 0 }
     Assert 'the timeout terminates the descendant process as well' ($childId -gt 0 -and -not (Get-Process -Id $childId -ErrorAction SilentlyContinue))
     if ($childId -gt 0 -and (Get-Process -Id $childId -ErrorAction SilentlyContinue)) { Stop-Process -Id $childId -Force }
+
+    $r = Invoke-Scenario $mini -Options @('-ThrottleLimit', '3', '-CheckTimeoutSeconds', '5') -Behaviour @{ 'Second.ps1' = $hang }
+    Assert 'the global deadline also bounds checks without an individual override' (
+        $r.Exit -ne 0 -and $r.Seconds -lt 40 -and $r.Output -match 'timed out after 5 s' -and
+        @($r.Timings | Where-Object Result -eq 'FAIL').Count -eq 1 -and
+        ($r.Timings | Where-Object Name -eq 'second').Result -eq 'FAIL' -and (Has-CompleteSummary $r $checks)
+    )
+    $globalChildId = [int](Get-Content (Join-Path $r.Marks 'child.pid'))
+    Assert 'the global deadline also terminates the descendant' (-not (Get-Process -Id $globalChildId -ErrorAction SilentlyContinue))
+    if (Get-Process -Id $globalChildId -ErrorAction SilentlyContinue) { Stop-Process -Id $globalChildId -Force }
 
     $r = Invoke-Scenario $mini -Behaviour @{ 'First.ps1' = '[Console]::Out.WriteLine(("o" * 100000)); [Console]::Error.WriteLine(("e" * 100000)); exit 0' }
     Assert 'large stdout and stderr drain concurrently rather than deadlock' ($r.Exit -eq 0 -and $r.Output.Contains(('o' * 100000)) -and $r.Output.Contains(('e' * 100000)))
