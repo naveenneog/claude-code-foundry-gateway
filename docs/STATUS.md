@@ -27,6 +27,29 @@ against stale runs is being added with the modes, and a single queue-driven writ
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
 
+## P51 terminal FinOps, first release, 2026-09-24
+
+**Delivered: `claude-finops`, merged from branch `claude-finops` at `00f296a`.** Nine terminal
+views (Textual) and scriptable commands (Typer) share one engine, backed by Turnstile's API with
+an Azure CLI token, by the gateway directly (Azure RBAC, Log Analytics and the repository's own
+PowerShell writers), or by example data for tests and pictures.
+[ADR-0018](adr/0018-terminal-finops.md); `docs/CLI-FINOPS.md`.
+
+| | |
+|---|---|
+| **Scope** | The first-release routes are pinned by a parity test. Approvals, boosts, bulk allocation and the richer revision-4 views are listed as deferred in the parity manifest, not shown as controls that do nothing |
+| **Changes** | Every budget change is previewed, rechecked against the server before the write, never retried, and removal or a limit below usage needs typed confirmation |
+| **Managers** | Follows Turnstile's `manager_scope` contract from `c0c345a`: null means unrestricted, an empty scope is still scoped, a team manager's parent unit is context and never a filter, a 403 reads "Not in your scope", and managers stay read-only |
+| **Tests** | 93 offline tests; 18 example-only screen pictures at 80x24 and 160x48. `Test-All` runs them when `.venv-finops` exists and otherwise records an explicit SKIP |
+| **Live** | 2026-09-24, owner only: command and terminal journeys agreed on identity, budgets, catalog, tiers, month totals (5,394,583 tokens, $1.923207 estimated) and 200 request ids. No live writes |
+| **Gate** | The agent's completeness-audited packet gate passed on `00f296a` in 25 min 43 s with all 32 registered checks present in the raw summary |
+
+Found at merge: the CLI's check is registered only when its venv exists, so a copy of the runner
+without the venv recorded SKIP, and `Test-RunnerIntegrity` expected every registered check to
+run. The invariant it now asserts is the one the false pass broke: every registered check has a
+result in the summary, PASS, FAIL or an explicit SKIP; the checks not skipped all run; and the
+final lines count the skips. Open: **U20** (scale, and the two sources' totals differ by design).
+
 ## A gate that passed on 9 of 32 checks, 2026-09-24
 
 Found while merging P19, before anything was pushed: the packet gate on `c938ec9` passed in 57
