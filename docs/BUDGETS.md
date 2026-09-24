@@ -18,6 +18,22 @@ use [FinOps](FINOPS.md). A token allowance is not an invoice cap.
   catalog and budgets there; a direct edit can be overwritten by its next apply.
   See [Manage everything in Turnstile](TURNSTILE.md#manage-everything-in-turnstile).
 
+### Find the values for the commands
+
+| Value | Portal source | CLI/read equivalent |
+|---|---|---|
+| `$rg` / `$apim` | Selected gateway > Overview > Essentials | `az apim list --query "[].{name:name,rg:resourceGroup}" -o table`; reuse the intended installer-recorded target |
+| `-User` | Entra ID > Users > selected person > Overview; use their verified UPN or Object ID | `az ad user show --id <upn> --query "{upn:userPrincipalName,id:id}" -o table` |
+| `-Tier` | The effective tier from the published entitlement, not the person's business-unit name | `scripts/Get-ClaudeBudget.ps1` with the explicit gateway target |
+| Quota / rate / dollar amount | Approved allocation from the responsible budget owner | Inspect current values first with `scripts/Set-ClaudeTier.ps1 -List`; a report's remaining balance is not an approved new limit |
+| `-Models` / gateway URL | Foundry deployment names and APIM Overview > Gateway URL | [Model discovery](MODELS.md#find-the-target-and-model-values) and `az apim show -g <gateway-rg> -n <apim> --query gatewayUrl -o tsv` |
+
+The Contoso person and numeric budgets in examples are illustrative inputs,
+not discovered policy or deployment defaults. Replace them only after selecting
+the real target and approving the change. The live
+[gateway Overview](OPERATIONS.md#1-select-the-gateway-and-workspace) shows where
+the gateway values come from; its Online status does not prove a budget edit.
+
 ## Reference: shipped defaults
 
 Named values are configuration the policy consumes, not consumed-quota storage.

@@ -12,6 +12,29 @@ that step: the gateway and Foundry account need not share one. Use
 [target discovery](OPERATIONS.md#1-select-the-gateway-and-workspace) to distinguish
 the subscription, gateway group, Foundry group and telemetry workspace.
 
+### Find the values used in this guide
+
+The following are lookups, not permission grants or deployment commands. Run
+them in the intended signed-in tenant. Select actual options from the returned
+list; do not substitute a resource name copied from a screenshot.
+
+| Placeholder | Azure portal source | Azure CLI equivalent |
+|---|---|---|
+| `<sub>` / subscription ID | Subscriptions > select the subscription > Overview > Subscription ID | `az account list --query "[].{name:name,id:id,tenant:tenantId,current:isDefault}" -o table` |
+| `<tenant-id>` | Microsoft Entra ID > Overview > Tenant ID; confirm the subscription belongs to it | `az account show --query tenantId -o tsv` |
+| Gateway `<rg>` and `<apim>` | API Management services > select the instance > Overview > Essentials > Resource group | `az apim list --query "[].{name:name,rg:resourceGroup,region:location,tier:sku.name}" -o table` |
+| Foundry `<rg>` and `<account>` | Foundry account > Overview > Essentials; use the account, not a project | `az cognitiveservices account list --query "[].{name:name,rg:resourceGroup,kind:kind,region:location}" -o table` |
+| `<region>` | The selected resource's Overview > Location; for a new service inspect the region/tier choices before creating it | `az apim list --query "[].{name:name,region:location,tier:sku.name}" -o table` shows existing instances, **not new regional capacity** |
+| `<apim-principal-id>` | Selected APIM > managed identity settings > system-assigned Object (principal) ID | `az apim show -g <gateway-rg> -n <apim> --query identity.principalId -o tsv` |
+| `<foundry-resource-id>` | Selected Foundry account > Overview > JSON View > `id` | `az cognitiveservices account show -g <foundry-rg> -n <account> --query id -o tsv` |
+
+Where a step says `<rg>`, use that step's resource group from this table.
+The role assignment uses the **Foundry** scope; APIM policy/limits use the
+**gateway** group. They are not interchangeable. Pass the chosen parameters
+for unattended deployment; the interactive installer presents numbered choices.
+The [live gateway Overview](OPERATIONS.md#1-select-the-gateway-and-workspace)
+shows the fields used for the gateway lookup.
+
 **In this article**
 
 1. [Prerequisites](#1-prerequisites)

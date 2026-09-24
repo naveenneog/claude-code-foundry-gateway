@@ -36,18 +36,61 @@ so no browser download is needed. If Edge is not present, run
 
 ## Capturing
 
-```powershell
-$env:AZURE_SUB    = "<subscription-id>"
-$env:AZURE_TENANT = "<tenant-id>"
-$env:APIM_NAME    = "<apim-name>"
-$env:GATEWAY_RG   = "<resource-group>"
-$env:FOUNDRY_RESOURCE = "<foundry-account>"
+### 1. Discover and select the capture targets
 
-# Set the tenant BEFORE sign-in. The root .pw-profile is local credential state.
-node guide/auth.mjs
+Resolve the signed-in subscription/tenant and enumerate the actual gateways and
+Foundry accounts. This is a read-only step:
+
+```powershell
+$account = az account show -o json | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0 -or -not $account.id) { throw 'No selected signed-in subscription' }
+$env:AZURE_SUB = $account.id
+$env:AZURE_TENANT = $account.tenantId
+az apim list --query "[].{name:name,rg:resourceGroup}" -o table
+az cognitiveservices account list --query "[].{name:name,rg:resourceGroup,kind:kind}" -o table
+
+# Set these to the actual selected rows, never a capture script's old defaults.
+$env:APIM_NAME = '<selected-apim-name>'
+$env:GATEWAY_RG = '<selected-gateway-resource-group>'
+$env:FOUNDRY_RESOURCE = '<selected-foundry-account>'
 
 # only needed for the "add a member" capture:
-$env:STANDARD_GROUP_ID = (az ad group show --group claude-code-standard --query id -o tsv)
+$env:STANDARD_GROUP_ID = (az ad group show --group '<recorded-standard-group>' --query id -o tsv)
+```
+
+**Portal equivalents and value sources:**
+
+| Value | Portal source |
+|---|---|
+| Subscription / tenant | Subscriptions > selected subscription > Overview; Entra ID > Overview > Tenant ID |
+| APIM name / group | API Management services > selected instance > Overview > Essentials |
+| Foundry account | The selected gateway's API backend, then that account's Overview; it may be in another resource group |
+| Standard group ID | Entra ID > Groups > the recorded tier group > Overview > Object ID |
+| Workbook GUID | The discovered workbook's resource ID, not a guessed display name |
+
+The [operations discovery procedure](../docs/OPERATIONS.md#1-select-the-gateway-and-workspace)
+locates the logger/workspace. When the installer record exists, reuse
+`scripts/Get-ClaudeGatewayTarget.ps1` rather than copying another environment's
+names. Confirm every deep link opens the intended resource; some historical
+capture steps assume resources share a group, so do not run them unchanged when
+your layout differs.
+
+### 2. Use an authorised dedicated browser profile
+
+An **interactive owner**, not unattended automation, may initialise its dedicated
+profile with `node guide/auth.mjs` and approve the required sign-in. Set the tenant
+first and close that browser before another process uses the profile.
+
+For an already-authorised capture session, copy its dedicated profile to this
+checkout's `.pw-profile` with the owner's permission. Never launch a browser
+against the source profile and never run two browsers on one profile. Do not use
+someone's normal personal browser profile. If a sign-in page appears, stop
+portal capture and report the blocker; do not attempt to sign in automatically.
+
+### 3. Capture, inspect and redact
+
+```powershell
+# Uses the authorised local profile; does not initialise a new sign-in here.
 
 node guide/capture.mjs              # everything
 node guide/capture.mjs a3-apim-overview   # one step

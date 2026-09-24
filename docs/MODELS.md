@@ -16,6 +16,28 @@ command.
 - If Turnstile owns tiers, coordinate its next apply rather than leaving a
   gateway-only model edit that will be overwritten.
 
+### Find the target and model values
+
+| Input | Where to find it in the portal | CLI equivalent |
+|---|---|---|
+| Gateway name and resource group | API Management services > selected gateway > Overview > Essentials | `az apim list --query "[].{name:name,rg:resourceGroup}" -o table` |
+| Foundry account and its group | The account used by that gateway's API backend; account > Overview | `az apim api show -g <gateway-rg> --service-name <apim> --api-id claude-foundry --query serviceUrl -o tsv`, then match the account using `az cognitiveservices account list -o table` |
+| Deployment name | Foundry account > Models + endpoints > selected deployment | `az cognitiveservices account deployment list -g <foundry-rg> -n <account> --query "[].{deployment:name,model:properties.model.name,state:properties.provisioningState}" -o table` |
+| Available model/version/SKU | Foundry model catalogue for that account and region; check the actual offered deployment options | `az cognitiveservices account list-models -g <foundry-rg> -n <account> -o json` |
+| Input/output rates | Your approved dated price book and provider agreement; not a numeric field inferred from the model name | Read the approved `config/price-book.json` or the documented example; the script does not discover negotiated prices from Azure |
+| Tier | The platform owner's intended `standard` or `premium` group/profile | `scripts/Set-ClaudeTier.ps1 -List` with the explicit gateway target |
+
+The model catalogue name and a deployment's chosen name can differ. Use the
+deployed name in calls and allowlists, and confirm the price mapping; do not
+paste a model catalogue into a client allowlist. Regions and quota eligibility
+are discovered per account, not supplied as a hard-coded default.
+
+**Live verification, 2026-09-24 UTC:** account discovery, deployment listing and
+the account-specific model-catalogue command above completed against a discovered
+account, and returned the selected account plus deployment/model records. This
+was read-only: no model was deployed or retired, no rate changed, and no claim
+of completed portal model-creation acceptance is made.
+
 ## 1. Inspect, deploy and allow
 
 ```powershell

@@ -27,6 +27,67 @@ the chargeback ledger and are not the Azure bill.**
 Sections 1–6 explain operational metrics. [Section 7](#7-dashboard) publishes
 the reporting functions and workbooks.
 
+### Find the gateway, logger and workspace values
+
+1. List the gateway candidates in the selected subscription:
+
+   ```powershell
+   az apim list --query "[].{name:name,rg:resourceGroup}" -o table
+   ```
+
+   **Portal:** API Management services > select the intended gateway >
+   Overview > Essentials. Copy its name and Resource group, not values from
+   a screenshot. The [live Overview example](OPERATIONS.md#1-select-the-gateway-and-workspace)
+   identifies these fields.
+2. Use those selected values, not a guessed Application Insights name:
+
+   ```powershell
+   ./scripts/Get-ClaudeTelemetry.ps1 -ResourceGroup '<gateway-rg>' -ApimName '<apim>'
+   $apimId = az apim show -g '<gateway-rg>' -n '<apim>' --query id -o tsv
+   az monitor diagnostic-settings list --resource $apimId -o json
+   ```
+
+   To read the component resource ID from the API's diagnostic with Azure CLI:
+
+   ```powershell
+   $loggerId = az rest --method get `
+       --url "https://management.azure.com${apimId}/apis/claude-foundry/diagnostics/applicationinsights?api-version=2024-05-01" `
+       --query properties.loggerId -o tsv
+   if ($LASTEXITCODE -ne 0 -or -not $loggerId) { throw 'Inspect the service-level diagnostic fallback before choosing a component' }
+   $appInsightsResourceId = az rest --method get `
+       --url "https://management.azure.com${loggerId}?api-version=2024-05-01" `
+       --query properties.resourceId -o tsv
+   if ($LASTEXITCODE -ne 0 -or -not $appInsightsResourceId) { throw 'The logger did not identify an Application Insights resource' }
+   az resource show --ids $appInsightsResourceId `
+       --query "{name:name,rg:resourceGroup,appId:properties.AppId,workspace:properties.WorkspaceResourceId}" -o json
+   ```
+
+   If the API-level diagnostic is absent, inspect
+   `${apimId}/diagnostics/applicationinsights` instead, as the helper does.
+   An explicitly configured component can live in another group; the ARM
+   `resourceId` is authoritative. The current helper expects its resolved
+   component in the supplied group, so use the ID-based reads for that layout
+   rather than inventing a component name or treating a failed read as zero usage.
+
+   **Portal:** APIM > APIs > Claude API > Settings > Diagnostics identifies
+   its logger. APIM > Monitoring > Diagnostic settings identifies the destination
+   for GatewayLlmLogs. Open the linked Application Insights resource and its
+   workspace; do not select the first resource with a similar name.
+3. Resolve each remaining placeholder from that linked resource:
+
+   | Value | Portal field | CLI read |
+   |---|---|---|
+   | `<app-insights-name>` / its `<rg>` | Linked Application Insights > Overview > JSON View > `name`, `resourceGroup` | `az resource show --ids <app-insights-resource-id> --query "{name:name,rg:resourceGroup}" -o table` |
+   | Application Insights AppId | Application Insights > API Access > Application ID, or JSON View > `properties.AppId` | `scripts/Get-ClaudeTelemetry.ps1 -ResourceGroup <gateway-rg> -ApimName <apim> -Quiet` |
+   | `<ledger-workspace>` and its group | Linked Log Analytics workspace > Overview / Properties | `az resource show --ids <workspace-resource-id> --query "{name:name,rg:resourceGroup}" -o table` |
+   | Workspace ARM resource ID | Application Insights > JSON View > `properties.WorkspaceResourceId`; compare the APIM diagnostic destination | `az resource show --ids <app-insights-resource-id> --query properties.WorkspaceResourceId -o tsv` |
+   | Workspace ID for a query client | Log Analytics workspace > Properties > Workspace ID | `az monitor log-analytics workspace show -g <workspace-rg> -n <ledger-workspace> --query customerId -o tsv` |
+
+The AppId, Workspace ID and ARM resource ID are different identifiers.
+Publishers need the workspace **name**, in the selected resource group; the
+Log Analytics query client uses `customerId`. Preserve separate gateway,
+Application Insights and workspace groups when they differ.
+
 ---
 
 ## 1. What is emitted

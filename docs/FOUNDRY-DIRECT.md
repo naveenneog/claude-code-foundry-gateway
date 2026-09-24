@@ -38,6 +38,32 @@ configure one machine directly and see which layer the failure follows.
 
 ## 2. Running it
 
+### Discover the values instead of copying a deployment name
+
+```powershell
+az account list --query "[].{name:name,id:id,tenant:tenantId,current:isDefault}" -o table
+az cognitiveservices account list --query "[].{name:name,rg:resourceGroup,kind:kind,region:location}" -o table
+```
+
+**Portal:** Subscriptions > select the intended subscription; Foundry account >
+Overview > Essentials supplies the account name, resource group and location.
+Use the **account**, not a project inside it. Microsoft Entra ID > Overview
+supplies its Tenant ID. A permission-filtered empty list is not proof that the
+account does not exist.
+
+| Placeholder / parameter | Take it from | CLI verification |
+|---|---|---|
+| `<resource>` / `-Resource` | The account name in the chosen list row | `az cognitiveservices account show -g <foundry-rg> -n <account> --query "{name:name,id:id}" -o table` |
+| `<rg>` / `-ResourceGroup` | That account's resource group, not the gateway's | The account-list `rg` column or Overview |
+| `<tenant-guid>` / `-TenantId` | The account owner's directory, confirmed against the selected subscription | `az account show --query "{subscription:id,tenant:tenantId}" -o table` |
+| `<a-deployment-name>` / `-Models` | Models + endpoints > selected deployment > deployment name | `az cognitiveservices account deployment list -g <foundry-rg> -n <account> --query "[].{deployment:name,model:properties.model.name,state:properties.provisioningState}" -o table` |
+| `<client-id>` | Only for an approved custom sign-in app: Entra > App registrations > Overview > Application (client) ID | `az ad app show --id <app-id> --query appId -o tsv` |
+| `<object-id>` for an access grant | Entra user/group/enterprise application > Overview > Object ID | `az ad user show --id <upn> --query id -o tsv`, or the corresponding group/service-principal lookup |
+
+The `ai-contoso` examples below are placeholders, not a deployed target or a
+fallback. Replace them with the selected account. Normal Azure CLI sign-in uses
+its existing public client; it does not require inventing a new client ID.
+
 ```powershell
 # Device code. No browser needed on this machine - enter the code anywhere.
 ./scripts/Setup-ClaudeFoundryDirect.ps1 -Resource ai-contoso -TenantId <tenant-guid>

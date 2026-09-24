@@ -17,6 +17,22 @@ flow and [Business units](BUSINESS-UNITS.md) for who owns each allocation.
 No Foundry data-plane role is needed for reporting. Turnstile readers/managers
 use their assigned app roles, not Azure subscription access.
 
+### Resolve the values before reporting
+
+Use [Monitoring's diagnostic-to-workspace discovery](MONITORING.md#find-the-gateway-logger-and-workspace-values)
+for `<apim-name>`, `<ledger-workspace>` and the correct resource group.
+**Portal:** select the gateway's actual diagnostic/logger destination and open
+that workspace's Properties; **CLI:** `Get-ClaudeTelemetry.ps1`, followed by
+the ID-based reads in that procedure. Do not choose a workspace by its similar
+name or by list order.
+
+The period is the agreed closed UTC month, not a deployment value.
+Rates come from the approved dated price book; recipients and budget ownership
+come from the finance/governance owner, not from an inferred email domain.
+For a console connection, the owner supplies the actual URL and delegated scope,
+or an authorised administrator reads the gateway's `turnstile-integration`
+named value. Do not derive a client ID from an account or tenant ID.
+
 ## 1. Publish or refresh the reporting definitions
 
 Have a platform owner run these from the repository root, with explicit targets:

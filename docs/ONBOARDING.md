@@ -14,6 +14,22 @@ Select the subscription, gateway and workspace with
 repository root. If your tier groups have nondefault names, pass
 `-StandardGroup` and `-PremiumGroup` to the membership/sync commands.
 
+## Find the values before changing membership
+
+| Value | Portal source | CLI lookup |
+|---|---|---|
+| `<apim>` / gateway `<rg>` | API Management services > selected instance > Overview > Essentials | `az apim list --query "[].{name:name,rg:resourceGroup}" -o table` |
+| Tier group name or ID | Entra ID > Groups > All groups; select the group your platform owner recorded, then Overview | `scripts/Get-ClaudeGatewayTarget.ps1 StandardGroup` and `scripts/Get-ClaudeGatewayTarget.ps1 PremiumGroup` read the installer record; `az ad group show --group <chosen-group> --query "{name:displayName,id:id}" -o table` verifies it |
+| Developer object ID | Entra ID > Users > selected user > Overview > Object ID | `az ad user show --id <upn> --query "{name:displayName,id:id}" -o table` |
+| Business-unit identifier | Configured governance authority: Turnstile Gateway governance, or APIM > Named values > `bu-registry` | `scripts/Set-ClaudeBusinessUnit.ps1 -List` with the explicit gateway target |
+| Config path | The controlled distribution location containing the generated handover | `Test-Path .\onboarding\claude-gateway.json` checks the local default output; it does not discover another team's deployment |
+
+Group membership changes are Entra operations; publication is a separate APIM
+or projection operation. The literal `claude-code-standard` / `claude-code-premium`
+examples below apply only if those are your recorded group names. If a lookup
+is absent or ambiguous, choose the actual group with its owner; do not create a
+new similarly named group as a workaround.
+
 ---
 
 ## How entitlement actually works
