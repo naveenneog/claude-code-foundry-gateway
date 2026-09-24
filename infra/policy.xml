@@ -394,16 +394,39 @@
             return long.TryParse(tokens, out parsed) && parsed > 0 ? tokens : "0";
         }" />
 
+        <set-variable name="buMode" value="@{
+            var unit = (string)context.Variables["businessUnit"];
+            var map = "{{bu-modes}}";
+            var marker = "," + unit + "=";
+            var i = map.IndexOf(marker);
+            if (i < 0) { return "strict"; }
+            var start = i + marker.Length;
+            var end = map.IndexOf(",", start);
+            if (end < 0) { return "strict"; }
+            var mode = map.Substring(start, end - start);
+            return System.Text.RegularExpressions.Regex.IsMatch(mode, "^(notify|allowance:([1-9][0-9]?|100))$") ? mode : "strict";
+        }" />
+        <set-variable name="buLimit" value="@{
+            var mode = (string)context.Variables["buMode"];
+            if (mode == "notify") { return "0"; }
+            if (mode.StartsWith("allowance:")) {
+                var tokens = decimal.Parse((string)context.Variables["buQuota"]);
+                var pct = int.Parse(mode.Substring(10));
+                return ((long)Math.Min(long.MaxValue, tokens + Math.Floor(tokens * pct / 100m))).ToString();
+            }
+            return (string)context.Variables["buQuota"];
+        }" />
         <choose>
-            <when condition="@((string)context.Variables["buQuota"] != "0")">
+            <when condition="@((string)context.Variables["buQuota"] != "0" &amp;&amp; (string)context.Variables["buLimit"] != "0")">
                 <set-variable name="budget" value="business unit" />
                 <set-variable name="budgetUnit" value="@((string)context.Variables["businessUnit"])" />
                 <llm-token-limit
                     counter-key="@("bu-" + (string)context.Variables["businessUnit"])"
-                    token-quota="@(long.Parse((string)context.Variables["buQuota"]))"
+                    token-quota="@(long.Parse((string)context.Variables["buLimit"]))"
                     token-quota-period="Monthly"
                     estimate-prompt-tokens="false"
-                    remaining-quota-tokens-header-name="x-bu-quota-remaining" />
+                    remaining-quota-tokens-header-name="x-bu-quota-remaining"
+                    remaining-quota-tokens-variable-name="buRemaining" />
             </when>
         </choose>
 
@@ -447,16 +470,39 @@
             return long.TryParse(tokens, out parsed) && parsed > 0 ? tokens : "0";
         }" />
 
+        <set-variable name="parentMode" value="@{
+            var unit = (string)context.Variables["parentUnit"];
+            var map = "{{bu-modes}}";
+            var marker = "," + unit + "=";
+            var i = map.IndexOf(marker);
+            if (i < 0) { return "strict"; }
+            var start = i + marker.Length;
+            var end = map.IndexOf(",", start);
+            if (end < 0) { return "strict"; }
+            var mode = map.Substring(start, end - start);
+            return System.Text.RegularExpressions.Regex.IsMatch(mode, "^(notify|allowance:([1-9][0-9]?|100))$") ? mode : "strict";
+        }" />
+        <set-variable name="parentLimit" value="@{
+            var mode = (string)context.Variables["parentMode"];
+            if (mode == "notify") { return "0"; }
+            if (mode.StartsWith("allowance:")) {
+                var tokens = decimal.Parse((string)context.Variables["parentQuota"]);
+                var pct = int.Parse(mode.Substring(10));
+                return ((long)Math.Min(long.MaxValue, tokens + Math.Floor(tokens * pct / 100m))).ToString();
+            }
+            return (string)context.Variables["parentQuota"];
+        }" />
         <choose>
-            <when condition="@((string)context.Variables["parentUnit"] != "" &amp;&amp; (string)context.Variables["parentQuota"] != "0")">
+            <when condition="@((string)context.Variables["parentUnit"] != "" &amp;&amp; (string)context.Variables["parentQuota"] != "0" &amp;&amp; (string)context.Variables["parentLimit"] != "0")">
                 <set-variable name="budget" value="business unit" />
                 <set-variable name="budgetUnit" value="@((string)context.Variables["parentUnit"])" />
                 <llm-token-limit
                     counter-key="@("bu-" + (string)context.Variables["parentUnit"])"
-                    token-quota="@(long.Parse((string)context.Variables["parentQuota"]))"
+                    token-quota="@(long.Parse((string)context.Variables["parentLimit"]))"
                     token-quota-period="Monthly"
                     estimate-prompt-tokens="false"
-                    remaining-quota-tokens-header-name="x-bu-parent-quota-remaining" />
+                    remaining-quota-tokens-header-name="x-bu-parent-quota-remaining"
+                    remaining-quota-tokens-variable-name="parentRemaining" />
             </when>
         </choose>
 
@@ -570,6 +616,33 @@
     <outbound>
         <base />
 
+        <!-- Remaining quota is an estimate, not a monthly ledger (ADR-0019).
+             Notify has no limiter and therefore no remaining counter. Its
+             advisory is present before and after the base budget is reached. -->
+        <set-variable name="budgetNotice" value="@{
+            var notices = new System.Collections.Generic.List&lt;string&gt;();
+            foreach (var scope in new string[] { "bu", "parent" }) {
+                var budget = long.Parse((string)context.Variables[scope + "Quota"]);
+                if (budget == 0) { continue; }
+                var mode = (string)context.Variables[scope + "Mode"];
+                var unit = (string)context.Variables[scope == "bu" ? "businessUnit" : "parentUnit"];
+                if (mode == "notify") {
+                    notices.Add(unit + ";mode=notify;status=usage-reported");
+                } else if (mode.StartsWith("allowance:") &amp;&amp; context.Variables.ContainsKey(scope + "Remaining")) {
+                    var limit = long.Parse((string)context.Variables[scope + "Limit"]);
+                    var remaining = Convert.ToInt64(context.Variables[scope + "Remaining"]);
+                    if (remaining < limit - budget) { notices.Add(unit + ";mode=" + mode + ";status=estimated-over-budget"); }
+                }
+            }
+            return string.Join(", ", notices);
+        }" />
+        <choose>
+            <when condition="@((string)context.Variables["budgetNotice"] != "")">
+                <set-header name="x-claude-budget-notice" exists-action="override">
+                    <value>@((string)context.Variables["budgetNotice"])</value>
+                </set-header>
+            </when>
+        </choose>
         <!-- The chargeback ledger's identity half. ADR-0006.
              ==========================================================
              The per-request token record is ApiManagementGatewayLlmLog, which
@@ -618,6 +691,22 @@
                 return ua.Length > 120 ? ua.Substring(0, 120) : ua;
             }" />
         </trace>
+
+        <choose>
+            <when condition="@((string)context.Variables["buMode"] != "strict" || (string)context.Variables["parentMode"] != "strict")">
+                <trace source="claude-budget" severity="information">
+                    <message>Budget mode usage; join BudgetRequestId to the usage ledger for monthly totals.</message>
+                    <metadata name="BudgetRequestId" value="@(context.RequestId.ToString())" />
+                    <metadata name="BusinessUnit" value="@((string)context.Variables["businessUnit"])" />
+                    <metadata name="Mode" value="@((string)context.Variables["buMode"])" />
+                    <metadata name="BaseTokens" value="@((string)context.Variables["buQuota"])" />
+                    <metadata name="ParentUnit" value="@((string)context.Variables["parentUnit"])" />
+                    <metadata name="ParentMode" value="@((string)context.Variables["parentMode"])" />
+                    <metadata name="ParentBaseTokens" value="@((string)context.Variables["parentQuota"])" />
+                    <metadata name="Notice" value="@((string)context.Variables["budgetNotice"])" />
+                </trace>
+            </when>
+        </choose>
 
         <set-header name="x-governed-by" exists-action="override">
             <value>apim-claude-gateway</value>

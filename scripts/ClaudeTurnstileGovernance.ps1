@@ -25,6 +25,7 @@ function ConvertTo-ClaudeTurnstileCatalog {
     param(
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Registry,
         [System.Collections.IDictionary]$Parents = @{},
+        [System.Collections.IDictionary]$Modes = @{},
         [switch]$IncludeUnassigned
     )
     $organizations = New-Object System.Collections.Generic.List[object]
@@ -37,7 +38,7 @@ function ConvertTo-ClaudeTurnstileCatalog {
         $ref = if ($u.Group) { "entra-group:$($u.Group)" } else { $null }
         $organizations.Add([ordered]@{
             id = [string]$u.Id; name = $(if ($u.Group) { [string]$u.Group } else { [string]$u.Id })
-            external_ref = $ref; attributes = [ordered]@{ tokens_per_month = [long]$u.TokensPerMonth; source = 'claude-gateway' }
+            external_ref = $ref; attributes = [ordered]@{ tokens_per_month = [long]$u.TokensPerMonth; source = 'claude-gateway' } + (Get-ClaudeBudgetModeAttributes -Id $u.Id -Modes $Modes)
         })
         $departments.Add([ordered]@{
             id = [string]$u.Id; name = ('{0} (direct members)' -f $(if ($u.Group) { $u.Group } else { $u.Id })); parent_id = [string]$u.Id
@@ -49,7 +50,7 @@ function ConvertTo-ClaudeTurnstileCatalog {
             $departments.Add([ordered]@{
                 id = [string]$team.Id; name = $(if ($team.Group) { [string]$team.Group } else { [string]$team.Id }); parent_id = [string]$u.Id
                 external_ref = $(if ($team.Group) { "entra-group:$($team.Group)" } else { $null })
-                attributes = [ordered]@{ tokens_per_month = [long]$team.TokensPerMonth; source = 'claude-gateway'; kind = 'team' }
+                attributes = [ordered]@{ tokens_per_month = [long]$team.TokensPerMonth; source = 'claude-gateway'; kind = 'team' } + (Get-ClaudeBudgetModeAttributes -Id $team.Id -Modes $Modes)
             })
         }
     }
