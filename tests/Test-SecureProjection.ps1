@@ -218,7 +218,7 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     Assert 'the sync tests are present' $false $syncDir
 } else {
     Push-Location $syncDir
-    $out = node --test --test-reporter=tap test/plan.test.mjs test/graph.test.mjs 2>&1 | Out-String
+    $out = node --test --test-reporter=tap test/*.test.mjs 2>&1 | Out-String
     $code = $LASTEXITCODE
     Pop-Location
     $passed = if ($out -match '(?m)^# pass (\d+)') { [int]$Matches[1] } else { 0 }
