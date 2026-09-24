@@ -14,6 +14,7 @@ from .accessibility import AsciiFilter
 from .output import safe_text
 from .palette import FinOpsCommands
 from .rules import can_edit
+from .redaction import Redactor
 from .scope import scope_label, visible_tabs
 from .screens import ChangeScreen, DetailScreen, ExportScreen, LookupScreen, MonthScreen
 from .views import DIMENSIONS, TABS, view_rows
@@ -37,11 +38,12 @@ class FinOpsApp(App):
         Binding("q", "quit", "Quit"),
     ]
 
-    def __init__(self, engine, config, no_color=False, preview_only=False):
+    def __init__(self, engine, config, no_color=False, preview_only=False, redact=False):
         super().__init__()
         self.animation_level = "none"
         self.engine, self.config = engine, config
         self.preview_only = preview_only
+        self.redactor = Redactor(redact)
         self.identity = {}
         self.editable = False
         self.allowed_tabs = visible_tabs({})
@@ -112,6 +114,9 @@ class FinOpsApp(App):
             filters.append(AsciiFilter())
         return filters
 
+    def present(self, value):
+        return self.redactor.present(value)
+
     @property
     def active(self):
         return self.query_one("#main-tabs", TabbedContent).active
@@ -145,7 +150,7 @@ class FinOpsApp(App):
         self.identity = identity
         if before == after:
             return
-        self.editable = can_edit(identity)
+        self.editable = can_edit(identity) and not self.redactor.enabled
         self.allowed_tabs = visible_tabs(identity)
         if before != after:
             self.data.clear()
@@ -178,8 +183,9 @@ class FinOpsApp(App):
             self.data[tab] = data
             self.render_tab(tab, data)
             stamp = "12:00 +00:00 example" if self.engine.backend.name == "Example" else datetime.now().astimezone().strftime("%H:%M:%S %z")
-            who = self.identity.get("email", self.identity.get("name", "caller"))
-            scope = scope_label(self.identity)
+            display_identity = self.present(self.identity)
+            who = display_identity.get("email", display_identity.get("name", "caller"))
+            scope = scope_label(display_identity)
             identity = f"claude-finops  {who}  [{self.identity.get('role', 'unknown')}] {scope}\n{self.engine.month} | {self.engine.backend.name} | fetched {stamp}"
             self.query_one("#identity", Static).update(safe_text(identity))
             self.query_one("#status", Static).update("Enter details | " + ("e edit, : more actions | " if self.editable else "Read-only | ") + "r refresh | ? help")
@@ -205,7 +211,8 @@ class FinOpsApp(App):
             catalog = await asyncio.to_thread(read, "catalog")
             select = self.query_one("#people-team", Select)
             departments = catalog.get("departments", [])
-            select.set_options([(row["name"], row["id"]) for row in departments])
+            labels = self.present(departments)
+            select.set_options([(label["name"], row["id"]) for row, label in zip(departments, labels)])
             if self.team not in {row["id"] for row in departments}:
                 self.team = ""
             if not self.team and departments:
@@ -236,7 +243,8 @@ class FinOpsApp(App):
                     accessibility="--plain, --no-color, --ascii; Tab/Shift+Tab; all states have words")
 
     def render_tab(self, tab, data):
-        columns, rows, records, note = view_rows(tab, data, ascii_only=self.config.ascii)
+        _, _, records, _ = view_rows(tab, data, ascii_only=self.config.ascii)
+        columns, rows, _, note = view_rows(tab, self.present(data), ascii_only=self.config.ascii)
         self.records[tab] = records
         table = self.query_one(f"#table-{tab}", DataTable)
         table.clear(columns=True)
@@ -400,4 +408,4 @@ class FinOpsApp(App):
                     access="Members are read-only. Scoped views are enforced by Turnstile.")
         if self.editable:
             keys["owner_actions"] = "e edits selected row. Palette: add/remove scope, edit tiers, Apply now."
-        self.push_screen(DetailScreen("claude-finops | tour and keys", keys))
+        self.push_screen(DetailScreen("AUM | tour and keys", keys))

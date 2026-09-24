@@ -1,6 +1,8 @@
 """Scriptable face; root options also work after a noun or verb."""
 
 from pathlib import Path
+import os
+import sys
 from typing import Annotated
 
 import typer
@@ -11,12 +13,19 @@ from .config import load_config
 from .engine import Engine
 from .errors import FinOpsError
 from .output import chargeback_csv, display
+from .brand import BANNER, PRODUCT, show_banner
+from . import __version__
+from .redaction import Redactor
+
+
+def terminal_output():
+    return sys.stdout.isatty()
 
 
 class EverywhereGroup(TyperGroup):
     def parse_args(self, ctx, args):
         ctx.meta["finops_help"] = "--help" in args
-        flags = {"--json", "--plain", "--what-if", "--no-color", "--ascii"}
+        flags = {"--json", "--plain", "--what-if", "--no-color", "--ascii", "--version", "--screen-reader", "--redact"}
         options = {"--backend", "--month", "--config", "--url", "--scope", "--theme",
                    "--resource-group", "--apim-name"}
         prefix, rest = [], []
@@ -41,7 +50,7 @@ class EverywhereGroup(TyperGroup):
 
 
 app = typer.Typer(cls=EverywhereGroup, invoke_without_command=True, no_args_is_help=False, rich_markup_mode=None,
-                  help="Claude gateway FinOps. No command opens the terminal app. Changes preview until --apply.")
+                  help="AUM - Azure Usage Management. No command opens the terminal app. Changes preview until --apply.")
 groups = {}
 for noun in ("budget", "people", "governance", "tier", "requests", "anomalies", "report", "usage", "trends", "catalog"):
     groups[noun] = typer.Typer(help=f"{noun.capitalize()} views and actions.", rich_markup_mode=None)
@@ -55,10 +64,11 @@ def emit(ctx, operation, *, mutation=False):
         if mutation and not result.get("preview", True) and result.get("requested_at"):
             if result.get("scope_type") != "user" and state["engine"].backend.name != "Direct":
                 result["apply_status"] = state["engine"].wait_for_apply(result["requested_at"])
-        display(result, as_json=state["json"], plain=state["plain"], no_color=state["no_color"])
+        display(state["redactor"].present(result), as_json=state["json"], plain=state["plain"], no_color=state["no_color"])
         return result
     except FinOpsError as error:
-        display(dict(error=str(error), exit_code=error.code), as_json=state["json"], plain=state["plain"], no_color=True)
+        display(state["redactor"].present(dict(error=str(error), exit_code=error.code)),
+                as_json=state["json"], plain=state["plain"], no_color=True)
         raise typer.Exit(error.code) from None
 
 
@@ -76,8 +86,20 @@ def root(ctx: typer.Context,
          plain: bool = False,
          what_if: Annotated[bool, typer.Option("--what-if", help="Always preview; never write.")] = False,
          no_color: bool = False,
+         version: Annotated[bool, typer.Option("--version", help="Show AUM version without connecting.")] = False,
+         screen_reader: Annotated[bool, typer.Option("--screen-reader", help="Use linear output without banner or screen UI.")] = False,
+         redact: Annotated[bool, typer.Option("--redact", help="Display Contoso pseudonyms; never alters API requests.")] = False,
          ascii_only: Annotated[bool, typer.Option("--ascii")] = False):
     if ctx.meta.get("finops_help"):
+        return
+    plain = plain or screen_reader
+    if version:
+        if show_banner(tty=terminal_output(), as_json=as_json, plain=plain, screen_reader=screen_reader):
+            typer.echo(BANNER)
+        if as_json:
+            display(dict(product=PRODUCT, version=__version__), as_json=True)
+        else:
+            typer.echo(f"{PRODUCT} {__version__}")
         return
     try:
         settings = load_config(config, backend=backend, url=url, scope=scope, resource_group=resource_group,
@@ -86,14 +108,17 @@ def root(ctx: typer.Context,
     except FinOpsError as error:
         display(dict(error=str(error), exit_code=error.code), as_json=as_json, plain=plain, no_color=True)
         raise typer.Exit(error.code) from None
-    ctx.obj = dict(engine=engine, config=settings, json=as_json, plain=plain, what_if=what_if, no_color=no_color)
+    redact = redact or os.environ.get("AUM_REDACT", "").lower() in {"1", "true", "yes"}
+    ctx.obj = dict(engine=engine, config=settings, json=as_json, plain=plain, what_if=what_if, no_color=no_color,
+                   redactor=Redactor(redact))
     ctx.call_on_close(engine.backend.close)
     if ctx.invoked_subcommand is None:
-        if plain or as_json:
+        if plain or as_json or not terminal_output():
+            ctx.obj["plain"] = plain or not terminal_output()
             emit(ctx, lambda e: dict(identity=e.read("whoami"), **e.status()))
         else:
             from .tui import FinOpsApp
-            FinOpsApp(engine, settings, no_color=no_color, preview_only=what_if).run()
+            FinOpsApp(engine, settings, no_color=no_color, preview_only=what_if, redact=redact).run()
 
 
 @app.command()
@@ -223,7 +248,7 @@ def report_chargeback(ctx: typer.Context, csv: Annotated[bool, typer.Option("--c
     if csv and not ctx.obj["json"]:
         try:
             rows = ctx.obj["engine"].chargeback(dimension)["items"]
-            typer.echo(chargeback_csv(rows, ctx.obj["engine"].month), nl=False)
+            typer.echo(chargeback_csv(ctx.obj["redactor"].present(rows), ctx.obj["engine"].month), nl=False)
         except FinOpsError as error:
             typer.echo(str(error), err=True)
             raise typer.Exit(error.code) from None
@@ -233,6 +258,11 @@ def report_chargeback(ctx: typer.Context, csv: Annotated[bool, typer.Option("--c
 
 def main():
     app()
+
+
+def legacy_main():
+    typer.echo("Deprecated: claude-finops is now aum (AUM - Azure Usage Management); this alias remains for one release.", err=True)
+    main()
 
 
 if __name__ == "__main__":

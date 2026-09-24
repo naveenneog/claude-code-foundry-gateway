@@ -91,11 +91,11 @@ Invoke-Check 'Resolver - the entitlement read path'   'Test-Resolver.ps1'
     $finopsPython = Join-Path $root '.venv-finops\Scripts\python.exe'
     $finopsUnixPython = Join-Path $root '.venv-finops\bin\python'
     if ((Test-Path $finopsPython) -or (Test-Path $finopsUnixPython)) {
-        Invoke-Check 'Terminal FinOps - commands, rules and pilot' 'Test-FinOps.ps1'
+        Invoke-Check 'AUM - commands, dashboard and pilot' 'Test-FinOps.ps1'
     }
     else {
-        Write-Host 'SKIP - FinOps: Python or the worktree .venv-finops is missing. See docs/CLI-FINOPS.md to install.' -ForegroundColor Yellow
-        $results += [pscustomobject]@{ Name = 'Terminal FinOps - commands, rules and pilot'; Result = 'SKIP' }
+        Write-Host 'SKIP - AUM: Python or the worktree .venv-finops is missing. See docs/AUM.md to install.' -ForegroundColor Yellow
+        $results += [pscustomobject]@{ Name = 'AUM - commands, dashboard and pilot'; Result = 'SKIP' }
     }
 
     if ($IncludeAzure) {

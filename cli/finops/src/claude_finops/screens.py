@@ -24,7 +24,7 @@ class DetailScreen(ModalScreen):
     def compose(self):
         with Vertical(id="detail-dialog"):
             yield Label(self.heading, markup=False)
-            yield TextArea(json.dumps(self.data, indent=2, ensure_ascii=True, default=str), read_only=True, id="detail-text")
+            yield TextArea(json.dumps(self.app.present(self.data), indent=2, ensure_ascii=True, default=str), read_only=True, id="detail-text")
             yield Button("Back (Esc)", id="close-detail")
 
     @on(Button.Pressed, "#close-detail")
@@ -82,7 +82,7 @@ class LookupScreen(ModalScreen):
             table = self.query_one(DataTable)
             table.clear(columns=True)
             table.add_columns("Kind", "Identifier", "Name")
-            for row in self.results:
+            for row in self.app.present(self.results):
                 table.add_row(row["kind"], row["id"], row["name"])
             self.query_one("#lookup-status", Static).update(f"{len(self.results)} matches. Tab then Enter opens; Esc cancels.")
         except FinOpsError as error:
@@ -280,7 +280,7 @@ class ExportScreen(ModalScreen):
             folder = Path.cwd() / "finops-reports"
             folder.mkdir(exist_ok=True)
             with (folder / name).open("x", encoding="utf-8", newline="") as output:
-                output.write(chargeback_csv(result["items"], self.app.engine.month))
+                output.write(chargeback_csv(self.app.present(result["items"]), self.app.engine.month))
             self.query_one("#export-status", Static).update(f"Exported {len(result['items'])} scopes to finops-reports\\{name}.")
         except (OSError, FinOpsError) as error:
             message = str(error) if isinstance(error, FinOpsError) else "Cannot create that file. Choose a new name and a writable current folder."

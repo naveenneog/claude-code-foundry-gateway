@@ -65,3 +65,29 @@ scope are refreshed before rendering, and changed scope discards cached tables.
 HTTP 403 is a scope/permission denial, not zero usage or a sign-in expiry.
 Members remain read-only even when writable ids are advertised. Owner manager-group
 edits use the deployed `manager_group_id` attribute and an Entra object id.
+
+## P52 amendment: AUM, dashboard and live publication, 2026-09-24
+
+The owner commissioned P52 in the separate `aum` worktree while the lead owns the
+main ledger and README. The product is now **AUM - Azure Usage Management**.
+`aum` is the primary command; `claude-finops` remains a deprecated alias for one
+release. Internal `cli/finops`, `claude_finops`, `.venv-finops` and the PowerShell
+bridge stay compatible: renaming those adds migration risk without a user benefit.
+
+The Overview changes from a metric table to a responsive, keyboard-focusable
+dashboard. Its token gauges, trend, rankings, risks and anomalies all come from
+existing APIs. Missing cost/forecast is unknown, never fabricated. The canonical
+budget counter remains separate from estimated cost and parent allocation.
+Catalog enforcement attributes display as strict/allowance/notify badges; an
+absent attribute displays the gateway default, strict.
+
+Display-time redaction replaces identities and deployment identifiers only in
+rendered output, never in requests, authorization checks or write targets. Published
+screenshots must come from live read-only backends with redaction on, with a
+manifest and privacy guard. Fake data remains test evidence, not live evidence.
+Existing Azure CLI/Owner rights are sufficient; no new consent or grant is sought.
+
+Research sources (2026-09-24): `rothgar/awesome-tuis`, btop, bottom, k9s, lazygit,
+WTF, Dolphie and Posting. Patterns and exact source links are recorded in the
+delivery report. Their code/assets are not copied. Tests must preserve the P51
+role, scope, preview, confirmation, headroom and apply-status guarantees.
