@@ -40,6 +40,14 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   write back, and refuses a catalog with no business unit. New groups and membership refresh need
   `GroupMember.Read.All` from a tenant administrator, `scripts/Grant-ClaudeGovernanceGraphAccess.ps1`
   (**U17**). [ADR-0015](docs/adr/0015-governance-authored-in-turnstile.md) amends ADR-0014.
+- **Scale, measured at 500,000 identities.** On a throwaway Premium v2 instance with a mock
+  backend, API Management's `llm-token-limit` counters accepted and charged 500,000 identities at
+  about 1,600 requests a second on one unit, and no allowance was exact: one identity was served
+  540 tokens against a 300-token hourly quota, and 1,000 exhausted identities were admitted again
+  within the hour (**U9**, narrowed). On the Premium v2 test gateway, the projection's resolver
+  returned 503 to 2 of 3 first requests after idle with no always-ready instance, and to 4 of the
+  first burst of 20 concurrent misses with one; nothing coalesces concurrent misses (**U18**).
+  `docs/SCALE.md`.
 - **Nothing about one deployment is written into the scripts.** Twenty-seven scripts and tests
   defaulted `-ResourceGroup` to the reference deployment's resource group. They now resolve it
   through `scripts/Get-ClaudeGatewayTarget.ps1`: `CLAUDE_RG`, else the resource group the installer

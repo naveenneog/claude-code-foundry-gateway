@@ -178,9 +178,35 @@ endpoint in the same VNet; the resolver had one always-ready instance.
 The resolver's own metrics counted exactly 150 executions in the miss window,
 all on the warm instance, so every miss was a real lookup. A miss adds about
 86 ms at the median and 139 ms at p95. The slowest, 389 ms, is a small fraction
-of the 5-second limit the gateway gives the resolver. Not yet measured: the
-first lookup after idle with **no** always-ready instance, which pays a cold
-start.
+of the 5-second limit the gateway gives the resolver.
+
+Measured again on 2026-09-24 from outside the VNet, 220 misses against 220 hits on
+the same gateway: a miss added 78 ms at the median and 134 ms at p99.
+
+### After idle, and under a burst, measured 2026-09-24
+
+The same gateway and resolver, one identity, asking for a model its tier may not
+call, so each answer is the gateway plus the lookup:
+
+| Condition | Requests | Refused with 503 | Slowest |
+|---|---:|---:|---:|
+| First request after at least 15 minutes idle, no always-ready instance | 3 | **2** | 5,880 ms |
+| The same, with one always-ready instance | 1 | 0 | 1,809 ms |
+| 20 concurrent misses for one identity, one always-ready instance, the first burst | 20 | **4** | 5,378 ms |
+| Later bursts of 20, 50 and 100, with the resolver already scaled out | 490 | 0 | 1,458 ms |
+
+Every concurrent miss reached the resolver: nothing coalesced them. The four
+failures in the first burst ran on two hosts that started during it and waited
+out the gateway's 5-second limit, and the 503 told the developer the entitlement
+service could not be reached. A 2,048 MB Flex Consumption instance takes 16
+concurrent requests by default
+([HTTP trigger concurrency](https://learn.microsoft.com/azure/azure-functions/functions-concurrency#http-trigger-concurrency)),
+so a burst larger than the warm instances waits for new ones. One always-ready
+instance does not keep a first burst inside the limit, and a resolver with none
+fails outright. Setting it back to one did not help at once: the next request
+still met a new host. That is **U18**. The fixes are the miss-path backpressure
+and coalescing the P19 review asked for, more always-ready instances, or both.
+Three cold trials do not give a cold-start p99.
 
 ### What a counter test still has to prove
 
@@ -199,6 +225,34 @@ spent, which is indistinguishable from a budget that does not work.
 `rate-limit-by-key` and `llm-token-limit` counter cardinality is not published.
 Microsoft's guidance is to test for the scenario rather than rely on a stated
 limit, which is **U9**.
+
+### Counters at 500,000 keys, measured 2026-09-24
+
+A throwaway Premium v2 instance in Canada Central, one unit and then two, with a
+mock Messages API behind `llm-token-limit` policies keyed on a synthetic
+identity: tokens per minute and a daily quota, as this gateway's tiers use, an
+hourly quota to see a rollover within the run, and a request-rate limit. Every
+response reported 15 tokens used. The instance was deleted and purged afterwards.
+
+| Check | Result |
+|---|---|
+| 500,000 distinct identities, one request each | All charged: 1,639 requests a second on one unit, p99 574 ms, 8 HTTP 500 |
+| Three more sweeps, 1,500,000 requests | 1,599 requests a second, p99 579 ms, no capacity 429 |
+| The remaining allowance reported to a random 2,048 of them | Did not match what they had used, before any scale-out or policy change |
+| One identity, one request at a time | Served 540 tokens against a 300-token hourly quota before it was refused |
+| 1,000 identities refused for 40 rounds in a row | All accepted and charged again later in the same hour |
+| Scale-out from one unit to two | 389 s; afterwards 11,042 requests were answered 503 over 16 s |
+| A policy change | In effect on every request 15 s after it was saved |
+
+So the counters take 500,000 identities, and they are soft at any scale. Microsoft
+documents the remaining-quota figure as an estimate, and the limit as one that
+concurrent requests can exceed
+([llm-token-limit](https://learn.microsoft.com/azure/api-management/llm-token-limit-policy)).
+That is the conclusion of [The budget is a delayed kill switch, not a hard
+cap](#the-budget-is-a-delayed-kill-switch-not-a-hard-cap), now measured at the
+cardinality. What the run did not establish is how far over a production-sized
+quota a developer can go, or why exhausted identities were admitted again, so
+**U9** stays open.
 
 ---
 

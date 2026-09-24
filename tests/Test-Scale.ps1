@@ -351,7 +351,13 @@ Assert 'it reports the measured sizes'      ($s -match '\| \*\*100,000\*\* \| \*
 # model call taken out so the lookup is all that differs.
 Assert 'the lookup cost is recorded'        ($s -match 'The lookup through the gateway, measured 2026-09-23')
 Assert 'with miss percentiles'              ($s -match '\| Cache miss \(1-second window, 1\.2 s apart\) \| 67 ms \| \*\*91 ms\*\* \| \*\*149 ms\*\* \| \*\*301 ms\*\* \| 389 ms \|')
-Assert 'and says what it did not measure'   ($s -match 'Not yet measured: the\s+first lookup after idle')
+# Measured since, 2026-09-24: the first lookup after idle, and a burst of misses.
+Assert 'and what the first lookup after idle did' ($s -match '(?s)After idle, and under a burst, measured 2026-09-24[\s\S]{0,700}no always-ready instance \| 3 \| \*\*2\*\*')
+Assert 'the burst failures are named U18'       ($s -match 'That is \*\*U18\*\*')
+Assert 'and U18 is open in the register'        ((Get-Content (Join-Path $root 'docs/UNKNOWNS.md') -Raw) -match '\| U18 \| OPEN \|')
+# U9, narrowed 2026-09-24: 500,000 keys accepted and charged, no allowance exact.
+Assert 'the counters at 500,000 keys are recorded' ($s -match 'Counters at 500,000 keys, measured 2026-09-24')
+Assert 'and they are said to be soft'           ($s -match 'soft at any scale')
 Assert 'and says why it stays flat'         ($s -match 'every identity is its own logical partition')
 # Writes are slow and that is a migration-window fact, not a request-path one.
 Assert 'the backfill rate is stated'        ($s -match '190 records a second')
@@ -424,7 +430,7 @@ Assert 'and gives the ceiling that still binds' ($status -match 'about 93 develo
 # end to end, so the page must say what is still missing instead.
 Assert 'it says the path was run, not just designed' ($status -match 'deployed with no public endpoint')
 Assert 'and that it is not the default'         ($status -match 'the projection is not the default')
-Assert 'it names what is still missing'         ($status -match '(?s)Still missing before 500,000[\s\S]{0,300}Counters at that cardinality \(U9\)\.\*\* Not yet measured')
+Assert 'it names what is still missing'         ($status -match '(?s)Still missing before 500,000[\s\S]{0,300}Counters at that cardinality \(U9\)\.\*\* Narrowed, not closed')
 Assert 'and reports U14 as measured'            ($status -match "resolver's p99 on a miss \(U14\)\s+is: 301 ms")
 Assert 'including Foundry quota'                ($status -match '(?s)Still missing before 500,000[\s\S]{0,700}Foundry quota')
 Assert 'and the policy path'                    ($status -match '(?s)not built[\s\S]{0,1000}cache-lookup-value')

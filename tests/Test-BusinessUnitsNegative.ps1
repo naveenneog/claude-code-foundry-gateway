@@ -565,6 +565,24 @@ $mutations = @(
        To    = '**30 ms**' }
 
     @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the resolver failures after idle lose their count'
+       File  = 'docs/SCALE.md'
+       From  = '| 3 | **2** |'
+       To    = '| 3 | 0 |' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the counters are called exact'
+       File  = 'docs/SCALE.md'
+       From  = 'soft at any scale'
+       To    = 'exact at any scale' }
+
+    @{ Suite = 'Test-Scale.ps1'
+       Name  = 'the scale guide stops naming U18'
+       File  = 'docs/SCALE.md'
+       From  = 'That is **U18**'
+       To    = 'That is a known issue' }
+
+    @{ Suite = 'Test-Scale.ps1'
        Name  = 'the README implies the projection is the default and load-tested'
        File  = 'README.md'
        From  = '**It is not the default, and it is not yet'

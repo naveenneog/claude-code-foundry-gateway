@@ -15,15 +15,16 @@ fails the release stage while any remain. Detail for each one follows below.
 | U6 | CLOSED | What signs a plugin, and who verifies it? Nothing, for Claude Code — researched 2026-09-03 | P14 rescoped |
 | U7 | CLOSED | Can Log Analytics honour selective deletion within its purge limits? Yes, within 30 days and Analytics-plan tables only — researched 2026-09-03 | P15 unblocked |
 | U8 | OPEN | Which OTEL attributes split lines-of-code and tool decisions into their parts? | P10 productivity columns |
-| U9 | OPEN | Does `llm-token-limit` have a counter-key cardinality limit? Today's design implies one counter per developer | P22 at scale |
+| U9 | OPEN | Does `llm-token-limit` have a counter-key cardinality limit? Today's design implies one counter per developer. Narrowed 2026-09-24 on a throwaway Premium v2 instance: 500,000 identities were accepted and charged at about 1,600 requests a second on one unit, but no allowance was exact - one identity was served 540 tokens against a 300-token quota, and 1,000 exhausted identities were admitted again within the hour ([SCALE.md](SCALE.md)) | P22 at scale |
 | U10 | OPEN | What does Graph cost in latency and throttling when the volatile cache is cold? | P19 |
 | U11 | OPEN | What does the trace ledger cost to ingest, and does a cheaper table plan forfeit purge? | P18, conflicts with U7 |
 | U12 | CLOSED | Does APIM telemetry preserve the Claude cache TTL split? No, and the quota scalar excludes cache entirely — measured 2026-09-15 | P18 shipped |
 | U13 | OPEN | Can APIM enforce a budget on categorised usage rather than one token total? `llm-token-limit` takes a single `token-quota` and counts prompt and completion only | P21 |
-| U14 | CLOSED | What does the projection resolver add to p99 on a cache miss? Measured 2026-09-23 from inside the VNet, 150 misses against 150 hits: p50 91 against 5 ms, p95 149 against 10, p99 301 against 172, max 389 - a Canada Central gateway reading Cosmos in East US 2, with one always-ready instance. Cold start with none is not measured | P19, [ADR-0013](adr/0013-gateway-outlives-instance.md) |
+| U14 | CLOSED | What does the projection resolver add to p99 on a cache miss? Measured 2026-09-23 from inside the VNet, 150 misses against 150 hits: p50 91 against 5 ms, p95 149 against 10, p99 301 against 172, max 389 - a Canada Central gateway reading Cosmos in East US 2, with one always-ready instance. Remeasured 2026-09-24 from outside the VNet, 220 against 220: a miss adds 78 ms at p50 and 134 ms at p99. After idle and under a burst: U18 | P19, [ADR-0013](adr/0013-gateway-outlives-instance.md) |
 | U15 | CLOSED | What forces `publicNetworkAccess: Disabled` on every Cosmos account in this subscription? Azure Policy: `CosmosDB_PublicNetwork_Modify` in the management-group initiative `MCAPSGovDeployPolicies`, which `az policy assignment list` did not show - found through the resource activity log, 2026-09-23 | nothing: the projection is deployed private by design ([SECURE-PROJECTION.md](SECURE-PROJECTION.md)) |
 | U16 | OPEN | Why does an AI Gateway tier instance deployed through ARM, in the published sample's shape, serve no model route? Measured 2026-09-23 in East US 2: its status endpoint answered 200, and every model route 404 with or without a key for more than six hours, for a Claude and an OpenAI model ([AI-GATEWAY-TIER.md](AI-GATEWAY-TIER.md)) | P42 |
 | U17 | OPEN | Can the apply job's managed identity be granted the Microsoft Graph application permission `GroupMember.Read.All` in the reference tenant? Only a Privileged Role Administrator or Global Administrator can grant it, and the operator holds no directory role. Measured 2026-09-24: every apply logged "the apply identity cannot read Entra groups (denied)"; budgets and tier limits were applied, a unit with a new group would not be, and membership was left as it was | P44, [ADR-0015](adr/0015-governance-authored-in-turnstile.md) |
+| U18 | OPEN | Does the resolver answer inside the gateway's 5-second limit after idle and under a burst of misses? Measured 2026-09-24 on the Premium v2 test gateway: with no always-ready instance, 2 of 3 first requests after 15 minutes idle returned 503; with one, the first burst of 20 concurrent misses for one identity returned four 503s while two new hosts started. Nothing coalesced the concurrent misses ([SCALE.md](SCALE.md)) | P19 |
 
 ---
 
@@ -323,6 +324,17 @@ The structural half of this is measured and written up in [SCALE.md](SCALE.md): 
 4,096 characters and 110 object ids, so the entitlement path runs out long before counter
 cardinality is reached. That does not close U9 — it means U9 only starts to matter once entitlement
 has moved to the projection in [ADR-0005](adr/0005-identity-projection.md).
+
+**Narrowed 2026-09-24.** The load test was run on a throwaway Premium v2 instance with a mock
+backend, and the instance was deleted and purged afterwards. Cardinality is not the problem:
+500,000 identities were accepted and charged at about 1,600 requests a second on one unit, with no
+capacity 429. Exactness is: the remaining allowance each response reported did not match what had
+been used, before any scale-out or policy change; one identity sent requests one at a time was
+served 540 tokens against a 300-token hourly quota; and 1,000 identities refused for 40 rounds were
+all accepted and charged again later in the same hour. Microsoft documents the figure as an
+estimate and the limit as exceedable by concurrent requests. Still open: how far over a
+production-sized quota a developer can go, why exhausted identities were admitted again, and Basic
+v2, which was not tested. Results in [SCALE.md](SCALE.md#counters-at-500000-keys-measured-2026-09-24).
 
 ### U10 — Directory latency and throttling on a cold cache
 

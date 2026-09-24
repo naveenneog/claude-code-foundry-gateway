@@ -107,10 +107,14 @@ gateway in Canada Central with the Cosmos account in East US 2
 
 Still missing before 500,000 can be claimed:
 
-- **Counters at that cardinality (U9).** Not yet measured. The resolver's p99 on a miss (U14)
+- **Counters at that cardinality (U9).** Narrowed, not closed: 500,000 identities were accepted
+  and charged, but no allowance was exact ([SCALE.md](SCALE.md)). The resolver's p99 on a miss (U14)
   is: 301 ms, with 389 ms the slowest of 150 ([SCALE.md](SCALE.md)).
 - **Foundry quota.** One capacity unit is 1 request and 1,000 tokens per minute (measured), so
   the model deployment, not the gateway, is the first limit — see [SCALE.md](SCALE.md).
+- **The resolver after idle and under a burst (U18).** With no always-ready instance, 2 of 3 first
+  requests after idle returned 503; with one, the first burst of 20 concurrent misses returned
+  four. Nothing coalesces concurrent misses.
 - **Making it the default** (`cos-default`) and a one-command move for existing gateways
   (`cos-upgrade`).
 
@@ -119,7 +123,7 @@ Found by review, 2026-09-24, and checked against the code before being recorded 
 | Finding | Checked | Fix to make |
 |---|---|---|
 | The resolver accepts a record of any age. A stopped sync keeps access indefinitely, so the cache TTL does not bound revocation | No expiry, age or generation check in `resolver/src/entitlement.mjs` | A completed-reconciliation generation with an absolute expiry, enforced by the resolver and the cache; an expired projection answers 503 |
-| The resolver is called before any limiter, so a burst of cache misses reaches it unthrottled | First `send-request` at line 98 of `infra/policy.xml`, first limiter at line 298 | Miss-path backpressure and request coalescing, with Cosmos deadlines under five seconds |
+| The resolver is called before any limiter, so a burst of cache misses reaches it unthrottled | First `send-request` at line 98 of `infra/policy.xml`, first limiter at line 298. Measured 2026-09-24: every concurrent miss reached the resolver, and the first burst of 20 returned four 503s (U18) | Miss-path backpressure and request coalescing, with Cosmos deadlines under five seconds |
 | `Sync-ClaudeProjection.ps1` reads existing records with one query and no continuation, so a revocation beyond the first page is never planned | One `POST .../docs`, no `x-ms-continuation` | Page through continuation tokens. Not changed yet: it needs a Cosmos account reachable from the test machine, and every account in the test subscription is private (U15) |
 | `projection.bicep` defaults to a public account | `param networkAccess string = 'public'` | Make the enterprise profile private-only |
 | Rolling back to the named-value lists after the flip can regrant leavers, and allowance counters are local to one gateway | Design, not code | Keep both destinations current for a bounded rollback window; treat a replacement or failed-over gateway as restoring allowance (U9) |
