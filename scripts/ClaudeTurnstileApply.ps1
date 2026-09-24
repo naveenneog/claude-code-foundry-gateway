@@ -117,7 +117,9 @@ function Get-ClaudeGatewayGovernanceChanges {
         The named values that differ between the gateway now and what Turnstile says.
     .DESCRIPTION
         Returns one change per named value to write, with the value it had. Nothing that
-        already matches is written, so an apply after an unrelated save changes nothing.
+        already matches is written, so an apply after an unrelated save changes nothing. The
+        policy finds registry, team and model entries by name, so entries in another order
+        match: measured, the first apply after seeding rewrote the registry only to reorder it.
     #>
     param(
         [Parameter(Mandatory = $true)]$Desired,
@@ -133,11 +135,36 @@ function Get-ClaudeGatewayGovernanceChanges {
         $want["quota-$($t.Id)"] = [string]$t.TokensPerDay
         $want["models-$($t.Id)"] = [string]$t.Models
     }
+    $canonical = {
+        param([string]$Value)
+        if ($Value -notmatch '^,.*,$') { return $Value }
+        ',' + ((@($Value.Trim(',') -split ',' | Where-Object { $_ }) | Sort-Object) -join ',') + ','
+    }
     foreach ($id in $want.Keys) {
         $was = if ($Current.Contains($id)) { [string]$Current[$id] } else { '' }
-        if ($was -ne [string]$want[$id]) { $changes.Add([pscustomobject]@{ Id = $id; Was = $was; Now = [string]$want[$id] }) }
+        if ((& $canonical $was) -ne (& $canonical ([string]$want[$id]))) { $changes.Add([pscustomobject]@{ Id = $id; Was = $was; Now = [string]$want[$id] }) }
     }
     return , $changes.ToArray()
+}
+
+function Get-ClaudeGatewayGovernanceValues {
+    <#
+    .SYNOPSIS
+        The named values governance writes, read in one call.
+    .DESCRIPTION
+        Measured against the gateway: eight reads one at a time took 21 seconds, one list 3.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$ResourceGroup,
+        [Parameter(Mandatory = $true)][string]$ApimName,
+        [Parameter(Mandatory = $true)][string[]]$Ids
+    )
+    $all = az apim nv list -g $ResourceGroup --service-name $ApimName --query '[].{id:name, value:value}' -o json 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "Could not read the named values of $ApimName." }
+    $listed = @($all | ConvertFrom-Json)
+    $values = [ordered]@{}
+    foreach ($id in $Ids) { $values[$id] = [string](@($listed | Where-Object { $_.id -eq $id })[0].value) }
+    $values
 }
 
 function Test-ClaudeGraphGroupAccess {
@@ -250,8 +277,7 @@ function Invoke-ClaudeGatewayGovernanceApply {
     )
     $desired = ConvertFrom-ClaudeTurnstileGovernance -Catalog $Catalog -BudgetItems @($BudgetItems) -Tiers @($Tiers)
     $ids = @('bu-registry', 'bu-parents') + @($script:ClaudeGatewayTiers | ForEach-Object { "tpm-$_"; "quota-$_"; "models-$_" })
-    $current = [ordered]@{}
-    foreach ($id in $ids) { $current[$id] = [string](Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $id) }
+    $current = Get-ClaudeGatewayGovernanceValues -ResourceGroup $ResourceGroup -ApimName $ApimName -Ids $ids
 
     $graph = Test-ClaudeGraphGroupAccess
     $currentUnits = @(ConvertFrom-ClaudeBuRegistry $current['bu-registry'])

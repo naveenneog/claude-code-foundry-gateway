@@ -111,11 +111,6 @@ function Get-TurnstileErrorDetail($ErrorRecord) {
     try { $d = ($detail | ConvertFrom-Json).detail; if ($d -is [array]) { return ($d -join '; ') }; return [string]$d } catch { return $detail }
 }
 
-$registry = @(ConvertFrom-ClaudeBuRegistry (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'))
-$parents = ConvertFrom-ClaudeBuParents (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents')
-if (-not $parents) { $parents = [ordered]@{} }
-$unassignedMode = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-unassigned'
-if (-not $unassignedMode) { $unassignedMode = 'allow' }
 
 if ($Direction -eq 'ToTurnstile' -and $governanceAuthority -eq 'Turnstile' -and -not $Seed) {
     throw ('Governance is authored in Turnstile, so pushing the gateway''s state would overwrite what was saved there. ' +
@@ -128,7 +123,8 @@ if ($Direction -eq 'FromTurnstile' -and $governanceAuthority -eq 'Turnstile') {
     # in, and reading it before then would remove every budget. Prepare does that, once.
     try { $prepared = Invoke-Turnstile POST '/api/v1/gateway-governance/prepare' }
     catch {
-        if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404) {
+        # 405, not 404, when the route is missing: Turnstile's page fallback owns the path.
+        if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -in 404, 405) {
             throw 'This Turnstile has no gateway governance endpoints. Deploy the Turnstile version with the Gateway governance page.'
         }
         throw
@@ -151,6 +147,11 @@ if ($Direction -eq 'FromTurnstile' -and $governanceAuthority -eq 'Turnstile') {
     return $result
 }
 
+$registry = @(ConvertFrom-ClaudeBuRegistry (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'))
+$parents = ConvertFrom-ClaudeBuParents (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents')
+if (-not $parents) { $parents = [ordered]@{} }
+$unassignedMode = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-unassigned'
+if (-not $unassignedMode) { $unassignedMode = 'allow' }
 if ($Direction -eq 'FromTurnstile') {
     if ($authority -ne 'Turnstile') {
         throw ('This connection authors budgets in the gateway, so Turnstile''s budgets are a mirror and are not read back. ' +

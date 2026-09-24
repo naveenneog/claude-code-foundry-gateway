@@ -94,7 +94,12 @@ $mutations = @(
     @{ Suite = $governance; Name = 'Turnstile''s API is granted on the gateway, not the apply job'
        File  = 'scripts/Connect-ClaudeTurnstile.ps1'; From = 'Role = ''Container Apps Jobs Operator''; Scope = $applyJobId }'; To = 'Role = ''Container Apps Jobs Operator''; Scope = $gatewayId }' }
     @{ Suite = $governance; Name = 'a save starts the job that also exports'
-       File  = 'infra/turnstile-schedule.bicep'; From = 'trigger: ''Manual'', skipExport: true'; To = 'trigger: ''Manual'', skipExport: false' })
+       File  = 'infra/turnstile-schedule.bicep'; From = 'trigger: ''Manual'', skipExport: true'; To = 'trigger: ''Manual'', skipExport: false' }
+    @{ Suite = $governance; Name = 'entries in another order are written again'
+       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if ((& $canonical $was) -ne (& $canonical ([string]$want[$id]))) {'; To = 'if ($was -ne [string]$want[$id]) {' }
+    @{ Suite = $governance; Name = 'every registration restarts Turnstile'
+       File  = 'scripts/Connect-ClaudeTurnstile.ps1'; From = 'if ($jobSetting -ne $applyJobId) {'; To = 'if ($true) {' }
+)
 
 $missed = @()
 $caught = 0

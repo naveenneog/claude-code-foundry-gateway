@@ -221,6 +221,8 @@ if ($toTurnstile -or $wasTurnstile) {
     $jobIdentity = az identity list -g $ResourceGroup --query "[?starts_with(name, 'id-turnstile-')].principalId | [0]" -o tsv 2>$null
     $apiIdentity = az webapp identity show -g $rg -n $apiApp --query principalId -o tsv 2>$null
     $gatewayId = az apim show -g $ResourceGroup -n $ApimName --query id -o tsv
+    # Written only when it changes: every change to an app setting restarts Turnstile's API.
+    $jobSetting = [string](az webapp config appsettings list -g $rg -n $apiApp --query "[?name=='GATEWAY_APPLY_JOB_ID'].value | [0]" -o tsv 2>$null)
 }
 if ($toTurnstile) {
     if (-not $applyJobId -or -not $jobIdentity) {
@@ -263,12 +265,12 @@ if ($toTurnstile) {
             $grants.Add("$($grant.Role) on $(Split-Path $grant.Scope -Leaf)")
         }
     }
-    az webapp config appsettings set -g $rg -n $apiApp --settings "GATEWAY_APPLY_JOB_ID=$applyJobId" -o none
-    $governanceWiring = "saves in Turnstile start $(Split-Path $applyJobId -Leaf) ($seeded). Add gatewayApplyJobId=$applyJobId to Turnstile's main.parameters.json so a redeploy keeps it"
+    if ($jobSetting -ne $applyJobId) { az webapp config appsettings set -g $rg -n $apiApp --settings "GATEWAY_APPLY_JOB_ID=$applyJobId" -o none }
+    $governanceWiring = "saves in Turnstile start $(Split-Path $applyJobId -Leaf) ($seeded). Turnstile's redeploys keep this; deploying Turnstile from scratch needs gatewayApplyJobId=$applyJobId in its parameters"
 }
 elseif ($wasTurnstile) {
     # Back to the gateway: saves in Turnstile no longer reach it, and the job loses its write.
-    az webapp config appsettings set -g $rg -n $apiApp --settings 'GATEWAY_APPLY_JOB_ID=' -o none
+    if ($jobSetting) { az webapp config appsettings set -g $rg -n $apiApp --settings 'GATEWAY_APPLY_JOB_ID=' -o none }
     if ($jobIdentity -and $gatewayId) {
         $assigned = az role assignment list --assignee $jobIdentity --role $writerRole --scope $gatewayId --query "[].id" -o tsv 2>$null
         foreach ($id in @($assigned | Where-Object { $_ })) { az role assignment delete --ids $id }

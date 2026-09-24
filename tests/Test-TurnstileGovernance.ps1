@@ -209,6 +209,12 @@ Assert 'a gateway that already matches gets no writes'        (@($none).Count -e
 $gatewayNow['tpm-standard'] = '10000'
 $one = Get-ClaudeGatewayGovernanceChanges -Desired $d -Current $gatewayNow
 Assert 'one changed limit is one write, with what it was'     (@($one).Count -eq 1 -and $one[0].Id -eq 'tpm-standard' -and $one[0].Was -eq '10000' -and $one[0].Now -eq '20000')
+$reordered = [ordered]@{}; foreach ($k in $gatewayNow.Keys) { $reordered[$k] = $gatewayNow[$k] }
+$reordered['tpm-standard'] = '20000'
+$reordered['bu-registry'] = ',' + ((@($reordered['bu-registry'].Trim(',') -split ',') | Sort-Object -Descending) -join ',') + ','
+$reordered['models-premium'] = ',claude-sonnet-5,claude-opus-5,'
+$sameEntries = Get-ClaudeGatewayGovernanceChanges -Desired $d -Current $reordered
+Assert 'entries in another order are not a change'            (@($sameEntries).Count -eq 0 -and $reordered['bu-registry'] -ne $gatewayNow['bu-registry'])
 
 $directory = @{ 'claude bu platform' = 'exists'; 'claude team web' = 'exists'; 'claude bu finance' = 'missing'; 'claude-code-standard' = 'exists'; 'claude premium' = 'exists' }
 $lookup = { param($g) $directory[$g.ToLowerInvariant()] }
@@ -236,6 +242,7 @@ Assert 'Turnstile is seeded only when governance moves'       ($connect -match "
 Assert 'a failed seed leaves governance with the gateway'     ($connect -match "(?s)catch \{\s+\`$settings\.governanceAuthority = 'Gateway'\s+Set-ApimNamedValue")
 Assert 'Turnstile may start the apply job, and only it'       ($connect -match "Role = 'Container Apps Jobs Operator'; Scope = \`$applyJobId \}")
 Assert 'the job may write named values, and nothing else'     ($applyLib -match "'Microsoft\.ApiManagement/service/namedValues/write'" -and -not ($applyLib -match 'Microsoft\.ApiManagement/service/(\*|policies|apis|products|certificates|backends)'))
+Assert 'Turnstile restarts only when its setting changes'  ($connect -match "if \(\`$jobSetting -ne \`$applyJobId\) \{ az webapp config appsettings set")
 Assert 'going back to the gateway removes both'               ($connect -match "GATEWAY_APPLY_JOB_ID=' -o none" -and $connect -match 'az role assignment delete --ids \$id')
 Assert 'a save starts a job that only applies'                ($jobTemplate -match "trigger: 'Manual', skipExport: true" -and $jobTemplate -match 'extra="\$\{extra\} -SkipExport"')
 Assert 'a pass applies Turnstile when it authors governance'  ($schedulePass -match "\`$integration\['governanceAuthority'\] -eq 'Turnstile' -or")
@@ -245,7 +252,7 @@ Write-Host 'Turnstile - the Entra application, the bill and the pictures' -Foreg
 
 $entraApp = Get-Content (Join-Path $root 'scripts/New-ClaudeTurnstileEntraApp.ps1') -Raw
 $bom = Get-Content (Join-Path $root 'scripts/Get-ClaudeTurnstileBom.ps1') -Raw
-$pictures = @('guide/capture-turnstile.mjs', 'guide/capture-turnstile-entra.mjs', 'guide/render-turnstile.mjs') |
+$pictures = @('guide/capture-turnstile.mjs', 'guide/capture-turnstile-entra.mjs', 'guide/render-turnstile.mjs', 'guide/capture-turnstile-governance.mjs') |
     ForEach-Object { Get-Content (Join-Path $root $_) -Raw }
 $portal = Get-Content (Join-Path $root 'guide/capture-turnstile-entra.mjs') -Raw
 
@@ -294,8 +301,9 @@ if (Get-Command az -ErrorAction SilentlyContinue) {
 Write-Host ''
 Write-Host 'Turnstile governance - applying to a gateway held in memory' -ForegroundColor Cyan
 
-# The apply reaches Azure through these four functions; they are replaced here, after every
+# The apply reaches Azure through these five functions; they are replaced here, after every
 # check above has used the real ones.
+function Get-ClaudeGatewayGovernanceValues { param($ResourceGroup, $ApimName, $Ids) $v = [ordered]@{}; foreach ($i in $Ids) { $v[$i] = [string]$script:gw[$i] }; $v }
 function Get-ApimNamedValue { param($ResourceGroup, $ApimName, $Id) $script:gw[$Id] }
 function Set-ApimNamedValue { param($ResourceGroup, $ApimName, $Id, $Value) $script:writes++; if (-not $script:dropWrites) { $script:gw[$Id] = $Value } }
 function Test-ClaudeGraphGroupAccess { $script:graphState }
