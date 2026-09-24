@@ -627,22 +627,6 @@
                 </set-header>
             </when>
         </choose>
-        <choose>
-            <when condition="@((string)context.Variables["buMode"] != "strict" || (string)context.Variables["parentMode"] != "strict")">
-                <trace source="claude-budget" severity="information">
-                    <message>Budget mode usage; join BudgetRequestId to the usage ledger for monthly totals.</message>
-                    <metadata name="BudgetRequestId" value="@(context.RequestId.ToString())" />
-                    <metadata name="BusinessUnit" value="@((string)context.Variables["businessUnit"])" />
-                    <metadata name="Mode" value="@((string)context.Variables["buMode"])" />
-                    <metadata name="BaseTokens" value="@((string)context.Variables["buQuota"])" />
-                    <metadata name="ParentUnit" value="@((string)context.Variables["parentUnit"])" />
-                    <metadata name="ParentMode" value="@((string)context.Variables["parentMode"])" />
-                    <metadata name="ParentBaseTokens" value="@((string)context.Variables["parentQuota"])" />
-                    <metadata name="Notice" value="@((string)context.Variables["budgetNotice"])" />
-                </trace>
-            </when>
-        </choose>
-
         <!-- The chargeback ledger's identity half. ADR-0006.
              ==========================================================
              The per-request token record is ApiManagementGatewayLlmLog, which
@@ -691,6 +675,22 @@
                 return ua.Length > 120 ? ua.Substring(0, 120) : ua;
             }" />
         </trace>
+
+        <choose>
+            <when condition="@((string)context.Variables["buMode"] != "strict" || (string)context.Variables["parentMode"] != "strict")">
+                <trace source="claude-budget" severity="information">
+                    <message>Budget mode usage; join BudgetRequestId to the usage ledger for monthly totals.</message>
+                    <metadata name="BudgetRequestId" value="@(context.RequestId.ToString())" />
+                    <metadata name="BusinessUnit" value="@((string)context.Variables["businessUnit"])" />
+                    <metadata name="Mode" value="@((string)context.Variables["buMode"])" />
+                    <metadata name="BaseTokens" value="@((string)context.Variables["buQuota"])" />
+                    <metadata name="ParentUnit" value="@((string)context.Variables["parentUnit"])" />
+                    <metadata name="ParentMode" value="@((string)context.Variables["parentMode"])" />
+                    <metadata name="ParentBaseTokens" value="@((string)context.Variables["parentQuota"])" />
+                    <metadata name="Notice" value="@((string)context.Variables["budgetNotice"])" />
+                </trace>
+            </when>
+        </choose>
 
         <set-header name="x-governed-by" exists-action="override">
             <value>apim-claude-gateway</value>
