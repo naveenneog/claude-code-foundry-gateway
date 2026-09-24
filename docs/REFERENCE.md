@@ -99,10 +99,23 @@ routine production health check. The packet gate is the definition of done.
 There is no portal substitute for the local test suite; use the verification
 steps in each deployment guide for live resources.
 
+The suite uses separate PowerShell 7 processes, up to four in parallel by
+default, with exclusive lanes for shared state or recursive source scans.
+Each check has private scratch and a 600-second default deadline.
+Do not mutate repository files, use fixed scratch names, or share Azure CLI
+configuration from a parallel check. Add checks with the one-line `Invoke-Check`
+form; use `-SerialLane` only for a demonstrated shared-state/full-tree-scan need.
+[ADR-0025](adr/0025-parallel-test-suite.md#running-and-extending-the-suite)
+documents serial diagnostics, shards, timing receipts and the restored
+30-minute gate budget.
+
 `Test-DocReferences.ps1` checks case-sensitive relative Markdown links, GitHub
 heading anchors (including duplicate, Unicode and explicit HTML anchors),
 repository-root script paths and parameters in copyable examples. It runs
-mutation cases in uniquely named project-local scratch copies. Source scope:
+mutation cases in GUID-named copies under the process-private scratch directory
+supplied by Test-All, not beside repository source. It reads only the guide set
+and its references, uses no Azure CLI state, and runs in the parallel lane.
+Source scope:
 README, DEVELOPER, user guides in `docs/`, `guide/README.md`, and onboarding
 Markdown. It does not scan historical STATUS/ROADMAP/UNKNOWNS/CHARTER or ADRs as
 source guides, but checks links into them. No active user guide is excluded.

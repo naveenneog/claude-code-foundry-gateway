@@ -256,9 +256,12 @@ foreach ($b in $broken) {
 }
 Assert 'every user-facing reference resolves' ($broken.Count -eq 0) "$($broken.Count) broken reference(s)"
 
-# Unique, project-local scratch copies avoid collisions between worktrees and
-# never borrow a user's TEMP directory. Every mutation uses the real scanner.
-$scratch = Join-Path $Root ('.docrefs-' + [guid]::NewGuid().ToString('N'))
+# Test-All supplies a private TEMP per process. Standalone callers may set TEMP
+# as well; never create fixtures beside source files while other checks read it.
+$scratchRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+$scratch = Join-Path $scratchRoot ('docrefs-' + [guid]::NewGuid().ToString('N'))
+Assert 'mutation copies use the process-private scratch root' (
+    [IO.Path]::GetDirectoryName($scratch).TrimEnd('\', '/') -eq $scratchRoot.TrimEnd('\', '/'))
 $utf8 = New-Object Text.UTF8Encoding($false)
 function Write-Fixture([string]$Path, [string]$Text) {
     [IO.File]::WriteAllText($Path, (($Text -replace '\r?\n', "`r`n").TrimEnd() + "`r`n"), $utf8)
