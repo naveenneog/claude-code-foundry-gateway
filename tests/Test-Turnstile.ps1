@@ -213,7 +213,7 @@ Write-Host ''
 Write-Host 'Turnstile bridge - the guide' -ForegroundColor Cyan
 
 Assert 'the guide exists'                                    ([bool]$doc)
-Assert 'it keeps one enforcer'                               ($doc -match '(?i)one enforcer')
+Assert 'it keeps one enforcer, as its own section'           ($doc -match '(?m)^## One enforcer\r?$')
 Assert 'it says why the source is backfill'                  ($doc -match '(?s)backfill.{0,400}cache correction')
 Assert 'it says why nothing is estimated'                    ($doc -match '(?s)estimated.{0,400}reconciliation window')
 Assert 'it gives the cache metric''s limit'                  ($doc -match '100 unique values' -and $doc -match '(?i)lower bound')

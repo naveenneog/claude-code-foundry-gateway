@@ -1,6 +1,6 @@
 # ADR-0014: Turnstile beside the gateway, fed by a scheduled job with no secret
 
-- **Status:** Accepted
+- **Status:** Accepted. Amended by [ADR-0015](0015-governance-authored-in-turnstile.md): when governance is authored in Turnstile, more than a budget comes back from it
 - **Date:** 2026-09-23
 - **Packet:** P39, P40
 - **Deciders:** claude-code-foundry-gateway maintainers, platform owner

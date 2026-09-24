@@ -51,7 +51,9 @@ function redactions() {
   }
   const pairs = [];
   for (const u of units) pairs.push([u.group, `claude-${parents[u.id] ? 'team' : 'bu'}-${example[u.id]}`], [u.id, example[u.id]]);
-  const job = az(['containerapp', 'job', 'list', '-g', RG, '--query', "[?starts_with(name, 'job-turnstile-apply-')].name | [0]", '-o', 'tsv']);
+  // Filtered here, not in a --query: on Windows az runs through cmd.exe, which reads | as a pipe.
+  const jobs = JSON.parse(az(['containerapp', 'job', 'list', '-g', RG, '--query', '[].name', '-o', 'json']) || '[]');
+  const job = jobs.find((name) => name.startsWith('job-turnstile-apply-'));
   if (job) pairs.push([job.slice('job-turnstile-apply-'.length), 'contoso']);
   // Longest first, so a group is replaced before the unit id inside it.
   pairs.sort((a, b) => b[0].length - a[0].length);
@@ -107,7 +109,8 @@ try {
   await page.locator('input[type="email"]').first().fill(owner.email);
   await page.locator('input[type="password"]').first().fill(owner.password);
   await page.locator('button[type="submit"]').first().click();
-  await page.waitForLoadState('networkidle');
+  // Signed in only once the console's navigation shows; the sign-in page itself is already idle.
+  await page.getByRole('button', { name: 'Gateway governance' }).or(page.getByRole('link', { name: 'Gateway governance' })).first().waitFor({ timeout: 60000 });
   await page.goto(`${BASE}/?source=apim&page=gateway-governance`, { waitUntil: 'networkidle' });
   await page.getByRole('heading', { name: 'Tiers' }).waitFor({ timeout: 60000 });
   await shot(page, 'turnstile-10-governance.png');

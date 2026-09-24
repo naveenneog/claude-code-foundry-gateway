@@ -6,14 +6,16 @@ article connects it to the Claude gateway, so that:
 
 - the business units, teams and budgets you manage in the gateway appear in Turnstile;
 - every Claude request, and every hour of cache reads, is accounted for there, per person;
-- if you choose, budgets are edited on Turnstile's budget page and enforced by the gateway.
+- if you choose, budgets are edited on Turnstile's budget page and enforced by the gateway;
+- or, if you choose, business units, teams, their Entra groups, budgets and tier limits are all
+  managed on Turnstile's pages, and each save reaches the gateway in about two minutes.
 
 It uses a fork, [naveenneog/turnstile](https://github.com/naveenneog/turnstile), branch
 `claude-gateway`, which adds Microsoft Entra admin-only sign-in, an enterprise catalog API and a
 deployer that runs on Windows. See [The fork](#the-fork).
 
-Every command, result and figure on this page was measured on 2026-09-23 against the reference
-gateway and a Turnstile deployment in Central US. People, tenant and unit names in the pictures
+Every command, result and figure on this page was measured on 2026-09-23 and 2026-09-24 against
+the reference gateway and a Turnstile deployment in Central US. People, tenant and unit names in the pictures
 are replaced by example ones: the units are `sales` (teams `sales-emea`, `sales-apac`) and
 `engineering`.
 
@@ -25,9 +27,12 @@ The gateway enforces. Turnstile shows, and optionally edits. Keep it that way.
   misconfiguration can refuse or delay a Claude call.
 - Access, tier quotas and business-unit and team budgets are decided by the gateway's policy on
   every request, from its named values, as described in [BUSINESS-UNITS.md](BUSINESS-UNITS.md).
-- A change made in Turnstile reaches developers one way only: a budget written back into the
-  gateway's `bu-registry` by `Sync-ClaudeTurnstileGovernance.ps1 -Direction FromTurnstile -Apply`.
-  The gateway enforces it on the next request.
+- A change made in Turnstile reaches developers only through the gateway's named values: a
+  budget written back into `bu-registry` by `Sync-ClaudeTurnstileGovernance.ps1 -Direction
+  FromTurnstile -Apply` ([step 7](#7-optional-edit-budgets-in-turnstile)), or, when governance is
+  authored in Turnstile, whatever its pages save, written by the gateway's apply job
+  ([Manage everything in Turnstile](#manage-everything-in-turnstile)). The gateway enforces it on
+  the next request.
 
 Turnstile can enforce budgets itself, for traffic routed through its own API Management policy.
 Claude traffic is not routed that way, so Turnstile's budget page shows **Soft budget · Alerts
@@ -49,6 +54,7 @@ Developer ──▶ Claude gateway (APIM) ──▶ Foundry          Turnstile w
 Export-ClaudeTurnstileUsage ─ Event Hubs REST, Entra ─▶ Event Hub ─▶ telemetry Function ─▶ PostgreSQL
 Sync-ClaudeTurnstileGovernance ─ Turnstile API, Entra bearer ─────────────────┘
 Sync ... -Direction FromTurnstile -Apply ─▶ bu-registry on the gateway
+A save in Turnstile ─ starts ─▶ apply job ─ the same sync, as its own identity ─▶ named values
 ```
 
 | In the gateway | In Turnstile | Carried by |
@@ -340,8 +346,9 @@ Measured round trip, with the `sales-emea` budget set to 1,000 tokens in Turnsti
 | The first request after `-Apply` returned | 403 `rate_limit_error`, "The Claude budget for your business unit (sales-emea) is spent for this period", 2 s later |
 | Budget restored in Turnstile, applied, authority back to Gateway | The registry read back identical; the first request returned 200 |
 
-Structure never comes back from Turnstile. A unit needs an Entra group, and groups belong to the
-gateway, so a unit added in Turnstile is not created in the gateway.
+With only budgets authored in Turnstile, structure stays the gateway's: a unit added in Turnstile
+is not created in the gateway. To manage units, teams, groups and tiers in Turnstile as well, see
+[Manage everything in Turnstile](#manage-everything-in-turnstile).
 
 ## Run it on a schedule
 
@@ -390,6 +397,135 @@ The first two runs failed, and both causes are now handled:
   stopped Turnstile's PostgreSQL server, and every Turnstile function was timing out at 30 s. See
   [Troubleshooting](#troubleshooting).
 
+## Manage everything in Turnstile
+
+Business units, teams, their Entra groups, budgets and tier limits can all be managed on
+Turnstile's pages, with no script for the Turnstile administrator. Each save starts the gateway's
+apply job, which reads Turnstile and writes the gateway's named values; the gateway enforces them
+on the next request. The gateway is still the one enforcer, and no Claude request passes through
+Turnstile ([ADR-0015](adr/0015-governance-authored-in-turnstile.md)).
+
+### Before you start
+
+| Requirement | Detail |
+|---|---|
+| The schedule | Registered from this version. `Register-ClaudeTurnstileSchedule.ps1` creates the apply job, `job-turnstile-apply-<suffix>`, beside the hourly one. Nothing starts it until the next step. |
+| Turnstile | The fork's `claude-gateway` branch with the **Gateway governance** page ([The fork](#the-fork)). |
+| Azure roles | Owner, or User Access Administrator, on the gateway's resource group: the next step defines a custom role there and assigns it. |
+| A tenant administrator, optional | To let the job read Entra groups ([step 3](#3-optional-let-the-job-read-entra-groups)). Everything else works without it. |
+
+### 1. Move governance to Turnstile
+
+```powershell
+./scripts/Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Turnstile
+```
+
+In order, it:
+
+1. Checks that the apply job, its identity and Turnstile's API identity exist, before it writes
+   anything.
+2. Records `governanceAuthority=Turnstile` in the gateway's `turnstile-integration` named value.
+3. Gives Turnstile the gateway's current units, teams, budgets and tiers, once. If that fails,
+   governance stays with the gateway.
+4. Grants the job's identity **Claude gateway governance writer**, a custom role with four
+   actions: read the instance, read and write its named values, and read operation results. Not
+   its policy, APIs, certificates or network.
+5. Grants Turnstile's API **Container Apps Jobs Operator** on the apply job alone.
+6. Sets Turnstile's `GATEWAY_APPLY_JOB_ID` app setting, only if it changed. Turnstile's API
+   restarts once when it does; allow a minute before the first save.
+
+Measured: 249 s. Turnstile received 3 organizations, 5 departments and 2 tiers, both roles were
+granted, and validation returned `ok - catalog is configured`. Registering the schedule again
+later neither seeded Turnstile again nor restarted it: the tier record's `updated_at` and the
+API's last-modified time were unchanged.
+
+Turnstile's own redeploys keep the setting, because its release step merges the app's current
+settings. Only a deployment of Turnstile from scratch needs `gatewayApplyJobId` in its
+parameters.
+
+### 2. Edit in Turnstile
+
+Open **Gateway governance**. Business units, teams and the two tiers the gateway's policy enforces
+are edited here; monthly budgets stay on **Budget Management**, and a save there applies the same
+way. **Apply now** applies again without a change, for example after a failed run.
+
+![Gateway governance: units, teams, tiers and the last apply](guide/turnstile-10-governance.png)
+
+![Editing the Standard tier](guide/turnstile-11-tier-editor.png)
+
+![Applied: the gateway now enforces 20,001 tokens per minute](guide/turnstile-12-applied.png)
+
+Measured from the save to the gateway, reading the named value with `az` every 5 s and sending a
+request every 10 s:
+
+| Saved in Turnstile | On the gateway |
+|---|---|
+| Standard tier, tokens per minute 20,000 to 20,001, with **Save and apply** | `tpm-standard` read 20,001 after 112 s |
+| Put back to 20,000 the same way | Read back after 109 s |
+| Team `sales-emea` monthly budget 1,666,666,666 to 1,000, through the budget API the Budget page calls | The first refused request came 123 s after the save: 403 `rate_limit_error`, "The Claude budget for your business unit (sales-emea) is spent for this period" |
+| The budget put back | The first 200 came 102 s after the save, and the registry read back as it was |
+
+Most of the time is the job starting, not the apply. In the first run, before the named values
+were read in one call: 33 s for the container to start, 55 s to add PowerShell, sign in and fetch
+the commit, and 64 s for the pass. Reading the eight named values in one call instead of eight
+took 3 s instead of 21.
+
+Each apply is one run of the job, priced like a scheduled run: $0.0021 at Container Apps list
+price ([Run it on a schedule](#run-it-on-a-schedule)).
+
+### 3. Optional: let the job read Entra groups
+
+The job checks that a unit's, team's or tier's group exists, and refreshes membership from the
+groups, as its own managed identity. Both need the Microsoft Graph application permission
+`GroupMember.Read.All`, which only a tenant administrator (Privileged Role Administrator or Global
+Administrator) can grant:
+
+```powershell
+./scripts/Grant-ClaudeGovernanceGraphAccess.ps1
+```
+
+| | Without `GroupMember.Read.All` | With it |
+|---|---|---|
+| Budgets and tier limits | Applied | Applied |
+| A unit or team whose group the gateway already uses | Applied | Applied, once the group is found |
+| A unit or team with a group the gateway does not use yet | Not applied; the run names it | Applied if the group exists |
+| Who is in each tier and unit | Left as it is | Refreshed from the groups on every apply |
+
+Without it, membership is never rewritten, because a group that cannot be read looks empty, and
+an empty tier list would refuse everyone in it. Azure caches a managed identity's tokens for up to
+about 24 hours, so a grant can take that long to be seen; each run's log says which it saw.
+`-Revoke` removes the permission. In the reference tenant it was not granted: every run applied
+budgets and tier limits and logged `Membership: not refreshed: the apply identity cannot read
+Entra groups (denied)`.
+
+When the gateway reads entitlement from the projection, as it must beyond about 93 developers
+([SCALE.md](SCALE.md)), the job never writes membership lists, with or without the grant.
+`Sync-ClaudeProjection.ps1` refreshes membership, and reads the units the job wrote.
+
+### What is applied, and what is not
+
+- Only the tiers the policy enforces, `standard` and `premium`. Another tier is named in the run
+  and not applied: a third tier is a policy change.
+- A unit or team id is lower-case letters, digits and hyphens. A unit with no Entra group is not
+  applied, and neither is a team under a unit that was not.
+- Turnstile's seeded demonstration catalog is never applied, and neither is a catalog with no
+  business unit at all: that is far more often a read that went wrong than a decision, so the
+  gateway's units are left as they are.
+- Budgets are read for the month Turnstile names, after Turnstile has given that month the
+  previous month's budgets. Until then a new month has none, and reading it would remove every
+  budget.
+- Only named values that differ are written, and each is read back. Entries in another order are
+  not a difference: the policy finds every entry by name.
+- The hourly run applies the same way, so a start that failed is caught up within the hour.
+
+### Move governance back to the gateway
+
+```powershell
+./scripts/Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Gateway
+```
+
+It clears `GATEWAY_APPLY_JOB_ID` and removes the writer role. The gateway keeps what was last
+applied, and from then on the hourly run shows the gateway's state in Turnstile again.
 ## Admin-only access
 
 Three layers, each measured.
@@ -464,6 +600,12 @@ through it, so for this integration it does nothing. The deployer always creates
 | The scheduled job stops at once with `set: pipefail\r` | CRLF line endings in the start script, from a Windows checkout of a changed template | Keep `replace(bootstrap, '\r', '')` in the template |
 | A scheduled run reports `refused` budgets | A team budget above its unit's, which Turnstile refuses | Expected; the gateway still enforces both |
 | The Entra capture stops with `MFA` | The blade needs a fresh multifactor sign-in, which pushed a request to your phone | `node guide/auth.mjs`, then capture again |
+| **Apply now** answers "No gateway apply job is configured" just after connecting | Turnstile's API restarts when `GATEWAY_APPLY_JOB_ID` changes. Measured: the first read after Connect still said not configured; the setting was there | Wait a minute and reload |
+| A run reports "This Turnstile has no gateway governance endpoints" | Turnstile predates the Gateway governance page. A missing route answers 405, not 404, because Turnstile's page fallback owns the path | Deploy the fork's `claude-gateway` branch |
+| A run stops with "Turnstile's catalog is its seeded demonstration set" | Governance was moved to Turnstile without seeding, or the catalog was reset | Run `Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Turnstile` again after `-GovernanceAuthority Gateway`, which seeds it |
+| A run logs `Membership: not refreshed ... (denied)` | The job's identity cannot read Entra groups | Expected without the grant; see [step 3](#3-optional-let-the-job-read-entra-groups) |
+| A run names a unit "could not be checked" | Its group is new to the gateway and the directory cannot be read | Grant `GroupMember.Read.All`, or ask a gateway administrator to add the unit with `Set-ClaudeBusinessUnit.ps1` |
+| The sync refuses: "pushing the gateway's state would overwrite what was saved there" | Governance is authored in Turnstile | `-Direction FromTurnstile -Apply`, or move governance back to the gateway first |
 
 ## FAQ
 
@@ -481,9 +623,16 @@ there and run `Sync-ClaudeAccess.ps1` ([BUSINESS-UNITS.md](BUSINESS-UNITS.md)).
 **What happens if Turnstile is down?** Nothing for developers. The scheduled run fails and the
 next one, whose window overlaps, sends what was missed.
 
-**Does a budget edited in Turnstile take effect if nobody runs the sync?** No. The gateway
-enforces its own registry. Run the sync with `-Apply`, on a schedule if Turnstile is where budgets
-are edited.
+**Does a budget edited in Turnstile take effect if nobody runs the sync?** With governance
+authored in Turnstile, yes: the save starts the apply job, and the budget was enforced about two
+minutes later. With only budgets authored there, not until the sync runs with `-Apply`, which the
+hourly job does.
+
+**Can I add a third tier in Turnstile?** No. The gateway's policy enforces `standard` and
+`premium`, so a third tier is a policy change. The Gateway governance page edits the two.
+
+**Can Turnstile rename a business unit?** Its name, yes: the gateway stores a unit's id, group
+and budget, not its name. A different id is a different unit, with a budget counter of its own.
 
 ## The fork
 
@@ -497,27 +646,32 @@ deployer does not run on Windows. The fork's branches, merged in `claude-gateway
 | `feature/entra-admin-only` | Tenant pin, admin role required, no account for anyone else | 3 of 3 mutations caught |
 | `feature/enterprise-catalog` | `GET`, `PUT` and `DELETE /api/v1/enterprise-catalog`, stored in PostgreSQL | 13 tests, 4 of 4 mutations caught |
 | `feature/entra-bearer-admin` | Entra access tokens for the API, for scripts and workload identities | 12 tests, 5 of 5 mutations caught |
+| `feature/gateway-governance` | The Gateway governance page; `GET`, `PUT /api/v1/gateway-tiers`; `GET`, `POST /api/v1/gateway-apply`; `POST /api/v1/gateway-governance/prepare`; a save that starts the gateway's apply job | 27 API tests and 9 page-rule tests passed |
 
 ## Reference
 
 | Script | Does |
 |---|---|
 | `scripts/New-ClaudeTurnstileEntraApp.ps1` | Creates or corrects the Entra application, role, scope, assignment and admin group |
-| `scripts/Connect-ClaudeTurnstile.ps1` | Discovers Turnstile, stores `turnstile-integration`, grants, validates; `-Show`, `-Disconnect`, `-BudgetAuthority`, `-PriceSource`, `-PersonBudgets` |
-| `scripts/Sync-ClaudeTurnstileGovernance.ps1` | Units, teams and budgets to Turnstile; `-Direction FromTurnstile [-Apply]` for budgets back |
+| `scripts/Connect-ClaudeTurnstile.ps1` | Discovers Turnstile, stores `turnstile-integration`, grants, validates; `-Show`, `-Disconnect`, `-BudgetAuthority`, `-GovernanceAuthority`, `-PriceSource`, `-PersonBudgets` |
+| `scripts/Sync-ClaudeTurnstileGovernance.ps1` | Units, teams, budgets and tiers to Turnstile; `-Direction FromTurnstile [-Apply]` for budgets back, or for everything when governance is authored in Turnstile |
+| `scripts/ClaudeTurnstileApply.ps1` | Turnstile's catalog, budgets and tiers as the gateway's named values, and the rules for what is applied |
+| `scripts/Grant-ClaudeGovernanceGraphAccess.ps1` | The tenant administrator's one step: `GroupMember.Read.All` for the job's identity; `-Revoke` |
 | `scripts/Export-ClaudeTurnstileUsage.ps1` | Usage to Turnstile's hub; `-From`, `-To`, `-SliceMinutes`, `-ThrottleLimit`, `-OutFile` |
 | `scripts/Get-ClaudeTurnstileBom.ps1` | What the Turnstile deployment costs to keep |
-| `scripts/Register-ClaudeTurnstileSchedule.ps1`, `infra/turnstile-schedule.bicep` | The hourly job, its identity and its grants; `-RunNow`, `-Cron`, `-NoGovernance`, `-RepositoryRef` |
+| `scripts/Register-ClaudeTurnstileSchedule.ps1`, `infra/turnstile-schedule.bicep` | The hourly job, the apply job, their identity and its grants; `-RunNow`, `-Cron`, `-NoGovernance`, `-RepositoryRef` |
 | `scripts/Invoke-ClaudeTurnstileSchedule.ps1` | One scheduled pass, which the job runs and you can run by hand |
 | `scripts/ClaudeTurnstile.ps1`, `scripts/ClaudeTurnstileGovernance.ps1` | The mapping and the checks, shared by all of the above |
 | `tests/Test-Turnstile.ps1`, `tests/Test-TurnstileGovernance.ps1` | Offline checks of the mapping, the rules and this page |
 | `tests/turnstile/check_contract.py` | Runs exported events through Turnstile's own ingest code |
 | `guide/capture-turnstile.mjs`, `guide/capture-turnstile-entra.mjs`, `guide/render-turnstile.mjs` | The pictures on this page, redacted in the page before capture |
+| `guide/capture-turnstile-governance.mjs` | Times a save on the Gateway governance page to the gateway, and photographs it; redactions built from the gateway at run time |
 
 `turnstile-integration` holds `version`, `url`, `clientId`, `tenantId`, `scope`,
 `eventHubNamespace`, `eventHubName`, `resourceGroup`, `priceSource`, `budgetAuthority`,
-`personBudgets`, `connectedAt` and `connectedBy`.
+`governanceAuthority`, `personBudgets`, `connectedAt` and `connectedBy`.
 
 Turnstile endpoints used: `GET`, `PUT /api/v1/enterprise-catalog`; `GET /api/v1/budgets`;
 `PUT /api/v1/budgets/{scope}/{id}`; `GET /api/v1/budgets/users`;
-`POST /api/v1/budgets/users/bulk`.
+`POST /api/v1/budgets/users/bulk`; `GET`, `PUT /api/v1/gateway-tiers`;
+`POST /api/v1/gateway-governance/prepare`.

@@ -99,6 +99,8 @@ $mutations = @(
        File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if ((& $canonical $was) -ne (& $canonical ([string]$want[$id]))) {'; To = 'if ($was -ne [string]$want[$id]) {' }
     @{ Suite = $governance; Name = 'every registration restarts Turnstile'
        File  = 'scripts/Connect-ClaudeTurnstile.ps1'; From = 'if ($jobSetting -ne $applyJobId) {'; To = 'if ($true) {' }
+    @{ Suite = $governance; Name = 'membership lists are written while the projection is the source'
+       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if ($current[''entitlement-source''] -eq ''projection'') {'; To = 'if ($false) {' }
 )
 
 $missed = @()

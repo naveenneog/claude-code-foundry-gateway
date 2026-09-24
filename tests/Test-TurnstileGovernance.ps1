@@ -341,6 +341,10 @@ try {
     Assert 'with Graph access, groups that exist are applied' (@(& $unitsNow | ForEach-Object { $_.Id }) -contains 'finance')
     Assert 'and membership is refreshed from the tier groups' ((Test-Path $refreshed) -and (Get-Content $refreshed -Raw).Trim() -eq 'claude-code-standard|Claude Premium' -and $r.Membership -eq 'refreshed from the Entra groups')
 
+    & $reset; $script:graphState = 'ok'; $script:gw['entitlement-source'] = 'projection'
+    $r = Invoke-ClaudeGatewayGovernanceApply @applyArgs -Apply
+    Assert 'with the projection, the lists are never written'  ($script:gw['tpm-standard'] -eq '20000' -and -not (Test-Path $refreshed) -and $r.Membership -match 'comes from the projection')
+
     & $reset; $script:graphState = 'ok'; $directory['claude premium'] = 'missing'
     $r = Invoke-ClaudeGatewayGovernanceApply @applyArgs -Apply
     Assert 'a tier with no group: limits applied, members not' ($script:gw['tpm-standard'] -eq '20000' -and -not (Test-Path $refreshed) -and $r.Membership -match 'every tier needs')

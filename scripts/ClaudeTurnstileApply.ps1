@@ -177,7 +177,8 @@ function Test-ClaudeGraphGroupAccess {
         Without it, groups the gateway already uses are trusted, new ones are not applied, and
         membership is left as it is - never rewritten from groups that merely could not be read.
     #>
-    $raw = az rest --method get --url 'https://graph.microsoft.com/v1.0/groups?$top=1&$select=id' 2>&1 | Out-String
+    # No & in the address: on Windows az runs through cmd.exe, which would end the command there.
+    $raw = az rest --method get --url 'https://graph.microsoft.com/v1.0/groups?$top=1' 2>&1 | Out-String
     if ($LASTEXITCODE -eq 0) { return 'ok' }
     if ($raw -match '(?i)Authorization_RequestDenied|Insufficient privileges|Forbidden|403') { return 'denied' }
     return 'error'
@@ -277,7 +278,8 @@ function Invoke-ClaudeGatewayGovernanceApply {
     )
     $desired = ConvertFrom-ClaudeTurnstileGovernance -Catalog $Catalog -BudgetItems @($BudgetItems) -Tiers @($Tiers)
     $ids = @('bu-registry', 'bu-parents') + @($script:ClaudeGatewayTiers | ForEach-Object { "tpm-$_"; "quota-$_"; "models-$_" })
-    $current = Get-ClaudeGatewayGovernanceValues -ResourceGroup $ResourceGroup -ApimName $ApimName -Ids $ids
+    # entitlement-source is read, never written: it says where the policy finds membership.
+    $current = Get-ClaudeGatewayGovernanceValues -ResourceGroup $ResourceGroup -ApimName $ApimName -Ids ($ids + 'entitlement-source')
 
     $graph = Test-ClaudeGraphGroupAccess
     $currentUnits = @(ConvertFrom-ClaudeBuRegistry $current['bu-registry'])
@@ -300,7 +302,12 @@ function Invoke-ClaudeGatewayGovernanceApply {
                 throw "$($c.Id) did not read back as written; the change may not be in effect."
             }
         }
-        if ($graph -ne 'ok') {
+        if ($current['entitlement-source'] -eq 'projection') {
+            # The policy reads membership from the projection, not the lists, and a list of every
+            # member could not be written anyway: a named value holds about 110 identities.
+            $membership = 'not refreshed here: entitlement comes from the projection, which Sync-ClaudeProjection.ps1 refreshes from the units written here'
+        }
+        elseif ($graph -ne 'ok') {
             # Never refresh membership from groups that could not be read: an unreadable group
             # looks empty, and an empty tier list would refuse everyone in it.
             $membership = "not refreshed: the apply identity cannot read Entra groups ($graph). A tenant administrator grants it Microsoft Graph GroupMember.Read.All once (docs/TURNSTILE.md)"

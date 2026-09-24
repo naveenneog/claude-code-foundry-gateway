@@ -251,6 +251,11 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       instance deployed but served no model route. [AI-GATEWAY-TIER.md](AI-GATEWAY-TIER.md)
 - [x] P43 nothing about one deployment in the code — every `-ResourceGroup` default comes from the
       environment or from what the installer recorded; a guard test fails when a literal is put back
+- [x] P44 governance authored in Turnstile — business units, teams, their Entra groups, budgets and
+      tier limits edited on Turnstile's pages, each save starting the gateway's apply job. Run live:
+      a tier limit saved on the page reached the gateway in 112 s, and a budget saved in Turnstile
+      refused the next request 123 s after the save. New groups and membership refresh wait on
+      U17. [ADR-0015](adr/0015-governance-authored-in-turnstile.md)
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so

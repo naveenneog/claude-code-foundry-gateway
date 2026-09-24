@@ -1,6 +1,55 @@
 # Status
 
-**Active packet:** P39 — Turnstile as the FinOps console, admin-only through Microsoft Entra, with the gateway still the one enforcer ([TURNSTILE.md](TURNSTILE.md)). Every step was run live on 2026-09-23; 15 of 15 Turnstile mutations caught.
+**Active packet:** P44 — governance authored in Turnstile and applied to the gateway on save ([TURNSTILE.md](TURNSTILE.md#manage-everything-in-turnstile), [ADR-0015](adr/0015-governance-authored-in-turnstile.md)). Every step was run live on 2026-09-24; 44 of 44 Turnstile mutations caught, 20 of them new.
+
+## P44 acceptance criteria — governance authored in Turnstile
+
+- [x] Business units, teams, their Entra groups, budgets and tier limits are edited on Turnstile's pages, with no script for the Turnstile administrator
+- [x] A save starts the gateway's apply job, and the gateway enforces it: a tier limit read on the gateway 112 s after **Save and apply**, a budget refusing the next request 123 s after the save
+- [x] Turnstile gains one power, starting one job; the job's identity may write the gateway's named values and nothing else
+- [x] Governance moves to Turnstile with one command, which seeds Turnstile once; registering the schedule again neither seeds it nor restarts it
+- [x] The start of a month never reads as every budget removed: Turnstile rolls the month in before the apply reads it
+- [x] No group that cannot be confirmed is applied, tier limits always are, membership is never rewritten from groups that could not be read, and a catalog with no business unit is refused
+- [ ] New groups and membership refreshed by the job: needs `GroupMember.Read.All` from a tenant administrator, which the reference tenant's operator cannot grant (**U17**). The script is `Grant-ClaudeGovernanceGraphAccess.ps1`
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+| Measured | Result |
+|---|---|
+| `Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Turnstile` | 249 s: 3 organizations, 5 departments and 2 tiers seeded; the writer role and Container Apps Jobs Operator granted; validation `ok` |
+| **Apply now**, through Turnstile's API | The job started in 1.9 s and succeeded after 152 s: 33 s for the container to start, 55 s to add PowerShell, sign in and fetch the commit, 64 s the pass |
+| Standard tier 20,000 to 20,001 on the Gateway governance page | Read on the gateway 112 s after **Save and apply**; put back the same way in 109 s |
+| Team budget 1,666,666,666 to 1,000, saved in Turnstile | The first refused request 123 s after the save: 403 `rate_limit_error` naming the unit. Put back: 200 after 102 s, and the registry read back as it was |
+| The schedule registered again | Turnstile's tier record and its API's last-modified time unchanged |
+| Eight named values read one at a time, against one list call | 21.3 s against 3.1 s, the same values |
+| Offline | `Test-TurnstileGovernance.ps1` 132 of 132, 51 new; the fork's 27 API tests and 9 page-rule tests |
+
+**Found by running it.** The first live apply wrote the registry only to reorder it; entries are
+now compared by name, as the policy reads them. The pass spent 21 s reading eight named values
+one at a time; it reads them in one call. Turnstile's redeploys keep the app's settings, because its
+release step merges them, so the apply job's setting survives them. The plan had assumed the
+opposite. Turnstile's API answered 405, not 404, for the route it did not have yet. The guide's
+one-enforcer check matched the phrase anywhere on the page, and the new section uses it, so the
+mutation that drops the section went uncaught; the check now looks for the section. The first gate
+failed on the Graph check's address, which carried an `&`: on Windows `az` runs through
+`cmd.exe`, which ends a command there, so an administrator's run would have misread the result.
+
+**Found before it ran.** Registering the schedule runs Connect, and Connect seeded Turnstile
+whenever governance was Turnstile's, which would have overwritten every save on each
+registration; it now seeds on the change only, and a failed seed leaves governance with the
+gateway. A new month has no budgets in Turnstile until its five-minute timer rolls the last month's
+in, which the apply would have read as every budget removed; Turnstile now rolls the month in when
+the apply asks. With the directory unreadable, a tier's limits were dropped whenever its group had
+a name other than the default. An empty catalog would have emptied the registry. Connect wrote
+Turnstile's app setting on every run, restarting Turnstile's API each time. And at scale the
+gateway reads membership from the projection, where the job would have tried to write every member
+into a named value that holds about 110; it now leaves membership to the projection's own sync.
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | Turnstile stays out of the request path. Its one new power is starting a job whose code and permissions this repository fixes |
+| Coder | Accept | The registry format keeps one implementation, and a round trip from the gateway through Turnstile and back is tested |
+| QA | Accept | 20 new mutations, all caught; the apply is tested against a gateway held in memory, not by reading its source |
+| UX | Accept, with a reservation | About two minutes from save to effect, most of it the job starting, and the page shows the last apply. Membership waits on a tenant administrator (U17) |
 
 ## P39 acceptance criteria — Turnstile, from the gateway
 

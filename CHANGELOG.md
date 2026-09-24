@@ -28,6 +28,18 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- **Governance authored in Turnstile, applied to the gateway on save.** With
+  `Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Turnstile`, business units, teams, their Entra
+  groups, budgets and tier limits are edited on Turnstile's pages, and each save starts the
+  gateway's apply job, a manually triggered Container Apps job beside the hourly one. Measured: a
+  tier limit saved on the page was read on the gateway 112 s later, and a budget saved in Turnstile
+  refused the next request 123 s after the save. Turnstile's API holds Container Apps Jobs Operator
+  on that one job; the job's identity holds a custom role that reads and writes the gateway's named
+  values and nothing else. `scripts/ClaudeTurnstileApply.ps1` applies no group it cannot confirm,
+  always applies tier limits, never rewrites membership from groups it could not read, reads each
+  write back, and refuses a catalog with no business unit. New groups and membership refresh need
+  `GroupMember.Read.All` from a tenant administrator, `scripts/Grant-ClaudeGovernanceGraphAccess.ps1`
+  (**U17**). [ADR-0015](docs/adr/0015-governance-authored-in-turnstile.md) amends ADR-0014.
 - **Nothing about one deployment is written into the scripts.** Twenty-seven scripts and tests
   defaulted `-ResourceGroup` to the reference deployment's resource group. They now resolve it
   through `scripts/Get-ClaudeGatewayTarget.ps1`: `CLAUDE_RG`, else the resource group the installer

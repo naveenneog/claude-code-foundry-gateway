@@ -620,7 +620,7 @@ journeys that span several guides:
 | [Business units](docs/BUSINESS-UNITS.md) | platform team, FinOps | business units, teams, tiers, dollar budgets, who is unassigned |
 | [Migration](docs/MIGRATION.md) | platform team | moving off first-party Claude at scale: what survives, MDM push, bulk entitlement |
 | [Monitoring](docs/MONITORING.md) | whoever owns the spend | metrics, filters, chargeback, KQL, alerts |
-| [Turnstile](docs/TURNSTILE.md) | FinOps, platform team | a FinOps console for Claude spend: units, teams and budgets synced from the gateway, per-person usage, admin-only through Entra |
+| [Turnstile](docs/TURNSTILE.md) | FinOps, platform team | a FinOps console for Claude spend: units, teams and budgets synced from the gateway, per-person usage, admin-only through Entra; optionally the place units, teams, groups, budgets and tiers are managed, each save applied to the gateway |
 | [AI Gateway tier](docs/AI-GATEWAY-TIER.md) | platform team | the API Management AI Gateway tier (preview) beside this gateway: what it offers, how it deploys, what was measured, which to use |
 | [Models](docs/MODELS.md) | platform team | adding a new Claude model: deploy, allow, price, and what developers change |
 | [Plugins](docs/PLUGINS.md) | platform team | marketplaces, plugin and extension controls for Code and Desktop, and their limits |
