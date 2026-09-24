@@ -38,6 +38,12 @@ test('a missed known resource or identity fails rather than publishes', () => {
   assert.throws(() => assertRedacted('stprivateexample', reportRedactions(inventory)), /unredacted/);
   assert.throws(() => assertRedacted('person@example.invalid', []), /unredacted/);
 });
+test('generated deployment suffix is removed from role and DNS-link names', () => {
+  const source = { ...inventory, Resources: [{ name: 'id-reports-abcxyz1234', type: 'Microsoft.ManagedIdentity/userAssignedIdentities' }] };
+  const pairs = reportRedactions(source);
+  const text = redactReportText('Claude reports sender abcxyz1234 / reports-abcxyz1234', pairs);
+  assert.equal(text, 'Claude reports sender contoso / reports-contoso');
+});
 test('only the copied profile inside the worktree may be opened', () => {
   const root = resolve('.');
   assert.equal(validateCaptureProfile(root, resolve(root, '.pw-profile')), resolve(root, '.pw-profile'));

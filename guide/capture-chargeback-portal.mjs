@@ -54,7 +54,7 @@ const steps = [
   { id: 'portal-identity-roles', item: identity, nav: 'Azure role assignments', expected: 'role' },
   { id: 'portal-network-subnets', item: network, group: 'Settings', nav: 'Subnets', expected: 'Subnets' },
   { id: 'portal-private-endpoint', item: endpoint, expected: 'Private endpoint' },
-  { id: 'portal-dns-links', item: dns, group: 'DNS Management', nav: 'Virtual network links', expected: 'links' },
+  { id: 'portal-dns-links', item: dns, group: 'DNS Management', nav: 'Virtual Network Links', expected: 'links' },
   { id: 'portal-email-service', item: email, expected: 'Email Communication' },
   { id: 'portal-email-domains', item: email, group: 'Settings', nav: 'Provision domains', expected: 'Domain' },
   { id: 'portal-communication', item: communication, expected: 'Communication Service' },

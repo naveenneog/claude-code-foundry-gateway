@@ -7,6 +7,10 @@ privately, and deliver it to administrator-maintained recipient lists. The repor
 the gateway's existing `ClaudeCost` and `ClaudeChargeback` functions. It does not collect
 prompts, responses or source code.
 
+For numbered **Azure portal (GUI) procedures, equivalent Azure CLI commands and live
+redacted screenshots**, see [Operate reports in the portal and CLI](chargeback-reports/PORTAL-CLI.md).
+The email/CSV examples below remain clearly labeled fixtures.
+
 **These are list-price showback reports, not Azure invoices.** Request, input, output and
 cache-read counts come from the saved ledger. Dollar figures are derived. Cache writes
 are unknown and are left blank, not reported as zero. The budget counter counts prompt
@@ -56,6 +60,8 @@ node .\guide\capture-chargeback-reports.mjs
 - A terminal connected to the reports VNet for direct blob operations, or `-ViaJob`
   for off-network administrative changes. Storage is private-endpoint-only.
 - Approved recipient domains and a business decision about retention.
+- An explicit network choice for first registration: select discovered VNet/subnets/DNS
+  resources, or supply an approved private CIDR plan for a new dedicated reports network.
 
 ### Roles and identities
 
@@ -92,6 +98,17 @@ $env:CLAUDE_RG = 'rg-contoso'
 $env:CLAUDE_APIM = 'apim-contoso'
 az login
 ```
+
+If no installer/environment target is recorded, use the actual numbered choices rather
+than copying example names:
+
+```powershell
+.\scripts\Get-ClaudeChargebackTarget.ps1 -Inventory
+```
+
+All administration commands accept `-SubscriptionId` and `-NonInteractive` in addition to
+gateway parameters. Explicit choices can be automated; an ambiguous missing choice fails
+in noninteractive mode instead of selecting the first resource silently.
 
 Portal: **Resource groups > your group > API Management service**. For the workspace,
 follow the API's **Diagnostics settings / Application Insights diagnostic > Logger >
@@ -189,6 +206,24 @@ git push origin your-reviewed-branch
 .\scripts\Register-ClaudeChargebackSchedule.ps1 `
   -AllowedDomains contoso.com -Cron '0 6 1 * *'
 ```
+
+First registration presents discovered regions, VNets, subnets and private DNS zones.
+Creating a new network requires its address plan; existing networks are not retagged as
+reports-owned. An unattended example uses **example** CIDRs that your network owner must
+replace or approve:
+
+```powershell
+.\scripts\Register-ClaudeChargebackSchedule.ps1 `
+  -AllowedDomains contoso.com -VirtualNetworkPrefix '10.42.8.0/24' `
+  -JobsSubnetPrefix '10.42.8.0/26' -EndpointSubnetPrefix '10.42.8.64/27' `
+  -NonInteractive
+```
+
+Alternatively pass `-VirtualNetworkId`, `-JobsSubnetId`, `-EndpointSubnetId` and, when
+reusing a zone, `-PrivateDnsZoneId` from discovery. The jobs subnet needs the Container Apps
+delegation and must not be occupied by another environment. Network placement is an
+initial-deployment choice, unlike editable recipients/schedules; the environment's subnet
+cannot be changed in place.
 
 The default is 06:00 UTC on day 1 for the previous month. Six hours is an ingestion
 allowance, not a completeness guarantee. Regenerate after late telemetry when needed.
@@ -590,6 +625,13 @@ Write commands support `-WhatIf` and `-Confirm`.
 | `Set-ClaudeChargebackSettings.ps1` | `AllowedDomains`, `BusinessUnit` array (empty selects all), `Format`, nullable Boolean `MonthToDate`/`DeliveryEnabled`, `RetentionDays`, `List`, `StorageAccount`, `ViaJob` |
 | `Register-ClaudeChargebackSchedule.ps1` | `Cron`, initial `AllowedDomains`, `MonthToDate`, `RunNow`, `Remove`, `PurgeArchive`, `BreakDispatchLease`, `RepositoryUrl`, `RepositoryRef`, `Location`, `OperatorObjectId`, `OperatorPrincipalType`, `RetentionDays` |
 | `Invoke-ClaudeChargebackSchedule.ps1` | `Mode` (`generator`, `dispatcher`, internal structured `admin`), required `StorageAccount` |
+| `Get-ClaudeChargebackTarget.ps1` | `SubscriptionId`, `ResourceGroup`, `ApimName`, `NonInteractive`, `Inventory`, `AsJson` |
+
+Registration additionally accepts `VirtualNetworkId`, `JobsSubnetId`, `EndpointSubnetId`,
+`PrivateDnsZoneId`, or the new-network `VirtualNetworkPrefix`, `JobsSubnetPrefix` and
+`EndpointSubnetPrefix`. A bare first registration offers numbered choices. The readable
+portal admin payload is `REPORT_ADMIN_JSON`; a CLI execution override uses
+`REPORT_ADMIN_REQUEST`. Supplying both is refused.
 
 Unit identifiers must be safe lower-case identifiers; path traversal and Windows reserved
 filenames are refused. `all`, `index`, `summary`, `manifest` are reserved report names.

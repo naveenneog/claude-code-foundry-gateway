@@ -27,6 +27,8 @@ export function reportRedactions(inventory) {
   };
   for (const resource of inventory.Resources ?? []) {
     const type = resource.type.toLowerCase();
+    const suffix = resource.name.match(/^id-reports-([a-z0-9]{10})$/i);
+    if (type === 'microsoft.managedidentity/userassignedidentities' && suffix) pairs.push([suffix[1], 'contoso']);
     let replacement = names[type];
     if (type === 'microsoft.app/jobs') replacement = resource.name.includes('admin') ? 'job-reports-admin-contoso' : /mail|dispatch/.test(resource.name) ? 'job-reports-mail-contoso' : 'job-reports-contoso';
     if (type === 'microsoft.managedidentity/userassignedidentities') replacement = resource.name.includes('admin') ? 'id-reports-admin-contoso' : 'id-reports-contoso';
