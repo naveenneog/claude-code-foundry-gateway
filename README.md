@@ -629,6 +629,7 @@ journeys that span several guides:
 | [Deploy the projection privately](docs/SECURE-PROJECTION.md) | platform and network teams | the projection with no public endpoint: subnets, identities, steps, verification, cost |
 | [Authentication types](docs/AUTHENTICATION.md) | platform and security teams | which credentials reach the gateway, measured: people, managed identities, service principals, lifetimes, what revokes access |
 | [Debug](docs/DEBUGGING.md) | anyone | isolate a failure layer by layer |
+| [AUM service](docs/AUM-SERVICE.md) | FinOps, platform team | optional authority independent of Turnstile: viewers, scoped managers, audited budget requests and boosts, deployment choices and regional costs |
 
 **Reference, when you need it:**
 
