@@ -23,6 +23,9 @@
     "get": { "label": "Get-ApimNamedValue", "source": "scripts/ApimNamedValue.ps1", "match": "function Get-ApimNamedValue" },
     "registry": { "label": "bu-registry", "source": "scripts/ClaudeTurnstileApply.ps1", "match": "'bu-registry'" },
     "parents": { "label": "bu-parents", "source": "scripts/ClaudeTurnstileApply.ps1", "match": "'bu-parents'" },
+    "modes": { "label": "bu-modes", "source": "scripts/ClaudeTurnstileApply.ps1", "match": "'bu-modes'" },
+    "revisions": { "label": "Get-ClaudeTurnstileGovernanceRevisions", "source": "scripts/ClaudeTurnstileApply.ps1", "match": "function Get-ClaudeTurnstileGovernanceRevisions {" },
+    "updated": { "label": "updated_at", "source": "scripts/ClaudeTurnstileApply.ps1", "match": "$Snapshot.Catalog.updated_at" },
     "membership": { "label": "Sync-ClaudeAccess.ps1", "source": "scripts/Sync-ClaudeAccess.ps1", "kind": "file" },
     "projection": { "label": "Sync-ClaudeProjection.ps1", "source": "scripts/Sync-ClaudeProjection.ps1", "kind": "file" },
     "ent-source": { "label": "entitlement-source", "source": "scripts/ClaudeTurnstileApply.ps1", "match": "$current['entitlement-source']" },
@@ -39,9 +42,9 @@
     { "id": "role", "x": 16, "y": 290, "w": 338, "h": 184, "tone": "blue", "title": "Job's gateway role", "lines": ["[[writer-role]]", "Read service and operation results; read / write named values.", "No policy or network writes."] },
     { "id": "read", "x": 428, "y": 290, "w": 832, "h": 184, "tone": "blue", "title": "4 · Read catalog, current-month budgets and tiers", "lines": ["POST [[prepare]] first rolls the month forward.", "GET [[catalog]], [[budgets]] and [[tiers]]", "Read the gateway's existing named values in one list call.", "The month boundary must not look like every budget was removed."] },
     { "id": "safety", "x": 16, "y": 518, "w": 338, "h": 224, "tone": "amber", "compact": true, "title": "Refuse unsafe inputs", "lines": ["Demo catalog: refuse.", "Invalid ids, tiers or groups: report and omit.", "No unit: keep the current registry.", "Graph unreadable: no new groups."] },
-    { "id": "validate", "x": 428, "y": 518, "w": 398, "h": 224, "tone": "blue", "title": "5 · Compute only real changes", "lines": ["Always retain standard and premium tier limits.", "Teams need an applied parent.", "Compare entries by name, not order.", "Without -Apply: preview only."] },
+    { "id": "validate", "x": 428, "y": 518, "w": 398, "h": 224, "tone": "blue", "compact": true, "title": "5 · Recheck source revisions", "lines": ["[[revisions]]", "Reread [[updated]] for all three sources.", "Changed: replan (default 3). Invalid or unreadable: no writes.", "Preview never writes."] },
     { "id": "write", "x": 870, "y": 518, "w": 390, "h": 224, "tone": "blue", "title": "6 · Apply and verify", "lines": ["[[set]] writes a changed value.", "[[get]] must read back exactly what was written.", "Mismatch or write failure stops the run.", "Report changes and problems."] },
-    { "id": "values", "x": 0, "y": 824, "w": 606, "h": 224, "tone": "blue", "title": "Gateway policy consumes the configuration", "lines": ["[[registry]] and [[parents]] carry units, teams and monthly budgets.", "The two tiers' TPM, daily quotas and model allowlists are named values.", "The next request uses applied configuration; a console save alone is not proof of enforcement."] },
+    { "id": "values", "x": 0, "y": 824, "w": 606, "h": 224, "tone": "blue", "title": "Gateway policy consumes the configuration", "lines": ["[[registry]] and [[parents]] carry units, teams and monthly budgets; [[modes]] carries exceptions.", "Tier TPM, daily quotas and model allowlists remain named values.", "The next request uses applied configuration; a save alone does not prove enforcement."] },
     { "id": "membership", "x": 652, "y": 824, "w": 628, "h": 224, "tone": "teal", "title": "Membership has its own safety condition", "lines": ["Named-value path: [[membership]] only after Graph is readable and every tier group is confirmed.", "Graph application reads need [[graph]] from a tenant administrator.", "When [[ent-source]] is projection, leave membership to [[projection]]; never write a large member list here."] }
   ],
   "edges": [
@@ -53,5 +56,5 @@
     { "from": "write", "to": "values", "kind": "control", "points": [[1064, 742], [1064, 790], [304, 790], [304, 824]] },
     { "from": "write", "to": "membership", "kind": "control", "points": [[1140, 742], [1140, 824]] }
   ],
-  "notice": "The hourly job runs the same governance pass and catches up a failed start. Writes are individually verified, not an atomic multi-value transaction. At this base revision, overlapping jobs can finish out of order; do not describe this as a serialized apply queue."
+  "notice": "The hourly job uses the same pass. A revision change triggers a full re-plan; continued edits or failed freshness checks defer without writes. This mitigates stale runs, but the recheck and individually verified writes are not atomic or serialized."
 }

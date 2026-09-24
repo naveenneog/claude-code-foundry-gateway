@@ -382,6 +382,7 @@ If a sign-in page appears, stop. The capture tool does not try to authenticate.
 | Flow | Evidence from this pass | Not established |
 |---|---|---|
 | Default request / Foundry identity | 401 without a token; 200 with 14 input and 4 output tokens; gateway identity grant and live policy guards present | All client applications, streaming edge cases and exact quota limits |
+| Merged budget modes | Read-only live inspection found the default strict map and deployed mode, advisory-header and budget-trace code | No additional strict/allowance/notify mutation was performed by this architecture packet |
 | Meter / attribute / observe | The marked request joined exactly once across LLM log and trace | Invoice reconciliation and completeness of all historic telemetry |
 | Delegated sign-in | Live Owner role; 60-second code; 200 redemption; 401 replay | Manager-only or Viewer-only sessions |
 | Governance apply | Live status and prior successful execution; one pending change detected | A new save/apply cycle; it was deliberately not started |

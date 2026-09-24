@@ -14,6 +14,7 @@
     "bu-members": { "label": "bu-members", "source": "infra/policy.xml", "match": "{{bu-members}}" },
     "bu-registry": { "label": "bu-registry", "source": "infra/policy.xml", "match": "{{bu-registry}}" },
     "parents": { "label": "bu-parents", "source": "infra/policy.xml", "match": "{{bu-parents}}" },
+    "modes": { "label": "bu-modes", "source": "infra/policy.xml", "match": "{{bu-modes}}" },
     "org": { "label": "quota-org", "source": "infra/policy.xml", "match": "{{quota-org}}" },
     "standard": { "label": "quota-standard", "source": "infra/policy.xml", "match": "{{quota-standard}}" },
     "premium": { "label": "quota-premium", "source": "infra/policy.xml", "match": "{{quota-premium}}" },
@@ -87,5 +88,5 @@
     { "from": "meter", "to": "attribute", "kind": "data", "points": [[846, 150], [868, 150]] },
     { "from": "attribute", "to": "observe", "kind": "data", "points": [[1063, 150], [1085, 150]] }
   ],
-  "notice": "Budgets are approximate token controls, not invoice ceilings. The quota scalar omits cache tokens; the recorded 30-day sample attributed 38.7% of cost weight to cache reads. That is a measured sample, not a universal uplift. Streaming estimates and concurrency add further uncertainty."
+  "notice": "Unit/team modes in [[modes]] can extend or skip that scope's limiter, not the other controls. Budgets remain approximate: the quota scalar omits cache; the recorded sample attributed 38.7% of cost weight to cache reads. Streaming and concurrency add uncertainty; no invoice ceiling or exact crossing is promised."
 }

@@ -10,6 +10,14 @@ export const SHARED_INPUTS = [
   'guide/architecture-layout.mjs', 'package-lock.json',
 ];
 export const TONES = ['blue', 'teal', 'purple', 'amber', 'slate'];
+let sourceSnapshot;
+
+export function withSourceSnapshot(root, action) {
+  const previous = sourceSnapshot;
+  sourceSnapshot = { root: resolve(root), texts: new Map(), paths: new Map() };
+  try { return action(); }
+  finally { sourceSnapshot = previous; }
+}
 
 export function fault(code, detail) {
   return `${code}: ${detail}`;
@@ -20,6 +28,8 @@ export function localPath(root, path) {
       isAbsolute(path) || /^[a-z]+:/i.test(path) || path.split('/').some(p => !p || p === '..' || p === '.')) {
     throw new Error(fault('PATH_UNSAFE', String(path)));
   }
+  const cache = sourceSnapshot?.root === resolve(root) ? sourceSnapshot.paths : null;
+  if (cache?.has(path)) return cache.get(path);
   const result = resolve(root, ...path.split('/'));
   const back = relative(root, result);
   if (back.startsWith(`..${sep}`) || isAbsolute(back)) throw new Error(fault('PATH_UNSAFE', path));
@@ -34,11 +44,16 @@ export function localPath(root, path) {
   if (physicalBack.startsWith(`..${sep}`) || isAbsolute(physicalBack)) {
     throw new Error(fault('PATH_UNSAFE', `${path}: link leaves repository`));
   }
+  cache?.set(path, result);
   return result;
 }
 
 export function text(root, path) {
-  return readFileSync(localPath(root, path), 'utf8').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+  const cache = sourceSnapshot?.root === resolve(root) ? sourceSnapshot.texts : null;
+  if (cache?.has(path)) return cache.get(path);
+  const value = readFileSync(localPath(root, path), 'utf8').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+  cache?.set(path, value);
+  return value;
 }
 
 export function sha256(value) {

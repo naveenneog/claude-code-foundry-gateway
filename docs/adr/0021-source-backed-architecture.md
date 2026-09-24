@@ -120,3 +120,15 @@ single-use code replay refusal, and read-only terminal views. It also exposed a 
 console database, a projection 503 and a pending governance difference. The coverage
 table records what was not exercised. Neither a screenshot nor an offline gate may
 silently convert these limits into a claim that every flow passed live.
+
+## Current main and check cost
+
+The integration follows current main at `fc98cca`, including the merged budget modes
+and ADR-0025's parallel runner. ADR-0025 supersedes ADR-0024's temporary 60-minute
+command budget and restores 30 minutes; this packet does not change that budget.
+
+Architecture fixtures remain under the checkout, so its one-line registration uses the
+runner's exclusive lane. Repeated source/path reads are cached for one synchronous
+check only, including proper cleanup on failure; a later check always starts fresh.
+Tests prove that edits and deletions between checks remain visible. No mutation was
+removed to improve timing.

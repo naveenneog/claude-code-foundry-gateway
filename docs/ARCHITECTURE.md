@@ -91,6 +91,10 @@ team means its monthly limiter is not set, not a zero-token entitlement. Tier
 `calls-per-minute` also protects against many small requests. These rate controls are
 separate from the four budget layers.
 
+Unit and team limits default to strict. `bu-modes` can add allowance or skip an individual
+scope's monthly limiter in notify mode; it does not disable the other layers. See
+[budget enforcement modes](#budget-enforcement-modes).
+
 | Failure | Gateway result | What it means |
 |---|---|---|
 | Missing, invalid or wrong-audience token | 401 | Authentication failed. |
@@ -259,9 +263,16 @@ The manual job runs `Invoke-ClaudeTurnstileSchedule.ps1 -SkipExport`, then
 3. Calculate changes. Seeded demo catalogs are refused; unsupported tiers, malformed
    ids and unconfirmed groups are reported, not invented. Teams need an applied parent.
    If no applicable unit remains, existing units are preserved.
-4. Apply only differences with `Set-ApimNamedValue`, then compare every value returned by
+4. Validate all mode metadata before writing. Invalid `enforcement` or
+   `allowance_percent` defers the complete apply with no writes. `bu-modes` is separate
+   from the legacy registry.
+5. Before applying, compare catalog/tiers and budget-row `updated_at` revisions with a
+   fresh read. A changed snapshot restarts planning, including rereading the gateway and
+   rechecking groups, up to three times by default. Missing required revisions, a failed
+   read or continued edits defer with no writes. Usage and `generated_at` are not revisions.
+6. Apply only differences with `Set-ApimNamedValue`, then compare every value returned by
    `Get-ApimNamedValue`. A write error or mismatch fails the run. Without `-Apply`, report only.
-5. Refresh named-value membership only when Graph is readable and every tier group is
+7. Refresh named-value membership only when Graph is readable and every tier group is
    confirmed. With unreadable Graph, existing known groups can remain, new unconfirmed
    groups cannot be introduced, and membership is not overwritten from an empty read.
    Tier limits still apply. When the entitlement source is the projection, its own
@@ -277,9 +288,10 @@ Turnstile ingest path. Export failures fail the pass; no automatic job retry is 
 The next hourly pass or **Apply now** can catch up.
 
 These are individually verified writes, not an atomic transaction or a serialized queue.
-At this base revision, concurrent apply jobs can complete out of order. Follow the
+The pre-write revision check mitigates stale runs but cannot make separate reads and
+writes atomic. Follow the
 [Turnstile setup and governance guide](TURNSTILE.md#manage-everything-in-turnstile)
-and [ADR-0015](adr/0015-governance-authored-in-turnstile.md); do not infer a stronger
+and [ADR-0019](adr/0019-budget-enforcement-modes.md); do not infer a stronger
 ordering guarantee from the arrows.
 
 ## Delegated management and console sign-in
@@ -414,14 +426,40 @@ Turnstile person budgets are not the gateway's per-person daily overrides. These
 belong in both terminal faces. The [AUM how-to](CLI-FINOPS.md) describes installation,
 configuration, commands and the first release's scope.
 
-## Budget enforcement modes (pending merge)
+## Budget enforcement modes
 
-The `budget-modes` branch is available at `8b83e47` but is not merged into this architecture's
-base. Its design separates strict, allowance and notify configuration from the registry.
-It also adds an apply-order guard. This section is a merge reminder, **not a claim that the
-base gateway enforces those modes**. After merge, add the mode source, render its diagram,
-and revise the request/apply explanations against the merged policy. See the
-[branch decision](https://github.com/naveenneog/claude-code-foundry-gateway/blob/8b83e47/docs/adr/0017-budget-enforcement-modes.md).
+![Budget modes: validated owner configuration publishes bu-modes separately from the base budget registry; strict, allowance and notify act on each scope independently, preserve other controls and emit advisory response/trace information.](images/architecture/budget-modes.png)
+
+Source: [09-budget-modes.json](architecture/09-budget-modes.json). The implementation is
+merged in main; [ADR-0019](adr/0019-budget-enforcement-modes.md) records its contract.
+
+`bu-registry` retains base monthly budgets. The separate `bu-modes` map holds exceptions
+for a unit or team. Missing entries mean strict. The owner controls modes; they do not
+alter manager scope or allocation rules.
+
+| Mode | That scope's monthly limiter | Response behavior |
+|---|---|---|
+| **Strict** | Uses the base budget and existing counter key | Quota exhaustion refuses with 403. |
+| **Allowance** | Base plus the floored 1-100 percent allowance, capped at the integer maximum | The extended quota still refuses. Estimated remaining tokens can cause an advisory after the base budget. |
+| **Notify** | Skips only this scope's monthly limiter; there is no monthly remaining counter there | A successful response with a nonzero notify budget carries a usage advisory, including before 100 percent. |
+
+The assigned scope and its parent resolve modes independently. The organisation ceiling,
+the other scope, personal daily quota, tier TPM and request-rate controls remain in force.
+A malformed gateway map entry falls back to strict; invalid authored Turnstile metadata
+is refused before the apply writes anything.
+
+`x-claude-budget-notice` is advisory. It does not prove an exact budget-crossing request,
+invoice cost or that a Claude client displayed a warning. The `claude-budget` trace carries
+base budgets and modes and uses `BudgetRequestId`; it does not reuse the identity trace's
+`RequestId` and duplicate that join. The ledger remains the reporting source.
+
+Switching a scope from notify back to a limiting mode does not reconstruct usage that
+was not counted while its limiter was skipped. Streaming estimates, concurrency and
+missing cache tokens still limit enforcement precision. See
+[business-unit budget modes](BUSINESS-UNITS.md) for commands and measured mode behavior.
+The architecture capture's live scope remains the explicit
+[verification coverage](architecture/LIVE-VERIFICATION.md#live-coverage-and-limitations);
+it does not claim an additional live mode mutation run.
 
 ## Azure resource inventory
 
@@ -493,6 +531,17 @@ document references, broken code-label witnesses, duplicate/unsafe output paths,
 escapes and unrepresented Azure resource types. Its isolated mutations prove those failures without
 editing the real sources; commented Bicep examples and line-ending conversion are
 positive controls.
+
+Repeated source and path reads are cached only inside one synchronous check and discarded
+on return, including on an exception. A later mutation gets a new snapshot, so performance
+does not hide edits between checks. `Test-Architecture.ps1` runs in Test-All's exclusive
+lane because its fixtures remain under the checkout; it does not share mutable Azure
+state with the parallel checks.
+
+The current main runner follows [ADR-0025](adr/0025-parallel-test-suite.md): isolated
+parallel checks and complete mutation shards restored the 30-minute gate command budget.
+That supersedes [ADR-0024](adr/0024-test-suite-time-budget.md)'s temporary 60-minute
+budget. Use the merged contract, not a worktree-local timeout change.
 
 Live screenshots are separate from deterministic diagrams. The capture tools discover
 real resource choices, use only a copied worktree browser profile, stop at sign-in, wait

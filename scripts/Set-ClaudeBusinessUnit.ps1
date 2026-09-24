@@ -37,6 +37,12 @@
 .PARAMETER Remove
     Remove the business unit. Its members fall back to unassigned.
 
+.PARAMETER Mode
+    Strict (default for new units), Allowance or Notify. Omit to keep its current mode.
+
+.PARAMETER AllowancePercent
+    Integer 1 to 100, required with -Mode Allowance and invalid with other modes.
+
 .PARAMETER List
     Show the registry and change nothing.
 
@@ -69,6 +75,13 @@ param(
     [decimal]$MonthlyBudgetUsd,
 
     [Parameter(ParameterSetName = 'Set')]
+    [ValidateSet('Strict', 'Allowance', 'Notify')]
+    [string]$Mode,
+
+    [Parameter(ParameterSetName = 'Set')]
+    [object]$AllowancePercent,
+
+    [Parameter(ParameterSetName = 'Set')]
     [string]$Model = 'claude-sonnet-5',
 
     [Parameter(ParameterSetName = 'Set')]
@@ -89,6 +102,14 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
 
+$requestedMode = $null
+if ($PSBoundParameters.ContainsKey('Mode') -or $PSBoundParameters.ContainsKey('AllowancePercent')) {
+    if (-not $PSBoundParameters.ContainsKey('Mode')) { throw '-AllowancePercent requires -Mode Allowance.' }
+    $percent = if ($PSBoundParameters.ContainsKey('AllowancePercent')) { $AllowancePercent } else { $null }
+    if ($percent -is [string] -and $percent -cmatch '^([1-9][0-9]?|100)$') { $percent = [int]$percent }
+    $requestedMode = ConvertTo-ClaudeBudgetMode -Mode $Mode.ToLowerInvariant() -AllowancePercent $percent
+}
+
 if (-not (az account show --query id -o tsv 2>$null)) { throw 'Not signed in. Run: az login' }
 if (-not $ApimName) {
     $ApimName = az apim list -g $ResourceGroup --query "[0].name" -o tsv 2>$null
@@ -106,6 +127,8 @@ if ($null -eq $parentsRaw) {
     throw "bu-parents not found on $ApimName. Redeploy with the current template first."
 }
 $parents = ConvertFrom-ClaudeBuParents $parentsRaw
+$modesRaw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-modes'
+$modes = ConvertFrom-ClaudeBuModes $modesRaw
 
 function Show-Registry($units) {
     if (-not $units.Count) {
@@ -131,6 +154,7 @@ function Show-Registry($units) {
         $p = if ($parents[$u.Id]) { $parents[$u.Id] } else { '-' }
         $name = if ($parents[$u.Id]) { '  ' + $u.Id } else { $u.Id }
         Write-Host ("  {0,-16} {1,-16} {2,-30} {3,18:n0} {4,12}" -f $name, $p, $u.Group, $u.TokensPerMonth, $(if ($null -ne $usd) { '$' + ('{0:n0}' -f $usd) } else { '-' }))
+        Write-Host ("    Budget mode: {0}" -f $(if ($modes.Contains($u.Id)) { $modes[$u.Id] } else { 'strict' }))
     }
     Write-Host ''
     Write-Host '  An indented row is a team. Its spend is charged to it and to its parent.' -ForegroundColor DarkGray
@@ -158,6 +182,7 @@ if ($Remove) {
     # so, rather than leaving a dangling parent.
     $orphans = @($parents.Keys | Where-Object { $parents[$_] -eq $Id })
     $parents.Remove($Id)
+    $modes.Remove($Id)
     foreach ($o in $orphans) { $parents.Remove($o) }
 }
 else {
@@ -239,9 +264,15 @@ else {
     }
 
     $registry += [pscustomobject]@{ Id = $Id; Group = $targetGroup; TokensPerMonth = $tokens }
+    if ($null -ne $requestedMode) {
+        $modes.Remove($Id)
+        if ($requestedMode -ne 'strict') { $modes[$Id] = $requestedMode }
+    }
 }
 
 $value = ConvertTo-ClaudeBuRegistry $registry
+$modeValue = ConvertTo-ClaudeBuModes $modes
+Test-ApimNamedValueLength -Id 'bu-modes' -Value $modeValue
 
 # The write is only safe because the registry was read first. Assert that every
 # other business unit survived rather than trusting the string building - an
@@ -257,6 +288,12 @@ Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-reg
 $parentValue = ConvertTo-ClaudeBuParents $parents
 if ($parentValue -ne $parentsRaw) {
     Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents' -Value $parentValue
+}
+if ($modeValue -ne $modesRaw) {
+    Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-modes' -Value $modeValue
+    if ((Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-modes') -ne $modeValue) {
+        throw 'Budget modes did not read back as written.'
+    }
 }
 
 Write-Host ''

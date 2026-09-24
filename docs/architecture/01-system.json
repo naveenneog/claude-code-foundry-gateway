@@ -32,7 +32,8 @@
     "writer": { "label": "apply-projection.mjs", "source": "sync/src/apply-projection.mjs", "kind": "file" },
     "graph": { "label": "GroupMember.Read.All", "source": "scripts/Grant-ClaudeGovernanceGraphAccess.ps1", "match": "'GroupMember.Read.All'" },
     "resolver-route": { "label": "entitlement/{oid}", "source": "resolver/src/index.mjs", "match": "route: 'entitlement/{oid}'" },
-    "ent-source": { "label": "entitlement-source", "source": "infra/policy.xml", "match": "{{entitlement-source}}" }
+    "ent-source": { "label": "entitlement-source", "source": "infra/policy.xml", "match": "{{entitlement-source}}" },
+    "modes": { "label": "bu-modes", "source": "infra/policy.xml", "match": "{{bu-modes}}" }
   },
   "groups": [
     { "x": 0, "y": 0, "w": 310, "h": 506, "tone": "slate", "title": "Client devices / automation" },
@@ -99,7 +100,7 @@
       "Overlapping export windows"
     ] },
     { "id": "values", "x": 328, "y": 1146, "w": 274, "h": 202, "tone": "purple", "compact": true, "title": "Gateway named values", "lines": [
-      "Catalog, tier and budget settings; read-back after writes",
+      "Catalog, tiers, budgets and [[modes]]; verified writes",
       "[[integration]] locates Turnstile and authority.",
       "Graph: [[graph]] when granted."
     ] },

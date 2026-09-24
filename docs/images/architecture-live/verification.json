@@ -92,6 +92,17 @@
       },
       "passed": true,
       "checkedUtc": "2026-09-24T20:38:51.369931+00:00"
+    },
+    {
+      "flow": "budget-modes",
+      "check": "live-read-only-configuration-and-policy",
+      "defaultStrict": true,
+      "modeMapReferenced": true,
+      "advisoryHeader": true,
+      "budgetTraceKey": true,
+      "configurationChanged": false,
+      "modeMutationRun": false,
+      "checkedUtc": "2026-09-24T22:27:33.3089255Z"
     }
   ],
   "governancePreflight": {

@@ -3,10 +3,14 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  IMAGE_DIR, MANIFEST, fault, inputsFor, loadSpecs, localPath, sha256, text, validateSpecs, walk,
+  IMAGE_DIR, MANIFEST, fault, inputsFor, loadSpecs, localPath, sha256, text, validateSpecs, walk, withSourceSnapshot,
 } from './architecture-model.mjs';
 
 export function checkArchitecture(root) {
+  return withSourceSnapshot(root, () => checkSnapshot(root));
+}
+
+function checkSnapshot(root) {
   const loaded = loadSpecs(root);
   const errors = [...loaded.errors, ...validateSpecs(root, loaded.specs)];
   let manifest;
