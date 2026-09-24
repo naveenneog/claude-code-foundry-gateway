@@ -60,7 +60,12 @@ def test_plain_no_args_is_not_fullscreen():
     assert "\x1b" not in result.output
 
 
-def test_subcommand_help_does_not_need_connection():
+@pytest.mark.parametrize("force_color", [None, "0"])
+def test_subcommand_help_does_not_need_connection(monkeypatch, force_color):
+    if force_color is None:
+        monkeypatch.delenv("FORCE_COLOR", raising=False)
+    else:
+        monkeypatch.setenv("FORCE_COLOR", force_color)
     result = runner.invoke(app, ["budget", "set", "--help"])
     assert result.exit_code == 0, result.output
     assert "--apply" in result.output

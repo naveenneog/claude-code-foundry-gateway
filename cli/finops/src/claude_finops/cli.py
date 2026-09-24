@@ -40,11 +40,11 @@ class EverywhereGroup(TyperGroup):
         return super().parse_args(ctx, prefix + rest)
 
 
-app = typer.Typer(cls=EverywhereGroup, invoke_without_command=True, no_args_is_help=False,
+app = typer.Typer(cls=EverywhereGroup, invoke_without_command=True, no_args_is_help=False, rich_markup_mode=None,
                   help="Claude gateway FinOps. No command opens the terminal app. Changes preview until --apply.")
 groups = {}
 for noun in ("budget", "people", "governance", "tier", "requests", "anomalies", "report", "usage", "trends", "catalog"):
-    groups[noun] = typer.Typer(help=f"{noun.capitalize()} views and actions.")
+    groups[noun] = typer.Typer(help=f"{noun.capitalize()} views and actions.", rich_markup_mode=None)
     app.add_typer(groups[noun], name=noun)
 
 
