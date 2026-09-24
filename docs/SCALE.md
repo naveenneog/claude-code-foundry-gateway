@@ -160,6 +160,44 @@ requests produced `TimeoutError` rather than more throughput. That is a
 backfill-window number, not a request-path one — nothing in the gateway waits on
 it — but ADR-0009's phase 1 has to budget for it.
 
+### 500,000 measured, 2026-09-24
+
+**MEASURED, 13:05:37–13:14:45 UTC:** the revised
+`guide/loadtest-projection.mjs` loaded a separate, initially empty `loadtest`
+container through the private endpoint, with 32 workers and `/oid` partitioning.
+The runner was in Canada Central and Cosmos in East US 2. It used the current
+record shape, including a reconciliation generation and an absolute expiry.
+The real `entitlement` container was not the load target.
+
+| Measurement | Result |
+|---|---:|
+| Confirmed cardinality (`COUNT(1)`) | **500,000** |
+| Load time | **524.26 seconds** |
+| Sustained write throughput | **953.73 records/second** |
+| Write charge | **2,950,000 RU**, 5.9 RU per create |
+| Near-empty point read | 1 RU, 51.99 ms |
+| Full-container reads | 500 reads, **1 RU each** |
+| Full-container latency, p50 / p95 / p99 / maximum | **47.53 / 49.15 / 51.00 / 72.09 ms** |
+
+| Record written | Samples | p50 | p99 |
+|---|---:|---:|---:|
+| First, 0 | 100 | 47.55 ms | 50.33 ms |
+| 1 | 100 | 47.64 ms | 49.95 ms |
+| Middle, 250,000 | 100 | 47.60 ms | 55.14 ms |
+| 499,998 | 100 | 47.28 ms | 50.79 ms |
+| Last, 499,999 | 100 | 47.53 ms | 49.15 ms |
+
+Percentiles use nearest rank. The test container and its temporary scoped role
+assignment were deleted afterwards. The tool now refuses any container other
+than explicitly named `loadtest`, refuses a nonempty container and bounds
+concurrency; the older loader always targeted `entitlement` and must not be used.
+
+**INFERRED:** this establishes the storage cardinality and point-read shape,
+not 500,000 simultaneously active developers. It does not measure a 500,000-user
+Graph scan, full reconciliation upsert throughput, APIM counter exactness,
+Foundry capacity or streaming concurrency. The earlier 190/s and this 954/s
+are measurements of different loaders, not competing guarantees.
+
 ### The lookup through the gateway, measured 2026-09-23
 
 What a cache miss adds to a request, end to end. The client was inside the
@@ -207,6 +245,23 @@ fails outright. Setting it back to one did not help at once: the next request
 still met a new host. That is **U18**. The fixes are the miss-path backpressure
 and coalescing the P19 review asked for, more always-ready instances, or both.
 Three cold trials do not give a cold-start p99.
+
+The P19 completion changes that path: per-process single flight in the resolver,
+a 3.5-second lookup deadline, a 2.5-second Cosmos transport timeout, and APIM
+backpressure **before** the resolver (100 concurrent misses, 200 misses/second).
+Two always-ready 2-GB instances each accept 100 concurrent HTTP requests, rather
+than relying on new hosts above the default of 16.
+
+**MEASURED, 13:27:47–13:27:49 UTC:** the first 20-request burst after deploying
+that configuration, with no probe warmup, had **zero 503s**; every response was
+the expected model-refusal 403, p99/maximum **2,334 ms**. The requests did not
+call Foundry. This is a measured burst envelope, not a latency SLA.
+
+**DOCUMENTED:** APIM's built-in cache has no atomic lock for this use.
+Coalescing is per resolver process, not across instances; APIM's distributed
+rate and concurrency limits are approximate. A cache flush above the admitted
+envelope can still return retryable 429. See
+[ADR-0017](adr/0017-projection-freshness-and-admission.md).
 
 ### What a counter test still has to prove
 
@@ -271,7 +326,7 @@ than quoted:
 ./scripts/Measure-ClaudeProjectionCost.ps1 -Developers 500000 -DailyActive 50000
 ```
 
-At the full 500,000-developer requirement that is **$69.09 a month**, of which
+The historical one-warm-instance, read-path estimate was **$69.09 a month**, of which
 $65.28 bills at rest: five private endpoints, five private DNS zones and one warm
 resolver instance, as deployed on 2026-09-23. The usage lines are under $4,
 because the resolver is called once per cache window per active developer, not
@@ -279,6 +334,17 @@ once per request, so the cache absorbs almost all of it. See
 [ADR-0011](adr/0011-projection-platform.md) for why private networking is
 assumed rather than optional. The standing-cost objection to ADR-0005 does not
 survive the arithmetic either way.
+
+That estimate is **not the operating total for leased reconciliations**.
+The current two-warm-instance profile bills $91.56/month at rest at the same
+published rates. It also refreshes every member's lease on every reconciliation,
+including unchanged members. At 500,000 records, hourly renewal means about
+365 million writes per 730-hour month. Using the measured **create** charge of
+5.9 RU as an illustrative input gives $538.38/month for writes alone at
+$0.25/million RU. **INFERRED, not a renewal quote:** existing-record upserts,
+Graph scanning, runner execution, telemetry and retries were not priced by that
+load. The cost script still models the read path; use `-AlwaysReadyInstances 2`
+and budget reconciliation separately, rather than presenting its total as complete.
 
 ---
 
@@ -369,9 +435,9 @@ custom domain above.
 
 The projection is **not wired into the installer**. Running
 `Install-ClaudeGateway.ps1` today deploys the gateway and nothing else, which is
-deliberate: wiring it in would give every deployment a Cosmos account nothing
-reads plus a private endpoint billing at rest, for a feature that does nothing
-until the resolver exists.
+deliberate: private subnets, Graph access and a reconciliation schedule need
+explicit operator decisions. The projection and resolver exist, but their
+deployment and the migration are still explicit rather than one installer step.
 
 To stand one up on its own:
 
@@ -530,8 +596,19 @@ node /work/sync/src/apply-projection.mjs --cosmos https://cosmos-<prefix>.docume
 the gateway's own registry, deepest first and first match winning, which is how
 the named-value path does it. Before 2026-09-23 the projection sync let the last
 match win, so anyone in a team and its parent would have been charged to a
-different unit after the flip. Backfill was measured at about 190 records a
-second, so 500,000 identities takes roughly 45 minutes.
+different unit after the flip. The isolated 500,000-record loader measured
+954 creates/second on 2026-09-24; that is not a measurement of the full directory
+scan and apply job. Use the in-network Node bulk writer for this population,
+not the PowerShell writer's serial HTTP loop.
+
+**Freshness is now part of the migration.** A complete scan stamps a generation,
+its start time and an absolute expiry, two hours by default and never longer.
+The snapshot must be applied before that expiry; copying or replaying it does
+not renew it. Schedule a fresh scan at least hourly, allowing scan, transfer
+and apply time to fit inside the lease. Every retained member is rewritten.
+Before upgrading an existing projection, populate leased records first, then
+deploy the strict resolver and policy. Old unleased records correctly return
+503 after that deployment.
 
 **Rollback:** delete and repopulate. No developer is affected either way.
 
@@ -552,7 +629,8 @@ This is the step that must not be rushed. The first comparison on its own says
 only whether the lists are current; the second is the one that reads the
 records the resolver would serve. It names every difference as
 `would-lose-access`, `would-gain-access`, `tier-drift` or `unit-drift` and exits
-non-zero while there are any. Measured on 2026-09-23: 8 identities compared,
+non-zero while there are any. Expired records now count as losing access, so an
+expired snapshot cannot approve a flip. Measured on 2026-09-23: 8 identities compared,
 0 differences.
 
 **Rollback:** not applicable — nothing has changed. Fix the drift and run again.
@@ -572,18 +650,21 @@ What each developer then experiences, measured on 2026-09-23:
 
 | Situation | Response |
 |---|---|
-| Record present | Served, and cached for `entitlement-cache-seconds`. Still served after removal from the named-value list, which is how to confirm the projection is the source |
+| Unexpired record present | Served; cached for the smaller of `entitlement-cache-seconds` and its remaining lease, and expiry checked on every hit |
 | No record | `403 permission_error`, cached for at most 60 seconds |
 | Resolver down, answer still cached | Served until the window ends |
 | Resolver down, window ended | `503` with `Retry-After: 5`, and a message saying it is not the developer's access |
+| Reconciliation stopped and record expired | `503` explaining that the projection expired or could not supply an unexpired answer; never stale authorization |
+| Miss-path capacity exhausted | Retryable `429`, before the resolver |
 
 Before 2026-09-23 the policy answered a missing record with that 503, so every
 unentitled attempt read as an outage and invited a retry. Redeploy the current
 policy before flipping.
 
-**Rollback:** set it back to `named-value`. The lists were never deleted, so the
-gateway returns to exactly the behaviour it had before. This is the whole reason
-both paths ship together.
+**Rollback:** first refresh and compare the lists, then
+set it back to `named-value`. A saved list is not a revocation-safe rollback: it can regrant a
+leaver. Keep both destinations current during the bounded rollback window, and
+do not roll back to lists once the population no longer fits them.
 
 ### 6. Watch, then stop maintaining the lists
 

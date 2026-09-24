@@ -390,7 +390,11 @@ elseif ($orphans.Count -gt 0) {
 }
 
 Write-Host ''
-Write-Host "$written entitled identity(ies) refreshed; $failed operation(s) failed." -ForegroundColor Green
+if ($expiresAt -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) {
+    $failed++
+    Write-Warning 'Projection expired during apply; resolve again and investigate scan/apply duration.'
+}
+Write-Host "$written entitled identity(ies) refreshed; $failed failure(s)." -ForegroundColor Green
 Note "mappingVersion $mappingVersion - a cached answer can be traced to this run."
 Write-Host ''
 if ($failed) { exit 1 }

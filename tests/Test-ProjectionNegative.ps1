@@ -14,9 +14,14 @@ $mutations = @(
     @{ Name='continuation header is not forwarded'; File='scripts\Sync-ClaudeProjection.ps1'; From="`$headers['x-ms-continuation'] = `$continuation"; To="`$headers['wrong-header'] = `$continuation"; Suite=$rules }
     @{ Name='PowerShell omits document expiry'; File='scripts\Sync-ClaudeProjection.ps1'; From='expiresAt      = $expiresAt'; To='expiresAt      = 0'; Suite=$rules }
     @{ Name='PowerShell restarts the lease after scanning'; File='scripts\Sync-ClaudeProjection.ps1'; From='$expiresAt = $scanStarted.ToUnixTimeSeconds() + $MaxAgeSeconds'; To='$expiresAt = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + $MaxAgeSeconds'; Suite=$rules }
+    @{ Name='PowerShell accepts a longer maximum lease'; File='scripts\Sync-ClaudeProjection.ps1'; From='[ValidateRange(60,7200)]'; To='[ValidateRange(60,86400)]'; Suite=$rules }
     @{ Name='PowerShell never renews unchanged members'; File='scripts\Sync-ClaudeProjection.ps1'; From='{ $unchanged++ }'; To='{ $unchanged++; continue }'; Suite=$rules }
+    @{ Name='PowerShell failed revocation reports success'; File='scripts\Sync-ClaudeProjection.ps1'; From='catch { $failed++; Write-Warning "  could not remove'; To='catch { Write-Warning "  could not remove'; Suite=$rules }
+    @{ Name='PowerShell expired apply is not reported'; File='scripts\Sync-ClaudeProjection.ps1'; From='Projection expired during apply'; To='Apply done'; Suite=$rules }
     @{ Name='Node apply omits refresh'; File='sync\src\apply-projection.mjs'; From=', refresh: true'; To=', refresh: false'; Suite=$rules }
     @{ Name='Node apply omits scan lease'; File='sync\src\apply-projection.mjs'; From='toDocument(r, { tenantId, mappingVersion, reconciliation })'; To='toDocument(r, { tenantId, mappingVersion })'; Suite=$rules }
+    @{ Name='Node expired apply reports success'; File='sync\src\apply-projection.mjs'; From=' && !expired, expired,'; To=', expired,'; Suite=$rules }
+    @{ Name='Node expired apply exits zero'; File='sync\src\apply-projection.mjs'; From=' || expired ? 3 : 0'; To=' ? 3 : 0'; Suite=$rules }
     @{ Name='generation is omitted from documents'; File='sync\src\plan.mjs'; From='    ...reconciliation,'; To=''; Suite=$node }
     @{ Name='renewal skips unchanged members'; File='sync\src\plan.mjs'; From='if (!refresh) continue;'; To='continue;'; Suite=$node }
     @{ Name='lease starts at apply instead of scan'; File='sync\src\plan.mjs'; From='Math.floor(start / 1000) + maxAgeSeconds'; To='Math.floor(now.getTime() / 1000) + maxAgeSeconds'; Suite=$node }
@@ -40,6 +45,9 @@ $mutations = @(
     @{ Name='deployed path bypasses coalescing'; File='resolver\src\index.mjs'; From='await lookup(oid)'; To='await getContainer().item(oid, oid).read()'; Suite=$rules }
     @{ Name='transport exceeds APIM deadline'; File='resolver\src\index.mjs'; From='requestTimeout: 2500'; To='requestTimeout: 60000'; Suite=$rules }
     @{ Name='Cosmos retries outlive deadline'; File='resolver\src\index.mjs'; From='maxRetryAttemptCount: 0'; To='maxRetryAttemptCount: 9'; Suite=$rules }
+    @{ Name='Cosmos loses the abort signal'; File='resolver\src\index.mjs'; From='.read({ abortSignal })'; To='.read()'; Suite=$rules }
+    @{ Name='default lookup deadline exceeds gateway'; File='resolver\src\lookup.mjs'; From='deadlineMs = 3500'; To='deadlineMs = 6000'; Suite=$rules }
+    @{ Name='default lookup work exceeds admission'; File='resolver\src\lookup.mjs'; From='maxInFlight = 100'; To='maxInFlight = 1000'; Suite=$rules }
     @{ Name='same identity misses fan out'; File='resolver\src\lookup.mjs'; From='if (pending.has(oid))'; To='if (false)'; Suite=$node }
     @{ Name='distinct identity work is unbounded'; File='resolver\src\lookup.mjs'; From='if (pending.size >= maxInFlight)'; To='if (false)'; Suite=$node }
     @{ Name='timeout does not cancel transport'; File='resolver\src\lookup.mjs'; From='abort.abort();'; To=''; Suite=$node }

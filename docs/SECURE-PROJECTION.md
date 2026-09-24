@@ -12,8 +12,9 @@ reached through private endpoints. It then points the gateway at the resolver
 without changing anyone's access, ready for the
 [migration runbook](SCALE.md#the-move-itself-step-by-step).
 
-Every step, result and error on this page was measured on 2026-09-23 against an
-API Management Premium v2 gateway in Canada Central. The Cosmos DB account was
+The original steps, results and errors were measured on 2026-09-23 against an
+API Management Premium v2 gateway in Canada Central. P19 freshness and admission
+changes, and the 500,000-record measurement, are dated 2026-09-24 below. The Cosmos DB account was
 in East US 2, reached through a private endpoint in the gateway's VNet.
 
 ## Architecture
@@ -71,6 +72,10 @@ az deployment group create -g <rg> --template-file infra/projection.bicep `
 Measured: 132 seconds. The account came up with `publicNetworkAccess: Disabled`,
 key authentication off and TLS 1.2.
 
+`private-only` is now the template default. Public and selected-IP profiles
+still require an explicit `networkAccess=public` or `networkAccess=selected-ips`;
+this does not override an Azure Policy that enforces private networking.
+
 ### 2. Connect it to your network
 
 Pass the subnets you were given. The template creates only the Cosmos private
@@ -124,7 +129,8 @@ Built-in authentication protects it from the first second.
 | `inboundAccess` | `public` now, `private` in step 6 |
 | `privateEndpointSubnetId` | The private endpoint subnet |
 | `blobDnsZoneId`, `queueDnsZoneId`, `tableDnsZoneId` | From step 2. With these, the resolver's storage has no public endpoint |
-| `alwaysReadyInstances` | `1`. The first lookup after idle otherwise pays a cold start against the gateway's 5-second timeout |
+| `alwaysReadyInstances` | `2` (current default). One instance at the platform's default concurrency failed the first burst in U18 |
+| `httpConcurrency` | `100` per instance (current default), sized to the gateway's 100 concurrent admitted misses |
 
 ```powershell
 az deployment group create -g <rg> --template-file infra/resolver.bicep --parameters '@resolver.params.json'
@@ -206,8 +212,9 @@ az cosmosdb sql role assignment create -g <rg> -a cosmos-<prefix> `
   --principal-id <runner-principal-id> --scope /dbs/claude/colls/entitlement
 ```
 
-Measured: 8 records written in 1.5 seconds. A second run found 8 unchanged and
-wrote nothing.
+Historical measurement: 8 records written in 1.5 seconds, then no writes on an
+unchanged run. With expiring leases, unchanged members must also be renewed:
+measured 2026-09-24, all 8 unchanged members refreshed in 1.88 seconds.
 
 **B. The job reads Entra itself.** The enterprise default for a scheduled sync.
 The job's identity needs the Microsoft Graph application permission
@@ -218,6 +225,42 @@ without a directory role is refused with `Authorization_RequestDenied`.
 Both ways assign business units exactly as the named-value path does: deepest
 first, then registry order, first match wins. `-ApimName` and `-ResourceGroup`
 make the export read the registry from the gateway itself.
+
+### Freshness and operating envelope
+
+**Two hours from scan start is the maximum stale-authorization window**, not
+two hours plus the gateway's cache. Each complete directory observation stamps
+`reconciliationGeneration`, `lastVerifiedAt` and absolute epoch-second
+`expiresAt`. The resolver enforces the lease; the gateway clips its cache TTL
+and rechecks expiry on every hit. Expired or malformed freshness returns 503,
+not user-not-found and never stale access. Existing unleased records must be
+reconciled before upgrading the resolver and gateway.
+
+Use `-MaxAgeSeconds` on the export/PowerShell writer or `--max-age-seconds` with
+the Node `--graph` writer to shorten the lease (60–7,200 seconds). Import never
+extends the snapshot's expiry. A scan that fails writes nothing; a failed apply
+may leave multiple generations, each retaining its own expiry, and exits nonzero.
+`-KeepOrphans`/`--keep-orphans` never renew an orphan's lease.
+
+Schedule a fresh reconciliation at least hourly for the default two-hour lease,
+with enough time for the directory scan and all writes. Alert on nonzero exit
+and on the oldest remaining lease, rather than assuming a running job is fresh.
+If that workload cannot complete before expiry, reduce scan/apply time or choose
+a separately designed reconciliation scheme; do not silently serve expired data.
+The bound is for **new requests**, subject to directory replication and clock
+skew; it does not interrupt an already-running model stream.
+
+APIM admits at most 100 concurrent resolver misses and 200 misses/second, with
+retryable 429 above that approximate distributed envelope. Cache hits do not
+consume this admission budget. The resolver coalesces same-identity in-flight
+reads **per process**, never across hosts, and has no completed-result cache.
+Its 3.5-second deadline and 2.5-second Cosmos transport timeout leave margin
+inside APIM's five seconds. Two always-ready instances at HTTP concurrency 100
+avoid depending on cold scale-out for an admitted burst. Greater production
+load needs its own measurement and coordinated admission/warm-capacity sizing.
+
+PowerShell and Node both consume every Cosmos continuation page before planning
+removals; an empty page with a continuation is not end-of-data.
 
 ### 9. Point the gateway at the resolver
 
@@ -246,12 +289,13 @@ Its step 4 compares the projection with the gateway before anything is flipped.
 
 | Situation | Response | Measured |
 |---|---|---|
-| Entitled, record present | Served; the answer is cached for `entitlement-cache-seconds` | Still served when removed from the named-value list, which proves the projection is the source |
+| Entitled, unexpired record present | Served; cache duration is clipped to absolute expiry | Still served when removed from the named-value list, which proves the projection is the source |
 | No record | `403 permission_error`; the refusal is cached for at most 60 seconds | Second call 567 ms, answered from cache |
 | Record added back | Served once the refusal expires | 200 after the short cache |
 | Resolver down, answer cached | Served until the window ends | 200 |
 | Resolver down, window ended | `503`, `Retry-After: 5`, "the entitlement service did not answer" | 503, then 200 when it returned |
 | Rolled back to named values | The lists decide again | 403 for anyone the lists had not been kept up to date for |
+| Expired record, even with a longer cache setting | 503; run a complete reconciliation | The lease is an authorization bound, not a storage TTL |
 
 ## Troubleshooting
 
@@ -269,7 +313,7 @@ Its step 4 compares the projection with the gateway before anything is flipped.
 
 ## Cost
 
-Priced by `./scripts/Measure-ClaudeProjectionCost.ps1 -Developers 500000 -DailyActive 50000`
+Historical read-path estimate from `./scripts/Measure-ClaudeProjectionCost.ps1 -Developers 500000 -DailyActive 50000`
 at published US list prices (usage read 2026-09-17; endpoints, zones and warm
 instance read 2026-09-23):
 
@@ -283,11 +327,18 @@ instance read 2026-09-23):
 | Cosmos DB storage | $0.05 | no |
 | **Total** | **$69.09** | $65.28 of it |
 
-A pilot with eight developers pays the $65.28 that bills at rest and nothing
-measurable on top. `-AlwaysReadyInstances 0` removes $26.28 and accepts cold
+That one-instance profile pays $65.28 at rest. `-AlwaysReadyInstances 0` removes $26.28 and accepts cold
 starts. Not included: API Management itself ($700 a month for Standard v2,
 $2,800 for Premium v2), the Foundry account's private endpoint and its three
 zones ($8.80), and endpoint data processing at $0.01 per GB.
+
+The current two-instance profile adds $26.28: **$91.56/month at rest**, and
+$95.37 for the historical read-path assumptions. Pass `-AlwaysReadyInstances 2`
+to the cost script. Neither total includes renewing every member's lease.
+At 500,000 members and hourly reconciliation, the write count is about
+365 million/month. The measured create charge (5.9 RU) would cost $538.38 at
+$0.25/million RU; that is an **illustration**, not a measured upsert or scheduled
+sync bill. Include Graph, the runner, retries and telemetry in an operating quote.
 
 ## Related
 
