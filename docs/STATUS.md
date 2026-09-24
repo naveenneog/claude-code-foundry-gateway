@@ -12,7 +12,7 @@
 - [x] The gateway enforces strict, allowance and notify per unit and team: `bu-modes` holds only the exceptions (missing means strict); allowance admits up to its percentage above the budget; notify skips only that scope's limiter, and the parent, organization and tier limits still apply. Invalid mode metadata stops the whole apply before any write
 - [x] An apply run rechecks Turnstile's catalog, per-budget and tier revisions immediately before writing, reconciles again from newer state up to three times, then defers with no writes and no membership refresh. This narrows the out-of-order race; P48's single writer closes it
 - [ ] A live sign-in with a manager-only account: moved to P53, which uses the CLI account's own group memberships (it owns both the admin group and the manager test groups) and restores them
-- [ ] `node .ironclad/gate.mjs --stage packet` exits 0 on the merge
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0 on the merge: `690015d`, 2026-09-24 17:16-17:46Z, Test-All 1,797.2 s of the 1,800 s budget then in force (see "The suite's time budget" below)
 
 | Measured | Result |
 |---|---|
@@ -61,6 +61,16 @@ without the venv recorded SKIP, and `Test-RunnerIntegrity` expected every regist
 run. The invariant it now asserts is the one the false pass broke: every registered check has a
 result in the summary, PASS, FAIL or an explicit SKIP; the checks not skipped all run; and the
 final lines count the skips. Open: **U20** (scale, and the two sources' totals differ by design).
+
+## The suite's time budget, 2026-09-24
+
+`Test-All` passed on `690015d` in 1,797.2 s, 2.8 s inside the gate's 1,800 s command budget, and a
+budget-modes gate on its own branch had already failed on time with no failing check. The suite
+runs its checks one after another and grew with every packet (1,477.4 s on `d1f1756`, 1,721.8 s on
+`c7f0a29`), while several agents' gates share the machine. The budget is now 3,600 s
+([ADR-0024](adr/0024-test-suite-time-budget.md)), `Test-All` prints and saves each check's
+duration, and P56 makes the suite parallel so the budget can return to 1,800 s. Nothing it checks
+was removed or weakened.
 
 ## A gate that passed on 9 of 32 checks, 2026-09-24
 

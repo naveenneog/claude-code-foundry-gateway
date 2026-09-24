@@ -578,6 +578,14 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Changed
 
+- **The gate gives the test suite 60 minutes, and the suite reports where its time goes.**
+  `tests/Test-All.ps1` took 1,797.2 s on `690015d` against a 1,800 s command budget, and a
+  budget-modes gate had already failed on time with no failing check. `commandTimeoutMs` is now
+  3,600,000 ([ADR-0024](docs/adr/0024-test-suite-time-budget.md)); `Test-All` prints each check's
+  seconds and the five slowest, and writes them to `test-all-timings-<utc>-<pid>.json` in the temp
+  folder, because the gate discards the suite's output when it passes. P56 makes the suite
+  parallel so the budget can return to 30 minutes.
+
 - Money moved from `[double]` to `[decimal]` in `ClaudeBusinessUnit.ps1`,
   `Set-ClaudeBusinessUnit.ps1` and `Get-ClaudeBusinessUnit.ps1`, and token spend
   is accumulated as `[long]` rather than `0.0`.

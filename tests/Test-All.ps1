@@ -41,13 +41,14 @@ function Invoke-Check {
     # A terminating error inside a check travels up to the nearest try block.
     # Without this catch that was the one around every check below: the rest
     # never ran and the summary still said all passed (Test-RunnerIntegrity).
+    $clock = [Diagnostics.Stopwatch]::StartNew()
     $ok = $false
     try {
         & $path @Params | Out-Host
         $ok = ($LASTEXITCODE -eq 0)
     }
     catch { Write-Host "  FAIL - the check stopped with an error: $($_.Exception.Message)" -ForegroundColor Red }
-    $script:results += [pscustomobject]@{ Name = $Name; Result = $(if ($ok) { 'PASS' } else { 'FAIL' }) }
+    $script:results += [pscustomobject]@{ Name = $Name; Result = $(if ($ok) { 'PASS' } else { 'FAIL' }); Seconds = [math]::Round($clock.Elapsed.TotalSeconds, 1) }
 }
 
 $completed = $false
@@ -117,7 +118,20 @@ Write-Host ' Summary' -ForegroundColor Cyan
 Write-Host ('=' * 72) -ForegroundColor DarkGray
 foreach ($r in $results) {
     $colour = switch ($r.Result) { 'PASS' { 'Green' } 'FAIL' { 'Red' } default { 'Yellow' } }
-    Write-Host ("  {0,-4}  {1}" -f $r.Result, $r.Name) -ForegroundColor $colour
+    $took = if ($r.Seconds) { "  ($($r.Seconds) s)" } else { '' }
+    Write-Host ("  {0,-4}  {1}{2}" -f $r.Result, $r.Name, $took) -ForegroundColor $colour
+}
+
+# The gate discards this output when the run passes, so the durations also go
+# to a file: the suite's time budget (ADR-0024) is managed from these numbers.
+$timed = @($results | Where-Object { $_.Seconds })
+if ($timed.Count) {
+    Write-Host ''
+    Write-Host ("  {0:N0} s in checks; slowest:" -f ($timed | Measure-Object -Property Seconds -Sum).Sum) -ForegroundColor DarkGray
+    $timed | Sort-Object Seconds -Descending | Select-Object -First 5 | ForEach-Object { Write-Host ("    {0,7:N1} s  {1}" -f $_.Seconds, $_.Name) -ForegroundColor DarkGray }
+    $timings = Join-Path ([IO.Path]::GetTempPath()) ('test-all-timings-{0}-{1}.json' -f (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmss'), $PID)
+    $results | Select-Object Name, Result, Seconds | ConvertTo-Json | Set-Content -LiteralPath $timings -Encoding ASCII
+    Write-Host "  timings: $timings" -ForegroundColor DarkGray
 }
 
 if (-not $IncludeAzure) {
