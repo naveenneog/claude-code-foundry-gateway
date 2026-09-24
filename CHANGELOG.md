@@ -40,6 +40,14 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   write back, and refuses a catalog with no business unit. New groups and membership refresh need
   `GroupMember.Read.All` from a tenant administrator, `scripts/Grant-ClaudeGovernanceGraphAccess.ps1`
   (**U17**). [ADR-0015](docs/adr/0015-governance-authored-in-turnstile.md) amends ADR-0014.
+- **Viewers, managers, and a sign-in that needs no consent.** Turnstile's Entra application has
+  `Turnstile.Viewer` and `Turnstile.Manager` beside `Turnstile.Admin`, created by
+  `New-ClaudeTurnstileEntraApp.ps1` as the app's owner, and its tokens carry only the groups
+  assigned to it. Viewers and managers sign in read-only; developers never do.
+  `scripts/Open-ClaudeTurnstile.ps1` signs a person in through the Azure CLI, which is
+  pre-authorized on Turnstile's API: the token is exchanged for a code that works once, within a
+  minute. For tenants whose web sign-in has no consent yet (**U19**).
+  [ADR-0016](docs/adr/0016-delegated-management.md).
 - **Scale, measured at 500,000 identities.** On a throwaway Premium v2 instance with a mock
   backend, API Management's `llm-token-limit` counters accepted and charged 500,000 identities at
   about 1,600 requests a second on one unit, and no allowance was exact: one identity was served

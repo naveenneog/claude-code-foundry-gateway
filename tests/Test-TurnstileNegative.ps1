@@ -101,6 +101,12 @@ $mutations = @(
        File  = 'scripts/Connect-ClaudeTurnstile.ps1'; From = 'if ($jobSetting -ne $applyJobId) {'; To = 'if ($true) {' }
     @{ Suite = $governance; Name = 'membership lists are written while the projection is the source'
        File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if ($current[''entitlement-source''] -eq ''projection'') {'; To = 'if ($false) {' }
+    @{ Suite = $governance; Name = 'a manager role can be held by an application'
+       File  = 'scripts/New-ClaudeTurnstileEntraApp.ps1'; From = 'allowedMemberTypes = @(''User'') }'; To = 'allowedMemberTypes = @(''User'', ''Application'') }' }
+    @{ Suite = $governance; Name = 'tokens carry every group a person is in'
+       File  = 'scripts/New-ClaudeTurnstileEntraApp.ps1'; From = 'patch.groupMembershipClaims = ''ApplicationGroup'''; To = 'patch.groupMembershipClaims = ''All''' }
+    @{ Suite = $governance; Name = 'the CLI sign-in puts the token in the link'
+       File  = 'scripts/Open-ClaudeTurnstile.ps1'; From = 'EscapeDataString($grant.code)'; To = 'EscapeDataString($token)' }
 )
 
 $missed = @()

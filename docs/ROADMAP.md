@@ -256,6 +256,21 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       a tier limit saved on the page reached the gateway in 112 s, and a budget saved in Turnstile
       refused the next request 123 s after the save. New groups and membership refresh wait on
       U17. [ADR-0015](adr/0015-governance-authored-in-turnstile.md)
+- [x] P45 delegated management, phase 1 — viewer and manager app roles, created as the app's
+      owner; admins sign in as Owner, viewers and managers read-only, developers never; a browser
+      sign-in through the Azure CLI that needs no consent. Run live: the link opened a session in
+      13.4 s, and the same link again returned 401. [ADR-0016](adr/0016-delegated-management.md)
+- [ ] P46 delegated management, phase 2 — acceptance: a manager sees and manages only the units
+      and teams whose manager group is in their token; allocation within their own headroom;
+      per unit or team, the admin's enforcement mode: strict, allowance or notify
+- [ ] P47 delegated management, phase 3 — acceptance: budget requests that go to the manager one
+      level up, boosts with an expiry, escalation, notifications at the warning threshold
+- [ ] P48 delegated management at 500,000 — acceptance: overrides and unit and team budgets in the
+      projection, one queue-driven writer instead of a job run per save, usage sent hourly per
+      person and model, access packages for joining a team
+- [ ] P49 network profiles — acceptance: one parameter chooses private (private endpoints for
+      every component) or public (Entra-only access, no private endpoints or DNS zones), for the
+      gateway, the projection and Turnstile, each priced by the bill-of-materials scripts
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so

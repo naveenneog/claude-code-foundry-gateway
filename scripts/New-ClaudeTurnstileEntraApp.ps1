@@ -9,7 +9,12 @@
     alone, and anything missing is added.
 
       application        single tenant, access tokens v2, Application ID URI api://<appId>
-      app role           Turnstile.Admin, for users and for applications (workload identities)
+      app roles          Turnstile.Admin, for users and for applications (workload identities);
+                         Turnstile.Viewer, which sees every page and changes nothing; and
+                         Turnstile.Manager, for people only, whose reach comes from the
+                         manager groups they are in
+      group claims       only groups assigned to Turnstile go into its tokens, so a manager's
+                         token names their manager groups and never their hundreds of others
       delegated scope    Turnstile.Manage, pre-authorized for the Azure CLI, so `az login`
                          users and scripts get a token without a consent prompt
       enterprise app     assignment required: Entra refuses a token to anyone not assigned
@@ -46,6 +51,8 @@ param(
     [string[]]$AssignUser = @(),
     [switch]$NoGroup,
     [string]$RoleValue = 'Turnstile.Admin',
+    [string]$ViewerRoleValue = 'Turnstile.Viewer',
+    [string]$ManagerRoleValue = 'Turnstile.Manager',
     [string]$ScopeValue = 'Turnstile.Manage'
 )
 
@@ -98,15 +105,32 @@ else {
 if ($app.signInAudience -ne 'AzureADMyOrg') { throw "'$DisplayName' is $($app.signInAudience). Turnstile's admin-only rule needs a single-tenant application (AzureADMyOrg)." }
 
 $patch = @{}
-$role = @($app.appRoles | Where-Object value -eq $RoleValue)[0]
-if (-not $role) {
-    $role = @{ id = [guid]::NewGuid().ToString(); value = $RoleValue; displayName = 'Turnstile administrator'
-        description = 'Administers Turnstile: budgets, catalog, people and usage.'; allowedMemberTypes = @('User', 'Application'); isEnabled = $true }
-    $patch.appRoles = @(@($app.appRoles) + $role)
-    $changes.Add("added app role $RoleValue")
+$roleSpecs = @(
+    @{ value = $RoleValue; displayName = 'Turnstile administrator'
+        description = 'Administers Turnstile: budgets, catalog, people and usage.'; allowedMemberTypes = @('User', 'Application') },
+    @{ value = $ViewerRoleValue; displayName = 'Turnstile viewer'
+        description = 'Sees every Turnstile page and changes nothing.'; allowedMemberTypes = @('User', 'Application') },
+    # A manager is always a person: their reach is the manager groups they belong to.
+    @{ value = $ManagerRoleValue; displayName = 'Turnstile manager'
+        description = 'Manages the business units and teams whose manager group they are in.'; allowedMemberTypes = @('User') }
+)
+$roles = @($app.appRoles)
+foreach ($spec in $roleSpecs) {
+    if (@($roles | Where-Object value -eq $spec.value).Count) { continue }
+    $roles += @{ id = [guid]::NewGuid().ToString(); value = $spec.value; displayName = $spec.displayName
+        description = $spec.description; allowedMemberTypes = $spec.allowedMemberTypes; isEnabled = $true }
+    $changes.Add("added app role $($spec.value)")
 }
-elseif (@($role.allowedMemberTypes) -notcontains 'Application') {
+if ($roles.Count -ne @($app.appRoles).Count) { $patch.appRoles = $roles }
+$role = @($roles | Where-Object value -eq $RoleValue)[0]
+if (@($role.allowedMemberTypes) -notcontains 'Application') {
     throw "App role $RoleValue does not allow applications, so a workload identity cannot hold it. Allow 'Applications' on the role in the portal."
+}
+# Only groups assigned to Turnstile go into its tokens: a manager's manager groups, never the
+# hundreds of others a person can be in, which would also overflow the token.
+if ($app.groupMembershipClaims -ne 'ApplicationGroup') {
+    $patch.groupMembershipClaims = 'ApplicationGroup'
+    $changes.Add('tokens carry only the groups assigned to Turnstile')
 }
 $scope = @($app.api.oauth2PermissionScopes | Where-Object value -eq $ScopeValue)[0]
 $api = @{ requestedAccessTokenVersion = 2; oauth2PermissionScopes = @($app.api.oauth2PermissionScopes); preAuthorizedApplications = @($app.api.preAuthorizedApplications) }
@@ -184,6 +208,8 @@ $summary = [pscustomobject][ordered]@{
     entraClientId     = $app.appId
     entraTenantId     = $tenant
     entraAdminRole    = $RoleValue
+    entraViewerRole   = $ViewerRoleValue
+    entraManagerRole  = $ManagerRoleValue
     Scope             = "api://$($app.appId)/$ScopeValue"
     AssignmentRequired = $true
     AdminGroup        = $(if ($group) { $group.displayName } else { $null })
@@ -199,5 +225,8 @@ Write-Host '  In Turnstile''s main.parameters.json:' -ForegroundColor DarkGray
 Write-Host "    entraClientId  = $($app.appId)" -ForegroundColor DarkGray
 Write-Host "    entraTenantId  = $tenant" -ForegroundColor DarkGray
 Write-Host "    entraAdminRole = $RoleValue" -ForegroundColor DarkGray
+Write-Host "    entraViewerRole = $ViewerRoleValue; entraManagerRole = $ManagerRoleValue" -ForegroundColor DarkGray
+Write-Host '  Viewers and manager groups are assigned on the enterprise application''s Users and groups page;' -ForegroundColor DarkGray
+Write-Host '  as its owner you can, with no directory role.' -ForegroundColor DarkGray
 if (-not $WebUrl) { Write-Host '  After deploying, run this again with -WebUrl <Turnstile address> to add the sign-in redirect.' -ForegroundColor DarkGray }
 $summary

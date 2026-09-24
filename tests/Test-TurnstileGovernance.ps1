@@ -260,6 +260,13 @@ Assert 'a multi-tenant application is refused'               ($entraApp -match "
 Assert 'assignment is required, so Entra refuses the rest'   ($entraApp -match 'appRoleAssignmentRequired = \$true')
 Assert 'the role can be held by a workload identity'         ($entraApp -match "allowedMemberTypes = @\('User', 'Application'\)")
 Assert 'the Azure CLI is pre-authorized by its published id' ($entraApp -match "04b07795-8ddb-461a-bbee-02f9e1bf7b46")
+Assert 'viewers and managers are roles on the app'          ($entraApp -match "\`$ViewerRoleValue = 'Turnstile\.Viewer'" -and $entraApp -match "\`$ManagerRoleValue = 'Turnstile\.Manager'")
+Assert 'a manager is a person, never an application'        ($entraApp -match "(?s)value = \`$ManagerRoleValue;.{0,200}allowedMemberTypes = @\('User'\) \}")
+Assert 'tokens carry only the groups assigned to Turnstile'  ($entraApp -match "patch\.groupMembershipClaims = 'ApplicationGroup'")
+$openTurnstile = Get-Content (Join-Path $root 'scripts/Open-ClaudeTurnstile.ps1') -Raw
+Assert 'the CLI sign-in asks for Turnstile''s own scope'     ($openTurnstile -match 'get-access-token --scope \$Scope')
+Assert 'it sends the token to Turnstile and never shows it'  ($openTurnstile -match '/api/v1/auth/cli' -and -not ($openTurnstile -match '(?i)(Write-Host|Write-Output|return)[^\r\n]*\$token'))
+Assert 'the link carries only the one-time code'             ($openTurnstile -match 'login_code=\$\(\[uri\]::EscapeDataString\(\$grant\.code\)\)')
 Assert 'Graph bodies go through a file, not cmd.exe'         ($entraApp -match '''--body'', "@\$file"')
 Assert 'an unknown price is not known, never zero'           ($bom -match 'MonthlyUsd = \$\(if \(\$null -eq \$Monthly\) \{ \$null \}' -and $bom -notmatch 'MonthlyUsd = 0')
 Assert 'the bill reads the deployment from the connection'   ($bom -match "\`$integration\['resourceGroup'\]")

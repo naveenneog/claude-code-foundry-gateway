@@ -546,6 +546,47 @@ and a forged token both returned 401.
 
 **The web sign-in is the tenant's.** See [step 3](#3-add-the-sign-in-redirect).
 
+### Viewers and managers
+
+Three app roles on Turnstile's Entra application decide who signs in, and as what:
+
+| Entra app role | Signs in as | Can |
+|---|---|---|
+| `Turnstile.Admin` | Owner | Everything |
+| `Turnstile.Viewer` | Member | See every page; change nothing an Owner governs. A reporting identity can hold it too |
+| `Turnstile.Manager` | Member | The same, for now. Limiting a manager to the units and teams whose manager group they are in is the next step |
+| none | Refused | Nothing: developers never sign in, and no account is written for them |
+
+`New-ClaudeTurnstileEntraApp.ps1` creates the roles, and makes Turnstile's tokens carry only the
+groups assigned to Turnstile, so a manager's token names their manager groups and never their
+hundreds of others. Turnstile admits the two reader roles when `ENTRA_VIEWER_ROLE` and
+`ENTRA_MANAGER_ROLE` are set; its redeploys keep them. As the application's owner you assign
+people and manager groups on the enterprise application's **Users and groups** page, with no
+directory role.
+
+### Sign in before the tenant grants consent
+
+**Sign in with Microsoft** needs a one-time, tenant-wide consent for its sign-in permissions
+(`openid`, `profile`, `email`, `User.Read`), which a Cloud Application Administrator or
+Application Administrator grants. Until then Entra shows everyone **Need admin approval**.
+Sign in through the Azure CLI instead. It is pre-authorized on Turnstile's API, so its token needs
+no consent:
+
+```powershell
+az login --tenant <tenant id> --allow-no-subscriptions
+./scripts/Open-ClaudeTurnstile.ps1
+```
+
+The script exchanges the token for a code that works once, within a minute, and opens the browser
+with it; the token itself never reaches the browser or the screen. An account that cannot read the
+gateway passes `-TurnstileUrl` and `-Scope`. To keep your usual Azure CLI sign-in, set
+`$env:AZURE_CONFIG_DIR` to a folder of its own first.
+
+Measured on 2026-09-24: the link was issued in 13.4 s; the browser came back signed in as the
+administrator, role `owner`, method `entra`, with the code already gone from the address; the same
+link in a fresh browser returned 401. Only a person's token opens a browser session, and the code
+is stored hashed and deleted as it is redeemed.
+
 The break-glass Owner signs in with a password and is not affected by any of this. Keep its
 credential in a secret store.
 
@@ -600,6 +641,8 @@ through it, so for this integration it does nothing. The deployer always creates
 | The scheduled job stops at once with `set: pipefail\r` | CRLF line endings in the start script, from a Windows checkout of a changed template | Keep `replace(bootstrap, '\r', '')` in the template |
 | A scheduled run reports `refused` budgets | A team budget above its unit's, which Turnstile refuses | Expected; the gateway still enforces both |
 | The Entra capture stops with `MFA` | The blade needs a fresh multifactor sign-in, which pushed a request to your phone | `node guide/auth.mjs`, then capture again |
+| **Need admin approval** at Turnstile's Microsoft sign-in | Nobody has consented to its sign-in permissions, and users may not consent in this tenant | Sign in with `./scripts/Open-ClaudeTurnstile.ps1`, which needs no consent, or ask a Cloud Application Administrator for the one-time consent |
+| `AADSTS50105` from `Open-ClaudeTurnstile.ps1` | The account holds no Turnstile role | Assign it `Turnstile.Admin`, `Turnstile.Viewer` or `Turnstile.Manager` on the enterprise application |
 | **Apply now** answers "No gateway apply job is configured" just after connecting | Turnstile's API restarts when `GATEWAY_APPLY_JOB_ID` changes. Measured: the first read after Connect still said not configured; the setting was there | Wait a minute and reload |
 | A run reports "This Turnstile has no gateway governance endpoints" | Turnstile predates the Gateway governance page. A missing route answers 405, not 404, because Turnstile's page fallback owns the path | Deploy the fork's `claude-gateway` branch |
 | A run stops with "Turnstile's catalog is its seeded demonstration set" | Governance was moved to Turnstile without seeding, or the catalog was reset | Run `Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Turnstile` again after `-GovernanceAuthority Gateway`, which seeds it |
@@ -658,13 +701,15 @@ deployer does not run on Windows. The fork's branches, merged in `claude-gateway
 | `feature/entra-admin-only` | Tenant pin, admin role required, no account for anyone else | 3 of 3 mutations caught |
 | `feature/enterprise-catalog` | `GET`, `PUT` and `DELETE /api/v1/enterprise-catalog`, stored in PostgreSQL | 13 tests, 4 of 4 mutations caught |
 | `feature/entra-bearer-admin` | Entra access tokens for the API, for scripts and workload identities | 12 tests, 5 of 5 mutations caught |
+| `feature/entra-viewer-manager` | `ENTRA_VIEWER_ROLE` and `ENTRA_MANAGER_ROLE`, signing in as Member; `POST /api/v1/auth/cli` and `/api/v1/auth/code`, a browser sign-in through the Azure CLI | 21 new tests passed |
 | `feature/gateway-governance` | The Gateway governance page; `GET`, `PUT /api/v1/gateway-tiers`; `GET`, `POST /api/v1/gateway-apply`; `POST /api/v1/gateway-governance/prepare`; a save that starts the gateway's apply job | 27 API tests and 9 page-rule tests passed |
 
 ## Reference
 
 | Script | Does |
 |---|---|
-| `scripts/New-ClaudeTurnstileEntraApp.ps1` | Creates or corrects the Entra application, role, scope, assignment and admin group |
+| `scripts/New-ClaudeTurnstileEntraApp.ps1` | Creates or corrects the Entra application, its admin, viewer and manager roles, the scope, the group claim, assignment and the admin group |
+| `scripts/Open-ClaudeTurnstile.ps1` | Opens Turnstile signed in as you through the Azure CLI, with no consent; `-TurnstileUrl`, `-Scope`, `-NoBrowser` |
 | `scripts/Connect-ClaudeTurnstile.ps1` | Discovers Turnstile, stores `turnstile-integration`, grants, validates; `-Show`, `-Disconnect`, `-BudgetAuthority`, `-GovernanceAuthority`, `-PriceSource`, `-PersonBudgets` |
 | `scripts/Sync-ClaudeTurnstileGovernance.ps1` | Units, teams, budgets and tiers to Turnstile; `-Direction FromTurnstile [-Apply]` for budgets back, or for everything when governance is authored in Turnstile |
 | `scripts/ClaudeTurnstileApply.ps1` | Turnstile's catalog, budgets and tiers as the gateway's named values, and the rules for what is applied |

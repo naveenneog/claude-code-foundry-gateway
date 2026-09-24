@@ -1,6 +1,36 @@
 # Status
 
-**Active packet:** P44 — governance authored in Turnstile and applied to the gateway on save ([TURNSTILE.md](TURNSTILE.md#manage-everything-in-turnstile), [ADR-0015](adr/0015-governance-authored-in-turnstile.md)). Every step was run live on 2026-09-24; 44 of 44 Turnstile mutations caught, 20 of them new.
+**Active packet:** P45 — delegated management, phase 1: viewer and manager roles, and a browser sign-in through the Azure CLI that needs no consent ([TURNSTILE.md](TURNSTILE.md#sign-in-before-the-tenant-grants-consent), [ADR-0016](adr/0016-delegated-management.md)). Run live on 2026-09-24; 47 of 47 Turnstile mutations caught.
+
+## P45 acceptance criteria — delegated management, phase 1
+
+- [x] `Turnstile.Viewer` and `Turnstile.Manager` exist beside `Turnstile.Admin`, created by the repository's script as the application's owner, with no directory role
+- [x] Tokens carry only the groups assigned to Turnstile, so a manager's token can name their manager groups
+- [x] An admin signs in as Owner, a viewer or manager as Member, read-only, and anyone else is refused before an account is written: 21 new tests in the fork
+- [x] A person signs in through the Azure CLI with no consent: a link in 13.4 s, a session as role `owner`, method `entra`, and the same link again 401
+- [ ] A manager limited to the units and teams of their manager groups, and the admin's enforcement modes (P46)
+- [ ] The normal **Sign in with Microsoft**: needs the one-time consent (**U19**)
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0
+
+| Measured | Result |
+|---|---|
+| `New-ClaudeTurnstileEntraApp.ps1` as the app's owner | Added `Turnstile.Viewer` [User/Application], `Turnstile.Manager` [User] and the ApplicationGroup claim; nothing else changed |
+| Turnstile's consent grants | None: every Entra user sees Need admin approval |
+| A Turnstile token from the Azure CLI | Issued with no consent, carrying `roles=[Turnstile.Admin]` |
+| `Open-ClaudeTurnstile.ps1`, then the link in a browser | Link in 13.4 s; session `owner`, `entra`; code gone from the address; the same link in a fresh browser 401 |
+| Turnstile redeploy | 630 s; `ENTRA_VIEWER_ROLE` and `ENTRA_MANAGER_ROLE` kept |
+
+**Found by running it.** Nobody in the tenant had ever consented to Turnstile's web sign-in, so the
+Microsoft button had never worked for anyone, the owner included; every earlier Entra check had
+used the Azure CLI. The fork's `member` role already hides every management control, which is what
+made mapping viewers and managers to it a sign-in change rather than a new role.
+
+| Seat | Verdict | Note |
+|---|---|---|
+| Architect | Accept | Entra decides who; the scope arrives in the person's own token, so no directory permission is needed to read it |
+| Coder | Accept | One mapping serves the web sign-in and bearer tokens, so the two cannot drift |
+| QA | Accept | The single-use, expiry and workload refusals are tested, and the live link was replayed to prove it |
+| Security | Accept, with a reservation | Until P46 a manager sees what a viewer sees; the code is stored hashed, lives a minute and opens only a person's session |
 
 ## P44 acceptance criteria — governance authored in Turnstile
 
