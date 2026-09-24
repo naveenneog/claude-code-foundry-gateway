@@ -218,6 +218,10 @@ round trip and has an unconditional recovery path; it needs only existing Owner 
 2. Use **Owners** to verify the CLI account owns the groups. Use **Members** to verify it
    is currently in the Admin group and the two test groups are empty. Group ownership
    is not a directory administrator role.
+   Also inspect the enterprise application's **Users and groups** assignments for a
+   direct **User** assignment of Admin or Viewer. Such an assignment survives removal
+   from the Admin group. Stop if one exists: removing it is a separate authorization
+   decision, not an implicit part of this group-only procedure.
 3. Export the authored catalog. In Turnstile, add the two existing test groups' object IDs
    to the chosen unit/team **Manager group object id** fields and save.
 4. **Only during the authorized Phase 2 window:** in the unit-manager group's **Members**,
@@ -245,7 +249,9 @@ az ad group member remove --group $unitManagerGroupId --member-id $me
 
 `guide/capture-turnstile-manager.mjs --dry-run` performs only reads. The actual guarded
 sequence requires `--execute --lead-go`, the private recovery artifact and the lead's
-explicit authorization. It has not been executed in this packet.
+explicit authorization. The authorized group-only attempt on 2026-09-24 was stopped
+because a direct Admin assignment kept the token broader than Manager. The account,
+catalog and named values were restored; no Manager-only screenshot is claimed.
 
 ## 6. Capture/render tools and the local inspector
 
