@@ -168,6 +168,9 @@ unit emails. A filtered unit's HTML and CSV never contain another unit's people.
 
 > Do not commit output. It contains personal usage data. The default report directory is
 > ignored by Git. An alternative `-OutputPath` must be secured and excluded by its owner.
+> Regeneration refuses unrelated files in an existing month folder. It stages a complete
+> replacement before moving the old report aside. Use different output roots for concurrent
+> manual runs; scheduled runs already use unique roots and archive prefixes.
 
 ## Deploy scheduled reporting
 
@@ -309,6 +312,12 @@ For mail-server delivery events, configure ACS **Monitoring > Diagnostic setting
 an Event Grid subscription to email delivery reports. Only the recipient can confirm
 the final mailbox folder.
 
+**MEASURED, 2026-09-24:** the reference generator archived a current-month report, an
+automatic managed-identity dispatcher submitted one owner-only email, and mailbox metadata
+confirmed that it arrived in **Inbox at 17:42:49 UTC**. The receiving organization prepended
+`[EXTERNAL]` to the subject. This is one delivery observation, not a guarantee for other
+organizations or future messages. No live mailbox screenshot is published.
+
 ## Send, regenerate or resend by hand
 
 From a VNet-connected terminal:
@@ -393,8 +402,9 @@ send an inbox-delivery guarantee.
 
 ## Costs
 
-Prices are USD list price, **East US 2, retrieved 2026-09-24**, before tax, discounts,
-free grants and existing-resource charges. The ACS data location is United States.
+Prices are USD list price for an **East US 2 deployment, retrieved 2026-09-24**, before tax,
+discounts, free grants and existing-resource charges. Nonregional Global and Zone 1
+meters are labeled below. The ACS data location is United States.
 Use the repository's `AzureRetailPrice.ps1`; the Retail API calls the service **Email**,
 not "Azure Communication Services".
 
@@ -477,10 +487,16 @@ network resources must also be included in a deployed bill of materials.
 | `BCP265: The name "environment" is not a function` | The resource symbol shadows the Bicep function. Use `az.environment()` |
 | `Unknown properties volumes in StartJobExecutionTemplate are not supported` | The management template is not the execution template. Send only execution-container fields, not `volumes` or `imageType` |
 | Scaler reports `MetricValue: 0.00` although the outbox contains a message | KEDA appends its delimiter. A configured prefix `outbox/` becomes `outbox//`; use `outbox` |
-| XML conversion fails on an Azure Blob listing that begins with a BOM | Strip U+FEFF from decoded text before the XML string parser; preserve raw bytes for artifact hashes |
+| `The specified node cannot be inserted as the valid child of this node, because the specified node is the wrong type.` | The Azure Blob listing begins with a BOM. Strip U+FEFF from decoded text before the XML string parser; preserve raw bytes for artifact hashes |
 | `No replicas found for execution` | Completed job pods have been cleaned up. Read durable `ContainerAppConsoleLogs` instead |
 | `'charmap' codec can't encode character '\ufeff'` in `az containerapp job logs show` | The Windows CLI log-stream decoder failed on the BOM. Read the durable workspace log through the query API |
 | Filtering console logs by the ARM environment name returns no rows | `EnvironmentName` is the runtime-generated name, not necessarily the ARM name. Filter by the exact `JobName` or execution's `ContainerGroupName` |
+| Every mutation is caught, but Test-All reports the mutation check as FAIL | A final expected native failure left `LASTEXITCODE=1`. The harness explicitly exits zero only after all mutations are caught |
+| A BOM assertion fails after the BOM was removed | Culture-sensitive `StartsWith` can treat U+FEFF as ignorable. Compare with `StringComparison.Ordinal` |
+| `Output month contains files not owned by this report.` | Move administrator notes or spreadsheets out of the generated month folder, or choose a new output root; the script will not delete them |
+| A negative test throws for missing parameters rather than its intended scenario | `$args` is an automatic variable and can be shadowed in callbacks. Use a named splat; do not override a splatted parameter on PowerShell 5.1 |
+| An administration execution reports `Failed` without a bootstrap log | One live pod failed before its first application log; the platform did not expose a more specific cause. An identical idempotent request succeeded on retry. Inspect system logs and retry the same operation, not a broader permission grant |
+| A dispatcher succeeds with `RateLimited` just before `NextActionUtc` | Startup duration varies. A live poll was 1.6 seconds early and correctly deferred to the next seven-minute interval; it did not send a duplicate |
 
 After verifying that no dispatcher is active, break a stale lease from a connected host:
 
@@ -513,7 +529,7 @@ not a normal retry mechanism.
 | `BudgetTokens` | Current monthly token budget from the gateway catalog |
 | `BudgetUsdEstimate` | Sonnet list-price estimate using 20% output, not historical input dollars |
 | `UsedPercent` | `(InputTokens + OutputTokens) / BudgetTokens * 100`, rounded to two decimals |
-| `People` | Exact distinct identities per scope; selected totals count unit-person rows |
+| `People` | Distinct ledger identities per scope, including workloads and an unidentified bucket where needed; not licensed headcount. Selected totals count unit-person rows |
 | `UnpricedRows` | Saved cost rows lacking a recognized price; cost is incomplete when nonzero |
 | `TopModel` | Highest estimated-cost model for that person |
 | `Clients` | Observed client surfaces; cache has its own `cache (no surface)` label |

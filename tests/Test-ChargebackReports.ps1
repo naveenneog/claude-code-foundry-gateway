@@ -43,6 +43,7 @@ try {
     Refuses 'KQL injection refused' { Get-ClaudeReportQuery -Window $w -Kind People -Unit 'x" | take 1' } 'identifier'
     Refuses 'unsafe filename refused' { Get-ClaudeReportFileName '../finance' } 'identifier'
     Refuses 'admin scope cannot be a unit filename' { Get-ClaudeReportFileName 'all' } 'identifier'
+    Refuses 'unit case must agree with case-sensitive KQL filters' { Get-ClaudeReportFileName 'Engineering' } 'identifier'
     Assert 'reserved bucket has stable name' ((Get-ClaudeReportFileName 'unassigned') -eq 'unassigned')
 
     $source = @{ PricingDate = '2026-09-15'; MembershipDate = '2026-09-24'; Functions = @(); QueryVersion = 1 }
@@ -56,8 +57,8 @@ try {
             [pscustomobject]@{Kind='Client';Name='sdk-cli / desktop (fixture)';Requests=$scope[0].Requests;EstimatedCostUsd=$scope[0].EstimatedCostUsd}
         )
     }
-    $args = @{ Window=$w; Catalog=$fixture.catalog; Scopes=$fixture.scopes; ReadPeople=$readPeople; ReadDimensions=$readDimensions; Source=$source; OutputPath=$base; Format=@('CSV','HTML') }
-    try { $result = Write-ClaudeChargebackReport @args; Assert 'valid fixture reconciles and publishes' $true }
+    $reportArgs = @{ Window=$w; Catalog=$fixture.catalog; Scopes=$fixture.scopes; ReadPeople=$readPeople; ReadDimensions=$readDimensions; Source=$source; OutputPath=$base; Format=@('CSV','HTML') }
+    try { $result = Write-ClaudeChargebackReport @reportArgs; Assert 'valid fixture reconciles and publishes' $true }
     catch { Assert 'valid fixture reconciles and publishes' $false; throw }
     $dir = $result.Path
     $manifest = Get-Content (Join-Path $dir 'manifest.json') -Raw | ConvertFrom-Json
@@ -89,28 +90,45 @@ try {
         Assert "hash for $($file.Name)" ((Get-FileHash (Join-Path $dir $file.Name) -Algorithm SHA256).Hash.ToLowerInvariant() -eq $file.Sha256)
     }
     $broken = @($fixture.scopes | Where-Object Unit -ne 'unassigned')
-    Refuses 'missing Unassigned cannot reconcile' { Write-ClaudeChargebackReport @args -Scopes $broken } 'reconcil'
-    # A separate splat avoids the duplicate parameter check: the failure must be mathematical.
-    $bad = $args.Clone(); $bad.Scopes=$broken; $bad.OutputPath=Join-Path $base 'bad'
+    $missingBucketArgs=$reportArgs.Clone();$missingBucketArgs.Scopes=$broken
+    Refuses 'missing Unassigned cannot reconcile' { Write-ClaudeChargebackReport @missingBucketArgs } 'reconcil'
+    # Separate splats work on both hosts; overriding a splatted parameter is PowerShell 7-only.
+    $bad = $reportArgs.Clone(); $bad.Scopes=$broken; $bad.OutputPath=Join-Path $base 'bad'
     Refuses 'dropped bucket fails mathematical reconciliation' { Write-ClaudeChargebackReport @bad } 'reconcil'
-    $bad=$args.Clone(); $bad.ReadPeople={ param($unit,$prefix) $fixture.people }; $bad.OutputPath=Join-Path $base 'leak'
+    $bad=$reportArgs.Clone(); $bad.ReadPeople={ param($unit,$prefix) $fixture.people }; $bad.OutputPath=Join-Path $base 'leak'
     Refuses 'cross-unit query rows refused before publication' { Write-ClaudeChargebackReport @bad } 'cross-unit'
     Assert 'failed report has no published manifest' (-not (Test-Path (Join-Path $base 'leak\2024-02\manifest.json')))
-    $bad=$args.Clone(); $bad.ReadPeople={ param($unit,$prefix) @() }; $bad.OutputPath=Join-Path $base 'lost'
+    $bad=$reportArgs.Clone(); $bad.ReadPeople={ param($unit,$prefix) @() }; $bad.OutputPath=Join-Path $base 'lost'
     Refuses 'dropped per-person tokens refused' { Write-ClaudeChargebackReport @bad } 'reconcil'
-    $bad=$args.Clone(); $bad.ReadDimensions={param($unit) @()}; $bad.OutputPath=Join-Path $base 'dimensions'
+    $bad=$reportArgs.Clone(); $bad.ReadDimensions={param($unit) @()}; $bad.OutputPath=Join-Path $base 'dimensions'
     Refuses 'missing model or client totals cannot look complete' { Write-ClaudeChargebackReport @bad } 'reconcil'
-    $empty=$args.Clone(); $empty.OutputPath=Join-Path $base 'empty'; $empty.ReadPeople={ param($unit,$prefix) @() }; $empty.ReadDimensions={ param($unit) @() }
+    $empty=$reportArgs.Clone(); $empty.OutputPath=Join-Path $base 'empty'; $empty.ReadPeople={ param($unit,$prefix) @() }; $empty.ReadDimensions={ param($unit) @() }
     $empty.Scopes=@([pscustomobject]@{Level='Workspace';Unit='';Team='';Requests=0;InputTokens=0;OutputTokens=0;CacheReadTokens=0;EstimatedCostUsd=0;People=0;UnpricedRows=0})
     $e=Write-ClaudeChargebackReport @empty
     $em=Get-Content (Join-Path $e.Path 'manifest.json') -Raw | ConvertFrom-Json
     Assert 'empty month reconciles explicitly' ($em.Reconciliation.Matched -and $em.Totals.Requests -eq 0)
     Assert 'empty month still has Unassigned CSV header' ((Get-Content (Join-Path $e.Path 'unassigned.csv')).Count -eq 1)
-    $selected=$args.Clone(); $selected.OutputPath=Join-Path $base 'selected'; $selected.BusinessUnit=@('finance'); $selected.Format=@('CSV')
+    $selected=$reportArgs.Clone(); $selected.OutputPath=Join-Path $base 'selected'; $selected.BusinessUnit=@('finance'); $selected.Format=@('CSV')
     $s=Write-ClaudeChargebackReport @selected
     Assert 'selection publishes only selected people' ((Test-Path (Join-Path $s.Path 'finance.csv')) -and -not (Test-Path (Join-Path $s.Path 'engineering.csv')))
     Assert 'JSON manifest exists without HTML selection' (Test-Path (Join-Path $s.Path 'manifest.json'))
+    $partitionCalls=New-Object 'System.Collections.Generic.List[string]'
+    $partitioned=$reportArgs.Clone();$partitioned.OutputPath=Join-Path $base 'partitioned';$partitioned.BusinessUnit=@('engineering')
+    $partitioned.ReadPeople={
+        param($unit,$prefix)
+        $partitionCalls.Add($prefix)
+        if($prefix -eq '') {return ,(@($fixture.people[0])*20001)}
+        if($prefix -eq '0') {return @($fixture.people | Where-Object Unit -eq engineering)}
+        return @()
+    }
+    $p=Write-ClaudeChargebackReport @partitioned
+    Assert 'saturated pages are split into all sixteen disjoint prefixes' ($partitionCalls.Count -eq 17 -and @($partitionCalls | Sort-Object -Unique).Count -eq 17)
+    Assert 'saturated parent data is never exported' ($p.Manifest.PersonRows -eq 2 -and $p.Manifest.Totals.Requests -eq 5)
     if ($KeepOutput) { New-Item -ItemType Directory -Path $KeepOutput -Force | Out-Null; Copy-Item "$dir\*" $KeepOutput -Force }
+    $notes=Join-Path $dir 'finance-notes.txt'
+    [IO.File]::WriteAllText($notes,'Preserve this administrator-owned file.')
+    Refuses 'regeneration cannot delete unrelated local files' {Write-ClaudeChargebackReport @reportArgs} 'not owned|unrelated'
+    Assert 'administrator notes remain intact' ((Test-Path $notes) -and [IO.File]::ReadAllText($notes) -eq 'Preserve this administrator-owned file.')
 }
 finally { if (Test-Path $base) { Remove-Item $base -Recurse -Force } }
 if ($fail) { throw "$fail of $checks chargeback report assertions failed." }

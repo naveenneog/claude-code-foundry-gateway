@@ -38,3 +38,4 @@ try {
 finally {if(Test-Path $scratch) {Remove-Item $scratch -Recurse -Force}}
 if($caught -ne $cases.Count) {throw 'Not every mutation ran.'}
 Write-Host "$caught of $($cases.Count) chargeback mutations caught."
+exit 0

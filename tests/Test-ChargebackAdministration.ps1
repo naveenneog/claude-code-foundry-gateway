@@ -19,6 +19,9 @@ Assert 'repeat bootstrap preserves current config' ($r.Status -eq 'Unchanged' -a
 $r=Invoke-ClaudeReportAdministration contoso ([pscustomobject]@{Operation='Recipients';Scope='engineering';Add=@('alice@contoso.com')})
 Assert 'private operation adds validated recipient' ($script:stored.Configuration.Units.engineering[0] -eq 'alice@contoso.com')
 Assert 'success response contains no addresses' (($r|ConvertTo-Json) -notmatch '@contoso')
+$before=$script:writes
+$r=Invoke-ClaudeReportAdministration contoso ([pscustomobject]@{Operation='Recipients';Scope='engineering';Add=@('alice@contoso.com')})
+Assert 'repeat private add does not write a new config version' ($r.Status -eq 'Unchanged' -and $script:writes -eq $before)
 Refuses 'private administration still enforces domain' {Invoke-ClaudeReportAdministration contoso ([pscustomobject]@{Operation='Recipients';Scope='engineering';Add=@('alice@evil.com')})}
 Refuses 'no arbitrary script execution operation' {Invoke-ClaudeReportAdministration contoso ([pscustomobject]@{Operation='Execute';Script='Write-Host unsafe'})}
 Refuses 'connection not writable via settings request' {Invoke-ClaudeReportAdministration contoso ([pscustomobject]@{Operation='Settings';Settings=[pscustomobject]@{Connection=@{Endpoint='elsewhere'}}})}

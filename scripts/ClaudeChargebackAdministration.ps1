@@ -22,7 +22,10 @@ function Invoke-ClaudeReportAdministration {
     if($Request.Operation -eq 'Recipients') {
         if(-not $Request.Scope) {throw 'A report recipient scope is required.'}
         if(@($Request.Add | Where-Object {$_}).Count -and @($Request.Remove | Where-Object {$_}).Count) {throw 'Choose either Add or Remove in one request.'}
+        $before=Get-ClaudeChargebackRecipients $config $Request.Scope
         $config=Update-ClaudeChargebackRecipients $config $Request.Scope @($Request.Add | Where-Object {$_}) @($Request.Remove | Where-Object {$_})
+        $after=Get-ClaudeChargebackRecipients $config $Request.Scope
+        if(($before -join ';') -ceq ($after -join ';')) {return [pscustomobject]@{Status='Unchanged';Operation='Recipients';Scope=$Request.Scope}}
     }
     if($Request.Operation -eq 'Settings') {
         $allowed=@('AllowedDomains','BusinessUnits','Formats','MonthToDate','DeliveryEnabled','RetentionDays')

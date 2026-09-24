@@ -20,7 +20,7 @@ function Get-ClaudeReportWindow {
 
 function Get-ClaudeReportFileName {
     param([string]$Unit)
-    if ($Unit -notmatch '^[a-z0-9][a-z0-9-]{0,99}$' -or $Unit -match '^(con|prn|aux|nul|com[0-9]|lpt[0-9]|index|summary|manifest|all)$') {
+    if ($Unit -cnotmatch '^[a-z0-9][a-z0-9-]{0,99}$' -or $Unit -match '^(con|prn|aux|nul|com[0-9]|lpt[0-9]|index|summary|manifest|all)$') {
         throw 'Invalid report unit identifier. Use 1-100 lower-case letters, digits or hyphens; reserved filenames are not allowed.'
     }
     return $Unit
@@ -60,6 +60,26 @@ function Assert-ClaudeReportReconciliation {
 function Write-ClaudeReportJson {
     param([string]$Path, $Value)
     [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth 30), (New-Object Text.UTF8Encoding($false)))
+}
+
+function Test-ClaudeReportDestination {
+    param([string]$Path,[string]$Month)
+    if(-not (Test-Path -LiteralPath $Path)) {return}
+    $item=Get-Item -LiteralPath $Path
+    if(-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'The report destination is not an ordinary directory. Refusing to replace unrelated content.'
+    }
+    $manifestPath=Join-Path $Path 'manifest.json'
+    if(-not (Test-Path -LiteralPath $manifestPath)) {throw 'Output month directory contains unrelated files, not a report manifest.'}
+    $previous=Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    if($previous.SchemaVersion -ne 1 -or $previous.Month -ne $Month) {throw 'Output month is not owned by this report format.'}
+    $owned=@('manifest.json')
+    foreach($file in $previous.Files) {
+        if($file.Name -cnotmatch '^[a-z0-9-]+\.(csv|html)$') {throw 'Output manifest lists an unrelated file. Use a new OutputPath.'}
+        $owned+=$file.Name
+    }
+    $unexpected=@(Get-ChildItem -LiteralPath $Path -Force | Where-Object {$_.PSIsContainer -or $_.Name -notin $owned})
+    if($unexpected.Count) {throw 'Output month contains files not owned by this report. Move them or choose a new OutputPath.'}
 }
 
 function Write-ClaudeChargebackReport {
@@ -114,9 +134,7 @@ function Write-ClaudeChargebackReport {
     }
     $root = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
     $destination = Join-Path $root $Window.Month
-    if ((Test-Path $destination) -and -not (Test-Path (Join-Path $destination 'manifest.json'))) {
-        throw 'Output month directory exists without a report manifest; refusing to replace unrelated files.'
-    }
+    Test-ClaudeReportDestination $destination $Window.Month
     $stage = Join-Path $root ('.building-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
     $summaries = New-Object 'System.Collections.Generic.List[object]'
@@ -200,8 +218,18 @@ function Write-ClaudeChargebackReport {
             Caveats=$script:ClaudeReportCaveats
         }
         Write-ClaudeReportJson (Join-Path $stage 'manifest.json') $manifest
-        if (Test-Path $destination) { Remove-Item $destination -Recurse -Force }
-        Move-Item $stage $destination
+        $backup=$null
+        if(Test-Path $destination) {
+            Test-ClaudeReportDestination $destination $Window.Month
+            $backup=Join-Path $root ('.chargeback-replaced-'+[guid]::NewGuid().ToString('N'))
+            [IO.Directory]::Move($destination,$backup)
+        }
+        try {[IO.Directory]::Move($stage,$destination)}
+        catch {
+            if($backup -and -not (Test-Path $destination)) {[IO.Directory]::Move($backup,$destination)}
+            throw
+        }
+        if($backup) {Remove-Item -LiteralPath $backup -Recurse -Force}
         [pscustomobject]@{ Path=$destination; Manifest=$manifest }
     }
     finally { if (Test-Path $stage) { Remove-Item $stage -Recurse -Force } }
