@@ -259,6 +259,14 @@ $gid = az ad group show --group claude-code-standard --query id -o tsv
 5. Search by name or email, tick the person, **Select**
 6. Confirm they now appear in the list
 
+Use the actual tier group identified in [the value-source table](#find-the-values-before-changing-membership),
+not a similarly named group. The All groups screenshot is an entry point; the
+Members operation and publication/verification steps remain separate.
+
+**Pending batch capture (`docs-review-entra-groups`).**
+
+![Microsoft Entra All groups view used to locate the discovered tier group](guide/docs-review-entra-groups.png)
+
 ### Then run the sync — this is the step people miss
 
 The portal grants *group membership*. The gateway reads an **allowlist of

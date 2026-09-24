@@ -144,6 +144,31 @@ Steps that need a portal session are **skipped, not failed**, when the profile
 is not signed in. A run with no session still produces the public-page
 screenshots and reports which ones it skipped.
 
+## Pending portal batch captures
+
+When Conditional Access asks for a new sign-in on a resource or Entra blade,
+stop portal capture. Do not retry, invoke `auth.mjs` unattended or reuse the
+source profile concurrently. Other live captures that do not use the portal,
+such as CLI transcripts and approved application/report views, can continue.
+
+The documentation packet's declared portal steps are in
+[`captures/docs-review.json`](captures/docs-review.json). Targets are discovered;
+no tenant, subscription or deployment name is a default in the specification.
+The `resolver` and `cosmos` filters describe logical component kinds; the batch
+operator must select the actual resource associated with the chosen gateway.
+Do not silently take an unrelated first match.
+
+Each guide marks its final image reference **pending batch capture (spec id)**.
+The lead runs the batch immediately after an owner-authorised sign-in, reviews
+redaction and populated blade contents, then commits the images. A loading shell
+or a sign-in page is not a completed screenshot. Missing outputs remain visible
+to the existing reference checks; do not add an exception to pretend they exist.
+
+The batch must remain read-only: an editor may be opened for a screenshot, but
+the spec must not save a quota, assign a role, deploy or delete a resource.
+Logical API names in click selectors come from this repository's template; if
+an API was renamed, resolve its known API ID/path before capturing.
+
 ## What is not committed, and why
 
 Captures partially mask email addresses in the DOM — first/last characters and

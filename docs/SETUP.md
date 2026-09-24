@@ -231,6 +231,15 @@ Turnstile and scheduled writers have separate identities and grants.
 Propagation takes 2–5 minutes. A `401` from the backend immediately after
 assignment usually just means you were too quick.
 
+**Portal:** open the discovered gateway > **Identity** > **System assigned**.
+Verify **Status** is **On**, then copy **Object (principal) ID** for the Foundry
+role assignment. If it is Off, an authorised operator enables it and saves
+before assigning the role; do not copy an application/client ID instead.
+
+**Pending batch capture (`docs-review-gateway-identity`).**
+
+![Gateway system-assigned identity blade with Status and Object principal ID](guide/docs-review-gateway-identity.png)
+
 ### 2.3 Developers
 
 **No Azure role at all.**
@@ -568,6 +577,16 @@ Full command reference: [GOVERNANCE-CHECKS.md](GOVERNANCE-CHECKS.md).
 Policies and Named values confirm configuration; the linked workbook confirms
 observed usage. Run a developer request as well: those blades cannot prove
 the developer's credential, streaming path or budget refusal.
+
+In **APIs**, select **Claude on Foundry (governed)**, the API display name emitted
+by this template, then **All operations**. Inspect **Inbound processing** and
+open the policy code editor to review the token, entitlement and quota policies.
+Do not select **Save** merely to inspect the policy. If the API was renamed,
+identify it from its `claude-foundry` API ID and `/claude` path first.
+
+**Pending batch capture (`docs-review-api-policy`).**
+
+![Claude API All operations view showing the inbound policy controls](guide/docs-review-api-policy.png)
 
 ### 4.1 Confirm the tier is v2
 
