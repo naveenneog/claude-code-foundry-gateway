@@ -49,3 +49,13 @@ def test_direct_read_only_role_is_explicit_not_claimed_owner():
         identity = backend.read("whoami")
     assert identity["method"] == "azure-rbac"
     assert "Azure RBAC" in identity["scope"]
+    assert identity["role"] == "member"
+
+
+def test_ascii_filter_preserves_cell_width():
+    from rich.segment import Segment
+    from textual.color import Color
+    from claude_finops.accessibility import AsciiFilter
+    rows = AsciiFilter().apply([Segment("─│█→界")], Color.parse("black"))
+    assert "".join(segment.text for segment in rows).isascii()
+    assert sum(segment.cell_length for segment in rows) == 6

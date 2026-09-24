@@ -90,3 +90,68 @@ async def test_palette_and_month_validation():
         app.screen.query_one("#month-input", Input).value = "invalid"
         await pilot.click("#set-month")
         assert "YYYY-MM" in str(app.screen.query_one("#month-error").render())
+
+
+async def test_changed_server_state_blocks_stale_preview():
+    app = example()
+    async with app.run_test(size=(80, 24)) as pilot:
+        await settle(app, pilot)
+        await pilot.press("2")
+        await settle(app, pilot)
+        app.query_one("#table-budgets", DataTable).move_cursor(row=1)
+        await pilot.press("e")
+        app.screen.query_one("#amount", Input).value = "9M"
+        await pilot.click("#preview")
+        await settle(app, pilot)
+        app.engine.backend.rows[1]["token_limit"] = 8100000
+        await pilot.click("#apply-change")
+        await settle(app, pilot)
+        assert "changed since preview" in str(app.screen.query_one("#form-status").render())
+        assert not app.engine.backend.writes
+
+
+async def test_edit_after_preview_disables_apply():
+    app = example()
+    async with app.run_test(size=(80, 24)) as pilot:
+        await settle(app, pilot)
+        await pilot.press("2")
+        await settle(app, pilot)
+        app.query_one("#table-budgets", DataTable).move_cursor(row=1)
+        await pilot.press("e")
+        app.screen.query_one("#amount", Input).value = "9M"
+        await pilot.click("#preview")
+        await settle(app, pilot)
+        app.screen.query_one("#amount", Input).value = "10M"
+        await pilot.pause()
+        assert app.screen.query_one("#apply-change", Button).disabled
+
+
+async def test_export_rejects_parent_paths_and_remains_read_only():
+    app = example("member")
+    async with app.run_test(size=(80, 24)) as pilot:
+        await settle(app, pilot)
+        app.action_export()
+        await pilot.pause()
+        app.screen.query_one("#export-name", Input).value = "..\\outside.csv"
+        await pilot.click("#export-csv")
+        await settle(app, pilot)
+        assert "without directory" in str(app.screen.query_one("#export-status").render())
+        assert not app.engine.backend.writes
+
+
+async def test_tier_form_preview_and_apply():
+    app = example()
+    async with app.run_test(size=(80, 24)) as pilot:
+        await settle(app, pilot)
+        await pilot.press("4")
+        await settle(app, pilot)
+        app.query_one("#table-governance", DataTable).move_cursor(row=4)
+        await pilot.press("e")
+        await pilot.pause()
+        app.screen.query_one("#tokens-per-minute", Input).value = "21k"
+        await pilot.click("#preview")
+        await settle(app, pilot)
+        await pilot.click("#apply-change")
+        await settle(app, pilot)
+        assert app.engine.backend.tiers[0]["tokens_per_minute"] == 21000
+        assert "Apply succeeded" in str(app.screen.query_one("#form-status").render())

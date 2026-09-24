@@ -1,4 +1,4 @@
-# Runs the checks that guard the setup scripts.
+﻿# Runs the checks that guard the setup scripts.
 #
 # Split into two groups because they have different requirements: the offline
 # checks need only bash and both PowerShell hosts, so they can run anywhere.
@@ -76,6 +76,16 @@ Invoke-Check 'Resolver - the entitlement read path'   'Test-Resolver.ps1'
     Invoke-Check 'Turnstile checks detect breakage'        'Test-TurnstileNegative.ps1'
     Invoke-Check 'No deployment written into the code'     'Test-NoDeploymentValues.ps1'
     Invoke-Check 'Foundry bypass audit'                    'Test-Bypass.ps1' @{ SkipLive = $true }
+
+    $finopsPython = Join-Path $root '.venv-finops\Scripts\python.exe'
+    $finopsUnixPython = Join-Path $root '.venv-finops\bin\python'
+    if ((Test-Path $finopsPython) -or (Test-Path $finopsUnixPython)) {
+        Invoke-Check 'Terminal FinOps - commands, rules and pilot' 'Test-FinOps.ps1'
+    }
+    else {
+        Write-Host 'SKIP - FinOps: Python or the worktree .venv-finops is missing. See docs/CLI-FINOPS.md to install.' -ForegroundColor Yellow
+        $results += [pscustomobject]@{ Name = 'Terminal FinOps - commands, rules and pilot'; Result = 'SKIP' }
+    }
 
     if ($IncludeAzure) {
         Invoke-Check 'Foundry discovery is selective'      'Test-Discovery.ps1'

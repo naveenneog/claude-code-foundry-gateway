@@ -1,4 +1,5 @@
 import json
+from fnmatch import fnmatchcase
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -79,7 +80,20 @@ class DirectBackend(Backend):
     def read(self, resource, **params):
         if resource == "whoami":
             account = json.loads(az("account", "show", "-o", "json"))
-            return dict(email=account.get("user", {}).get("name", "Azure caller"), role="owner",
+            can_write = False
+            if account.get("id"):
+                resource_id = (f"/subscriptions/{account['id']}/resourceGroups/{self.config.resource_group}"
+                               f"/providers/Microsoft.ApiManagement/service/{self.config.apim_name}")
+                url = f"https://management.azure.com{resource_id}/providers/Microsoft.Authorization/permissions?api-version=2022-04-01"
+                try:
+                    permissions = json.loads(az("rest", "--method", "get", "--url", url, "-o", "json"))
+                    action = "microsoft.apimanagement/service/namedvalues/write"
+                    can_write = any(any(fnmatchcase(action, p.lower()) for p in row.get("actions", []))
+                                    and not any(fnmatchcase(action, p.lower()) for p in row.get("notActions", []))
+                                    for row in permissions.get("value", []))
+                except FinOpsError:
+                    can_write = False
+            return dict(email=account.get("user", {}).get("name", "Azure caller"), role="owner" if can_write else "member",
                         method="azure-rbac", tenant=account.get("tenantId"),
                         scope="Gateway administrator mode; Azure RBAC checks every operation")
         if resource == "apply":
@@ -141,25 +155,41 @@ class DirectBackend(Backend):
                     raise FinOpsError("Request not found in this month's ledger.", 5)
                 return rows[0]
             return dict(items=rows, page={"next_cursor": None}, note="Ledger lower bound: per-request cache and cost are unknown.")
-        totals = "total_tokens=sum(total_tokens), total_requests=count(), cache_read_tokens=real(null), estimated_cost=real(null)"
+        start, end = month_window(params["month"])
+        cost = f"ClaudeCost(datetime({start}), datetime({end}))"
+        for key, column in (("department_id", "business_unit"), ("model_id", "model"), ("user_id", "actor")):
+            if params.get(key):
+                cost += f"\n| where {column} == {self._quote(params[key])}"
+        if params.get("organization_id"):
+            unit = self._quote(params["organization_id"])
+            cost += f"\n| where business_unit == {unit} or business_unit_parent == {unit}"
+        totals = ("total_tokens=sum(prompt_tokens + completion_tokens), total_requests=sum(requests), "
+                  "cache_read_tokens=sum(cache_read_tokens), estimated_cost=sum(usd), unknown_prices=countif(not(priced_ok))")
+        unknown = "\n| extend estimated_cost=iff(unknown_prices > 0, real(null), estimated_cost)"
+        caveat = "Published ClaudeCost: list-price lower bound; cache writes unknown; current membership. Not an invoice."
         if resource == "overview":
-            rows = self.query(ledger + "\n| summarize " + totals)
-            return dict(totals=rows[0] if rows else {}, note="Ledger tokens only. Cost and cache are not zero: they are unknown.")
+            rows = self.query(cost + "\n| summarize " + totals + unknown)
+            return dict(totals=rows[0] if rows else {}, note=caveat)
         if resource == "distribution":
             dimension = params.get("dimension", "organization")
             if dimension not in DIMENSIONS:
                 raise FinOpsError("Direct usage dimensions: organization, department, user, model, runtime.")
-            rows = self.query(ledger + f"\n| summarize {totals} by id={DIMENSIONS[dimension]}"
+            column = ("iff(isempty(business_unit_parent), business_unit, business_unit_parent)"
+                      if dimension == "organization" else DIMENSIONS[dimension])
+            rows = self.query(cost + f"\n| summarize {totals} by id={column}" + unknown +
                               "\n| order by total_tokens desc | take 100")
             return dict(items=[dict(row, name=row["id"]) for row in rows], dimension=dimension,
-                        note="Estimated cost unavailable; use repository chargeback scripts for priced reports.")
+                        note=caveat)
         if resource == "trends":
             interval = params.get("interval", "day")
             if interval not in {"day", "hour", "week"}:
                 raise FinOpsError("Interval must be hour, day or week.")
             step = {"hour": "1h", "day": "1d", "week": "7d"}[interval]
-            rows = self.query(ledger + f"\n| summarize {totals} by bucket_start=bin(timestamp,{step}) | order by bucket_start asc")
-            return dict(points=[dict(bucket_start=row.pop("bucket_start"), label="All", totals=row) for row in rows])
+            if interval == "hour":
+                raise FinOpsError("Direct cost facts are daily. Choose day/week, or Turnstile for hourly trends.")
+            rows = self.query(cost + f"\n| summarize {totals} by bucket_start=bin(day,{step})" + unknown +
+                              "\n| order by bucket_start asc")
+            return dict(points=[dict(bucket_start=row.pop("bucket_start"), label="All", totals=row) for row in rows], note=caveat)
         if resource == "anomalies":
             return dict(items=[], note="Direct mode has no Turnstile anomaly-rule engine. Use Azure Monitor alerts; this is not an all-clear.")
         raise FinOpsError("This view requires Turnstile.")

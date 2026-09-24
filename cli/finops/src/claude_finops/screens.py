@@ -1,5 +1,7 @@
 import asyncio
 import json
+from pathlib import Path
+import re
 from functools import partial
 
 from textual import on, work
@@ -8,7 +10,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Input, Label, Select, Static, TextArea
 
 from .errors import FinOpsError
-from .output import safe_text
+from .output import chargeback_csv, safe_text
 from .rules import allocation_left, apply_state, human, month_window, parse_tokens
 
 
@@ -247,3 +249,43 @@ class ChangeScreen(ModalScreen):
             return
         self.dismiss()
         self.app.action_refresh()
+
+
+class ExportScreen(ModalScreen):
+    BINDINGS = [("escape", "dismiss", "Back")]
+
+    def compose(self):
+        with Vertical(id="month-dialog"):
+            yield Label("Export complete chargeback (all visible catalog units)")
+            yield Input(f"chargeback-{self.app.engine.month}.csv", id="export-name")
+            yield Static("Saved under finops-reports in the current folder. Existing files are never overwritten.",
+                         id="export-status", markup=False)
+            with Horizontal(classes="buttons"):
+                yield Button("Cancel", id="cancel-export")
+                yield Button("Export CSV", id="export-csv", variant="primary")
+
+    @on(Button.Pressed, "#export-csv")
+    @work(exclusive=True, group="export")
+    async def export(self):
+        name = self.query_one("#export-name", Input).value
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,100}\.csv", name):
+            self.query_one("#export-status", Static).update("Use a CSV filename, without directory separators.")
+            return
+        button = self.query_one("#export-csv", Button)
+        button.disabled = True
+        self.query_one("#export-status", Static).update("Reading every catalog scope, not just the top ranking...")
+        try:
+            result = await asyncio.to_thread(self.app.engine.chargeback)
+            folder = Path.cwd() / "finops-reports"
+            folder.mkdir(exist_ok=True)
+            with (folder / name).open("x", encoding="utf-8", newline="") as output:
+                output.write(chargeback_csv(result["items"], self.app.engine.month))
+            self.query_one("#export-status", Static).update(f"Exported {len(result['items'])} scopes to finops-reports\\{name}.")
+        except (OSError, FinOpsError) as error:
+            message = str(error) if isinstance(error, FinOpsError) else "Cannot create that file. Choose a new name and a writable current folder."
+            self.query_one("#export-status", Static).update(message)
+            button.disabled = False
+
+    @on(Button.Pressed, "#cancel-export")
+    def cancel(self):
+        self.dismiss()

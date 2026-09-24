@@ -13,6 +13,7 @@ class FinOpsCommands(Provider):
             ("Change month", self.app.action_month, "YYYY-MM"),
             ("Refresh current view", self.app.action_refresh, "Read the latest server state"),
             ("Help and key map", self.app.action_help, "Learn this screen"),
+            ("Export complete chargeback CSV", self.app.action_export, "All visible catalog units, not the top 100"),
         ]
         if self.app.editable:
             commands += [

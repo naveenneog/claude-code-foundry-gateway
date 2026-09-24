@@ -10,10 +10,11 @@ from textual.theme import Theme
 from textual.widgets import Button, DataTable, Footer, Input, Select, Static, TabbedContent, TabPane
 
 from .errors import FinOpsError
+from .accessibility import AsciiFilter
 from .output import safe_text
 from .palette import FinOpsCommands
 from .rules import can_edit
-from .screens import ChangeScreen, DetailScreen, LookupScreen, MonthScreen
+from .screens import ChangeScreen, DetailScreen, ExportScreen, LookupScreen, MonthScreen
 from .views import DIMENSIONS, TABS, view_rows
 
 
@@ -101,6 +102,12 @@ class FinOpsApp(App):
     def on_mount(self):
         if self.config.ascii:
             self.add_class("ascii")
+
+    def get_line_filters(self):
+        filters = list(super().get_line_filters())
+        if getattr(self, "config", None) and self.config.ascii:
+            filters.append(AsciiFilter())
+        return filters
 
     @property
     def active(self):
@@ -269,7 +276,9 @@ class FinOpsApp(App):
         self.push_screen(LookupScreen())
 
     def open_lookup_result(self, result):
-        if result["kind"] == "person":
+        if result["kind"] == "team":
+            self.team = result["id"]
+        elif result["kind"] == "person":
             self.people_query = result["id"]
             self.query_one("#people-query", Input).value = result["id"]
         elif result["kind"] == "model":
@@ -285,6 +294,9 @@ class FinOpsApp(App):
 
     def action_month(self):
         self.push_screen(MonthScreen())
+
+    def action_export(self):
+        self.push_screen(ExportScreen())
 
     def action_edit(self):
         if not self.check_action("edit", ()):

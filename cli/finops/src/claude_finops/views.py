@@ -14,6 +14,15 @@ def view_rows(tab, data, *, ascii_only=False):
     if tab == "overview":
         columns = ["Metric / scope", "Current month", "Context"]
         totals = data["overview"].get("totals", {})
+        units = [r for r in data["budgets"].get("items", []) if r["scope_type"] == "organization"]
+        limit = sum(r.get("token_limit") or 0 for r in units)
+        forecast = sum(r.get("forecast_tokens") or 0 for r in units)
+        if limit:
+            rows.append(("Allocated unit budgets", human(limit), "tokens; not org ceiling"))
+            records.append({"allocated_unit_tokens": limit})
+        if forecast:
+            rows.append(("Forecast month-end", human(forecast), "tokens; server forecast"))
+            records.append({"forecast_tokens": forecast})
         for key, value in totals.items():
             rows.append((key.replace("_", " "), human(value), "estimated USD" if key == "estimated_cost" else ""))
             records.append({key: value})
@@ -23,6 +32,8 @@ def view_rows(tab, data, *, ascii_only=False):
         note = "Estimated cost, not an invoice. Enter: exact values. 2: budgets; 5: rankings."
     elif tab in {"budgets", "people"}:
         columns = ["Scope", "Used", "Budget", "Remaining", "Status"]
+        if tab == "budgets":
+            columns.insert(4, "Unallocated")
         items = data.get("items", [])
         if tab == "budgets":
             units = [r for r in items if r["scope_type"] == "organization"]
@@ -33,8 +44,15 @@ def view_rows(tab, data, *, ascii_only=False):
             items = ordered + [r for r in items if r not in ordered]
         for item in items:
             prefix = "  > " if tab == "budgets" and item["scope_type"] == "department" else ""
-            rows.append((prefix + item["scope_id"], human(item["used_tokens"]), human(item.get("token_limit")),
-                         human(item.get("remaining_tokens")), item.get("status", "unknown")))
+            cells = [prefix + item["scope_id"], human(item["used_tokens"]), human(item.get("token_limit")),
+                     human(item.get("remaining_tokens")), item.get("status", "unknown")]
+            if tab == "budgets":
+                children = [r for r in items if r.get("parent_scope_id") == item["scope_id"]
+                            and r["scope_type"] != item["scope_type"]]
+                free = (item["token_limit"] - sum(r.get("token_limit") or 0 for r in children)
+                        if item.get("token_limit") is not None and item["scope_type"] == "organization" else None)
+                cells.insert(4, human(free) if item["scope_type"] == "organization" else "see People")
+            rows.append(tuple(cells))
             records.append(item)
         if tab == "budgets":
             note = note or "Organization > unit > team. Remaining = budget minus usage; edit shows allocation."

@@ -86,24 +86,40 @@ switch ([string]$request.action) {
     'catalog' {
         if ($nv['turnstile-integration'] -match 'governanceAuthority=Turnstile') { throw 'Turnstile owns the catalog. Use its backend.' }
         $wanted = @($request.body.organizations) + @($request.body.departments | Where-Object { $_.attributes.kind -ne 'unit-direct' })
+        if (-not @($request.body.organizations).Count) { throw 'Keep at least one unit.' }
+        $nextRegistry = @()
+        $nextParents = [ordered]@{}
+        $seen = @{}
         foreach ($item in $wanted) {
             Test-ClaudeBuId ([string]$item.id)
+            if ($seen.ContainsKey([string]$item.id)) { throw 'Duplicate scope identifier.' }
+            $seen[[string]$item.id] = $true
             if ([string]$item.external_ref -notlike 'entra-group:*') { throw 'Every direct scope needs an Entra group.' }
             if ($item.attributes.manager_group) { throw 'Manager group authoring requires Turnstile.' }
-        }
-        foreach ($item in $wanted) {
-            $args = @{
-                Id = [string]$item.id; Group = ([string]$item.external_ref).Substring(12)
-                ResourceGroup = $ResourceGroup; ApimName = $ApimName
+            $group = ([string]$item.external_ref).Substring(12)
+            if ($group -match '[,:=&|<>^%!"\r\n]') { throw 'Group contains unsafe registry or shell characters.' }
+            $groupId = az ad group show --group $group --query id -o tsv 2>$null
+            if ($LASTEXITCODE -ne 0 -or -not $groupId) { throw 'An Entra group could not be verified. Nothing was written.' }
+            $prior = @($registry | Where-Object Id -eq $item.id)
+            $amount = if ($prior.Count) { [long]$prior[0].TokensPerMonth } else { [long]0 }
+            $nextRegistry += [pscustomobject]@{ Id = [string]$item.id; Group = $group; TokensPerMonth = $amount }
+            if ($item.parent_id) {
+                if ([string]$item.parent_id -notin @($request.body.organizations.id)) { throw 'Team parent is not a unit.' }
+                $nextParents[[string]$item.id] = [string]$item.parent_id
             }
-            if (@($registry | Where-Object Id -eq $item.id).Count -eq 0) { $args.MonthlyBudgetUsd = 0 }
-            if ($item.parent_id) { $args.Parent = [string]$item.parent_id }
-            & (Join-Path $PSScriptRoot 'Set-ClaudeBusinessUnit.ps1') @args 6>$null | Out-Null
         }
-        foreach ($old in @($registry | Where-Object { $_.Id -notin @($wanted.id) })) {
-            & (Join-Path $PSScriptRoot 'Set-ClaudeBusinessUnit.ps1') -Id $old.Id -Remove -ResourceGroup $ResourceGroup -ApimName $ApimName 6>$null | Out-Null
+        Test-ClaudeBuDepth -Parents $nextParents
+        $nextRaw = ConvertTo-ClaudeBuRegistry $nextRegistry
+        $parentRaw = ConvertTo-ClaudeBuParents $nextParents
+        Test-ApimNamedValueLength -Id 'bu-registry' -Value $nextRaw
+        Test-ApimNamedValueLength -Id 'bu-parents' -Value $parentRaw
+        if ($nextRaw -ne $nv['bu-registry']) {
+            Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry' -Value $nextRaw | Out-Null
         }
-        $result = @{ verified = $true; effect = 'Catalog scripts completed; reads show the current gateway state.' }
+        if ($parentRaw -ne $nv['bu-parents']) {
+            Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents' -Value $parentRaw | Out-Null
+        }
+        $result = @{ verified = $true; effect = 'Registry written using shared serializers. New scopes have no budget; set one explicitly. Display names are Entra group names.' }
     }
     default { throw 'Unsupported bridge action.' }
 }

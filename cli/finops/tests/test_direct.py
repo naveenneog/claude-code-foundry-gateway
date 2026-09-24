@@ -40,3 +40,13 @@ def test_no_duplicate_registry_format():
     assert "ConvertTo-ClaudeBuRegistry" in bridge
     assert "Set-ClaudeTier.ps1" in bridge
 
+
+def test_direct_chargeback_uses_published_price_and_membership_query():
+    captured = []
+    backend = DirectBackend(Config(backend="direct", resource_group="rg-contoso", apim_name="apim-contoso"))
+    backend.query = lambda query: captured.append(query) or [dict(total_tokens=10, estimated_cost=0.2)]
+    result = backend.read("overview", month="2026-09", organization_id="sales")
+    assert "ClaudeCost(" in captured[0]
+    assert "business_unit_parent" in captured[0]
+    assert "unknown_prices" in captured[0]
+    assert result["totals"]["estimated_cost"] == 0.2
