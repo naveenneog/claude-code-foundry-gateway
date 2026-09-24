@@ -117,6 +117,10 @@ try {
     $allRegistered = @(Get-Registered $source -Azure)
     $r = Invoke-Scenario $source -Options @('-IncludeAzure', '-ThrottleLimit', '3', '-CheckTimeoutSeconds', '60')
     Assert 'IncludeAzure adds all registered live checks (stubs only)' ($r.Exit -eq 0 -and (Has-CompleteSummary $r $allRegistered) -and $r.Ran.Count -eq ($allRegistered.Count - 1))
+    $azureScripts = @($allRegistered | Select-Object -Skip $registered.Count | ForEach-Object Script)
+    $live = @($r.Ran | Where-Object { $_.Script -in $azureScripts -and -not $_.SkipLive })
+    $offlineEnd = ($r.Ran | Where-Object { $_.Pid -notin $live.Pid } | Measure-Object End -Maximum).Maximum
+    Assert 'live registrations are last and mutually exclusive' ($live.Count -eq $azureScripts.Count -and (Get-MaxOverlap $live) -eq 1 -and ($live | Measure-Object Start -Minimum).Minimum -ge $offlineEnd)
 
     $mini = With-Checks $source @'
     Invoke-Check 'first' 'First.ps1' @{ Token = 'first'; Check = $true; SkipLive = $false; Text = 'space ; $literal & quote"' }
@@ -145,6 +149,9 @@ try {
     $r = Invoke-Scenario $mini
     Assert 'an explicit throttle takes precedence over the environment' ($r.Exit -eq 0)
     $env:TEST_ALL_THROTTLE = $null
+    $r = Invoke-Scenario $mini -Options @()
+    $cpuLimit = [math]::Max(1, [math]::Min(4, [Environment]::ProcessorCount))
+    Assert 'the default follows logical CPUs and is capped at four' ($r.Exit -eq 0 -and $r.Output -match "throttle $cpuLimit;" -and (Get-MaxOverlap $r.Ran) -le $cpuLimit)
     foreach ($option in @(@('-ThrottleLimit', '0'), @('-CheckTimeoutSeconds', '0'))) {
         $r = Invoke-Scenario $mini -Options $option
         Assert "$($option[0]) rejects zero" ($r.Exit -ne 0 -and $r.Ran.Count -eq 0)
@@ -184,6 +191,8 @@ exit 0
     $r = Invoke-Scenario $mini -Missing @('Third.ps1')
     Assert 'a missing registered script fails and is named' ($r.Exit -ne 0 -and $r.Output -match 'Third.ps1 not found' -and ($r.Timings | Where-Object Name -eq 'third').Result -eq 'FAIL')
     Assert 'a missing script does not stop the other checks' ($r.Ran.Count -eq 3 -and (Has-CompleteSummary $r $checks))
+    $r = Invoke-Scenario $mini -Missing @('Optional.ps1')
+    Assert 'a skip prerequisite cannot hide a missing registered script' ($r.Exit -ne 0 -and ($r.Timings | Where-Object Name -eq 'optional').Result -eq 'FAIL')
 
     $hang = @'
 $childFile = Join-Path $marks 'child.ps1'
@@ -228,6 +237,9 @@ Start-Sleep -Seconds 300
     $lost = Mutate $mini '$script:results[$check.Id] = $result' '$script:results[0] = $result'
     $r = Invoke-Scenario $lost -Behaviour @{ 'First.ps1' = $meet + "`r`nexit 7"; 'Second.ps1' = $meet + "`r`nexit 8" }
     Assert 'mutation: concurrent results overwritten is caught even though every child ran' ($r.Exit -ne 0 -and $r.Ran.Count -eq 4 -and $r.Output -match 'stopped before every check ran' -and -not (Has-CompleteSummary $r $checks))
+    $wrongIdentity = Mutate $mini 'Id = $check.Id; Name = $check.Name; Script = $check.Script' "Id = `$check.Id; Name = 'wrong check'; Script = `$check.Script"
+    $r = Invoke-Scenario $wrongIdentity
+    Assert 'mutation: a full count with the wrong result identities cannot pass' ($r.Exit -ne 0 -and $r.Timings.Count -eq $checks.Count -and $r.Output -match 'stopped before every check ran')
 }
 catch { Assert 'integrity scenarios complete' $false $_.Exception.Message }
 finally {

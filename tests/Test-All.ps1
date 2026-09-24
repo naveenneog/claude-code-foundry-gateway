@@ -76,15 +76,15 @@ function Set-CheckFailure($check, [string]$Message) {
 }
 
 function Start-Check($check) {
-    if ($check.SkipReason) {
-        Set-CheckResult $check 'SKIP' ("  SKIP - " + $check.SkipReason)
-        return
-    }
     $check.Clock = [Diagnostics.Stopwatch]::StartNew()
     $path = Join-Path $PSScriptRoot $check.Script
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { $path = Join-Path $scriptsDir $check.Script }
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         Set-CheckFailure $check "$($check.Script) not found"
+        return
+    }
+    if ($check.SkipReason) {
+        Set-CheckResult $check 'SKIP' ("  SKIP - " + $check.SkipReason)
         return
     }
     $scratch = Join-Path $runDirectory ([string]$check.Id)
@@ -153,7 +153,7 @@ $completed = $false
 try {
     $azureConfig = if ($env:AZURE_CONFIG_DIR) { $env:AZURE_CONFIG_DIR } else { Join-Path $HOME '.azure' }
     $compilerName = if ($IsWindows) { 'bicep.exe' } else { 'bicep' }
-    $bicepNeedsAz = -not (Test-Path -LiteralPath (Join-Path $azureConfig "bin/$compilerName"))
+    $bicepNeedsAz = -not (Test-Path -LiteralPath (Join-Path (Join-Path $azureConfig 'bin') $compilerName))
     # BEGIN CHECK REGISTRATION
     # Recursive source scans and native Azure CLI users run before sandboxes.
     Invoke-Check 'Script encoding (PowerShell 5.1 safety)' 'Repair-ScriptEncoding.ps1' @{ Check = $true } -SerialLane

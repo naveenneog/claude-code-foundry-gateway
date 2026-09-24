@@ -8,7 +8,7 @@
 # the size budget; the method is the same.
 
 $root = Split-Path $PSScriptRoot -Parent
-$sandbox = Join-Path $root "onboarding\turnstile-negative-$PID-$(Get-Random)"
+$sandbox = Join-Path ([IO.Path]::GetTempPath()) ('turnstile-negative-' + [guid]::NewGuid().ToString('N'))
 
 $bridge = 'Test-Turnstile.ps1'
 $governance = 'Test-TurnstileGovernance.ps1'
