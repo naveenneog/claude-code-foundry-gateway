@@ -43,8 +43,8 @@ function Invoke-ClaudeReportBlob {
 
 function ConvertFrom-ClaudeReportBlobText {
     param($Response)
-    if($Response.Content -is [byte[]]) { return [Text.Encoding]::UTF8.GetString($Response.Content) }
-    return [string]$Response.Content
+    $text=if($Response.Content -is [byte[]]) {[Text.Encoding]::UTF8.GetString($Response.Content)} else {[string]$Response.Content}
+    return $text.TrimStart([char]0xfeff)
 }
 
 function Get-ClaudeReportConfiguration {

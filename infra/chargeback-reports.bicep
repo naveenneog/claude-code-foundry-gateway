@@ -295,7 +295,7 @@ resource jobs 'Microsoft.App/jobs@2025-01-01' = [for spec in specs: {
             metadata: {
               accountName: storage.name
               blobContainerName: 'reports'
-              blobPrefix: 'outbox/'
+              blobPrefix: 'outbox'
               blobCount: '1'
               activationBlobCount: '0'
             }

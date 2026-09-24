@@ -205,7 +205,7 @@ The deployment creates reports-only resources in the gateway resource group:
 | Blob private DNS zone and VNet link | Resolve the account to its private endpoint | **Private DNS zones > privatelink.blob.core.windows.net > Virtual network links** |
 | Consumption Container Apps environment | Reports independent of Turnstile | **Container Apps environments > Create > Networking > Use your own virtual network** |
 | Generator job | Monthly report generation/archive | **Container Apps Jobs > Create > Schedule**, cron `0 6 1 * *`, Consumption, 1 vCPU/2 GiB |
-| Dispatcher job | Start only while pending blobs exist | **Container Apps Jobs > Create > Event**; `azure-blob`, `reports`, prefix `outbox/`, count 1, poll 420 s, min 0/max 1 |
+| Dispatcher job | Start only while pending blobs exist | **Container Apps Jobs > Create > Event**; `azure-blob`, `reports`, prefix `outbox` (KEDA adds `/`), count 1, poll 420 s, min 0/max 1 |
 | Manual administration job | Configuration changes from outside the VNet | **Container Apps Jobs > Create > Manual**, separate admin identity |
 | Two user-assigned identities | Separate reporting from configuration authority | **Managed Identities > Create**; jobs **Settings > Identity > User assigned > Add** |
 | Diagnostic setting | Job console evidence in the existing workspace | Environment **Monitoring > Diagnostic settings > Add**, all log categories |
@@ -408,6 +408,10 @@ Get-AzureRetailPrice -ServiceName 'Azure Container Apps' -Region eastus2 `
   -MeterName 'Standard Memory Active Usage'
 Get-AzureRetailPrice -ServiceName Storage -Region eastus2 -ProductName 'General Block Blob v2' `
   -SkuName 'Hot LRS' -MeterName 'Hot LRS Data Stored' -Tier First
+Get-AzureRetailPrice -ServiceName 'Virtual Network' -Region Global `
+  -ProductName 'Virtual Network Private Link' -MeterName 'Standard Private Endpoint'
+Get-AzureRetailPrice -ServiceName 'Azure DNS' -Region 'Zone 1' `
+  -MeterName 'Private Zone' -Tier First
 ```
 
 Portal: **Cost Management > Cost analysis > Resource**, filter to the reports resources.
@@ -422,7 +426,17 @@ list-price evidence; Cost Management provides your agreement's billed costs when
 | Blob Hot LRS, StorageV2 | $0.0184/GB-month at the first tier | Archive, retained versions and soft-deleted data consume storage |
 | Blob writes/list/create | $0.05/10,000 operations | KEDA still polls when idle; jobs do not start for an empty outbox |
 | Log Analytics queries | Interactive Analytics-plan queries are not charged by bytes scanned | Existing ingestion, retention and new job logs still incur normal charges |
-| Private endpoint and DNS | Regional hourly/zone meters | Required by the reference policy; unlike Consumption compute, these have an at-rest cost |
+| Blob private endpoint | $0.01/hour, Global meter | $7.30 per 730-hour month, derived; data processing is additional |
+| Private DNS zone | $0.50/zone-month, Zone 1 first tier | DNS queries are additional |
+| Environment-managed Standard load balancer | $0.025/hour, Global included-rules meter | $18.25/month before usage, derived |
+| Environment-managed Standard IPv4 public IP | $0.005/hour, East US 2 | $3.65/month, derived; this is environment networking, not a public blob endpoint |
+
+**MEASURED resource inventory:** the VNet-integrated reference environment created one
+Standard load balancer and one Standard public IP in its Azure-managed infrastructure
+resource group. **DERIVED standing networking cost:** $29.70/month for those resources,
+one blob private endpoint and one private DNS zone, at 730 hours and the quoted first
+tiers. Add blob storage/operations, DNS queries, logs, job execution and emails. The
+Consumption jobs have no running replica when idle, but private networking is not free.
 
 For 400 days of retention, estimate stored bytes from actual manifests, not developer
 headcount alone. A monthly 15 MB archive retained for 13 months is about 0.195 GB before
@@ -461,6 +475,12 @@ network resources must also be included in a deployed bill of materials.
 | First Add works; second Add produces `Invalid recipient address` | A singleton array unrolled into a string and concatenation joined addresses. Recipient accumulation is explicitly `string[]` |
 | A valid serialized UTC timestamp fails a string assertion on PowerShell 7 | `ConvertFrom-Json` converts ISO dates to DateTime. The test asserts the serialized `Z`, not display formatting |
 | `BCP265: The name "environment" is not a function` | The resource symbol shadows the Bicep function. Use `az.environment()` |
+| `Unknown properties volumes in StartJobExecutionTemplate are not supported` | The management template is not the execution template. Send only execution-container fields, not `volumes` or `imageType` |
+| Scaler reports `MetricValue: 0.00` although the outbox contains a message | KEDA appends its delimiter. A configured prefix `outbox/` becomes `outbox//`; use `outbox` |
+| XML conversion fails on an Azure Blob listing that begins with a BOM | Strip U+FEFF from decoded text before the XML string parser; preserve raw bytes for artifact hashes |
+| `No replicas found for execution` | Completed job pods have been cleaned up. Read durable `ContainerAppConsoleLogs` instead |
+| `'charmap' codec can't encode character '\ufeff'` in `az containerapp job logs show` | The Windows CLI log-stream decoder failed on the BOM. Read the durable workspace log through the query API |
+| Filtering console logs by the ARM environment name returns no rows | `EnvironmentName` is the runtime-generated name, not necessarily the ARM name. Filter by the exact `JobName` or execution's `ContainerGroupName` |
 
 After verifying that no dispatcher is active, break a stale lease from a connected host:
 

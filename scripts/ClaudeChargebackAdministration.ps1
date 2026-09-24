@@ -37,6 +37,33 @@ function Invoke-ClaudeReportAdministration {
     return [pscustomobject]@{Status='Saved';Operation=$Request.Operation;Scope=$Request.Scope;Utc=[datetime]::UtcNow.ToString('o')}
 }
 
+function New-ClaudeReportInitialSettings {
+    param([string[]]$AllowedDomains,$Outputs,[string]$WorkspaceResourceId,[bool]$MonthToDate,[int]$RetentionDays=400)
+    $configuration=New-ClaudeChargebackConfiguration $AllowedDomains
+    $configuration.MonthToDate=$MonthToDate
+    $configuration.RetentionDays=$RetentionDays
+    $configuration.Connection=[pscustomobject]@{
+        Endpoint=$Outputs.endpoint.value;SenderAddress=$Outputs.senderAddress.value
+        JobName=$Outputs.jobName.value;DispatcherJobName=$Outputs.dispatcherJobName.value
+        AdminJobName=$Outputs.adminJobName.value;EnvironmentName=$Outputs.environmentName.value
+        WorkspaceResourceId=$WorkspaceResourceId
+    }
+    return $configuration
+}
+
+function New-ClaudeReportExecutionTemplate {
+    param($Template,[string]$Variable,[string]$Value)
+    $containers=@(foreach($container in $Template.containers) {
+        $c=[ordered]@{}
+        foreach($key in @('name','image','command','args','resources')) {
+            if($null -ne $container.$key) {$c[$key]=$container.$key}
+        }
+        $c.env=@($container.env | Where-Object name -ne $Variable)+@([pscustomobject]@{name=$Variable;value=$Value})
+        $c
+    })
+    return @{containers=$containers}
+}
+
 function Invoke-ClaudeReportAdminRequest {
     param([string]$ResourceGroup,[string]$ApimName,$Request,[string]$JobName)
     if(-not $JobName) {
@@ -51,10 +78,7 @@ function Invoke-ClaudeReportAdminRequest {
     $sub=az account show --query id -o tsv
     $path="/subscriptions/$sub/resourceGroups/$ResourceGroup/providers/Microsoft.App/jobs/$JobName"
     $job=Invoke-ClaudeReportArm $path
-    $template=$job.properties.template
-    foreach($container in $template.containers) {
-        $container.env=@($container.env | Where-Object name -ne 'REPORT_ADMIN_REQUEST')+@([pscustomobject]@{name='REPORT_ADMIN_REQUEST';value=$encoded})
-    }
+    $template=New-ClaudeReportExecutionTemplate $job.properties.template 'REPORT_ADMIN_REQUEST' $encoded
     $start=Invoke-ClaudeReportArm "$path/start" POST $template
     if(-not $start.name) {throw 'Administration job did not return an execution name.'}
     $run=Wait-ClaudeReportJob -ResourceGroup $ResourceGroup -Job $JobName -Execution $start.name

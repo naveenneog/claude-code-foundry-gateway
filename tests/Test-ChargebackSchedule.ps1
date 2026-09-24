@@ -36,7 +36,9 @@ Assert 'sender rechecks current recipients' ($outbox -match 'Get-ClaudeChargebac
 Assert 'sender serializes with blob lease' ($outbox -match 'x-ms-lease-action')
 Assert 'outbox stores no address list' ($outbox -notmatch 'Recipients=\$recipients')
 Assert 'send state persisted before network operation' ($outbox -match "(?s)Status='Submitting'.*?Set-ClaudeReportArchiveJson.*?Invoke-ClaudeReportEmail -Endpoint[^\r\n]+-Body")
-Assert 'dispatcher scales to zero with no pending blobs' ($infra -match "minExecutions: 0" -and $infra -match "type: 'azure-blob'" -and $infra -match "blobPrefix: 'outbox/'")
+Assert 'dispatcher scales to zero with no pending blobs' ($infra -match "minExecutions: 0" -and $infra -match "type: 'azure-blob'")
+$blobPrefix=[regex]::Match($infra,"blobPrefix: '([^']+)'").Groups[1].Value
+Assert 'KEDA effective prefix matches the outbox (it appends the delimiter)' (($blobPrefix+'/') -ceq 'outbox/')
 Assert 'storage is network-private, not just authenticated' ($infra -match "publicNetworkAccess: 'Disabled'" -and $infra -match 'infrastructureSubnetId:')
 Assert 'private blob endpoint and DNS are declared' ($infra -match 'Microsoft.Network/privateEndpoints' -and $infra -match 'privatelink.blob.core.windows.net')
 Assert 'manual administration has its own identity' ($infra -match 'adminIdentity' -and $infra -match "mode: 'admin'")

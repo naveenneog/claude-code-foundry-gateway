@@ -26,5 +26,11 @@ $r=Invoke-ClaudeReportAdministration contoso ([pscustomobject]@{Operation='Setti
 Assert 'private settings applied without resource redeployment' ($script:stored.Configuration.MonthToDate -and $script:stored.Configuration.BusinessUnits[0] -eq 'engineering')
 $r=Invoke-ClaudeReportAdministration contoso ([pscustomobject]@{Operation='Inspect'})
 Assert 'off-network inspect only logs recipient counts' (($r|ConvertTo-Json -Depth 10) -notmatch 'alice@' -and @($r.Recipients | Where-Object Scope -eq engineering)[0].Count -eq 1)
+$template=[pscustomobject]@{volumes=@();initContainers=@();containers=@([pscustomobject]@{name='reports';image='fixture';imageType='ContainerImage';command=@('/bin/bash','-c','fixed');resources=@{cpu=1;memory='2Gi'};env=@([pscustomobject]@{name='REPO_REF';value=('a'*40)})})}
+$execution=New-ClaudeReportExecutionTemplate $template 'REPORT_ADMIN_REQUEST' 'fixture'
+Assert 'execution override omits unsupported volumes' (-not $execution.Contains('volumes'))
+Assert 'execution override omits management-only imageType' (-not $execution.containers[0].Contains('imageType'))
+Assert 'execution preserves pinned code and fixed command' ($execution.containers[0].command[2] -eq 'fixed' -and @($execution.containers[0].env | Where-Object name -eq 'REPO_REF')[0].value -eq ('a'*40))
+Assert 'execution adds one structured payload' (@($execution.containers[0].env | Where-Object name -eq 'REPORT_ADMIN_REQUEST').Count -eq 1)
 if($fail){throw "$fail of $checks administration assertions failed."}
 Write-Host "$checks chargeback administration assertions passed."

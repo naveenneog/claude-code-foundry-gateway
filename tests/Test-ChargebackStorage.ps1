@@ -9,6 +9,11 @@ function Refuses($Name,[scriptblock]$Action,$Pattern) {
     Assert $Name $caught
 }
 $script:blobs=@{};$script:puts=0;$script:lastHeaders=@{}
+$xmlWithBom=[pscustomobject]@{Content=([string][char]0xfeff+'<?xml version="1.0" encoding="utf-8"?><EnumerationResults><Blobs /></EnumerationResults>')}
+$text=ConvertFrom-ClaudeReportBlobText $xmlWithBom
+Assert 'Blob XML preamble is removed before string parsing' (-not $text.StartsWith([string][char]0xfeff,[StringComparison]::Ordinal))
+$bytesWithBom=[pscustomobject]@{Content=[Text.Encoding]::UTF8.GetBytes($xmlWithBom.Content)}
+Assert 'byte responses use the same BOM handling' (-not (ConvertFrom-ClaudeReportBlobText $bytesWithBom).StartsWith([string][char]0xfeff,[StringComparison]::Ordinal))
 function Invoke-ClaudeReportBlob {
     param($Account,$Container='reports',$Name,$Method='GET',$Bytes,$ContentType,$ExtraHeaders=@{},[switch]$AllowNotFound)
     $script:lastHeaders=$ExtraHeaders

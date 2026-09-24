@@ -85,6 +85,12 @@ if($stored) {
     $outputs=az deployment group show -g $ResourceGroup -n "chargeback-$ApimName" --query properties.outputs -o json | ConvertFrom-Json
     if($LASTEXITCODE -ne 0 -or -not $outputs.adminJobName.value) {throw 'Reports deployment metadata is missing. Read the job names from the resource group before updating.'}
     $config=[pscustomobject]@{Connection=[pscustomobject]@{JobName=$outputs.jobName.value;DispatcherJobName=$outputs.dispatcherJobName.value}}
+    if($AllowedDomains) {
+        . (Join-Path $PSScriptRoot 'ClaudeTurnstileGovernance.ps1')
+        $workspace=Get-ClaudeGatewayWorkspaceId $ResourceGroup $ApimName
+        $initial=New-ClaudeReportInitialSettings $AllowedDomains $outputs $workspace ([bool]$MonthToDate) $RetentionDays
+        Invoke-ClaudeReportAdminRequest $ResourceGroup $ApimName @{Operation='Initialize';Configuration=$initial} $outputs.adminJobName.value | Out-Null
+    }
     if($PSBoundParameters.ContainsKey('Cron') -or $refExplicit) {
         $newCron=if($PSBoundParameters.ContainsKey('Cron')) {$Cron} else {''}
         Update-ClaudeReportJob $ResourceGroup $config.Connection.JobName $newCron $(if($refExplicit){$RepositoryRef}else{''})
@@ -122,14 +128,7 @@ else {
     }
     finally {Remove-Item $folder -Recurse -Force}
     $account=$deployment.storageAccount.value
-    $config=New-ClaudeChargebackConfiguration $AllowedDomains
-    $config.MonthToDate=[bool]$MonthToDate;$config.RetentionDays=$RetentionDays
-    $config.Connection=[pscustomobject]@{
-        Endpoint=$deployment.endpoint.value;SenderAddress=$deployment.senderAddress.value
-        JobName=$deployment.jobName.value;DispatcherJobName=$deployment.dispatcherJobName.value
-        AdminJobName=$deployment.adminJobName.value
-        EnvironmentName=$deployment.environmentName.value;WorkspaceResourceId=$workspace
-    }
+    $config=New-ClaudeReportInitialSettings $AllowedDomains $deployment $workspace ([bool]$MonthToDate) $RetentionDays
     # Bootstrap runs inside the private network with a configuration-only identity.
     Invoke-ClaudeReportAdminRequest $ResourceGroup $ApimName @{Operation='Initialize';Configuration=$config} $deployment.adminJobName.value | Out-Null
 }
