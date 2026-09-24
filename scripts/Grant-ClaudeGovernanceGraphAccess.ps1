@@ -65,7 +65,13 @@ try {
     $raw = az rest --method post --url "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalId/appRoleAssignments" --headers 'Content-Type=application/json' --body "@$file" 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) {
         if ($raw -match '(?i)Authorization_RequestDenied|Insufficient privileges') {
-            throw "Only a tenant administrator can grant $permission. Ask one to run this script, or to grant it in the Entra admin center."
+            # Owner of the subscription is an Azure role, for Azure resources; the directory has its own roles.
+            $who = az account show --query user.name -o tsv 2>$null
+            throw ("Microsoft Graph refused to grant $permission as $who. Granting a Microsoft Graph application " +
+                "permission takes the Entra role Privileged Role Administrator or Global Administrator; Owner of the " +
+                "subscription is an Azure role and does not count. If you hold one of them through Privileged Identity " +
+                "Management, activate it and sign in again. Otherwise ask an administrator to run this script: no portal " +
+                "page adds a permission to a managed identity.")
         }
         throw "Granting $permission failed: $($raw.Trim())"
     }

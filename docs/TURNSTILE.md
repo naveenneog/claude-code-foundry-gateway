@@ -628,6 +628,18 @@ authored in Turnstile, yes: the save starts the apply job, and the budget was en
 minutes later. With only budgets authored there, not until the sync runs with `-Apply`, which the
 hourly job does.
 
+**Why does the job need a tenant administrator, when I can read and create groups myself?** What
+you can do, you do signed in: the scripts act as you, with the rights every member of the directory
+has. The apply job runs when nobody is signed in, as its own managed identity, and Entra gives an
+identity like that no directory access at all; measured, its read of the groups was refused. The
+only ways to let it read groups are a Microsoft Graph application permission or a directory role,
+and granting either takes Privileged Role Administrator or Global Administrator. Owner of the
+subscription is an Azure role: it covers the gateway, the job and the telemetry, which is why
+those work, but not the directory ([Azure roles and Microsoft Entra
+roles](https://learn.microsoft.com/azure/role-based-access-control/rbac-and-directory-admin-roles)).
+Turnstile itself never reads Entra. Without the grant, run the apply yourself when groups change:
+`./scripts/Sync-ClaudeTurnstileGovernance.ps1 -Direction FromTurnstile -Apply` checks new groups
+and refreshes membership as you.
 **Can I add a third tier in Turnstile?** No. The gateway's policy enforces `standard` and
 `premium`, so a third tier is a policy change. The Gateway governance page edits the two.
 
