@@ -32,3 +32,26 @@ def test_disabled_redaction_mutation_cannot_be_published():
 def test_docs_images_all_have_guarded_manifest_entries():
     folder = Path(__file__).resolve().parents[3] / "docs" / "images" / "aum"
     assert not validate_manifest(folder)
+
+
+def test_every_required_live_tab_and_direct_overview_was_captured():
+    from claude_finops.views import TABS
+    folder = Path(__file__).resolve().parents[3] / "docs" / "images" / "aum"
+    entries = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))["images"]
+    actual = {(e["backend"], e["tab"], tuple(e["size"])) for e in entries
+              if e["source"] == "live" and e["redaction"] is True and e["phase"] == "after"}
+    expected = {("Turnstile", tab, size) for tab, _ in TABS for size in ((80, 24), (160, 48))}
+    expected |= {("Direct", "overview", size) for size in ((80, 24), (160, 48))}
+    assert expected <= actual
+
+
+def test_missing_manifest_entry_mutation_is_caught():
+    from unittest.mock import patch
+    folder = Path(__file__).resolve().parents[3] / "docs" / "images" / "aum"
+    document = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+    document["images"].pop()
+    original = Path.read_text
+    def altered(path, *args, **kwargs):
+        return json.dumps(document) if path == folder / "manifest.json" else original(path, *args, **kwargs)
+    with patch.object(Path, "read_text", altered):
+        assert any("no manifest" in problem for problem in validate_manifest(folder))

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 from textual.widgets import TabbedContent
 
@@ -26,28 +27,33 @@ async def probe(args):
     for name, command in (("whoami", ["whoami"]), ("status", ["status"]),
                           ("budgets", ["budget", "list"]), ("governance", ["governance", "show"]),
                           ("requests", ["requests", "list", "--limit", "200"])):
+        started = time.monotonic()
         result = subprocess.run([sys.executable, "-m", "claude_finops.cli", *command, "--json",
                                  "--url", args.url, "--scope", args.scope, "--month", args.month],
                                 capture_output=True, text=True, encoding="utf-8", timeout=240)
         if result.returncode:
             raise RuntimeError(f"{name} command failed with exit {result.returncode}; run it interactively for the safe error.")
         outputs[name] = json.loads(result.stdout)
-        evidence["commands"].append(dict(command=name, exit_code=result.returncode, at=utc()))
+        evidence["commands"].append(dict(command=name, exit_code=result.returncode, at=utc(),
+                                         seconds=round(time.monotonic() - started, 3)))
     config = Config(url=args.url, scope=args.scope)
     backend = TurnstileBackend(config)
-    app = FinOpsApp(Engine(backend, args.month), config)
+    app = FinOpsApp(Engine(backend, args.month), config, redact=True)
+    evidence["display_redaction"] = True
     try:
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
             await app.workers.wait_for_complete()
             for tab in ("overview", "budgets", "governance", "requests", "settings"):
+                started = time.monotonic()
                 app.query_one(TabbedContent).active = tab
                 await pilot.pause()
                 await app.workers.wait_for_complete()
                 await pilot.pause(.25)
                 if tab not in app.data:
                     raise RuntimeError(f"Live terminal {tab} did not load.")
-                evidence["terminal"].append(dict(tab=tab, row_count=len(app.records.get(tab, [])), at=utc()))
+                evidence["terminal"].append(dict(tab=tab, row_count=len(app.records.get(tab, [])), at=utc(),
+                                                 seconds=round(time.monotonic() - started, 3)))
             evidence["role"] = app.identity.get("role")
             evidence["method"] = app.identity.get("method")
             evidence["same_identity"] = app.identity.get("id") == outputs["whoami"].get("id")

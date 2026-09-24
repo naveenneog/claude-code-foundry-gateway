@@ -40,14 +40,23 @@ async def capture(args):
                 await app.workers.wait_for_complete()
                 for tab in tabs:
                     started = time.monotonic()
-                    app.query_one(TabbedContent).active = tab
+                    if tab == "people":
+                        overview = app.data.get("overview", {})
+                        allowed = {row["id"] for row in overview.get("catalog", {}).get("departments", [])}
+                        preferred = next((row["id"] for row in overview.get("teams", {}).get("items", [])
+                                          if row["id"] in allowed), None)
+                        if preferred:
+                            app.team = preferred
+                    shortcut = next(label[0] for key, label in TABS if key == tab)
+                    await pilot.press(shortcut)
                     if tab == "overview":
                         app.action_refresh()
                     await pilot.pause(.25)
                     await app.workers.wait_for_complete()
                     await pilot.pause(.5)
                     if tab not in app.data:
-                        raise RuntimeError(f"Live {tab} failed; no image published.")
+                        state = app.redactor.text(str(app.query_one(f"#note-{tab}").render()))
+                        raise RuntimeError(f"Live {tab} failed; no image published. {state}")
                     filename = f"{config.backend}-{tab}-{size[0]}x{size[1]}-{args.phase}.svg"
                     entry = dict(file=filename, source="live", backend=backend.name,
                                  captured_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),

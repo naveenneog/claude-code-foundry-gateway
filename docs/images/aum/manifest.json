@@ -28,6 +28,286 @@
       ],
       "tab": "overview",
       "phase": "before"
+    },
+    {
+      "file": "direct-overview-80x24-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-24T17:28:44.552502Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "overview",
+      "phase": "after"
+    },
+    {
+      "file": "direct-overview-160x48-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-24T17:29:13.412851Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "overview",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-overview-80x24-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:29:22.816028Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "overview",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-budgets-80x24-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:29:24.272358Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "budgets",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-governance-80x24-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:29:28.399635Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "governance",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-usage-80x24-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:29:29.625225Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "usage",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-trends-80x24-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:29:30.845186Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "trends",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-requests-80x24-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:29:32.706495Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "requests",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-anomalies-80x24-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:29:34.004598Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "anomalies",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-settings-80x24-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:29:35.048887Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "settings",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-overview-160x48-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:29:39.396637Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "overview",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-budgets-160x48-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:29:40.977519Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "budgets",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-governance-160x48-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:29:45.163657Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "governance",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-usage-160x48-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:29:46.552208Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "usage",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-trends-160x48-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:29:47.800923Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "trends",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-requests-160x48-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:29:49.222096Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "requests",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-anomalies-160x48-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:29:50.581359Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "anomalies",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-settings-160x48-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:29:51.595198Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "settings",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-people-80x24-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:39:07.922141Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "people",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-people-160x48-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T17:39:11.437416Z",
+      "redaction": true,
+      "commit": "732eca72bf25652a28268de8286d853dc1b2dcaf",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "people",
+      "phase": "after"
     }
   ]
 }

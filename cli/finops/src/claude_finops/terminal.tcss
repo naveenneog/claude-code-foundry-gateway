@@ -12,6 +12,7 @@ Screen {
 #identity { height: 1; padding: 0 1; background: $surface; }
 .wide-overview #brand { height: 5; }
 #quick-filter { display: none; height: 3; }
+Input > .input--placeholder { color: $foreground; }
 TabbedContent { height: 1fr; }
 TabPane { padding: 0 1; }
 DataTable { height: 1fr; }

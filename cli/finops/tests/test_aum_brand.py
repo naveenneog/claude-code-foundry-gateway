@@ -50,3 +50,22 @@ def test_no_arguments_in_pipe_is_linear_not_tui():
     assert result.exit_code == 0, result.output
     assert "total_tokens" in result.output
     assert BANNER not in result.output
+
+
+def test_deprecated_entry_prints_one_notice_on_stderr(capsys):
+    from claude_finops.cli import legacy_main
+    with patch("claude_finops.cli.main") as primary:
+        legacy_main()
+    primary.assert_called_once()
+    captured = capsys.readouterr()
+    assert not captured.out
+    assert len(captured.err.splitlines()) == 1
+    assert "Deprecated" in captured.err and "aum" in captured.err
+
+
+@pytest.mark.parametrize("flag", ["--plain", "--screen-reader", "--json"])
+def test_tty_version_accessibility_modes_suppress_art(flag):
+    with patch("claude_finops.cli.terminal_output", return_value=True):
+        result = CliRunner().invoke(app, ["--version", flag])
+    assert result.exit_code == 0
+    assert BANNER not in result.output

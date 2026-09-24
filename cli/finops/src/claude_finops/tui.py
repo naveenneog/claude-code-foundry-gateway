@@ -231,7 +231,12 @@ class FinOpsApp(App):
             display_identity = self.present(self.identity)
             who = display_identity.get("email", display_identity.get("name", "caller"))
             scope = scope_label(display_identity)
-            identity = f"{self.engine.month} | {self.engine.backend.name} | {self.identity.get('role', 'unknown')} | {who} | fetched {stamp}"
+            prefix = f"{self.engine.month} | {self.engine.backend.name} | {self.identity.get('role', 'unknown')} | "
+            suffix = f" | @ {stamp}"
+            available = max(8, self.size.width - len(prefix) - len(suffix) - 2)
+            if len(who) > available:
+                who = who[:available - 3] + "..."
+            identity = prefix + who + suffix
             if scope:
                 identity += " | " + scope
             self.query_one("#identity", Static).update(safe_text(identity))

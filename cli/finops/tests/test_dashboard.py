@@ -93,3 +93,22 @@ async def test_live_style_redaction_applies_to_dashboard_and_identity():
         assert "private@example.org" not in svg
         assert "Private Person" not in svg
         assert not app.editable
+
+
+async def test_preselected_people_team_does_not_trigger_refresh_loop():
+    from textual.widgets import Select
+    backend = FakeBackend()
+    backend.catalog["departments"].reverse()
+    app = FinOpsApp(Engine(backend, "2026-09"), Config(backend="fake"), redact=True)
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause(.25)
+        await app.workers.wait_for_complete()
+        app.team = "sales-emea"
+        await pilot.press("3")
+        await pilot.pause(.25)
+        await app.workers.wait_for_complete()
+        await pilot.pause(.25)
+        assert app.query_one("#people-team", Select).value == "sales-emea"
+        assert len(app.data["people"]["items"]) == 50
+        calls = [(op, params) for op, params in backend.reads if op == "people"]
+        assert len(calls) == 1
