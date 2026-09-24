@@ -352,7 +352,13 @@ Assert 'the identity reads the Application Insights resource' ($connect -match "
 Assert 'the start script survives a Windows checkout'        ($job -match "replace\(bootstrap, '\\r', ''\)")
 Assert 'a pass reports budgets refused, not just counted'    ($pass -match "like 'refused \*'" -and $pass -match 'refused \$\(\$refused\.Count\)')
 if (Get-Command az -ErrorAction SilentlyContinue) {
-    az bicep build --file $scheduleTemplate --stdout *> $null
+    # Every mutation still compiles. Avoid the Azure CLI startup around its own
+    # installed compiler (measured 6.5s direct versus 10.8s through az, 2026-09-24).
+    $azureConfig = if ($env:AZURE_CONFIG_DIR) { $env:AZURE_CONFIG_DIR } else { Join-Path $HOME '.azure' }
+    $compilerName = if ($env:OS -eq 'Windows_NT') { 'bicep.exe' } else { 'bicep' }
+    $compiler = Join-Path (Join-Path $azureConfig 'bin') $compilerName
+    if (Test-Path $compiler) { & $compiler build $scheduleTemplate --stdout *> $null }
+    else { az bicep build --file $scheduleTemplate --stdout *> $null }
     Assert 'the schedule template compiles'                  ($LASTEXITCODE -eq 0)
 }
 
