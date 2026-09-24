@@ -76,7 +76,7 @@ Nothing appears, no window, no error, and no `claude` process. The deployment
 log — **Event Viewer → Applications and Services → Microsoft → Windows →
 AppXDeploymentServer/Operational** — shows:
 
-```
+```text
 Error while deleting file ...\Packages\Claude_pzs8sxrjxfjjc\SystemAppData\Helium\UserClasses.dat
 Error Code : 0x20.
 ```

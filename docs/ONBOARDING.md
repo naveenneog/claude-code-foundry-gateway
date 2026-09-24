@@ -20,7 +20,7 @@ repository root. If your tier groups have nondefault names, pass
 
 Understanding this makes every operation below obvious.
 
-```
+```text
 Entra group  ──(Sync-ClaudeAccess.ps1)──▶  APIM named value  ──▶  policy check
 claude-code-standard                        allow-standard         oid in list?
 claude-code-premium                         allow-premium
@@ -338,7 +338,7 @@ az ad group member add    --group claude-code-premium  --member-id <oid>
 Verify from the developer's own response headers — the gateway reports the tier
 it applied:
 
-```
+```text
 x-claude-tier: premium
 x-ratelimit-remaining-tokens: 79980
 ```

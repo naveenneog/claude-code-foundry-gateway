@@ -27,7 +27,7 @@ Produces the full four-control report:
 ./scripts/Show-Governance.ps1 -ApimName $APIM -ResourceGroup $RG
 ```
 
-```
+```text
 1. Entitled developer          [PASS] HTTP 200  tier=standard  consumed=20  remaining=19980
 2. Tier enforcement            [PASS] HTTP 200  tier=premium   consumed=20  remaining=79980
 3. Per-minute token budget     [PASS] HTTP 429  Retry-After: 3s
@@ -67,7 +67,7 @@ $r.Headers['x-quota-remaining-today']
 
 Illustrative response shape; token counts depend on the request and model:
 
-```
+```text
 HTTP 200
 x-claude-tier                    standard
 x-tokens-consumed                35
@@ -151,7 +151,7 @@ finally {
 
 Expected tail:
 
-```
+```text
 11  HTTP 200  remaining=11
 12  HTTP 200  remaining=0
 13  HTTP 429  remaining=0  retry-after=2

@@ -162,7 +162,7 @@ An honest architecture review has to cover this side too.
 
 ## How to choose
 
-```
+```text
 Do you need per-developer budgets or chargeback?
 ├── yes ────────────────────────────────▶ C. Foundry + gateway
 └── no
@@ -218,4 +218,3 @@ from documentation:
 | Give people access | [Onboarding guide](ONBOARDING.md) |
 | Watch the spend | [Monitoring guide](MONITORING.md) |
 | Fix something | [Debug guide](DEBUGGING.md) |
-

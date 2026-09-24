@@ -33,7 +33,7 @@ To see where things stand first:
 ./scripts/Add-ClaudeModel.ps1 -List -ResourceGroup <rg> -ApimName <apim>
 ```
 
-```
+```text
   Model                      Deployed   Priced             In/M        Out/M
   claude-haiku-4.5           no         yes                  $1           $5
   claude-opus-5              yes        yes                  $5          $25
@@ -81,7 +81,7 @@ add an unpriced model unless you pass `-SkipPrice`.
 A model that is not deployed is refused outright, and the error names what *is*
 deployed:
 
-```
+```text
 'claude-opus-9' is not deployed on Foundry account 'ai-contoso'.
 Deployed: claude-opus-5, claude-sonnet-5. Pass -Deploy to create it now, or
 -SkipDeploymentCheck if you are staging configuration ahead of the deployment.

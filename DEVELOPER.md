@@ -182,7 +182,7 @@ not run on this machine — it writes the developer setting that reveals it.
 
 **Your budget is on every response:**
 
-```
+```text
 x-ratelimit-remaining-tokens: 19980
 x-quota-remaining-today: 499980
 ```

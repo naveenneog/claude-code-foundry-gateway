@@ -274,7 +274,7 @@ capture a local client's egress. Treat the hostname report as internal data.
 
 ## 6. ECONNRESET is not an allowlist problem
 
-```
+```text
 ✳ Connection dropped (ECONNRESET) · Retrying in 22s · attempt 8/10
 ```
 

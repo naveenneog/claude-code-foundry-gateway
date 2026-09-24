@@ -342,8 +342,7 @@ So the counters take 500,000 identities, and they are soft at any scale. Microso
 documents the remaining-quota figure as an estimate, and the limit as one that
 concurrent requests can exceed
 ([llm-token-limit](https://learn.microsoft.com/azure/api-management/llm-token-limit-policy)).
-That is the conclusion of [The budget is a delayed kill switch, not a hard
-cap](#the-budget-is-a-delayed-kill-switch-not-a-hard-cap), now measured at the
+That is consistent with the [soft-cap discussion](#the-budget-is-a-delayed-kill-switch-not-a-hard-cap), now measured at the
 cardinality. What the run did not establish is how far over a production-sized
 quota a developer can go, or why exhausted identities were admitted again, so
 **U9** stays open.
@@ -512,7 +511,7 @@ az deployment group create -g <rg> `
 Nothing silent. `ApimNamedValue.ps1` checks the size before writing, so the sync
 **refuses and says so** rather than truncating:
 
-```
+```text
 Named value 'allow-standard' is 4441 characters, which is 345 over the API
 Management limit of 4096. It holds 120 entries of about 38 characters; roughly
 107 fit. Nothing was written. A list this large needs a different store - see

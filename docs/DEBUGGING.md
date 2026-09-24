@@ -61,7 +61,7 @@ answering from somewhere other than your gateway, which no other check catches.
 
 Every failure lives at exactly one of these hops.
 
-```
+```text
   developer machine
         │  0. VS Code extension host is current?
         │  1. az login → Entra token (oid, upn)
@@ -92,13 +92,9 @@ opened.** The extension auto-updates on disk; the running host does not pick
 that up. A window left open for days can be several versions behind, and the
 symptom is a Claude Code panel that fails while the CLI works perfectly.
 
-Observed case: a window running for **171 hours** across **7 extension
-updates**, with a healthy tenant, a healthy gateway, valid tokens, correct
-settings on both the CLI and VS Code side, and a `claude -p` that returned
-normally and reached the gateway.
-
 **Each open window has its own extension host.** Reloading one does not fix the
-others — in the case above there were four, all stale.
+others. A healthy terminal call and correct files on disk do not establish that
+a long-running extension host has loaded the current version.
 
 ```powershell
 # is any extension host older than the installed extension?

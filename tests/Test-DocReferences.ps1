@@ -32,6 +32,25 @@ function Get-GuideFiles([string]$Repo) {
     }
 }
 
+function Test-ExactRepositoryPath([string]$Repo, [string]$Path, [hashtable]$DirectoryCache) {
+    $base = $Repo.TrimEnd('\', '/')
+    $Path = $Path.TrimEnd('\', '/')
+    if ($Path -eq $base) { return $true }
+    if (-not $Path.StartsWith($base + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        return $false
+    }
+    $current = $base
+    foreach ($part in ($Path.Substring($base.Length + 1) -split '[/\\]')) {
+        if (-not $DirectoryCache.ContainsKey($current)) {
+            $DirectoryCache[$current] = @(Get-ChildItem -LiteralPath $current -Force | ForEach-Object Name)
+        }
+        # Windows accepts wrong case; GitHub's repository links do not.
+        if ($DirectoryCache[$current] -cnotcontains $part) { return $false }
+        $current = Join-Path $current $part
+    }
+    return $true
+}
+
 function Get-MarkdownLines([string]$Text) {
     $fence = ''
     $length = 0
@@ -159,6 +178,7 @@ function Get-ScriptParameters([string]$Path) {
 function Get-DocReferenceFailures([string]$Repo) {
     $anchorCache = @{}
     $parameterCache = @{}
+    $directoryCache = @{}
     foreach ($file in @(Get-GuideFiles $Repo)) {
         $relative = $file.FullName.Substring($Repo.TrimEnd('\', '/').Length + 1)
         $text = [IO.File]::ReadAllText($file.FullName)
@@ -174,6 +194,10 @@ function Get-DocReferenceFailures([string]$Repo) {
             $resolved = [IO.Path]::GetFullPath($resolved)
             if (-not (Test-Path -LiteralPath $resolved)) {
                 New-ReferenceFailure $relative $link.Line 'link' $target
+                continue
+            }
+            if (-not (Test-ExactRepositoryPath $Repo $resolved $directoryCache)) {
+                New-ReferenceFailure $relative $link.Line 'link-case' "$target (path case or outside repository)"
                 continue
             }
             if ($parts.Count -eq 2 -and $parts[1] -and [IO.Path]::GetExtension($resolved) -eq '.md') {
@@ -197,6 +221,10 @@ function Get-DocReferenceFailures([string]$Repo) {
                 $resolved = Join-Path $Repo $scriptPath
                 if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) {
                     New-ReferenceFailure $relative $number 'script' $m.Value
+                    continue
+                }
+                if (-not (Test-ExactRepositoryPath $Repo ([IO.Path]::GetFullPath($resolved)) $directoryCache)) {
+                    New-ReferenceFailure $relative $number 'script-case' $m.Value
                     continue
                 }
                 # In Get-Help the path is data; -Full belongs to Get-Help, not
@@ -258,6 +286,9 @@ Setext title
 ```
 '@
     Write-Fixture $guide $heading
+    # Keep this test file ASCII while exercising UTF-8 headings and URI escapes.
+    $unicodeHeading = '## Caf' + [char]0xE9 + ' ' + [char]0x398
+    Write-Fixture $guide ($heading + "`r`n" + $unicodeHeading)
     $valid = @'
 # Home
 [guide](docs/guide(v2).md#a-bold-code_name--detail)
@@ -267,7 +298,9 @@ Setext title
 [setext](docs/guide(v2).md#setext-title)
 [alias](docs/guide(v2).md#old-anchor)
 [encoded](docs/guide%28v2%29.md#overview)
+[unicode](docs/guide(v2).md#caf%C3%A9-%CE%B8)
 [root](/docs/guide(v2).md)
+[directory](docs/)
 [reference][intro]
 [intro]: docs/guide(v2).md#overview
 `[not-a-link](missing.md)`
@@ -290,7 +323,9 @@ Get-Help ./scripts/Get-Example.ps1 -Full
         @{ Label = 'missing root script'; From = './Install-Example.ps1'; To = './Install-Missing.ps1'; Kind = 'script' },
         @{ Label = 'wrong parameter'; From = '-ResourceGroup'; To = '-ResourceGruop'; Kind = 'parameter' },
         @{ Label = 'wrong continued parameter'; From = '-Name'; To = '-Wrong'; Kind = 'parameter' },
-        @{ Label = 'broken reference definition'; From = '[intro]: docs/guide(v2).md#overview'; To = '[intro]: docs/missing.md'; Kind = 'link' }
+        @{ Label = 'broken reference definition'; From = '[intro]: docs/guide(v2).md#overview'; To = '[intro]: docs/missing.md'; Kind = 'link' },
+        @{ Label = 'wrong-case link'; From = 'docs/guide%28v2%29.md'; To = 'docs/Guide%28v2%29.md'; Kind = 'link-case' },
+        @{ Label = 'wrong-case script'; From = 'scripts/Get-Example.ps1'; To = 'scripts/get-example.ps1'; Kind = 'script-case' }
     )
     foreach ($mutation in $mutations) {
         $changed = $valid.Replace($mutation.From, $mutation.To)

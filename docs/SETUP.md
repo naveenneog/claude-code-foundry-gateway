@@ -90,7 +90,7 @@ model/version above is an example, not a promise of regional availability.
 The installer asks **how many developers** will use the gateway and suggests a
 tier from it, showing the arithmetic so you can argue with it:
 
-```
+```text
 50 developers x 500 requests/day x 22 days = 550,000 requests/month
 Basic v2 includes 10,000,000 and Standard v2 50,000,000.
 ```
@@ -246,7 +246,7 @@ edits alone do not publish entitlement.
 Both setup scripts check the environment before touching anything, and stop with
 a specific remedy rather than failing part-way through:
 
-```
+```text
 ==> Checking prerequisites
     [OK]   Windows PowerShell 5.1.26100.8875
     [OK]   Azure CLI 2.86.0
@@ -464,7 +464,7 @@ completed developer rollout.
 API Management is essentially the whole cost of this accelerator, so the wizard
 looks for v2 instances you already own and offers to reuse one:
 
-```
+```text
     Existing v2 API Management instances you can reuse:
 
        1. apim-contoso-claude     BasicV2    East US 2      rg-contoso-claude

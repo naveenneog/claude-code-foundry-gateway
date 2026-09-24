@@ -18,7 +18,7 @@ before using it on anything that matters.
 | A spike, a demo, or debugging whether a problem is the gateway or Foundry | ✅ |
 | One person evaluating models against their own subscription | ✅ |
 | A team | ❌ use the gateway |
-| Anything where you need to know what it cost, or who spent it | ❌ use the gateway |
+| Per-person attribution and shared team budget controls | ❌ use the gateway; direct Foundry billing is resource-level |
 | Anything where access must end when somebody leaves | ❌ use the gateway |
 
 It is also the fastest way to answer *"is the gateway broken, or is Foundry?"* —
@@ -364,9 +364,9 @@ Granting that principal the role is the other route, and is right only where
 the machine identity is genuinely meant to have Claude access.
 
 **Do not set `ANTHROPIC_FOUNDRY_AUTH_TOKEN` to get past this.** It works,
-because it pins a token the client then uses verbatim — and that token expires
-in about an hour, after which the failure comes back looking unrelated to
-anything you changed.
+because it pins a token the client then uses verbatim — without refreshing it.
+When that token expires, the failure returns. Lifetimes vary by identity and
+policy; see [Authentication](AUTHENTICATION.md#the-matrix).
 
 **3. Right tenant, no role.** Only now is a role assignment the answer:
 
@@ -413,7 +413,7 @@ roles is entirely consistent with seeing it.
 Desktop's native Foundry Entra mode runs its own device-code flow. Read from
 `app.asar` in Desktop 2.110.1.0, it posts:
 
-```
+```text
 POST https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/devicecode
      client_id=<clientId>&scope=https://cognitiveservices.azure.com/.default offline_access
 ```

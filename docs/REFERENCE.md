@@ -96,7 +96,8 @@ routine production health check. The packet gate is the definition of done.
 There is no portal substitute for the local test suite; use the verification
 steps in each deployment guide for live resources.
 
-`Test-DocReferences.ps1` checks relative Markdown links, GitHub heading anchors,
+`Test-DocReferences.ps1` checks case-sensitive relative Markdown links, GitHub
+heading anchors (including duplicate, Unicode and explicit HTML anchors),
 repository-root script paths and parameters in copyable examples. It runs
 mutation cases in uniquely named project-local scratch copies. Source scope:
 README, DEVELOPER, user guides in `docs/`, `guide/README.md`, and onboarding

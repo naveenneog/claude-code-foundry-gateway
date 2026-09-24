@@ -73,7 +73,7 @@ table for third-party mode:
 The two modes keep separate storage roots, each with its own IndexedDB, which
 is observable on any machine that has run both:
 
-```
+```text
 %APPDATA%\Claude\                 first-party: Local Storage, IndexedDB, Session Storage
 %LOCALAPPDATA%\Claude-3p\         Foundry mode: its own Local Storage and IndexedDB
 ```
@@ -261,7 +261,7 @@ skills, slash commands, hooks and sub-agents into one directory, so the
 marketplace is the distribution mechanism for all of them at once. The
 system-wide fallback, for devices that cannot reach git or an HTTPS host:
 
-```
+```text
 macOS     /Library/Application Support/Claude/org-plugins/
 Windows   C:\Program Files\Claude\org-plugins\
 ```
@@ -453,7 +453,7 @@ file is.
 one machine, the highest-ranked source that supplies *any* policy key wins
 outright and the rest are ignored, silently. The order is:
 
-```
+```text
 remote  >  MDM / HKLM  >  managed-settings.json  >  HKCU
 ```
 
@@ -718,7 +718,7 @@ they live on Anthropic's backend, not on the disk — measured, that profile's
 whole IndexedDB is 7 KB, which is a cache and not a history. The origins say so
 outright on a machine that has run both:
 
-```
+```text
 %APPDATA%\Claude\IndexedDB\https_claude.ai_0.indexeddb.leveldb     first-party
 %LOCALAPPDATA%\Claude-3p\IndexedDB\app_localhost_0.indexeddb.leveldb   3P
 ```
