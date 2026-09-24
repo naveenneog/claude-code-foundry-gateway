@@ -42,15 +42,17 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     Assert 'node is available to run them' $false 'install Node to run the resolver tests'
 } else {
     Push-Location $resolverDir
-    $out = node --test test/*.test.mjs 2>&1 | Out-String
+    # The default reporter's Unicode summary depends on the child's console
+    # code page. TAP keeps these machine-read counters ASCII, also headlessly.
+    $out = node --test --test-reporter=tap test/*.test.mjs 2>&1 | Out-String
     $code = $LASTEXITCODE
     Pop-Location
 
-    $passed = if ($out -match '(?m)^.\s*pass\s+(\d+)') { [int]$Matches[1] } else { 0 }
-    $failed = if ($out -match '(?m)^.\s*fail\s+(\d+)') { [int]$Matches[1] } else { -1 }
+    $passed = if ($out -match '(?m)^# pass (\d+)') { [int]$Matches[1] } else { 0 }
+    $failed = if ($out -match '(?m)^# fail (\d+)') { [int]$Matches[1] } else { -1 }
 
     Assert "node --test ran them ($passed passed)" ($code -eq 0 -and $failed -eq 0) `
-        (($out -split "`n" | Where-Object { $_ -match 'not ok |failing tests' } | Select-Object -First 3) -join ' | ')
+        (($out -split "`n" | Where-Object { $_ -match 'not ok |failing tests|Error|Cannot' } | Select-Object -First 3) -join ' | ')
     # A wrapper that reports success when nothing ran is worse than no wrapper.
     Assert 'and there were tests to run' ($passed -gt 0) 'no tests executed'
 }

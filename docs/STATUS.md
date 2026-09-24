@@ -12,7 +12,7 @@
 - [x] The gateway enforces strict, allowance and notify per unit and team: `bu-modes` holds only the exceptions (missing means strict); allowance admits up to its percentage above the budget; notify skips only that scope's limiter, and the parent, organization and tier limits still apply. Invalid mode metadata stops the whole apply before any write
 - [x] An apply run rechecks Turnstile's catalog, per-budget and tier revisions immediately before writing, reconciles again from newer state up to three times, then defers with no writes and no membership refresh. This narrows the out-of-order race; P48's single writer closes it
 - [ ] A live sign-in with a manager-only account: moved to P53, which uses the CLI account's own group memberships (it owns both the admin group and the manager test groups) and restores them
-- [ ] `node .ironclad/gate.mjs --stage packet` exits 0 on the merge
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0 on the merge: `690015d`, 2026-09-24 17:16-17:46Z, Test-All 1,797.2 s of the 1,800 s budget then in force (see "The suite's time budget" below)
 
 | Measured | Result |
 |---|---|
@@ -23,6 +23,7 @@
 | Modes on the reference gateway, 2026-09-24 14:26-14:28Z | Strict at a budget of 1 refused with 403 naming the team. Allowance 10%: served at an estimated 104.0% of the budget with an `estimated-over-budget` notice, refused once usage exceeded the 110% effective quota. Notify at a budget of 1: three requests served with `usage-reported`, and their 48 tokens joined the ledger through `BudgetRequestId`. The original registry and `bu-modes` (`,,`) restored exactly; a policy-only deploy left every named value byte-identical |
 | Modes tests | 206 governance and 146 team assertions; 108 of 108 Turnstile mutations caught; the policy's own expression bodies compiled and executed for 1, 10 and 100%, zero, rounding and the Int64 limit |
 | The guard against live data, 15:35Z | Real catalog, budget and tier reads through the guard against a gateway held in memory: verified before writing, 0 newer snapshots, 0 writes |
+| Rolled out live, 17:51-18:02Z | Main's merged policy (`690015d`) deployed to the reference gateway: all 28 named values byte-identical before and after, and a request through the gateway returned 200 with every budget header. Both Turnstile jobs repinned to `690015d`; their first run succeeded. The only named value that run changed was `turnstile-integration`'s `connectedAt`, re-stamped by the connect step; tiers match Turnstile (`tpm-standard` 20,000, `tpm-premium` 80,000) |
 
 The notices are advisory. `llm-token-limit`'s remaining quota is an estimate, so an allowance
 notice cannot promise the exact request that crosses the budget, and notify has no monthly counter
@@ -61,6 +62,40 @@ without the venv recorded SKIP, and `Test-RunnerIntegrity` expected every regist
 run. The invariant it now asserts is the one the false pass broke: every registered check has a
 result in the summary, PASS, FAIL or an explicit SKIP; the checks not skipped all run; and the
 final lines count the skips. Open: **U20** (scale, and the two sources' totals differ by design).
+
+## The suite's time budget, 2026-09-24
+
+`Test-All` passed on `690015d` in 1,797.2 s, 2.8 s inside the gate's 1,800 s command budget, and a
+budget-modes gate on its own branch had already failed on time with no failing check. The suite
+runs its checks one after another and grew with every packet (1,477.4 s on `d1f1756`, 1,721.8 s on
+`c7f0a29`), while several agents' gates share the machine. The budget is now 3,600 s
+([ADR-0024](adr/0024-test-suite-time-budget.md)), `Test-All` prints and saves each check's
+duration, and P56 makes the suite parallel so the budget can return to 1,800 s. Nothing it checks
+was removed or weakened. **Done the same day:** P56 brought `Test-All` to 790-927 s on a busy
+machine and ADR-0025 returned the budget to 1,800 s (below).
+
+## P56 parallel test suite, 2026-09-24
+
+Merged from `parallel-suite` at `15a8a97`. `Test-All` starts each check as its own `pwsh`
+process, four at a time (the machine has 16 logical CPUs), and runs alone the checks that share
+Azure CLI state or scan the whole tree. A per-check deadline of 600 s stops a hung check without
+stalling the gate. The two slow mutation harnesses run as shards: four for business units, two
+for Turnstile, with every one of the 476 and 108 mutations kept, in its original order, which
+`tests/Test-MutationShards.ps1` proves. [ADR-0025](adr/0025-parallel-test-suite.md).
+
+| Run | Wall time | Result |
+|---|---:|---|
+| Serial, `49c53bf` (gate receipt) | 1,829 s | 34 PASS |
+| Parallel without shards | 1,302.8 s | not enough; shards added |
+| Parallel with shards, three busy runs | 927.2, 830.6, 790.0 s | 39 PASS each, FinOps run, not skipped |
+| The agent's final gate on `15a8a97` | 809.9 s | 39 PASS, 0 FAIL, 0 SKIP |
+
+It costs more CPU (about 2,450 CPU-seconds against 1,841 serially), because each check now has its
+own process. Found by building it, and fixed test-first: the resolver check's wrapper parsed zero
+passes from Node's Unicode summary under a headless code page 437, so it now asks Node for ASCII TAP
+output; a missing script behind a prerequisite SKIP was reported as skipped instead of failing; a
+timed-out check lost the output it had printed; and a check started late could have outlived the
+gate's budget, which set the 600 s default deadline.
 
 ## A gate that passed on 9 of 32 checks, 2026-09-24
 
