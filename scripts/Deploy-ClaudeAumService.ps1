@@ -145,7 +145,6 @@ if ($NewNetworkAddressPrefix) {
     finally { Remove-Item $networkFile -ErrorAction SilentlyContinue }
 }
 $file = New-ClaudeAumLocalFile
-$zip = New-ClaudeAumLocalFile -Extension 'zip'
 try {
     $parameters = [ordered]@{}
     foreach ($key in @($plan.parameters.Keys)) { $parameters[$key] = @{ value=$plan.parameters[$key] } }
@@ -175,18 +174,7 @@ try {
         throw 'Storage publicNetworkAccess is Disabled (often Azure Policy). No code deployed. Choose and price -StorageNetwork Private; do not enable keys or bypass policy.'
     }
     if (-not $SkipCodeDeploy) {
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        $source = Join-Path $root 'service\aum'
-        $archive = [IO.Compression.ZipFile]::Open($zip, 'Create')
-        try {
-            foreach ($entry in @(Get-ChildItem $source -Recurse -File | Where-Object { $_.FullName -notmatch '__pycache__|\.pyc$' })) {
-                $relative = $entry.FullName.Substring($source.Length + 1).Replace('\','/')
-                [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $entry.FullName, $relative) | Out-Null
-            }
-        }
-        finally { $archive.Dispose() }
-        Invoke-ClaudeAumAz @('functionapp','deployment','source','config-zip','--name',$record.functionName,'--resource-group',$ResourceGroup,
-            '--subscription',$SubscriptionId,'--src',$zip,'--build-remote','true','--timeout','1200','-o','json') | Out-Null
+        & (Join-Path $PSScriptRoot 'Publish-ClaudeAumService.ps1') -RecordPath $recordPath -Confirm:$false | Out-Null
     }
     Write-Host "`nService: $($record.endpoint)" -ForegroundColor Green
     Write-Host "Scope: $($record.scope)"
@@ -195,5 +183,4 @@ try {
 }
 finally {
     Remove-Item $file -ErrorAction SilentlyContinue
-    Remove-Item $zip -ErrorAction SilentlyContinue
 }

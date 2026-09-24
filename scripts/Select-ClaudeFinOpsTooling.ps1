@@ -7,13 +7,15 @@ param(
     [ValidateSet('None','Direct','AumService','Turnstile','TurnstileAum')][string]$Tool,
     [string]$Region,
     [hashtable]$AumServiceParameters = @{},
-    [string]$TurnstilePath, [string]$TurnstileParameters, [string]$SubscriptionId,
+    [string]$TurnstilePath, [string]$TurnstileParameters, [string]$TurnstilePython, [string]$SubscriptionId,
     [switch]$Accept
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ClaudeAumDeployment.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeFinOpsPrices.ps1')
 $prices = if ($Region) { Get-ClaudeAumPrices -Region $Region } else { $null }
-$options = @(Get-ClaudeFinOpsChoices -Prices $prices)
+$comparison = if ($prices) { Get-ClaudeFinOpsComparisonPrice -Region $Region -AumPrices $prices } else { $null }
+$options = @(Get-ClaudeFinOpsChoices -Prices $prices -TurnstilePrices $comparison)
 Write-Host "`nChoose FinOps tooling. Neither tool is required by the other." -ForegroundColor Cyan
 for ($i=0; $i -lt $options.Count; $i++) {
     $o = $options[$i]
@@ -22,6 +24,11 @@ for ($i=0; $i -lt $options.Count; $i++) {
     Write-Host "     $($o.Implications)" -ForegroundColor DarkGray
 }
 Write-Host '  Scoped managers require AUM service or Turnstile. Developers never sign in to a FinOps tool.'
+if ($comparison) {
+    Write-Host "  Regional comparison: $Region, $($comparison.PricedAtUtc)"
+    Write-Host "  $($comparison.Basis)" -ForegroundColor DarkGray
+    Write-Host "  A new Standard v2 APIM, if Turnstile's parameters create one: $(Format-ClaudeAumCost $comparison.AdditionalStandardV2Monthly)"
+}
 if (-not $Tool) {
     $answer = Read-Host 'Choose a number (no default)'
     $n = 0
@@ -37,17 +44,25 @@ if ($Tool -eq 'AumService') {
     & (Join-Path $PSScriptRoot 'Deploy-ClaudeAumService.ps1') @AumServiceParameters -WhatIf:$WhatIfPreference
     return
 }
+if (-not $Region) { throw 'Select -Region to see live regional Turnstile prices before deploying. No infrastructure was created.' }
 if (-not $TurnstilePath -or -not (Test-Path (Join-Path $TurnstilePath 'scripts\deploy'))) {
     throw 'For Turnstile, clone naveenneog/turnstile and pass -TurnstilePath. Its deployment guide prices the chosen architecture.'
 }
 if (-not $TurnstileParameters -or -not (Test-Path $TurnstileParameters) -or -not $SubscriptionId) {
     throw 'Turnstile needs -TurnstileParameters and -SubscriptionId. Use docs/TURNSTILE.md; do not point its APIM integration at the governed Claude gateway.'
 }
+$TurnstilePath = (Resolve-Path $TurnstilePath).Path
+$TurnstileParameters = (Resolve-Path $TurnstileParameters).Path
+if (-not $TurnstilePython) {
+    $TurnstilePython = Join-Path $TurnstilePath '.venv\Scripts\python.exe'
+    if (-not (Test-Path $TurnstilePython)) { $TurnstilePython = 'python' }
+}
+elseif (Test-Path $TurnstilePython) { $TurnstilePython = (Resolve-Path $TurnstilePython).Path }
 Write-Host 'The Turnstile deployer runs its regional plan before deployment and asks for confirmation. No AUM service is created.'
 if ($PSCmdlet.ShouldProcess($TurnstilePath, 'Run Turnstile deployment with its explicit parameters')) {
     Push-Location $TurnstilePath
     try {
-        & python -m scripts.deploy deploy --subscription $SubscriptionId --parameters $TurnstileParameters
+        & $TurnstilePython -m scripts.deploy deploy --subscription $SubscriptionId --parameters $TurnstileParameters
         if ($LASTEXITCODE) { throw 'Turnstile deployment failed. No AUM service was created.' }
     }
     finally { Pop-Location }

@@ -37,6 +37,12 @@ The selector shows costs, roles and prerequisites. For a new gateway,
 `Install-ClaudeGateway.ps1 -ChooseFinOps` opens the same selector after install.
 Without the switch, the installer prints its command and creates no FinOps tool.
 
+Pass `-Region <discovered-region>` for regional comparison prices. The selector
+quotes a lean/public and a dedicated/private Turnstile shape from Retail meters
+and calls out any additional Standard v2 APIM separately. A missing regional
+meter is unknown, not a zero-cost component. Turnstile deployment requires its
+existing parameter file and Python environment; no clone is silently modified.
+
 Only one authority should write the gateway. If `turnstile-integration` says
 Turnstile owns budgets or governance, AUM service mutations return
 `other_authority`; its capabilities disable writes. Choose the Turnstile backend
@@ -148,6 +154,9 @@ The script:
 3. Deploys `infra/aum-service.bicep` and its scoped access modules.
 4. Deploys the Python package with an Azure remote build, not Windows binaries.
 5. Writes the uncommitted `onboarding/aum-service.json` deployment/removal record.
+
+For later code-only updates, use `scripts/Publish-ClaudeAumService.ps1`. It uses
+the recorded target and remote build without changing roles or infrastructure.
 
 Keep the record. It contains addresses and identifiers, not secrets.
 Re-run with the same group and prefix to update the same deployment.
@@ -561,6 +570,7 @@ count, audit retention, query latency and manager concurrency explicitly.
 | `named_value_capacity` | Serialized value exceeds 4,096 characters | Remove unnecessary overrides or complete the projection-backed budget migration |
 | `rollback_failed` | Azure/external writer prevented compensation | Inspect audit and current named values; reconcile only affected entries |
 | `analytics_incomplete` | Partial/failed query, missing saved function or permission | Publish queries; verify workspace selection and Log Analytics Reader; do not report zero usage |
+| KQL `SEM0064: Cannot compare values of types string and string` | Relational comparison on a string cursor | Use the current service, which applies `strcmp()` to people/request IDs |
 | `writer_busy` / `lease_lost` | Another writer or storage connectivity loss | Read state before retrying; inspect private DNS/RBAC |
 | ARM `RequestDisallowedByPolicy` | Tenant policy rejects chosen public/service shape | Choose a compliant private topology; do not re-enable shared keys |
 | Storage `AuthorizationPermissionMismatch` | Data-role propagation or wrong identity | Verify Blob Data Owner and Table Data Contributor on this account, then retry reads later |
@@ -568,6 +578,7 @@ count, audit retention, query latency and manager concurrency explicitly.
 | `InaccessibleStorageException` / `BlobUploadFailedException` / 403 during OneDeploy | Policy disabled public storage, or deployment traffic still bypasses the integration subnet | Select and price private storage; verify approved endpoints, private DNS and `outboundVnetRouting.allTraffic=true`. Never enable keys as a workaround |
 | HTTP 404 after package deployment | Root package layout or Functions indexing failed | Ensure `host.json`, `function_app.py`, requirements and package directory are at ZIP root |
 | Timer not listed / boost remains active | Missing extension bundle, indexing, storage lease or failed restore | Inspect Functions/host logs and durable boost/audit records; minute ticks retry |
+| Private DNS zone deletion fails on nested resources | VNet links still exist | The removal script unlinks only recorded service VNets first; a new shared link is refused for review |
 | Portal capture reaches sign-in | Copied session expired | Stop capture and tell the lead; never open or share the original profile |
 
 ## Test and remove
@@ -607,6 +618,35 @@ does not restore every budget merely because its resources are removed.
 Removal uses the deployment record, deletes only its service resources and
 external role assignments, and leaves the gateway, workspace, resource group
 and reused resources. Do not delete a shared resource group as a shortcut.
+Tenant policy can create extra NSGs. Inspect any remainder and delete an isolated
+test group only after confirming no shared or attached resource remains.
+
+## Live verification receipt
+
+Measured 2026-09-24 UTC, against the isolated non-production gateway/workspace,
+not the reference gateway's Turnstile authority:
+
+| Flow | Result |
+|---|---|
+| Owned AUM registration and Azure CLI token | `AUM.Admin`, v2 `AUM.Access`, audience matched; no consent prompt |
+| `/me`, capabilities, usage, budgets, people, trends, requests | HTTP 200; anonymous `/me` 401 |
+| Real analytics | 3,883 requests, one observed person; four unpriced rows, so the priced subtotal is not a zero-cost claim |
+| Request cursor | Two real 100-row pages, no overlapping request IDs; both returned a continuation |
+| Test-team limit | Changed through the Function, read from ARM, restored byte-identically at 20:25:38Z |
+| Headroom | Above-parent write returned 409 |
+| Approval/rejection/escalation | Default self-approval 403; explicit audited Admin override and versioned decisions succeeded |
+| Boost | Expiry 20:27:04Z; observed expired and byte-identical registry restoration at 20:28:09Z, performed by the real minute timer |
+| Manager-only journey | Read-only preparation passed at 20:29:47Z; execution held for the lead's explicit go-ahead |
+| Portal | Two resource captures; stopped at Entra sign-in, as required |
+| Final restoration | At 20:53:06Z the original empty registry matched byte-for-byte, no boosts were active, Admin access remained, and 38 audit records were exported |
+| Cost cleanup | At 21:11:56Z all paid pilot resources and the isolated group were removed; only the free owned AUM registration remains |
+
+The following images render the **actual saved API receipts**, with IDs removed.
+They are API evidence, not screenshots of an AUM or Azure portal interface.
+
+![Live authenticated AUM API read receipts](guide/aum-09-live-reads.png)
+![Live budget changes, headroom refusal and workflow decisions](guide/aum-10-live-writes.png)
+![Live timer expiry and byte-identical named-value restoration](guide/aum-11-live-expiry.png)
 
 ## Next steps
 

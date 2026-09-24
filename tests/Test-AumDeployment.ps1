@@ -72,8 +72,31 @@ Assert ($options.Count -eq 5) 'admin chooses among five independent FinOps optio
 Assert (($options | Where-Object Id -eq 'Direct').Who -match 'admin') 'Direct is admin-only'
 Assert (($options | Where-Object Id -eq 'AumService').Who -match 'manager') 'service supports scoped managers'
 Assert (($options | Where-Object Id -eq 'TurnstileAum').Needs -match 'Turnstile') 'AUM can use Turnstile without its own service'
+Assert (($options | Where-Object Id -eq 'Turnstile').Cost -notmatch '58-159') 'Turnstile choices do not substitute a fixed example for regional pricing'
+. (Join-Path $root 'scripts\ClaudeFinOpsPrices.ps1')
+function Get-AzureRetailMeter {
+    param($ServiceName, $Region)
+    if ($script:missingComparison -eq $ServiceName) { return $null }
+    $rows = @(
+        @{skuName='B1'; productName='Basic Plan - Linux'; meterName='B1 App'; retailPrice=[decimal]'0.02'},
+        @{skuName='P0v3'; productName='Premium Plan - Linux'; meterName='P0v3 App'; retailPrice=[decimal]'0.08'},
+        @{skuName='B1MS'; productName='Flexible Server Compute'; meterName='B1ms'; retailPrice=[decimal]'0.03'},
+        @{skuName='Storage'; productName='Azure Database for PostgreSQL Flex Server Storage'; meterName='Storage Data Stored'; retailPrice=[decimal]'0.1'},
+        @{skuName='Standard'; productName='Event Hubs'; meterName='Standard Throughput Unit'; retailPrice=[decimal]'0.04'},
+        @{skuName='Basic'; productName='Registry'; meterName='Basic Registry Unit'; retailPrice=[decimal]'0.2'},
+        @{skuName='Standard v2'; productName='APIM'; meterName='Standard v2 Unit'; retailPrice=[decimal]'1'}
+    )
+    return @($rows | ForEach-Object { $_.type='Consumption'; $_.tierMinimumUnits=0; [pscustomobject]$_ })
+}
+$script:missingComparison = $null
+$comparison = Get-ClaudeFinOpsComparisonPrice -Region 'contoso-region' -AumPrices $prices
+Assert ($comparison.LeanMonthly -gt 0 -and $comparison.DedicatedPrivateMonthly -gt $comparison.LeanMonthly) 'regional comparison derives both operational shapes'
+Assert ($comparison.AdditionalStandardV2Monthly -eq 730) 'Turnstile additional gateway cost is not hidden'
+$script:missingComparison = 'Event Hubs'
+$unknownComparison = Get-ClaudeFinOpsComparisonPrice -Region 'contoso-region' -AumPrices $prices
+Assert ($null -eq $unknownComparison.LeanMonthly) 'one missing comparison meter makes the total unknown, never cheaper'
 
-foreach ($file in @('Deploy-ClaudeAumService.ps1','Remove-ClaudeAumService.ps1','Select-ClaudeFinOpsTooling.ps1','New-ClaudeAumEntraApp.ps1')) {
+foreach ($file in @('Deploy-ClaudeAumService.ps1','Publish-ClaudeAumService.ps1','Remove-ClaudeAumService.ps1','Select-ClaudeFinOpsTooling.ps1','New-ClaudeAumEntraApp.ps1')) {
     $path = Join-Path $root "scripts\$file"
     Assert (Test-Path $path) "$file exists"
     $tokens = $null; $errors = $null
@@ -94,6 +117,8 @@ $role = Get-ClaudeAumWriterRoleDefinition -Scope '/subscriptions/00000000-0000-0
 Assert (@($role.Actions).Count -eq 4) 'writer role has exactly the existing four governance actions'
 Assert (@($role.Actions | Where-Object { $_ -match 'policies|delete|\*' }).Count -eq 0) 'writer cannot edit policy or delete resources'
 & (Join-Path $PSScriptRoot 'Test-AumDiscovery.ps1')
+if ($LASTEXITCODE) { exit $LASTEXITCODE }
+& (Join-Path $PSScriptRoot 'Test-AumRemoval.ps1')
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
 foreach ($template in @('aum-service.bicep','aum-service-network.bicep')) {
     $build = & az bicep build --file (Join-Path $root "infra\$template") --stdout --only-show-errors 2>&1 | Out-String

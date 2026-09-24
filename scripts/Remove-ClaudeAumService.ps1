@@ -33,6 +33,16 @@ foreach ($id in @($record.roleAssignmentIds)) {
     if ($match.Count) { Invoke-ClaudeAumAz @('role','assignment','delete','--ids',$id,'--subscription',$record.subscriptionId,'-o','json') | Out-Null }
 }
 foreach ($r in @($selected | Sort-Object { if ($_.type -eq 'Microsoft.Network/privateEndpoints') { 0 } elseif ($_.type -eq 'Microsoft.Web/sites') { 1 } elseif ($_.type -eq 'Microsoft.Network/virtualNetworks') { 3 } else { 2 } })) {
+    if ($r.type -eq 'Microsoft.Network/privateDnsZones') {
+        $links = @(Invoke-ClaudeAumAz @('network','private-dns','link','vnet','list','--resource-group',$record.resourceGroup,
+            '--zone-name',$r.name,'--subscription',$record.subscriptionId,'-o','json'))
+        foreach ($link in $links) {
+            if ($link.virtualNetwork.id -notin @($record.networkResourceIds)) { throw 'A service DNS zone has acquired a link to a shared VNet. Review that dependency before removing it.' }
+            Invoke-ClaudeAumAz @('network','private-dns','link','vnet','delete','--name',$link.name,
+                '--resource-group',$record.resourceGroup,'--zone-name',$r.name,'--subscription',$record.subscriptionId,
+                '--yes','-o','json') | Out-Null
+        }
+    }
     Invoke-ClaudeAumAz @('resource','delete','--ids',$r.id,'--subscription',$record.subscriptionId,'-o','json') | Out-Null
 }
 if ($RemoveAppRegistration) {

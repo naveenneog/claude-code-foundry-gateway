@@ -215,13 +215,17 @@ function Set-ClaudeAumWriterRole {
 }
 
 function Get-ClaudeFinOpsChoices {
-    param($Prices)
+    param($Prices, $TurnstilePrices)
     $serviceCost = $(if ($Prices) { Format-ClaudeAumCost $Prices.StorageGbMonthly.LRS '/GB-month + usage' } else { 'regional Retail API quote at deployment' })
+    $turnstileCost = if ($TurnstilePrices) {
+        (Format-ClaudeAumCost $TurnstilePrices.LeanMonthly) + ' lean; ' +
+        (Format-ClaudeAumCost $TurnstilePrices.DedicatedPrivateMonthly) + ' dedicated/private; additional APIM excluded'
+    } else { 'unknown regional price until -Region is selected; not zero' }
     @(
         [pscustomobject]@{ Id='None'; Label='None'; Cost='$0 added'; Who='Azure administrators use the existing scripts'; Needs='No FinOps application'; Implications='Gateway budgets and telemetry continue without a FinOps console.' }
         [pscustomobject]@{ Id='Direct'; Label='AUM Direct'; Cost='$0 added infrastructure'; Who='Azure admins only'; Needs='Python and Azure RBAC'; Implications='No server; Azure RBAC cannot scope managers to units or teams.' }
         [pscustomobject]@{ Id='AumService'; Label='AUM + AUM service'; Cost=$serviceCost; Who='Admins, viewers and scoped managers'; Needs='Functions, Storage and an owned Entra app'; Implications='Independent of Turnstile; adds audited approvals, temporary boosts and service operations.' }
-        [pscustomobject]@{ Id='Turnstile'; Label='Turnstile'; Cost='$58-159/month example; regional quote before deployment'; Who='Admins, viewers and scoped managers'; Needs='Turnstile App Service, PostgreSQL and Entra app'; Implications='Web console and database operations. Choose one budget authority.' }
-        [pscustomobject]@{ Id='TurnstileAum'; Label='Turnstile + AUM'; Cost='$58-159/month example; AUM client adds $0 infrastructure'; Who='Admins, viewers and scoped managers through Turnstile'; Needs='Turnstile plus the AUM client'; Implications='AUM uses the Turnstile API; no AUM service required. Server capabilities decide which workflows appear.' }
+        [pscustomobject]@{ Id='Turnstile'; Label='Turnstile'; Cost=$turnstileCost; Who='Admins, viewers and scoped managers'; Needs='Turnstile App Service, PostgreSQL and Entra app'; Implications='Web console/database operations; one budget authority. Its default deployer can create another APIM, an additional material charge; never repurpose the governed gateway for its integration.' }
+        [pscustomobject]@{ Id='TurnstileAum'; Label='Turnstile + AUM'; Cost=($turnstileCost + '; AUM client adds $0 infrastructure'); Who='Admins, viewers and scoped managers through Turnstile'; Needs='Turnstile plus the AUM client'; Implications='AUM uses the Turnstile API; no AUM service required. Server capabilities decide which workflows appear.' }
     )
 }
