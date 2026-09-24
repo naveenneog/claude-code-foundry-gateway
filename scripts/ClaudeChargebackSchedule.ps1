@@ -59,9 +59,11 @@ function Update-ClaudeReportJob {
 }
 
 function Wait-ClaudeReportJob {
-    param([string]$ResourceGroup,[string]$Job)
-    $execution=az containerapp job start -g $ResourceGroup -n $Job --query name -o tsv
-    if($LASTEXITCODE -ne 0 -or -not $execution) { throw 'Could not start the report job.' }
+    param([string]$ResourceGroup,[string]$Job,[string]$Execution)
+    if(-not $Execution) {
+        $Execution=az containerapp job start -g $ResourceGroup -n $Job --query name -o tsv
+        if($LASTEXITCODE -ne 0 -or -not $Execution) { throw 'Could not start the report job.' }
+    }
     $deadline=[datetime]::UtcNow.AddMinutes(65)
     do {
         Start-Sleep -Seconds 15

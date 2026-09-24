@@ -22,6 +22,44 @@ resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' 
   location: location
   tags: tags
 }
+resource adminIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'id-reports-admin-${suffix}'
+  location: location
+  tags: tags
+}
+resource network 'Microsoft.Network/virtualNetworks@2024-05-01' = {
+  name: 'vnet-reports-${suffix}'
+  location: location
+  tags: tags
+  properties: {
+    addressSpace: { addressPrefixes: ['10.87.0.0/24'] }
+    subnets: [
+      {
+        name: 'jobs'
+        properties: {
+          addressPrefix: '10.87.0.0/26'
+          delegations: [{ name: 'container-apps', properties: { serviceName: 'Microsoft.App/environments' } }]
+        }
+      }
+      {
+        name: 'endpoints'
+        properties: { addressPrefix: '10.87.0.64/27', privateEndpointNetworkPolicies: 'Disabled' }
+      }
+    ]
+  }
+}
+resource privateDns 'Microsoft.Network/privateDnsZones@2020-06-01' = {
+  // Azure public cloud: privatelink.blob.core.windows.net.
+  name: 'privatelink.blob.${az.environment().suffixes.storage}'
+  location: 'global'
+  tags: tags
+}
+resource dnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
+  parent: privateDns
+  name: 'reports-${suffix}'
+  location: 'global'
+  properties: { registrationEnabled: false, virtualNetwork: { id: network.id } }
+}
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: 'streports${suffix}'
   location: location
@@ -31,11 +69,29 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   properties: {
     allowBlobPublicAccess: false
     allowSharedKeyAccess: false
+    publicNetworkAccess: 'Disabled'
     defaultToOAuthAuthentication: true
     supportsHttpsTrafficOnly: true
     minimumTlsVersion: 'TLS1_2'
     accessTier: 'Hot'
   }
+}
+resource endpoint 'Microsoft.Network/privateEndpoints@2024-05-01' = {
+  name: 'pe-reports-blob-${suffix}'
+  location: location
+  tags: tags
+  properties: {
+    subnet: { id: '${network.id}/subnets/endpoints' }
+    privateLinkServiceConnections: [{
+      name: 'report-blobs'
+      properties: { privateLinkServiceId: storage.id, groupIds: ['blob'] }
+    }]
+  }
+}
+resource dnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2024-05-01' = {
+  parent: endpoint
+  name: 'default'
+  properties: { privateDnsZoneConfigs: [{ name: 'blob', properties: { privateDnsZoneId: privateDns.id } }] }
 }
 resource blobs 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
   parent: storage
@@ -106,6 +162,7 @@ resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   location: location
   tags: tags
   properties: {
+    vnetConfiguration: { infrastructureSubnetId: '${network.id}/subnets/jobs' }
     appLogsConfiguration: { destination: 'azure-monitor' }
     workloadProfiles: [{ name: 'Consumption', workloadProfileType: 'Consumption' }]
   }
@@ -173,6 +230,15 @@ resource operatorBlobRole 'Microsoft.Authorization/roleAssignments@2022-04-01' =
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
   }
 }
+resource adminBlobRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(containers[0].id, adminIdentity.id, 'reports-config-writer')
+  scope: containers[0]
+  properties: {
+    principalId: adminIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  }
+}
 module workspaceReader 'chargeback-workspace-role.bicep' = {
   name: 'reports-workspace-${suffix}'
   scope: resourceGroup(split(workspaceResourceId, '/')[2], split(workspaceResourceId, '/')[4])
@@ -194,12 +260,13 @@ az account set --subscription "${SUBSCRIPTION_ID}"
 var specs = [
   { name: 'job-reports-${suffix}', mode: 'generator', cron: cronExpression }
   { name: 'job-reports-mail-${suffix}', mode: 'dispatcher', cron: '*/7 * * * *' }
+  { name: 'job-reports-admin-${suffix}', mode: 'admin', cron: '' }
 ]
 resource jobs 'Microsoft.App/jobs@2025-01-01' = [for spec in specs: {
   name: spec.name
   location: location
   tags: tags
-  identity: { type: 'UserAssigned', userAssignedIdentities: { '${identity.id}': {} } }
+  identity: { type: 'UserAssigned', userAssignedIdentities: { '${spec.mode == 'admin' ? adminIdentity.id : identity.id}': {} } }
   properties: {
     environmentId: environment.id
     workloadProfileName: 'Consumption'
@@ -209,6 +276,9 @@ resource jobs 'Microsoft.App/jobs@2025-01-01' = [for spec in specs: {
     }, spec.mode == 'generator' ? {
       triggerType: 'Schedule'
       scheduleTriggerConfig: { cronExpression: spec.cron, parallelism: 1, replicaCompletionCount: 1 }
+    } : spec.mode == 'admin' ? {
+      triggerType: 'Manual'
+      manualTriggerConfig: { parallelism: 1, replicaCompletionCount: 1 }
     } : {
       triggerType: 'Event'
       eventTriggerConfig: {
@@ -240,7 +310,7 @@ resource jobs 'Microsoft.App/jobs@2025-01-01' = [for spec in specs: {
         command: ['/bin/bash', '-c', replace(bootstrap, '\r', '')]
         resources: { cpu: json('1.0'), memory: '2Gi' }
         env: [
-          { name: 'AZURE_CLIENT_ID', value: identity.properties.clientId }
+          { name: 'AZURE_CLIENT_ID', value: spec.mode == 'admin' ? adminIdentity.properties.clientId : identity.properties.clientId }
           { name: 'SUBSCRIPTION_ID', value: subscription().subscriptionId }
           { name: 'CLAUDE_RG', value: resourceGroup().name }
           { name: 'CLAUDE_APIM', value: gatewayApimName }
@@ -261,8 +331,12 @@ output endpoint string = 'https://${communication.properties.hostName}'
 output senderAddress string = 'DoNotReply@${domain.properties.fromSenderDomain}'
 output jobName string = jobs[0].name
 output dispatcherJobName string = jobs[1].name
+output adminJobName string = jobs[2].name
 output environmentName string = environment.name
 output principalId string = identity.properties.principalId
 output communicationService string = communication.name
 output emailService string = email.name
 output identityName string = identity.name
+output adminIdentityName string = adminIdentity.name
+output networkName string = network.name
+output privateEndpointName string = endpoint.name

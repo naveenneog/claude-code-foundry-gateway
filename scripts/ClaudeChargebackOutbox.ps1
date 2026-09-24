@@ -5,6 +5,9 @@ function Add-ClaudeReportOutbox {
     Test-ClaudeReportArtifacts $ReportPath $Manifest
     if(-not $Configuration.DeliveryEnabled) { throw 'Email delivery is disabled in report settings.' }
     if(@($Manifest.Formats | Sort-Object -Unique).Count -ne 2) { throw 'Email requires CSV and HTML artifacts.' }
+    if(-not (Get-ClaudeReportArchiveJson $Account 'state/dispatch.json' -AllowMissing)) {
+        Set-ClaudeReportArchiveJson $Account 'state/dispatch.json' @{NextActionUtc=$null} @{'If-None-Match'='*'}
+    }
     $scopes=@($Manifest.BusinessUnits)+@('all')
     if($Scope) {
         foreach($s in $Scope) { if($s -notin $scopes) {throw 'Requested email scope is not present in the report.'} }
@@ -79,7 +82,7 @@ function Complete-ClaudeReportOutbox {
 function Get-ClaudeReportBlobBytes {
     param([string]$Account,[string]$Name,[string]$Sha256)
     $r=Invoke-ClaudeReportBlob -Account $Account -Name $Name
-    $bytes=if($r.Content -is [byte[]]) {$r.Content} else {[Text.Encoding]::UTF8.GetBytes([string]$r.Content)}
+    $bytes=if($r.RawContentStream) {$r.RawContentStream.ToArray()} elseif($r.Content -is [byte[]]) {$r.Content} else {[Text.Encoding]::UTF8.GetBytes([string]$r.Content)}
     $sha=[Security.Cryptography.SHA256]::Create()
     try {$actual=([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','').ToLowerInvariant()}
     finally {$sha.Dispose()}

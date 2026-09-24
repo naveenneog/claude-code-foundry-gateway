@@ -23,7 +23,7 @@ param(
     [string]$ApimName = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ApimName)
 )
 $ErrorActionPreference='Stop'
-foreach($helper in @('Report','Query','Configuration','Storage','Schedule')) {. (Join-Path $PSScriptRoot "ClaudeChargeback$helper.ps1")}
+foreach($helper in @('Report','Query','Configuration','Storage','Schedule','Administration')) {. (Join-Path $PSScriptRoot "ClaudeChargeback$helper.ps1")}
 $repo=Split-Path $PSScriptRoot -Parent
 Test-ClaudeReportCron $Cron
 if($AllowedDomains) {Test-ClaudeReportDomains $AllowedDomains}
@@ -43,7 +43,7 @@ if($Remove) {
             if($LASTEXITCODE -ne 0) {throw 'Could not remove a reports identity role assignment.'}
         }
     }
-    $order=@('Microsoft.App/jobs','Microsoft.App/managedEnvironments','Microsoft.Communication/communicationServices','Microsoft.Communication/emailServices','Microsoft.ManagedIdentity/userAssignedIdentities','Microsoft.Storage/storageAccounts')
+    $order=@('Microsoft.App/jobs','Microsoft.App/managedEnvironments','Microsoft.Network/privateEndpoints','Microsoft.Network/privateDnsZones','Microsoft.Network/virtualNetworks','Microsoft.Communication/communicationServices','Microsoft.Communication/emailServices','Microsoft.ManagedIdentity/userAssignedIdentities','Microsoft.Storage/storageAccounts')
     foreach($type in $order) {
         foreach($resource in @($resources | Where-Object type -eq $type)) {
             if($type -eq 'Microsoft.Storage/storageAccounts' -and -not $PurgeArchive) {Write-Host 'Keeping the report archive and configuration. Add -PurgeArchive to delete storage.';continue}
@@ -63,10 +63,10 @@ if($Remove) {
     return
 }
 $storage=@($resources | Where-Object type -eq 'Microsoft.Storage/storageAccounts')
-$stored=$null
-if($storage.Count -eq 1) {$stored=Get-ClaudeReportConfiguration $storage[0].name -AllowMissing}
+$adminJobs=@($resources | Where-Object {$_.type -eq 'Microsoft.App/jobs' -and $_.name -like 'job-reports-admin-*'})
+$stored=$adminJobs.Count -eq 1
 if($BreakDispatchLease) {
-    if(-not $stored) {throw 'Reports configuration does not exist.'}
+    if($storage.Count -ne 1) {throw 'Reports storage does not exist.'}
     Invoke-ClaudeReportBlob -Account $storage[0].name -Name 'state/dispatch.json' -Method PUT -Query 'comp=lease' `
         -ExtraHeaders @{'x-ms-lease-action'='break';'x-ms-lease-break-period'='0'} | Out-Null
     Write-Host 'Dispatch lease broken. Check the last operation before resending anything.'
@@ -82,17 +82,21 @@ if(-not $stored -or $refExplicit) {
     if(-not $remote.Count) {throw 'The job commit is not on origin. Push your branch before registration.'}
 }
 if($stored) {
-    $config=$stored.Configuration
+    $outputs=az deployment group show -g $ResourceGroup -n "chargeback-$ApimName" --query properties.outputs -o json | ConvertFrom-Json
+    if($LASTEXITCODE -ne 0 -or -not $outputs.adminJobName.value) {throw 'Reports deployment metadata is missing. Read the job names from the resource group before updating.'}
+    $config=[pscustomobject]@{Connection=[pscustomobject]@{JobName=$outputs.jobName.value;DispatcherJobName=$outputs.dispatcherJobName.value}}
     if($PSBoundParameters.ContainsKey('Cron') -or $refExplicit) {
         $newCron=if($PSBoundParameters.ContainsKey('Cron')) {$Cron} else {''}
         Update-ClaudeReportJob $ResourceGroup $config.Connection.JobName $newCron $(if($refExplicit){$RepositoryRef}else{''})
         if($refExplicit) {Update-ClaudeReportJob $ResourceGroup $config.Connection.DispatcherJobName '' $RepositoryRef}
+        if($refExplicit) {Update-ClaudeReportJob $ResourceGroup $outputs.adminJobName.value '' $RepositoryRef}
     }
-    $change=$false
-    if($AllowedDomains) {$config.AllowedDomains=@($AllowedDomains | ForEach-Object {$_.ToLowerInvariant()} | Sort-Object -Unique);$change=$true}
-    if($PSBoundParameters.ContainsKey('MonthToDate')) {$config.MonthToDate=[bool]$MonthToDate;$change=$true}
-    if($PSBoundParameters.ContainsKey('RetentionDays')) {$config.RetentionDays=$RetentionDays;$change=$true;Set-ClaudeReportRetention $ResourceGroup $storage[0].name $RetentionDays}
-    if($change) {$config.UpdatedUtc=[datetime]::UtcNow.ToString('o');Save-ClaudeReportConfiguration $storage[0].name $config $stored.ETag}
+    $changes=@{}
+    if($AllowedDomains) {$changes.AllowedDomains=@($AllowedDomains | ForEach-Object {$_.ToLowerInvariant()} | Sort-Object -Unique)}
+    if($PSBoundParameters.ContainsKey('MonthToDate')) {$changes.MonthToDate=[bool]$MonthToDate}
+    if($PSBoundParameters.ContainsKey('RetentionDays')) {$changes.RetentionDays=$RetentionDays}
+    if($changes.Count) {Invoke-ClaudeReportAdminRequest $ResourceGroup $ApimName @{Operation='Settings';Settings=$changes} $outputs.adminJobName.value | Out-Null}
+    if($changes.ContainsKey('RetentionDays')) {Set-ClaudeReportRetention $ResourceGroup $storage[0].name $RetentionDays}
     $account=$storage[0].name
 }
 else {
@@ -123,20 +127,11 @@ else {
     $config.Connection=[pscustomobject]@{
         Endpoint=$deployment.endpoint.value;SenderAddress=$deployment.senderAddress.value
         JobName=$deployment.jobName.value;DispatcherJobName=$deployment.dispatcherJobName.value
+        AdminJobName=$deployment.adminJobName.value
         EnvironmentName=$deployment.environmentName.value;WorkspaceResourceId=$workspace
     }
-    # Role propagation is asynchronous. Retry only authorization failures, never silently skip.
-    for($attempt=0;$attempt -lt 12;$attempt++) {
-        try {
-            Save-ClaudeReportConfiguration $account $config ''
-            Set-ClaudeReportArchiveJson $account 'state/dispatch.json' @{NextActionUtc=$null} @{'If-None-Match'='*'}
-            break
-        }
-        catch {
-            if($_.Exception.Message -notmatch 'HTTP 403' -or $attempt -eq 11) {throw}
-            Start-Sleep -Seconds 30
-        }
-    }
+    # Bootstrap runs inside the private network with a configuration-only identity.
+    Invoke-ClaudeReportAdminRequest $ResourceGroup $ApimName @{Operation='Initialize';Configuration=$config} $deployment.adminJobName.value | Out-Null
 }
 $run=$null
 if($RunNow) {$run=Wait-ClaudeReportJob $ResourceGroup $config.Connection.JobName}

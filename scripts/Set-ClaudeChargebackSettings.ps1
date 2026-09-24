@@ -11,7 +11,7 @@ param(
     [string[]]$AllowedDomains,[AllowEmptyCollection()][string[]]$BusinessUnit,
     [ValidateSet('CSV','HTML')][string[]]$Format,
     [Nullable[bool]]$MonthToDate,[Nullable[bool]]$DeliveryEnabled,
-    [ValidateRange(1,3650)][int]$RetentionDays,[switch]$List,[string]$StorageAccount,
+    [ValidateRange(1,3650)][int]$RetentionDays,[switch]$List,[string]$StorageAccount,[switch]$ViaJob,
     [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$ApimName = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ApimName)
 )
@@ -21,6 +21,22 @@ $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'ClaudeChargebackConfiguration.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeChargebackStorage.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeChargebackSchedule.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeChargebackAdministration.ps1')
+if($ViaJob) {
+    $settings=@{}
+    foreach($key in @('AllowedDomains','MonthToDate','DeliveryEnabled','RetentionDays')) {if($PSBoundParameters.ContainsKey($key)) {$settings[$key]=$PSBoundParameters[$key]}}
+    if($PSBoundParameters.ContainsKey('BusinessUnit')) {$settings.BusinessUnits=@($BusinessUnit)}
+    if($PSBoundParameters.ContainsKey('Format')) {$settings.Formats=@($Format)}
+    $request=if($List) {@{Operation='Inspect'}} else {@{Operation='Settings';Settings=$settings}}
+    if($PSCmdlet.ShouldProcess('Private report administration job',"$($request.Operation) without redeploying")) {
+        Invoke-ClaudeReportAdminRequest $ResourceGroup $ApimName $request
+        if($RetentionDays) {
+            $StorageAccount=Get-ClaudeReportStorageAccount $ResourceGroup $ApimName $StorageAccount
+            Set-ClaudeReportRetention $ResourceGroup $StorageAccount $RetentionDays
+        }
+    }
+    return
+}
 $StorageAccount=Get-ClaudeReportStorageAccount $ResourceGroup $ApimName $StorageAccount
 $stored=Get-ClaudeReportConfiguration $StorageAccount
 $config=$stored.Configuration

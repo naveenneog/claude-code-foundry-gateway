@@ -1,5 +1,5 @@
 # Email-safe HTML and streaming, formula-safe CSV. No external assets or tracking.
-$script:ClaudeReportPersonColumns = @('Unit','Person','Team','Tier','Requests','InputTokens','OutputTokens','CacheReadTokens','CacheWrite5mTokens','CacheWrite1hTokens','EstimatedCostUsd','TopModel','Clients')
+$script:ClaudeReportPersonColumns = @('Unit','Person','Team','Tier','Requests','InputTokens','OutputTokens','CacheReadTokens','CacheWrite5mTokens','CacheWrite1hTokens','EstimatedCostUsd','TopModel','Clients','UnpricedRows')
 $script:ClaudeReportSummaryColumns = @('Unit','Team','Name','Requests','InputTokens','OutputTokens','CacheReadTokens','CacheWrite5mTokens','CacheWrite1hTokens','EstimatedCostUsd','BudgetTokens','BudgetUsdEstimate','UsedPercent','People','UnpricedRows')
 $script:ClaudeReportCaveats = @(
     'Figures are at list price and are not reconciled to an Azure invoice (U2). Costs are derived; tokens and requests are measured in the saved ledger.'
@@ -126,6 +126,7 @@ function New-ClaudeReportUnitHtml {
 function New-ClaudeReportIndexHtml {
     param($Window,[object[]]$Summaries,$Totals,$Source)
     $body='<p style="font-size:15px">Selected units: ' + (Format-ClaudeReportNumber $Totals.Requests) + ' requests; USD ' + (Format-ClaudeReportNumber $Totals.EstimatedCostUsd 'N6') + ' estimated list-price cost. Team rows are subdivisions, not additional spend.</p>'
+    if($Totals.UnpricedRows -gt 0) {$body+='<p style="color:#9f1239">Warning: unpriced ledger rows exist. Estimated cost is incomplete; see UnpricedRows in summary.csv.</p>'}
     $rows=@($Summaries | ForEach-Object { [pscustomobject]@{Cells=@($_.Name,$_.Unit,$_.Team,(Format-ClaudeReportNumber $_.Requests),(Format-ClaudeReportNumber $_.People),(Format-ClaudeReportNumber $_.EstimatedCostUsd 'N6'))} })
     $body+=New-ClaudeReportTable @('Name','Unit','Team','Requests','People','Estimated USD') $rows
     return New-ClaudeReportPage 'Business-unit chargeback' $Window $body $Source

@@ -37,5 +37,8 @@ Assert 'sender serializes with blob lease' ($outbox -match 'x-ms-lease-action')
 Assert 'outbox stores no address list' ($outbox -notmatch 'Recipients=\$recipients')
 Assert 'send state persisted before network operation' ($outbox -match "(?s)Status='Submitting'.*?Set-ClaudeReportArchiveJson.*?Invoke-ClaudeReportEmail -Endpoint[^\r\n]+-Body")
 Assert 'dispatcher scales to zero with no pending blobs' ($infra -match "minExecutions: 0" -and $infra -match "type: 'azure-blob'" -and $infra -match "blobPrefix: 'outbox/'")
+Assert 'storage is network-private, not just authenticated' ($infra -match "publicNetworkAccess: 'Disabled'" -and $infra -match 'infrastructureSubnetId:')
+Assert 'private blob endpoint and DNS are declared' ($infra -match 'Microsoft.Network/privateEndpoints' -and $infra -match 'privatelink.blob.core.windows.net')
+Assert 'manual administration has its own identity' ($infra -match 'adminIdentity' -and $infra -match "mode: 'admin'")
 if($fail){throw "$fail of $checks schedule assertions failed."}
 Write-Host "$checks chargeback schedule assertions passed."

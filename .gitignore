@@ -49,5 +49,5 @@ claude-code-backups/
 config/price-book.json
 
 # Personal usage reports and private live evidence. Only Contoso fixtures ship.
-chargeback-reports/
+/chargeback-reports/
 .chargeback-*/

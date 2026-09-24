@@ -20,7 +20,7 @@ function Get-ClaudeReportWindow {
 
 function Get-ClaudeReportFileName {
     param([string]$Unit)
-    if ($Unit -notmatch '^[a-z0-9][a-z0-9-]{0,99}$' -or $Unit -match '^(con|prn|aux|nul|com[0-9]|lpt[0-9]|index|summary|manifest)$') {
+    if ($Unit -notmatch '^[a-z0-9][a-z0-9-]{0,99}$' -or $Unit -match '^(con|prn|aux|nul|com[0-9]|lpt[0-9]|index|summary|manifest|all)$') {
         throw 'Invalid report unit identifier. Use 1-100 lower-case letters, digits or hyphens; reserved filenames are not allowed.'
     }
     return $Unit
@@ -167,6 +167,14 @@ function Write-ClaudeChargebackReport {
             foreach ($t in $unitTeams) { $summaries.Add((New-ClaudeReportSummary $id $t.Team $t $catalogById)) }
             if ($Format -contains 'HTML') {
                 $dimensions = & $ReadDimensions $id
+                foreach($kind in @('Model','Client')) {
+                    $dimensionRows=@($dimensions | Where-Object Kind -eq $kind)
+                    $requests=[long]0; $cost=[decimal]0
+                    foreach($d in $dimensionRows) {$requests+=[long]$d.Requests;$cost+=[decimal]$d.EstimatedCostUsd}
+                    if($requests -ne [long]$expected.Requests -or [math]::Abs($cost-[decimal]$expected.EstimatedCostUsd) -gt [decimal]0.000001) {
+                        throw "Report reconciliation failed for $id ($kind totals). No report was published."
+                    }
+                }
                 $html = New-ClaudeReportUnitHtml $Window $summary $unitTeams $top.ToArray() @($dimensions) $Source
                 [IO.File]::WriteAllText((Join-Path $stage "$id.html"), $html, (New-Object Text.UTF8Encoding($false)))
             }

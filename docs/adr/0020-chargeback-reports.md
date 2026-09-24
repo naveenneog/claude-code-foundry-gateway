@@ -122,8 +122,28 @@ limited to reading the named-value catalog used for budgets.
 
 Storage disables public blob access and shared-key access, requires HTTPS/TLS 1.2, enables
 soft delete/versioning, and deletes archived runs by an administrator-editable lifecycle
-rule (default 400 days, approximately 13 months). Private means authenticated containers,
-not private endpoints: network isolation is optional and not claimed by this packet.
+rule (default 400 days, approximately 13 months).
+
+**Measured deployment correction, 2026-09-24:** the reference subscription's inherited
+Azure Policy modifies Storage `publicNetworkAccess` to `Disabled`. An Owner with Storage
+Blob Data Contributor still receives HTTP 403 from an off-network machine. Do not disable
+the policy or treat it as RBAC propagation.
+
+Use a dedicated reports VNet, delegated Container Apps subnet, blob private endpoint and
+private DNS zone. The Consumption environment uses that subnet; no gateway or Turnstile
+network is touched. The environment needs recreation if it was originally created without
+a VNet, because its infrastructure subnet is immutable. Report storage remains in place.
+
+For frequent off-network administrator edits, a separate **manual** administration job
+runs the same validated recipient/settings operations. It has a separate user-assigned
+identity with configuration-container Blob Data Contributor and no email or ledger role.
+An administrator starts a fixed pinned command with a structured, validated execution
+payload, never arbitrary shell text. No addresses or config contents are printed to job
+logs. List responses contain scope/counts only off-network; full address lists are read by
+the ordinary scripts from a VNet-connected terminal. Configuration bootstrap is another
+idempotent administration operation. This adds no always-running compute. Operator access
+to the admin job is privileged configuration authority and must not be delegated to report
+recipients.
 
 ## Alternatives rejected
 

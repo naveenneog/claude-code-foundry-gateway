@@ -6,13 +6,20 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('generator','dispatcher')][string]$Mode='generator',
+    [ValidateSet('generator','dispatcher','admin')][string]$Mode='generator',
     [Parameter(Mandatory)][string]$StorageAccount,
     [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$ApimName = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ApimName)
 )
 $ErrorActionPreference='Stop'
 foreach($helper in @('Report','Query','Configuration','Storage','Email','Outbox')) {. (Join-Path $PSScriptRoot "ClaudeChargeback$helper.ps1")}
+if($Mode -eq 'admin') {
+    . (Join-Path $PSScriptRoot 'ClaudeChargebackAdministration.ps1')
+    if(-not $env:REPORT_ADMIN_REQUEST) {throw 'A structured administration request is required.'}
+    $request=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:REPORT_ADMIN_REQUEST)) | ConvertFrom-Json
+    Invoke-ClaudeReportAdministration $StorageAccount $request | ConvertTo-Json -Depth 8 -Compress
+    return
+}
 $config=(Get-ClaudeReportConfiguration $StorageAccount).Configuration
 if($Mode -eq 'dispatcher') {Invoke-ClaudeReportOutbox $StorageAccount | ConvertTo-Json -Compress;return}
 $output=Join-Path (Get-Location).Path ('.chargeback-job-' + [guid]::NewGuid().ToString('N'))

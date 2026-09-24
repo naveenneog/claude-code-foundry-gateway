@@ -42,11 +42,20 @@ try {
     Assert 'people query is bounded' ($q -match 'take 20001')
     Refuses 'KQL injection refused' { Get-ClaudeReportQuery -Window $w -Kind People -Unit 'x" | take 1' } 'identifier'
     Refuses 'unsafe filename refused' { Get-ClaudeReportFileName '../finance' } 'identifier'
+    Refuses 'admin scope cannot be a unit filename' { Get-ClaudeReportFileName 'all' } 'identifier'
     Assert 'reserved bucket has stable name' ((Get-ClaudeReportFileName 'unassigned') -eq 'unassigned')
 
     $source = @{ PricingDate = '2026-09-15'; MembershipDate = '2026-09-24'; Functions = @(); QueryVersion = 1 }
     $readPeople = { param($unit, $prefix) @($fixture.people | Where-Object Unit -eq $unit) }
-    $readDimensions = { param($unit) @([pscustomobject]@{ Kind='Model'; Name='claude-sonnet-5'; Requests=1; EstimatedCostUsd=0.001 }) }
+    $readDimensions = {
+        param($unit)
+        $scope=@($fixture.scopes | Where-Object { $_.Level -eq 'Unit' -and $_.Unit -eq $unit })
+        if(-not $scope.Count) {return @()}
+        @(
+            [pscustomobject]@{Kind='Model';Name='claude-sonnet-5';Requests=$scope[0].Requests;EstimatedCostUsd=$scope[0].EstimatedCostUsd}
+            [pscustomobject]@{Kind='Client';Name='sdk-cli / desktop (fixture)';Requests=$scope[0].Requests;EstimatedCostUsd=$scope[0].EstimatedCostUsd}
+        )
+    }
     $args = @{ Window=$w; Catalog=$fixture.catalog; Scopes=$fixture.scopes; ReadPeople=$readPeople; ReadDimensions=$readDimensions; Source=$source; OutputPath=$base; Format=@('CSV','HTML') }
     try { $result = Write-ClaudeChargebackReport @args; Assert 'valid fixture reconciles and publishes' $true }
     catch { Assert 'valid fixture reconciles and publishes' $false; throw }
@@ -89,6 +98,8 @@ try {
     Assert 'failed report has no published manifest' (-not (Test-Path (Join-Path $base 'leak\2024-02\manifest.json')))
     $bad=$args.Clone(); $bad.ReadPeople={ param($unit,$prefix) @() }; $bad.OutputPath=Join-Path $base 'lost'
     Refuses 'dropped per-person tokens refused' { Write-ClaudeChargebackReport @bad } 'reconcil'
+    $bad=$args.Clone(); $bad.ReadDimensions={param($unit) @()}; $bad.OutputPath=Join-Path $base 'dimensions'
+    Refuses 'missing model or client totals cannot look complete' { Write-ClaudeChargebackReport @bad } 'reconcil'
     $empty=$args.Clone(); $empty.OutputPath=Join-Path $base 'empty'; $empty.ReadPeople={ param($unit,$prefix) @() }; $empty.ReadDimensions={ param($unit) @() }
     $empty.Scopes=@([pscustomobject]@{Level='Workspace';Unit='';Team='';Requests=0;InputTokens=0;OutputTokens=0;CacheReadTokens=0;EstimatedCostUsd=0;People=0;UnpricedRows=0})
     $e=Write-ClaudeChargebackReport @empty

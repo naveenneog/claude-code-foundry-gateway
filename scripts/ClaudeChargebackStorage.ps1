@@ -104,11 +104,18 @@ function Save-ClaudeReportArchive {
     param([string]$Account,[string]$Path,$Manifest)
     Test-ClaudeReportArtifacts $Path $Manifest
     $prefix="runs/$($Manifest.Month)/$($Manifest.RunId)"
+    $existing=Get-ClaudeReportArchiveJson $Account "$prefix/manifest.json" -AllowMissing
+    if($existing) {
+        if(($existing.Files | ConvertTo-Json -Depth 6 -Compress) -ne ($Manifest.Files | ConvertTo-Json -Depth 6 -Compress)) {
+            throw 'Archive run ID already exists with different artifacts. Regenerate as a new run.'
+        }
+        return $prefix
+    }
     foreach($file in $Manifest.Files) {
         $type=if($file.Name -like '*.csv') {'text/csv; charset=utf-8'} else {'text/html; charset=utf-8'}
         Invoke-ClaudeReportBlob -Account $Account -Name "$prefix/$($file.Name)" -Method PUT `
             -Bytes ([IO.File]::ReadAllBytes((Join-Path $Path $file.Name))) -ContentType $type | Out-Null
     }
-    Set-ClaudeReportArchiveJson $Account "$prefix/manifest.json" $Manifest
+    Set-ClaudeReportArchiveJson $Account "$prefix/manifest.json" $Manifest @{'If-None-Match'='*'}
     return $prefix
 }
