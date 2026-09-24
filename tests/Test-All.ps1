@@ -62,16 +62,21 @@ function Stop-CheckProcess($check) {
                 $check.Process.Kill($true)
                 if (-not $check.Process.WaitForExit(5000)) { throw 'The check process did not stop.' }
             }
+            foreach ($read in @($check.Stdout, $check.Stderr)) {
+                if ($read) { [void]$read.Wait(1000) }
+            }
         }
         finally { $check.Process.Dispose(); $check.Process = $null }
     }
 }
 
 function Set-CheckFailure($check, [string]$Message) {
+    # Killing the process closes its pipes. Collect after that, or a timed-out
+    # check loses all the diagnostic output it printed before hanging.
+    try { Stop-CheckProcess $check } catch { $Message += " Cleanup: $($_.Exception.Message)" }
     $output = ''
     if ($check.Stdout -and $check.Stdout.IsCompletedSuccessfully) { $output += $check.Stdout.Result }
     if ($check.Stderr -and $check.Stderr.IsCompletedSuccessfully) { $output += $check.Stderr.Result }
-    try { Stop-CheckProcess $check } catch { $Message += " Cleanup: $($_.Exception.Message)" }
     Set-CheckResult $check 'FAIL' ($output + "`n  FAIL - $Message")
 }
 
@@ -158,6 +163,7 @@ try {
     # Recursive source scans and native Azure CLI users run before sandboxes.
     Invoke-Check 'Script encoding (PowerShell 5.1 safety)' 'Repair-ScriptEncoding.ps1' @{ Check = $true } -SerialLane
     Invoke-Check 'Test-All counts every check'             'Test-RunnerIntegrity.ps1'
+    Invoke-Check 'Mutation shards preserve every case'     'Test-MutationShards.ps1'
     Invoke-Check 'Format strings parse and run'            'Test-FormatStrings.ps1'
     Invoke-Check 'Screenshots and the docs that show them' 'Test-Screenshots.ps1'
     Invoke-Check 'Resolver - the entitlement read path'   'Test-Resolver.ps1'
@@ -177,7 +183,10 @@ try {
     Invoke-Check 'Teams and the budget cascade'            'Test-Teams.ps1'
     Invoke-Check 'Model discovery and deployment'          'Test-ModelDeployment.ps1'
     Invoke-Check 'Client attribution and the workbook'     'Test-Observability.ps1'
-    Invoke-Check 'Business unit checks detect breakage'    'Test-BusinessUnitsNegative.ps1'
+    Invoke-Check 'Business unit checks detect breakage [0/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '0/4' }
+    Invoke-Check 'Business unit checks detect breakage [1/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '1/4' }
+    Invoke-Check 'Business unit checks detect breakage [2/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '2/4' }
+    Invoke-Check 'Business unit checks detect breakage [3/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '3/4' }
     Invoke-Check 'Admin surface - SKU, groups, tiers'      'Test-AdminSurface.ps1'
     Invoke-Check 'Scale ceilings and the load envelope'    'Test-Scale.ps1'
     Invoke-Check 'Secure projection and the migration'     'Test-SecureProjection.ps1' -SerialLane
@@ -186,7 +195,8 @@ try {
     Invoke-Check 'Backup and restore'                      'Test-Backup.ps1'
     Invoke-Check 'Turnstile - usage mapping and its rules' 'Test-Turnstile.ps1'
     Invoke-Check 'Turnstile - governance and connection'   'Test-TurnstileGovernance.ps1' -SerialLane:$bicepNeedsAz
-    Invoke-Check 'Turnstile checks detect breakage'        'Test-TurnstileNegative.ps1' -SerialLane:$bicepNeedsAz
+    Invoke-Check 'Turnstile checks detect breakage [0/2]'   'Test-TurnstileNegative.ps1' @{ Shard = '0/2' } -SerialLane:$bicepNeedsAz
+    Invoke-Check 'Turnstile checks detect breakage [1/2]'   'Test-TurnstileNegative.ps1' @{ Shard = '1/2' } -SerialLane:$bicepNeedsAz
     Invoke-Check 'No deployment written into the code'     'Test-NoDeploymentValues.ps1'
     Invoke-Check 'Foundry bypass audit'                    'Test-Bypass.ps1' @{ SkipLive = $true }
 

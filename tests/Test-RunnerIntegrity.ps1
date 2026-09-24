@@ -208,6 +208,7 @@ Start-Sleep -Seconds 300
     $r = Invoke-Scenario $timedMini -Behaviour @{ 'Second.ps1' = $hang }
     Assert 'a hung check hits its own deadline without stalling the suite' ($r.Exit -ne 0 -and $r.Seconds -lt 40 -and $r.Output -match 'timed out after 5 s')
     Assert 'only the hung check fails and later checks finish' (@($r.Timings | Where-Object Result -eq 'FAIL').Count -eq 1 -and ($r.Timings | Where-Object Name -eq 'second').Result -eq 'FAIL' -and (Has-CompleteSummary $r $checks))
+    Assert 'a timeout retains the output emitted before the hang' ($r.Output -match 'OUTPUT:Second.ps1:second')
     $childPidFile = Join-Path $r.Marks 'child.pid'
     $childId = if (Test-Path $childPidFile) { [int](Get-Content $childPidFile) } else { 0 }
     Assert 'the timeout terminates the descendant process as well' ($childId -gt 0 -and -not (Get-Process -Id $childId -ErrorAction SilentlyContinue))
