@@ -58,6 +58,10 @@ $mutations = @(
     @{ Name='load can target entitlement'; File='guide\loadtest-projection.mjs'; From="containerName !== 'loadtest' || "; To=''; Suite=$node }
     @{ Name='load count is unbounded'; File='guide\loadtest-projection.mjs'; From='total < 1 || total > 500000 ||'; To=''; Suite=$node }
     @{ Name='load concurrency is unbounded'; File='guide\loadtest-projection.mjs'; From='concurrency < 1 || concurrency > 128'; To='false'; Suite=$node }
+    @{ Name='load writes real entitlement despite safe arguments'; File='guide\loadtest-projection.mjs'; From="client.database('claude').container(containerName)"; To="client.database('claude').container('entitlement')"; Suite=$rules }
+    @{ Name='load overwrites an occupied container'; File='guide\loadtest-projection.mjs'; From='if (before[0] !== 0)'; To='if (false)'; Suite=$rules }
+    @{ Name='load never confirms cardinality'; File='guide\loadtest-projection.mjs'; From='if (after[0] !== total)'; To='if (false)'; Suite=$rules }
+    @{ Name='load uses a different document id'; File='guide\loadtest-projection.mjs'; From='id: oid, oid, tenantId:'; To="id: 'prefix-' + oid, oid, tenantId:"; Suite=$rules }
 )
 function Run-Suite($suite) {
     Push-Location $sandbox

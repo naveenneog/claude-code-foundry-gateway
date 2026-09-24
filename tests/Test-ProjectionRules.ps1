@@ -11,6 +11,7 @@ $network = Get-Content (Join-Path $root 'infra\projection.bicep') -Raw
 $resolver = Get-Content (Join-Path $root 'infra\resolver.bicep') -Raw
 $wiring = Get-Content (Join-Path $root 'resolver\src\index.mjs') -Raw
 $lookup = Get-Content (Join-Path $root 'resolver\src\lookup.mjs') -Raw
+$loader = Get-Content (Join-Path $root 'guide\loadtest-projection.mjs') -Raw
 Assert 'PowerShell consumes the response continuation header' ($sync -match "Continuation = \[string\]\`$response.Headers\['x-ms-continuation'\]")
 Assert 'PowerShell queries through the multi-page helper' ($sync -match '\$existing = Get-ClaudeProjectionExisting -ReadPage')
 Assert 'PowerShell sends opaque continuation as a header' ($sync -match "\`$headers\['x-ms-continuation'\] = \`$continuation")
@@ -40,5 +41,9 @@ Assert 'two instances are warm by default' ($resolver -match 'param alwaysReadyI
 Assert 'HTTP concurrency is explicitly sized' ($resolver -match 'param httpConcurrency int = 100' -and $resolver -match 'perInstanceConcurrency: httpConcurrency')
 Assert 'enterprise Cosmos is private by default' ($network -match "param networkAccess string = 'private-only'")
 Assert 'explicit public and selected IP profiles remain' ($network -match "'public'" -and $network -match "'selected-ips'" -and $network -match "networkAccess == 'private-only' \? 'Disabled' : 'Enabled'")
+Assert 'load uses the validated isolated container' ($loader.Contains("client.database('claude').container(containerName)"))
+Assert 'load refuses occupied containers' ($loader.Contains("if (before[0] !== 0) throw new Error"))
+Assert 'load verifies full cardinality' ($loader.Contains("if (after[0] !== total) throw new Error"))
+Assert 'load measures the resolver point-read shape' ($loader.Contains('id: oid, oid, tenantId:') -and $loader.Contains('container.item(d.id, d.oid).read()'))
 Write-Host "Projection rules: $fail failed."
 exit ([int]($fail -gt 0))

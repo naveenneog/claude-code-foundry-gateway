@@ -257,6 +257,11 @@ that configuration, with no probe warmup, had **zero 503s**; every response was
 the expected model-refusal 403, p99/maximum **2,334 ms**. The requests did not
 call Foundry. This is a measured burst envelope, not a latency SLA.
 
+**MEASURED, 13:44:43–13:44:44 UTC:** after **16 minutes with no probe traffic**,
+another first burst of 20 returned 20 expected 403s, **zero 503s**, and
+p99/maximum **1,105 ms**. The two always-ready instances and HTTP concurrency
+100 were left in place deliberately; the cache setting remained 60 seconds.
+
 **DOCUMENTED:** APIM's built-in cache has no atomic lock for this use.
 Coalescing is per resolver process, not across instances; APIM's distributed
 rate and concurrency limits are approximate. A cache flush above the admitted
