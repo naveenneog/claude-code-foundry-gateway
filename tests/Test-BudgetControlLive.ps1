@@ -8,7 +8,7 @@
 # The override map is captured first and restored in a finally block.
 
 param(
-    [string]$ResourceGroup = $(if ($env:CLAUDE_RG) { $env:CLAUDE_RG } else { 'rg-contosohub' }),
+    [string]$ResourceGroup = $(& (Join-Path (Split-Path $PSScriptRoot -Parent) 'scripts/Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$ApimName
 )
 

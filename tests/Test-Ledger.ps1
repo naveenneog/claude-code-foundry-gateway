@@ -99,7 +99,7 @@ if ($SkipLive) {
     Write-Host '  skipped - offline run (-SkipLive)' -ForegroundColor Yellow
 }
 else {
-    $rg = if ($env:CLAUDE_RG) { $env:CLAUDE_RG } else { 'rg-contosohub' }
+    $rg = & (Join-Path $root 'scripts/Get-ClaudeGatewayTarget.ps1') ResourceGroup
     $apim = az apim list -g $rg --query "[0].name" -o tsv 2>$null
     $sub = az account show --query id -o tsv 2>$null
     if (-not $apim -or -not $sub) {
@@ -133,7 +133,10 @@ else {
         }
 
         $qTok = (az account get-access-token --resource https://api.applicationinsights.io --query accessToken -o tsv 2>$null).Trim()
-        $ws = "/subscriptions/$sub/resourceGroups/$rg/providers/Microsoft.OperationalInsights/workspaces/log-claude-gw-fzgql9"
+        # The workspace is found through the Application Insights resource the gateway logs to,
+        # not named here (tests/Test-NoDeploymentValues.ps1).
+        $telemetry = & (Join-Path $root 'scripts/Get-ClaudeTelemetry.ps1') -ResourceGroup $rg -ApimName $apim
+        $ws = az resource show -g $rg -n $telemetry.AppInsights --resource-type Microsoft.Insights/components --query properties.WorkspaceResourceId -o tsv
         $kqlLive = (Get-Content $ledgerPath -Raw) -replace '(?m)^\s*//.*$', ''
 
         $rows = @()

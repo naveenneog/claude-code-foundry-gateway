@@ -113,7 +113,7 @@ if ($SkipLive) {
     Write-Host '  skipped - offline run (-SkipLive)' -ForegroundColor Yellow
 }
 else {
-    $rg = if ($env:CLAUDE_RG) { $env:CLAUDE_RG } else { 'rg-contosohub' }
+    $rg = & (Join-Path $root 'scripts/Get-ClaudeGatewayTarget.ps1') ResourceGroup
     $apim = az apim list -g $rg --query "[0].name" -o tsv 2>$null
     if (-not $apim) {
         Write-Host '  skipped - no API Management found' -ForegroundColor Yellow

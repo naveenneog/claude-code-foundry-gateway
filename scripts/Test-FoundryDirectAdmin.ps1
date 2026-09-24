@@ -30,7 +30,7 @@
     own device-code sign-in. Checked for being a public client.
 
 .EXAMPLE
-    ./scripts/Test-FoundryDirectAdmin.ps1 -Resource ai-contosohub530569751908
+    ./scripts/Test-FoundryDirectAdmin.ps1 -Resource <foundry-account>
 
 .EXAMPLE
     ./scripts/Test-FoundryDirectAdmin.ps1 -Resource pcsaif56c293bd -ResourceGroup RG-AzureARC

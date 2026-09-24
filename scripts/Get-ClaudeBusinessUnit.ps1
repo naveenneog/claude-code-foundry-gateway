@@ -41,7 +41,7 @@ param(
     [string]$BusinessUnit,
     [int]$Days,
     [switch]$AsJson,
-    [string]$ResourceGroup = $(if ($env:CLAUDE_RG) { $env:CLAUDE_RG } else { 'rg-contosohub' }),
+    [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$ApimName,
     [string]$Model = 'claude-sonnet-5',
     [decimal]$OutputShare = 0.2

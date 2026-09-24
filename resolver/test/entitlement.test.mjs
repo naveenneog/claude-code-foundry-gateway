@@ -11,8 +11,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { toEntitlement, isObjectId, KNOWN_TIERS } from '../src/entitlement.mjs';
 
-const OID = '43cc5304-b62c-48c4-a49e-427d621c19a9';
-const TENANT = '16b3c013-d300-468d-ac64-7eda0820b6d3';
+const OID = '7f2a1c94-3e5b-4d81-9a06-b1e4c8d72f35';
+const TENANT = '11111111-2222-3333-4444-555555555555';
 
 test('a standard record resolves', () => {
   const r = toEntitlement(

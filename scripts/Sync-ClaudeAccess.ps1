@@ -25,7 +25,7 @@
     it survives renames and email changes, and it is what the policy meters on.
 
 .EXAMPLE
-    .\Sync-ClaudeAccess.ps1 -ApimName apim-claude-gw-xxxx -ResourceGroup rg-contosohub
+    .\Sync-ClaudeAccess.ps1 -ApimName <apim-name> -ResourceGroup <resource-group>
 #>
 [CmdletBinding()]
 param(

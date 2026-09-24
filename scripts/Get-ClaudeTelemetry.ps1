@@ -11,7 +11,7 @@
     redeploy that picks a new prefix leaves the old workspace in place and
     starts writing to a new one. On the reference deployment that happened on
     2026-08-31: customMetrics stopped arriving in appi-claude-gateway and
-    started arriving in appi-claude-gw-fzgql9, while requests kept appearing in
+    started arriving in the gateway's Application Insights, while requests kept appearing in
     both because the service-level and API-level diagnostics pointed at
     different loggers. A report reading the old workspace showed zero and looked
     like "nobody used it" rather than "you are reading the wrong workspace".
@@ -32,7 +32,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$ResourceGroup = $(if ($env:CLAUDE_RG) { $env:CLAUDE_RG } else { 'rg-contosohub' }),
+    [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$ApimName,
     [string]$ApiId = 'claude-foundry',
     [string]$AppInsightsName,

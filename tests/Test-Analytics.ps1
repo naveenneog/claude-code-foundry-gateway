@@ -74,7 +74,7 @@ Write-Host 'P10 analytics - live' -ForegroundColor Cyan
 # writing to a new one. That happened on the reference deployment on 2026-08-31,
 # and reading the old workspace returned zero rows - which looks like "nobody
 # used it", not "wrong workspace". See scripts/Get-ClaudeTelemetry.ps1.
-$rg = if ($env:CLAUDE_RG) { $env:CLAUDE_RG } else { 'rg-contosohub' }
+$rg = & (Join-Path $root 'scripts/Get-ClaudeGatewayTarget.ps1') ResourceGroup
 $ai = if ($env:CLAUDE_APPINSIGHTS) { $env:CLAUDE_APPINSIGHTS } else { '' }
 
 $appId = $env:CLAUDE_ANALYTICS_APPID

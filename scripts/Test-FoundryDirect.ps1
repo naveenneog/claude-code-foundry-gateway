@@ -15,7 +15,7 @@
       7. Claude Code completes a real round trip on Foundry
 
 .PARAMETER Resource
-    Foundry (AIServices) account name, e.g. ai-contosohub530569751908.
+    Foundry (AIServices) account name, for example ai-contoso-foundry.
 
 .PARAMETER ResourceGroup
     Resource group of the Foundry account. Optional; enables the deployment check.
@@ -25,7 +25,7 @@
     every resource carries different deployments, so nothing is assumed.
 
 .EXAMPLE
-    .\Test-ClaudeFoundry.ps1 -Resource ai-contosohub530569751908 -ResourceGroup rg-contosohub
+    .\Test-ClaudeFoundry.ps1 -Resource <foundry-account> -ResourceGroup <resource-group>
 #>
 [CmdletBinding()]
 param(

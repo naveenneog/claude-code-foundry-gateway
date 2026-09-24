@@ -52,7 +52,7 @@ param(
     [string]$Date,
     [int]$Days = 1,
     [switch]$AsJson,
-    [string]$ResourceGroup = $(if ($env:CLAUDE_RG) { $env:CLAUDE_RG } else { 'rg-contosohub' }),
+    [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$ApimName,
     [string]$AppInsightsName = $(if ($env:CLAUDE_APPINSIGHTS) { $env:CLAUDE_APPINSIGHTS } else { $null })
 )

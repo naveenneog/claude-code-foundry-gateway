@@ -17,7 +17,7 @@
     a test should do.
 
 .EXAMPLE
-    .\Show-Governance.ps1 -ApimName apim-claude-gw-xxxx -ResourceGroup rg-contosohub
+    .\Show-Governance.ps1 -ApimName <apim-name> -ResourceGroup <resource-group>
 #>
 [CmdletBinding()]
 param(

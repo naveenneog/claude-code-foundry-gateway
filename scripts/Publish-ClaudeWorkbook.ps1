@@ -35,7 +35,7 @@ param(
     [string]$Name = 'Claude gateway',
     [switch]$List,
     [switch]$Remove,
-    [string]$ResourceGroup = $(if ($env:CLAUDE_RG) { $env:CLAUDE_RG } else { 'rg-contosohub' }),
+    [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$WorkspaceName,
     [string]$WorkbookFile,
     [string]$SubscriptionId

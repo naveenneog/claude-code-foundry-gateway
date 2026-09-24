@@ -28,6 +28,14 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- **Nothing about one deployment is written into the scripts.** Twenty-seven scripts and tests
+  defaulted `-ResourceGroup` to the reference deployment's resource group. They now resolve it
+  through `scripts/Get-ClaudeGatewayTarget.ps1`: `CLAUDE_RG`, else the resource group the installer
+  recorded in `onboarding/claude-gateway.json`, else nothing, with a warning naming what to pass.
+  Help examples, a live test's workspace name, and three tenant ids in `docs/FOUNDRY-DIRECT.md`
+  and the resolver's test fixture are placeholders or discovered. `tests/Test-NoDeploymentValues.ps1`
+  keeps it that way, and fails when a literal is put back.
+
 - **The API Management AI Gateway tier (preview), assessed beside this gateway.**
   `docs/AI-GATEWAY-TIER.md`. Its dollar budgets count per API key, not per person; enforcement for
   Entra principals is announced as coming. Deployed in 133 s as `Microsoft.ApiManagement/service`

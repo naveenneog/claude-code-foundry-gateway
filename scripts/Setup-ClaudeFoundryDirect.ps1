@@ -22,7 +22,7 @@
 
 .PARAMETER Resource
     The Foundry (AIServices) account name - not a URL, not a resource id.
-    Example: ai-contosohub530569751908
+    Example: ai-contoso-foundry
 
 .PARAMETER TenantId
     Entra tenant to sign in to. Required when your account exists in more than
@@ -41,7 +41,7 @@
     Deployment names to allow. Default discovers them from the resource.
 
 .EXAMPLE
-    .\Setup-ClaudeFoundryDirect.ps1 -Resource ai-contosohub530569751908 -TenantId 16b3c013-d300-468d-ac64-7eda0820b6d3
+    .\Setup-ClaudeFoundryDirect.ps1 -Resource ai-contoso-foundry -TenantId 00000000-0000-0000-0000-000000000000
 
 .EXAMPLE
     .\Setup-ClaudeFoundryDirect.ps1 -Resource ai-contoso -TenantId <guid> -Auth interactive

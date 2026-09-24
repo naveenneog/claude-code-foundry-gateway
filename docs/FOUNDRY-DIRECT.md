@@ -75,7 +75,7 @@ Explicit arguments still win over the file. Passing both a config and a
   "mode": "foundry-direct",
   "generated": "2026-09-21 17:28",
   "foundryResource": "ai-contosohub530569751908",
-  "tenantId": "16b3c013-d300-468d-ac64-7eda0820b6d3",
+  "tenantId": "00000000-0000-0000-0000-000000000000",
   "clientId": "",
   "auth": "device",
   "models": ["claude-opus-5", "claude-sonnet-5"],
@@ -665,7 +665,7 @@ Contents:
   "env": {
     "CLAUDE_CODE_USE_FOUNDRY": "1",
     "ANTHROPIC_FOUNDRY_RESOURCE": "ai-contosohub530569751908",
-    "AZURE_TENANT_ID": "16b3c013-d300-468d-ac64-7eda0820b6d3",
+    "AZURE_TENANT_ID": "00000000-0000-0000-0000-000000000000",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-sonnet-5"
@@ -711,7 +711,7 @@ is an array of objects, which the UI will not let you edit properly.
 "claudeCode.environmentVariables": [
   { "name": "CLAUDE_CODE_USE_FOUNDRY",    "value": "1" },
   { "name": "ANTHROPIC_FOUNDRY_RESOURCE", "value": "ai-contosohub530569751908" },
-  { "name": "AZURE_TENANT_ID",            "value": "16b3c013-d300-468d-ac64-7eda0820b6d3" }
+  { "name": "AZURE_TENANT_ID",            "value": "00000000-0000-0000-0000-000000000000" }
 ]
 ```
 
