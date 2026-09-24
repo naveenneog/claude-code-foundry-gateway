@@ -140,7 +140,8 @@ class FinOpsApp(App):
             return
         large = self.size.width >= 120 and self.size.height >= 38 and self.active == "overview"
         self.set_class(large, "wide-overview")
-        self.query_one("#brand", Static).update((BANNER + "\n" if large else "") + COMPACT)
+        heading = PRODUCT if large or self.config.ascii else COMPACT
+        self.query_one("#brand", Static).update((BANNER + "\n" if large else "") + heading)
 
     def on_resize(self):
         self.update_brand()

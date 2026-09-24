@@ -1,7 +1,7 @@
 import pytest
 from textual.widgets import Input, Static
 
-from claude_finops.brand import BANNER, COMPACT
+from claude_finops.brand import BANNER, COMPACT, PRODUCT
 from claude_finops.config import Config
 from claude_finops.dashboard import DashboardPanel, budget_totals, enforcement_badge, sparkline
 from claude_finops.engine import Engine
@@ -47,7 +47,7 @@ async def test_dashboard_panels_fit_and_receive_keyboard_focus(size):
             assert panel.border_title
         text = str(app.query_one("#brand", Static).render())
         assert (BANNER in text) is (size[0] >= 120)
-        assert COMPACT in text
+        assert (PRODUCT if size[0] >= 120 else COMPACT) in text
         panels[0].focus()
         focused = {app.focused.id}
         for _ in range(4):

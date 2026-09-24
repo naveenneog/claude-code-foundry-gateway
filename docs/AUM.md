@@ -19,7 +19,8 @@ data used for tests.
 ```
 
 The ASCII banner appears on a large Overview and terminal `aum --version`.
-An 80x24 terminal uses the compact **AUM - Azure Usage Management** heading.
+An 80x24 terminal uses the compact **AUM · Azure Usage Management** heading
+(an ASCII hyphen when `--ascii` is selected).
 Piped output, `--json`, `--plain` and `--screen-reader` never print the banner
 or launch a full-screen application.
 

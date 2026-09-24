@@ -1,7 +1,7 @@
 """AUM's identity and terminal-only banner policy."""
 
 PRODUCT = "AUM - Azure Usage Management"
-COMPACT = "AUM - Azure Usage Management"
+COMPACT = "AUM · Azure Usage Management"
 BANNER = " _____ _____ _____ \n|  _  |  |  |     |\n|     |  |  | | | |\n|__|__|_____|_|_|_|"
 
 
