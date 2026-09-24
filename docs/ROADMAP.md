@@ -267,7 +267,9 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
 - [ ] P46 delegated management, phase 2 — acceptance: a manager sees and manages only the units
       and teams whose manager group is in their token (done in the fork, `c0c345a`); allocation
       within their own headroom (done); per unit or team, the admin's enforcement mode: strict,
-      allowance or notify, enforced by the gateway (in progress)
+      allowance or notify, enforced by the gateway (done, live-tested and restored 2026-09-24,
+      [ADR-0019](adr/0019-budget-enforcement-modes.md)), with a guard that rechecks Turnstile's
+      revisions before an apply writes. Open: the manager-only live sign-in (P53)
 - [ ] P47 delegated management, phase 3 — acceptance: budget requests that go to the manager one
       level up, boosts with an expiry, escalation, notifications at the warning threshold
 - [ ] P48 delegated management at 500,000 — acceptance: overrides and unit and team budgets in the
