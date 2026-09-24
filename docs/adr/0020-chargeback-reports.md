@@ -95,7 +95,11 @@ each part, then check actual serialized request bytes. Never put an unrestricted
 link or SAS in an email.
 
 A durable archive-backed outbox separates monthly generation from delivery. A second,
-short-lived Container Apps job drains it conservatively. A blob lease serializes sends
+short-lived, blob-triggered Container Apps job drains it conservatively. KEDA polls the
+outbox every 420 seconds, minExecutions zero, maxExecutions one: no container starts
+when there is no mail. The [blob scaler](https://keda.sh/docs/2.18/scalers/azure-storage-blob/)
+uses the same managed identity and counts pending blobs, which the worker deletes on
+completion. A blob lease serializes sends
 across manual and scheduled runs; persisted pacing survives process restarts. Read current
 recipient settings at delivery time, including removals and the domain policy. Record
 operation IDs, scope and recipient counts, not address lists, in each run manifest.

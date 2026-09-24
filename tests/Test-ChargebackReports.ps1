@@ -48,7 +48,8 @@ try {
     $readPeople = { param($unit, $prefix) @($fixture.people | Where-Object Unit -eq $unit) }
     $readDimensions = { param($unit) @([pscustomobject]@{ Kind='Model'; Name='claude-sonnet-5'; Requests=1; EstimatedCostUsd=0.001 }) }
     $args = @{ Window=$w; Catalog=$fixture.catalog; Scopes=$fixture.scopes; ReadPeople=$readPeople; ReadDimensions=$readDimensions; Source=$source; OutputPath=$base; Format=@('CSV','HTML') }
-    $result = Write-ClaudeChargebackReport @args
+    try { $result = Write-ClaudeChargebackReport @args; Assert 'valid fixture reconciles and publishes' $true }
+    catch { Assert 'valid fixture reconciles and publishes' $false; throw }
     $dir = $result.Path
     $manifest = Get-Content (Join-Path $dir 'manifest.json') -Raw | ConvertFrom-Json
     Assert 'manifest is complete only after reconciliation' ($manifest.Status -eq 'Complete' -and $manifest.Reconciliation.Matched)

@@ -71,6 +71,11 @@ Invoke-Check 'Resolver - the entitlement read path'   'Test-Resolver.ps1'
     Invoke-Check 'Capability scoping per tier'             'Test-CapabilityScoping.ps1' @{ SkipLive = $true }
     Invoke-Check 'Compliance retrieval and deletion'       'Test-Compliance.ps1' @{ SkipLive = $true }
     Invoke-Check 'Chargeback ledger'                       'Test-Ledger.ps1' @{ SkipLive = $true }
+    Invoke-Check 'Chargeback report generation'            'Test-ChargebackReports.ps1'
+    Invoke-Check 'Chargeback recipients and attachments'   'Test-ChargebackDelivery.ps1'
+    Invoke-Check 'Chargeback durable email outbox'         'Test-ChargebackOutbox.ps1'
+    Invoke-Check 'Chargeback scheduled jobs'               'Test-ChargebackSchedule.ps1'
+    Invoke-Check 'Chargeback mutations detect breakage'    'Test-ChargebackNegative.ps1'
     Invoke-Check 'Business unit chargeback'                'Test-BusinessUnits.ps1'
     Invoke-Check 'Teams and the budget cascade'            'Test-Teams.ps1'
     Invoke-Check 'Model discovery and deployment'          'Test-ModelDeployment.ps1'
