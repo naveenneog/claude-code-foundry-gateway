@@ -192,6 +192,29 @@ try {
         Write-FixtureJson $p $spec
     } 'RESOURCE_UNKNOWN'
 
+    $hiddenTypeFile = Join-Path $fixture 'infra/architecture-mutation.bicep'
+    try {
+        [IO.File]::WriteAllText($hiddenTypeFile, "resource sample 'Microsoft.ArchitectureMutation/widgets@2026-01-01' = { name: 'example' }", $script:utf8)
+        Invoke-Mutation 'undrawn flow metadata cannot satisfy resource coverage' 'docs/architecture/01-system.json' {
+            param($p)
+            $spec = Get-Content $p -Raw | ConvertFrom-Json
+            $section = [pscustomobject]@{ title = 'Hidden'; note = 'Not drawn'; types = @('Microsoft.ArchitectureMutation/widgets') }
+            $spec | Add-Member -MemberType NoteProperty -Name sections -Value @($section) -Force
+            Write-FixtureJson $p $spec
+        } 'RESOURCE_UNCOVERED'
+    }
+    finally { Remove-Item -LiteralPath $hiddenTypeFile -Force }
+
+    Invoke-Mutation 'undrawn inventory cards cannot satisfy label coverage' 'docs/architecture/07-resources.json' {
+        param($p)
+        $spec = Get-Content $p -Raw | ConvertFrom-Json
+        $card = [pscustomobject]@{ id = 'hidden'; title = '[[hidden-script]]'; lines = @() }
+        $spec | Add-Member -MemberType NoteProperty -Name nodes -Value @($card) -Force
+        $witness = [pscustomobject]@{ label = 'Sync-ClaudeAccess.ps1'; source = 'scripts/Sync-ClaudeAccess.ps1'; kind = 'file' }
+        $spec.identifiers | Add-Member -MemberType NoteProperty -Name 'hidden-script' -Value $witness -Force
+        Write-FixtureJson $p $spec
+    } 'IDENTIFIER_MISSING'
+
     Invoke-Mutation 'two sources cannot overwrite the same output' 'docs/architecture/01-system.json' {
         param($p)
         $spec = Get-Content $p -Raw | ConvertFrom-Json

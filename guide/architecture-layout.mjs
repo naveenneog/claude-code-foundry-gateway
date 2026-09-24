@@ -39,7 +39,7 @@ function flow(spec) {
 
 function inventory(spec) {
   return `<div class="inventory">${spec.sections.map(section => `<section>
-    <h2>${escape(section.title)}</h2><p>${escape(section.note)}</p>
+    <h2>${content(spec, section.title)}</h2><p>${content(spec, section.note)}</p>
     <ul>${section.types.map(type => `<li><code>${escape(type)}</code></li>`).join('')}</ul>
   </section>`).join('')}</div>`;
 }

@@ -83,10 +83,13 @@ export function labelText(spec, value, decorate = v => v) {
 
 export function visualStrings(spec) {
   const strings = [spec.title, spec.subtitle, spec.notice ?? ''];
-  for (const group of spec.groups ?? []) strings.push(group.title, group.subtitle ?? '');
-  for (const node of spec.nodes ?? []) strings.push(node.title, node.eyebrow ?? '', ...(node.lines ?? []));
-  for (const edge of spec.edges ?? []) strings.push(edge.label ?? '');
-  for (const section of spec.sections ?? []) strings.push(section.title, section.note, ...section.types);
+  if (spec.kind === 'flow') {
+    for (const group of spec.groups ?? []) strings.push(group.title, group.subtitle ?? '');
+    for (const node of spec.nodes ?? []) strings.push(node.title, node.eyebrow ?? '', ...(node.lines ?? []));
+    for (const edge of spec.edges ?? []) strings.push(edge.label ?? '');
+  } else {
+    for (const section of spec.sections ?? []) strings.push(section.title, section.note, ...section.types);
+  }
   return strings.filter(Boolean);
 }
 
@@ -193,7 +196,9 @@ export function validateSpecs(root, specs) {
     for (const candidate of new Set(candidates)) {
       if (!known.some(label => label.includes(candidate))) errors.push(fault('IDENTIFIER_UNBOUND', `${spec.id}: ${candidate}`));
     }
-    for (const type of (spec.sections ?? []).flatMap(section => section.types)) represented.add(type.toLowerCase());
+    if (spec.kind === 'inventory') {
+      for (const type of (spec.sections ?? []).flatMap(section => section.types)) represented.add(type.toLowerCase());
+    }
     try { inputsFor(root, spec); }
     catch (error) { errors.push(fault('SOURCE_MISSING', `${spec.id}: ${error.message}`)); }
     if (spec.kind === 'flow') {
