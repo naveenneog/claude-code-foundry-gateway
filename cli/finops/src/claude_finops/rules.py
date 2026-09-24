@@ -1,7 +1,7 @@
 """Pure rules shared by command and interactive faces."""
 
 import re
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from .errors import FinOpsError
@@ -97,7 +97,12 @@ def apply_state(status: dict, since: str | None = None) -> str:
     if status.get("executions_error"):
         return "Unknown: cannot read apply executions; check Azure job access."
     request = status.get("last_request") or {}
-    if since and request.get("requested_at", "") < since:
+    def at_or_after(value, boundary):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")) >= datetime.fromisoformat(boundary.replace("Z", "+00:00"))
+        except (ValueError, AttributeError, TypeError):
+            return False
+    if since and not at_or_after(request.get("requested_at"), since):
         return "Pending: waiting for this save's apply request."
     if request.get("error"):
         return "Failed: apply could not start; check Governance and retry Apply now."
@@ -106,7 +111,7 @@ def apply_state(status: dict, since: str | None = None) -> str:
     if execution_id:
         executions = [e for e in executions if e.get("name") == execution_id.split("/")[-1]]
     elif since:
-        executions = [e for e in executions if (e.get("started_at") or "") >= since]
+        executions = [e for e in executions if at_or_after(e.get("started_at"), since)]
     if not executions:
         return "Pending: waiting for the apply job."
     state = executions[0].get("status", "Unknown")

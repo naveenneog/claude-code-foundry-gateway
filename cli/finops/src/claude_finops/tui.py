@@ -37,6 +37,7 @@ class FinOpsApp(App):
 
     def __init__(self, engine, config, no_color=False):
         super().__init__()
+        self.animation_level = "none"
         self.engine, self.config = engine, config
         self.identity = {}
         self.editable = False

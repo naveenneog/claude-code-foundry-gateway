@@ -211,6 +211,9 @@ class ChangeScreen(ModalScreen):
         self.query_one("#preview", Button).disabled = True
         self.query_one("#form-status", Static).update("Saving once. Do not close this terminal.")
         try:
+            fresh = await asyncio.to_thread(self.operation())
+            if any(fresh.get(key) != self.preview_plan.get(key) for key in ("before", "after", "parent_headroom")):
+                raise FinOpsError("The server state changed since preview. Cancel, refresh and preview again.", 6)
             result = await asyncio.to_thread(self.operation(True))
             self.saved = True
             if self.kind == "budget" and self.row.get("scope_type") == "user":

@@ -23,6 +23,18 @@ class Engine:
     def governance(self):
         return dict(catalog=self.read("catalog"), tiers=self.read("tiers"), apply=self.read("apply"))
 
+    def chargeback(self, dimension="organization"):
+        if dimension not in {"organization", "department"}:
+            raise FinOpsError("Complete chargeback supports organization or department. Use usage show for top-100 model/person rankings.")
+        catalog = self.read("catalog")
+        rows = []
+        collection = "organizations" if dimension == "organization" else "departments"
+        for scope in catalog[collection]:
+            totals = self.read("overview", **{f"{dimension}_id": scope["id"]})["totals"]
+            rows.append(dict(id=scope["id"], name=scope["name"], **totals))
+        return dict(period=self.month, dimension=dimension, items=rows,
+                    note="All catalog scopes, not a top-N ranking. Cost is estimated, not an Azure invoice.")
+
     def budget_change(self, kind, key, amount=None, *, remove=False, apply=False,
                       confirm=None, warning=None, department_id=None):
         require_owner(self.read("whoami"))
@@ -140,7 +152,7 @@ class Engine:
                     raise FinOpsError("Name must contain 1 to 200 characters.")
                 row["name"] = name.strip()
             if group is not None:
-                if not group.strip() or len(group) > 256 or any(char in group for char in "\r\n"):
+                if not group.strip() or len(group) > 256 or any(char in group for char in "\r\n&|<>^%!\""):
                     raise FinOpsError("Enter an Entra member group name or object id.")
                 row["external_ref"] = "entra-group:" + group
             if manager_group is not None:
