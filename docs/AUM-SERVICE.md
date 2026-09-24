@@ -276,26 +276,27 @@ Entra/Functions screenshots as completed portal tests.
 
 ### Pending owner batch captures
 
-The lead captures `guide/captures/p55.json` after fresh owner sign-in. These
-references are deliberately pending, not placeholder images or passing evidence.
-`func-aum-` and `staum` are logical component-name tokens, not deployed names;
-ambiguous discovery must stop. Entra registration versus enterprise-application
-binding is pending confirmation by the shared runner owner.
+The lead captures version-1 `guide/captures/p55.json` after fresh owner sign-in.
+These inline paths are deliberately pending, not broken images, placeholders or
+passing evidence. Resource discovery uses the logical `component=aum-service`
+tag; Entra discovery uses the operator's `AUM_APP_DISPLAY_FILTER`. Runtime
+`--select` values choose discovered candidates. The spec explicitly distinguishes
+app-registration from enterprise-application blades and uses a private redaction map.
 
 | Pending batch capture (spec id) | Exact portal verification | Image |
 |---|---|---|
-| `p55-aum-app-roles` | App registrations > AUM > App roles: Admin, Viewer, Manager enabled for Users/Groups | ![Pending AUM app-role capture](guide/p55-aum-app-roles.png) |
-| `p55-aum-api-scope` | Expose an API: AUM.Access enabled; Azure CLI listed under Authorized client applications | ![Pending exposed API capture](guide/p55-aum-api-scope.png) |
-| `p55-aum-token-manifest` | Manifest: requestedAccessTokenVersion 2, groupMembershipClaims ApplicationGroup | ![Pending token manifest capture](guide/p55-aum-token-manifest.png) |
-| `p55-aum-assignment-required` | Enterprise applications > AUM > Properties: Assignment required? Yes | ![Pending assignment-required capture](guide/p55-aum-assignment-required.png) |
-| `p55-aum-assigned-roles` | Enterprise applications > AUM > Users and groups: correct user/group roles | ![Pending assigned-role capture](guide/p55-aum-assigned-roles.png) |
-| `p55-aum-function-overview` | Function App > Overview: Running, selected region, Python runtime | ![Pending Function overview](guide/p55-aum-function-overview.png) |
-| `p55-aum-function-identity` | Settings > Identity > System assigned: Status On | ![Pending Function identity](guide/p55-aum-function-identity.png) |
-| `p55-aum-function-triggers` | Functions: http_api, expire_boosts, warning_thresholds | ![Pending HTTP and timer functions](guide/p55-aum-function-triggers.png) |
-| `p55-aum-scale-choice` | Scale and concurrency: administrator-selected always-ready count and 512-MiB instance size | ![Pending Flex capacity choice](guide/p55-aum-scale-choice.png) |
-| `p55-aum-private-routing` | Networking > VNet integration: service subnet, all outbound traffic routed | ![Pending service routing](guide/p55-aum-private-routing.png) |
-| `p55-aum-storage-keyless` | Storage > Configuration: shared-key and anonymous blob access Disabled | ![Pending keyless storage](guide/p55-aum-storage-keyless.png) |
-| `p55-aum-storage-private` | Storage > Networking: Public network access Disabled; private endpoint connections Approved | ![Pending private storage network](guide/p55-aum-storage-private.png) |
+| `p55-aum-app-roles` | App registrations > AUM > App roles: Admin, Viewer, Manager enabled for Users/Groups | `docs/guide/p55-aum-app-roles.png` |
+| `p55-aum-api-scope` | Expose an API: AUM.Access enabled; Azure CLI listed under Authorized client applications | `docs/guide/p55-aum-api-scope.png` |
+| `p55-aum-token-manifest` | Manifest: requestedAccessTokenVersion 2, groupMembershipClaims ApplicationGroup | `docs/guide/p55-aum-token-manifest.png` |
+| `p55-aum-assignment-required` | Enterprise applications > AUM > Properties: Assignment required? Yes | `docs/guide/p55-aum-assignment-required.png` |
+| `p55-aum-assigned-roles` | Enterprise applications > AUM > Users and groups: correct user/group roles | `docs/guide/p55-aum-assigned-roles.png` |
+| `p55-aum-function-overview` | Function App > Overview: Running, selected region, Python runtime | `docs/guide/p55-aum-function-overview.png` |
+| `p55-aum-function-identity` | Settings > Identity > System assigned: Status On | `docs/guide/p55-aum-function-identity.png` |
+| `p55-aum-function-triggers` | Functions: http_api, expire_boosts, warning_thresholds | `docs/guide/p55-aum-function-triggers.png` |
+| `p55-aum-scale-choice` | Scale and concurrency: administrator-selected always-ready count and 512-MiB instance size | `docs/guide/p55-aum-scale-choice.png` |
+| `p55-aum-private-routing` | Networking > VNet integration: service subnet, all outbound traffic routed | `docs/guide/p55-aum-private-routing.png` |
+| `p55-aum-storage-keyless` | Storage > Configuration: shared-key and anonymous blob access Disabled | `docs/guide/p55-aum-storage-keyless.png` |
+| `p55-aum-storage-private` | Storage > Networking: Public network access Disabled; private endpoint connections Approved | `docs/guide/p55-aum-storage-private.png` |
 
 Optional Insights uses a **non-secret routing connection string** and
 `APPLICATIONINSIGHTS_AUTHENTICATION_STRING=Authorization=AAD`. It is not a
