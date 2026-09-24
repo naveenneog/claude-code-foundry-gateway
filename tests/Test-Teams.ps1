@@ -155,6 +155,8 @@ foreach ($scope in 'bu', 'parent') {
 Assert 'both notify limits are skipped' (([regex]::Matches($policy, '(bu|parent)Limit"\] != "0"')).Count -eq 2)
 Assert 'notices are response headers without buffering' ($policy -match 'name="x-claude-budget-notice"' -and $policy -notmatch 'context.Response.Body.As')
 Assert 'budget trace joins the usage ledger' ($policy -match 'source="claude-budget"' -and $policy -match 'name="BaseTokens"' -and $policy -match 'name="ParentBaseTokens"' -and $policy -match 'name="ParentMode"')
+$budgetTrace = [regex]::Match($policy, '(?s)<trace source="claude-budget".*?</trace>').Value
+Assert 'budget trace cannot duplicate existing identity joins' ($budgetTrace -match 'name="BudgetRequestId"' -and $budgetTrace -notmatch 'name="RequestId"')
 $modeWriter = Get-Content $setPath -Raw
 Assert 'CLI exposes modes and optional allowance' ($modeWriter -match "ValidateSet\('Strict', 'Allowance', 'Notify'\)" -and $modeWriter -match '\$AllowancePercent')
 Assert 'CLI preserves unedited modes and removes deleted ones' ($modeWriter -match "PSBoundParameters.ContainsKey\('Mode'\)" -and $modeWriter -match '\$modes.Remove\(\$Id\)')

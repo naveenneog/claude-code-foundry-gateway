@@ -75,12 +75,14 @@ Claude clients might not display custom response headers. Responses refused by
 another control can return before the notice is added. No response body is read
 or buffered for notices.
 
-For non-strict scopes, the `claude-budget` trace records `RequestId`,
+For non-strict scopes, the `claude-budget` trace records `BudgetRequestId`,
 `BusinessUnit`, `Mode`, `BaseTokens`, `ParentUnit`, `ParentMode`,
-`ParentBaseTokens` and `Notice`. Join `RequestId` to the chargeback ledger and
+`ParentBaseTokens` and `Notice`. Join `BudgetRequestId` to the chargeback ledger's
+request id (the LLM log's `CorrelationId`) and
 aggregate the month's usage to report over-budget tokens, including notify
 usage; do not sum the notices as if they were usage. The trace itself does not
-claim a cumulative total. Cache, ingestion delay and telemetry availability
+claim a cumulative total. Its distinct join-key name keeps it out of existing
+identity queries that select traces with `RequestId`. Cache, ingestion delay and telemetry availability
 retain the ledger's existing limitations.
 
 Changing modes keeps the counter key `bu-<id>`. Notify stops counting at that

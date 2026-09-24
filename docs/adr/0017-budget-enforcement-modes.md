@@ -31,9 +31,10 @@ Allowance notices compare APIM's estimated remaining quota with the allowance.
 Notify has no monthly remaining counter, so every successful response with a
 nonzero notify budget carries an advisory notice, including before 100%.
 It never asserts that the request crossed the budget. A trace carries both
-scopes' base budgets and modes with RequestId; the ledger can join usage and
+scopes' base budgets and modes with BudgetRequestId; the ledger can join usage and
 calculate over-budget usage. Neither notice claims invoice-accurate accounting,
-an exact crossing request, or reliable display by a Claude client.
+an exact crossing request, or reliable display by a Claude client. The separate
+join-key name prevents the second trace from duplicating existing identity queries.
 
 Invalid Turnstile mode metadata refuses the complete apply before any write,
 rather than silently removing a unit or turning off its budget. Gateway edits

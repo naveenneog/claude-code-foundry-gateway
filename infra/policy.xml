@@ -630,8 +630,8 @@
         <choose>
             <when condition="@((string)context.Variables["buMode"] != "strict" || (string)context.Variables["parentMode"] != "strict")">
                 <trace source="claude-budget" severity="information">
-                    <message>Budget mode usage; join RequestId to the usage ledger for monthly totals.</message>
-                    <metadata name="RequestId" value="@(context.RequestId.ToString())" />
+                    <message>Budget mode usage; join BudgetRequestId to the usage ledger for monthly totals.</message>
+                    <metadata name="BudgetRequestId" value="@(context.RequestId.ToString())" />
                     <metadata name="BusinessUnit" value="@((string)context.Variables["businessUnit"])" />
                     <metadata name="Mode" value="@((string)context.Variables["buMode"])" />
                     <metadata name="BaseTokens" value="@((string)context.Variables["buQuota"])" />

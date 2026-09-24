@@ -168,6 +168,8 @@ $mutations = @(
        File = 'infra/policy.xml'; From = 'name="x-claude-budget-notice"'; To = 'name="x-unused"' }
     @{ Suite = $teams; Name = 'policy omits budget traces'
        File = 'infra/policy.xml'; From = 'source="claude-budget"'; To = 'source="unused"' }
+    @{ Suite = $teams; Name = 'budget traces duplicate existing identity joins'
+       File = 'infra/policy.xml'; From = 'name="BudgetRequestId"'; To = 'name="RequestId"' }
     @{ Suite = $teams; Name = 'allowance notice triggers before base budget'
        File = 'infra/policy.xml'; From = 'remaining < limit - budget'; To = 'remaining <= limit - budget' }
     @{ Suite = $teams; Name = 'notify notices require a nonexistent counter'
