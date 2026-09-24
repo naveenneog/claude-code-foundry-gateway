@@ -554,7 +554,7 @@ Three app roles on Turnstile's Entra application decide who signs in, and as wha
 |---|---|---|
 | `Turnstile.Admin` | Owner | Everything |
 | `Turnstile.Viewer` | Member | See every page; change nothing an Owner governs. A reporting identity can hold it too |
-| `Turnstile.Manager` | Member | The same, for now. Limiting a manager to the units and teams whose manager group they are in is the next step |
+| `Turnstile.Manager` | Member, scoped | Only the units and teams whose manager group is in their token: their usage, budgets and people. A unit manager sets its teams' budgets; any manager sets person budgets inside their scope ([Managers](#managers)) |
 | none | Refused | Nothing: developers never sign in, and no account is written for them |
 
 `New-ClaudeTurnstileEntraApp.ps1` creates the roles, and makes Turnstile's tokens carry only the
@@ -563,6 +563,37 @@ hundreds of others. Turnstile admits the two reader roles when `ENTRA_VIEWER_ROL
 `ENTRA_MANAGER_ROLE` are set; its redeploys keep them. As the application's owner you assign
 people and manager groups on the enterprise application's **Users and groups** page, with no
 directory role.
+
+### Managers
+
+A person who holds only `Turnstile.Manager` sees and manages the units and teams whose manager
+group is in their own sign-in token. Turnstile needs no directory permission to know it: the
+token lists the groups assigned to Turnstile that the person is in.
+
+1. Create a security group for the unit's or team's managers, and add the managers to it.
+2. On the enterprise application's **Users and groups** page, assign the group the
+   `Turnstile.Manager` role. As the application's owner you can.
+3. On **Gateway governance**, edit the unit or team and enter the group's object id as its
+   **Manager group**. An owner can.
+4. The managers sign in, or sign in again after their membership changes: a session keeps the
+   groups its token carried.
+
+| A manager of | Sees | Changes |
+|---|---|---|
+| A unit | The unit, all its teams and its direct members: usage, budgets, people, requests | Its teams' budgets, and person budgets in the unit |
+| A team | The team and its people; the unit only as context | Person budgets in the team |
+
+The unit budget, the catalog, tiers, budget modes and **Apply now** stay the owner's, and
+Turnstile still refuses a child budget above its parent's. Every page or API a scoped manager
+is not allowed is refused by default, including the organization-wide overview, the assistant
+and model management. Admin and Viewer take precedence: a person who also holds either sees
+everything.
+
+Measured on 2026-09-24 in the fork: 203 manager-scope tests, and a browser run of the built
+console against test-signed manager tokens (30 API requests, none outside the allow-list).
+Live, the owner's sign-in stayed unrestricted, and a catalog change and its restore were each
+applied to the gateway. A live sign-in with a manager-only account is an acceptance step for the
+owner, because the account running the checks holds `Turnstile.Admin`, which takes precedence.
 
 ### Sign in before the tenant grants consent
 
@@ -701,6 +732,7 @@ deployer does not run on Windows. The fork's branches, merged in `claude-gateway
 | `feature/entra-admin-only` | Tenant pin, admin role required, no account for anyone else | 3 of 3 mutations caught |
 | `feature/enterprise-catalog` | `GET`, `PUT` and `DELETE /api/v1/enterprise-catalog`, stored in PostgreSQL | 13 tests, 4 of 4 mutations caught |
 | `feature/entra-bearer-admin` | Entra access tokens for the API, for scripts and workload identities | 12 tests, 5 of 5 mutations caught |
+| `feature/manager-scoping` | Managers scoped to the units and teams of their manager groups; scoped usage, budgets and people; manager groups and budget modes on the Gateway governance page (migration 012) | 203 manager tests and 17 page-rule tests passed; 770 platform tests |
 | `feature/entra-viewer-manager` | `ENTRA_VIEWER_ROLE` and `ENTRA_MANAGER_ROLE`, signing in as Member; `POST /api/v1/auth/cli` and `/api/v1/auth/code`, a browser sign-in through the Azure CLI | 21 new tests passed |
 | `feature/gateway-governance` | The Gateway governance page; `GET`, `PUT /api/v1/gateway-tiers`; `GET`, `POST /api/v1/gateway-apply`; `POST /api/v1/gateway-governance/prepare`; a save that starts the gateway's apply job | 27 API tests and 9 page-rule tests passed |
 

@@ -40,6 +40,12 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   write back, and refuses a catalog with no business unit. New groups and membership refresh need
   `GroupMember.Read.All` from a tenant administrator, `scripts/Grant-ClaudeGovernanceGraphAccess.ps1`
   (**U17**). [ADR-0015](docs/adr/0015-governance-authored-in-turnstile.md) amends ADR-0014.
+- **Managers scoped to their units and teams.** In Turnstile (fork `c0c345a`), a person holding
+  only `Turnstile.Manager` sees and manages the units and teams whose manager group is in their
+  own token: usage, budgets, people and requests, filtered; a unit manager sets its teams'
+  budgets, any manager sets person budgets in scope; every other page and API is refused by
+  default. Owners record each unit's and team's manager group and budget mode on the Gateway
+  governance page. Migration 012 asks existing Entra members to sign in once again.
 - **Viewers, managers, and a sign-in that needs no consent.** Turnstile's Entra application has
   `Turnstile.Viewer` and `Turnstile.Manager` beside `Turnstile.Admin`, created by
   `New-ClaudeTurnstileEntraApp.ps1` as the app's owner, and its tokens carry only the groups

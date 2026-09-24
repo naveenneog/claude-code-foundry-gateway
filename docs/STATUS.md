@@ -1,6 +1,31 @@
 # Status
 
-**Active packet:** P45 — delegated management, phase 1: viewer and manager roles, and a browser sign-in through the Azure CLI that needs no consent ([TURNSTILE.md](TURNSTILE.md#sign-in-before-the-tenant-grants-consent), [ADR-0016](adr/0016-delegated-management.md)). Run live on 2026-09-24; 47 of 47 Turnstile mutations caught.
+**Active packet:** P46 — managers scoped to their units and teams (done, fork `c0c345a`), and budget modes in the gateway (in progress) ([TURNSTILE.md](TURNSTILE.md#managers), [ADR-0016](adr/0016-delegated-management.md)).
+
+## P46 acceptance criteria — managers scoped, and budget modes
+
+- [x] A manager-only token reaches an allow-list of 13 read routes and the budget writes; every other protected route is refused by default, asserted on each protected router
+- [x] Scope comes from the manager groups in the person's token, resolved against the catalog on each request; a unit manager's scope includes its teams and direct members; missing or overage groups grant nothing
+- [x] Usage, budgets, people, the catalog and a request's detail are filtered to the scope; a filter or id outside it is refused
+- [x] A unit manager sets its teams' budgets and any manager sets person budgets in scope; the unit budget, catalog, tiers, modes and **Apply now** stay the owner's; Turnstile still refuses a child above its parent
+- [x] An owner records a unit's or team's manager group and budget mode on the Gateway governance page (`manager_group_id`, `enforcement`, `allowance_percent`)
+- [ ] The gateway enforces strict, allowance and notify (in progress)
+- [ ] A live sign-in with a manager-only account: the owner's acceptance step, since the account running the checks holds `Turnstile.Admin`
+- [ ] `node .ironclad/gate.mjs --stage packet` exits 0
+
+| Measured | Result |
+|---|---|
+| Fork checks at `c0c345a` | 770 platform tests passed, 5 skipped, the six known environmental failures only; 203 manager-scope tests; 17 page-rule tests |
+| The built console against test-signed manager tokens, in a browser | 30 API requests, none outside the allow-list; forbidden pages redirected; team-only budgets shown as roots |
+| Turnstile redeploy | 9 min 22 s; the owner's live sign-in afterwards: `owner`, `entra`, no scope |
+| Two manager attributes added to the live catalog, then restored | The restore read back identical, write-payload hash unchanged; every budget unchanged |
+
+**Found by running it.** Two catalog saves one second apart started two apply runs that
+finished out of order, 13:36:15Z and 13:36:05Z, so the earlier save's run wrote last. Harmless
+this time, because manager attributes do not reach the gateway, but budget modes will: a guard
+against stale runs is being added with the modes, and a single queue-driven writer (P48) is the
+full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
+their own routers, not only on the aggregate.
 
 ## P45 acceptance criteria — delegated management, phase 1
 
