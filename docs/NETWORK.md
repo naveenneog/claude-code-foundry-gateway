@@ -3,16 +3,14 @@
 What to allow on a firewall or proxy so that Claude Code, the VS Code extension
 and Claude Desktop work against Microsoft Foundry.
 
-Every host in this document was observed on the wire from the clients
-themselves. None of it is taken from a vendor page. The method and the evidence
-are in [§5](#5-how-this-was-measured), including the parts that could not be
-measured here and are marked as such.
+This is the observed CLI/extension inference path plus Desktop endpoints
+derived from its installed package; **Desktop runtime was not captured**.
+The method and limits are in [§5](#5-how-this-was-measured).
 
-The reason for measuring rather than listing: the three clients mention **214
-distinct hostnames** between them — documentation links, certificate
-authorities, `example.com`, endpoints for clouds you are not using. Allowing
-all of them is both over-permissive and beside the point. What they need at
-runtime is **three**.
+It is not a universal egress allowlist. Browser sign-in/MFA, operating-system
+updates, MCP servers, plugins and tools invoked by a user can need additional
+destinations. Review those separately. The first three rows below cover the
+default inference hosts and Entra token endpoint, not every feature of a client.
 
 **In this article**
 
@@ -30,13 +28,19 @@ runtime is **three**.
 | **Azure CLI** | signed in with `az login`, in the tenant that owns the Foundry resource |
 | **A Foundry resource or a gateway** | whichever path you deploy — you need one, not both |
 | **PowerShell** | 5.1 or 7. Every script here runs on both |
-| **A role that reaches Claude** | one of the five in [FOUNDRY-DIRECT.md §4](FOUNDRY-DIRECT.md#4-diagnostics). Network access is necessary and not sufficient |
+| **Access for the selected path** | Gateway: published Entra entitlement, no Foundry role. Direct evaluation only: a role in [FOUNDRY-DIRECT.md §4](FOUNDRY-DIRECT.md#4-diagnostics). Network access is necessary and not sufficient |
 
 To check a machine before changing anything:
 
 ```powershell
 ./scripts/Test-ClaudeNetwork.ps1 -IncludeOptional
 ```
+
+Supply `-GatewayUrl` for your gateway if it is not already in local settings.
+**Portal/manual:** the platform owner copies the Gateway URL from APIM >
+Overview (or Custom domains) and checks its network configuration; the client
+operator performs the DNS/TLS and streaming checks below. A portal resource
+showing Healthy does not test the developer's proxy.
 
 ![Test-ClaudeNetwork.ps1 reporting each destination, who needs it, who terminated TLS, and a streaming round trip that succeeded](guide/network-check.png)
 
@@ -68,8 +72,14 @@ extension, **Desktop** is the Claude Desktop app.
 
 Rows 1 and 2 are alternatives: allow the one matching the path you deploy. Row
 3 is needed in both. **Rows 1–3 are the only ones needed to *run*** — 4 to 8
-are install and update, and an already-installed client keeps working without
-them.
+are install/update rows, not requirements for the observed inference calls.
+This statement does not cover interactive sign-in web dependencies or
+client-invoked tools. Use your organisation's approved installer distribution.
+
+For a custom gateway hostname, allow that exact hostname instead of only
+`<apim-name>.azure-api.net`. For a private gateway endpoint, developers need the
+approved private-network path and DNS resolution (for example VPN); a firewall
+allow rule alone cannot supply that route.
 
 `*.vsassets.io` covers the publisher-scoped gallery hosts observed during a
 real install: `anthropic.gallery.vsassets.io` and
@@ -90,17 +100,21 @@ Not required by any developer, on any client.
 |---|---|---|:--:|:--:|:--:|---|
 | 11 | `dc.services.visualstudio.com` | 443 | ○ | ○ | ○ | Azure CLI telemetry — `az config set core.collect_telemetry=false` |
 | 12 | `mobile.events.data.microsoft.com` | 443 | — | ○ | — | VS Code telemetry |
-| 13 | `169.254.169.254` | 80 | ○ | ○ | ○ | instance metadata — link-local, see [§4](#the-instance-metadata-service) |
+| 13 | `169.254.169.254` | 80 | ○ | ○ | ○ | instance metadata — link-local, see [§4](#4-the-instance-metadata-service) |
 
 ○ = seen on the wire, safe to block.
 
 ### Deliberately left blocked
 
-`api.anthropic.com`, `code.claude.com`, `*.datadoghq.com`, `claude.ai`. None is
-needed on any client in Foundry mode. If the clients work while these are
-blocked, that is the demonstration that no prompt or completion leaves to
-Anthropic — a stronger statement than any client setting, because your network
-enforces it rather than the client asserting it.
+`api.anthropic.com`, `code.claude.com`, `*.datadoghq.com`, `claude.ai` were not
+needed by the measured inference path. Your network can block unapproved direct
+client connections; an installation/update or explicitly enabled integration
+may have different requirements.
+
+This does **not** prove Anthropic is absent from processing behind Foundry, or
+that a tool cannot send content elsewhere. Check the selected hosting terms in
+[Comparison](COMPARISON.md#4-data-handling--the-nuance-most-people-get-wrong)
+and all enabled connectors. Do not infer provider residency from a hostname.
 
 ### Two entries that look sufficient and are not
 
@@ -194,9 +208,9 @@ any of the three clients.
 
 Row 13, `169.254.169.254:80`, is link-local and not a firewall rule, but it
 decides which identity the clients use. The Azure identity chain probes it
-**before** falling back to your `az login`, so on any Azure-hosted machine — a
-Cloud PC, a Dev Box, an Azure VM — a managed identity is found first and used
-instead of the person sitting at the keyboard.
+**before** falling back to your `az login`. On an Azure-hosted machine with an
+available managed identity, that identity can be selected instead of the person.
+A metadata response alone does not prove a managed-identity token was issued.
 
 Measured on a Windows 365 Cloud PC: it answers with instance metadata in 10 ms.
 
@@ -205,7 +219,7 @@ Three behaviours, all different:
 | Behaviour | Consequence |
 |---|---|
 | refused | healthy — the chain falls through to the CLI immediately |
-| answers | a managed identity is used instead of your sign-in; pin with `AZURE_TOKEN_CREDENTIALS=dev` |
+| answers | the host has IMDS; an available managed identity may be selected ahead of the user's sign-in. Inspect the actual identity; pin with `AZURE_TOKEN_CREDENTIALS=dev` for the measured client |
 | silently dropped | every token acquisition waits for a timeout first; ask for it to be refused rather than dropped |
 
 `AZURE_TOKEN_CREDENTIALS` takes **`dev`**, not a credential name. Measured on
@@ -234,10 +248,23 @@ Two tools built for this, kept because the question recurs:
 Run a client through the observer to reproduce any of this:
 
 ```powershell
+# Terminal 1: leave this running in the foreground.
 node scripts/observe-egress.mjs --port 8888 --out egress.json
-$env:HTTPS_PROXY = 'http://127.0.0.1:8888'
-claude -p "hello"
 ```
+
+```powershell
+# Terminal 2: restore this terminal's proxy after the test.
+$previousProxy = $env:HTTPS_PROXY
+try {
+    $env:HTTPS_PROXY = 'http://127.0.0.1:8888'
+    claude -p "hello"
+}
+finally { $env:HTTPS_PROXY = $previousProxy }
+```
+
+Stop terminal 1 with Ctrl+C after the test. **Manual alternative:** use your
+approved network/proxy logs for the same time window; Azure portal cannot
+capture a local client's egress. Treat the hostname report as internal data.
 
 > [!NOTE]
 > The observer forwards CONNECT to the real host and pipes the bytes untouched.
@@ -247,7 +274,7 @@ claude -p "hello"
 
 ## 6. ECONNRESET is not an allowlist problem
 
-```
+```text
 ✳ Connection dropped (ECONNRESET) · Retrying in 22s · attempt 8/10
 ```
 
@@ -272,25 +299,37 @@ The test that separates a blocked host from a broken stream is a non-streaming
 call against a streaming one:
 
 ```powershell
-$res = '<your-resource>'
+$baseUrl = 'https://<apim-name>.azure-api.net/claude'
+$id = [guid]::NewGuid().ToString('N')
+$nonStreamingBody = Join-Path (Get-Location) "network-$id-a.json"
+$streamingBody = Join-Path (Get-Location) "network-$id-b.json"
 $tok = az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv
 
+try {
 # Non-streaming
 '{"model":"<deployment>","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}' |
-  Set-Content $env:TEMP\a.json -Encoding ascii
+  Set-Content $nonStreamingBody -Encoding ascii
 curl.exe -sS -w "`n[http=%{http_code}]" -X POST `
-  "https://$res.services.ai.azure.com/anthropic/v1/messages" `
+  "$baseUrl/v1/messages" `
   -H "Authorization: Bearer $tok" -H "content-type: application/json" `
-  -H "anthropic-version: 2023-06-01" -d "@$env:TEMP\a.json"
+  -H "anthropic-version: 2023-06-01" -d "@$nonStreamingBody"
 
 # Streaming - what the clients actually do
 '{"model":"<deployment>","max_tokens":32,"stream":true,"messages":[{"role":"user","content":"count to five"}]}' |
-  Set-Content $env:TEMP\b.json -Encoding ascii
+  Set-Content $streamingBody -Encoding ascii
 curl.exe -sS -N --no-buffer -w "`n[http=%{http_code}]" -X POST `
-  "https://$res.services.ai.azure.com/anthropic/v1/messages" `
+  "$baseUrl/v1/messages" `
   -H "Authorization: Bearer $tok" -H "content-type: application/json" `
-  -H "anthropic-version: 2023-06-01" -d "@$env:TEMP\b.json"
+  -H "anthropic-version: 2023-06-01" -d "@$streamingBody"
+}
+finally { Remove-Item $nonStreamingBody, $streamingBody -Force -ErrorAction SilentlyContinue }
 ```
+
+These are Windows PowerShell examples (`curl.exe` avoids the 5.1 `curl`
+alias). Use your actual gateway URL and permitted deployment name. For an
+approved direct test, change the base URL to the Foundry account's
+`https://<resource>.services.ai.azure.com/anthropic` and use its authorised
+identity; do not grant a gateway developer a bypass role merely to test networking.
 
 Write the body to a file and pass `-d "@file"`. Inlining JSON through
 PowerShell into `curl.exe` mangles the quoting and returns
@@ -318,6 +357,11 @@ true and useless.
 > again gets the ticket closed as "already done".
 
 ## Next steps
+
+For backend private endpoints, VNet/subnet ownership, DNS zones, and tests from
+inside versus outside the network, follow [Private projection](SECURE-PROJECTION.md).
+The gateway can have a public authenticated ingress while its resolver,
+Cosmos and Foundry paths are private; these are separate network decisions.
 
 | Goal | Where |
 |---|---|

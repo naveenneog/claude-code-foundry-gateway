@@ -1,6 +1,13 @@
 # Governance control checks — command reference
 
-Every command below was run against the live gateway. Set these once:
+For platform operators verifying a deployment or change. Manual HTTP examples
+use **PowerShell 7**; the shipped `Show-Governance.ps1` also supports 5.1.
+Use an entitled test user and an approved change window: calls consume model
+capacity and the throttle test temporarily changes a live tier limit.
+
+Required roles are in [Setup](SETUP.md#2-permissions-and-roles). Select the
+subscription, gateway group, Foundry group and actual telemetry resources with
+[Operations](OPERATIONS.md#1-select-the-gateway-and-workspace), then set:
 
 ```powershell
 $APIM = "<your-apim-name>"          # e.g. apim-claude-gw-xxxxxx
@@ -20,7 +27,7 @@ Produces the full four-control report:
 ./scripts/Show-Governance.ps1 -ApimName $APIM -ResourceGroup $RG
 ```
 
-```
+```text
 1. Entitled developer          [PASS] HTTP 200  tier=standard  consumed=20  remaining=19980
 2. Tier enforcement            [PASS] HTTP 200  tier=premium   consumed=20  remaining=79980
 3. Per-minute token budget     [PASS] HTTP 429  Retry-After: 3s
@@ -28,6 +35,9 @@ Produces the full four-control report:
 ```
 
 Add `-SkipThrottleTest` to leave the live budget untouched.
+That option does not prove throttling. **Portal/manual:** inspect APIM > APIs >
+Claude API > Policies and Named values, then perform the request tests below.
+There is no single portal button equivalent to this report.
 
 ---
 
@@ -55,9 +65,9 @@ $r.Headers['x-ratelimit-remaining-tokens']
 $r.Headers['x-quota-remaining-today']
 ```
 
-Live output:
+Illustrative response shape; token counts depend on the request and model:
 
-```
+```text
 HTTP 200
 x-claude-tier                    standard
 x-tokens-consumed                35
@@ -71,8 +81,10 @@ x-governed-by                    apim-claude-gateway
 | **200** | Entitled; `x-claude-tier` names the tier |
 | **401** | No valid Entra token — not signed in, or wrong tenant |
 | **403** `permission_error` | Authenticated but in no Claude Code group |
-| **403** (no message) | Daily quota exhausted |
-| **429** | Per-minute token budget hit; honour `Retry-After` |
+| **403** `rate_limit_error` | Inspect `budget` and the unit name for the exhausted counter |
+| **403** `model_not_allowed` / unassigned-unit message | Model or unit policy, not a missing token |
+| **429** | Token/request rate, miss admission or Foundry capacity; honour `Retry-After` |
+| **503** naming entitlement | Resolver unavailable or expired lease; use [Private projection](SECURE-PROJECTION.md#troubleshooting) |
 
 > On Windows PowerShell 5.1 there is no `-SkipHttpErrorCheck`; wrap the call in
 > `try/catch` and read `$_.Exception.Response`.
@@ -83,13 +95,17 @@ x-governed-by                    apim-claude-gateway
 
 Acquire a token as a service principal standing in for another developer:
 
+Use an isolated, entitled test principal. Supply its short-lived credential from
+an approved secret store, not a literal pasted into shell history. A second
+human test account is also valid; do not grant a new Foundry bypass role.
+
 ```powershell
 $tok = (Invoke-RestMethod -Method Post `
     -Uri "https://login.microsoftonline.com/<tenant-id>/oauth2/v2.0/token" `
     -ContentType 'application/x-www-form-urlencoded' `
     -Body @{
         client_id     = '<app-id>'
-        client_secret = '<secret>'
+        client_secret = $env:CLAUDE_TEST_CLIENT_SECRET
         scope         = 'https://cognitiveservices.azure.com/.default'
         grant_type    = 'client_credentials'
     }).access_token
@@ -97,6 +113,10 @@ $tok = (Invoke-RestMethod -Method Post `
 
 Then repeat check 1 with that token. A premium member returns
 `x-claude-tier: premium` and a visibly larger `x-ratelimit-remaining-tokens`.
+
+**Portal:** Entra ID > Groups > premium tier > Members and APIM > Named values
+show configuration. A call using that identity proves enforcement; the APIM
+portal operator's own sign-in is a different identity.
 
 ---
 
@@ -107,9 +127,12 @@ Lower the limit, exhaust it, restore it:
 ```powershell
 $restore = az apim nv show -g $RG --service-name $APIM `
     --named-value-id tpm-standard --query value -o tsv
+if ($LASTEXITCODE -ne 0 -or -not $restore) { throw 'Cannot read the limit to restore; do not change it' }
 
+try {
 az apim nv update -g $RG --service-name $APIM --named-value-id tpm-standard --value 100 -o none
-Start-Sleep -Seconds 25          # allow the policy to pick up the new value
+if ($LASTEXITCODE -ne 0) { throw 'Limit update failed' }
+Start-Sleep -Seconds 25          # check response headers too; propagation can be slower
 
 1..15 | ForEach-Object {
     $r = Invoke-WebRequest -Uri "$GW/v1/messages" -Method Post `
@@ -119,29 +142,50 @@ Start-Sleep -Seconds 25          # allow the policy to pick up the new value
         ($r.Headers['x-ratelimit-remaining-tokens'] -join ''), ($r.Headers['Retry-After'] -join '')
 }
 
-az apim nv update -g $RG --service-name $APIM --named-value-id tpm-standard --value $restore -o none
+}
+finally {
+    az apim nv update -g $RG --service-name $APIM --named-value-id tpm-standard --value $restore -o none
+    az apim nv show -g $RG --service-name $APIM --named-value-id tpm-standard --query value -o tsv
+}
 ```
 
 Expected tail:
 
-```
+```text
 11  HTTP 200  remaining=11
 12  HTTP 200  remaining=0
 13  HTTP 429  remaining=0  retry-after=2
 ```
 
 **Always restore the named value.** Anything else leaves the team throttled.
+If the restore call fails, restore it immediately in **APIM > Named values >
+`tpm-standard` > Edit**, then prove a normal request succeeds. The fixed sleep
+is not a propagation guarantee; compare response headers before drawing a
+conclusion about the new limit.
 
 ---
 
 ## Check 4 — Chargeback attribution
 
-Custom metric dimensions are not exposed by `az monitor metrics list`, so query
-the REST API:
+First verify the request ledger in **Log Analytics > Logs** in the gateway's
+workspace, after [publishing its functions](MONITORING.md#7-dashboard):
+
+```kusto
+ClaudeChargeback(ago(1h), now())
+| project timestamp, actor, user_id, tier, business_unit, model,
+          prompt_tokens, completion_tokens, cache_tokens_known
+| take 20
+```
+
+Confirm the test identity/model and time. Cache categories remain unknown on
+request rows. Use [FinOps](FINOPS.md) for priced aggregates and monthly close.
+
+For a **pilot metric diagnostic only**, custom metric dimensions are not
+reliably exposed by `az monitor metrics list`, so query the REST API:
 
 ```powershell
 $sub = az account show --query id -o tsv
-$ai  = "/subscriptions/$sub/resourceGroups/$RG/providers/Microsoft.Insights/components/appi-claude-gateway"
+$ai  = '<application-insights-resource-id-from-the-gateway-logger>'
 $mgmt = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv
 
 $ts = "{0}/{1}" -f (Get-Date).ToUniversalTime().AddHours(-1).ToString('yyyy-MM-ddTHH:mm:ssZ'),
@@ -161,13 +205,11 @@ foreach ($metric in $m.value) {
 }
 ```
 
-```
-alice@contoso.com                              831
-build-agent (service principal)                728
-```
-
 Swap `metricnames` for `Prompt%20Tokens` or `Completion%20Tokens`, or change the
 filter to `Tier eq '*'` or `Model eq '*'` to slice differently.
+**Portal:** the linked Application Insights > Metrics > `claudecode` > Sum >
+Apply splitting. This diagnostic has metric cardinality limits and is not
+evidence of complete billing.
 
 > Nothing returned? Allow ~3 minutes after traffic, confirm the APIM diagnostic
 > has `metrics: true`, and confirm App Insights has
@@ -190,19 +232,28 @@ az ad group member list --group claude-code-standard --query "[].{name:displayNa
 
 ```powershell
 az apim nv list -g $RG --service-name $APIM `
-    --query "[?contains(name,'tpm') || contains(name,'quota') || contains(name,'calls')].{setting:name,value:value}" -o table
+    -o json | ConvertFrom-Json |
+    Where-Object { $_.name -match 'tpm|quota|calls' } |
+    Select-Object name, value
 ```
 
 **Nobody bypasses the gateway** — the only principal with data-plane access
 should be the gateway's managed identity:
 
 ```powershell
-$scope = az cognitiveservices account show -n $FOUNDRY -g $FRG --query id -o tsv
-az role assignment list --scope $scope --include-inherited `
-    --query "[?roleDefinitionName=='Cognitive Services User'].{who:principalName,type:principalType}" -o table
+./scripts/Get-ClaudeBypass.ps1 -ResourceGroup $RG -ApimName $APIM
 ```
 
-Any human in that list can skip every control above.
+It checks data actions and inherited scope, not just one role name. Review each
+finding with its owner. **Portal:** Foundry > Access control (IAM) > Role
+assignments, including inherited assignments. Also review key access and
+networking before claiming there is no bypass.
+
+**Portal equivalents for the other audits:** APIM > Named values; Entra > Groups
+> All members for transitive membership; APIM > APIs > Claude API > Policy code
+editor for policy. A direct-members list alone is not the effective roster.
+For projection entitlement use [the store comparison](SCALE.md#4-run-the-comparison-until-it-reports-nothing),
+not stale named-value lists.
 
 **The policy that is actually deployed**
 
@@ -230,6 +281,10 @@ AppRequests
 '@ -o table
 ```
 
+**Portal:** open that workspace > Logs and run the same query. The workspace
+ID is its `customerId`, not the Application Insights AppId or ARM resource ID.
+Query access is required, not a Foundry inference role.
+
 ---
 
 ## Client-side verification
@@ -244,3 +299,7 @@ claude -p "Reply OK" --output-format json   # look for "provider":"foundry"
 
 In an interactive session, `/status` reports **API provider: Microsoft Foundry**
 plus the resource name. It does not work in the VS Code panel — terminal only.
+
+**Client UI:** verify the gateway connection in Desktop and the configured
+provider in VS Code; use [Developer setup](../DEVELOPER.md#using-it).
+If a request fails, [Troubleshooting](TROUBLESHOOTING.md) routes by symptom.

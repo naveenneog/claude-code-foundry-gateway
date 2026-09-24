@@ -166,6 +166,7 @@ try {
     Invoke-Check 'Mutation shards preserve every case'     'Test-MutationShards.ps1'
     Invoke-Check 'Format strings parse and run'            'Test-FormatStrings.ps1'
     Invoke-Check 'Screenshots and the docs that show them' 'Test-Screenshots.ps1'
+    Invoke-Check 'Documentation links and commands'        'Test-DocReferences.ps1'
     Invoke-Check 'Resolver - the entitlement read path'   'Test-Resolver.ps1'
     Invoke-Check 'Named value writes fail loudly'          'Test-NamedValueWrites.ps1' @{ SkipLive = $true }
     Invoke-Check 'Release log hygiene'                     'Test-ReleaseLog.ps1'
