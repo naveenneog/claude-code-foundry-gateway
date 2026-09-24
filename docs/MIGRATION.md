@@ -5,7 +5,7 @@ answers and different owners:
 
 | # | Requirement | Short answer |
 |---|---|---|
-| [1](#1-history-memory-and-sessions) | Keep chat history, memory and sessions intact | **All of it migrates — Desktop chats, Cowork and Code sessions, projects and memory — through an import wizard that is off by default at both ends. Attachments are the exception.** |
+| [1](#1-history-memory-and-sessions) | Preserve history, memory and sessions | Local Code data stays on the device; supported Desktop history uses an opt-in import. Pilot with representative data and move attachments separately. |
 | [2](#2-mass-deployment-through-mdm) | Bulk install and push user-level config via MDM | Fully supported. Managed settings override every user-level value. |
 | [3](#3-bulk-entitlement-from-a-csv-or-an-entra-group) | Bulk migration from C4E, CSV or Entra groups | `Import-ClaudeEntitlement.ps1`. Budget effort for identity resolution, not for the import. |
 | [4](#5-cutover-runbook) | How to actually run it | Switch on import, export, pilot, dual-run, cut over, decommission. |
@@ -14,15 +14,33 @@ Every claim below was checked against Anthropic's documentation or against a
 live deployment. Where something is genuinely undocumented it says so rather
 than guessing.
 
+## Prerequisites and owners
+
+- Platform owner: deployed gateway, approved model/hosting choice and
+  [Setup roles](SETUP.md#2-permissions-and-roles).
+- Directory owner: group membership and the active-store publication path.
+  See [Onboarding](ONBOARDING.md) for nested groups, last-member removal and
+  unattended Graph grants.
+- Device administrator: Intune/Jamf/GPO permissions for fleet policy; users can
+  perform their own local imports and backups.
+- Claude workspace owner and privacy owner: approve exports, optional content
+  capture and retention. Organisational exports and member exports differ below.
+
+Use the [operations target checklist](OPERATIONS.md#1-select-the-gateway-and-workspace)
+before commands. Do not run a 500,000-person roster into named values: the
+default map fills at roughly 93 developers with six-character unit IDs.
+Plan [Scale](SCALE.md) first.
+
 ---
 
 ## 1. History, memory and sessions
 
 ### What survives
 
-**Everything except attachments — but the import that moves it is off by
-default at both ends.** The work is switching it on before people cut over, not
-recovering data afterwards.
+**Enable the supported import before cutover.** Local files and imported
+history have different paths. Validate the result for each client's version
+and data type before decommissioning the source; an export is not proof of a
+successful import.
 
 | Artefact | Survives? | What you do |
 |---|---|---|
@@ -123,12 +141,14 @@ files moved separately, through an organization-level export.
 
 ### Getting the claude.ai export
 
-This is a **central admin task on Team and Enterprise, not a per-user one** —
-which changes the runbook, because "tell everyone to export" does not work.
+Distinguish the **organisation-wide export** from a **member's own export**.
+The owner controls whether members may export; that toggle does not give a
+member access to the whole organisation or to omitted attachment contents.
 
 | Plan | Who exports | Where |
 |------|-------------|-------|
-| Team, Enterprise | **Primary Owner only** | Organization settings → Data and privacy |
+| Team, Enterprise: organisation export | **Primary Owner only** | Organization settings → Data and privacy |
+| Team, Enterprise: member's own data | The member, after the owner enables exports | Personal export / Desktop import flow documented above |
 | Free, Pro, Max | Each user | Settings → Privacy |
 
 Both run from the web app **or Claude Desktop**; neither works from iOS or
@@ -185,6 +205,10 @@ which is exactly the right shape for that:
 # paste the exported block, or point at the file you saved it to
 ./scripts/Import-ClaudeMemory.ps1 -Path .\exported-memory.md
 ```
+
+**Manual/client UI:** export memory through the documented Claude interface,
+review it, then merge the approved text into `~/.claude/CLAUDE.md` with an
+editor. Back up that file first. Azure has no portal action for local memory.
 
 It strips the code fence, writes `~/.claude/CLAUDE.md`, keeps anything already
 in that file, and replaces its own block rather than stacking on a re-run.
@@ -524,6 +548,11 @@ Entitlement is Entra group membership. Filling those groups is the migration.
 ./scripts/Sync-ClaudeAccess.ps1 -ApimName <apim> -ResourceGroup <rg>
 ```
 
+**Portal/manual:** Entra ID > Groups > the tier group > Members > Bulk operations
+> Import members (use the portal's own CSV template), or Add members for a small
+pilot. Then publish and verify using [Onboarding](ONBOARDING.md#step-3--push-the-change-to-the-gateway).
+A portal import does not publish APIM membership.
+
 The script is idempotent, so re-running it after the roster changes adds only
 what is new. It collapses duplicates, and when someone appears in both tiers
 premium wins — matching how the gateway policy resolves a dual member.
@@ -533,20 +562,18 @@ premium wins — matching how the gateway policy resolves a dual member.
 Not the import. Identity resolution.
 
 A person can exist in the directory under several different strings, and the
-one a colleague typed into a spreadsheet is often none of them. From the tenant
-this was built against — a single real account:
+one a colleague typed into a spreadsheet is often none of them. This
+anonymized example illustrates the shapes to check:
 
-```
-userPrincipalName   navg_microsoft.com#EXT#@fdpo.onmicrosoft.com
-mail                naveen.g@microsoft.com
-otherMails          nag@microsoft.com
+```text
+userPrincipalName   alice_contoso.com#EXT#@contoso.onmicrosoft.com
+mail                alice@contoso.com
+otherMails          alice.morgan@contoso.com
 ```
 
-Three addresses, and the one that person actually signs in with —
-`navg@microsoft.com` — appears on none of them. Their `userType` is `Member`
-despite the `#EXT#` form, so filtering on `userType` would not have caught it
-either. A naive `az ad user show --id <email>` returns nothing for all four
-variants, and a naive importer would silently drop them.
+The sign-in address can differ from all of those attributes, and `#EXT#` is
+not sufficient evidence of the current `userType`. A failed
+`az ad user show --id <email>` is not grounds for silently dropping a person.
 
 So each identifier is tried four ways, in order:
 
@@ -574,10 +601,13 @@ you want it.
 
 ### Keeping it in sync afterwards
 
-The import is for the migration. Afterwards, membership changes come from
-joiner/mover/leaver, and `Sync-ClaudeAccess.ps1` on a schedule pushes them to
-the gateway. Removal takes effect at the next sync — or immediately if the
-account is disabled, since token acquisition fails at that moment.
+The import is for the migration. Afterwards, joiner/mover/leaver changes must
+be published to the active entitlement store. The named-value writer is
+`Sync-ClaudeAccess.ps1`; the projection has its own reconciliation job.
+Disabling an account stops new token acquisition, not use of a token already
+issued. Remove every membership path, publish, and verify refusal after
+propagation/cache. Provision and monitor unattended Graph access before relying
+on a schedule ([Onboarding](ONBOARDING.md#5-revoke-access)).
 
 ---
 
@@ -594,6 +624,10 @@ they carry different risk.
 ./scripts/Restore-ClaudeGateway.ps1 -Path ./backups/<file>.json -Apply
 ```
 
+**Portal/manual:** follow [Operations: backup and restore](OPERATIONS.md#4-back-up-change-restore-verify)
+for the per-resource editors and verification. There is no single portal export
+equivalent to this configuration backup.
+
 One file holds what makes the gateway behave the way it does: every named value
 — entitlement lists, per-tier limits, the organisation ceiling, per-user
 overrides, the business unit registry, the parent map, the membership map — plus
@@ -604,6 +638,9 @@ returns a secret named value's contents only from the `listValue` action; the
 backup reads the plain list, which omits them, so a secret cannot reach the file
 even by mistake. Their names are recorded, and the restore tells you which ones
 have to be set by hand.
+This protection applies to named values correctly marked Secret. A credential
+mistakenly stored in an ordinary named value is still ordinary configuration:
+review the backup and keep it private.
 
 The restore is a dry run until `-Apply`, and it prints the before-and-after of
 every value it would change. It refuses to restore into a gateway other than the
@@ -626,6 +663,11 @@ happen in:
 ./scripts/Migrate-ClaudeWorkstation.ps1 -Configure   # point it at the gateway
 ./scripts/Migrate-ClaudeWorkstation.ps1 -Restore -Apply
 ```
+
+**Manual/client UI:** completely quit the clients, copy their data folders to
+controlled backup storage, and inspect the copy before configuring the new
+provider. Use [Developer setup](../DEVELOPER.md#appendix--configuring-it-by-hand)
+for local file/UI changes. Azure portal cannot back up workstation history.
 
 **Back up before configuring.** Switching to the gateway moves Claude Desktop to
 a different profile root — `%LOCALAPPDATA%\Claude-3p` instead of
@@ -696,6 +738,8 @@ Both backup folders are git-ignored.
 
 ---
 
+<a name="4-cutover-runbook"></a>
+
 ## 5. Cutover runbook
 
 **Turn on both import switches first.** `claudeAiImport.enabled` in the Desktop
@@ -714,7 +758,7 @@ and land those files wherever they should have been in the first place.
 Organization settings → Data and privacy. Do it at the *start*: anything already
 removed by a retention policy will not be in the archive.
 
-**Pilot — one team, two weeks.** Deploy the gateway, entitle the team, push MDM
+**Pilot — agree a representative cohort and observation window.** Deploy the gateway, entitle the team, push MDM
 to their machines only. Confirm `/status` shows the managed source, traffic
 carries `x-governed-by`, and budgets appear in Application Insights. Have them
 run the import wizard and confirm their Cowork and Code sessions came across —

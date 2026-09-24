@@ -6,6 +6,11 @@ Why route Claude Code through your own Foundry deployment instead of
 This is written to be used in an architecture review, so it includes the
 arguments *against* as well as for.
 
+Option A below means a shared raw API key, not the full Claude Enterprise
+administration product. All options need a review of their provider terms,
+retention and access controls. See [Architecture](ARCHITECTURE.md) and
+[Authentication](AUTHENTICATION.md) before relying on a security claim.
+
 ---
 
 ## The three options
@@ -13,12 +18,12 @@ arguments *against* as well as for.
 | | **A. Anthropic direct** | **B. Foundry direct** | **C. Foundry + gateway** |
 |---|---|---|---|
 | Endpoint | `api.anthropic.com` | `<res>.services.ai.azure.com/anthropic` | `<apim>.azure-api.net/claude` |
-| Credential on the dev machine | API key | none — Entra token | none — Entra token |
+| Credential on the dev machine | API key | Entra bearer token, no model key | Entra bearer token, no model key |
 | Who can call the model | anyone with the key | anyone with `Cognitive Services User` | only entitled group members |
 | Per-developer budget | no | no | **yes** |
 | Per-developer cost attribution | no | no | **yes** |
 | Billing lands on | Anthropic invoice | Azure invoice | Azure invoice |
-| Setup effort | minutes | ~1 hour | ~1 hour |
+| Setup effort | Provider/account setup | Identity, role and client setup | Those decisions plus gateway provisioning and governance |
 
 **B is not a destination.** It removes the API key but leaves you with a shared,
 unmetered resource that any role holder can drain. It is a useful stepping stone
@@ -43,15 +48,16 @@ request carries the developer's own token including the `oid` and `upn` claims.
 
 | | API key | Entra token |
 |---|---|---|
-| Lifetime | until revoked | ~1 hour |
+| Lifetime | until revoked | Token-dependent; [measured lifetimes](AUTHENTICATION.md#the-matrix) are not universal defaults |
 | Identity | none | the actual person |
-| Revocation | rotate, break everyone | disable the account, instant |
-| Leaving the company | manual key rotation | access dies with the account |
-| Conditional Access, MFA, device compliance | not applicable | **enforced** |
+| Revocation | rotate the shared key | remove entitlement and publish; disabling an account does not invalidate an existing token |
+| Leaving the company | revoke shared access and review keys | group/store revocation plus normal account/device offboarding |
+| Conditional Access, MFA, device compliance | not conveyed by the API key | Applied at user sign-in according to tenant policy; not re-evaluated by APIM on every request |
 
 That last row is easy to skim past. Routing through Entra means your existing
-Conditional Access policies apply to AI usage automatically — no separate control
-plane to build.
+Conditional Access policies can protect user sign-in. Workload identities and
+already-issued tokens have different behavior; the gateway's entitlement check
+is the control for prompt revocation of new requests.
 
 ### 2. Spend moves onto the Azure invoice
 
@@ -79,7 +85,7 @@ the best you can do is one shared bucket.
 | Per-developer rate limit | ✗ | ✓ `llm-token-limit` keyed on `oid` |
 | Per-developer daily quota | ✗ | ✓ |
 | Tiers | ✗ | ✓ Entra group membership |
-| Cost attribution by person | ✗ | ✓ App Insights dimension |
+| Cost attribution by person | not from a shared key alone | request ledger and priced reporting, with cache/invoice caveats |
 | Revoke one person | ✗ | ✓ remove from group, sync |
 | Model allowlist | ✗ | ✓ policy |
 
@@ -96,7 +102,7 @@ There are two hosting options, and they differ materially:
 | Inference infrastructure | Azure | Anthropic |
 | Prompts and completions | stay within Azure, except usage metadata and safety-flagged content | may be processed outside Azure, including outside your region |
 | Deployment types | Global Standard, **US Data Zone Standard** | Global Standard only |
-| Suits strict residency | yes | no |
+| Residency review | Check the selected region/deployment type and documented processing exceptions | Check provider processing locations and terms; do not infer Azure-only processing |
 
 Check what you actually have:
 
@@ -114,6 +120,10 @@ az cognitiveservices model list -l <region> \
 On the deployment this accelerator was built against, both models run
 `GlobalStandard` and the model `format` is `Anthropic`.
 
+**Portal:** Foundry > Models + endpoints > deployment details shows deployment
+type, model and version. Compare those to the hosting reference; model format
+alone does not establish where inference is processed.
+
 > If you are adopting Foundry **specifically** for data residency, verify the
 > hosting option and deployment type before committing. Do not assume the Azure
 > endpoint implies Azure-only processing.
@@ -123,7 +133,7 @@ On the deployment this accelerator was built against, both models run
 | | Anthropic direct | Foundry |
 |---|---|---|
 | Network path | public internet | Azure backbone; Private Link available |
-| Egress control | allowlist a third-party FQDN | stays inside your network boundary |
+| Egress control | allowlist a third-party FQDN | Private Link is optional; verify the actual network path and hosting terms |
 | Diagnostics | Anthropic console | Azure Monitor, Log Analytics, App Insights |
 | Policy and posture | separate | Azure Policy, Defender for Cloud |
 | Identity | Anthropic org | Entra ID, Conditional Access, PIM |
@@ -142,10 +152,10 @@ An honest architecture review has to cover this side too.
 | **New model lag** | Anthropic ships to its own API first; Foundry follows | Keep a small direct-API path for evaluation |
 | **Beta feature lag** | Newer beta headers and endpoints may not be exposed | Test before depending on one |
 | **Not every model** | Your region and Marketplace entitlement decide what you can deploy. Marketplace purchases disabled in the tenant blocks deployment entirely | Check `az cognitiveservices model list` early |
-| **Gateway cost** | APIM Basic v2 is ~$150/month at list price before any tokens | Only worth it at team scale; a 5-person team is likely below the line |
+| **Gateway cost** | APIM Basic v2 is ~$150/month at list price before any tokens, for the recorded reference pricing | Compare your regional quote, workload and governance need; no headcount break-even was measured |
 | **Gateway latency** | one extra hop | co-locate APIM and Foundry in the same region |
-| **New single point of failure** | gateway down = everyone down | Standard v2 / Premium v2 for SLA and multi-region |
-| **Membership is not live** | entitlement changes apply when the sync runs | schedule the sync |
+| **New single point of failure** | gateway down = everyone down | Premium v2 supports zones, not multi-region. Regional failover and counter behavior need a separate design/test |
+| **Membership is not live** | entitlement changes apply when the active store is refreshed | provision/monitor the sync and Graph grants; the optional projection also enforces an absolute lease |
 | **Operational ownership** | someone now owns policy, budgets, and upgrades | this is real headcount, not zero |
 
 ---
@@ -159,15 +169,16 @@ Do you need per-developer budgets or chargeback?
     └── Do you need to remove API keys, or put spend on the Azure invoice?
         ├── yes ────────────────────────▶ B. Foundry direct
         └── no
-            └── Are you evaluating, or fewer than ~5 developers?
+            └── Is this an approved individual evaluation?
                 ├── yes ────────────────▶ A. Anthropic direct
                 └── no ─────────────────▶ C. Foundry + gateway
 ```
 
 ### Rules of thumb
 
-- **Under ~5 developers**, the $150/month gateway probably exceeds the spend it
-  governs. Use A or B and revisit.
+- **For a small deployment**, compare the $150/month gateway reference figure
+  with your regional prices and governance requirements. Headcount alone does
+  not establish whether it is worthwhile.
 - **Regulated industry, or residency requirements** — go to Foundry, and verify
   the hosting option per section 4.
 - **You have an Azure commitment** — the MACC drawdown usually settles it.
@@ -193,7 +204,7 @@ from documentation:
 | **Cognitive Services User** is required; Owner is not sufficient | Owner is control-plane only and gets `401` |
 | `CLAUDE_CODE_USE_FOUNDRY=1` is the switch; `CLAUDE_CODE_USE_AZURE` does not exist | — |
 | `ANTHROPIC_FOUNDRY_RESOURCE` and `ANTHROPIC_FOUNDRY_BASE_URL` are mutually exclusive | Use the base URL in gateway mode |
-| Claude Code forwards the developer's own Entra token, with `oid`/`upn` and an `x-claude-code-session-id` header | Per-user metering is unforgeable — this is what makes the whole design work |
+| Claude Code forwards the developer's own Entra token, with `oid`/`upn` and an `x-claude-code-session-id` header | Identity uses signed token claims, not a supplied user header; bearer tokens still need protection against theft/replay |
 | Streaming, tool use, and `count_tokens` all work through the gateway | No feature loss on the governed path |
 | APIM `llm-*` policies parse Anthropic token usage **only on v2 SKUs** | Classic tiers silently meter zero |
 
@@ -207,5 +218,4 @@ from documentation:
 | Give people access | [Onboarding guide](ONBOARDING.md) |
 | Watch the spend | [Monitoring guide](MONITORING.md) |
 | Fix something | [Debug guide](DEBUGGING.md) |
-
 

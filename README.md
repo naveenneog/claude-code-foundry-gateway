@@ -238,6 +238,7 @@ there; [Operations](docs/OPERATIONS.md) maps tasks to commands and portal paths.
 | [Migration](docs/MIGRATION.md) | First-party history, MDM, bulk onboarding and cutover |
 | [Architecture](docs/ARCHITECTURE.md) / [Decisions](docs/DECISIONS.md) | System map and deployment choices |
 | [Authentication](docs/AUTHENTICATION.md) / [Network](docs/NETWORK.md) | Identities, revocation, client egress and private access |
+| [Data governance](docs/DATA-GOVERNANCE.md) | Retention, discovery, approved purge and its coverage limits |
 | [Scale](docs/SCALE.md) / [Private projection](docs/SECURE-PROJECTION.md) | Measured limits, costs and migration runbook |
 | [Comparison](docs/COMPARISON.md) / [Foundry direct](docs/FOUNDRY-DIRECT.md) | Adoption choices and ungoverned evaluation |
 | [AI Gateway tier](docs/AI-GATEWAY-TIER.md) | Preview comparison and unverified model-serving path |
