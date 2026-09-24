@@ -109,6 +109,15 @@ Assert 'the guide says which blades are not committed' (
     $guideDoc -match '(?s)not committed|against your own tenant')
 
 Write-Host ''
+Write-Host 'Turnstile live capture provenance and mutations' -ForegroundColor Cyan
+Push-Location $root
+try {
+    & node --test tests/turnstile-captures.test.mjs
+    Assert 'every Turnstile capture has verified live provenance' ($LASTEXITCODE -eq 0)
+}
+finally { Pop-Location }
+
+Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host ("Screenshots hold: {0} image(s), {1} declared capture(s), {2} referenced." -f `
     $shots.Count, $ids.Count, $referenced.Count) -ForegroundColor Green
