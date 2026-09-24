@@ -168,7 +168,7 @@ export function snapshotText(snapshot) {
   return result.join('\n');
 }
 
-export async function capturePixels(page, name, redactor, locator = null) {
+export async function capturePixels(page, name, redactor, locator = null, recordDiagnostic = true) {
   for (const frame of page.frames()) await frame.evaluate(({ rules, publicGuid }) => {
     if (!document.body) return;
     const replace = (value) => {
@@ -221,7 +221,7 @@ export async function capturePixels(page, name, redactor, locator = null) {
     const findings = redactor.leaks(text);
     if (text.trim().length < 80) throw new Error(`Refusing ${name}: empty or incomplete page`);
     if (findings.length) {
-      privateJson('redaction-diagnostic.json', { image: name, findings });
+      if (recordDiagnostic) privateJson('redaction-diagnostic.json', { image: name, findings });
       throw new Error(`Refusing ${name}: rendered DOM still contains a real value (${findings.join(', ')})`);
     }
     const screenshot = await cdp.send('Page.captureScreenshot', {

@@ -161,7 +161,7 @@ test('capture redacts child frames and refuses to rely on an uninspected iframe'
     await page.setContent(`<main>Controlled browser fixture for capture validation, not live deployment evidence.</main>
       <iframe srcdoc="<p>Private Person person@private.example.org aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee</p>"></iframe>`);
     await page.frames()[1].waitForLoadState();
-    const pixels = await capturePixels(page, 'fixture-not-published.png', new Redactor([['Private Person', 'Example Owner']]));
+    const pixels = await capturePixels(page, 'fixture-not-published.png', new Redactor([['Private Person', 'Example Owner']]), null, false);
     assert.ok(pixels.length > 100);
     const text = await page.frames()[1].locator('body').innerText();
     assert.ok(text.includes('Example Owner'));
