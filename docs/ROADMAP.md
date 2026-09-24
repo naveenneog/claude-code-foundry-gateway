@@ -298,6 +298,11 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       and P47's requests and boosts; discovery-first deployment with cost and implications, and a
       FinOps tooling selector. [ADR-0023](adr/0023-aum-service.md), `docs/AUM-SERVICE.md`.
       Open: the manager-only journey and the AUM client's end-to-end journey on its test gateway
+- [x] P57 documentation review — eight reader journeys walked with the guides alone; 70
+      findings fixed, five task guides added (Operations, Budgets, FinOps, Reference, Data
+      governance), README from 710 to 278 lines, live names replaced by discovery commands, and
+      `tests/Test-DocReferences.ps1` guarding links, anchors, scripts and parameters. Open: the
+      portal walkthrough pictures, declared as capture specs for one batch after a fresh sign-in
 - [x] P51 terminal FinOps, first release — `claude-finops`, nine terminal views and scriptable
       commands over one engine, backed by Turnstile, the gateway directly, or example data. Budget
       changes are previewed, rechecked against the server and never retried. Managers see only

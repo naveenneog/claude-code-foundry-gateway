@@ -41,6 +41,26 @@ against stale runs is being added with the modes, and a single queue-driven writ
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
 
+## P57 documentation review, 2026-09-24
+
+Merged at `0d0ac7c`, its last green commit. Eight reader journeys were walked with the guides
+alone: developer, administrator standing it up and running it, FinOps, delegated manager or viewer,
+security, network, capacity planner and on-call operator.
+
+| | |
+|---|---|
+| **Fixed** | 70 findings across README, DEVELOPER and 22 guides; 23 proposals for files other packets own are in the review's report |
+| **New guides** | Operations, Budgets, FinOps, Reference and Data governance, each a task guide with value sources, discovery commands and portal paths |
+| **README** | From 710 to 278 lines, with every original rendered anchor and image kept; a documentation map routes each reader |
+| **No live names** | Where guides named the reference deployment's resources, they now use placeholders plus the command that discovers the reader's own value (ADR-0003's labels only; its decision text is unchanged) |
+| **Guard** | `tests/Test-DocReferences.ps1` checks links, anchors, script names and parameters in 33 guides, with ten mutations; it adds 7.1 s to the suite |
+| **Gate** | PASS on `0d0ac7c`: 40 checks, 14 min 6 s |
+
+Not yet accepted: the portal walkthroughs. The capture profile's session asks for a fresh sign-in
+on resource and Entra blades (tenant Conditional Access), so 16 portal pictures are declared as
+capture specs on the review's branch (`da3d77b`), for one batch after the owner signs in again.
+That commit is not green until the pictures exist.
+
 ## P50 chargeback reports, 2026-09-24
 
 Merged from `chargeback-reports` at `854ea37`. [ADR-0020](adr/0020-chargeback-reports.md);

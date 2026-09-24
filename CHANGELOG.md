@@ -599,6 +599,13 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Changed
 
+- **The documentation is organised by what a reader is trying to do.** README is a 278-line
+  landing page with a documentation map, down from 710 lines, and five task guides were added:
+  Operations, Budgets, FinOps, Reference and Data governance. Guides say where each value comes
+  from and give the command that discovers it, with the portal path beside the script. Seventy
+  findings from walking eight reader journeys were fixed. `tests/Test-DocReferences.ps1` fails
+  on a broken link or anchor, or on a script or parameter a guide names that does not exist.
+
 - **The test suite runs in parallel, and the gate's budget is 30 minutes again.** `Test-All`
   starts each check as its own `pwsh` process, four at a time, with an exclusive lane for checks
   that share Azure CLI state or scan the whole tree, logs in registration order, and a 600 s
