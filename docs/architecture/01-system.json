@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "id": "system-overview",
+  "kind": "flow",
+  "title": "One gateway. Separate request and governance paths.",
+  "subtitle": "The customer owns the Entra tenant, Azure resources and Foundry Claude deployment. Optional profiles add services; they do not replace the gateway as the enforcer.",
+  "width": 1280,
+  "height": 1380,
+  "outputs": ["docs/images/architecture/system-overview.png", "docs/images/architecture.png"],
+  "sources": ["infra/main.bicep", "infra/foundry-role.bicep", "infra/projection.bicep", "infra/projection-network.bicep", "infra/resolver.bicep", "infra/turnstile-schedule.bicep", "scripts/Setup-ClaudeWorkstation.ps1", "scripts/Connect-ClaudeTurnstile.ps1"],
+  "identifiers": {
+    "policy": { "label": "infra/policy.xml", "source": "infra/policy.xml", "match": "<policies>" },
+    "validate": { "label": "validate-azure-ad-token", "source": "infra/policy.xml", "match": "<validate-azure-ad-token" },
+    "limit": { "label": "llm-token-limit", "source": "infra/policy.xml", "match": "<llm-token-limit" },
+    "rate": { "label": "rate-limit-by-key", "source": "infra/policy.xml", "match": "<rate-limit-by-key" },
+    "metric": { "label": "llm-emit-token-metric", "source": "infra/policy.xml", "match": "<llm-emit-token-metric" },
+    "mi": { "label": "authentication-managed-identity", "source": "infra/policy.xml", "match": "<authentication-managed-identity" },
+    "helper": { "label": "get-foundry-token.ps1", "source": "scripts/get-foundry-token.ps1", "kind": "file" },
+    "allow-standard": { "label": "allow-standard", "source": "infra/policy.xml", "match": "{{allow-standard}}" },
+    "allow-premium": { "label": "allow-premium", "source": "infra/policy.xml", "match": "{{allow-premium}}" },
+    "sync": { "label": "Sync-ClaudeAccess.ps1", "source": "scripts/Sync-ClaudeAccess.ps1", "kind": "file" },
+    "llm-log": { "label": "ApiManagementGatewayLlmLog", "source": "analytics/chargeback-ledger.kql", "match": "\nApiManagementGatewayLlmLog\n" },
+    "traces": { "label": "AppTraces", "source": "analytics/chargeback-ledger.kql", "match": "    AppTraces\n" },
+    "metrics": { "label": "AppMetrics", "source": "analytics/chargeback-cost.kql", "match": "AppMetrics" },
+    "ledger": { "label": "ClaudeChargeback()", "source": "scripts/Publish-ClaudeQueries.ps1", "match": "Alias   = 'ClaudeChargeback'" },
+    "cost": { "label": "ClaudeCost()", "source": "scripts/Publish-ClaudeQueries.ps1", "match": "Alias   = 'ClaudeCost'" },
+    "daily": { "label": "ClaudeCodeDaily()", "source": "scripts/Publish-ClaudeQueries.ps1", "match": "Alias   = 'ClaudeCodeDaily'" },
+    "apply": { "label": "ClaudeTurnstileApply.ps1", "source": "scripts/ClaudeTurnstileApply.ps1", "kind": "file" },
+    "export": { "label": "Export-ClaudeTurnstileUsage.ps1", "source": "scripts/Export-ClaudeTurnstileUsage.ps1", "kind": "file" },
+    "integration": { "label": "turnstile-integration", "source": "scripts/ClaudeTurnstileGovernance.ps1", "match": "'turnstile-integration'" },
+    "projection-sync": { "label": "Sync-ClaudeProjection.ps1", "source": "scripts/Sync-ClaudeProjection.ps1", "kind": "file" },
+    "writer": { "label": "apply-projection.mjs", "source": "sync/src/apply-projection.mjs", "kind": "file" },
+    "graph": { "label": "GroupMember.Read.All", "source": "scripts/Grant-ClaudeGovernanceGraphAccess.ps1", "match": "'GroupMember.Read.All'" },
+    "resolver-route": { "label": "entitlement/{oid}", "source": "resolver/src/index.mjs", "match": "route: 'entitlement/{oid}'" },
+    "ent-source": { "label": "entitlement-source", "source": "infra/policy.xml", "match": "{{entitlement-source}}" }
+  },
+  "groups": [
+    { "x": 0, "y": 0, "w": 310, "h": 506, "tone": "slate", "title": "Client devices / automation" },
+    { "x": 340, "y": 0, "w": 520, "h": 506, "tone": "blue", "title": "Customer gateway · apim-<prefix>" },
+    { "x": 890, "y": 0, "w": 390, "h": 506, "tone": "teal", "title": "Customer identity and model" },
+    { "x": 0, "y": 544, "w": 1280, "h": 276, "tone": "blue", "title": "Telemetry · customer Log Analytics workspace" },
+    { "x": 0, "y": 852, "w": 618, "h": 526, "tone": "purple", "title": "Optional Turnstile governance" },
+    { "x": 650, "y": 852, "w": 630, "h": 526, "tone": "teal", "title": "Optional projection · private VNet profile" }
+  ],
+  "nodes": [
+    { "id": "code", "x": 16, "y": 60, "w": 278, "h": 90, "tone": "slate", "compact": true, "title": "Claude Code", "lines": ["Azure CLI sign-in"] },
+    { "id": "vscode", "x": 16, "y": 166, "w": 278, "h": 90, "tone": "slate", "compact": true, "title": "Claude VS Code extension", "lines": ["Azure CLI sign-in; Foundry mode"] },
+    { "id": "desktop", "x": 16, "y": 272, "w": 278, "h": 110, "tone": "slate", "compact": true, "title": "Claude Desktop", "lines": ["[[helper]]", "Helper reuses Azure CLI sign-in"] },
+    { "id": "terminal", "x": 16, "y": 408, "w": 278, "h": 80, "tone": "purple", "compact": true, "title": "claude-finops", "lines": ["Pending merge · admin APIs"] },
+    { "id": "apim", "x": 356, "y": 60, "w": 488, "h": 426, "tone": "blue", "title": "API Management v2", "eyebrow": "Request policy", "lines": [
+      "[[policy]]",
+      "1  [[validate]]; signed oid",
+      "2  Entitlement, tier and model allowlist",
+      "3  [[limit]]; [[rate]]",
+      "4  [[metric]]; attribution trace",
+      "5  [[mi]]; stream to Foundry",
+      "Default: [[allow-standard]] / [[allow-premium]] from [[sync]]",
+      "Optional: [[ent-source]] = projection"
+    ] },
+    { "id": "foundry", "x": 906, "y": 60, "w": 358, "h": 194, "tone": "teal", "title": "Customer's Foundry Claude", "lines": [
+      "Gateway managed identity holds Cognitive Services User.",
+      "Caller token is replaced, not forwarded.",
+      "Remove direct developer access to prevent bypass."
+    ] },
+    { "id": "entra", "x": 906, "y": 298, "w": 358, "h": 188, "tone": "teal", "title": "Microsoft Entra ID", "lines": [
+      "Issues signed caller and gateway tokens.",
+      "Automation uses its own managed identity and must also be entitled.",
+      "Token checks do not resolve groups."
+    ] },
+    { "id": "logs", "x": 16, "y": 600, "w": 594, "h": 198, "tone": "blue", "title": "Meter and attribute", "lines": [
+      "[[llm-log]] + [[traces]]",
+      "Join the LLM correlation id to the trace's request id.",
+      "Application Insights emits traces and [[metrics]].",
+      "No prompt or response body capture in this policy."
+    ] },
+    { "id": "observe", "x": 676, "y": 600, "w": 588, "h": 198, "tone": "blue", "title": "Read usage, cost and attribution", "lines": [
+      "[[ledger]] · [[cost]] · [[daily]]",
+      "Azure Monitor workbooks; optional Grafana",
+      "List-price estimates, cache caveats and attribution are visible.",
+      "Readers use Azure RBAC."
+    ] },
+    { "id": "console", "x": 16, "y": 914, "w": 270, "h": 194, "tone": "purple", "compact": true, "title": "Turnstile console", "lines": [
+      "Entra app roles gate people.",
+      "App Service + PostgreSQL",
+      "Event Hubs usage ingest",
+      "Supporting Functions, Storage and Key Vault"
+    ] },
+    { "id": "apply-job", "x": 328, "y": 914, "w": 274, "h": 194, "tone": "purple", "compact": true, "title": "Manual apply job", "lines": [
+      "Container Apps job; customer-pinned commit",
+      "[[apply]]",
+      "Console MI: start this job only",
+      "Job MI: named-value writer"
+    ] },
+    { "id": "export-job", "x": 16, "y": 1146, "w": 270, "h": 202, "tone": "purple", "compact": true, "title": "Hourly export job", "lines": [
+      "07 past each hour, UTC",
+      "[[export]]",
+      "Job MI reads logs; sends to Event Hubs; syncs governance.",
+      "Overlapping export windows"
+    ] },
+    { "id": "values", "x": 328, "y": 1146, "w": 274, "h": 202, "tone": "purple", "compact": true, "title": "Gateway named values", "lines": [
+      "Catalog, tier and budget settings; read-back after writes",
+      "[[integration]] locates Turnstile and authority.",
+      "Graph: [[graph]] when granted."
+    ] },
+    { "id": "writer", "x": 666, "y": 914, "w": 280, "h": 194, "tone": "teal", "compact": true, "title": "Directory snapshot writer", "lines": [
+      "[[projection-sync]]",
+      "[[writer]] inside the VNet",
+      "Writer MI: Data Contributor",
+      "Snapshot, or Graph if granted"
+    ] },
+    { "id": "cosmos", "x": 984, "y": 914, "w": 280, "h": 194, "tone": "teal", "compact": true, "title": "Cosmos DB projection", "lines": [
+      "Database claude; container entitlement; partition /oid",
+      "Private endpoint + private DNS",
+      "Key auth disabled",
+      "Records expire absolutely."
+    ] },
+    { "id": "network", "x": 666, "y": 1146, "w": 280, "h": 202, "tone": "teal", "compact": true, "title": "Network and host services", "lines": [
+      "VNet integration + private endpoints and DNS links",
+      "Private Function host storage: blob, queue and table",
+      "Private resolver: Standard v2 or Premium v2 gateway"
+    ] },
+    { "id": "resolver", "x": 984, "y": 1146, "w": 280, "h": 202, "tone": "teal", "compact": true, "title": "Resolver Function", "lines": [
+      "[[resolver-route]]",
+      "Accepts gateway identity only",
+      "Own identity: container Data Reader",
+      "Miss admission and lease checks protect this path."
+    ] }
+  ],
+  "edges": [
+    { "from": "code", "to": "apim", "kind": "data", "points": [[294, 105], [326, 105], [326, 190], [356, 190]] },
+    { "from": "vscode", "to": "apim", "kind": "data", "points": [[294, 211], [356, 211]] },
+    { "from": "desktop", "to": "apim", "kind": "data", "points": [[294, 328], [326, 328], [326, 232], [356, 232]] },
+    { "from": "apim", "to": "foundry", "kind": "data", "points": [[844, 150], [906, 150]] },
+    { "from": "entra", "to": "apim", "kind": "identity", "points": [[906, 348], [844, 348]] },
+    { "from": "apim", "to": "logs", "kind": "data", "points": [[590, 486], [590, 600]] },
+    { "from": "logs", "to": "observe", "kind": "data", "points": [[610, 706], [676, 706]] },
+    { "from": "console", "to": "apply-job", "kind": "control", "points": [[286, 1000], [328, 1000]] },
+    { "from": "apply-job", "to": "values", "kind": "control", "points": [[465, 1108], [465, 1146]] },
+    { "from": "values", "to": "apim", "kind": "control", "points": [[602, 1248], [634, 1248], [634, 526], [700, 526], [700, 486]] },
+    { "from": "logs", "to": "export-job", "kind": "data", "points": [[306, 798], [306, 1248], [286, 1248]] },
+    { "from": "export-job", "to": "console", "kind": "data", "points": [[150, 1146], [150, 1108]] },
+    { "from": "terminal", "to": "apim", "kind": "control", "points": [[294, 446], [356, 446]] },
+    { "from": "terminal", "to": "console", "kind": "control", "points": [[16, 446], [6, 446], [6, 1000], [16, 1000]] },
+    { "from": "writer", "to": "cosmos", "kind": "data", "points": [[946, 1000], [984, 1000]] },
+    { "from": "resolver", "to": "cosmos", "kind": "identity", "points": [[1124, 1146], [1124, 1108]] },
+    { "from": "apim", "to": "resolver", "kind": "identity", "points": [[810, 486], [810, 526], [1274, 526], [1274, 1248], [1264, 1248]] }
+  ],
+  "notice": "Default named values need no resolver, Cosmos DB or Turnstile. Projection and Turnstile are independent additions. Basic v2 can use an explicitly public, identity-protected resolver, but not the private-inbound VNet path shown here."
+}

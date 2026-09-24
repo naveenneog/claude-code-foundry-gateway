@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "id": "azure-resource-inventory",
+  "kind": "inventory",
+  "title": "The declared Azure resource types, by deployment profile",
+  "subtitle": "A type inventory, not a bill of materials. Existing references and child configuration resources are included; conditional declarations do not mean every deployment creates them.",
+  "width": 1280,
+  "outputs": ["docs/images/architecture/azure-resource-inventory.png"],
+  "sources": ["infra/main.bicep", "infra/foundry-role.bicep", "infra/projection.bicep", "infra/projection-network.bicep", "infra/resolver.bicep", "infra/turnstile-schedule.bicep"],
+  "identifiers": {},
+  "sections": [
+    {
+      "title": "Default gateway and telemetry · existing Foundry account",
+      "note": "API Management may be created or reused. Logger, API, operations, policy, named values and diagnostics are configuration resources. The role assignment grants the gateway identity access to Foundry.",
+      "types": [
+        "Microsoft.ApiManagement/service",
+        "Microsoft.ApiManagement/service/loggers",
+        "Microsoft.ApiManagement/service/apis",
+        "Microsoft.ApiManagement/service/apis/operations",
+        "Microsoft.ApiManagement/service/namedValues",
+        "Microsoft.ApiManagement/service/apis/policies",
+        "Microsoft.ApiManagement/service/apis/diagnostics",
+        "Microsoft.CognitiveServices/accounts",
+        "Microsoft.Authorization/roleAssignments",
+        "Microsoft.OperationalInsights/workspaces",
+        "Microsoft.Insights/components",
+        "Microsoft.Insights/diagnosticSettings"
+      ]
+    },
+    {
+      "title": "Optional projection · durable entitlement and container-scoped data roles",
+      "note": "Cosmos DB stores one leased entitlement per identity. Key authentication is disabled. The resolver's reader grant is not the writer's grant.",
+      "types": [
+        "Microsoft.DocumentDB/databaseAccounts",
+        "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+        "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+        "Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments"
+      ]
+    },
+    {
+      "title": "Optional private networking and evaluation runner",
+      "note": "Create a VNet or use supplied subnets. Private endpoints, private DNS zones, VNet links and zone groups resolve private addresses. The container group is an optional writer/test runner, not a production requirement.",
+      "types": [
+        "Microsoft.Network/virtualNetworks",
+        "Microsoft.Network/privateEndpoints",
+        "Microsoft.Network/privateDnsZones",
+        "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+        "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+        "Microsoft.ContainerInstance/containerGroups"
+      ]
+    },
+    {
+      "title": "Optional resolver · Function host, deployment storage and authentication",
+      "note": "Flex Consumption runs the resolver. The Function's own storage and deployment container are separate from the entitlement database. Authentication settings restrict callers; publishing credentials are disabled.",
+      "types": [
+        "Microsoft.Web/serverfarms",
+        "Microsoft.Web/sites",
+        "Microsoft.Web/sites/config",
+        "Microsoft.Web/sites/basicPublishingCredentialsPolicies",
+        "Microsoft.Storage/storageAccounts",
+        "Microsoft.Storage/storageAccounts/blobServices",
+        "Microsoft.Storage/storageAccounts/blobServices/containers"
+      ]
+    },
+    {
+      "title": "Optional Turnstile integration · manual apply and hourly export",
+      "note": "Two Container Apps jobs share a user-assigned identity and a Consumption environment. Turnstile's App Service, PostgreSQL, Event Hubs and support resources are deployed by its separate fork, not by these gateway Bicep files.",
+      "types": [
+        "Microsoft.ManagedIdentity/userAssignedIdentities",
+        "Microsoft.App/managedEnvironments",
+        "Microsoft.App/jobs"
+      ]
+    }
+  ],
+  "notice": "The architecture check compares this explicit inventory with resource declarations in every infra Bicep file. A new type fails until a diagram source includes it. Saved KQL functions and workbooks are published by scripts; optional Grafana is supplied separately."
+}

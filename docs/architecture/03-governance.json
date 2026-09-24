@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "id": "governance-apply",
+  "kind": "flow",
+  "title": "A Turnstile save asks the gateway's job to apply",
+  "subtitle": "Turnstile can start one job. It cannot rewrite gateway policy. The customer-owned job reads desired state, checks it, writes only named values and reads every change back.",
+  "width": 1280,
+  "height": 1050,
+  "outputs": ["docs/images/architecture/governance-apply.png"],
+  "sources": ["infra/turnstile-schedule.bicep", "scripts/Connect-ClaudeTurnstile.ps1", "scripts/ClaudeTurnstileApply.ps1", "scripts/Sync-ClaudeTurnstileGovernance.ps1", "scripts/ApimNamedValue.ps1"],
+  "identifiers": {
+    "apply-job-id": { "label": "GATEWAY_APPLY_JOB_ID", "source": "scripts/Connect-ClaudeTurnstile.ps1", "match": "GATEWAY_APPLY_JOB_ID" },
+    "operator": { "label": "Container Apps Jobs Operator", "source": "scripts/Connect-ClaudeTurnstile.ps1", "match": "'Container Apps Jobs Operator'" },
+    "runner": { "label": "Invoke-ClaudeTurnstileSchedule.ps1", "source": "scripts/Invoke-ClaudeTurnstileSchedule.ps1", "kind": "file" },
+    "sync": { "label": "Sync-ClaudeTurnstileGovernance.ps1", "source": "scripts/Sync-ClaudeTurnstileGovernance.ps1", "kind": "file" },
+    "apply": { "label": "ClaudeTurnstileApply.ps1", "source": "scripts/ClaudeTurnstileApply.ps1", "kind": "file" },
+    "writer-role": { "label": "Claude gateway governance writer", "source": "scripts/ClaudeTurnstileApply.ps1", "match": "$script:ClaudeGovernanceWriterRole = 'Claude gateway governance writer'" },
+    "prepare": { "label": "/api/v1/gateway-governance/prepare", "source": "scripts/Sync-ClaudeTurnstileGovernance.ps1", "match": "/api/v1/gateway-governance/prepare" },
+    "catalog": { "label": "/api/v1/enterprise-catalog", "source": "scripts/Sync-ClaudeTurnstileGovernance.ps1", "match": "/api/v1/enterprise-catalog" },
+    "tiers": { "label": "/api/v1/gateway-tiers", "source": "scripts/Sync-ClaudeTurnstileGovernance.ps1", "match": "/api/v1/gateway-tiers" },
+    "budgets": { "label": "/api/v1/budgets", "source": "scripts/Sync-ClaudeTurnstileGovernance.ps1", "match": "/api/v1/budgets" },
+    "set": { "label": "Set-ApimNamedValue", "source": "scripts/ApimNamedValue.ps1", "match": "function Set-ApimNamedValue" },
+    "get": { "label": "Get-ApimNamedValue", "source": "scripts/ApimNamedValue.ps1", "match": "function Get-ApimNamedValue" },
+    "registry": { "label": "bu-registry", "source": "scripts/ClaudeTurnstileApply.ps1", "match": "'bu-registry'" },
+    "parents": { "label": "bu-parents", "source": "scripts/ClaudeTurnstileApply.ps1", "match": "'bu-parents'" },
+    "membership": { "label": "Sync-ClaudeAccess.ps1", "source": "scripts/Sync-ClaudeAccess.ps1", "kind": "file" },
+    "projection": { "label": "Sync-ClaudeProjection.ps1", "source": "scripts/Sync-ClaudeProjection.ps1", "kind": "file" },
+    "ent-source": { "label": "entitlement-source", "source": "scripts/ClaudeTurnstileApply.ps1", "match": "$current['entitlement-source']" },
+    "graph": { "label": "GroupMember.Read.All", "source": "scripts/Grant-ClaudeGovernanceGraphAccess.ps1", "match": "'GroupMember.Read.All'" }
+  },
+  "groups": [
+    { "x": 0, "y": 0, "w": 370, "h": 264, "tone": "purple", "title": "Turnstile · App Service identity" },
+    { "x": 404, "y": 0, "w": 876, "h": 764, "tone": "blue", "title": "Customer-owned Container Apps job · user-assigned identity" }
+  ],
+  "nodes": [
+    { "id": "save", "x": 16, "y": 60, "w": 338, "h": 180, "tone": "purple", "title": "1 · Save desired governance", "lines": ["Save catalog, tiers or budgets.", "The response does not wait for Azure.", "Apply now retries without an edit."] },
+    { "id": "trigger", "x": 428, "y": 60, "w": 350, "h": 180, "tone": "purple", "title": "2 · Start the manual job", "lines": ["[[apply-job-id]]", "Turnstile's identity holds [[operator]] on that one job.", "A failed start is shown as status."] },
+    { "id": "bootstrap", "x": 830, "y": 60, "w": 430, "h": 180, "tone": "blue", "compact": true, "title": "3 · Run the pinned scripts", "lines": ["[[runner]] -SkipExport", "Pinned commit; job MI sign-in.", "[[sync]] -> [[apply]]"] },
+    { "id": "role", "x": 16, "y": 290, "w": 338, "h": 184, "tone": "blue", "title": "Job's gateway role", "lines": ["[[writer-role]]", "Read service and operation results; read / write named values.", "No policy or network writes."] },
+    { "id": "read", "x": 428, "y": 290, "w": 832, "h": 184, "tone": "blue", "title": "4 · Read catalog, current-month budgets and tiers", "lines": ["POST [[prepare]] first rolls the month forward.", "GET [[catalog]], [[budgets]] and [[tiers]]", "Read the gateway's existing named values in one list call.", "The month boundary must not look like every budget was removed."] },
+    { "id": "safety", "x": 16, "y": 518, "w": 338, "h": 224, "tone": "amber", "compact": true, "title": "Refuse unsafe inputs", "lines": ["Demo catalog: refuse.", "Invalid ids, tiers or groups: report and omit.", "No unit: keep the current registry.", "Graph unreadable: no new groups."] },
+    { "id": "validate", "x": 428, "y": 518, "w": 398, "h": 224, "tone": "blue", "title": "5 · Compute only real changes", "lines": ["Always retain standard and premium tier limits.", "Teams need an applied parent.", "Compare entries by name, not order.", "Without -Apply: preview only."] },
+    { "id": "write", "x": 870, "y": 518, "w": 390, "h": 224, "tone": "blue", "title": "6 · Apply and verify", "lines": ["[[set]] writes a changed value.", "[[get]] must read back exactly what was written.", "Mismatch or write failure stops the run.", "Report changes and problems."] },
+    { "id": "values", "x": 0, "y": 824, "w": 606, "h": 224, "tone": "blue", "title": "Gateway policy consumes the configuration", "lines": ["[[registry]] and [[parents]] carry units, teams and monthly budgets.", "The two tiers' TPM, daily quotas and model allowlists are named values.", "The next request uses applied configuration; a console save alone is not proof of enforcement."] },
+    { "id": "membership", "x": 652, "y": 824, "w": 628, "h": 224, "tone": "teal", "title": "Membership has its own safety condition", "lines": ["Named-value path: [[membership]] only after Graph is readable and every tier group is confirmed.", "Graph application reads need [[graph]] from a tenant administrator.", "When [[ent-source]] is projection, leave membership to [[projection]]; never write a large member list here."] }
+  ],
+  "edges": [
+    { "from": "save", "to": "trigger", "kind": "control", "points": [[354, 150], [428, 150]] },
+    { "from": "trigger", "to": "bootstrap", "kind": "control", "points": [[778, 150], [830, 150]] },
+    { "from": "bootstrap", "to": "read", "kind": "control", "points": [[1045, 240], [1045, 290]] },
+    { "from": "read", "to": "validate", "kind": "data", "points": [[626, 474], [626, 518]] },
+    { "from": "validate", "to": "write", "kind": "control", "points": [[826, 632], [870, 632]] },
+    { "from": "write", "to": "values", "kind": "control", "points": [[1064, 742], [1064, 790], [304, 790], [304, 824]] },
+    { "from": "write", "to": "membership", "kind": "control", "points": [[1140, 742], [1140, 824]] }
+  ],
+  "notice": "The hourly job runs the same governance pass and catches up a failed start. Writes are individually verified, not an atomic multi-value transaction. At this base revision, overlapping jobs can finish out of order; do not describe this as a serialized apply queue."
+}

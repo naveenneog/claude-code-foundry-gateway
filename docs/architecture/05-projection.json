@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "id": "projection-freshness",
+  "kind": "flow",
+  "title": "Projection freshness is a lease, not just a cache TTL",
+  "subtitle": "A complete directory observation gives each record an absolute expiry. The gateway bounds cache misses before the resolver, and never grants a request using an expired positive answer.",
+  "width": 1280,
+  "height": 1306,
+  "outputs": ["docs/images/architecture/projection-freshness.png"],
+  "sources": ["sync/src/graph.mjs", "sync/src/plan.mjs", "sync/src/apply-projection.mjs", "resolver/src/index.mjs", "resolver/src/lookup.mjs", "resolver/src/entitlement.mjs", "infra/policy.xml", "infra/resolver.bicep", "infra/projection.bicep", "infra/projection-network.bicep"],
+  "identifiers": {
+    "snapshot": { "label": "Sync-ClaudeProjection.ps1", "source": "scripts/Sync-ClaudeProjection.ps1", "kind": "file" },
+    "next": { "label": "@odata.nextLink", "source": "sync/src/graph.mjs", "match": "page['@odata.nextLink']" },
+    "reconcile": { "label": "createReconciliation", "source": "sync/src/plan.mjs", "match": "export function createReconciliation(" },
+    "generation": { "label": "reconciliationGeneration", "source": "sync/src/plan.mjs", "match": "reconciliationGeneration: randomUUID()" },
+    "verified": { "label": "lastVerifiedAt", "source": "sync/src/plan.mjs", "match": "lastVerifiedAt: new Date(start).toISOString()" },
+    "expiry": { "label": "expiresAt", "source": "sync/src/plan.mjs", "match": "expiresAt = Math.floor(start / 1000) + maxAgeSeconds" },
+    "writer": { "label": "apply-projection.mjs", "source": "sync/src/apply-projection.mjs", "kind": "file" },
+    "fetch": { "label": "fetchNext()", "source": "sync/src/apply-projection.mjs", "match": "await iterator.fetchNext()" },
+    "upsert": { "label": "executeBulkOperations", "source": "sync/src/apply-projection.mjs", "match": "container.items.executeBulkOperations(" },
+    "lookup": { "label": "createLookup", "source": "resolver/src/lookup.mjs", "match": "export function createLookup(" },
+    "to-entitlement": { "label": "toEntitlement", "source": "resolver/src/entitlement.mjs", "match": "export function toEntitlement(" },
+    "route": { "label": "entitlement/{oid}", "source": "resolver/src/index.mjs", "match": "route: 'entitlement/{oid}'" },
+    "ttl": { "label": "entitlement-cache-seconds", "source": "infra/policy.xml", "match": "{{entitlement-cache-seconds}}" },
+    "misses": { "label": "entitlement-misses", "source": "infra/policy.xml", "match": "counter-key=\"entitlement-misses\"" },
+    "key": { "label": "ent:v2:<tenant>:<oid>", "source": "infra/policy.xml", "match": "ent:v2:{{tenant-id}}:" },
+    "inbound": { "label": "inboundAccess", "source": "infra/resolver.bicep", "match": "param inboundAccess string = 'private'" },
+    "network": { "label": "networkAccess", "source": "infra/projection.bicep", "match": "param networkAccess string = 'private-only'" },
+    "auth": { "label": "authsettingsV2", "source": "infra/resolver.bicep", "match": "name: 'authsettingsV2'" }
+  },
+  "groups": [
+    { "x": 0, "y": 0, "w": 394, "h": 510, "tone": "slate", "title": "Directory observation · outside or inside VNet" },
+    { "x": 430, "y": 0, "w": 850, "h": 510, "tone": "teal", "title": "Private VNet · separate writer identity" },
+    { "x": 0, "y": 548, "w": 394, "h": 758, "tone": "blue", "title": "API Management · caller already validated" },
+    { "x": 430, "y": 548, "w": 850, "h": 758, "tone": "teal", "title": "Private resolver · separate read-only identity" }
+  ],
+  "nodes": [
+    { "id": "scan", "x": 16, "y": 68, "w": 362, "h": 420, "tone": "slate", "title": "1 · Finish the whole scan", "lines": [
+      "Snapshot: [[snapshot]]",
+      "Export uses the operator's Graph token; in-VNet reads use the writer's grant.",
+      "Read users and service principals transitively; follow every [[next]].",
+      "[[reconcile]] records scan start as [[verified]], a UUID [[generation]], and [[expiry]].",
+      "Default and maximum lease: 7,200 seconds. A failed scan publishes nothing."
+    ] },
+    { "id": "writer", "x": 446, "y": 68, "w": 372, "h": 420, "tone": "teal", "title": "2 · Reconcile, do not renew replay", "lines": [
+      "[[writer]]",
+      "Snapshot import preserves its generation and expiry.",
+      "Page existing records with [[fetch]]; write in bounded [[upsert]] batches.",
+      "Refresh unchanged members too. Delete orphans; kept or failed-to-delete orphans are not renewed.",
+      "Empty replacement is refused unless explicit. Partial failure or expiry exits nonzero."
+    ] },
+    { "id": "store", "x": 878, "y": 68, "w": 386, "h": 420, "tone": "teal", "title": "3 · Cosmos DB entitlement", "lines": [
+      "One record per oid; id and partition key are that oid.",
+      "Carries tenant, tier, unit / team, mapping version and absolute freshness.",
+      "Writer: Data Contributor on one container. Resolver: Data Reader on that container.",
+      "[[network]] defaults to private-only. Key authentication is off.",
+      "A partial apply can leave mixed generations. There is no atomic cross-partition cutover."
+    ] },
+    { "id": "cache", "x": 16, "y": 614, "w": 362, "h": 304, "tone": "blue", "title": "4 · Cache hit or miss", "lines": [
+      "Key: [[key]]",
+      "Check positive expiry on every hit.",
+      "Store for min([[ttl]], remaining lease).",
+      "A miss goes to admission below; the cache never extends a lease.",
+      "Negative cache: min(60s, configured window)."
+    ] },
+    { "id": "admit", "x": 16, "y": 946, "w": 362, "h": 330, "tone": "blue", "title": "5 · Admission before lookup", "lines": [
+      "[[misses]]",
+      "At most 200 misses/s and 100 concurrent misses.",
+      "Beyond that envelope: retryable 429, Retry-After 1.",
+      "Within it: gateway MI calls the resolver; 5-second request timeout.",
+      "Approximate, not a throughput guarantee."
+    ] },
+    { "id": "function", "x": 446, "y": 614, "w": 374, "h": 304, "tone": "teal", "title": "6 · Authenticated Function", "lines": [
+      "GET [[route]]",
+      "[[auth]] allows the gateway identity, correct tenant and audience only.",
+      "Private endpoint for [[inbound]] = private",
+      "Two warm 2-GB instances; 100 HTTP requests each.",
+      "No result cache after a read."
+    ] },
+    { "id": "singleflight", "x": 446, "y": 946, "w": 374, "h": 330, "tone": "teal", "title": "7 · One read per identity / process", "lines": [
+      "[[lookup]] shares concurrent same-oid reads.",
+      "100 distinct in-flight reads per process; 3.5-second deadline and abort signal.",
+      "Cosmos transport timeout: 2.5 seconds; throttling retries disabled.",
+      "An aborted read keeps its slot until transport settles. No cross-host single flight."
+    ] },
+    { "id": "validate", "x": 878, "y": 614, "w": 386, "h": 304, "tone": "teal", "title": "8 · Validate the stored record", "lines": [
+      "[[to-entitlement]]",
+      "Check tenant, supported tier, generation, scan time and absolute expiry.",
+      "Read by id + partition key over the Cosmos private endpoint.",
+      "A future scan time or a lease longer than two hours is invalid."
+    ] },
+    { "id": "outcome", "x": 878, "y": 946, "w": 386, "h": 330, "tone": "amber", "title": "9 · Distinguish absence from fault", "lines": [
+      "Fresh, entitled record: return 200 with expiry; continue the gateway policy.",
+      "Missing / not-yet-effective record: resolver 404 becomes gateway 403.",
+      "Expired / malformed freshness or resolver failure: gateway 503, Retry-After 5.",
+      "No fallback to old lists. A healthy retry is not proof that membership changed."
+    ] }
+  ],
+  "edges": [
+    { "from": "scan", "to": "writer", "kind": "data", "points": [[378, 240], [446, 240]] },
+    { "from": "writer", "to": "store", "kind": "data", "points": [[818, 240], [878, 240]] },
+    { "from": "cache", "to": "admit", "kind": "data", "points": [[194, 918], [194, 946]] },
+    { "from": "admit", "to": "function", "kind": "identity", "points": [[378, 1066], [412, 1066], [412, 746], [446, 746]] },
+    { "from": "function", "to": "singleflight", "kind": "data", "points": [[634, 918], [634, 946]] },
+    { "from": "singleflight", "to": "validate", "kind": "data", "points": [[820, 1066], [850, 1066], [850, 746], [878, 746]] },
+    { "from": "store", "to": "validate", "kind": "data", "points": [[1070, 488], [1070, 614]] },
+    { "from": "validate", "to": "outcome", "kind": "data", "points": [[1070, 918], [1070, 946]] }
+  ],
+  "notice": "A stopped sync bounds admission of new requests to two hours from the last successful scan's start, subject to clock skew and directory replication; it does not terminate an existing stream. Schedule scan + transfer + apply inside the lease, and alert on remaining lease as well as job failure."
+}
