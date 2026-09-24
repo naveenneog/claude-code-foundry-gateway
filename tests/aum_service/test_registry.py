@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import subprocess
 import unittest
@@ -28,6 +29,31 @@ def values():
 
 
 class SerializerTests(unittest.TestCase):
+    def test_shared_fixtures_execute_on_both_windows_powershell_hosts(self):
+        if os.name == "nt":
+            for script in ("Export-AumRegistryFixtures.ps1", "Export-AumModeFixtures.ps1"):
+                results = []
+                for host in ("pwsh", "powershell"):
+                    result = subprocess.run([host, "-NoProfile", "-File", str(ROOT / "tests" / script)],
+                                            check=True, capture_output=True, encoding="utf-8-sig")
+                    results.append(json.loads(result.stdout))
+                self.assertEqual(results[0], results[1], script)
+
+    def test_mode_input_normalization_matches_the_actual_powershell_parser(self):
+        fixtures = json.loads((ROOT / "tests" / "fixtures" / "aum-mode-inputs.json").read_text())
+        output = subprocess.run(
+            ["pwsh", "-NoProfile", "-File", str(ROOT / "tests" / "Export-AumModeFixtures.ps1")],
+            check=True, capture_output=True, encoding="utf-8-sig",
+        )
+        powershell = {f["name"]: f["canonical"] for f in json.loads(output.stdout)}
+        for fixture in fixtures:
+            with self.subTest(name=fixture["name"]):
+                actual = render_modes(parse_modes(fixture["raw"]))
+                self.assertEqual(fixture["canonical"].encode(), actual.encode())
+                self.assertEqual(powershell[fixture["name"]].encode(), actual.encode())
+        with self.assertRaises(ServiceError):
+            parse_modes(",,,")
+
     def test_shared_fixtures_python_and_powershell_are_byte_identical(self):
         fixtures = json.loads((ROOT / "tests" / "fixtures" / "aum-registry.json").read_text())
         output = subprocess.run(
@@ -80,6 +106,7 @@ class SerializerTests(unittest.TestCase):
     def test_mode_is_strict_by_default(self):
         config = Config(values())
         self.assertEqual("strict", config.mode("payroll")["enforcement"])
+        self.assertNotIn("allowance_percent", config.mode("payroll"))
 
 
 class HeadroomTests(unittest.TestCase):

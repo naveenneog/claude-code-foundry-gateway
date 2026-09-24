@@ -147,6 +147,16 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(405, self.call("PATCH", "/budgets")[0])
         self.assertEqual(404, self.call("GET", "/never-a-route")[0])
 
+    def test_explicit_null_mode_attributes_are_not_treated_as_absent(self):
+        _, current, _ = self.call("GET", "/budgets")
+        for body in (
+            {"enforcement": None, "reason": "Invalid explicit null"},
+            {"enforcement": "strict", "allowance_percent": None, "reason": "Invalid explicit null"},
+        ):
+            with self.subTest(body=body):
+                self.assertEqual(400, self.call("PUT", "/modes/finance", body=body,
+                                               headers={"If-Match": current["revision"]})[0])
+
     def test_scoped_audit_and_workflow_viewer_denied(self):
         self.verifier.verify.return_value = actor("Manager", groups=[TEAM_GROUP])
         self.assertEqual(403, self.call("GET", "/audit")[0])

@@ -6,7 +6,8 @@ function ConvertTo-OrderedMap($Object) {
     foreach ($p in $Object.PSObject.Properties) { $map[$p.Name] = $p.Value }
     return $map
 }
-$results = @(foreach ($f in @(Get-Content -Raw $FixturePath | ConvertFrom-Json)) {
+$fixtures = Get-Content -Raw -Encoding UTF8 $FixturePath | ConvertFrom-Json
+$results = @(foreach ($f in $fixtures) {
     [ordered]@{
         name = $f.name
         registry = ConvertTo-ClaudeBuRegistry @($f.units)

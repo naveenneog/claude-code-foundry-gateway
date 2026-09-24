@@ -225,6 +225,9 @@ class AumService:
         if kind == "mode":
             if key not in config.by_id:
                 raise invalid("Unknown catalog id")
+            for attribute in ("enforcement", "allowance_percent"):
+                if attribute in body and body[attribute] is None:
+                    raise invalid(attribute + " cannot be null; omit an optional attribute instead")
             mode = body.get("enforcement")
             allowance = body.get("allowance_percent")
             if mode == "allowance":

@@ -89,8 +89,16 @@ def render_registry(units):
 
 
 def parse_modes(value):
+    if value is None or (isinstance(value, str) and (not value.strip() or value == ",,")):
+        return {}
+    if not isinstance(value, str) or not value.startswith(",") or not value.endswith(","):
+        raise invalid("bu-modes must have sentinel commas")
+    checked_value(value)
+    inner = value.strip(",")
+    if not inner:
+        raise invalid("Invalid empty bu-modes entry")
     result = {}
-    for key, mode in parse_map(value).items():
+    for key, mode in parse_map("," + inner + ",").items():
         entity_id(key)
         if not MODE.fullmatch(mode):
             raise invalid("Mode must be strict, notify, or allowance:1 through allowance:100")
@@ -134,7 +142,7 @@ class Config:
     def mode(self, key):
         mode = self.modes.get(key, "strict")
         name, _, allowance = mode.partition(":")
-        return {"enforcement": name, "allowance_percent": int(allowance) if allowance else None}
+        return {"enforcement": name, **({"allowance_percent": int(allowance)} if allowance else {})}
 
     def entities(self):
         return [
