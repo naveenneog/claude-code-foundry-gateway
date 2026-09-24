@@ -98,7 +98,7 @@ az rest --method GET --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$
 
 **Verification:** the CLI records and portal fields describe the same application and
 enterprise application. Existing live Graph captures are in
-[the Turnstile guide](TURNSTILE.md#in-the-portal-instead).
+[the Turnstile guide](../TURNSTILE.md#in-the-portal-instead).
 
 ## 3. Sign in without obtaining new consent
 
@@ -129,7 +129,7 @@ enterprise application. Existing live Graph captures are in
 
 This is an explicitly documented **CLI + application-browser** path, not a claimed
 click-only Azure portal path. Phase 1 measured it live with no extra grants; see
-[the live sign-in/profile captures](TURNSTILE.md#live-evidence-and-sign-in-without-additional-grants).
+[the live sign-in/profile captures](../TURNSTILE.md#live-evidence-and-sign-in-without-additional-grants).
 
 ## 4. Inspect governance and perform a reversible change
 

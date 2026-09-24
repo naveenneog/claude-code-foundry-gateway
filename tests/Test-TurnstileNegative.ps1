@@ -38,7 +38,8 @@ $mutations = @(
     @{ Suite = $governance; Name = 'a portal picture with a real value left is saved anyway'
        File  = 'guide/capture-turnstile-entra.mjs'; From = 'if (left.length) {'; To = 'if (false) {' }
     @{ Suite = $governance; Name = 'a real address is written into a picture script'
-       File  = 'guide/render-turnstile.mjs'; From = "'amara.okafor@contoso.com']"; To = "'amara.okafor@fabrikam.com']" }
+       File  = 'guide/render-turnstile.mjs'; From = 'const redactor = new Redactor(';
+       To = "const leaked = 'amara.okafor@fabrikam.com';`nconst redactor = new Redactor(" }
     @{ Suite = $governance; Name = 'a real identifier is written into a picture script'
        File  = 'guide/capture-turnstile-entra.mjs'; From = "const PUBLIC_GUIDS = ['04b07795-8ddb-461a-bbee-02f9e1bf7b46'];"; To = "const PUBLIC_GUIDS = ['04b07795-8ddb-461a-bbee-02f9e1bf7b46', '5a7c9e21-3b4d-4f6a-8c2e-9d1b7f3a6e45'];" }
     @{ Suite = $bridge; Name = 'the guide drops the one-enforcer rule'

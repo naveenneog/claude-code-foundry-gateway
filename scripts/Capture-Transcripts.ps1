@@ -45,6 +45,16 @@ function Remove-Identifiers {
     $Text = $Text -replace [regex]::Escape($env:USERPROFILE), '~'
     $Text = $Text -replace [regex]::Escape($root), '.'
     foreach ($pair in ($replacementPairs | Sort-Object { -([string]$_[0]).Length })) {
+        # Same length as the original, deliberately: consume/extend table padding rather
+        # than baking equal-width aliases for one customer's resource names into source.
+        $from = [string]$pair[0]
+        $to = [string]$pair[1]
+        $Text = [regex]::Replace($Text, ([regex]::Escape($from) + '(?<padding> {2,})'), {
+            param($match)
+            $width = $match.Length
+            if ($to.Length -ge $width) { throw 'Replacement does not fit the table column; supply a shorter Contoso placeholder.' }
+            return $to.PadRight($width)
+        })
         $Text = $Text.Replace([string]$pair[0], [string]$pair[1])
     }
     $Text = $Text -replace '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', 'admin@contoso.com'

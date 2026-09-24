@@ -22,7 +22,7 @@ are replaced by example ones: the units are `sales` (teams `sales-emea`, `sales-
 ## Live evidence and sign-in without additional grants
 
 For numbered Azure portal/application-GUI steps and equivalent commands, see
-[Turnstile manual operations](TURNSTILE-MANUAL.md). Its new Azure portal screenshots are
+[Turnstile manual operations](manual/turnstile.md). Its new Azure portal screenshots are
 explicitly pending: the copied capture profile reached sign-in and capture stopped without
 attempting to sign in. Existing Graph captures are not presented as portal screenshots.
 
