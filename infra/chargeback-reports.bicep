@@ -158,7 +158,7 @@ resource communication 'Microsoft.Communication/communicationServices@2023-03-31
   properties: { dataLocation: 'United States', linkedDomains: [domain.id] }
 }
 resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
-  name: 'cae-reports-${suffix}'
+  name: 'cae-reports-private-${suffix}'
   location: location
   tags: tags
   properties: {
