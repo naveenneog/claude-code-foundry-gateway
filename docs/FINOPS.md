@@ -110,10 +110,19 @@ dollar stop; see [Scale](SCALE.md#the-budget-is-a-delayed-kill-switch-not-a-hard
   and delegated management are separate from the inference request path.
   [Viewers and managers](TURNSTILE.md#viewers-and-managers) explains roles and
   `scripts/Open-ClaudeTurnstile.ps1` when web consent is unavailable.
-- **Terminal:** this revision ships `scripts/Manage-ClaudeBusinessUnits.ps1`
-  for interactive unit management, plus the read/report commands above.
-  The separate terminal FinOps tool is being merged; its guide is not present
-  in this revision. Do not assume an unmerged command is installed.
+- **AUM (Azure Usage Management):** the [terminal FinOps console](CLI-FINOPS.md)
+  supplies interactive views and scriptable reports/commands over Turnstile,
+  direct gateway access or isolated example data. Managers and viewers remain
+  read-only in its first release, even where Turnstile's web console permits
+  manager budget edits. Direct mode requires Azure permissions and is not a
+  delegated-manager boundary. Preview and apply are separate; follow the job
+  result rather than treating a saved budget as enforced.
+  The merged first release exposes `claude-finops`; the product rename changes
+  the preferred command to `aum`, retaining `claude-finops` as a deprecated alias.
+  Use the linked guide for the command available in your checkout. Its
+  `CLI-FINOPS.md` address remains the stable entry point during the guide move.
+  `scripts/Manage-ClaudeBusinessUnits.ps1` remains the narrower unit-management
+  script, not another name for AUM.
 - **Grafana:** optional [existing-instance publication](MONITORING.md#if-you-would-rather-use-grafana).
 
 ### Sign in as a viewer or business-unit manager
@@ -157,5 +166,6 @@ for that separate live acceptance.
 ## Next steps
 
 - [Monitoring](MONITORING.md) — saved functions, workbooks, alerts and empty data.
+- [AUM](CLI-FINOPS.md) — terminal setup, scoped reads and safe command workflows.
 - [Turnstile](TURNSTILE.md) — browser-based governance and consent troubleshooting.
 - [Scale](SCALE.md) — what the 500,000-record test did and did not measure.

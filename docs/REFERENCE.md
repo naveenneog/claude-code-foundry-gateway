@@ -66,6 +66,7 @@ scripts/
   inspect-proxy.mjs           local protocol/claim inspection
 resolver/                    request-path projection reader
 sync/                        in-network projection writer
+cli/finops/                  AUM (Azure Usage Management), terminal FinOps console
 docs/                        task guides and reference
   adr/                       accepted architecture decisions
   CHARTER.md ROADMAP.md STATUS.md UNKNOWNS.md
@@ -78,6 +79,8 @@ tests/                       offline and opt-in live checks
 ```
 
 The [README index](../README.md#documentation) lists every guide.
+[AUM](CLI-FINOPS.md) documents the terminal console and command interfaces;
+the stable guide link will remain a pointer when its content moves to AUM.md.
 `inspect-proxy.mjs` helped establish the identity model by decoding JWT claims
 without printing the token; it is a historical diagnostic with a fixed upstream,
 not a safe default for customer traffic. Read the

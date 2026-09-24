@@ -276,6 +276,21 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
 - [ ] P49 network profiles — acceptance: one parameter chooses private (private endpoints for
       every component) or public (Entra-only access, no private endpoints or DNS zones), for the
       gateway, the projection and Turnstile, each priced by the bill-of-materials scripts
+- [ ] P50 chargeback reports — acceptance: one command writes each business unit's monthly
+      report (people, requests, every token kind, estimated cost, budget against use) that
+      reconciles to the month's total through an explicit unassigned line; recipients per unit and
+      for the admin team are changed by script with no redeploy and limited to allowed domains; a
+      scheduled job with a managed identity archives each run privately and emails each unit its
+      own report. In progress
+- [x] P51 terminal FinOps, first release — `claude-finops`, nine terminal views and scriptable
+      commands over one engine, backed by Turnstile, the gateway directly, or example data. Budget
+      changes are previewed, rechecked against the server and never retried. Managers see only
+      their scope and read only; a 403 says "Not in your scope". The owner's command and terminal
+      journeys agreed live on identity, budgets, catalog, tiers, month totals and 200 request ids,
+      with no live writes. [ADR-0018](adr/0018-terminal-finops.md), `docs/CLI-FINOPS.md`.
+      Follow-ups: saved views, comparison charts and in-terminal profiles; a request cursor (the
+      API stops at 200); conditional catalog and tier writes; P47's requests and boosts; a live
+      scoped-manager journey (**U20**)
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so

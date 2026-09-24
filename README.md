@@ -38,6 +38,7 @@ Start with [Setup](docs/SETUP.md) for deployment or
 | Stand up a gateway | [Setup](docs/SETUP.md) — required roles, installer and portal deployment |
 | Operate people, tiers, teams, budgets or models | [Operations](docs/OPERATIONS.md) — task router and portal paths |
 | Own monthly chargeback or the FinOps process | [FinOps](docs/FINOPS.md) — close a month, investigate gaps and set allocations |
+| Use a terminal FinOps console or automate reports | [AUM (Azure Usage Management)](docs/CLI-FINOPS.md) — terminal views and scriptable commands |
 | Manage a business unit or view its usage | [Turnstile: viewers and managers](docs/TURNSTILE.md#viewers-and-managers) — assigned roles and sign-in without web consent |
 | Review security, identities or revocation | [Authentication](docs/AUTHENTICATION.md), then [Network](docs/NETWORK.md) |
 | Configure firewalls, private endpoints or VNet access | [Network](docs/NETWORK.md), then [Private projection](docs/SECURE-PROJECTION.md) |
@@ -203,8 +204,9 @@ is the reporting view, not a reconciled invoice.
 
 [Business-unit commands](docs/BUSINESS-UNITS.md) manage allocations;
 [Turnstile](docs/TURNSTILE.md) optionally provides a browser console and delegated
-management. [Terminal options](docs/FINOPS.md#optional-consoles) distinguishes
-the shipped unit-management command from the terminal FinOps tool being merged.
+management. [AUM (Azure Usage Management)](docs/CLI-FINOPS.md) provides the
+terminal FinOps console and scriptable commands over Turnstile or the gateway.
+See [console choices](docs/FINOPS.md#optional-consoles) for access differences.
 Custom metrics remain useful for pilot diagnostics, not complete scaled billing.
 
 ## What it costs
@@ -233,6 +235,7 @@ there; [Operations](docs/OPERATIONS.md) maps tasks to commands and portal paths.
 | [Operations](docs/OPERATIONS.md) / [Onboarding](docs/ONBOARDING.md) | Daily administration, people, backup and retirement |
 | [Budgets](docs/BUDGETS.md) / [Business units](docs/BUSINESS-UNITS.md) | Personal, tier, organisation, unit and team limits |
 | [FinOps](docs/FINOPS.md) / [Monitoring](docs/MONITORING.md) | Monthly close, ledger, workbooks, alerts and gaps |
+| [AUM (Azure Usage Management)](docs/CLI-FINOPS.md) | Terminal FinOps console, reports and preview-before-apply commands |
 | [Turnstile](docs/TURNSTILE.md) | Optional console, roles, governance authority and apply jobs |
 | [Models](docs/MODELS.md) / [Plugins](docs/PLUGINS.md) | Model lifecycle and client capability policy |
 | [Migration](docs/MIGRATION.md) | First-party history, MDM, bulk onboarding and cutover |

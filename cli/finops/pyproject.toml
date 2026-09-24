@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claude-finops"
+version = "0.1.0"
+description = "Keyboard-first FinOps for Claude on Microsoft Foundry"
+requires-python = ">=3.12"
+dependencies = ["httpx>=0.28,<1", "textual>=1,<7", "typer>=0.15,<1"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10", "pytest-asyncio>=0.25,<2"]
+
+[project.scripts]
+claude-finops = "claude_finops.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+claude_finops = ["*.tcss", "*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+

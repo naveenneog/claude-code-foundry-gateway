@@ -91,6 +91,7 @@ it fills. Do not silence the failure or truncate a list. For `401`, `403`,
 | Create a cost centre | `scripts/Set-ClaudeBusinessUnit.ps1 -Id sales -Group claude-bu-sales -MonthlyBudgetUsd 20000` | Entra > Groups, then [Business units](BUSINESS-UNITS.md) or Turnstile > Gateway governance |
 | Inspect unit spend | `scripts/Get-ClaudeBusinessUnit.ps1` | Chargeback workbook; [FinOps](FINOPS.md) |
 | Manage units interactively | `scripts/Manage-ClaudeBusinessUnits.ps1` | Turnstile > Gateway governance / Budgets if connected |
+| Use AUM (Azure Usage Management) | [Terminal console and commands](CLI-FINOPS.md) | Turnstile's web views, or the corresponding Azure blades for direct mode; terminal Members remain read-only |
 | Open a workbook | `scripts/Publish-ClaudeWorkbook.ps1 -List` | Azure Monitor > Workbooks > saved workbook |
 | Add a model | `scripts/Add-ClaudeModel.ps1 -List` to inspect first | Foundry > Models + endpoints, then APIM > Named values; [Models](MODELS.md) |
 | Govern plugins | `scripts/New-ClaudeCodePolicy.ps1` with the selected profile | Intune / Jamf / GPO or local policy files; [Plugins](PLUGINS.md) |
