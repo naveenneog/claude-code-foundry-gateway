@@ -411,7 +411,7 @@ and run the sync as well.
 
 > **Also check the bypass.** Removing someone from the group does nothing if they
 > hold `Cognitive Services User` directly on the Foundry account. See
-> [Setup §4.2](SETUP.md#42-close-the-bypass--do-not-skip-this).
+> [Setup §4.2](SETUP.md#42-close-the-bypass).
 
 ---
 

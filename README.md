@@ -314,12 +314,12 @@ is the whole of their side:
 
 ```powershell
 # Windows
-.\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json
+.\scripts\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json
 ```
 
 ```bash
 # macOS and Linux
-./setup-claude-workstation.sh --config ./claude-gateway.json
+./scripts/setup-claude-workstation.sh --config ./claude-gateway.json
 ```
 
 No admin rights. Checks prerequisites, installs what is missing, and configures
@@ -707,4 +707,3 @@ are safe; bash is unaffected. `./tests/Test-AzArguments.ps1` enforces this.
 ## License
 
 MIT — see [LICENSE](LICENSE).
-

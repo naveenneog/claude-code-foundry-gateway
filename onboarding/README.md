@@ -29,10 +29,12 @@ you onboard.
 
 ## What it is for
 
-`claude-gateway.json` is the handover artifact. A developer runs:
+`claude-gateway.json` is the handover artifact. Distribute it beside the complete
+`scripts` folder, not a lone setup file: Desktop needs the credential helpers.
+From the directory containing both, a developer runs:
 
 ```powershell
-.\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json
+.\scripts\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json
 ```
 
 and the script reads the gateway URL, tenant and tier limits from it, so they
@@ -63,7 +65,7 @@ Ask your platform team — they generated it when they built the gateway. You ca
 also skip the file entirely:
 
 ```powershell
-.\Setup-ClaudeWorkstation.ps1 -GatewayUrl https://<apim>.azure-api.net/claude -TenantId <tenant-id>
+.\scripts\Setup-ClaudeWorkstation.ps1 -GatewayUrl https://<apim>.azure-api.net/claude -TenantId <tenant-id>
 ```
 
 Both values are safe to share over chat.

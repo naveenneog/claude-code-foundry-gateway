@@ -90,7 +90,7 @@ Not required by any developer, on any client.
 |---|---|---|:--:|:--:|:--:|---|
 | 11 | `dc.services.visualstudio.com` | 443 | ○ | ○ | ○ | Azure CLI telemetry — `az config set core.collect_telemetry=false` |
 | 12 | `mobile.events.data.microsoft.com` | 443 | — | ○ | — | VS Code telemetry |
-| 13 | `169.254.169.254` | 80 | ○ | ○ | ○ | instance metadata — link-local, see [§4](#the-instance-metadata-service) |
+| 13 | `169.254.169.254` | 80 | ○ | ○ | ○ | instance metadata — link-local, see [§4](#4-the-instance-metadata-service) |
 
 ○ = seen on the wire, safe to block.
 

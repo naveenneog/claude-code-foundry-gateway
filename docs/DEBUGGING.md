@@ -275,7 +275,7 @@ API, the Claude Code install, provider resolution, and an end-to-end call.
 
 > This needs you to hold `Cognitive Services User` directly, which by design you
 > normally should not. Grant it temporarily and remove it afterwards — see
-> [Setup §4.2](SETUP.md#42-close-the-bypass--do-not-skip-this).
+> [Setup §4.2](SETUP.md#42-close-the-bypass).
 
 Two `404`s that look alike and are not:
 

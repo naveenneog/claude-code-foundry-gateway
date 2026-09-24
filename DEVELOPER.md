@@ -33,17 +33,19 @@ the gateway up*, you want [docs/SETUP.md](docs/SETUP.md) instead.
 ## One command
 
 Your platform team sent you `claude-gateway.json`. It holds the gateway URL,
-tenant and tier limits, so you do not have to type any of them. Put it next to
-the script:
+tenant and tier limits, so you do not have to type any of them. Ask for the
+complete `scripts` folder, including the credential helpers, or download this
+repository. Open a terminal in the folder that contains `scripts`, and put
+`claude-gateway.json` there. All commands on this page use that directory:
 
 ```powershell
 # Windows
-.\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json
+.\scripts\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json
 ```
 
 ```bash
 # macOS and Linux
-./setup-claude-workstation.sh --config ./claude-gateway.json
+./scripts/setup-claude-workstation.sh --config ./claude-gateway.json
 ```
 
 It checks what you already have, installs anything missing, configures **all
@@ -57,7 +59,7 @@ including Cowork — then makes a real call through the gateway to prove it work
 > directly:
 >
 > ```powershell
-> .\Setup-ClaudeWorkstation.ps1 -GatewayUrl https://<apim>.azure-api.net/claude -TenantId <tenant-id>
+> .\scripts\Setup-ClaudeWorkstation.ps1 -GatewayUrl https://<apim>.azure-api.net/claude -TenantId <tenant-id>
 > ```
 >
 > Neither is a secret. Your access comes from group membership, not from these.
@@ -490,7 +492,7 @@ does not have. Both the setup script and the credential helper can print a code
 to use on another machine instead:
 
 ```powershell
-.\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json -Auth device
+.\scripts\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json -Auth device
 
 # and for the helper, which signs in again when its cached token expires
 [Environment]::SetEnvironmentVariable('CLAUDE_FOUNDRY_AUTH','device','User')

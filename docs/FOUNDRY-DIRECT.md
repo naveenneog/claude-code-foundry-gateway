@@ -171,7 +171,7 @@ a name. A guessed name writes a settings file that looks fine and fails minutes
 later. Supply the names instead:
 
 ```powershell
-.\Setup-ClaudeFoundryDirect.ps1 -Resource <resource> -Models claude-sonnet-5,claude-opus-5
+.\scripts\Setup-ClaudeFoundryDirect.ps1 -Resource <resource> -Models claude-sonnet-5,claude-opus-5
 ```
 
 Passing `-Models` skips discovery, so aliases fall back to matching the name.
@@ -764,4 +764,3 @@ file.
 - [Debugging](DEBUGGING.md) — isolating a failure layer by layer
 - [Comparison](COMPARISON.md) — Foundry through the gateway against Anthropic direct
 - `./scripts/Test-FoundryDirect.ps1` — verifies the direct path without configuring anything
-

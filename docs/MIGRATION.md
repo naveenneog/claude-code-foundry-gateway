@@ -8,7 +8,7 @@ answers and different owners:
 | [1](#1-history-memory-and-sessions) | Keep chat history, memory and sessions intact | **All of it migrates — Desktop chats, Cowork and Code sessions, projects and memory — through an import wizard that is off by default at both ends. Attachments are the exception.** |
 | [2](#2-mass-deployment-through-mdm) | Bulk install and push user-level config via MDM | Fully supported. Managed settings override every user-level value. |
 | [3](#3-bulk-entitlement-from-a-csv-or-an-entra-group) | Bulk migration from C4E, CSV or Entra groups | `Import-ClaudeEntitlement.ps1`. Budget effort for identity resolution, not for the import. |
-| [4](#4-cutover-runbook) | How to actually run it | Switch on import, export, pilot, dual-run, cut over, decommission. |
+| [4](#5-cutover-runbook) | How to actually run it | Switch on import, export, pilot, dual-run, cut over, decommission. |
 
 Every claim below was checked against Anthropic's documentation or against a
 live deployment. Where something is genuinely undocumented it says so rather
@@ -387,16 +387,18 @@ level: no user, project, local or `--settings` value overrides them.
 ### Generate the policy
 
 ```powershell
-# Claude Code - CLI, VS Code and JetBrains extensions, and Desktop's Code tab
+# Claude Code and the Desktop capability profile
 ./scripts/New-ClaudeCodePolicy.ps1 -ConfigPath ./onboarding/claude-gateway.json
-
-# Claude Desktop - Chat and Cowork
-#   github.com/naveenneog/claude-desktop-foundry
-./scripts/New-DesktopPolicy.ps1 -Mode GatewayHelper -GatewayBaseUrl <url>
 ```
 
-Each emits `managed-settings.json`, a `.reg`, an Intune OMA-URI CSV, a
-`.mobileconfig`, and an apply script for piloting.
+The Code profile includes `managed-settings.json`, a `.reg`, an Intune OMA-URI
+CSV, a `.mobileconfig`, and an apply script for piloting. The Desktop capability
+profile is emitted as `claude-desktop.managed-settings.json` and
+`claude-desktop.reg`; see [Plugins](PLUGINS.md#where-the-policy-goes).
+For a complete Desktop connection payload, use the
+[companion accelerator](https://github.com/naveenneog/claude-desktop-foundry)
+and its instructions in that repository. Its `New-DesktopPolicy.ps1` is not a
+script in this checkout.
 
 ### Where each mechanism stores the policy
 
