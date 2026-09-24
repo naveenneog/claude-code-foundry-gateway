@@ -24,6 +24,7 @@
 | Modes tests | 206 governance and 146 team assertions; 108 of 108 Turnstile mutations caught; the policy's own expression bodies compiled and executed for 1, 10 and 100%, zero, rounding and the Int64 limit |
 | The guard against live data, 15:35Z | Real catalog, budget and tier reads through the guard against a gateway held in memory: verified before writing, 0 newer snapshots, 0 writes |
 | Rolled out live, 17:51-18:02Z | Main's merged policy (`690015d`) deployed to the reference gateway: all 28 named values byte-identical before and after, and a request through the gateway returned 200 with every budget header. Both Turnstile jobs repinned to `690015d`; their first run succeeded. The only named value that run changed was `turnstile-integration`'s `connectedAt`, re-stamped by the connect step; tiers match Turnstile (`tpm-standard` 20,000, `tpm-premium` 80,000) |
+| A mode set in Turnstile's UI, 21:12-21:20Z | Notify on one team: `bu-modes` read `,<team>=notify,` on the gateway 113.4 s after the save (apply job succeeded at 151.8 s). Strict: exactly `,,` after 113.2 s. The originally unset attribute was restored too; the catalog and every non-secret named value then equalled the snapshot (P53) |
 
 The notices are advisory. `llm-token-limit`'s remaining quota is an estimate, so an allowance
 notice cannot promise the exact request that crosses the budget, and notify has no monthly counter
@@ -39,6 +40,58 @@ this time, because manager attributes do not reach the gateway, but budget modes
 against stale runs is being added with the modes, and a single queue-driven writer (P48) is the
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
+
+## P50 chargeback reports, 2026-09-24
+
+Merged from `chargeback-reports` at `854ea37`. [ADR-0020](adr/0020-chargeback-reports.md);
+`docs/CHARGEBACK-REPORTS.md`.
+
+| | |
+|---|---|
+| **Generate** | `scripts/New-ClaudeChargebackReport.ps1 -Month`: per unit, a CSV of its people and an HTML summary (requests, input, output, cache-read and cache-write tokens, estimated cost, budget against use), an index and a manifest. Unit totals plus an explicit Unassigned line must equal the month's total, or the run fails |
+| **Recipients** | `scripts/Set-ClaudeChargebackRecipients.ps1`, per unit and for the admin team, limited to allowed domains, changed with no redeploy |
+| **Deliver** | A scheduled Container Apps job archives each run in Storage reachable only through a private endpoint, and emails each unit its own report through Azure Communication Services |
+| **Live** | 2026-09-24: current and previous month generated from the reference gateway's ledger and reconciled with the saved function; both emails reached the owner's inbox (17:42:49Z, 18:10:36Z), with only the owner's address configured |
+| **Tests** | 276 assertions on each PowerShell host, 12 mutations caught; 100,000 people generated offline |
+| **Cost** | $29.70 a month standing (a private endpoint, a private DNS zone, and the Container Apps environment's load balancer and public IP), plus storage and $0.00025 per email; list price, derived |
+| **Gate** | PASS on `854ea37`, Test-All 956.2 s |
+
+An Azure-managed sender domain sends at most 10 messages an hour per subscription and cannot be
+raised: broad delivery needs a verified custom domain. Team-level recipients wait for team-only
+reports. It is left running on the reference deployment;
+`Register-ClaudeChargebackSchedule.ps1 -Remove -PurgeArchive` removes it.
+
+## P55 the AUM service, 2026-09-24
+
+Merged from `aum-service` at `aa697fc`. [ADR-0023](adr/0023-aum-service.md); `docs/AUM-SERVICE.md`.
+An optional Azure Functions API that gives AUM viewers, scoped managers and budget requests
+without Turnstile. A gateway has one governance authority: the service refuses to write to a
+gateway Turnstile governs, so the reference gateway stays Turnstile's.
+
+| | |
+|---|---|
+| **Identity** | Its own Entra app, created by its owner, with `AUM.Admin`, `AUM.Viewer` and `AUM.Manager`, and the Azure CLI pre-authorized, so tokens need no consent |
+| **Writes** | Named values written by the Function's managed identity with read-back and conditional revisions (`If-Match`); byte-for-byte parity with the PowerShell serializers, proven on shared fixtures on both hosts |
+| **P47, for this service** | Budget requests, approve, reject, escalate; boosts whose expiry a timer reverts |
+| **Live** | On a test gateway: admin reads and reversible writes; the real one-minute timer restored the registry byte-identically; anonymous calls refused with 401 |
+| **Tests** | 84 Python tests and 5 mutations, 57 PowerShell assertions |
+| **Gate** | PASS on `aa697fc`, Test-All 785.1 s |
+
+Open: the manager-only journey (after P53's), the AUM client's end-to-end journey on the dedicated
+test gateway, and the portal pictures (after the owner signs in again).
+
+## P53 Turnstile, tested and captured live, 2026-09-24 (phase 1)
+
+Merged at `146fd12`.
+
+| | |
+|---|---|
+| **Pictures** | All 22 recaptured live from the reference deployment and 4 added, each with a dated, redacted provenance record and a pixel hash that the screenshot check enforces |
+| **Sign-in** | The owner through the consent-free Azure CLI code in 8.0 s; the one-use code, replayed, returned 401 |
+| **A change in the UI** | Standard tier 20,000 to 20,001 on the page reached the gateway in 105.3 s; restored through the page in 118.6 s |
+| **A mode in the UI** | See P46 above: notify reached `bu-modes` in 113.4 s, strict returned it to `,,` in 113.2 s |
+| **Capture tooling** | Capture scripts discover their targets instead of defaulting to live names; `Test-NoDeploymentValues.ps1` also scans `.mjs` files |
+| **Manager-only (phase 2)** | The first attempt restored everything exactly but proved nothing: the account also holds a direct `Turnstile.Admin` assignment, so leaving the admin group still left Admin, which outranks Manager. A retry that includes the direct assignment is authorized (**U21**) |
 
 ## P51 terminal FinOps, first release, 2026-09-24
 
