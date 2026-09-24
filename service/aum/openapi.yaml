@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: AUM service
-  version: 1.0.2
+  version: 1.0.3
   description: |
     Optional Azure Usage Management authority; no Turnstile dependency.
     All paths require a delegated Entra v2 bearer token for this app with
@@ -327,8 +327,15 @@ paths:
         - {$ref: '#/components/parameters/Cursor'}
       responses:
         '200':
-          description: Scoped budget.warning records; delivery_status=pending, no email-delivery claim.
-          content: {application/json: {schema: {$ref: '#/components/schemas/Page'}}}
+          description: Versioned warning facts only. Transport state and recipients are separate; no email delivery is configured.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/NotificationFact'}}
+                  next_cursor: {type: string, nullable: true}
   /api/v1/audit:
     get:
       operationId: audit
@@ -426,6 +433,46 @@ components:
       properties:
         items: {type: array, items: {type: object}}
         next_cursor: {type: string, nullable: true}
+    NotificationFact:
+      type: object
+      description: |
+        Immutable fact, not a delivery job. A changed nominal token limit or
+        threshold rearms the warning; an identical restored limit reuses its
+        earlier deterministic id. Future delivery resolves current recipients
+        and domain policy at send time. No address list is stored here.
+      required:
+        - schema_version
+        - id
+        - kind
+        - scope_type
+        - scope_id
+        - period_start_utc
+        - period_end_utc
+        - threshold_percent
+        - observed_usage
+        - usage_unit
+        - usage_basis
+        - effective_limit_version
+        - source
+        - token_limit
+        - occurred_at
+      properties:
+        schema_version: {type: integer, enum: [1]}
+        id: {type: string}
+        kind: {type: string, enum: [budget.warning]}
+        scope_type: {type: string, enum: [organization, department, user]}
+        scope_id: {type: string}
+        period: {type: string}
+        period_start_utc: {type: string, format: date-time}
+        period_end_utc: {type: string, format: date-time, description: Exclusive UTC end of the budget period.}
+        threshold_percent: {type: integer, minimum: 1, maximum: 100}
+        observed_usage: {type: string, description: Exact nonnegative decimal text, not binary floating point.}
+        usage_unit: {type: string, enum: [tokens]}
+        usage_basis: {type: string, enum: [prompt_completion_only]}
+        effective_limit_version: {type: string}
+        source: {type: string, enum: [ClaudeCost, ClaudeChargeback]}
+        token_limit: {type: integer}
+        occurred_at: {type: string, format: date-time}
     Identity:
       type: object
       required: [id, role, access, method, manager_scope]

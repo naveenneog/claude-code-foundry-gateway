@@ -435,10 +435,16 @@ Do not allocate permanent child budgets into temporary parent headroom: the
 server checks against the parent's post-expiry baseline too. Overlapping boosts
 and normal edits to an actively boosted target are refused.
 
-The 15-minute warning timer writes `budget.warning` notification records. These
-are idempotent per budget, UTC period and threshold. `delivery_status=pending`
-means **no email has been sent**. ACS email integration can consume these records
-later; the capability `email_delivery` is false.
+The 15-minute warning timer writes version-1 `budget.warning` facts: tokens,
+`prompt_completion_only` basis, exact decimal usage text, exclusive UTC period
+bounds, source and an effective-limit version. The deterministic ID includes the
+scope, interval, threshold, basis and limit version. A changed nominal limit
+rearms a warning; restoring an identical limit reuses its earlier fact.
+Facts contain no recipient addresses or transport status. Future delivery must
+resolve current scope recipients/domain policy separately. Email is not
+configured: `email_delivery` is false. [ACS's Azure-managed-domain quota](https://learn.microsoft.com/azure/communication-services/concepts/service-limits#email) of ten
+sends per subscription/hour requires aggregated digests, not a promise of
+real-time per-person emails at 500,000.
 
 An Admin can explicitly include `admin_override: true` on a decision, with a
 reason. Managers cannot use it. It is recorded in both the decision and audit,

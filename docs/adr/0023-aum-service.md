@@ -66,8 +66,11 @@ Requests route one level up; self-approval is refused by default. Approvals rech
 headroom at decision time. Escalation moves toward the administrator.
 Boosts retain the previous value and an expiry. The timer retries overdue
 records on subsequent ticks, using compare-and-restore rather than overwriting
-a newer administrator edit. Warning records are idempotent per budget,
-UTC period and threshold; email delivery is not represented as implemented.
+a newer administrator edit. Warning records are idempotent per budget, UTC
+period, threshold, usage basis and nominal limit version. A changed limit
+rearms; restoring the same limit reuses the fact. Versioned facts carry exact
+decimal usage, exclusive UTC period bounds and source, but no addresses or
+transport state. Email delivery is not implemented.
 
 ## Evidence and unknowns recorded before implementation
 
