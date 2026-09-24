@@ -68,7 +68,8 @@ class LookupScreen(ModalScreen):
     def compose(self):
         with Vertical(id="lookup-dialog"):
             yield Label("Find units, teams, models; people in the selected team", markup=False)
-            yield Input(placeholder="Search; request:<id> for a request. Enter to search.", id="lookup-query")
+            yield Input(placeholder="Search; request:<id> for a request. Enter to search.", id="lookup-query",
+                        password=self.app.redactor.enabled)
             yield Static("People are searched on the server, never loaded in full.", id="lookup-status", markup=False)
             yield DataTable(id="lookup-results", cursor_type="row", zebra_stripes=True)
 
@@ -258,7 +259,7 @@ class ExportScreen(ModalScreen):
     def compose(self):
         with Vertical(id="month-dialog"):
             yield Label("Export complete chargeback (managed scopes only)")
-            yield Input(f"chargeback-{self.app.engine.month}.csv", id="export-name")
+            yield Input(f"chargeback-{self.app.engine.month}.csv", id="export-name", password=self.app.redactor.enabled)
             yield Static("Saved under finops-reports in the current folder. Existing files are never overwritten.",
                          id="export-status", markup=False)
             with Horizontal(classes="buttons"):
@@ -281,7 +282,8 @@ class ExportScreen(ModalScreen):
             folder.mkdir(exist_ok=True)
             with (folder / name).open("x", encoding="utf-8", newline="") as output:
                 output.write(chargeback_csv(self.app.present(result["items"]), self.app.engine.month))
-            self.query_one("#export-status", Static).update(f"Exported {len(result['items'])} scopes to finops-reports\\{name}.")
+            self.query_one("#export-status", Static).update(
+                self.app.redactor.text(f"Exported {len(result['items'])} scopes to finops-reports\\{name}."))
         except (OSError, FinOpsError) as error:
             message = str(error) if isinstance(error, FinOpsError) else "Cannot create that file. Choose a new name and a writable current folder."
             self.query_one("#export-status", Static).update(message)

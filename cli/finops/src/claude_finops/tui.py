@@ -77,14 +77,15 @@ class FinOpsApp(App):
     def compose(self) -> ComposeResult:
         yield Static(COMPACT, id="brand", markup=False)
         yield Static("Signing in through Azure CLI...", id="identity", markup=False)
-        yield Input(placeholder="/ Filter visible rows (Esc clears; Ctrl+F searches the server)", id="quick-filter")
+        yield Input(placeholder="/ Filter visible rows (Esc clears; Ctrl+F searches the server)", id="quick-filter",
+                    password=self.redactor.enabled)
         with TabbedContent(initial="overview", id="main-tabs"):
             for tab, title in TABS:
                 with TabPane(title, id=tab):
                     if tab == "people":
                         with Horizontal(classes="toolbar"):
                             yield Select([], id="people-team", prompt="Choose a team")
-                            yield Input(placeholder="Search people; Enter", id="people-query")
+                            yield Input(placeholder="Search people; Enter", id="people-query", password=self.redactor.enabled)
                             yield Button("Find", id="find-people")
                     elif tab == "usage":
                         with Horizontal(classes="toolbar"):
@@ -97,7 +98,7 @@ class FinOpsApp(App):
                             yield Static("Enter a bucket for exact metrics", classes="toolbar-note")
                     elif tab == "requests":
                         with Horizontal(classes="toolbar"):
-                            yield Input(placeholder="Filter model (exact id)", id="request-model")
+                            yield Input(placeholder="Filter model (exact id)", id="request-model", password=self.redactor.enabled)
                             yield Input(placeholder="Before ISO time (UTC)", id="request-before")
                             yield Button("Filter", id="filter-requests")
                     elif tab == "settings":
@@ -319,7 +320,8 @@ class FinOpsApp(App):
         elif query:
             matches = [(row, record) for row, record in zip(rows, records) if query.casefold() in " ".join(map(str, row)).casefold()]
             rows, records = [row for row, _ in matches], [record for _, record in matches]
-            note = f"Filter: {query} | {len(rows)} visible matches | Esc clears"
+            label = "Filter applied" if self.redactor.enabled else f"Filter: {query}"
+            note = f"{label} | {len(rows)} visible matches | Esc clears"
         self.records[tab] = records
         table = self.query_one(f"#table-{tab}", DataTable)
         table.clear(columns=True)

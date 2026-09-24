@@ -91,7 +91,7 @@ class Redactor:
         if isinstance(value, dict):
             if key == "enforcement_modes":
                 return {self.text(k): v for k, v in value.items()}
-            return {k: self._render(v, k) for k, v in value.items()}
+            return {mask_identifiers(str(k)): self._render(v, k) for k, v in value.items()}
         if isinstance(value, list):
             return [self._render(item, key) for item in value]
         if isinstance(value, str):

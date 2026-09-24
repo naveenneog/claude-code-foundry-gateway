@@ -112,3 +112,23 @@ async def test_preselected_people_team_does_not_trigger_refresh_loop():
         assert len(app.data["people"]["items"]) == 50
         calls = [(op, params) for op, params in backend.reads if op == "people"]
         assert len(calls) == 1
+
+
+async def test_redacted_queries_do_not_leak_through_input_or_filter_echo():
+    app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), redact=True)
+    secret_id = "11111111-2222-3333-4444-555555555555"
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause(.25)
+        await app.workers.wait_for_complete()
+        app.team = "sales-emea"
+        app.open_lookup_result(dict(kind="person", id=secret_id, name="Private Person", tab="people"))
+        await pilot.pause(.25)
+        await app.workers.wait_for_complete()
+        await pilot.pause(.25)
+        assert app.query_one("#people-query", Input).value == secret_id
+        assert app.query_one("#people-query", Input).password
+        assert secret_id not in app.export_screenshot()
+        await pilot.press("/")
+        app.query_one("#quick-filter", Input).value = "private@example.org"
+        await pilot.pause(.25)
+        assert "private@example.org" not in app.export_screenshot()

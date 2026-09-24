@@ -267,7 +267,9 @@ aum status --json
 
 Redaction is display-time only: numbers and backend requests stay unchanged;
 people, addresses and deployment identifiers become deterministic Contoso
-pseudonyms. Free-form private descriptions are hidden. Redacted interactive
+pseudonyms. Free-form private descriptions and query-field text are hidden;
+selected person ids are still sent unchanged to the API, not echoed into captures.
+Redacted interactive
 sessions are intentionally read-only to prevent pseudonyms being mistaken for
 write targets. Turn redaction off when making an authorized edit.
 

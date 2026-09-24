@@ -87,3 +87,8 @@ def test_identity_strings_cannot_rewrite_schema_keys_or_status_enums():
     assert rendered["scope_type"] == "organization"
     assert rendered["status"] == "warning"
     assert rendered["enforcement_modes"][rendered["scope_id"]] == "notify"
+
+
+def test_dynamic_identifier_keys_remain_private():
+    source = {"attributes": {"11111111-2222-3333-4444-555555555555": "example"}}
+    assert not privacy_problems(json.dumps(Redactor(True).present(source)))
