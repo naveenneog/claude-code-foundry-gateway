@@ -81,7 +81,8 @@ metrics in `Get-ClaudeBudget.ps1` are not the chargeback ledger or dollars.
 
 **Pending batch capture (`docs-review-named-values`).**
 
-![APIM Named values list showing tier limits and quota settings](guide/docs-review-named-values.png)
+Planned image: `docs/guide/docs-review-named-values.png` — tier limits and
+quota settings in the Named values list.
 
 ## 2. Change a tier or the organisation ceiling
 
@@ -101,7 +102,8 @@ change; read the value back and test the caller after propagation.
 
 **Pending batch capture (`docs-review-daily-quota-editor`).**
 
-![Named value editor for the standard daily quota, including the Value field](guide/docs-review-daily-quota-editor.png)
+Planned image: `docs/guide/docs-review-daily-quota-editor.png` — the standard
+daily-quota editor and its Value field.
 
 No redeployment is needed. Wait for configuration propagation and verify a
 request; a successful ARM write is not proof the running policy has changed.

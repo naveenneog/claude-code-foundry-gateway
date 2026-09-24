@@ -98,7 +98,8 @@ name alone is not sufficient.
 
 **Pending batch capture (`docs-review-foundry-deployments`).**
 
-![Foundry account deployment list used to inspect model and deployment identities](guide/docs-review-foundry-deployments.png)
+Planned image: `docs/guide/docs-review-foundry-deployments.png` — the
+account's model deployment list and identities.
 
 ---
 

@@ -32,7 +32,8 @@ merely to complete an inspection; obtain the privacy owner's approval first.
 
 **Pending batch capture (`docs-review-workspace-tables`).**
 
-![Workspace Tables view used to inspect the AppMetrics table plan and retention](guide/docs-review-workspace-tables.png)
+Planned image: `docs/guide/docs-review-workspace-tables.png` — the
+AppMetrics table plan and retention entry point.
 
 Choose retention before enabling capture. A lower-cost table plan can forfeit
 selective purge: the recorded U7 constraints allow Analytics-plan tables, not

@@ -152,17 +152,23 @@ source profile concurrently. Other live captures that do not use the portal,
 such as CLI transcripts and approved application/report views, can continue.
 
 The documentation packet's declared portal steps are in
-[`captures/docs-review.json`](captures/docs-review.json). Targets are discovered;
-no tenant, subscription or deployment name is a default in the specification.
-The `resolver` and `cosmos` filters describe logical component kinds; the batch
-operator must select the actual resource associated with the chosen gateway.
-Do not silently take an unrelated first match.
+[`captures/docs-review.json`](captures/docs-review.json), using the version-1
+object containing `steps`. Targets are discovered; no tenant, subscription or
+deployment name is a default. The operator supplies `DOCS_RESOLVER_NAME_FILTER`,
+`DOCS_PROJECTION_NAME_FILTER` and `DOCS_ENTITLEMENT_GROUP_FILTER` at runtime,
+selecting real associated candidates. `selectionKey` reuses that choice across
+steps. The private replacement map is supplied through
+`PORTAL_REDACTIONS_FILE`; never commit it.
 
-Each guide marks its final image reference **pending batch capture (spec id)**.
+Each guide marks its final image path **pending batch capture (spec id)**.
+Until capture, the path is inline code, not a broken image or a fake placeholder,
+as required by the batch contract. Convert it to an image with meaningful alt
+text only after its real output has been reviewed and committed.
 The lead runs the batch immediately after an owner-authorised sign-in, reviews
 redaction and populated blade contents, then commits the images. A loading shell
-or a sign-in page is not a completed screenshot. Missing outputs remain visible
-to the existing reference checks; do not add an exception to pretend they exist.
+or a sign-in page is not a completed screenshot. Pending specs remain open in
+the batch's status report; passing ordinary link/image checks does not mean a
+declared pending capture was taken. Do not add an exception or fabricate a file.
 
 The batch must remain read-only: an editor may be opened for a screenshot, but
 the spec must not save a quota, assign a role, deploy or delete a resource.

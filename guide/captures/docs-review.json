@@ -1,150 +1,196 @@
-[
-  {
-    "id": "docs-review-gateway-overview",
-    "output": "docs/guide/docs-review-live-apim-overview.png",
-    "target": { "discover": "gateway" },
-    "blade": "/overview",
-    "waitFor": "[aria-label^=\"Copy to clipboard the value for Tier \"]",
-    "settle": 6000
-  },
-  {
-    "id": "docs-review-foundry-iam",
-    "output": "docs/guide/docs-review-live-foundry-iam.png",
-    "target": { "discover": "foundry" },
-    "blade": "/users",
-    "waitFor": "text=View my access",
-    "settle": 5000
-  },
-  {
-    "id": "docs-review-named-values",
-    "output": "docs/guide/docs-review-named-values.png",
-    "target": { "discover": "gateway" },
-    "blade": "/namedValues",
-    "waitFor": "text=quota-standard",
-    "settle": 5000
-  },
-  {
-    "id": "docs-review-daily-quota-editor",
-    "output": "docs/guide/docs-review-daily-quota-editor.png",
-    "target": { "discover": "gateway" },
-    "blade": "/namedValues",
-    "clicks": ["text=quota-standard"],
-    "waitFor": "text=Display name",
-    "settle": 4000
-  },
-  {
-    "id": "docs-review-gateway-identity",
-    "output": "docs/guide/docs-review-gateway-identity.png",
-    "target": { "discover": "gateway" },
-    "blade": "/identity",
-    "waitFor": "text=System assigned",
-    "settle": 5000
-  },
-  {
-    "id": "docs-review-api-settings",
-    "output": "docs/guide/docs-review-api-settings.png",
-    "target": { "discover": "gateway" },
-    "blade": "/apis",
-    "clicks": ["text=Claude on Foundry (governed)", "text=Settings"],
-    "waitFor": "text=Web service URL",
-    "settle": 5000
-  },
-  {
-    "id": "docs-review-api-policy",
-    "output": "docs/guide/docs-review-api-policy.png",
-    "target": { "discover": "gateway" },
-    "blade": "/apis",
-    "clicks": ["text=Claude on Foundry (governed)", "text=All operations"],
-    "waitFor": "text=Inbound processing",
-    "settle": 5000
-  },
-  {
-    "id": "docs-review-gateway-diagnostics",
-    "output": "docs/guide/docs-review-gateway-diagnostics.png",
-    "target": { "discover": "gateway" },
-    "blade": "/diagnostics",
-    "waitFor": "text=Diagnostic settings",
-    "settle": 5000
-  },
-  {
-    "id": "docs-review-workspace-properties",
-    "output": "docs/guide/docs-review-workspace-properties.png",
-    "target": { "discover": "workspace" },
-    "blade": "/properties",
-    "waitFor": "text=Workspace ID",
-    "settle": 5000
-  },
-  {
-    "id": "docs-review-workspace-functions",
-    "output": "docs/guide/docs-review-workspace-functions.png",
-    "target": { "discover": "workspace" },
-    "blade": "/logs",
-    "clicks": ["text=Functions"],
-    "waitFor": "text=ClaudeCost",
-    "settle": 10000
-  },
-  {
-    "id": "docs-review-workspace-workbooks",
-    "output": "docs/guide/docs-review-workspace-workbooks.png",
-    "target": { "discover": "workspace" },
-    "blade": "/workbooks",
-    "waitFor": "text=Workbooks",
-    "settle": 8000
-  },
-  {
-    "id": "docs-review-workspace-tables",
-    "output": "docs/guide/docs-review-workspace-tables.png",
-    "target": { "discover": "workspace" },
-    "blade": "/tables",
-    "waitFor": "text=AppMetrics",
-    "settle": 6000
-  },
-  {
-    "id": "docs-review-foundry-deployments",
-    "output": "docs/guide/docs-review-foundry-deployments.png",
-    "target": { "discover": "foundry" },
-    "blade": "/deployments",
-    "waitFor": "text=Deployments",
-    "settle": 6000
-  },
-  {
-    "id": "docs-review-entra-groups",
-    "output": "docs/guide/docs-review-entra-groups.png",
-    "target": { "discover": "gateway" },
-    "entraBlade": "Microsoft_AAD_IAM/GroupsManagementMenuBlade/~/AllGroups",
-    "waitFor": "text=All groups",
-    "settle": 6000
-  },
-  {
-    "id": "docs-review-foundry-networking",
-    "output": "docs/guide/docs-review-foundry-networking.png",
-    "target": { "discover": "foundry" },
-    "blade": "/networking",
-    "waitFor": "text=Public network access",
-    "settle": 6000
-  },
-  {
-    "id": "docs-review-resolver-networking",
-    "output": "docs/guide/docs-review-resolver-networking.png",
-    "target": { "type": "Microsoft.Web/sites", "nameContains": "resolver" },
-    "blade": "/networking",
-    "waitFor": "text=Virtual network integration",
-    "settle": 6000
-  },
-  {
-    "id": "docs-review-resolver-authentication",
-    "output": "docs/guide/docs-review-resolver-authentication.png",
-    "target": { "type": "Microsoft.Web/sites", "nameContains": "resolver" },
-    "blade": "/authsettings",
-    "waitFor": "text=Identity provider",
-    "settle": 6000
-  },
-  {
-    "id": "docs-review-cosmos-networking",
-    "output": "docs/guide/docs-review-cosmos-networking.png",
-    "target": { "type": "Microsoft.DocumentDB/databaseAccounts", "nameContains": "cosmos" },
-    "blade": "/networking",
-    "waitFor": "text=Public network access",
-    "settle": 6000
-  }
-]
+{
+  "version": 1,
+  "steps": [
+    {
+      "id": "docs-review-gateway-overview",
+      "output": "docs/guide/docs-review-live-apim-overview.png",
+      "target": { "discover": "gateway", "selectionKey": "gateway" },
+      "blade": "/overview",
+      "waitFor": { "selector": "[aria-label^=\"Copy to clipboard the value for Tier \"]" },
+      "settle": 6000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-foundry-iam",
+      "output": "docs/guide/docs-review-live-foundry-iam.png",
+      "target": { "discover": "foundry", "selectionKey": "foundry" },
+      "blade": "/users",
+      "waitFor": { "text": "View my access", "exact": true },
+      "settle": 5000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-named-values",
+      "output": "docs/guide/docs-review-named-values.png",
+      "target": { "discover": "gateway", "selectionKey": "gateway" },
+      "blade": "/namedValues",
+      "waitFor": { "text": "quota-standard", "exact": true },
+      "settle": 5000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-daily-quota-editor",
+      "output": "docs/guide/docs-review-daily-quota-editor.png",
+      "target": { "discover": "gateway", "selectionKey": "gateway" },
+      "blade": "/namedValues",
+      "clicks": [{ "text": "quota-standard", "exact": true }],
+      "waitFor": { "text": "Display name" },
+      "settle": 4000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-gateway-identity",
+      "output": "docs/guide/docs-review-gateway-identity.png",
+      "target": { "discover": "gateway", "selectionKey": "gateway" },
+      "blade": "/identity",
+      "waitFor": { "text": "System assigned" },
+      "settle": 5000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-api-settings",
+      "output": "docs/guide/docs-review-api-settings.png",
+      "target": { "discover": "gateway", "selectionKey": "gateway" },
+      "blade": "/apis",
+      "clicks": [
+        { "text": "Claude on Foundry (governed)", "exact": true },
+        { "text": "Settings", "exact": true }
+      ],
+      "waitFor": { "text": "Web service URL" },
+      "settle": 5000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-api-policy",
+      "output": "docs/guide/docs-review-api-policy.png",
+      "target": { "discover": "gateway", "selectionKey": "gateway" },
+      "blade": "/apis",
+      "clicks": [
+        { "text": "Claude on Foundry (governed)", "exact": true },
+        { "text": "All operations", "exact": true }
+      ],
+      "waitFor": { "text": "Inbound processing" },
+      "settle": 5000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-gateway-diagnostics",
+      "output": "docs/guide/docs-review-gateway-diagnostics.png",
+      "target": { "discover": "gateway", "selectionKey": "gateway" },
+      "blade": "/diagnostics",
+      "waitFor": { "text": "Diagnostic settings" },
+      "settle": 5000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-workspace-properties",
+      "output": "docs/guide/docs-review-workspace-properties.png",
+      "target": { "discover": "workspace", "selectionKey": "workspace" },
+      "blade": "/properties",
+      "waitFor": { "text": "Workspace ID" },
+      "settle": 5000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-workspace-functions",
+      "output": "docs/guide/docs-review-workspace-functions.png",
+      "target": { "discover": "workspace", "selectionKey": "workspace" },
+      "blade": "/logs",
+      "clicks": [{ "text": "Functions", "exact": true }],
+      "waitFor": { "text": "ClaudeCost" },
+      "settle": 10000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-workspace-workbooks",
+      "output": "docs/guide/docs-review-workspace-workbooks.png",
+      "target": { "discover": "workspace", "selectionKey": "workspace" },
+      "blade": "/workbooks",
+      "waitFor": { "text": "Workbooks" },
+      "settle": 8000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-workspace-tables",
+      "output": "docs/guide/docs-review-workspace-tables.png",
+      "target": { "discover": "workspace", "selectionKey": "workspace" },
+      "blade": "/tables",
+      "waitFor": { "text": "AppMetrics", "exact": true },
+      "settle": 6000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-foundry-deployments",
+      "output": "docs/guide/docs-review-foundry-deployments.png",
+      "target": { "discover": "foundry", "selectionKey": "foundry" },
+      "blade": "/deployments",
+      "waitFor": { "text": "Deployments" },
+      "settle": 6000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-entra-groups",
+      "output": "docs/guide/docs-review-entra-groups.png",
+      "target": {
+        "discover": "entra-group",
+        "nameFilterEnv": "DOCS_ENTITLEMENT_GROUP_FILTER",
+        "selectionKey": "docs-entitlement-group"
+      },
+      "entraBlade": { "kind": "group", "name": "Members" },
+      "waitFor": { "text": "Members", "exact": true },
+      "settle": 6000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-foundry-networking",
+      "output": "docs/guide/docs-review-foundry-networking.png",
+      "target": { "discover": "foundry", "selectionKey": "foundry" },
+      "blade": "/networking",
+      "waitFor": { "text": "Public network access" },
+      "settle": 6000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-resolver-networking",
+      "output": "docs/guide/docs-review-resolver-networking.png",
+      "target": {
+        "discover": "resource",
+        "resourceType": "Microsoft.Web/sites",
+        "nameFilterEnv": "DOCS_RESOLVER_NAME_FILTER",
+        "selectionKey": "docs-resolver"
+      },
+      "blade": "/networking",
+      "waitFor": { "text": "Virtual network integration" },
+      "settle": 6000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-resolver-authentication",
+      "output": "docs/guide/docs-review-resolver-authentication.png",
+      "target": {
+        "discover": "resource",
+        "resourceType": "Microsoft.Web/sites",
+        "nameFilterEnv": "DOCS_RESOLVER_NAME_FILTER",
+        "selectionKey": "docs-resolver"
+      },
+      "blade": "/authsettings",
+      "waitFor": { "text": "Identity provider" },
+      "settle": 6000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "docs-review-cosmos-networking",
+      "output": "docs/guide/docs-review-cosmos-networking.png",
+      "target": {
+        "discover": "resource",
+        "resourceType": "Microsoft.DocumentDB/databaseAccounts",
+        "nameFilterEnv": "DOCS_PROJECTION_NAME_FILTER",
+        "selectionKey": "docs-projection"
+      },
+      "blade": "/networking",
+      "waitFor": { "text": "Public network access" },
+      "settle": 6000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    }
+  ]
+}

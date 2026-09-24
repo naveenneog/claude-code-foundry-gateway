@@ -260,12 +260,14 @@ $gid = az ad group show --group claude-code-standard --query id -o tsv
 6. Confirm they now appear in the list
 
 Use the actual tier group identified in [the value-source table](#find-the-values-before-changing-membership),
-not a similarly named group. The All groups screenshot is an entry point; the
-Members operation and publication/verification steps remain separate.
+not a similarly named group. The batch resolves that group from the operator's
+runtime filter and opens its Members blade; publication/verification remain
+separate from this directory view.
 
 **Pending batch capture (`docs-review-entra-groups`).**
 
-![Microsoft Entra All groups view used to locate the discovered tier group](guide/docs-review-entra-groups.png)
+Planned image: `docs/guide/docs-review-entra-groups.png` — the discovered
+entitlement group's Members blade.
 
 ### Then run the sync — this is the step people miss
 

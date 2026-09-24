@@ -121,7 +121,8 @@ this does not override an Azure Policy that enforces private networking.
 
 **Pending batch capture (`docs-review-cosmos-networking`).**
 
-![Discovered Cosmos projection account Networking blade showing public-access controls](guide/docs-review-cosmos-networking.png)
+Planned image: `docs/guide/docs-review-cosmos-networking.png` — the
+projection account's Networking public-access controls.
 
 ### 2. Connect it to your network
 
@@ -245,7 +246,8 @@ do not widen the allowlist to make a failing request succeed.
 
 **Pending batch capture (`docs-review-resolver-authentication`).**
 
-![Resolver Function Authentication view showing its configured identity provider](guide/docs-review-resolver-authentication.png)
+Planned image: `docs/guide/docs-review-resolver-authentication.png` — the
+resolver's configured identity provider.
 
 ### 5. Publish the resolver code
 
@@ -296,7 +298,8 @@ network deployment outputs, not a screenshot or another environment.
 
 **Pending batch capture (`docs-review-resolver-networking`).**
 
-![Resolver Function Networking view showing its integration and private-endpoint entry points](guide/docs-review-resolver-networking.png)
+Planned image: `docs/guide/docs-review-resolver-networking.png` — resolver
+VNet integration and private-endpoint entry points.
 
 ### 7. Integrate the gateway with the VNet
 
@@ -335,7 +338,8 @@ public access. [Network](NETWORK.md) distinguishes client and backend routes.
 
 **Pending batch capture (`docs-review-foundry-networking`).**
 
-![Discovered Foundry account Networking view showing the public-network-access setting](guide/docs-review-foundry-networking.png)
+Planned image: `docs/guide/docs-review-foundry-networking.png` — Foundry's
+public-network-access setting.
 
 ### 8. Populate the projection from inside the network
 

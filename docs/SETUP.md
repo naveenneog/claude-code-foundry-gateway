@@ -238,7 +238,8 @@ before assigning the role; do not copy an application/client ID instead.
 
 **Pending batch capture (`docs-review-gateway-identity`).**
 
-![Gateway system-assigned identity blade with Status and Object principal ID](guide/docs-review-gateway-identity.png)
+Planned image: `docs/guide/docs-review-gateway-identity.png` — system-assigned
+identity, Status and Object (principal) ID.
 
 ### 2.3 Developers
 
@@ -586,7 +587,8 @@ identify it from its `claude-foundry` API ID and `/claude` path first.
 
 **Pending batch capture (`docs-review-api-policy`).**
 
-![Claude API All operations view showing the inbound policy controls](guide/docs-review-api-policy.png)
+Planned image: `docs/guide/docs-review-api-policy.png` — the Claude API's
+All operations view and inbound policy controls.
 
 ### 4.1 Confirm the tier is v2
 

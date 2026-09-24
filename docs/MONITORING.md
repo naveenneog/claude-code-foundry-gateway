@@ -76,7 +76,8 @@ the reporting functions and workbooks.
 
    **Pending batch capture (`docs-review-api-settings`).**
 
-   ![Claude API Settings showing its backend and diagnostics configuration](guide/docs-review-api-settings.png)
+   Planned image: `docs/guide/docs-review-api-settings.png` — API backend and
+   diagnostics settings.
 
    In the resource's **Diagnostic settings**, select the setting that sends
    **GatewayLlmLogs** and verify its **Send to Log Analytics workspace**
@@ -85,7 +86,8 @@ the reporting functions and workbooks.
 
    **Pending batch capture (`docs-review-gateway-diagnostics`).**
 
-   ![Gateway Diagnostic settings used to identify the actual LLM-log destination](guide/docs-review-gateway-diagnostics.png)
+   Planned image: `docs/guide/docs-review-gateway-diagnostics.png` — the actual
+   LLM-log destination in Diagnostic settings.
 3. Resolve each remaining placeholder from that linked resource:
 
    | Value | Portal field | CLI read |
@@ -107,7 +109,8 @@ name or ARM resource ID.
 
 **Pending batch capture (`docs-review-workspace-properties`).**
 
-![Log Analytics Properties showing the Workspace ID field](guide/docs-review-workspace-properties.png)
+Planned image: `docs/guide/docs-review-workspace-properties.png` — the
+workspace Properties and Workspace ID field.
 
 ---
 
@@ -370,7 +373,8 @@ unpublished placeholders.
 
 **Pending batch capture (`docs-review-workspace-functions`).**
 
-![Log Analytics Functions view showing the published Claude cost function](guide/docs-review-workspace-functions.png)
+Planned image: `docs/guide/docs-review-workspace-functions.png` — the
+published Claude cost function in Logs.
 
 The `.kql` files stay the source. The publisher rewrites only the window lines
 at the top of each file into function parameters, and **refuses to publish if it
@@ -413,7 +417,8 @@ is an entry point, not evidence that a query completed or a period reconciled.
 
 **Pending batch capture (`docs-review-workspace-workbooks`).**
 
-![Workspace Workbooks gallery used to locate the saved Claude reporting workbook](guide/docs-review-workspace-workbooks.png)
+Planned image: `docs/guide/docs-review-workspace-workbooks.png` — the
+workspace Workbooks gallery.
 
 ### What it shows
 
