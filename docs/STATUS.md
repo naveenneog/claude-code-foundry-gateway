@@ -65,6 +65,18 @@ Still missing before 500,000 can be claimed:
 - **Making it the default** (`cos-default`) and a one-command move for existing gateways
   (`cos-upgrade`).
 
+Found by review, 2026-09-24, and checked against the code before being recorded here:
+
+| Finding | Checked | Fix to make |
+|---|---|---|
+| The resolver accepts a record of any age. A stopped sync keeps access indefinitely, so the cache TTL does not bound revocation | No expiry, age or generation check in `resolver/src/entitlement.mjs` | A completed-reconciliation generation with an absolute expiry, enforced by the resolver and the cache; an expired projection answers 503 |
+| The resolver is called before any limiter, so a burst of cache misses reaches it unthrottled | First `send-request` at line 98 of `infra/policy.xml`, first limiter at line 298 | Miss-path backpressure and request coalescing, with Cosmos deadlines under five seconds |
+| `Sync-ClaudeProjection.ps1` reads existing records with one query and no continuation, so a revocation beyond the first page is never planned | One `POST .../docs`, no `x-ms-continuation` | Page through continuation tokens. Not changed yet: it needs a Cosmos account reachable from the test machine, and every account in the test subscription is private (U15) |
+| `projection.bicep` defaults to a public account | `param networkAccess string = 'public'` | Make the enterprise profile private-only |
+| Rolling back to the named-value lists after the flip can regrant leavers, and allowance counters are local to one gateway | Design, not code | Keep both destinations current for a bounded rollback window; treat a replacement or failed-over gateway as restoring allowance (U9) |
+
+Fixed at the same time: `sync/src/apply-projection.mjs` reported `ok: true` when writes or deletes had failed, though it exited 3. It now reports the outcome.
+
 ## Where P19 stood, 2026-09-17 (superseded by the section above)
 
 **Not finished, and the shipped product still holds about 93 developers.** That number is

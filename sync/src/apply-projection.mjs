@@ -136,6 +136,6 @@ const writes = await bulk(container, plan.toWrite.map((r) => ({
   operationType: 'Upsert', partitionKey: r.oid, resourceBody: toDocument(r, { tenantId, mappingVersion }),
 })));
 const deletes = await bulk(container, plan.toDelete.map((oid) => ({ operationType: 'Delete', id: oid, partitionKey: oid })));
-Object.assign(summary, { written: writes.ok, writeFailed: writes.failed, deleted: deletes.ok, deleteFailed: deletes.failed, mappingVersion, seconds: (Date.now() - started) / 1000 });
+Object.assign(summary, { ok: !(writes.failed || deletes.failed), written: writes.ok, writeFailed: writes.failed, deleted: deletes.ok, deleteFailed: deletes.failed, mappingVersion, seconds: (Date.now() - started) / 1000 });
 console.log(JSON.stringify(summary));
 process.exit(writes.failed || deletes.failed ? 3 : 0);

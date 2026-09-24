@@ -2426,6 +2426,12 @@ $mutations = @(
        To    = 'const problems = [];' }
 
     @{ Suite = 'Test-SecureProjection.ps1'
+       Name  = 'a failed write is reported as ok'
+       File  = 'sync/src/apply-projection.mjs'
+       From  = 'ok: !(writes.failed || deletes.failed), '
+       To    = '' }
+
+    @{ Suite = 'Test-SecureProjection.ps1'
        Name  = 'the in-network sync charges the last business unit'
        File  = 'sync/src/plan.mjs'
        From  = 'if (!assigned.has(m.oid)) { rec.businessUnit = unit.id; assigned.add(m.oid); }'

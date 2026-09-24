@@ -524,6 +524,13 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Fixed
 
+- **The in-network projection writer reported success when writes failed.**
+  `sync/src/apply-projection.mjs` printed `ok: true` even when upserts or deletes had failed,
+  though it exited 3. It now reports the outcome. Found by a review of the 500,000-developer
+  design, whose other findings are recorded, checked against the code, in `docs/STATUS.md`: the
+  resolver accepts a record of any age, it is called before any limiter, and
+  `Sync-ClaudeProjection.ps1` reads only the first page of existing records.
+
 - **Re-running the installer reset the revocation window to an hour.** That is
   how long a removed developer keeps working. The wizard's answer, 60 minutes
   by default and the only answer under `-Yes`, always won over the value it had

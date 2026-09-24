@@ -88,6 +88,7 @@ Assert 'and is written without a byte-order mark' ($sp -match 'UTF8Encoding\(\$f
 Assert 'the importer exists'                      (Test-Path (Join-Path $root 'sync/src/apply-projection.mjs'))
 $ap = Get-Content (Join-Path $root 'sync/src/apply-projection.mjs') -Raw
 Assert 'it validates a snapshot before writing'   ($ap -match 'validateSnapshot\(snap, \{ tenantId \}\)')
+Assert 'a failed write is not reported as ok'     ($ap -match 'ok: !\(writes\.failed \|\| deletes\.failed\)')
 Assert 'it tolerates a byte-order mark'           ($ap -match '\\uFEFF')
 Assert 'it writes in bulk'                        ($ap -match 'executeBulkOperations')
 Assert 'and can compare without writing'          ($ap -match "opt\('--compare'\)")
