@@ -29,7 +29,7 @@
 import { readFileSync } from 'node:fs';
 import { CosmosClient } from '@azure/cosmos';
 import { DefaultAzureCredential } from '@azure/identity';
-import { mergeMembership, planChanges, toDocument, validateSnapshot, compareWithGateway } from './plan.mjs';
+import { mergeMembership, planChanges, toDocument, validateSnapshot, compareWithGateway, createReconciliation } from './plan.mjs';
 import { resolveGroupId, getTransitiveMembers } from './graph.mjs';
 
 const argv = process.argv.slice(2);
@@ -59,9 +59,11 @@ async function resolveMembership() {
     const snap = JSON.parse(readFileSync(opt('--snapshot'), 'utf8').replace(/^\uFEFF/, ''));
     const problems = validateSnapshot(snap, { tenantId });
     if (problems.length) fail(`snapshot refused: ${problems.join('; ')}`);
-    return { records: snap.records, mappingVersion: snap.mappingVersion, source: `snapshot ${snap.generatedAt}` };
+    return { records: snap.records, mappingVersion: snap.mappingVersion, source: `snapshot ${snap.generatedAt}`,
+      reconciliation: { reconciliationGeneration: snap.reconciliationGeneration, lastVerifiedAt: snap.lastVerifiedAt, expiresAt: snap.expiresAt } };
   }
   if (!flag('--graph')) fail('pass --snapshot <file> or --graph');
+  const verifiedAt = new Date();
   const token = (await credential.getToken('https://graph.microsoft.com/.default')).token;
   const tiers = {};
   for (const [tier, group] of [['premium', opt('--premium', 'claude-code-premium')], ['standard', opt('--standard', 'claude-code-standard')]]) {
@@ -78,7 +80,8 @@ async function resolveMembership() {
   }
   const { records, unitWithoutTier } = mergeMembership({ tiers, businessUnits });
   for (const u of unitWithoutTier.slice(0, 10)) log(`note: ${u.oid} is in ${u.unit} but holds no tier - not projected`);
-  return { records, mappingVersion: Math.floor(Date.now() / 1000), source: 'graph' };
+  return { records, mappingVersion: Math.floor(Date.now() / 1000), source: 'graph',
+    reconciliation: createReconciliation({ verifiedAt, maxAgeSeconds: Number(opt('--max-age-seconds', 7200)) }) };
 }
 
 async function readExisting(container) {
@@ -112,7 +115,7 @@ if (opt('--compare')) {
   const gw = JSON.parse(readFileSync(opt('--compare'), 'utf8').replace(/^\uFEFF/, ''));
   if (gw.kind !== 'claude-gateway-decisions') fail("--compare expects a file written by Compare-ClaudeEntitlement.ps1 -ExportGatewayPath");
   const records = [];
-  const it = containerRef().items.query('SELECT c.id, c.oid, c.tier, c.businessUnit, c.tenantId FROM c', { maxItemCount: 1000 });
+  const it = containerRef().items.query('SELECT c.id, c.oid, c.tier, c.businessUnit, c.tenantId, c.reconciliationGeneration, c.lastVerifiedAt, c.expiresAt FROM c', { maxItemCount: 1000 });
   while (it.hasMoreResults()) { const { resources } = await it.fetchNext(); records.push(...(resources ?? [])); }
   const { compared, differences } = compareWithGateway(gw, records, { tenantId });
   const byKind = differences.reduce((a, d) => ({ ...a, [d.kind]: (a[d.kind] ?? 0) + 1 }), {});
@@ -120,10 +123,10 @@ if (opt('--compare')) {
   process.exit(differences.length ? 4 : 0);
 }
 
-const { records, mappingVersion, source } = await resolveMembership();
+const { records, mappingVersion, source, reconciliation } = await resolveMembership();
 const container = containerRef();
 const existing = await readExisting(container);
-const plan = planChanges(records, existing, { allowEmpty: flag('--allow-empty'), keepOrphans: flag('--keep-orphans') });
+const plan = planChanges(records, existing, { allowEmpty: flag('--allow-empty'), keepOrphans: flag('--keep-orphans'), refresh: true });
 if (plan.refused) fail(plan.reason, 2);
 
 const summary = {
@@ -132,10 +135,11 @@ const summary = {
 };
 if (whatIf) { console.log(JSON.stringify(summary)); process.exit(0); }
 
+if (reconciliation.expiresAt <= Math.floor(Date.now() / 1000)) fail('projection expired before writing; resolve the directory again', 2);
 const writes = await bulk(container, plan.toWrite.map((r) => ({
-  operationType: 'Upsert', partitionKey: r.oid, resourceBody: toDocument(r, { tenantId, mappingVersion }),
+  operationType: 'Upsert', partitionKey: r.oid, resourceBody: toDocument(r, { tenantId, mappingVersion, reconciliation }),
 })));
 const deletes = await bulk(container, plan.toDelete.map((oid) => ({ operationType: 'Delete', id: oid, partitionKey: oid })));
-Object.assign(summary, { ok: !(writes.failed || deletes.failed), written: writes.ok, writeFailed: writes.failed, deleted: deletes.ok, deleteFailed: deletes.failed, mappingVersion, seconds: (Date.now() - started) / 1000 });
+Object.assign(summary, { ok: !(writes.failed || deletes.failed), written: writes.ok, writeFailed: writes.failed, deleted: deletes.ok, deleteFailed: deletes.failed, mappingVersion, ...reconciliation, seconds: (Date.now() - started) / 1000 });
 console.log(JSON.stringify(summary));
 process.exit(writes.failed || deletes.failed ? 3 : 0);

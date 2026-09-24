@@ -210,6 +210,10 @@ Assert 'and quotes the device code guidance'      ($auth -match 'unilateral bloc
 
 Write-Host ''
 Write-Host 'Secure projection - the sync rules, run' -ForegroundColor Cyan
+& (Join-Path $PSScriptRoot 'Test-ProjectionPaging.ps1')
+Assert 'multi-page Cosmos behavior holds' ($LASTEXITCODE -eq 0)
+& (Join-Path $PSScriptRoot 'Test-ProjectionRules.ps1')
+Assert 'projection freshness and miss-path rules hold' ($LASTEXITCODE -eq 0)
 
 $syncDir = Join-Path $root 'sync'
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {

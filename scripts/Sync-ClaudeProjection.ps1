@@ -69,11 +69,13 @@ param(
     # reads Graph here, and sync/src/apply-projection.mjs applies the file from
     # inside the network with an identity that can write only the container.
     # No credential crosses into the network - only object ids and tiers.
+    [ValidateRange(60,7200)][int]$MaxAgeSeconds = 7200,
     [string]$ExportPath
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ClaudeGraphMembership.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeProjection.ps1')
 
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "  [OK]   $m" -ForegroundColor Green }
@@ -134,6 +136,7 @@ Ok $(if ($ExportPath) { 'Graph token acquired (export only - Cosmos is not conta
 
 # ---------------------------------------------------------------- 2. resolve
 Step 'Reading group membership'
+$scanStarted = [DateTimeOffset]::UtcNow
 $byOid = @{}
 
 foreach ($t in @(
@@ -190,6 +193,12 @@ if ($units.Count) {
 $resolved = @($byOid.Values)
 Write-Host ''
 Ok "$($resolved.Count) entitled identity(ies) resolved"
+$generation = [guid]::NewGuid().ToString()
+$verifiedAt = $scanStarted.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+$expiresAt = $scanStarted.ToUnixTimeSeconds() + $MaxAgeSeconds
+if ($expiresAt -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) {
+    throw 'Directory scan outlived the projection lease. Nothing published; resolve again.'
+}
 
 if ($ExportPath) {
     Step 'Writing the snapshot'
@@ -197,6 +206,9 @@ if ($ExportPath) {
         kind           = 'claude-entitlement-snapshot'
         tenantId       = $TenantId
         generatedAt    = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+        reconciliationGeneration = $generation
+        lastVerifiedAt = $verifiedAt
+        expiresAt      = $expiresAt
         mappingVersion = [int][double]::Parse((Get-Date -UFormat %s))
         groups         = [ordered]@{ standard = $StandardGroup; premium = $PremiumGroup; businessUnits = @($BusinessUnitGroups) }
         records        = @($resolved | ForEach-Object { [ordered]@{ oid = $_.Oid; tier = $_.Tier; businessUnit = $_.BusinessUnit } })
@@ -219,7 +231,7 @@ $authHeader = "type=aad&ver=1.0&sig=$cosmosToken"
 
 function Invoke-Cosmos {
     param([string]$Method, [string]$Path, [string]$ResourceType, [string]$ResourceLink,
-          [hashtable]$Extra = @{}, [string]$Body)
+          [hashtable]$Extra = @{}, [string]$Body, [switch]$Page)
     $h = @{
         'Authorization' = [uri]::EscapeDataString($authHeader)
         'x-ms-version'  = '2018-12-31'
@@ -229,18 +241,24 @@ function Invoke-Cosmos {
     foreach ($k in $Extra.Keys) { $h[$k] = $Extra[$k] }
     $p = @{ Uri = "$base$Path"; Method = $Method; Headers = $h; ContentType = 'application/json'; TimeoutSec = 60 }
     if ($Body) { $p['Body'] = $Body }
-    Invoke-RestMethod @p
+    $response = Invoke-WebRequest @p -UseBasicParsing
+    $data = if ($response.Content) { $response.Content | ConvertFrom-Json } else { $null }
+    if ($Page) { return @{ Documents = @($data.Documents); Continuation = [string]$response.Headers['x-ms-continuation'] } }
+    return $data
 }
 
 $existing = @{}
 try {
     $q = @{ query = 'SELECT c.id, c.oid, c.tier, c.businessUnit, c.mappingVersion FROM c' } | ConvertTo-Json -Compress
-    $r = Invoke-Cosmos -Method POST -Path "/dbs/$Database/colls/$Container/docs" `
-            -Extra @{ 'x-ms-documentdb-isquery' = 'True'
-                      'Content-Type'            = 'application/query+json'
-                      'x-ms-documentdb-query-enablecrosspartition' = 'True' } `
-            -Body $q
-    foreach ($d in @($r.Documents)) { $existing[$d.id] = $d }
+    $existing = Get-ClaudeProjectionExisting -ReadPage {
+        param($continuation)
+        $headers = @{ 'x-ms-documentdb-isquery' = 'True'
+                      'Content-Type' = 'application/query+json'
+                      'x-ms-max-item-count' = '1000'
+                      'x-ms-documentdb-query-enablecrosspartition' = 'True' }
+        if ($continuation) { $headers['x-ms-continuation'] = $continuation }
+        Invoke-Cosmos -Method POST -Path "/dbs/$Database/colls/$Container/docs" -Extra $headers -Body $q -Page
+    }
     Ok "$($existing.Count) record(s) already there"
 }
 catch {
@@ -289,7 +307,7 @@ catch {
 # ---------------------------------------------------------------- 4. compare
 Step 'What would change'
 $mappingVersion = [int][double]::Parse((Get-Date -UFormat %s))
-$toWrite = @()
+$toWrite = [Collections.Generic.List[object]]::new()
 $unchanged = 0
 foreach ($r in $resolved) {
     $cur = $existing[$r.Oid]
@@ -297,9 +315,9 @@ foreach ($r in $resolved) {
         # No ?? here: Windows PowerShell 5.1 is what an admin's box runs.
         $curBu = ''
         if ($cur.businessUnit) { $curBu = $cur.businessUnit }
-        if ($cur.tier -eq $r.Tier -and $curBu -eq $r.BusinessUnit) { $unchanged++; continue }
+        if ($cur.tier -eq $r.Tier -and $curBu -eq $r.BusinessUnit) { $unchanged++ }
     }
-    $toWrite += $r
+    $toWrite.Add($r)
 }
 $orphans = @($existing.Keys | Where-Object { -not $byOid.ContainsKey($_) })
 
@@ -328,6 +346,7 @@ if ($WhatIfPreference) {
 
 # ---------------------------------------------------------------- 5. write
 Step 'Writing'
+if ($expiresAt -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) { throw 'Projection expired before writing; resolve again.' }
 $written = 0; $failed = 0
 foreach ($r in $toWrite) {
     $doc = @{
@@ -338,6 +357,9 @@ foreach ($r in $toWrite) {
         businessUnit   = $r.BusinessUnit
         mappingVersion = $mappingVersion
         effectiveFrom  = $null
+        reconciliationGeneration = $generation
+        lastVerifiedAt = $verifiedAt
+        expiresAt      = $expiresAt
     } | ConvertTo-Json -Compress
     try {
         Invoke-Cosmos -Method POST -Path "/dbs/$Database/colls/$Container/docs" `
@@ -358,20 +380,20 @@ if ($orphans.Count -gt 0 -and -not $KeepOrphans) {
             Invoke-Cosmos -Method DELETE -Path "/dbs/$Database/colls/$Container/docs/$o" `
                 -Extra @{ 'x-ms-documentdb-partitionkey' = "[""$o""]" } | Out-Null
             $removed++
-        } catch { Write-Warning "  could not remove $o : $($_.Exception.Message)" }
+        } catch { $failed++; Write-Warning "  could not remove $o : $($_.Exception.Message)" }
     }
     Ok "$removed record(s) removed"
 }
 elseif ($orphans.Count -gt 0) {
     Write-Host "  [WARN] $($orphans.Count) orphan(s) kept (-KeepOrphans)" -ForegroundColor Yellow
-    Note 'Those identities are no longer in any group and are still entitled by'
-    Note 'the projection. The resolver has no way to know they should not be.'
+    Note 'Their existing lease is not renewed. They lose access at its absolute expiry.'
 }
 
 Write-Host ''
-Write-Host "Projection now holds $($unchanged + $written) entitled identity(ies)." -ForegroundColor Green
+Write-Host "$written entitled identity(ies) refreshed; $failed operation(s) failed." -ForegroundColor Green
 Note "mappingVersion $mappingVersion - a cached answer can be traced to this run."
 Write-Host ''
+if ($failed) { exit 1 }
 Note 'This changes nothing about who the gateway lets in. Authorisation moves'
 Note "only when entitlement-source is set to 'projection'; until then this is"
 Note 'a shadow copy to compare against. Compare-ClaudeEntitlement.ps1 does that.'

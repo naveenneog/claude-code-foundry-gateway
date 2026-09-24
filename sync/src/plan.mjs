@@ -8,7 +8,21 @@
  * path with the projection, and a difference in code would read as drift.
  */
 
+import { randomUUID } from 'node:crypto';
+
 export const TIERS_BY_PRECEDENCE = ['premium', 'standard'];
+export const MAX_PROJECTION_AGE_SECONDS = 7200;
+
+export function createReconciliation({ verifiedAt, now = new Date(), maxAgeSeconds = MAX_PROJECTION_AGE_SECONDS } = {}) {
+  const start = new Date(verifiedAt).getTime();
+  if (!Number.isFinite(start) || start > now.getTime() ||
+      !Number.isInteger(maxAgeSeconds) || maxAgeSeconds < 60 || maxAgeSeconds > MAX_PROJECTION_AGE_SECONDS) {
+    throw new Error('invalid reconciliation freshness');
+  }
+  const expiresAt = Math.floor(start / 1000) + maxAgeSeconds;
+  if (expiresAt <= Math.floor(now.getTime() / 1000)) throw new Error('reconciliation expired before publication');
+  return { reconciliationGeneration: randomUUID(), lastVerifiedAt: new Date(start).toISOString(), expiresAt };
+}
 
 /**
  * Merge tier and business-unit membership into one record per identity.
@@ -55,7 +69,7 @@ export function mergeMembership({ tiers = {}, businessUnits = [] } = {}) {
  * exactly like a directory with nobody in it, and acting on it would revoke
  * everyone. allowEmpty overrides that for an emptiness that is real.
  */
-export function planChanges(resolved, existing, { allowEmpty = false, keepOrphans = false } = {}) {
+export function planChanges(resolved, existing, { allowEmpty = false, keepOrphans = false, refresh = false } = {}) {
   if (resolved.length === 0 && existing.size > 0 && !allowEmpty) {
     return {
       refused: true,
@@ -70,7 +84,7 @@ export function planChanges(resolved, existing, { allowEmpty = false, keepOrphan
     const cur = existing.get(r.oid);
     if (cur && cur.tier === r.tier && (cur.businessUnit ?? '') === (r.businessUnit ?? '')) {
       unchanged++;
-      continue;
+      if (!refresh) continue;
     }
     toWrite.push(r);
   }
@@ -89,7 +103,7 @@ export function planChanges(resolved, existing, { allowEmpty = false, keepOrphan
  * reads: id and partition key are both the object id, so a lookup is a point
  * read.
  */
-export function toDocument(r, { tenantId, mappingVersion }) {
+export function toDocument(r, { tenantId, mappingVersion, reconciliation }) {
   return {
     id: r.oid,
     oid: r.oid,
@@ -98,6 +112,7 @@ export function toDocument(r, { tenantId, mappingVersion }) {
     businessUnit: r.businessUnit ?? '',
     mappingVersion,
     effectiveFrom: null,
+    ...reconciliation,
   };
 }
 
@@ -116,14 +131,14 @@ const GUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a
  * A record stamped with another tenant is served as a refusal by the resolver,
  * so it counts as no record here.
  */
-export function compareWithGateway(gateway, records, { tenantId } = {}) {
+export function compareWithGateway(gateway, records, { tenantId, now = new Date() } = {}) {
   const premium = new Set(gateway.premium ?? []);
   const standard = new Set(gateway.standard ?? []);
   const units = gateway.businessUnits ?? {};
   const gwTier = (oid) => (premium.has(oid) ? 'premium' : standard.has(oid) ? 'standard' : 'denied');
   const byOid = new Map();
   for (const r of records) {
-    if (tenantId && r.tenantId && r.tenantId !== tenantId) continue;
+    if (!tenantId || r.tenantId !== tenantId || freshnessProblems(r, now).length) continue;
     byOid.set(r.oid ?? r.id, r);
   }
   const all = new Set([...premium, ...standard, ...byOid.keys()]);
@@ -152,12 +167,13 @@ export function compareWithGateway(gateway, records, { tenantId } = {}) {
  * never honoured by the resolver, and a malformed record would become a
  * document the resolver refuses at request time instead of here.
  */
-export function validateSnapshot(snap, { tenantId } = {}) {
+export function validateSnapshot(snap, { tenantId, now = new Date() } = {}) {
   const problems = [];
   if (!snap || typeof snap !== 'object') return ['snapshot is not an object'];
   if (snap.kind !== 'claude-entitlement-snapshot') problems.push("kind is not 'claude-entitlement-snapshot'");
   if (!GUID.test(snap.tenantId ?? '')) problems.push('tenantId is not a guid');
   if (tenantId && snap.tenantId !== tenantId) problems.push(`snapshot is for tenant ${snap.tenantId}, not ${tenantId}`);
+  problems.push(...freshnessProblems(snap, now));
   if (!Array.isArray(snap.records)) problems.push('records is not an array');
   for (const r of snap.records ?? []) {
     if (!GUID.test(r.oid ?? '')) { problems.push(`record oid '${r.oid}' is not a guid`); break; }
@@ -168,5 +184,15 @@ export function validateSnapshot(snap, { tenantId } = {}) {
     if (seen.has(r.oid)) { problems.push(`record ${r.oid} appears twice`); break; }
     seen.add(r.oid);
   }
+  return problems;
+}
+
+function freshnessProblems(snap, now) {
+  const problems = [];
+  const verified = Date.parse(snap.lastVerifiedAt);
+  if (!GUID.test(snap.reconciliationGeneration ?? '') || !Number.isFinite(verified) ||
+      verified > now.getTime() || !Number.isInteger(snap.expiresAt) ||
+      snap.expiresAt > Math.floor(verified / 1000) + MAX_PROJECTION_AGE_SECONDS) problems.push('invalid snapshot freshness');
+  if (!Number.isInteger(snap.expiresAt) || snap.expiresAt <= Math.floor(now.getTime() / 1000)) problems.push('snapshot expired; resolve the directory again');
   return problems;
 }

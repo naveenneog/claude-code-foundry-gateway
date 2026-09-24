@@ -37,7 +37,7 @@ export function toEntitlement(doc, { tenantId, now = new Date() } = {}) {
   // within a tenant and not across them, so without this check a lookup could
   // be satisfied by the wrong directory. projection.bicep stores tenantId on
   // every record precisely for this.
-  if (tenantId && doc.tenantId && doc.tenantId !== tenantId) {
+  if (!tenantId || doc.tenantId !== tenantId) {
     return { ok: false, status: 403, reason: 'record belongs to a different tenant' };
   }
 
@@ -47,6 +47,16 @@ export function toEntitlement(doc, { tenantId, now = new Date() } = {}) {
       status: 409,
       reason: `record names tier '${doc.tier}', which the gateway policy does not implement`,
     };
+  }
+
+  const verified = Date.parse(doc.lastVerifiedAt);
+  if (!isObjectId(doc.reconciliationGeneration) || !Number.isFinite(verified) ||
+      verified > now.getTime() || !Number.isInteger(doc.expiresAt) ||
+      doc.expiresAt > Math.floor(verified / 1000) + 7200) {
+    return { ok: false, status: 503, reason: 'projection freshness is invalid; run a complete reconciliation' };
+  }
+  if (doc.expiresAt <= Math.floor(now.getTime() / 1000)) {
+    return { ok: false, status: 503, reason: 'projection expired; its directory reconciliation must run again' };
   }
 
   // A record that has not taken effect is not yet entitlement. This is what
@@ -72,6 +82,8 @@ export function toEntitlement(doc, { tenantId, now = new Date() } = {}) {
       // generation of the mapping produced it, and when it became true.
       mappingVersion: doc.mappingVersion ?? 0,
       effectiveFrom: doc.effectiveFrom ?? null,
+      reconciliationGeneration: doc.reconciliationGeneration,
+      expiresAt: doc.expiresAt,
     },
   };
 }

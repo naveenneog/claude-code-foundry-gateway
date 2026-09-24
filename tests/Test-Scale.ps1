@@ -490,7 +490,7 @@ $pol = Get-Content (Join-Path $root 'infra/policy.xml') -Raw
 Assert 'the policy reads an entitlement source'  ($pol -match '\{\{entitlement-source\}\}')
 Assert 'and still has the named-value path'      ($pol -match '\{\{allow-premium\}\}.*Contains\(oid\)|Contains\(oid\)')
 Assert 'the list path is guarded, not deleted'   ($pol -match '(?s)when condition="@\(!\(bool\)context\.Variables\["entResolved"\]\)"')
-Assert 'the projection path caches the record'   ($pol -match 'cache-store-value key="@\("ent:"')
+Assert 'the projection path caches the record by tenant and schema' ($pol -match 'cache-store-value key="@\("ent:v2:\{\{tenant-id\}\}:"')
 Assert 'and the window is configurable'          ($pol -match '\{\{entitlement-cache-seconds\}\}')
 # The audience and the URL are different things; a token for the URL is rejected.
 Assert 'the token audience is its own value'     ($pol -match 'resource="\{\{entitlement-resolver-audience\}\}"')
