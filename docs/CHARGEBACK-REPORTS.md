@@ -22,6 +22,8 @@ Enforcement is a delayed brake that blocks approximately, with overshoot (U2/U9/
 Large CSVs are split at complete records and compressed into ZIP attachments. A message
 can have several attachments; larger sets become numbered messages. No public link, SAS
 or storage key is emailed. Recipients appear in BCC, not in each other's address lists.
+Delivery attachments use content-addressed archive paths: a retry or explicit resend cannot
+overwrite bytes that an earlier pending message references, even if ZIP metadata changes.
 
 ### Example report
 
@@ -497,6 +499,7 @@ network resources must also be included in a deployed bill of materials.
 | A negative test throws for missing parameters rather than its intended scenario | `$args` is an automatic variable and can be shadowed in callbacks. Use a named splat; do not override a splatted parameter on PowerShell 5.1 |
 | An administration execution reports `Failed` without a bootstrap log | One live pod failed before its first application log; the platform did not expose a more specific cause. An identical idempotent request succeeded on retry. Inspect system logs and retry the same operation, not a broader permission grant |
 | A dispatcher succeeds with `RateLimited` just before `NextActionUtc` | Startup duration varies. A live poll was 1.6 seconds early and correctly deferred to the next seven-minute interval; it did not send a duplicate |
+| Requeueing a large report invalidates an older attachment hash | ZIP bytes can change because of timestamps/compressor versions. Delivery blobs are named by content hash so previous pending messages remain valid |
 
 After verifying that no dispatcher is active, break a stale lease from a connected host:
 

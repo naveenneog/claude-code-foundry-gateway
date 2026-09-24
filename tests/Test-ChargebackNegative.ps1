@@ -12,6 +12,7 @@ $cases=@(
     @{Name='removed recipients still mailed';File='ClaudeChargebackOutbox.ps1';From='$current=Get-ClaudeChargebackRecipients $configuration $item.Scope';To='$current=@(''alice@contoso.com'',''bob@contoso.com'')';Test='Test-ChargebackOutbox.ps1'}
     @{Name='BOM breaks private blob listing';File='ClaudeChargebackStorage.ps1';From='return $text.TrimStart([char]0xfeff)';To='return $text';Test='Test-ChargebackStorage.ps1'}
     @{Name='double-slash event prefix stalls delivery';Directory='infra';File='chargeback-reports.bicep';From="blobPrefix: 'outbox'";To="blobPrefix: 'outbox/'";Test='Test-ChargebackSchedule.ps1'}
+    @{Name='resend overwrites a pending compressed attachment';File='ClaudeChargebackOutbox.ps1';From='$blob="$Prefix/delivery/$scopeName/$hash-$($a.Name)"';To='$blob="$Prefix/delivery/$scopeName/$($a.Name)"';Test='Test-ChargebackQueue.ps1'}
 )
 $caught=0
 try {

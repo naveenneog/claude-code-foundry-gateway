@@ -31,9 +31,10 @@ function Add-ClaudeReportOutbox {
             foreach($a in $attachments) {
                 $encoded=[long]([math]::Ceiling($a.Bytes/3.0)*4)+256
                 if($size+$encoded -gt 6000000 -and $group.Count) { $groups.Add($group.ToArray());$group.Clear();$size=0 }
-                $blob="$Prefix/delivery/$scopeName/$($a.Name)"
+                $hash=(Get-FileHash $a.Path -Algorithm SHA256).Hash.ToLowerInvariant()
+                $blob="$Prefix/delivery/$scopeName/$hash-$($a.Name)"
                 Invoke-ClaudeReportBlob -Account $Account -Name $blob -Method PUT -ContentType $a.ContentType -Bytes ([IO.File]::ReadAllBytes($a.Path)) | Out-Null
-                $group.Add([pscustomobject]@{Name=$a.Name;Blob=$blob;ContentType=$a.ContentType;Sha256=(Get-FileHash $a.Path -Algorithm SHA256).Hash.ToLowerInvariant()})
+                $group.Add([pscustomobject]@{Name=$a.Name;Blob=$blob;ContentType=$a.ContentType;Sha256=$hash})
                 $size+=$encoded
             }
             if($group.Count) {$groups.Add($group.ToArray())}
