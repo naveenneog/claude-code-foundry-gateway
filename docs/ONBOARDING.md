@@ -1,13 +1,18 @@
 # Onboarding guide — granting, changing, and revoking access
 
-**For the platform team.** Everything here needs Entra rights; none of it is
-the developer's job.
+**For the platform team.** Membership changes need group-owner or Groups
+Administrator rights. Publishing and budget changes also need gateway write
+access; reading reports needs telemetry access. These are not developer tasks.
 
 What the developer does is one command on their own machine, with no Azure
 rights at all — that is **[DEVELOPER.md](../DEVELOPER.md)**, and handing them
 that link is step 5 below.
 
 Prerequisites and roles are in the [Setup guide](SETUP.md#2-permissions-and-roles).
+Select the subscription, gateway and workspace with
+[Operations](OPERATIONS.md#1-select-the-gateway-and-workspace). Run from the
+repository root. If your tier groups have nondefault names, pass
+`-StandardGroup` and `-PremiumGroup` to the membership/sync commands.
 
 ---
 
@@ -25,6 +30,12 @@ The policy compares the `oid` claim in the caller's token against the
 `allow-standard` and `allow-premium` named values. Those are **flat lists of
 object ids**, not group references — the gateway never calls Graph at request
 time.
+
+This section describes `entitlement-source=named-value`, the default.
+After a [projection migration](SCALE.md#the-move-itself-step-by-step), group
+changes must be published by the projection writer instead. `-Sync` on
+`Set-ClaudeDeveloper.ps1` invokes the named-value writer; it does not refresh
+Cosmos leases or records.
 
 Three consequences:
 
@@ -45,29 +56,35 @@ works until the next sync and then silently stops.
 
 ```powershell
 ./scripts/Set-ClaudeDeveloper.ps1 -User amara@contoso.com -Tier standard -Sync
-./scripts/Set-ClaudeDeveloper.ps1 -User amara@contoso.com -Tier premium -BusinessUnit mcaps -Sync
+./scripts/Set-ClaudeDeveloper.ps1 -User amara@contoso.com -Tier premium -BusinessUnit sales -Sync
 ./scripts/Set-ClaudeDeveloper.ps1 -User amara@contoso.com -Remove -Sync
 ```
 
 `-Sync` publishes to the gateway as well. Without it the change is in the
 directory but not yet at the gateway, and the script says so rather than
 implying it is done.
+If it reports **Nothing to change**, run `Sync-ClaudeAccess.ps1` explicitly:
+the command exits before syncing when no direct membership edit was made.
+Read warnings and run the comparison; process success alone is not proof of
+effective access.
 
 Moving someone between tiers removes them from the one they left. Leaving them
 in both is not an error — the policy checks premium first — but it makes the
 lists unreadable and the applied tier hard to predict from the portal.
 
-`-Remove` clears **every** business unit as well as both tiers. Removing
-entitlement but leaving someone in a business unit group leaves a member on a
-budget who can no longer call the gateway, which reads as a team that has
-stopped working rather than an offboarding that was only half done.
+`-Remove` attempts to clear direct membership in both tiers and all registered
+business-unit groups. It cannot remove an inherited path through an unregistered
+nested group. Do not combine `-Remove` with `-BusinessUnit`: use the removal
+command shown, then verify every effective membership path.
 
 Guests work by the address you invited them with. A guest's UPN is not their
 email — in this tenant `amara@contoso.com` is stored as
-`amara_contoso.com#EXT#@tenant.onmicrosoft.com` — and the script tries the
+`amara_contoso.com#EXT#@contoso.onmicrosoft.com` — and the script tries the
 object id, the mail attribute and the UPN in turn.
 
 The sections below cover the same job done by hand, and the portal walkthrough.
+**Portal:** Entra ID > Groups > the relevant tier/team/unit > Members. Add or
+remove the person, then perform Step 3's publication and Step 4's verification.
 
 ## 1a. Add a developer by hand
 
@@ -90,6 +107,10 @@ For a service principal or CI identity:
 ```bash
 az ad sp show --id <app-id> --query "{name:displayName, oid:id}" -o table
 ```
+
+**Portal:** Entra ID > Users > person > Overview > Object ID. For a workload,
+Enterprise applications > application > Overview > Object ID; the application
+(client) ID is not its service-principal object ID.
 
 ### Step 2 — add them to the tier group
 
@@ -117,13 +138,36 @@ Preview first if you want:
 
 The script prints each resolved identity and flags anyone in both groups.
 
+**Portal/manual:** Entra > Groups > All members gives the transitive roster.
+APIM > APIs > Named values > `allow-premium` / `allow-standard` > Edit accepts
+the comma-delimited object IDs. Publish the full roster, not just the changed
+person; premium wins over standard. This is a manual publication, not an
+automatic link between the portals. The script handles the roster consistently.
+
+**Removing the last member:** the writer protects against unexpectedly empty
+groups and may leave the old list in place with a warning. Confirm the directory
+really is empty, then intentionally run:
+
+```powershell
+./scripts/Sync-ClaudeAccess.ps1 -ApimName <apim> -ResourceGroup <rg> -AllowEmpty
+```
+
+In the portal, the equivalent is saving an empty sentinel list only after the
+same review. Re-run the comparison and prove the removed identity is refused.
+
 > **Service principals** are not returned by a delegated token without
 > `Application.Read.All`. Pass CI identities explicitly:
 > `-AdditionalPremiumOids <oid>` or `-AdditionalStandardOids <oid>`.
 
-> **Schedule it** if you want membership changes to apply without a person in the
-> loop. A daily Azure Automation runbook or a scheduled pipeline is enough; the
-> script is idempotent.
+> **Scheduling is a separate deployment.** A delegated operator token is not a
+> durable unattended credential. An Automation/pipeline/Container Apps identity
+> needs Graph membership-read permission and gateway write access; application
+> permission consent needs a tenant administrator ([U17](UNKNOWNS.md)).
+> Entra > Enterprise applications > the job identity shows its granted
+> permissions; Azure > the scheduler > execution history shows whether it ran.
+> Choose the cadence from the required revocation window, not an arbitrary day.
+> For the projection, complete reconciliation must finish within its lease;
+> follow [Private projection](SECURE-PROJECTION.md#freshness-and-operating-envelope).
 
 ### Step 4 — verify
 
@@ -131,7 +175,8 @@ The script prints each resolved identity and flags anyone in both groups.
 az apim nv show -g <rg> --service-name <apim> --named-value-id allow-standard --query value -o tsv
 ```
 
-Their object id must appear. Then confirm end to end:
+Their object id must appear in the effective tier. **Portal:** APIM > Named
+values shows the same published list. Then confirm end to end as the developer:
 
 ```powershell
 ./scripts/Show-Governance.ps1 -ApimName <apim> -ResourceGroup <rg>
@@ -165,6 +210,11 @@ access. Access is group membership.
 > Put `Setup-ClaudeWorkstation.ps1` and `claude-gateway.json` on a share or
 > internal site and pass `-DistributionUrl`; the email then contains a
 > two-line command that fetches and runs them.
+> Also distribute the complete scripts folder, including Desktop's token
+> helpers. The email generator's two-file download is not a complete Desktop
+> installation bundle. **Manual:** attach the config and bundle/link in your
+> mail client and include [DEVELOPER.md](../DEVELOPER.md); no Graph mail grant is
+> required to send that handover yourself.
 
 ---
 
@@ -218,6 +268,8 @@ sync runs; `stale` is someone removed who can still call the gateway.
 > admin consent at all — the trade-off is that changes apply when it runs.
 > Schedule it (Azure Automation, or a pipeline on a timer) if you want the
 > portal to be the only step.
+> The workload identity/grant and failure monitoring in Step 3 are still needed;
+> clicking Add member does not create that schedule.
 
 ### Copying someone's object id from the portal
 
@@ -259,10 +311,10 @@ out of the loop entirely.
 | Situation | What to do |
 |-----------|-----------|
 | Whole team at once | Loop `az ad group member add`, then sync once |
-| Nested group | **Not supported.** The sync reads direct members only. Flatten it, or add each person |
+| Nested group | Supported: the shared Graph reader resolves transitive membership and follows paging. Inspect All members, not only direct members |
 | Contractor, time-boxed | Use an Entra **access package** or PIM-eligible membership so it expires on its own, then schedule the sync |
 | CI/CD identity | Service principal in `claude-code-premium`, passed with `-AdditionalPremiumOids` |
-| Someone needs it *now* | Add to group, run the sync immediately — the whole path is under a minute |
+| Someone needs it *now* | Add to group, publish, wait for propagation and prove a request; no fixed completion time is guaranteed |
 
 ---
 
@@ -295,8 +347,9 @@ x-ratelimit-remaining-tokens: 79980
 
 ### 4b. Change what a tier *means*
 
-This changes the budget for everyone in that tier. **No sync needed** — named
-values are read on the next request.
+This changes the budget for everyone in that tier. **No membership sync needed** —
+verify requests after configuration propagation. If Turnstile owns governance,
+edit the tier there so its apply job does not overwrite your change.
 
 `./scripts/Set-ClaudeTier.ps1` is the way to do it. It shows what is set now,
 prints before-and-after for anything it changes, and checks a model allowlist
@@ -373,10 +426,10 @@ az apim nv show -g <rg> --service-name <apim> \
   --named-value-id tpm-standard --query value -o tsv
 ```
 
-> **The daily quota does not reset when you raise it.** `llm-token-limit` tracks
-> consumption against the period that is already running. Someone who exhausted
-> 500,000 today stays blocked until the period rolls over, even after you set it
-> to 5,000,000. Move them to premium instead if they need unblocking now.
+> **The daily quota does not reset when you raise it.** Consumption remains.
+> A higher quota can admit requests once it exceeds the consumed amount and
+> propagates. Moving a developer to premium is not a consumed-quota reset and
+> cannot bypass a spent organisation or unit budget. See [Budgets](BUDGETS.md).
 
 ### 4c. Add a third tier
 
@@ -393,13 +446,16 @@ Entra group, and a branch in the policy's tier lookup. The policy structure is i
     -ApimName <apim> -ResourceGroup <rg>
 ```
 
-`-Remove` takes them out of both tier groups and every business-unit group, so a
-premium developer, or one who is in both tiers, is not left with access. `-Sync`
-runs the sync straight after. Confirm the object id appears in neither
-`allow-standard` nor `allow-premium` afterwards.
+`-Remove` handles direct membership in both tiers and registered units. Review
+warnings, remove any remaining nested-group path in Entra > Groups > Members,
+and publish explicitly if the command said Nothing to change. Confirm the
+object id appears in neither `allow-standard` nor `allow-premium` afterwards;
+when the last member leaves, Step 3's `-AllowEmpty` review applies.
 
-The next request returns `403`. There is no credential to rotate and nothing to
-collect from the developer's machine, because none was ever issued.
+After publication and propagation, a new request is refused. For projection
+gateways reconcile the store and allow at most the remaining cache/lease window.
+There is no model key to rotate, but Entra tokens and local conversation history
+still exist on the machine and remain subject to normal offboarding policy.
 
 **When someone leaves the company**, disable the Entra account as part of normal
 offboarding — but do not treat that as the revocation. Disabling the account
@@ -419,9 +475,12 @@ and run the sync as well.
 
 - [ ] Removed from both `claude-code-*` tier groups
 - [ ] Removed from every business-unit and team group
-- [ ] `Sync-ClaudeAccess.ps1` run, allowlists confirmed clean
+- [ ] No nested-group path still grants a tier or business unit
+- [ ] Active entitlement store published: named-value sync or projection reconciliation
+- [ ] Allowlists confirmed clean, or projection removal/lease checked
+- [ ] Removed developer's next request verified refused after propagation/cache
 - [ ] No direct `Cognitive Services User` on the Foundry account
-- [ ] Usage exported from [Monitoring](MONITORING.md) if it is being charged back
+- [ ] Usage exported from [FinOps](FINOPS.md) if it is being charged back
 
 ---
 ---

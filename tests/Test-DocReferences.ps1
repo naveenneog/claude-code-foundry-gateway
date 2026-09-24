@@ -199,6 +199,9 @@ function Get-DocReferenceFailures([string]$Repo) {
                     New-ReferenceFailure $relative $number 'script' $m.Value
                     continue
                 }
+                # In Get-Help the path is data; -Full belongs to Get-Help, not
+                # to the referenced script. Still verify that the file exists.
+                if ($line.Substring(0, $m.Index) -match '\bGet-Help\s+(?:-Name\s+)?$') { continue }
                 $tail = $line.Substring($m.Index + $m.Length)
                 if ($tail -notmatch '^[ \t]+-[A-Za-z]') { continue }
                 if (-not $parameterCache.ContainsKey($resolved)) { $parameterCache[$resolved] = Get-ScriptParameters $resolved }
@@ -272,6 +275,7 @@ Setext title
 ./scripts/Get-Example.ps1 -ResourceGroup 'Contoso' `
     -Name 'Contoso' -WhatIf
 ./Install-Example.ps1 -Yes
+Get-Help ./scripts/Get-Example.ps1 -Full
 ```
 '@
     Write-Fixture $readme $valid

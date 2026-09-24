@@ -1011,7 +1011,9 @@ foreach ($img in @('network-check.png', 'network-reset.png', 'bom-prices.png')) 
 }
 $rdm = Get-Content (Join-Path $root 'README.md') -Raw
 Assert 'the README shows the priced BOM'         ($rdm -match '!\[[^\]]*\]\(docs/guide/bom-prices\.png\)')
-Assert 'and says tokens are excluded from it'    ($rdm -match 'omitted the largest line')
+# The landing page now states the exclusion directly rather than explaining
+# why silently omitting it would be misleading.
+Assert 'and says tokens are excluded from it'    ($rdm -match 'excludes Claude tokens')
 
 # The capture pipeline. Both of these were wrong first and the screenshots
 # showed it: a shorter replacement left every rendered table ragged, and the

@@ -3,7 +3,14 @@
 Who this is for: the platform, AI CoE, or cloud engineering team that stands up
 the gateway once for the organisation.
 
-Time: about 60 minutes, of which 40 is unattended APIM provisioning.
+Allow a deployment/change window: resource provisioning, quota approval and role
+propagation vary by tenant. Review [Architecture](ARCHITECTURE.md) and
+[Decisions](DECISIONS.md) before choosing a tier or network layout.
+
+Run commands from the repository root. `<rg>` means the resource group named by
+that step: the gateway and Foundry account need not share one. Use
+[target discovery](OPERATIONS.md#1-select-the-gateway-and-workspace) to distinguish
+the subscription, gateway group, Foundry group and telemetry workspace.
 
 **In this article**
 
@@ -21,9 +28,13 @@ Time: about 60 minutes, of which 40 is unattended APIM provisioning.
 
 | Resource | Requirement | Check |
 |----------|-------------|-------|
-| Microsoft Foundry account | An AI Services / Cognitive Services account | `az cognitiveservices account list -o table` |
+| Microsoft Foundry account | An account of kind `AIServices`, eligible for Claude | `az cognitiveservices account list -o table` |
 | Claude deployment | Optional. The installer deploys one if the account has none | `az cognitiveservices account deployment list -g <rg> -n <account> -o table` |
 | Subscription | Able to create API Management **v2** SKUs in the target region | see [Region](#region) |
+
+**Portal checks:** Foundry > select the account > Models + endpoints lists the
+deployments. Azure portal > the account > Overview / JSON View gives its kind,
+subscription, resource group and location.
 
 The gateway is a front door and cannot create a model, but the installer can
 deploy a model for you. If no account in the subscription has a Claude
@@ -68,6 +79,12 @@ az rest --method put --headers Content-Type=application/json --body '@deployment
   --url "https://management.azure.com/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account>/deployments/claude-haiku-4-5?api-version=2025-12-01"
 ```
 
+**Portal:** Foundry > Model catalog > select an available Claude model > Deploy.
+Review hosting, version, deployment name and capacity; supply the requested
+organisation details and accept the applicable Marketplace terms. Verify the
+deployment's provisioning state is `Succeeded` in Models + endpoints. The
+model/version above is an example, not a promise of regional availability.
+
 ### Choosing the SKU
 
 The installer asks **how many developers** will use the gateway and suggests a
@@ -86,26 +103,32 @@ built on an RPS figure would be a guess in a table.
 
 On that arithmetic Basic v2 covers roughly 900 developers, so **volume rarely
 decides this**. What usually moves an enterprise to Standard v2 is that Basic v2
-has no VNet integration and no availability zones. The installer says so rather
+has no VNet integration. Neither Basic v2 nor Standard v2 has availability zones;
+Premium v2 does, but not multi-region. The installer says so rather
 than implying the request count is the deciding factor, and the suggestion is
 only a default — override it at the prompt.
+
+This is included-request arithmetic, **not supported developer capacity**.
+The shipped named-value membership map fills at roughly 93 developers with
+six-character unit IDs; see [Scale](SCALE.md). Private projection deployment is
+separate and needs Standard v2 or Premium v2.
 
 ### Tooling
 
 | Tool | Version | Why |
 |------|---------|-----|
 | Azure CLI | 2.60+ | deployment and all verification commands |
-| Bicep | bundled with the CLI | `az bicep version` |
+| Bicep | Azure CLI-managed executable | `az bicep version`; if missing, `az bicep install` |
 | PowerShell | 7+, or Windows PowerShell 5.1 | the setup wizard and scripts. macOS/Linux can use the `.sh` equivalents instead |
-| Node.js | 18+ | only for the optional screenshot and inspector tooling |
+| Node.js | compatible with the selected tooling's `package.json` | only for optional screenshot/inspector tooling and the projection code |
 
 ### Region
 
-APIM v2 SKUs are not available everywhere. Confirm before you start:
-
-```bash
-az apim list-skus --query "[?contains(name,'V2')].{sku:name,locations:locations}" -o table
-```
+APIM v2 SKUs are not available everywhere. **Portal:** Create a resource >
+API Management > Basics > Region and Pricing tier. Check that your required
+v2 tier is selectable, then cancel this preview. `az apim list-skus` is not an
+Azure CLI command. Use the [v2 availability reference](https://learn.microsoft.com/azure/api-management/v2-service-tiers-overview)
+and confirm the subscription's regional capacity before deploying.
 
 Deploy the gateway in the **same region as the Foundry account** where possible.
 A cross-region hop adds latency to every token.
@@ -124,14 +147,21 @@ things.
 |-------|------|------------------|---------------------|
 | Target resource group | **Contributor** | create APIM, Application Insights, Log Analytics | Owner also works |
 | Foundry account | **User Access Administrator** or **Owner** | create the role assignment that lets the gateway call Foundry | **No** — Contributor cannot create role assignments |
-| Subscription | **Reader** | resource discovery during setup | inherited from the above |
+| Subscription | **Reader** | subscription-wide resource discovery during setup | A role on one resource group does not grant this |
 
+If the resource group does not exist, arrange its creation or hold Contributor
+at subscription scope. Directory permissions below are independent of Azure RBAC.
 Check what you actually hold:
 
 ```bash
 az role assignment list --assignee $(az ad signed-in-user show --query id -o tsv) \
   --all --query "[].{role:roleDefinitionName, scope:scope}" -o table
 ```
+
+**Portal:** Subscription / resource group / Foundry account > Access control
+(IAM) > View my access. Check inherited and active PIM assignments at each
+scope. To grant the gateway role manually: Foundry account > IAM > Add role
+assignment > Cognitive Services User > Managed identity > select the gateway.
 
 > **The common failure.** People with Contributor on the resource group assume
 > they are covered, then the deployment fails at the role-assignment step with
@@ -153,7 +183,8 @@ az role assignment list --assignee $(az ad signed-in-user show --query id -o tsv
 |-------|------|---------|-----|
 | Foundry account | **Cognitive Services User** | `a97b65f3-24c7-4388-baec-2e87135dc908` | call the Messages API |
 
-This is the only standing permission in the whole design.
+This is the default gateway's Foundry permission. The optional projection,
+Turnstile and scheduled writers have separate identities and grants.
 
 > **Owner is not sufficient.** Owner is a management-plane role and confers no
 > data-plane access to Cognitive Services. An identity with Owner and nothing
@@ -179,6 +210,7 @@ membership*, not an RBAC assignment. They need:
 > **Guest accounts** must sign in with the tenant named explicitly:
 > `az login --tenant <tenant-id>`. A bare `az login` lands them in their home
 > directory and the gateway rejects the token with `401`.
+> If the account has no Azure subscriptions, add `--allow-no-subscriptions`.
 
 ### 2.4 Entra directory permissions
 
@@ -189,7 +221,7 @@ are separate from Azure RBAC.
 |--------|-------|----------------------|
 | Create the two groups | **Groups Administrator**, or tenant self-service group creation | Ask an admin to create them; the wizard reuses groups that already exist |
 | Add or remove members | Group **Owner** or Groups Administrator | Ask the group owner |
-| `Sync-ClaudeAccess.ps1` reading membership | Your own delegated token — no app role needed | — |
+| `Sync-ClaudeAccess.ps1` reading membership | Your delegated Graph token and permission to read those groups | Guest/restricted-directory policies may require an administrator |
 
 > **What deliberately is *not* used.** Giving the gateway the Graph
 > `GroupMember.Read.All` application permission would let APIM resolve group
@@ -200,7 +232,14 @@ are separate from Azure RBAC.
 > result is written to APIM named values.
 >
 > The trade-off is that membership changes are **not** instant — they apply when
-> the sync runs. Put it on a schedule if that matters to you.
+> the sync runs. The default installer does not create an unattended membership
+> schedule. A workload identity needs its own Graph application permission;
+> subscription Owner does not grant it. See [Onboarding](ONBOARDING.md#step-3--push-the-change-to-the-gateway)
+> and [U17](UNKNOWNS.md) before promising automatic revocation.
+
+**Portal:** Entra ID > Groups > New group / Owners / Members performs directory
+changes. APIM > APIs > Named values shows their published result. Directory
+edits alone do not publish entitlement.
 
 ### 2.5 Everything, as one preflight check
 
@@ -226,6 +265,10 @@ own if you just want the report:
 . ./scripts/Test-Prerequisites.ps1
 Test-ClaudePrerequisites -Mode Admin
 ```
+
+**Manual equivalent:** check each installed tool's version locally, sign in to
+the Azure portal and verify the resources/roles above. There is no portal action
+that inspects tools installed on your workstation.
 
 To preview the whole plan without creating anything:
 
@@ -286,7 +329,7 @@ where it costs money, with the figure at your stated developer count:
 
 | Choice | Options | Why it is asked rather than defaulted |
 |---|---|---|
-| Revocation window | 15 min / 1 hour / 4 hours | How long a removed developer keeps working. Costed at your scale; most of the figure is the private endpoint, which is charged whether used or not. |
+| Revocation window | 15 min / 1 hour / 4 hours | A requested projection cache window, not an installed sync schedule. Current projection leases cap stale admission at two hours from scan start, including cache; named values remain stale until synced. |
 | Team budget | `report` / `stop` | `report` attributes spend and blocks nothing. `stop` also refuses a team at its limit — and triggers later than the dollar figure suggests, because the counter cannot see cached tokens. |
 | Unassigned developers | `allow` / `deny` | `deny` on day one refuses people who have done nothing wrong. Start on `allow` and switch when `Get-ClaudeBusinessUnit.ps1` reports zero unassigned. |
 | Developer sign-in | `interactive` / `device` / `helper` | How developers authenticate. Written into `claude-gateway.json` and applied by the onboarding script on each machine. |
@@ -302,6 +345,8 @@ where it costs money, with the figure at your stated developer count:
 >
 > It is changeable later by reissuing `claude-gateway.json` and re-running
 > `Onboard-ClaudeDeveloper.ps1`, which is safe to run repeatedly.
+> Device-code sign-in still needs Conditional Access to allow that flow; review
+> [Authentication](AUTHENTICATION.md#conditional-access) before choosing it.
 
 **4. The summary, before anything is created.** Reusing is called out
 explicitly, along with what will and will not be touched.
@@ -340,9 +385,10 @@ Unattended:
 ./deploy.ps1 -FoundryAccount <your-foundry-account> -ResourceGroup rg-claude-gateway
 ```
 
-Takes the same parameters without prompting, wraps the same Bicep, and — like
+Takes explicit parameters without prompting, wraps the same Bicep, and — like
 the wizard — creates the Entra groups and runs the entitlement sync. Use it if
-you are scripting against the accelerator.
+you are scripting against the accelerator; use `Get-Help .\deploy.ps1 -Full`
+for this script's parameters rather than assuming every wizard option exists.
 
 It does **not** write `onboarding/claude-gateway.json`, the file your developers'
 setup script reads. Only the wizard writes that. Run the wizard once afterwards
@@ -372,20 +418,40 @@ az ad group create --display-name claude-code-premium  --mail-nickname claude-co
 ./Install-ClaudeGateway.ps1 -FoundryAccount <account> -Yes
 ```
 
-Step 3 is the wizard again. It reuses the instance the button created rather
-than deploying a second one.
+Step 3 is the wizard again. Explicitly select the existing instance and review
+its plan rather than assuming unattended discovery chose the intended gateway.
+
+**Without the scripts, finish the same three tasks in the portal/manual path:**
+
+1. Entra ID > Groups > New group > Security. Create or reuse both tier groups,
+   then Members > Add members. Check transitive membership for nested teams.
+2. APIM > APIs > Named values > `allow-premium` / `allow-standard` > Edit.
+   Populate comma-delimited object IDs, including leading/trailing commas,
+   with premium taking precedence. This is a one-time manual publication, not
+   an automatic sync; use [Onboarding](ONBOARDING.md) for the durable workflow.
+3. Resource group > Deployments > the completed deployment > Outputs provides
+   the gateway URL. Entra ID > Overview gives the tenant ID. Create
+   `onboarding/claude-gateway.json` using the
+   [handover schema](../onboarding/README.md), matching your actual names,
+   models, sign-in mode and limits. No Azure portal blade generates this file.
+
+Then publish the reporting functions/workbook using [Monitoring](MONITORING.md#7-dashboard)
+and complete all verification below. The template button alone is not a
+completed developer rollout.
 
 ### What gets created
 
 | Resource | Purpose | Rough cost |
 |----------|---------|-----------:|
 | API Management, Basic v2 | the gateway | ~$150/mo |
-| Application Insights | token metrics and chargeback | usage-based |
+| Application Insights | metrics and identity traces | usage-based |
 | Log Analytics workspace | backing store for the above | usage-based |
 | 2 Entra groups | entitlement | free |
 
-> Basic v2 has no SLA-backed multi-region or VNet support. For production, use
-> Standard v2 or Premium v2 — the policy is identical.
+> Basic v2 has no VNet integration. Standard v2 supplies outbound VNet
+> integration; Premium v2 adds zone redundancy. Neither is a multi-region
+> deployment. Do not select classic Premium here to obtain multi-region:
+> the Anthropic token policies require v2. See [Decisions](DECISIONS.md).
 
 ### Already have a v2 API Management instance?
 
@@ -395,9 +461,9 @@ looks for v2 instances you already own and offers to reuse one:
 ```
     Existing v2 API Management instances you can reuse:
 
-       1. apim-claude-gw-fzgql9    BasicV2    East US 2      rg-contosohub
+       1. apim-contoso-claude     BasicV2    East US 2      rg-contoso-claude
           already has the Claude API - this would update it
-       2. hocon-gateway            BasicV2    East US 2      rg-hello-agent-dev
+       2. apim-contoso-shared     BasicV2    East US 2      rg-contoso-shared
           would add the Claude API
        3. create a new one
 ```
@@ -434,6 +500,10 @@ it — it clears it.
 
 ## 4. Verify before announcing
 
+Use an entitled test identity and an agreed change window. The governance
+check sends model requests and its throttle test temporarily changes limits;
+`-SkipThrottleTest` leaves that live limit untouched but does not prove throttling.
+
 ```powershell
 ./scripts/Show-Governance.ps1 -ApimName <apim> -ResourceGroup <rg>
 ```
@@ -450,6 +520,11 @@ Four things must pass:
 | 4 | Chargeback — tokens attributed per user | you have a bill you cannot allocate |
 
 Full command reference: [GOVERNANCE-CHECKS.md](GOVERNANCE-CHECKS.md).
+
+**Portal/manual:** APIM > Overview confirms the tier; APIs > Claude API >
+Policies and Named values confirm configuration; the linked workbook confirms
+observed usage. Run a developer request as well: those blades cannot prove
+the developer's credential, streaming path or budget refusal.
 
 ### 4.1 Confirm the tier is v2
 
@@ -509,6 +584,13 @@ az role assignment delete --assignee <principal-id> \
 
 Use the scope the audit reports, not the Foundry account id: an inherited
 assignment has to be removed where it was granted.
+
+**Portal:** Foundry account > Access control (IAM) > Role assignments. Include
+inherited entries and inspect each role's data actions. Remove an unintended
+assignment at its displayed subscription/resource-group/account scope; keep the
+gateway identity's grant. Repeat the audit and an end-to-end gateway request.
+Also review Foundry key access/local authentication and network exposure: an
+RBAC-only audit does not prove an old API key cannot bypass the gateway.
 
 > Read each principal before removing it. A deployment pipeline, Defender, or
 > another application may hold the assignment legitimately. The finding is that
