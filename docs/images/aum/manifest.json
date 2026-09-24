@@ -33,9 +33,9 @@
       "file": "turnstile-overview-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:47:36.948863Z",
+      "captured_at": "2026-09-24T17:57:06.268257Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         80,
         24
@@ -47,9 +47,9 @@
       "file": "turnstile-budgets-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:47:38.216216Z",
+      "captured_at": "2026-09-24T17:57:07.504229Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         80,
         24
@@ -61,9 +61,9 @@
       "file": "turnstile-people-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:47:39.969069Z",
+      "captured_at": "2026-09-24T17:57:09.044247Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         80,
         24
@@ -75,9 +75,9 @@
       "file": "turnstile-governance-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:47:42.250222Z",
+      "captured_at": "2026-09-24T17:57:11.088807Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         80,
         24
@@ -89,9 +89,9 @@
       "file": "turnstile-usage-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:47:43.358800Z",
+      "captured_at": "2026-09-24T17:57:12.375466Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         80,
         24
@@ -103,9 +103,9 @@
       "file": "turnstile-trends-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:47:44.546397Z",
+      "captured_at": "2026-09-24T17:57:13.623978Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         80,
         24
@@ -117,9 +117,9 @@
       "file": "turnstile-requests-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:47:46.252972Z",
+      "captured_at": "2026-09-24T17:57:15.635825Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         80,
         24
@@ -131,9 +131,9 @@
       "file": "turnstile-anomalies-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:47:47.411534Z",
+      "captured_at": "2026-09-24T17:57:16.996744Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         80,
         24
@@ -145,9 +145,9 @@
       "file": "turnstile-settings-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:47:48.380910Z",
+      "captured_at": "2026-09-24T17:57:18.061006Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         80,
         24
@@ -159,9 +159,9 @@
       "file": "turnstile-overview-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:47:51.763971Z",
+      "captured_at": "2026-09-24T17:57:22.458048Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         160,
         48
@@ -173,9 +173,9 @@
       "file": "turnstile-budgets-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:47:53.136480Z",
+      "captured_at": "2026-09-24T17:57:24.218890Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         160,
         48
@@ -187,9 +187,9 @@
       "file": "turnstile-people-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:47:54.700182Z",
+      "captured_at": "2026-09-24T17:57:25.960621Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         160,
         48
@@ -201,9 +201,9 @@
       "file": "turnstile-governance-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:47:56.552726Z",
+      "captured_at": "2026-09-24T17:57:28.115797Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         160,
         48
@@ -215,9 +215,9 @@
       "file": "turnstile-usage-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:47:57.877127Z",
+      "captured_at": "2026-09-24T17:57:29.491075Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         160,
         48
@@ -229,9 +229,9 @@
       "file": "turnstile-trends-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:47:59.068076Z",
+      "captured_at": "2026-09-24T17:57:30.865888Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         160,
         48
@@ -243,9 +243,9 @@
       "file": "turnstile-requests-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:48:00.713829Z",
+      "captured_at": "2026-09-24T17:57:32.325755Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         160,
         48
@@ -257,9 +257,9 @@
       "file": "turnstile-anomalies-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:48:01.994795Z",
+      "captured_at": "2026-09-24T17:57:33.793576Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         160,
         48
@@ -271,9 +271,9 @@
       "file": "turnstile-settings-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T17:48:03.112842Z",
+      "captured_at": "2026-09-24T17:57:34.937368Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         160,
         48
@@ -285,9 +285,9 @@
       "file": "direct-overview-80x24-after.svg",
       "source": "live",
       "backend": "Direct",
-      "captured_at": "2026-09-24T17:48:33.785326Z",
+      "captured_at": "2026-09-24T17:58:09.891355Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         80,
         24
@@ -299,9 +299,9 @@
       "file": "direct-overview-160x48-after.svg",
       "source": "live",
       "backend": "Direct",
-      "captured_at": "2026-09-24T17:49:05.857838Z",
+      "captured_at": "2026-09-24T17:58:40.222171Z",
       "redaction": true,
-      "commit": "61f0ecb1f126f463cea899ead6aa97ead6064cfb",
+      "commit": "af8e352c925111f19d67a266ef005c7b89fbf6df",
       "size": [
         160,
         48
