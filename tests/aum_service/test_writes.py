@@ -102,6 +102,11 @@ class ServiceWriteTests(unittest.TestCase):
         self.assertEqual("stale_revision", error.exception.code)
         self.assertEqual(1, len(self.arm.writes))
 
+    def test_daily_override_reserves_longest_month_not_only_today_month(self):
+        with self.assertRaises(ServiceError) as error:
+            self.write(self.admin, "user", PERSON, 100000)
+        self.assertEqual("insufficient_headroom", error.exception.code)
+
     def test_audit_outage_refuses_mutation(self):
         self.store.fail_audit = True
         with self.assertRaises(Exception):

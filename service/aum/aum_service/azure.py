@@ -37,6 +37,7 @@ class NamedValues:
             raise invalid("AUM_APIM_RESOURCE_ID must identify one gateway")
         self.base = "https://management.azure.com" + apim_id
         self.http = http
+        self.documents = {}
 
     def url(self, name=None):
         return self.base + "/namedValues" + ("/" + name if name else "") + "?api-version=2024-05-01"
@@ -64,15 +65,22 @@ class NamedValues:
         etag = headers.get("ETag") or headers.get("etag") or payload.get("etag")
         if not etag:
             raise ServiceError(503, "etag_missing", "ARM did not return an ETag; refusing an unconditional write")
+        if len(self.documents) >= 256:
+            self.documents.clear()
+        self.documents[(key, etag)] = payload["properties"]
         return {"value": payload["properties"]["value"], "etag": etag}
 
     def put(self, key, value, etag):
         if key not in CONFIG_NAMES or not etag:
             raise invalid("A named-value write requires an allowed key and ETag")
         checked_value(value)
+        current = self.documents.get((key, etag), {})
+        properties = {"displayName": current.get("displayName", key), "value": value, "secret": False}
+        if "tags" in current:
+            properties["tags"] = current["tags"]
         payload, headers = self.http.call(
             "PUT", self.url(key),
-            body={"properties": {"displayName": key, "value": value, "secret": False}},
+            body={"properties": properties},
             headers={"If-Match": etag},
         )
         poll = headers.get("Azure-AsyncOperation") or headers.get("azure-asyncoperation")

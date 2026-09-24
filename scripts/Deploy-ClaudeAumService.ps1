@@ -64,8 +64,11 @@ if ($ExistingPlanName) {
 }
 if ($ExistingStorageName) {
     $match = @($discovery.Storage | Where-Object { $_.name -eq $ExistingStorageName -and $_.resourceGroup -eq $ResourceGroup -and
-        $_.tags.component -eq 'aum-service' -and $_.allowSharedKeyAccess -eq $false -and $_.sku.name -eq "Standard_$Redundancy" })
-    if ($match.Count -ne 1) { throw 'Reuse requires service-owned, keyless storage in the selected group with matching redundancy. Shared accounts are not modified.' }
+        $_.tags.component -eq 'aum-service' -and $_.tags.'aum-gateway' -eq $discovery.Gateway.id -and
+        $_.tags.'aum-function' -eq "func-aum-$NamePrefix" -and $_.allowSharedKeyAccess -eq $false -and
+        $_.sku.name -eq "Standard_$Redundancy" -and
+        $_.publicNetworkAccess -eq $(if ($Network -eq 'Private') { 'Disabled' } else { 'Enabled' }) })
+    if ($match.Count -ne 1) { throw 'Reuse requires this same service and gateway, keyless storage in the selected group, and matching redundancy/network. Shared accounts are not modified.' }
 }
 if ($Network -eq 'Private') {
     foreach ($name in @('IntegrationSubnetId','PrivateEndpointSubnetId','SitesDnsZoneId','BlobDnsZoneId','TableDnsZoneId')) {

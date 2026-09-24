@@ -39,7 +39,7 @@ var metricsPublisher = '3913510d-42f4-4e42-8a64-420c390055eb'
 resource newStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = if (empty(existingStorageName)) {
   name: storageName
   location: location
-  tags: { component: 'aum-service' }
+  tags: { component: 'aum-service', 'aum-gateway': apimResourceId, 'aum-function': siteName }
   kind: 'StorageV2'
   sku: { name: 'Standard_${storageRedundancy}' }
   properties: {

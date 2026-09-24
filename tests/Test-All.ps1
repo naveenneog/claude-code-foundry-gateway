@@ -87,6 +87,17 @@ Invoke-Check 'Resolver - the entitlement read path'   'Test-Resolver.ps1'
     Invoke-Check 'Turnstile checks detect breakage'        'Test-TurnstileNegative.ps1'
     Invoke-Check 'No deployment written into the code'     'Test-NoDeploymentValues.ps1'
     Invoke-Check 'Foundry bypass audit'                    'Test-Bypass.ps1' @{ SkipLive = $true }
+    Invoke-Check 'AUM service - discovery and administrator choices' 'Test-AumDeployment.ps1'
+
+    $aumPython = Join-Path $root '.venv-aum-service\Scripts\python.exe'
+    $aumUnixPython = Join-Path $root '.venv-aum-service\bin\python'
+    if ((Test-Path $aumPython) -or (Test-Path $aumUnixPython)) {
+        Invoke-Check 'AUM service - authority, API and mutations' 'Test-AumService.ps1'
+    }
+    else {
+        Write-Host 'SKIP - AUM service: worktree .venv-aum-service is missing. See docs/AUM-SERVICE.md.' -ForegroundColor Yellow
+        $results += [pscustomobject]@{ Name = 'AUM service - authority, API and mutations'; Result = 'SKIP' }
+    }
 
     $finopsPython = Join-Path $root '.venv-finops\Scripts\python.exe'
     $finopsUnixPython = Join-Path $root '.venv-finops\bin\python'

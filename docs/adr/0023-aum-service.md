@@ -57,7 +57,8 @@ conflicts; rollback never overwrites a later independent write.
 Headroom is an allocation constraint, independent of strict/allowance/notify:
 children cannot reserve more than a finite parent's remaining allocation.
 Monthly team and daily person budgets are not compared as if periods matched;
-person overrides reserve their daily amount over the calendar month. A unit
+person overrides reserve 31 times their daily amount, so a longer next month
+cannot silently consume unallocated headroom. A unit
 manager may edit its teams, any manager may edit people in scope, and only an
 Admin edits units, catalog, tiers or modes.
 

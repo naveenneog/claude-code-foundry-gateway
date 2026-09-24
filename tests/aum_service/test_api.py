@@ -41,6 +41,15 @@ class ApiTests(unittest.TestCase):
         _, capabilities, _ = self.call("GET", "/capabilities")
         self.assertFalse(capabilities["capabilities"]["budget_write"])
 
+    def test_capabilities_never_offer_a_second_writer_or_absent_gateway_modes(self):
+        del self.arm.values["bu-modes"]
+        self.assertFalse(self.call("GET", "/capabilities")[1]["capabilities"]["modes_write"])
+        self.arm.values["turnstile-integration"] = "governanceAuthority=Turnstile"
+        self.arm.etags["turnstile-integration"] = 1
+        capabilities = self.call("GET", "/capabilities")[1]["capabilities"]
+        for flag in ("budget_write", "catalog_write", "tiers_write", "modes_write", "boosts", "approvals"):
+            self.assertFalse(capabilities[flag], flag)
+
     def test_auth_required_on_every_route_and_error_does_not_leak(self):
         for path in ("/me", "/capabilities", "/budgets", "/people", "/unknown"):
             with self.subTest(path=path):

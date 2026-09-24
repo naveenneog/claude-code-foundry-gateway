@@ -1,4 +1,3 @@
-import calendar
 from copy import deepcopy
 from datetime import UTC, datetime
 import re
@@ -53,15 +52,18 @@ class AumService:
                 "manager_scope": scope.profile() if scope is not None else None}
 
     def capabilities(self, identity):
-        _, _, _, scope = self.context(identity)
-        writer = identity.access in {"admin", "manager"}
+        _, config, _, scope = self.context(identity)
+        other_authority = re.search(r"(?:^|;)(?:governanceAuthority|budgetAuthority)=Turnstile(?:;|$)",
+                                    config.values.get("turnstile-integration", ""))
+        writer = identity.access in {"admin", "manager"} and not other_authority
+        admin_writer = identity.is_admin and not other_authority
         assigned = scope is None or bool(scope.organization_ids or scope.department_ids)
         return {"schema_version": 1, "backend": "aum-service", "capabilities": {
             "usage_read": True, "budgets_read": True, "budget_write": writer and assigned,
-            "manager_budget_write": identity.access == "manager" and assigned,
-            "catalog_write": identity.is_admin, "tiers_write": identity.is_admin,
-            "modes_write": identity.is_admin, "budget_requests": writer and assigned,
-            "approvals": writer and assigned, "boosts": writer and assigned,
+            "manager_budget_write": writer and identity.access == "manager" and assigned,
+            "catalog_write": bool(admin_writer), "tiers_write": bool(admin_writer),
+            "modes_write": bool(admin_writer and "bu-modes" in config.values), "budget_requests": bool(writer and assigned),
+            "approvals": bool(writer and assigned), "boosts": bool(writer and assigned),
             "notifications": True, "audit_read": identity.is_admin, "email_delivery": False,
         }, "limits": {"page_size": 200, "named_value_characters": 4096, "analytics_window_days": 93}}
 
@@ -126,7 +128,7 @@ class AumService:
             amount_for_check = max(config.tier(t)["tokens_per_day"] for t in ("standard", "premium"))
         else:
             amount_for_check = tokens(amount, 1)
-        days = calendar.monthrange(self.clock().year, self.clock().month)[1]
+        days = 31
         validate_headroom(config, kind, key, amount_for_check, members, days)
         parent = members.get(key) if kind == "user" else config.parents.get(key)
         if parent and not restoring:
@@ -156,7 +158,8 @@ class AumService:
         why = reason(body)
         amount = body.get("token_limit")
         changes = self.plan_budget(identity, config, scope, kind, key, amount, restoring)
-        threshold = body.get("warning_threshold_percent", 80)
+        metadata = self.store.get("budgets", kind + ":" + key) or {}
+        threshold = body.get("warning_threshold_percent", metadata.get("warning_threshold_percent", 80))
         if type(threshold) is not int or not 1 <= threshold <= 100:
             raise invalid("warning_threshold_percent must be an integer from 1 to 100")
         def work():
@@ -259,7 +262,7 @@ class AumService:
                    "bu-modes": render_modes({k: v for k, v in config.modes.items() if k not in removed})}
         candidate = Config({**config.values, **changes})
         members = self.members(candidate)
-        days = calendar.monthrange(self.clock().year, self.clock().month)[1]
+        days = 31
         for unit in candidate.units:
             if unit["TokensPerMonth"] > 0:
                 validate_headroom(candidate, "department" if unit["Id"] in parents else "organization",

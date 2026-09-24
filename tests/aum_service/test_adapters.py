@@ -39,6 +39,15 @@ class AzureAdapterTests(unittest.TestCase):
         self.assertEqual('"2"', http.call.call_args.kwargs["headers"]["If-Match"])
         self.assertNotIn("listKeys", http.call.call_args.args[1])
 
+    def test_put_preserves_display_name_and_tags(self):
+        http = Mock()
+        http.call.return_value = ({"properties": {"value": "100", "displayName": "quota-org",
+                                                  "tags": ["Contoso Governance"]}}, {"ETag": '"2"'})
+        arm = NamedValues(APIM, http)
+        arm.get("quota-org")
+        arm.put("quota-org", "101", '"2"')
+        self.assertEqual(["Contoso Governance"], http.call.call_args.kwargs["body"]["properties"]["tags"])
+
     def test_log_analytics_rejects_partial_error_not_zero_usage(self):
         http = Mock()
         http.call.return_value = ({"error": {"code": "PartialError"}, "tables": []}, {})

@@ -42,6 +42,13 @@ $plans = @(
 )
 $compatible = @(Get-ClaudeAumReusablePlans -Plans $plans -Region 'contoso-region')
 Assert ($compatible.Count -eq 1 -and $compatible[0].name -eq 'contoso-empty') 'Flex plan cannot be shared with another app or region'
+$cliPlans = @(
+    [pscustomobject]@{ name='contoso-busy-cli'; location='contoso-region'; sku=@{name='FC1'}; numberOfSites=1 },
+    [pscustomobject]@{ name='contoso-empty-cli'; location='contoso-region'; sku=@{name='FC1'}; numberOfSites=0 },
+    [pscustomobject]@{ name='contoso-unknown-cli'; location='contoso-region'; sku=@{name='FC1'} }
+)
+$compatible = @(Get-ClaudeAumReusablePlans -Plans $cliPlans -Region 'contoso-region')
+Assert ($compatible.Count -eq 1 -and $compatible[0].name -eq 'contoso-empty-cli') 'flattened CLI site counts are honored; unknown is not zero'
 
 $discovery = @{
     Account = @{ id = '00000000-0000-0000-0000-000000000001'; tenantId = '00000000-0000-0000-0000-000000000002' }
@@ -80,4 +87,6 @@ Assert ($bicep -match 'Storage Blob Data Owner|b7e6dc6d-f1e8-4753-8033-0f276bb09
 $role = Get-ClaudeAumWriterRoleDefinition -Scope '/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/rg-contoso'
 Assert (@($role.Actions).Count -eq 4) 'writer role has exactly the existing four governance actions'
 Assert (@($role.Actions | Where-Object { $_ -match 'policies|delete|\*' }).Count -eq 0) 'writer cannot edit policy or delete resources'
+& (Join-Path $PSScriptRoot 'Test-AumDiscovery.ps1')
+if ($LASTEXITCODE) { exit $LASTEXITCODE }
 Write-Host "$script:passed AUM deployment assertions passed." -ForegroundColor Green

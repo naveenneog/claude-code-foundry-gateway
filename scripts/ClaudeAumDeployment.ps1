@@ -3,7 +3,10 @@
 
 function Invoke-ClaudeAumAz {
     param([Parameter(Mandatory)][string[]]$Arguments)
-    $raw = & az @Arguments 2>&1 | Out-String
+    foreach ($argument in $Arguments) {
+        if ($argument -match '[&|]') { throw 'Unsafe Azure CLI argument: use a JSON file or Invoke-RestMethod for query continuations.' }
+    }
+    $raw = & az @Arguments --only-show-errors 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) { throw "Azure CLI failed ($($Arguments[0])): $($raw.Trim())" }
     if ($raw.Trim()) { return ($raw | ConvertFrom-Json) }
 }
@@ -17,7 +20,8 @@ function New-ClaudeAumLocalFile {
 
 function Write-ClaudeAumJson {
     param([string]$Path, $Value)
-    [IO.File]::WriteAllText($Path, ($Value | ConvertTo-Json -Depth 30), (New-Object System.Text.UTF8Encoding($false)))
+    $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+    [IO.File]::WriteAllText($resolved, ($Value | ConvertTo-Json -Depth 30), (New-Object System.Text.UTF8Encoding($false)))
 }
 
 function Get-ClaudeAumPrices {
@@ -91,8 +95,9 @@ function Select-ClaudeAumChoice {
 function Get-ClaudeAumReusablePlans {
     param([object[]]$Plans, [string]$Region)
     return @($Plans | Where-Object {
+        $count = if ($null -ne $_.numberOfSites) { $_.numberOfSites } else { $_.properties.numberOfSites }
         ($_.location -replace ' ', '') -eq ($Region -replace ' ', '') -and
-        $_.sku.name -eq 'FC1' -and [int]$_.properties.numberOfSites -eq 0
+        $_.sku.name -eq 'FC1' -and $null -ne $count -and [int]$count -eq 0
     })
 }
 
@@ -181,9 +186,17 @@ function Set-ClaudeAumWriterRole {
     }
     $file = New-ClaudeAumLocalFile
     try {
-        Write-ClaudeAumJson $file $definition
-        $verb = if ($existing.Count) { 'update' } else { 'create' }
-        $role = Invoke-ClaudeAumAz @('role','definition',$verb,'--role-definition',"@$file",'-o','json')
+        $roleId = if ($existing.Count) { $existing[0].id } else {
+            ($GatewayResourceId.Split('/')[0..2] -join '/') + '/providers/Microsoft.Authorization/roleDefinitions/' + [guid]::NewGuid().ToString()
+        }
+        $body = @{ properties=@{
+            roleName=$definition.Name; description=$definition.Description; type='CustomRole'
+            assignableScopes=$definition.AssignableScopes
+            permissions=@(@{ actions=$definition.Actions; notActions=@(); dataActions=@(); notDataActions=@() })
+        } }
+        Write-ClaudeAumJson $file $body
+        $role = Invoke-ClaudeAumAz @('rest','--method','PUT','--url',"https://management.azure.com$roleId`?api-version=2022-04-01",
+            '--headers','Content-Type=application/json','--body',"@$file",'-o','json')
         return $role.id
     }
     finally { Remove-Item $file -ErrorAction SilentlyContinue }

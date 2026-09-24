@@ -20,6 +20,10 @@ $graph = 'https://graph.microsoft.com/v1.0'
 $cliId = '04b07795-8ddb-461a-bbee-02f9e1bf7b46'
 function Invoke-AumGraph {
     param([string]$Method, [string]$Path, $Body)
+    if ($Method -eq 'GET' -and $Path.Contains('&')) {
+        $access = Invoke-ClaudeAumAz @('account','get-access-token','--resource','https://graph.microsoft.com','-o','json')
+        return Invoke-RestMethod -Method Get -Uri "$graph$Path" -Headers @{ Authorization=('Bearer ' + $access.accessToken) }
+    }
     $args = @('rest','--method',$Method,'--url',"$graph$Path",'-o','json')
     $file = $null
     try {
@@ -94,8 +98,21 @@ if (-not $sp.appRoleAssignmentRequired) {
 }
 if (-not $SkipOwnerAssignment) {
     $roleId = @($app.appRoles | Where-Object value -eq 'AUM.Admin')[0].id
-    $assigned = @((Invoke-AumGraph GET ("/servicePrincipals/$($sp.id)/appRoleAssignedTo?`$filter=" + [uri]::EscapeDataString("principalId eq $($me.id)"))).value)
-    if (-not @($assigned | Where-Object appRoleId -eq $roleId).Count) {
+    # Graph rejects principalId filtering on this relationship in some tenants.
+    # Follow the proven Turnstile route, including continuation pages.
+    $path = "/servicePrincipals/$($sp.id)/appRoleAssignedTo"
+    $alreadyAssigned = $false
+    while ($path) {
+        $page = Invoke-AumGraph GET $path
+        if (@($page.value | Where-Object { $_.principalId -eq $me.id -and $_.appRoleId -eq $roleId }).Count) {
+            $alreadyAssigned = $true
+            break
+        }
+        $next = [string]$page.'@odata.nextLink'
+        if ($next -and -not $next.StartsWith("$graph/")) { throw 'Graph returned an unexpected assignment continuation address.' }
+        $path = if ($next) { $next.Substring($graph.Length) } else { $null }
+    }
+    if (-not $alreadyAssigned) {
         Invoke-AumGraph POST "/users/$($me.id)/appRoleAssignments" @{ principalId=$me.id; resourceId=$sp.id; appRoleId=$roleId } | Out-Null
     }
 }
