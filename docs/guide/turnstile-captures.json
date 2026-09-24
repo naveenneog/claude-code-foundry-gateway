@@ -281,6 +281,72 @@
       "sha256": "83845d5ec07a4faeca483c674da6398aa15bbbf3da0a36b69f30ae4ca5d93fad"
     },
     {
+      "image": "turnstile-mode-notify-apply.png",
+      "live": true,
+      "captured_at_utc": "2026-09-24T21:15:31.798Z",
+      "accel_commit": "715fd45c232d375c23708ea7818bfbcf018f540d",
+      "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
+      "tool": "Playwright 1.62.1",
+      "command": "az apim nv show -g $env:GATEWAY_RG --service-name $env:GATEWAY_APIM --named-value-id bu-modes --query value -o tsv; GET /api/v1/gateway-apply",
+      "identity_kind": "owner_cli",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true,
+        "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
+      },
+      "sha256": "a4e07d41960bc8a50adb0ff650eb2a33ab537e5dd0ec0b8e40a218818e56866a"
+    },
+    {
+      "image": "turnstile-mode-notify.png",
+      "live": true,
+      "captured_at_utc": "2026-09-24T21:15:31.622Z",
+      "accel_commit": "715fd45c232d375c23708ea7818bfbcf018f540d",
+      "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
+      "tool": "Playwright 1.62.1",
+      "route": "/?source=apim&page=gateway-governance",
+      "identity_kind": "owner_cli_code",
+      "state": "notify; independently read back from the gateway",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true,
+        "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
+      },
+      "sha256": "4b341601601847ecde92c271dcdefb247d6aa50edc743c232039bf7af01204b2"
+    },
+    {
+      "image": "turnstile-mode-strict-apply.png",
+      "live": true,
+      "captured_at_utc": "2026-09-24T21:18:05.918Z",
+      "accel_commit": "715fd45c232d375c23708ea7818bfbcf018f540d",
+      "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
+      "tool": "Playwright 1.62.1",
+      "command": "az apim nv show -g $env:GATEWAY_RG --service-name $env:GATEWAY_APIM --named-value-id bu-modes --query value -o tsv; GET /api/v1/gateway-apply",
+      "identity_kind": "owner_cli",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true,
+        "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
+      },
+      "sha256": "403fb9866dba5c48b854ee1c02aca4a552be36e2aad66d12f786e7960d2f045d"
+    },
+    {
+      "image": "turnstile-mode-strict.png",
+      "live": true,
+      "captured_at_utc": "2026-09-24T21:18:05.855Z",
+      "accel_commit": "715fd45c232d375c23708ea7818bfbcf018f540d",
+      "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
+      "tool": "Playwright 1.62.1",
+      "route": "/?source=apim&page=gateway-governance",
+      "identity_kind": "owner_cli_code",
+      "state": "strict; independently read back from the gateway",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true,
+        "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
+      },
+      "sha256": "a7f84c87255cb16934b34ced44e9747e2ea626fb0e1ab21c5f858fd8cfd6b212"
+    },
+    {
       "image": "turnstile-t01-connect-show.png",
       "live": true,
       "captured_at_utc": "2026-09-24T17:33:45.994Z",

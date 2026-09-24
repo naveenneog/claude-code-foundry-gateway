@@ -611,6 +611,36 @@ successful restored state; the command capture records the temporary +1 value.*
 
 ### Current manager and people controls
 
+The mode round-trip evidence below is recorded separately from the earlier tier proof.
+It uses the already-deployed gateway mode mapping; no directory or role change is involved.
+
+![Notify selected on one existing team, after gateway readback](guide/turnstile-mode-notify.png)
+
+![Notify named value and the succeeded apply, read live](guide/turnstile-mode-notify-apply.png)
+
+![Strict restored on the same team](guide/turnstile-mode-strict.png)
+
+![The restored empty exceptions map and succeeded apply](guide/turnstile-mode-strict-apply.png)
+
+*Captured live from the reference deployment on 2026-09-24 UTC; names replaced. These
+images are generated only after the corresponding named-value readback and successful
+apply. `guide/capture-turnstile-modes.mjs` restores the original authored catalog as well
+if the starting Strict mode was implicit rather than an explicit attribute.*
+
+Measured on 2026-09-24 UTC, in one short window:
+
+| UI save | Independently observed on the gateway | Save to first matching value | Save to verified successful apply |
+|---|---|---|---|
+| Team to Notify | `,sales-emea=notify,` (team id replaced for publication) | 113.363 s | 151.762 s |
+| Same team back to Strict | Exactly `,,` | 113.152 s | 150.898 s |
+
+The original catalog had no explicit mode attribute, so the owner also selected **Gateway
+default** and waited for that apply to succeed. This removed only the temporary authored
+attribute; `bu-modes` remained `,,`. Final verification at **21:19:58.703Z** found the
+authored catalog and every non-secret named value identical to the original snapshot,
+with budget definitions and tiers unchanged. No group/role was changed and no quota
+exhaustion was induced. This proves UI-to-gateway mode mapping, not a billing guarantee.
+
 ![Owner editing a manager-group object id and allowance mode; cancelled without saving](guide/turnstile-15-manager-editor.png)
 
 *Captured live from the reference deployment on 2026-09-24; names replaced. The fields are

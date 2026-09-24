@@ -183,6 +183,34 @@ Direct custom API read/write equivalents are the requests made by the documented
 tier objects and always restore in `finally`; do not replace them with a partial catalog
 PUT that discards fields.
 
+### Mode round trip without a new grant
+
+1. Record the original team attributes and `bu-modes` value. Start only when the existing
+   mode map is `,,` and no other operator is changing the catalog.
+2. In **Gateway governance**, select **Edit** for one existing team. In **Budget enforcement**,
+   choose **Notify — report without blocking**, then **Save and apply**.
+3. Wait for **Gateway apply Succeeded**, then independently read:
+
+   ```powershell
+   az apim nv show --resource-group $resourceGroup --service-name $apimName `
+     --named-value-id bu-modes --query value --output tsv
+   ```
+
+   The value must be exactly `,<team-id>=notify,`. In Azure portal, the equivalent read is
+   **API Management service** > **APIs** > **Named values** > `bu-modes` > **Value**.
+   The Turnstile save is performed in the application, not by editing the named value.
+4. Edit the same team, select **Strict — stop at the budget**, and **Save and apply**.
+   Wait for successful apply and verify the value is exactly `,,`.
+5. If the original attribute was absent, select **Gateway default** as the final authored
+   restoration and wait for that apply too. Verify the whole authored catalog, budgets,
+   tiers and named values against the before snapshot.
+
+The application-side steps and CLI readbacks were measured live; see the
+[four mode screenshots](../TURNSTILE.md#current-manager-and-people-controls).
+The APIM portal equivalent remains documented, not newly photographed after the portal's
+Users and groups sign-in stop. `guide/capture-turnstile-modes.mjs` records the same
+round trip and has an unconditional recovery path; it needs only existing Owner access.
+
 ## 5. Phase 2 membership transition — only after explicit go
 
 1. Verify the exclusive account window first. In **Microsoft Entra ID** > **Groups** >
