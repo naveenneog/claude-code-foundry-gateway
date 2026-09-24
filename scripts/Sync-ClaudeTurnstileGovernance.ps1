@@ -136,11 +136,25 @@ if ($Direction -eq 'FromTurnstile' -and $governanceAuthority -eq 'Turnstile') {
     $catalogDoc = Invoke-Turnstile GET '/api/v1/enterprise-catalog'
     $budgetDoc = Invoke-Turnstile GET "/api/v1/budgets?period=$Period"
     $tierDoc = Invoke-Turnstile GET '/api/v1/gateway-tiers'
+    $readGovernance = {
+        $freshMonth = Invoke-Turnstile POST '/api/v1/gateway-governance/prepare'
+        $freshCatalog = Invoke-Turnstile GET '/api/v1/enterprise-catalog'
+        $freshBudgets = Invoke-Turnstile GET "/api/v1/budgets?period=$($freshMonth.period)"
+        $freshTiers = Invoke-Turnstile GET '/api/v1/gateway-tiers'
+        [pscustomobject]@{
+            Catalog = $freshCatalog; BudgetItems = @($freshBudgets.items); Tiers = @($freshTiers.items)
+            TierUpdatedAt = $freshTiers.updated_at; BudgetPeriod = [string]$freshMonth.period
+        }
+    }
     $result = Invoke-ClaudeGatewayGovernanceApply -Catalog $catalogDoc -BudgetItems @($budgetDoc.items) -Tiers @($tierDoc.items) `
+        -TierUpdatedAt $tierDoc.updated_at -BudgetPeriod $Period -ReadGovernance $readGovernance `
         -ResourceGroup $ResourceGroup -ApimName $ApimName -ScriptRoot $PSScriptRoot -Apply:$Apply
     foreach ($c in $result.Changes) { Write-Host "  $c" }
     foreach ($p in $result.Problems) { Write-Host "  not applied - $p" }
-    if (-not @($result.Changes).Count) { Write-Host '  The gateway already matches Turnstile.' }
+    Write-Host "  Freshness: $($result.Freshness)"
+    foreach ($read in @($result.SourceReads)) { Write-Host ("  Source revisions: " + ($read | ConvertTo-Json -Depth 5 -Compress)) }
+    if (-not @($result.Changes).Count -and @($result.Problems).Count) { Write-Host '  No named values written; see the reported problems.' }
+    elseif (-not @($result.Changes).Count) { Write-Host '  The gateway already matches Turnstile.' }
     elseif (-not $Apply) { Write-Host "  Nothing written. Pass -Apply to write $(@($result.Changes).Count) change(s) to the gateway." }
     else { Write-Host "  Wrote $($result.Applied) named value(s). In effect on the next request." }
     Write-Host "  Membership: $($result.Membership)"

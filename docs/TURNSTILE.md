@@ -399,6 +399,36 @@ The first two runs failed, and both causes are now handled:
 
 ## Manage everything in Turnstile
 
+### Concurrent saves and the stale-run guard
+
+**Measured 2026-09-24 by the manager-scoping agent:** two catalog saves one second
+apart started apply runs at 13:34:26 and 13:34:27 UTC. They finished out of order:
+the later run at 13:36:05, then the earlier run at 13:36:15. Without a freshness
+check, the earlier save can be written last, including restoring a stale budget
+mode.
+
+The apply records the catalog and tier documents' `updated_at` values and every
+unit/team budget row's `updated_at`. The budget response's `generated_at` and
+usage totals are not revisions: they can change without a save. **Measured
+2026-09-24:** the catalog and tiers expose a document timestamp; budgets expose
+timestamps per row.
+
+Immediately before its first write, the run re-reads all three sources. If any
+revision differs, including an added or removed budget row or a changed month,
+it re-plans from the fresh snapshot, re-reading gateway state and checking groups
+again. After three re-plans, another change defers the run with no writes. A
+failed read or missing/invalid required revision also defers rather than applying
+unchecked state. The run output includes source revision pairs, the number of
+reconciliations and whether it verified or deferred the apply.
+
+This **narrows the race window; it does not eliminate it**. The three reads are
+not one atomic snapshot, and another save or writer can race after the final
+check or during the individual named-value writes. The **single queue-driven
+writer in roadmap P48** is the full fix. This guard does not add a lock, queue or
+schedule, and it does not claim that overlapping jobs are serialized.
+
+### Budget modes
+
 The platform admin can also choose **strict** (the default), **allowance**
 (an integer 1 to 100 percent beyond the base budget), or **notify** for a unit or
 team. The catalog contract uses attributes `enforcement` and, only with allowance,

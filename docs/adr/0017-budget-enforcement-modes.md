@@ -53,6 +53,22 @@ preserve modes unless explicitly changed; seeding preserves them too.
 
 ## How we would know this was wrong
 
+### Stale-run mitigation, 2026-09-24
+
+The manager-scoping agent measured two saves one second apart starting apply jobs
+at 13:34:26 and 13:34:27 UTC; the newer run finished at 13:36:05 and the older at
+13:36:15. Modes can therefore regress if the older snapshot is written last.
+Read-only inspection of the live API confirmed document `updated_at` on catalog
+and tiers, and per-row `updated_at` on budgets.
+
+Before writing, compare those revision vectors with a new read; a change restarts
+reconciliation against fresh source and gateway state. Bound restarts at three,
+then report and defer with no writes. Missing required revision metadata or a
+failed read likewise defers. Do not use budget `generated_at` or usage as a
+revision. The separate reads and writes are not atomic, so P48's single
+queue-driven writer remains the full fix. This amendment authorizes only the
+interim guard, not that queue or a deployment change.
+
 A strict default changing behavior, malformed metadata loosening a budget, a
 redeploy resetting modes, or an advisory being presented as proof of a precise
 budget crossing is a regression, not a supported interpretation.
