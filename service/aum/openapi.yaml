@@ -469,7 +469,9 @@ components:
         observed_usage: {type: string, description: Exact nonnegative decimal text, not binary floating point.}
         usage_unit: {type: string, enum: [tokens]}
         usage_basis: {type: string, enum: [prompt_completion_only]}
-        effective_limit_version: {type: string}
+        effective_limit_version:
+          type: string
+          description: Stable policy/content fingerprint of scope, nominal limit, threshold, unit and usage basis; not a monotonically increasing revision.
         source: {type: string, enum: [ClaudeCost, ClaudeChargeback]}
         token_limit: {type: integer}
         occurred_at: {type: string, format: date-time}

@@ -437,7 +437,8 @@ and normal edits to an actively boosted target are refused.
 
 The 15-minute warning timer writes version-1 `budget.warning` facts: tokens,
 `prompt_completion_only` basis, exact decimal usage text, exclusive UTC period
-bounds, source and an effective-limit version. The deterministic ID includes the
+bounds, source and an effective-limit version (a stable policy/content
+fingerprint, not a monotonically increasing revision). The deterministic ID includes the
 scope, interval, threshold, basis and limit version. A changed nominal limit
 rearms a warning; restoring an identical limit reuses its earlier fact.
 Facts contain no recipient addresses or transport status. Future delivery must
