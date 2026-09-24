@@ -4,6 +4,8 @@ claude-settings.json
 # local tooling
 node_modules/
 .venv-finops/
+.venv-aum-service/
+.aum-local/
 .finops-research/
 __pycache__/
 *.egg-info/
