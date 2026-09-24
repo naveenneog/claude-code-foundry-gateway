@@ -59,7 +59,7 @@ function Get-JourneyToken {
 function Invoke-JourneyApi {
     param([string]$Token, [string]$Method, [string]$Path, $Body, [string]$Revision)
     $headers = @{ Authorization='Bearer ' + $Token }
-    if ($Revision) { $headers['If-Match'] = $Revision }
+    if ($Revision) { $headers['If-Match'] = Format-ClaudeAumIfMatch $Revision }
     $arguments = @{ Uri="$($record.endpoint)/api/v1/$Path"; Headers=$headers; Method=$Method; TimeoutSec=90 }
     if ($null -ne $Body) { $arguments.ContentType='application/json'; $arguments.Body=($Body | ConvertTo-Json -Depth 10) }
     return Invoke-RestMethod @arguments

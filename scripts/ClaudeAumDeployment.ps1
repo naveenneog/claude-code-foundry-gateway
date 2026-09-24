@@ -60,6 +60,13 @@ function Format-ClaudeAumCost {
     return ('$' + ([decimal]$Value).ToString('0.00####', [Globalization.CultureInfo]::InvariantCulture) + " $Unit USD list price")
 }
 
+function Format-ClaudeAumIfMatch {
+    param([Parameter(Mandatory)][string]$Revision)
+    $value = $Revision.Trim('"')
+    if ($value -notmatch '^[0-9a-f]{64}$') { throw 'Expected the opaque revision from GET /budgets.' }
+    return '"' + $value + '"'
+}
+
 function Get-ClaudeAumChoices {
     param([Parameter(Mandatory)]$Prices)
     @(

@@ -34,6 +34,8 @@ Assert (@($choices | Where-Object Category -eq 'Network').Count -eq 2) 'public a
 Assert (@($choices | Where-Object { -not $_.Implications }).Count -eq 0) 'every choice explains implications'
 Assert (@($choices | Where-Object { -not $_.Cost }).Count -eq 0) 'every choice describes cost'
 Assert ((Format-ClaudeAumCost $null) -match 'unknown') 'missing prices never become free'
+$revision = 'a' * 64
+Assert ((Format-ClaudeAumIfMatch $revision) -ceq ('"' + $revision + '"')) 'If-Match uses the HTTP entity-tag quoting required by PowerShell'
 
 $plans = @(
     [pscustomobject]@{ name = 'contoso-flex'; location = 'contoso-region'; sku = @{ name = 'FC1' }; properties = @{ numberOfSites = 1 } },

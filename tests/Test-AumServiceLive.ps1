@@ -28,7 +28,7 @@ $evidence = New-Object System.Collections.Generic.List[object]
 function Invoke-LiveApi {
     param([string]$Method, [string]$Path, $Body, [string]$Revision, [int]$Expected=200)
     $h = @{}; foreach ($key in $headers.Keys) { $h[$key] = $headers[$key] }
-    if ($Revision) { $h['If-Match'] = $Revision }
+    if ($Revision) { $h['If-Match'] = Format-ClaudeAumIfMatch $Revision }
     $params = @{Uri="$($record.endpoint)/api/v1/$Path"; Method=$Method; Headers=$h; TimeoutSec=120; UseBasicParsing=$true}
     if ($null -ne $Body) { $params.ContentType='application/json'; $params.Body=($Body | ConvertTo-Json -Depth 12) }
     $start = [datetime]::UtcNow

@@ -40,6 +40,8 @@ class Api:
                 raise ServiceError(404, "not_found", "Route not found")
             route = route[len("/api/v1/"):]
             result, status = self.dispatch(method, route, identity, params, body, normalized.get("if-match"))
+            if isinstance(result, dict) and result.get("revision"):
+                response_headers["ETag"] = '"' + result["revision"] + '"'
             return status, result, response_headers
         except ServiceError as error:
             if error.status == 401:

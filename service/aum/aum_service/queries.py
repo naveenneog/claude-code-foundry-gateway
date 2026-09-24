@@ -123,7 +123,7 @@ class QueryBuilder:
             if cursor:
                 if len(cursor["after"]) != 1:
                     raise invalid("Invalid people cursor")
-                kql += "\n| where id > " + literal(cursor["after"][0])
+                kql += "\n| where strcmp(id, " + literal(cursor["after"][0]) + ") > 0"
             kql += f"\n| order by id asc\n| take {limit + 1}"
         elif kind == "requests":
             if cursor:
@@ -135,7 +135,7 @@ class QueryBuilder:
                 parse_time(timestamp)
                 rid = literal(cursor["after"][1])
                 kql += (f"\n| where timestamp < datetime({timestamp}) or "
-                        f"(timestamp == datetime({timestamp}) and request_id > {rid})")
+                        f"(timestamp == datetime({timestamp}) and strcmp(request_id, {rid}) > 0)")
             kql += f"\n| order by timestamp desc, request_id asc\n| take {limit + 1}"
         else:
             raise invalid("Unknown analytics view")

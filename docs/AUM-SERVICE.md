@@ -334,7 +334,7 @@ $record = Get-Content .\onboarding\aum-service.json -Raw | ConvertFrom-Json
 $token = az account get-access-token --scope $record.scope --query accessToken -o tsv
 $headers = @{ Authorization = 'Bearer ' + $token.Trim() }
 $budgets = Invoke-RestMethod "$($record.endpoint)/api/v1/budgets" -Headers $headers
-$headers['If-Match'] = $budgets.revision
+$headers['If-Match'] = '"' + $budgets.revision + '"'
 $body = @{ manager_group_id = '<owned-group-object-id>'; reason = 'Delegate the finance unit' } | ConvertTo-Json
 Invoke-RestMethod "$($record.endpoint)/api/v1/manager-groups/<unit-id>" `
   -Method Put -Headers $headers -ContentType application/json -Body $body
@@ -484,7 +484,8 @@ No cookies, client secrets or Function keys grant authority.
 | `GET /api/v1/audit` | Admin-only change intents/outcomes |
 
 All mutation bodies require `reason`. Budget/configuration writes require
-`If-Match` from a fresh `/budgets` revision. Never automatically retry a write.
+`If-Match` from a fresh `/budgets` revision, wrapped in double quotes as an HTTP
+entity-tag (or use the response's `ETag` header). Never automatically retry a write.
 After a timeout, read the target and audit log to establish its outcome.
 Unknown capabilities default to false in a client.
 
@@ -554,6 +555,7 @@ count, audit retention, query latency and manager concurrency explicitly.
 | `AUM.Viewer is read-only` | Viewer takes precedence over Manager | Remove Viewer if scoped management is intended; refresh token |
 | `other_authority` | Turnstile owns the gateway | Choose one authority; do not run two writers |
 | `stale_revision` | Configuration changed after preview | Refresh budgets, inspect differences, confirm again |
+| PowerShell `The format of value '<revision>' is invalid.` | An unquoted `If-Match` value is not an HTTP entity-tag | Wrap the JSON revision in double quotes, or use the API's `ETag` header |
 | `insufficient_headroom` | Parent allocations are already committed | Lower another allocation or request more one level up |
 | `unknown_parent` | Person is not attributable to a known budget parent | Correct membership/telemetry; never grant guessed scope |
 | `named_value_capacity` | Serialized value exceeds 4,096 characters | Remove unnecessary overrides or complete the projection-backed budget migration |

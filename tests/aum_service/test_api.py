@@ -104,7 +104,8 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(200, self.call("GET", "/people", {
             "limit": "200", "search": "person", "cursor": page["next_cursor"],
         })[0])
-        self.assertIn("id >", self.logs.queries[-1])
+        self.assertIn("strcmp(id,", self.logs.queries[-1])
+        self.assertNotIn("id >", self.logs.queries[-1])
         self.assertEqual(400, self.call("GET", "/people", {"limit": "500000"})[0])
 
     def test_request_cursor_preserves_log_analytics_submicrosecond_precision(self):
@@ -114,6 +115,8 @@ class ApiTests(unittest.TestCase):
         self.logs.usage_rows = []
         self.assertEqual(200, self.call("GET", "/requests", {"limit": "1", "cursor": page["next_cursor"]})[0])
         self.assertIn(stamp, self.logs.queries[-1])
+        self.assertIn("strcmp(request_id,", self.logs.queries[-1])
+        self.assertNotIn("request_id >", self.logs.queries[-1])
 
     def test_query_injection_stays_in_a_quoted_string(self):
         self.call("GET", "/people", {"search": 'x" | union * //'})
@@ -122,7 +125,8 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(400, self.call("GET", "/people", {"department_id": "x';union *"})[0])
 
     def test_write_http_contract_and_readonly_viewer(self):
-        _, current, _ = self.call("GET", "/budgets")
+        _, current, headers = self.call("GET", "/budgets")
+        self.assertEqual('"' + current["revision"] + '"', headers["ETag"])
         body = {"token_limit": 3000001, "reason": "Pilot"}
         self.assertEqual(409, self.call("PUT", "/budgets/department/payroll", body=body)[0])
         status, result, _ = self.call("PUT", "/budgets/department/payroll", body=body,

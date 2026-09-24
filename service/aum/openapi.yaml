@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: AUM service
-  version: 1.0.1
+  version: 1.0.2
   description: |
     Optional Azure Usage Management authority; no Turnstile dependency.
     All paths require a delegated Entra v2 bearer token for this app with
@@ -109,6 +109,10 @@ paths:
       responses:
         '200':
           description: Scoped budgets and opaque configuration revision.
+          headers:
+            ETag:
+              description: Quoted HTTP entity-tag, suitable for If-Match.
+              schema: {type: string}
           content:
             application/json:
               schema:
@@ -348,7 +352,12 @@ components:
     Cursor: {name: cursor, in: query, schema: {type: string, maxLength: 2048}}
     ScopeType: {name: scope_type, in: path, required: true, schema: {type: string, enum: [organization, department, user]}}
     ScopeId: {name: scope_id, in: path, required: true, schema: {type: string}}
-    IfMatch: {name: If-Match, in: header, required: true, schema: {type: string}}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Quoted HTTP entity-tag from ETag, or the JSON revision wrapped in double quotes.
+      schema: {type: string}
   responses:
     Forbidden:
       description: Not in your scope or role; never an empty success response.
