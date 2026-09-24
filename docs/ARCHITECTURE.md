@@ -104,6 +104,13 @@ that healthy:
 - `buffer-request-body="false"` — requests carry large tool schemas and file context; a 90 KB
   request body is ordinary
 
+`buffer-response` is left at its default. [Learn](https://learn.microsoft.com/azure/api-management/forward-request-policy)
+documents that default as buffering chunked responses in 8 KB pieces and recommends `false` for
+server-sent events, but the gateway did not buffer. Measured on 2026-09-24 through a Basic v2
+gateway, twice: a 19.7 KB streamed response arrived in 72 to 74 reads with a median of 283 bytes
+and none of 8 KB or more, the same pattern as calling Foundry directly (65 to 67 reads, median 285
+bytes). Measure again before relying on it on another tier.
+
 Token counting on a streamed response is estimated rather than exact. Anthropic sends final usage
 in the terminating `message_delta` event and APIM v2 reads it, but a client that disconnects
 mid-stream can under-report. Budgets should be set with a little headroom for that.
