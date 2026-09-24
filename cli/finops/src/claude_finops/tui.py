@@ -36,10 +36,11 @@ class FinOpsApp(App):
         Binding("q", "quit", "Quit"),
     ]
 
-    def __init__(self, engine, config, no_color=False):
+    def __init__(self, engine, config, no_color=False, preview_only=False):
         super().__init__()
         self.animation_level = "none"
         self.engine, self.config = engine, config
+        self.preview_only = preview_only
         self.identity = {}
         self.editable = False
         self.team = ""

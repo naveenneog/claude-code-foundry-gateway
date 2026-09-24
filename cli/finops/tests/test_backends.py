@@ -113,3 +113,19 @@ def test_bounded_people_lookup():
     result = Engine(backend, "2026-09").lookup("dev", department_id="sales-emea")
     assert any(row["kind"] == "person" for row in result)
     assert all(call[1].get("limit", 20) <= 50 for call in backend.reads)
+
+
+def test_fake_budget_save_recomputes_remaining():
+    backend = FakeBackend()
+    engine = Engine(backend, "2026-09")
+    engine.budget_change("team", "sales-emea", "9M", apply=True)
+    row = next(row for row in engine.read("budgets")["items"] if row["scope_id"] == "sales-emea")
+    assert row["remaining_tokens"] == 2900000
+
+
+def test_moving_team_cannot_overallocate_parent():
+    backend = FakeBackend()
+    backend.rows[-1]["token_limit"] = 1000
+    with pytest.raises(FinOpsError, match="headroom"):
+        Engine(backend, "2026-09").catalog_change("team", "sales-emea", parent="engineering", apply=True)
+    assert not backend.writes

@@ -118,6 +118,11 @@ class FakeBackend(Backend):
             rows = self.people if params["scope_type"] == "user" else self.rows
             row = next(item for item in rows if item["scope_id"] == params["scope_id"])
             row["token_limit"] = None if resource == "budget_remove" else body["token_limit"]
+            limit, used = row["token_limit"], row["used_tokens"]
+            row["remaining_tokens"] = None if limit is None else limit - used
+            row["usage_percent"] = None if limit is None else used * 100 / limit
+            row["status"] = ("unallocated" if limit is None else "exceeded" if used >= limit
+                             else "warning" if used >= limit * .8 else "healthy")
             if body:
                 row["warning_threshold_percent"] = body["warning_threshold_percent"]
             return self.read("budgets", month=params["month"])

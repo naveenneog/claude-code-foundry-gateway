@@ -161,6 +161,12 @@ class Engine:
                 row["parent_id"] = parent or row.get("parent_id")
                 if row["parent_id"] not in {unit["id"] for unit in body["organizations"]}:
                     raise FinOpsError("Choose an existing unit with --parent.")
+                budget_rows = self.read("budgets")["items"]
+                team_budget = next((r for r in budget_rows if r["scope_type"] == "department"
+                                    and r["scope_id"] == key), None)
+                if team_budget and team_budget.get("token_limit"):
+                    moved = dict(team_budget, parent_scope_id=row["parent_id"])
+                    validate_budget(budget_rows, moved, team_budget["token_limit"])
                 row.setdefault("attributes", {})["kind"] = "team"
         if not body["organizations"]:
             raise FinOpsError("Keep at least one business unit.")

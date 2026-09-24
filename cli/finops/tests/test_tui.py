@@ -155,3 +155,19 @@ async def test_tier_form_preview_and_apply():
         await settle(app, pilot)
         assert app.engine.backend.tiers[0]["tokens_per_minute"] == 21000
         assert "Apply succeeded" in str(app.screen.query_one("#form-status").render())
+
+
+async def test_what_if_mode_cannot_write_from_form():
+    app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), preview_only=True)
+    async with app.run_test(size=(80, 24)) as pilot:
+        await settle(app, pilot)
+        await pilot.press("2")
+        await settle(app, pilot)
+        app.query_one("#table-budgets", DataTable).move_cursor(row=1)
+        await pilot.press("e")
+        app.screen.query_one("#amount", Input).value = "9M"
+        await pilot.click("#preview")
+        await settle(app, pilot)
+        assert app.screen.query_one("#apply-change", Button).disabled
+        assert "What-if" in str(app.screen.query_one("#form-status").render())
+        assert not app.engine.backend.writes

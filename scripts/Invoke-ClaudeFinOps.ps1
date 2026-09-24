@@ -50,6 +50,7 @@ switch ([string]$request.action) {
         }
         $id = [string]$request.parameters.scope_id
         Test-ClaudeBuId $id
+        if ($request.parameters.scope_type -notin 'organization', 'department') { throw 'Only unit and team budgets are direct gateway limits.' }
         $row = @($registry | Where-Object Id -eq $id)
         if ($row.Count -ne 1) { throw 'Scope not found in the gateway registry.' }
         $isTeam = $parents.Contains($id)
@@ -80,6 +81,13 @@ switch ([string]$request.action) {
         foreach ($tier in @($request.body.tiers)) {
             & (Join-Path $PSScriptRoot 'Set-ClaudeTier.ps1') -Tier $tier.id -TokensPerMinute $tier.tokens_per_minute `
                 -DailyQuota $tier.tokens_per_day -Models ($tier.models -join ',') -ResourceGroup $ResourceGroup -ApimName $ApimName 6>$null | Out-Null
+            foreach ($check in @(
+                @{ Id = "tpm-$($tier.id)"; Expected = [string]$tier.tokens_per_minute },
+                @{ Id = "quota-$($tier.id)"; Expected = [string]$tier.tokens_per_day }
+            )) {
+                $actual = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $check.Id
+                if ($actual -ne $check.Expected) { throw 'Tier read-back did not match. Refresh before retrying.' }
+            }
         }
         $result = @{ verified = $true; effect = 'Tier script completed. Read tier show to verify limits.' }
     }
@@ -109,6 +117,13 @@ switch ([string]$request.action) {
             }
         }
         Test-ClaudeBuDepth -Parents $nextParents
+        foreach ($unit in @($nextRegistry | Where-Object { -not $nextParents.Contains([string]$_.Id) })) {
+            $allocated = [long]0
+            foreach ($child in @($nextRegistry | Where-Object { $nextParents[[string]$_.Id] -eq [string]$unit.Id })) {
+                $allocated += [long]$child.TokensPerMonth
+            }
+            if ($unit.TokensPerMonth -gt 0 -and $allocated -gt $unit.TokensPerMonth) { throw 'Moving these teams would exceed parent headroom.' }
+        }
         $nextRaw = ConvertTo-ClaudeBuRegistry $nextRegistry
         $parentRaw = ConvertTo-ClaudeBuParents $nextParents
         Test-ApimNamedValueLength -Id 'bu-registry' -Value $nextRaw
@@ -118,6 +133,10 @@ switch ([string]$request.action) {
         }
         if ($parentRaw -ne $nv['bu-parents']) {
             Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents' -Value $parentRaw | Out-Null
+        }
+        if ((Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry') -ne $nextRaw -or
+            (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents') -ne $parentRaw) {
+            throw 'Catalog read-back did not match. Inspect the current state before retrying.'
         }
         $result = @{ verified = $true; effect = 'Registry written using shared serializers. New scopes have no budget; set one explicitly. Display names are Entra group names.' }
     }

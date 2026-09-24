@@ -197,8 +197,9 @@ class ChangeScreen(ModalScreen):
                 summary = f"{human(plan['before'])} -> {human(plan['after'])}; parent free {human(plan['parent_headroom'])}."
             else:
                 summary = self.preview_plan["action"]
-            self.query_one("#form-status", Static).update(summary + " Preview ready. Apply commits; Esc cancels.")
-            self.query_one("#apply-change", Button).disabled = False
+            mode = " What-if: writes are disabled." if self.app.preview_only else " Preview ready. Apply commits; Esc cancels."
+            self.query_one("#form-status", Static).update(summary + mode)
+            self.query_one("#apply-change", Button).disabled = self.app.preview_only
         except FinOpsError as error:
             self.query_one("#form-status", Static).update(str(error))
             self.query_one("#apply-change", Button).disabled = True
@@ -206,7 +207,7 @@ class ChangeScreen(ModalScreen):
     @on(Button.Pressed, "#apply-change")
     @work(exclusive=True, group="change")
     async def apply_change(self):
-        if self.applying or not self.preview_plan or self.saved:
+        if self.applying or not self.preview_plan or self.saved or self.app.preview_only:
             return
         self.applying = True
         self.query_one("#apply-change", Button).disabled = True

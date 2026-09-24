@@ -58,3 +58,9 @@ def test_plain_no_args_is_not_fullscreen():
     assert result.exit_code == 0, result.output
     assert "total_tokens" in result.output
     assert "\x1b" not in result.output
+
+
+def test_subcommand_help_does_not_need_connection():
+    result = runner.invoke(app, ["budget", "set", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "--apply" in result.output

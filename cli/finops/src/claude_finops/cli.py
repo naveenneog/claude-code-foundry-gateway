@@ -15,6 +15,7 @@ from .output import chargeback_csv, display
 
 class EverywhereGroup(TyperGroup):
     def parse_args(self, ctx, args):
+        ctx.meta["finops_help"] = "--help" in args
         flags = {"--json", "--plain", "--what-if", "--no-color", "--ascii"}
         options = {"--backend", "--month", "--config", "--url", "--scope", "--theme",
                    "--resource-group", "--apim-name"}
@@ -76,6 +77,8 @@ def root(ctx: typer.Context,
          what_if: Annotated[bool, typer.Option("--what-if", help="Always preview; never write.")] = False,
          no_color: bool = False,
          ascii_only: Annotated[bool, typer.Option("--ascii")] = False):
+    if ctx.meta.get("finops_help"):
+        return
     try:
         settings = load_config(config, backend=backend, url=url, scope=scope, resource_group=resource_group,
                                apim_name=apim_name, theme=theme, ascii=True if ascii_only else None)
@@ -90,7 +93,7 @@ def root(ctx: typer.Context,
             emit(ctx, lambda e: dict(identity=e.read("whoami"), **e.status()))
         else:
             from .tui import FinOpsApp
-            FinOpsApp(engine, settings, no_color=no_color).run()
+            FinOpsApp(engine, settings, no_color=no_color, preview_only=what_if).run()
 
 
 @app.command()
