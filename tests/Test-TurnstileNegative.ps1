@@ -176,6 +176,40 @@ $mutations = @(
        File = 'infra/policy.xml'; From = 'notices.Add(unit + ";mode=notify;status=usage-reported");'; To = '' }
     @{ Suite = $teams; Name = 'guide drops notice limitations'
        File = 'docs/BUSINESS-UNITS.md'; From = 'notice is deliberately unconditional'; To = 'notice is exact' }
+    @{ Suite = $governance; Name = 'changed revisions no longer restart stale plans'
+       File = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if (-not $changed.Count) {'; To = 'if ($true) {' }
+    @{ Suite = $governance; Name = 'freshness compares the stale snapshot to itself'
+       File = 'scripts/ClaudeTurnstileApply.ps1'; From = '$fresh = & $ReadGovernance $snapshot'; To = '$fresh = $snapshot' }
+    @{ Suite = $governance; Name = 'reconciliation keeps the stale catalog'
+       File = 'scripts/ClaudeTurnstileApply.ps1'; From = '$Catalog = $fresh.Catalog;'; To = '' }
+    @{ Suite = $governance; Name = 'reconciliation keeps stale budgets'
+       File = 'scripts/ClaudeTurnstileApply.ps1'; From = '$BudgetItems = @($fresh.BudgetItems);'; To = '' }
+    @{ Suite = $governance; Name = 'reconciliation keeps stale tiers'
+       File = 'scripts/ClaudeTurnstileApply.ps1'; From = '$Tiers = @($fresh.Tiers)'; To = '$Tiers = @($Tiers)' }
+    @{ Suite = $governance; Name = 'stale retry bound is off by one'
+       File = 'scripts/ClaudeTurnstileApply.ps1'; From = '$reconciliations -ge $MaxReconciliations'; To = '$reconciliations -gt $MaxReconciliations' }
+    @{ Suite = $governance; Name = 'freshness failures still allow writes'
+       File = 'scripts/ClaudeTurnstileApply.ps1'; From = '$Apply = $false'; To = '$Apply = $true' }
+    @{ Suite = $governance; Name = 'budget revisions are not compared'
+       File = 'scripts/ClaudeTurnstileApply.ps1'; From = '$versions[$key] = & $stamp $item.updated_at $key ($null -eq $item.token_limit)'; To = '' }
+    @{ Suite = $governance; Name = 'catalog revision is a constant'
+       File = 'scripts/ClaudeTurnstileApply.ps1'; From = "catalog = & `$stamp `$Snapshot.Catalog.updated_at 'catalog'"; To = "catalog = 'unchanged'" }
+    @{ Suite = $governance; Name = 'tier revision is a constant'
+       File = 'scripts/ClaudeTurnstileApply.ps1'; From = "tiers = & `$stamp `$Snapshot.TierUpdatedAt 'tiers'"; To = "tiers = 'unchanged'" }
+    @{ Suite = $governance; Name = 'new budget month does not invalidate the plan'
+       File = 'scripts/ClaudeTurnstileApply.ps1'; From = 'period = [string]$Snapshot.BudgetPeriod'; To = "period = 'unchanged'" }
+    @{ Suite = $governance; Name = 'required missing timestamps are accepted'
+       File = 'scripts/ClaudeTurnstileApply.ps1'; From = "if (`$Optional) { return '' }"; To = "return ''" }
+    @{ Suite = $governance; Name = 'invalid timestamps are accepted'
+       File = 'scripts/ClaudeTurnstileApply.ps1'; From = 'throw "Turnstile''s $Label has an invalid updated_at."'; To = "return ''" }
+    @{ Suite = $governance; Name = 'sync does not wire up the freshness callback'
+       File = 'scripts/Sync-ClaudeTurnstileGovernance.ps1'; From = '-ReadGovernance $readGovernance'; To = '' }
+    @{ Suite = $governance; Name = 'freshness decisions are hidden from run output'
+       File = 'scripts/Sync-ClaudeTurnstileGovernance.ps1'; From = 'Freshness: $($result.Freshness)'; To = 'Finished' }
+    @{ Suite = $governance; Name = 'source revision observations are discarded'
+       File = 'scripts/ClaudeTurnstileApply.ps1'; From = '$sourceReads.Add($observation)'; To = '' }
+    @{ Suite = $governance; Name = 'the guard is documented as the full concurrency fix'
+       File = 'docs/TURNSTILE.md'; From = 'narrows the race window; it does not eliminate it'; To = 'eliminates the race window' }
 )
 foreach ($scope in 'bu', 'parent') {
     $mutations += @(

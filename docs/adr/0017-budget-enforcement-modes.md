@@ -51,9 +51,7 @@ preserve modes unless explicitly changed; seeding preserves them too.
   does not provide here; adding one would put a new dependency in the request path.
 - Live tests and mutations must distinguish estimated notices from exact limits.
 
-## How we would know this was wrong
-
-### Stale-run mitigation, 2026-09-24
+## Stale-run mitigation, 2026-09-24
 
 The manager-scoping agent measured two saves one second apart starting apply jobs
 at 13:34:26 and 13:34:27 UTC; the newer run finished at 13:36:05 and the older at
@@ -68,6 +66,8 @@ failed read likewise defers. Do not use budget `generated_at` or usage as a
 revision. The separate reads and writes are not atomic, so P48's single
 queue-driven writer remains the full fix. This amendment authorizes only the
 interim guard, not that queue or a deployment change.
+
+## How we would know this was wrong
 
 A strict default changing behavior, malformed metadata loosening a budget, a
 redeploy resetting modes, or an advisory being presented as proof of a precise

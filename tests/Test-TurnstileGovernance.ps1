@@ -284,6 +284,10 @@ Assert 'unreadable directory: tier limits still apply'        (@($blind.Governan
 
 Assert 'a push cannot overwrite what Turnstile authored'      ($sync -match "if \(\`$Direction -eq 'ToTurnstile' -and \`$governanceAuthority -eq 'Turnstile' -and -not \`$Seed\) \{")
 Assert 'the month is prepared before budgets are read'        ($sync -match "(?s)/api/v1/gateway-governance/prepare.*\`$Period = \[string\]\`$prepared\.period.*\`$budgetDoc = Invoke-Turnstile GET")
+Assert 'the sync passes revision metadata and a real freshness reader' ($sync -match '-TierUpdatedAt \$tierDoc.updated_at -BudgetPeriod \$Period -ReadGovernance \$readGovernance' -and $sync -match "\`$freshCatalog = Invoke-Turnstile GET '/api/v1/enterprise-catalog'" -and $sync -match '\$freshBudgets = Invoke-Turnstile GET' -and $sync -match "\`$freshTiers = Invoke-Turnstile GET '/api/v1/gateway-tiers'")
+Assert 'the run prints freshness decisions and the source revision pairs' ($sync -match 'Freshness: \$\(\$result.Freshness\)' -and $sync -match 'Source revisions:' -and $sync -match 'No named values written; see the reported problems')
+$guardGuide = Get-Content (Join-Path $root 'docs/TURNSTILE.md') -Raw
+Assert 'the guide retains P48 as the full concurrency fix' ($guardGuide -match 'narrows the race window; it does not eliminate it' -and $guardGuide -match 'single queue-driven\s+writer in roadmap P48')
 Assert 'what governance needs is checked before it is set'    ($connect -match "(?s)No apply job in .{0,400}has no managed identity.{0,300}Set-ApimNamedValue -ResourceGroup \`$ResourceGroup -ApimName \`$ApimName -Id \`$script:TurnstileIntegrationNamedValue -Value \`$value")
 Assert 'Turnstile is seeded only when governance moves'       ($connect -match "(?s)if \(-not \`$wasTurnstile\) \{.{0,400}-Direction ToTurnstile -Seed")
 Assert 'a failed seed leaves governance with the gateway'     ($connect -match "(?s)catch \{\s+\`$settings\.governanceAuthority = 'Gateway'\s+Set-ApimNamedValue")
@@ -357,7 +361,7 @@ Write-Host 'Turnstile governance - applying to a gateway held in memory' -Foregr
 
 # The apply reaches Azure through these five functions; they are replaced here, after every
 # check above has used the real ones.
-function Get-ClaudeGatewayGovernanceValues { param($ResourceGroup, $ApimName, $Ids) $v = [ordered]@{}; foreach ($i in $Ids) { $v[$i] = [string]$script:gw[$i] }; $v }
+function Get-ClaudeGatewayGovernanceValues { param($ResourceGroup, $ApimName, $Ids) $script:gatewayReads++; $v = [ordered]@{}; foreach ($i in $Ids) { $v[$i] = [string]$script:gw[$i] }; $v }
 function Get-ApimNamedValue { param($ResourceGroup, $ApimName, $Id) $script:gw[$Id] }
 function Set-ApimNamedValue { param($ResourceGroup, $ApimName, $Id, $Value) $script:writes++; if (-not $script:dropWrites) { $script:gw[$Id] = $Value } }
 function Test-ClaudeGraphGroupAccess { $script:graphState }
@@ -374,6 +378,7 @@ $reset = {
         'tpm-premium' = '100000'; 'quota-premium' = '5000000'; 'models-premium' = ',claude-opus-5,claude-sonnet-5,'
     }
     $script:writes = 0; $script:dropWrites = $false; $script:graphState = 'denied'
+    $script:gatewayReads = 0
     Remove-Item $refreshed -ErrorAction SilentlyContinue
 }
 $unitsNow = { @(ConvertFrom-ClaudeBuRegistry $script:gw['bu-registry']) }
@@ -446,7 +451,9 @@ try {
         $snapshot = [pscustomobject]@{
             Catalog = $modeCatalog | ConvertTo-Json -Depth 10 | ConvertFrom-Json
             BudgetItems = @([pscustomobject]@{ scope_type = 'organization'; scope_id = 'sales'; token_limit = 1000; updated_at = '2026-09-24T12:00:00Z' })
-            Tiers = @([pscustomobject]@{ id = 'standard'; entra_group = 'claude-code-standard'; tokens_per_minute = 20000; tokens_per_day = 500000; models = @() })
+            Tiers = @(
+                [pscustomobject]@{ id = 'standard'; entra_group = 'claude-code-standard'; tokens_per_minute = 20000; tokens_per_day = 500000; models = @() },
+                [pscustomobject]@{ id = 'premium'; entra_group = 'Claude Premium'; tokens_per_minute = 100000; tokens_per_day = 5000000; models = @('claude-opus-5', 'claude-sonnet-5') })
             TierUpdatedAt = '2026-09-24T12:00:00Z'; BudgetPeriod = '2026-09'
         }
         $snapshot.Catalog.updated_at = '2026-09-24T12:00:00Z'
@@ -472,9 +479,10 @@ try {
             }
             Assert "$source newer values, not stale values, are written" $expected
             Assert "$source refresh and revisions are reported" ($r.Freshness -match 'reconciled 1' -and @($r.SourceReads).Count -eq 2)
+            Assert "$source reconciliation re-reads gateway state" ($script:gatewayReads -eq 2)
         }
 
-        & $reset; $script:sourceReads = 0
+        & $reset; $script:graphState = 'ok'; $script:sourceReads = 0
         $churn = {
             param($initial)
             $script:sourceReads++
@@ -494,6 +502,7 @@ try {
         & $reset
         $r = Invoke-ClaudeGatewayGovernanceApply @guardArgs -ReadGovernance { throw 'read failed' } -Apply
         Assert 'a freshness read failure reports and writes nothing' ($script:writes -eq 0 -and $r.Applied -eq 0 -and $r.Freshness -match 'deferred' -and @($r.Problems -match 'read failed').Count -eq 1)
+        Assert 'even a failed freshness check retains the revisions originally read' (@($r.SourceReads).Count -eq 1 -and $r.SourceReads[0].Read['catalog'] -match '2026-09-24T12:00:00' -and $null -eq $r.SourceReads[0].Checked)
         $r = Invoke-ClaudeGatewayGovernanceApply @guardArgs -Apply
         Assert 'apply without a source reader is refused' ($script:writes -eq 0 -and $r.Applied -eq 0 -and $r.Freshness -match 'deferred')
         $r = Invoke-ClaudeGatewayGovernanceApply @guardArgs -ReadGovernance { throw 'preview should not read' }
@@ -509,6 +518,45 @@ try {
         $reordered = & $clone $snapshot; $reordered.BudgetItems[0] | Add-Member -NotePropertyName used_tokens -NotePropertyValue 99
         $sameVersions = Get-ClaudeTurnstileGovernanceRevisions -Snapshot $reordered
         Assert 'usage changes without a budget save do not churn revisions' (($versions | ConvertTo-Json -Compress) -ceq ($sameVersions | ConvertTo-Json -Compress))
+
+        foreach ($revision in 'catalog', 'tiers', 'budget') {
+            $missing = & $clone $snapshot
+            switch ($revision) {
+                'catalog' { $missing.Catalog.updated_at = $null }
+                'tiers' { $missing.TierUpdatedAt = $null }
+                'budget' { $missing.BudgetItems[0].updated_at = $null }
+            }
+            Assert "missing $revision revision cannot authorize writes" (Throws { Get-ClaudeTurnstileGovernanceRevisions -Snapshot $missing })
+        }
+
+        & $reset; $script:graphState = 'ok'
+        $script:latestSource = & $clone $snapshot
+        $script:latestSource.Catalog.updated_at = '2026-09-24T12:00:01Z'
+        foreach ($entity in @($script:latestSource.Catalog.organizations) + @($script:latestSource.Catalog.departments)) { $entity.attributes = @{ enforcement = 'strict' } }
+        $matched = ConvertFrom-ClaudeTurnstileGovernance -Catalog $snapshot.Catalog -BudgetItems $snapshot.BudgetItems -Tiers $snapshot.Tiers
+        $script:gw['bu-registry'] = ConvertTo-ClaudeBuRegistry $matched.Registry
+        $script:gw['bu-parents'] = ConvertTo-ClaudeBuParents $matched.Parents
+        $script:gw['bu-modes'] = ConvertTo-ClaudeBuModes $matched.Modes
+        $script:gw['tpm-standard'] = '20000'
+        $r = Invoke-ClaudeGatewayGovernanceApply @guardArgs -ReadGovernance { param($initial) $script:latestSource } -Apply
+        Assert 'an initially matching gateway still rechecks and applies newer strict modes' ($script:gw['bu-modes'] -eq ',,' -and $r.Reconciliations -eq 1 -and $r.Applied -eq 1)
+
+        foreach ($change in 'removed budget', 'new month', 'invalid fresh mode') {
+            & $reset; $script:graphState = 'ok'
+            $script:latestSource = & $clone $snapshot
+            switch ($change) {
+                'removed budget' { $script:latestSource.BudgetItems = @() }
+                'new month' { $script:latestSource.BudgetPeriod = '2026-10'; $script:latestSource.BudgetItems[0].token_limit = 3000 }
+                'invalid fresh mode' { $script:latestSource.Catalog.updated_at = '2026-09-24T12:00:01Z'; $script:latestSource.Catalog.organizations[0].attributes = @{ enforcement = 'allowance'; allowance_percent = 101 } }
+            }
+            $r = Invoke-ClaudeGatewayGovernanceApply @guardArgs -ReadGovernance { param($initial) $script:latestSource } -Apply
+            $expected = switch ($change) {
+                'removed budget' { @(& $unitsNow | Where-Object Id -eq 'sales')[0].TokensPerMonth -eq 0 -and $r.Reconciliations -eq 1 }
+                'new month' { @(& $unitsNow | Where-Object Id -eq 'sales')[0].TokensPerMonth -eq 3000 -and $r.Reconciliations -eq 1 }
+                'invalid fresh mode' { $script:writes -eq 0 -and $r.Freshness -match 'invalid budget modes' }
+            }
+            Assert "$change is reconciled without applying the stale snapshot" $expected
+        }
     }
     else { Assert 'stale apply revisions can be read and compared' $false }
 }

@@ -348,70 +348,70 @@ function Invoke-ClaudeGatewayGovernanceApply {
     $freshness = 'preview: no freshness check or writes'
     $membership = 'not refreshed: nothing was applied'
     while ($true) {
-    $desired = ConvertFrom-ClaudeTurnstileGovernance -Catalog $Catalog -BudgetItems @($BudgetItems) -Tiers @($Tiers)
-    if ($desired.InvalidModes) {
-        return [pscustomobject]@{
-            Direction = 'FromTurnstile'; Mode = 'governance'; Units = 0; Teams = 0; Tiers = 0
-            Changes = @(); Applied = 0; Membership = 'not refreshed: invalid budget modes'; Problems = $desired.Problems
-            Freshness = 'deferred: invalid budget modes'; Reconciliations = $reconciliations; SourceReads = $sourceReads.ToArray()
+        $desired = ConvertFrom-ClaudeTurnstileGovernance -Catalog $Catalog -BudgetItems @($BudgetItems) -Tiers @($Tiers)
+        if ($desired.InvalidModes) {
+            return [pscustomobject]@{
+                Direction = 'FromTurnstile'; Mode = 'governance'; Units = 0; Teams = 0; Tiers = 0
+                Changes = @(); Applied = 0; Membership = 'not refreshed: invalid budget modes'; Problems = $desired.Problems
+                Freshness = 'deferred: invalid budget modes'; Reconciliations = $reconciliations; SourceReads = $sourceReads.ToArray()
+            }
         }
-    }
-    $snapshot = [pscustomobject]@{ Catalog = $Catalog; BudgetItems = @($BudgetItems); Tiers = @($Tiers); TierUpdatedAt = $TierUpdatedAt; BudgetPeriod = $BudgetPeriod }
-    $revisions = $null
-    $revisionError = $null
-    if ($Apply) {
+        $snapshot = [pscustomobject]@{ Catalog = $Catalog; BudgetItems = @($BudgetItems); Tiers = @($Tiers); TierUpdatedAt = $TierUpdatedAt; BudgetPeriod = $BudgetPeriod }
+        $revisions = $null
+        $revisionError = $null
+        if ($Apply) {
+            try {
+                if (-not $ReadGovernance) { throw 'An apply needs a Turnstile source reader to verify freshness.' }
+                $revisions = Get-ClaudeTurnstileGovernanceRevisions -Snapshot $snapshot
+            }
+            catch { $revisionError = $_.Exception.Message }
+        }
+        $ids = @('bu-registry', 'bu-parents', 'bu-modes') + @($script:ClaudeGatewayTiers | ForEach-Object { "tpm-$_"; "quota-$_"; "models-$_" })
+        # entitlement-source is read, never written: it says where the policy finds membership.
+        $current = Get-ClaudeGatewayGovernanceValues -ResourceGroup $ResourceGroup -ApimName $ApimName -Ids ($ids + 'entitlement-source')
+
+        $graph = Test-ClaudeGraphGroupAccess
+        $currentUnits = @(ConvertFrom-ClaudeBuRegistry $current['bu-registry'])
+        $knownGroups = @($currentUnits | ForEach-Object { $_.Group })
+        $state = if ($graph -eq 'ok') { { param($g) Test-ClaudeEntraGroup $g } } else { { param($g) 'unknown' } }
+        $selected = Select-ClaudeGovernanceWithGroups -Desired $desired -KnownGroups $knownGroups -GroupState $state
+        $problems = @($desired.Problems) + @($selected.Problems)
+        $changes = Get-ClaudeGatewayGovernanceChanges -Desired $selected.Governance -Current $current
+        if (-not @($selected.Governance.Registry).Count -and $currentUnits.Count) {
+            # Every unit gone at once is far more often a read that went wrong than a decision.
+            $changes = @($changes | Where-Object { $_.Id -notin 'bu-registry', 'bu-parents', 'bu-modes' })
+            $problems += "Turnstile has no business unit the gateway can apply, so the gateway's $($currentUnits.Count) were left as they are"
+        }
+
+        if (-not $Apply) { break }
         try {
-            if (-not $ReadGovernance) { throw 'An apply needs a Turnstile source reader to verify freshness.' }
-            $revisions = Get-ClaudeTurnstileGovernanceRevisions -Snapshot $snapshot
+            if ($revisionError) { throw $revisionError }
+            $observation = [pscustomobject]@{ Read = $revisions; Checked = $null }
+            $sourceReads.Add($observation)
+            # No gateway write occurs before this reread. A newer source requires a full
+            # re-plan, including rereading gateway state and rechecking groups.
+            $fresh = & $ReadGovernance $snapshot
+            $latest = Get-ClaudeTurnstileGovernanceRevisions -Snapshot $fresh
+            $observation.Checked = $latest
+            $keys = @(@($revisions.Keys) + @($latest.Keys) | Sort-Object -Unique)
+            $changed = @($keys | Where-Object { $revisions[$_] -cne $latest[$_] })
+            if (-not $changed.Count) {
+                $freshness = "verified before writing; reconciled $reconciliations newer snapshot(s)"
+                break
+            }
+            if ($reconciliations -ge $MaxReconciliations) { throw "Turnstile changed during $($reconciliations + 1) freshness checks; retry on the next apply." }
+            $Catalog = $fresh.Catalog; $BudgetItems = @($fresh.BudgetItems); $Tiers = @($fresh.Tiers)
+            $TierUpdatedAt = $fresh.TierUpdatedAt; $BudgetPeriod = $fresh.BudgetPeriod
+            $reconciliations++
         }
-        catch { $revisionError = $_.Exception.Message }
-    }
-    $ids = @('bu-registry', 'bu-parents', 'bu-modes') + @($script:ClaudeGatewayTiers | ForEach-Object { "tpm-$_"; "quota-$_"; "models-$_" })
-    # entitlement-source is read, never written: it says where the policy finds membership.
-    $current = Get-ClaudeGatewayGovernanceValues -ResourceGroup $ResourceGroup -ApimName $ApimName -Ids ($ids + 'entitlement-source')
-
-    $graph = Test-ClaudeGraphGroupAccess
-    $currentUnits = @(ConvertFrom-ClaudeBuRegistry $current['bu-registry'])
-    $knownGroups = @($currentUnits | ForEach-Object { $_.Group })
-    $state = if ($graph -eq 'ok') { { param($g) Test-ClaudeEntraGroup $g } } else { { param($g) 'unknown' } }
-    $selected = Select-ClaudeGovernanceWithGroups -Desired $desired -KnownGroups $knownGroups -GroupState $state
-    $problems = @($desired.Problems) + @($selected.Problems)
-    $changes = Get-ClaudeGatewayGovernanceChanges -Desired $selected.Governance -Current $current
-    if (-not @($selected.Governance.Registry).Count -and $currentUnits.Count) {
-        # Every unit gone at once is far more often a read that went wrong than a decision.
-        $changes = @($changes | Where-Object { $_.Id -notin 'bu-registry', 'bu-parents', 'bu-modes' })
-        $problems += "Turnstile has no business unit the gateway can apply, so the gateway's $($currentUnits.Count) were left as they are"
-    }
-
-    if (-not $Apply) { break }
-    try {
-        if ($revisionError) { throw $revisionError }
-        $observation = [pscustomobject]@{ Read = $revisions; Checked = $null }
-        $sourceReads.Add($observation)
-        # No gateway write occurs before this reread. A newer source requires a full
-        # re-plan, including rereading gateway state and rechecking groups.
-        $fresh = & $ReadGovernance $snapshot
-        $latest = Get-ClaudeTurnstileGovernanceRevisions -Snapshot $fresh
-        $observation.Checked = $latest
-        $keys = @(@($revisions.Keys) + @($latest.Keys) | Sort-Object -Unique)
-        $changed = @($keys | Where-Object { $revisions[$_] -cne $latest[$_] })
-        if (-not $changed.Count) {
-            $freshness = "verified before writing; reconciled $reconciliations newer snapshot(s)"
+        catch {
+            $problems += "Freshness could not be verified: $($_.Exception.Message)"
+            $freshness = "deferred after $reconciliations reconciliation(s): no writes"
+            $membership = 'not refreshed: freshness check deferred the apply'
+            $changes = @()
+            $Apply = $false
             break
         }
-        if ($reconciliations -ge $MaxReconciliations) { throw "Turnstile changed during $($reconciliations + 1) freshness checks; retry on the next apply." }
-        $Catalog = $fresh.Catalog; $BudgetItems = @($fresh.BudgetItems); $Tiers = @($fresh.Tiers)
-        $TierUpdatedAt = $fresh.TierUpdatedAt; $BudgetPeriod = $fresh.BudgetPeriod
-        $reconciliations++
-    }
-    catch {
-        $problems += "Freshness could not be verified: $($_.Exception.Message)"
-        $freshness = "deferred after $reconciliations reconciliation(s): no writes"
-        $membership = 'not refreshed: freshness check deferred the apply'
-        $changes = @()
-        $Apply = $false
-        break
-    }
     }
     if ($Apply) {
         foreach ($c in $changes) {
