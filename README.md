@@ -235,6 +235,7 @@ there; [Operations](docs/OPERATIONS.md) maps tasks to commands and portal paths.
 | [Operations](docs/OPERATIONS.md) / [Onboarding](docs/ONBOARDING.md) | Daily administration, people, backup and retirement |
 | [Budgets](docs/BUDGETS.md) / [Business units](docs/BUSINESS-UNITS.md) | Personal, tier, organisation, unit and team limits |
 | [FinOps](docs/FINOPS.md) / [Monitoring](docs/MONITORING.md) | Monthly close, ledger, workbooks, alerts and gaps |
+| [Chargeback reports](https://github.com/naveenneog/claude-code-foundry-gateway/blob/904b5ba2a739089a2462da69a98d99a7a0c551fe/docs/CHARGEBACK-REPORTS.md) | P50 preview: generate monthly business-unit reports, configure recipients and schedule private ACS email delivery |
 | [AUM (Azure Usage Management)](docs/CLI-FINOPS.md) | Terminal FinOps console, reports and preview-before-apply commands |
 | [Turnstile](docs/TURNSTILE.md) | Optional console, roles, governance authority and apply jobs |
 | [Models](docs/MODELS.md) / [Plugins](docs/PLUGINS.md) | Model lifecycle and client capability policy |
