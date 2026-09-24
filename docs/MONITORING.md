@@ -2,8 +2,30 @@
 
 Who this is for: whoever owns the AI spend and has to answer "who used what".
 
-Everything here comes from one custom metric namespace, `claudecode`, emitted by
-the `llm-emit-token-metric` policy on every request that reaches the gateway.
+For a monthly financial task, start with [FinOps](FINOPS.md). For the big
+picture, see [Architecture](ARCHITECTURE.md). **Custom token metrics are not
+the chargeback ledger and are not the Azure bill.**
+
+## Prerequisites and data sources
+
+- Select the gateway, Application Insights and Log Analytics workspace with
+  [Operations](OPERATIONS.md#1-select-the-gateway-and-workspace). Never choose the
+  first workspace in the resource group.
+- Readers need telemetry/workbook read access. Publishing needs workspace
+  saved-search and workbook write access. Alert creation also needs monitoring
+  write access; see [Operations roles](OPERATIONS.md#prerequisites-and-roles).
+- Use Azure CLI and PowerShell from the repository root for script examples.
+  A workbook viewer does not need Foundry data-plane access.
+
+| Source | Use it for | Limit |
+|---|---|---|
+| `ClaudeChargeback` | Request attribution, input/output tokens and client surface | Joins `ApiManagementGatewayLlmLog` with identity traces; cache categories remain unknown |
+| `ClaudeCost` | Priced daily aggregates and the chargeback workbook | Generated rates/membership; cache reads still depend on metrics; no cache-write cost |
+| `claudecode` custom metrics | Pilot diagnostics, rate trends and session investigations | 100 distinct values per dimension / 1,000 active series per namespace; new values can be silently discarded ([ADR-0006](adr/0006-ledger-is-the-llm-log.md)) |
+| Azure Cost Management | Billed cost | Claude's aggregate meter does not directly attribute the invoice to people |
+
+Sections 1–6 explain operational metrics. [Section 7](#7-dashboard) publishes
+the reporting functions and workbooks.
 
 ---
 
@@ -15,7 +37,7 @@ the `llm-emit-token-metric` policy on every request that reaches the gateway.
 |--------|---------|
 | `Prompt Tokens` | input tokens |
 | `Completion Tokens` | output tokens |
-| `Total Tokens` | both — use this for cost |
+| `Total Tokens` | reported token total, not complete billable categories or dollars |
 
 ### Dimensions
 
@@ -23,7 +45,7 @@ Five, which is the APIM maximum:
 
 | Dimension | Value | Answers |
 |-----------|-------|---------|
-| `User` | UPN from the caller's token | who spent it — **chargeback** |
+| `User` | UPN from the caller's token | pilot per-person diagnostics |
 | `UserId` | Entra object id | same, but stable across renames |
 | `Tier` | `standard` / `premium` | is the tiering doing anything |
 | `Model` | `claude-sonnet-5` / `claude-opus-5` | where the cost concentrates |
@@ -53,17 +75,15 @@ a client-supplied header and cannot be spoofed by editing a config file.
 > The screenshot above is on **Avg**, which is what the portal defaults to, and
 > it is the wrong number for cost.
 
-Measured on this deployment over one day:
-
-| Aggregation | Value | What it actually is |
-|-------------|------:|---------------------|
-| Sum | 515,212 | tokens consumed — **this is your bill** |
-| Avg | 879.20 | average tokens per request |
-| Count | 586 | number of requests |
+| Aggregation | Meaning |
+|---|---|
+| Sum | Sum of reported token observations; neither dollars nor complete billable usage |
+| Avg | Average reported metric value, not a spend total |
+| Count | Metric observations; do not equate aggregate samples with request count |
 
 Avg is useful for spotting a developer whose prompts are unusually large. It is
-never the basis for chargeback. Set the aggregation to **Sum** before you export
-anything to a finance conversation.
+never the basis for chargeback. Set **Sum** for operational token charts and use
+the priced ledger for finance, with its caveats.
 
 ---
 
@@ -78,25 +98,12 @@ usually want both.
 | Is anyone approaching their daily quota? | — | `User` |
 | Is Opus driving the cost? | — | `Model` |
 | Is the premium tier being used at all? | — | `Tier` |
-| Which model does one team prefer? | `Tier = premium` | `Model` |
+| Which model does one tier prefer? | `Tier = premium` | `Model` |
 | What did one expensive session cost? | `SessionId = <id>` | `Model` |
 
-Real numbers from this deployment, last 7 days:
-
-```
-split by User      dev-a@contoso.com    518,372
-                   service-principal      1,931
-
-split by Tier      standard             518,372
-                   premium                1,931
-
-split by Model     claude-opus-5        466,400
-                   claude-sonnet-5       53,903
-```
-
-That Model split is the single most actionable view here: Opus was 90% of
-consumption. Changing the default model alias is usually a larger saving than
-tightening anyone's budget.
+These splits count reported tokens, not cost. A tier is not a team; use
+`business_unit` in the ledger/workbook for team questions. Compare priced model
+usage before deciding whether to change default aliases or budgets.
 
 ---
 
@@ -107,7 +114,7 @@ Useful for scheduled reporting, and it is the only reliable path because
 tell you the metric does not exist.
 
 ```powershell
-$sub = '<subscription-id>'; $rg = '<rg>'; $ai = 'appi-claude-gateway'
+$sub = '<subscription-id>'; $rg = '<app-insights-resource-group>'; $ai = '<app-insights-name>'
 $tok = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv
 $end   = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
 $start = (Get-Date).ToUniversalTime().AddDays(-7).ToString('yyyy-MM-ddTHH:mm:ssZ')
@@ -128,6 +135,10 @@ function Split-By($dim) {
 Split-By User; Split-By Tier; Split-By Model
 ```
 
+**Portal:** Application Insights > Metrics > `claudecode` > Total Tokens > Sum,
+then Apply splitting. Both routes have the same metric cardinality limitations.
+Never print or share the `$tok` value.
+
 Two syntax traps:
 
 - `aggregation=Total` is the API's name for Sum. There is no `aggregation=Sum`.
@@ -138,43 +149,31 @@ Two syntax traps:
 
 ## 5. Drill into logs
 
-Metrics are pre-aggregated. For anything per-request — latency, status codes,
-which prompt burned the quota — use **Drill into Logs**, or the Logs blade
-directly:
+Metrics can be pre-aggregated. For request attribution, use **Log Analytics >
+Logs** in the ledger workspace after publishing the functions in section 7:
 
 ```kusto
-// tokens per developer, last 7 days, highest first
-customMetrics
-| where name == "Total Tokens"
-| where timestamp > ago(7d)
-| extend User = tostring(customDimensions.User),
-         Tier = tostring(customDimensions.Tier),
-         Model = tostring(customDimensions.Model)
-| summarize Tokens = sum(value), Requests = count() by User, Tier
-| order by Tokens desc
+// Prompt/completion tokens and requests, not a dollar bill.
+ClaudeChargeback(ago(7d), now())
+| summarize Prompt = sum(prompt_tokens), Output = sum(completion_tokens),
+            Requests = count() by user_id, actor, tier
+| order by Prompt desc
 ```
 
-Verified output on this deployment:
-
-```
-User                Tier        Tokens   Requests
-dev-a@contoso.com   standard    518782         93
-service-principal   premium       2352         10
-```
+For a pilot session investigation in the same workspace:
 
 ```kusto
-// the most expensive sessions
-customMetrics
-| where name == "Total Tokens" and timestamp > ago(7d)
-| extend User = tostring(customDimensions.User),
-         SessionId = tostring(customDimensions.SessionId)
-| summarize Tokens = sum(value) by SessionId, User
+// Highest reported token usage per session; metric limits still apply.
+AppMetrics
+| where Name == "Total Tokens" and TimeGenerated > ago(7d)
+| extend User = tostring(Properties.User),
+         SessionId = tostring(Properties.SessionId)
+| summarize Tokens = sum(Sum) by SessionId, User
 | top 20 by Tokens desc
 ```
 
-One session accounted for 515,212 of the 518,782 tokens above — a single long
-agent run. This is the query that explains a spike, and it is why `SessionId` is
-worth one of the five dimension slots.
+Session IDs help explain spikes. They do not expose the prompt, and a missing
+session value must not be treated as proof the request was not served.
 
 > `SessionId` reads `none` for callers that do not send
 > `x-claude-code-session-id` — service principals and raw `curl` tests, not the
@@ -184,10 +183,10 @@ worth one of the five dimension slots.
 
 ```kusto
 // throttle and quota pressure, last 24h
-requests
-| where timestamp > ago(24h)
-| where resultCode in ("429", "403")
-| summarize Blocked = count() by resultCode, name
+AppRequests
+| where TimeGenerated > ago(24h)
+| where ResultCode in ("429", "403")
+| summarize Blocked = count() by ResultCode, Name
 | order by Blocked desc
 ```
 
@@ -201,19 +200,9 @@ requests
 > Querying `customDimensions.User` on `requests` returns blank rather than an
 > error, which makes this easy to miss.
 
-If you need per-user throttle attribution, emit a counter on the rejection path
-by adding this to the `<on-error>` section of the policy:
-
-```xml
-<emit-metric name="Throttled" namespace="claudecode" value="1">
-    <dimension name="User" value="@((string)context.Variables["userUpn"])" />
-    <dimension name="Reason" value="@(context.Response.StatusCode.ToString())" />
-</emit-metric>
-```
-
-Then split the `Throttled` metric by `User` exactly as in section 3. It costs
-one extra custom metric; the five-dimension cap applies per metric, not per
-namespace, so the existing token metric is unaffected.
+Do not infer per-person rejection counts from missing user dimensions. Adding
+rejection telemetry is a reviewed policy change, not a dashboard setting;
+custom metrics also remain subject to the namespace's series limit.
 
 > Log ingestion lags metrics by a few minutes. If a query returns nothing right
 > after a test call, wait before concluding it is broken.
@@ -225,24 +214,19 @@ namespace, so the existing token metric is unaffected.
 Budgets throttle individuals. Alerts tell **you** before the monthly invoice
 does.
 
-**Metrics blade → New alert rule**, or:
+**Portal procedure:**
 
-```bash
-AI_ID=$(az resource show -g <rg> -n appi-claude-gateway \
-  --resource-type Microsoft.Insights/components --query id -o tsv)
+1. Application Insights > Metrics > `claudecode` > Total Tokens > Sum >
+   New alert rule.
+2. Confirm the resource scope; set an operational threshold, lookback and
+   evaluation frequency based on observed traffic, not a copied sample.
+3. Select/create an action group, with an approved contact such as
+   `finops@contoso.com`, and test its notification route.
+4. Create the rule. In Azure Monitor > Alerts > Alert rules, verify it is
+   enabled and evaluated; use the action group's Test action to check delivery.
 
-az monitor metrics alert create \
-  --name claude-hourly-burn \
-  --resource-group <rg> \
-  --scopes "$AI_ID" \
-  --condition "total 'Total Tokens' > 2000000" \
-  --window-size 1h --evaluation-frequency 15m \
-  --description "Claude Code consumption above the expected hourly rate"
-```
-
-> Use `az resource show`, not `az monitor app-insights component show` — the
-> latter needs the `application-insights` CLI extension, which is not installed
-> by default and will prompt interactively in a pipeline.
+For rejected requests use a scheduled log-query alert over `AppRequests` instead
+of pretending request status is a token metric dimension.
 
 Worth having:
 
@@ -250,7 +234,7 @@ Worth having:
 |-------|-----------|-----|
 | Aggregate burn | `Sum(Total Tokens) > <hourly budget>` over 1h | catches a runaway agent loop |
 | Throttle storm | `Count(requests where resultCode == 429) > N` | budgets set too tight, or genuine overuse |
-| Gateway unreachable | a standard availability test against `/claude/v1/messages` | developers blocked; must be configured separately, it is not deployed by the template |
+| Gateway unreachable | an authenticated synthetic Messages POST, with an entitled test identity | a plain availability GET to `/claude/v1/messages` is not a valid inference test; not deployed by the template |
 | No traffic | `Sum(Total Tokens) == 0` over 24h | the metric pipeline broke silently |
 
 That last one matters more than it looks. Every failure mode in section 8 shows
@@ -263,7 +247,9 @@ you alert on it.
 
 Two things ship: **saved KQL functions** and an **Azure Workbook**. Both are
 metadata — a saved search stores nothing and a workbook runs nothing, so each
-costs nothing to have. The only bill is the query when somebody opens it.
+costs nothing to have as a definition. Logs still have ingestion/retention costs;
+query charges depend on the selected table plan. A saved function is not an
+archive of its results.
 
 ### Publish the functions first
 
@@ -283,8 +269,17 @@ exists.
 
 | Function | Call it | Returns |
 |---|---|---|
-| `ClaudeChargeback(from, to)` | `ClaudeChargeback()` = last day, `ClaudeChargeback(ago(30d), now())` = a month | One row per request: caller, business unit, client, model, tokens |
+| `ClaudeChargeback(from, to)` | `ClaudeChargeback()` = last day; `ago(30d), now()` = rolling 30 days, not a calendar month | One row per request: caller, business unit, client, model, tokens |
 | `ClaudeCodeDaily(day)` | `ClaudeCodeDaily()` = yesterday | The Claude Code analytics shape, one row per developer per day |
+| `ClaudeCost(from, to)` | `ClaudeCost()` = last day | Daily priced rows by person, unit, model and client, plus observed cache reads |
+
+**Portal/manual:** workspace > Logs > save as Function, using the alias and
+datetime parameters from the publisher. `ClaudeChargeback`/`ClaudeCost` use
+`p_from` and `p_to`; `ClaudeCodeDaily` uses `p_day`, with null datetime defaults.
+Replace only the source query's window declarations with those parameters and
+the same default-window logic. `ClaudeCost` additionally needs populated
+PRICE-BOOK and MEMBERSHIP blocks; [FinOps](FINOPS.md#1-publish-or-refresh-the-reporting-definitions)
+explains why the unpopulated file is not a working manual publication.
 
 The `.kql` files stay the source. The publisher rewrites only the window lines
 at the top of each file into function parameters, and **refuses to publish if it
@@ -317,6 +312,10 @@ Pass `-WorkspaceName` when the resource group holds more than one workspace. The
 script will not guess, because a workbook bound to the wrong workspace renders
 empty and reads as no usage.
 
+**Portal:** Azure Monitor > Workbooks > New > Edit > Advanced editor. Paste the
+appropriate `infra/workbook*.json`, bind the workspace, Apply and Save.
+Verify a known recent request in a tile, not just that the workbook opens.
+
 ### What it shows
 
 | Tile | Answers |
@@ -339,9 +338,10 @@ not `cli` — so a hard-coded list of expected values mis-buckets the real CLI.
 The same query works at a Logs prompt, which is the point of publishing the
 function: no file to find, no repository to clone.
 
-Every currency figure in the workbook is **list price** and the counter is blind
-to cached tokens, which was 38.7% of real cost weight on thirty days of measured
-usage. The workbook says so on the pane rather than in a footnote.
+The token workbook is not a financial close. The priced workbook below uses
+the published price book (built-in list rates unless replaced). The quota
+counter excludes cache; the recorded U12 sample attributed **38.7%** of cost
+weight to cache reads ([Unknowns](UNKNOWNS.md)). That sample is not your ratio.
 
 ### The chargeback workbook — the same question in money
 
@@ -351,11 +351,11 @@ second workbook answers in dollars:
 ```powershell
 # The function first. This one also bakes in the price book and the current
 # business unit membership, so it needs the gateway as well as the workspace.
-./scripts/Publish-ClaudeQueries.ps1 -ResourceGroup rg-contosohub `
-    -ApimName apim-claude-gw-fzgql9 -WorkspaceName log-claude-gw-fzgql9
+./scripts/Publish-ClaudeQueries.ps1 -ResourceGroup '<resource-group>' `
+    -ApimName '<apim-name>' -WorkspaceName '<ledger-workspace>'
 
-./scripts/Publish-ClaudeWorkbook.ps1 -ResourceGroup rg-contosohub `
-    -WorkspaceName log-claude-gw-fzgql9 `
+./scripts/Publish-ClaudeWorkbook.ps1 -ResourceGroup '<resource-group>' `
+    -WorkspaceName '<ledger-workspace>' `
     -WorkbookFile infra/workbook-chargeback.json `
     -Name 'Claude gateway - chargeback'
 ```
@@ -376,8 +376,8 @@ view is a gap you will not fix.
 
 ![The chargeback workbook open on the totals for the period: estimated spend, input, output and cache-read tokens, and the developer count, above a daily spend chart stacked by business unit](guide/d1-chargeback-totals.png)
 
-Cache read is the largest of those four numbers by three orders of magnitude,
-which is the point of showing it beside the others rather than inside them.
+The screenshots are historical examples, not a current usage statement. Read
+the selected period and source workspace before interpreting their totals.
 
 ![The same workbook scrolled to spend by developer and spend by model, each row showing metered and cache-read dollars apart, and a Priced column marking a model the price book does not know](guide/d2-chargeback-units.png)
 
@@ -387,11 +387,10 @@ understate the bill.
 
 ![The workbook scrolled to spend by client surface and the attribution and pricing gaps tiles](guide/d3-chargeback-models.png)
 
-**Cache is usually the largest number on the page.** Measured 2026-09-17 on the
-reference gateway, cache reads were 98% of estimated spend for the month to
-date — 1,236,027 cached tokens against 6,245 metered ones. They are billed at a
-tenth of base input, so a very large token count is a small but real cost, and
-the per-developer budget counter cannot see any of it.
+**Keep cache separate.** The price code applies 0.1 times the base input rate to
+cache reads; a cached token and an output token do not have the same price.
+The per-developer quota counter cannot see cache. `ClaudeCost` obtains cache
+reads from `AppMetrics`, whose cardinality limitations still matter at scale.
 
 #### Which business unit a request counts against
 
@@ -400,14 +399,12 @@ But the workbook totals by the unit a developer belongs to **today**, because
 "what does this unit owe" must not change answer depending on when somebody was
 moved between teams.
 
-The two genuinely disagree. Measured 2026-09-17 on the reference gateway, one
-identity held 6,245 tokens stamped `ites-1`, 544 stamped `unassigned` and 158
-stamped `platform` — all the same developer, across edits to the configuration.
-Totalling by today's membership puts all 6,947 against `ites-1`, which is what
-`./scripts/Get-ClaudeBusinessUnit.ps1` reports, so the workbook and the console
-agree. The **Spend that moved unit** figure on the gaps tile is exactly that
-difference, and `business_unit_at_time` on `ClaudeCost()` keeps the original
-stamp for anyone who needs to audit what was charged at the time.
+Those are different allocation policies. A developer transferred from Contoso
+Sales to Engineering can move prior usage in a current-membership report.
+The **Spend that moved unit** tile exposes that difference;
+`business_unit_at_time` on `ClaudeCost()` keeps the original stamp. Preserve
+dated exports for a financial close instead of assuming today's report is an
+immutable historical invoice.
 
 Because membership is baked in when the function is published, **re-run
 `Publish-ClaudeQueries.ps1` after moving people between units**, or the workbook
@@ -418,13 +415,15 @@ it is working from.
 
 Cache *writes* are not counted at all. The 5-minute and 1-hour categories exist
 only in the Anthropic response body, and reading that body in an outbound policy
-buffers the response and ends streaming. Real spend is therefore higher than the
-workbook shows, never lower.
+buffers the response and ends streaming. At the same tariff, missing categories
+understate complete usage cost. This is not a lower bound on the Azure invoice:
+commercial discounts and billing terms can change that comparison.
 
-Unpriced models are counted at **zero dollars** and flagged rather than guessed.
-If **Spend on unpriced models** is above zero, the totals understate spend — add
-the model with `./scripts/Add-ClaudeModel.ps1`, which refuses a model it has no
-price for.
+Unpriced models contribute **zero dollars** to totals and are flagged by
+`priced_ok=false`; zero does not mean free. Check unpriced rows/tokens, not a
+nonzero dollar total for those rows. Add approved rates using
+[Models](MODELS.md), then republish. Publication also replaces the embedded
+price book for historical queries; save the month's rates with its exported rows.
 
 #### The ceiling above the unit budgets
 
@@ -434,19 +433,14 @@ ceiling below the sum of the unit budgets makes every one of those budgets
 unreachable: the gateway denies the whole organisation first, and each unit
 still reports plenty of headroom.
 
-Measured on the reference gateway 2026-09-17: `quota-org` was 100,000,000
-tokens a month — about $360 at the blended Sonnet rate — while two top-level
-units were allowed 6,944,444,443 between them. Every unit budget was decorative.
-
 `./scripts/Set-ClaudeBusinessUnit.ps1` now says so when it writes a budget, and
 `./scripts/Test-ClaudeHealth.ps1` fails the run on it. Only top-level units are
 summed, because a team is charged to its parent as well as to itself and
 counting both would double count.
 
-```powershell
-az apim nv update -g rg-contosohub --service-name apim-claude-gw-fzgql9 `
-    --named-value-id quota-org --value 6944444443
-```
+Change the organisation ceiling through [Budgets](BUDGETS.md#2-change-a-tier-or-the-organisation-ceiling).
+**Portal:** APIM > Named values > `quota-org` > Edit. Use your approved allocation,
+not a value copied from another deployment.
 
 #### What a dollar budget does and does not stop
 
@@ -455,16 +449,14 @@ becomes 555,555,555 tokens at a blended $3.60/M for Sonnet assuming 20% output.
 Pass `-Model claude-opus-5` if the unit mostly uses Opus, or the conversion
 under-charges them by about two and a half times.
 
-The counter is **blind to cached tokens**, and on the reference gateway cache
-made real spend **41.5×** the portion the budget counts ($0.0364 metered against
-$1.4753 cache over thirty days). A $2,000 budget set naively therefore permits
-far more than $2,000 of real spend. Two honest ways to handle that:
+The counter is **blind to cached tokens**. A nominal $2,000 allocation can
+therefore allow more than $2,000 of categorized usage. Two ways to handle that:
 
-- treat the dollar budget as **showback**, and enforce with the per-user daily
-  quota, which is the only limit that stops a single runaway agent loop; or
+- treat the dollar budget as **showback**, with personal and shared token limits
+  as operational safeguards rather than dollar guarantees; or
 - divide the token figure by **your own** measured ratio — read it from the
-  chargeback workbook rather than reusing 41.5, which is one gateway's caching
-  profile and not a constant.
+  chargeback workbook, subject to its missing categories and metric limits.
+  A ratio is a planning assumption, not a hard cap.
 
 The largest lever that caching cannot defeat is the **model allow list**: Opus
 is two and a half times Sonnet on both input and output, and
@@ -480,7 +472,7 @@ normal — nobody expects every developer to spend their whole allowance every d
 per-developer quota can never be the binding control. The organisation is denied
 first, and moving somebody to a higher tier changes nothing except how fast.
 
-Measured on the reference gateway 2026-09-17: three premium developers at
+Illustration using shipped tier defaults: three premium developers at
 5,000,000 tokens a day and five standard at 500,000 come to **17,500,000 a day**
 against a 100,000,000 month — the whole ceiling in **5.7 days**.
 
@@ -498,11 +490,17 @@ Azure Managed Grafana instance, reading the same saved functions.
 ./scripts/Publish-ClaudeGrafana.ps1 -GrafanaName graf-platform
 ```
 
-It is **optional, and the only observability option here with a standing bill**.
+It is **optional and has a standing bill**; the optional Turnstile deployment
+also has standing costs.
 Azure Managed Grafana is charged per instance per hour whether or not anyone
 opens it, where the workbook is a definition that bills only for the queries it
 runs. This exists for organisations that already run Grafana and want Claude
 spend on the same wall as everything else — not as the default.
+
+**Portal/manual:** open the existing Azure Managed Grafana resource > Endpoint;
+add an Azure Monitor data source with workspace query access, and create panels
+using the published functions. Verify a known request. There is no Azure portal
+button that runs this repository's panel generator.
 
 It will not create the instance. Standing one up is a decision with a cost
 attached and belongs wherever your other shared infrastructure is provisioned,
@@ -516,7 +514,7 @@ thing being absent is not an error.
 
 **Save to dashboard** on each chart. A useful board is four tiles:
 
-1. Total Tokens, Sum, split by **User** — chargeback
+1. Total Tokens, Sum, split by **User** — pilot usage diagnostics
 2. Total Tokens, Sum, split by **Model** — where cost concentrates
 3. Request count split by **resultCode** — 429/403 pressure
 4. Total Tokens, Sum, no split, 30-day window — the trend

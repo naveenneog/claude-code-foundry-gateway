@@ -1667,7 +1667,7 @@ $mutations = @(
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'the budget page drops the measured cache gap'
        File  = 'docs/DECISIONS.md'
-       From  = '41.5'
+       From  = '38.7%'
        To    = '1.1' }
 
     @{ Suite = 'Test-Scale.ps1'
