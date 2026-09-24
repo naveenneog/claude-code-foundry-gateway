@@ -105,12 +105,12 @@ az deployment group create -g <rg> --template-file infra/projection.bicep `
   --parameters namePrefix=<prefix> networkAccess=private-only location=<region>
 ```
 
-  **Portal/manual:** create an Azure Cosmos DB for NoSQL serverless account with
-  local authentication disabled and public network access disabled; database
-  `claude`, container `entitlement`, partition key `/oid`. Check the template for
-  its indexing/backup and role definitions before substituting a hand-built store.
-  Verify Overview/Networking and Data Explorer from the private network. Prefer
-  the template route to keep its role definitions and settings together.
+**Portal/manual:** create an Azure Cosmos DB for NoSQL serverless account with
+local authentication disabled and public network access disabled; database
+`claude`, container `entitlement`, partition key `/oid`. Check the template for
+its indexing/backup and role definitions before substituting a hand-built store.
+Verify Overview/Networking and Data Explorer from the private network. Prefer
+the template route to keep its role definitions and settings together.
 
 Measured: 132 seconds. The account came up with `publicNetworkAccess: Disabled`,
 key authentication off and TLS 1.2.

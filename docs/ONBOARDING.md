@@ -197,7 +197,9 @@ Or generate the whole handover — a formatted email with the config alongside i
     -To developer@contoso.com -DisplayName 'Sam'
 ```
 
-Writes HTML, plain text and an `.eml` you can open in Outlook and send. Add
+Writes HTML, plain text and an `.eml` you can open in Outlook and send. Attach
+the configuration and complete bundle yourself; the generated message does not
+attach them. Add
 `-Send` to try Microsoft Graph directly — that needs the `Mail.Send` delegated
 permission, and falls back to the `.eml` cleanly when it is not granted.
 

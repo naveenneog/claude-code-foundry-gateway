@@ -116,6 +116,44 @@ dollar stop; see [Scale](SCALE.md#the-budget-is-a-delayed-kill-switch-not-a-hard
   in this revision. Do not assume an unmerged command is installed.
 - **Grafana:** optional [existing-instance publication](MONITORING.md#if-you-would-rather-use-grafana).
 
+### Sign in as a viewer or business-unit manager
+
+1. Ask the console owner for its URL, tenant ID and API scope, and for an
+   assignment to `Turnstile.Viewer` or `Turnstile.Manager`. A manager also needs
+   a manager group assigned to the application and recorded on their unit/team.
+   These are separate from inference entitlement and Azure RBAC.
+2. With Azure CLI and the complete repository scripts available, sign in as
+   yourself and pass the supplied values explicitly. This avoids needing
+   permission to read the gateway's connection configuration:
+
+   ```powershell
+   az login --tenant '<tenant-id>' --allow-no-subscriptions
+   ./scripts/Open-ClaudeTurnstile.ps1 -TurnstileUrl 'https://<console-api>.azurewebsites.net' `
+       -Scope 'api://<turnstile-application-id>/Turnstile.Manage'
+   ```
+
+   **Browser alternative:** use Sign in with Microsoft only after the tenant has
+   granted the one-time web consent. There is no Azure portal action that
+   bypasses that consent. The CLI route uses its pre-authorised delegated scope,
+   not a workload identity or another person's token. Do not forward its
+   one-use sign-in link.
+3. Verify the displayed role and scope. Viewers can read across the console,
+   not just one unit. Managers see their scoped units/teams/people; a unit
+   manager can allocate to teams and in-scope people, and a team manager to
+   in-scope people. The owner retains unit budgets, catalog, tiers, modes and
+   Apply now. Admin or Viewer assignments take precedence over Manager; avoid
+   them on an account intended to be scoped.
+4. After a permitted budget save, check the last apply result and the gateway's
+   effective behavior. A UI save does not prove enforcement yet. Sign out/in
+   after role or manager-group changes; current sessions retain token groups.
+
+**Troubleshoot:** `AADSTS50105` means check application assignment, not Foundry
+roles. Need admin approval on the browser path means web consent is missing.
+An empty manager scope means check the assigned manager group/catalog and a
+fresh sign-in. The owner's live manager-only acceptance is still open in
+[Status](STATUS.md); do not mistake the recorded test-signed-token browser run
+for that separate live acceptance.
+
 ## Next steps
 
 - [Monitoring](MONITORING.md) — saved functions, workbooks, alerts and empty data.

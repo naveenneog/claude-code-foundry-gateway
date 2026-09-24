@@ -127,10 +127,12 @@ Lower the limit, exhaust it, restore it:
 ```powershell
 $restore = az apim nv show -g $RG --service-name $APIM `
     --named-value-id tpm-standard --query value -o tsv
+if ($LASTEXITCODE -ne 0 -or -not $restore) { throw 'Cannot read the limit to restore; do not change it' }
 
-az apim nv update -g $RG --service-name $APIM --named-value-id tpm-standard --value 100 -o none
 try {
-Start-Sleep -Seconds 25          # allow the policy to pick up the new value
+az apim nv update -g $RG --service-name $APIM --named-value-id tpm-standard --value 100 -o none
+if ($LASTEXITCODE -ne 0) { throw 'Limit update failed' }
+Start-Sleep -Seconds 25          # check response headers too; propagation can be slower
 
 1..15 | ForEach-Object {
     $r = Invoke-WebRequest -Uri "$GW/v1/messages" -Method Post `

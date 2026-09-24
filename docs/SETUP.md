@@ -379,6 +379,12 @@ Unattended:
 ./Install-ClaudeGateway.ps1 -FoundryAccount <account> -Yes
 ```
 
+```bash
+# macOS/Linux preview or unattended equivalent, from the repository root
+./install-claude-gateway.sh --what-if
+./install-claude-gateway.sh --foundry-account ai-contoso --yes
+```
+
 ### Option B — non-interactive script
 
 ```powershell

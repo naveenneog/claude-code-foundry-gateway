@@ -22,9 +22,12 @@ regardless of where the pixels came from.
 
 The gateway itself needs none of this — the tooling is only for regenerating
 the guide's images.
+Use Node/npm, an installed Microsoft Edge and an account authorised to see the
+target blades. Live capture needs interactive MFA; no unattended workaround is
+implied. Run commands from the **repository root**, not this `guide` folder.
 
 ```bash
-npm install
+npm ci
 ```
 
 The capture launches your installed **Microsoft Edge** (`channel: 'msedge'`),
@@ -34,15 +37,14 @@ so no browser download is needed. If Edge is not present, run
 ## Capturing
 
 ```powershell
-# One-time sign-in. Approve the Authenticator prompt when it appears; the
-# session is stored in ../.pw-profile and reused by later runs.
-node guide/auth.mjs
-
 $env:AZURE_SUB    = "<subscription-id>"
 $env:AZURE_TENANT = "<tenant-id>"
 $env:APIM_NAME    = "<apim-name>"
 $env:GATEWAY_RG   = "<resource-group>"
 $env:FOUNDRY_RESOURCE = "<foundry-account>"
+
+# Set the tenant BEFORE sign-in. The root .pw-profile is local credential state.
+node guide/auth.mjs
 
 # only needed for the "add a member" capture:
 $env:STANDARD_GROUP_ID = (az ad group show --group claude-code-standard --query id -o tsv)
@@ -50,6 +52,18 @@ $env:STANDARD_GROUP_ID = (az ad group show --group claude-code-standard --query 
 node guide/capture.mjs              # everything
 node guide/capture.mjs a3-apim-overview   # one step
 ```
+
+**Manual/portal path:** open the relevant guide's portal blade, capture it with
+your approved screenshot tool, then redact and review before publication.
+Capturing does not require running a deployment script. The scripted tool has
+historical resource-name defaults and assumes some shared resource locations:
+set every environment value above, inspect the destination URLs, and do not
+assume a wrong/empty blade means your resource does not exist.
+
+The tool writes into `docs/guide`. Work in a controlled checkout and never stage
+its output before redaction/review. `.pw-profile` and `guide/.auth.json` can
+authenticate as you; keep them private, never commit them, and remove that
+dedicated capture state when it is no longer needed.
 
 Step ids:
 
@@ -65,7 +79,8 @@ is a generated guid rather than a name and cannot be derived:
 
 ```powershell
 # Publish it, then use the guid the publisher prints.
-./scripts/Publish-ClaudeWorkbook.ps1 -ResourceGroup rg-contosohub `
+./scripts/Publish-ClaudeWorkbook.ps1 -ResourceGroup '<workbook-resource-group>' `
+    -WorkspaceName '<ledger-workspace>' `
     -WorkbookFile infra/workbook-chargeback.json -Name 'Claude gateway - chargeback'
 
 $env:CHARGEBACK_WORKBOOK_ID = "<guid it printed>"
@@ -88,16 +103,18 @@ screenshots and reports which ones it skipped.
 
 ## What is not committed, and why
 
-Captures mask email addresses in the DOM before the screenshot is taken — same
-rule as `redact-entra.mjs`, first two characters and last two of the local part,
-domain intact — so a workbook showing developers by spend is safe to ship.
+Captures partially mask email addresses in the DOM — first/last characters and
+the domain can remain. **This is not anonymization and does not make an image
+safe to publish.** Replace real names, addresses, tenant/resource/group IDs,
+URLs, browser chrome and deployment names with Contoso placeholders before
+committing. Review pixels as well as captions; automated masking can miss text.
 
 **That is not enough for every blade**, and three were captured during this work
 and deleted rather than committed:
 
 | Blade | What was in the frame |
 |---|---|
-| Entra → Groups → All groups | 4,858 real groups from the tenant, most unrelated to this |
+| Entra → Groups → All groups | directory-wide group names, mostly unrelated to this gateway |
 | A group's Members list | display names and object ids beside the addresses |
 | Application Insights overview | the instrumentation key and connection string |
 
@@ -170,3 +187,14 @@ titles.
 `channel: 'msedge'` is set on the browser launch. A plain Chromium profile is
 rejected with `AADSTS530033` on tenants that require device compliance; Edge
 passes because it can present the device certificate.
+
+## Verify and next steps
+
+Open each image at readable resolution, confirm the caption describes the
+actual blade, and add meaningful alt text in the consuming guide. Run
+`tests/Test-Screenshots.ps1` and `tests/Test-DocReferences.ps1`; they detect
+missing references, not all personal data in pixels. Have a separate reviewer
+check redaction before publication.
+
+Use [Reference](../docs/REFERENCE.md) for encoding and repository checks, and
+[Releasing](../docs/RELEASING.md) before publishing a release.

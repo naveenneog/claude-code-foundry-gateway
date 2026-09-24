@@ -706,7 +706,7 @@ Contents:
 {
   "env": {
     "CLAUDE_CODE_USE_FOUNDRY": "1",
-    "ANTHROPIC_FOUNDRY_RESOURCE": "ai-contosohub530569751908",
+    "ANTHROPIC_FOUNDRY_RESOURCE": "ai-contoso",
     "AZURE_TENANT_ID": "00000000-0000-0000-0000-000000000000",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5",
@@ -752,7 +752,7 @@ is an array of objects, which the UI will not let you edit properly.
 ```json
 "claudeCode.environmentVariables": [
   { "name": "CLAUDE_CODE_USE_FOUNDRY",    "value": "1" },
-  { "name": "ANTHROPIC_FOUNDRY_RESOURCE", "value": "ai-contosohub530569751908" },
+  { "name": "ANTHROPIC_FOUNDRY_RESOURCE", "value": "ai-contoso" },
   { "name": "AZURE_TENANT_ID",            "value": "00000000-0000-0000-0000-000000000000" }
 ]
 ```
