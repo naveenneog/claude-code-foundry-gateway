@@ -18,17 +18,17 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('ResourceGroup', 'ApimName')][string]$Field = 'ResourceGroup'
+    [ValidateSet('ResourceGroup', 'ApimName', 'StandardGroup', 'PremiumGroup')][string]$Field = 'ResourceGroup'
 )
 
-$fromEnvironment = if ($Field -eq 'ResourceGroup') { $env:CLAUDE_RG } else { $env:CLAUDE_APIM }
+$fromEnvironment = switch ($Field) { 'ResourceGroup' { $env:CLAUDE_RG } 'ApimName' { $env:CLAUDE_APIM } default { $null } }
 if ($fromEnvironment) { return [string]$fromEnvironment }
 
 $config = Join-Path (Split-Path $PSScriptRoot -Parent) 'onboarding/claude-gateway.json'
 if (Test-Path $config) {
     try {
         $recorded = Get-Content $config -Raw | ConvertFrom-Json
-        $value = if ($Field -eq 'ResourceGroup') { $recorded.resourceGroup } else { $recorded.apimName }
+        $value = switch ($Field) { 'ResourceGroup' { $recorded.resourceGroup } 'ApimName' { $recorded.apimName } 'StandardGroup' { $recorded.standardGroup } 'PremiumGroup' { $recorded.premiumGroup } }
         if ($value) { return [string]$value }
     }
     catch {

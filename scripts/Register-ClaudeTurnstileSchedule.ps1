@@ -9,6 +9,10 @@
     export and sync need, through Connect-ClaudeTurnstile.ps1 -ExporterPrincipalId, so the
     grants are made in one place.
 
+    A second job, started by hand rather than on a schedule, runs the same pass without the
+    export. It is the one Turnstile starts on every save once Turnstile authors governance
+    (Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Turnstile); until then nothing starts it.
+
     Nothing is assumed. The gateway, its workspace and the Turnstile connection are read from
     the gateway; the scripts the job runs are this repository at a commit that must already be
     on the remote, so the job cannot run code that was never pushed.
@@ -89,6 +93,7 @@ finally { Remove-Item $file -ErrorAction SilentlyContinue }
 if (-not $deployment) { throw 'The deployment returned no outputs.' }
 $principalId = $deployment.principalId.value
 $jobName = $deployment.jobName.value
+$applyJobName = $deployment.applyJobName.value
 
 Write-Host "Granting the job's identity what the export and sync need..."
 $connect = & (Join-Path $PSScriptRoot 'Connect-ClaudeTurnstile.ps1') -ResourceGroup $ResourceGroup -ApimName $ApimName -ExporterPrincipalId $principalId -SkipValidation
@@ -109,6 +114,9 @@ if ($RunNow) {
 
 [pscustomobject][ordered]@{
     Job         = $jobName
+    # Started by Turnstile on every save once it authors governance:
+    # ./scripts/Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Turnstile
+    ApplyJob    = $applyJobName
     Schedule    = "$Cron (UTC)"
     Commit      = $RepositoryRef
     PrincipalId = $principalId

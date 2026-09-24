@@ -135,6 +135,112 @@ Assert 'it writes the registry through the shared renderer'  ($sync -match 'Conv
 Assert 'budget authority is honoured'                        ($sync -match "budgetAuthority")
 
 Write-Host ''
+Write-Host 'Turnstile governance - authored in Turnstile' -ForegroundColor Cyan
+
+. (Join-Path $root 'scripts/ClaudeTurnstileApply.ps1')
+$applyLib = Get-Content (Join-Path $root 'scripts/ClaudeTurnstileApply.ps1') -Raw
+$grantGraph = Get-Content (Join-Path $root 'scripts/Grant-ClaudeGovernanceGraphAccess.ps1') -Raw
+$schedulePass = Get-Content (Join-Path $root 'scripts/Invoke-ClaudeTurnstileSchedule.ps1') -Raw
+$jobTemplate = Get-Content (Join-Path $root 'infra/turnstile-schedule.bicep') -Raw
+
+# What the gateway sends Turnstile comes back as the same registry.
+$sent = ConvertTo-ClaudeTurnstileCatalog -Registry $registry -Parents $parents -IncludeUnassigned
+$stored = [pscustomobject]@{
+    source        = 'configured'
+    organizations = @($sent.organizations | ForEach-Object { [pscustomobject]$_ })
+    departments   = @($sent.departments | ForEach-Object { [pscustomobject]$_ })
+}
+# These functions return their array whole; assigning it first lets it be enumerated.
+$sentPlan = Get-ClaudeTurnstileBudgetPlan -Registry $registry -Parents $parents
+$budgetRows = @($sentPlan | ForEach-Object { [pscustomobject]@{ scope_type = $_.ScopeType; scope_id = $_.ScopeId; token_limit = $_.TokenLimit } })
+$round = ConvertFrom-ClaudeTurnstileGovernance -Catalog $stored -BudgetItems $budgetRows
+$shape = { param($r) (@($r | Sort-Object Id | ForEach-Object { "$($_.Id)=$($_.Group):$($_.TokensPerMonth)" }) -join ',') }
+Assert 'the registry survives the round trip through Turnstile' ((& $shape $round.Registry) -eq (& $shape $registry)) (& $shape $round.Registry)
+Assert 'and so do the teams'                                  ((ConvertTo-ClaudeBuParents $round.Parents) -eq (ConvertTo-ClaudeBuParents $parents))
+Assert 'with nothing to report'                               (@($round.Problems).Count -eq 0) ($round.Problems -join '; ')
+
+# What an administrator might save.
+$edited = [pscustomobject]@{
+    source        = 'configured'
+    organizations = @(
+        [pscustomobject]@{ id = 'platform'; external_ref = 'entra-group:Claude BU Platform' },
+        [pscustomobject]@{ id = 'finance'; external_ref = 'entra-group:Claude BU Finance' },
+        [pscustomobject]@{ id = 'unassigned'; external_ref = 'entra-group:Claude Everyone' },
+        [pscustomobject]@{ id = 'nogroup'; external_ref = $null },
+        [pscustomobject]@{ id = 'Bad_Id'; external_ref = 'entra-group:Claude Bad' })
+    departments   = @(
+        [pscustomobject]@{ id = 'platform'; parent_id = 'platform'; external_ref = 'entra-group:Claude BU Platform' },
+        [pscustomobject]@{ id = 'platform-web'; parent_id = 'platform'; external_ref = 'entra-group:Claude Team Web' },
+        [pscustomobject]@{ id = 'orphan'; parent_id = 'nogroup'; external_ref = 'entra-group:Claude Orphan' })
+}
+$edits = @(
+    [pscustomobject]@{ scope_type = 'organization'; scope_id = 'platform'; token_limit = 25000000 },
+    [pscustomobject]@{ scope_type = 'department'; scope_id = 'platform-web'; token_limit = 6000000 },
+    [pscustomobject]@{ scope_type = 'organization'; scope_id = 'finance'; token_limit = $null },
+    [pscustomobject]@{ scope_type = 'user'; scope_id = 'dev@contoso.com'; token_limit = 5 })
+$tierEdits = @(
+    [pscustomobject]@{ id = 'standard'; entra_group = 'claude-code-standard'; tokens_per_minute = 20000; tokens_per_day = 500000; models = @() },
+    [pscustomobject]@{ id = 'premium'; entra_group = 'Claude Premium'; tokens_per_minute = 100000; tokens_per_day = 5000000; models = @('claude-opus-5', 'claude-sonnet-5') },
+    [pscustomobject]@{ id = 'gold'; entra_group = 'Claude Gold'; tokens_per_minute = 1; tokens_per_day = 1; models = @() })
+$d = ConvertFrom-ClaudeTurnstileGovernance -Catalog $edited -BudgetItems $edits -Tiers $tierEdits
+$ids = @($d.Registry | ForEach-Object { $_.Id })
+$unitOf = { param($id) @($d.Registry | Where-Object Id -eq $id)[0] }
+Assert 'the unassigned organization is never a unit, even with a group' ($ids -notcontains 'unassigned')
+Assert 'a unit''s direct-members department is not a team'   (@($ids | Where-Object { $_ -eq 'platform' }).Count -eq 1 -and -not $d.Parents.Contains('platform'))
+Assert 'a department with its own group is a team'            ($d.Parents['platform-web'] -eq 'platform' -and (& $unitOf 'platform-web').Group -eq 'Claude Team Web')
+Assert 'budgets become monthly tokens'                        ((& $unitOf 'platform').TokensPerMonth -eq 25000000 -and (& $unitOf 'platform-web').TokensPerMonth -eq 6000000)
+Assert 'no budget is no business-unit budget, not an error'   ((& $unitOf 'finance').TokensPerMonth -eq 0)
+Assert 'a unit without a group is reported, not applied'      ($ids -notcontains 'nogroup' -and @($d.Problems -match "business unit 'nogroup': names no Entra group").Count -eq 1)
+Assert 'and so is a team under it'                            ($ids -notcontains 'orphan' -and @($d.Problems -match "team 'orphan'").Count -eq 1)
+Assert 'an id the gateway cannot use is reported'             ($ids -notcontains 'Bad_Id' -and @($d.Problems -match "'Bad_Id'").Count -eq 1)
+Assert 'a person''s budget never reaches the registry'        (@($d.Registry | Where-Object { $_.TokensPerMonth -eq 5 }).Count -eq 0)
+Assert 'only the tiers the policy enforces are applied'       ((@($d.Tiers | ForEach-Object { $_.Id }) -join ',') -eq 'standard,premium' -and @($d.Problems -match "tier 'gold'").Count -eq 1)
+Assert 'every model is the gateway''s ,, list'                ((@($d.Tiers | Where-Object Id -eq 'standard')[0].Models) -eq ',,')
+Assert 'named models are comma-anchored'                      ((@($d.Tiers | Where-Object Id -eq 'premium')[0].Models) -eq ',claude-opus-5,claude-sonnet-5,')
+Assert 'Turnstile''s demonstration catalog is never applied'  (Throws { ConvertFrom-ClaudeTurnstileGovernance -Catalog ([pscustomobject]@{ source = 'seeded'; organizations = @(); departments = @() }) })
+
+$gatewayNow = [ordered]@{
+    'bu-registry' = ConvertTo-ClaudeBuRegistry @($d.Registry); 'bu-parents' = ConvertTo-ClaudeBuParents $d.Parents
+    'tpm-standard' = '20000'; 'quota-standard' = '500000'; 'models-standard' = ',,'
+    'tpm-premium' = '100000'; 'quota-premium' = '5000000'; 'models-premium' = ',claude-opus-5,claude-sonnet-5,'
+}
+$none = Get-ClaudeGatewayGovernanceChanges -Desired $d -Current $gatewayNow
+Assert 'a gateway that already matches gets no writes'        (@($none).Count -eq 0)
+$gatewayNow['tpm-standard'] = '10000'
+$one = Get-ClaudeGatewayGovernanceChanges -Desired $d -Current $gatewayNow
+Assert 'one changed limit is one write, with what it was'     (@($one).Count -eq 1 -and $one[0].Id -eq 'tpm-standard' -and $one[0].Was -eq '10000' -and $one[0].Now -eq '20000')
+
+$directory = @{ 'claude bu platform' = 'exists'; 'claude team web' = 'exists'; 'claude bu finance' = 'missing'; 'claude-code-standard' = 'exists'; 'claude premium' = 'exists' }
+$lookup = { param($g) $directory[$g.ToLowerInvariant()] }
+$sel = Select-ClaudeGovernanceWithGroups -Desired $d -GroupState $lookup
+$kept = @($sel.Governance.Registry | ForEach-Object { $_.Id })
+Assert 'a unit whose group does not exist is not applied'     ($kept -notcontains 'finance' -and @($sel.Problems -match "no Entra group 'Claude BU Finance'").Count -eq 1)
+Assert 'units and teams whose groups exist are applied'       ($kept -contains 'platform' -and $sel.Governance.Parents['platform-web'] -eq 'platform')
+Assert 'tiers whose groups exist can have members refreshed'  ($sel.TierGroups['standard'] -eq 'claude-code-standard' -and $sel.TierGroups['premium'] -eq 'Claude Premium')
+$directory['claude bu platform'] = 'missing'
+$sel = Select-ClaudeGovernanceWithGroups -Desired $d -GroupState $lookup
+Assert 'a team whose unit is not applied is not applied'      (@($sel.Governance.Registry | ForEach-Object { $_.Id }) -notcontains 'platform-web' -and -not $sel.Governance.Parents.Contains('platform-web'))
+$directory['claude bu platform'] = 'exists'; $directory['claude premium'] = 'missing'
+$sel = Select-ClaudeGovernanceWithGroups -Desired $d -GroupState $lookup
+Assert 'a tier whose group is missing keeps its limits'       (@($sel.Governance.Tiers).Count -eq 2 -and -not $sel.TierGroups.Contains('premium') -and @($sel.Problems -match "tier 'premium'").Count -eq 1)
+$blind = Select-ClaudeGovernanceWithGroups -Desired $d -KnownGroups @('Claude BU Platform', 'Claude Team Web') -GroupState { param($g) 'unknown' }
+$seen = @($blind.Governance.Registry | ForEach-Object { $_.Id })
+Assert 'unreadable directory: groups in use are trusted'      ($seen -contains 'platform' -and $seen -contains 'platform-web')
+Assert 'unreadable directory: a new group is not applied'     ($seen -notcontains 'finance' -and @($blind.Problems -match 'could not be checked').Count -ge 1)
+Assert 'unreadable directory: tier limits still apply'        (@($blind.Governance.Tiers).Count -eq 2 -and $blind.TierGroups.Count -eq 0)
+
+Assert 'a push cannot overwrite what Turnstile authored'      ($sync -match "if \(\`$Direction -eq 'ToTurnstile' -and \`$governanceAuthority -eq 'Turnstile' -and -not \`$Seed\) \{")
+Assert 'the month is prepared before budgets are read'        ($sync -match "(?s)/api/v1/gateway-governance/prepare.*\`$Period = \[string\]\`$prepared\.period.*\`$budgetDoc = Invoke-Turnstile GET")
+Assert 'what governance needs is checked before it is set'    ($connect -match "(?s)No apply job in .{0,400}has no managed identity.{0,300}Set-ApimNamedValue -ResourceGroup \`$ResourceGroup -ApimName \`$ApimName -Id \`$script:TurnstileIntegrationNamedValue -Value \`$value")
+Assert 'Turnstile is seeded only when governance moves'       ($connect -match "(?s)if \(-not \`$wasTurnstile\) \{.{0,400}-Direction ToTurnstile -Seed")
+Assert 'a failed seed leaves governance with the gateway'     ($connect -match "(?s)catch \{\s+\`$settings\.governanceAuthority = 'Gateway'\s+Set-ApimNamedValue")
+Assert 'Turnstile may start the apply job, and only it'       ($connect -match "Role = 'Container Apps Jobs Operator'; Scope = \`$applyJobId \}")
+Assert 'the job may write named values, and nothing else'     ($applyLib -match "'Microsoft\.ApiManagement/service/namedValues/write'" -and -not ($applyLib -match 'Microsoft\.ApiManagement/service/(\*|policies|apis|products|certificates|backends)'))
+Assert 'going back to the gateway removes both'               ($connect -match "GATEWAY_APPLY_JOB_ID=' -o none" -and $connect -match 'az role assignment delete --ids \$id')
+Assert 'a save starts a job that only applies'                ($jobTemplate -match "trigger: 'Manual', skipExport: true" -and $jobTemplate -match 'extra="\$\{extra\} -SkipExport"')
+Assert 'a pass applies Turnstile when it authors governance'  ($schedulePass -match "\`$integration\['governanceAuthority'\] -eq 'Turnstile' -or")
+Assert 'the Graph grant is one read-only permission'          ($grantGraph -match "\`$permission = 'GroupMember\.Read\.All'" -and -not ($grantGraph -match 'ReadWrite'))
+Write-Host ''
 Write-Host 'Turnstile - the Entra application, the bill and the pictures' -ForegroundColor Cyan
 
 $entraApp = Get-Content (Join-Path $root 'scripts/New-ClaudeTurnstileEntraApp.ps1') -Raw
@@ -185,6 +291,63 @@ if (Get-Command az -ErrorAction SilentlyContinue) {
     Assert 'the schedule template compiles'                  ($LASTEXITCODE -eq 0)
 }
 
+Write-Host ''
+Write-Host 'Turnstile governance - applying to a gateway held in memory' -ForegroundColor Cyan
+
+# The apply reaches Azure through these four functions; they are replaced here, after every
+# check above has used the real ones.
+function Get-ApimNamedValue { param($ResourceGroup, $ApimName, $Id) $script:gw[$Id] }
+function Set-ApimNamedValue { param($ResourceGroup, $ApimName, $Id, $Value) $script:writes++; if (-not $script:dropWrites) { $script:gw[$Id] = $Value } }
+function Test-ClaudeGraphGroupAccess { $script:graphState }
+function Test-ClaudeEntraGroup { param($Group) $directory[$Group.ToLowerInvariant()] }
+$stub = Join-Path ([IO.Path]::GetTempPath()) "turnstile-apply-$PID-$(Get-Random)"
+New-Item -ItemType Directory -Path $stub -Force | Out-Null
+Set-Content -Path (Join-Path $stub 'Sync-ClaudeAccess.ps1') -Value 'param($ApimName, $ResourceGroup, $StandardGroup, $PremiumGroup) Set-Content -Path (Join-Path $PSScriptRoot "refreshed.txt") -Value "$StandardGroup|$PremiumGroup"'
+$refreshed = Join-Path $stub 'refreshed.txt'
+$reset = {
+    $script:gw = @{
+        'bu-registry' = ConvertTo-ClaudeBuRegistry @([pscustomobject]@{ Id = 'platform'; Group = 'Claude BU Platform'; TokensPerMonth = 20000000 })
+        'bu-parents' = ',,'; 'tpm-standard' = '10000'; 'quota-standard' = '500000'; 'models-standard' = ',,'
+        'tpm-premium' = '100000'; 'quota-premium' = '5000000'; 'models-premium' = ',claude-opus-5,claude-sonnet-5,'
+    }
+    $script:writes = 0; $script:dropWrites = $false; $script:graphState = 'denied'
+    Remove-Item $refreshed -ErrorAction SilentlyContinue
+}
+$unitsNow = { @(ConvertFrom-ClaudeBuRegistry $script:gw['bu-registry']) }
+$directory = @{ 'claude bu platform' = 'exists'; 'claude team web' = 'exists'; 'claude bu finance' = 'exists'; 'claude-code-standard' = 'exists'; 'claude premium' = 'exists' }
+$applyArgs = @{ Catalog = $edited; BudgetItems = $edits; Tiers = $tierEdits; ResourceGroup = 'rg'; ApimName = 'apim'; ScriptRoot = $stub }
+try {
+    & $reset
+    $r = Invoke-ClaudeGatewayGovernanceApply @applyArgs
+    Assert 'without -Apply nothing is written'                ($script:writes -eq 0 -and @($r.Changes).Count -gt 0 -and $r.Applied -eq 0)
+
+    & $reset
+    $r = Invoke-ClaudeGatewayGovernanceApply @applyArgs -Apply
+    Assert 'a limit saved in Turnstile reaches the gateway'   ($script:gw['tpm-standard'] -eq '20000' -and $r.Applied -eq @($r.Changes).Count)
+    Assert 'a budget saved in Turnstile reaches the gateway'  (@(& $unitsNow | Where-Object Id -eq 'platform')[0].TokensPerMonth -eq 25000000)
+    Assert 'without Graph access, membership is left alone'   (-not (Test-Path $refreshed) -and $r.Membership -match 'cannot read Entra groups')
+    Assert 'and a group not yet in use is not applied'        (@(& $unitsNow | ForEach-Object { $_.Id }) -notcontains 'finance')
+
+    & $reset; $script:graphState = 'ok'
+    $r = Invoke-ClaudeGatewayGovernanceApply @applyArgs -Apply
+    Assert 'with Graph access, groups that exist are applied' (@(& $unitsNow | ForEach-Object { $_.Id }) -contains 'finance')
+    Assert 'and membership is refreshed from the tier groups' ((Test-Path $refreshed) -and (Get-Content $refreshed -Raw).Trim() -eq 'claude-code-standard|Claude Premium' -and $r.Membership -eq 'refreshed from the Entra groups')
+
+    & $reset; $script:graphState = 'ok'; $directory['claude premium'] = 'missing'
+    $r = Invoke-ClaudeGatewayGovernanceApply @applyArgs -Apply
+    Assert 'a tier with no group: limits applied, members not' ($script:gw['tpm-standard'] -eq '20000' -and -not (Test-Path $refreshed) -and $r.Membership -match 'every tier needs')
+    $directory['claude premium'] = 'exists'
+
+    & $reset
+    $empty = [pscustomobject]@{ source = 'configured'; organizations = @(); departments = @() }
+    $r = Invoke-ClaudeGatewayGovernanceApply @applyArgs -Catalog $empty -Apply
+    Assert 'every unit gone at once is not applied'           (@(& $unitsNow).Count -eq 1 -and @($r.Problems -match 'left as they are').Count -eq 1)
+    Assert 'while the tier limits still are'                  ($script:gw['tpm-standard'] -eq '20000')
+
+    & $reset; $script:dropWrites = $true
+    Assert 'a write that does not read back is an error'      (Throws { Invoke-ClaudeGatewayGovernanceApply @applyArgs -Apply })
+}
+finally { Remove-Item $stub -Recurse -Force -ErrorAction SilentlyContinue }
 Write-Host ''
 if ($fail) { Write-Host "$fail check(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Every Turnstile governance check passed.' -ForegroundColor Green

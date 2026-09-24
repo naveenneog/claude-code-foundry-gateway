@@ -61,7 +61,40 @@ $mutations = @(
        File  = 'scripts/Invoke-ClaudeTurnstileSchedule.ps1'; From = "refused `$(`$refused.Count)"; To = "`$(@(`$result.Budgets).Count) budget(s)" }
     @{ Suite = $bridge; Name = 'the guide drops the measured resend'
        File  = 'docs/TURNSTILE.md'; From = '1,114'; To = '1114' }
-)
+    @{ Suite = $governance; Name = 'the unassigned organization becomes a business unit'
+       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if ($id -eq ''unassigned'') { continue }'; To = '' }
+    @{ Suite = $governance; Name = 'a unit''s direct-members department becomes a team'
+       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if (-not $parent -or $id -eq $parent -or'; To = 'if (-not $parent -or' }
+    @{ Suite = $governance; Name = 'membership is refreshed from groups that could not be read'
+       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if ($graph -ne ''ok'') {'; To = 'if ($false) {' }
+    @{ Suite = $governance; Name = 'a group that cannot be checked is always trusted'
+       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if ($known -contains $key) { return $true }'; To = 'return $true' }
+    @{ Suite = $governance; Name = 'a group that does not exist is applied'
+       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'default { $problems.Add("${Label}: there is no Entra group ''$Group''"); return $false }'; To = 'default { return $true }' }
+    @{ Suite = $governance; Name = 'every model is written as no model'
+       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if (-not $items.Count) { return '',,'' }'; To = 'if (-not $items.Count) { return '','' }' }
+    @{ Suite = $governance; Name = 'Turnstile''s demonstration catalog is applied'
+       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if ([string]$Catalog.source -ne ''configured'') {'; To = 'if ($false) {' }
+    @{ Suite = $governance; Name = 'a write is not read back'
+       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = '-Id $c.Id) -ne $c.Now) {'; To = '-Id $c.Id) -ne $c.Now -and $false) {' }
+    @{ Suite = $governance; Name = 'membership is refreshed while a tier has no group'
+       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'elseif (@($script:ClaudeGatewayTiers | Where-Object { -not $selected.TierGroups.Contains($_) }).Count) {'; To = 'elseif ($false) {' }
+    @{ Suite = $governance; Name = 'every unit gone at once is applied'
+       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = 'if (-not @($selected.Governance.Registry).Count -and $currentUnits.Count) {'; To = 'if ($false) {' }
+    @{ Suite = $governance; Name = 'the job may change the gateway''s policy'
+       File  = 'scripts/ClaudeTurnstileApply.ps1'; From = '''Microsoft.ApiManagement/service/operationresults/read'')'; To = '''Microsoft.ApiManagement/service/operationresults/read'', ''Microsoft.ApiManagement/service/policies/write'')' }
+    @{ Suite = $governance; Name = 'a push overwrites what Turnstile authored'
+       File  = 'scripts/Sync-ClaudeTurnstileGovernance.ps1'; From = '-and $governanceAuthority -eq ''Turnstile'' -and -not $Seed) {'; To = '-and $governanceAuthority -eq ''Turnstile'' -and $false) {' }
+    @{ Suite = $governance; Name = 'budgets are read before the month is prepared'
+       File  = 'scripts/Sync-ClaudeTurnstileGovernance.ps1'; From = '$Period = [string]$prepared.period'; To = '' }
+    @{ Suite = $governance; Name = 'Turnstile is seeded again on every registration'
+       File  = 'scripts/Connect-ClaudeTurnstile.ps1'; From = 'if (-not $wasTurnstile) {'; To = 'if ($true) {' }
+    @{ Suite = $governance; Name = 'a failed seed leaves governance with Turnstile'
+       File  = 'scripts/Connect-ClaudeTurnstile.ps1'; From = '$settings.governanceAuthority = ''Gateway'''; To = '' }
+    @{ Suite = $governance; Name = 'Turnstile''s API is granted on the gateway, not the apply job'
+       File  = 'scripts/Connect-ClaudeTurnstile.ps1'; From = 'Role = ''Container Apps Jobs Operator''; Scope = $applyJobId }'; To = 'Role = ''Container Apps Jobs Operator''; Scope = $gatewayId }' }
+    @{ Suite = $governance; Name = 'a save starts the job that also exports'
+       File  = 'infra/turnstile-schedule.bicep'; From = 'trigger: ''Manual'', skipExport: true'; To = 'trigger: ''Manual'', skipExport: false' })
 
 $missed = @()
 $caught = 0

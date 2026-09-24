@@ -24,10 +24,19 @@
         their tier's daily quota times the days in the month, for departments where that fits.
 
     -Direction FromTurnstile
-        For a connection whose budgets are authored in Turnstile. Unit and team budgets
-        changed on Turnstile's budget page are written back to the gateway's registry and
-        enforced on the next request. Nothing is written without -Apply. Structure is never
-        taken from Turnstile: a unit needs an Entra group, and groups belong to the gateway.
+        For a connection whose budgets are authored in Turnstile (budgetAuthority). Unit and
+        team budgets changed on Turnstile's budget page are written back to the gateway's
+        registry and enforced on the next request. Structure stays the gateway's.
+
+        For a connection whose governance is authored in Turnstile (governanceAuthority),
+        everything comes from Turnstile: business units, teams, their Entra groups, budgets
+        and tiers. Turnstile first rolls the previous month's budgets into the current month
+        if its own timer has not yet, so the start of a month never reads as every budget
+        removed. Groups the gateway cannot confirm exist are not applied, and tier
+        membership is refreshed only where group members can be read (docs/TURNSTILE.md).
+        The apply job runs this after every save in Turnstile.
+
+        Nothing is written without -Apply.
 
     Authentication is a Microsoft Entra access token for the Turnstile API: your own
     `az login` interactively, or a workload identity on a schedule. Turnstile accepts it
@@ -55,6 +64,9 @@ param(
     [switch]$Apply,
     [switch]$WhatIf,
     [switch]$SkipPersonBudgets,
+    # Push the gateway's state into Turnstile even when Turnstile authors governance: used once,
+    # by Connect-ClaudeTurnstile.ps1, when governance moves to Turnstile.
+    [switch]$Seed,
     [ValidateRange(1, 100)][int]$WarningThresholdPercent = 80,
     [string]$TurnstileUrl,
     [string]$Scope,
@@ -68,6 +80,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeTurnstile.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeTurnstileGovernance.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeTurnstileApply.ps1')
 
 $sub = az account show --query id -o tsv 2>$null
 if (-not $sub) { throw 'Not signed in. Run: az login' }
@@ -81,6 +94,7 @@ $url = ([string](Resolve-ClaudeTurnstileSetting $TurnstileUrl $integration 'url'
 $scope = [string](Resolve-ClaudeTurnstileSetting $Scope $integration 'scope' 'Scope')
 $authority = [string](Resolve-ClaudeTurnstileSetting $null $integration 'budgetAuthority' 'BudgetAuthority' 'Gateway')
 $personBudgets = (-not $SkipPersonBudgets) -and [bool](Resolve-ClaudeTurnstileSetting $null $integration 'personBudgets' 'PersonBudgets' $false)
+$governanceAuthority = [string](Resolve-ClaudeTurnstileSetting $null $integration 'governanceAuthority' 'GovernanceAuthority' 'Gateway')
 
 $token = if ($AccessToken) { $AccessToken } else { (az account get-access-token --scope $scope --query accessToken -o tsv 2>$null) }
 if (-not $token) { throw "Could not get a token for $scope. Your account must hold the Turnstile admin role (its admin group), or pass -AccessToken from a workload identity that does." }
@@ -102,6 +116,40 @@ $parents = ConvertFrom-ClaudeBuParents (Get-ApimNamedValue -ResourceGroup $Resou
 if (-not $parents) { $parents = [ordered]@{} }
 $unassignedMode = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-unassigned'
 if (-not $unassignedMode) { $unassignedMode = 'allow' }
+
+if ($Direction -eq 'ToTurnstile' -and $governanceAuthority -eq 'Turnstile' -and -not $Seed) {
+    throw ('Governance is authored in Turnstile, so pushing the gateway''s state would overwrite what was saved there. ' +
+        'Apply Turnstile to the gateway instead: -Direction FromTurnstile -Apply')
+}
+
+if ($Direction -eq 'FromTurnstile' -and $governanceAuthority -eq 'Turnstile') {
+    # Everything from Turnstile: business units, teams, their Entra groups, budgets and tiers.
+    # The month first: a new month has no budgets until Turnstile rolls the previous month's
+    # in, and reading it before then would remove every budget. Prepare does that, once.
+    try { $prepared = Invoke-Turnstile POST '/api/v1/gateway-governance/prepare' }
+    catch {
+        if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404) {
+            throw 'This Turnstile has no gateway governance endpoints. Deploy the Turnstile version with the Gateway governance page.'
+        }
+        throw
+    }
+    if ($PSBoundParameters.ContainsKey('Period') -and $Period -ne [string]$prepared.period) {
+        throw "Governance authored in Turnstile applies Turnstile's current month, $($prepared.period); -Period $Period cannot be applied."
+    }
+    $Period = [string]$prepared.period
+    $catalogDoc = Invoke-Turnstile GET '/api/v1/enterprise-catalog'
+    $budgetDoc = Invoke-Turnstile GET "/api/v1/budgets?period=$Period"
+    $tierDoc = Invoke-Turnstile GET '/api/v1/gateway-tiers'
+    $result = Invoke-ClaudeGatewayGovernanceApply -Catalog $catalogDoc -BudgetItems @($budgetDoc.items) -Tiers @($tierDoc.items) `
+        -ResourceGroup $ResourceGroup -ApimName $ApimName -ScriptRoot $PSScriptRoot -Apply:$Apply
+    foreach ($c in $result.Changes) { Write-Host "  $c" }
+    foreach ($p in $result.Problems) { Write-Host "  not applied - $p" }
+    if (-not @($result.Changes).Count) { Write-Host '  The gateway already matches Turnstile.' }
+    elseif (-not $Apply) { Write-Host "  Nothing written. Pass -Apply to write $(@($result.Changes).Count) change(s) to the gateway." }
+    else { Write-Host "  Wrote $($result.Applied) named value(s). In effect on the next request." }
+    Write-Host "  Membership: $($result.Membership)"
+    return $result
+}
 
 if ($Direction -eq 'FromTurnstile') {
     if ($authority -ne 'Turnstile') {
@@ -146,6 +194,19 @@ if ($WhatIf) {
 }
 
 $stored = Invoke-Turnstile PUT '/api/v1/enterprise-catalog' $catalog
+
+# Tiers too, so Turnstile's Gateway governance page shows the gateway's own limits. Their groups
+# are the ones the installer recorded, or the access sync's defaults.
+$standardGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') StandardGroup 3>$null)
+$premiumGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') PremiumGroup 3>$null)
+if (-not $standardGroup) { $standardGroup = 'claude-code-standard' }
+if (-not $premiumGroup) { $premiumGroup = 'claude-code-premium' }
+$tierDocument = Get-ClaudeGatewayTierDocument -ResourceGroup $ResourceGroup -ApimName $ApimName -StandardGroup $standardGroup -PremiumGroup $premiumGroup
+$tierResult = 'none on the gateway'
+if (@($tierDocument.tiers).Count) {
+    try { $tierResult = "$(@((Invoke-Turnstile PUT '/api/v1/gateway-tiers' $tierDocument).items).Count) tier(s)" }
+    catch { $tierResult = "not sent: $(Get-TurnstileErrorDetail $_)" }
+}
 
 $budgetResults = New-Object System.Collections.Generic.List[string]
 foreach ($b in $plan) {
@@ -204,6 +265,7 @@ if ($personBudgets) {
     Direction      = $Direction
     Turnstile      = $url
     Catalog        = "$($stored.source): $(@($stored.organizations).Count) organizations, $(@($stored.departments).Count) departments"
+    Tiers          = $tierResult
     BudgetAuthority = $authority
     Budgets        = $budgetResults.ToArray()
     PersonBudgets  = $(if ($personBudgets) { $personResults.ToArray() } else { 'off' })

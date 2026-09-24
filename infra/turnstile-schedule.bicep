@@ -93,11 +93,20 @@ az login --identity --client-id "${AZURE_CLIENT_ID}" --allow-no-subscriptions --
 az account set --subscription "${SUBSCRIPTION_ID}"
 extra=""
 if [ "${TURNSTILE_GOVERNANCE}" != "true" ]; then extra="-SkipGovernance"; fi
+if [ "${TURNSTILE_SKIP_EXPORT}" = "true" ]; then extra="${extra} -SkipExport"; fi
 /opt/pwsh/pwsh -NoProfile -File ./scripts/Invoke-ClaudeTurnstileSchedule.ps1 -ResourceGroup "${CLAUDE_RG}" -ApimName "${CLAUDE_APIM}" ${extra}
 '''
 
-resource job 'Microsoft.App/jobs@2024-03-01' = {
-  name: 'job-turnstile-${suffix}'
+// Two jobs from one definition: the hourly pass, and the apply job that Turnstile starts when
+// governance is saved there (Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Turnstile), which
+// applies governance only.
+var jobSpecs = [
+  { name: 'job-turnstile-${suffix}', trigger: 'Schedule', skipExport: false }
+  { name: 'job-turnstile-apply-${suffix}', trigger: 'Manual', skipExport: true }
+]
+
+resource jobs 'Microsoft.App/jobs@2024-03-01' = [for spec in jobSpecs: {
+  name: spec.name
   location: location
   identity: {
     type: 'UserAssigned'
@@ -108,18 +117,25 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
   properties: {
     environmentId: environment.id
     workloadProfileName: 'Consumption'
-    configuration: {
-      triggerType: 'Schedule'
+    configuration: union({
       replicaTimeout: 1800
       // No retry: the next run's window overlaps this one's, so a failed run is recovered by
-      // the next rather than repeated.
+      // the next rather than repeated; a failed apply is repeated by the next save, or Apply now.
       replicaRetryLimit: 0
+    }, spec.trigger == 'Schedule' ? {
+      triggerType: 'Schedule'
       scheduleTriggerConfig: {
         cronExpression: cronExpression
         parallelism: 1
         replicaCompletionCount: 1
       }
-    }
+    } : {
+      triggerType: 'Manual'
+      manualTriggerConfig: {
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
+    })
     template: {
       containers: [
         {
@@ -146,6 +162,7 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
             { name: 'REPO_REF', value: repositoryRef }
             { name: 'PWSH_VERSION', value: powershellVersion }
             { name: 'TURNSTILE_GOVERNANCE', value: governance ? 'true' : 'false' }
+            { name: 'TURNSTILE_SKIP_EXPORT', value: spec.skipExport ? 'true' : 'false' }
             // PowerShell's globalization needs ICU, which the image does not carry. Invariant
             // mode is enough: the scripts format numbers, not locale-specific text.
             { name: 'DOTNET_SYSTEM_GLOBALIZATION_INVARIANT', value: '1' }
@@ -154,9 +171,11 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
       ]
     }
   }
-}
+}]
 
 output principalId string = identity.properties.principalId
 output clientId string = identity.properties.clientId
-output jobName string = job.name
+output jobName string = jobs[0].name
+output applyJobName string = jobs[1].name
+output applyJobId string = jobs[1].id
 output environmentName string = environment.name

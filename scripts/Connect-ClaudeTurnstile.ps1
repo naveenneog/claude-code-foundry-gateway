@@ -37,6 +37,15 @@
     Turnstile's budget page the place budgets are edited, pulled back into the gateway by
     Sync-ClaudeTurnstileGovernance.ps1 -Direction FromTurnstile.
 
+.PARAMETER GovernanceAuthority
+    Gateway keeps business units, teams, tiers and budgets authored in this repository.
+    Turnstile makes Turnstile's pages the only place they are edited: Turnstile is first
+    given the gateway's current state, then every save there starts the gateway's apply
+    job (created by Register-ClaudeTurnstileSchedule.ps1), which writes the gateway within
+    about a minute. The job's identity gets a custom role that writes this gateway's named
+    values and nothing else; Turnstile's API gets Container Apps Jobs Operator on that one
+    job. Setting it back to Gateway removes both. Implies budgets are Turnstile's as well.
+
 .EXAMPLE
     ./scripts/Connect-ClaudeTurnstile.ps1 -TurnstileResourceGroup rg-turnstile-prod
 
@@ -47,6 +56,9 @@
     ./scripts/Connect-ClaudeTurnstile.ps1 -BudgetAuthority Turnstile
 
 .EXAMPLE
+    ./scripts/Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Turnstile
+
+.EXAMPLE
     ./scripts/Connect-ClaudeTurnstile.ps1 -Disconnect
 #>
 [CmdletBinding()]
@@ -55,6 +67,7 @@ param(
     [string]$ExporterPrincipalId,
     [ValidateSet('Gateway', 'Turnstile')][string]$PriceSource,
     [ValidateSet('Gateway', 'Turnstile')][string]$BudgetAuthority,
+    [ValidateSet('Gateway', 'Turnstile')][string]$GovernanceAuthority,
     [Nullable[bool]]$PersonBudgets = $null,
     [switch]$Show,
     [switch]$Disconnect,
@@ -67,6 +80,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeTurnstile.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeTurnstileGovernance.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeTurnstileApply.ps1')
 
 $sub = az account show --query id -o tsv 2>$null
 if (-not $sub) { throw 'Not signed in. Run: az login' }
@@ -137,6 +151,7 @@ $settings = [ordered]@{
     resourceGroup     = $rg
     priceSource       = $(if ($PriceSource) { $PriceSource } elseif ($current) { [string]$current['priceSource'] } else { 'Gateway' })
     budgetAuthority   = $(if ($BudgetAuthority) { $BudgetAuthority } elseif ($current) { [string]$current['budgetAuthority'] } else { 'Gateway' })
+    governanceAuthority = $(if ($GovernanceAuthority) { $GovernanceAuthority } elseif ($current -and $current['governanceAuthority']) { [string]$current['governanceAuthority'] } else { 'Gateway' })
     personBudgets     = $(if ($null -ne $PersonBudgets) { [bool]$PersonBudgets } elseif ($current) { [bool]$current['personBudgets'] } else { $false })
     connectedAt       = [datetime]::UtcNow.ToString('o')
     connectedBy       = (az account show --query user.name -o tsv)
@@ -193,7 +208,73 @@ if ($ExporterPrincipalId) {
     }
 }
 
+# --- Where governance is authored ---------------------------------------------------------
+# Turnstile: every save there starts the gateway's apply job. The job's identity may write the
+# gateway's named values (and nothing else), Turnstile's API may start the job (and nothing
+# else), and Turnstile is first given the gateway's current state, so its pages start from it.
+# What that needs is checked before anything is written.
+$wasTurnstile = [bool]($current -and [string]$current['governanceAuthority'] -eq 'Turnstile')
+$toTurnstile = $settings.governanceAuthority -eq 'Turnstile'
+$governanceWiring = 'unchanged'
+if ($toTurnstile -or $wasTurnstile) {
+    $applyJobId = az containerapp job list -g $ResourceGroup --query "[?starts_with(name, 'job-turnstile-apply-')].id | [0]" -o tsv 2>$null
+    $jobIdentity = az identity list -g $ResourceGroup --query "[?starts_with(name, 'id-turnstile-')].principalId | [0]" -o tsv 2>$null
+    $apiIdentity = az webapp identity show -g $rg -n $apiApp --query principalId -o tsv 2>$null
+    $gatewayId = az apim show -g $ResourceGroup -n $ApimName --query id -o tsv
+}
+if ($toTurnstile) {
+    if (-not $applyJobId -or -not $jobIdentity) {
+        throw "No apply job in $ResourceGroup. Run ./scripts/Register-ClaudeTurnstileSchedule.ps1 first: it creates the job that applies Turnstile's saves."
+    }
+    if (-not $apiIdentity) { throw "Turnstile's API app $apiApp has no managed identity, which it needs to start the apply job." }
+}
+
 Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $script:TurnstileIntegrationNamedValue -Value $value
+
+$writerRole = $script:ClaudeGovernanceWriterRole
+if ($toTurnstile) {
+    Set-ClaudeGovernanceWriterRole -ResourceGroup $ResourceGroup | Out-Null
+    $seeded = 'already the source'
+    if (-not $wasTurnstile) {
+        # Only when governance moves. From then on Turnstile is the source: seeding again would
+        # overwrite what was saved there, and Register-ClaudeTurnstileSchedule.ps1 runs this
+        # script on every registration.
+        try {
+            $seed = & (Join-Path $PSScriptRoot 'Sync-ClaudeTurnstileGovernance.ps1') -Direction ToTurnstile -Seed -ResourceGroup $ResourceGroup -ApimName $ApimName
+            $seeded = "seeded: $($seed.Catalog); tiers: $($seed.Tiers)"
+        }
+        catch {
+            $settings.governanceAuthority = 'Gateway'
+            Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $script:TurnstileIntegrationNamedValue -Value (ConvertTo-ClaudeTurnstileIntegrationValue -Settings $settings)
+            throw "Turnstile could not be given the gateway's current state, so governance stays with the gateway: $($_.Exception.Message)"
+        }
+    }
+    foreach ($grant in @(
+            @{ Principal = $jobIdentity; Role = $writerRole; Scope = $gatewayId },
+            @{ Principal = $apiIdentity; Role = 'Container Apps Jobs Operator'; Scope = $applyJobId })) {
+        if (-not (az role assignment list --assignee $grant.Principal --role $grant.Role --scope $grant.Scope --query "[0].id" -o tsv 2>$null)) {
+            for ($try = 1; ; $try++) {
+                az role assignment create --assignee-object-id $grant.Principal --assignee-principal-type ServicePrincipal --role $grant.Role --scope $grant.Scope -o none 2>$null
+                if ($LASTEXITCODE -eq 0) { break }
+                # A role defined a moment ago takes a while to be usable everywhere.
+                if ($try -ge 6) { throw "Could not grant $($grant.Role) on $($grant.Scope)." }
+                Start-Sleep -Seconds 20
+            }
+            $grants.Add("$($grant.Role) on $(Split-Path $grant.Scope -Leaf)")
+        }
+    }
+    az webapp config appsettings set -g $rg -n $apiApp --settings "GATEWAY_APPLY_JOB_ID=$applyJobId" -o none
+    $governanceWiring = "saves in Turnstile start $(Split-Path $applyJobId -Leaf) ($seeded). Add gatewayApplyJobId=$applyJobId to Turnstile's main.parameters.json so a redeploy keeps it"
+}
+elseif ($wasTurnstile) {
+    # Back to the gateway: saves in Turnstile no longer reach it, and the job loses its write.
+    az webapp config appsettings set -g $rg -n $apiApp --settings 'GATEWAY_APPLY_JOB_ID=' -o none
+    if ($jobIdentity -and $gatewayId) {
+        $assigned = az role assignment list --assignee $jobIdentity --role $writerRole --scope $gatewayId --query "[].id" -o tsv 2>$null
+        foreach ($id in @($assigned | Where-Object { $_ })) { az role assignment delete --ids $id }
+    }
+    $governanceWiring = 'saves in Turnstile no longer reach the gateway; the apply job can no longer write it'
+}
 
 # --- Prove it: an admin token reaches the API, admin-only ---------------------------------
 $validation = 'skipped'
@@ -216,7 +297,9 @@ if (-not $SkipValidation) {
     Tenant          = $settings.tenantId
     AdminRole       = $entra['ENTRA_ADMIN_ROLE']
     PriceSource     = $settings.priceSource
-    BudgetAuthority = $settings.budgetAuthority
+    BudgetAuthority = $(if ($settings.governanceAuthority -eq 'Turnstile') { 'Turnstile' } else { $settings.budgetAuthority })
+    GovernanceAuthority = $settings.governanceAuthority
+    Governance      = $governanceWiring
     PersonBudgets   = $settings.personBudgets
     Granted         = $(if ($grants.Count) { $grants.ToArray() } else { @() })
     Validation      = $validation

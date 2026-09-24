@@ -159,7 +159,7 @@ function Get-ClaudeTierMonthlyTokens {
 
 $script:TurnstileIntegrationNamedValue = 'turnstile-integration'
 $script:TurnstileIntegrationFields = @('version', 'url', 'clientId', 'tenantId', 'scope', 'eventHubNamespace', 'eventHubName',
-    'resourceGroup', 'priceSource', 'budgetAuthority', 'personBudgets', 'connectedAt', 'connectedBy')
+    'resourceGroup', 'priceSource', 'budgetAuthority', 'governanceAuthority', 'personBudgets', 'connectedAt', 'connectedBy')
 
 function ConvertTo-ClaudeTurnstileIntegrationValue {
     <#
@@ -175,6 +175,7 @@ function ConvertTo-ClaudeTurnstileIntegrationValue {
     if ([string]$Settings['scope'] -notmatch '^api://[0-9a-f-]{36}/\S+$') { $problems.Add('scope must be api://<client id>/<scope>') }
     if ([string]$Settings['priceSource'] -notin 'Gateway', 'Turnstile') { $problems.Add('priceSource must be Gateway or Turnstile') }
     if ([string]$Settings['budgetAuthority'] -notin 'Gateway', 'Turnstile') { $problems.Add('budgetAuthority must be Gateway or Turnstile') }
+    if ($Settings.Contains('governanceAuthority') -and [string]$Settings['governanceAuthority'] -notin 'Gateway', 'Turnstile') { $problems.Add('governanceAuthority must be Gateway or Turnstile') }
     if ($Settings.Contains('eventHubNamespace') -and [string]$Settings['eventHubNamespace'] -and [string]$Settings['eventHubNamespace'] -notmatch '^[A-Za-z][A-Za-z0-9-]{4,48}[A-Za-z0-9]$') { $problems.Add('eventHubNamespace is not a valid namespace name') }
     # key=value;key=value, with no quotes anywhere. On Windows az runs through cmd.exe,
     # which strips double quotes from arguments - measured: JSON written this way came back

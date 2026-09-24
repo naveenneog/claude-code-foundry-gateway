@@ -31,7 +31,9 @@
 param(
     [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$ApimName = $env:CLAUDE_APIM,
-    [switch]$SkipGovernance
+    [switch]$SkipGovernance,
+    # The apply job: governance only, started when something is saved in Turnstile.
+    [switch]$SkipExport
 )
 
 $ErrorActionPreference = 'Stop'
@@ -49,7 +51,8 @@ if (-not $ApimName) {
 $integration = ConvertFrom-ClaudeTurnstileIntegrationValue (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $script:TurnstileIntegrationNamedValue)
 if (-not $integration) { throw "$ApimName is not connected to Turnstile. Run ./scripts/Connect-ClaudeTurnstile.ps1." }
 
-$export = & (Join-Path $PSScriptRoot 'Export-ClaudeTurnstileUsage.ps1') -ResourceGroup $ResourceGroup -ApimName $ApimName
+$export = if ($SkipExport) { [pscustomobject]@{ From = ''; To = ''; Requests = 0; CacheEvents = 0; CostUsd = 0; Batches = 0 } }
+else { & (Join-Path $PSScriptRoot 'Export-ClaudeTurnstileUsage.ps1') -ResourceGroup $ResourceGroup -ApimName $ApimName }
 
 $governance = 'skipped'
 if (-not $SkipGovernance) {
@@ -61,13 +64,20 @@ if (-not $SkipGovernance) {
         throw "Could not get a token for $resource. Assign this identity Turnstile's admin app role: ./scripts/Connect-ClaudeTurnstile.ps1 -ExporterPrincipalId <object id>."
     }
     $sync = Join-Path $PSScriptRoot 'Sync-ClaudeTurnstileGovernance.ps1'
-    $result = if ([string]$integration['budgetAuthority'] -eq 'Turnstile') {
+    # Where governance is authored decides the direction: Turnstile authoring everything, Turnstile
+    # authoring budgets only, or the gateway authoring and Turnstile mirroring it.
+    $fromTurnstile = [string]$integration['governanceAuthority'] -eq 'Turnstile' -or [string]$integration['budgetAuthority'] -eq 'Turnstile'
+    $result = if ($fromTurnstile) {
         & $sync -Direction FromTurnstile -Apply -AccessToken $token.Trim() -ResourceGroup $ResourceGroup -ApimName $ApimName
     }
     else {
         & $sync -AccessToken $token.Trim() -ResourceGroup $ResourceGroup -ApimName $ApimName
     }
-    $governance = if ($result.Direction -eq 'FromTurnstile') { "from Turnstile: $($result.Changes) change(s), $($result.Applied) applied" }
+    $governance = if ($result.Mode -eq 'governance') {
+        "from Turnstile: $($result.Units) unit(s), $($result.Teams) team(s), $($result.Tiers) tier(s); $($result.Applied) named value(s) written; membership $($result.Membership)" +
+            $(if (@($result.Problems).Count) { "; not applied: $(@($result.Problems) -join '; ')" } else { '' })
+    }
+    elseif ($result.Direction -eq 'FromTurnstile') { "from Turnstile: $($result.Changes) change(s), $($result.Applied) applied" }
     else {
         # Counted by outcome: Turnstile answers an unchanged budget with 200 and no change, and
         # refuses a team budget above its unit's, so a bare count would hide both.
