@@ -180,7 +180,8 @@ if ($Direction -eq 'FromTurnstile') {
 }
 
 # --- ToTurnstile ---------------------------------------------------------------------------
-$catalog = ConvertTo-ClaudeTurnstileCatalog -Registry $registry -Parents $parents -IncludeUnassigned:($unassignedMode -ne 'deny')
+$modes = ConvertFrom-ClaudeBuModes (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-modes')
+$catalog = ConvertTo-ClaudeTurnstileCatalog -Registry $registry -Parents $parents -Modes $modes -IncludeUnassigned:($unassignedMode -ne 'deny')
 $plan = if ($authority -eq 'Gateway') { Get-ClaudeTurnstileBudgetPlan -Registry $registry -Parents $parents } else { @() }
 if ($WhatIf) {
     return [pscustomobject][ordered]@{

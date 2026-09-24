@@ -29,6 +29,9 @@
 #>
 
 # Claude's published list rates, per million tokens, retrieved 2026-09-15 from
+. (Join-Path $PSScriptRoot 'ClaudeBudgetModes.ps1')
+
+# Claude's published list rates, per million tokens, retrieved 2026-09-15 from
 # https://platform.claude.com/docs/en/about-claude/pricing
 #
 # Only base input and output are stored. The cache rates are multipliers of base

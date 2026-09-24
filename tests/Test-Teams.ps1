@@ -139,6 +139,27 @@ Assert 'they report separate headers'      ($policy -match 'x-bu-parent-quota-re
 Assert 'no parent means no second charge'  ($policy -match 'parentUnit"\]\s*!=\s*""|parentUnit"\] != ""')
 Assert 'an unpriced parent is skipped'     ($policy -match 'parentQuota"\] != "0"')
 
+# P46 leaves strict on its original counter; a second, effective quota controls modes.
+$installer = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
+Assert 'modes have a separate preserved named value' ($bicep -match "key: 'bu-modes', value: buModesValue" -and $bicep -match "empty\(buModesExisting\) \? ',,' : buModesExisting")
+Assert 'installer reads and passes modes on redeploy' ($installer -match 'named-value-id bu-modes --query value' -and $installer -match 'buModesExisting=\$buModes')
+foreach ($scope in 'bu', 'parent') {
+    Assert "$scope mode lookup is anchored and defaults strict" ($policy -match "(?s)name=`"${scope}Mode`".*?var map = `"\{\{bu-modes\}\}`";.*?var marker = `",`" \+ unit \+ `"=`";.*?return `"strict`"")
+    Assert "$scope notify skips quota instead of inventing unlimited tokens" ($policy -match "(?s)name=`"${scope}Limit`".*?if \(mode == `"notify`"\) \{ return `"0`"; \}")
+    Assert "$scope allowance uses overflow-safe floor arithmetic" ($policy -match "(?s)name=`"${scope}Limit`".*?Math.Min\(long.MaxValue, tokens \+ Math.Floor\(tokens \* pct / 100m\)\)")
+    Assert "$scope strict retains the original quota" ($policy -match "(?s)name=`"${scope}Limit`".*?return \(string\)context.Variables\[`"${scope}Quota`"\]")
+    Assert "$scope limit is effective, not the base budget" ($policy -match "token-quota=`"@\(long.Parse\(\(string\)context.Variables\[`"${scope}Limit`"\]\)\)")
+    Assert "$scope remaining estimate is exposed to policy" ($policy -match "remaining-quota-tokens-variable-name=`"${scope}Remaining`"")
+    Assert "$scope allowance notice requires an estimate beyond base" ($policy -match "remaining < limit - budget")
+}
+Assert 'both notify limits are skipped' (([regex]::Matches($policy, '(bu|parent)Limit"\] != "0"')).Count -eq 2)
+Assert 'notices are response headers without buffering' ($policy -match 'name="x-claude-budget-notice"' -and $policy -notmatch 'context.Response.Body.As')
+Assert 'budget trace joins the usage ledger' ($policy -match 'source="claude-budget"' -and $policy -match 'name="BaseTokens"' -and $policy -match 'name="ParentBaseTokens"' -and $policy -match 'name="ParentMode"')
+$modeWriter = Get-Content $setPath -Raw
+Assert 'CLI exposes modes and optional allowance' ($modeWriter -match "ValidateSet\('Strict', 'Allowance', 'Notify'\)" -and $modeWriter -match '\$AllowancePercent')
+Assert 'CLI preserves unedited modes and removes deleted ones' ($modeWriter -match "PSBoundParameters.ContainsKey\('Mode'\)" -and $modeWriter -match '\$modes.Remove\(\$Id\)')
+Assert 'CLI validates before any write and reads modes back' ($modeWriter.IndexOf('ConvertTo-ClaudeBudgetMode') -ge 0 -and $modeWriter.IndexOf('ConvertTo-ClaudeBudgetMode') -lt $modeWriter.IndexOf('Set-ApimNamedValue -') -and $modeWriter -match 'Budget modes did not read back')
+
 # The refusal has to say which level ran out, or a team lead cannot tell whether
 # to ask for their own budget or the unit's.
 $i = $policy.IndexOf('which == "business unit"')

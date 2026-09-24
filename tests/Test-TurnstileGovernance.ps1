@@ -143,6 +143,48 @@ $grantGraph = Get-Content (Join-Path $root 'scripts/Grant-ClaudeGovernanceGraphA
 $schedulePass = Get-Content (Join-Path $root 'scripts/Invoke-ClaudeTurnstileSchedule.ps1') -Raw
 $jobTemplate = Get-Content (Join-Path $root 'infra/turnstile-schedule.bicep') -Raw
 
+# P46: mode metadata is independent of the legacy registry and survives seeding.
+$modeRegistry = @(
+    [pscustomobject]@{ Id = 'sales'; Group = 'Contoso Sales'; TokensPerMonth = 1000 },
+    [pscustomobject]@{ Id = 'sales-emea'; Group = 'Contoso Sales EMEA'; TokensPerMonth = 500 },
+    [pscustomobject]@{ Id = 'engineering'; Group = 'Contoso Engineering'; TokensPerMonth = 1000 })
+$modeParents = [ordered]@{ 'sales-emea' = 'sales' }
+$modeMap = [ordered]@{ sales = 'allowance:10'; 'sales-emea' = 'notify' }
+if (Get-Command ConvertFrom-ClaudeBuModes -ErrorAction SilentlyContinue) {
+    $parsedModes = ConvertFrom-ClaudeBuModes ',sales=allowance:10,sales-emea=notify,'
+    Assert 'modes round trip without touching the registry' ((ConvertTo-ClaudeBuModes $parsedModes) -eq ',sales=allowance:10,sales-emea=notify,')
+    Assert 'empty modes and explicit strict are canonical strict' ((ConvertFrom-ClaudeBuModes ',,').Count -eq 0 -and (ConvertTo-ClaudeBuModes (ConvertFrom-ClaudeBuModes ',sales=strict,')) -eq ',,')
+    foreach ($bad in ',sales=allowance:0,', ',sales=allowance:101,', ',sales=allowance:1.5,', ',sales=notify:10,', ',sales=other,', ',sales=notify,sales=strict,', 'sales=notify', ',Bad=notify,') {
+        Assert "invalid stored mode refused: $bad" (Throws { ConvertFrom-ClaudeBuModes $bad })
+    }
+    $modeCatalog = ConvertTo-ClaudeTurnstileCatalog -Registry $modeRegistry -Parents $modeParents -Modes $modeMap
+    $modeCatalog['source'] = 'configured'
+    $modeRound = ConvertFrom-ClaudeTurnstileGovernance -Catalog $modeCatalog
+    Assert 'unit and team modes survive the catalog round trip' ((ConvertTo-ClaudeBuModes $modeRound.Modes) -eq (ConvertTo-ClaudeBuModes $modeMap))
+    Assert 'seeding emits an integer allowance' ($modeCatalog.organizations[0].attributes.allowance_percent -is [int] -and $modeCatalog.organizations[0].attributes.allowance_percent -eq 10)
+    Assert 'seeding emits strict explicitly without allowance' ($modeCatalog.organizations[1].attributes.enforcement -eq 'strict' -and -not $modeCatalog.organizations[1].attributes.Contains('allowance_percent'))
+    foreach ($attrs in @(
+        @{ enforcement = 'other' }, @{ enforcement = '' }, @{ enforcement = 'Notify' },
+        @{ enforcement = 'allowance' }, @{ enforcement = 'allowance'; allowance_percent = 0 },
+        @{ enforcement = 'allowance'; allowance_percent = 101 }, @{ enforcement = 'allowance'; allowance_percent = 1.5 },
+        @{ enforcement = 'allowance'; allowance_percent = '10' }, @{ enforcement = 'allowance'; allowance_percent = $true },
+        @{ enforcement = 'notify'; allowance_percent = 10 }, @{ enforcement = 'strict'; allowance_percent = 10 },
+        @{ allowance_percent = 10 })) {
+        $badCatalog = $modeCatalog | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+        $badCatalog.organizations[0].attributes = $attrs
+        $invalid = ConvertFrom-ClaudeTurnstileGovernance -Catalog $badCatalog
+        Assert "invalid mode is reported: $($attrs | ConvertTo-Json -Compress)" ($invalid.InvalidModes -and @($invalid.Problems).Count -gt 0)
+    }
+    $modeCurrent = [ordered]@{ 'bu-registry' = ConvertTo-ClaudeBuRegistry $modeRound.Registry; 'bu-parents' = ConvertTo-ClaudeBuParents $modeRound.Parents; 'bu-modes' = ',sales-emea=notify,sales=allowance:10,' }
+    $modeChanges = Get-ClaudeGatewayGovernanceChanges -Desired $modeRound -Current $modeCurrent
+    Assert 'mode comparison ignores order' (@($modeChanges).Count -eq 0)
+    $modeCurrent['bu-modes'] = ',,'
+    $modeChanges = Get-ClaudeGatewayGovernanceChanges -Desired $modeRound -Current $modeCurrent
+    Assert 'changing modes writes only modes' (@($modeChanges).Count -eq 1 -and $modeChanges[0].Id -eq 'bu-modes')
+}
+else { Assert 'budget mode validation and serialization exist' $false }
+Assert 'seeding reads and forwards modes' ($sync -match "-Id 'bu-modes'" -and $sync -match 'ConvertTo-ClaudeTurnstileCatalog .* -Modes \$modes')
+
 # What the gateway sends Turnstile comes back as the same registry.
 $sent = ConvertTo-ClaudeTurnstileCatalog -Registry $registry -Parents $parents -IncludeUnassigned
 $stored = [pscustomobject]@{
@@ -200,6 +242,7 @@ Assert 'named models are comma-anchored'                      ((@($d.Tiers | Whe
 Assert 'Turnstile''s demonstration catalog is never applied'  (Throws { ConvertFrom-ClaudeTurnstileGovernance -Catalog ([pscustomobject]@{ source = 'seeded'; organizations = @(); departments = @() }) })
 
 $gatewayNow = [ordered]@{
+    'bu-modes' = ',,'
     'bu-registry' = ConvertTo-ClaudeBuRegistry @($d.Registry); 'bu-parents' = ConvertTo-ClaudeBuParents $d.Parents
     'tpm-standard' = '20000'; 'quota-standard' = '500000'; 'models-standard' = ',,'
     'tpm-premium' = '100000'; 'quota-premium' = '5000000'; 'models-premium' = ',claude-opus-5,claude-sonnet-5,'
@@ -315,12 +358,13 @@ function Get-ApimNamedValue { param($ResourceGroup, $ApimName, $Id) $script:gw[$
 function Set-ApimNamedValue { param($ResourceGroup, $ApimName, $Id, $Value) $script:writes++; if (-not $script:dropWrites) { $script:gw[$Id] = $Value } }
 function Test-ClaudeGraphGroupAccess { $script:graphState }
 function Test-ClaudeEntraGroup { param($Group) $directory[$Group.ToLowerInvariant()] }
-$stub = Join-Path ([IO.Path]::GetTempPath()) "turnstile-apply-$PID-$(Get-Random)"
+$stub = Join-Path $root "onboarding\turnstile-apply-$PID-$(Get-Random)"
 New-Item -ItemType Directory -Path $stub -Force | Out-Null
 Set-Content -Path (Join-Path $stub 'Sync-ClaudeAccess.ps1') -Value 'param($ApimName, $ResourceGroup, $StandardGroup, $PremiumGroup) Set-Content -Path (Join-Path $PSScriptRoot "refreshed.txt") -Value "$StandardGroup|$PremiumGroup"'
 $refreshed = Join-Path $stub 'refreshed.txt'
 $reset = {
     $script:gw = @{
+        'bu-modes' = ',,'
         'bu-registry' = ConvertTo-ClaudeBuRegistry @([pscustomobject]@{ Id = 'platform'; Group = 'Claude BU Platform'; TokensPerMonth = 20000000 })
         'bu-parents' = ',,'; 'tpm-standard' = '10000'; 'quota-standard' = '500000'; 'models-standard' = ',,'
         'tpm-premium' = '100000'; 'quota-premium' = '5000000'; 'models-premium' = ',claude-opus-5,claude-sonnet-5,'
@@ -365,6 +409,32 @@ try {
 
     & $reset; $script:dropWrites = $true
     Assert 'a write that does not read back is an error'      (Throws { Invoke-ClaudeGatewayGovernanceApply @applyArgs -Apply })
+
+    if (Get-Command ConvertFrom-ClaudeBuModes -ErrorAction SilentlyContinue) {
+        & $reset; $script:graphState = 'ok'
+        $modeArgs = @{ Catalog = $modeCatalog; ResourceGroup = 'rg'; ApimName = 'apim'; ScriptRoot = $stub }
+        $directory['contoso sales'] = 'exists'; $directory['contoso sales emea'] = 'exists'; $directory['contoso engineering'] = 'exists'
+        $r = Invoke-ClaudeGatewayGovernanceApply @modeArgs -Apply
+        Assert 'apply writes unit and team modes and reads them back' ($script:gw['bu-modes'] -eq ',sales=allowance:10,sales-emea=notify,')
+        $script:writes = 0
+        $r = Invoke-ClaudeGatewayGovernanceApply @modeArgs -Apply
+        Assert 'applying unchanged modes performs no writes' ($script:writes -eq 0)
+        $badCatalog = $modeCatalog | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+        $badCatalog.departments[1].attributes = @{ enforcement = 'allowance'; allowance_percent = 101 }
+        $beforeModes = $script:gw['bu-modes']
+        $r = Invoke-ClaudeGatewayGovernanceApply @modeArgs -Catalog $badCatalog -Apply
+        Assert 'invalid team mode prevents every write' ($script:writes -eq 0 -and $r.Applied -eq 0 -and @($r.Problems).Count -gt 0 -and $script:gw['bu-modes'] -eq $beforeModes)
+        $r = Invoke-ClaudeGatewayGovernanceApply @modeArgs -Catalog $empty -Apply
+        Assert 'empty catalog preserves modes alongside registry' ($script:gw['bu-modes'] -eq $beforeModes)
+        $strictCatalog = $modeCatalog | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+        foreach ($entity in @($strictCatalog.organizations) + @($strictCatalog.departments)) { $entity.attributes = @{} }
+        $r = Invoke-ClaudeGatewayGovernanceApply @modeArgs -Catalog $strictCatalog -Apply
+        Assert 'missing mode metadata clears previous exceptions to strict' ($script:gw['bu-modes'] -eq ',,')
+        & $reset; $script:graphState = 'ok'; $script:dropWrites = $true
+        $script:gw['bu-registry'] = ConvertTo-ClaudeBuRegistry $modeRound.Registry
+        $script:gw['bu-parents'] = ConvertTo-ClaudeBuParents $modeRound.Parents
+        Assert 'a mode-only write must read back' (Throws { Invoke-ClaudeGatewayGovernanceApply @modeArgs -Apply })
+    }
 }
 finally { Remove-Item $stub -Recurse -Force -ErrorAction SilentlyContinue }
 Write-Host ''

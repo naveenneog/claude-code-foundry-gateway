@@ -48,6 +48,16 @@ function ConvertFrom-ClaudeTurnstileGovernance {
         throw "Turnstile's catalog is its seeded demonstration set. Add business units on Turnstile's Gateway governance page first; nothing was applied."
     }
     $problems = New-Object System.Collections.Generic.List[string]
+    $modes = [ordered]@{}
+    $invalidModes = $false
+    foreach ($entity in @($Catalog.organizations) + @($Catalog.departments)) {
+        if ($entity.id -eq 'unassigned' -or $entity.parent_id -eq 'unassigned' -or $entity.id -eq $entity.parent_id) { continue }
+        try {
+            $mode = ConvertTo-ClaudeBudgetMode -Mode $entity.attributes.enforcement -AllowancePercent $entity.attributes.allowance_percent
+            if ($mode -ne 'strict') { $modes[[string]$entity.id] = $mode }
+        }
+        catch { $invalidModes = $true; $problems.Add("'$($entity.id)': $($_.Exception.Message)") }
+    }
     $limits = @{}
     foreach ($b in @($BudgetItems)) {
         if ($b -and [string]$b.scope_type -in @('organization', 'department') -and $null -ne $b.token_limit) {
@@ -106,6 +116,8 @@ function ConvertFrom-ClaudeTurnstileGovernance {
     [pscustomobject]@{
         Registry = $units.ToArray()
         Parents  = $parents
+        Modes    = $modes
+        InvalidModes = $invalidModes
         Tiers    = $tierSettings.ToArray()
         Problems = $problems.ToArray()
     }
@@ -129,6 +141,7 @@ function Get-ClaudeGatewayGovernanceChanges {
     $want = [ordered]@{
         'bu-registry' = ConvertTo-ClaudeBuRegistry @($Desired.Registry)
         'bu-parents'  = ConvertTo-ClaudeBuParents $Desired.Parents
+        'bu-modes'    = ConvertTo-ClaudeBuModes $Desired.Modes
     }
     foreach ($t in @($Desired.Tiers)) {
         $want["tpm-$($t.Id)"] = [string]$t.TokensPerMinute
@@ -241,6 +254,10 @@ function Select-ClaudeGovernanceWithGroups {
         elseif ($keptIds -contains $team) { $problems.Add("team '$team': its business unit was not applied") }
     }
     $kept = @($kept | Where-Object { -not $Desired.Parents.Contains($_.Id) -or $parents.Contains($_.Id) })
+    $modes = [ordered]@{}
+    foreach ($unit in $kept) {
+        if ($Desired.Modes -and $Desired.Modes.Contains($unit.Id)) { $modes[$unit.Id] = $Desired.Modes[$unit.Id] }
+    }
     $tierGroups = [ordered]@{}
     foreach ($tier in @($Desired.Tiers)) {
         $key = $tier.Group.ToLowerInvariant()
@@ -251,7 +268,7 @@ function Select-ClaudeGovernanceWithGroups {
         }
     }
     [pscustomobject]@{
-        Governance = [pscustomobject]@{ Registry = $kept; Parents = $parents; Tiers = @($Desired.Tiers) }
+        Governance = [pscustomobject]@{ Registry = $kept; Parents = $parents; Modes = $modes; Tiers = @($Desired.Tiers) }
         TierGroups = $tierGroups
         Problems   = $problems.ToArray()
     }
@@ -277,7 +294,13 @@ function Invoke-ClaudeGatewayGovernanceApply {
         [switch]$Apply
     )
     $desired = ConvertFrom-ClaudeTurnstileGovernance -Catalog $Catalog -BudgetItems @($BudgetItems) -Tiers @($Tiers)
-    $ids = @('bu-registry', 'bu-parents') + @($script:ClaudeGatewayTiers | ForEach-Object { "tpm-$_"; "quota-$_"; "models-$_" })
+    if ($desired.InvalidModes) {
+        return [pscustomobject]@{
+            Direction = 'FromTurnstile'; Mode = 'governance'; Units = 0; Teams = 0; Tiers = 0
+            Changes = @(); Applied = 0; Membership = 'not refreshed: invalid budget modes'; Problems = $desired.Problems
+        }
+    }
+    $ids = @('bu-registry', 'bu-parents', 'bu-modes') + @($script:ClaudeGatewayTiers | ForEach-Object { "tpm-$_"; "quota-$_"; "models-$_" })
     # entitlement-source is read, never written: it says where the policy finds membership.
     $current = Get-ClaudeGatewayGovernanceValues -ResourceGroup $ResourceGroup -ApimName $ApimName -Ids ($ids + 'entitlement-source')
 
@@ -290,7 +313,7 @@ function Invoke-ClaudeGatewayGovernanceApply {
     $changes = Get-ClaudeGatewayGovernanceChanges -Desired $selected.Governance -Current $current
     if (-not @($selected.Governance.Registry).Count -and $currentUnits.Count) {
         # Every unit gone at once is far more often a read that went wrong than a decision.
-        $changes = @($changes | Where-Object { $_.Id -notin 'bu-registry', 'bu-parents' })
+        $changes = @($changes | Where-Object { $_.Id -notin 'bu-registry', 'bu-parents', 'bu-modes' })
         $problems += "Turnstile has no business unit the gateway can apply, so the gateway's $($currentUnits.Count) were left as they are"
     }
 
