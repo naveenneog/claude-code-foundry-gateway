@@ -1,0 +1,10 @@
+{
+  "version": "2.0",
+  "functionTimeout": "00:05:00",
+  "logging": {
+    "logLevel": {"default": "Warning", "Host.Results": "Information"},
+    "applicationInsights": {
+      "samplingSettings": {"isEnabled": true, "excludedTypes": "Exception"}
+    }
+  }
+}
