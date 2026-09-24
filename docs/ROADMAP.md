@@ -176,7 +176,11 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       days, which is not a traffic model. **U9 still open**
 - [ ] P19 scale identity resolution — acceptance: a durable entitlement projection synced from Graph
       off the request path, with a written failure contract for stale, unknown and revoked
-      identities. **U10, ADR-0005**
+      identities. **U10, ADR-0005**. 2026-09-24: continuation paging, absolute two-hour leases, miss
+      admission and coalescing, and a private-only enterprise default are built and measured, and
+      500,000 records were loaded and read ([ADR-0017](adr/0017-projection-freshness-and-admission.md)).
+      Still open: `cos-default`, `cos-upgrade`, a scheduled Graph scan (**U17**), coalescing across
+      instances, and sizing per deployment
 - [x] P19b shadow migration — the sequence is settled in
       [ADR-0009](adr/0009-shadow-migration.md): five phases, authorization unchanged until the
       canary at phase 4, counter keys and period boundaries preserved throughout, and a rollback

@@ -54,6 +54,19 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   pre-authorized on Turnstile's API: the token is exchanged for a code that works once, within a
   minute. For tenants whose web sign-in has no consent yet (**U19**).
   [ADR-0016](docs/adr/0016-delegated-management.md).
+- **A projection record authorizes for two hours at most, and a burst of misses gets an answer.**
+  Each complete directory observation stamps every member it keeps with a reconciliation generation
+  and an absolute expiry, two hours by default and at most. The resolver and the gateway's cache
+  both refuse an expired record with a 503 that names the expired projection, so a stopped writer
+  no longer leaves access standing. Reconcile an existing projection once before deploying the new
+  resolver and policy. Both writers read every Cosmos continuation page before publishing. Before
+  the resolver, the gateway admits at most 100 concurrent misses and 200 a second and answers the
+  rest with a retryable 429; the resolver coalesces concurrent reads of one identity within a
+  process and runs two always-ready instances. Enterprise Cosmos defaults to private-only. Measured
+  on the Premium v2 test gateway: no 503 in the first 20 misses after deployment or after 16 minutes
+  idle, nor in bursts of 50 and 100. A throwaway container loaded 500,000 records at 954 a second,
+  and 500 point reads cost 1 RU each, p99 51 ms (**U14**; **U18**, narrowed).
+  [ADR-0017](docs/adr/0017-projection-freshness-and-admission.md).
 - **Scale, measured at 500,000 identities.** On a throwaway Premium v2 instance with a mock
   backend, API Management's `llm-token-limit` counters accepted and charged 500,000 identities at
   about 1,600 requests a second on one unit, and no allowance was exact: one identity was served

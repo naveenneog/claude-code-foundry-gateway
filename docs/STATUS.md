@@ -144,7 +144,55 @@ request after `-Apply` returned.
 | UX | Accept | One command per step, each safe to re-run, with a portal path beside the script |
 | Security | Accept | Single tenant, assignment required, role checked on every token; pictures redacted in the page and refused if a real value survives |
 
-## Where P19 stands, 2026-09-23
+## Where P19 stands, 2026-09-24
+
+**Hardened and measured at 500,000 records, but still not the default.** The four review findings
+recorded on 2026-09-23 that were code are fixed, deployed to the Premium v2 test gateway, and
+measured there. The default install still holds about 93 developers, because the installer still
+writes named values: `cos-default` and `cos-upgrade` are not built.
+[ADR-0017](adr/0017-projection-freshness-and-admission.md) records the design.
+
+| Finding from 2026-09-23 | Now |
+|---|---|
+| The resolver accepted a record of any age | Each complete directory observation stamps every member it keeps with a reconciliation generation and an absolute expiry: 7,200 s by default and at most, 60 s at least. The resolver and the gateway's cache both check it, and the cache TTL is clipped to the time left. Measured: a record whose lease was cut to 20 s answered 503, naming the expired projection, although the gateway caches entries for 60 s; restored, it answered 403 again |
+| A burst of misses reached the resolver unthrottled | The gateway admits at most 100 concurrent misses and 200 a second before calling the resolver, and answers the rest with a retryable 429 (`Retry-After: 1`). The resolver coalesces concurrent reads of one identity within a process, holds at most 100 distinct reads, and gives up after 3.5 s. Two always-ready instances take 100 concurrent requests each |
+| The sync read one page of existing records | Both writers read every continuation page, empty ones included, before publishing, and fail on a repeated token or a failed page |
+| `projection.bicep` defaulted to a public account | The enterprise default is private-only; public and selected-IP stay explicit choices |
+| Rollback can regrant leavers; allowance is local to one gateway | Not changed: design, not code |
+
+Measured 2026-09-24:
+
+| | |
+|---|---|
+| **500,000 records** | A throwaway container loaded in 524 s, 954 records a second, 2.95 M RU (5.9 RU a write). 500 point reads of the first, middle and last records cost 1 RU each: p50 47.5 ms, p99 51.0 ms, max 72.1 ms. The container was deleted. This measures storage, not a directory scan or 500,000 people at once |
+| **First requests** | 20 concurrent misses right after deployment: no 503, slowest 2,334 ms. The same after 16 minutes idle: no 503, slowest 1,105 ms. Before the fix, 2 of 3 first requests after idle returned 503 |
+| **Bursts** | 100, three of 50 and three of 100 concurrent misses: no 503, slowest 1,682 ms. 500 primed connections at once: 279 answered, 221 retryable 429, no 503 |
+| **Miss overhead (U14)** | 100 misses against 99 hits: 81 ms more at p50, 192 ms more at p99 |
+| **Gate** | Packet gate PASS on `8a19524` in 29 min 35 s; 57 of 57 projection mutations caught |
+
+The lease has a running cost. Every member the scan keeps is written again, changed or not, so the
+scan has to run at least hourly and finish inside the lease. At 500,000 members that is about 365
+million writes a month: about $538 a month at the measured 5.9 RU a write and $0.25 per million RU,
+on top of $91.56 a month at rest, which is $26.28 more than with one warm instance (derived, list
+price).
+
+**The test gateway's leases expire at 2026-09-24T15:58:49Z.** Nothing reconciles there on a
+schedule: the runner is stopped, and an unattended scan needs `GroupMember.Read.All` (U17). After
+that time the test gateway answers every request with 503 until someone reconciles again. That is
+the fix working, not a fault.
+
+Still missing before 500,000 can be claimed:
+
+- **Counters at that cardinality (U9).** Unchanged: narrowed, not closed.
+- **A scheduled directory scan of 500,000 members.** It needs U17 and has not been run at that size.
+- **Coalescing across instances.** It is per process, so two instances can both read one identity.
+- **Bursts of different identities, a regional failure, and allowance retention on failover.**
+- **Making it the default** (`cos-default`) and a one-command move for existing gateways
+  (`cos-upgrade`).
+- **Foundry quota.** Unchanged: the model deployment, not the gateway, is the first limit
+  ([SCALE.md](SCALE.md)).
+
+## Where P19 stood, 2026-09-23 (superseded by the section above)
 
 **Not finished, but no longer only designed.** The default install still holds about 93
 developers, because the projection is not the default and has not been load-tested at 500,000.
