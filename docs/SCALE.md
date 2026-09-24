@@ -11,6 +11,17 @@ Run the measurement against your gateway rather than reading the numbers here:
 
 It exits non-zero when a list is past 80% of its limit, so it runs as a check.
 
+**Prerequisites:** Reader access to the selected gateway for headroom; write,
+network and directory roles for migration as listed in
+[Private projection](SECURE-PROJECTION.md#prerequisites). Run from the
+repository root using explicit resource groups; Foundry, APIM and the
+projection may be in different groups.
+
+**Portal/manual:** APIM > APIs > Named values shows list contents and lengths;
+Overview shows the tier. Measure the actual encoded membership size against the
+table below. This checks configuration capacity, not traffic throughput.
+[Architecture](ARCHITECTURE.md) shows how the optional store fits.
+
 ---
 
 ## What runs out first
@@ -78,8 +89,9 @@ Materialising 500,000 records in a **data store** is unremarkable; materialising
 them in **API Management policy configuration** is what cannot work.
 
 That is the reasoning behind [ADR-0005](adr/0005-identity-projection.md), which
-replaces the list with a durable entitlement projection queried off the request
-path.
+replaces the list with a durable entitlement projection. Graph reconciliation
+runs off the request path; a cache miss reads the projection **on** the request
+path through the resolver.
 
 ---
 
@@ -343,15 +355,20 @@ quota a developer can go, or why exhausted identities were admitted again, so
 1. Observe the five numbers on a pilot cohort, over enough days to include a bad one.
 2. Load-test API Management, Foundry capacity, telemetry ingestion and quota
    composition **together**. Each is fine alone; the interaction is what fails.
-3. Only then size the projection in [ADR-0005](adr/0005-identity-projection.md).
+3. Size and test reconciliation, miss admission and the projection alongside the
+   request path; storage cardinality alone does not size the full service.
 
 The projection runs on Cosmos DB serverless with a Function resolver, decided in
 [ADR-0011](adr/0011-projection-platform.md). What it costs is computed rather
 than quoted:
 
 ```powershell
-./scripts/Measure-ClaudeProjectionCost.ps1 -Developers 500000 -DailyActive 50000
+./scripts/Measure-ClaudeProjectionCost.ps1 -Developers 500000 -DailyActive 50000 -AlwaysReadyInstances 2
 ```
+
+**Manual:** the [cost table](SECURE-PROJECTION.md#cost) exposes the inputs;
+Azure Cost Management > Cost analysis shows actual billing after deployment.
+The script is a local calculation, not a portal budget or a measured invoice.
 
 The historical one-warm-instance, read-path estimate was **$69.09 a month**, of which
 $65.28 bills at rest: five private endpoints, five private DNS zones and one warm
@@ -376,6 +393,11 @@ and budget reconciliation separately, rather than presenting its total as comple
 ---
 
 ## The budget is a delayed kill switch, not a hard cap
+
+The delay calculation below describes a **ledger-driven external watcher**,
+not APIM's admission-time token counter. The repository's token quotas are
+also soft and cache-blind. Do not assume a financial watcher is installed by
+the default gateway deployment.
 
 A budget enforced outside the request path cannot stop spending at the moment a
 threshold is crossed. Four things elapse first:
@@ -413,6 +435,12 @@ A genuine hard cap needs admission-time budget reservation: the decision has to
 be made before the request is served, against state the gateway already holds.
 API Management's quota policies do not offer that, so this is not called one.
 
+**Portal/manual measurement:** Log Analytics > Logs can compare ingestion time
+with request time; the scheduler's execution history gives its interval.
+Observe changed response headers through an entitled test client after editing
+APIM > Named values to measure propagation. A portal value readback alone does
+not establish the delay or in-flight overshoot.
+
 ---
 
 ## Deploying today, and scaling later
@@ -441,6 +469,11 @@ Read from Microsoft Learn on 2026-09-17:
 | Multi-region | no | no | **no** | **yes** |
 | Virtual network integration | **no** | **yes** | yes, plus injection | injection |
 | In-place move | ↔ Standard v2 | ↔ Basic v2 | not documented | classic family only |
+
+Do **not** deploy classic Premium as the multi-region version of this
+accelerator: it lacks the required Anthropic token parsing. The table describes
+platform offerings, not equivalent supported gateway configurations. Multi-
+region governance and allowance retention still need a separate verified design.
 
 Two of those cells matter more than the rest:
 
@@ -504,8 +537,10 @@ The thing that would be painful to migrate is not in the layer being replaced.
 | The oid → tier, oid → unit maps | `allow-*`, `bu-members` | **yes** — these three, and only these |
 
 The named values are a *projection* of Entra, rebuilt from it on every sync. So
-moving to Cosmos changes where the gateway reads, not what is true. The same
-`Sync-ClaudeAccess.ps1` that writes the named values writes the projection.
+moving to Cosmos changes where the gateway reads, not what is true.
+`Sync-ClaudeAccess.ps1` writes named values; `Sync-ClaudeProjection.ps1` and
+the in-network Node writer publish the projection. Reuse the directory model,
+not the assumption that the two commands are interchangeable.
 
 A rollback restores authorization without restoring consumption, which is the
 rule that makes the move safe to reverse mid-flight.
@@ -552,8 +587,11 @@ measures the gap.
 
 ## The move itself, step by step
 
-What a POC customer runs to get from the named-value lists to the projection.
-Every step is reversible, and the gateway keeps serving throughout.
+What a pilot customer runs to get from the named-value lists to the projection.
+The measured small migration kept serving; this is not a zero-downtime
+guarantee. A rollback is safe only while refreshed lists fit and agree with
+current directory membership. Confirm backup, schedule, lease alerts and a
+test cohort before changing the source.
 
 **Before you start**, settle the two decisions that cannot be retrofitted —
 a custom domain and whether you need a second region. See
@@ -572,6 +610,9 @@ no public endpoint. Two ways forward: deploy the resolver with
 move to Standard v2 or Premium v2 and keep everything private.
 [Deploy the projection privately](SECURE-PROJECTION.md) covers both.
 
+**Portal:** APIM > Overview / Pricing tier. For this private runbook choose a
+VNet-capable v2 tier; a public resolver is an explicitly reviewed alternative.
+
 **Rollback:** none needed. Nothing has changed yet.
 
 ### 1. Confirm the switch is present
@@ -583,6 +624,10 @@ az apim nv show -g <rg> --service-name <apim> --named-value-id entitlement-sourc
 Expect `named-value`. If the named value is absent, the gateway is running a
 policy from before the switch existed — redeploy with
 `Install-ClaudeGateway.ps1`, which preserves everything else.
+
+**Portal:** APIM > Named values > `entitlement-source`. A policy/template
+upgrade is a separate change; back up and follow Setup rather than assuming a
+bare template redeploy preserves live state.
 
 **Rollback:** none. This step only reads.
 
@@ -600,9 +645,13 @@ az deployment group create -g <rg> `
 Then point the gateway at the resolver, which still changes nobody's access:
 
 ```powershell
+. ./scripts/ApimNamedValue.ps1
 Set-ApimNamedValue -ResourceGroup <rg> -ApimName <apim> -Id entitlement-resolver-url -Value 'https://func-resolver-<prefix>.azurewebsites.net/api'
 Set-ApimNamedValue -ResourceGroup <rg> -ApimName <apim> -Id entitlement-resolver-audience -Value 'api://<resolver-app-id>'
 ```
+
+**Portal:** APIM > Named values > edit URL/audience from the resolver
+deployment's Outputs. Creating these values does not switch authorization.
 
 **Rollback:** delete the resources. Nothing reads them yet.
 
@@ -639,6 +688,10 @@ deploy the strict resolver and policy. Old unleased records correctly return
 
 **Rollback:** delete and repopulate. No developer is affected either way.
 
+**Portal/manual:** Container instance > Containers > Connect runs the prepared
+writer from inside the VNet; Cosmos > Data Explorer inspects records. Do not
+hand-author freshness timestamps as a substitute for a directory scan.
+
 ### 4. Run the comparison until it reports nothing
 
 Two comparisons, and both must be clean:
@@ -660,6 +713,10 @@ non-zero while there are any. Expired records now count as losing access, so an
 expired snapshot cannot approve a flip. Measured on 2026-09-23: 8 identities compared,
 0 differences.
 
+**Portal:** Entra All members, APIM Named values and Cosmos Data Explorer can
+spot-check a test identity. They are not a replacement for comparing every
+effective identity before a bulk flip.
+
 **Rollback:** not applicable — nothing has changed. Fix the drift and run again.
 
 ### 5. Flip one value
@@ -668,6 +725,10 @@ expired snapshot cannot approve a flip. Measured on 2026-09-23: 8 identities com
 az apim nv update -g <rg> --service-name <apim> `
   --named-value-id entitlement-source --value projection
 ```
+
+**Portal:** APIM > Named values > `entitlement-source` > `projection` > Save.
+Repeat the same action with `named-value` only under the rollback conditions
+below. Check real caller responses after propagation.
 
 Propagation to the running policy was measured at 9–18 seconds on Basic v2. On
 Premium v2 the write itself took 38 to 41 seconds, and the flip took effect
@@ -695,9 +756,13 @@ do not roll back to lists once the population no longer fits them.
 
 ### 6. Watch, then stop maintaining the lists
 
-Give it a working day. `./scripts/Test-ClaudeHealth.ps1` and the chargeback
-workbook both keep working unchanged — the counter key is the object id in both
-paths, so nobody's month restarts and no spend history moves.
+Observe a representative working period. Request counter keys and existing log
+history stay in place; that is not a promise that counters survive an instance
+replacement or failover. Current admin reports still read named-value rosters:
+`Get-ClaudeBudget.ps1`, `Get-ClaudeBusinessUnit.ps1`, the health comparison and
+`ClaudeCost`'s published membership map must be reviewed for projection-scale
+coverage. Do not interpret an old/empty list as the current projected population.
+The request ledger's stamped unit remains available for an audit.
 
 Only once you are satisfied should the sync stop writing the named-value lists.
 Until then they are your rollback. A rollback is only as good as the lists:
@@ -711,4 +776,4 @@ entitled developer with 403 until `Sync-ClaudeAccess.ps1` ran again.
 | The gateway address | unchanged, so no developer reconfigures anything |
 | Per-developer counters | keyed on the object id in both paths — allowances do not reset |
 | Spend history | in Log Analytics, untouched by any of this |
-| The policy | not redeployed at any point in this list |
+| The policy | source flip is configuration-only after the prerequisite policy upgrade and fresh-store comparison |
