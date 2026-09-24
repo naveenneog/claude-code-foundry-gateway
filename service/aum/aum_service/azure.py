@@ -27,7 +27,7 @@ class AzureHttp:
             raise ServiceError(429, "azure_throttled", "Azure throttled the request; retry reads later")
         if not response.ok:
             raise ServiceError(503, "azure_unavailable", f"Azure dependency returned HTTP {response.status_code}")
-        return response.json() if response.content else {}, dict(response.headers)
+        return response.json() if response.content else {}, {k.lower(): v for k, v in response.headers.items()}
 
 
 class NamedValues:

@@ -1,5 +1,7 @@
 import unittest
 from unittest.mock import Mock
+import json
+from pathlib import Path
 
 from aum_service.azure import NamedValues, LogAnalytics
 from aum_service.errors import ServiceError
@@ -74,6 +76,16 @@ class StorageEncodingTests(unittest.TestCase):
         with self.assertRaises(ServiceError):
             encode_entity("requests", "bad/key", {})
         self.assertEqual("PartitionKey eq 'boosts' and RowKey gt 'abc'", row_filter("boosts", "abc"))
+
+
+class FunctionHostTests(unittest.TestCase):
+    def test_timer_extension_and_registered_bindings(self):
+        import function_app
+        config = json.loads((Path(__file__).resolve().parents[2] / "service" / "aum" / "host.json").read_text())
+        self.assertEqual("Microsoft.Azure.Functions.ExtensionBundle", config["extensionBundle"]["id"])
+        bindings = {f.get_function_name(): f.get_bindings_dict() for f in function_app.app.get_functions()}
+        self.assertEqual("0 * * * * *", bindings["expire_boosts"]["bindings"][0]["schedule"])
+        self.assertTrue(bindings["expire_boosts"]["bindings"][0]["useMonitor"])
 
 
 if __name__ == "__main__":
