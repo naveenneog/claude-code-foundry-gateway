@@ -19,8 +19,15 @@ export function chosenOption(options, requested, preferred, nonInteractive) {
 }
 
 export async function choose(label, options, requested, preferred, nonInteractive = !stdin.isTTY) {
-  if (!options.length) throw new Error(`No accessible ${label} found`);
-  const selected = chosenOption(options, requested, preferred, nonInteractive);
+  const flag = { subscription: '--subscription', 'resource group': '--resource-group',
+    'API Management instance': '--apim-name', foundry: '--foundry',
+    appInsights: '--app-insights', workspace: '--workspace', vnet: '--vnet',
+    subnet: '--subnet', keyVault: '--key-vault', dnsZone: '--dns-zone',
+    workbook: '--workbook', 'upstream endpoint': '--upstream' }[label] ?? `--${label}`;
+  if (!options.length) throw new Error(`No accessible ${label} found. Check the signed-in subscription and pass ${flag} after discovering an accessible resource.`);
+  let selected;
+  try { selected = chosenOption(options, requested, preferred, nonInteractive); }
+  catch (error) { throw new Error(`${error.message}. Select ${label} with ${flag}.`); }
   if (selected) return selected;
   const defaultIndex = Math.max(0, options.findIndex((item) => item.id === preferred || item.name === preferred));
   console.log(`\nChoose ${label}:`);

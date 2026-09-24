@@ -4,13 +4,13 @@ This is the manual companion to the capture tools, not a second deployment proce
 Use only the subscriptions, resources and app/group assignments you already own.
 Do not request tenant-wide consent, new directory roles or new users to follow it.
 
-**Live portal evidence is blocked.** On 2026-09-24 at **18:21:32.985Z**, the dedicated
-profile was copied to this worktree and reached a sign-in page. Capture stopped, without
-entering credentials or attempting sign-in. No new Azure portal blade is represented as
-live-verified here. The existing Turnstile application images and Graph command images
-remain live evidence of those surfaces, not substitutes for Azure portal screenshots.
-The numbered portal procedures below are **DOCUMENTED** from Microsoft Learn; their new
-portal screenshots remain pending a usable signed-in capture profile.
+**Live portal evidence is partial.** A fresh copy of the dedicated capture profile was
+verified authenticated on 2026-09-24 at **20:11:40.424Z**, without entering credentials.
+Application Overview, Expose an API, App roles and enterprise Properties were captured live.
+Users and groups then displayed an actual sign-in prompt; capture stopped without
+attempting authentication. That blade and the remaining resource blades are still pending.
+The initial URL-only probe had classified a silent redirect too strictly; a redirect alone
+is not evidence that the user must sign in.
 
 ## 1. Select an existing deployment
 
@@ -97,8 +97,20 @@ az rest --method GET --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$
 ```
 
 **Verification:** the CLI records and portal fields describe the same application and
-enterprise application. Existing live Graph captures are in
+enterprise application. Live portal captures and command provenance are in
 [the Turnstile guide](../TURNSTILE.md#in-the-portal-instead).
+
+Live portal views:
+
+![Application Overview, with identities replaced by placeholders](../guide/turnstile-entra-1-overview.png)
+
+![Expose an API and the pre-authorized Azure CLI](../guide/turnstile-entra-2-expose-api.png)
+
+![The application's existing app roles](../guide/turnstile-entra-3-app-roles.png)
+
+![Enterprise application Properties and assignment requirement](../guide/turnstile-t08-entra-config.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
 
 ## 3. Sign in without obtaining new consent
 
@@ -238,5 +250,5 @@ Reviewed 2026-09-24:
 - [Assign users and groups to an application](https://learn.microsoft.com/entra/identity/enterprise-apps/assign-user-or-group-access-portal)
 - [Add or edit an API Management named value](https://learn.microsoft.com/azure/api-management/api-management-howto-properties#add-or-edit-a-named-value)
 
-Do not turn a documented portal path into a claim of live verification. New portal
-screenshots are still blocked by the observed sign-in redirect.
+Do not turn a documented portal path into a claim of live verification. Only the four
+portal views above were captured; further portal capture stopped at the actual sign-in prompt.

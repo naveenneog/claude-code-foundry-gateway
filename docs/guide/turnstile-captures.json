@@ -229,53 +229,56 @@
     {
       "image": "turnstile-entra-1-overview.png",
       "live": true,
-      "captured_at_utc": "2026-09-24T17:35:17.357Z",
-      "accel_commit": "c7f0a29504bfa26ce98e2368e04915fc3af1e0d5",
+      "captured_at_utc": "2026-09-24T20:15:26.201Z",
+      "accel_commit": "78d4537c3083f1d997bc82f6d1082236db527d21",
       "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
       "tool": "Playwright 1.62.1",
-      "command": "$app = az ad app show --id $env:TURNSTILE_APP_ID -o json | ConvertFrom-Json; $app | Select-Object displayName,appId,signInAudience,spa | ConvertTo-Json -Depth 8",
-      "identity_kind": "owner_cli",
-      "outcome": "success",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/Overview/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "owner_portal",
+      "surface": "App registrations / Overview",
+      "state": "existing authenticated portal session; read only; no directory mutation",
       "redaction": {
         "applied": true,
         "leak_check_passed": true,
         "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "7a0268a93acd5a7738f8125550c0a1b2466891d5d8145ff876a05346b194d896"
+      "sha256": "34ce412b42906895b71ad0643e4dfcf50bfe446f9730e27b08e7e1b47181a441"
     },
     {
       "image": "turnstile-entra-2-expose-api.png",
       "live": true,
-      "captured_at_utc": "2026-09-24T17:35:21.460Z",
-      "accel_commit": "c7f0a29504bfa26ce98e2368e04915fc3af1e0d5",
+      "captured_at_utc": "2026-09-24T20:16:32.402Z",
+      "accel_commit": "78d4537c3083f1d997bc82f6d1082236db527d21",
       "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
       "tool": "Playwright 1.62.1",
-      "command": "az ad app show --id $env:TURNSTILE_APP_ID --query api -o json",
-      "identity_kind": "owner_cli",
-      "outcome": "success",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/ProtectAnAPI/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "owner_portal",
+      "surface": "App registrations / Expose an API",
+      "state": "existing authenticated portal session; read only; no directory mutation",
       "redaction": {
         "applied": true,
         "leak_check_passed": true,
         "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "a3c74dc03ab1c34c1c0f183b3179ea627e5a4f1065c0639dcb7d311ce723b37a"
+      "sha256": "6aa6dc7dad7771d25cc03fb9e68d27b053c009bfc2eafb5e3878bfc2da06946a"
     },
     {
       "image": "turnstile-entra-3-app-roles.png",
       "live": true,
-      "captured_at_utc": "2026-09-24T17:35:26.315Z",
-      "accel_commit": "c7f0a29504bfa26ce98e2368e04915fc3af1e0d5",
+      "captured_at_utc": "2026-09-24T20:16:38.628Z",
+      "accel_commit": "78d4537c3083f1d997bc82f6d1082236db527d21",
       "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
       "tool": "Playwright 1.62.1",
-      "command": "az ad app show --id $env:TURNSTILE_APP_ID --query appRoles -o json",
-      "identity_kind": "owner_cli",
-      "outcome": "success",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/AppRoles/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "owner_portal",
+      "surface": "App registrations / App roles",
+      "state": "existing authenticated portal session; read only; no directory mutation",
       "redaction": {
         "applied": true,
         "leak_check_passed": true,
         "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "6947154e6ffb2e9136a7864c3860811ef52470283c453e5a20645c56591db657"
+      "sha256": "83845d5ec07a4faeca483c674da6398aa15bbbf3da0a36b69f30ae4ca5d93fad"
     },
     {
       "image": "turnstile-t01-connect-show.png",
@@ -397,19 +400,20 @@
     {
       "image": "turnstile-t08-entra-config.png",
       "live": true,
-      "captured_at_utc": "2026-09-24T17:35:35.858Z",
-      "accel_commit": "c7f0a29504bfa26ce98e2368e04915fc3af1e0d5",
+      "captured_at_utc": "2026-09-24T20:16:49.754Z",
+      "accel_commit": "78d4537c3083f1d997bc82f6d1082236db527d21",
       "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
       "tool": "Playwright 1.62.1",
-      "command": "$app = az ad app show --id $env:TURNSTILE_APP_ID -o json | ConvertFrom-Json; $sp = az ad sp show --id $env:TURNSTILE_SP_ID -o json | ConvertFrom-Json; [ordered]@{ audience=$app.signInAudience; groupClaims=$app.groupMembershipClaims; tokenVersion=$app.api.requestedAccessTokenVersion; assignmentRequired=$sp.appRoleAssignmentRequired; redirects=$app.spa.redirectUris } | ConvertTo-Json -Depth 6",
-      "identity_kind": "owner_cli",
-      "outcome": "success",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Properties/objectId/00000000-0000-0000-0000-000000000000/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "owner_portal",
+      "surface": "Enterprise applications / Properties",
+      "state": "existing authenticated portal session; read only; no directory mutation",
       "redaction": {
         "applied": true,
         "leak_check_passed": true,
         "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "0d0cfd400e7fd44655f90cd37c9a3428dc04e40c1dfac7c16972e1caa77a6f1d"
+      "sha256": "292678db483e5c1c8a033645286fa8d8bee5c484d847528241749ec46ff58aa3"
     },
     {
       "image": "turnstile-t09-entra-mutation.png",

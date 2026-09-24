@@ -17,7 +17,7 @@ import { discoverTargets } from './lib/azure-targets.mjs';
 import { Redactor, capturePixels } from './lib/turnstile-live.mjs';
 
 const PROFILE = path.resolve('.pw-profile');
-const OUT = path.resolve('docs/guide');
+const OUT = path.resolve(process.env.GUIDE_OUTPUT ?? 'docs/guide');
 const ONLY = process.argv.slice(2).filter((a) => !a.startsWith('-'));
 
 const needsAzure = !ONLY.length || ONLY.some((id) => !['a1-repo', 'b1-marketplace'].includes(id));
@@ -231,7 +231,11 @@ async function isSignedIn(page) {
   return page.url().includes('portal.azure.com') && !page.url().includes('login.microsoftonline');
 }
 
-const ctx = await chromium.launchPersistentContext(PROFILE, {
+const wanted = STEPS.filter((s) => !ONLY.length || ONLY.includes(s.id));
+const needAuth = wanted.some((s) => s.needsAuth);
+const publicBrowser = needAuth ? null : await chromium.launch({ headless: true });
+const ctx = publicBrowser ? await publicBrowser.newContext({ viewport: { width: 1600, height: 1000 } })
+  : await chromium.launchPersistentContext(PROFILE, {
   channel: 'msedge',
   headless: false,
   viewport: { width: 1600, height: 1000 },
@@ -241,8 +245,6 @@ const ctx = await chromium.launchPersistentContext(PROFILE, {
 const page = ctx.pages()[0] ?? (await ctx.newPage());
 fs.mkdirSync(OUT, { recursive: true });
 
-const wanted = STEPS.filter((s) => !ONLY.length || ONLY.includes(s.id));
-const needAuth = wanted.some((s) => s.needsAuth);
 const authed = needAuth ? await isSignedIn(page) : false;
 
 if (needAuth) {
@@ -353,4 +355,5 @@ console.log(`captured ${done.length}: ${done.join(', ') || '(none)'}`);
 if (skipped.length) console.log(`skipped  ${skipped.length}: ${skipped.join(', ')}`);
 
 await ctx.close();
+if (publicBrowser) await publicBrowser.close();
 if (skipped.length) process.exitCode = 1;

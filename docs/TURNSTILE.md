@@ -22,9 +22,10 @@ are replaced by example ones: the units are `sales` (teams `sales-emea`, `sales-
 ## Live evidence and sign-in without additional grants
 
 For numbered Azure portal/application-GUI steps and equivalent commands, see
-[Turnstile manual operations](manual/turnstile.md). Its new Azure portal screenshots are
-explicitly pending: the copied capture profile reached sign-in and capture stopped without
-attempting to sign in. Existing Graph captures are not presented as portal screenshots.
+[Turnstile manual operations](manual/turnstile.md). The copied portal profile now supplies
+live application Overview, Expose an API, App roles and enterprise Properties screenshots.
+Users and groups reached a sign-in prompt, so further portal capture stopped without
+attempting authentication. That missing view is not replaced by a claimed portal screenshot.
 
 The pictures below are fresh captures from the **reference deployment**, not examples copied
 from upstream Turnstile. Names, email addresses, tenant/object ids and resource names are
@@ -62,9 +63,10 @@ server's profile response, not a fabricated Settings panel.*
 - Phase 1 captures are the **Owner's** view. They are not claimed as Viewer or Manager
   evidence. Phase 2's manager-only browser journey is prepared but waits for an exclusive
   operator-authorized window; it must not interrupt another administrator's saves.
-- The Entra overview, exposed API and app-role images show commands rerun against
-  **Microsoft Graph**, using existing application-owner rights. They are rendered terminal
-  output, not pictures of portal blades that would require another interactive sign-in.
+- The Entra overview, exposed API, app-role and enterprise Properties images are now
+  **live Azure portal captures** from the copied, already-authenticated profile. The
+  manifest distinguishes `owner_portal` from CLI command output. Users and groups remains
+  a read-only preflight capture, not a portal picture or a membership mutation.
 - The older screenshots of exhausting a real team's budget and revoking the admin
   assignment are superseded by safe live health/preflight captures. Those destructive
   historical experiments were **not replayed** for this recapture. Their earlier measured
@@ -185,7 +187,7 @@ In the [Microsoft Entra admin center](https://entra.microsoft.com):
 5. **Enterprise applications >** the app **> Properties**. Set **Assignment required?** to **Yes**.
 6. **Users and groups > Add user/group**. Choose the admin group and the role.
 
-![The application overview, read live through Microsoft Graph](guide/turnstile-entra-1-overview.png)
+![The application Overview blade, captured live in Azure portal](guide/turnstile-entra-1-overview.png)
 
 *Captured live from the reference deployment on 2026-09-24; names replaced.*
 
@@ -193,7 +195,7 @@ In the [Microsoft Entra admin center](https://entra.microsoft.com):
 
 *Captured live from the reference deployment on 2026-09-24; names replaced.*
 
-![Current Admin, Viewer and Manager app roles, read through Microsoft Graph](guide/turnstile-entra-3-app-roles.png)
+![Current Admin, Viewer and Manager app roles in the live Azure portal](guide/turnstile-entra-3-app-roles.png)
 
 *Captured live from the reference deployment on 2026-09-24; names replaced.*
 
@@ -657,7 +659,7 @@ Three layers, each measured.
 **Entra refuses the token.** With the admin group's assignment removed, Entra refused a token 5 s
 later with `AADSTS50105`, and issued one again 22 s after the assignment was restored:
 
-![The application as configured, from Microsoft Graph](guide/turnstile-t08-entra-config.png)
+![The enterprise application's Properties blade, captured live in Azure portal](guide/turnstile-t08-entra-config.png)
 
 *Captured live from the reference deployment on 2026-09-24; names replaced.*
 
