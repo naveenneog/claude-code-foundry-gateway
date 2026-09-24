@@ -146,9 +146,9 @@
                             </when>
                         </choose>
                         <set-variable name="entFresh" value="@{
-                            if (!context.Variables.ContainsKey("entRecord")) return false;
+                            if (!context.Variables.ContainsKey("entRecord")) { return false; }
                             var rec = JObject.Parse((string)context.Variables["entRecord"]);
-                            if ((string)rec["tier"] == "none") return true;
+                            if ((string)rec["tier"] == "none") { return true; }
                             var expires = (long?)rec["expiresAt"] ?? 0;
                             var now = (long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds;
                             return expires > now &amp;&amp; !string.IsNullOrEmpty((string)rec["reconciliationGeneration"]);

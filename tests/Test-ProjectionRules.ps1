@@ -21,6 +21,7 @@ Assert 'Node writes the scan lease, not a new import lease' ($apply -match 'toDo
 Assert 'gateway cache keys include tenant and schema version' (([regex]::Matches($policy, 'ent:v2:\{\{tenant-id\}\}:')).Count -eq 3)
 Assert 'gateway cache lifetime is clipped by absolute expiry' ($policy -match 'Math.Min\(int.Parse\("\{\{entitlement-cache-seconds\}\}"\), expires - now\)')
 Assert 'gateway checks expiry even on a cache hit' ($policy -match 'return expires > now &amp;&amp; !string.IsNullOrEmpty')
+Assert 'APIM Razor conditionals use braced blocks' ($policy -match 'if \(!context.Variables.ContainsKey\("entRecord"\)\) \{ return false; \}' -and $policy -match 'if \(\(string\)rec\["tier"\] == "none"\) \{ return true; \}')
 Assert 'gateway only authorizes a fresh answer' ($policy -match 'when condition="@\(context.Variables.ContainsKey\("entRecord"\) &amp;&amp; \(bool\)context.Variables\["entFresh"\]\)"')
 Assert 'expired projection is explicitly a service failure' ($policy -match 'The entitlement projection expired')
 Assert 'miss backpressure precedes the resolver' ($policy -match '(?s)<limit-concurrency key="entitlement-misses" max-count="100">\s*<send-request')

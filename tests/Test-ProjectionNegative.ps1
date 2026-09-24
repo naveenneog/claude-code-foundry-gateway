@@ -31,6 +31,7 @@ $mutations = @(
     @{ Name='tenant-free cache key'; File='infra\policy.xml'; From='ent:v2:{{tenant-id}}:'; To='ent:'; Suite=$rules }
     @{ Name='cache outlives record'; File='infra\policy.xml'; From='Math.Min(int.Parse("{{entitlement-cache-seconds}}"), expires - now)'; To='int.Parse("{{entitlement-cache-seconds}}")'; Suite=$rules }
     @{ Name='cache hit skips expiry'; File='infra\policy.xml'; From='return expires > now &amp;&amp; !string.IsNullOrEmpty'; To='return !string.IsNullOrEmpty'; Suite=$rules }
+    @{ Name='Razor conditional loses required braces'; File='infra\policy.xml'; From='{ return false; }'; To='return false;'; Suite=$rules }
     @{ Name='stale answer is authorized'; File='infra\policy.xml'; From=' &amp;&amp; (bool)context.Variables["entFresh"]'; To=''; Suite=$rules }
     @{ Name='expired error loses diagnostic'; File='infra\policy.xml'; From='The entitlement projection expired'; To='Unknown failure'; Suite=$rules }
     @{ Name='resolver has no concurrency backpressure'; File='infra\policy.xml'; From='<limit-concurrency key="entitlement-misses" max-count="100">'; To='<limit-concurrency key="entitlement-misses" max-count="10000">'; Suite=$rules }
