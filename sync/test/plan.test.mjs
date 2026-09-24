@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeMembership, planChanges, toDocument, validateSnapshot } from '../src/plan.mjs';
+import { mergeMembership, planChanges, toDocument, validateSnapshot, createReconciliation } from '../src/plan.mjs';
+const lease = createReconciliation({ verifiedAt: new Date() });
 
 const A = '11111111-1111-1111-1111-111111111111';
 const B = '22222222-2222-2222-2222-222222222222';
@@ -85,7 +86,7 @@ test('the flip comparison names what each identity would experience', async () =
     // C absent                                                          // would-lose-access
     { oid: '44444444-4444-4444-4444-444444444444', tier: 'standard', tenantId: T }, // would-gain-access
   ];
-  const { compared, differences } = compareWithGateway(gateway, records, { tenantId: T });
+  const { compared, differences } = compareWithGateway(gateway, records.map(r => ({ ...lease, ...r })), { tenantId: T });
   assert.equal(compared, 4);
   const kinds = Object.fromEntries(differences.map((d) => [d.oid, d.kind]));
   assert.equal(kinds[A], 'tier-drift');
@@ -96,20 +97,20 @@ test('the flip comparison names what each identity would experience', async () =
 
 test('agreement is reported as no differences, and another tenant counts as no record', async () => {
   const { compareWithGateway } = await import('../src/plan.mjs');
-  const same = compareWithGateway({ premium: [], standard: [A] }, [{ oid: A, tier: 'standard', businessUnit: '', tenantId: T }], { tenantId: T });
+  const same = compareWithGateway({ premium: [], standard: [A] }, [{ oid: A, tier: 'standard', businessUnit: '', tenantId: T, ...lease }], { tenantId: T });
   assert.deepEqual(same.differences, []);
-  const foreign = compareWithGateway({ standard: [A] }, [{ oid: A, tier: 'standard', tenantId: '00000000-0000-0000-0000-000000000000' }], { tenantId: T });
+  const foreign = compareWithGateway({ standard: [A] }, [{ oid: A, tier: 'standard', tenantId: '00000000-0000-0000-0000-000000000000', ...lease }], { tenantId: T });
   assert.equal(foreign.differences[0].kind, 'would-lose-access');
 });
 
 test('a snapshot for another tenant is refused before anything is written', () => {
-  const snap = { kind: 'claude-entitlement-snapshot', tenantId: T, records: [{ oid: A, tier: 'standard' }] };
+  const snap = { kind: 'claude-entitlement-snapshot', tenantId: T, ...lease, records: [{ oid: A, tier: 'standard' }] };
   assert.deepEqual(validateSnapshot(snap, { tenantId: T }), []);
   assert.match(validateSnapshot(snap, { tenantId: '00000000-0000-0000-0000-000000000000' }).join(), /not 00000000/);
 });
 
 test('a snapshot with an unknown tier, a bad oid or a duplicate is refused', () => {
-  const base = { kind: 'claude-entitlement-snapshot', tenantId: T };
+  const base = { kind: 'claude-entitlement-snapshot', tenantId: T, ...lease };
   assert.match(validateSnapshot({ ...base, records: [{ oid: A, tier: 'gold' }] }).join(), /tier 'gold'/);
   assert.match(validateSnapshot({ ...base, records: [{ oid: 'not-a-guid', tier: 'standard' }] }).join(), /not a guid/);
   assert.match(validateSnapshot({ ...base, records: [{ oid: A, tier: 'standard' }, { oid: A, tier: 'premium' }] }).join(), /twice/);

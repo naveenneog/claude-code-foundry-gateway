@@ -86,7 +86,12 @@ pays a cold start, and the gateway gives the resolver 5 seconds. 1 removes the
 cold start for a steady trickle; 2 or more keeps one warm through a burst.
 ''')
 @minValue(0)
-param alwaysReadyInstances int = 1
+param alwaysReadyInstances int = 2
+
+@description('HTTP requests per warm instance. Keep at least the gateway miss concurrency (100); coalescing shares same-identity Cosmos reads within each worker.')
+@minValue(100)
+@maxValue(200)
+param httpConcurrency int = 100
 
 @minValue(1)
 @maxValue(1000)
@@ -305,6 +310,11 @@ resource site 'Microsoft.Web/sites@2024-04-01' = {
         }
       }
       scaleAndConcurrency: {
+        triggers: {
+          http: {
+            perInstanceConcurrency: httpConcurrency
+          }
+        }
         maximumInstanceCount: maximumInstanceCount
         instanceMemoryMB: instanceMemoryMB
         alwaysReady: alwaysReadyInstances > 0 ? [

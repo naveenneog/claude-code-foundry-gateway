@@ -13,6 +13,7 @@ import { app } from '@azure/functions';
 import { CosmosClient } from '@azure/cosmos';
 import { DefaultAzureCredential } from '@azure/identity';
 import { toEntitlement, isObjectId } from './entitlement.mjs';
+import { createLookup } from './lookup.mjs';
 
 const endpoint = process.env.COSMOS_ENDPOINT;
 const databaseName = process.env.COSMOS_DATABASE ?? 'claude';
@@ -28,11 +29,17 @@ function getContainer() {
     // Key authentication is disabled on the account by projection.bicep, so
     // this is the only way in. It is also why the Function needs a role
     // assignment rather than a connection string.
-    const client = new CosmosClient({ endpoint, aadCredentials: new DefaultAzureCredential() });
+    const client = new CosmosClient({ endpoint, aadCredentials: new DefaultAzureCredential(),
+      connectionPolicy: { requestTimeout: 2500, retryOptions: { maxRetryAttemptCount: 0, maxWaitTimeInSeconds: 0 } } });
     container = client.database(databaseName).container(containerName);
   }
   return container;
 }
+
+const lookup = createLookup(async (oid, abortSignal) => {
+  const { resource } = await getContainer().item(oid, oid).read({ abortSignal });
+  return resource ?? null;
+});
 
 app.http('entitlement', {
   methods: ['GET'],
@@ -55,8 +62,7 @@ app.http('entitlement', {
     try {
       // Point read by id and partition key - the cheapest operation Cosmos
       // offers, and measured flat at 1 RU from one record to 100,000.
-      const { resource } = await getContainer().item(oid, oid).read();
-      doc = resource ?? null;
+      doc = await lookup(oid);
     } catch (err) {
       if (err?.code === 404) {
         doc = null;

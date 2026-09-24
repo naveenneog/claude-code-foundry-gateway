@@ -9,7 +9,16 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { toEntitlement, isObjectId, KNOWN_TIERS } from '../src/entitlement.mjs';
+import { toEntitlement as resolveDocument, isObjectId, KNOWN_TIERS } from '../src/entitlement.mjs';
+
+// Existing authorization cases use a current lease; freshness boundary cases
+// exercise the unwrapped resolver in sync/test/freshness.test.mjs.
+const toEntitlement = (doc, options) => resolveDocument(doc ? {
+  reconciliationGeneration: '33333333-3333-4333-8333-333333333333',
+  lastVerifiedAt: new Date().toISOString(),
+  expiresAt: Math.floor(Date.now() / 1000) + 7200,
+  ...doc,
+} : doc, options);
 
 const OID = '7f2a1c94-3e5b-4d81-9a06-b1e4c8d72f35';
 const TENANT = '11111111-2222-3333-4444-555555555555';

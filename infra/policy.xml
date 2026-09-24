@@ -99,18 +99,26 @@
                              failure but not a managed-identity token failure,
                              which throws out of the whole block. -->
                         <set-variable name="entResolving" value="@(true)" />
-                        <cache-lookup-value key="@("ent:" + (string)context.Variables["userId"])" variable-name="entRecord" />
+                        <cache-lookup-value key="@("ent:v2:{{tenant-id}}:" + (string)context.Variables["userId"])" variable-name="entRecord" />
                         <choose>
                             <when condition="@(!context.Variables.ContainsKey("entRecord"))">
+                                <rate-limit-by-key calls="200" renewal-period="1" counter-key="entitlement-misses" />
+                                <limit-concurrency key="entitlement-misses" max-count="100">
                                 <send-request mode="new" response-variable-name="entResponse" timeout="5" ignore-error="true">
                                     <set-url>@("{{entitlement-resolver-url}}" + "/entitlement/" + (string)context.Variables["userId"])</set-url>
                                     <set-method>GET</set-method>
                                     <authentication-managed-identity resource="{{entitlement-resolver-audience}}" />
                                 </send-request>
+                                </limit-concurrency>
                                 <choose>
                                     <when condition="@(context.Variables.ContainsKey("entResponse") &amp;&amp; ((IResponse)context.Variables["entResponse"]).StatusCode == 200)">
                                         <set-variable name="entRecord" value="@(((IResponse)context.Variables["entResponse"]).Body.As&lt;string&gt;(preserveContent: true))" />
-                                        <cache-store-value key="@("ent:" + (string)context.Variables["userId"])" value="@((string)context.Variables["entRecord"])" duration="@(int.Parse("{{entitlement-cache-seconds}}"))" />
+                                        <cache-store-value key="@("ent:v2:{{tenant-id}}:" + (string)context.Variables["userId"])" value="@((string)context.Variables["entRecord"])" duration="@{
+                                            var rec = JObject.Parse((string)context.Variables["entRecord"]);
+                                            var expires = (long?)rec["expiresAt"] ?? 0;
+                                            var now = (long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds;
+                                            return (int)Math.Max(0, Math.Min(int.Parse("{{entitlement-cache-seconds}}"), expires - now));
+                                        }" />
                                     </when>
                                     <!-- 404 is the resolver's answer for an identity with no
                                          record: not entitled, the same as being in neither
@@ -132,13 +140,21 @@
                                          just added to a group is let in promptly. -->
                                     <when condition="@(context.Variables.ContainsKey("entResponse") &amp;&amp; ((IResponse)context.Variables["entResponse"]).StatusCode == 404)">
                                         <set-variable name="entRecord" value="@("{'tier':'none','businessUnit':''}")" />
-                                        <cache-store-value key="@("ent:" + (string)context.Variables["userId"])" value="@((string)context.Variables["entRecord"])" duration="@(Math.Min(60, int.Parse("{{entitlement-cache-seconds}}")))" />
+                                        <cache-store-value key="@("ent:v2:{{tenant-id}}:" + (string)context.Variables["userId"])" value="@((string)context.Variables["entRecord"])" duration="@(Math.Min(60, int.Parse("{{entitlement-cache-seconds}}")))" />
                                     </when>
                                 </choose>
                             </when>
                         </choose>
+                        <set-variable name="entFresh" value="@{
+                            if (!context.Variables.ContainsKey("entRecord")) { return false; }
+                            var rec = JObject.Parse((string)context.Variables["entRecord"]);
+                            if ((string)rec["tier"] == "none") { return true; }
+                            var expires = (long?)rec["expiresAt"] ?? 0;
+                            var now = (long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalSeconds;
+                            return expires > now &amp;&amp; !string.IsNullOrEmpty((string)rec["reconciliationGeneration"]);
+                        }" />
                         <choose>
-                            <when condition="@(context.Variables.ContainsKey("entRecord"))">
+                            <when condition="@(context.Variables.ContainsKey("entRecord") &amp;&amp; (bool)context.Variables["entFresh"])">
                                 <set-variable name="tier" value="@{
                                     var rec = JObject.Parse((string)context.Variables["entRecord"]);
                                     var t = (string)rec["tier"];
@@ -179,9 +195,9 @@
                                             new JProperty("error", new JObject(
                                                 new JProperty("type", "api_error"),
                                                 new JProperty("message",
-                                                    "The entitlement service did not answer and no recent answer is cached. " +
-                                                    "This is not a problem with your access - your platform team can see it in " +
-                                                    "the gateway's availability metrics. Retry shortly.")))
+                                                    "The entitlement projection expired, has invalid freshness, or the entitlement service did not answer. " +
+                                                    "No unexpired answer is available. Your platform team must check the directory reconciliation " +
+                                                    "and the entitlement service. Retry shortly.")))
                                         ).ToString();
                                     }</set-body>
                                 </return-response>
@@ -628,6 +644,14 @@
              raw. This replaces it with the shape Claude Code expects and names
              which budget ran out. -->
         <choose>
+            <when condition="@(context.Variables.GetValueOrDefault&lt;bool&gt;("entResolving", false) &amp;&amp; (context.LastError.Source == "rate-limit-by-key" || context.LastError.Source == "limit-concurrency"))">
+                <return-response>
+                    <set-status code="429" reason="Too Many Requests" />
+                    <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+                    <set-header name="Retry-After" exists-action="override"><value>1</value></set-header>
+                    <set-body>{"type":"error","error":{"type":"rate_limit_error","message":"Entitlement lookup is busy. Retry shortly; your access has not changed."}}</set-body>
+                </return-response>
+            </when>
             <when condition="@(context.Variables.ContainsKey("entResolving") &amp;&amp; (bool)context.Variables["entResolving"])">
                 <!-- Anything that threw while resolving entitlement from the
                      projection. send-request's ignore-error covers a transport

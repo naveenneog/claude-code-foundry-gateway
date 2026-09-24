@@ -34,7 +34,7 @@ missing role.
   'selected-ips'
   'private-only'
 ])
-param networkAccess string = 'public'
+param networkAccess string = 'private-only'
 
 @description('Addresses allowed when networkAccess is selected-ips. Cosmos also needs the Azure portal ranges if anyone will browse data there.')
 param allowedIpAddresses array = []

@@ -34,7 +34,7 @@ Assert 'and the wiring is what talks to Cosmos'  ($wiring -match "from '@azure/c
 Assert 'it authenticates with a managed identity' ($wiring -match 'DefaultAzureCredential')
 Assert 'and does not accept a connection string'  ($wiring -notmatch 'AccountKey|connectionString')
 # A point read by id and partition key is the operation measured flat at 1 RU.
-Assert 'the lookup is a point read'               ($wiring -match '\.item\(oid, oid\)\.read\(\)')
+Assert 'the lookup is a point read with cancellation' ($wiring -match '\.item\(oid, oid\)\.read\(\{ abortSignal \}\)')
 # Authentication is configured on the Function App, not re-implemented here.
 Assert 'auth is not decided in two places'        ($wiring -match '(?s)Authentication is not done here')
 
