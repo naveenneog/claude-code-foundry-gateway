@@ -5,7 +5,7 @@
   "title": "One request, six governed hops",
   "subtitle": "Claude Code, the VS Code extension and Claude Desktop share the gateway policy. The numbered hops explain the flow; telemetry arrives asynchronously after the request.",
   "width": 1280,
-  "height": 1040,
+  "height": 1078,
   "outputs": ["docs/images/architecture/request-path.png", "docs/images/request-flow.png"],
   "sources": ["infra/main.bicep", "infra/policy.xml", "infra/resolver.bicep", "infra/projection.bicep", "infra/turnstile-schedule.bicep", "resolver/src/entitlement.mjs"],
   "identifiers": {
@@ -72,11 +72,12 @@
     { "id": "within", "x": 0, "y": 626, "w": 404, "h": 158, "tone": "teal", "compact": true, "title": "Projection miss · admitted", "lines": ["Within 100 concurrent and 200 misses/s: call the resolver, then admit only a valid entitlement.", "No record: ordinary 403, not an outage."] },
     { "id": "busy", "x": 438, "y": 626, "w": 404, "h": 158, "tone": "amber", "compact": true, "title": "Admission exceeded · 429", "lines": ["Refuse before the resolver.", "[[retry]]: 1", "Retryable overload; access has not changed."] },
     { "id": "expired", "x": 876, "y": 626, "w": 404, "h": 158, "tone": "amber", "compact": true, "title": "Expired record / fault · 503", "lines": ["No unexpired answer: fail closed.", "[[retry]]: 5", "Do not fall back to old membership lists."] },
-    { "id": "profiles", "x": 0, "y": 824, "w": 1280, "h": 216, "tone": "slate", "title": "What each deployment profile adds", "lines": [
+    { "id": "profiles", "x": 0, "y": 824, "w": 1280, "h": 254, "tone": "slate", "title": "What each deployment profile adds", "lines": [
       "Default: API Management + Application Insights + Log Analytics; workbook and saved functions are definitions.",
       "Projection: Cosmos DB + resolver Function + host storage + private networking; a separately run directory writer.",
       "Turnstile: App Service + PostgreSQL + Event Hubs, supporting Functions / Storage / Key Vault, and Container Apps jobs.",
-      "AUM (Azure Usage Management): terminal FinOps console, command aum; local admin APIs, not an inference service. Rate controls remain [[tpm-standard]], [[tpm-premium]], [[calls]]."
+      "AUM (Azure Usage Management): terminal FinOps console, command aum; local admin APIs, not an inference service. Rate controls remain [[tpm-standard]], [[tpm-premium]], [[calls]].",
+      "P50 reports (pending): dedicated Consumption jobs and VNet, private Blob archive/configuration and paced ACS Email; no Turnstile dependency."
     ] }
   ],
   "edges": [

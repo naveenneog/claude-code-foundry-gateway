@@ -285,6 +285,39 @@ try {
     finally {
         if (Test-Path -LiteralPath $link) { [IO.Directory]::Delete($link) }
     }
+
+    $resourceProbe = @'
+import { pathToFileURL } from 'node:url';
+const m = await import(pathToFileURL(process.argv[2]));
+const root = process.argv[3];
+const { specs } = m.loadSpecs(root);
+const spec = specs.find(s => s.id === 'system-overview');
+spec.identifiers['resource-probe'] = {
+  kind: 'resource', label: 'Microsoft.ArchitectureMutation/widgets',
+  source: 'infra/architecture-mutation.bicep',
+  match: "resource sample 'Microsoft.ArchitectureMutation/widgets@2026-01-01'"
+};
+spec.nodes[0].lines.push('[[resource-probe]]');
+const errors = m.validateSpecs(root, specs);
+console.log(errors.join('\n') || 'Rendered resource coverage PASS');
+process.exitCode = errors.length ? 1 : 0;
+'@
+    $resourceFile = Join-Path $fixture 'infra/architecture-mutation.bicep'
+    $notBicep = Join-Path $fixture 'infra/architecture-mutation.txt'
+    try {
+        [IO.File]::WriteAllText($resourceFile, "resource sample 'Microsoft.ArchitectureMutation/widgets@2026-01-01' = { name: 'example' }", $script:utf8)
+        $result = $resourceProbe | & node --input-type=module - (Join-Path $root 'guide/architecture-model.mjs') $fixture | Out-String
+        Assert 'a drawn source-backed resource label satisfies type coverage' ($LASTEXITCODE -eq 0) $result
+        [IO.File]::WriteAllText($resourceFile, "// resource sample 'Microsoft.ArchitectureMutation/widgets@2026-01-01' = { name: 'example' }", $script:utf8)
+        $result = $resourceProbe | & node --input-type=module - (Join-Path $root 'guide/architecture-model.mjs') $fixture | Out-String
+        Assert 'a resource label needs a declaration, not a comment witness' ($LASTEXITCODE -ne 0 -and $result.Contains('RESOURCE_LABEL_INVALID')) $result
+        [IO.File]::WriteAllText($resourceFile, "resource sample 'Microsoft.ArchitectureMutation/widgets@2026-01-01' = { name: 'example' }", $script:utf8)
+        [IO.File]::WriteAllText($notBicep, "resource sample 'Microsoft.ArchitectureMutation/widgets@2026-01-01' = { name: 'example' }", $script:utf8)
+        $nonBicepProbe = $resourceProbe.Replace("source: 'infra/architecture-mutation.bicep'", "source: 'infra/architecture-mutation.txt'")
+        $result = $nonBicepProbe | & node --input-type=module - (Join-Path $root 'guide/architecture-model.mjs') $fixture | Out-String
+        Assert 'a resource witness must be Bicep, not documentation text' ($LASTEXITCODE -ne 0 -and $result.Contains('RESOURCE_LABEL_INVALID')) $result
+    }
+    finally { Remove-Item -LiteralPath $resourceFile,$notBicep -Force -ErrorAction SilentlyContinue }
 }
 finally {
     if (Test-Path -LiteralPath $fixture) { Remove-Item -LiteralPath $fixture -Recurse -Force }

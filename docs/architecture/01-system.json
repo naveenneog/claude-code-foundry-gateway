@@ -5,7 +5,7 @@
   "title": "One gateway. Separate request and governance paths.",
   "subtitle": "The customer owns the Entra tenant, Azure resources and Foundry Claude deployment. Optional profiles add services; they do not replace the gateway as the enforcer.",
   "width": 1280,
-  "height": 1380,
+  "height": 1712,
   "outputs": ["docs/images/architecture/system-overview.png", "docs/images/architecture.png"],
   "sources": ["infra/main.bicep", "infra/foundry-role.bicep", "infra/projection.bicep", "infra/projection-network.bicep", "infra/resolver.bicep", "infra/turnstile-schedule.bicep", "scripts/Setup-ClaudeWorkstation.ps1", "scripts/Connect-ClaudeTurnstile.ps1"],
   "identifiers": {
@@ -40,7 +40,8 @@
     { "x": 890, "y": 0, "w": 390, "h": 506, "tone": "teal", "title": "Customer identity and model" },
     { "x": 0, "y": 544, "w": 1280, "h": 276, "tone": "blue", "title": "Telemetry · customer Log Analytics workspace" },
     { "x": 0, "y": 852, "w": 618, "h": 526, "tone": "purple", "title": "Optional Turnstile governance" },
-    { "x": 650, "y": 852, "w": 630, "h": 526, "tone": "teal", "title": "Optional projection · private VNet profile" }
+    { "x": 650, "y": 852, "w": 630, "h": 526, "tone": "teal", "title": "Optional projection · private VNet profile" },
+    { "x": 0, "y": 1410, "w": 1280, "h": 302, "tone": "blue", "title": "Optional P50 chargeback reports · pending merge · independent of Turnstile" }
   ],
   "nodes": [
     { "id": "code", "x": 16, "y": 60, "w": 278, "h": 90, "tone": "slate", "compact": true, "title": "Claude Code", "lines": ["Azure CLI sign-in"] },
@@ -124,6 +125,21 @@
       "Accepts gateway identity only",
       "Own identity: container Data Reader",
       "Miss admission and lease checks protect this path."
+    ] },
+    { "id": "reports", "x": 16, "y": 1470, "w": 382, "h": 222, "tone": "blue", "compact": true, "title": "Monthly generator", "lines": [
+      "Reads the workspace's saved functions and gateway budget catalog.",
+      "Reconciles units and people before publishing CSV / HTML.",
+      "Dedicated Consumption environment and reports VNet; no inference calls."
+    ] },
+    { "id": "report-store", "x": 450, "y": 1470, "w": 382, "h": 222, "tone": "teal", "compact": true, "title": "Private Blob archive / outbox", "lines": [
+      "Private endpoint and DNS; configuration in its own versioned container.",
+      "Reporting identity reads config and writes reports.",
+      "Separate manual administration job and identity may write configuration only."
+    ] },
+    { "id": "report-mail", "x": 882, "y": 1470, "w": 382, "h": 222, "tone": "blue", "compact": true, "title": "Paced ACS Email delivery", "lines": [
+      "Blob-triggered dispatcher: min 0, max 1; 420-second polling.",
+      "Current recipient/domain checks; per-unit BCC; no unrestricted links.",
+      "Azure-managed domain: 10 sends/hour; large rollouts need custom-domain quota."
     ] }
   ],
   "edges": [
@@ -143,7 +159,9 @@
     { "from": "terminal", "to": "console", "kind": "control", "points": [[16, 446], [6, 446], [6, 1000], [16, 1000]] },
     { "from": "writer", "to": "cosmos", "kind": "data", "points": [[946, 1000], [984, 1000]] },
     { "from": "resolver", "to": "cosmos", "kind": "identity", "points": [[1124, 1146], [1124, 1108]] },
-    { "from": "apim", "to": "resolver", "kind": "identity", "points": [[810, 486], [810, 526], [1274, 526], [1274, 1248], [1264, 1248]] }
+    { "from": "apim", "to": "resolver", "kind": "identity", "points": [[810, 486], [810, 526], [1274, 526], [1274, 1248], [1264, 1248]] },
+    { "from": "reports", "to": "report-store", "kind": "data", "points": [[398, 1572], [450, 1572]] },
+    { "from": "report-store", "to": "report-mail", "kind": "data", "points": [[832, 1572], [882, 1572]] }
   ],
   "notice": "Default named values need no resolver, Cosmos DB or Turnstile. Projection and Turnstile are independent additions. Basic v2 needs an explicitly public, identity-protected resolver. AUM terminal code is merged; its command naming is staged on branch aum."
 }

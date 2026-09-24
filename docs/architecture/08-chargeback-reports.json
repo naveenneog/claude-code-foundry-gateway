@@ -1,0 +1,190 @@
+{
+  "version": 1,
+  "id": "chargeback-reports",
+  "kind": "flow",
+  "title": "Monthly chargeback: private generation, scoped delivery",
+  "subtitle": "P50 pending merge · verified at d1a304f on chargeback-reports. A dedicated reports deployment reads existing gateway telemetry. It neither depends on Turnstile nor changes the inference path.",
+  "width": 1280,
+  "height": 1730,
+  "outputs": ["docs/images/architecture/chargeback-reports.png"],
+  "sources": ["scripts/Publish-ClaudeQueries.ps1", "analytics/chargeback-cost.kql", "analytics/chargeback-ledger.kql"],
+  "upstream": {
+    "infra": {
+      "repository": "naveenneog/claude-code-foundry-gateway",
+      "revision": "d1a304f095274d0542073a616f020d9a0e523e42",
+      "path": "infra/chargeback-reports.bicep",
+      "excerpt": "param cronExpression string = '0 6 1 * *'\npublicNetworkAccess: 'Disabled'\n// Azure public cloud: privatelink.blob.core.windows.net.\n/opt/pwsh/pwsh -NoProfile -File ./scripts/Invoke-ClaudeChargebackSchedule.ps1 -Mode \"${REPORT_MODE}\" -StorageAccount \"${REPORT_STORAGE}\"\nminExecutions: 0\nmaxExecutions: 1\npollingInterval: 420\nactions: ['Microsoft.ApiManagement/service/namedValues/read']\nactions: ['Microsoft.Communication/CommunicationServices/Read', 'Microsoft.Communication/CommunicationServices/Write']\nresource lifecycle 'Microsoft.Storage/storageAccounts/managementPolicies@2023-05-01' = {\n}\nresource email 'Microsoft.Communication/emailServices@2023-03-31' = {\n}\nresource domain 'Microsoft.Communication/emailServices/domains@2023-03-31' = {\n  name: 'AzureManagedDomain'\n}\nresource communication 'Microsoft.Communication/communicationServices@2023-03-31' = {\n}\nresource gatewayRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {\n}"
+    },
+    "schedule": {
+      "repository": "naveenneog/claude-code-foundry-gateway",
+      "revision": "d1a304f095274d0542073a616f020d9a0e523e42",
+      "path": "scripts/Invoke-ClaudeChargebackSchedule.ps1",
+      "excerpt": "[ValidateSet('generator','dispatcher','admin')][string]$Mode='generator',\n$result=& (Join-Path $PSScriptRoot 'New-ClaudeChargebackReport.ps1') -ResourceGroup $ResourceGroup -ApimName $ApimName `\n$prefix=Save-ClaudeReportArchive $StorageAccount $result.Path $result.Manifest\nif($config.DeliveryEnabled) {$queued=Add-ClaudeReportOutbox $StorageAccount $result.Path $result.Manifest $config $prefix}"
+    },
+    "query": {
+      "repository": "naveenneog/claude-code-foundry-gateway",
+      "revision": "d1a304f095274d0542073a616f020d9a0e523e42",
+      "path": "scripts/ClaudeChargebackQuery.ps1",
+      "excerpt": "let d = ClaudeCost(datetime($from), datetime($to))\nforeach ($alias in @('ClaudeCost','ClaudeChargeback')) {\n$registry = @(ConvertFrom-ClaudeBuRegistry $map['bu-registry'])\n$parents = ConvertFrom-ClaudeBuParents $map['bu-parents']"
+    },
+    "storage": {
+      "repository": "naveenneog/claude-code-foundry-gateway",
+      "revision": "d1a304f095274d0542073a616f020d9a0e523e42",
+      "path": "scripts/ClaudeChargebackStorage.ps1",
+      "excerpt": "$r=Invoke-ClaudeReportBlob -Account $Account -Container configuration -Name 'settings.json' -AllowNotFound:$AllowMissing\n$headers=if($ETag) {@{'If-Match'=$ETag}} else {@{'If-None-Match'='*'}}\n$prefix=\"runs/$($Manifest.Month)/$($Manifest.RunId)\"\nfunction Test-ClaudeReportArtifacts {\nfunction Save-ClaudeReportArchive {"
+    },
+    "admin": {
+      "repository": "naveenneog/claude-code-foundry-gateway",
+      "revision": "d1a304f095274d0542073a616f020d9a0e523e42",
+      "path": "scripts/ClaudeChargebackAdministration.ps1",
+      "excerpt": "function Invoke-ClaudeReportAdministration {\nif($Request.Operation -notin @('Initialize','Recipients','Settings','Inspect')) {throw 'Unknown report administration operation.'}\n$container.env=@($container.env | Where-Object name -ne 'REPORT_ADMIN_REQUEST')+@([pscustomobject]@{name='REPORT_ADMIN_REQUEST';value=$encoded})\nWrite-Host 'Administration completed. No report code or resources were redeployed. Job logs contain status/counts, never addresses.'"
+    },
+    "outbox": {
+      "repository": "naveenneog/claude-code-foundry-gateway",
+      "revision": "d1a304f095274d0542073a616f020d9a0e523e42",
+      "path": "scripts/ClaudeChargebackOutbox.ps1",
+      "excerpt": "function Add-ClaudeReportOutbox {\n$name=\"outbox/$key.json\"\nVersion=1;Key=$key;RunPrefix=$Prefix;Month=$Manifest.Month;Scope=$scopeName;RecipientHashes=$hashes\nfunction Invoke-ClaudeReportOutbox {\n$state=Get-ClaudeReportArchiveJson $Account 'state/dispatch.json'\n$state.NextActionUtc=$now.AddSeconds(420).ToString('o')\n$configuration=(Get-ClaudeReportConfiguration $Account).Configuration\n$recipients=@($current | Where-Object {(Get-ClaudeReportAddressHash $_) -in $item.RecipientHashes})"
+    },
+    "email": {
+      "repository": "naveenneog/claude-code-foundry-gateway",
+      "revision": "d1a304f095274d0542073a616f020d9a0e523e42",
+      "path": "scripts/ClaudeChargebackEmail.ps1",
+      "excerpt": "recipients=@{bcc=@($Recipients | ForEach-Object {@{address=$_}})}\n$headers=@{Authorization='Bearer ' + (Get-ClaudeReportToken 'https://communication.azure.com');'Operation-Id'=$OperationId}\nreturn Invoke-RestMethod -Uri \"$base/emails:send?api-version=2023-03-31\" -Headers $headers -Method Post -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($json))"
+    }
+  },
+  "identifiers": {
+    "cost": { "label": "ClaudeCost()", "source": "scripts/Publish-ClaudeQueries.ps1", "match": "Alias   = 'ClaudeCost'" },
+    "chargeback": { "label": "ClaudeChargeback()", "source": "scripts/Publish-ClaudeQueries.ps1", "match": "Alias   = 'ClaudeChargeback'" },
+    "catalog": { "label": "bu-registry", "upstream": "query", "match": "$map['bu-registry']" },
+    "parents": { "label": "bu-parents", "upstream": "query", "match": "$map['bu-parents']" },
+    "read-values": { "label": "namedValues/read", "upstream": "infra", "match": "'Microsoft.ApiManagement/service/namedValues/read'" },
+    "entrypoint": { "label": "Invoke-ClaudeChargebackSchedule.ps1", "upstream": "infra", "match": "./scripts/Invoke-ClaudeChargebackSchedule.ps1" },
+    "generator": { "label": "New-ClaudeChargebackReport.ps1", "upstream": "schedule", "match": "Join-Path $PSScriptRoot 'New-ClaudeChargebackReport.ps1'" },
+    "cron": { "label": "0 6 1 * *", "upstream": "infra", "match": "param cronExpression string = '0 6 1 * *'" },
+    "settings": { "label": "configuration/settings.json", "upstream": "storage", "match": "-Container configuration -Name 'settings.json'" },
+    "etag": { "label": "If-Match", "upstream": "storage", "match": "@{'If-Match'=$ETag}" },
+    "admin-payload": { "label": "REPORT_ADMIN_REQUEST", "upstream": "admin", "match": "name='REPORT_ADMIN_REQUEST';value=$encoded" },
+    "admin": { "label": "Invoke-ClaudeReportAdministration", "upstream": "admin", "match": "function Invoke-ClaudeReportAdministration {" },
+    "archive": { "label": "Save-ClaudeReportArchive", "upstream": "storage", "match": "function Save-ClaudeReportArchive {" },
+    "runs": { "label": "runs/<month>/<run>/", "upstream": "storage", "match": "$prefix=\"runs/$($Manifest.Month)/$($Manifest.RunId)\"" },
+    "outbox": { "label": "Add-ClaudeReportOutbox", "upstream": "outbox", "match": "function Add-ClaudeReportOutbox {" },
+    "hashes": { "label": "RecipientHashes", "upstream": "outbox", "match": "RecipientHashes=$hashes" },
+    "state": { "label": "state/dispatch.json", "upstream": "outbox", "match": "$state=Get-ClaudeReportArchiveJson $Account 'state/dispatch.json'" },
+    "pacing": { "label": "NextActionUtc", "upstream": "outbox", "match": "$state.NextActionUtc=$now.AddSeconds(420).ToString('o')" },
+    "dispatcher": { "label": "Invoke-ClaudeReportOutbox", "upstream": "outbox", "match": "function Invoke-ClaudeReportOutbox {" },
+    "pna": { "label": "publicNetworkAccess: Disabled", "upstream": "infra", "match": "publicNetworkAccess: 'Disabled'" },
+    "dns": { "label": "privatelink.blob.core.windows.net", "upstream": "infra", "match": "privatelink.blob.core.windows.net" },
+    "audience": { "label": "https://communication.azure.com", "upstream": "email", "match": "Get-ClaudeReportToken 'https://communication.azure.com'" },
+    "email-route": { "label": "/emails:send", "upstream": "email", "match": "$base/emails:send?api-version=2023-03-31" },
+    "managed-domain": { "label": "AzureManagedDomain", "upstream": "infra", "match": "name: 'AzureManagedDomain'" },
+    "bcc": { "label": "bcc", "upstream": "email", "match": "recipients=@{bcc=@" },
+    "lifecycle-type": { "label": "Microsoft.Storage/storageAccounts/managementPolicies", "kind": "resource", "upstream": "infra", "match": "resource lifecycle 'Microsoft.Storage/storageAccounts/managementPolicies@2023-05-01'" },
+    "role-type": { "label": "Microsoft.Authorization/roleDefinitions", "kind": "resource", "upstream": "infra", "match": "resource gatewayRole 'Microsoft.Authorization/roleDefinitions@2022-04-01'" },
+    "email-type": { "label": "Microsoft.Communication/emailServices", "kind": "resource", "upstream": "infra", "match": "resource email 'Microsoft.Communication/emailServices@2023-03-31'" },
+    "domain-type": { "label": "Microsoft.Communication/emailServices/domains", "kind": "resource", "upstream": "infra", "match": "resource domain 'Microsoft.Communication/emailServices/domains@2023-03-31'" },
+    "acs-type": { "label": "Microsoft.Communication/communicationServices", "kind": "resource", "upstream": "infra", "match": "resource communication 'Microsoft.Communication/communicationServices@2023-03-31'" }
+  },
+  "groups": [
+    { "x": 0, "y": 0, "w": 834, "h": 250, "tone": "blue", "title": "Existing source APIs · authenticated, read-only access" },
+    { "x": 868, "y": 0, "w": 412, "h": 250, "tone": "purple", "title": "Privileged operator" },
+    { "x": 0, "y": 290, "w": 1280, "h": 912, "tone": "teal", "title": "Dedicated reports VNet · Consumption environment, jobs subnet and endpoint subnet", "subtitle": "Private Blob endpoint + DNS link; job entry point: [[entrypoint]]" },
+    { "x": 0, "y": 1236, "w": 628, "h": 286, "tone": "blue", "title": "Azure Communication Services · outbound HTTPS" },
+    { "x": 668, "y": 1236, "w": 612, "h": 286, "tone": "amber", "title": "Recipient mailbox · outside storage retention" }
+  ],
+  "nodes": [
+    { "id": "workspace", "x": 16, "y": 58, "w": 382, "h": 170, "tone": "blue", "title": "Log Analytics", "lines": [
+      "[[cost]] uses [[chargeback]].",
+      "Server-side aggregation; previous UTC month by default.",
+      "Person pages split by hash, not truncated."
+    ] },
+    { "id": "gateway", "x": 436, "y": 58, "w": 382, "h": 170, "tone": "blue", "compact": true, "title": "Gateway budget catalog", "lines": [
+      "[[catalog]] and [[parents]]",
+      "Budgets as read now.",
+      "[[read-values]] only; no gateway writes."
+    ] },
+    { "id": "operator", "x": 884, "y": 58, "w": 380, "h": 170, "tone": "purple", "title": "Start the manual admin job", "lines": [
+      "Structured [[admin-payload]]",
+      "Fixed pinned command, not supplied shell text.",
+      "Job-start access is configuration authority."
+    ] },
+    { "id": "generator", "x": 16, "y": 378, "w": 382, "h": 242, "tone": "teal", "compact": true, "title": "1 · Monthly generator job", "lines": [
+      "[[generator]]",
+      "[[cron]] (06:00 UTC, day 1)",
+      "Reconcile workspace, units + Unassigned, then people.",
+      "Partial results or mismatches: no report."
+    ] },
+    { "id": "configuration", "x": 452, "y": 378, "w": 382, "h": 242, "tone": "teal", "title": "2 · Versioned private settings", "lines": [
+      "[[settings]]",
+      "Recipients, exact allowed domains, selected units, formats and retention.",
+      "ETag [[etag]] prevents lost edits.",
+      "Workers read; only the admin identity writes."
+    ] },
+    { "id": "admin", "x": 892, "y": 378, "w": 372, "h": 242, "tone": "purple", "title": "3 · Private administration job", "lines": [
+      "[[admin]]",
+      "Initialize, Recipients, Settings or Inspect",
+      "Validate each structured operation.",
+      "Off-network inspection returns counts, never address lists."
+    ] },
+    { "id": "archive", "x": 16, "y": 674, "w": 382, "h": 280, "tone": "teal", "title": "4 · Private reports container", "lines": [
+      "[[archive]]",
+      "[[runs]]",
+      "Scoped CSV / HTML + manifest; artifact hashes and query provenance.",
+      "[[pna]]",
+      "[[dns]]; blob versioning and lifecycle retention."
+    ] },
+    { "id": "outbox", "x": 452, "y": 674, "w": 382, "h": 280, "tone": "teal", "title": "5 · Archive-backed outbox", "lines": [
+      "[[outbox]]",
+      "Pending blobs under outbox/ carry scope and [[hashes]], not addresses.",
+      "Lease on [[state]] serializes senders.",
+      "[[pacing]] persists the 420-second interval across restarts."
+    ] },
+    { "id": "dispatcher", "x": 892, "y": 674, "w": 372, "h": 280, "tone": "teal", "title": "6 · Blob-triggered dispatcher", "lines": [
+      "[[dispatcher]]",
+      "KEDA polling: 420 s; min 0 / max 1 execution.",
+      "Re-read current settings; honor removals and domain restrictions.",
+      "One send or poll action per pass. No idle container with an empty outbox."
+    ] },
+    { "id": "worker-role", "x": 16, "y": 1002, "w": 818, "h": 178, "tone": "teal", "title": "Reporting UAMI · generator, scaler and dispatcher", "lines": [
+      "Log Analytics Reader on the workspace; named-value read only at APIM.",
+      "Blob Data Reader on configuration; Blob Data Contributor on reports.",
+      "Dedicated ACS resource: custom read/write role, no keys or delete.",
+      "This is not an email-send-only permission; ACS exposes no such data action here."
+    ] },
+    { "id": "admin-role", "x": 892, "y": 1002, "w": 372, "h": 178, "tone": "purple", "compact": true, "title": "Separate administration UAMI", "lines": [
+      "Configuration Blob Data Contributor only.",
+      "No ledger or email role.",
+      "Log status/counts only, never addresses."
+    ] },
+    { "id": "acs", "x": 16, "y": 1298, "w": 596, "h": 202, "tone": "blue", "title": "7 · Entra-authenticated ACS Email", "lines": [
+      "Token audience: [[audience]]",
+      "POST [[email-route]]; poll the same operation id.",
+      "Communication Services links to Email Service's [[managed-domain]].",
+      "Record operation ids, status and recipient counts."
+    ] },
+    { "id": "recipients", "x": 684, "y": 1298, "w": 580, "h": 202, "tone": "amber", "title": "8 · Scope-specific BCC delivery", "lines": [
+      "[[bcc]] receives only that unit's HTML and CSV parts.",
+      "Explicit all-units recipients receive the selected report set.",
+      "No SAS / unrestricted download link. Team-specific recipients are deferred.",
+      "ACS acceptance is not proof of inbox placement."
+    ] },
+    { "id": "types", "x": 0, "y": 1558, "w": 1280, "h": 172, "tone": "slate", "title": "Additional resource types declared by P50 (pending merge)", "lines": [
+      "[[role-type]] · [[lifecycle-type]]",
+      "[[email-type]] · [[domain-type]]",
+      "[[acs-type]]"
+    ] }
+  ],
+  "edges": [
+    { "from": "workspace", "to": "generator", "kind": "data", "points": [[208, 228], [208, 268], [6, 268], [6, 482], [16, 482]] },
+    { "from": "gateway", "to": "generator", "kind": "data", "points": [[626, 228], [626, 268], [854, 268], [854, 354], [414, 354], [414, 482], [398, 482]] },
+    { "from": "operator", "to": "admin", "kind": "control", "points": [[1078, 228], [1078, 378]] },
+    { "from": "admin", "to": "configuration", "kind": "control", "points": [[892, 494], [834, 494]] },
+    { "from": "configuration", "to": "generator", "kind": "control", "points": [[452, 548], [398, 548]] },
+    { "from": "generator", "to": "archive", "kind": "data", "points": [[208, 620], [208, 674]] },
+    { "from": "archive", "to": "outbox", "kind": "data", "points": [[398, 820], [452, 820]] },
+    { "from": "outbox", "to": "dispatcher", "kind": "data", "points": [[834, 820], [892, 820]] },
+    { "from": "configuration", "to": "dispatcher", "kind": "control", "points": [[646, 620], [646, 646], [1078, 646], [1078, 674]] },
+    { "from": "dispatcher", "to": "acs", "kind": "identity", "points": [[1264, 838], [1274, 838], [1274, 1220], [648, 1220], [648, 1388], [612, 1388]] },
+    { "from": "acs", "to": "recipients", "kind": "data", "points": [[612, 1460], [684, 1460]] }
+  ],
+  "notice": "Azure-managed domains allow at most 10 sends/hour. One send plus one poll at 420-second pacing is about 4.3 completed messages/hour; additional polls are slower. Hundreds of units need a verified custom domain and approved quota for timely production delivery. Cost remains showback, not an invoice; cache writes remain unknown."
+}

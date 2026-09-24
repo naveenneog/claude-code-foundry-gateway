@@ -155,7 +155,7 @@ export function bicepResources(source) {
 }
 
 export function validateSpecs(root, specs) {
-  const errors = [], outputs = new Set(), ids = new Set(), represented = new Set();
+  const errors = [], outputs = new Set(), ids = new Set(), represented = new Set(), externalResources = new Set();
   for (const spec of specs) {
     if (ids.has(spec.id)) errors.push(fault('SPEC_DUPLICATE', spec.id));
     ids.add(spec.id);
@@ -186,6 +186,16 @@ export function validateSpecs(root, specs) {
           if (!source.path || !source.path.endsWith(`/${identifier.label}`)) throw new Error('File label must name its own source');
         } else if (!identifier.match || !source.content.includes(identifier.match)) {
           throw new Error(`Missing code witness: ${identifier.match ?? identifier.label}`);
+        }
+        if (identifier.kind === 'resource') {
+          const type = identifier.label.toLowerCase();
+          const witnessPath = identifier.source ?? spec.upstream?.[identifier.upstream]?.path;
+          if (!witnessPath?.endsWith('.bicep') ||
+              !bicepResources(source.content).some(declared => declared.toLowerCase() === type)) {
+            throw new Error(fault('RESOURCE_LABEL_INVALID', `${identifier.label} has no resource declaration`));
+          }
+          represented.add(type);
+          if (!source.path) externalResources.add(type);
         }
       } catch (error) { errors.push(fault('IDENTIFIER_MISSING', `${spec.id}/${key}: ${error.message}`)); }
     }
@@ -234,7 +244,7 @@ export function validateSpecs(root, specs) {
     } catch (error) { errors.push(error.message); }
   }
   for (const type of represented) {
-    if (!declared.has(type)) errors.push(fault('RESOURCE_UNKNOWN', type));
+    if (!declared.has(type) && !externalResources.has(type)) errors.push(fault('RESOURCE_UNKNOWN', type));
   }
   return [...new Set(errors)];
 }

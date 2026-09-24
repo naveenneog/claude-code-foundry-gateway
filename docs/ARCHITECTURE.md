@@ -25,6 +25,7 @@ Source: [01-system.json](architecture/01-system.json).
 | **Projection** | Cosmos DB, a resolver Function, Function host/deployment storage, private endpoints and DNS. A writer runs separately to reconcile the directory. | The writer and resolver have different identities and container-scoped data roles. The private-inbound path requires Standard v2 or Premium v2 outbound VNet integration. |
 | **Turnstile** | A separate fork deployment: App Service, PostgreSQL, Event Hubs and supporting Functions, Storage, Key Vault and networking. This repository adds the manual apply and hourly export Container Apps jobs. | Entra app roles control console access. The console starts one apply job; the job, not the console, writes gateway named values. |
 | **AUM (Azure Usage Management)** | A local Python terminal FinOps console, command `aum`; no new inference service or mandatory Azure resource. The terminal release is merged; the naming packet is staged on branch `aum`. | It uses Turnstile's HTTP API or Direct Azure with the operator's Azure CLI sign-in. A fake backend is for tests, never an outage fallback. |
+| **Monthly chargeback reports (P50, pending merge)** | A dedicated reports VNet and Consumption environment, generator/dispatcher/admin jobs, private Blob storage and Azure Communication Services Email. | The reporting identity reads telemetry/configuration and writes reports. A separate administration identity writes configuration only. No Turnstile dependency. |
 
 Projection and Turnstile are independent options. Turning on one does not imply the other.
 The default deployment has no additional application database, processor or queue, but
@@ -135,6 +136,94 @@ remain unknown, not zero. Price-based costs remain estimates, not a reconciled A
 invoice. An unjoined row remains visible as unattributed rather than being silently
 discarded. See [monitoring](MONITORING.md), [analytics provenance](adr/0006-ledger-is-the-llm-log.md)
 and [financial semantics](adr/0010-financial-semantics.md).
+
+## Private monthly reports and email delivery (P50, pending merge)
+
+![P50 chargeback reports: read-only workspace and gateway sources feed a monthly generator in a dedicated reports VNet. Private Blob settings, archive and hashed-recipient outbox connect separate reporting and administration identities to a paced ACS Email dispatcher and scoped BCC recipients.](images/architecture/chargeback-reports.png)
+
+Source: [08-chargeback-reports.json](architecture/08-chargeback-reports.json), verified
+against the pushed `chargeback-reports` branch at
+[`d1a304f`](https://github.com/naveenneog/claude-code-foundry-gateway/tree/d1a304f095274d0542073a616f020d9a0e523e42).
+This profile is not merged into this checkout. The
+[P50 how-to](https://github.com/naveenneog/claude-code-foundry-gateway/blob/d1a304f095274d0542073a616f020d9a0e523e42/docs/CHARGEBACK-REPORTS.md)
+and [ADR-0020](https://github.com/naveenneog/claude-code-foundry-gateway/blob/d1a304f095274d0542073a616f020d9a0e523e42/docs/adr/0020-chargeback-reports.md)
+describe deployment, recipient administration and measured limitations.
+
+P50 reads the existing `ClaudeCost()` and `ClaudeChargeback()` saved functions over
+Entra-authenticated HTTPS. It is independent of Turnstile and never proxies a model call.
+The scheduled default is `0 6 1 * *`: 06:00 UTC on the first day of each month, reporting
+the previous UTC calendar month. Month-to-date is an explicit configuration choice.
+
+### Generate and reconcile before publishing
+
+`Invoke-ClaudeChargebackSchedule.ps1` selects the generator, dispatcher or administration
+mode. The generator calls `New-ClaudeChargebackReport.ps1`. It aggregates server-side
+rather than downloading raw request rows, splitting bounded person pages by hash.
+Units including Unassigned must reconcile to workspace totals, and person totals must
+reconcile to their unit. Teams are subdivisions, not extra totals to add again.
+
+Partial query results, reconciliation mismatches or changing saved-function definitions
+invalidate the report instead of silently publishing incomplete data. A complete run
+archives scoped CSV/HTML and a manifest under `runs/<month>/<run>/`. The manifest records
+the UTC window, query/artifact hashes, price-book and membership provenance, and budgets
+as read at generation time. It does not reconstruct historical budget or tariff changes.
+Costs remain the existing saved function's list-price showback; unknown cache-write
+categories stay null/empty, not zero.
+
+### Separate private storage from administration
+
+The reports-only VNet has a delegated Container Apps subnet and a private-endpoint subnet.
+The dedicated Consumption environment uses that network. Storage has a Blob private
+endpoint and `privatelink.blob.core.windows.net` zone/link, disables public network and
+shared-key access, and requires HTTPS/TLS 1.2. P50's deployment measured an inherited
+policy enforcing private storage; granting a blob data role does not make an off-network
+terminal able to reach it. No gateway or Turnstile network is modified.
+
+`configuration/settings.json` lives in a separate, versioned container. ETag conditional
+writes refuse stale edits. Allowed recipient domains are required and matched exactly.
+Report artifacts, pending `outbox/` items and dispatch state live in the `reports`
+container; lifecycle retention defaults to 400 days and is configurable.
+
+| Identity | Access |
+|---|---|
+| Reporting user-assigned managed identity | Workspace Log Analytics Reader; gateway `namedValues/read` only; configuration-container Blob Data Reader; reports-container Blob Data Contributor. A custom read/write role is scoped to the dedicated ACS resource, with no keys or delete. |
+| Separate administration managed identity | Configuration-container Blob Data Contributor only; no workspace or email role. |
+| Administrator starting the manual job | Privileged configuration authority, not a role to give report recipients. |
+
+The ACS role is not a fictitious email-send-only role: the inspected provider exposes no
+send-only data action for this path. Its residual resource management privilege is
+contained on a dedicated ACS resource.
+
+For off-network administration, the manual job accepts a validated, structured
+`REPORT_ADMIN_REQUEST`, not arbitrary shell code. It performs Initialize, Recipients,
+Settings or Inspect operations. Logs and off-network inspection contain status and counts,
+not address lists. Full recipient lists are read from a VNet-connected terminal.
+
+### Pace delivery and recheck recipients
+
+The generator queues recipient hashes and scope, not address lists. The blob-triggered
+dispatcher polls every 420 seconds with zero minimum and one maximum execution, so an
+empty outbox does not keep a container running. An infinite lease on `state/dispatch.json`
+serializes sends; persisted `NextActionUtc` pacing survives process restarts.
+
+Before sending, the dispatcher rereads current configuration, honors recipient removals
+and domain restrictions, verifies archived artifact hashes, and sends scoped HTML/CSV
+parts through the Entra ACS Email endpoint. Unit recipients receive their unit's report
+using BCC. Explicit all-units recipients receive the selected report set. Team-specific
+recipient delivery is deferred; sending the parent unit report would widen their scope.
+Email contains no SAS or unrestricted download link.
+
+Send/poll operation ids, scope, status and recipient counts are recorded in the run
+manifest. An ambiguous send is polled using its existing operation id, not resent as a
+new message. Unknown outcomes require inspection. A crashed worker can leave its lease
+held; an administrator checks for active executions before explicitly breaking a stale
+lease.
+
+Azure-managed domains permit at most 10 sends per hour. At one send and one poll per
+message, the 420-second pacing permits about 4.3 completed messages per hour; more polls
+are slower. Hundreds of unit reports therefore require a verified custom domain and an
+approved quota for timely production delivery. A successful ACS operation is not proof
+of inbox placement, and emailed data is outside the archive's retention control.
 
 ## Governance apply path
 
@@ -335,7 +424,10 @@ and revise the request/apply explanations against the merged policy. See the
 Source: [07-resources.json](architecture/07-resources.json). This explicit list includes
 existing references and child configuration resources. It is not the live deployment's
 resource count. Turnstile's separate fork has its own infrastructure; saved functions and
-workbooks are published by scripts rather than by these Bicep files.
+workbooks are published by scripts rather than by these Bicep files. The P50 diagram
+separately displays five additional resource types from its pinned branch: custom role
+definitions, Storage management policies and the three Communication/Email resource types.
+These are not claimed as resources in the current default deployment.
 
 ## Keep architecture current after every feature
 
@@ -369,16 +461,19 @@ SHA-256 manifest. It keeps the README's `docs/images/architecture.png` and
    File labels use `kind: "file"` and name their own source. Prefer a declaration or
    executable use as the match, not prose that could outlive the code.
 3. If the feature adds an Azure resource type, put the exact type in an inventory
-   `sections[].types` list. These are drawn as text, not hidden coverage metadata.
-   Existing declarations, conditional resources and child resources all count.
+   `sections[].types` list, or draw a `[[key]]` label with `kind: "resource"` bound to its
+   Bicep declaration. A code-backed resource label must match a real declaration, not
+   a commented example. Existing, conditional and child resources all count.
 4. Add the image to this article with an explanation of components, identities, data
    flow, failures and deployment-profile changes. Run the render command. Open **every**
    changed image and check labels, arrows, boundaries and readability before committing.
 5. Run the architecture test and the packet gate. Commit the source, pictures, manifest
    and article together. A new diagram does not require editing the generator or a registry.
 
-P50 chargeback reports can follow this same process when their diagram specification
-arrives. Do not draw an unverified storage, delivery or scheduling path in advance.
+The P50 diagram is an example of adding one spec without changing the diagram registry:
+it carries pinned implementation witnesses while pending merge, including rendered
+resource-type labels. When those files become local, the checker uses them and requires
+a new render. Do not represent a pending path as already deployed.
 
 ### What the check proves
 
@@ -398,7 +493,10 @@ are an explicitly versioned external contract, **not a live check of another rep
 branch**. AUM's implementation labels now refer to local code; the merge invalidated the
 old manifest as intended. The command rename is separately recorded as pinned naming
 evidence until its packet merges. Re-render after that integration, and review and repin
-fork witnesses when the external dependency changes.
+fork witnesses when the external dependency changes. P50's pending implementation and
+resource declarations use the same pinned-witness mechanism; its actual files take over
+when merged. Resource types backed by a pinned external declaration are explicitly
+distinguished from the current local Bicep inventory.
 
 The architecture image ownership check covers `docs/images/architecture/` and the two
 legacy PNG aliases, not `docs/images/finops/*.svg`. Those SVGs are terminal snapshot-test

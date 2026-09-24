@@ -87,3 +87,17 @@ The owner named the product AUM - Azure Usage Management, with command `aum` and
 recorded as naming evidence; this architecture uses the new name while explicitly stating
 that the naming packet is not yet integrated. The terminal SVGs under `docs/images/finops`
 remain snapshot baselines, outside the architecture-orphan check's scope.
+
+## Pending P50 resource declarations
+
+The pushed chargeback-reports implementation at `d1a304f` is drawn without importing or
+editing that packet's runtime files. Its diagram carries pinned code witnesses, including
+five additional Azure resource types. A visible `kind: "resource"` identifier may satisfy
+resource coverage when its source contains a real Bicep declaration. Comment text and
+undrawn metadata cannot satisfy that contract. This allows a feature to add its flow and
+resource types in one spec while keeping the existing inventory useful.
+
+Pinned external types are not claimed as declarations in the current local checkout.
+When P50 is merged, local Bicep and scripts replace the snapshots, invalidating the old
+manifest and requiring review and regeneration. This is the same adoption rule used for
+the terminal implementation, not a separate renderer or an exception to drift checking.
