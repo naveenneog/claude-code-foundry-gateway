@@ -69,3 +69,9 @@ def test_tty_version_accessibility_modes_suppress_art(flag):
         result = CliRunner().invoke(app, ["--version", flag])
     assert result.exit_code == 0
     assert BANNER not in result.output
+
+
+def test_version_short_circuits_child_commands_without_connecting():
+    result = CliRunner().invoke(app, ["status", "--version", "--json"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["product"] == PRODUCT

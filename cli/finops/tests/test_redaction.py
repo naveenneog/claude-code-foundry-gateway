@@ -76,3 +76,14 @@ def test_bounded_request_page_redaction_is_interactive():
     elapsed = perf_counter() - started
     assert not privacy_problems(json.dumps(rendered))
     assert elapsed < 2, f"Display redaction blocked a bounded request page for {elapsed:.2f}s"
+
+
+def test_identity_strings_cannot_rewrite_schema_keys_or_status_enums():
+    source = {"name": "status", "scope_name": "warning", "scope_id": "name",
+              "scope_type": "organization", "status": "warning",
+              "enforcement_modes": {"name": "notify"}}
+    rendered = Redactor(True).present(source)
+    assert set(rendered) == set(source)
+    assert rendered["scope_type"] == "organization"
+    assert rendered["status"] == "warning"
+    assert rendered["enforcement_modes"][rendered["scope_id"]] == "notify"

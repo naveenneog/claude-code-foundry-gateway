@@ -11,10 +11,19 @@ PERSON_KEYS = {"email", "user_name", "user_id", "actor", "updated_by", "changed_
 PRIVATE_TEXT = {"description", "reason", "error_message", "ingest_error"}
 PRIVATE_FIELDS = {"tenant", "tenant_id", "app_id", "client_id", "subscription_id", "workspace",
                   "repository", "resource_group", "apim_name", "entra_group", "external_ref"}
+ENUM_FIELDS = {"role", "method", "status", "scope_type", "severity", "kind", "enforcement",
+               "action", "dimension", "source", "usage_source", "runtime"}
 
 
 def digest(value):
     return sha256(str(value).casefold().encode("utf-8")).hexdigest()[:8]
+
+
+def mask_identifiers(text):
+    text = EMAIL.sub(lambda match: match[0] if match[0].lower().endswith("@contoso.com")
+                     else f"person-{digest(match[0])}@contoso.com", text)
+    text = GUID.sub(lambda match: f"id-{digest(match[0])}", text)
+    return HOST.sub(lambda match: f"service-{digest(match[0])}.contoso.com", text)
 
 
 def privacy_problems(text):
@@ -43,6 +52,10 @@ class Redactor:
 
     def _learn(self, value, key=""):
         if isinstance(value, dict):
+            if key == "enforcement_modes":
+                for scope_id in value:
+                    self.alias(scope_id)
+                return
             for child_key, child in value.items():
                 self._learn(child, child_key)
         elif isinstance(value, list):
@@ -66,11 +79,7 @@ class Redactor:
                 alternatives = "|".join(re.escape(value) for value in sorted(self.replacements, key=len, reverse=True))
                 self._pattern = re.compile(r"(?<![\w-])(?:" + alternatives + r")(?![\w-])")
             text = self._pattern.sub(lambda match: self.replacements[match[0]], text)
-        text = EMAIL.sub(lambda match: match[0] if match[0].lower().endswith("@contoso.com")
-                         else f"person-{digest(match[0])}@contoso.com", text)
-        text = GUID.sub(lambda match: f"id-{digest(match[0])}", text)
-        text = HOST.sub(lambda match: f"service-{digest(match[0])}.contoso.com", text)
-        return text
+        return mask_identifiers(text)
 
     def present(self, value):
         if not self.enabled:
@@ -80,10 +89,14 @@ class Redactor:
 
     def _render(self, value, key=""):
         if isinstance(value, dict):
-            return {self.text(k): self._render(v, k) for k, v in value.items()}
+            if key == "enforcement_modes":
+                return {self.text(k): v for k, v in value.items()}
+            return {k: self._render(v, k) for k, v in value.items()}
         if isinstance(value, list):
             return [self._render(item, key) for item in value]
         if isinstance(value, str):
+            if key in ENUM_FIELDS:
+                return mask_identifiers(value)
             if key in PRIVATE_TEXT and value:
                 return "[private text hidden]"
             if key == "title" and value:

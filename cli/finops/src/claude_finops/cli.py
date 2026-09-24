@@ -100,7 +100,7 @@ def root(ctx: typer.Context,
             display(dict(product=PRODUCT, version=__version__), as_json=True)
         else:
             typer.echo(f"{PRODUCT} {__version__}")
-        return
+        raise typer.Exit()
     try:
         settings = load_config(config, backend=backend, url=url, scope=scope, resource_group=resource_group,
                                apim_name=apim_name, theme=theme, ascii=True if ascii_only else None)
