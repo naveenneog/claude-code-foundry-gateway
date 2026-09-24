@@ -293,12 +293,14 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       Follow-ups: saved views, comparison charts and in-terminal profiles; a request cursor (the
       API stops at 200); conditional catalog and tier writes; P47's requests and boosts; a live
       scoped-manager journey (**U20**)
-- [ ] P56 a parallel test suite — acceptance: `tests/Test-All.ps1` runs independent checks at
-      the same time, each check proven safe to run beside the others (no shared temp paths, no
-      in-place mutation of repository files), with the same per-check result, completion guard
-      and SKIP counting; reliably under 20 minutes on a busy machine, after which the gate's
-      command budget returns from 3,600 to 1,800 seconds in a new ADR.
-      [ADR-0024](adr/0024-test-suite-time-budget.md)
+- [x] P56 a parallel test suite — `tests/Test-All.ps1` runs checks in separate `pwsh` processes,
+      at most four at a time, with an exclusive lane for checks that share Azure CLI state or scan
+      the whole tree, logs printed in registration order, one result slot per registration, a
+      per-check deadline (600 s by default) and the same completion guard and SKIP counting. The
+      business-unit and Turnstile mutation harnesses run as four and two shards, and a new check
+      proves the shards cover exactly the 476 and 108 mutations, in order. Three busy full runs:
+      927.2, 830.6 and 790.0 s, against 1,829 s serially; the gate's command budget is back to
+      1,800 s. [ADR-0025](adr/0025-parallel-test-suite.md)
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so
