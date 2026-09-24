@@ -4,14 +4,16 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { pathToFileURL } from 'node:url';
+import { StringDecoder } from 'node:string_decoder';
 
 export function createEventMeter() {
   let pending = '';
+  const decoder = new StringDecoder('utf8');
   const events = [];
   return {
     events,
     push(chunk, elapsedMs) {
-      pending += chunk.toString('utf8');
+      pending += decoder.write(chunk);
       let end;
       while ((end = pending.indexOf('\n')) >= 0) {
         const line = pending.slice(0, end).trimEnd();
@@ -45,6 +47,7 @@ export async function probe(options) {
     ...options.headers,
     authorization: `Bearer ${options.token}`,
     'content-type': 'application/json',
+    'user-agent': options.headers?.['user-agent'] ?? 'claude-network-verifier/1.0',
     'anthropic-version': '2023-06-01',
     'content-length': String(body.length),
   };
@@ -53,6 +56,9 @@ export async function probe(options) {
   const result = {
     startedUtc: new Date().toISOString(),
     status: null,
+    apimRequestId: null,
+    gatewayRequestId: null,
+    tier: null,
     httpVersion: null,
     tlsAuthorized: false,
     tlsProtocol: null,
@@ -67,6 +73,7 @@ export async function probe(options) {
     maxEventGapMs: null,
     eventCount: 0,
     completed: false,
+    httpCompleted: false,
     responseBytes: 0,
     inputTokens: null,
     outputTokens: null,
@@ -91,6 +98,13 @@ export async function probe(options) {
     await new Promise((resolve, reject) => {
       let client;
       let request;
+      const tlsDeadline = setTimeout(() => {
+        const error = new Error('TLS handshake did not complete.');
+        error.code = 'TLS_HANDSHAKE_TIMEOUT';
+        request?.destroy(error);
+        client?.destroy(error);
+        reject(error);
+      }, options.tlsTimeoutMs ?? 20000);
       const deadline = setTimeout(() => {
         request?.destroy();
         client?.destroy();
@@ -98,13 +112,15 @@ export async function probe(options) {
       }, options.timeoutMs ?? 660000);
       const finish = (error) => {
         clearTimeout(deadline);
+        clearTimeout(tlsDeadline);
         client?.close();
-        if (error) reject(error); else resolve();
+        if (error) reject(error); else { result.httpCompleted = true; resolve(); }
       };
       if (options.http2) {
         client = http2.connect(url.origin, tlsOptions);
         client.on('error', finish);
         client.on('connect', () => {
+          clearTimeout(tlsDeadline);
           result.tlsAuthorized = client.socket.authorized;
           result.tlsProtocol = client.socket.getProtocol();
           result.httpVersion = client.alpnProtocol;
@@ -112,6 +128,9 @@ export async function probe(options) {
         request = client.request({ ':method': 'POST', ':path': url.pathname + url.search, ...headers });
         request.on('response', responseHeaders => {
           result.status = responseHeaders[':status'];
+          result.apimRequestId = responseHeaders['apim-request-id'] ?? null;
+          result.gatewayRequestId = responseHeaders['x-claude-gateway-request-id'] ?? null;
+          result.tier = responseHeaders['x-claude-tier'] ?? null;
           result.headersMs = elapsed();
         });
         request.on('data', onData);
@@ -119,6 +138,9 @@ export async function probe(options) {
       } else {
         request = https.request(url, { ...tlsOptions, method: 'POST', headers }, response => {
           result.status = response.statusCode;
+          result.apimRequestId = response.headers['apim-request-id'] ?? null;
+          result.gatewayRequestId = response.headers['x-claude-gateway-request-id'] ?? null;
+          result.tier = response.headers['x-claude-tier'] ?? null;
           result.httpVersion = response.httpVersion;
           result.headersMs = elapsed();
           result.tlsAuthorized = response.socket.authorized;
@@ -128,6 +150,7 @@ export async function probe(options) {
           response.on('aborted', () => finish(new Error('Response stream aborted.')));
           response.on('end', () => finish());
         });
+        request.on('socket', socket => socket.once('secureConnect', () => clearTimeout(tlsDeadline)));
       }
       request.on('error', finish);
       request.end(body);
@@ -141,7 +164,7 @@ export async function probe(options) {
   result.firstTextMs = meter.events.find(e => e.text)?.elapsedMs ?? null;
   result.completed = meter.events.some(e => e.type === 'message_stop');
   result.maxEventGapMs = meter.events.length > 1
-    ? Math.max(...meter.events.slice(1).map((e, i) => Math.round((e.elapsedMs - meter.events[i].elapsedMs) * 10) / 10))
+    ? meter.events.slice(1).reduce((maximum, e, i) => Math.max(maximum, Math.round((e.elapsedMs - meter.events[i].elapsedMs) * 10) / 10), 0)
     : null;
   result.inputTokens = meter.events.find(e => e.inputTokens !== null)?.inputTokens ?? null;
   result.outputTokens = meter.events.filter(e => e.outputTokens !== null).at(-1)?.outputTokens ?? null;

@@ -15,12 +15,19 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ClaudeNetwork.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeNetworkPolicy.ps1')
-$StatePath = [IO.Path]::GetFullPath($StatePath)
+$StatePath = Get-ClaudeNetworkLocalPath $StatePath
 $state = Get-Content $StatePath -Raw | ConvertFrom-Json
 $directory = Split-Path $StatePath -Parent
 if ($state.Version -ne 1 -or -not $state.OwnerId -or -not $state.ApimId) { throw 'Invalid network-edge state.' }
 if ($state.Removed) { Write-Host 'The edge was already removed.'; return }
 if (-not $RestoreApim) { throw 'Pass -RestoreApim to confirm restoring the previous APIM public access and integration before the edge is deleted.' }
+if ($state.VnetSelection -eq 'new') {
+    $rgId="/subscriptions/$($state.SubscriptionId)/resourceGroups/$($state.ResourceGroup)"
+    $policyNsgs=Get-ClaudeNetworkOwnedNsgs -VnetId $state.VnetId -ResourceGroupId $rgId -OwnerId $state.OwnerId
+    foreach ($nsg in $policyNsgs) {
+        if (@($state.OwnedResources | Where-Object id -eq $nsg.id).Count -eq 0) { $state.OwnedResources=@($nsg)+@($state.OwnedResources) }
+    }
+}
 $liveResources = @{}
 foreach ($resource in $state.OwnedResources) {
     $live = Invoke-ClaudeNetworkArm "https://management.azure.com$($resource.id)?api-version=$($resource.apiVersion)" -AllowNotFound
@@ -35,6 +42,8 @@ $currentSubnet = $apim.properties.virtualNetworkConfiguration.subnetResourceId
 $originalSubnet = $state.OriginalApimNetwork.virtualNetworkConfiguration.subnetResourceId
 if ($currentSubnet -and $currentSubnet -ne $originalSubnet -and -not $currentSubnet.StartsWith($state.VnetId+'/',[StringComparison]::OrdinalIgnoreCase)) { throw 'APIM network changed outside this edge. Resolve the drift before removal.' }
 if (-not $PSCmdlet.ShouldProcess($state.GatewayId,'Restore the selected APIM and delete only manifest-owned edge resources')) { return }
+Write-ClaudeNetworkState $state $StatePath
+$apim=Wait-ClaudeNetworkResourceReady -ResourceId $state.ApimId -ApiVersion '2024-05-01'
 $policy = Invoke-ClaudeNetworkArm "https://management.azure.com$($state.ApimId)/policies/policy?api-version=2024-05-01" -AllowNotFound
 if ($policy -and $policy.properties.value.Contains("claude-network-edge:$($state.OwnerId):begin")) {
     $restored = Remove-ClaudeNetworkPolicyText -Policy $policy.properties.value -EdgeId $state.OwnerId
@@ -42,7 +51,10 @@ if ($policy -and $policy.properties.value.Contains("claude-network-edge:$($state
 }
 $previous = $state.OriginalApimNetwork
 $network = @{publicNetworkAccess=$previous.publicNetworkAccess;virtualNetworkType=$previous.virtualNetworkType;virtualNetworkConfiguration=$previous.virtualNetworkConfiguration}
-[void](Invoke-ClaudeNetworkArm "https://management.azure.com$($state.ApimId)?api-version=2024-05-01" -Method patch -Body @{properties=$network} -StateDirectory $directory)
+if ($apim.properties.publicNetworkAccess -ne $previous.publicNetworkAccess -or $apim.properties.virtualNetworkType -ne $previous.virtualNetworkType -or $apim.properties.virtualNetworkConfiguration.subnetResourceId -ne $originalSubnet) {
+    [void](Invoke-ClaudeNetworkArm "https://management.azure.com$($state.ApimId)?api-version=2024-05-01" -Method patch -Body @{properties=$network} -StateDirectory $directory)
+    [void](Wait-ClaudeNetworkResourceReady -ResourceId $state.ApimId -ApiVersion '2024-05-01')
+}
 if ($RestoreFoundryPublicAccess) {
     [void](Invoke-ClaudeNetworkArm "https://management.azure.com$($state.FoundryId)?api-version=2024-10-01" -Method patch -Body @{properties=@{publicNetworkAccess=$state.FoundryOriginalPublicAccess}} -StateDirectory $directory)
 }
@@ -50,13 +62,7 @@ $resources = @($state.OwnedResources)
 [array]::Reverse($resources)
 foreach ($resource in $resources) {
     if (-not $liveResources[$resource.id]) { continue }
-    [void](Invoke-ClaudeNetworkArm "https://management.azure.com$($resource.id)?api-version=$($resource.apiVersion)" -Method delete)
-    $deadline = [DateTime]::UtcNow.AddMinutes(15)
-    do {
-        Start-Sleep -Seconds 5
-        $remaining = Invoke-ClaudeNetworkArm "https://management.azure.com$($resource.id)?api-version=$($resource.apiVersion)" -AllowNotFound
-    } while ($remaining -and [DateTime]::UtcNow -lt $deadline)
-    if ($remaining) { throw 'Deletion has not completed; keep the state file and re-run removal. No later resource was deleted.' }
+    Remove-ClaudeNetworkOwnedResource -Resource $resource -OwnerId $state.OwnerId
     Write-Host ('Removed ' + (($resource.id -split '/providers/')[-1] -split '/')[0])
 }
 $state.Removed = $true

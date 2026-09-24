@@ -47,6 +47,19 @@ attack-pattern refusal in Prevention. Disable response buffering and configure
 a 600-second backend timeout; the measurement harness distinguishes first SSE
 event, first text delta and complete response.
 
+The live Detection log exposed prompt/system/tool text, so log scrubbing is
+part of the default policy, independently of inspection. The measured example
+has six field selectors and 71 individual rule/field pairs; it is not a
+universal waiver for future clients. Actual code traffic passed Prevention and
+a query-string attack and oversized body still blocked.
+
+The evaluation certificate must be a real CA/server chain: Key Vault's
+self-signed end-entity certificate worked with Node's explicit trust but not
+with the tested native client's CA configuration. The private verifier now
+generates a two-day CA and leaf, imports the leaf PFX over Private Link, deletes
+the working keys, and returns only the public CA. Production uses the selected
+enterprise/public issuer.
+
 Persist a local ownership manifest before each write. Re-runs read live
 ownership, and removal checks it again and restores APIM before deleting only
 owned resources. Private DNS can live in another subscription. The script

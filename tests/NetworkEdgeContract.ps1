@@ -15,8 +15,12 @@ function Test-ClaudeNetworkTemplateContract {
     if ($waf -notmatch 'exclusions:\s*exclusions' -or $waf -notmatch 'requestBodyCheck:\s*true') { 'inspectable scoped exclusions lost' }
     if ($waf -match "action:\s*'Allow'") { 'a custom Allow can bypass managed WAF rules' }
     if ($waf -notmatch 'requestBodyEnforcement:\s*true') { 'oversized requests no longer fail closed' }
+    if ($waf -notmatch '(?m)^\s+logScrubbing:' -or $waf -notmatch "'RequestJSONArgNames'" -or $waf -notmatch "selector:\s*'Authorization'") { 'WAF matched-data logging can disclose prompts or bearer credentials' }
+    if ($waf -match "(?s)logScrubbing:.*selector:\s*'\*'") { 'EqualsAny log scrubbing requires an empty selector, unlike an exclusion' }
     if ($pe -notmatch 'privateDnsZoneGroups' -or $pe -notmatch 'privateDnsZoneId:\s*zoneId') { 'PE DNS wiring lost' }
     if ($deploy -notmatch 'ShouldProcess' -or $deploy -notmatch 'Assert-ClaudeNetworkOwnership') { 'deployment ownership or WhatIf guard lost' }
     if ($remove -notmatch 'ShouldProcess' -or $remove -notmatch 'Assert-ClaudeNetworkOwnership') { 'removal ownership or WhatIf guard lost' }
     if ($remove -match 'az group delete') { 'removal must not delete a shared resource group' }
+    if ($deploy -notmatch 'network-edge-runner\.bicep' -or $deploy -notmatch 'network-certificate\.mjs') { 'private-vault certificate setup needs an in-network managed identity' }
+    if ($deploy -notmatch 'network-edge-private-name\.bicep') { 'private listeners need split DNS, not an HTTP Host override' }
 }

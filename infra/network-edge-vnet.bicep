@@ -13,6 +13,8 @@ param edgeRouteTableId string = ''
 param apimRouteTableId string = ''
 param dnsServers array = []
 param ddosProtectionPlanId string = ''
+param endpointsNsgId string = ''
+param runnerNsgId string = ''
 
 resource edgeNsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
   name: '${name}-edge'
@@ -143,12 +145,18 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
         properties: {
           addressPrefix: endpointsPrefix
           privateEndpointNetworkPolicies: 'Disabled'
+          networkSecurityGroup: empty(endpointsNsgId) ? null : {
+            id: endpointsNsgId
+          }
         }
       }
       {
         name: 'verification'
         properties: {
           addressPrefix: runnerPrefix
+          networkSecurityGroup: empty(runnerNsgId) ? null : {
+            id: runnerNsgId
+          }
           delegations: [
             {
               name: 'container-instance'

@@ -28,6 +28,8 @@ function Check([string]$Name,[bool]$Pass,[object]$Observed) {
 }
 $edge = Invoke-ClaudeNetworkArm "https://management.azure.com$($state.GatewayId)?api-version=2024-05-01"
 Check 'edge provisioned' ($edge.properties.provisioningState -eq 'Succeeded') $edge.properties.provisioningState
+Check 'edge running' ($edge.properties.operationalState -eq 'Running') $edge.properties.operationalState
+if ($edge.properties.operationalState -ne 'Running') { throw 'Application Gateway is not Running. Check its Activity log and Overview > Start; a stopped gateway can still accept a TCP connection.' }
 Check 'response buffering off' ($edge.properties.globalConfiguration.enableResponseBuffering -eq $false) $edge.properties.globalConfiguration.enableResponseBuffering
 Check 'frontend HTTP/2 enabled' ($edge.properties.enableHttp2 -eq $true) $edge.properties.enableHttp2
 $timeout = @($edge.properties.backendHttpSettingsCollection)[0].properties.requestTimeout
@@ -55,13 +57,18 @@ if (-not $Model) {
 if ($PSCmdlet.ShouldProcess($state.Endpoint,'Spend a small number of tokens to test TLS, SSE and authenticated direct-origin refusal')) {
     $token = Invoke-ClaudeNetworkAz @('account','get-access-token','--resource','https://cognitiveservices.azure.com','--subscription',$state.SubscriptionId)
     $options = @{url=$state.Endpoint.TrimEnd('/')+'/v1/messages';model=$Model;token=$token.accessToken;maxTokens=32;http2=$true;timeoutMs=90000}
-    if ($CaCertificatePath) { $options.caPath=[IO.Path]::GetFullPath($CaCertificatePath) }
+    if ($CaCertificatePath) {
+        $options.caPath=Get-ClaudeNetworkLocalPath $CaCertificatePath
+        if (-not (Test-Path -LiteralPath $options.caPath -PathType Leaf)) { throw 'The selected public CA PEM file does not exist.' }
+    }
     $json = ($options | ConvertTo-Json -Depth 20) | & node (Join-Path $PSScriptRoot 'network-edge-probe.mjs')
+    if (-not $json) { throw 'The TLS/SSE probe returned no receipt. Check Node and the public CA file before retrying.' }
     $probe = $json | ConvertFrom-Json
     Check 'TLS chain and hostname verified' $probe.tlsAuthorized $probe.tlsProtocol
     Check 'real streaming inference' ($probe.status -eq 200 -and $probe.completed -and $null -ne $probe.firstTextMs -and $probe.firstTextMs -lt $probe.completedMs) $probe
     Check 'HTTP/2 negotiated with edge' ($probe.httpVersion -eq 'h2') $probe.httpVersion
     $options.url = $apim.properties.gatewayUrl.TrimEnd('/')+'/'+$state.ApiPath+'/v1/messages'
+    $options.http2 = $false
     $options.Remove('caPath')
     $bypassJson = ($options | ConvertTo-Json -Depth 20) | & node (Join-Path $PSScriptRoot 'network-edge-probe.mjs')
     $bypass = $bypassJson | ConvertFrom-Json

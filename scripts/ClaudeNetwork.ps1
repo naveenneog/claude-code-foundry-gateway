@@ -28,22 +28,39 @@ function Invoke-ClaudeNetworkArm {
     if ($Url -notmatch '^https://management\.azure\.com/(subscriptions|providers)/') { throw 'Expected an Azure Resource Manager URL.' }
     $file = $null
     try {
-        # ARM continuation links contain ampersands. Do not pass them to az.cmd.
-        if ($Url.Contains('&')) {
-            $token = Invoke-ClaudeNetworkAz @('account','get-access-token','--resource','https://management.azure.com')
-            return Invoke-RestMethod -Method $Method -Uri $Url -Headers @{ Authorization = "Bearer $($token.accessToken)" } -TimeoutSec 120
+        # az rest has no bounded connect timeout on the measured CLI version.
+        # Keep authentication in az, but bound ARM transport and never pass
+        # continuation URLs or policy expressions through cmd.exe.
+        if (-not $script:ClaudeNetworkTokens) { $script:ClaudeNetworkTokens = @{} }
+        $scope = if ($Url -match '/subscriptions/([^/]+)/') { $Matches[1] } else { 'current' }
+        $cached = $script:ClaudeNetworkTokens[$scope]
+        if (-not $cached -or [DateTime]::UtcNow -ge $cached.refresh) {
+            $tokenArgs = @('account','get-access-token','--resource','https://management.azure.com')
+            if ($scope -ne 'current') { $tokenArgs += @('--subscription',$scope) }
+            $token = Invoke-ClaudeNetworkAz $tokenArgs
+            $cached = @{token=$token.accessToken;refresh=[DateTime]::UtcNow.AddMinutes(5)}
+            $script:ClaudeNetworkTokens[$scope] = $cached
         }
-        $args = @('rest','--method',$Method,'--url',$Url)
+        $request = @{Method=$Method;Uri=$Url;Headers=@{Authorization="Bearer $($cached.token)"};TimeoutSec=45;ErrorAction='Stop'}
         if ($null -ne $Body) {
             if (-not $StateDirectory -or -not (Test-Path $StateDirectory -PathType Container)) { throw 'A local state directory is required for ARM request files.' }
             $file = Join-Path $StateDirectory ('request-' + [guid]::NewGuid().ToString('N') + '.json')
             [IO.File]::WriteAllText($file, ($Body | ConvertTo-Json -Depth 100), (New-Object Text.UTF8Encoding $false))
-            $args += @('--headers','Content-Type=application/json','--body',('@' + $file))
+            $request.Body = [IO.File]::ReadAllBytes($file)
+            $request.ContentType = 'application/json; charset=utf-8'
         }
-        return Invoke-ClaudeNetworkAz $args
+        for ($attempt=0; $attempt -lt 3; $attempt++) {
+            try { return Invoke-RestMethod @request }
+            catch {
+                $status = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+                if ($Method -eq 'post' -or $attempt -eq 2 -or ($status -ne 0 -and $status -ne 429 -and $status -lt 500)) { throw }
+                Start-Sleep -Seconds (2 + 2*$attempt)
+            }
+        }
     }
     catch {
-        if ($AllowNotFound -and $_.Exception.Message -match 'ResourceNotFound|ResourceGroupNotFound|NotFound|could not be found') { return $null }
+        $httpStatus = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
+        if ($AllowNotFound -and ($httpStatus -eq 404 -or $_.Exception.Message -match 'ResourceNotFound|ResourceGroupNotFound|NotFound|could not be found|\(404\)|404.*Not Found')) { return $null }
         throw
     }
     finally { if ($file) { Remove-Item $file -Force -ErrorAction SilentlyContinue } }
@@ -97,6 +114,24 @@ function Select-ClaudeNetworkOption {
         if ([int]::TryParse($answer, [ref]$number) -and $number -ge 1 -and $number -le $Options.Count) { return $Options[$number - 1] }
         Write-Warning 'Enter one of the displayed numbers.'
     }
+}
+
+function Test-ClaudeNetworkInventoryFresh {
+    param([object]$RetrievedUtc,[datetime]$NowUtc = [DateTime]::UtcNow)
+    # PS 7 can deserialize ISO dates as DateTime; PS 5.1 returns a string.
+    # Parsing the former's culture-formatted string loses its UTC kind.
+    $retrieved = if ($RetrievedUtc -is [datetime]) { $RetrievedUtc.ToUniversalTime() }
+        else { [DateTime]::Parse([string]$RetrievedUtc,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime() }
+    $age = $NowUtc.ToUniversalTime() - $retrieved
+    return ($age -ge [TimeSpan]::FromMinutes(-5) -and $age -le [TimeSpan]::FromMinutes(30))
+}
+
+function Get-ClaudeNetworkStableGuid {
+    param([string]$Value)
+    $hash = [Security.Cryptography.SHA256]::Create()
+    try { $bytes = $hash.ComputeHash([Text.Encoding]::UTF8.GetBytes($Value)) }
+    finally { $hash.Dispose() }
+    return [guid]::new([byte[]]$bytes[0..15]).ToString()
 }
 
 function ConvertFrom-ClaudeNetworkNumber {
@@ -188,6 +223,29 @@ function Get-ClaudeNetworkSkuLocation {
     return ,@($locations | Sort-Object -Unique)
 }
 
+function Assert-ClaudeNetworkWafExclusions {
+    param([object[]]$Exclusions,$RuleSet)
+    foreach ($exclusion in $Exclusions) {
+        if ($exclusion.matchVariable -ne 'RequestArgValues' -or $exclusion.selectorMatchOperator -notin @('Equals','StartsWith') -or -not $exclusion.selector -or $exclusion.selector -eq '*') {
+            throw 'Use specific Claude argument values with Equals or StartsWith; header, cookie and all-argument exemptions are not automated.'
+        }
+        if (-not $exclusion.exclusionManagedRuleSets) { throw 'An exclusion must name individual managed rules.' }
+        foreach ($set in $exclusion.exclusionManagedRuleSets) {
+            if ($set.ruleSetType -ne $RuleSet.ruleSetType -or $set.ruleSetVersion -ne $RuleSet.ruleSetVersion) { throw 'Exclusions must target the selected discovered managed rule set.' }
+            if (-not $set.ruleGroups) { throw 'An exclusion must name individual managed rules.' }
+            foreach ($group in $set.ruleGroups) {
+                if (-not $group.rules) { throw 'An exclusion must name individual rules, not exempt an entire rule group.' }
+                $discovered = @($RuleSet.ruleGroups | Where-Object { $_.ruleGroupName -eq $group.ruleGroupName })
+                if ($discovered.Count -ne 1) { throw 'The exclusion names a rule group not discovered in this rule set.' }
+                foreach ($rule in $group.rules) {
+                    if (-not $rule.ruleId -or @($discovered[0].rules | Where-Object { [string]$_.ruleId -eq [string]$rule.ruleId }).Count -ne 1) { throw 'The exclusion names an individual rule not discovered in this group.' }
+                }
+            }
+        }
+    }
+    return $true
+}
+
 function Get-ClaudeNetworkInventory {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)][string]$SubscriptionId,[string[]]$DiscoverySubscriptionId = @())
@@ -262,7 +320,7 @@ function Assert-ClaudeNetworkOwnership {
 
 function Write-ClaudeNetworkState {
     param([object]$State,[string]$Path)
-    $full = [IO.Path]::GetFullPath($Path)
+    $full = Get-ClaudeNetworkLocalPath $Path
     $directory = Split-Path $full -Parent
     if (-not (Test-Path $directory)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
     $staged = Join-Path $directory ('state-' + [guid]::NewGuid().ToString('N') + '.json')
@@ -271,6 +329,62 @@ function Write-ClaudeNetworkState {
         Move-Item $staged $full -Force
     }
     finally { if (Test-Path $staged) { Remove-Item $staged -Force } }
+}
+
+function Get-ClaudeNetworkLocalPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+}
+
+function Remove-ClaudeNetworkOwnedResource {
+    param($Resource,[string]$OwnerId,[ValidateRange(0,60)][int]$RetryDelaySeconds = 5)
+    $url = "https://management.azure.com$($Resource.id)?api-version=$($Resource.apiVersion)"
+    $deadline = [DateTime]::UtcNow.AddMinutes(15)
+    $issued = $false
+    do {
+        $live = Invoke-ClaudeNetworkArm $url -AllowNotFound
+        if (-not $live) { return }
+        if ($Resource.kind -eq 'role') {
+            if ($live.properties.principalId -ne $Resource.principalId) { throw 'Role assignment principal changed; refusing removal.' }
+        }
+        else { Assert-ClaudeNetworkOwnership $live $OwnerId }
+        if (-not $issued) {
+            try { [void](Invoke-ClaudeNetworkArm $url -Method delete); $issued=$true }
+            catch {
+                $detail = "$($_.Exception.Message) $($_.ErrorDetails.Message)"
+                if ($detail -notmatch 'CannotDeleteResource|InUse|AnotherOperationInProgress') { throw }
+                # A deleted link can return 404 before its parent's delete
+                # constraint clears. Retry this owned parent, not its children.
+            }
+        }
+        Start-Sleep -Seconds $RetryDelaySeconds
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw 'Owned-resource deletion has not completed. Keep the state and re-run; inspect any remaining references instead of force-deleting shared dependencies.'
+}
+
+function Get-ClaudeNetworkOwnedNsgs {
+    param([string]$VnetId,[string]$ResourceGroupId,[string]$OwnerId)
+    $vnet=Invoke-ClaudeNetworkArm "https://management.azure.com${VnetId}?api-version=2024-05-01" -AllowNotFound
+    $owned=@()
+    if (-not $vnet) { return ,$owned }
+    foreach ($id in @($vnet.properties.subnets | ForEach-Object { $_.properties.networkSecurityGroup.id } | Where-Object { $_ } | Sort-Object -Unique)) {
+        if (-not $id.StartsWith("$ResourceGroupId/providers/Microsoft.Network/networkSecurityGroups/",[StringComparison]::OrdinalIgnoreCase)) { continue }
+        $nsg=Invoke-ClaudeNetworkArm "https://management.azure.com${id}?api-version=2024-05-01"
+        if ($nsg.tags.'claude-network-owner' -eq $OwnerId) { $owned += [pscustomobject]@{id=$id;apiVersion='2024-05-01';kind='tag';principalId=''} }
+    }
+    return ,$owned
+}
+
+function Wait-ClaudeNetworkResourceReady {
+    param([string]$ResourceId,[string]$ApiVersion,[ValidateRange(0,60)][int]$RetryDelaySeconds = 10)
+    $deadline=[DateTime]::UtcNow.AddMinutes(30)
+    do {
+        $live=Invoke-ClaudeNetworkArm "https://management.azure.com${ResourceId}?api-version=$ApiVersion"
+        if ($live.properties.provisioningState -eq 'Succeeded') { return $live }
+        if ($live.properties.provisioningState -in @('Failed','Canceled','Deleting')) { throw "Resource is $($live.properties.provisioningState); inspect the deployment before continuing." }
+        Start-Sleep -Seconds $RetryDelaySeconds
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw 'Resource is still transitioning after 30 minutes. No dependent write or deletion was attempted.'
 }
 
 function Invoke-ClaudeNetworkDeployment {

@@ -38,6 +38,41 @@ resource policy 'Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolic
       requestBodyInspectLimitInKB: bodyLimitKb
       fileUploadEnforcement: true
       fileUploadLimitInMb: 100
+      logScrubbing: {
+        state: 'Enabled'
+        scrubbingRules: [
+          {
+            matchVariable: 'RequestJSONArgNames'
+            selectorMatchOperator: 'EqualsAny'
+            selector: ''
+            state: 'Enabled'
+          }
+          {
+            matchVariable: 'RequestArgNames'
+            selectorMatchOperator: 'EqualsAny'
+            selector: ''
+            state: 'Enabled'
+          }
+          {
+            matchVariable: 'RequestPostArgNames'
+            selectorMatchOperator: 'EqualsAny'
+            selector: ''
+            state: 'Enabled'
+          }
+          {
+            matchVariable: 'RequestCookieNames'
+            selectorMatchOperator: 'EqualsAny'
+            selector: ''
+            state: 'Enabled'
+          }
+          {
+            matchVariable: 'RequestHeaderNames'
+            selectorMatchOperator: 'Equals'
+            selector: 'Authorization'
+            state: 'Enabled'
+          }
+        ]
+      }
     }
     customRules: customRules
     managedRules: {

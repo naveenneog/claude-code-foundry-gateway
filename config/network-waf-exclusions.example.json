@@ -1,0 +1,102 @@
+[
+  {
+    "matchVariable": "RequestArgValues",
+    "selectorMatchOperator": "StartsWith",
+    "selector": "messages.content",
+    "exclusionManagedRuleSets": [{
+      "ruleSetType": "Microsoft_DefaultRuleSet",
+      "ruleSetVersion": "2.1",
+      "ruleGroups": [
+        { "ruleGroupName": "LFI", "rules": [
+          {"ruleId":"930100"}, {"ruleId":"930110"}, {"ruleId":"930120"}
+        ]},
+        { "ruleGroupName": "MS-ThreatIntel-SQLI", "rules": [
+          {"ruleId":"99031002"}, {"ruleId":"99031004"}
+        ]},
+        { "ruleGroupName": "RCE", "rules": [
+          {"ruleId":"932100"}, {"ruleId":"932105"}, {"ruleId":"932110"},
+          {"ruleId":"932115"}, {"ruleId":"932130"}, {"ruleId":"932160"}
+        ]},
+        { "ruleGroupName": "SQLI", "rules": [
+          {"ruleId":"942100"}, {"ruleId":"942130"}, {"ruleId":"942150"},
+          {"ruleId":"942180"}, {"ruleId":"942190"}, {"ruleId":"942200"},
+          {"ruleId":"942210"}, {"ruleId":"942260"}, {"ruleId":"942270"},
+          {"ruleId":"942330"}, {"ruleId":"942340"}, {"ruleId":"942370"},
+          {"ruleId":"942380"}, {"ruleId":"942390"}, {"ruleId":"942410"},
+          {"ruleId":"942430"}, {"ruleId":"942440"}, {"ruleId":"942480"},
+          {"ruleId":"942510"}
+        ]},
+        { "ruleGroupName": "XSS", "rules": [
+          {"ruleId":"941100"}, {"ruleId":"941110"}, {"ruleId":"941120"},
+          {"ruleId":"941140"}, {"ruleId":"941150"}, {"ruleId":"941160"},
+          {"ruleId":"941170"}, {"ruleId":"941180"}, {"ruleId":"941210"},
+          {"ruleId":"941320"}, {"ruleId":"941330"}, {"ruleId":"941340"}
+        ]}
+      ]
+    }]
+  },
+  {
+    "matchVariable": "RequestArgValues",
+    "selectorMatchOperator": "Equals",
+    "selector": "system.text",
+    "exclusionManagedRuleSets": [{
+      "ruleSetType": "Microsoft_DefaultRuleSet",
+      "ruleSetVersion": "2.1",
+      "ruleGroups": [
+        { "ruleGroupName": "PHP", "rules": [{"ruleId":"933160"}, {"ruleId":"933210"}] },
+        { "ruleGroupName": "RCE", "rules": [{"ruleId":"932100"}, {"ruleId":"932110"}] },
+        { "ruleGroupName": "SQLI", "rules": [
+          {"ruleId":"942130"}, {"ruleId":"942200"}, {"ruleId":"942210"},
+          {"ruleId":"942260"}, {"ruleId":"942310"}, {"ruleId":"942340"},
+          {"ruleId":"942360"}, {"ruleId":"942370"}, {"ruleId":"942380"},
+          {"ruleId":"942430"}, {"ruleId":"942440"}, {"ruleId":"942510"}
+        ]},
+        { "ruleGroupName": "XSS", "rules": [{"ruleId":"941380"}] },
+        { "ruleGroupName": "MS-ThreatIntel-SQLI", "rules": [{"ruleId":"99031002"}, {"ruleId":"99031004"}] }
+      ]
+    }]
+  },
+  {
+    "matchVariable": "RequestArgValues",
+    "selectorMatchOperator": "Equals",
+    "selector": "metadata.user_id",
+    "exclusionManagedRuleSets": [{
+      "ruleSetType": "Microsoft_DefaultRuleSet",
+      "ruleSetVersion": "2.1",
+      "ruleGroups": [{ "ruleGroupName": "SQLI", "rules": [
+        {"ruleId":"942200"}, {"ruleId":"942260"}, {"ruleId":"942340"},
+        {"ruleId":"942370"}, {"ruleId":"942430"}
+      ]}]
+    }]
+  },
+  {
+    "matchVariable": "RequestArgValues",
+    "selectorMatchOperator": "Equals",
+    "selector": "tools.description",
+    "exclusionManagedRuleSets": [{
+      "ruleSetType": "Microsoft_DefaultRuleSet",
+      "ruleSetVersion": "2.1",
+      "ruleGroups": [{ "ruleGroupName": "SQLI", "rules": [{"ruleId":"942200"}, {"ruleId":"942430"}] }]
+    }]
+  },
+  {
+    "matchVariable": "RequestArgValues",
+    "selectorMatchOperator": "Equals",
+    "selector": "tools.input_schema.$schema",
+    "exclusionManagedRuleSets": [{
+      "ruleSetType": "Microsoft_DefaultRuleSet",
+      "ruleSetVersion": "2.1",
+      "ruleGroups": [{ "ruleGroupName": "RFI", "rules": [{"ruleId":"931130"}] }]
+    }]
+  },
+  {
+    "matchVariable": "RequestArgValues",
+    "selectorMatchOperator": "Equals",
+    "selector": "tools.input_schema.properties.pages.description",
+    "exclusionManagedRuleSets": [{
+      "ruleSetType": "Microsoft_DefaultRuleSet",
+      "ruleSetVersion": "2.1",
+      "ruleGroups": [{ "ruleGroupName": "SQLI", "rules": [{"ruleId":"942200"}, {"ruleId":"942330"}] }]
+    }]
+  }
+]

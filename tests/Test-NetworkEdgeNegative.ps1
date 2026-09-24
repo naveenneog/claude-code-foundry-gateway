@@ -12,6 +12,7 @@ $mutations = @(
     @('infra\network-edge-waf.bicep', 'requestBodyCheck: true', 'requestBodyCheck: false'),
     @('infra\network-edge-waf.bicep', 'exclusions: exclusions', 'exclusions: []'),
     @('infra\network-edge-waf.bicep', 'requestBodyEnforcement: true', 'requestBodyEnforcement: false'),
+    @('infra\network-edge-waf.bicep', 'logScrubbing:', 'noLogScrubbing:'),
     @('infra\network-private-endpoint.bicep', 'privateDnsZoneId: zoneId', "privateDnsZoneId: ''"),
     @('scripts\New-ClaudeNetworkEdge.ps1', 'Assert-ClaudeNetworkOwnership', 'Assert-OtherOwnership'),
     @('scripts\Remove-ClaudeNetworkEdge.ps1', 'Assert-ClaudeNetworkOwnership', 'Assert-OtherOwnership'),

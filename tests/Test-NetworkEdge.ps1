@@ -28,6 +28,18 @@ Assert-Throws 'unknown explicit choice fails closed' { Select-ClaudeNetworkOptio
 Assert-Throws 'unattended ambiguity is not silently defaulted' { Select-ClaudeNetworkOption -Options $choices -NonInteractive -Prompt 'Network' } 'Select.*explicitly'
 Assert-Throws 'no options is not success' { Select-ClaudeNetworkOption -Options @() -NonInteractive -Prompt 'Network' } 'No.*options'
 Assert 'one real choice can be selected unattended' ((Select-ClaudeNetworkOption -Options @($choices[0]) -NonInteractive -Prompt 'Network').id -eq 'a')
+$now = [DateTime]::SpecifyKind([DateTime]'2026-09-24T18:15:00',[DateTimeKind]::Utc)
+Assert 'freshness preserves a JSON DateTime UTC kind' (Test-ClaudeNetworkInventoryFresh -RetrievedUtc $now.AddMinutes(-1) -NowUtc $now)
+Assert 'freshness accepts a PS 5.1 JSON date string' (Test-ClaudeNetworkInventoryFresh -RetrievedUtc '2026-09-24T18:14:00Z' -NowUtc $now)
+Assert 'stale discovery is rejected' (-not (Test-ClaudeNetworkInventoryFresh -RetrievedUtc $now.AddMinutes(-31) -NowUtc $now))
+Assert 'role assignment names are deterministic valid GUIDs' ((Get-ClaudeNetworkStableGuid 'contoso/vault/role') -eq (Get-ClaudeNetworkStableGuid 'contoso/vault/role') -and (Get-ClaudeNetworkStableGuid 'contoso/vault/role') -match '^[0-9a-f-]{36}$')
+Push-Location $RepositoryRoot
+$nativeDirectory=[Environment]::CurrentDirectory
+try {
+    [Environment]::CurrentDirectory=Split-Path $RepositoryRoot -Parent
+    Assert 'relative files resolve from the PowerShell location, not the process startup directory' ((Get-ClaudeNetworkLocalPath '.network-state\example.json') -eq (Join-Path $RepositoryRoot '.network-state\example.json'))
+}
+finally { [Environment]::CurrentDirectory=$nativeDirectory; Pop-Location }
 
 $r = Get-ClaudeNetworkCidr -Cidr '10.12.4.0/24'
 Assert 'IPv4 range has the correct start and end' ($r.First -eq 168559616 -and $r.Last -eq 168559871)
@@ -56,6 +68,13 @@ $skuRows = @(
 )
 $regions = Get-ClaudeNetworkSkuLocation -Skus $skuRows -Sku StandardV2
 Assert 'SKU choices exclude subscription restrictions' (@($regions).Count -eq 1 -and $regions[0] -eq 'regiona')
+$ruleCatalog=[pscustomobject]@{ruleSetType='Microsoft_DefaultRuleSet';ruleSetVersion='2.1';ruleGroups=@([pscustomobject]@{ruleGroupName='SQL';rules=@([pscustomobject]@{ruleId=942100})})}
+$scoped=@{matchVariable='RequestArgValues';selectorMatchOperator='Equals';selector='messages.content';exclusionManagedRuleSets=@(@{ruleSetType='Microsoft_DefaultRuleSet';ruleSetVersion='2.1';ruleGroups=@(@{ruleGroupName='SQL';rules=@(@{ruleId='942100'})})})}
+Assert 'a discovered exact rule and field can be excluded' (Assert-ClaudeNetworkWafExclusions -Exclusions @($scoped) -RuleSet $ruleCatalog)
+$broad=@{matchVariable='RequestArgValues';selectorMatchOperator='Equals';selector='messages.content';exclusionManagedRuleSets=@(@{ruleSetType='Microsoft_DefaultRuleSet';ruleSetVersion='2.1';ruleGroups=@(@{ruleGroupName='SQL';rules=@()})})}
+Assert-Throws 'an empty rule list cannot quietly exempt a whole rule group' { Assert-ClaudeNetworkWafExclusions -Exclusions @($broad) -RuleSet $ruleCatalog } 'individual'
+$wrong=@{matchVariable='RequestArgValues';selectorMatchOperator='EqualsAny';selector='*';exclusionManagedRuleSets=$scoped.exclusionManagedRuleSets}
+Assert-Throws 'an all-arguments exclusion is refused' { Assert-ClaudeNetworkWafExclusions -Exclusions @($wrong) -RuleSet $ruleCatalog } 'specific'
 
 $script:azCalls = @()
 function Invoke-ClaudeNetworkAz {
@@ -77,6 +96,10 @@ function Invoke-ClaudeNetworkAz {
         default { throw 'Unexpected Azure command' }
     }
 }
+function Invoke-ClaudeNetworkArm {
+    param([string]$Url)
+    return Invoke-ClaudeNetworkAz @('rest','--method','get','--url',$Url)
+}
 $inventory = Get-ClaudeNetworkInventory -SubscriptionId '00000000-0000-0000-0000-000000000001'
 Assert 'discovery can represent an empty subscription' (@($inventory.Resources).Count -eq 0 -and @($inventory.Locations).Count -eq 1)
 Assert 'discovery gets real SKUs and available WAF rule sets' (@($inventory.ApimSkus).Count -eq 2 -and @($inventory.WafRuleSets).Count -eq 1)
@@ -94,6 +117,17 @@ Assert-Throws 'another edge cannot replace an existing restriction' { Set-Claude
 Assert-Throws 'an open allow range is rejected' { Set-ClaudeNetworkPolicyText -Policy $original -AllowedCidrs @('0.0.0.0/0') -EdgeId 'contoso-edge' } 'unrestricted'
 Assert-Throws 'untrusted marker input is rejected' { Set-ClaudeNetworkPolicyText -Policy $original -AllowedCidrs @('10.2.0.0/24') -EdgeId 'x--><choose>' } 'edge identifier'
 Assert 'removal changes only the owned block' ((Remove-ClaudeNetworkPolicyText -Policy $restricted -EdgeId 'contoso-edge') -eq $original)
+$commented = '<!-- Put rules in <inbound>, not in this comment. --><policies><inbound /><backend><forward-request /></backend><outbound /><on-error /></policies>'
+$withComment = Set-ClaudeNetworkPolicyText -Policy $commented -AllowedCidrs @('10.2.0.0/24') -EdgeId 'contoso-edge'
+Assert 'a default service policy comment is not mistaken for an inbound element' ([regex]::Matches($withComment,'claude-network-edge:contoso-edge:begin').Count -eq 1 -and $withComment.StartsWith('<!-- Put rules in <inbound>, not in this comment. -->'))
+try { [void][xml]$withComment; $wellFormed=$true } catch { $wellFormed=$false }
+Assert 'the generated service policy is well-formed XML' $wellFormed
+Assert-Throws 'an XML-invalid double hyphen is rejected in the ownership marker' { Set-ClaudeNetworkPolicyText -Policy $original -AllowedCidrs @('10.2.0.0/24') -EdgeId 'contoso--edge' } 'edge identifier'
+$gatewayPolicy = Get-Content (Join-Path $RepositoryRoot 'infra\policy.xml') -Raw
+$ledger = Get-Content (Join-Path $RepositoryRoot 'analytics\chargeback-ledger.kql') -Raw
+Assert 'ledger trace uses the trusted edge variable with socket-IP fallback' ($gatewayPolicy.Contains('<metadata name="ClientIp"') -and $gatewayPolicy.Contains('GetValueOrDefault<string>("claude-edge-client-ip", context.Request.IpAddress)'))
+Assert 'chargeback exposes the preserved client address' ($ledger -match 'client_ip = tostring\(Properties\.ClientIp\)' -and $ledger -match 'client_ip = take_any\(client_ip\)' -and $ledger -match '(?m)^    client_ip,')
+Assert 'the gateway returns its own unambiguous ledger request id' ($gatewayPolicy -match '(?s)<set-header name="x-claude-gateway-request-id" exists-action="override">\s*<value>@\(context.RequestId.ToString\(\)\)</value>')
 
 . (Join-Path $PSScriptRoot 'NetworkEdgeContract.ps1')
 $issues = @(Test-ClaudeNetworkTemplateContract -Root $RepositoryRoot)
@@ -105,6 +139,12 @@ foreach ($name in @('New-ClaudeNetworkEdge.ps1','Test-ClaudeNetworkEdge.ps1','Re
     $tokens = $null; $errors = $null
     [void][System.Management.Automation.Language.Parser]::ParseInput($text, [ref]$tokens, [ref]$errors)
     Assert "$name parses" (@($errors).Count -eq 0)
+}
+& node --test (Join-Path $PSScriptRoot 'network-edge-probe.test.mjs')
+Assert 'SSE probe protocol tests pass' ($LASTEXITCODE -eq 0)
+foreach ($template in Get-ChildItem (Join-Path $RepositoryRoot 'infra') -Filter 'network-*.bicep') {
+    & az bicep build --file $template.FullName --stdout --only-show-errors > $null
+    Assert "$($template.Name) compiles" ($LASTEXITCODE -eq 0)
 }
 
 Write-Host "$passed passed; $fail failed."
