@@ -17,6 +17,7 @@ finops-reports/
 # These authenticate as you; never commit them.
 .pw-profile/
 guide/.auth.json
+.network-state/
 
 # Generated onboarding artifacts contain your gateway URL and tenant id.
 # Not secret, but environment-specific - regenerate rather than commit.
