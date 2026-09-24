@@ -481,6 +481,24 @@ function Get-ClaudeGatewayTierDocument {
 
 $script:ClaudeGovernanceWriterRole = 'Claude gateway governance writer'
 
+function Get-ClaudeGovernanceWriterDefinition {
+    param([Parameter(Mandatory)][string[]]$Scopes)
+    return [ordered]@{
+        Name             = $script:ClaudeGovernanceWriterRole
+        IsCustom         = $true
+        Description      = 'Reads and writes gateway named values, for the selected governance authority. Nothing else.'
+        Actions          = @(
+            'Microsoft.ApiManagement/service/read',
+            'Microsoft.ApiManagement/service/namedValues/read',
+            'Microsoft.ApiManagement/service/namedValues/write',
+            'Microsoft.ApiManagement/service/operationresults/read')
+        NotActions       = @()
+        DataActions      = @()
+        NotDataActions   = @()
+        AssignableScopes = $Scopes
+    }
+}
+
 function Set-ClaudeGovernanceWriterRole {
     # A custom role that reads and writes an API Management instance's named values and nothing
     # else. The built-in role that can write them, API Management Service Contributor, can also
@@ -497,20 +515,7 @@ function Set-ClaudeGovernanceWriterRole {
         }
         $scopes = $current + $scope
     }
-    $definition = [ordered]@{
-        Name             = $script:ClaudeGovernanceWriterRole
-        IsCustom         = $true
-        Description      = 'Reads and writes the named values of a Claude gateway, for the job that applies what Turnstile saves. Nothing else.'
-        Actions          = @(
-            'Microsoft.ApiManagement/service/read',
-            'Microsoft.ApiManagement/service/namedValues/read',
-            'Microsoft.ApiManagement/service/namedValues/write',
-            'Microsoft.ApiManagement/service/operationresults/read')
-        NotActions       = @()
-        DataActions      = @()
-        NotDataActions   = @()
-        AssignableScopes = $scopes
-    }
+    $definition = Get-ClaudeGovernanceWriterDefinition -Scopes $scopes
     if ($existing.Count) { $definition['Id'] = $existing[0].name }
     $file = Join-Path ([IO.Path]::GetTempPath()) "claude-governance-role-$PID.json"
     try {

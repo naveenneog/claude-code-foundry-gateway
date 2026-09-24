@@ -630,6 +630,7 @@ journeys that span several guides:
 | [Authentication types](docs/AUTHENTICATION.md) | platform and security teams | which credentials reach the gateway, measured: people, managed identities, service principals, lifetimes, what revokes access |
 | [Debug](docs/DEBUGGING.md) | anyone | isolate a failure layer by layer |
 | [Chargeback reports](docs/CHARGEBACK-REPORTS.md) | FinOps, platform team | monthly business-unit reports, editable recipients, private archives and scheduled email delivery |
+| [AUM service](docs/AUM-SERVICE.md) | FinOps, platform team | optional authority independent of Turnstile: viewers, scoped managers, audited budget requests and boosts, deployment choices and regional costs |
 
 **Reference, when you need it:**
 

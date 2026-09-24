@@ -209,6 +209,14 @@ try {
     Invoke-Check 'Turnstile checks detect breakage [1/2]'   'Test-TurnstileNegative.ps1' @{ Shard = '1/2' } -SerialLane:$bicepNeedsAz
     Invoke-Check 'No deployment written into the code'     'Test-NoDeploymentValues.ps1'
     Invoke-Check 'Foundry bypass audit'                    'Test-Bypass.ps1' @{ SkipLive = $true }
+    Invoke-Check 'AUM service - discovery and administrator choices' 'Test-AumDeployment.ps1' -SerialLane
+
+    $aumPython = Join-Path $root '.venv-aum-service\Scripts\python.exe'
+    $aumUnixPython = Join-Path $root '.venv-aum-service\bin\python'
+    $aumSkip = if (-not ((Test-Path $aumPython) -or (Test-Path $aumUnixPython))) {
+        'AUM service: worktree .venv-aum-service is missing. See docs/AUM-SERVICE.md.'
+    } else { '' }
+    Invoke-Check 'AUM service - authority, API and mutations' 'Test-AumService.ps1' -SkipReason $aumSkip
 
     $finopsPython = Join-Path $root '.venv-finops\Scripts\python.exe'
     $finopsUnixPython = Join-Path $root '.venv-finops\bin\python'

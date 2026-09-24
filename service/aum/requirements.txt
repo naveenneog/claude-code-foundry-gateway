@@ -1,0 +1,6 @@
+azure-functions==1.25.0
+azure-identity==1.25.3
+azure-data-tables==12.7.0
+azure-storage-blob==12.30.3
+PyJWT[crypto]==2.14.0
+requests==2.34.2
