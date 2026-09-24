@@ -12,7 +12,7 @@ MODE = re.compile(r"^(strict|notify|allowance:([1-9][0-9]?|100))$")
 CONFIG_NAMES = frozenset({
     "bu-registry", "bu-parents", "bu-members", "bu-modes", "quota-overrides", "quota-org",
     "quota-standard", "quota-premium", "tpm-standard", "tpm-premium",
-    "models-standard", "models-premium", "entitlement-source", "claude-turnstile",
+    "models-standard", "models-premium", "entitlement-source", "turnstile-integration",
 })
 
 
