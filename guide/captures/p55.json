@@ -1,0 +1,98 @@
+[
+  {
+    "id": "p55-aum-app-roles",
+    "output": "docs/guide/p55-aum-app-roles.png",
+    "target": {"entraApp": "AUM"},
+    "entraBlade": "AppRoles",
+    "waitFor": "text=AUM.Manager",
+    "settle": 5000
+  },
+  {
+    "id": "p55-aum-api-scope",
+    "output": "docs/guide/p55-aum-api-scope.png",
+    "target": {"entraApp": "AUM"},
+    "entraBlade": "ProtectAnAPI",
+    "waitFor": "text=AUM.Access",
+    "settle": 5000
+  },
+  {
+    "id": "p55-aum-token-manifest",
+    "output": "docs/guide/p55-aum-token-manifest.png",
+    "target": {"entraApp": "AUM"},
+    "entraBlade": "Manifest",
+    "waitFor": "text=groupMembershipClaims",
+    "settle": 5000
+  },
+  {
+    "id": "p55-aum-assignment-required",
+    "output": "docs/guide/p55-aum-assignment-required.png",
+    "target": {"entraApp": "AUM"},
+    "entraBlade": "Properties",
+    "waitFor": "text=Assignment required?",
+    "settle": 5000
+  },
+  {
+    "id": "p55-aum-assigned-roles",
+    "output": "docs/guide/p55-aum-assigned-roles.png",
+    "target": {"entraApp": "AUM"},
+    "entraBlade": "Users",
+    "waitFor": "text=Users and groups",
+    "settle": 5000
+  },
+  {
+    "id": "p55-aum-function-overview",
+    "output": "docs/guide/p55-aum-function-overview.png",
+    "target": {"type": "Microsoft.Web/sites", "nameContains": "func-aum-"},
+    "blade": "/overview",
+    "waitFor": "text=Running",
+    "settle": 6000
+  },
+  {
+    "id": "p55-aum-function-identity",
+    "output": "docs/guide/p55-aum-function-identity.png",
+    "target": {"type": "Microsoft.Web/sites", "nameContains": "func-aum-"},
+    "blade": "/msi",
+    "waitFor": "text=System assigned",
+    "settle": 5000
+  },
+  {
+    "id": "p55-aum-function-triggers",
+    "output": "docs/guide/p55-aum-function-triggers.png",
+    "target": {"type": "Microsoft.Web/sites", "nameContains": "func-aum-"},
+    "blade": "/functions",
+    "waitFor": "text=expire_boosts",
+    "settle": 6000
+  },
+  {
+    "id": "p55-aum-scale-choice",
+    "output": "docs/guide/p55-aum-scale-choice.png",
+    "target": {"type": "Microsoft.Web/sites", "nameContains": "func-aum-"},
+    "blade": "/scaleAndConcurrency",
+    "waitFor": "text=Always ready",
+    "settle": 6000
+  },
+  {
+    "id": "p55-aum-private-routing",
+    "output": "docs/guide/p55-aum-private-routing.png",
+    "target": {"type": "Microsoft.Web/sites", "nameContains": "func-aum-"},
+    "blade": "/networking",
+    "waitFor": "text=Virtual network integration",
+    "settle": 6000
+  },
+  {
+    "id": "p55-aum-storage-keyless",
+    "output": "docs/guide/p55-aum-storage-keyless.png",
+    "target": {"type": "Microsoft.Storage/storageAccounts", "nameContains": "staum"},
+    "blade": "/configuration",
+    "waitFor": "text=Allow storage account key access",
+    "settle": 5000
+  },
+  {
+    "id": "p55-aum-storage-private",
+    "output": "docs/guide/p55-aum-storage-private.png",
+    "target": {"type": "Microsoft.Storage/storageAccounts", "nameContains": "staum"},
+    "blade": "/networking",
+    "waitFor": "text=Public network access",
+    "settle": 5000
+  }
+]
