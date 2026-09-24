@@ -54,6 +54,17 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   pre-authorized on Turnstile's API: the token is exchanged for a code that works once, within a
   minute. For tenants whose web sign-in has no consent yet (**U19**).
   [ADR-0016](docs/adr/0016-delegated-management.md).
+- **Budget modes per business unit and team: strict, allowance or notify.** Strict is the default
+  and unchanged. Allowance admits up to a percentage (1 to 100) above the budget; notify skips only
+  that scope's limiter, while the parent, organization and tier limits still apply.
+  `Set-ClaudeBusinessUnit.ps1 -Mode -AllowancePercent` sets it, and so does the Gateway governance
+  page in Turnstile; the new named value `bu-modes` holds only the exceptions and survives a
+  redeploy. Notices are advisory, because the remaining quota API Management reports is an
+  estimate: `estimated-over-budget` for allowance, `usage-reported` for notify. Each budget trace
+  joins the ledger on `BudgetRequestId`. Live-tested on the reference gateway and restored exactly.
+  An apply run now rechecks Turnstile's revisions immediately before writing and reconciles again
+  from newer state, so an earlier save can no longer overwrite a later one in the common case; the
+  single writer in P48 closes it. [ADR-0019](docs/adr/0019-budget-enforcement-modes.md).
 - **A terminal FinOps console, `claude-finops`.** Nine views in the terminal and the same actions as
   commands for scripts, over Turnstile's API, the gateway directly, or example data. Budget
   changes are previewed, rechecked against the server, never retried, and removal needs typed
@@ -566,6 +577,14 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   string parses and runs.
 
 ### Changed
+
+- **The gate gives the test suite 60 minutes, and the suite reports where its time goes.**
+  `tests/Test-All.ps1` took 1,797.2 s on `690015d` against a 1,800 s command budget, and a
+  budget-modes gate had already failed on time with no failing check. `commandTimeoutMs` is now
+  3,600,000 ([ADR-0024](docs/adr/0024-test-suite-time-budget.md)); `Test-All` prints each check's
+  seconds and the five slowest, and writes them to `test-all-timings-<utc>-<pid>.json` in the temp
+  folder, because the gate discards the suite's output when it passes. P56 makes the suite
+  parallel so the budget can return to 30 minutes.
 
 - Money moved from `[double]` to `[decimal]` in `ClaudeBusinessUnit.ps1`,
   `Set-ClaudeBusinessUnit.ps1` and `Get-ClaudeBusinessUnit.ps1`, and token spend

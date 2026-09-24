@@ -48,6 +48,24 @@ function ConvertFrom-ClaudeTurnstileGovernance {
         throw "Turnstile's catalog is its seeded demonstration set. Add business units on Turnstile's Gateway governance page first; nothing was applied."
     }
     $problems = New-Object System.Collections.Generic.List[string]
+    $modes = [ordered]@{}
+    $invalidModes = $false
+    foreach ($entity in @($Catalog.organizations) + @($Catalog.departments)) {
+        if ($entity.id -eq 'unassigned' -or $entity.parent_id -eq 'unassigned' -or $entity.id -eq $entity.parent_id) { continue }
+        try {
+            $attributes = @{}
+            if ($entity.attributes -is [System.Collections.IDictionary]) { $attributes = $entity.attributes }
+            elseif ($null -ne $entity.attributes) {
+                foreach ($p in $entity.attributes.PSObject.Properties) { $attributes[$p.Name] = $p.Value }
+            }
+            foreach ($key in 'enforcement', 'allowance_percent') {
+                if ($attributes.Contains($key) -and $null -eq $attributes[$key]) { throw "$key cannot be null; omit it instead." }
+            }
+            $mode = ConvertTo-ClaudeBudgetMode -Mode $entity.attributes.enforcement -AllowancePercent $entity.attributes.allowance_percent
+            if ($mode -ne 'strict') { $modes[[string]$entity.id] = $mode }
+        }
+        catch { $invalidModes = $true; $problems.Add("'$($entity.id)': $($_.Exception.Message)") }
+    }
     $limits = @{}
     foreach ($b in @($BudgetItems)) {
         if ($b -and [string]$b.scope_type -in @('organization', 'department') -and $null -ne $b.token_limit) {
@@ -106,6 +124,8 @@ function ConvertFrom-ClaudeTurnstileGovernance {
     [pscustomobject]@{
         Registry = $units.ToArray()
         Parents  = $parents
+        Modes    = $modes
+        InvalidModes = $invalidModes
         Tiers    = $tierSettings.ToArray()
         Problems = $problems.ToArray()
     }
@@ -129,6 +149,7 @@ function Get-ClaudeGatewayGovernanceChanges {
     $want = [ordered]@{
         'bu-registry' = ConvertTo-ClaudeBuRegistry @($Desired.Registry)
         'bu-parents'  = ConvertTo-ClaudeBuParents $Desired.Parents
+        'bu-modes'    = ConvertTo-ClaudeBuModes $Desired.Modes
     }
     foreach ($t in @($Desired.Tiers)) {
         $want["tpm-$($t.Id)"] = [string]$t.TokensPerMinute
@@ -241,6 +262,10 @@ function Select-ClaudeGovernanceWithGroups {
         elseif ($keptIds -contains $team) { $problems.Add("team '$team': its business unit was not applied") }
     }
     $kept = @($kept | Where-Object { -not $Desired.Parents.Contains($_.Id) -or $parents.Contains($_.Id) })
+    $modes = [ordered]@{}
+    foreach ($unit in $kept) {
+        if ($Desired.Modes -and $Desired.Modes.Contains($unit.Id)) { $modes[$unit.Id] = $Desired.Modes[$unit.Id] }
+    }
     $tierGroups = [ordered]@{}
     foreach ($tier in @($Desired.Tiers)) {
         $key = $tier.Group.ToLowerInvariant()
@@ -251,10 +276,45 @@ function Select-ClaudeGovernanceWithGroups {
         }
     }
     [pscustomobject]@{
-        Governance = [pscustomobject]@{ Registry = $kept; Parents = $parents; Tiers = @($Desired.Tiers) }
+        Governance = [pscustomobject]@{ Registry = $kept; Parents = $parents; Modes = $modes; Tiers = @($Desired.Tiers) }
         TierGroups = $tierGroups
         Problems   = $problems.ToArray()
     }
+}
+
+function Get-ClaudeTurnstileGovernanceRevisions {
+    # Catalog and tiers expose document updated_at; budgets expose it per scope.
+    # generated_at and usage totals change on reads, not saves, so they are not revisions.
+    param([Parameter(Mandatory = $true)]$Snapshot)
+    $stamp = {
+        param($Value, [string]$Label, [bool]$Optional = $false)
+        if ($null -eq $Value -or "$Value" -eq '') {
+            if ($Optional) { return '' }
+            throw "Turnstile's $Label has no updated_at; freshness cannot be verified."
+        }
+        if ($Value -is [datetime] -or $Value -is [datetimeoffset]) {
+            return ([datetimeoffset]$Value).ToUniversalTime().ToString('o')
+        }
+        $parsed = [datetimeoffset]::MinValue
+        if (-not [datetimeoffset]::TryParse([string]$Value, [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$parsed)) {
+            throw "Turnstile's $Label has an invalid updated_at."
+        }
+        $parsed.ToUniversalTime().ToString('o')
+    }
+    if ($Snapshot.BudgetPeriod -notmatch '^\d{4}-(0[1-9]|1[0-2])$') { throw 'The governance snapshot has no valid budget period.' }
+    if ($null -eq $Snapshot.BudgetItems -or $null -eq $Snapshot.Tiers) { throw 'The governance snapshot is missing budgets or tiers.' }
+    $versions = [ordered]@{
+        catalog = & $stamp $Snapshot.Catalog.updated_at 'catalog'
+        tiers = & $stamp $Snapshot.TierUpdatedAt 'tiers'
+        period = [string]$Snapshot.BudgetPeriod
+    }
+    foreach ($item in @($Snapshot.BudgetItems | Where-Object { $_.scope_type -in 'organization', 'department' } | Sort-Object scope_type, scope_id)) {
+        $key = "budget/$($item.scope_type)/$($item.scope_id)"
+        if ($versions.Contains($key)) { throw "Duplicate budget revision '$key'." }
+        $versions[$key] = & $stamp $item.updated_at $key ($null -eq $item.token_limit)
+    }
+    $versions
 }
 
 function Invoke-ClaudeGatewayGovernanceApply {
@@ -266,6 +326,9 @@ function Invoke-ClaudeGatewayGovernanceApply {
         what names an Entra group known to exist, writes the named values that differ - reading
         each back - and then refreshes membership from the groups, when the directory can be
         read. Without -Apply it only reports. Nothing is written for a seeded Turnstile catalog.
+        Before writing, ReadGovernance rereads the three sources. Changed revisions restart
+        planning against fresh source and gateway state, at most MaxReconciliations times.
+        A failed read or continuous edits defer all writes. This is not writer serialization.
     #>
     param(
         [Parameter(Mandatory = $true)]$Catalog,
@@ -274,27 +337,82 @@ function Invoke-ClaudeGatewayGovernanceApply {
         [Parameter(Mandatory = $true)][string]$ResourceGroup,
         [Parameter(Mandatory = $true)][string]$ApimName,
         [Parameter(Mandatory = $true)][string]$ScriptRoot,
+        [AllowNull()]$TierUpdatedAt,
+        [string]$BudgetPeriod,
+        [scriptblock]$ReadGovernance,
+        [ValidateRange(0, 5)][int]$MaxReconciliations = 3,
         [switch]$Apply
     )
-    $desired = ConvertFrom-ClaudeTurnstileGovernance -Catalog $Catalog -BudgetItems @($BudgetItems) -Tiers @($Tiers)
-    $ids = @('bu-registry', 'bu-parents') + @($script:ClaudeGatewayTiers | ForEach-Object { "tpm-$_"; "quota-$_"; "models-$_" })
-    # entitlement-source is read, never written: it says where the policy finds membership.
-    $current = Get-ClaudeGatewayGovernanceValues -ResourceGroup $ResourceGroup -ApimName $ApimName -Ids ($ids + 'entitlement-source')
-
-    $graph = Test-ClaudeGraphGroupAccess
-    $currentUnits = @(ConvertFrom-ClaudeBuRegistry $current['bu-registry'])
-    $knownGroups = @($currentUnits | ForEach-Object { $_.Group })
-    $state = if ($graph -eq 'ok') { { param($g) Test-ClaudeEntraGroup $g } } else { { param($g) 'unknown' } }
-    $selected = Select-ClaudeGovernanceWithGroups -Desired $desired -KnownGroups $knownGroups -GroupState $state
-    $problems = @($desired.Problems) + @($selected.Problems)
-    $changes = Get-ClaudeGatewayGovernanceChanges -Desired $selected.Governance -Current $current
-    if (-not @($selected.Governance.Registry).Count -and $currentUnits.Count) {
-        # Every unit gone at once is far more often a read that went wrong than a decision.
-        $changes = @($changes | Where-Object { $_.Id -notin 'bu-registry', 'bu-parents' })
-        $problems += "Turnstile has no business unit the gateway can apply, so the gateway's $($currentUnits.Count) were left as they are"
-    }
-
+    $reconciliations = 0
+    $sourceReads = New-Object System.Collections.Generic.List[object]
+    $freshness = 'preview: no freshness check or writes'
     $membership = 'not refreshed: nothing was applied'
+    while ($true) {
+        $desired = ConvertFrom-ClaudeTurnstileGovernance -Catalog $Catalog -BudgetItems @($BudgetItems) -Tiers @($Tiers)
+        if ($desired.InvalidModes) {
+            return [pscustomobject]@{
+                Direction = 'FromTurnstile'; Mode = 'governance'; Units = 0; Teams = 0; Tiers = 0
+                Changes = @(); Applied = 0; Membership = 'not refreshed: invalid budget modes'; Problems = $desired.Problems
+                Freshness = 'deferred: invalid budget modes'; Reconciliations = $reconciliations; SourceReads = $sourceReads.ToArray()
+            }
+        }
+        $snapshot = [pscustomobject]@{ Catalog = $Catalog; BudgetItems = @($BudgetItems); Tiers = @($Tiers); TierUpdatedAt = $TierUpdatedAt; BudgetPeriod = $BudgetPeriod }
+        $revisions = $null
+        $revisionError = $null
+        if ($Apply) {
+            try {
+                if (-not $ReadGovernance) { throw 'An apply needs a Turnstile source reader to verify freshness.' }
+                $revisions = Get-ClaudeTurnstileGovernanceRevisions -Snapshot $snapshot
+            }
+            catch { $revisionError = $_.Exception.Message }
+        }
+        $ids = @('bu-registry', 'bu-parents', 'bu-modes') + @($script:ClaudeGatewayTiers | ForEach-Object { "tpm-$_"; "quota-$_"; "models-$_" })
+        # entitlement-source is read, never written: it says where the policy finds membership.
+        $current = Get-ClaudeGatewayGovernanceValues -ResourceGroup $ResourceGroup -ApimName $ApimName -Ids ($ids + 'entitlement-source')
+
+        $graph = Test-ClaudeGraphGroupAccess
+        $currentUnits = @(ConvertFrom-ClaudeBuRegistry $current['bu-registry'])
+        $knownGroups = @($currentUnits | ForEach-Object { $_.Group })
+        $state = if ($graph -eq 'ok') { { param($g) Test-ClaudeEntraGroup $g } } else { { param($g) 'unknown' } }
+        $selected = Select-ClaudeGovernanceWithGroups -Desired $desired -KnownGroups $knownGroups -GroupState $state
+        $problems = @($desired.Problems) + @($selected.Problems)
+        $changes = Get-ClaudeGatewayGovernanceChanges -Desired $selected.Governance -Current $current
+        if (-not @($selected.Governance.Registry).Count -and $currentUnits.Count) {
+            # Every unit gone at once is far more often a read that went wrong than a decision.
+            $changes = @($changes | Where-Object { $_.Id -notin 'bu-registry', 'bu-parents', 'bu-modes' })
+            $problems += "Turnstile has no business unit the gateway can apply, so the gateway's $($currentUnits.Count) were left as they are"
+        }
+
+        if (-not $Apply) { break }
+        try {
+            if ($revisionError) { throw $revisionError }
+            $observation = [pscustomobject]@{ Read = $revisions; Checked = $null }
+            $sourceReads.Add($observation)
+            # No gateway write occurs before this reread. A newer source requires a full
+            # re-plan, including rereading gateway state and rechecking groups.
+            $fresh = & $ReadGovernance $snapshot
+            $latest = Get-ClaudeTurnstileGovernanceRevisions -Snapshot $fresh
+            $observation.Checked = $latest
+            $keys = @(@($revisions.Keys) + @($latest.Keys) | Sort-Object -Unique)
+            $changed = @($keys | Where-Object { $revisions[$_] -cne $latest[$_] })
+            if (-not $changed.Count) {
+                $freshness = "verified before writing; reconciled $reconciliations newer snapshot(s)"
+                break
+            }
+            if ($reconciliations -ge $MaxReconciliations) { throw "Turnstile changed during $($reconciliations + 1) freshness checks; retry on the next apply." }
+            $Catalog = $fresh.Catalog; $BudgetItems = @($fresh.BudgetItems); $Tiers = @($fresh.Tiers)
+            $TierUpdatedAt = $fresh.TierUpdatedAt; $BudgetPeriod = $fresh.BudgetPeriod
+            $reconciliations++
+        }
+        catch {
+            $problems += "Freshness could not be verified: $($_.Exception.Message)"
+            $freshness = "deferred after $reconciliations reconciliation(s): no writes"
+            $membership = 'not refreshed: freshness check deferred the apply'
+            $changes = @()
+            $Apply = $false
+            break
+        }
+    }
     if ($Apply) {
         foreach ($c in $changes) {
             Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $c.Id -Value $c.Now
@@ -337,6 +455,9 @@ function Invoke-ClaudeGatewayGovernanceApply {
         Applied    = $(if ($Apply) { @($changes).Count } else { 0 })
         Membership = $membership
         Problems   = $problems
+        Freshness  = $freshness
+        Reconciliations = $reconciliations
+        SourceReads = $sourceReads.ToArray()
     }
 }
 

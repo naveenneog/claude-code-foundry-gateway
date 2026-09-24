@@ -933,6 +933,7 @@ if ($ExistingApim -or (Invoke-AzOptional { az apim show -g $ResourceGroup -n $ap
     # it empties the registry and unassigns every developer on the next
     # redeploy.
     $buReg = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id bu-registry --query value -o tsv 2>$null
+    $buModes = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id bu-modes --query value -o tsv 2>$null
     $buMem = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id bu-members  --query value -o tsv 2>$null
     $buPar = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id bu-parents  --query value -o tsv 2>$null
     # Which entitlement path this gateway is on. An operator who has migrated to
@@ -1065,6 +1066,7 @@ az deployment group create `
         buRegistryExisting=$buReg `
         buMembersExisting=$buMem `
         buParentsExisting=$buPar `
+        buModesExisting=$buModes `
         modelsStandard=$modelsStd `
         modelsPremium=$modelsPrm `
         tpmStandard=$TpmStandard `
@@ -1243,4 +1245,3 @@ Write-Host '   3. Close the direct-access bypass - see docs/SETUP.md section 4.1
 Write-Host '      Anyone holding Cognitive Services User on the Foundry account'
 Write-Host '      can skip the gateway entirely and ignore these budgets.'
 Write-Host ''
-

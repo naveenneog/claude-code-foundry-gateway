@@ -267,7 +267,9 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
 - [ ] P46 delegated management, phase 2 — acceptance: a manager sees and manages only the units
       and teams whose manager group is in their token (done in the fork, `c0c345a`); allocation
       within their own headroom (done); per unit or team, the admin's enforcement mode: strict,
-      allowance or notify, enforced by the gateway (in progress)
+      allowance or notify, enforced by the gateway (done, live-tested and restored 2026-09-24,
+      [ADR-0019](adr/0019-budget-enforcement-modes.md)), with a guard that rechecks Turnstile's
+      revisions before an apply writes. Open: the manager-only live sign-in (P53)
 - [ ] P47 delegated management, phase 3 — acceptance: budget requests that go to the manager one
       level up, boosts with an expiry, escalation, notifications at the warning threshold
 - [ ] P48 delegated management at 500,000 — acceptance: overrides and unit and team budgets in the
@@ -291,6 +293,12 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       Follow-ups: saved views, comparison charts and in-terminal profiles; a request cursor (the
       API stops at 200); conditional catalog and tier writes; P47's requests and boosts; a live
       scoped-manager journey (**U20**)
+- [ ] P56 a parallel test suite — acceptance: `tests/Test-All.ps1` runs independent checks at
+      the same time, each check proven safe to run beside the others (no shared temp paths, no
+      in-place mutation of repository files), with the same per-check result, completion guard
+      and SKIP counting; reliably under 20 minutes on a busy machine, after which the gate's
+      command budget returns from 3,600 to 1,800 seconds in a new ADR.
+      [ADR-0024](adr/0024-test-suite-time-budget.md)
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so
