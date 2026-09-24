@@ -28,7 +28,6 @@
     entirely. Callers must say so rather than present the figure as money.
 #>
 
-# Claude's published list rates, per million tokens, retrieved 2026-09-15 from
 . (Join-Path $PSScriptRoot 'ClaudeBudgetModes.ps1')
 
 # Claude's published list rates, per million tokens, retrieved 2026-09-15 from

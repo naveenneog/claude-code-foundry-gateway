@@ -169,7 +169,7 @@ if (Get-Command ConvertFrom-ClaudeBuModes -ErrorAction SilentlyContinue) {
         @{ enforcement = 'allowance'; allowance_percent = 101 }, @{ enforcement = 'allowance'; allowance_percent = 1.5 },
         @{ enforcement = 'allowance'; allowance_percent = '10' }, @{ enforcement = 'allowance'; allowance_percent = $true },
         @{ enforcement = 'notify'; allowance_percent = 10 }, @{ enforcement = 'strict'; allowance_percent = 10 },
-        @{ allowance_percent = 10 })) {
+        @{ allowance_percent = 10 }, @{ enforcement = $null }, @{ enforcement = 'strict'; allowance_percent = $null })) {
         $badCatalog = $modeCatalog | ConvertTo-Json -Depth 10 | ConvertFrom-Json
         $badCatalog.organizations[0].attributes = $attrs
         $invalid = ConvertFrom-ClaudeTurnstileGovernance -Catalog $badCatalog
@@ -184,6 +184,7 @@ if (Get-Command ConvertFrom-ClaudeBuModes -ErrorAction SilentlyContinue) {
 }
 else { Assert 'budget mode validation and serialization exist' $false }
 Assert 'seeding reads and forwards modes' ($sync -match "-Id 'bu-modes'" -and $sync -match 'ConvertTo-ClaudeTurnstileCatalog .* -Modes \$modes')
+Assert 'CLI never rounds a fractional allowance into an integer' ((Get-Content (Join-Path $root 'scripts/Set-ClaudeBusinessUnit.ps1') -Raw) -notmatch '\[int\]\$AllowancePercent')
 
 # What the gateway sends Turnstile comes back as the same registry.
 $sent = ConvertTo-ClaudeTurnstileCatalog -Registry $registry -Parents $parents -IncludeUnassigned

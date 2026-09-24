@@ -160,6 +160,52 @@ Assert 'CLI exposes modes and optional allowance' ($modeWriter -match "ValidateS
 Assert 'CLI preserves unedited modes and removes deleted ones' ($modeWriter -match "PSBoundParameters.ContainsKey\('Mode'\)" -and $modeWriter -match '\$modes.Remove\(\$Id\)')
 Assert 'CLI validates before any write and reads modes back' ($modeWriter.IndexOf('ConvertTo-ClaudeBudgetMode') -ge 0 -and $modeWriter.IndexOf('ConvertTo-ClaudeBudgetMode') -lt $modeWriter.IndexOf('Set-ApimNamedValue -') -and $modeWriter -match 'Budget modes did not read back')
 
+# Execute the actual policy expressions, not a second implementation of the arithmetic.
+$methods = ''
+foreach ($name in 'buMode', 'parentMode', 'buLimit', 'parentLimit', 'budgetNotice') {
+    $body = [regex]::Match($policy, "(?s)<set-variable name=`"$name`" value=`"@\{(.*?)\}`" />").Groups[1].Value
+    $body = [Net.WebUtility]::HtmlDecode($body).Replace('context.Variables', 'variables').Replace('var map = "{{bu-modes}}";', '')
+    $methods += "public static string $name(System.Collections.Generic.Dictionary<string,object> variables, string map) { $body }`n"
+}
+try {
+    $policyType = Add-Type -TypeDefinition ("using System; public class BudgetModes" + [guid]::NewGuid().ToString('N') + " { $methods }") -PassThru -ErrorAction Stop
+    foreach ($scope in 'bu', 'parent') {
+        $vars = [Collections.Generic.Dictionary[string,object]]::new()
+        $vars['businessUnit'] = 'sales'; $vars['parentUnit'] = 'sales'
+        $modeMethod = "${scope}Mode"; $limitMethod = "${scope}Limit"
+        Assert "$scope absent entry is strict, not a prefix match" ($policyType::$modeMethod($vars, ',sales-emea=notify,') -eq 'strict')
+        Assert "$scope invalid metadata fails closed" ($policyType::$modeMethod($vars, ',sales=allowance:101,') -eq 'strict')
+        Assert "$scope exact notify entry is recognized" ($policyType::$modeMethod($vars, ',sales=notify,') -eq 'notify')
+        Assert "$scope exact allowance entry is recognized" ($policyType::$modeMethod($vars, ',sales=allowance:10,') -eq 'allowance:10')
+        foreach ($case in @(
+            @{ Mode = 'strict'; Tokens = '1000'; Want = '1000' },
+            @{ Mode = 'allowance:10'; Tokens = '1000'; Want = '1100' },
+            @{ Mode = 'allowance:1'; Tokens = '101'; Want = '102' },
+            @{ Mode = 'allowance:100'; Tokens = '1000'; Want = '2000' },
+            @{ Mode = 'allowance:100'; Tokens = '9223372036854775807'; Want = '9223372036854775807' },
+            @{ Mode = 'notify'; Tokens = '1000'; Want = '0' },
+            @{ Mode = 'allowance:10'; Tokens = '0'; Want = '0' })) {
+            $vars["${scope}Mode"] = $case.Mode; $vars["${scope}Quota"] = $case.Tokens
+            Assert "$scope $($case.Mode) quota $($case.Tokens) is $($case.Want)" ($policyType::$limitMethod($vars, '') -eq $case.Want)
+        }
+    }
+    $v = [Collections.Generic.Dictionary[string,object]]::new()
+    $v['businessUnit'] = 'sales-emea'; $v['parentUnit'] = 'sales'
+    $v['buQuota'] = '1000'; $v['buLimit'] = '1100'; $v['buMode'] = 'allowance:10'
+    $v['parentQuota'] = '2000'; $v['parentLimit'] = '2000'; $v['parentMode'] = 'strict'
+    $v['buRemaining'] = [long]100
+    Assert 'at the base budget there is no over-budget notice' ($policyType::budgetNotice($v, '') -eq '')
+    $v['buRemaining'] = [long]99
+    Assert 'past base, allowance notice identifies the scope and estimate' ($policyType::budgetNotice($v, '') -eq 'sales-emea;mode=allowance:10;status=estimated-over-budget')
+    $v.Remove('buRemaining') | Out-Null
+    Assert 'a missing remaining estimate is not treated as zero' ($policyType::budgetNotice($v, '') -eq '')
+    $v['buMode'] = 'notify'; $v['parentMode'] = 'notify'
+    Assert 'notify reports both scopes without a remaining counter' ($policyType::budgetNotice($v, '') -eq 'sales-emea;mode=notify;status=usage-reported, sales;mode=notify;status=usage-reported')
+    $v['buQuota'] = '0'; $v['parentQuota'] = '0'
+    Assert 'zero budgets have no misleading notice' ($policyType::budgetNotice($v, '') -eq '')
+}
+catch { Assert 'policy budget expressions compile and execute' $false $_.Exception.Message }
+
 # The refusal has to say which level ran out, or a team lead cannot tell whether
 # to ask for their own budget or the unit's.
 $i = $policy.IndexOf('which == "business unit"')
@@ -186,6 +232,7 @@ Assert 'the guide explains teams'        ($d -match '(?i)\bteam\b')
 Assert 'it explains the tier axis'       ($d -match '(?i)tier')
 Assert 'it shows nesting'                ($d -match '(?i)nest')
 Assert 'it states the two-level cap'     ($d -match '(?i)two level|two-level|depth')
+Assert 'modes document estimated and unconditional notices' ($d -match '## Budget modes' -and $d -match 'notice is deliberately unconditional' -and $d -match 'cannot promise the exact request' -and $d -match 'does not backfill')
 Assert 'the decision is recorded'        (Test-Path (Join-Path $root 'docs/adr/0008-teams-and-tiers.md'))
 
 # The portal captures show the model better than prose does: direct members are

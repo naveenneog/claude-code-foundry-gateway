@@ -399,6 +399,16 @@ The first two runs failed, and both causes are now handled:
 
 ## Manage everything in Turnstile
 
+The platform admin can also choose **strict** (the default), **allowance**
+(an integer 1 to 100 percent beyond the base budget), or **notify** for a unit or
+team. The catalog contract uses attributes `enforcement` and, only with allowance,
+`allowance_percent`. The gateway apply validates them before writing `bu-modes`;
+seeding Turnstile preserves existing gateway modes. Allocation remains separate
+from enforcement. Parent budgets, tier quotas and the organization ceiling still
+apply. See [Budget modes](BUSINESS-UNITS.md#budget-modes) for notice semantics:
+APIM remaining quota is estimated, and notify reports usage without a monthly
+blocking counter (Microsoft Learn reference retrieved 2026-09-24).
+
 Business units, teams, their Entra groups, budgets and tier limits can all be managed on
 Turnstile's pages, with no script for the Turnstile administrator. Each save starts the gateway's
 apply job, which reads Turnstile and writes the gateway's named values; the gateway enforces them

@@ -79,8 +79,7 @@ param(
     [string]$Mode,
 
     [Parameter(ParameterSetName = 'Set')]
-    [ValidateRange(1, 100)]
-    [int]$AllowancePercent,
+    [object]$AllowancePercent,
 
     [Parameter(ParameterSetName = 'Set')]
     [string]$Model = 'claude-sonnet-5',
@@ -107,6 +106,7 @@ $requestedMode = $null
 if ($PSBoundParameters.ContainsKey('Mode') -or $PSBoundParameters.ContainsKey('AllowancePercent')) {
     if (-not $PSBoundParameters.ContainsKey('Mode')) { throw '-AllowancePercent requires -Mode Allowance.' }
     $percent = if ($PSBoundParameters.ContainsKey('AllowancePercent')) { $AllowancePercent } else { $null }
+    if ($percent -is [string] -and $percent -cmatch '^([1-9][0-9]?|100)$') { $percent = [int]$percent }
     $requestedMode = ConvertTo-ClaudeBudgetMode -Mode $Mode.ToLowerInvariant() -AllowancePercent $percent
 }
 

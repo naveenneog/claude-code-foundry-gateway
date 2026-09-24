@@ -53,6 +53,14 @@ function ConvertFrom-ClaudeTurnstileGovernance {
     foreach ($entity in @($Catalog.organizations) + @($Catalog.departments)) {
         if ($entity.id -eq 'unassigned' -or $entity.parent_id -eq 'unassigned' -or $entity.id -eq $entity.parent_id) { continue }
         try {
+            $attributes = @{}
+            if ($entity.attributes -is [System.Collections.IDictionary]) { $attributes = $entity.attributes }
+            elseif ($null -ne $entity.attributes) {
+                foreach ($p in $entity.attributes.PSObject.Properties) { $attributes[$p.Name] = $p.Value }
+            }
+            foreach ($key in 'enforcement', 'allowance_percent') {
+                if ($attributes.Contains($key) -and $null -eq $attributes[$key]) { throw "$key cannot be null; omit it instead." }
+            }
             $mode = ConvertTo-ClaudeBudgetMode -Mode $entity.attributes.enforcement -AllowancePercent $entity.attributes.allowance_percent
             if ($mode -ne 'strict') { $modes[[string]$entity.id] = $mode }
         }

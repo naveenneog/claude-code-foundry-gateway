@@ -21,6 +21,73 @@ Membership comes from the group, so moving a developer between business units is
 done in Entra and picked up by the sync. There is no separate roster to keep in
 step.
 
+## Budget modes
+
+The platform admin chooses an enforcement mode for each unit or team. A missing
+mode means **strict**, preserving the existing behavior. A zero-token budget
+still means no budget at that scope, in every mode.
+
+| Mode | Effective monthly token quota | Notice |
+|---|---|---|
+| **Strict** | The base budget | The existing 403 `rate_limit_error` names the exhausted unit or team |
+| **Allowance** | Base budget plus an integer percentage, from 1 to 100 | `x-claude-budget-notice` reports `estimated-over-budget` when APIM's estimate indicates usage above the base |
+| **Notify** | No limiter at this scope | The header reports `usage-reported` on every response with a nonzero budget, before and after 100% |
+
+For example, a 1,000-token budget with 10% allowance has an effective quota of
+1,100 tokens. Fractional extra tokens are rounded down. The parent budget, tier
+quotas and organization ceiling still apply. Notify on a team does not bypass
+its parent's budget; notify on the parent does not bypass the team's.
+
+When governance is authored in the gateway:
+
+```powershell
+.\scripts\Set-ClaudeBusinessUnit.ps1 -Id sales -Mode Allowance -AllowancePercent 10
+.\scripts\Set-ClaudeBusinessUnit.ps1 -Id sales-emea -Mode Notify
+.\scripts\Set-ClaudeBusinessUnit.ps1 -Id sales -Mode Strict
+```
+
+Omit `-Mode` to keep the current mode when changing a group or budget.
+`-AllowancePercent` requires `-Mode Allowance`. `-List` shows the stored mode.
+When governance is authored in Turnstile, use its administrator controls instead:
+the next apply would overwrite a gateway-authored change.
+
+The new named value `bu-modes` keeps exceptions separately from `bu-registry`.
+For example, `,sales=allowance:10,sales-emea=notify,`; `,,` means all budgets are
+strict. The installer preserves this value on redeploy. Before applying the
+policy alone to an older gateway, create `bu-modes` with `,,` if it is missing;
+do not reset an existing value. `Set-GatewayPolicy.ps1` changes only the API policy.
+Turnstile seeding carries the modes into catalog attributes `enforcement` and
+`allowance_percent`; invalid attributes stop the apply before any write.
+
+### Notice and accounting limits
+
+**Documented, retrieved 2026-09-24:** Microsoft's
+[`llm-token-limit` reference](https://learn.microsoft.com/en-us/azure/api-management/llm-token-limit-policy)
+calls `remaining-quota-tokens-variable-name` an estimate that can be larger than
+the actual remainder. Without prompt estimation, a request can cross a quota
+before a subsequent request is blocked. Concurrent calls can overshoot; streaming
+always estimates tokens. These remain soft token caps, not exact dollar limits.
+
+The allowance notice cannot promise the exact request that crosses 100%.
+Notify skips its limiter, so APIM supplies no monthly remaining counter for it:
+the notice is deliberately unconditional, not a claim that the budget is spent.
+Claude clients might not display custom response headers. Responses refused by
+another control can return before the notice is added. No response body is read
+or buffered for notices.
+
+For non-strict scopes, the `claude-budget` trace records `RequestId`,
+`BusinessUnit`, `Mode`, `BaseTokens`, `ParentUnit`, `ParentMode`,
+`ParentBaseTokens` and `Notice`. Join `RequestId` to the chargeback ledger and
+aggregate the month's usage to report over-budget tokens, including notify
+usage; do not sum the notices as if they were usage. The trace itself does not
+claim a cumulative total. Cache, ingestion delay and telemetry availability
+retain the ledger's existing limitations.
+
+Changing modes keeps the counter key `bu-<id>`. Notify stops counting at that
+scope; switching back mid-month does not backfill those tokens into APIM's
+counter. Use the ledger for the full month's reporting. See
+[ADR-0017](adr/0017-budget-enforcement-modes.md).
+
 ## Teams, and how they relate to tiers
 
 A **team** is a business unit that names a parent. A request is charged to the
