@@ -242,8 +242,8 @@ class FinOpsApp(App):
             if scope:
                 identity += " | " + scope
             self.query_one("#identity", Static).update(safe_text(identity))
-            self.query_one("#status", Static).update("<Enter> details  <Tab> next panel  <Ctrl+F> lookup  <r> refresh" +
-                                                    ("  [redacted / read-only]" if self.redactor.enabled else ""))
+            mode = "[redacted/read-only] " if self.redactor.enabled else ""
+            self.query_one("#status", Static).update(mode + "<Enter> details <Tab> panel <Ctrl+F> lookup <r> refresh")
             if tab == "overview":
                 self.query_one("#dash-kpis", DashboardPanel).focus()
             else:

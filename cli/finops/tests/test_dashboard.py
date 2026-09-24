@@ -93,6 +93,9 @@ async def test_live_style_redaction_applies_to_dashboard_and_identity():
         assert "private@example.org" not in svg
         assert "Private Person" not in svg
         assert not app.editable
+        status = str(app.query_one("#status", Static).render())
+        assert status.startswith("[redacted/read-only]")
+        assert len(status) <= 78
 
 
 async def test_preselected_people_team_does_not_trigger_refresh_loop():
