@@ -90,6 +90,29 @@ scope; switching back mid-month does not backfill those tokens into APIM's
 counter. Use the ledger for the full month's reporting. See
 [ADR-0017](adr/0017-budget-enforcement-modes.md).
 
+### Measured on the reference gateway
+
+**2026-09-24, UTC; Basic v2, East US 2.** The signed-in user's existing team was
+tested without changing its membership, parent, tier or organization ceiling.
+All requests used `claude-sonnet-5`, `max_tokens: 16`, without streaming.
+
+| Time (UTC) | Check | Result |
+|---|---|---|
+| 14:24:39-14:24:47 | Policy-only deployment after the offline packet gate | Policy hash changed; the sorted named-value snapshot was identical before and after. `bu-modes` had first been created with the safe default `,,` |
+| 14:26:29 | Strict, base budget 1 token | 403 `rate_limit_error`, `budget: business unit`, naming the caller's team |
+| 14:26:50 | Allowance 10%, base 172,792, effective quota 190,071 | 200; estimated remainder 10,341, implying 179,730 consumed (104.0% of base); header `status=estimated-over-budget` |
+| 14:27:10 | Allowance 10%, base lowered to 163,300, effective quota 179,630 | 403 `rate_limit_error` naming the same team; its existing usage was already above that effective quota |
+| 14:27:32-14:27:36 | Notify, base 1 token | Three 200 responses with `status=usage-reported`; no team remaining-quota header |
+| 14:27:39-14:27:56 | Exact original registry and modes restored | Both read back identical; the next request was 200 without a notice |
+| 14:31:10 | Join mode traces to the LLM log | Three notify requests: 33 prompt + 15 completion tokens against base 1; one allowance request: 11 + 16 tokens |
+
+The allowance check lowered the budget around the existing monthly counter;
+it did not reset that counter or spend through a fresh month's quota. It proves
+admission above base and refusal above the effective quota, not a zero-overshoot
+110% guarantee. Notify's three successful calls are live samples; its
+non-blocking scope follows from skipping the limiter, which both policy
+expressions and mutation tests exercise.
+
 ## Teams, and how they relate to tiers
 
 A **team** is a business unit that names a parent. A request is charged to the
