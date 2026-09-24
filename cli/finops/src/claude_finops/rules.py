@@ -37,7 +37,7 @@ def parse_tokens(text: str | int) -> int:
 
 
 def can_edit(identity: dict) -> bool:
-    return identity.get("role") == "owner"
+    return identity.get("role") == "owner" and identity.get("manager_scope") is None
 
 
 def require_owner(identity: dict) -> None:

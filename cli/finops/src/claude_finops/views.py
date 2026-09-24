@@ -64,7 +64,8 @@ def view_rows(tab, data, *, ascii_only=False):
         catalog = data["catalog"]
         for kind, collection in (("Unit", "organizations"), ("Team", "departments")):
             for item in catalog[collection]:
-                rows.append((f"{kind}: {item['id']}", item.get("parent_id") or item.get("external_ref") or "-",
+                label = "Parent context" if item.get("scope_context") else kind
+                rows.append((f"{label}: {item['id']}", item.get("parent_id") or item.get("external_ref") or "-",
                              item.get("external_ref") or "no member group"))
                 records.append(dict(item, kind=kind.lower()))
         for item in data["tiers"]["items"]:

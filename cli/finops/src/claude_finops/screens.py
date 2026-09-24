@@ -135,8 +135,8 @@ class ChangeScreen(ModalScreen):
                     yield Input((self.row.get("external_ref") or "").removeprefix("entra-group:"),
                                 placeholder="Entra member group", id="scope-group")
                     yield Input(self.row.get("parent_id") or "", placeholder="Parent unit (teams only)", id="scope-parent")
-                    yield Input(str(self.row.get("attributes", {}).get("manager_group", "")),
-                                placeholder="Manager group (stored metadata; server decides scope)", id="scope-manager")
+                    yield Input(str(self.row.get("attributes", {}).get("manager_group_id", "")),
+                                placeholder="Manager group's Entra object id; server decides scope", id="scope-manager")
                 yield Input(placeholder="For removal / below-usage changes, type the identifier", id="confirm")
             yield Static("Review fields, Preview, then Apply. Nothing is written yet.", id="form-status", markup=False)
             with Horizontal(classes="buttons"):
@@ -257,7 +257,7 @@ class ExportScreen(ModalScreen):
 
     def compose(self):
         with Vertical(id="month-dialog"):
-            yield Label("Export complete chargeback (all visible catalog units)")
+            yield Label("Export complete chargeback (managed scopes only)")
             yield Input(f"chargeback-{self.app.engine.month}.csv", id="export-name")
             yield Static("Saved under finops-reports in the current folder. Existing files are never overwritten.",
                          id="export-status", markup=False)

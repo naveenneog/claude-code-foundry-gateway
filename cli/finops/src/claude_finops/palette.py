@@ -7,14 +7,16 @@ from .views import TABS
 
 class FinOpsCommands(Provider):
     def commands(self):
-        commands = [(f"Open {label[2:]}", partial(self.app.action_tab, key), "Switch view") for key, label in TABS]
+        commands = [(f"Open {label[2:]}", partial(self.app.action_tab, key), "Switch view")
+                    for key, label in TABS if key in self.app.allowed_tabs]
         commands += [
             ("Find scope, person, model or request", self.app.action_lookup, "Bounded server search"),
             ("Change month", self.app.action_month, "YYYY-MM"),
             ("Refresh current view", self.app.action_refresh, "Read the latest server state"),
             ("Help and key map", self.app.action_help, "Learn this screen"),
-            ("Export complete chargeback CSV", self.app.action_export, "All visible catalog units, not the top 100"),
         ]
+        if self.app.check_action("export", ()):
+            commands.append(("Export complete chargeback CSV", self.app.action_export, "All managed scopes, not the top 100"))
         if self.app.editable:
             commands += [
                 ("Edit selected budget or governance row", self.app.action_edit, "Preview, then apply"),

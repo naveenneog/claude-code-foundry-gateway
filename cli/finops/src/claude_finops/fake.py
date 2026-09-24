@@ -41,7 +41,7 @@ class FakeBackend(Backend):
                                            for r in self.rows if r["scope_type"] == "organization"],
                             departments=[dict(id=r["scope_id"], name=r["scope_name"], parent_id=r["parent_scope_id"],
                                              external_ref=f"entra-group:contoso-{r['scope_id']}",
-                                             attributes={"kind": "team", "manager_group": f"contoso-{r['scope_id']}-managers"})
+                                             attributes={"kind": "team", "manager_group_id": "00000000-0000-0000-0000-000000000001"})
                                          for r in self.rows if r["scope_type"] == "department"])
         self.tiers = [dict(id="standard", name="Standard", entra_group="contoso-standard", tokens_per_minute=20000,
                            tokens_per_day=500000, models=["claude-sonnet-5"]),

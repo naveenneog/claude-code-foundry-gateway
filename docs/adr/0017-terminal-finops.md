@@ -48,3 +48,20 @@ One set of validation and preview rules serves automation and the terminal. Dire
 requires the repository scripts and Azure roles and cannot offer scoped manager access.
 Future Turnstile pages require explicit parity review; the manifest distinguishes current
 coverage from intentionally deferred endpoints.
+
+## P46 scope compatibility follow-up, 2026-09-24
+
+DOCUMENTED: The deployed Turnstile contract at `c0c345a` adds `manager_scope` to
+`Profile` in `backend/http/authentication.py`. `manager_scope.py` defines its
+organizations, departments and writable-department ids. Null is unrestricted;
+an object, including empty lists, is scoped. `session.py::MANAGER_READ_ROUTES`
+permits every first-release FinOps read endpoint; other protected views are denied.
+
+The CLI therefore keeps all nine views for assigned managers, without inventing a
+parent-unit filter. It hides data views for empty assignments and leaves Settings
+and readable configuration. Context parent catalog rows are not authorized unit
+lookup targets; scoped chargeback enumerates managed departments. Identity and
+scope are refreshed before rendering, and changed scope discards cached tables.
+HTTP 403 is a scope/permission denial, not zero usage or a sign-in expiry.
+Members remain read-only even when writable ids are advertised. Owner manager-group
+edits use the deployed `manager_group_id` attribute and an Entra object id.

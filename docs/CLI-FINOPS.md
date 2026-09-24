@@ -94,6 +94,33 @@ Select another config with `--config .\contoso-finops.json` or the
 file. To change profile or backend, exit and restart with the desired config.
 Sign out outside the app with `az logout`.
 
+### Manager scope
+
+The deployed P46 API returns `manager_scope` in `/api/v1/auth/me`. A null value
+means unrestricted access; an object means scoped access, even when its
+`organizations` and `departments` arrays are empty. Older servers can omit the
+field. A Member role alone does not distinguish a viewer from a manager.
+
+The terminal refreshes identity and assignments when loading a view. It hides
+data tabs, number-key targets and palette entries when no units or teams are
+assigned, leaving Settings and readable gateway configuration. Malformed scope
+metadata fails closed to Settings. When scope changes, previous tables and
+cached detail are discarded.
+
+All nine first-release tabs are permitted for managers with assignments. Usage
+endpoints automatically filter server-side: the CLI does not broaden a team
+manager's query by adding a parent-unit filter. Parent units returned in a
+catalog for context are labeled **Parent context**, not offered as unit budget
+lookup targets. Person searches remain limited to managed departments.
+
+For a scoped manager, chargeback exports every managed department and identifies
+the result as team-only, even if the default requested dimension is organization.
+It never queries context-only parent units or exports their unrelated teams.
+HTTP 403 reads as **Not in your scope / not permitted for this sign-in**; it is
+not reported as zero usage, an empty successful result, or an expired token.
+Managers remain read-only in this CLI even if the server advertises writable
+department ids.
+
 ### Connect directly to the gateway
 
 ```json
@@ -297,7 +324,7 @@ converted with an unstated price assumption.
 | Change tier models | `claude-finops tier set premium --models claude-sonnet-5,claude-opus-5 --apply` |
 | Add or edit a unit | `claude-finops catalog set unit sales --name Sales --group contoso-sales --apply` |
 | Add or edit a team | `claude-finops catalog set team sales-emea --name "Sales EMEA" --group contoso-sales-emea --parent sales --apply` |
-| Store manager metadata | `claude-finops catalog set team sales-emea --manager-group contoso-sales-emea-managers --apply` |
+| Assign a manager group | `claude-finops catalog set team sales-emea --manager-group 00000000-0000-0000-0000-000000000001 --apply` |
 | Remove an empty scope | `claude-finops catalog remove team sales-apac --apply --confirm sales-apac` |
 | List a request window | `claude-finops requests list --month 2026-09 --team sales-emea --limit 50` |
 | Older requests | `claude-finops requests list --before 2026-09-20T00:00:00Z --limit 200` |
@@ -309,8 +336,9 @@ converted with an unstated price assumption.
 | Complete team chargeback | `claude-finops report chargeback --month 2026-09 --dimension department --csv` |
 
 Run `<command> --help` for field descriptions. Stable identifiers are used for
-changes so duplicate display names cannot select the wrong scope. Manager metadata
-does not grant access by itself; the connected server defines and enforces scopes.
+changes so duplicate display names cannot select the wrong scope. `--manager-group`
+is an Entra object id and writes `attributes.manager_group_id`, the server's
+scope-resolution field. Group membership and the connected server determine access.
 
 ## Troubleshoot
 
@@ -318,7 +346,7 @@ does not grant access by itself; the connected server defines and enforces scope
 |---|---|
 | `AADSTS50105`, 4 | Ask an administrator to assign your account a Turnstile role. Signing in again cannot grant one. |
 | Token missing or HTTP 401, 3 | Run `az login --tenant <tenant-id>`. Check that the configured delegated scope belongs to this Turnstile. |
-| HTTP 403, 4 | Check role, account enabled state and managed scope. Members remain read-only in this release. |
+| HTTP 403, 4 | Not in your scope / not permitted for this sign-in. Select an assigned unit/team in Settings, or ask an administrator to check the role and assignments. Members remain read-only. |
 | Invalid input or HTTP 422, 2 | Use `YYYY-MM`, a stable scope id and positive whole token amount. Check parent allocation. |
 | Scope or route missing, 5 | Check the month and scope. For HTTP 405, deploy the `claude-gateway` fork's API. |
 | Conflict, 6 | Refresh and preview again. Do not overwrite a concurrent change. |

@@ -103,7 +103,7 @@ switch ([string]$request.action) {
             if ($seen.ContainsKey([string]$item.id)) { throw 'Duplicate scope identifier.' }
             $seen[[string]$item.id] = $true
             if ([string]$item.external_ref -notlike 'entra-group:*') { throw 'Every direct scope needs an Entra group.' }
-            if ($item.attributes.manager_group) { throw 'Manager group authoring requires Turnstile.' }
+            if ($item.attributes.manager_group_id -or $item.attributes.manager_group) { throw 'Manager group authoring requires Turnstile.' }
             $group = ([string]$item.external_ref).Substring(12)
             if ($group -match '[,:=&|<>^%!"\r\n]') { throw 'Group contains unsafe registry or shell characters.' }
             $groupId = az ad group show --group $group --query id -o tsv 2>$null

@@ -5,16 +5,25 @@ import time
 from .errors import FinOpsError
 from .rules import (allocation_left, apply_state, identifier, month_window, parse_tokens,
                     require_owner, scope_type, validate_budget)
+from .scope import managed_catalog, profile, require_read
 
 
 class Engine:
     def __init__(self, backend, month=None):
         self.backend = backend
         self.month = month or datetime.now(timezone.utc).strftime("%Y-%m")
+        self._identity = None
         month_window(self.month)
 
     def read(self, resource, **params):
-        return self.backend.read(resource, month=self.month, **params)
+        if resource == "whoami":
+            self._identity = self.backend.read(resource, month=self.month, **params)
+            return self._identity
+        if self._identity is None:
+            self.read("whoami")
+        require_read(self._identity, resource, params)
+        result = self.backend.read(resource, month=self.month, **params)
+        return managed_catalog(self._identity, result) if resource == "catalog" else result
 
     def status(self):
         return dict(month=self.month, backend=self.backend.name, overview=self.read("overview"),
@@ -27,13 +36,18 @@ class Engine:
         if dimension not in {"organization", "department"}:
             raise FinOpsError("Complete chargeback supports organization or department. Use usage show for top-100 model/person rankings.")
         catalog = self.read("catalog")
+        scoped = profile(self._identity)
+        if scoped is not None:
+            # Parent catalog rows may be context only. Department queries never widen a manager's scope.
+            dimension = "department"
         rows = []
         collection = "organizations" if dimension == "organization" else "departments"
         for scope in catalog[collection]:
             totals = self.read("overview", **{f"{dimension}_id": scope["id"]})["totals"]
             rows.append(dict(id=scope["id"], name=scope["name"], **totals))
         return dict(period=self.month, dimension=dimension, items=rows,
-                    note="All catalog scopes, not a top-N ranking. Cost is estimated, not an Azure invoice.")
+                    note=("All managed teams only; context parent units are not queried. " if scoped is not None else
+                          "All catalog scopes, not a top-N ranking. ") + "Cost is estimated, not an Azure invoice.")
 
     def budget_change(self, kind, key, amount=None, *, remove=False, apply=False,
                       confirm=None, warning=None, department_id=None):
@@ -156,7 +170,12 @@ class Engine:
                     raise FinOpsError("Enter an Entra member group name or object id.")
                 row["external_ref"] = "entra-group:" + group
             if manager_group is not None:
-                row.setdefault("attributes", {})["manager_group"] = manager_group
+                from uuid import UUID
+                try:
+                    group_id = str(UUID(manager_group))
+                except ValueError:
+                    raise FinOpsError("Manager group must be its Entra object id, not a display name.") from None
+                row.setdefault("attributes", {})["manager_group_id"] = group_id
             if kind == "team":
                 row["parent_id"] = parent or row.get("parent_id")
                 if row["parent_id"] not in {unit["id"] for unit in body["organizations"]}:
@@ -185,6 +204,7 @@ class Engine:
         if not text:
             return []
         catalog = self.read("catalog")
+        catalog = managed_catalog(self._identity, catalog, context=False)
         result = []
         # Subsequence matching is useful for short scope names; people remain server-searched.
         def matches(value):

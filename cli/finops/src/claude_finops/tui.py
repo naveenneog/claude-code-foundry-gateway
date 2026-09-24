@@ -14,6 +14,7 @@ from .accessibility import AsciiFilter
 from .output import safe_text
 from .palette import FinOpsCommands
 from .rules import can_edit
+from .scope import scope_label, visible_tabs
 from .screens import ChangeScreen, DetailScreen, ExportScreen, LookupScreen, MonthScreen
 from .views import DIMENSIONS, TABS, view_rows
 
@@ -43,6 +44,7 @@ class FinOpsApp(App):
         self.preview_only = preview_only
         self.identity = {}
         self.editable = False
+        self.allowed_tabs = visible_tabs({})
         self.team = ""
         self.people_query = ""
         self.people_offset = 0
@@ -115,6 +117,10 @@ class FinOpsApp(App):
         return self.query_one("#main-tabs", TabbedContent).active
 
     def check_action(self, action, parameters):
+        if action == "tab":
+            return bool(parameters) and parameters[0] in self.allowed_tabs
+        if action == "export":
+            return "usage" in self.allowed_tabs
         if action == "edit":
             return self.editable and self.active in {"budgets", "people", "governance"}
         if action == "apply":
@@ -124,7 +130,7 @@ class FinOpsApp(App):
         return True
 
     def action_tab(self, tab):
-        if len(self.screen_stack) != 1:
+        if len(self.screen_stack) != 1 or tab not in self.allowed_tabs:
             return
         self.query_one("#main-tabs", TabbedContent).active = tab
 
@@ -133,28 +139,58 @@ class FinOpsApp(App):
         self.refresh_bindings()
         self.action_refresh()
 
+    def update_access(self, identity):
+        before = (self.identity.get("role"), self.identity.get("manager_scope"))
+        after = (identity.get("role"), identity.get("manager_scope"))
+        self.identity = identity
+        if before == after:
+            return
+        self.editable = can_edit(identity)
+        self.allowed_tabs = visible_tabs(identity)
+        if before != after:
+            self.data.clear()
+            self.records.clear()
+            self.request_filters = {}
+            self.team = ""
+            self.people_offset = self.request_page = 0
+            for tab, _ in TABS:
+                self.query_one(f"#table-{tab}", DataTable).clear(columns=True)
+        tabs = self.query_one("#main-tabs", TabbedContent)
+        if tabs.active not in self.allowed_tabs:
+            tabs.active = "settings"
+        for tab, _ in TABS:
+            if tab in self.allowed_tabs:
+                tabs.show_tab(tab)
+            else:
+                tabs.hide_tab(tab)
+        self.refresh_bindings()
+
     @work(exclusive=True, group="view")
     async def action_refresh(self):
         tab = self.active
         self.query_one(f"#note-{tab}", Static).update("Loading current server data... (q still works)")
         try:
-            if not self.identity:
-                self.identity = await asyncio.to_thread(self.engine.read, "whoami")
-                self.editable = can_edit(self.identity)
-                self.refresh_bindings()
+            identity = await asyncio.to_thread(self.engine.read, "whoami")
+            self.update_access(identity)
+            if tab not in self.allowed_tabs:
+                return
             data = await self.load_tab(tab)
             self.data[tab] = data
             self.render_tab(tab, data)
             stamp = "12:00 +00:00 example" if self.engine.backend.name == "Example" else datetime.now().astimezone().strftime("%H:%M:%S %z")
             who = self.identity.get("email", self.identity.get("name", "caller"))
-            scope = self.identity.get("managed_units") or self.identity.get("managed_organizations") or ""
+            scope = scope_label(self.identity)
             identity = f"claude-finops  {who}  [{self.identity.get('role', 'unknown')}] {scope}\n{self.engine.month} | {self.engine.backend.name} | fetched {stamp}"
             self.query_one("#identity", Static).update(safe_text(identity))
             self.query_one("#status", Static).update("Enter details | " + ("e edit, : more actions | " if self.editable else "Read-only | ") + "r refresh | ? help")
             self.query_one(f"#table-{tab}", DataTable).focus()
         except FinOpsError as error:
+            self.data.pop(tab, None)
+            self.records.pop(tab, None)
+            self.query_one(f"#table-{tab}", DataTable).clear(columns=True)
             self.query_one(f"#note-{tab}", Static).update(str(error))
-            self.query_one("#status", Static).update(f"Read failed (exit {error.code}). r retries; ? explains sign-in.")
+            fix = "Check managed scope in Settings; r refreshes." if error.code == 4 else "r retries; ? explains sign-in."
+            self.query_one("#status", Static).update(f"Read failed (exit {error.code}). {fix}")
 
     async def load_tab(self, tab):
         read = self.engine.read
@@ -170,6 +206,8 @@ class FinOpsApp(App):
             select = self.query_one("#people-team", Select)
             departments = catalog.get("departments", [])
             select.set_options([(row["name"], row["id"]) for row in departments])
+            if self.team not in {row["id"] for row in departments}:
+                self.team = ""
             if not self.team and departments:
                 self.team = departments[0]["id"]
             if self.team:
@@ -297,7 +335,8 @@ class FinOpsApp(App):
         self.push_screen(MonthScreen())
 
     def action_export(self):
-        self.push_screen(ExportScreen())
+        if self.check_action("export", ()):
+            self.push_screen(ExportScreen())
 
     def action_edit(self):
         if not self.check_action("edit", ()):
@@ -348,7 +387,7 @@ class FinOpsApp(App):
         self.action_refresh()
 
     def action_help(self):
-        keys = dict(tabs="1 Overview, 2 Budgets, 3 People, 4 Governance, 5 Usage, 6 Trends, 7 Requests, 8 Anomalies, 0 Settings",
+        keys = dict(tabs=", ".join(label for tab, label in TABS if tab in self.allowed_tabs),
                     navigation="Tab / Shift+Tab changes focus; arrows move; Enter opens exact values; Esc goes back.",
                     lookup="/ searches units, teams, models and request:<id>; people use the current People team.",
                     commands=": opens the command palette; m changes month; r refreshes; q quits.",
