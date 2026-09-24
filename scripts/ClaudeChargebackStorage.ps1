@@ -1,6 +1,6 @@
 # Entra-only Blob REST operations. Never request account keys or mint a SAS.
 function Get-ClaudeReportStorageAccount {
-    param([string]$ResourceGroup,[string]$ApimName,[string]$StorageAccount)
+    param([string]$ResourceGroup,[string]$ApimName,[string]$StorageAccount,[switch]$NonInteractive)
     if($StorageAccount) {
         if($StorageAccount -notmatch '^[a-z0-9]{3,24}$') { throw 'Invalid report storage account name.' }
         return $StorageAccount
@@ -8,6 +8,10 @@ function Get-ClaudeReportStorageAccount {
     $resources=az resource list -g $ResourceGroup --resource-type Microsoft.Storage/storageAccounts -o json | ConvertFrom-Json
     if($LASTEXITCODE -ne 0) { throw 'Could not discover report storage.' }
     $match=@($resources | Where-Object { $_.tags.'claude-chargeback-gateway' -eq $ApimName })
+    if($match.Count -gt 1 -and (Get-Command Select-ClaudeReportOption -ErrorAction SilentlyContinue)){
+        $choices=@($match|ForEach-Object {[pscustomobject]@{Id=$_.name;Name="$($_.name) ($($_.location))"}})
+        return (Select-ClaudeReportOption -Prompt 'Reports storage account' -Options $choices -NonInteractive:$NonInteractive).Id
+    }
     if($match.Count -ne 1) { throw 'No unique reports storage account. Register the schedule or pass -StorageAccount.' }
     return [string]$match[0].name
 }

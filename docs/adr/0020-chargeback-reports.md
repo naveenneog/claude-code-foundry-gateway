@@ -153,6 +153,26 @@ recipients.
 - One long-running sender: expensive idle time under the non-increasable managed-domain quota.
 - Sending every person's report individually: neither requested nor feasible at this quota.
 
+## Owner requirement extension, 2026-09-25
+
+The owner now requires live, fully redacted portal screenshots and a numbered portal/CLI
+procedure beside each shipped flow. This supersedes the earlier fixture-only screenshot
+restriction: fixture examples remain labeled fixtures, while new portal images are real
+captures whose identifiers/names/addresses are replaced with Contoso placeholders before
+pixels are saved. Only a copy of the approved browser profile is used, one browser at a
+time. A sign-in page stops capture; the agent must not sign in.
+
+Resource choices must come from discovery, not a reference deployment default. Gateway
+target resolution reuses Get-ClaudeGatewayTarget; missing choices use the installer's
+numbered-choice pattern. Explicit parameters and noninteractive mode remain available for
+automation. Network address space is explicit rather than a fixed reference CIDR.
+Discovery concerns resources used here; no Key Vault picker is introduced because this
+feature has no Key Vault or connection string.
+
+Live flow proof uses the retained reports deployment for nondestructive operations and
+isolated, tagged canary resources for removal/retention semantics. It does not delete the
+gateway, Turnstile, or the working report archive to demonstrate a delete button.
+
 ## Consequences and detectors
 
 Archived reports are reproducible artifacts, not proof that telemetry was complete at source.

@@ -1,4 +1,12 @@
 # Structured operations only. No supplied script text is evaluated in the private admin job.
+function ConvertFrom-ClaudeReportAdminPayload {
+    param([string]$Encoded,[string]$Json)
+    if($Encoded -and $Json){throw 'Supply only one administration payload: REPORT_ADMIN_REQUEST or REPORT_ADMIN_JSON.'}
+    if($Encoded){$Json=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Encoded))}
+    if(-not $Json -or [Text.Encoding]::UTF8.GetByteCount($Json) -gt 30000){throw 'A structured administration payload of at most 30 KB is required.'}
+    return $Json|ConvertFrom-Json
+}
+
 function Invoke-ClaudeReportAdministration {
     param([string]$Account,$Request)
     if($Request.Operation -notin @('Initialize','Recipients','Settings','Inspect')) {throw 'Unknown report administration operation.'}
@@ -61,7 +69,8 @@ function New-ClaudeReportExecutionTemplate {
         foreach($key in @('name','image','command','args','resources')) {
             if($null -ne $container.$key) {$c[$key]=$container.$key}
         }
-        $c.env=@($container.env | Where-Object name -ne $Variable)+@([pscustomobject]@{name=$Variable;value=$Value})
+        $remove=if($Variable -in @('REPORT_ADMIN_REQUEST','REPORT_ADMIN_JSON')){@('REPORT_ADMIN_REQUEST','REPORT_ADMIN_JSON')}else{@($Variable)}
+        $c.env=@($container.env | Where-Object {$_.name -notin $remove})+@([pscustomobject]@{name=$Variable;value=$Value})
         $c
     })
     return @{containers=$containers}

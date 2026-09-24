@@ -15,8 +15,7 @@ $ErrorActionPreference='Stop'
 foreach($helper in @('Report','Query','Configuration','Storage','Email','Outbox')) {. (Join-Path $PSScriptRoot "ClaudeChargeback$helper.ps1")}
 if($Mode -eq 'admin') {
     . (Join-Path $PSScriptRoot 'ClaudeChargebackAdministration.ps1')
-    if(-not $env:REPORT_ADMIN_REQUEST) {throw 'A structured administration request is required.'}
-    $request=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:REPORT_ADMIN_REQUEST)) | ConvertFrom-Json
+    $request=ConvertFrom-ClaudeReportAdminPayload -Encoded $env:REPORT_ADMIN_REQUEST -Json $env:REPORT_ADMIN_JSON
     Invoke-ClaudeReportAdministration $StorageAccount $request | ConvertTo-Json -Depth 8 -Compress
     return
 }

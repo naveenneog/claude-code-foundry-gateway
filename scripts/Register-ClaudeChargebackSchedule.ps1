@@ -17,17 +17,23 @@ param(
     [string]$Cron='0 6 1 * *',[string[]]$AllowedDomains,[switch]$MonthToDate,[switch]$RunNow,
     [switch]$Remove,[switch]$PurgeArchive,[switch]$BreakDispatchLease,
     [string]$RepositoryUrl,[string]$RepositoryRef,[string]$Location,
+    [string]$SubscriptionId,[switch]$NonInteractive,
+    [string]$VirtualNetworkId,[string]$JobsSubnetId,[string]$EndpointSubnetId,[string]$PrivateDnsZoneId,
+    [string]$VirtualNetworkPrefix,[string]$JobsSubnetPrefix,[string]$EndpointSubnetPrefix,
     [string]$OperatorObjectId,[ValidateSet('User','ServicePrincipal')][string]$OperatorPrincipalType='User',
     [ValidateRange(1,3650)][int]$RetentionDays=400,
     [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$ApimName = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ApimName)
 )
 $ErrorActionPreference='Stop'
-foreach($helper in @('Report','Query','Configuration','Storage','Schedule','Administration')) {. (Join-Path $PSScriptRoot "ClaudeChargeback$helper.ps1")}
+foreach($helper in @('Report','Query','Configuration','Storage','Schedule','Administration','Discovery','Network')) {. (Join-Path $PSScriptRoot "ClaudeChargeback$helper.ps1")}
 $repo=Split-Path $PSScriptRoot -Parent
 Test-ClaudeReportCron $Cron
 if($AllowedDomains) {Test-ClaudeReportDomains $AllowedDomains}
-if(-not $ResourceGroup -or -not $ApimName) {throw 'Pass -ResourceGroup and -ApimName or set CLAUDE_RG and CLAUDE_APIM.'}
+if(-not $ResourceGroup -or -not $ApimName -or $SubscriptionId){
+    $target=Resolve-ClaudeReportTarget $ResourceGroup $ApimName $SubscriptionId -NonInteractive:$NonInteractive
+    $ResourceGroup=$target.ResourceGroup;$ApimName=$target.ApimName
+}
 if(-not $PSCmdlet.ShouldProcess("$ResourceGroup / $ApimName",$(if($Remove){'Remove dedicated reports resources (archive retained unless -PurgeArchive)'}elseif($BreakDispatchLease){'Break dispatch lease after verifying no dispatcher is running'}else{"Register/update reports; UTC cron $Cron$(if($RunNow){'; run generator now'})"}))) {return}
 $resources=@(az resource list -g $ResourceGroup -o json | ConvertFrom-Json | Where-Object {$_.tags.'claude-chargeback-gateway' -eq $ApimName})
 if($LASTEXITCODE -ne 0) {throw 'Could not enumerate reports resources.'}
@@ -43,9 +49,16 @@ if($Remove) {
             if($LASTEXITCODE -ne 0) {throw 'Could not remove a reports identity role assignment.'}
         }
     }
-    $order=@('Microsoft.App/jobs','Microsoft.App/managedEnvironments','Microsoft.Network/privateEndpoints','Microsoft.Network/privateDnsZones','Microsoft.Network/virtualNetworks','Microsoft.Communication/communicationServices','Microsoft.Communication/emailServices','Microsoft.ManagedIdentity/userAssignedIdentities','Microsoft.Storage/storageAccounts')
+    $metadataJson=Invoke-ClaudeReportAzOptional {az deployment group show -g $ResourceGroup -n "chargeback-$ApimName" --query properties.outputs -o json}
+    $metadata=if($metadataJson){$metadataJson|ConvertFrom-Json}else{$null}
+    if($metadata.dnsLinkId.value){
+        az resource delete --ids $metadata.dnsLinkId.value --output none
+        if($LASTEXITCODE -ne 0){throw 'Could not remove the reports DNS link; shared DNS zone was not deleted.'}
+    }
+    $order=@('Microsoft.App/jobs','Microsoft.App/managedEnvironments','Microsoft.Network/privateEndpoints','Microsoft.Network/privateDnsZones/virtualNetworkLinks','Microsoft.Network/privateDnsZones','Microsoft.Network/virtualNetworks','Microsoft.Communication/communicationServices','Microsoft.Communication/emailServices','Microsoft.ManagedIdentity/userAssignedIdentities','Microsoft.Storage/storageAccounts')
     foreach($type in $order) {
         foreach($resource in @($resources | Where-Object type -eq $type)) {
+            if($metadata.dnsLinkId.value -and $resource.id -eq $metadata.dnsLinkId.value){continue}
             if($type -eq 'Microsoft.Storage/storageAccounts' -and -not $PurgeArchive) {Write-Host 'Keeping the report archive and configuration. Add -PurgeArchive to delete storage.';continue}
             az resource delete --ids $resource.id --output none
             if($LASTEXITCODE -ne 0) {throw "Could not remove report resource of type $type."}
@@ -109,14 +122,18 @@ else {
     if(-not $AllowedDomains) {throw 'First registration requires -AllowedDomains. No recipient is configured automatically.'}
     . (Join-Path $PSScriptRoot 'ClaudeTurnstileGovernance.ps1')
     $workspace=Get-ClaudeGatewayWorkspaceId $ResourceGroup $ApimName
-    if(-not $Location) {$Location=az apim show -g $ResourceGroup -n $ApimName --query location -o tsv}
+    $gatewayLocation=az apim show -g $ResourceGroup -n $ApimName --query location -o tsv
+    $Location=Resolve-ClaudeReportLocation -Location $Location -SuggestedLocation $gatewayLocation -NonInteractive:$NonInteractive
+    $network=Resolve-ClaudeReportNetwork -ResourceGroup $ResourceGroup -Location $Location -VirtualNetworkId $VirtualNetworkId `
+        -JobsSubnetId $JobsSubnetId -EndpointSubnetId $EndpointSubnetId -PrivateDnsZoneId $PrivateDnsZoneId `
+        -VirtualNetworkPrefix $VirtualNetworkPrefix -JobsSubnetPrefix $JobsSubnetPrefix -EndpointSubnetPrefix $EndpointSubnetPrefix -NonInteractive:$NonInteractive
     if(-not $OperatorObjectId) {
         $OperatorObjectId=az ad signed-in-user show --query id -o tsv 2>$null
         if(-not $OperatorObjectId) {throw 'Pass -OperatorObjectId and -OperatorPrincipalType for a workload operator.'}
     }
     if($OperatorObjectId -notmatch '^[0-9a-f-]{36}$') {throw 'OperatorObjectId must be an Entra object ID.'}
     if(-not $RepositoryUrl) {$RepositoryUrl=(git -C $repo remote get-url origin).Trim() -replace '^git@github\.com:','https://github.com/'}
-    $parameters=New-ClaudeReportScheduleParameters $ApimName $workspace $RepositoryUrl $RepositoryRef $Cron $OperatorObjectId $OperatorPrincipalType $Location $RetentionDays
+    $parameters=New-ClaudeReportScheduleParameters $ApimName $workspace $RepositoryUrl $RepositoryRef $Cron $OperatorObjectId $OperatorPrincipalType $Location $RetentionDays $network
     $folder=Join-Path $repo ('.chargeback-deploy-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory $folder | Out-Null
     $file=Join-Path $folder 'parameters.json'

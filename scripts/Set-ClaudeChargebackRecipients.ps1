@@ -12,7 +12,7 @@ param(
     [Parameter(Mandatory,ParameterSetName='Add')][string[]]$Add,
     [Parameter(Mandatory,ParameterSetName='Remove')][string[]]$Remove,
     [Parameter(ParameterSetName='List')][switch]$List,
-    [string]$StorageAccount,[switch]$ViaJob,
+    [string]$StorageAccount,[switch]$ViaJob,[string]$SubscriptionId,[switch]$NonInteractive,
     [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$ApimName = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ApimName)
 )
@@ -23,6 +23,11 @@ $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'ClaudeChargebackStorage.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeChargebackSchedule.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeChargebackAdministration.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeChargebackDiscovery.ps1')
+if(-not $ResourceGroup -or -not $ApimName -or $SubscriptionId){
+    $target=Resolve-ClaudeReportTarget $ResourceGroup $ApimName $SubscriptionId -NonInteractive:$NonInteractive
+    $ResourceGroup=$target.ResourceGroup;$ApimName=$target.ApimName
+}
 if($BusinessUnit -and $AllUnits) { throw 'Choose -BusinessUnit or -AllUnits, not both.' }
 if($BusinessUnit) { Get-ClaudeReportFileName $BusinessUnit | Out-Null }
 if(-not $BusinessUnit -and -not $AllUnits -and $PSCmdlet.ParameterSetName -ne 'List') { throw 'Choose -BusinessUnit or -AllUnits for a recipient change.' }
@@ -34,7 +39,7 @@ if($ViaJob) {
     }
     return
 }
-$StorageAccount=Get-ClaudeReportStorageAccount $ResourceGroup $ApimName $StorageAccount
+$StorageAccount=Get-ClaudeReportStorageAccount $ResourceGroup $ApimName $StorageAccount -NonInteractive:$NonInteractive
 $stored=Get-ClaudeReportConfiguration $StorageAccount
 if($PSCmdlet.ParameterSetName -eq 'List') {
     if($scope) { $addresses=Get-ClaudeChargebackRecipients $stored.Configuration $scope; [pscustomobject]@{Scope=$scope;Recipients=$addresses} }

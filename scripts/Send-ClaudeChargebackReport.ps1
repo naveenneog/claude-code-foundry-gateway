@@ -11,19 +11,23 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [Parameter(Mandatory)][string]$ReportPath,[string[]]$BusinessUnit,[switch]$AllUnits,
-    [switch]$Dispatch,[switch]$Resend,[string]$StorageAccount,
+    [switch]$Dispatch,[switch]$Resend,[string]$StorageAccount,[string]$SubscriptionId,[switch]$NonInteractive,
     [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$ApimName = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ApimName)
 )
 $ErrorActionPreference='Stop'
-foreach($helper in @('Report','Query','Configuration','Storage','Email','Outbox')) {. (Join-Path $PSScriptRoot "ClaudeChargeback$helper.ps1")}
+foreach($helper in @('Report','Query','Configuration','Storage','Email','Outbox','Discovery')) {. (Join-Path $PSScriptRoot "ClaudeChargeback$helper.ps1")}
 $ReportPath=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ReportPath)
 $manifest=Get-Content (Join-Path $ReportPath 'manifest.json') -Raw | ConvertFrom-Json
 Test-ClaudeReportArtifacts $ReportPath $manifest
 if($BusinessUnit -and $AllUnits) {throw 'Choose unit recipients or the all-units admin list, not both.'}
 $scope=if($AllUnits) {@('all')} else {$BusinessUnit}
 if(-not $PSCmdlet.ShouldProcess("$($manifest.Month) ($($manifest.RunId))",'Archive verified artifacts and queue scoped reports'+$(if($Resend){' as an explicit resend'}))) {return}
-$StorageAccount=Get-ClaudeReportStorageAccount $ResourceGroup $ApimName $StorageAccount
+if(-not $ResourceGroup -or -not $ApimName -or $SubscriptionId){
+    $target=Resolve-ClaudeReportTarget $ResourceGroup $ApimName $SubscriptionId -NonInteractive:$NonInteractive
+    $ResourceGroup=$target.ResourceGroup;$ApimName=$target.ApimName
+}
+$StorageAccount=Get-ClaudeReportStorageAccount $ResourceGroup $ApimName $StorageAccount -NonInteractive:$NonInteractive
 $config=(Get-ClaudeReportConfiguration $StorageAccount).Configuration
 $existing=Get-ClaudeReportArchiveJson $StorageAccount "runs/$($manifest.Month)/$($manifest.RunId)/manifest.json" -AllowMissing
 if($existing) { $manifest.Sends=$existing.Sends }

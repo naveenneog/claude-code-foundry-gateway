@@ -35,5 +35,13 @@ Assert 'execution override omits unsupported volumes' (-not $execution.Contains(
 Assert 'execution override omits management-only imageType' (-not $execution.containers[0].Contains('imageType'))
 Assert 'execution preserves pinned code and fixed command' ($execution.containers[0].command[2] -eq 'fixed' -and @($execution.containers[0].env | Where-Object name -eq 'REPO_REF')[0].value -eq ('a'*40))
 Assert 'execution adds one structured payload' (@($execution.containers[0].env | Where-Object name -eq 'REPORT_ADMIN_REQUEST').Count -eq 1)
+$request=ConvertFrom-ClaudeReportAdminPayload -Json '{"Operation":"Inspect"}'
+Assert 'portal may supply readable JSON, without a Base64 tool' ($request.Operation -eq 'Inspect')
+$request=ConvertFrom-ClaudeReportAdminPayload -Encoded ([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('{"Operation":"Inspect"}')))
+Assert 'existing encoded execution payload remains supported' ($request.Operation -eq 'Inspect')
+Refuses 'ambiguous portal and CLI payloads are refused' {ConvertFrom-ClaudeReportAdminPayload -Json '{"Operation":"Inspect"}' -Encoded 'e30='}
+$template.containers[0].env+=@([pscustomobject]@{name='REPORT_ADMIN_JSON';value='{"Operation":"Inspect"}'})
+$execution=New-ClaudeReportExecutionTemplate $template 'REPORT_ADMIN_REQUEST' 'fixture'
+Assert 'CLI override removes a persisted portal request' (@($execution.containers[0].env|Where-Object name -eq REPORT_ADMIN_JSON).Count -eq 0)
 if($fail){throw "$fail of $checks administration assertions failed."}
 Write-Host "$checks chargeback administration assertions passed."

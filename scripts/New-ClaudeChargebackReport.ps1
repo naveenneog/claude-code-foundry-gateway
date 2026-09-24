@@ -15,7 +15,7 @@ param(
     [string]$Month, [switch]$MonthToDate, [string[]]$BusinessUnit,
     [string]$OutputPath = './chargeback-reports',
     [ValidateSet('CSV','HTML')][string[]]$Format = @('CSV','HTML'),
-    [switch]$Send, [string]$StorageAccount,
+    [switch]$Send, [string]$StorageAccount,[string]$SubscriptionId,[switch]$NonInteractive,
     [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$ApimName = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ApimName),
     [string]$WorkspaceResourceId = $env:CLAUDE_REPORT_WORKSPACE
@@ -24,11 +24,15 @@ $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'ClaudeChargebackReport.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeChargebackQuery.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeChargebackRender.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeChargebackDiscovery.ps1')
 $window=Get-ClaudeReportWindow -Month $Month -MonthToDate:$MonthToDate
 foreach($unit in $BusinessUnit) { Get-ClaudeReportFileName $unit | Out-Null }
 if ($Send -and (@($Format | Sort-Object -Unique).Count -ne 2)) { throw 'Email requires CSV and HTML. Choose both formats before sending.' }
 if (-not $PSCmdlet.ShouldProcess("$OutputPath/$($window.Month)", "Generate report ($($window.From) to $($window.To), UTC, exclusive end)$(if($Send){' and queue email'})")) { return }
-if (-not $ResourceGroup -or -not $ApimName) { throw 'Pass -ResourceGroup and -ApimName, or set CLAUDE_RG and CLAUDE_APIM.' }
+if(-not $ResourceGroup -or -not $ApimName -or $SubscriptionId){
+    $target=Resolve-ClaudeReportTarget $ResourceGroup $ApimName $SubscriptionId -NonInteractive:$NonInteractive
+    $ResourceGroup=$target.ResourceGroup;$ApimName=$target.ApimName
+}
 if (-not $WorkspaceResourceId) {
     . (Join-Path $PSScriptRoot 'ClaudeTurnstileGovernance.ps1')
     $WorkspaceResourceId=Get-ClaudeGatewayWorkspaceId -ResourceGroup $ResourceGroup -ApimName $ApimName

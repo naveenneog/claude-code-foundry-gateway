@@ -19,7 +19,7 @@ function Test-ClaudeReportCron {
 
 function New-ClaudeReportScheduleParameters {
     param([string]$ApimName,[string]$WorkspaceResourceId,[string]$RepositoryUrl,[string]$RepositoryRef,[string]$Cron,
-        [string]$OperatorObjectId,[string]$OperatorPrincipalType,[string]$Location,[int]$RetentionDays=400)
+        [string]$OperatorObjectId,[string]$OperatorPrincipalType,[string]$Location,[int]$RetentionDays=400,$Network)
     if($RepositoryRef -notmatch '^[0-9a-f]{40}$') { throw 'RepositoryRef must be a full published commit ID.' }
     if($RepositoryUrl -notmatch '^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(\.git)?$') { throw 'RepositoryUrl must be a public GitHub HTTPS repository URL.' }
     Test-ClaudeReportCron $Cron
@@ -27,6 +27,10 @@ function New-ClaudeReportScheduleParameters {
     $values=@{gatewayApimName=$ApimName;workspaceResourceId=$WorkspaceResourceId;repositoryUrl=$RepositoryUrl;repositoryRef=$RepositoryRef
         cronExpression=$Cron;operatorObjectId=$OperatorObjectId;operatorPrincipalType=$OperatorPrincipalType;location=$Location;retentionDays=$RetentionDays}
     foreach($k in $values.Keys) { $params[$k]=@{value=$values[$k]} }
+    foreach($key in @('ExistingVirtualNetworkId','ExistingJobsSubnetId','ExistingEndpointSubnetId','ExistingPrivateDnsZoneId','VirtualNetworkPrefix','JobsSubnetPrefix','EndpointSubnetPrefix')){
+        $name=$key.Substring(0,1).ToLowerInvariant()+$key.Substring(1)
+        $params[$name]=@{value=$(if($Network){[string]$Network.$key}else{''})}
+    }
     return @{ '$schema'='https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#';contentVersion='1.0.0.0';parameters=$params }
 }
 

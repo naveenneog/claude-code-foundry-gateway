@@ -12,6 +12,7 @@ param(
     [ValidateSet('CSV','HTML')][string[]]$Format,
     [Nullable[bool]]$MonthToDate,[Nullable[bool]]$DeliveryEnabled,
     [ValidateRange(1,3650)][int]$RetentionDays,[switch]$List,[string]$StorageAccount,[switch]$ViaJob,
+    [string]$SubscriptionId,[switch]$NonInteractive,
     [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$ApimName = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ApimName)
 )
@@ -22,6 +23,11 @@ $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'ClaudeChargebackStorage.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeChargebackSchedule.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeChargebackAdministration.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeChargebackDiscovery.ps1')
+if(-not $ResourceGroup -or -not $ApimName -or $SubscriptionId){
+    $target=Resolve-ClaudeReportTarget $ResourceGroup $ApimName $SubscriptionId -NonInteractive:$NonInteractive
+    $ResourceGroup=$target.ResourceGroup;$ApimName=$target.ApimName
+}
 if($ViaJob) {
     $settings=@{}
     foreach($key in @('AllowedDomains','MonthToDate','DeliveryEnabled','RetentionDays')) {if($PSBoundParameters.ContainsKey($key)) {$settings[$key]=$PSBoundParameters[$key]}}
@@ -31,13 +37,13 @@ if($ViaJob) {
     if($PSCmdlet.ShouldProcess('Private report administration job',"$($request.Operation) without redeploying")) {
         Invoke-ClaudeReportAdminRequest $ResourceGroup $ApimName $request
         if($RetentionDays) {
-            $StorageAccount=Get-ClaudeReportStorageAccount $ResourceGroup $ApimName $StorageAccount
+            $StorageAccount=Get-ClaudeReportStorageAccount $ResourceGroup $ApimName $StorageAccount -NonInteractive:$NonInteractive
             Set-ClaudeReportRetention $ResourceGroup $StorageAccount $RetentionDays
         }
     }
     return
 }
-$StorageAccount=Get-ClaudeReportStorageAccount $ResourceGroup $ApimName $StorageAccount
+$StorageAccount=Get-ClaudeReportStorageAccount $ResourceGroup $ApimName $StorageAccount -NonInteractive:$NonInteractive
 $stored=Get-ClaudeReportConfiguration $StorageAccount
 $config=$stored.Configuration
 if($List) { $config; return }

@@ -11,6 +11,13 @@ param operatorPrincipalType string = 'User'
 param retentionDays int = 400
 param image string = 'mcr.microsoft.com/azure-cli:2.90.0'
 param powershellVersion string = '7.6.6'
+param existingVirtualNetworkId string = ''
+param existingJobsSubnetId string = ''
+param existingEndpointSubnetId string = ''
+param existingPrivateDnsZoneId string = ''
+param virtualNetworkPrefix string
+param jobsSubnetPrefix string
+param endpointSubnetPrefix string
 
 var suffix = take(uniqueString(resourceGroup().id, gatewayApimName, 'reports'), 10)
 var tags = {
@@ -27,38 +34,45 @@ resource adminIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01
   location: location
   tags: tags
 }
-resource network 'Microsoft.Network/virtualNetworks@2024-05-01' = {
+resource network 'Microsoft.Network/virtualNetworks@2024-05-01' = if (empty(existingVirtualNetworkId)) {
   name: 'vnet-reports-${suffix}'
   location: location
   tags: tags
   properties: {
-    addressSpace: { addressPrefixes: ['10.87.0.0/24'] }
+    addressSpace: { addressPrefixes: [virtualNetworkPrefix] }
     subnets: [
       {
         name: 'jobs'
         properties: {
-          addressPrefix: '10.87.0.0/26'
+          addressPrefix: jobsSubnetPrefix
           delegations: [{ name: 'container-apps', properties: { serviceName: 'Microsoft.App/environments' } }]
         }
       }
       {
         name: 'endpoints'
-        properties: { addressPrefix: '10.87.0.64/27', privateEndpointNetworkPolicies: 'Disabled' }
+        properties: { addressPrefix: endpointSubnetPrefix, privateEndpointNetworkPolicies: 'Disabled' }
       }
     ]
   }
 }
-resource privateDns 'Microsoft.Network/privateDnsZones@2020-06-01' = {
-  // Azure public cloud: privatelink.blob.core.windows.net.
-  name: 'privatelink.blob.${az.environment().suffixes.storage}'
-  location: 'global'
-  tags: tags
-}
-resource dnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
-  parent: privateDns
-  name: 'reports-${suffix}'
-  location: 'global'
-  properties: { registrationEnabled: false, virtualNetwork: { id: network.id } }
+var networkId = empty(existingVirtualNetworkId) ? network.id : existingVirtualNetworkId
+var jobSubnetId = empty(existingVirtualNetworkId) ? '${network.id}/subnets/jobs' : existingJobsSubnetId
+var endpointSubnetId = empty(existingVirtualNetworkId) ? '${network.id}/subnets/endpoints' : existingEndpointSubnetId
+// Azure public cloud: privatelink.blob.core.windows.net.
+var zoneName = 'privatelink.blob.${az.environment().suffixes.storage}'
+module dns 'chargeback-dns.bicep' = {
+  name: 'reports-dns-${suffix}'
+  scope: resourceGroup(
+    empty(existingPrivateDnsZoneId) ? subscription().subscriptionId : split(existingPrivateDnsZoneId, '/')[2],
+    empty(existingPrivateDnsZoneId) ? resourceGroup().name : split(existingPrivateDnsZoneId, '/')[4]
+  )
+  params: {
+    zoneName: zoneName
+    createZone: empty(existingPrivateDnsZoneId)
+    virtualNetworkId: networkId
+    linkName: 'reports-${suffix}'
+    tags: tags
+  }
 }
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: 'streports${suffix}'
@@ -81,7 +95,7 @@ resource endpoint 'Microsoft.Network/privateEndpoints@2024-05-01' = {
   location: location
   tags: tags
   properties: {
-    subnet: { id: '${network.id}/subnets/endpoints' }
+    subnet: { id: endpointSubnetId }
     privateLinkServiceConnections: [{
       name: 'report-blobs'
       properties: { privateLinkServiceId: storage.id, groupIds: ['blob'] }
@@ -91,7 +105,7 @@ resource endpoint 'Microsoft.Network/privateEndpoints@2024-05-01' = {
 resource dnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2024-05-01' = {
   parent: endpoint
   name: 'default'
-  properties: { privateDnsZoneConfigs: [{ name: 'blob', properties: { privateDnsZoneId: privateDns.id } }] }
+  properties: { privateDnsZoneConfigs: [{ name: 'blob', properties: { privateDnsZoneId: dns.outputs.zoneId } }] }
 }
 resource blobs 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
   parent: storage
@@ -162,7 +176,7 @@ resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   location: location
   tags: tags
   properties: {
-    vnetConfiguration: { infrastructureSubnetId: '${network.id}/subnets/jobs' }
+    vnetConfiguration: { infrastructureSubnetId: jobSubnetId }
     appLogsConfiguration: { destination: 'azure-monitor' }
     workloadProfiles: [{ name: 'Consumption', workloadProfileType: 'Consumption' }]
   }
@@ -338,5 +352,7 @@ output communicationService string = communication.name
 output emailService string = email.name
 output identityName string = identity.name
 output adminIdentityName string = adminIdentity.name
-output networkName string = network.name
+output virtualNetworkId string = networkId
+output privateDnsZoneId string = dns.outputs.zoneId
+output dnsLinkId string = dns.outputs.linkId
 output privateEndpointName string = endpoint.name
