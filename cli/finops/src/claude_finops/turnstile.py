@@ -66,7 +66,7 @@ class TurnstileBackend(Backend):
 
     def read(self, resource, **params):
         if resource not in READ_ROUTES:
-            raise FinOpsError("Unsupported view. Update claude-finops and the Turnstile fork.")
+            raise FinOpsError("Unsupported view. Update AUM and the Turnstile fork.")
         path = READ_ROUTES[resource]
         query = {}
         if resource in {"overview", "distribution", "trends", "requests", "anomalies"}:

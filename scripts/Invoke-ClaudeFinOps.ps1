@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    JSON bridge for claude-finops. Reuses the gateway's registry implementation.
+    JSON bridge for AUM (Azure Usage Management). Keeps its compatible filename.
 .DESCRIPTION
     Reads named values without secrets. Mutations are explicit, use the existing
     serializers and tier script, and never accept PowerShell code in the input.

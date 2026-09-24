@@ -27,6 +27,6 @@ async def test_all_main_screen_snapshots(size):
             await pilot.pause(0.25)
             rendered = [strip.text for strip in app.screen._compositor.render_strips()]
             assert rendered == baseline[tab], f"{tab} changed at {size}; inspect SVG before recording."
-            svg = Path(__file__).resolve().parents[3] / "docs" / "images" / "finops" / f"{tab}-{size[0]}x{size[1]}.svg"
+            svg = BASE / "svg" / f"{tab}-{size[0]}x{size[1]}.svg"
             assert svg.exists()
             assert "admin@contoso.com" in svg.read_text(encoding="utf-8")

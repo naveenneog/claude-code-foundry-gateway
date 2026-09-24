@@ -2,15 +2,33 @@ Screen {
     background: $background;
     color: $foreground;
 }
-#identity {
-    height: 2;
+#brand {
+    height: 1;
     padding: 0 1;
     background: $panel;
     color: $foreground;
+    text-style: bold;
 }
+#identity { height: 1; padding: 0 1; background: $surface; }
+.wide-overview #brand { height: 5; }
+#quick-filter { display: none; height: 3; }
 TabbedContent { height: 1fr; }
 TabPane { padding: 0 1; }
 DataTable { height: 1fr; }
+.titled-table { border: solid $primary-muted; }
+.titled-table:focus { border: solid $accent; }
+.all-metrics { display: none; }
+.ascii .titled-table { border: ascii $primary-muted; }
+#note-overview { height: 1; }
+#dashboard { height: 1fr; }
+.dashboard-panel { border: solid $primary-muted; padding: 0 1; color: $foreground; overflow: hidden; }
+.dashboard-panel:focus { border: solid $accent; background: $surface; }
+.ascii .dashboard-panel { border: ascii $primary-muted; }
+#dash-kpis { height: 4; }
+#dash-main { height: 1fr; }
+#dash-left { width: 2fr; }
+#dash-right { width: 1fr; min-width: 25; }
+#dash-trend, #dash-rank, #dash-risks, #dash-anomalies { height: 1fr; min-height: 4; }
 .context { height: 2; color: $foreground; }
 .toolbar { height: 3; }
 .toolbar Select { width: 25; }
@@ -18,7 +36,7 @@ DataTable { height: 1fr; }
 .toolbar Button { min-width: 8; width: 10; }
 .toolbar-note { width: 1fr; padding: 1 1; }
 #status { height: 1; padding: 0 1; color: $foreground; background: $surface; }
-Footer { height: 1; }
+#key-hints { height: 1; background: $panel; color: $foreground; padding: 0 1; }
 ModalScreen { align: center middle; background: $background 80%; }
 #detail-dialog, #lookup-dialog, #change-dialog, #month-dialog {
     width: 76;

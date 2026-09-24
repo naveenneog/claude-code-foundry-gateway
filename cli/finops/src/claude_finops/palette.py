@@ -11,6 +11,7 @@ class FinOpsCommands(Provider):
                     for key, label in TABS if key in self.app.allowed_tabs]
         commands += [
             ("Find scope, person, model or request", self.app.action_lookup, "Bounded server search"),
+            ("Filter the current view", self.app.action_filter, "Visible rows only; Esc clears"),
             ("Change month", self.app.action_month, "YYYY-MM"),
             ("Refresh current view", self.app.action_refresh, "Read the latest server state"),
             ("Help and key map", self.app.action_help, "Learn this screen"),

@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "images": [
+    {
+      "file": "turnstile-overview-80x24-before.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T16:50:02.246680Z",
+      "redaction": true,
+      "commit": "a1f0836d14e41dc4c19e986bf033edf739fd0325",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "overview",
+      "phase": "before"
+    },
+    {
+      "file": "turnstile-overview-160x48-before.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T16:50:05.181194Z",
+      "redaction": true,
+      "commit": "a1f0836d14e41dc4c19e986bf033edf739fd0325",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "overview",
+      "phase": "before"
+    }
+  ]
+}

@@ -34,6 +34,7 @@ def view_rows(tab, data, *, ascii_only=False):
         columns = ["Scope", "Used", "Budget", "Remaining", "Status"]
         if tab == "budgets":
             columns.insert(4, "Unallocated")
+            columns.append("Mode")
         items = data.get("items", [])
         if tab == "budgets":
             units = [r for r in items if r["scope_type"] == "organization"]
@@ -52,6 +53,7 @@ def view_rows(tab, data, *, ascii_only=False):
                 free = (item["token_limit"] - sum(r.get("token_limit") or 0 for r in children)
                         if item.get("token_limit") is not None and item["scope_type"] == "organization" else None)
                 cells.insert(4, human(free) if item["scope_type"] == "organization" else "see People")
+                cells.append(data.get("enforcement_modes", {}).get(item["scope_id"], "STRICT"))
             rows.append(tuple(cells))
             records.append(item)
         if tab == "budgets":
@@ -60,13 +62,14 @@ def view_rows(tab, data, *, ascii_only=False):
             total = data.get("total")
             note = f"Server search | {data.get('offset', 0) + 1}-{data.get('offset', 0) + len(items)} of {total if total is not None else 'unknown'} | Parent free: {human(data.get('department_available_tokens'))}"
     elif tab == "governance":
+        from .dashboard import enforcement_badge
         columns = ["Kind / scope", "Parent / group", "Limits / models"]
         catalog = data["catalog"]
         for kind, collection in (("Unit", "organizations"), ("Team", "departments")):
             for item in catalog[collection]:
                 label = "Parent context" if item.get("scope_context") else kind
                 rows.append((f"{label}: {item['id']}", item.get("parent_id") or item.get("external_ref") or "-",
-                             item.get("external_ref") or "no member group"))
+                             (item.get("external_ref") or "no member group") + " [" + enforcement_badge(item) + "]"))
                 records.append(dict(item, kind=kind.lower()))
         for item in data["tiers"]["items"]:
             rows.append((f"Tier: {item['id']}", f"{human(item['tokens_per_minute'])}/min {human(item['tokens_per_day'])}/day",

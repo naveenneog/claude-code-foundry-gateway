@@ -16,8 +16,8 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 async def capture():
-    images = ROOT / "docs" / "images" / "finops"
     snapshots = ROOT / "cli" / "finops" / "tests" / "snapshots"
+    images = snapshots / "svg"
     images.mkdir(parents=True, exist_ok=True)
     snapshots.mkdir(exist_ok=True)
     for size in ((80, 24), (160, 48)):

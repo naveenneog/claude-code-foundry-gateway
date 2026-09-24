@@ -7,10 +7,12 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.theme import Theme
-from textual.widgets import Button, DataTable, Footer, Input, Select, Static, TabbedContent, TabPane
+from textual.widgets import Button, DataTable, Input, Select, Static, TabbedContent, TabPane
 
 from .errors import FinOpsError
 from .accessibility import AsciiFilter
+from .brand import BANNER, COMPACT, PRODUCT
+from .dashboard import Dashboard, DashboardPanel, enforcement_badge
 from .output import safe_text
 from .palette import FinOpsCommands
 from .rules import can_edit
@@ -21,12 +23,14 @@ from .views import DIMENSIONS, TABS, view_rows
 
 
 class FinOpsApp(App):
-    TITLE = "claude-finops"
+    TITLE = PRODUCT
     CSS_PATH = "terminal.tcss"
     COMMANDS = {FinOpsCommands}
     BINDINGS = [
         *[Binding(label[0], f"tab('{tab}')", label[2:], show=False) for tab, label in TABS],
-        Binding("/", "lookup", "Find"),
+        Binding("/", "filter", "Filter"),
+        Binding("ctrl+f", "lookup", "Lookup", show=False),
+        Binding("escape", "clear_filter", "Clear filter", show=False),
         Binding("colon", "command_palette", "Commands", key_display=":"),
         Binding("m", "month", "Month"),
         Binding("e", "edit", "Edit"),
@@ -58,6 +62,7 @@ class FinOpsApp(App):
         self.data = {}
         self.records = {}
         self.pending_selection = None
+        self.filters = {}
         self.register_theme(Theme(name="gateway", primary="#F2A007", accent="#F2A007", secondary="#8FADEC",
                                   foreground="#F2F4FA", background="#0D1117", surface="#161D2D", panel="#1E2761",
                                   warning="#F2A007", error="#FF9292", success="#8DE0AA", dark=True))
@@ -70,7 +75,9 @@ class FinOpsApp(App):
         self.theme = "no-color" if no_color else (config.theme if config.theme in self.available_themes else "gateway")
 
     def compose(self) -> ComposeResult:
-        yield Static("claude-finops | Signing in through Azure CLI...", id="identity", markup=False)
+        yield Static(COMPACT, id="brand", markup=False)
+        yield Static("Signing in through Azure CLI...", id="identity", markup=False)
+        yield Input(placeholder="/ Filter visible rows (Esc clears; Ctrl+F searches the server)", id="quick-filter")
         with TabbedContent(initial="overview", id="main-tabs"):
             for tab, title in TABS:
                 with TabPane(title, id=tab):
@@ -95,18 +102,50 @@ class FinOpsApp(App):
                             yield Button("Filter", id="filter-requests")
                     elif tab == "settings":
                         with Horizontal(classes="toolbar"):
-                            yield Select([("Gateway", "gateway"), ("High contrast", "high-contrast"),
+                            yield Select([("AUM", "gateway"), ("High contrast", "high-contrast"),
                                           ("No color", "no-color"), ("Light", "textual-light")],
                                          value=self.theme, id="theme-choice", allow_blank=False)
                             yield Static("Use --plain for a linear screen-reader view", classes="toolbar-note")
                     yield Static("Loading...", id=f"note-{tab}", classes="context", markup=False)
-                    yield DataTable(id=f"table-{tab}", cursor_type="row", zebra_stripes=True)
+                    if tab == "overview":
+                        yield Dashboard(id="dashboard")
+                    yield DataTable(id=f"table-{tab}", cursor_type="row", zebra_stripes=True,
+                                    classes="all-metrics" if tab == "overview" else "titled-table")
         yield Static("1-8 / 0 tabs | Tab / Shift+Tab focus | Enter details | ? one-screen tour", id="status", markup=False)
-        yield Footer()
+        yield Static("", id="key-hints", markup=False)
 
     def on_mount(self):
         if self.config.ascii:
             self.add_class("ascii")
+        for tab, label in TABS:
+            self.query_one(f"#table-{tab}", DataTable).border_title = label[2:]
+        self.update_brand()
+        self.update_key_hints()
+
+    def update_key_hints(self):
+        if not self.query("#key-hints"):
+            return
+        keys = ["/ Filter", ": Command", "m Month"]
+        if self.check_action("edit", ()):
+            keys.append("e Edit")
+        if self.check_action("apply", ()):
+            keys.append("a Apply")
+        if self.check_action("next_page", ()):
+            keys.append("n/p Page")
+        keys.extend(["? Help", "q Quit"])
+        self.query_one("#key-hints", Static).update("  ".join(f"<{key}>" for key in keys))
+
+    def update_brand(self):
+        if not self.query("#brand") or not self.query("#main-tabs"):
+            return
+        large = self.size.width >= 120 and self.size.height >= 38 and self.active == "overview"
+        self.set_class(large, "wide-overview")
+        self.query_one("#brand", Static).update((BANNER + "\n" if large else "") + COMPACT)
+
+    def on_resize(self):
+        self.update_brand()
+        if self.data.get("overview"):
+            self.call_after_refresh(self.render_tab, "overview", self.data["overview"])
 
     def get_line_filters(self):
         filters = list(super().get_line_filters())
@@ -141,6 +180,9 @@ class FinOpsApp(App):
 
     @on(TabbedContent.TabActivated)
     def switched(self, event):
+        self.update_brand()
+        self.update_key_hints()
+        self.query_one("#quick-filter", Input).display = False
         self.refresh_bindings()
         self.action_refresh()
 
@@ -156,10 +198,12 @@ class FinOpsApp(App):
             self.data.clear()
             self.records.clear()
             self.request_filters = {}
+            self.filters = {}
             self.team = ""
             self.people_offset = self.request_page = 0
             for tab, _ in TABS:
                 self.query_one(f"#table-{tab}", DataTable).clear(columns=True)
+            self.query_one(Dashboard).clear()
         tabs = self.query_one("#main-tabs", TabbedContent)
         if tabs.active not in self.allowed_tabs:
             tabs.active = "settings"
@@ -169,6 +213,7 @@ class FinOpsApp(App):
             else:
                 tabs.hide_tab(tab)
         self.refresh_bindings()
+        self.update_key_hints()
 
     @work(exclusive=True, group="view")
     async def action_refresh(self):
@@ -186,14 +231,22 @@ class FinOpsApp(App):
             display_identity = self.present(self.identity)
             who = display_identity.get("email", display_identity.get("name", "caller"))
             scope = scope_label(display_identity)
-            identity = f"claude-finops  {who}  [{self.identity.get('role', 'unknown')}] {scope}\n{self.engine.month} | {self.engine.backend.name} | fetched {stamp}"
+            identity = f"{self.engine.month} | {self.engine.backend.name} | {self.identity.get('role', 'unknown')} | {who} | fetched {stamp}"
+            if scope:
+                identity += " | " + scope
             self.query_one("#identity", Static).update(safe_text(identity))
-            self.query_one("#status", Static).update("Enter details | " + ("e edit, : more actions | " if self.editable else "Read-only | ") + "r refresh | ? help")
-            self.query_one(f"#table-{tab}", DataTable).focus()
+            self.query_one("#status", Static).update("<Enter> details  <Tab> next panel  <Ctrl+F> lookup  <r> refresh" +
+                                                    ("  [redacted / read-only]" if self.redactor.enabled else ""))
+            if tab == "overview":
+                self.query_one("#dash-kpis", DashboardPanel).focus()
+            else:
+                self.query_one(f"#table-{tab}", DataTable).focus()
         except FinOpsError as error:
             self.data.pop(tab, None)
             self.records.pop(tab, None)
             self.query_one(f"#table-{tab}", DataTable).clear(columns=True)
+            if tab == "overview":
+                self.query_one(Dashboard).clear()
             self.query_one(f"#note-{tab}", Static).update(str(error))
             fix = "Check managed scope in Settings; r refreshes." if error.code == 4 else "r retries; ? explains sign-in."
             self.query_one("#status", Static).update(f"Read failed (exit {error.code}). {fix}")
@@ -201,12 +254,19 @@ class FinOpsApp(App):
     async def load_tab(self, tab):
         read = self.engine.read
         if tab == "overview":
-            overview, budgets, ranking = await asyncio.gather(
+            overview, budgets, ranking, teams, trends, anomalies, catalog = await asyncio.gather(
                 asyncio.to_thread(read, "overview"), asyncio.to_thread(read, "budgets"),
-                asyncio.to_thread(read, "distribution", dimension="organization", limit=10))
-            return dict(overview=overview, budgets=budgets, ranking=ranking)
+                asyncio.to_thread(read, "distribution", dimension="organization", limit=10),
+                asyncio.to_thread(read, "distribution", dimension="department", limit=10),
+                asyncio.to_thread(read, "trends", interval="day", group_by="none"),
+                asyncio.to_thread(read, "anomalies", limit=10),
+                asyncio.to_thread(read, "catalog"))
+            return dict(overview=overview, budgets=budgets, ranking=ranking, teams=teams,
+                        trends=trends, anomalies=anomalies, catalog=catalog)
         if tab == "budgets":
-            return await asyncio.to_thread(read, "budgets")
+            budgets, catalog = await asyncio.gather(asyncio.to_thread(read, "budgets"), asyncio.to_thread(read, "catalog"))
+            modes = {row["id"]: enforcement_badge(row) for key in ("organizations", "departments") for row in catalog[key]}
+            return dict(budgets, enforcement_modes=modes)
         if tab == "people":
             catalog = await asyncio.to_thread(read, "catalog")
             select = self.query_one("#people-team", Select)
@@ -237,7 +297,7 @@ class FinOpsApp(App):
         if tab == "anomalies":
             return await asyncio.to_thread(read, "anomalies", limit=100)
         return dict(**self.identity, backend=self.engine.backend.name, month=self.engine.month,
-                    url=self.config.url or "(not used)", config="~/.claude-finops/config.json",
+                    url=self.config.url or "(not used)", config="~/.aum/config.json (legacy config supported)",
                     theme=self.theme, ascii=self.config.ascii,
                     sign_in="az login", sign_out="az logout (outside this app)",
                     accessibility="--plain, --no-color, --ascii; Tab/Shift+Tab; all states have words")
@@ -245,6 +305,15 @@ class FinOpsApp(App):
     def render_tab(self, tab, data):
         _, _, records, _ = view_rows(tab, data, ascii_only=self.config.ascii)
         columns, rows, _, note = view_rows(tab, self.present(data), ascii_only=self.config.ascii)
+        query = self.filters.get(tab, "")
+        if tab == "overview":
+            self.query_one(Dashboard).update_data(self.present(data), data, query)
+            generated = data.get("overview", {}).get("generated_at")
+            note = f"Source as of {generated or 'unknown'} | UTC month | Enter panel: exact facts; estimates are not invoices."
+        elif query:
+            matches = [(row, record) for row, record in zip(rows, records) if query.casefold() in " ".join(map(str, row)).casefold()]
+            rows, records = [row for row, _ in matches], [record for _, record in matches]
+            note = f"Filter: {query} | {len(rows)} visible matches | Esc clears"
         self.records[tab] = records
         table = self.query_one(f"#table-{tab}", DataTable)
         table.clear(columns=True)
@@ -258,6 +327,31 @@ class FinOpsApp(App):
                     table.move_cursor(row=index)
                     break
             self.pending_selection = None
+
+    def action_filter(self):
+        field = self.query_one("#quick-filter", Input)
+        field.display = True
+        field.value = self.filters.get(self.active, "")
+        field.focus()
+
+    @on(Input.Changed, "#quick-filter")
+    def filter_changed(self, event):
+        self.filters[self.active] = event.value[:200]
+        if self.active in self.data:
+            self.render_tab(self.active, self.data[self.active])
+
+    @on(Input.Submitted, "#quick-filter")
+    def filter_submitted(self):
+        self.query_one("#quick-filter", Input).display = False
+        self.query_one("#dash-kpis" if self.active == "overview" else f"#table-{self.active}").focus()
+
+    def action_clear_filter(self):
+        self.query_one("#quick-filter", Input).value = ""
+        self.query_one("#quick-filter", Input).display = False
+        self.filters.pop(self.active, None)
+        if self.active in self.data:
+            self.render_tab(self.active, self.data[self.active])
+        self.query_one("#dash-kpis" if self.active == "overview" else f"#table-{self.active}").focus()
 
     @on(Input.Submitted, "#people-query")
     @on(Button.Pressed, "#find-people")
@@ -397,7 +491,7 @@ class FinOpsApp(App):
     def action_help(self):
         keys = dict(tabs=", ".join(label for tab, label in TABS if tab in self.allowed_tabs),
                     navigation="Tab / Shift+Tab changes focus; arrows move; Enter opens exact values; Esc goes back.",
-                    lookup="/ searches units, teams, models and request:<id>; people use the current People team.",
+                    lookup="Ctrl+F searches scopes, people, models and request:<id>; / filters the current view.",
                     commands=": opens the command palette; m changes month; r refreshes; q quits.",
                     current_view=self.active, role=self.identity.get("role", "unknown"),
                     pagination="n next / p previous on People and Requests; requests are capped at 200 per window.",

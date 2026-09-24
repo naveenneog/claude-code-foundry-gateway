@@ -77,7 +77,12 @@ class Config:
 
 
 def load_config(path: Path | None = None, **overrides) -> Config:
-    path = path or Path(os.environ.get("CLAUDE_FINOPS_CONFIG", Path.home() / ".claude-finops" / "config.json"))
+    if path is None:
+        explicit = os.environ.get("AUM_CONFIG") or os.environ.get("CLAUDE_FINOPS_CONFIG")
+        path = Path(explicit) if explicit else Path.home() / ".aum" / "config.json"
+        legacy = Path.home() / ".claude-finops" / "config.json"
+        if not explicit and not path.exists() and legacy.exists():
+            path = legacy
     values = {}
     if path.exists():
         try:
@@ -90,7 +95,7 @@ def load_config(path: Path | None = None, **overrides) -> Config:
     config = Config(**values).validate()
     if config.backend == "turnstile" and (not config.url or not config.scope):
         if not config.resource_group or not config.apim_name:
-            raise FinOpsError("Set url and scope in ~/.claude-finops/config.json, or pass --url and --scope. For discovery set resource_group and apim_name.")
+            raise FinOpsError("Set url and scope in ~/.aum/config.json, or pass --url and --scope. For discovery set resource_group and apim_name.")
         raw = az("apim", "nv", "show", "-g", config.resource_group, "--service-name", config.apim_name,
                  "--named-value-id", "turnstile-integration", "--query", "value", "-o", "tsv")
         settings = parse_integration(raw)

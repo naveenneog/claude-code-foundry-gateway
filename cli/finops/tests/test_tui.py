@@ -35,7 +35,7 @@ async def test_lookup_jumps_to_scope():
     app = example()
     async with app.run_test(size=(80, 24)) as pilot:
         await settle(app, pilot)
-        await pilot.press("/")
+        await pilot.press("ctrl+f")
         await pilot.pause()
         app.screen.query_one("#lookup-query", Input).value = "sales-emea"
         await pilot.press("enter")
