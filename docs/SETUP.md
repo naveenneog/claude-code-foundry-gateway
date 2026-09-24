@@ -163,6 +163,20 @@ az role assignment list --assignee $(az ad signed-in-user show --query id -o tsv
 scope. To grant the gateway role manually: Foundry account > IAM > Add role
 assignment > Cognitive Services User > Managed identity > select the gateway.
 
+The live Foundry **Access control (IAM)** blade exposes **Check access**,
+**Role assignments**, **Roles** and **Deny assignments** tabs. On **Check access**,
+**View my access** inspects the operator; **Check access** lets an authorised
+operator inspect another principal. Choose **Role assignments** to review direct
+and inherited grants before making a change.
+
+![Live Foundry Access control IAM blade with Check access selected, View my access and Add role assignment controls, and Contoso-substituted resource and account names](guide/docs-review-live-foundry-iam.png)
+
+This screenshot was captured read-only on 2026-09-24 UTC. No role assignment
+was created or removed during the capture. For the equivalent CLI read, use the
+role-assignment listing above; for another principal use its verified object
+ID and the actual Foundry account scope, as in
+[closing the bypass](#42-close-the-bypass).
+
 > **The common failure.** People with Contributor on the resource group assume
 > they are covered, then the deployment fails at the role-assignment step with
 > `AuthorizationFailed`. Creating a role assignment requires

@@ -23,6 +23,24 @@ values: replace them rather than sending requests to an example deployment.
 
 ## 1. Select the gateway and workspace
 
+Do not copy another deployment's resource names or choose the first search
+result. The examples use placeholders; the live objects come from discovery.
+For an interactive deployment, use the installer's numbered discovery lists.
+For an existing gateway, enumerate the choices before setting the variables:
+
+```powershell
+az account list --query "[].{subscription:name, id:id, tenant:tenantId, current:isDefault}" -o table
+az account show --query "{subscription:id, tenant:tenantId}" -o table
+az group list --query "[].{name:name, location:location}" -o table
+az apim list --query "[].{name:name, group:resourceGroup, region:location, tier:sku.name}" -o table
+```
+
+Prefer the target returned by `scripts/Get-ClaudeGatewayTarget.ps1` when it
+matches the intended deployment. Otherwise choose from the actual list and
+pass explicit `-ResourceGroup` / `-ApimName`; never replace a missing recorded
+target with a deployment-specific default. Subscription-wide Reader visibility
+can differ from access to one known resource.
+
 1. Read `onboarding/claude-gateway.json` from your deployment, not another team's
    copy. If it is missing, get the values from the resource owner.
 2. Sign in and explicitly select the subscription before any write:
@@ -39,6 +57,13 @@ values: replace them rather than sending requests to an example deployment.
    **Portal:** Directories + subscriptions > select the directory/subscription;
    Resource groups > your gateway group > API Management > Overview. Copy
    the resource group, name and resource ID. Foundry may be in a different group.
+
+   On the live **Overview > Essentials** panel, the fields are **Resource group**,
+   **Status**, **Location**, **Subscription**, **Subscription ID**, **Gateway URL**
+   and **Tier**. Check the selected resource and tier before continuing; `Online`
+   is a resource status, not proof of an inference request.
+
+   ![Live Azure API Management Overview showing the Essentials fields, an Online Basic v2 gateway, and fully substituted Contoso resource and subscription values](guide/docs-review-live-apim-overview.png)
 
 3. Discover the two telemetry routes rather than choosing the first workspace:
 
@@ -189,3 +214,36 @@ unexpected continuing usage after billing data arrives.
 - [Reference](REFERENCE.md) — repository map and contributor checks.
 - [Releasing](RELEASING.md) — versioning and release validation.
 - [Authentication](AUTHENTICATION.md) and [Network](NETWORK.md) — security reviews.
+
+## Live verification record and limits
+
+On **2026-09-24 UTC**, the review discovered available subscriptions and Claude
+gateways rather than using a saved deployment name, then selected the default-
+install gateway from those options. The actual gateway logger resolved its
+Application Insights resource and workspace. The following live **reads**
+completed using explicit discovered targets:
+
+| Flow | Operation | Verification |
+|---|---|---|
+| Tier reference | `Set-ClaudeTier.ps1 -List` | Returned the deployed tier configuration |
+| Personal budget inspection | `Get-ClaudeBudget.ps1 -AsJson` | Parsed the organisation/developers shape and returned developer records |
+| Unit spend inspection | `Get-ClaudeBusinessUnit.ps1 -AsJson` | Returned unit records with `ledger_read=true` |
+| Named-value capacity | `Measure-ClaudeCeiling.ps1` | Completed its live headroom check |
+| Saved-function discovery | `Publish-ClaudeQueries.ps1 -List` | Found `ClaudeChargeback`, `ClaudeCodeDaily` and `ClaudeCost` |
+| Workbook discovery | `Publish-ClaudeWorkbook.ps1 -List` | Returned the published workbook links |
+
+The Overview image above and the [Foundry IAM image](SETUP.md#21-you--the-person-running-the-deployment)
+are live portal captures with identifiers replaced, not fabricated portal pages.
+They prove those read-only blades rendered; they do **not** prove a role was
+granted, a budget changed, an end-to-end client succeeded or an invoice reconciled.
+
+**Portal verification stopped when an authentication surface was detected while
+opening Named values.** No sign-in was attempted. Unpopulated/loading captures
+were rejected, and no sign-in image is presented as an operation. A fresh
+owner-authorised session is needed before completing the remaining portal
+walkthroughs and screenshots.
+
+Write/restore/deletion, role/group lifecycle, full client setup, private
+deployment and release procedures were **not rerun by this documentation
+review**. Existing dated evidence is linked in their respective guides; this
+limited read verification must not be used as a blanket live-acceptance receipt.
