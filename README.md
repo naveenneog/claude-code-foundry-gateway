@@ -617,6 +617,10 @@ journeys that span several guides:
 | [Developer](DEVELOPER.md) | **developers** | one command, using it, what to do when it fails — nothing else |
 | [Setup](docs/SETUP.md) | platform team | prerequisites, **roles and permissions**, deployment, closing the bypass |
 | [Onboarding](docs/ONBOARDING.md) | platform team | add a developer, change tiers, revoke, offboard |
+| [Operations](docs/OPERATIONS.md) | platform team | targets, roles, daily tasks, backup/restore and safe retirement |
+| [Budgets](docs/BUDGETS.md) | platform team | token ceilings, overrides, model limits and verification |
+| [FinOps](docs/FINOPS.md) | finance and budget holders | closed-month export, allocation, reconciliation limits and consoles |
+| [Reference](docs/REFERENCE.md) | contributors and operators | repository layout, commands, encoding and quoting |
 | [Business units](docs/BUSINESS-UNITS.md) | platform team, FinOps | business units, teams, tiers, dollar budgets, who is unassigned |
 | [Migration](docs/MIGRATION.md) | platform team | moving off first-party Claude at scale: what survives, MDM push, bulk entitlement |
 | [Monitoring](docs/MONITORING.md) | whoever owns the spend | metrics, filters, chargeback, KQL, alerts |
