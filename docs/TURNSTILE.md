@@ -61,8 +61,10 @@ server's profile response, not a fabricated Settings panel.*
 ### Evidence boundaries
 
 - Phase 1 captures are the **Owner's** view. They are not claimed as Viewer or Manager
-  evidence. Phase 2's manager-only browser journey is prepared but waits for an exclusive
-  operator-authorized window; it must not interrupt another administrator's saves.
+  evidence. The separately authorized Phase 2 group-only attempt found a direct User
+  Admin assignment that survived group removal; it stopped rather than presenting an
+  Admin+Manager token as Manager-only. Memberships, catalog and named values were restored.
+  A changed plan needs separate authorization; it must not interrupt another operator's saves.
 - The Entra overview, exposed API, app-role and enterprise Properties images are now
   **live Azure portal captures** from the copied, already-authenticated profile. The
   manifest distinguishes `owner_portal` from CLI command output. Users and groups remains

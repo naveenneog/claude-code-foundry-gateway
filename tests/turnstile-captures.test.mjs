@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { chromium } from 'playwright';
 import { Redactor, catalogWrite, snapshotText, capturePixels } from '../guide/lib/turnstile-live.mjs';
-import { executionMode, managerClaims } from '../guide/capture-turnstile-manager.mjs';
+import { executionMode, managerClaims, freshRole, directWiderRoles } from '../guide/capture-turnstile-manager.mjs';
 import { chosenOption } from '../guide/lib/azure-targets.mjs';
 
 export function manifestProblems(images, entries, readImage) {
@@ -110,6 +110,20 @@ test('a cached Admin, Viewer, missing group or overage token can never be presen
   assert.equal(managerClaims(manager, 'other-group'), false);
   assert.equal(managerClaims({ ...manager, hasgroups: true }, 'unit-group'), false);
   assert.equal(managerClaims({ ...manager, hasgroups: false }, 'unit-group'), false);
+});
+test('role-transition proof rejects tokens minted before the transition', () => {
+  assert.equal(freshRole({ iat: 100, roles: ['Turnstile.Manager'] }, 'Turnstile.Manager', 100_000), true);
+  assert.equal(freshRole({ iat: 98, roles: ['Turnstile.Manager'] }, 'Turnstile.Manager', 100_000), false);
+  assert.equal(freshRole({ iat: 100, roles: ['Turnstile.Admin'] }, 'Turnstile.Manager', 100_000), false);
+  assert.equal(freshRole({ roles: ['Turnstile.Admin'] }, 'Turnstile.Admin', 100_000), false);
+});
+test('direct Admin or Viewer assignments block a group-only manager transition before writes', () => {
+  const roles = [{ id: 'admin', value: 'Turnstile.Admin' }, { id: 'viewer', value: 'Turnstile.Viewer' },
+    { id: 'manager', value: 'Turnstile.Manager' }];
+  const assignments = [{ principalId: 'self', appRoleId: 'admin' }, { principalId: 'self', appRoleId: 'viewer' },
+    { principalId: 'self', appRoleId: 'manager' }, { principalId: 'another-user', appRoleId: 'admin' }];
+  assert.deepEqual(directWiderRoles(assignments, roles, 'self'), ['Turnstile.Admin', 'Turnstile.Viewer']);
+  assert.deepEqual(directWiderRoles(assignments, roles, 'unassigned'), []);
 });
 test('the frozen rendered-DOM detector joins split SVG labels and checks displayed input values', () => {
   const snapshot = {
