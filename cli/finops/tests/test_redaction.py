@@ -1,5 +1,6 @@
 from copy import deepcopy
 import json
+from time import perf_counter
 
 import pytest
 
@@ -64,3 +65,14 @@ def test_ids_and_names_are_redacted_consistently_in_nested_settings():
     view = Redactor(True).present(data)
     assert view["user_id"] == view["created_by"]
     assert "Private" not in json.dumps(view)
+
+
+def test_bounded_request_page_redaction_is_interactive():
+    data = {"items": [{"request_id": f"request-{i:04}", "user_id": f"user-{i}@example.org",
+                       "user_name": f"Private person {i}", "total_tokens": 1000} for i in range(200)]}
+    redactor = Redactor(True)
+    started = perf_counter()
+    rendered = redactor.present(data)
+    elapsed = perf_counter() - started
+    assert not privacy_problems(json.dumps(rendered))
+    assert elapsed < 2, f"Display redaction blocked a bounded request page for {elapsed:.2f}s"

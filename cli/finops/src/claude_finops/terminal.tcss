@@ -15,15 +15,15 @@ Screen {
 TabbedContent { height: 1fr; }
 TabPane { padding: 0 1; }
 DataTable { height: 1fr; }
-.titled-table { border: solid $primary-muted; }
+.titled-table { border: solid $secondary; border-title-color: $foreground; }
 .titled-table:focus { border: solid $accent; }
 .all-metrics { display: none; }
-.ascii .titled-table { border: ascii $primary-muted; }
+.ascii .titled-table { border: ascii $secondary; }
 #note-overview { height: 1; }
 #dashboard { height: 1fr; }
-.dashboard-panel { border: solid $primary-muted; padding: 0 1; color: $foreground; overflow: hidden; }
+.dashboard-panel { border: solid $secondary; border-title-color: $foreground; padding: 0 1; color: $foreground; overflow: hidden; }
 .dashboard-panel:focus { border: solid $accent; background: $surface; }
-.ascii .dashboard-panel { border: ascii $primary-muted; }
+.ascii .dashboard-panel { border: ascii $secondary; }
 #dash-kpis { height: 4; }
 #dash-main { height: 1fr; }
 #dash-left { width: 2fr; }

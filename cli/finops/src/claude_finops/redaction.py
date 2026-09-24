@@ -32,10 +32,13 @@ class Redactor:
     def __init__(self, enabled=False):
         self.enabled = enabled
         self.replacements = {}
+        self._pattern = None
 
     def alias(self, value, person=False):
         label = f"person-{digest(value)}@contoso.com" if person else f"contoso-{digest(value)}"
-        self.replacements[str(value)] = label
+        if self.replacements.get(str(value)) != label:
+            self.replacements[str(value)] = label
+            self._pattern = None
         return label
 
     def _learn(self, value, key=""):
@@ -58,8 +61,11 @@ class Redactor:
         if not self.enabled:
             return str(value)
         text = str(value)
-        for original, alias in sorted(self.replacements.items(), key=lambda pair: -len(pair[0])):
-            text = re.sub(r"(?<![\w-])" + re.escape(original) + r"(?![\w-])", lambda _: alias, text)
+        if self.replacements:
+            if self._pattern is None:
+                alternatives = "|".join(re.escape(value) for value in sorted(self.replacements, key=len, reverse=True))
+                self._pattern = re.compile(r"(?<![\w-])(?:" + alternatives + r")(?![\w-])")
+            text = self._pattern.sub(lambda match: self.replacements[match[0]], text)
         text = EMAIL.sub(lambda match: match[0] if match[0].lower().endswith("@contoso.com")
                          else f"person-{digest(match[0])}@contoso.com", text)
         text = GUID.sub(lambda match: f"id-{digest(match[0])}", text)
