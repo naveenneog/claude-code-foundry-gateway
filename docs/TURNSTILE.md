@@ -140,7 +140,7 @@ Set these in `.turnstile/main.parameters.json`. `.turnstile/` is ignored by Git.
 | `entraClientId`, `entraTenantId`, `entraAdminRole` | From step 1 |
 | `entraAllowedEmailDomains` | The domains your administrators sign in with |
 | `bootstrapOwnerEmail` | A break-glass Owner who signs in with a password. Keep its credential in a secret store; daily administration is through Entra |
-| `existingApimName`, `existingApimResourceGroupName`, `existingApimPrincipalId`, `existingApimGatewayUrl` | Optional. Turnstile needs an API Management instance and creates a Standard v2 one if these are empty. **Do not point them at the Claude gateway**: the deployer grants itself custom roles on the instance it uses |
+| `existingApimName`, `existingApimResourceGroupName`, `existingApimPrincipalId`, `existingApimGatewayUrl` | Optional. Turnstile needs an API Management instance and creates a Standard v2 one if these are empty. **Do not point them at the Claude gateway.** The deployer grants itself custom roles on the instance it uses, rewrites the instance's `azuremonitor` logger, and adds a diagnostic setting on the whole instance that sends every API's `GatewayLlmLogs` and `GatewayLogs`, the Claude gateway's included, to Turnstile's workspace (the fork's `infra/modules/apim-integration.bicep`) |
 | `observerPlanSkuName` | The plan for Turnstile's usage observer, P0v3 by default. See [What it costs](#what-it-costs) |
 
 Then deploy:
