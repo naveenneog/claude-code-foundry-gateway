@@ -19,6 +19,75 @@ the reference gateway and a Turnstile deployment in Central US. People, tenant a
 are replaced by example ones: the units are `sales` (teams `sales-emea`, `sales-apac`) and
 `engineering`.
 
+## Live evidence and sign-in without additional grants
+
+For numbered Azure portal/application-GUI steps and equivalent commands, see
+[Turnstile manual operations](manual/turnstile.md). The copied portal profile now supplies
+live application Overview, Expose an API, App roles and enterprise Properties screenshots.
+Users and groups reached a sign-in prompt, so further portal capture stopped without
+attempting authentication. That missing view is not replaced by a claimed portal screenshot.
+
+The pictures below are fresh captures from the **reference deployment**, not examples copied
+from upstream Turnstile. Names, email addresses, tenant/object ids and resource names are
+replaced **before pixels are saved**. Charts keep their measured values. This is why the
+people and units look like examples. The [capture manifest](guide/turnstile-captures.json)
+records each image's UTC capture time, actual route or command, identity kind, fork and
+accelerator revisions, redaction check and image SHA-256.
+
+These captures use the signed-in operator's existing `Turnstile.Admin` assignment and the
+pre-authorized Azure CLI. They do not request admin consent, a new directory role or a new
+user. An operator who cannot obtain further grants can use:
+
+```powershell
+./scripts/Open-ClaudeTurnstile.ps1 -NoBrowser `
+  -TurnstileUrl https://<turnstile-api>.azurewebsites.net `
+  -Scope api://<turnstile-client-id>/Turnstile.Manage
+```
+
+Open the returned single-use link within 60 seconds. The browser redeems it, removes
+`login_code` from the address, and establishes an Entra session. The link and access token
+are not published in the captures. This is not the Microsoft button: that button's
+tenant-wide consent requirement remains unresolved in the reference tenant.
+
+![The consent-free CLI command, browser result and refused replay of the used code](guide/turnstile-16-cli-signin.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
+
+![The live profile endpoint after CLI-code sign-in: Owner, Entra, unrestricted scope](guide/turnstile-13-cli-session.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced. This is the
+server's profile response, not a fabricated Settings panel.*
+
+### Evidence boundaries
+
+- Phase 1 captures are the **Owner's** view. They are not claimed as Viewer or Manager
+  evidence. Phase 2's manager-only browser journey is prepared but waits for an exclusive
+  operator-authorized window; it must not interrupt another administrator's saves.
+- The Entra overview, exposed API, app-role and enterprise Properties images are now
+  **live Azure portal captures** from the copied, already-authenticated profile. The
+  manifest distinguishes `owner_portal` from CLI command output. Users and groups remains
+  a read-only preflight capture, not a portal picture or a membership mutation.
+- The older screenshots of exhausting a real team's budget and revoking the admin
+  assignment are superseded by safe live health/preflight captures. Those destructive
+  historical experiments were **not replayed** for this recapture. Their earlier measured
+  results remain historical results in the tables below.
+- The reversible Owner journey changes only the Standard tier's tokens per minute by
+  **+1**, saves through the UI, reads the resulting named value with `az`, then restores
+  through the UI and verifies the original value. It never lowers a real team's budget
+  to force a refusal. Catalog and budget definitions are compared before and after.
+
+To reproduce with your existing access, set `TURNSTILE_URL`, `TURNSTILE_SCOPE`,
+`TURNSTILE_APP_ID`, `TURNSTILE_SP_ID`, `TURNSTILE_FORK_COMMIT`, `GATEWAY_RG` and
+`GATEWAY_APIM`, then run `npm ci` and `node guide/capture-turnstile-live.mjs`.
+After the restore job succeeds, `node guide/verify-turnstile-live.mjs` checks the saved
+baseline again and captures the successful restored state and readable live profile.
+Private evidence stays in the ignored `.finops-evidence/p53` directory. The default
+`node guide/capture-turnstile-manager.mjs --dry-run` checks current ownership, membership
+and existing assignments **without changing any of them**. Execution requires both
+`--execute --lead-go`, only after the lead authorizes it; recovery runs in `finally`.
+`tests/Test-Screenshots.ps1` rejects missing, undated, non-live or changed-pixel evidence
+and runs mutations proving those failures are detected.
+
 ## One enforcer
 
 The gateway enforces. Turnstile shows, and optionally edits. Keep it that way.
@@ -118,11 +187,17 @@ In the [Microsoft Entra admin center](https://entra.microsoft.com):
 5. **Enterprise applications >** the app **> Properties**. Set **Assignment required?** to **Yes**.
 6. **Users and groups > Add user/group**. Choose the admin group and the role.
 
-![The application: single tenant, one single-page-app redirect](guide/turnstile-entra-1-overview.png)
+![The application Overview blade, captured live in Azure portal](guide/turnstile-entra-1-overview.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
 
 ![Expose an API: the Turnstile.Manage scope, with the Azure CLI authorized](guide/turnstile-entra-2-expose-api.png)
 
-![App roles: Turnstile.Admin for users, groups and applications](guide/turnstile-entra-3-app-roles.png)
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
+
+![Current Admin, Viewer and Manager app roles in the live Azure portal](guide/turnstile-entra-3-app-roles.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
 
 The Authentication, Properties and Users and groups blades asked for a fresh multifactor sign-in
 when captured, so their settings are shown from Microsoft Graph instead, in
@@ -195,7 +270,12 @@ the redirect is the tenant id, not `/organizations`, which is what upstream Turn
 
 ![Turnstile's sign-in page](guide/turnstile-01-signin.png)
 
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
+
 ![Sign in with Microsoft opens the tenant's sign-in page](guide/turnstile-02-entra-signin.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced. Reaching this
+page does not prove consent; the CLI-code journey above proves the working sign-in path.*
 
 ## 4. Connect the gateway
 
@@ -218,6 +298,8 @@ setting to change it, or with `-Disconnect`.
 
 ![The stored connection](guide/turnstile-t01-connect-show.png)
 
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
+
 The value is `key=value;key=value`, with no quotes. On Windows `az` runs through `cmd.exe`,
 which strips double quotes from arguments: measured, JSON written this way came back as
 `{version:1,url:https://...}`.
@@ -228,9 +310,13 @@ which strips double quotes from arguments: measured, JSON written this way came 
 ./scripts/Sync-ClaudeTurnstileGovernance.ps1
 ```
 
-![Three organizations, five departments and four budgets, in 24 seconds](guide/turnstile-t02-sync-to.png)
+![Gateway-to-Turnstile sync refused because Turnstile already authors governance](guide/turnstile-t02-sync-to.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
 
 ![The budget page: units as organizations, teams as departments](guide/turnstile-03-budgets.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
 
 Run it after you change a unit, a team or a budget. `-WhatIf` shows what it would write.
 
@@ -266,15 +352,26 @@ For history, pass dates, and use day slices:
 | Hourly slices, five at a time | 738 | 586.5 s |
 | Day slices, five at a time | 31 | 66.9 s |
 
-![Thirty days exported: 545 requests and 12 hours of cache reads](guide/turnstile-t03-export.png)
+![The current settled window exported through the existing Event Hubs grant](guide/turnstile-t03-export.png)
 
-![Executive overview: 557 calls, $2.9726](guide/turnstile-04-overview.png)
+*Captured live from the reference deployment on 2026-09-24; names replaced. This rerun
+uses the command's current default window, not the historical 30-day benchmark.*
+
+![The current executive overview, from the deployed console](guide/turnstile-04-overview.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
 
 ![Usage by model and department](guide/turnstile-05-analytics.png)
 
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
+
 ![A single request, with Turnstile's own note that cache was not measured](guide/turnstile-06-requests.png)
 
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
+
 ![Anomaly governance](guide/turnstile-07-governance.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
 
 ### What is sent, and why
 
@@ -325,16 +422,25 @@ Turnstile's budget page instead:
 ./scripts/Connect-ClaudeTurnstile.ps1 -BudgetAuthority Turnstile
 ```
 
-![Budgets are now authored in Turnstile](guide/turnstile-t04-authority.png)
+![The existing budget and governance authority, read without a new grant](guide/turnstile-t04-authority.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
 
 Change a unit's or a team's budget in Turnstile, then read it back. Nothing is written without
 `-Apply`:
 
-![The change, read back, and nothing written](guide/turnstile-t05-sync-from-preview.png)
+![The current From-Turnstile preview; nothing written by this command](guide/turnstile-t05-sync-from-preview.png)
 
-![Written to the gateway](guide/turnstile-t06-sync-from-apply.png)
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
 
-![The next request is refused by the gateway](guide/turnstile-t07-gateway-refuses.png)
+![The reversible UI tier save, independently read back on the gateway](guide/turnstile-t06-sync-from-apply.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
+
+![Current live health check; no real budget was lowered to induce a refusal](guide/turnstile-t07-gateway-refuses.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced. The legacy
+filename is retained, but this image no longer claims an induced budget refusal.*
 
 Measured round trip, with the `sales-emea` budget set to 1,000 tokens in Turnstile:
 
@@ -491,9 +597,59 @@ way. **Apply now** applies again without a change, for example after a failed ru
 
 ![Gateway governance: units, teams, tiers and the last apply](guide/turnstile-10-governance.png)
 
+*Captured live from the reference deployment on 2026-09-24; names replaced. Includes the
+current manager-group and budget-enforcement columns.*
+
 ![Editing the Standard tier](guide/turnstile-11-tier-editor.png)
 
-![Applied: the gateway now enforces 20,001 tokens per minute](guide/turnstile-12-applied.png)
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
+
+![The reversible tier change saved in Turnstile and read back on the gateway](guide/turnstile-12-applied.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced. Shows the
+successful restored state; the command capture records the temporary +1 value.*
+
+### Current manager and people controls
+
+The mode round-trip evidence below is recorded separately from the earlier tier proof.
+It uses the already-deployed gateway mode mapping; no directory or role change is involved.
+
+![Notify selected on one existing team, after gateway readback](guide/turnstile-mode-notify.png)
+
+![Notify named value and the succeeded apply, read live](guide/turnstile-mode-notify-apply.png)
+
+![Strict restored on the same team](guide/turnstile-mode-strict.png)
+
+![The restored empty exceptions map and succeeded apply](guide/turnstile-mode-strict-apply.png)
+
+*Captured live from the reference deployment on 2026-09-24 UTC; names replaced. These
+images are generated only after the corresponding named-value readback and successful
+apply. `guide/capture-turnstile-modes.mjs` restores the original authored catalog as well
+if the starting Strict mode was implicit rather than an explicit attribute.*
+
+Measured on 2026-09-24 UTC, in one short window:
+
+| UI save | Independently observed on the gateway | Save to first matching value | Save to verified successful apply |
+|---|---|---|---|
+| Team to Notify | `,sales-emea=notify,` (team id replaced for publication) | 113.363 s | 151.762 s |
+| Same team back to Strict | Exactly `,,` | 113.152 s | 150.898 s |
+
+The original catalog had no explicit mode attribute, so the owner also selected **Gateway
+default** and waited for that apply to succeed. This removed only the temporary authored
+attribute; `bu-modes` remained `,,`. Final verification at **21:19:58.703Z** found the
+authored catalog and every non-secret named value identical to the original snapshot,
+with budget definitions and tiers unchanged. No group/role was changed and no quota
+exhaustion was induced. This proves UI-to-gateway mode mapping, not a billing guarantee.
+
+![Owner editing a manager-group object id and allowance mode; cancelled without saving](guide/turnstile-15-manager-editor.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced. The fields are
+the deployed editor, not a design mockup; the allowance selection was cancelled.*
+
+![The live people budget panel](guide/turnstile-14-people.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced. This is the
+Owner's people panel, not evidence of a manager-only sign-in.*
 
 Measured from the save to the gateway, reading the named value with `az` every 5 s and sending a
 request every 10 s:
@@ -573,9 +729,14 @@ Three layers, each measured.
 **Entra refuses the token.** With the admin group's assignment removed, Entra refused a token 5 s
 later with `AADSTS50105`, and issued one again 22 s after the assignment was restored:
 
-![The application as configured, from Microsoft Graph](guide/turnstile-t08-entra-config.png)
+![The enterprise application's Properties blade, captured live in Azure portal](guide/turnstile-t08-entra-config.png)
 
-![Only the admin group can get a token](guide/turnstile-t09-entra-mutation.png)
+*Captured live from the reference deployment on 2026-09-24; names replaced.*
+
+![Live Phase 2 preflight: current ownership and assignments, with no membership changes](guide/turnstile-t09-entra-mutation.png)
+
+*Captured live from the reference deployment on 2026-09-24; names replaced. This is the
+dry run, not a fresh revocation experiment or a manager access proof.*
 
 **Turnstile checks the tenant and the role.** It accepts an Entra access token only when both
 `ENTRA_ADMIN_ROLE` and `ENTRA_TENANT_IDS` are set, only from a pinned tenant, and only with the

@@ -7,10 +7,36 @@
 # Everything here is non-destructive: the wizard runs with -WhatIf and stops at
 # the summary.
 
-$ErrorActionPreference = 'Continue'
+param(
+    [string]$SubscriptionId,
+    [string]$ResourceGroup,
+    [string]$ApimName,
+    [string]$FoundryAccount,
+    [string]$RedactionsFile = $env:REDACTIONS_FILE,
+    [switch]$NonInteractive,
+    [ValidateSet('All', 'Wizard')][string]$Flow = 'All'
+)
+
+$ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $out = Join-Path $root 'docs/transcripts'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
+if (-not $RedactionsFile -or -not (Test-Path $RedactionsFile)) {
+    throw 'Supply -RedactionsFile with the private real-to-Contoso replacement map.'
+}
+$replacementPairs = Get-Content $RedactionsFile -Raw | ConvertFrom-Json
+$selectionFile = Join-Path $out "discovery-$PID.json"
+$selectionArgs = @((Join-Path $root 'guide/discover-targets.mjs'), '--resources', 'apim,foundry', '--output', $selectionFile)
+if ($SubscriptionId) { $selectionArgs += @('--subscription', $SubscriptionId) }
+if ($ResourceGroup) { $selectionArgs += @('--resource-group', $ResourceGroup) }
+if ($ApimName) { $selectionArgs += @('--apim-name', $ApimName) }
+if ($FoundryAccount) { $selectionArgs += @('--foundry', $FoundryAccount) }
+if ($NonInteractive) { $selectionArgs += '--non-interactive' }
+& node @selectionArgs
+if ($LASTEXITCODE) { throw 'Discovery failed; nothing captured.' }
+$target = Get-Content $selectionFile -Raw | ConvertFrom-Json
+$FoundryAccount = $target.foundry.name
+$gatewayBaseUrl = "$($target.apim.gatewayUrl.TrimEnd('/'))/claude"
 
 # Everything captured here ends up in published screenshots, so the operator's
 # own identity, tenant and paths are replaced with the documentation values.
@@ -18,33 +44,41 @@ function Remove-Identifiers {
     param([string]$Text)
     $Text = $Text -replace [regex]::Escape($env:USERPROFILE), '~'
     $Text = $Text -replace [regex]::Escape($root), '.'
-    $Text = $Text -replace '(?i)naveen\.g@microsoft\.com', 'admin@contoso.com'
-    $Text = $Text -replace '(?i)navg@microsoft\.com', 'admin@contoso.com'
-    $Text = $Text -replace 'MCAPS-Hybrid-REQ-[0-9-]+-\w+', 'Contoso-Production'
-    $Text = $Text -replace 'ai-contosohub530569751908', 'ai-contoso-foundry-011234'
-    # Same length as the original, deliberately. These transcripts are rendered
-    # into screenshots, and the scripts pad their columns before this runs - a
-    # shorter replacement leaves every table in the documentation ragged from
-    # that column onward. Matching the width keeps the alignment the script
-    # produced.
-    $Text = $Text -replace 'apim-claude-gw-fzgql9', 'apim-claude-gw-contos'
-    $Text = $Text -replace '16b3c013-d300-468d-ac64-7eda0820b6d3', '11111111-2222-3333-4444-555555555555'
+    foreach ($pair in ($replacementPairs | Sort-Object { -([string]$_[0]).Length })) {
+        # Same length as the original, deliberately: consume/extend table padding rather
+        # than baking equal-width aliases for one customer's resource names into source.
+        $from = [string]$pair[0]
+        $to = [string]$pair[1]
+        $Text = [regex]::Replace($Text, ([regex]::Escape($from) + '(?<padding> {2,})'), {
+            param($match)
+            $width = $match.Length
+            if ($to.Length -ge $width) { throw 'Replacement does not fit the table column; supply a shorter Contoso placeholder.' }
+            return $to.PadRight($width)
+        })
+        $Text = $Text.Replace([string]$pair[0], [string]$pair[1])
+    }
+    $Text = $Text -replace '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', 'admin@contoso.com'
     $Text = $Text -replace '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '00000000-0000-0000-0000-000000000000'
-    $Text = $Text -replace 'rg-contosohub', 'rg-contoso-ai'
-
-    # The account-discovery step lists every Cognitive Services account in the
-    # subscription, so real resource names appear. Scrub the operator-specific
-    # tokens generically rather than enumerating each name - a new resource
-    # would otherwise leak silently the next time this runs.
-    $Text = $Text -replace '(?i)\bai-navgai[0-9]+\b', 'ai-contoso-foundry'
-    $Text = $Text -replace '(?i)\bai-navg[-0-9]*\b', 'ai-contoso-eval'
-    $Text = $Text -replace '(?i)\bnaveen[a-z0-9-]*\b', 'contoso-service'
-    $Text = $Text -replace '(?i)\bnavg[a-z0-9-]*\b', 'contoso-service'
-    $Text = $Text -replace '(?i)\bmcaps[a-z0-9-]*\b', 'contoso-safety'
-    $Text = $Text -replace '(?i)\brg-navg[a-z0-9-]*\b', 'rg-contoso-ai'
-    $Text = $Text -replace '(?i)\bneo-pikachu\b', 'rg-contoso-ai'
+    foreach ($pair in $replacementPairs) {
+        if ($pair[0] -ne $pair[1] -and $Text.Contains([string]$pair[0])) {
+            throw 'A real identifier survived transcript redaction.'
+        }
+    }
 
     return $Text
+}
+
+function Save-Record([string]$Name, [string]$Command, [int]$ExitCode) {
+    $manifest = Join-Path $out 'manifest.json'
+    $records = if (Test-Path $manifest) { @(Get-Content $manifest -Raw | ConvertFrom-Json) } else { @() }
+    $records = @($records | Where-Object file -ne "$Name.txt") + @([ordered]@{
+        file = "$Name.txt"
+        command = Remove-Identifiers $Command
+        live = $true
+        captured_at_utc = [datetime]::UtcNow.ToString('o')
+        exit_code = $ExitCode
+    })
+    ConvertTo-Json -InputObject $records -Depth 5 | Set-Content $manifest -Encoding UTF8
 }
 
 # Write-Host writes to the host, not the pipeline, so `& $block 2>&1 | Out-String`
@@ -65,9 +99,11 @@ function Save-Transcript {
     # [WARN] and [FAIL] markers itself, which reproduces what the operator saw
     # from the same signal rather than inventing one.
     $text = cmd /c "`"$($ps.Source)`" -NoProfile -File `"$ScriptPath`" $argLine" | Out-String -Width 96
+    $code = $LASTEXITCODE
 
     $text = Remove-Identifiers $text
     $text | Set-Content (Join-Path $out "$Name.txt") -Encoding UTF8
+    Save-Record $Name "$ScriptPath $argLine" $code
     $n = (Get-Content (Join-Path $out "$Name.txt")).Count
     Write-Host "  -> $Name.txt  ($n lines)" -ForegroundColor DarkGray
 }
@@ -86,10 +122,12 @@ function Save-InteractiveTranscript {
     $ps = (Get-Command pwsh -ErrorAction SilentlyContinue) ?? (Get-Command powershell)
     $argLine = ($Arguments | ForEach-Object { if ($_ -match '\s') { "`"$_`"" } else { $_ } }) -join ' '
     $text = cmd /c "`"$($ps.Source)`" -NoProfile -File `"$ScriptPath`" $argLine < `"$answerFile`"" | Out-String -Width 96
+    $code = $LASTEXITCODE
 
     Remove-Item $answerFile -Force -ErrorAction SilentlyContinue
     $text = Remove-Identifiers $text
     $text | Set-Content (Join-Path $out "$Name.txt") -Encoding UTF8
+    Save-Record $Name "$ScriptPath $argLine" $code
     Write-Host "  -> $Name.txt" -ForegroundColor DarkGray
 }
 
@@ -97,9 +135,17 @@ function Save-InteractiveTranscript {
 #    -FoundryAccount is supplied so discovery is skipped: on a subscription with
 #    dozens of Cognitive Services accounts that step prints a long list and is
 #    slow, and it is not what this screenshot is for. The prompts are.
+if ($NonInteractive) {
+    Save-Transcript 'admin-wizard' (Join-Path $root 'Install-ClaudeGateway.ps1') @(
+        '-WhatIf', '-Yes', '-SubscriptionId', $target.subscriptionId,
+        '-FoundryAccount', $FoundryAccount, '-FoundryResourceGroup', $target.foundry.resourceGroup,
+        '-ResourceGroup', $target.resourceGroup
+    )
+}
+else {
 Save-InteractiveTranscript 'admin-wizard' `
     (Join-Path $root 'Install-ClaudeGateway.ps1') `
-    @('-WhatIf', '-FoundryAccount', 'ai-contosohub530569751908') @(
+    @('-WhatIf', '-FoundryAccount', $FoundryAccount) @(
         'y'          # use the current subscription
         ''           # resource group
         ''           # location
@@ -114,6 +160,9 @@ Save-InteractiveTranscript 'admin-wizard' `
         ''           # standard group
         ''           # premium group
     )
+}
+
+if ($Flow -eq 'Wizard') { return }
 
 # 2. The developer setup, real run, nothing installed.
 Save-Transcript 'workstation-setup' `
@@ -128,7 +177,7 @@ Save-Transcript 'onboarding-email' `
 # 4. The health check.
 Save-Transcript 'governance-checks' `
     (Join-Path $root 'scripts/Debug-ClaudeCode.ps1') `
-    @('-GatewayBaseUrl', 'https://apim-claude-gw-fzgql9.azure-api.net/claude', '-SkipLiveCall')
+    @('-GatewayBaseUrl', $gatewayBaseUrl, '-SkipLiveCall')
 
 # 5. The network check, on a machine where everything works.
 Save-Transcript 'network-check' `
