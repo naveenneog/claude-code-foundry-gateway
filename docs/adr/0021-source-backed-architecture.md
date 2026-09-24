@@ -101,3 +101,22 @@ Pinned external types are not claimed as declarations in the current local check
 When P50 is merged, local Bicep and scripts replace the snapshots, invalidating the old
 manifest and requiring review and regeneration. This is the same adoption rule used for
 the terminal implementation, not a separate renderer or an exception to drift checking.
+
+## Live evidence and discovery
+
+The owner's standing requirement adds live, redacted evidence and portal/CLI inspection
+paths beside the concept diagrams. Keep live screenshots under `docs/images/architecture-live`,
+separate from deterministic diagram outputs. Discover selected Azure resources; no tenant,
+subscription, gateway, workspace or hostname is a checked-in default.
+
+The capture tool uses only the copied worktree profile, stops on a visible sign-in page,
+waits for actual content in visible portal frames, and stages captures privately.
+Display redaction must not alter hidden OAuth fields, passwords, textarea/select values
+or application input values. Sensitive input pixels are overlaid, not rewritten.
+Only individually reviewed image ids can be published, with hashes and identifier-free receipts.
+
+The live pass proved a small authenticated request and log/trace join, Owner sign-in and
+single-use code replay refusal, and read-only terminal views. It also exposed a stopped
+console database, a projection 503 and a pending governance difference. The coverage
+table records what was not exercised. Neither a screenshot nor an offline gate may
+silently convert these limits into a claim that every flow passed live.

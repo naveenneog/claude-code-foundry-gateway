@@ -6,6 +6,12 @@ also explains the optional entitlement projection, Turnstile governance console 
 AUM (Azure Usage Management), the terminal FinOps console. It is a concept article; use the linked how-to guides to deploy or
 operate each part.
 
+For current operational evidence, use
+[Verify the architecture in the Azure portal](architecture/LIVE-VERIFICATION.md).
+It pairs portal inspections with Azure CLI commands and redacted live screenshots.
+Its coverage table distinguishes successful live requests and sign-in from configuration
+inspection, prior job history and tests still blocked or deliberately not performed.
+
 ## Overview
 
 API Management is the enforcement point. It validates the caller's Microsoft Entra token,
@@ -487,6 +493,13 @@ document references, broken code-label witnesses, duplicate/unsafe output paths,
 escapes and unrepresented Azure resource types. Its isolated mutations prove those failures without
 editing the real sources; commented Bicep examples and line-ending conversion are
 positive controls.
+
+Live screenshots are separate from deterministic diagrams. The capture tools discover
+real resource choices, use only a copied worktree browser profile, stop at sign-in, wait
+for loaded visible frames and stage Contoso-redacted images privately. Publication
+requires explicit reviewed image ids. Hidden authentication fields and input values
+are not rewritten. These checks protect the evidence pipeline; a screenshot is not a
+replacement for a successful flow test.
 
 The Turnstile fork carries small, pinned upstream code witnesses inside its spec. These
 are an explicitly versioned external contract, **not a live check of another repository's

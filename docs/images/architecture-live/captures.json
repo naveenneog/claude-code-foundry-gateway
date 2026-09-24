@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "captures": [
+    {
+      "id": "foundry-access",
+      "title": "6. Foundry access control boundary",
+      "status": "captured",
+      "image": "docs/images/architecture-live/foundry-access.png",
+      "sha256": "7fdb28ca065cdfef72acc108630fc4d666b6a7895af2d5cb624db01f881a08fa",
+      "capturedUtc": "2026-09-24T19:36:58.107Z"
+    },
+    {
+      "id": "foundry-overview",
+      "title": "5. Customer-owned Foundry account",
+      "status": "captured",
+      "image": "docs/images/architecture-live/foundry-overview.png",
+      "sha256": "9502c4ef01a6a51565be0a3b0d7d4587c7e0e5cf3679c424dd7a53a35bc65f6b",
+      "capturedUtc": "2026-09-24T19:36:44.085Z"
+    },
+    {
+      "id": "gateway-apis",
+      "title": "4. The governed API and policy entry point",
+      "status": "captured",
+      "image": "docs/images/architecture-live/gateway-apis.png",
+      "sha256": "992fec13790a9f1102666f4193c662c85df56e4c361b713cd933c33bfc162425",
+      "capturedUtc": "2026-09-24T20:50:00.339Z"
+    },
+    {
+      "id": "gateway-identity",
+      "title": "2. Gateway managed identity",
+      "status": "captured",
+      "image": "docs/images/architecture-live/gateway-identity.png",
+      "sha256": "6f6c371cc5576cbbf8a54c625f8d4c608d239df26ac8c01ecac12e6603764bd1",
+      "capturedUtc": "2026-09-24T20:49:15.931Z"
+    },
+    {
+      "id": "gateway-named-values",
+      "title": "3. Entitlement and budget named values",
+      "status": "captured",
+      "image": "docs/images/architecture-live/gateway-named-values.png",
+      "sha256": "3ece9fd5b545052ff659b476546b8aee8a2c9e55ca21fef920b6982b8b5f29e7",
+      "capturedUtc": "2026-09-24T21:13:18.291Z"
+    },
+    {
+      "id": "gateway-overview",
+      "title": "1. Gateway overview and v2 tier",
+      "status": "captured",
+      "image": "docs/images/architecture-live/gateway-overview.png",
+      "sha256": "060bc84a61900e6e94415cf02447b0d52586885f7fce0a9ea801da68cfaf6b73",
+      "capturedUtc": "2026-09-24T19:31:12.776Z"
+    },
+    {
+      "id": "governance-apply-job",
+      "title": "15. governance-apply job and execution history",
+      "status": "captured",
+      "image": "docs/images/architecture-live/governance-apply-job.png",
+      "sha256": "eacff7ae72cd944e58007b1ecf05d58e14e07485f4f8b4190c5d3f1fc34b615c",
+      "capturedUtc": "2026-09-24T20:52:25.033Z"
+    },
+    {
+      "id": "projection-networking",
+      "title": "14. Cosmos private networking",
+      "status": "captured",
+      "image": "docs/images/architecture-live/projection-networking.png",
+      "sha256": "c586c19419b6c7b1cfc58adba65667bb6d36ceac90972070736b7e688f202562",
+      "capturedUtc": "2026-09-24T19:46:33.729Z"
+    },
+    {
+      "id": "reports-admin-job",
+      "title": "15. reports-admin job and execution history",
+      "status": "captured",
+      "image": "docs/images/architecture-live/reports-admin-job.png",
+      "sha256": "3f911b3f68c887bf254c126a4eaaccecd1e2828fd46e072788cd385638079d78",
+      "capturedUtc": "2026-09-24T20:54:20.993Z"
+    },
+    {
+      "id": "reports-dispatcher-job",
+      "title": "15. reports-dispatcher job and execution history",
+      "status": "captured",
+      "image": "docs/images/architecture-live/reports-dispatcher-job.png",
+      "sha256": "bcf0ae7212976ae37220b0c9a803341957be6fb4bf1146f703ccc2043deff783",
+      "capturedUtc": "2026-09-24T20:52:47.442Z"
+    },
+    {
+      "id": "reports-email",
+      "title": "19. Dedicated ACS Email resource",
+      "status": "captured",
+      "image": "docs/images/architecture-live/reports-email.png",
+      "sha256": "90235c515fb95cb32175f3b939806d6eca36de1a84fd02ceca51dbcca553beb5",
+      "capturedUtc": "2026-09-24T20:54:56.646Z"
+    },
+    {
+      "id": "reports-generator-job",
+      "title": "15. reports-generator job and execution history",
+      "status": "captured",
+      "image": "docs/images/architecture-live/reports-generator-job.png",
+      "sha256": "edcfec96e8339d6582c1d2c929a213f56d464938d002050a8d3fa9f87a44933c",
+      "capturedUtc": "2026-09-24T20:53:09.812Z"
+    },
+    {
+      "id": "reports-networking",
+      "title": "18. Reports storage network boundary",
+      "status": "captured",
+      "image": "docs/images/architecture-live/reports-networking.png",
+      "sha256": "bd08a6cc086501b6c36ec78a07d994561f7a8f5d7b20da8f3ce947058ac74e27",
+      "capturedUtc": "2026-09-24T20:53:58.724Z"
+    },
+    {
+      "id": "resolver-authentication",
+      "title": "11. Resolver authentication boundary",
+      "status": "captured",
+      "image": "docs/images/architecture-live/resolver-authentication.png",
+      "sha256": "c6567a7ba8ba55ab150b87e30cb880bbdf2974411af8b157d1b0e8951a34c0b3",
+      "capturedUtc": "2026-09-24T21:13:40.758Z"
+    },
+    {
+      "id": "resolver-networking",
+      "title": "12. Resolver private networking",
+      "status": "captured",
+      "image": "docs/images/architecture-live/resolver-networking.png",
+      "sha256": "b103e704e8b3b70dbf90550bd522506cdb2ee273263cae47da1b3368c0150a83",
+      "capturedUtc": "2026-09-24T21:14:03.088Z"
+    },
+    {
+      "id": "telemetry-tables",
+      "title": "8. Request and attribution tables",
+      "status": "captured",
+      "image": "docs/images/architecture-live/telemetry-tables.png",
+      "sha256": "7ebf95b4599913b30a4361d7d8b9e67fefd0443618b6da89627a04be3e986178",
+      "capturedUtc": "2026-09-24T20:50:36.182Z"
+    },
+    {
+      "id": "telemetry-workspace",
+      "title": "7. Log Analytics telemetry workspace",
+      "status": "captured",
+      "image": "docs/images/architecture-live/telemetry-workspace.png",
+      "sha256": "0b0ff9e3ed1628fc3b13ff67d50e22f80a0a108d4ec12ea2a2867cd7b4a0cc32",
+      "capturedUtc": "2026-09-24T20:50:22.735Z"
+    },
+    {
+      "id": "terminal-budgets",
+      "title": "Live AUM terminal core - budgets",
+      "status": "captured",
+      "image": "docs/images/architecture-live/terminal-budgets.png",
+      "sha256": "492e91022b64238e3c315e3ce97584acec37d9af031d23871550995d6581a09f",
+      "capturedUtc": "2026-09-24T20:40:22.299Z"
+    },
+    {
+      "id": "terminal-overview",
+      "title": "Live AUM terminal core - overview",
+      "status": "captured",
+      "image": "docs/images/architecture-live/terminal-overview.png",
+      "sha256": "d310ca4dc2037862a0571020ebc9a3fb912c4b7f6a21e547812374c824aac0ad",
+      "capturedUtc": "2026-09-24T20:40:21.730Z"
+    },
+    {
+      "id": "turnstile-app-roles",
+      "title": "21. Delegated console app roles",
+      "status": "captured",
+      "image": "docs/images/architecture-live/turnstile-app-roles.png",
+      "sha256": "846b24769af02f2108913426a7cee80e9d243a6c1ab7884c2082784e271f87da",
+      "capturedUtc": "2026-09-24T20:05:05.375Z"
+    }
+  ]
+}

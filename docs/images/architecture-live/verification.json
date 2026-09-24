@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "completeUnderStandingRequirements": false,
+  "checks": [
+    {
+      "flow": "request-authentication",
+      "check": "missing-token",
+      "http": 401,
+      "passed": true
+    },
+    {
+      "flow": "request-serve",
+      "check": "eight-token-maximum-request",
+      "http": 200,
+      "gatewayHeader": true,
+      "tier": "standard",
+      "passed": true,
+      "promptTokens": 14,
+      "completionTokens": 4,
+      "errorType": null
+    },
+    {
+      "flow": "projection-resolution",
+      "check": "deliberately-disallowed-model-after-entitlement",
+      "http": 503,
+      "errorType": "api_error",
+      "errorCode": null,
+      "passed": false,
+      "refusalClass": "freshness-or-resolver-availability",
+      "expiredRecordConfirmed": false
+    },
+    {
+      "flow": "meter-attribute-observe",
+      "check": "live-request-joined-between-llm-log-and-trace",
+      "matchedRequests": 1,
+      "promptTokens": 14,
+      "completionTokens": 4,
+      "passed": true,
+      "checkedUtc": "2026-09-24T19:55:29.5088949Z"
+    },
+    {
+      "flow": "request-identity-and-policy",
+      "tokenValidation": true,
+      "managedIdentity": true,
+      "replacesAuthorization": true,
+      "removesApiKey": true,
+      "tokenLimits": true,
+      "checkedUtc": "2026-09-24T20:01:11.5510147Z"
+    },
+    {
+      "flow": "gateway-to-foundry",
+      "check": "managed-identity-role-assignment",
+      "matchingGrantCount": 1,
+      "passed": true,
+      "checkedUtc": "2026-09-24T20:01:23.7330747Z"
+    },
+    {
+      "flow": "delegated-management",
+      "check": "live-assigned-role",
+      "role": "owner",
+      "method": "entra",
+      "managerScopePresent": false,
+      "passed": true,
+      "checkedUtc": "2026-09-24T19:45:50.9486941Z"
+    },
+    {
+      "flow": "consent-free-sign-in",
+      "check": "issue-redeem-replay",
+      "remainingSeconds": 60,
+      "redeemHttp": 200,
+      "replayHttp": 401,
+      "passed": true,
+      "checkedUtc": "2026-09-24T19:45:53.1704895Z"
+    },
+    {
+      "flow": "governance-apply",
+      "check": "live-apply-status",
+      "reachable": true,
+      "configured": true,
+      "passed": true,
+      "checkedUtc": "2026-09-24T19:45:54.2164633Z"
+    },
+    {
+      "flow": "terminal-finops",
+      "backend": "Turnstile HTTP",
+      "codeRevision": "a1f0836",
+      "readOnly": true,
+      "redactedBeforeLayout": true,
+      "loadedRows": {
+        "overview": 21,
+        "budgets": 8
+      },
+      "passed": true,
+      "checkedUtc": "2026-09-24T20:38:51.369931+00:00"
+    }
+  ],
+  "governancePreflight": {
+    "checkedUtc": "2026-09-24T20:49:48.7418136Z",
+    "changes": 1,
+    "problems": 0,
+    "observedUnits": 4,
+    "observedTiers": 2,
+    "noApplyRequested": true
+  },
+  "priorJobEvidence": [
+    {
+      "flow": "governance-export",
+      "executions": 34,
+      "latestStatus": "Failed",
+      "evidence": "read-existing-execution-history; no new job was started"
+    },
+    {
+      "flow": "governance-apply",
+      "executions": 10,
+      "latestStatus": "Succeeded",
+      "evidence": "read-existing-execution-history; no new job was started"
+    },
+    {
+      "flow": "reports-dispatcher",
+      "executions": 6,
+      "latestStatus": "Succeeded",
+      "evidence": "read-existing-execution-history; no new job was started"
+    },
+    {
+      "flow": "reports-generator",
+      "executions": 3,
+      "latestStatus": "Succeeded",
+      "evidence": "read-existing-execution-history; no new job was started"
+    },
+    {
+      "flow": "reports-admin",
+      "executions": 6,
+      "latestStatus": "Succeeded",
+      "evidence": "read-existing-execution-history; no new job was started"
+    }
+  ],
+  "databaseRecovery": {
+    "component": "Turnstile PostgreSQL",
+    "before": "Stopped",
+    "after": "Ready",
+    "action": "start-existing-discovered-server",
+    "startedUtc": "2026-09-24T19:42:33.8566221Z",
+    "checkedUtc": "2026-09-24T19:44:47.8820757Z",
+    "configurationChanged": false
+  },
+  "limitations": [
+    "No Manager-only or Viewer-only test identity was used.",
+    "A core desired-governance difference was present; no new save/apply was requested.",
+    "The projection path returned 503; expiry versus resolver availability was not distinguished.",
+    "No new P50 generation, recipient change or email send was requested.",
+    "Native Azure portal GUI equivalents do not exist for all application-specific or local tooling operations."
+  ]
+}

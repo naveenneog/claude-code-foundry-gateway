@@ -27,6 +27,8 @@ function Invoke-ArchitectureCheck([string]$Directory) {
 }
 
 Write-Host 'Architecture generation contract' -ForegroundColor Cyan
+& node --test (Join-Path $root 'guide/architecture-live.test.mjs') | Out-Host
+Assert 'live-capture discovery and privacy helpers hold offline' ($LASTEXITCODE -eq 0)
 Assert 'the offline architecture checker ships' (Test-Path $checker)
 if (-not (Test-Path $checker)) { exit 1 }
 $baseline = Invoke-ArchitectureCheck $root
