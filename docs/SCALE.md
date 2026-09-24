@@ -688,8 +688,8 @@ Before 2026-09-23 the policy answered a missing record with that 503, so every
 unentitled attempt read as an outage and invited a retry. Redeploy the current
 policy before flipping.
 
-**Rollback:** first refresh and compare the lists, then
-set it back to `named-value`. A saved list is not a revocation-safe rollback: it can regrant a
+**Rollback:** set it back to `named-value` **only after refreshing and comparing
+the lists**. A saved list is not a revocation-safe rollback: it can regrant a
 leaver. Keep both destinations current during the bounded rollback window, and
 do not roll back to lists once the population no longer fits them.
 

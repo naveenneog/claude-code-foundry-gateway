@@ -141,6 +141,7 @@ const writes = await bulk(container, plan.toWrite.map((r) => ({
 })));
 const deletes = await bulk(container, plan.toDelete.map((oid) => ({ operationType: 'Delete', id: oid, partitionKey: oid })));
 const expired = reconciliation.expiresAt <= Math.floor(Date.now() / 1000);
-Object.assign(summary, { ok: !(writes.failed || deletes.failed) && !expired, expired, written: writes.ok, writeFailed: writes.failed, deleted: deletes.ok, deleteFailed: deletes.failed, mappingVersion, ...reconciliation, seconds: (Date.now() - started) / 1000 });
+Object.assign(summary, { ok: !(writes.failed || deletes.failed), expired, written: writes.ok, writeFailed: writes.failed, deleted: deletes.ok, deleteFailed: deletes.failed, mappingVersion, ...reconciliation, seconds: (Date.now() - started) / 1000 });
+summary.ok = summary.ok && !expired;
 console.log(JSON.stringify(summary));
 process.exit(writes.failed || deletes.failed || expired ? 3 : 0);

@@ -20,8 +20,9 @@ $mutations = @(
     @{ Name='PowerShell expired apply is not reported'; File='scripts\Sync-ClaudeProjection.ps1'; From='Projection expired during apply'; To='Apply done'; Suite=$rules }
     @{ Name='Node apply omits refresh'; File='sync\src\apply-projection.mjs'; From=', refresh: true'; To=', refresh: false'; Suite=$rules }
     @{ Name='Node apply omits scan lease'; File='sync\src\apply-projection.mjs'; From='toDocument(r, { tenantId, mappingVersion, reconciliation })'; To='toDocument(r, { tenantId, mappingVersion })'; Suite=$rules }
-    @{ Name='Node expired apply reports success'; File='sync\src\apply-projection.mjs'; From=' && !expired, expired,'; To=', expired,'; Suite=$rules }
+    @{ Name='Node expired apply reports success'; File='sync\src\apply-projection.mjs'; From='summary.ok = summary.ok && !expired;'; To=''; Suite=$rules }
     @{ Name='Node expired apply exits zero'; File='sync\src\apply-projection.mjs'; From=' || expired ? 3 : 0'; To=' ? 3 : 0'; Suite=$rules }
+    @{ Name='Node operation failures report success'; File='sync\src\apply-projection.mjs'; From='ok: !(writes.failed || deletes.failed), '; To=''; Suite=$rules }
     @{ Name='generation is omitted from documents'; File='sync\src\plan.mjs'; From='    ...reconciliation,'; To=''; Suite=$node }
     @{ Name='renewal skips unchanged members'; File='sync\src\plan.mjs'; From='if (!refresh) continue;'; To='continue;'; Suite=$node }
     @{ Name='lease starts at apply instead of scan'; File='sync\src\plan.mjs'; From='Math.floor(start / 1000) + maxAgeSeconds'; To='Math.floor(now.getTime() / 1000) + maxAgeSeconds'; Suite=$node }
