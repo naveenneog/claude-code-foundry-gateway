@@ -3,6 +3,12 @@ claude-settings.json
 
 # local tooling
 node_modules/
+.venv-finops/
+.finops-research/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.finops-evidence/
 *.log
 .DS_Store
 
