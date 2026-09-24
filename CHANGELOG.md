@@ -54,6 +54,24 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   pre-authorized on Turnstile's API: the token is exchanged for a code that works once, within a
   minute. For tenants whose web sign-in has no consent yet (**U19**).
   [ADR-0016](docs/adr/0016-delegated-management.md).
+- **Budget modes per business unit and team: strict, allowance or notify.** Strict is the default
+  and unchanged. Allowance admits up to a percentage (1 to 100) above the budget; notify skips only
+  that scope's limiter, while the parent, organization and tier limits still apply.
+  `Set-ClaudeBusinessUnit.ps1 -Mode -AllowancePercent` sets it, and so does the Gateway governance
+  page in Turnstile; the new named value `bu-modes` holds only the exceptions and survives a
+  redeploy. Notices are advisory, because the remaining quota API Management reports is an
+  estimate: `estimated-over-budget` for allowance, `usage-reported` for notify. Each budget trace
+  joins the ledger on `BudgetRequestId`. Live-tested on the reference gateway and restored exactly.
+  An apply run now rechecks Turnstile's revisions immediately before writing and reconciles again
+  from newer state, so an earlier save can no longer overwrite a later one in the common case; the
+  single writer in P48 closes it. [ADR-0019](docs/adr/0019-budget-enforcement-modes.md).
+- **A terminal FinOps console, `claude-finops`.** Nine views in the terminal and the same actions as
+  commands for scripts, over Turnstile's API, the gateway directly, or example data. Budget
+  changes are previewed, rechecked against the server, never retried, and removal needs typed
+  confirmation; the full chargeback export covers every unit and team, and CSV cells that start
+  like a formula are escaped. Managers see only their scope and read only. Sign-in uses the Azure
+  CLI and no token is stored. Accessible themes, no motion, and plain linear output.
+  `docs/CLI-FINOPS.md`, [ADR-0018](docs/adr/0018-terminal-finops.md) (**U20**).
 - **A projection record authorizes for two hours at most, and a burst of misses gets an answer.**
   Each complete directory observation stamps every member it keeps with a reconciliation generation
   and an absolute expiry, two hours by default and at most. The resolver and the gateway's cache
@@ -560,6 +578,22 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Changed
 
+- **The test suite runs in parallel, and the gate's budget is 30 minutes again.** `Test-All`
+  starts each check as its own `pwsh` process, four at a time, with an exclusive lane for checks
+  that share Azure CLI state or scan the whole tree, logs in registration order, and a 600 s
+  deadline per check. The business-unit and Turnstile mutation harnesses run as four and two
+  shards, and `tests/Test-MutationShards.ps1` proves the shards cover all 476 and 108 mutations
+  exactly. Measured on a busy machine: 790 to 927 s, against 1,829 s serially.
+  [ADR-0025](docs/adr/0025-parallel-test-suite.md).
+
+- **The gate gives the test suite 60 minutes, and the suite reports where its time goes.**
+  `tests/Test-All.ps1` took 1,797.2 s on `690015d` against a 1,800 s command budget, and a
+  budget-modes gate had already failed on time with no failing check. `commandTimeoutMs` is now
+  3,600,000 ([ADR-0024](docs/adr/0024-test-suite-time-budget.md)); `Test-All` prints each check's
+  seconds and the five slowest, and writes them to `test-all-timings-<utc>-<pid>.json` in the temp
+  folder, because the gate discards the suite's output when it passes. P56 makes the suite
+  parallel so the budget can return to 30 minutes.
+
 - Money moved from `[double]` to `[decimal]` in `ClaudeBusinessUnit.ps1`,
   `Set-ClaudeBusinessUnit.ps1` and `Get-ClaudeBusinessUnit.ps1`, and token spend
   is accumulated as `[long]` rather than `0.0`.
@@ -570,6 +604,14 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   converts to 1,388,888,888 tokens and back to exactly $5000.00.
 
 ### Fixed
+
+- **The resolver check could fail with every test passing, and three runner gaps.** Under a
+  headless console on code page 437, Node's Unicode summary line did not match the wrapper's
+  pattern, so it counted zero passes; `tests/Test-Resolver.ps1` now asks for ASCII TAP output and
+  reads its exact pass and fail counters. A registered script that was missing behind a
+  prerequisite SKIP was reported as skipped, not failed; a check stopped at its deadline lost the
+  output it had printed; and a check started late could have outlived the gate's budget. Each was
+  reproduced by a failing test first.
 
 - **`Test-All.ps1` reported success for checks that never ran.** A terminating error inside a
   check travels up to the nearest `try`, and every check ran inside one `try`/`finally` with no

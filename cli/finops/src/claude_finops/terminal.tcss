@@ -1,0 +1,45 @@
+Screen {
+    background: $background;
+    color: $foreground;
+}
+#identity {
+    height: 2;
+    padding: 0 1;
+    background: $panel;
+    color: $foreground;
+}
+TabbedContent { height: 1fr; }
+TabPane { padding: 0 1; }
+DataTable { height: 1fr; }
+.context { height: 2; color: $foreground; }
+.toolbar { height: 3; }
+.toolbar Select { width: 25; }
+.toolbar Input { width: 1fr; }
+.toolbar Button { min-width: 8; width: 10; }
+.toolbar-note { width: 1fr; padding: 1 1; }
+#status { height: 1; padding: 0 1; color: $foreground; background: $surface; }
+Footer { height: 1; }
+ModalScreen { align: center middle; background: $background 80%; }
+#detail-dialog, #lookup-dialog, #change-dialog, #month-dialog {
+    width: 76;
+    max-width: 96%;
+    height: 90%;
+    padding: 1;
+    border: solid $accent;
+    background: $surface;
+}
+#month-dialog { height: 14; }
+#lookup-query { height: 3; }
+#lookup-status { height: 2; }
+#lookup-results { height: 1fr; }
+#detail-text { height: 1fr; }
+#fields { height: 1fr; }
+#form-title { height: 1; text-style: bold; }
+#form-status { height: 3; }
+#headroom { height: 2; }
+.buttons { height: 3; align: right middle; }
+.buttons Button { margin-left: 1; min-width: 12; }
+#month-error { height: 2; color: $foreground; }
+.ascii #detail-dialog, .ascii #lookup-dialog, .ascii #change-dialog, .ascii #month-dialog {
+    border: ascii $accent;
+}

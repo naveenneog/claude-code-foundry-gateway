@@ -267,7 +267,9 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
 - [ ] P46 delegated management, phase 2 — acceptance: a manager sees and manages only the units
       and teams whose manager group is in their token (done in the fork, `c0c345a`); allocation
       within their own headroom (done); per unit or team, the admin's enforcement mode: strict,
-      allowance or notify, enforced by the gateway (in progress)
+      allowance or notify, enforced by the gateway (done, live-tested and restored 2026-09-24,
+      [ADR-0019](adr/0019-budget-enforcement-modes.md)), with a guard that rechecks Turnstile's
+      revisions before an apply writes. Open: the manager-only live sign-in (P53)
 - [ ] P47 delegated management, phase 3 — acceptance: budget requests that go to the manager one
       level up, boosts with an expiry, escalation, notifications at the warning threshold
 - [ ] P48 delegated management at 500,000 — acceptance: overrides and unit and team budgets in the
@@ -276,6 +278,29 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
 - [ ] P49 network profiles — acceptance: one parameter chooses private (private endpoints for
       every component) or public (Entra-only access, no private endpoints or DNS zones), for the
       gateway, the projection and Turnstile, each priced by the bill-of-materials scripts
+- [ ] P50 chargeback reports — acceptance: one command writes each business unit's monthly
+      report (people, requests, every token kind, estimated cost, budget against use) that
+      reconciles to the month's total through an explicit unassigned line; recipients per unit and
+      for the admin team are changed by script with no redeploy and limited to allowed domains; a
+      scheduled job with a managed identity archives each run privately and emails each unit its
+      own report. In progress
+- [x] P51 terminal FinOps, first release — `claude-finops`, nine terminal views and scriptable
+      commands over one engine, backed by Turnstile, the gateway directly, or example data. Budget
+      changes are previewed, rechecked against the server and never retried. Managers see only
+      their scope and read only; a 403 says "Not in your scope". The owner's command and terminal
+      journeys agreed live on identity, budgets, catalog, tiers, month totals and 200 request ids,
+      with no live writes. [ADR-0018](adr/0018-terminal-finops.md), `docs/CLI-FINOPS.md`.
+      Follow-ups: saved views, comparison charts and in-terminal profiles; a request cursor (the
+      API stops at 200); conditional catalog and tier writes; P47's requests and boosts; a live
+      scoped-manager journey (**U20**)
+- [x] P56 a parallel test suite — `tests/Test-All.ps1` runs checks in separate `pwsh` processes,
+      at most four at a time, with an exclusive lane for checks that share Azure CLI state or scan
+      the whole tree, logs printed in registration order, one result slot per registration, a
+      per-check deadline (600 s by default) and the same completion guard and SKIP counting. The
+      business-unit and Turnstile mutation harnesses run as four and two shards, and a new check
+      proves the shards cover exactly the 476 and 108 mutations, in order. Three busy full runs:
+      927.2, 830.6 and 790.0 s, against 1,829 s serially; the gate's command budget is back to
+      1,800 s. [ADR-0025](adr/0025-parallel-test-suite.md)
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so
