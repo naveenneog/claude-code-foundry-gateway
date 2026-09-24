@@ -23,7 +23,7 @@ if (-not $record.storageReused) { $names += $record.storageName }
 $prefix = $record.functionName -replace '^func-aum-',''
 $names += "appi-aum-$prefix"
 $names += @("pe-aum-$prefix-sites","pe-aum-$prefix-blob","pe-aum-$prefix-table")
-$selected = @($resources | Where-Object { $_.name -in $names })
+$selected = @($resources | Where-Object { $_.name -in $names -or $_.id -in @($record.networkResourceIds) })
 Write-Host 'This deletes dedicated audit/history storage. It does not undo budget changes or active boosts.' -ForegroundColor Yellow
 Write-Host 'Before removing, wait for boosts to expire or restore their budgets and export audit records.'
 foreach ($r in $selected) { Write-Host "  Delete $($r.type): $($r.name)" }
@@ -32,7 +32,7 @@ foreach ($id in @($record.roleAssignmentIds)) {
     $match = @(Invoke-ClaudeAumAz @('role','assignment','list','--assignee-object-id',$record.principalId,'--all','--subscription',$record.subscriptionId,'-o','json') | Where-Object id -eq $id)
     if ($match.Count) { Invoke-ClaudeAumAz @('role','assignment','delete','--ids',$id,'--subscription',$record.subscriptionId,'-o','json') | Out-Null }
 }
-foreach ($r in @($selected | Sort-Object { if ($_.type -eq 'Microsoft.Network/privateEndpoints') { 0 } elseif ($_.type -eq 'Microsoft.Web/sites') { 1 } else { 2 } })) {
+foreach ($r in @($selected | Sort-Object { if ($_.type -eq 'Microsoft.Network/privateEndpoints') { 0 } elseif ($_.type -eq 'Microsoft.Web/sites') { 1 } elseif ($_.type -eq 'Microsoft.Network/virtualNetworks') { 3 } else { 2 } })) {
     Invoke-ClaudeAumAz @('resource','delete','--ids',$r.id,'--subscription',$record.subscriptionId,'-o','json') | Out-Null
 }
 if ($RemoveAppRegistration) {

@@ -34,7 +34,7 @@ const replacements = [
   [me.mail, 'admin@contoso.com'],
 ].filter(([a]) => a).sort((a, b) => b[0].length - a[0].length);
 const steps = [
-  ['aum-01-overview', `https://portal.azure.com/#resource${site}/overview`, 'Function overview', record.functionName],
+  ['aum-01-overview', `https://portal.azure.com/#resource${site}/overview`, 'Function overview', 'Running'],
   ['aum-02-identity', `https://portal.azure.com/#resource${site}/identity`, 'System-assigned managed identity', 'System assigned'],
   ['aum-03-scale', `https://portal.azure.com/#resource${site}/scaleAndConcurrency`, 'Flex capacity and cold-start choice', 'Always ready'],
   ['aum-04-storage', `https://portal.azure.com/#resource${storage}/configuration`, 'Storage: shared-key access disabled', 'Allow storage account key access'],
@@ -53,6 +53,7 @@ const receipts = [];
 try {
   for (const [name, url, title, ready] of steps.filter(s => !only.length || only.includes(s[0]))) {
     const started = new Date().toISOString();
+    await page.goto('about:blank');
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     let matched = false;
     try {
@@ -79,6 +80,7 @@ try {
           '00000000-0000-0000-0000-000000000000');
         result = result.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, 'admin@contoso.com');
         result = result.replace(/MICROSOFT NON-PRODUCTION[^()\n]*/gi, 'CONTOSO');
+          result = result.replace(/[a-z0-9.-]+\.onmicrosoft\.com/gi, 'contoso.onmicrosoft.com');
         return result;
       };
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -101,6 +103,9 @@ try {
         background: '#102a43', color: '#fff', zIndex: '2147483647', font: '16px Segoe UI' });
       banner.textContent = `${title} | Live portal ${timestamp} | Identities replaced with Contoso placeholders`;
       document.body.append(banner);
+      // Detach React's original nodes so a late response cannot reintroduce
+      // identifiers between the text audit and the pixel capture.
+      document.body.replaceWith(document.body.cloneNode(true));
     }, { replacements, title, timestamp: started });
     const scrubbed = await page.locator('body').innerText();
     for (const [actual] of replacements) {

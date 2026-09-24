@@ -92,6 +92,16 @@ class ServiceWriteTests(unittest.TestCase):
             self.assertEqual(403, error.exception.status)
         self.assertEqual([], self.arm.writes)
 
+    def test_manager_mutation_response_never_returns_whole_named_value(self):
+        outside = "00000000-0000-0000-0000-000000000004"
+        self.arm.values["quota-overrides"] += outside + "=20,"
+        manager = actor("Manager", groups=[TEAM_GROUP])
+        result = self.write(manager, "user", PERSON, 1001)
+        self.assertNotIn(outside, str(result))
+        self.assertNotIn("quota-overrides", str(result))
+        self.assertEqual(PERSON, result["result"]["scope_id"])
+        self.assertEqual(1001, result["result"]["token_limit"])
+
     def test_failed_headroom_and_stale_revision_do_not_write(self):
         revision = self.revision()
         with self.assertRaises(ServiceError):
@@ -106,6 +116,15 @@ class ServiceWriteTests(unittest.TestCase):
         with self.assertRaises(ServiceError) as error:
             self.write(self.admin, "user", PERSON, 100000)
         self.assertEqual("insufficient_headroom", error.exception.code)
+
+    def test_projection_does_not_trust_obsolete_named_value_membership(self):
+        self.arm.values["entitlement-source"] = "projection"
+        self.arm.etags["entitlement-source"] = 1
+        self.logs.members[PERSON] = "audit"
+        manager = actor("Manager", groups=[TEAM_GROUP])
+        with self.assertRaises(ServiceError) as error:
+            self.write(manager, "user", PERSON, 1001)
+        self.assertEqual(403, error.exception.status)
 
     def test_audit_outage_refuses_mutation(self):
         self.store.fail_audit = True
@@ -124,6 +143,32 @@ class ServiceWriteTests(unittest.TestCase):
             with self.subTest(kind=kind), self.assertRaises(ServiceError) as error:
                 self.service.configure(manager, kind, id_, {**data, "reason": "Test"}, self.revision())
             self.assertEqual(403, error.exception.status)
+
+    def test_catalog_can_add_strict_entries_before_optional_modes_upgrade(self):
+        del self.arm.values["bu-modes"]
+        catalog = self.service.catalog(self.admin)
+        entities = catalog["organizations"] + catalog["departments"] + [{
+            "id": "research", "name": "Contoso Research", "parent_id": None,
+            "external_ref": "entra-group:Contoso Research",
+        }]
+        result = self.service.configure(self.admin, "catalog", "", {
+            "entities": entities, "reason": "Add catalog entry",
+        }, self.revision())
+        self.assertNotIn("bu-modes", self.arm.values)
+        self.assertIn("research=Contoso Research:0", self.arm.values["bu-registry"])
+
+    def test_deleting_and_reusing_catalog_id_does_not_restore_old_manager_authority(self):
+        self.arm.values["bu-members"] = ",,"
+        self.arm.values["quota-overrides"] = ",,"
+        self.service.configure(self.admin, "catalog", "", {"entities": [], "reason": "Remove old catalog"},
+                               self.revision())
+        self.assertNotIn("finance", self.store.mappings())
+        self.service.configure(self.admin, "catalog", "", {"entities": [{
+            "id": "finance", "name": "Contoso New Finance", "parent_id": None,
+            "external_ref": "entra-group:Contoso New Finance",
+        }], "reason": "New catalog with reused id"}, self.revision())
+        manager = actor("Manager", groups=[UNIT_GROUP])
+        self.assertEqual([], self.service.me(manager)["manager_scope"]["organizations"])
 
     def test_turnstile_authority_refuses_a_second_writer(self):
         self.arm.values["turnstile-integration"] = "governanceAuthority=Turnstile"
@@ -167,6 +212,28 @@ class WorkflowTests(ServiceWriteTests):
                 "scope_type": "department", "scope_id": "audit", "token_limit": 1, "reason": "No",
             })
 
+    def test_admin_self_decision_requires_explicit_audited_override(self):
+        request = self.workflows.request(self.admin, {
+            "scope_type": "department", "scope_id": "payroll",
+            "token_limit": 3100000, "reason": "Owner-managed allocation",
+        })
+        with self.assertRaises(ServiceError):
+            self.decide(self.admin, request)
+        result = self.workflows.decide(self.admin, request["id"], "approve", {
+            "version": request["version"], "reason": "Explicit owner override", "admin_override": True,
+        })
+        self.assertTrue(result["result"]["admin_override"])
+        self.assertTrue(self.store.audits[-1]["after"]["admin_override"])
+        self.assertEqual("approved", result["result"]["state"])
+
+    def test_manager_cannot_claim_admin_override(self):
+        request = self.request()
+        with self.assertRaises(ServiceError) as error:
+            self.workflows.decide(self.manager, request["id"], "approve", {
+                "version": request["version"], "reason": "Not an administrator", "admin_override": True,
+            })
+        self.assertEqual(403, error.exception.status)
+
     def test_approval_rechecks_headroom_and_dynamic_group_mapping(self):
         request = self.request(8000000)
         with self.assertRaises(ServiceError):
@@ -207,7 +274,7 @@ class WorkflowTests(ServiceWriteTests):
         with self.assertRaises(ServiceError):
             self.workflows.boost(self.admin, data, self.revision())
         with self.assertRaises(ServiceError):
-            self.write(self.admin, "user", PERSON, 103333)
+            self.write(self.admin, "user", PERSON, 99000)
 
     def test_timer_does_not_overwrite_newer_external_edit(self):
         result = self.workflows.boost(self.admin, {

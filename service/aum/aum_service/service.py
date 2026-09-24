@@ -6,7 +6,7 @@ from uuid import uuid4
 from .auth import object_id
 from .errors import AccessDenied, Conflict, ServiceError, invalid
 from .registry import (
-    Config, budget_changes, checked_value, entity_id, render_map, render_modes,
+    Config, budget_changes, checked_value, entity_id, parse_registry, render_map, render_modes,
     render_registry, tokens, validate_headroom,
 )
 from .scope import resolve_scope
@@ -21,7 +21,7 @@ def reason(body):
 
 
 def utc(value):
-    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    return value.astimezone(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
 class AumService:
@@ -37,7 +37,7 @@ class AumService:
         return snapshot, config, mappings, scope
 
     def members(self, config, extra=()):
-        result = dict(config.members)
+        result = {} if config.values.get("entitlement-source") == "projection" else dict(config.members)
         missing = (set(config.overrides) | set(extra)) - set(result)
         if missing:
             result.update(self.analytics.memberships(sorted(missing)))
@@ -64,6 +64,7 @@ class AumService:
             "catalog_write": bool(admin_writer), "tiers_write": bool(admin_writer),
             "modes_write": bool(admin_writer and "bu-modes" in config.values), "budget_requests": bool(writer and assigned),
             "approvals": bool(writer and assigned), "boosts": bool(writer and assigned),
+            "approval_admin_override": bool(admin_writer),
             "notifications": True, "audit_read": identity.is_admin, "email_delivery": False,
         }, "limits": {"page_size": 200, "named_value_characters": 4096, "analytics_window_days": 93}}
 
@@ -163,13 +164,16 @@ class AumService:
         if type(threshold) is not int or not 1 <= threshold <= 100:
             raise invalid("warning_threshold_percent must be an integer from 1 to 100")
         def work():
-            receipt = apply_values(self.arm, snapshot, changes, lease)
+            apply_values(self.arm, snapshot, changes, lease)
             self.store.put("budgets", kind + ":" + key, {"warning_threshold_percent": threshold})
-            return {k: v["value"] for k, v in receipt.items()}
+            return {"scope_type": kind, "scope_id": key, "token_limit": amount,
+                    "period": "day" if kind == "user" else "month",
+                    "warning_threshold_percent": threshold}
         return self.audit_change(identity, f"budget.{kind}.{key}", why,
                                  {k: snapshot[k]["value"] for k in changes}, changes, work)
 
     def set_budget(self, identity, kind, key, body, expected):
+        identity.require_writer()
         with self.store.lease() as lease:
             snapshot, config, mappings, scope = self.prepare(identity, expected)
             audit_id, result = self.apply_budget(identity, snapshot, config, scope, kind, key, body, lease)
@@ -186,7 +190,7 @@ class AumService:
                 if key not in config.by_id:
                     raise invalid("Unknown catalog id")
                 try:
-                    group = object_id(body["manager_group_id"]) if body.get("manager_group_id") else None
+                    group = object_id(body["manager_group_id"]) if body.get("manager_group_id") is not None else None
                 except ValueError as error:
                     raise invalid("manager_group_id must be an Entra object id or null") from error
                 def work():
@@ -197,10 +201,22 @@ class AumService:
                                                      mappings.get(key), group, work)
             else:
                 changes = self.config_changes(config, kind, key, body)
+                removed = (set(config.by_id) - {u["Id"] for u in parse_registry(changes["bu-registry"])}) if kind == "catalog" else set()
+                mapping_resets = {k: None for k in removed if k in mappings}
+                before = {k: snapshot[k]["value"] for k in changes}
+                after = dict(changes)
+                if mapping_resets:
+                    before["manager_groups"] = {k: mappings[k] for k in mapping_resets}
+                    after["manager_groups"] = mapping_resets
+                def work():
+                    lease()
+                    # Revoke before deleting an id. A partial failure can deny
+                    # access, never re-grant an old group on a later id reuse.
+                    for removed_id in mapping_resets:
+                        self.store.put("managers", removed_id, {"manager_group_id": None})
+                    return apply_values(self.arm, snapshot, changes, lease)
                 audit_id, result = self.audit_change(
-                    identity, f"config.{kind}.{key}", why,
-                    {k: snapshot[k]["value"] for k in changes}, changes,
-                    lambda: apply_values(self.arm, snapshot, changes, lease),
+                    identity, f"config.{kind}.{key}", why, before, after, work,
                 )
         _, updated, mappings, _ = self.context(identity)
         return {"audit_id": audit_id, "revision": updated.revision(mappings), "result": result}
@@ -258,8 +274,9 @@ class AumService:
         for removed_id in removed:
             if self.store.active_boost("department" if removed_id in config.parents else "organization", removed_id):
                 raise Conflict("Cannot remove a budget with an active boost")
-        changes = {"bu-registry": render_registry(units), "bu-parents": render_map(parents),
-                   "bu-modes": render_modes({k: v for k, v in config.modes.items() if k not in removed})}
+        changes = {"bu-registry": render_registry(units), "bu-parents": render_map(parents)}
+        if "bu-modes" in config.values:
+            changes["bu-modes"] = render_modes({k: v for k, v in config.modes.items() if k not in removed})
         candidate = Config({**config.values, **changes})
         members = self.members(candidate)
         days = 31

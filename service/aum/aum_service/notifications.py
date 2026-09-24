@@ -1,6 +1,7 @@
 import hashlib
 
 from .service import utc
+from .queries import literal
 from .workflows import SYSTEM
 
 
@@ -20,15 +21,25 @@ def record_warnings(service):
             parent = config.parents.get(leaf)
             if parent:
                 usage[parent] = usage.get(parent, 0) + used
+        targets = []
         for unit in config.units:
             key, limit = unit["Id"], unit["TokensPerMonth"]
             kind = "department" if key in config.parents else "organization"
+            targets.append((kind, key, limit, usage.get(key, 0), now.strftime("%Y-%m")))
+        if config.overrides:
+            day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            selected = ",".join(literal(oid) for oid in config.overrides)
+            daily_query = (f"ClaudeChargeback(datetime({utc(day)}), datetime({utc(now)}))"
+                           f"\n| where user_id in ({selected})"
+                           "\n| summarize tokens=sum(prompt_tokens)+sum(completion_tokens) by user_id\n| take 201")
+            daily = {r["user_id"]: float(r.get("tokens", 0)) for r in service.analytics.query(daily_query)}
+            for key, limit in config.overrides.items():
+                targets.append(("user", key, limit, daily.get(key, 0), now.strftime("%Y-%m-%d")))
+        for kind, key, limit, used, period in targets:
             metadata = service.store.get("budgets", kind + ":" + key) or {}
             threshold = metadata.get("warning_threshold_percent", 80)
-            used = usage.get(key, 0)
             if limit <= 0 or used * 100 < limit * threshold:
                 continue
-            period = now.strftime("%Y-%m")
             id_ = hashlib.sha256(f"{kind}/{key}/{period}/{threshold}".encode()).hexdigest()
             if service.store.get("notifications", id_):
                 continue

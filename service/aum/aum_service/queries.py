@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import json
+import re
 from datetime import timedelta
 
 from .auth import object_id
@@ -128,7 +129,10 @@ class QueryBuilder:
             if cursor:
                 if len(cursor["after"]) != 2:
                     raise invalid("Invalid requests cursor")
-                timestamp = utc(parse_time(cursor["after"][0]))
+                timestamp = cursor["after"][0]
+                if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?Z", timestamp):
+                    raise invalid("Invalid request timestamp cursor")
+                parse_time(timestamp)
                 rid = literal(cursor["after"][1])
                 kql += (f"\n| where timestamp < datetime({timestamp}) or "
                         f"(timestamp == datetime({timestamp}) and request_id > {rid})")

@@ -16,6 +16,8 @@ param(
     [ValidateSet('LRS','ZRS','GRS')][string]$Redundancy,
     [ValidateSet('On','Off')][string]$Insights,
     [ValidateSet('Public','Private')][string]$Network,
+    [ValidateSet('Public','Private')][string]$StorageNetwork,
+    [string]$NewNetworkAddressPrefix,
     [string]$ExistingStorageName, [string]$ExistingPlanName,
     [string]$IntegrationSubnetId, [string]$PrivateEndpointSubnetId,
     [string]$SitesDnsZoneId, [string]$BlobDnsZoneId, [string]$TableDnsZoneId,
@@ -40,6 +42,9 @@ $AlwaysReady = [string](Select-ClaudeAumChoice 'Always-ready HTTP capacity' @($c
 $Redundancy = Select-ClaudeAumChoice 'Storage redundancy (per actual GB stored)' @($choices | Where-Object Category -eq 'Redundancy') $Redundancy
 $Insights = Select-ClaudeAumChoice 'Application Insights' @($choices | Where-Object Category -eq 'Insights') $Insights
 $Network = Select-ClaudeAumChoice 'Network' @($choices | Where-Object Category -eq 'Network') $Network
+$StorageNetwork = if ($Network -eq 'Private') { 'Private' } else {
+    Select-ClaudeAumChoice 'Storage network (public API does not require public storage)' @($choices | Where-Object Category -eq 'StorageNetwork') $StorageNetwork
+}
 if (-not $ResourceGroup) {
     $groupChoices = @([pscustomobject]@{ Value='new'; Label='New isolated resource group'; Cost='$0 group overhead'; Implications='Recommended; clean removal without touching the gateway.' })
     $groupChoices += @($discovery.Groups | ForEach-Object { [pscustomobject]@{
@@ -67,15 +72,24 @@ if ($ExistingStorageName) {
         $_.tags.component -eq 'aum-service' -and $_.tags.'aum-gateway' -eq $discovery.Gateway.id -and
         $_.tags.'aum-function' -eq "func-aum-$NamePrefix" -and $_.allowSharedKeyAccess -eq $false -and
         $_.sku.name -eq "Standard_$Redundancy" -and
-        $_.publicNetworkAccess -eq $(if ($Network -eq 'Private') { 'Disabled' } else { 'Enabled' }) })
+        $_.publicNetworkAccess -eq $(if ($StorageNetwork -eq 'Private') { 'Disabled' } else { 'Enabled' }) })
     if ($match.Count -ne 1) { throw 'Reuse requires this same service and gateway, keyless storage in the selected group, and matching redundancy/network. Shared accounts are not modified.' }
 }
-if ($Network -eq 'Private') {
-    foreach ($name in @('IntegrationSubnetId','PrivateEndpointSubnetId','SitesDnsZoneId','BlobDnsZoneId','TableDnsZoneId')) {
+if ($NewNetworkAddressPrefix) {
+    if ($StorageNetwork -ne 'Private') { throw 'A new service network is only needed for private storage or a private API.' }
+    if ($NewNetworkAddressPrefix -notmatch '^((10\.\d{1,3}\.\d{1,3})|(172\.(1[6-9]|2\d|3[01])\.\d{1,3})|(192\.168\.\d{1,3}))\.0/24$') {
+        throw 'NewNetworkAddressPrefix must be an administrator-selected RFC1918 /24 (network address ending .0/24).'
+    }
+    if ($IntegrationSubnetId -or $PrivateEndpointSubnetId -or $BlobDnsZoneId -or $TableDnsZoneId -or $SitesDnsZoneId) { throw 'Choose a new isolated network OR existing subnet/DNS IDs, not both.' }
+}
+elseif ($StorageNetwork -eq 'Private') {
+    $requiredNetwork = @('IntegrationSubnetId','PrivateEndpointSubnetId','BlobDnsZoneId','TableDnsZoneId')
+    if ($Network -eq 'Private') { $requiredNetwork += 'SitesDnsZoneId' }
+    foreach ($name in $requiredNetwork) {
         if (-not (Get-Variable $name -ValueOnly)) { throw "Private networking requires -$name. Supply service subnets and linked private DNS; no gateway topology is changed." }
     }
 }
-$plan = New-ClaudeAumPlan -Discovery $discovery -ResourceGroup $ResourceGroup -Location $Location -NamePrefix $NamePrefix -AlwaysReady ([int]$AlwaysReady) -Redundancy $Redundancy -Insights $Insights -Network $Network
+$plan = New-ClaudeAumPlan -Discovery $discovery -ResourceGroup $ResourceGroup -Location $Location -NamePrefix $NamePrefix -AlwaysReady ([int]$AlwaysReady) -Redundancy $Redundancy -Insights $Insights -Network $Network -StorageNetwork $StorageNetwork
 $plan.parameters.existingStorageName = $ExistingStorageName
 $plan.parameters.existingPlanName = $ExistingPlanName
 $plan.parameters.integrationSubnetId = $IntegrationSubnetId
@@ -89,6 +103,9 @@ Write-Host "  Gateway: $($discovery.Gateway.id)"
 Write-Host "  Workspace: $($discovery.Workspace.id)"
 Write-Host "  Service: $ResourceGroup / func-aum-$NamePrefix / $Location"
 Write-Host "  Always ready: $AlwaysReady; redundancy: $Redundancy; Insights: $Insights; network: $Network"
+Write-Host "  Storage network: $StorageNetwork"
+if ($Network -eq 'Public' -and $StorageNetwork -eq 'Private') { Write-Host "  Private storage: $(Format-ClaudeAumCost $prices.PrivateStorageMonthly)" }
+if ($NewNetworkAddressPrefix) { Write-Host "  New isolated service VNet: $NewNetworkAddressPrefix; no peering or gateway edits. VNet itself has no fixed charge." }
 Write-Host "  Storage: $(Format-ClaudeAumCost $prices.StorageGbMonthly[$Redundancy] '/GB-month') plus operations"
 Write-Host "  Compute while active: $(Format-ClaudeAumCost $prices.ExecutionGbSecond '/GB-second')"
 Write-Host '  Entra app owner only; no tenant administrator/consent. Assigns the CLI account AUM.Admin.'
@@ -101,12 +118,31 @@ if (-not $Accept -and -not $WhatIfPreference) {
 if (-not $PSCmdlet.ShouldProcess("$ResourceGroup/func-aum-$NamePrefix", 'Deploy the priced AUM service and role assignments')) {
     return [pscustomobject]@{ WhatIf=$true; Plan=$plan; Prices=$prices }
 }
-$app = & (Join-Path $PSScriptRoot 'New-ClaudeAumEntraApp.ps1') -DisplayName $AppDisplayName -ClientId $ClientId -Confirm:$false
+$app = & (Join-Path $PSScriptRoot 'New-ClaudeAumEntraApp.ps1') -DisplayName $AppDisplayName -ClientId $ClientId -SubscriptionId $SubscriptionId -Confirm:$false
 $plan.parameters.clientId = $app.ClientId
 $plan.parameters.writerRoleDefinitionId = Set-ClaudeAumWriterRole -GatewayResourceId $discovery.Gateway.id
 $exists = Invoke-ClaudeAumAz @('group','exists','--name',$ResourceGroup,'--subscription',$SubscriptionId,'-o','json')
 if (-not $exists) {
     Invoke-ClaudeAumAz @('group','create','--name',$ResourceGroup,'--location',$Location,'--subscription',$SubscriptionId,'--tags','component=aum-service','-o','json') | Out-Null
+}
+$networkResourceIds = @()
+if ($NewNetworkAddressPrefix) {
+    $networkFile = New-ClaudeAumLocalFile
+    try {
+        Write-ClaudeAumJson $networkFile @{ parameters=@{
+            namePrefix=@{value=$NamePrefix}; location=@{value=$Location}
+            addressPrefix=@{value=$NewNetworkAddressPrefix}; privateApi=@{value=($Network -eq 'Private')}
+        } }
+        $networkDeployment = Invoke-ClaudeAumAz @('deployment','group','create','--name',"aum-network-$NamePrefix",
+            '--resource-group',$ResourceGroup,'--subscription',$SubscriptionId,
+            '--template-file',(Join-Path $root 'infra\aum-service-network.bicep'),'--parameters',"@$networkFile",'-o','json')
+        $networkOutputs = $networkDeployment.properties.outputs
+        foreach ($key in @('integrationSubnetId','privateEndpointSubnetId','sitesDnsZoneId','blobDnsZoneId','tableDnsZoneId')) {
+            $plan.parameters[$key] = $networkOutputs.$key.value
+        }
+        $networkResourceIds = @($networkOutputs.resourceIds.value)
+    }
+    finally { Remove-Item $networkFile -ErrorAction SilentlyContinue }
 }
 $file = New-ClaudeAumLocalFile
 $zip = New-ClaudeAumLocalFile -Extension 'zip'
@@ -125,12 +161,19 @@ try {
         scope=$app.Scope; gatewayResourceId=$discovery.Gateway.id; workspaceResourceId=$discovery.Workspace.id
         roleAssignmentIds=$outputs.roleAssignmentIds.value; resourceGroupCreated=(-not $exists)
         storageReused=[bool]$ExistingStorageName; planReused=[bool]$ExistingPlanName
-        choices=@{ alwaysReady=[int]$AlwaysReady; redundancy=$Redundancy; insights=$Insights; network=$Network }
+        choices=@{ alwaysReady=[int]$AlwaysReady; redundancy=$Redundancy; insights=$Insights; network=$Network; storageNetwork=$StorageNetwork }
+        networkResourceIds=$networkResourceIds
         prices=$prices; deployedAtUtc=[datetime]::UtcNow.ToString('o')
     }
     $recordPath = Join-Path $root 'onboarding\aum-service.json'
     New-Item -ItemType Directory -Path (Split-Path $recordPath -Parent) -Force | Out-Null
     Write-ClaudeAumJson $recordPath $record
+    $actualStorage = Invoke-ClaudeAumAz @('storage','account','show','--name',$record.storageName,'--resource-group',$ResourceGroup,
+        '--subscription',$SubscriptionId,'-o','json')
+    if ($actualStorage.allowSharedKeyAccess -ne $false) { throw 'Storage shared-key access is not disabled. No code deployed.' }
+    if ($StorageNetwork -eq 'Public' -and $actualStorage.publicNetworkAccess -ne 'Enabled') {
+        throw 'Storage publicNetworkAccess is Disabled (often Azure Policy). No code deployed. Choose and price -StorageNetwork Private; do not enable keys or bypass policy.'
+    }
     if (-not $SkipCodeDeploy) {
         Add-Type -AssemblyName System.IO.Compression.FileSystem
         $source = Join-Path $root 'service\aum'

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: AUM service
-  version: 1.0.0
+  version: 1.0.1
   description: |
     Optional Azure Usage Management authority; no Turnstile dependency.
     All paths require a delegated Entra v2 bearer token for this app with
@@ -251,7 +251,7 @@ paths:
           application/json:
             schema:
               allOf:
-                - {$ref: '#/components/schemas/BudgetWrite'}
+                - {$ref: '#/components/schemas/RequestedBudget'}
                 - type: object
                   required: [scope_type, scope_id]
                   properties:
@@ -278,6 +278,10 @@ paths:
                   required: [version]
                   properties:
                     version: {type: integer, minimum: 1}
+                    admin_override:
+                      type: boolean
+                      default: false
+                      description: Explicit Admin-only self-decision override, audited; never bypasses headroom.
       responses:
         '200': {$ref: '#/components/responses/Mutation'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -301,7 +305,7 @@ paths:
           application/json:
             schema:
               allOf:
-                - {$ref: '#/components/schemas/BudgetWrite'}
+                - {$ref: '#/components/schemas/RequestedBudget'}
                 - type: object
                   required: [scope_type, scope_id, expires_at]
                   properties:
@@ -380,6 +384,13 @@ components:
           properties:
             token_limit: {type: integer, minimum: 1, maximum: 9223372036854775807}
             warning_threshold_percent: {type: integer, minimum: 1, maximum: 100, default: 80}
+    RequestedBudget:
+      allOf:
+        - {$ref: '#/components/schemas/Reason'}
+        - type: object
+          required: [token_limit]
+          properties:
+            token_limit: {type: integer, minimum: 1, maximum: 9223372036854775807}
     Entity:
       type: object
       required: [id, name, parent_id, external_ref]
@@ -444,6 +455,7 @@ components:
             modes_write: true
             budget_requests: true
             approvals: true
+            approval_admin_override: true
             boosts: true
             notifications: true
             audit_read: true

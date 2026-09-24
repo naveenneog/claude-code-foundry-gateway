@@ -48,6 +48,7 @@ function Get-ClaudeAumPrices {
         AlwaysReadyMonthly = $(if ($null -ne $baseline) { $baseline * [decimal]0.5 * 730 * 3600 } else { $null })
         StorageGbMonthly = $storage
         PrivateMonthly = $(if ($null -ne $pe -and $null -ne $dns) { $pe * 730 * 3 + $dns * 3 } else { $null })
+        PrivateStorageMonthly = $(if ($null -ne $pe -and $null -ne $dns) { $pe * 730 * 2 + $dns * 2 } else { $null })
         PrivateEndpointHourly = $pe; DnsZoneMonthly = $dns
         InsightsGb = $ingestion; ExecutionGbSecond = $execution; ExecutionsPerTen = $runs
     }
@@ -71,6 +72,8 @@ function Get-ClaudeAumChoices {
         [pscustomobject]@{ Category='Insights'; Value='On'; Label='Application Insights on'; Cost=(Format-ClaudeAumCost $Prices.InsightsGb '/GB ingested'); Implications='Identity-authenticated telemetry in the gateway workspace; ingestion/retention bill by usage.' }
         [pscustomobject]@{ Category='Network'; Value='Public'; Label='Public endpoint, Entra-only'; Cost='$0/month private networking'; Implications='Internet-reachable HTTPS, every route checks Entra. Storage shared-key and blob-public access are off.' }
         [pscustomobject]@{ Category='Network'; Value='Private'; Label='Private endpoints'; Cost=(Format-ClaudeAumCost $Prices.PrivateMonthly); Implications='Three endpoints and three DNS zones; requires connected clients, DNS and an integration subnet. VPN/ExpressRoute costs excluded. Does not change the gateway network.' }
+        [pscustomobject]@{ Category='StorageNetwork'; Value='Public'; Label='Public Entra-only storage'; Cost='$0/month private storage networking'; Implications='No shared keys or anonymous blobs. Some tenant policies prohibit this shape and require private storage instead.' }
+        [pscustomobject]@{ Category='StorageNetwork'; Value='Private'; Label='Private storage behind a public Entra-only API'; Cost=(Format-ClaudeAumCost $Prices.PrivateStorageMonthly); Implications='Two storage endpoints and DNS zones, plus Function VNet integration. The API remains reachable by signed-in admins without a VPN.' }
     )
 }
 
@@ -152,7 +155,7 @@ function Get-ClaudeAumDiscovery {
 
 function New-ClaudeAumPlan {
     param([hashtable]$Discovery, [string]$ResourceGroup, [string]$Location, [string]$NamePrefix,
-          [int]$AlwaysReady, [string]$Redundancy, [string]$Insights, [string]$Network)
+          [int]$AlwaysReady, [string]$Redundancy, [string]$Insights, [string]$Network, [string]$StorageNetwork = 'Public')
     if ($NamePrefix -notmatch '^[a-z][a-z0-9-]{2,25}$') { throw 'NamePrefix must be 3-26 lower-case letters, digits or hyphens, starting with a letter.' }
     if (-not $ResourceGroup -or -not $Location) { throw 'Choose a resource group and location.' }
     return [ordered]@{
@@ -163,6 +166,7 @@ function New-ClaudeAumPlan {
             workspaceCustomerId=$Discovery.Workspace.properties.customerId
             alwaysReadyInstances=$AlwaysReady; storageRedundancy=$Redundancy
             enableInsights=($Insights -eq 'On'); inboundAccess=$Network.ToLowerInvariant()
+            storageAccess=$(if ($Network -eq 'Private') { 'private' } else { $StorageNetwork.ToLowerInvariant() })
         }
     }
 }
@@ -176,8 +180,9 @@ function Get-ClaudeAumWriterRoleDefinition {
 function Set-ClaudeAumWriterRole {
     param([string]$GatewayResourceId)
     $scope = $GatewayResourceId.Substring(0, $GatewayResourceId.IndexOf('/providers/'))
+    $subscriptionId = $GatewayResourceId.Split('/')[2]
     $definition = Get-ClaudeAumWriterRoleDefinition -Scope $scope
-    $existing = @(Invoke-ClaudeAumAz @('role','definition','list','--name',$definition.Name,'--custom-role-only','true','-o','json'))
+    $existing = @(Invoke-ClaudeAumAz @('role','definition','list','--subscription',$subscriptionId,'--name',$definition.Name,'--custom-role-only','true','-o','json'))
     if ($existing.Count) {
         $definition['Id'] = $existing[0].name
         $definition.AssignableScopes = @(@($existing[0].assignableScopes) + $scope | Select-Object -Unique)
@@ -196,7 +201,7 @@ function Set-ClaudeAumWriterRole {
         } }
         Write-ClaudeAumJson $file $body
         $role = Invoke-ClaudeAumAz @('rest','--method','PUT','--url',"https://management.azure.com$roleId`?api-version=2022-04-01",
-            '--headers','Content-Type=application/json','--body',"@$file",'-o','json')
+            '--subscription',$subscriptionId,'--headers','Content-Type=application/json','--body',"@$file",'-o','json')
         return $role.id
     }
     finally { Remove-Item $file -ErrorAction SilentlyContinue }

@@ -1,8 +1,10 @@
 import unittest
+from unittest.mock import Mock
 
 from aum_service.notifications import record_warnings
 from aum_service.service import AumService
 from fakes import FakeArm, FakeStore, FakeAnalytics, Clock
+from test_identity import PERSON
 
 
 class NotificationTests(unittest.TestCase):
@@ -25,6 +27,17 @@ class NotificationTests(unittest.TestCase):
         logs.usage_rows = [{"business_unit": "payroll", "user_id": "", "tokens": 100}]
         record_warnings(AumService(arm, store, logs, clock))
         self.assertEqual([], store.list("notifications")[0])
+
+    def test_person_warning_uses_daily_usage_and_daily_deduplication(self):
+        arm, store, logs, clock = FakeArm(), FakeStore(), FakeAnalytics(), Clock()
+        logs.query = Mock(side_effect=[[], [{"user_id": PERSON, "tokens": 900}]])
+        record_warnings(AumService(arm, store, logs, clock))
+        rows, _ = store.list("notifications")
+        self.assertEqual(1, len(rows))
+        self.assertEqual("user", rows[0]["scope_type"])
+        self.assertEqual("2026-09-24", rows[0]["period"])
+        self.assertIn("ClaudeChargeback(", logs.query.call_args.args[0])
+        self.assertIn(PERSON, logs.query.call_args.args[0])
 
 
 if __name__ == "__main__":

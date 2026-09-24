@@ -61,6 +61,9 @@ Assert ($plan.parameters.workspaceCustomerId -eq $discovery.Workspace.properties
 Assert ($plan.parameters.alwaysReadyInstances -eq 0) 'cold-start choice is preserved'
 Assert (-not $plan.parameters.enableInsights) 'no hidden telemetry cost'
 Assert ($plan.parameters.inboundAccess -eq 'public') 'network choice is preserved'
+$privateStoragePlan = New-ClaudeAumPlan -Discovery $discovery -ResourceGroup 'rg-aum-contoso' -Location 'contoso-region' -NamePrefix 'contoso' -AlwaysReady 0 -Redundancy LRS -Insights Off -Network Public -StorageNetwork Private
+Assert ($privateStoragePlan.parameters.storageAccess -eq 'private' -and $privateStoragePlan.parameters.inboundAccess -eq 'public') 'public API with private storage is a distinct priced choice'
+Assert ($prices.PrivateStorageMonthly -eq [decimal]'15.60') 'private storage quote includes two endpoints and two DNS zones'
 
 $options = @(Get-ClaudeFinOpsChoices -Prices $prices)
 Assert ($options.Count -eq 5) 'admin chooses among five independent FinOps options'
@@ -84,9 +87,14 @@ Assert ($bicep -match 'allowSharedKeyAccess: false') 'storage keys are off'
 Assert ($bicep -notmatch 'listKeys\(') 'template never obtains a key'
 Assert ($bicep -match "name: 'AUM_APIM_RESOURCE_ID'") 'gateway is an injected resource id'
 Assert ($bicep -match 'Storage Blob Data Owner|b7e6dc6d-f1e8-4753-8033-0f276bb0955b') 'timer host has the required data role'
+Assert ($bicep -match 'outboundVnetRouting' -and $bicep -match 'allTraffic: storagePrivate') 'private deployment traffic is explicitly routed through the integration subnet'
 $role = Get-ClaudeAumWriterRoleDefinition -Scope '/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/rg-contoso'
 Assert (@($role.Actions).Count -eq 4) 'writer role has exactly the existing four governance actions'
 Assert (@($role.Actions | Where-Object { $_ -match 'policies|delete|\*' }).Count -eq 0) 'writer cannot edit policy or delete resources'
 & (Join-Path $PSScriptRoot 'Test-AumDiscovery.ps1')
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
+foreach ($template in @('aum-service.bicep','aum-service-network.bicep')) {
+    $build = & az bicep build --file (Join-Path $root "infra\$template") --stdout --only-show-errors 2>&1 | Out-String
+    Assert ($LASTEXITCODE -eq 0) "$template compiles: $build"
+}
 Write-Host "$script:passed AUM deployment assertions passed." -ForegroundColor Green

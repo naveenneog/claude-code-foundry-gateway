@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 import json
 import re
 import threading
+import time
 from uuid import uuid4
 
 from azure.core.exceptions import HttpResponseError, ResourceExistsError, ResourceNotFoundError
@@ -121,17 +122,20 @@ class AzureStore:
                 raise Conflict("Another service writer is active; read state before retrying", "writer_busy") from error
             raise
         stopped, lost = threading.Event(), threading.Event()
+        deadline = [time.monotonic() + 55]
         def renew():
             while not stopped.wait(20):
                 try:
+                    started = time.monotonic()
                     lease.renew()
+                    deadline[0] = started + 55
                 except Exception:
                     lost.set()
                     return
         worker = threading.Thread(target=renew, daemon=True)
         worker.start()
         def check():
-            if lost.is_set():
+            if lost.is_set() or time.monotonic() >= deadline[0]:
                 raise Conflict("Gateway writer lease was lost", "lease_lost")
         try:
             yield check

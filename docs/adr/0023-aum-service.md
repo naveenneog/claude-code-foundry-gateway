@@ -62,7 +62,7 @@ cannot silently consume unallocated headroom. A unit
 manager may edit its teams, any manager may edit people in scope, and only an
 Admin edits units, catalog, tiers or modes.
 
-Requests route one level up; no self-approval. Approvals recheck scope and
+Requests route one level up; self-approval is refused by default. Approvals recheck scope and
 headroom at decision time. Escalation moves toward the administrator.
 Boosts retain the previous value and an expiry. The timer retries overdue
 records on subsequent ticks, using compare-and-restore rather than overwriting
@@ -107,3 +107,25 @@ character ceiling. Paging 500,000 observed people does not imply 500,000
 individual named-value overrides are possible. Projection-backed budgets and
 a cross-tool single writer remain P48. At capacity, edits return an explicit
 conflict; they never truncate, widen scope, or silently stop enforcing.
+
+## Live findings and bounded refinements
+
+- **Measured:** the tenant modifies newly created Storage accounts to disable
+  public network access. The public-storage shape cannot deploy there. Offer an
+  explicit public-API/private-storage choice, priced separately; do not weaken
+  storage policy or enable a key. A new isolated VNet requires an administrator-
+  selected address range and never peers or modifies the gateway network.
+- **Measured:** private endpoints, DNS links, VNet integration and correct data
+  roles alone still produced `InaccessibleStorageException` during OneDeploy.
+  Explicit `outboundVnetRouting.allTraffic=true` made the same keyless deployment
+  succeed. Persist that property with the
+  [2025-03-01 site schema](https://learn.microsoft.com/azure/templates/microsoft.web/2025-03-01/sites).
+- **Decision:** managers can never self-approve. An Admin, who already has direct
+  budget-writing authority, can explicitly choose `admin_override: true` on a
+  request decision, with a reason. It is false by default, cannot be claimed by a
+  Manager, is flagged in the resulting record and audit, and never bypasses
+  headroom. This supports a single-administrator non-production installation
+  without pretending that it supplies independent two-person approval.
+- **Measured:** the copied portal session required sign-in on the Entra blade.
+  Capture stopped. Existing resource screenshots are not evidence of an Entra
+  UI journey; CLI registration and token evidence are recorded separately.

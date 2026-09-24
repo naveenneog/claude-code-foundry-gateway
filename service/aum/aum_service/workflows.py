@@ -63,6 +63,11 @@ class Workflows:
         why = reason(body)
         if action not in {"approve", "reject", "escalate"}:
             raise invalid("Action must be approve, reject or escalate")
+        override = body.get("admin_override", False)
+        if type(override) is not bool:
+            raise invalid("admin_override must be a boolean")
+        if override:
+            identity.require_admin()
         with self.store.lease() as lease:
             snapshot, config, mappings, scope = self.service.prepare(identity, require_revision=False)
             record = self.store.get("requests", id_)
@@ -70,11 +75,12 @@ class Workflows:
                 raise AccessDenied("Request is not accessible")
             if record["state"] != "pending" or type(body.get("version")) is not int or body["version"] != record["version"]:
                 raise Conflict("Request changed; read it again", "stale_request")
-            approver = self.can_approve(identity, record, mappings)
+            approver = self.can_approve(identity, record, mappings) or (identity.is_admin and override)
             if not approver and not (action == "escalate" and record["requester"] == identity.oid):
                 raise AccessDenied("Only the next-level manager or an administrator may decide")
             after = {**record, "version": record["version"] + 1,
-                     "decision_by": identity.oid, "decision_at": utc(self.service.clock()), "decision_reason": why}
+                     "decision_by": identity.oid, "decision_at": utc(self.service.clock()),
+                     "decision_reason": why, "admin_override": override}
             if action == "escalate":
                 if record["approver_scope"] is None:
                     raise Conflict("Request is already escalated to administrators")

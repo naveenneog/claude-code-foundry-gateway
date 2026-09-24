@@ -1,11 +1,12 @@
 import unittest
 from unittest.mock import Mock
+from unittest.mock import patch
 import json
 from pathlib import Path
 
 from aum_service.azure import NamedValues, LogAnalytics
 from aum_service.errors import ServiceError
-from aum_service.storage import encode_entity, decode_entity, row_filter
+from aum_service.storage import AzureStore, encode_entity, decode_entity, row_filter
 
 
 APIM = "/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso"
@@ -66,8 +67,10 @@ class AzureAdapterTests(unittest.TestCase):
         self.assertEqual("finance", next(iter(mapping.values())))
         query = http.call.call_args.kwargs["body"]["query"]
         self.assertIn("user_id in (", query)
-        self.assertIn("arg_max", query)
-        self.assertIn("ClaudeCost(", query)
+        self.assertIn("last_timestamp=max(timestamp)", query)
+        self.assertIn("array_length(units) == 1", query)
+        self.assertIn("ClaudeChargeback(", query)
+        self.assertNotIn("ClaudeCost(", query)
 
 
 class StorageEncodingTests(unittest.TestCase):
@@ -85,6 +88,18 @@ class StorageEncodingTests(unittest.TestCase):
         with self.assertRaises(ServiceError):
             encode_entity("requests", "bad/key", {})
         self.assertEqual("PartitionKey eq 'boosts' and RowKey gt 'abc'", row_filter("boosts", "abc"))
+
+    def test_a_hung_renewal_cannot_extend_the_local_writer_deadline(self):
+        store = AzureStore.__new__(AzureStore)
+        store.blob = Mock()
+        with patch("aum_service.storage.threading.Thread"), patch("time.monotonic") as clock:
+            clock.return_value = 100
+            with store.lease() as check:
+                check()
+                clock.return_value = 161
+                with self.assertRaises(ServiceError) as error:
+                    check()
+                self.assertEqual("lease_lost", error.exception.code)
 
 
 class FunctionHostTests(unittest.TestCase):

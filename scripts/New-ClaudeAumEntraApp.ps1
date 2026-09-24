@@ -11,6 +11,7 @@
 param(
     [string]$DisplayName = 'AUM',
     [string]$ClientId,
+    [string]$SubscriptionId,
     [switch]$SkipOwnerAssignment
 )
 $ErrorActionPreference = 'Stop'
@@ -21,10 +22,10 @@ $cliId = '04b07795-8ddb-461a-bbee-02f9e1bf7b46'
 function Invoke-AumGraph {
     param([string]$Method, [string]$Path, $Body)
     if ($Method -eq 'GET' -and $Path.Contains('&')) {
-        $access = Invoke-ClaudeAumAz @('account','get-access-token','--resource','https://graph.microsoft.com','-o','json')
+        $access = Invoke-ClaudeAumAz @('account','get-access-token','--subscription',$SubscriptionId,'--resource','https://graph.microsoft.com','-o','json')
         return Invoke-RestMethod -Method Get -Uri "$graph$Path" -Headers @{ Authorization=('Bearer ' + $access.accessToken) }
     }
-    $args = @('rest','--method',$Method,'--url',"$graph$Path",'-o','json')
+    $args = @('rest','--method',$Method,'--url',"$graph$Path",'--subscription',$SubscriptionId,'-o','json')
     $file = $null
     try {
         if ($null -ne $Body) {
@@ -36,7 +37,8 @@ function Invoke-AumGraph {
     }
     finally { if ($file) { Remove-Item $file -ErrorAction SilentlyContinue } }
 }
-$account = Invoke-ClaudeAumAz @('account','show','-o','json')
+if (-not $SubscriptionId) { $SubscriptionId = (Invoke-ClaudeAumAz @('account','show','-o','json')).id }
+$account = Invoke-ClaudeAumAz @('account','show','--subscription',$SubscriptionId,'-o','json')
 $me = Invoke-AumGraph GET '/me'
 if (-not $me.id) { throw 'Sign in as a person who can create and own app registrations: az login' }
 $filter = if ($ClientId) { "appId eq '$([guid]$ClientId)'" } else { "displayName eq '$($DisplayName.Replace("'","''"))'" }

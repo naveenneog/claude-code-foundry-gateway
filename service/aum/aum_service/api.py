@@ -105,7 +105,7 @@ class Api:
                         else self.workflows.boost(identity, body, revision)), 201
             decision = re.fullmatch(r"budget-requests/([0-9a-f-]{36})/(approve|reject|escalate)", route)
             if decision and method == "POST":
-                self.fields(body, ["reason", "version"], ["reason", "version"])
+                self.fields(body, ["reason", "version", "admin_override"], ["reason", "version"])
                 return self.workflows.decide(identity, *decision.groups(), body), 200
         raise ServiceError(404, "not_found", "Route not found")
 

@@ -97,6 +97,7 @@ class NamedValues:
             raise ServiceError(504, "arm_operation_pending", "Write is still pending; inspect audit and gateway state")
         version = headers.get("ETag") or headers.get("etag") or payload.get("etag")
         if version and "value" in payload.get("properties", {}):
+            self.documents[(key, version)] = {**properties, **payload["properties"]}
             return {"value": payload["properties"]["value"], "etag": version}
         return self.get(key)
 
@@ -126,7 +127,11 @@ class LogAnalytics:
         if not ids:
             return {}
         selected = ",".join(literal(object_id(id_)) for id_ in ids)
-        query = (f"ClaudeCost(ago(93d), now())\n| where user_id in ({selected})"
-                 "\n| summarize arg_max(day, business_unit) by user_id"
-                 "\n| project id=user_id, parent_id=business_unit\n| take 201")
+        query = (f"let observed = ClaudeChargeback(ago(93d), now())\n| where user_id in ({selected});"
+                 "\nlet latest = observed | summarize last_timestamp=max(timestamp) by user_id;"
+                 "\nobserved | join kind=inner latest on user_id"
+                 "\n| where timestamp == last_timestamp"
+                 "\n| summarize units=make_set(business_unit, 2) by user_id"
+                 "\n| where array_length(units) == 1"
+                 "\n| project id=user_id, parent_id=tostring(units[0])\n| take 201")
         return {r["id"]: r["parent_id"] for r in self.query(query)}

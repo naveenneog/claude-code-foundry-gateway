@@ -15,6 +15,8 @@ param storageRedundancy string
 param enableInsights bool
 @allowed(['public', 'private'])
 param inboundAccess string
+@allowed(['public', 'private'])
+param storageAccess string = inboundAccess
 
 @description('Reuse only a service-owned account with shared key already disabled; blank creates a dedicated account.')
 param existingStorageName string = ''
@@ -30,6 +32,7 @@ var storageName = empty(existingStorageName) ? take('staum${uniqueString(resourc
 var planName = empty(existingPlanName) ? 'plan-aum-${namePrefix}' : existingPlanName
 var siteName = 'func-aum-${namePrefix}'
 var private = inboundAccess == 'private'
+var storagePrivate = private || storageAccess == 'private'
 var packageContainerName = 'aum-package-${namePrefix}'
 // Built-in platform role identifiers, not deployment identifiers.
 var blobOwner = 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b' // Storage Blob Data Owner: Functions timer host.
@@ -48,7 +51,7 @@ resource newStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = if (empty(e
     allowBlobPublicAccess: false
     supportsHttpsTrafficOnly: true
     minimumTlsVersion: 'TLS1_2'
-    publicNetworkAccess: private ? 'Disabled' : 'Enabled'
+    publicNetworkAccess: storagePrivate ? 'Disabled' : 'Enabled'
   }
 }
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' existing = { name: storageName }
@@ -102,7 +105,7 @@ var settings = [
   { name: 'AUM_WORKSPACE_ID', value: workspaceCustomerId }
   { name: 'AUM_STORAGE_ACCOUNT', value: storageName }
 ]
-resource site 'Microsoft.Web/sites@2024-04-01' = {
+resource site 'Microsoft.Web/sites@2025-03-01' = {
   name: siteName
   location: location
   kind: 'functionapp,linux'
@@ -112,7 +115,10 @@ resource site 'Microsoft.Web/sites@2024-04-01' = {
     serverFarmId: plan.id
     httpsOnly: true
     publicNetworkAccess: private ? 'Disabled' : 'Enabled'
-    virtualNetworkSubnetId: private ? integrationSubnetId : null
+    virtualNetworkSubnetId: storagePrivate || private ? integrationSubnetId : null
+    outboundVnetRouting: {
+      allTraffic: storagePrivate
+    }
     siteConfig: {
       minTlsVersion: '1.2'
       scmMinTlsVersion: '1.2'
@@ -187,11 +193,12 @@ module logsAccess 'aum-logs-access.bicep' = {
     principalId: site.identity.principalId
   }
 }
-var endpoints = private ? [
+var endpoints = concat(private ? [
   { name: 'sites', target: site.id, zone: sitesDnsZoneId }
+] : [], storagePrivate ? [
   { name: 'blob', target: storage.id, zone: blobDnsZoneId }
   { name: 'table', target: storage.id, zone: tableDnsZoneId }
-] : []
+] : [])
 resource endpoint 'Microsoft.Network/privateEndpoints@2023-11-01' = [for ep in endpoints: {
   name: 'pe-aum-${namePrefix}-${ep.name}'
   location: location

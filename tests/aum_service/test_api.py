@@ -107,6 +107,14 @@ class ApiTests(unittest.TestCase):
         self.assertIn("id >", self.logs.queries[-1])
         self.assertEqual(400, self.call("GET", "/people", {"limit": "500000"})[0])
 
+    def test_request_cursor_preserves_log_analytics_submicrosecond_precision(self):
+        stamp = "2026-09-24T11:00:00.1234567Z"
+        self.logs.usage_rows = [{"timestamp": stamp, "request_id": str(n)} for n in range(2)]
+        _, page, _ = self.call("GET", "/requests", {"limit": "1"})
+        self.logs.usage_rows = []
+        self.assertEqual(200, self.call("GET", "/requests", {"limit": "1", "cursor": page["next_cursor"]})[0])
+        self.assertIn(stamp, self.logs.queries[-1])
+
     def test_query_injection_stays_in_a_quoted_string(self):
         self.call("GET", "/people", {"search": 'x" | union * //'})
         self.assertIn('x\\" | union * //', self.logs.queries[-1])

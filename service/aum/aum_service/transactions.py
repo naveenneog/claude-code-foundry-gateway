@@ -21,9 +21,11 @@ def apply_values(arm, snapshot, changes, check_lease):
                 continue
             result = arm.put(key, value, current["etag"])
             receipts.append((key, before["value"], result["etag"]))
+            check_lease()
             readback = arm.get(key)
             if readback["value"] != value or readback["etag"] != result["etag"]:
                 raise Conflict("Named value read-back did not match", "readback_failed")
+        check_lease()
         return {key: arm.get(key) for key in changes}
     except Exception as error:
         incomplete = []
@@ -40,4 +42,5 @@ def apply_values(arm, snapshot, changes, check_lease):
                                "Rollback needs administrator review: " + ", ".join(incomplete)) from error
         if isinstance(error, ServiceError) and not receipts:
             raise
-        raise ServiceError(502, "write_failed", "Named-value write failed; completed changes restored") from error
+        raise ServiceError(502, "write_failed",
+                           "Write failed; known completed changes restored. Verify target state before retrying.") from error

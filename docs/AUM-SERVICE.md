@@ -107,7 +107,7 @@ deployment-specific defaults.
   -GatewayResourceGroup <gateway-resource-group> -ApimName <gateway-name> `
   -ResourceGroup <new-service-resource-group> -Location <discovered-region> `
   -NamePrefix <chosen-prefix> -AlwaysReady 0 -Redundancy LRS `
-  -Insights Off -Network Public -WhatIf
+  -Insights Off -Network Public -StorageNetwork Public -WhatIf
 ```
 
 The script presents numbered choices even when parameters select them:
@@ -121,6 +121,9 @@ The script presents numbered choices even when parameters select them:
 - **Public Entra-only or private.** Public still validates every token and
   disables storage shared keys. Private needs connected clients, VNet
   integration and DNS, and has fixed endpoint charges.
+- **Storage network independently.** A public API can use private storage.
+  Choose this when policy disables storage's public endpoint; two storage
+  endpoints and DNS zones add $15.60/month in the dated example below.
 
 `-WhatIf` performs discovery/pricing only. It creates no app registration,
 resources, role assignments, deployment package or access token for the service.
@@ -152,6 +155,12 @@ Re-run with the same group and prefix to update the same deployment.
 
 ### Private deployment
 
+For a public API and private storage, choose `-Network Public -StorageNetwork
+Private`. For an entirely private service, choose `-Network Private`. An
+isolated service VNet can be created with `-NewNetworkAddressPrefix
+<administrator-selected-nonoverlapping-RFC1918-/24>`; it has no peering to the
+gateway. Alternatively supply existing service subnets and DNS zones.
+
 Supply `-IntegrationSubnetId`, `-PrivateEndpointSubnetId`, `-SitesDnsZoneId`,
 `-BlobDnsZoneId` and `-TableDnsZoneId`. Use service-specific subnets:
 
@@ -165,6 +174,12 @@ and new storage. The deployer and administrators must resolve/reach the private
 Function and SCM endpoints. Private DNS zone reuse can reduce the quoted fixed
 cost. VPN/ExpressRoute and central DNS operations are separate administrator
 choices, not hidden free components. The gateway's topology is untouched.
+
+Public API/private storage uses only the blob and table endpoints and zones;
+it needs no sites private zone. In both private-storage shapes the template
+explicitly enables `outboundVnetRouting.allTraffic`. Measured in this deployment:
+private endpoints, DNS and data roles without it still gave OneDeploy a 403;
+the same deployment succeeded after this routing property was enabled.
 
 ## Deploy in the Azure portal
 
@@ -239,6 +254,16 @@ az bicep build --file .\infra\aum-service.bicep `
 10. In **Functions**, verify `http_api`, `expire_boosts` and
     `warning_thresholds`; in **Flex Consumption > Scale and concurrency** verify
     the administrator's warm-instance choice.
+
+The following captures are from the real deployment, with identities replaced
+by Contoso placeholders. The overview was captured before code deployment;
+its loading details are not proof of a healthy API. The copied session then
+required sign-in on the Entra blade and capture stopped. Do not treat missing
+Entra/Functions screenshots as completed portal tests.
+
+![Live provisioned Function resource, before code deployment](guide/aum-01-overview.png)
+
+![Live storage configuration with shared-key and anonymous access disabled](guide/aum-04-storage.png)
 
 Optional Insights uses a **non-secret routing connection string** and
 `APPLICATIONINSIGHTS_AUTHENTICATION_STRING=Authorization=AAD`. It is not a
@@ -387,7 +412,7 @@ unlimited under a finite parent is refused.
    `reason`. The server selects the next-level approver, never a client group ID.
 2. The next-level manager or another Admin calls
    `/budget-requests/<id>/approve` or `/reject`, with the current `version`
-   and a reason. Self-approval is refused. Approval rechecks current scope and
+   and a reason. Self-approval is refused by default. Approval rechecks current scope and
    headroom; submitting a request does not reserve headroom.
 3. The requester or approver can call `/escalate`. A team-level approver becomes
    its unit; the next escalation reaches Admin. Escalating beyond Admin is refused.
@@ -406,14 +431,35 @@ are idempotent per budget, UTC period and threshold. `delivery_status=pending`
 means **no email has been sent**. ACS email integration can consume these records
 later; the capability `email_delivery` is false.
 
+An Admin can explicitly include `admin_override: true` on a decision, with a
+reason. Managers cannot use it. It is recorded in both the decision and audit,
+does not bypass headroom, and is advertised as `approval_admin_override`.
+This is the same ultimate authority an Admin already has through direct budget
+writes, not a claim of independent two-person approval. A sole-admin installation
+can test the workflow without inventing a second identity.
+
 ### Manager-only live journey
 
-Use the dedicated manager-journey script described in the test section, first
+Use `scripts/Test-ClaudeAumManagerJourney.ps1`, first
 as a dry run. Changing the current account's role/group membership affects
 other tests and already-issued tokens remain valid until expiry. Coordinate
 with the lead before `-Execute`, and require a fresh token after each change.
 The script must restore assignments and owned-group membership in `finally`,
 then prove Admin access. Never use a browser profile owned by another run.
+
+```powershell
+# Default is read-only: reports exactly what would change.
+.\scripts\Test-ClaudeAumManagerJourney.ps1 `
+  -UnitManagerGroupId <owned-unit-manager-group-id> `
+  -TeamManagerGroupId <owned-team-manager-group-id> `
+  -UnitId <test-unit> -TeamId <test-team> -OutsideTeamId <other-team>
+```
+
+Only after the lead's explicit go-ahead, add `-Execute -LeadApproval go`.
+If CLI token caching retains Admin claims, the script refuses to call it a
+manager test. Supply `-TokenAcquirer` with a script block that returns a freshly
+issued delegated token for the supplied scope/phase. It never clears the shared
+CLI cache, and always restores access in `finally`.
 
 ## API reference
 
@@ -460,6 +506,7 @@ The following is a **dated example**, not a deployment default: Canada Central,
 | Optional Insights ingestion | $2.76/GB | Retention/allowances are workspace-specific |
 | Three private endpoints | $21.90/month | Global $0.01/hour per endpoint |
 | Three new private DNS zones | $1.50/month | First 25 zones, $0.50 each |
+| Public API with private storage | $15.60/month fixed networking | Two endpoints and two new DNS zones |
 | On-demand execution | $0.000037/GB-second | Regional marginal rate; grants are subscription-wide |
 
 Blob package/host storage, Table operations, bandwidth and retained audit growth
@@ -479,7 +526,7 @@ architectures, not a required AUM cost. See [Turnstile costs](TURNSTILE.md#what-
 | Manager scope | Token groups only, 200-group claim ceiling, fail-closed overage; no Graph broadening |
 | Catalog/overrides | Existing gateway formats, **4,096 characters per named value**; reject capacity rather than truncate |
 | 500,000 person overrides | **Not supported by named values.** Projection-backed budgets and single cross-tool writer are P48 |
-| Active/idle membership | Uses gateway membership where present and observed analytics for missing people; unknown parents cannot receive allocations |
+| Active/idle membership | Legacy gateway membership, or the latest unambiguous request stamp for projection-backed people; never an obsolete legacy map under projection. Unknown parents cannot receive allocations |
 | Scope revocation | Fresh mapping lookup each request, but group-role changes require a newly issued token; existing tokens expire normally |
 | Telemetry | Delayed, retained for a finite workspace window; cache-write cost is unknown rather than fabricated |
 | Mutations | Serialized per service, conditional ARM writes; no distributed transaction with an independent external writer |
@@ -515,6 +562,8 @@ count, audit retention, query latency and manager concurrency explicitly.
 | `writer_busy` / `lease_lost` | Another writer or storage connectivity loss | Read state before retrying; inspect private DNS/RBAC |
 | ARM `RequestDisallowedByPolicy` | Tenant policy rejects chosen public/service shape | Choose a compliant private topology; do not re-enable shared keys |
 | Storage `AuthorizationPermissionMismatch` | Data-role propagation or wrong identity | Verify Blob Data Owner and Table Data Contributor on this account, then retry reads later |
+| `RoleAssignmentScopeNotAssignableToRoleDefinition` just after extending a custom role | Role-definition propagation | Confirm the selected gateway group is an assignable scope; wait and rerun the idempotent deployment |
+| `InaccessibleStorageException` / `BlobUploadFailedException` / 403 during OneDeploy | Policy disabled public storage, or deployment traffic still bypasses the integration subnet | Select and price private storage; verify approved endpoints, private DNS and `outboundVnetRouting.allTraffic=true`. Never enable keys as a workaround |
 | HTTP 404 after package deployment | Root package layout or Functions indexing failed | Ensure `host.json`, `function_app.py`, requirements and package directory are at ZIP root |
 | Timer not listed / boost remains active | Missing extension bundle, indexing, storage lease or failed restore | Inspect Functions/host logs and durable boost/audit records; minute ticks retry |
 | Portal capture reaches sign-in | Copied session expired | Stop capture and tell the lead; never open or share the original profile |
@@ -535,6 +584,13 @@ warning records and timer expiry. Five isolated mutations must fail the tests:
 scope widening, removed headroom, serializer drift, no expiry, and an
 out-of-scope manager write. `Test-All.ps1` explicitly records SKIP when the
 service venv is absent; it does not claim those checks passed.
+
+`tests/Test-AumServiceLive.ps1` is an explicitly opted-in, empty-test-catalog
+Admin harness. It checks real reads, request paging, a named-value change and
+byte-identical restore, headroom denial, default self-approval denial, explicit
+Admin decisions, escalation and a short boost reverted by the actual timer.
+It does not change any Entra membership. Use only the discovered isolated test
+gateway; never run it against an existing business catalog.
 
 Before removal, export audit/history and resolve outstanding boosts. The service
 does not restore every budget merely because its resources are removed.
