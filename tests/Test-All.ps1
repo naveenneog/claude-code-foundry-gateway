@@ -28,8 +28,9 @@ function Invoke-Check {
     $path = Join-Path $PSScriptRoot $Script
     if (-not (Test-Path $path)) { $path = Join-Path $scriptsDir $Script }
     if (-not (Test-Path $path)) {
-        Write-Host "  skipped - $Script not found" -ForegroundColor Yellow
-        $script:results += [pscustomobject]@{ Name = $Name; Result = 'SKIP' }
+        # A registered check that is missing proves nothing, so it fails the run.
+        Write-Host "  FAIL - $Script not found" -ForegroundColor Red
+        $script:results += [pscustomobject]@{ Name = $Name; Result = 'FAIL' }
         return
     }
 
@@ -37,15 +38,24 @@ function Invoke-Check {
     # Splat a hashtable, not an array: an array is bound positionally, so
     # '-Check' would land in $Root and the check would silently scan nothing
     # and still report success.
-    & $path @Params | Out-Host
-    $ok = ($LASTEXITCODE -eq 0)
+    # A terminating error inside a check travels up to the nearest try block.
+    # Without this catch that was the one around every check below: the rest
+    # never ran and the summary still said all passed (Test-RunnerIntegrity).
+    $ok = $false
+    try {
+        & $path @Params | Out-Host
+        $ok = ($LASTEXITCODE -eq 0)
+    }
+    catch { Write-Host "  FAIL - the check stopped with an error: $($_.Exception.Message)" -ForegroundColor Red }
     $script:results += [pscustomobject]@{ Name = $Name; Result = $(if ($ok) { 'PASS' } else { 'FAIL' }) }
 }
 
+$completed = $false
 Push-Location $root
 try {
     # Must come first: a missing BOM mangles every other PowerShell check on 5.1.
     Invoke-Check 'Script encoding (PowerShell 5.1 safety)' 'Repair-ScriptEncoding.ps1' @{ Check = $true }
+    Invoke-Check 'Test-All counts every check'             'Test-RunnerIntegrity.ps1'
     Invoke-Check 'Format strings parse and run'            'Test-FormatStrings.ps1'
 Invoke-Check 'Screenshots and the docs that show them' 'Test-Screenshots.ps1'
 Invoke-Check 'Resolver - the entitlement read path'   'Test-Resolver.ps1'
@@ -87,6 +97,7 @@ Invoke-Check 'Resolver - the entitlement read path'   'Test-Resolver.ps1'
         Invoke-Check 'Model allowlist on the live gateway' 'Test-CapabilityScopingLive.ps1'
         Invoke-Check 'Named value writes against Azure'    'Test-NamedValueWrites.ps1'
     }
+    $completed = $true
 }
 finally { Pop-Location }
 
@@ -105,6 +116,7 @@ if (-not $IncludeAzure) {
 }
 
 Write-Host ''
+if (-not $completed) { Write-Host 'The run stopped before every check ran, so it proves nothing.' -ForegroundColor Red; exit 1 }
 $failed = @($results | Where-Object Result -eq 'FAIL').Count
 if ($failed) { Write-Host "$failed check(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'All checks passed.' -ForegroundColor Green

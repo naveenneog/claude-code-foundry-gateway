@@ -571,6 +571,18 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Fixed
 
+- **`Test-All.ps1` reported success for checks that never ran.** A terminating error inside a
+  check travels up to the nearest `try`, and every check ran inside one `try`/`finally` with no
+  `catch`. So when `Test-On-PS51.ps1` found its fixed temp file `wiz51-answers.txt` locked by a
+  second run on the same machine, the rest of the run was skipped and the summary still printed
+  "All checks passed." with exit code 0: a packet gate passed in 57 seconds on 9 of 32 checks. It
+  was caught before anything was pushed. Each check now records FAIL and the run continues; a run
+  that stops early fails; a registered check whose script is missing fails instead of being
+  skipped; and both wizard tests use one temp file per run. `tests/Test-RunnerIntegrity.ps1`
+  reproduces the false pass on a copy of the runner, and two mutations prove its assertions catch
+  it. The only trigger found was the wizard's fixed temp file; earlier gate receipts ran for 20 to
+  30 minutes, and a run cut short at the wizard check takes about one.
+
 - **The in-network projection writer reported success when writes failed.**
   `sync/src/apply-projection.mjs` printed `ok: true` even when upserts or deletes had failed,
   though it exited 3. It now reports the outcome. Found by a review of the 500,000-developer

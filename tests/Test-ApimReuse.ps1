@@ -30,7 +30,8 @@ if (-not $v2.Count) {
 $expected = $v2[0].name
 Write-Host ("  expecting it to reuse: {0} ({1}, {2})" -f $expected, $v2[0].sku.name, $v2[0].resourceGroup) -ForegroundColor DarkGray
 
-$answers = Join-Path $env:TEMP 'wiz-reuse-answers.txt'
+# One file per run, so two runs on the same machine cannot share it.
+$answers = Join-Path $env:TEMP ('wiz-reuse-answers-' + [guid]::NewGuid().ToString('N') + '.txt')
 # Positional, so the order below must match the order the wizard asks in. When
 # a prompt is added ahead of the reuse menu, every answer after it shifts and
 # the "1" lands somewhere else - which is how this test failed after the tier
@@ -60,8 +61,8 @@ y
 
 '@ | Set-Content $answers -Encoding ASCII
 
-$out = cmd /c "powershell -NoProfile -File `"$script`" -WhatIf < `"$answers`" 2>&1" | Out-String
-Remove-Item $answers -Force -ErrorAction SilentlyContinue
+$out = try { cmd /c "powershell -NoProfile -File `"$script`" -WhatIf < `"$answers`" 2>&1" | Out-String }
+finally { Remove-Item $answers -Force -ErrorAction SilentlyContinue }
 
 $fail = 0
 function Assert($label, $condition) {

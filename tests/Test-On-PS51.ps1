@@ -15,7 +15,9 @@ Write-Host 'Running the wizard under Windows PowerShell 5.1' -ForegroundColor Cy
 Write-Host "  $ps51" -ForegroundColor DarkGray
 Write-Host ''
 
-$answers = Join-Path $env:TEMP 'wiz51-answers.txt'
+# One file per run: a fixed name let a second run on the same machine find it
+# locked, and that error once stopped Test-All early (Test-RunnerIntegrity).
+$answers = Join-Path $env:TEMP ('wiz51-answers-' + [guid]::NewGuid().ToString('N') + '.txt')
 # y            use this subscription
 # (blank)      resource group default
 # (blank)      location default
@@ -38,8 +40,8 @@ y
 
 '@ | Set-Content $answers -Encoding ASCII
 
-$out = cmd /c "`"$ps51`" -NoProfile -File `"$script`" -WhatIf < `"$answers`" 2>&1" | Out-String
-Remove-Item $answers -Force -ErrorAction SilentlyContinue
+$out = try { cmd /c "`"$ps51`" -NoProfile -File `"$script`" -WhatIf < `"$answers`" 2>&1" | Out-String }
+finally { Remove-Item $answers -Force -ErrorAction SilentlyContinue }
 
 $out -split "`n" | ForEach-Object { $_.TrimEnd() }
 

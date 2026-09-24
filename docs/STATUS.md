@@ -27,6 +27,20 @@ against stale runs is being added with the modes, and a single queue-driven writ
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
 
+## A gate that passed on 9 of 32 checks, 2026-09-24
+
+Found while merging P19, before anything was pushed: the packet gate on `c938ec9` passed in 57
+seconds. `Test-All.ps1` had run 9 of its 32 checks. A second `Test-All` in another worktree held
+the PowerShell 5.1 wizard's fixed temp file, the write threw, and a terminating error travels up
+to the nearest `try`: the one around every check. The summary counted only the results it had and
+printed "All checks passed." That receipt is not counted.
+
+| | |
+|---|---|
+| **Fix** | Each check catches its own error and records FAIL; a run that stops early fails; a registered check whose script is missing fails; both wizard tests use one temp file per run |
+| **Proof** | `tests/Test-RunnerIntegrity.ps1`, 17 assertions on a copy of the runner with stub checks: a locked-file error, a thrown error, exit 1 and a missing script. Removing the per-check catch still fails the run through the completion guard; removing both reproduces the false pass. Before the fix, 9 assertions failed: exit 0 with 10 of 32 stubs run |
+| **Earlier receipts** | They ran for 20 to 30 minutes; a run cut short at the wizard check takes about one |
+
 ## P45 acceptance criteria — delegated management, phase 1
 
 - [x] `Turnstile.Viewer` and `Turnstile.Manager` exist beside `Turnstile.Admin`, created by the repository's script as the application's owner, with no directory role
