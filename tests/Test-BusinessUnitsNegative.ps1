@@ -583,10 +583,10 @@ $mutations = @(
        To    = 'That is a known issue' }
 
     @{ Suite = 'Test-Scale.ps1'
-       Name  = 'the README implies the projection is the default and load-tested'
+       Name  = 'the README implies the projection is the default'
        File  = 'README.md'
-       From  = '**It is not the default, and it is not yet'
-       To    = '**It is the default, and it is' }
+       From  = '**It is not the default.**'
+       To    = '**It is the default.**' }
 
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'private networking stops being priced'
@@ -3038,4 +3038,3 @@ Write-Host 'Every mutation was caught.' -ForegroundColor Green
 # last thing it ran was a suite that was supposed to go red. Falling off the
 # end here would report that as this script's own failure.
 exit 0
-
