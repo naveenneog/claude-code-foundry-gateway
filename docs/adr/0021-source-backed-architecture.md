@@ -127,8 +127,10 @@ The integration follows current main at `fc98cca`, including the merged budget m
 and ADR-0025's parallel runner. ADR-0025 supersedes ADR-0024's temporary 60-minute
 command budget and restores 30 minutes; this packet does not change that budget.
 
-Architecture fixtures remain under the checkout, so its one-line registration uses the
-runner's exclusive lane. Repeated source/path reads are cached for one synchronous
+Architecture reads are bounded to the declared source paths, docs and Bicep inventory,
+not the whole working tree. Fixtures have unique names in the ignored `.shots-entra`
+area and never mutate repository sources or share Azure CLI state, so the one-line
+registration uses the normal parallel lane. Repeated source/path reads are cached for one synchronous
 check only, including proper cleanup on failure; a later check always starts fresh.
 Tests prove that edits and deletions between checks remain visible. No mutation was
 removed to improve timing.

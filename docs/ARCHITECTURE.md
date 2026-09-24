@@ -534,9 +534,9 @@ positive controls.
 
 Repeated source and path reads are cached only inside one synchronous check and discarded
 on return, including on an exception. A later mutation gets a new snapshot, so performance
-does not hide edits between checks. `Test-Architecture.ps1` runs in Test-All's exclusive
-lane because its fixtures remain under the checkout; it does not share mutable Azure
-state with the parallel checks.
+does not hide edits between checks. `Test-Architecture.ps1` runs in the parallel lane:
+it does not use Azure CLI state or scan the entire working tree, and every mutation uses
+a uniquely named copy in the ignored `.shots-entra` area, never a repository source file.
 
 The current main runner follows [ADR-0025](adr/0025-parallel-test-suite.md): isolated
 parallel checks and complete mutation shards restored the 30-minute gate command budget.

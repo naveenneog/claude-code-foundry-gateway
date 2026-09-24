@@ -36,7 +36,7 @@ Assert 'committed pictures agree with sources and code' ($baseline.Code -eq 0) $
 if ($baseline.Code -ne 0) { exit 1 }
 if ($CheckOnly) { Write-Host $baseline.Output; exit 0 }
 
-$fixture = Join-Path $root ('.architecture-test-' + [guid]::NewGuid().ToString('N'))
+$fixture = Join-Path (Join-Path $root '.shots-entra') ('architecture-test-' + [guid]::NewGuid().ToString('N'))
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 
 function Copy-FixtureFile([string]$Relative) {
@@ -67,7 +67,7 @@ function Invoke-Mutation([string]$Label, [string]$Relative, [scriptblock]$Change
 }
 
 try {
-    New-Item $fixture -ItemType Directory | Out-Null
+    New-Item $fixture -ItemType Directory -Force | Out-Null
     $manifest = Get-Content (Join-Path $root 'docs/architecture/manifest.json') -Raw | ConvertFrom-Json
     $files = @('docs/architecture/manifest.json', 'README.md', 'docs/ARCHITECTURE.md')
     foreach ($diagram in $manifest.diagrams) {

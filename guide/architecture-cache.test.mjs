@@ -6,8 +6,8 @@ import { resolve, join } from 'node:path';
 import { text, withSourceSnapshot } from './architecture-model.mjs';
 
 test('source caching belongs to one synchronous check, never a later mutation', () => {
-  const root = resolve(`.architecture-cache-${randomUUID()}`);
-  mkdirSync(root);
+  const root = resolve('.shots-entra', `architecture-cache-${randomUUID()}`);
+  mkdirSync(root, { recursive: true });
   try {
     const file = join(root, 'source.txt');
     writeFileSync(file, 'before\r\n');
@@ -23,8 +23,8 @@ test('source caching belongs to one synchronous check, never a later mutation', 
 });
 
 test('a thrown check releases its cache', () => {
-  const root = resolve(`.architecture-cache-${randomUUID()}`);
-  mkdirSync(root);
+  const root = resolve('.shots-entra', `architecture-cache-${randomUUID()}`);
+  mkdirSync(root, { recursive: true });
   try {
     const file = join(root, 'source.txt');
     writeFileSync(file, 'old');
