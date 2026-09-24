@@ -32,6 +32,13 @@ deployed name in calls and allowlists, and confirm the price mapping; do not
 paste a model catalogue into a client allowlist. Regions and quota eligibility
 are discovered per account, not supplied as a hard-coded default.
 
+**Current script boundary:** `Add-ClaudeModel.ps1` uses one `-ResourceGroup`
+for both its gateway writes and Foundry deployment discovery. `-FoundryAccount`
+selects a name, not a different resource group. When those resources are in
+different groups, use the manual procedure below with each resource's own
+scope; do not change `-ResourceGroup` until one half happens to work and assume
+the other half still targets the right resource.
+
 **Live verification, 2026-09-24 UTC:** account discovery, deployment listing and
 the account-specific model-catalogue command above completed against a discovered
 account, and returned the selected account plus deployment/model records. This
