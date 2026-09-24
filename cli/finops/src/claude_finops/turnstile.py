@@ -36,7 +36,7 @@ class TurnstileBackend(Backend):
     def __init__(self, config, token_provider=None, transport=None):
         config.validate()
         self.config = config
-        self._token_provider = token_provider or (lambda: token(config.scope))
+        self._token_provider = token_provider or (lambda: token(config.scope, config.subscription))
         self._token = None
         self._client = httpx.Client(base_url=config.url.rstrip("/"), timeout=60,
                                     follow_redirects=False, transport=transport)

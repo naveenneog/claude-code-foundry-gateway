@@ -2,6 +2,7 @@
 
 from datetime import datetime
 import json
+from hashlib import sha256
 import re
 from xml.etree import ElementTree
 
@@ -67,4 +68,43 @@ def validate_manifest(folder):
             continue
         if image.name not in seen:
             problems.append("image has no manifest: " + image.name)
+    return problems
+
+
+def validate_portal_manifest(folder):
+    path = folder / "manifest.json"
+    if not path.exists():
+        return ["missing live portal manifest"]
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+        entries = document["images"]
+    except (ValueError, KeyError):
+        return ["invalid portal manifest"]
+    problems, seen = [], set()
+    if document.get("auth_blocked"):
+        problems.append("portal sign-in was required; do not claim complete portal capture")
+    if not entries:
+        problems.append("no live portal images")
+    for entry in entries:
+        name, text_file = entry.get("file", ""), entry.get("text_file", "")
+        if not re.fullmatch(r"[a-z0-9-]+\.png", name) or not re.fullmatch(r"[a-z0-9-]+\.txt", text_file):
+            problems.append("unsafe portal evidence filename")
+            continue
+        if name in seen:
+            problems.append("duplicate portal image")
+        seen.add(name)
+        image, transcript = folder / name, folder / text_file
+        if entry.get("source") != "live" or entry.get("redaction") is not True:
+            problems.append(name + ": must be live and redacted")
+        if not re.fullmatch(r"[a-f0-9]{40}", entry.get("commit", "")):
+            problems.append(name + ": source commit missing")
+        if not image.exists() or not transcript.exists():
+            problems.append(name + ": image or redacted DOM evidence missing")
+            continue
+        if sha256(image.read_bytes()).hexdigest() != entry.get("sha256"):
+            problems.append(name + ": image hash does not match provenance")
+        problems += [name + ": " + issue for issue in privacy_problems(transcript.read_text(encoding="utf-8"))]
+    for image in folder.glob("*.png"):
+        if image.name not in seen:
+            problems.append("portal image has no manifest: " + image.name)
     return problems

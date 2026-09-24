@@ -35,7 +35,8 @@ class DirectBackend(Backend):
         try:
             path.write_text(json.dumps(dict(action=action, body=body, parameters=params)), encoding="utf-8")
             result = subprocess.run(["pwsh", "-NoProfile", "-File", str(self.bridge), "-InputFile", str(path),
-                                     "-ResourceGroup", self.config.resource_group, "-ApimName", self.config.apim_name],
+                                     "-ResourceGroup", self.config.resource_group, "-ApimName", self.config.apim_name,
+                                     *(["-Subscription", self.config.subscription] if self.config.subscription else [])],
                                     capture_output=True, text=True, encoding="utf-8", timeout=300)
             if result.returncode:
                 raise FinOpsError("Gateway script refused the change. Check Azure roles, governance authority, parent budget and Entra groups; refresh before retrying.", 6)
@@ -49,8 +50,8 @@ class DirectBackend(Backend):
         if not self.config.workspace:
             raise FinOpsError("Usage requires workspace in config: the Log Analytics workspace customer id. Find it in Azure Portal > Log Analytics > Overview.")
         workspace = identifier(self.config.workspace)
-        access = az("account", "get-access-token", "--resource", "https://api.loganalytics.io",
-                    "--query", "accessToken", "-o", "tsv")
+        access = self._az("account", "get-access-token", "--resource", "https://api.loganalytics.io",
+                         "--query", "accessToken", "-o", "tsv")
         try:
             with httpx.Client(timeout=90) as client:
                 response = client.post(f"https://api.loganalytics.io/v1/workspaces/{workspace}/query",
@@ -77,16 +78,19 @@ class DirectBackend(Backend):
     def _quote(value):
         return json.dumps(str(value), ensure_ascii=True)
 
+    def _az(self, *args):
+        return az(*args, *(("--subscription", self.config.subscription) if self.config.subscription else ()))
+
     def read(self, resource, **params):
         if resource == "whoami":
-            account = json.loads(az("account", "show", "-o", "json"))
+            account = json.loads(self._az("account", "show", "-o", "json"))
             can_write = False
             if account.get("id"):
                 resource_id = (f"/subscriptions/{account['id']}/resourceGroups/{self.config.resource_group}"
                                f"/providers/Microsoft.ApiManagement/service/{self.config.apim_name}")
                 url = f"https://management.azure.com{resource_id}/providers/Microsoft.Authorization/permissions?api-version=2022-04-01"
                 try:
-                    permissions = json.loads(az("rest", "--method", "get", "--url", url, "-o", "json"))
+                    permissions = json.loads(self._az("rest", "--method", "get", "--url", url, "-o", "json"))
                     action = "microsoft.apimanagement/service/namedvalues/write"
                     can_write = any(any(fnmatchcase(action, p.lower()) for p in row.get("actions", []))
                                     and not any(fnmatchcase(action, p.lower()) for p in row.get("notActions", []))

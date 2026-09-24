@@ -9,9 +9,18 @@
 param(
     [Parameter(Mandatory = $true)][string]$InputFile,
     [Parameter(Mandatory = $true)][string]$ResourceGroup,
-    [Parameter(Mandatory = $true)][string]$ApimName
+    [Parameter(Mandatory = $true)][string]$ApimName,
+    [string]$Subscription
 )
 $ErrorActionPreference = 'Stop'
+if ($Subscription) {
+    $parsedSubscription = [guid]::Empty
+    if (-not [guid]::TryParse($Subscription, [ref]$parsedSubscription)) { throw 'Subscription must be an object id.' }
+    $script:AzureCliExecutable = @(Get-Command az -CommandType Application -ErrorAction Stop)[0].Source
+    function az {
+        & $script:AzureCliExecutable @args --subscription $Subscription
+    }
+}
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeTurnstileGovernance.ps1')

@@ -29,8 +29,9 @@ def az(*args: str) -> str:
     return result.stdout.strip()
 
 
-def token(scope: str) -> str:
-    value = az("account", "get-access-token", "--scope", scope, "--query", "accessToken", "-o", "tsv")
+def token(scope: str, subscription: str = "") -> str:
+    selected = ("--subscription", subscription) if subscription else ()
+    value = az("account", "get-access-token", "--scope", scope, "--query", "accessToken", "-o", "tsv", *selected)
     if not value:
         raise FinOpsError("No access token. Run az login in the Turnstile tenant.", 3)
     return value
@@ -50,6 +51,7 @@ class Config:
     backend: str = "turnstile"
     url: str = ""
     scope: str = ""
+    subscription: str = ""
     resource_group: str = ""
     apim_name: str = ""
     repository: str = ""
@@ -70,6 +72,12 @@ class Config:
         for value in (self.resource_group, self.apim_name):
             if value and not re.fullmatch(r"[A-Za-z0-9._()-]+", value):
                 raise FinOpsError("Use a simple Azure resource group and APIM name.")
+        if self.subscription:
+            from uuid import UUID
+            try:
+                UUID(self.subscription)
+            except (ValueError, TypeError):
+                raise FinOpsError("Use a subscription object id; configure can discover it from its display name.") from None
         return self
 
     def public(self):
@@ -95,9 +103,10 @@ def load_config(path: Path | None = None, **overrides) -> Config:
     config = Config(**values).validate()
     if config.backend == "turnstile" and (not config.url or not config.scope):
         if not config.resource_group or not config.apim_name:
-            raise FinOpsError("Set url and scope in ~/.aum/config.json, or pass --url and --scope. For discovery set resource_group and apim_name.")
+            raise FinOpsError("Run aum configure to discover Azure targets, or set url and scope in ~/.aum/config.json. You can also pass --url and --scope.")
         raw = az("apim", "nv", "show", "-g", config.resource_group, "--service-name", config.apim_name,
-                 "--named-value-id", "turnstile-integration", "--query", "value", "-o", "tsv")
+                 "--named-value-id", "turnstile-integration", "--query", "value", "-o", "tsv",
+                 *(("--subscription", config.subscription) if config.subscription else ()))
         settings = parse_integration(raw)
         config.url = config.url or settings["url"]
         config.scope = config.scope or settings["scope"]

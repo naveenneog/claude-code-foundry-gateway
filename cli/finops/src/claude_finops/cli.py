@@ -27,7 +27,7 @@ class EverywhereGroup(TyperGroup):
         ctx.meta["finops_help"] = "--help" in args
         flags = {"--json", "--plain", "--what-if", "--no-color", "--ascii", "--version", "--screen-reader", "--redact"}
         options = {"--backend", "--month", "--config", "--url", "--scope", "--theme",
-                   "--resource-group", "--apim-name"}
+                   "--resource-group", "--apim-name", "--subscription"}
         prefix, rest = [], []
         index = 0
         while index < len(args):
@@ -79,6 +79,7 @@ def root(ctx: typer.Context,
          config: Path | None = None,
          url: str | None = None,
          scope: str | None = None,
+         subscription: str | None = None,
          resource_group: str | None = None,
          apim_name: str | None = None,
          theme: str | None = None,
@@ -101,14 +102,19 @@ def root(ctx: typer.Context,
         else:
             typer.echo(f"{PRODUCT} {__version__}")
         raise typer.Exit()
+    redact = redact or os.environ.get("AUM_REDACT", "").lower() in {"1", "true", "yes"}
+    if ctx.invoked_subcommand == "configure":
+        ctx.obj = dict(configure=dict(backend=backend, subscription=subscription, resource_group=resource_group,
+                                     apim_name=apim_name, path=config), tty=terminal_output(),
+                       json=as_json, plain=plain, what_if=what_if, no_color=no_color, redactor=Redactor(redact))
+        return
     try:
         settings = load_config(config, backend=backend, url=url, scope=scope, resource_group=resource_group,
-                               apim_name=apim_name, theme=theme, ascii=True if ascii_only else None)
+                               apim_name=apim_name, subscription=subscription, theme=theme, ascii=True if ascii_only else None)
         engine = Engine(connect(settings), month)
     except FinOpsError as error:
         display(dict(error=str(error), exit_code=error.code), as_json=as_json, plain=plain, no_color=True)
         raise typer.Exit(error.code) from None
-    redact = redact or os.environ.get("AUM_REDACT", "").lower() in {"1", "true", "yes"}
     ctx.obj = dict(engine=engine, config=settings, json=as_json, plain=plain, what_if=what_if, no_color=no_color,
                    redactor=Redactor(redact))
     ctx.call_on_close(engine.backend.close)
@@ -258,6 +264,10 @@ def report_chargeback(ctx: typer.Context, csv: Annotated[bool, typer.Option("--c
 
 def main():
     app()
+
+
+from .configure import configure
+app.command()(configure)
 
 
 def legacy_main():
