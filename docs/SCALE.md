@@ -262,6 +262,28 @@ another first burst of 20 returned 20 expected 403s, **zero 503s**, and
 p99/maximum **1,105 ms**. The two always-ready instances and HTTP concurrency
 100 were left in place deliberately; the cache setting remained 60 seconds.
 
+**MEASURED, 13:48–13:52 UTC:** miss bursts used a one-second cache. The primed
+overload test ran after restoring 60 seconds, with the previous answer expired:
+
+| Condition | Requests | Result | Maximum |
+|---|---:|---|---:|
+| First burst of 100 | 100 | 100 expected 403, no 503 | 1,682 ms |
+| Three bursts of 50 | 150 | 150 expected 403, no 503 | 960 ms |
+| Three bursts of 100 | 300 | 300 expected 403, no 503 | 1,326 ms |
+| 500 already-connected callers, cache empty | 500 | 279 expected 403, **221 retryable 429**, no 503 | 1,377 ms |
+
+The 429 body said “Entitlement lookup is busy” with `Retry-After: 1`.
+Priming used an absent route (404), not the entitlement endpoint. An earlier
+500-request run with cold client connections got all 403s, but took up to
+5,084 ms and did not exercise overload: TLS setup staggered arrival and the
+cache absorbed calls. That is why those two tests are not interchangeable.
+
+Warm sequential comparison: 100 misses at p50/p95/p99
+**256/292/384 ms**, against 99 hits after a separate warmup at
+**175/180/191 ms**. Added p50 was 81 ms, added p99 192 ms. The cache was restored
+to **60 seconds**. These are same-identity tests; distinct-identity throughput
+and a larger cold envelope remain deployment-specific capacity work.
+
 **DOCUMENTED:** APIM's built-in cache has no atomic lock for this use.
 Coalescing is per resolver process, not across instances; APIM's distributed
 rate and concurrency limits are approximate. A cache flush above the admitted

@@ -295,7 +295,7 @@ Its step 4 compares the projection with the gateway before anything is flipped.
 | Resolver down, answer cached | Served until the window ends | 200 |
 | Resolver down, window ended | `503`, `Retry-After: 5`, "the entitlement service did not answer" | 503, then 200 when it returned |
 | Rolled back to named values | The lists decide again | 403 for anyone the lists had not been kept up to date for |
-| Expired record, even with a longer cache setting | 503; run a complete reconciliation | The lease is an authorization bound, not a storage TTL |
+| Expired record, even with a longer cache setting | 503; run a complete reconciliation | 2026-09-24: a real test identity's lease shortened to 20 seconds with cache still 60; expected 403 before expiry, explicit projection-expired 503 after expiry, expected 403 after restoring the original record |
 
 ## Troubleshooting
 
