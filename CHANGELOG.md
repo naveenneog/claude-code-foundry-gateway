@@ -578,6 +578,14 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Changed
 
+- **The test suite runs in parallel, and the gate's budget is 30 minutes again.** `Test-All`
+  starts each check as its own `pwsh` process, four at a time, with an exclusive lane for checks
+  that share Azure CLI state or scan the whole tree, logs in registration order, and a 600 s
+  deadline per check. The business-unit and Turnstile mutation harnesses run as four and two
+  shards, and `tests/Test-MutationShards.ps1` proves the shards cover all 476 and 108 mutations
+  exactly. Measured on a busy machine: 790 to 927 s, against 1,829 s serially.
+  [ADR-0025](docs/adr/0025-parallel-test-suite.md).
+
 - **The gate gives the test suite 60 minutes, and the suite reports where its time goes.**
   `tests/Test-All.ps1` took 1,797.2 s on `690015d` against a 1,800 s command budget, and a
   budget-modes gate had already failed on time with no failing check. `commandTimeoutMs` is now
@@ -596,6 +604,14 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   converts to 1,388,888,888 tokens and back to exactly $5000.00.
 
 ### Fixed
+
+- **The resolver check could fail with every test passing, and three runner gaps.** Under a
+  headless console on code page 437, Node's Unicode summary line did not match the wrapper's
+  pattern, so it counted zero passes; `tests/Test-Resolver.ps1` now asks for ASCII TAP output and
+  reads its exact pass and fail counters. A registered script that was missing behind a
+  prerequisite SKIP was reported as skipped, not failed; a check stopped at its deadline lost the
+  output it had printed; and a check started late could have outlived the gate's budget. Each was
+  reproduced by a failing test first.
 
 - **`Test-All.ps1` reported success for checks that never ran.** A terminating error inside a
   check travels up to the nearest `try`, and every check ran inside one `try`/`finally` with no

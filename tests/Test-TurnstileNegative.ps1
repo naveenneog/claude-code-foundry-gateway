@@ -7,9 +7,12 @@
 # Its own file rather than more entries in Test-BusinessUnitsNegative.ps1, which is past
 # the size budget; the method is the same.
 
-$root = Split-Path $PSScriptRoot -Parent
-$sandbox = Join-Path $root "onboarding\turnstile-negative-$PID-$(Get-Random)"
+param([string]$Shard = '', [switch]$ListMutations)
 
+$root = Split-Path $PSScriptRoot -Parent
+$sandbox = Join-Path ([IO.Path]::GetTempPath()) ('turnstile-negative-' + [guid]::NewGuid().ToString('N'))
+
+# BEGIN MUTATION MANIFEST
 $bridge = 'Test-Turnstile.ps1'
 $governance = 'Test-TurnstileGovernance.ps1'
 $teams = 'Test-Teams.ps1'
@@ -227,6 +230,16 @@ foreach ($scope in 'bu', 'parent') {
     )
 }
 
+# END MUTATION MANIFEST
+. (Join-Path $PSScriptRoot 'Select-MutationShard.ps1')
+$mutationIndices = @(Get-MutationShardIndices -Count $mutations.Count -Shard $Shard)
+if ($ListMutations) {
+    $inventory = @(foreach ($i in $mutationIndices) { [pscustomobject]@{ Index = $i; Name = $mutations[$i].Name } })
+    ConvertTo-Json -InputObject $inventory
+    exit 0
+}
+if ($Shard) { Write-Host "Shard ${Shard}: $($mutationIndices.Count) of $($mutations.Count) mutations." }
+
 $missed = @()
 $caught = 0
 try {
@@ -248,7 +261,8 @@ try {
     }
     Write-Host '  [BASE]   the unmutated copy passes' -ForegroundColor DarkGray
 
-    foreach ($m in $mutations) {
+    foreach ($index in $mutationIndices) {
+        $m = $mutations[$index]
         $path = Join-Path $sandbox $m.File
         $original = [IO.File]::ReadAllText($path)
         if (-not $original.Contains($m.From)) {
@@ -272,7 +286,7 @@ finally {
 }
 
 Write-Host ''
-Write-Host "$caught of $($mutations.Count) mutations caught."
+Write-Host "$caught of $($mutationIndices.Count) mutations caught."
 if ($missed.Count) {
     Write-Host 'Not caught - these assertions do not measure what they claim:' -ForegroundColor Red
     $missed | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
