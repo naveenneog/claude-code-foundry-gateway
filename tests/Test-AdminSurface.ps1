@@ -487,7 +487,9 @@ Assert 'the direct path is documented'   ($fd.Length -gt 0)
 # Ordered as it actually occurs: wrong tenant beats missing role in the wild.
 Assert 'the 401 is documented'                ($fd -match '(?i)401 Principal does not have access')
 Assert 'the wrong tenant is named first'      ($fd -match '(?i)No `AZURE_TENANT_ID`, and the resource is in another tenant')
-Assert 'and an empty list is read correctly'  ($fd -match '(?i)wrong tenant, not that you lack a role')
+# A resource list is permission-filtered. Empty cannot distinguish a wrong
+# tenant from the wrong subscription or missing management-plane visibility.
+Assert 'and an empty list is read correctly'  ($fd -match '(?i)empty list does not prove the tenant is wrong')
 Assert 'the credential chain is explained'    ($fd -match '(?i)sit ahead of the Azure CLI in it')
 Assert 'it says what to check first'          ($fd -match 'AZURE_CLIENT_ID\|AZURE_CLIENT_SECRET')
 Assert 'and how to grant the role'            ($fd -match '(?i)az role assignment create --assignee')
@@ -499,7 +501,11 @@ Assert 'with a worked example'                ($fd -match '\| `claude-primary` \
 Assert 'and discovery failure stops'          ($fd -match '(?i)\*\*stops\*\* rather than guessing')
 # A pasted catalogue passes enforceAvailableModels and fails per model.
 Assert 'availableModels is deployment names'  ($fd -match '(?i)availableModels holds deployment names, not model names')
-Assert 'and the query to get them is given'   ($fd -match 'deployment:name, model:properties\.model\.name')
+# Filtering JSON in PowerShell avoids cmd.exe interpreting && in JMESPath.
+Assert 'and the query to get them is given'   (
+    $fd -match 'az cognitiveservices account deployment list' -and
+    $fd -match "Where-Object \{.*properties\.model\.format -eq 'Anthropic'" -and
+    $fd.Contains("Select-Object name, @{n='model'"))
 # Entitlement here is an Azure role on a group, not an Entra app permission.
 Assert 'the role for a group is documented'   ($fd -match '(?i)Which role, and which scope')
 Assert 'assigned to a group, not per person'  ($fd -match '--assignee-principal-type Group')
@@ -945,7 +951,7 @@ Assert 'an unusable existing value is flagged'   ($tfd -match "notin @\('dev', '
 $fdn = Get-Content (Join-Path $root 'docs/FOUNDRY-DIRECT.md') -Raw
 Assert 'the guide gives dev, not a name'         ($fdn.Contains("SetEnvironmentVariable('AZURE_TOKEN_CREDENTIALS','dev','User')"))
 Assert 'and says a credential name is rejected'  ($fdn -match '\*\*Use `dev`\. A credential name is rejected\*\*')
-Assert 'a Cloud PC is named as the common case'  ($fdn -match 'On a Cloud PC, a Dev Box or any Azure VM this is the default')
+Assert 'a Cloud PC is named as the common case'  ($fdn -match 'On a Cloud PC, a Dev Box or an Azure VM with a managed identity')
 Assert 'the direct guide points at the network doc' ($fdn -match '\*\*\[NETWORK\.md\]\(NETWORK\.md\)\*\*')
 Assert 'and does not restate the whole list'     (-not ($fdn -match '(?m)^\*\*Required for administration only\*\*'))
 

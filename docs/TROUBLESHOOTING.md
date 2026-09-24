@@ -3,6 +3,11 @@
 Every entry here is a failure that was actually hit while building and verifying this
 accelerator, not a hypothetical.
 
+Use this page when you know the symptom. If you cannot identify the failing
+layer, follow [Debugging](DEBUGGING.md); for roles/resource names, use
+[Operations](OPERATIONS.md#1-select-the-gateway-and-workspace).
+After a fix, repeat the original request and inspect its body and headers.
+
 ## Deployment
 
 | Symptom | Cause → Fix |
@@ -38,8 +43,11 @@ The preflight in both setup scripts reports whether the platform is affected.
 |---|---|
 | **401** "A Microsoft Entra ID token is required" | Not signed in, or signed into the wrong tenant. Guests must use `az login --tenant <tenant-id>`. |
 | **403** "Not entitled to Claude Code" | Object id is in neither allowlist. Add the person to a group and run `Sync-ClaudeAccess.ps1`. |
-| **403** with no message | Daily token quota exhausted. It resets on the period boundary. |
-| **429** | Per-minute token budget hit. `Retry-After` says how long; Claude Code backs off on its own. |
+| **403** `rate_limit_error` | Read `budget` and the message: personal, organisation or business-unit/team budget. A quota increase can admit new requests after propagation; it does not reset consumption. |
+| **403** `model_not_allowed` / unassigned-unit message | Model or unit policy, not necessarily missing tier membership. Check [Budgets](BUDGETS.md) and the published unit map. |
+| **429** | Token/request rate, resolver miss admission or Foundry capacity. Inspect the body and honour `Retry-After`; not every 429 is the personal TPM limit. |
+| **503** naming an expired projection | Reconciliation did not renew the lease. Complete a fresh scan/apply; never serve stale records or roll back to unreviewed old lists. |
+| **503** naming the entitlement service | Resolver/network/authentication failure after cache expiry. Check [Private projection](SECURE-PROJECTION.md#troubleshooting). |
 | **404** `api_not_supported` from Foundry | An OpenAI-shaped path. Claude deployments expose only `/anthropic/*`. |
 | **404** `DeploymentNotFound` | A model alias points at a deployment you do not have. Foundry mode does no start-up model check, so this surfaces mid-task. |
 | Backend returns 401 through the gateway | The gateway identity lacks `Cognitive Services User` on the Foundry account, or the assignment has not propagated (allow 2–5 minutes). |
@@ -108,16 +116,24 @@ those files while no Claude process is running is the signature.
 | Metrics exist but there is no per-user breakdown | Application Insights needs `CustomMetricsOptedInType: WithDimensions`. Dimensions are dropped silently otherwise. |
 | `az monitor metrics list` says the metric does not exist | The CLI drops `--namespace` for custom namespaces. Query the REST API; `Show-Governance.ps1` shows the call. |
 | Metrics lag | Custom metric ingestion takes a few minutes. Generate traffic, then wait before querying. |
+| Many users work but some never appear in metrics | Custom metric cardinality caps discard new series. Use the request ledger; [FinOps](FINOPS.md) also explains cache-read reporting limits. |
 | A service principal is missing from the group sync | Delegated tokens cannot list service principal members without `Application.Read.All`. Pass CI identities explicitly with `-AdditionalPremiumOids` / `-AdditionalStandardOids`. |
 | `ApiManagementGatewayLlmLog` is empty — even over all time — while the gateway is plainly serving | You are reading a different workspace. A resource group often holds several, and the first one listed need not be the gateway's; on the reference deployment three share the group and the first is not it. Ask the gateway where it writes rather than guessing: `az monitor diagnostic-settings list --resource <apim-resource-id> --query "[].workspaceId" -o tsv`. The scripts here ask the gateway, match the workspace named after it, or refuse to guess — none takes the first one listed. |
 
 ## Still stuck?
 
-Run the inspector proxy to see exactly what Claude Code is sending, including the decoded token
-claims (the token itself is never printed):
+Collect UTC time, client/version, gateway host, status/error body and the
+relevant operation/request ID for the platform team. Redact personal/deployment
+values and never attach a token. [Debugging](DEBUGGING.md) has the next tests.
 
-```powershell
-node scripts/inspect-proxy.mjs
-$env:ANTHROPIC_FOUNDRY_BASE_URL = "http://localhost:8787"
-claude -p "hello"
-```
+Do not use the historical inspector proxy unchanged: its upstream is fixed and
+its listener is not explicitly loopback-only. See
+[the inspection warning](DEBUGGING.md#see-exactly-what-is-on-the-wire).
+
+## Turnstile and offboarding
+
+| Symptom | Next action |
+|---|---|
+| Need admin approval at Microsoft sign-in | Use [Turnstile's CLI sign-in](TURNSTILE.md#viewers-and-managers), or have the tenant administrator grant approved web consent |
+| Removed person still works | Check nested memberships, active-store publication, `Nothing to change`/empty-list warnings and cache/lease timing; [Onboarding](ONBOARDING.md#5-revoke-access) |
+| Turnstile save is not yet applied | Check the apply job/last result and governance authority; UI save is not proof of gateway propagation |

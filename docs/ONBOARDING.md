@@ -460,7 +460,7 @@ still exist on the machine and remain subject to normal offboarding policy.
 **When someone leaves the company**, disable the Entra account as part of normal
 offboarding — but do not treat that as the revocation. Disabling the account
 stops them acquiring a *new* token; it does not invalidate one already issued.
-The gateway checks the token's signature and claims with `validate-jwt`, which
+The gateway checks the token's signature and claims with `validate-azure-ad-token`, which
 does not call Entra per request, so an access token obtained shortly before the
 account was disabled keeps working until it expires. Remove the group membership
 and run the sync as well.

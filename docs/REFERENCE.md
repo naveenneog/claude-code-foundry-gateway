@@ -79,7 +79,9 @@ tests/                       offline and opt-in live checks
 
 The [README index](../README.md#documentation) lists every guide.
 `inspect-proxy.mjs` helped establish the identity model by decoding JWT claims
-without printing the token; treat its output as personal diagnostic data.
+without printing the token; it is a historical diagnostic with a fixed upstream,
+not a safe default for customer traffic. Read the
+[inspection warning](DEBUGGING.md#see-exactly-what-is-on-the-wire) before adapting it.
 
 ## Contributor checks
 

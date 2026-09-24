@@ -535,7 +535,7 @@ Diagnose in this order — each check is cheap and rules out everything below it
 | # | Check | Command | If wrong |
 |---|-------|---------|----------|
 | 1 | Is traffic reaching the gateway? | Application Insights → **Live metrics** | client config, see [Debug guide](DEBUGGING.md) |
-| 2 | Is the APIM diagnostic emitting metrics? | `az apim diagnostic show -g <rg> --service-name <apim> --diagnostic-id applicationinsights --query metrics` | must be `true`, else `llm-emit-token-metric` emits nothing |
+| 2 | Is the APIM diagnostic emitting metrics? | `scripts/Get-ClaudeTelemetry.ps1` with the explicit gateway target; portal: APIM > APIs > Claude API > Settings > Diagnostics | `MetricsEnabled` must be `true`; `az apim diagnostic show` is not a CLI command |
 | 3 | Does App Insights accept dimensions? | `az resource show -g <rg> -n appi-claude-gateway --resource-type Microsoft.Insights/components --query "properties.CustomMetricsOptedInType"` | must be `WithDimensions`, else totals appear but the per-user split is dropped at ingestion |
 | 4 | Is the SKU v2? | `az apim show -g <rg> -n <apim> --query "sku.name"` | classic tiers parse **zero** Anthropic tokens — metrics exist and read 0 |
 | 5 | Has ingestion caught up? | wait 5 minutes | custom metrics are not real-time |

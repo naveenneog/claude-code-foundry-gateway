@@ -1421,7 +1421,7 @@ $mutations = @(
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'an empty resource list is read as a missing role'
        File  = 'docs/FOUNDRY-DIRECT.md'
-       From  = 'wrong tenant, not that you lack a role'
+       From  = 'empty list does not prove the tenant is wrong'
        To    = 'you lack a role on it' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
@@ -2214,7 +2214,7 @@ $mutations = @(
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the Cloud PC case stops being named'
        File  = 'docs/FOUNDRY-DIRECT.md'
-       From  = 'On a Cloud PC, a Dev Box or any Azure VM this is the default'
+       From  = 'On a Cloud PC, a Dev Box or an Azure VM with a managed identity'
        To    = 'This is rare' }
 
     @{ Suite = 'Test-AdminSurface.ps1'

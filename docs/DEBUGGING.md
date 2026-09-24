@@ -7,6 +7,20 @@ This guide is for when you do **not** — a request fails and you need to find o
 where. It bisects the path layer by layer, so each step eliminates everything
 below it.
 
+## Prerequisites
+
+Developers need their supplied gateway URL, permitted model names and an Entra
+sign-in. Platform checks also need Reader access to APIM/Foundry and telemetry
+query access; writes need the roles in [Setup](SETUP.md#2-permissions-and-roles).
+Use [Operations](OPERATIONS.md#1-select-the-gateway-and-workspace) to find the
+gateway group, Foundry group and correct workspace. Do not grant a developer
+direct Foundry access to make a gateway diagnostic pass.
+
+Run script examples from the repository root. The manual HTTP example below
+uses PowerShell 7; script-supported hosts are listed in each script's help.
+Retain UTC time, status, error body and client version, but redact identities
+and never include bearer tokens in a public report.
+
 ---
 
 ## Step 0 — Run the health check
@@ -114,8 +128,8 @@ survive a reload.
 
 ## Step 1 — Read the response headers first
 
-This is the fastest single diagnostic and most people skip it. The gateway
-annotates every response.
+Read the status, body and available headers together. Not every refusal passes
+through the same outbound/error policies, so not every header is present.
 
 ```powershell
 $tok = az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv
@@ -134,6 +148,11 @@ $r.Headers | Format-Table -AutoSize
 > Windows PowerShell 5.1 has no `-SkipHttpErrorCheck`. Use PowerShell 7, or wrap
 > the call in `try/catch` and read `$_.Exception.Response`.
 
+**Portal/manual:** a platform operator can inspect APIM > APIs > Claude API >
+Test, using an approved test identity, and correlate its request with the
+workspace logs. A developer can run the HTTP example without portal access.
+The test console's own authentication is not proof of the developer's sign-in.
+
 What the headers tell you:
 
 | Header | Present when | Means |
@@ -142,12 +161,14 @@ What the headers tell you:
 | `x-claude-tier` | tier resolved | `standard` / `premium` — confirms which allowlist matched |
 | `x-ratelimit-remaining-tokens` | per-minute limit applied | your remaining minute budget |
 | `x-quota-remaining-today` | daily quota applied | remaining daily budget |
-| `x-tokens-consumed` | backend responded | what this call cost |
+| `x-tokens-consumed` | backend responded | quota scalar for the call, not complete billable usage or dollars |
 | `Retry-After` | `429` | seconds until the minute budget resets |
 | `x-gateway-error` | policy raised the error | **the gateway rejected you, not Foundry** |
 
-**`x-gateway-error` is the key signal.** If it is present, stop looking at
-Foundry — the request never got there.
+**`x-gateway-error` means the gateway's error handler ran.** It can also report
+backend connection failures, so it does not prove Foundry was never attempted.
+An absent header does not prove the gateway was bypassed: explicit
+`return-response` branches need not run that handler.
 
 ---
 
@@ -156,8 +177,9 @@ Foundry — the request never got there.
 | Code | Layer | Go to |
 |------|-------|-------|
 | `401` with `x-gateway-error` | identity | [Step 3](#step-3--identity) |
-| `403` with `x-gateway-error` | entitlement or quota | [Step 4](#step-4--entitlement-and-budget) |
-| `429` | per-minute budget | [Step 4](#step-4--entitlement-and-budget) |
+| `403` | read the body: entitlement, model, unit assignment or quota | [Step 4](#step-4--entitlement-and-budget) |
+| `429` | token/request limit, miss admission or Foundry capacity | [Step 4](#step-4--entitlement-and-budget) |
+| `503` naming entitlement/projection | unavailable resolver or expired projection lease | [Private projection troubleshooting](SECURE-PROJECTION.md#troubleshooting) |
 | `401` **without** `x-gateway-error` | gateway → Foundry RBAC | [Step 5](#step-5--gateway--foundry) |
 | `404` | wrong path or missing deployment | [Step 6](#step-6--foundry-itself) |
 | `500` | usually a missing named value | [Step 7](#step-7--policy-and-configuration) |
@@ -187,9 +209,13 @@ Check, in order:
 | Claim | Must be | If wrong |
 |-------|---------|----------|
 | `tid` | the tenant hosting the gateway | `az login --tenant <tenant-id>` — **the usual cause for guests** |
-| `aud` | `https://cognitiveservices.azure.com` | you requested the wrong resource scope |
+| `aud` | `https://cognitiveservices.azure.com` or `https://ai.azure.com` | you requested the wrong resource scope |
 | `oid` | present | service principals differ from users; use the SP object id, not the app id |
 | `exp` | in the future | token expired — re-run `az login` |
+
+**Portal:** Entra ID > Sign-in logs helps the identity administrator diagnose
+issuance/Conditional Access. Decode claims locally; the portal does not show
+the access token the affected process actually selected.
 
 > A guest account's `upn` often looks like
 > `user_home.com#EXT#@hosting-tenant.onmicrosoft.com`. That is normal. The
@@ -212,21 +238,30 @@ Not there → they are in the Entra group but the sync has not run:
 ./scripts/Sync-ClaudeAccess.ps1 -ApimName <apim> -ResourceGroup <rg>
 ```
 
+This checks the **named-value** path only. On a projection gateway, inspect the
+record and lease and run the [projection comparison](SCALE.md#4-run-the-comparison-until-it-reports-nothing).
+Absence from an old named-value list is not proof of a missing projection record.
+**Portal:** Entra > Groups > All members, then APIM > Named values or Cosmos >
+Data Explorer from an authorised private-network client. Publication is required
+after a group edit.
+
 ### Is it a budget rejection instead?
 
 `429` and quota-`403` are working-as-intended, not faults.
 
 | Code | Meaning | Resolution |
 |------|---------|-----------|
-| `429` + `Retry-After` | per-minute budget | wait; Claude Code retries on its own |
-| `403`, no entitlement message | daily quota spent | wait for the period, or move them to premium |
+| `429` + `Retry-After` | token/request rate, resolver admission or Foundry capacity | read the body and honour the delay; inspect the corresponding limit |
+| `403`, `rate_limit_error` | budget spent | `budget` names personal/organisation/business unit; raise only an approved limit or wait for its period |
+| `403`, `permission_error` / `model_not_allowed` | entitlement, unit assignment or model policy | correct the published mapping or permitted deployment, not the quota |
 
-> Raising `quota-standard` does **not** unblock someone already over it — the
-> counter runs against the period that has already started. Move them to the
-> premium tier instead.
+Raising a quota does not reset consumption, but can unblock a caller if the new
+quota exceeds the consumed amount. Moving to premium cannot bypass an
+organisation or unit ceiling. See [Budgets](BUDGETS.md).
 
-Distinguish the two `403`s by the message body: an entitlement failure says so
-explicitly, a quota failure has no message.
+**Portal:** APIM > Named values shows configured limits; a new caller request
+proves the applied limit after propagation. Do not diagnose every `403` as an
+empty entitlement list or rely on an absent message.
 
 ---
 
@@ -247,6 +282,9 @@ az role assignment list \
 ```
 
 Expect `Cognitive Services User`.
+**Portal:** APIM > Identity > System assigned; Foundry account > Access control
+(IAM) > Role assignments, including inherited assignments. Use the Foundry
+account's resource group, not automatically the gateway's.
 
 | Finding | Fix |
 |---------|-----|
@@ -289,12 +327,15 @@ Two `404`s that look alike and are not:
 ## Step 7 — Policy and configuration
 
 ```bash
-# is the policy actually attached?
-az apim api policy show -g <rg> --service-name <apim> --api-id claude-foundry --query value -o tsv
-
 # do all referenced named values exist?
 az apim nv list -g <rg> --service-name <apim> --query "[].name" -o tsv
 ```
+
+**Portal:** APIM > APIs > Claude API > All operations > Inbound processing >
+Policy code editor. Read the API policy, including inherited/global policies.
+For a scripted policy read, use the ARM example in
+[Governance checks](GOVERNANCE-CHECKS.md#configuration-audits);
+`az apim api policy show` is not an Azure CLI command.
 
 A `{{name}}` in the policy with no matching named value returns `500`.
 
@@ -309,8 +350,9 @@ A `{{name}}` in the policy with no matching named value returns `500`.
 
 ## Step 8 — Client configuration
 
-If the request never reaches the gateway at all, `x-governed-by` is absent and
-Application Insights **Live metrics** shows nothing.
+If there is no evidence the request reached the gateway, check the configured
+provider and URL, then the correct diagnostic destination. Missing headers or
+temporarily empty Live metrics alone do not prove the request went elsewhere.
 
 ```powershell
 claude auth status
@@ -331,19 +373,16 @@ claude auth status
 
 ### See exactly what is on the wire
 
-When nothing else explains it, put the inspector between the client and the
-gateway. It decodes the token claims and prints headers; the token itself is
-never logged.
+The historical `scripts/inspect-proxy.mjs` helped establish the token/claim
+shape. **Do not run it unchanged against a customer session:** it has a
+hard-coded upstream and does not explicitly bind only to loopback. It can bypass
+the selected gateway and prints other request headers and personal claims.
 
-```powershell
-node scripts/inspect-proxy.mjs
-$env:ANTHROPIC_FOUNDRY_BASE_URL = "http://localhost:8787"
-claude -p "hello"
-```
-
-This is how the identity model was established rather than assumed — it is what
-proved Claude Code forwards the developer's own Entra token, complete with `oid`,
-`upn`, and `x-claude-code-session-id`.
+Use the supported diagnostic script, approved network tracing or the
+[non-intercepting observer](NETWORK.md#5-how-this-was-measured). Any adapted
+inspector needs an approved target, local-only binding and redaction review
+before it handles credentials. There is no Azure portal substitute for seeing
+which token a local client chose.
 
 ---
 
@@ -366,9 +405,9 @@ If they fail, it is platform-wide. Start at Step 5.
 |--------|-------|---------|
 | Everything passes but the panel fails | stale extension host | [above](#everything-checks-out-but-the-panel-is-still-broken) |
 | CLI works, VS Code does not | different build or different config | [above](#everything-checks-out-but-the-panel-is-still-broken) |
-| `x-gateway-error` present | gateway rejected it | Steps 3–4 |
+| `x-gateway-error` present | gateway error handler ran; inspect the reason | Steps 3–5 |
 | `x-gateway-error` absent, `401` | Foundry rejected the gateway | Step 5 |
-| No `x-governed-by`, no Live metrics traffic | never left the client | Step 8 |
+| No `x-governed-by`, no Live metrics traffic | verify route, diagnostic destination and ingestion before concluding bypass | Step 8 |
 | `429` + `Retry-After` | working as designed | Step 4 |
 | Metrics all zero | classic APIM tier | [Monitoring §8](MONITORING.md#8-when-the-charts-are-empty) |
 | Metrics exist, no per-user split | `CustomMetricsOptedInType` | [Monitoring §8](MONITORING.md#8-when-the-charts-are-empty) |

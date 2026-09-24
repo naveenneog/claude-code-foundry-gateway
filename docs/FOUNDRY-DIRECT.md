@@ -24,6 +24,18 @@ before using it on anything that matters.
 It is also the fastest way to answer *"is the gateway broken, or is Foundry?"* —
 configure one machine directly and see which layer the failure follows.
 
+## Prerequisites
+
+- An approved isolated evaluation, not a way around a production gateway.
+- Azure CLI, PowerShell 5.1 or 7, the permitted Claude deployment names and
+  network access. Run script examples from the repository root.
+- A Foundry data-plane role for the evaluation identity at the account scope;
+  Reader access for discovery. Role assignment needs Owner/User Access
+  Administrator; client configuration alone needs no Azure write role.
+- Record the existing client configuration and restore it after evaluation.
+  [Operations](OPERATIONS.md#1-select-the-gateway-and-workspace) explains resource
+  and tenant values; [Developer setup](../DEVELOPER.md) is the governed path.
+
 ## 2. Running it
 
 ```powershell
@@ -74,7 +86,7 @@ Explicit arguments still win over the file. Passing both a config and a
 {
   "mode": "foundry-direct",
   "generated": "2026-09-21 17:28",
-  "foundryResource": "ai-contosohub530569751908",
+  "foundryResource": "ai-contoso",
   "tenantId": "00000000-0000-0000-0000-000000000000",
   "clientId": "",
   "auth": "device",
@@ -195,9 +207,14 @@ Discovery writes what is really there. If you are editing by hand, this is the
 list to copy:
 
 ```powershell
-az cognitiveservices account deployment list --name <resource> --resource-group <rg> `
-  --query "[?properties.model.format=='Anthropic' && properties.provisioningState=='Succeeded'].{deployment:name, model:properties.model.name}" -o table
+az cognitiveservices account deployment list --name <resource> --resource-group <rg> -o json |
+    ConvertFrom-Json |
+    Where-Object { $_.properties.model.format -eq 'Anthropic' -and $_.properties.provisioningState -eq 'Succeeded' } |
+    Select-Object name, @{n='model'; e={$_.properties.model.name}}
 ```
+
+**Portal:** Foundry > Models + endpoints > deployment details. Use the
+deployment name, not the catalogue name, for each client alias.
 
 ### The setting that ends a session
 
@@ -279,12 +296,14 @@ that returned zero rows from the signing-in account's tenant:
 az cognitiveservices account list --query "[?name=='<resource>'].name" -o tsv
 ```
 
-Nothing back means you are in the wrong tenant, not that you lack a role. Sign
-in to the owning tenant and record it in the settings file, where it applies to
-every session rather than only this shell:
+An **empty list does not prove the tenant is wrong**. Azure resource discovery
+is filtered by subscription and management-plane visibility; a data-plane-only
+user may also see nothing. Compare `az account show` with the resource owner's
+tenant/subscription, then check Reader rights separately. If the tenant is
+wrong, sign in to the owning tenant and record it in the settings file:
 
 ```powershell
-az login --tenant <owning-tenant-guid>
+az login --tenant <owning-tenant-guid> --allow-no-subscriptions
 ```
 
 ```json
@@ -301,7 +320,8 @@ variable, or an Azure VM's own identity, silently authenticates as something
 else:
 
 ```powershell
-Get-ChildItem Env: | Where-Object Name -match 'AZURE_CLIENT_ID|AZURE_CLIENT_SECRET|AZURE_USERNAME|IDENTITY_ENDPOINT|MSI_ENDPOINT'
+Get-ChildItem Env: | Where-Object Name -match 'AZURE_CLIENT_ID|AZURE_CLIENT_SECRET|AZURE_USERNAME|IDENTITY_ENDPOINT|MSI_ENDPOINT' |
+    Select-Object Name
 ```
 
 This is the failure where the health check passes and Claude Code still gets
@@ -325,17 +345,17 @@ the library sees it, against a shorter list. Measured on CLI 2.1.272:
 | `dev` | works — excludes managed identity, selects the CLI sign-in |
 | `prod` | fails — `prod` excludes the developer credentials, which is the sign-in you are trying to select |
 
-`dev` is the value in every case. There is no version of Claude Code where a
-credential name is the better answer, because the check is the client's own and
-not the library's.
+`dev` is the verified choice for the measured client build, not a claim about
+every future version. Inspect the token's actual identity: the development
+credential chain can include credentials other than Azure CLI.
 
 Then open a new terminal and restart VS Code or Desktop — a running process
 keeps the environment it started with. Source:
 [Credential chains in the Azure Identity library for JavaScript](https://learn.microsoft.com/azure/developer/javascript/sdk/authentication/credential-chains#defaultazurecredential-overview).
 
-> **On a Cloud PC, a Dev Box or any Azure VM this is the default, not an edge
-> case.** Those machines run on Azure, so the instance metadata service answers
-> and a managed identity is found ahead of your `az login` every time. Measured
+> **On a Cloud PC, a Dev Box or an Azure VM with a managed identity**, that
+> credential can be found ahead of your `az login`. An IMDS response alone
+> does not establish that a managed-identity token is available. Measured
 > on a Windows 365 Cloud PC: `169.254.169.254` returns instance metadata in
 > 10 ms. `Test-ClaudeNetwork.ps1` reports which of the three behaviours -
 > answers, refused, dropped - applies to a given machine.
@@ -363,12 +383,24 @@ Isolate auth from everything else before launching Claude:
 
 ```powershell
 $t = az account get-access-token --resource https://cognitiveservices.azure.com --query accessToken -o tsv
-curl -s -o NUL -w "%{http_code}\n" -X POST `
-  "https://<resource>.services.ai.azure.com/anthropic/v1/messages" `
-  -H "Authorization: Bearer $t" -H "anthropic-version: 2023-06-01" `
-  -H "content-type: application/json" `
-  -d '{\"model\":\"<a-deployment-name>\",\"max_tokens\":16,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}'
+$body = @{
+    model = '<a-deployment-name>'
+    max_tokens = 16
+    messages = @(@{ role = 'user'; content = 'hi' })
+} | ConvertTo-Json -Depth 5
+try {
+    $response = Invoke-WebRequest -UseBasicParsing -Method Post `
+        -Uri 'https://<resource>.services.ai.azure.com/anthropic/v1/messages' `
+        -Headers @{ Authorization = "Bearer $t"; 'anthropic-version' = '2023-06-01' } `
+        -ContentType 'application/json' -Body $body
+    $response.StatusCode
+}
+catch { Write-Error $_.Exception.Message }
 ```
+
+**Portal/manual:** Foundry's deployment playground can test the authorised
+operator's access. It does not prove a local client's credential chain; use the
+request above and never print `$t`.
 
 On the gateway path none of this applies: API Management holds the role through
 its managed identity, so developers need no role on the Foundry resource at all.
@@ -430,6 +462,11 @@ Fixes, in order of effort:
 Desktop with `inferenceCredentialKind: helper-script`, which takes its token
 from the Azure CLI. It never calls `/devicecode`, so none of the above applies.
 
+**Portal (app owner):** Entra ID > App registrations > your app > Authentication
+> Allow public client flows. Confirm its tenant and client ID in Overview.
+API permissions and tenant consent need the appropriate directory administrator.
+Do not ask a developer to create registrations merely to repair a gateway setup.
+
 ### Which role, and which scope
 Entitlement on this path is an Azure role assignment. Give it to an Entra
 **group** and manage people by membership — there is no Entra app registration,
@@ -471,10 +508,15 @@ that should work and still gets 401, check where it is actually assigned:
 
 ```powershell
 az role assignment list --assignee <object-id> --all `
-  --query "[?contains(roleDefinitionName,'Foundry') || contains(roleDefinitionName,'Cognitive')].{role:roleDefinitionName, scope:scope}" -o table
+  -o json | ConvertFrom-Json |
+  Where-Object { $_.roleDefinitionName -match 'Foundry|Cognitive' } |
+  Select-Object roleDefinitionName, scope
 ```
 
 A scope ending in `/projects/<name>` is the explanation.
+**Portal:** Foundry account > Access control (IAM) > View access / Role
+assignments. For a group grant, assign Cognitive Services User to the group at
+the account scope; Entra > Groups > Members maintains its roster.
 
 ### Network access
 
