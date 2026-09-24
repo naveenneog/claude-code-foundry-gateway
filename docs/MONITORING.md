@@ -494,6 +494,11 @@ ceiling below the sum of the unit budgets makes every one of those budgets
 unreachable: the gateway denies the whole organisation first, and each unit
 still reports plenty of headroom.
 
+For a unit in notify mode, there is no limiter at that unit's scope; the
+organisation and any enforcing parent/personal limits still apply. Allowance
+uses an effective quota above the base allocation. Interpret headroom alongside
+the stored `bu-modes`, not as proof every base budget is a blocking counter.
+
 `./scripts/Set-ClaudeBusinessUnit.ps1` now says so when it writes a budget, and
 `./scripts/Test-ClaudeHealth.ps1` fails the run on it. Only top-level units are
 summed, because a team is charged to its parent as well as to itself and
@@ -505,7 +510,7 @@ not a value copied from another deployment.
 
 #### What a dollar budget does and does not stop
 
-A budget is set in dollars and enforced in tokens: `-MonthlyBudgetUsd 2000`
+A strict/allowance budget is set in dollars and enforced in tokens: `-MonthlyBudgetUsd 2000`
 becomes 555,555,555 tokens at a blended $3.60/M for Sonnet assuming 20% output.
 Pass `-Model claude-opus-5` if the unit mostly uses Opus, or the conversion
 under-charges them by about two and a half times.
@@ -518,6 +523,13 @@ therefore allow more than $2,000 of categorized usage. Two ways to handle that:
 - divide the token figure by **your own** measured ratio — read it from the
   chargeback workbook, subject to its missing categories and metric limits.
   A ratio is a planning assumption, not a hard cap.
+
+  With notify, use the ledger rather than counting notice headers: the notice is
+  unconditional for applicable nonzero notify budgets, not an over-budget event.
+  The `claude-budget` trace uses `BudgetRequestId` to join to the request ledger.
+  Mode changes keep counter keys, but time spent in notify is not backfilled into
+  the blocking counter when enforcement resumes. See
+  [Budget modes](BUSINESS-UNITS.md#budget-modes).
 
 The largest lever that caching cannot defeat is the **model allow list**: Opus
 is two and a half times Sonnet on both input and output, and

@@ -163,6 +163,63 @@ multiply `Total Tokens` by a single rate, and do not promise a hard dollar cap.
 Counter behaviour at 500,000 identities is measured, not exact: [Scale](SCALE.md)
 and [U9/U13](UNKNOWNS.md) describe the remaining limits.
 
+## Business-unit and team enforcement modes
+
+The platform owner can select a mode for a unit or team independently of its
+base allocation. This does not change who is authorised to manage it.
+
+| Mode | Behavior at that scope |
+|---|---|
+| Strict (missing map entry) | Apply the base monthly token quota |
+| Allowance | Apply the base plus an integer percentage from 1 to 100; fractional extra tokens are rounded down |
+| Notify | Skip that scope's limiter; parent, organisation and personal controls still apply |
+
+A zero base quota remains no budget at that scope. These are still soft token
+controls, not precise currency caps. `bu-modes` stores exceptions separately from
+`bu-registry`; the installer preserves it on redeploy.
+
+When the gateway owns governance, first obtain the actual unit identifier from
+`Set-ClaudeBusinessUnit.ps1 -List`, then use an approved change:
+
+```powershell
+./scripts/Set-ClaudeBusinessUnit.ps1 -ResourceGroup $rg -ApimName $apim `
+    -Id '<unit-id>' -Mode Allowance -AllowancePercent 10
+```
+
+The percentage is an illustrative input, not a recommendation. Omit `-Mode` to
+preserve the existing mode when editing another property. When Turnstile owns
+governance, use its owner-only Gateway governance controls instead; the apply
+job writes `bu-modes` and will overwrite a competing gateway-authored change.
+
+**Portal/manual:** APIM > APIs > Named values > `bu-modes` > Edit > Value.
+For the example, preserve all other entries and add `<unit-id>=allowance:10`
+inside the sentinel-comma map. `,,` means no exceptions, therefore strict.
+Do not reset the whole map to change one unit. For a policy-only upgrade, create
+the named value only if absent before applying a policy that references it.
+
+**Azure CLI equivalent:** read the complete map first, make the same reviewed
+single-unit edit locally, then write and read back the full preserved map:
+
+```powershell
+az apim nv show -g $rg --service-name $apim --named-value-id bu-modes --query value -o tsv
+az apim nv update -g $rg --service-name $apim --named-value-id bu-modes --value '<reviewed-complete-sentinel-map>'
+az apim nv show -g $rg --service-name $apim --named-value-id bu-modes --query value -o tsv
+```
+
+This raw edit bypasses the script's mode validation. A read followed by a write
+is not a transaction: coordinate the governance authority and other writers,
+and do not use it to race a Turnstile apply.
+
+**Verify:** `Set-ClaudeBusinessUnit.ps1 -List` reports the stored mode. Test an
+approved identity's request after apply/propagation and inspect the body and
+`x-claude-budget-notice`. The allowance notice uses estimated remaining quota;
+notify reports usage even before the base is spent, and clients need not display
+the custom header. Neither notice is an exact budget-crossing measurement.
+Notify stops counting at that scope; returning to strict/allowance mid-month
+does not reconstruct that interval in APIM's counter. The ledger still reports
+usage. The [owner's dated live checks](BUSINESS-UNITS.md#measured-on-the-reference-gateway)
+and [ADR-0019](adr/0019-budget-enforcement-modes.md) state the tested envelope.
+
 ## Next steps
 
 - [FinOps monthly close](FINOPS.md) — prices, attribution and reconciliation.

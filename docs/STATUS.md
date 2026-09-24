@@ -1,6 +1,6 @@
 # Status
 
-**Active packet:** P46 — managers scoped to their units and teams (done, fork `c0c345a`), and budget modes in the gateway (in progress) ([TURNSTILE.md](TURNSTILE.md#managers), [ADR-0016](adr/0016-delegated-management.md)).
+**Active packet:** P46 — managers scoped to their units and teams (done, fork `c0c345a`), and budget modes in the gateway (done, merged from `budget-modes` at `3ee0bd3`); the manager-only live sign-in is next, in P53 ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P46 acceptance criteria — managers scoped, and budget modes
 
@@ -9,9 +9,10 @@
 - [x] Usage, budgets, people, the catalog and a request's detail are filtered to the scope; a filter or id outside it is refused
 - [x] A unit manager sets its teams' budgets and any manager sets person budgets in scope; the unit budget, catalog, tiers, modes and **Apply now** stay the owner's; Turnstile still refuses a child above its parent
 - [x] An owner records a unit's or team's manager group and budget mode on the Gateway governance page (`manager_group_id`, `enforcement`, `allowance_percent`)
-- [ ] The gateway enforces strict, allowance and notify (in progress)
-- [ ] A live sign-in with a manager-only account: the owner's acceptance step, since the account running the checks holds `Turnstile.Admin`
-- [ ] `node .ironclad/gate.mjs --stage packet` exits 0
+- [x] The gateway enforces strict, allowance and notify per unit and team: `bu-modes` holds only the exceptions (missing means strict); allowance admits up to its percentage above the budget; notify skips only that scope's limiter, and the parent, organization and tier limits still apply. Invalid mode metadata stops the whole apply before any write
+- [x] An apply run rechecks Turnstile's catalog, per-budget and tier revisions immediately before writing, reconciles again from newer state up to three times, then defers with no writes and no membership refresh. This narrows the out-of-order race; P48's single writer closes it
+- [ ] A live sign-in with a manager-only account: moved to P53, which uses the CLI account's own group memberships (it owns both the admin group and the manager test groups) and restores them
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0 on the merge: `690015d`, 2026-09-24 17:16-17:46Z, Test-All 1,797.2 s of the 1,800 s budget then in force (see "The suite's time budget" below)
 
 | Measured | Result |
 |---|---|
@@ -19,6 +20,17 @@
 | The built console against test-signed manager tokens, in a browser | 30 API requests, none outside the allow-list; forbidden pages redirected; team-only budgets shown as roots |
 | Turnstile redeploy | 9 min 22 s; the owner's live sign-in afterwards: `owner`, `entra`, no scope |
 | Two manager attributes added to the live catalog, then restored | The restore read back identical, write-payload hash unchanged; every budget unchanged |
+| Modes on the reference gateway, 2026-09-24 14:26-14:28Z | Strict at a budget of 1 refused with 403 naming the team. Allowance 10%: served at an estimated 104.0% of the budget with an `estimated-over-budget` notice, refused once usage exceeded the 110% effective quota. Notify at a budget of 1: three requests served with `usage-reported`, and their 48 tokens joined the ledger through `BudgetRequestId`. The original registry and `bu-modes` (`,,`) restored exactly; a policy-only deploy left every named value byte-identical |
+| Modes tests | 206 governance and 146 team assertions; 108 of 108 Turnstile mutations caught; the policy's own expression bodies compiled and executed for 1, 10 and 100%, zero, rounding and the Int64 limit |
+| The guard against live data, 15:35Z | Real catalog, budget and tier reads through the guard against a gateway held in memory: verified before writing, 0 newer snapshots, 0 writes |
+
+The notices are advisory. `llm-token-limit`'s remaining quota is an estimate, so an allowance
+notice cannot promise the exact request that crosses the budget, and notify has no monthly counter
+to report against: it says `usage-reported` before and after 100%, and the ledger is the source
+for the total. Switching a scope from notify back to strict does not backfill its usage into the
+limiter. Found by testing: the budget trace first went out before the identity trace and shared
+its join key, which broke the ledger's first-trace contract; it now follows identity and joins on
+`BudgetRequestId`.
 
 **Found by running it.** Two catalog saves one second apart started two apply runs that
 finished out of order, 13:36:15Z and 13:36:05Z, so the earlier save's run wrote last. Harmless
@@ -49,6 +61,16 @@ without the venv recorded SKIP, and `Test-RunnerIntegrity` expected every regist
 run. The invariant it now asserts is the one the false pass broke: every registered check has a
 result in the summary, PASS, FAIL or an explicit SKIP; the checks not skipped all run; and the
 final lines count the skips. Open: **U20** (scale, and the two sources' totals differ by design).
+
+## The suite's time budget, 2026-09-24
+
+`Test-All` passed on `690015d` in 1,797.2 s, 2.8 s inside the gate's 1,800 s command budget, and a
+budget-modes gate on its own branch had already failed on time with no failing check. The suite
+runs its checks one after another and grew with every packet (1,477.4 s on `d1f1756`, 1,721.8 s on
+`c7f0a29`), while several agents' gates share the machine. The budget is now 3,600 s
+([ADR-0024](adr/0024-test-suite-time-budget.md)), `Test-All` prints and saves each check's
+duration, and P56 makes the suite parallel so the budget can return to 1,800 s. Nothing it checks
+was removed or weakened.
 
 ## A gate that passed on 9 of 32 checks, 2026-09-24
 

@@ -132,13 +132,18 @@ more than this.
 
 ### 6. Is a team budget a report, or a hard stop?
 
-**Default today:** the installer asks `report` or `stop`, with `report` selected.
-In this revision that answer changes guidance, not the runtime policy: any
-positive unit quota in `bu-registry` is enforced. Do not assume selecting
-`report` prevents a refusal. Budget enforcement modes are an active packet;
-check [Status](STATUS.md) before using an unmerged mode.
+**Default today:** a unit with no entry in `bu-modes` is **strict**. The shipped
+policy also supports **allowance** (base plus an integer percentage) and
+**notify** (no blocking limiter at that unit/team scope). Parent, organisation
+and personal controls still apply independently.
 
-Budgets are set in dollars and enforced by counting tokens, and the counter
+The installer's legacy `report` / `stop` prompt does not select these per-unit
+modes. Its `report` answer is not proof of notify behavior; the installer
+preserves the existing map. Configure the desired mode explicitly through
+[Business units](BUSINESS-UNITS.md#budget-modes) or the configured Turnstile
+authority, then verify the applied named value and response behavior.
+
+Enforcing budgets are set in dollars and enforced by counting tokens, and the counter
 **cannot see cached tokens**. The retained U12 sample attributes **38.7%** of
 cost weight to cache reads ([UNKNOWNS.md](UNKNOWNS.md)); it is evidence of a gap,
 not a ratio to apply to every deployment.
@@ -154,8 +159,11 @@ handle that:
 Say "we can attribute the cost" rather than "we can cap it". Today the first is
 true and the second is not.
 **Portal:** inspect the configured authority in [Turnstile](TURNSTILE.md), or
-APIM > Named values > `bu-registry`. Verify the next request and the reported
-budget, not just the label on an installer prompt.
+APIM > Named values > `bu-registry` and `bu-modes`. Verify the next request and
+the reported budget, not just the label on an installer prompt. Notify's notice
+is advisory on each applicable response, not proof the budget was crossed.
+Switching back from notify does not backfill the skipped monthly counter;
+use the ledger for reporting ([ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ### 7. Can everyone use the most expensive model?
 

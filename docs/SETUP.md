@@ -367,7 +367,7 @@ where it costs money, with the figure at your stated developer count:
 | Choice | Options | Why it is asked rather than defaulted |
 |---|---|---|
 | Revocation window | 15 min / 1 hour / 4 hours | A requested projection cache window, not an installed sync schedule. Current projection leases cap stale admission at two hours from scan start, including cache; named values remain stale until synced. |
-| Team budget | `report` / `stop` | In this revision the choice changes guidance, not policy enforcement. A positive unit quota is enforced in either case and triggers later than the dollar figure suggests because the counter cannot see cached tokens. See [Decisions](DECISIONS.md#6-is-a-team-budget-a-report-or-a-hard-stop). |
+| Team budget | `report` / `stop` | This legacy prompt changes guidance, not a unit's stored mode. The installer preserves `bu-modes`; a missing entry means strict. Configure strict, allowance or notify per unit through [Business units](BUSINESS-UNITS.md#budget-modes) or Turnstile. An enforcing token quota triggers later than the dollar figure suggests because it excludes cache. |
 | Unassigned developers | `allow` / `deny` | `deny` on day one refuses people who have done nothing wrong. Start on `allow` and switch when `Get-ClaudeBusinessUnit.ps1` reports zero unassigned. |
 | Developer sign-in | `interactive` / `device` / `helper` | How developers authenticate. Written into `claude-gateway.json` and applied by the onboarding script on each machine. |
 | Developer address | `azure` / `custom` | The only one that is expensive to change afterwards — the instance name is part of the address, so replacing the gateway later means reconfiguring every machine. |
