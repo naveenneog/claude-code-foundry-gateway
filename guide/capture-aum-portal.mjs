@@ -185,15 +185,39 @@ try {
           + '| extend estimated_usd=iff(unpriced > 0, real(null), estimated_usd)';
         let editorFrame;
         for (const candidate of await visibleFrames(page)) {
-          if (await candidate.locator('.monaco-editor textarea').first().isVisible().catch(() => false)) {
+          if (await candidate.locator('.monaco-editor').first().isVisible().catch(() => false)) {
             editorFrame = candidate;
             break;
           }
         }
         if (!editorFrame) throw new Error('Visible KQL editor not found');
-        await editorFrame.locator('.monaco-editor textarea').first().focus();
-        await page.keyboard.press('Control+A');
-        await page.keyboard.insertText(query);
+        const modelSet = await editorFrame.evaluate(text => {
+          const models = globalThis.monaco?.editor?.getModels?.() ?? [];
+          const model = models.find(item => /kusto|kql/i.test(item.getLanguageId?.() ?? '')) ?? models.at(-1);
+          if (!model) return false;
+          model.setValue(text);
+          return model.getValue() === text;
+        }, query);
+        if (!modelSet) {
+          await editorFrame.locator('.monaco-editor').first().click({ position: { x: 160, y: 30 } });
+          await page.keyboard.press('Control+A');
+          await page.keyboard.type(query, { delay: 1 });
+        }
+        await page.waitForTimeout(1000);
+        if (!(await visibleText(page)).includes('ClaudeCost')) {
+          const diagnostic = await editorFrame.evaluate(() => ({
+            active: document.activeElement?.tagName, monaco: Boolean(globalThis.monaco),
+            textareas: document.querySelectorAll('.monaco-editor textarea').length,
+          }));
+          throw new Error('KQL editor did not receive the query: ' + JSON.stringify(diagnostic));
+        }
+        const recent = editorFrame.getByText('Last 24 hours', { exact: true }).first();
+        if (await recent.isVisible().catch(() => false)) {
+          await recent.click();
+          const month = editorFrame.getByText('Last 30 days', { exact: true }).first();
+          if (await month.isVisible().catch(() => false)) await month.click();
+          else await page.keyboard.press('Escape');
+        }
         const reply = page.waitForResponse(response => response.request().method() === 'POST'
           && /loganalytics/i.test(response.url()) && /\/query(?:\?|$)/i.test(response.url()), { timeout: 90000 }).catch(() => null);
         await editorFrame.getByText('Run', { exact: true }).first().click();
@@ -204,9 +228,10 @@ try {
         if (!response.ok() || !rows) throw new Error('KQL returned no verified result rows');
         step.query_verified = true;
         step.query_rows = rows;
+        step.query_range = (await visibleText(page)).includes('Last 30 days') ? 'Last 30 days; KQL constrains current month' : 'Portal-selected range';
         await page.waitForTimeout(3000);
       }
-    } catch {
+    } catch (error) {
       if (authBlocked) {
         console.log('STOP: a visible portal frame requires sign-in. No sign-in attempted.');
         break;
@@ -217,6 +242,11 @@ try {
         break;
       }
       console.log(`NOT READY ${step.file}: resource data did not render; no screenshot saved.`);
+      let failure = String(error.message);
+      for (const [value, substitute] of Object.entries(replacements)) if (value) failure = failure.split(value).join(substitute);
+      console.log(failure.replace(/\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/gi, '[redacted-id]')
+        .replace(/[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, 'admin@contoso.com')
+        .replace(/https?:\/\/[^\s]+/g, 'https://service.contoso.com').slice(0, 1500));
       let diagnostic = await visibleText(page);
       for (const [value, substitute] of Object.entries(replacements).sort((a, b) => b[0].length - a[0].length)) {
         if (value) diagnostic = diagnostic.split(value).join(substitute);
@@ -288,7 +318,7 @@ try {
     fs.writeFileSync(path.join(folder, `${step.file}.txt`), visible, 'utf8');
     images.push({ file: filename, text_file: `${step.file}.txt`, source: 'live', backend: 'Azure portal',
       captured_at: new Date().toISOString(), redaction: true, commit, title: step.title,
-      ...(step.query_verified ? { query_verified: true, query_rows: step.query_rows } : {}),
+      ...(step.query_verified ? { query_verified: true, query_rows: step.query_rows, query_range: step.query_range } : {}),
       sha256: createHash('sha256').update(fs.readFileSync(path.join(folder, filename))).digest('hex') });
     console.log(`LIVE ${step.file} captured with redaction.`);
   }
