@@ -16,7 +16,16 @@ class Engine(FeatureEngine):
         self.month = month or datetime.now(timezone.utc).strftime("%Y-%m")
         self._identity = None
         self._capabilities = None
+        self.change_reason = ""
         month_window(self.month)
+
+    def mutation_metadata(self):
+        if not self.backend.requires_reason:
+            return {}
+        reason = self.change_reason
+        if not isinstance(reason, str) or not 1 <= len(reason.strip()) <= 500:
+            raise FinOpsError("AUM service requires an audit reason. Pass --reason (1-500 characters) or fill the form.")
+        return {"reason": reason.strip()}
 
     def read(self, resource, **params):
         if resource == "whoami":
@@ -34,6 +43,8 @@ class Engine(FeatureEngine):
             require_read(self._identity, resource, params)
         if resource == "requests" and params.get("cursor"):
             self.require_feature("request_cursor")
+        if resource == "people" and params.get("cursor"):
+            self.require_feature("people_cursor")
         result = self.backend.read(resource, month=self.month, **params)
         return managed_catalog(self._identity, result) if resource == "catalog" else result
 
@@ -49,6 +60,14 @@ class Engine(FeatureEngine):
             raise FinOpsError("Complete chargeback supports organization or department. Use usage show for top-100 model/person rankings.")
         catalog = self.read("catalog")
         scoped = profile(self._identity)
+        if scoped is not None and not self.backend.unit_direct_departments:
+            units = {row["id"] for row in scoped["organizations"]}
+            targets = [("organization", row) for row in catalog["organizations"] if row["id"] in units]
+            targets += [("department", row) for row in catalog["departments"] if row.get("parent_id") not in units]
+            rows = [dict(id=row["id"], name=row["name"], scope_type=kind,
+                         **self.read("overview", **{f"{kind}_id": row["id"]})["totals"]) for kind, row in targets]
+            return dict(period=self.month, dimension="managed-scope", items=rows,
+                        note="Actually managed units (including direct members) plus independent teams; no context-parent query or double counting. Estimated cost, not an invoice.")
         if scoped is not None:
             # Parent catalog rows may be context only. Department queries never widen a manager's scope.
             dimension = "department"
@@ -63,13 +82,16 @@ class Engine(FeatureEngine):
 
     def budget_change(self, kind, key, amount=None, *, remove=False, apply=False,
                       confirm=None, warning=None, department_id=None):
+        metadata = self.mutation_metadata()
+        if warning is not None and not self.backend.budget_warning_threshold:
+            raise FinOpsError("Direct has no stored warning threshold. Use the AUM service or omit --warning.")
         kind, key = scope_type(kind), identifier(key)
         require_budget_write(self.read("whoami"), kind, key, department_id)
         rows = self.read("budgets")["items"]
         if kind == "user":
             if not department_id:
                 raise FinOpsError("Choose a team with --team before editing a person's budget.")
-            people = self.read("people", department_id=department_id, query=key, limit=50, offset=0)
+            people = self.read("people", **self.backend.people_filter(department_id), query=key, limit=50, offset=0)
             rows += people["items"]
         row = next((item for item in rows if item["scope_type"] == kind and item["scope_id"] == key), None)
         if row is None:
@@ -98,17 +120,24 @@ class Engine(FeatureEngine):
                     effect="Gateway daily person override; monthly unit limits still apply independently. Daily limits are not monthly allocations." if daily else
                     "Person budgets are Turnstile-only; not gateway quotas." if kind == "user"
                     else "Gateway apply normally takes about two minutes. A save is not proof of enforcement.")
+        if not self.backend.budget_warning_threshold:
+            plan.pop("warning_threshold_percent")
         if apply:
             if destructive and confirm != key:
                 raise FinOpsError(f"Destructive change requires confirmation: --confirm {key}")
-            plan["requested_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            if not self.backend.immediate_writes:
+                plan["requested_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             body = None if remove else dict(token_limit=proposed, warning_threshold_percent=threshold)
+            if body and not self.backend.budget_warning_threshold:
+                body.pop("warning_threshold_percent")
             plan["result"] = self.backend.write("budget_remove" if remove else "budget", body,
-                                                scope_type=kind, scope_id=key, month=self.month)
+                                                scope_type=kind, scope_id=key, month=self.month, **metadata)
         return plan
 
     def apply(self, *, apply=False):
         require_owner(self.read("whoami"))
+        if self.backend.immediate_writes:
+            raise FinOpsError("This backend has no separate apply job. Changes return their own verified receipt.", 5)
         result = dict(preview=not apply, action="Apply current governance", effect="Usually about two minutes.")
         if apply:
             result["requested_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -210,11 +239,13 @@ class Engine(FeatureEngine):
         return self._replace("catalog", body, current, apply)
 
     def _replace(self, resource, body, before, apply):
+        metadata = self.mutation_metadata()
         plan = dict(preview=not apply, action=f"Replace {resource}", before=before, after=body,
                     effect="Whole collection is saved; refresh before preview to avoid overwriting concurrent edits.")
         if apply:
-            plan["requested_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-            plan["result"] = self.backend.write(resource, body)
+            if not self.backend.immediate_writes:
+                plan["requested_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            plan["result"] = self.backend.write(resource, body, **metadata)
         return plan
 
     def lookup(self, text, department_id=None):
@@ -245,7 +276,7 @@ class Engine(FeatureEngine):
             result += [dict(kind="configured-model", id=model, name=model, tab="governance")
                        for model in tier["models"] if model not in names and matches(model)]
         if department_id:
-            people = self.read("people", department_id=department_id, query=text, offset=0, limit=20)
+            people = self.read("people", **self.backend.people_filter(department_id), query=text, offset=0, limit=20)
             result += [dict(kind="person", id=row["scope_id"], name=row["scope_name"], tab="people")
                        for row in people["items"]]
         if text.startswith(("request:", "contoso-request-")) or (len(text) == 36 and text.count("-") == 4):

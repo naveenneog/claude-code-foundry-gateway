@@ -27,7 +27,7 @@ class EverywhereGroup(TyperGroup):
         ctx.meta["finops_help"] = "--help" in args
         flags = {"--json", "--plain", "--what-if", "--no-color", "--ascii", "--version", "--screen-reader", "--redact"}
         options = {"--backend", "--month", "--config", "--url", "--scope", "--theme",
-                   "--resource-group", "--apim-name", "--subscription"}
+                   "--resource-group", "--apim-name", "--subscription", "--reason"}
         prefix, rest = [], []
         index = 0
         while index < len(args):
@@ -62,7 +62,7 @@ def emit(ctx, operation, *, mutation=False):
     try:
         result = operation(state["engine"])
         if mutation and not result.get("preview", True) and result.get("requested_at"):
-            if result.get("scope_type") != "user" and state["engine"].backend.name != "Direct":
+            if result.get("scope_type") != "user" and not state["engine"].backend.immediate_writes:
                 result["apply_status"] = state["engine"].wait_for_apply(result["requested_at"])
         display(state["redactor"].present(result), as_json=state["json"], plain=state["plain"], no_color=state["no_color"])
         return result
@@ -74,12 +74,13 @@ def emit(ctx, operation, *, mutation=False):
 
 @app.callback()
 def root(ctx: typer.Context,
-         backend: Annotated[str | None, typer.Option(help="turnstile, direct or fake")] = None,
+         backend: Annotated[str | None, typer.Option(help="direct, aum-service, turnstile or fake")] = None,
          month: str | None = None,
          config: Path | None = None,
          url: str | None = None,
          scope: str | None = None,
          subscription: str | None = None,
+         reason: str | None = None,
          resource_group: str | None = None,
          apim_name: str | None = None,
          theme: str | None = None,
@@ -112,6 +113,7 @@ def root(ctx: typer.Context,
         settings = load_config(config, backend=backend, url=url, scope=scope, resource_group=resource_group,
                                apim_name=apim_name, subscription=subscription, theme=theme, ascii=True if ascii_only else None)
         engine = Engine(connect(settings), month)
+        engine.change_reason = reason or ""
     except FinOpsError as error:
         display(dict(error=str(error), exit_code=error.code), as_json=as_json, plain=plain, no_color=True)
         raise typer.Exit(error.code) from None
@@ -175,14 +177,14 @@ def budget_remove(ctx: typer.Context, kind: str, name: str, apply: bool = False,
 @groups["people"].command("find")
 def people_find(ctx: typer.Context, query: Annotated[str, typer.Argument()] = "", team: Annotated[str, typer.Option()] = "",
                 offset: Annotated[int, typer.Option(min=0)] = 0,
-                limit: Annotated[int, typer.Option(min=1, max=200)] = 50):
+                limit: Annotated[int, typer.Option(min=1, max=200)] = 50, cursor: str | None = None):
     """Search one team's people on the server. Never downloads the directory."""
     def operation(engine):
         if not team:
             raise FinOpsError("Choose --team <team-id>. Run governance show to find a team.")
         if len(query) > 200:
             raise FinOpsError("Search text must not exceed 200 characters.")
-        return engine.read("people", department_id=team, query=query, offset=offset, limit=limit)
+        return engine.read("people", **engine.backend.people_filter(team), query=query, offset=offset, limit=limit, cursor=cursor)
     emit(ctx, operation)
 
 

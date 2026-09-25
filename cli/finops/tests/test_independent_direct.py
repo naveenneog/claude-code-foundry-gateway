@@ -38,6 +38,7 @@ def test_direct_anomalies_run_documented_server_series_query():
     result = backend.read("anomalies", month="2026-09", limit=50)
     assert "series_decompose_anomalies" in queries[0]
     assert "priced_ok" in queries[0] and "scope_kind" in queries[0]
+    assert "| where day < startofday(now())" in queries[0]
     assert result["items"][0]["severity"] in {"warning", "critical"}
     assert "statistical" in result["note"].lower()
 
@@ -84,3 +85,21 @@ def test_daily_person_budget_does_not_compare_daily_allocation_to_monthly_parent
     plan = Engine(backend, "2026-09").budget_change("person", "dev-001@contoso.com", "3M", department_id="sales-emea")
     assert plan["budget_period"] == "day" and plan["parent_headroom"] is None
     assert "daily" in plan["effect"].lower()
+
+
+def test_direct_does_not_pretend_warning_thresholds_are_persisted():
+    from claude_finops.engine import Engine
+    from claude_finops.errors import FinOpsError
+    backend = direct()
+    def no_read(*_args, **_kwargs):
+        raise AssertionError("Validate unsupported fields before calling Azure.")
+    backend.read = no_read
+    with pytest.raises(FinOpsError, match="warning threshold"):
+        Engine(backend).budget_change("team", "sales-emea", "1M", warning=85)
+
+
+def test_direct_cost_filter_accepts_the_observed_person_object_id():
+    backend, queries = direct(), []
+    backend.query = lambda query: queries.append(query) or [{}]
+    backend.read("overview", month="2026-09", user_id="00000000-0000-0000-0000-000000000001")
+    assert 'user_id == "00000000-0000-0000-0000-000000000001"' in queries[0]

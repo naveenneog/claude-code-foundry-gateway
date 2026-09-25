@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from hashlib import sha256
+from uuid import UUID
 
 from .errors import FinOpsError
 from .rules import query_window
@@ -33,6 +34,10 @@ def people(backend, ledger, params):
         override = state.get("overrides", {}).get(key)
         budget = override if override is not None else defaults.get(row.get("tier"))
         used = row.get("used_tokens") if current else None
+        try:
+            writable = str(UUID(row.get("user_id", ""))) == row.get("user_id", "").lower()
+        except (ValueError, AttributeError):
+            writable = False
         result.append(dict(scope_type="user", scope_id=key, scope_name=row["actor"],
             parent_scope_id=team, used_tokens=used, token_limit=budget,
             remaining_tokens=budget - used if budget is not None and used is not None else None,
@@ -40,7 +45,7 @@ def people(backend, ledger, params):
             last_seen=row.get("last_seen"), tier=row.get("tier"), observed_window_tokens=row.get("window_tokens"),
             unit=state.get("parents", {}).get(team, team),
             budget_period="day", has_override=override is not None, warning_threshold_percent=80,
-            writable=bool(row.get("user_id")) and bool(state.get("person_budgets_supported"))))
+            writable=writable and bool(state.get("person_budgets_supported"))))
     return dict(items=result, offset=offset, limit=limit, total=None, budget_period="day",
         note="Observed people, server-paged. Used/limit: current UTC day; detail includes selected-month tokens. "
              "Daily override or tier default, not a monthly allocation or an exact gateway counter.")
@@ -67,7 +72,8 @@ def hourly(backend, ledger, params):
 def anomalies(backend, cost, params):
     start, end = query_window(params["month"], params.get("from"), params.get("to"))
     limit = min(200, max(1, int(params.get("limit", 50))))
-    query = f"""let aum_facts=materialize({cost});
+    query = f"""let aum_facts=materialize({cost}
+| where day < startofday(now()));
 let aum_scopes=union
 (aum_facts | extend scope_kind="organization", scope_id=iff(isempty(business_unit_parent), business_unit, business_unit_parent)),
 (aum_facts | where isnotempty(business_unit_parent) | extend scope_kind="department", scope_id=business_unit);

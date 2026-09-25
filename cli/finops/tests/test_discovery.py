@@ -71,6 +71,37 @@ def test_direct_workspace_is_resolved_from_logger_not_name_guess():
     assert any("diagnostics/applicationinsights" in " ".join(call) for call in calls)
 
 
+@pytest.mark.parametrize("recorded_other_gateway", [False, True])
+def test_service_discovery_uses_tagged_function_and_nonsecret_settings(recorded_other_gateway):
+    base, calls = runner()
+    function_id = APIM_ID.rsplit("/providers/", 1)[0] + "/providers/Microsoft.Web/sites/func-contoso"
+    def run(*args):
+        if args[:2] == ("apim", "list") and recorded_other_gateway:
+            original = json.loads(base(*args))
+            return json.dumps(original + [dict(id=APIM_ID.replace("rg-contoso", "rg-other").replace("apim-contoso", "apim-other"),
+                name="apim-other", resourceGroup="rg-other")])
+        if args[:2] == ("functionapp", "list"):
+            calls.append(args)
+            return json.dumps([dict(id=function_id, name="func-contoso", resourceGroup="rg-contoso",
+                                   defaultHostName="func.contoso.com", tags={"component": "aum-service"})])
+        if args[:4] == ("functionapp", "config", "appsettings", "list"):
+            import subprocess
+            calls.append(args)
+            assert "--query" in args
+            assert not any("|" in str(arg) or "&" in str(arg) for arg in args)
+            assert subprocess.list2cmdline([args[args.index("--query") + 1]]).startswith('"')
+            return json.dumps([dict(name=name, value=value) for name, value in {
+                "AUM_CLIENT_ID": SUB, "AUM_TENANT_ID": SUB, "AUM_APIM_RESOURCE_ID": APIM_ID,
+                "AUM_WORKSPACE_ID": SUB}.items()])
+        return base(*args)
+    target = lambda field: ("rg-other" if field == "ResourceGroup" else "apim-other") if recorded_other_gateway else ""
+    result = discover(backend="aum-service", runner=run, target_reader=target, interactive=False)
+    assert result["config"]["url"] == "https://func.contoso.com"
+    assert result["config"]["scope"] == f"api://{SUB}/AUM.Access"
+    assert result["config"]["workspace_resource_id"] == WS_ID
+    assert not any(call[:2] == ("account", "set") for call in calls)
+
+
 def test_configure_command_previews_without_existing_profile(monkeypatch):
     from typer.testing import CliRunner
     from claude_finops.cli import app

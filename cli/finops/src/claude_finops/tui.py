@@ -192,17 +192,21 @@ class FinOpsApp(FeatureUI, App):
                 return False
             return bool(parameters) and parameters[0] in self.allowed_tabs
         if action == "export":
-            return "usage" in self.allowed_tabs
+            return "overview" in self.allowed_tabs
         if action == "edit":
             if self.redactor.enabled:
                 return False
+            if "native_writes" in self.feature_caps.get("features", {}) and not enabled(self.feature_caps, "native_writes", "budget"):
+                return False
             if self.active in {"budgets", "people"}:
                 row = self.selected()
+                if row.get("writable") is False:
+                    return False
                 return can_budget_write(self.identity, row.get("scope_type"), row.get("scope_id"),
                                         row.get("parent_scope_id"))
             return self.editable and self.active == "governance"
         if action == "apply":
-            return self.editable and self.active == "governance" and self.engine.backend.name != "Direct"
+            return self.editable and self.active == "governance" and not self.engine.backend.immediate_writes
         if action in {"next_page", "previous_page"}:
             return self.active in {"people", "requests", "approvals"}
         if action in {"copy_request", "open_ledger"}:
@@ -298,10 +302,10 @@ class FinOpsApp(FeatureUI, App):
         if tab == "overview":
             overview, budgets, ranking, teams, trends, anomalies, catalog = await asyncio.gather(
                 asyncio.to_thread(read, "overview", **self.scope_filters), asyncio.to_thread(read, "budgets"),
-                asyncio.to_thread(read, "distribution", dimension=self.ranking_dimension, limit=10, **self.scope_filters),
-                asyncio.to_thread(read, "distribution", dimension="department", limit=10, **self.scope_filters),
+                self.optional_dashboard_read("usage_breakdown", "distribution", dimension=self.ranking_dimension, limit=10, **self.scope_filters),
+                self.optional_dashboard_read("usage_breakdown", "distribution", dimension="department", limit=10, **self.scope_filters),
                 asyncio.to_thread(read, "trends", interval="day", group_by="none", **self.scope_filters),
-                asyncio.to_thread(read, "anomalies", limit=10, **self.scope_filters),
+                self.optional_dashboard_read("anomaly_findings", "anomalies", limit=10, **self.scope_filters),
                 asyncio.to_thread(read, "catalog"))
             return dict(overview=overview, budgets=budgets, ranking=ranking, teams=teams,
                         trends=trends, anomalies=anomalies, catalog=catalog)
@@ -316,6 +320,9 @@ class FinOpsApp(FeatureUI, App):
             catalog = await asyncio.to_thread(read, "catalog")
             select = self.query_one("#people-team", Select)
             departments = catalog.get("departments", [])
+            if self.config.backend == "aum-service":
+                departments = departments + [dict(row, name=row["name"] + " (unit, including teams)")
+                    for row in catalog.get("organizations", []) if not row.get("scope_context")]
             labels = self.present(departments)
             select.set_options([(label["name"], row["id"]) for row, label in zip(departments, labels)])
             if self.team not in {row["id"] for row in departments}:
@@ -324,8 +331,9 @@ class FinOpsApp(FeatureUI, App):
                 self.team = departments[0]["id"]
             if self.team:
                 select.value = self.team
-                return await asyncio.to_thread(read, "people", department_id=self.team,
-                                                query=self.people_query, offset=self.people_offset, limit=50)
+                paging = {"cursor": self.people_cursor} if enabled(self.feature_caps, "people_cursor") else {"offset": self.people_offset}
+                return await asyncio.to_thread(read, "people", **self.engine.backend.people_filter(self.team),
+                                                query=self.people_query, limit=50, **paging)
             return dict(items=[], note="No teams in your scope. Ask an Owner to check the catalog.")
         if tab == "governance":
             return await asyncio.to_thread(self.engine.governance)
@@ -351,7 +359,12 @@ class FinOpsApp(FeatureUI, App):
         if tab == "anomalies":
             return await asyncio.to_thread(read, "anomalies", limit=100, **self.scope_filters)
         return dict(**self.identity, backend=self.engine.backend.name, month=self.engine.month,
-                    url=self.config.url or "(not used)", config="~/.aum/config.json (legacy config supported)",
+                    **({"access_note": "Direct: Azure RBAC administrator access, not unit-scoped.\nManagers/viewers: AUM service or Turnstile.",
+                        "governance_authority": self.feature_caps.get("authority", "Gateway")}
+                       if self.config.backend == "direct" else {"access_note": "AUM service enforces its own app roles and scoped authority; no Turnstile dependency."}
+                       if self.config.backend == "aum-service" else {}),
+                    url="(not used by Direct)" if self.config.backend == "direct" else self.config.url or "(not used)",
+                    config="~/.aum/config.json (legacy config supported)",
                     theme=self.theme, ascii=self.config.ascii,
                     sign_in="az login", sign_out="az logout (outside this app)",
                     accessibility="--plain, --no-color, --ascii; Tab/Shift+Tab; all states have words")
@@ -445,14 +458,14 @@ class FinOpsApp(FeatureUI, App):
     @on(Button.Pressed, "#find-people")
     def find_people(self):
         self.people_query = self.query_one("#people-query", Input).value[:200]
-        self.people_offset = 0
+        self.reset_people_page()
         self.action_refresh()
 
     @on(Select.Changed, "#people-team")
     def team_changed(self, event):
         if event.value is not Select.BLANK and event.value != self.team:
             self.team = str(event.value)
-            self.people_offset = 0
+            self.reset_people_page()
             self.action_refresh()
 
     @on(Select.Changed, "#dimension")
@@ -573,13 +586,15 @@ class FinOpsApp(FeatureUI, App):
             self.push_screen(ChangeScreen(self.engine, "catalog"))
 
     def action_apply(self):
-        if self.editable and self.engine.backend.name != "Direct":
+        if self.editable and not self.engine.backend.immediate_writes:
             self.push_screen(ChangeScreen(self.engine, "apply"))
 
     def action_next_page(self):
         if self.active == "approvals":
             return self.page_feature()
         if self.active == "people":
+            if enabled(self.feature_caps, "people_cursor"):
+                return self.page_people()
             data = self.data.get("people", {})
             if len(data.get("items", [])) < 50:
                 return
@@ -602,6 +617,8 @@ class FinOpsApp(FeatureUI, App):
         if self.active == "approvals":
             return self.page_feature(previous=True)
         if self.active == "people":
+            if enabled(self.feature_caps, "people_cursor"):
+                return self.page_people(previous=True)
             self.people_offset = max(0, self.people_offset - 50)
         elif self.active == "requests":
             if enabled(self.feature_caps, "request_cursor"):
@@ -621,7 +638,9 @@ class FinOpsApp(FeatureUI, App):
                     pagination="n next / p previous; cursor pages when advertised, otherwise 200 requests per window.",
                     safety="Preview first, then Apply. Removing or lowering below usage requires the identifier.",
                     freshness="Header time is fetch time, not ingestion time. Request ledger can lag.",
-                    limitations="Person budgets do not enforce gateway quotas. Cost is estimated, not an invoice.",
+                    limitations=("Person limits are gateway DAILY overrides; units/teams remain monthly."
+                                 if self.engine.backend.person_budget_period == "day"
+                                 else "Person monthly budgets are Turnstile records, not gateway quotas.") + " Cost is estimated, not an invoice.",
                     sign_in="Run az login. AADSTS50105: ask an admin to assign a Turnstile role.",
                     access="Viewers are read-only; managers edit only server-advertised writable budgets.")
         if self.editable:

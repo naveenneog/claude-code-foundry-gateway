@@ -64,7 +64,8 @@ switch ([string]$request.action) {
             quota_org = [long]$nv['quota-org']
             overrides = $(if ($nv.ContainsKey('quota-overrides')) { ConvertFrom-ClaudeBudgetOverrides $nv['quota-overrides'] } else { @{} })
             person_budgets_supported = $nv.ContainsKey('quota-overrides')
-            authority = $(if ($nv['turnstile-integration'] -match 'governanceAuthority=Turnstile') { 'Turnstile' } else { 'Gateway' })
+            modes_supported = $nv.ContainsKey('bu-modes')
+            authority = $(if ($nv['turnstile-integration'] -match '(?:^|;)(?:governanceAuthority|budgetAuthority)=Turnstile(?:;|$)') { 'Turnstile' } else { 'Gateway' })
         }
     }
     { $_ -in 'budget', 'budget_remove' } {
@@ -141,6 +142,7 @@ switch ([string]$request.action) {
     }
     'mode' {
         if ($nv['turnstile-integration'] -match 'governanceAuthority=Turnstile') { throw 'Turnstile owns modes. Use its backend.' }
+        if (-not $nv.ContainsKey('bu-modes')) { throw 'Upgrade the gateway mode policy before editing modes.' }
         $modeArgs = @{
             Id = [string]$request.parameters.scope_id
             Mode = [string]$request.body.mode
@@ -176,7 +178,7 @@ switch ([string]$request.action) {
             if ($seen.ContainsKey([string]$item.id)) { throw 'Duplicate scope identifier.' }
             $seen[[string]$item.id] = $true
             if ([string]$item.external_ref -notlike 'entra-group:*') { throw 'Every direct scope needs an Entra group.' }
-            if ($item.attributes.manager_group_id -or $item.attributes.manager_group) { throw 'Manager group authoring requires Turnstile.' }
+            if ($item.attributes.manager_group_id -or $item.attributes.manager_group) { throw 'Manager groups require the optional AUM service or Turnstile authority.' }
             $group = ([string]$item.external_ref).Substring(12)
             if ($group -match '[,:=&|<>^%!"\r\n]') { throw 'Group contains unsafe registry or shell characters.' }
             $groupId = az ad group show --group $group --query id -o tsv 2>$null

@@ -18,7 +18,7 @@ def validate_capture(svg, entry):
         problems.append("missing live/example provenance")
     if entry.get("source") == "live" and entry.get("redaction") is not True:
         problems.append("live image requires display redaction")
-    if entry.get("backend") not in {"Turnstile", "Direct", "Example"}:
+    if entry.get("backend") not in {"Turnstile", "Direct", "AUM service", "Example"}:
         problems.append("missing backend")
     if not re.fullmatch(r"[a-f0-9]{40}", entry.get("commit", "")):
         problems.append("missing source commit")

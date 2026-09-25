@@ -24,16 +24,16 @@ def az(*args: str) -> str:
         raise FinOpsError("Azure CLI did not finish. Check az account show and network access.", 7) from None
     if result.returncode:
         if "AADSTS50105" in result.stderr:
-            raise FinOpsError("AADSTS50105: your account holds no Turnstile role. Ask an admin to assign Turnstile.Viewer or Turnstile.Admin.", 4)
+            raise FinOpsError("AADSTS50105: no app role for the selected backend. Check the existing AUM or Turnstile app assignment; Azure administrators can choose Direct with existing RBAC.", 4)
         raise FinOpsError("Azure CLI refused the operation. Run az login in the correct tenant and check Azure role assignments.", 3)
     return result.stdout.strip()
 
 
-def token(scope: str, subscription: str = "") -> str:
-    selected = ("--subscription", subscription) if subscription else ()
+def token(scope: str, subscription: str = "", tenant_id: str = "") -> str:
+    selected = ("--tenant", tenant_id) if tenant_id else ("--subscription", subscription) if subscription else ()
     value = az("account", "get-access-token", "--scope", scope, "--query", "accessToken", "-o", "tsv", *selected)
     if not value:
-        raise FinOpsError("No access token. Run az login in the Turnstile tenant.", 3)
+        raise FinOpsError("No access token. Run az login in the selected backend's tenant.", 3)
     return value
 
 
@@ -105,6 +105,14 @@ def load_config(path: Path | None = None, **overrides) -> Config:
     if "backend" not in values:
         values["backend"] = "turnstile" if values.get("url") or values.get("scope") else "direct"
     config = Config(**values).validate()
+    if config.backend == "aum-service" and (not config.url or not config.scope):
+        from .discovery import discover
+        result = discover(backend="aum-service", subscription=config.subscription or None,
+                          resource_group=config.resource_group or None, apim_name=config.apim_name or None,
+                          workspace=config.workspace_resource_id or None, interactive=False)
+        discovered = result["config"]
+        discovered.update({key: value for key, value in values.items() if value not in ("", None)})
+        config = Config(**discovered).validate()
     if config.backend == "turnstile" and (not config.url or not config.scope):
         if not config.resource_group or not config.apim_name:
             raise FinOpsError("Run aum configure to discover Azure targets, or set url and scope in ~/.aum/config.json. You can also pass --url and --scope.")

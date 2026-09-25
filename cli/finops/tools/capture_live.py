@@ -92,7 +92,7 @@ async def capture(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--backend", choices=["turnstile", "direct"], default="turnstile")
+    parser.add_argument("--backend", choices=["direct", "aum-service", "turnstile"], default="direct")
     parser.add_argument("--config")
     parser.add_argument("--url")
     parser.add_argument("--scope")

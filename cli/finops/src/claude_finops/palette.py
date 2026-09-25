@@ -32,20 +32,25 @@ class FinOpsCommands(Provider):
         if self.app.active == "requests" and not self.app.redactor.enabled:
             commands += [("Copy request id", self.app.action_copy_request, "Terminal clipboard"),
                          ("Open request in ledger", self.app.action_open_ledger, "Discovered Log Analytics resource")]
-        for dimension in ("organization", "department", "user", "model", "runtime", "tier"):
-            commands.append((f"Overview ranking: {dimension}", partial(self.app.action_overview_rank, dimension), "Scoped server ranking"))
+        ranking = self.app.feature_caps.get("features", {}).get("usage_breakdown")
+        if ranking is None or enabled(self.app.feature_caps, "usage_breakdown"):
+            for dimension in ("organization", "department", "user", "model", "runtime", "tier"):
+                commands.append((f"Overview ranking: {dimension}", partial(self.app.action_overview_rank, dimension), "Scoped server ranking"))
         if self.app.check_action("export", ()):
             commands.append(("Export complete chargeback CSV", self.app.action_export, "All managed scopes, not the top 100"))
         if self.app.editable:
             commands += [
                 ("Edit selected budget or governance row", self.app.action_edit, "Preview, then apply"),
                 ("Add unit or team", self.app.action_add, "Author gateway catalog"),
-                ("Apply governance now", self.app.action_apply, "Retry the configured gateway job"),
                 ("Remove selected budget or scope", self.app.action_remove, "Type the identifier to confirm"),
-                ("Set budget enforcement mode", self.app.action_mode, "Strict, allowance or notify"),
-                ("Import person budgets from CSV", self.app.action_bulk, "Preview full parent allocation"),
                 ("Generate reconciled chargeback report (P50)", self.app.action_report_generate, "Activates when the merged generator is present"),
             ]
+            if not self.app.engine.backend.immediate_writes:
+                commands.append(("Apply governance now", self.app.action_apply, "Retry the configured gateway job"))
+            if enabled(self.app.feature_caps, "bulk_budget", "write"):
+                commands.append(("Import person budgets from CSV", self.app.action_bulk, "Preview full parent allocation"))
+            if enabled(self.app.feature_caps, "budget_modes", "write"):
+                commands.append(("Set budget enforcement mode", self.app.action_mode, "Strict, allowance or notify"))
         elif self.app.check_action("edit", ()):
             commands.append(("Edit selected delegated budget", self.app.action_edit, "Within the server's writable scope"))
         caps = self.app.feature_caps

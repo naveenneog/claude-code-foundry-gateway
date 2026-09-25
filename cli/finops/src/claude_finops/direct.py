@@ -20,6 +20,10 @@ DIMENSIONS = {"organization": "business_unit", "department": "business_unit", "u
 
 class DirectBackend(Backend):
     name = "Direct"
+    immediate_writes = True
+    native_modes = True
+    person_budget_period = "day"
+    budget_warning_threshold = False
 
     def __init__(self, config):
         self.config = config.validate()
@@ -89,9 +93,15 @@ class DirectBackend(Backend):
 
     def read(self, resource, **params):
         if resource == "capabilities":
-            result = current_capabilities(params.get("identity") or self.read("whoami"))
+            identity = params.get("identity") or self.read("whoami")
+            result = current_capabilities(identity)
+            state = self._bridge("read")
+            writer = identity.get("role") == "owner" and state.get("authority") == "Gateway"
+            result["authority"] = state.get("authority", "unknown")
             result["features"]["bulk_budget"] = {"enabled": False, "actions": []}
-            result["features"]["person_daily_budget"] = {"enabled": True, "actions": ["read", "write"]}
+            result["features"]["native_writes"] = {"enabled": writer, "actions": ["budget", "catalog", "tiers"] if writer else []}
+            result["features"]["budget_modes"] = {"enabled": True, "actions": ["read"] + (["write"] if writer and state.get("modes_supported") else [])}
+            result["features"]["person_daily_budget"] = {"enabled": True, "actions": ["read"] + (["write"] if writer and state.get("person_budgets_supported") else [])}
             return result
         if resource == "whoami":
             account = json.loads(self._az("account", "show", "-o", "json"))
@@ -174,10 +184,13 @@ class DirectBackend(Backend):
             return dict(items=rows, page={"next_cursor": None}, note="Ledger lower bound: per-request cache and cost are unknown.")
         start, end = query_window(params["month"], params.get("from"), params.get("to"))
         cost = f"ClaudeCost(datetime({start}), datetime({end}))"
-        for key, column in (("department_id", "business_unit"), ("model_id", "model"), ("user_id", "actor"),
+        for key, column in (("department_id", "business_unit"), ("model_id", "model"),
                             ("runtime", "client_surface"), ("tier", "tier")):
             if params.get(key):
                 cost += f"\n| where {column} == {self._quote(params[key])}"
+        if params.get("user_id"):
+            value = self._quote(params["user_id"])
+            cost += f"\n| where user_id == {value} or actor == {value}"
         if params.get("organization_id"):
             unit = self._quote(params["organization_id"])
             cost += f"\n| where business_unit == {unit} or business_unit_parent == {unit}"

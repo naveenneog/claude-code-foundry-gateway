@@ -15,6 +15,7 @@ from .feature_screens import ActionForm, FiltersScreen, TourScreen
 from .ledger import ledger_url
 from .preferences import Preferences
 from .screens import DetailScreen
+from .views import TABS
 
 EXTRA_TABS = [("approvals", "9 Approvals"), ("ask", "a Ask"), ("advanced", "Advanced")]
 
@@ -37,6 +38,8 @@ class FeatureUI:
         self.feature_cursor = None
         self.feature_cursor_stack = []
         self.ranking_dimension = "organization"
+        self.people_cursor = None
+        self.people_cursor_stack = []
 
     def compose_feature(self, tab):
         if tab == "ask":
@@ -58,7 +61,25 @@ class FeatureUI:
                 yield Button("Open", id="advanced-load")
 
     async def refresh_features(self):
-        self.feature_caps = await asyncio.to_thread(self.engine.capabilities)
+        self.feature_caps = await asyncio.to_thread(self.engine.capabilities, refresh=self.config.backend == "aum-service")
+        supported = self.feature_caps.get("features", {}).get("supported_views")
+        if supported:
+            self.allowed_tabs &= set(supported["actions"]) | {key for key, _ in EXTRA_TABS}
+            for tab, _ in TABS:
+                if tab not in self.allowed_tabs:
+                    self.query_one("#main-tabs").hide_tab(tab)
+        if "native_writes" in self.feature_caps.get("features", {}):
+            self.editable = self.identity.get("role") == "owner" and not self.redactor.enabled and enabled(
+                self.feature_caps, "native_writes", "catalog")
+        intervals = self.feature_caps.get("features", {}).get("trend_intervals")
+        if intervals:
+            selector = self.query_one("#interval", Select)
+            options = [(value.title(), value) for value in intervals["actions"]]
+            if options:
+                with selector.prevent(Select.Changed):
+                    selector.set_options(options)
+                    self.interval = self.interval if self.interval in intervals["actions"] else options[0][1]
+                    selector.value = self.interval
         if self.preferences is None:
             identity = self.identity.get("id") or self.identity.get("email", "unknown")
             profile = f"{self.config.backend}|{self.config.url}|{self.config.subscription}|{self.config.apim_name}"
@@ -91,6 +112,29 @@ class FeatureUI:
         if self.preferences and not self.preferences.toured and len(self.screen_stack) == 1:
             self.push_screen(TourScreen())
 
+    async def optional_dashboard_read(self, feature, resource, **params):
+        if feature in self.feature_caps.get("features", {}) and not enabled(self.feature_caps, feature):
+            return dict(items=[], note=f"{resource.title()} is not offered by this server contract; no fallback backend was queried.")
+        return await asyncio.to_thread(self.engine.read, resource, **params)
+
+    def reset_people_page(self):
+        self.people_offset = 0
+        self.people_cursor = None
+        self.people_cursor_stack = []
+
+    def page_people(self, previous=False):
+        if previous:
+            if not self.people_cursor_stack:
+                return
+            self.people_cursor = self.people_cursor_stack.pop()
+        else:
+            cursor = self.data.get("people", {}).get("page", {}).get("next_cursor")
+            if not cursor:
+                return
+            self.people_cursor_stack.append(self.people_cursor)
+            self.people_cursor = cursor
+        self.action_refresh()
+
     def update_filter_chips(self):
         if not self.query("#filter-chips"):
             return
@@ -111,6 +155,7 @@ class FeatureUI:
         self.cursor_stack = []
         self.feature_cursor = None
         self.feature_cursor_stack = []
+        self.reset_people_page()
 
     def clear_query_context(self):
         self.reset_paging()
@@ -185,7 +230,7 @@ class FeatureUI:
         self.action_refresh()
 
     def action_mode(self):
-        if not self.editable:
+        if not self.editable or not enabled(self.feature_caps, "budget_modes", "write"):
             return
         row = self.selected()
         kind = "unit" if row.get("kind") == "unit" or row.get("scope_type") == "organization" else "team"
@@ -233,9 +278,11 @@ class FeatureUI:
         self.push_screen(ActionForm("Temporary person boost", [
             ("person", "Person id", row.get("scope_id", ""), None),
             ("team", "Team", self.team, None), ("amount", "Additional tokens", "", None),
+            ("window", "Budget window", "daily" if self.engine.backend.person_budget_period == "day" else "monthly",
+             [("daily", "Daily")] if self.engine.backend.person_budget_period == "day" else [("daily", "Daily"), ("monthly", "Monthly")]),
             ("until", "Expires at (UTC ISO date/time)", "", None), ("reason", "Reason", "", None)],
             lambda values, apply: self.engine.boost(values["person"], values["team"], values["amount"],
-                                                     values["until"], values["reason"], apply=apply)))
+                                                     values["until"], values["reason"], window=values["window"], apply=apply)))
 
     def action_disposition(self, status):
         action = "acknowledge" if status == "acknowledged" else "false_positive"
@@ -271,7 +318,7 @@ class FeatureUI:
             return dict(preview=not apply, action="Switch profile/backend", after=config.public())
         self.push_screen(ActionForm("Switch profile or backend", [
             ("path", "Profile JSON path", str(Path.home() / ".aum" / "config.json"), None),
-            ("backend", "Backend", self.config.backend, [(b, b.title()) for b in ("turnstile", "direct", "fake")])],
+            ("backend", "Backend", self.config.backend, [(b, b.title()) for b in ("direct", "aum-service", "turnstile", "fake")])],
             run, mutation=False))
 
     async def activate_profile(self, config):
@@ -516,8 +563,12 @@ class FeatureUI:
     def action_budget_history(self):
         async def load():
             try:
-                result = await asyncio.to_thread(self.engine.read, "budgets")
-                self.push_screen(DetailScreen("Budget audit history", result.get("history", [])))
+                if enabled(self.feature_caps, "audit_read"):
+                    result = await asyncio.to_thread(self.engine.read, "audit", limit=50)
+                    self.push_screen(DetailScreen("AUM service audit history", result))
+                else:
+                    result = await asyncio.to_thread(self.engine.read, "budgets")
+                    self.push_screen(DetailScreen("Budget audit history", result.get("history", [])))
             except FinOpsError as error:
                 self.notify(str(error), severity="error")
         self.run_worker(load(), group="budget-history", exclusive=True)

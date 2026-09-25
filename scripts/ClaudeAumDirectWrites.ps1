@@ -16,6 +16,10 @@ function Invoke-AumVerifiedWrite {
             throw 'Named values changed before the write. Refresh and preview again.'
         }
     }
+    $changed = @($keys | Where-Object {
+        -not $current.Contains($_) -or [string]$current[$_] -cne [string]$After[$_]
+    })
+    if (-not $changed.Count) { return @{ verified=$true; rollback=$false; changed=@(); unchanged=$true } }
     try {
         & $Operation | Out-Null
         $current = & $Read
@@ -24,7 +28,7 @@ function Invoke-AumVerifiedWrite {
                 throw 'Named value read-back mismatch.'
             }
         }
-        return @{ verified=$true; rollback=$false; changed=@($keys) }
+        return @{ verified=$true; rollback=$false; changed=@($changed) }
     }
     catch {
         $recovery = @()

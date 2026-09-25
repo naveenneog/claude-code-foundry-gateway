@@ -16,6 +16,12 @@ def test_gauge_never_double_counts_unit_and_team():
     assert budget_totals([dict(scope_type="department", used_tokens=8, token_limit=None)]) == (0, 0, 0)
 
 
+def test_unavailable_budget_usage_is_not_rendered_as_zero():
+    from claude_finops.dashboard import gauge
+    assert budget_totals([dict(scope_type="organization", used_tokens=None, token_limit=100)]) == (None, 100, 1)
+    assert "unknown" in gauge(None, 100).lower()
+
+
 @pytest.mark.parametrize("attributes,expected", [
     ({}, "STRICT"), ({"enforcement": "notify"}, "NOTIFY"),
     ({"enforcement": "allowance", "allowance_percent": 10}, "ALLOW +10%"),

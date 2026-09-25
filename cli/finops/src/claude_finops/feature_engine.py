@@ -29,7 +29,7 @@ class FeatureEngine:
         return "https://portal.azure.com/#" + prefix + "view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Members/groupId/" + group_id
 
     def person_detail(self, person, team):
-        people = self.read("people", department_id=identifier(team), query=identifier(person), offset=0, limit=50)
+        people = self.read("people", **self.backend.people_filter(identifier(team)), query=identifier(person), offset=0, limit=50)
         row = next((item for item in people["items"] if item["scope_id"] == person), None)
         if row is None:
             raise FinOpsError("Person not found in this team.", 5)
@@ -53,7 +53,10 @@ class FeatureEngine:
         cap.require(self.capabilities(), name, action)
 
     def mode_change(self, kind, key, mode, allowance=None, *, apply=False):
+        metadata = self.mutation_metadata()
         require_owner(self.read("whoami"))
+        if self.backend.native_modes:
+            self.require_feature("budget_modes", "write")
         kind = scope_type(kind)
         if kind not in {"organization", "department"} or mode not in {"strict", "allowance", "notify"}:
             raise FinOpsError("Choose a unit/team and strict, allowance or notify.")
@@ -78,11 +81,12 @@ class FeatureEngine:
         plan = dict(preview=not apply, action="Set budget mode", scope_type=kind, scope_id=key,
                     before=before, after=row["attributes"], effect="Configured mode; follow gateway apply before claiming effect.")
         if apply:
-            plan["requested_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-            if self.backend.name == "Direct":
-                plan["result"] = self.backend.write("mode", dict(mode=mode, allowance_percent=allowance), scope_id=key)
+            if not self.backend.immediate_writes:
+                plan["requested_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            if self.backend.native_modes:
+                plan["result"] = self.backend.write("mode", dict(mode=mode, allowance_percent=allowance), scope_id=key, **metadata)
             else:
-                plan["result"] = self.backend.write("catalog", body)
+                plan["result"] = self.backend.write("catalog", body, **metadata)
         return plan
 
     def compare_trends(self, comparison, interval="day", group_by="none", **filters):
@@ -104,14 +108,16 @@ class FeatureEngine:
                 plan["requested_at"] = job["requested_at"]
         return plan
 
-    @staticmethod
-    def _reason(reason):
-        if not isinstance(reason, str) or not reason.strip() or len(reason) > 2000:
-            raise FinOpsError("Enter a reason of 1 to 2,000 characters.")
+    def _reason(self, reason):
+        maximum = 500 if self.backend.requires_reason else 2000
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > maximum:
+            raise FinOpsError(f"Enter a reason of 1 to {maximum} characters.")
         return reason.strip()
 
     def request_budget(self, kind, key, amount, reason, *, expires_at=None, apply=False):
         if expires_at:
+            if "request_expiry" in self.capabilities().get("features", {}) and not self.has_feature("request_expiry"):
+                raise FinOpsError("This server contract has no request expiry. Use a temporary boost for expiry.", 5)
             expires_at = self._future_expiry(expires_at)
         body = dict(scope_type=scope_type(kind), scope_id=identifier(key), period=self.month,
                     token_limit=parse_tokens(amount), reason=self._reason(reason), expires_at=expires_at)
@@ -150,9 +156,11 @@ class FeatureEngine:
         self.require_feature("boosts", "create")
         if window not in {"daily", "monthly"}:
             raise FinOpsError("Boost window must be daily or monthly.")
+        if self.backend.person_budget_period == "day" and window != "daily":
+            raise FinOpsError("This backend's person boosts are daily. Use --window daily.")
         expires = self._future_expiry(until)
         tokens = parse_tokens(amount)
-        people = self.read("people", department_id=identifier(team), query=identifier(person), offset=0, limit=50)
+        people = self.read("people", **self.backend.people_filter(identifier(team)), query=identifier(person), offset=0, limit=50)
         row = next((r for r in people["items"] if r["scope_id"] == person), None)
         if not row:
             raise FinOpsError("Person not found in the selected team.", 5)

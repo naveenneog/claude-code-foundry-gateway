@@ -31,6 +31,8 @@ class ActionForm(ModalScreen):
         self.busy = False
 
     def compose(self):
+        if self.mutation and self.app.engine.backend.requires_reason and not any(name == "reason" for name, *_ in self.fields):
+            self.fields = [*self.fields, ("reason", "Audit reason (required by AUM service)", self.app.engine.change_reason, None)]
         with Vertical(id="change-dialog"):
             yield Label(self.heading, markup=False)
             with VerticalScroll(id="fields"):
@@ -48,7 +50,10 @@ class ActionForm(ModalScreen):
                 yield Button("Apply" if self.mutation else "Open", id="action-apply", disabled=True, variant="primary")
 
     def values(self):
-        return {name: self.query_one(f"#field-{name}").value for name, *_ in self.fields}
+        values = {name: self.query_one(f"#field-{name}").value for name, *_ in self.fields}
+        if self.app.engine.backend.requires_reason and "reason" in values:
+            self.app.engine.change_reason = values["reason"]
+        return values
 
     @on(Input.Changed)
     @on(Select.Changed)
@@ -99,7 +104,7 @@ class ActionForm(ModalScreen):
                     self.app.exit()
                 return
             state = "Saved." if self.mutation else "Opened."
-            if result.get("requested_at") and self.app.engine.backend.name != "Direct":
+            if result.get("requested_at") and not self.app.engine.backend.immediate_writes:
                 self.query_one("#action-status", Static).update("Saved; following apply status...")
                 outcome = await asyncio.to_thread(self.app.engine.wait_for_apply, result["requested_at"])
                 state = outcome["state"]
@@ -128,6 +133,9 @@ class FiltersScreen(ModalScreen):
                                    ("user_id", "Person id"), ("model_id", "Model id"),
                                    ("runtime", "Surface"), ("tier", "Tier"),
                                    ("from", "Range start ISO time + offset"), ("to", "Range end ISO time + offset")):
+                    supported = self.app.feature_caps.get("features", {}).get("filter_fields")
+                    if supported and key not in supported["actions"]:
+                        continue
                     yield Label(label)
                     yield Input(str(self.app.scope_filters.get(key, "")), id=f"filter-{key.replace('_', '-')}",
                                 password=self.app.redactor.enabled)

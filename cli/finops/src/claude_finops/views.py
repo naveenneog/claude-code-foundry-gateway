@@ -49,6 +49,8 @@ def view_rows(tab, data, *, ascii_only=False, utc=False):
         note = "Estimated cost, not an invoice. Enter: exact values. 2: budgets; 5: rankings."
     elif tab in {"budgets", "people"}:
         columns = ["Scope", "Used", "Budget", "Remaining", "Status"]
+        if tab == "people" and any(row.get("budget_period") == "day" for row in data.get("items", [])):
+            columns = ["Scope", "Used/day", "Limit/day", "Remaining/day", "Status"]
         if tab == "budgets":
             columns.insert(4, "Unallocated")
             columns.append("Mode")
@@ -62,7 +64,8 @@ def view_rows(tab, data, *, ascii_only=False, utc=False):
             items = ordered + [r for r in items if r not in ordered]
         for item in items:
             prefix = "  > " if tab == "budgets" and item["scope_type"] == "department" else ""
-            cells = [prefix + item["scope_id"], human(item["used_tokens"]), human(item.get("token_limit")),
+            period = " [day]" if tab == "budgets" and item.get("budget_period") == "day" else ""
+            cells = [prefix + item["scope_id"] + period, human(item["used_tokens"]), human(item.get("token_limit")),
                      human(item.get("remaining_tokens")), item.get("status", "unknown")]
             if tab == "budgets":
                 children = [r for r in items if r.get("parent_scope_id") == item["scope_id"]
@@ -77,7 +80,7 @@ def view_rows(tab, data, *, ascii_only=False, utc=False):
             note = note or "Organization > unit > team. Remaining = budget minus usage; edit shows allocation."
         else:
             total = data.get("total")
-            note = f"Server search | {data.get('offset', 0) + 1}-{data.get('offset', 0) + len(items)} of {total if total is not None else 'unknown'} | Parent free: {human(data.get('department_available_tokens'))}"
+            note = note or f"Server search | {data.get('offset', 0) + 1}-{data.get('offset', 0) + len(items)} of {total if total is not None else 'unknown'} | Parent free: {human(data.get('department_available_tokens'))}"
     elif tab == "governance":
         from .dashboard import enforcement_badge
         columns = ["Kind / scope", "Parent / group", "Limits / models"]
@@ -92,7 +95,8 @@ def view_rows(tab, data, *, ascii_only=False, utc=False):
             rows.append((f"Tier: {item['id']}", f"{human(item['tokens_per_minute'])}/min {human(item['tokens_per_day'])}/day",
                          ", ".join(item["models"]) or "all models"))
             records.append(dict(item, kind="tier"))
-        note = apply_state(data["apply"]) + " | Enter: all groups and details."
+        note = (data["apply"].get("note", "Synchronous verified writes.") if data["apply"].get("direct")
+                else apply_state(data["apply"])) + " | Enter: all groups and details."
     elif tab == "usage":
         columns = ["Scope / model", "Tokens", "Cache read", "Requests", "Est. USD"]
         for item in data.get("items", []):
@@ -129,7 +133,7 @@ def view_rows(tab, data, *, ascii_only=False, utc=False):
         for key, value in data.items():
             rows.append((key, str(value)))
             records.append({key: value})
-        note = "Config stores addresses only. Sign in/out with az login / az logout outside this app."
+        note = data.get("access_note") or "Config stores addresses only. Sign in/out with az login / az logout outside this app."
     if not rows:
         rows = [("No results. Adjust the month or filter.", *("" for _ in columns[1:]))]
         records = [{}]

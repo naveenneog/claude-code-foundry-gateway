@@ -16,6 +16,10 @@ $result = Invoke-AumVerifiedWrite -Before $before -After $after -Read $read -Wri
     -Operation { $script:state.first='new-one'; $script:state.second='new-two' }
 Assert $result.verified 'Successful multi-value writes need read-back.'
 Assert ($script:state.second -eq 'new-two') 'Both desired values should persist.'
+$script:ran = $false
+$result = Invoke-AumVerifiedWrite -Before $after -After $after -Read $read -Write $write -Remove $remove `
+    -Operation { $script:ran=$true }
+Assert (-not $script:ran -and $result.verified) 'Already-equal state must not run the writer again.'
 
 $script:state = @{ first='old-one'; second='old-two' }
 $message = ''

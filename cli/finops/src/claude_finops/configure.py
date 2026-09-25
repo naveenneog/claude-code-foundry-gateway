@@ -11,7 +11,7 @@ from .output import display
 
 
 def configure(ctx: typer.Context, workspace: str | None = None, save: bool = False,
-              force: bool = False, no_prompt: bool = False):
+              force: bool = False, no_prompt: bool = False, service_app: str | None = None):
     """Discover accessible Azure targets; --save writes an address-only local profile."""
     state = ctx.obj
     options = state["configure"]
@@ -29,7 +29,7 @@ def configure(ctx: typer.Context, workspace: str | None = None, save: bool = Fal
     try:
         result = discover(backend=options["backend"], subscription=options["subscription"],
                           resource_group=options["resource_group"], apim_name=options["apim_name"],
-                          workspace=workspace, interactive=interactive, picker=pick)
+                          workspace=workspace, service_app=service_app, interactive=interactive, picker=pick)
         output = options["path"] or Path.home() / ".aum" / "config.json"
         saved = False
         if save and not state["what_if"]:

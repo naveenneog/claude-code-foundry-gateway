@@ -146,8 +146,9 @@ class ChangeScreen(ModalScreen):
                     yield Label(("Daily" if self.row.get("budget_period") == "day" else "Monthly") + " tokens (1.5M or exact integer)")
                     yield Input(str(self.row.get("token_limit") or ""), id="amount")
                     yield Static("", id="headroom", markup=False)
-                    yield Label("Warning threshold (%)")
-                    yield Input(str(self.row.get("warning_threshold_percent", 80)), id="warning")
+                    if self.engine.backend.budget_warning_threshold:
+                        yield Label("Warning threshold (%)")
+                        yield Input(str(self.row.get("warning_threshold_percent", 80)), id="warning")
                 elif self.kind == "tier" and not self.remove:
                     for key, label in (("tokens_per_minute", "Tokens per minute"), ("tokens_per_day", "Tokens per day")):
                         yield Label(label)
@@ -162,9 +163,13 @@ class ChangeScreen(ModalScreen):
                     yield Input((self.row.get("external_ref") or "").removeprefix("entra-group:"),
                                 placeholder="Entra member group", id="scope-group")
                     yield Input(self.row.get("parent_id") or "", placeholder="Parent unit (teams only)", id="scope-parent")
-                    yield Input(str(self.row.get("attributes", {}).get("manager_group_id", "")),
-                                placeholder="Manager group's Entra object id; server decides scope", id="scope-manager")
+                    if self.engine.backend.name != "Direct":
+                        yield Input(str(self.row.get("attributes", {}).get("manager_group_id", "")),
+                                    placeholder="Manager group's Entra object id; server decides scope", id="scope-manager")
                 yield Input(placeholder="For removal / below-usage changes, type the identifier", id="confirm")
+                if self.engine.backend.requires_reason:
+                    yield Label("Audit reason (1-500 characters)")
+                    yield Input(self.engine.change_reason, id="audit-reason")
             yield Static("Review fields, Preview, then Apply. Nothing is written yet.", id="form-status", markup=False)
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel-change")
@@ -174,6 +179,8 @@ class ChangeScreen(ModalScreen):
 
     def value(self, key, fallback=""):
         result = self.query(f"#{key}")
+        if self.engine.backend.requires_reason and self.query("#audit-reason"):
+            self.engine.change_reason = self.query_one("#audit-reason", Input).value
         return result.first(Input).value if result else fallback
 
     @on(Input.Changed)
@@ -187,7 +194,8 @@ class ChangeScreen(ModalScreen):
             try:
                 amount = parse_tokens(self.value("amount"))
                 left = allocation_left(self.rows, self.row, amount)
-                text = f"Parent unallocated after change: {human(left)} tokens."
+                text = ("Daily person limit; monthly unit/team limits still apply independently."
+                        if self.row.get("budget_period") == "day" else f"Parent unallocated after change: {human(left)} tokens.")
             except FinOpsError as error:
                 text = str(error)
             self.query_one("#headroom", Static).update(text)
@@ -196,7 +204,7 @@ class ChangeScreen(ModalScreen):
         confirm = self.value("confirm")
         if self.kind == "budget":
             try:
-                warning = int(self.value("warning", "80"))
+                warning = int(self.value("warning", "80")) if self.engine.backend.budget_warning_threshold else None
             except ValueError:
                 raise FinOpsError("Warning threshold must be a whole percent.") from None
             return partial(self.engine.budget_change, self.row["scope_type"], self.row["scope_id"],

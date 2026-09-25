@@ -19,6 +19,7 @@ READ_FEATURES = {
     "registry": "advanced", "backend_pool": "advanced", "releases": "advanced",
     "release": "advanced", "release_diff": "advanced", "applications": "advanced",
     "application": "advanced",
+    "audit": "audit_read",
 }
 WRITE_FEATURES = {
     "approval_create": ("approvals", "request"), "approval_decide": ("approvals", "approve"),

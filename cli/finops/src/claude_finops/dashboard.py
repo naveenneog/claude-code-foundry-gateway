@@ -13,7 +13,7 @@ def budget_totals(rows):
     roots = [row for row in rows if row.get("scope_type") == "organization"]
     roots = roots or [row for row in rows if row.get("scope_type") == "department"]
     limited = [row for row in roots if (row.get("token_limit") or 0) > 0]
-    return (sum(row.get("used_tokens") or 0 for row in limited),
+    return (None if any(row.get("used_tokens") is None for row in limited) else sum(row["used_tokens"] for row in limited),
             sum(row["token_limit"] for row in limited), len(limited))
 
 
@@ -29,6 +29,8 @@ def enforcement_badge(entity):
 def gauge(used, limit, width=18, ascii_only=False):
     if not limit:
         return "Budget not assigned"
+    if used is None:
+        return "Usage unknown"
     share = max(0, used / limit)
     filled = min(width, round(share * width))
     bar = ("#" if ascii_only else "━") * filled + ("." if ascii_only else "─") * (width - filled)
@@ -180,7 +182,7 @@ class Dashboard(Vertical):
             if panel.size.width >= 64:
                 line += f" [{mode}]"
             lines.append(line)
-        panel.update("\n".join(lines) or "No ranked usage in this window.")
+        panel.update("\n".join(lines) or data.get("ranking", {}).get("note") or "No ranked usage in this window.")
 
     def _risks(self, data, raw, query):
         panel = self.query_one("#dash-risks", DashboardPanel)
@@ -194,7 +196,7 @@ class Dashboard(Vertical):
             lines += [f"[{str(row.get('status', 'risk')).upper()}] {row.get('scope_name', row.get('scope_id', 'scope'))}",
                       f"Used {row.get('usage_percent', '?')}% | forecast {row.get('forecast_percent', '?')}%"]
         count = budget.get("risk_count")
-        empty = f"{count} risk(s) reported; details unavailable." if count else "No budget warnings returned."
+        empty = f"{count} risk(s) reported; details unavailable." if count else budget.get("note") or "No budget warnings returned."
         panel.update("\n".join(lines) or empty)
 
     def _anomalies(self, data, raw, query):

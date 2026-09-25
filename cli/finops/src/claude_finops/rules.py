@@ -67,7 +67,8 @@ def can_budget_write(identity, kind, key, department=None):
     if kind == "department":
         return key in scope.get("writable_department_ids", [])
     if kind == "user":
-        return department in {row.get("id") for row in scope.get("departments", []) if isinstance(row, dict)}
+        return department in {row.get("id") for key in ("organizations", "departments")
+                              for row in scope.get(key, []) if isinstance(row, dict)}
     return False
 
 
