@@ -7,7 +7,7 @@
       "inputs": {
         "analytics/chargeback-cost.kql": "8d8a66a8980348851f37889579bf019666b229105bb4e64caae02c474de080b1",
         "analytics/chargeback-ledger.kql": "65b0b2942ed548bfb1bd2a192de6854aa86464c441401d9e5ba1a605c2ba692b",
-        "docs/architecture/01-system.json": "ea3f3ddd78f1b4348e2959b326feb722d61984bef8f06b3eba814fb64d116342",
+        "docs/architecture/01-system.json": "6ed17d4394fc3de2e6e040626ef125b229ff2d49f26bbca9ec43cc249d5b05d0",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -20,7 +20,7 @@
         "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "resolver/src/index.mjs": "b6b755fbbc56ef62e7b535a4bde2756111c2b5fc9913c16a893b45cb6dce33a3",
-        "scripts/ClaudeTurnstileApply.ps1": "a0cfe0c9825be8ec843d67f70a26cbb3bacc047e18429760595fa893a5135d11",
+        "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
         "scripts/ClaudeTurnstileGovernance.ps1": "ec6eb0fbcfabbe9c13eab90c2f652fb89350110d9a8d97a10e8a1e4fe21c18f5",
         "scripts/Connect-ClaudeTurnstile.ps1": "a698919454b1fcf0715346bd26b0af0d9782c357fade14c4f4b2c7ee90535a19",
         "scripts/Export-ClaudeTurnstileUsage.ps1": "8976d8891fce6c355d6645be743655a75828541b201254b009c4f12089764b43",
@@ -35,11 +35,11 @@
       "outputs": [
         {
           "path": "docs/images/architecture/system-overview.png",
-          "sha256": "8fcde26771c5fc78afae876934e321477192f81272e1cdf27136f135e5469c06"
+          "sha256": "2874037c7a39dd22ac67a76442b1a22639ea9914633a3b2932d53854054657b8"
         },
         {
           "path": "docs/images/architecture.png",
-          "sha256": "8fcde26771c5fc78afae876934e321477192f81272e1cdf27136f135e5469c06"
+          "sha256": "2874037c7a39dd22ac67a76442b1a22639ea9914633a3b2932d53854054657b8"
         }
       ]
     },
@@ -48,7 +48,7 @@
       "source": "docs/architecture/02-request.json",
       "inputs": {
         "analytics/chargeback-ledger.kql": "65b0b2942ed548bfb1bd2a192de6854aa86464c441401d9e5ba1a605c2ba692b",
-        "docs/architecture/02-request.json": "105d37be1c380c0eff296b2ce8ea2c26f879cccb7c7533b590ebabac9510b284",
+        "docs/architecture/02-request.json": "32b899dc11efab1bfafda4b4666bb7340c3a55a3ed9b4645900636227591f287",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -65,11 +65,11 @@
       "outputs": [
         {
           "path": "docs/images/architecture/request-path.png",
-          "sha256": "de2635e46d57bb9b4b76846d381a0acac6a345927fc158c920472f2451ccec30"
+          "sha256": "86bf6732289625cc62eb34a1f13317ca1649411b3e9244966f1936c56fd20f19"
         },
         {
           "path": "docs/images/request-flow.png",
-          "sha256": "de2635e46d57bb9b4b76846d381a0acac6a345927fc158c920472f2451ccec30"
+          "sha256": "86bf6732289625cc62eb34a1f13317ca1649411b3e9244966f1936c56fd20f19"
         }
       ]
     },
@@ -84,7 +84,7 @@
         "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ApimNamedValue.ps1": "4e12f047b61c586f215a66f73535708488c917b69e2163e6fa6f19253b77fe08",
-        "scripts/ClaudeTurnstileApply.ps1": "a0cfe0c9825be8ec843d67f70a26cbb3bacc047e18429760595fa893a5135d11",
+        "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
         "scripts/Connect-ClaudeTurnstile.ps1": "a698919454b1fcf0715346bd26b0af0d9782c357fade14c4f4b2c7ee90535a19",
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "eb7f4cd920c4c4b1caca61baf24c63a221078cb0fa23382027a002e2e329707b",
         "scripts/Invoke-ClaudeTurnstileSchedule.ps1": "bd51af7bd733a2f7a8bda78fdca70fa60411ec831ef74ffbed7bda08861c4978",
@@ -159,7 +159,7 @@
         "cli/finops/src/claude_finops/scope.py": "9e17c5590ba07b3ad72f384cd544f68a5eee5ef5cee39fb02e188419231b1e19",
         "cli/finops/src/claude_finops/tui.py": "8d68ec5b3e3a5eedea3e27d03c858356347dfaa6e3b42f753c6618c0f9732c0f",
         "cli/finops/src/claude_finops/turnstile.py": "20ac813e313ace9f693b8eab50efc51b53a9b9505896161b8bae2a8dde53cf45",
-        "docs/architecture/06-finops.json": "495142474a36bd13c94de9693a401c97f6b8032c452b26133d8511fcb57a6076",
+        "docs/architecture/06-finops.json": "a695f9c8a88416cbb3743f30af4877dcddc7f212a4455befa8db736c81f5b77b",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -172,7 +172,7 @@
       "outputs": [
         {
           "path": "docs/images/architecture/terminal-finops.png",
-          "sha256": "68a8b19d2bb3afe6010b705b7fda92a75e62eca9e028e19d1454ad95599cb8d2"
+          "sha256": "37a819482fbbcf87a92f5381e796bb640d5dd16ecaa353a9c1601d37490352a4"
         }
       ]
     },
@@ -180,10 +180,13 @@
       "id": "azure-resource-inventory",
       "source": "docs/architecture/07-resources.json",
       "inputs": {
-        "docs/architecture/07-resources.json": "aab7f650152b46ad2f9489e9d489045887ea1e0331cf0d27012f37f8267a5db1",
+        "docs/architecture/07-resources.json": "e8303bfee513fa9d9e6a61945ada86c24f85cc3ce80ca80e204b93deb3293118",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/aum-service.bicep": "727fc2001ea7fe3412038dbca429f0915c98bba935cf38abc01e6d8b7c5d4067",
+        "infra/chargeback-dns.bicep": "00f796c7ff57e7e81a7e7c41391cb083e1cace89933f8fc1b8018c02a210bcbf",
+        "infra/chargeback-reports.bicep": "8a3f09f34cbb332496d41f116ab450c7fa8f3892d788a489ffbb2d9334e7659d",
         "infra/foundry-role.bicep": "96a1602ea171dfcd975bb5b7e0f18a1b32f1e9e6d74e306298836b518db72d50",
         "infra/main.bicep": "7dd06134ac7199f42a9e4894b33f7ef028064d355d750c1af689bdce01a8597b",
         "infra/projection-network.bicep": "129f88bebc796ea1c0b5369c4e4f63afaf318f539f4f660d735be5b946946af1",
@@ -195,7 +198,7 @@
       "outputs": [
         {
           "path": "docs/images/architecture/azure-resource-inventory.png",
-          "sha256": "934c54fb010007734164d76c821328b2ba12d5922da665a9c3ac2f2c369698cc"
+          "sha256": "3739527fe5add728ca262379428c54947e31f666de84fdb4a15701acd522ed11"
         }
       ]
     },
@@ -205,17 +208,24 @@
       "inputs": {
         "analytics/chargeback-cost.kql": "8d8a66a8980348851f37889579bf019666b229105bb4e64caae02c474de080b1",
         "analytics/chargeback-ledger.kql": "65b0b2942ed548bfb1bd2a192de6854aa86464c441401d9e5ba1a605c2ba692b",
-        "docs/architecture/08-chargeback-reports.json": "ab3d20e0cc60af42be7b2c379eed1fb6652d52bf6b301327997228b859f3222b",
+        "docs/architecture/08-chargeback-reports.json": "6081e4f195e619c67b888221f5e88894c923aeb8306107fe4b97f99bedb1d358",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/chargeback-reports.bicep": "8a3f09f34cbb332496d41f116ab450c7fa8f3892d788a489ffbb2d9334e7659d",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "scripts/ClaudeChargebackAdministration.ps1": "146ca717a8b311119a4ae381ccabf4113a7e7e3f4062d9121ff4c823c8327499",
+        "scripts/ClaudeChargebackEmail.ps1": "da8678777a36a1988c67ece872d38a873383c41fe9104b0f9e4e85d87b25b2ca",
+        "scripts/ClaudeChargebackOutbox.ps1": "95997c31730c099bbedbd17b79c07a03e4ebd075d377a76fc436da753fb27f25",
+        "scripts/ClaudeChargebackQuery.ps1": "2dc713c7bd244848e206e09860b791a4a2c713639dd1516e4003fd56559d75a5",
+        "scripts/ClaudeChargebackStorage.ps1": "71d217a035d81f98c67170c006d4f6dfe0ffb42335981805132ff756d858bd4f",
+        "scripts/Invoke-ClaudeChargebackSchedule.ps1": "5dbdf4149255ec84dedb8d333d5e8e2acfda74eea7eb67f030300e1285bb7d42",
         "scripts/Publish-ClaudeQueries.ps1": "950aa4b399ef72be4d35335d26462e435f365900d6a5cc1415d2e0c53003d667"
       },
       "outputs": [
         {
           "path": "docs/images/architecture/chargeback-reports.png",
-          "sha256": "2e33169146096eee393242d1d3dc9328766d698eb1ce5bb7a3041a21471e2bc2"
+          "sha256": "efc59eccca79898587d53b6fbc4d52b4a08bd1bb4cae6af7c02042df58362e1f"
         }
       ]
     },
@@ -231,7 +241,7 @@
         "infra/policy.xml": "0fc8ce021143a12ff729efa04fecc8e910c5e1e4e0086954fa6e4cc769b08874",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeBudgetModes.ps1": "d27db15c9e257e2e923355978896737bb07cd2227135fa29625b003655f70946",
-        "scripts/ClaudeTurnstileApply.ps1": "a0cfe0c9825be8ec843d67f70a26cbb3bacc047e18429760595fa893a5135d11",
+        "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
         "scripts/ClaudeTurnstileGovernance.ps1": "ec6eb0fbcfabbe9c13eab90c2f652fb89350110d9a8d97a10e8a1e4fe21c18f5",
         "scripts/Set-ClaudeBusinessUnit.ps1": "9467a8b59a4166625cbba17c3fb434361be2499f97fdb9f5b30ca44118d7cbdd"
       },
@@ -239,6 +249,33 @@
         {
           "path": "docs/images/architecture/budget-modes.png",
           "sha256": "7a5825ed5817421c98170e6cb3d1af04f5a6800288a11ae9358e2f03a095dcb8"
+        }
+      ]
+    },
+    {
+      "id": "aum-service",
+      "source": "docs/architecture/10-aum-service.json",
+      "inputs": {
+        "docs/architecture/10-aum-service.json": "757025e4956da043436b4b5edcd5fbcd615fa617ce93525e3862dc0b21e3e8df",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/aum-service.bicep": "727fc2001ea7fe3412038dbca429f0915c98bba935cf38abc01e6d8b7c5d4067",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "scripts/New-ClaudeAumEntraApp.ps1": "489aa5051af325ca4d96e5b9123d29577195f08318976898a8a592aeea2a05fe",
+        "service/aum/aum_service/api.py": "8e37c33e339d8eed072b7f5c7a90ccf2617e57e9d15e8eb7fba7614431319dda",
+        "service/aum/aum_service/auth.py": "5b5b2beff81afd3d5aa7d7be47f5ee416f7bf2ef4ae2340e1c75a39634872249",
+        "service/aum/aum_service/queries.py": "588b4c0771e545a56d098285baeba3029450dd68f1b3d7360fa2d3db7b706548",
+        "service/aum/aum_service/service.py": "52fd82c478aeb6c3c883ff248013799206b9fb960a3b1d2151445aa52acfb1ad",
+        "service/aum/aum_service/storage.py": "1d7f5bb8aa828f8406b746161d18126951940ee78c6dfc4fe6889d243e6d6418",
+        "service/aum/aum_service/transactions.py": "606c7698df08f8e7de9e10605ef39eea0c50235590878ed0d4f1926781c138c0",
+        "service/aum/aum_service/workflows.py": "afe22a6e5bda94c73898d9b13eb500627349483195a0645405355a851d325128",
+        "service/aum/function_app.py": "a3f2e8a593b2c1e3cd88bb3898dbeb478fc56959dc1160654255b9c25a3b64f1"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/aum-service.png",
+          "sha256": "b9c4599c9645bdc94b3ce272abc672963c6e9a8dd041ee7d0a06a6ad228da811"
         }
       ]
     }

@@ -31,7 +31,8 @@ Source: [01-system.json](architecture/01-system.json).
 | **Projection** | Cosmos DB, a resolver Function, Function host/deployment storage, private endpoints and DNS. A writer runs separately to reconcile the directory. | The writer and resolver have different identities and container-scoped data roles. The private-inbound path requires Standard v2 or Premium v2 outbound VNet integration. |
 | **Turnstile** | A separate fork deployment: App Service, PostgreSQL, Event Hubs and supporting Functions, Storage, Key Vault and networking. This repository adds the manual apply and hourly export Container Apps jobs. | Entra app roles control console access. The console starts one apply job; the job, not the console, writes gateway named values. |
 | **AUM (Azure Usage Management)** | A local Python terminal FinOps console, command `aum`; no new inference service or mandatory Azure resource. The terminal release is merged; the naming packet is staged on branch `aum`. | It uses Turnstile's HTTP API or Direct Azure with the operator's Azure CLI sign-in. A fake backend is for tests, never an outage fallback. |
-| **Monthly chargeback reports (P50, pending merge)** | A dedicated reports VNet and Consumption environment, generator/dispatcher/admin jobs, private Blob storage and Azure Communication Services Email. | The reporting identity reads telemetry/configuration and writes reports. A separate administration identity writes configuration only. No Turnstile dependency. |
+| **Monthly chargeback reports (P50)** | A separate Consumption environment, generator/dispatcher/admin jobs, discovered existing or explicit new VNet, private Blob storage and Azure Communication Services Email. | The reporting identity reads telemetry/configuration and writes reports. A separate administration identity writes configuration only. No Turnstile dependency. |
+| **AUM service (P55)** | Optional Python Functions, keyless Blob/Table state, scoped administrative API and timers. Network, redundancy, warm capacity and telemetry are explicit priced choices. | An independent administrative authority; it refuses gateway writes while Turnstile owns them. It does not proxy inference or make an unimplemented client adapter complete. |
 
 Projection and Turnstile are independent options. Turning on one does not imply the other.
 The default deployment has no additional application database, processor or queue, but
@@ -147,16 +148,14 @@ invoice. An unjoined row remains visible as unattributed rather than being silen
 discarded. See [monitoring](MONITORING.md), [analytics provenance](adr/0006-ledger-is-the-llm-log.md)
 and [financial semantics](adr/0010-financial-semantics.md).
 
-## Private monthly reports and email delivery (P50, pending merge)
+## Private monthly reports and email delivery (P50)
 
 ![P50 chargeback reports: read-only workspace and gateway sources feed a monthly generator in a dedicated reports VNet. Private Blob settings, archive and hashed-recipient outbox connect separate reporting and administration identities to a paced ACS Email dispatcher and scoped BCC recipients.](images/architecture/chargeback-reports.png)
 
 Source: [08-chargeback-reports.json](architecture/08-chargeback-reports.json), verified
-against the pushed `chargeback-reports` branch at
-[`d1a304f`](https://github.com/naveenneog/claude-code-foundry-gateway/tree/d1a304f095274d0542073a616f020d9a0e523e42).
-This profile is not merged into this checkout. The
-[P50 how-to](https://github.com/naveenneog/claude-code-foundry-gateway/blob/d1a304f095274d0542073a616f020d9a0e523e42/docs/CHARGEBACK-REPORTS.md)
-and [ADR-0020](https://github.com/naveenneog/claude-code-foundry-gateway/blob/d1a304f095274d0542073a616f020d9a0e523e42/docs/adr/0020-chargeback-reports.md)
+against the implementation now merged into main. The
+[P50 how-to](CHARGEBACK-REPORTS.md), [portal/CLI appendix](chargeback-reports/PORTAL-CLI.md)
+and [ADR-0020](adr/0020-chargeback-reports.md)
 describe deployment, recipient administration and measured limitations.
 
 P50 reads the existing `ClaudeCost()` and `ClaudeChargeback()` saved functions over
@@ -182,8 +181,10 @@ categories stay null/empty, not zero.
 
 ### Separate private storage from administration
 
-The reports-only VNet has a delegated Container Apps subnet and a private-endpoint subnet.
-The dedicated Consumption environment uses that network. Storage has a Blob private
+The network selection offers discovered existing VNets/subnets/DNS or an explicitly
+sized new network. Shared discovered networks are not silently retagged as reports-owned.
+The chosen network has a Container Apps subnet and a private-endpoint subnet; the
+dedicated Consumption environment uses it. Storage has a Blob private
 endpoint and `privatelink.blob.core.windows.net` zone/link, disables public network and
 shared-key access, and requires HTTPS/TLS 1.2. P50's deployment measured an inherited
 policy enforcing private storage; granting a blob data role does not make an off-network
@@ -205,7 +206,8 @@ send-only data action for this path. Its residual resource management privilege 
 contained on a dedicated ACS resource.
 
 For off-network administration, the manual job accepts a validated, structured
-`REPORT_ADMIN_REQUEST`, not arbitrary shell code. It performs Initialize, Recipients,
+`REPORT_ADMIN_REQUEST`, or readable `REPORT_ADMIN_JSON` for the portal editor, not arbitrary
+shell code. Supplying both forms is refused. It performs Initialize, Recipients,
 Settings or Inspect operations. Logs and off-network inspection contain status and counts,
 not address lists. Full recipient lists are read from a VNet-connected terminal.
 
@@ -426,6 +428,51 @@ Turnstile person budgets are not the gateway's per-person daily overrides. These
 belong in both terminal faces. The [AUM how-to](CLI-FINOPS.md) describes installation,
 configuration, commands and the first release's scope.
 
+## Optional independent AUM service (P55)
+
+![Independent AUM service: delegated Entra users reach a token-validated Functions API; authority, scope and allocation checks precede audited and leased named-value writes; keyless service storage holds workflows and two timers handle boost expiry and warnings.](images/architecture/aum-service.png)
+
+Source: [10-aum-service.json](architecture/10-aum-service.json), verified against the
+merged `service/aum` implementation and [ADR-0023](adr/0023-aum-service.md).
+Use [the AUM service guide](AUM-SERVICE.md) for deployment choices, commands and measured
+acceptance limits. A service-aware client's integration is a separate API contract; the
+three-backend terminal diagram is not a claim that every client already implements it.
+
+The service is a Python Functions Flex Consumption application, not another model proxy.
+Assigned people use a v2 Entra access token with `AUM.Access`. The precedence is
+`AUM.Admin` > `AUM.Viewer` > `AUM.Manager`; application-assigned groups determine manager
+scope. `Api.handle` validates each route through `TokenVerifier`; function-key
+`anonymous` does not mean unauthenticated. Missing/overage groups never widen scope.
+
+`AumService` reads the current gateway configuration and service-owned manager mappings.
+A null `manager_scope` is unrestricted, while an object, even empty, is scoped.
+Unit managers can reach their teams/direct members; a displayed parent does not grant a
+team manager the parent's scope. Direct Azure remains an Azure RBAC path, not a delegated
+manager boundary. If `turnstile-integration` says Turnstile owns governance or budgets,
+the service refuses gateway writes rather than becoming a second authority.
+
+The service uses its managed identity for a narrow gateway named-value role, workspace
+Log Analytics Reader, and Blob/Table data roles on its own keyless storage. `AumState`
+holds manager mappings, requests, boosts, warning records and audit; these do not consume
+named-value space. A gateway-wide lease lives in `aum-control/gateway-writer`.
+Mutation safety is durable audit intent, fresh revisions, lease renewal/deadline checks,
+ARM ETags, read-back and reverse-order compensation. Rollback cannot overwrite a later
+independent write. An ambiguous response requires state inspection, not an automatic retry.
+
+Allocation is independent of strict/allowance/notify. Daily person overrides reserve
+31 days against monthly parents. Requests route upward and recheck scope/headroom when
+decided; self-approval is denied unless an Admin explicitly uses the audited
+`admin_override` with a reason. That does not imply independent two-person approval.
+`expire_boosts` runs every minute and compare-restores overdue values.
+`warning_thresholds` runs every 15 minutes and creates idempotent records; it is not an
+email-delivery implementation.
+
+Network access, storage redundancy, telemetry and zero/one warm instance are explicit
+choices. Private storage uses Blob/Table private endpoints, DNS and outbound VNet
+routing. The deployment does not repurpose shared storage/plans or modify the gateway's
+network. Bounded observed-user queries do not remove the 4,096-character named-value
+limit or prove capacity for 500,000 per-person overrides.
+
 ## Budget enforcement modes
 
 ![Budget modes: validated owner configuration publishes bu-modes separately from the base budget registry; strict, allowance and notify act on each scope independently, preserve other controls and emit advisory response/trace information.](images/architecture/budget-modes.png)
@@ -469,7 +516,7 @@ Source: [07-resources.json](architecture/07-resources.json). This explicit list 
 existing references and child configuration resources. It is not the live deployment's
 resource count. Turnstile's separate fork has its own infrastructure; saved functions and
 workbooks are published by scripts rather than by these Bicep files. The P50 diagram
-separately displays five additional resource types from its pinned branch: custom role
+separately displays five additional resource types from its merged implementation: custom role
 definitions, Storage management policies and the three Communication/Email resource types.
 These are not claimed as resources in the current default deployment.
 
@@ -515,9 +562,9 @@ SHA-256 manifest. It keeps the README's `docs/images/architecture.png` and
    and article together. A new diagram does not require editing the generator or a registry.
 
 The P50 diagram is an example of adding one spec without changing the diagram registry:
-it carries pinned implementation witnesses while pending merge, including rendered
-resource-type labels. When those files become local, the checker uses them and requires
-a new render. Do not represent a pending path as already deployed.
+its pinned witnesses were adopted from local implementation files at merge, requiring
+a new render. Its resource types remain visibly drawn. Do not represent an unmerged
+path or an untested deployment variant as already deployed.
 
 ### What the check proves
 
@@ -557,10 +604,9 @@ are an explicitly versioned external contract, **not a live check of another rep
 branch**. AUM's implementation labels now refer to local code; the merge invalidated the
 old manifest as intended. The command rename is separately recorded as pinned naming
 evidence until its packet merges. Re-render after that integration, and review and repin
-fork witnesses when the external dependency changes. P50's pending implementation and
-resource declarations use the same pinned-witness mechanism; its actual files take over
-when merged. Resource types backed by a pinned external declaration are explicitly
-distinguished from the current local Bicep inventory.
+fork witnesses when the external dependency changes. P50's implementation and resource
+declarations now use local files. Resource types backed by any still-pinned external
+declaration are explicitly distinguished from the local Bicep inventory.
 
 The architecture image ownership check covers `docs/images/architecture/` and the two
 legacy PNG aliases, not `docs/images/finops/*.svg`. Those SVGs are terminal snapshot-test

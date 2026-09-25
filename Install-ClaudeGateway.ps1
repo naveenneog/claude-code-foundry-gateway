@@ -62,6 +62,8 @@ param(
     [ValidatePattern('^[A-Za-z]{2}$')]
     [string]$ModelCountryCode,
 
+    [switch]$ChooseFinOps,
+
     # Accept every default without prompting.
     [switch]$Yes
 )
@@ -1245,3 +1247,7 @@ Write-Host '   3. Close the direct-access bypass - see docs/SETUP.md section 4.1
 Write-Host '      Anyone holding Cognitive Services User on the Foundry account'
 Write-Host '      can skip the gateway entirely and ignore these budgets.'
 Write-Host ''
+if ($ChooseFinOps) {
+    & (Join-Path $root 'scripts\Select-ClaudeFinOpsTooling.ps1') -Region $Location -SubscriptionId $SubscriptionId
+}
+else { Write-Host '   4. Choose optional FinOps tooling: .\scripts\Select-ClaudeFinOpsTooling.ps1' }

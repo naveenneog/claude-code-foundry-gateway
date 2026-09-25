@@ -4,24 +4,63 @@
 shape and runs in the normal suite, so a malformed changelog fails the build
 rather than being noticed later by a reader.
 
+## Prerequisites
+
+Repository release/tag permission, an approved release branch/commit, Git and
+the tools required by [Contributor checks](REFERENCE.md#contributor-checks).
+Start from a clean checkout and fetch tags. Resolve release-blocking unknowns
+in the engineering record; do not lower a gate to publish.
+There is no Azure portal action that releases this repository.
+
 ## Cutting a release
 
 1. Move the entries out of `## [Unreleased]` into a new
    `## [x.y.z] - YYYY-MM-DD` heading, newest first.
 2. Add the compare link at the bottom of the file, and repoint `[Unreleased]` at
    the new tag.
-3. Tag the commit:
+3. Commit the reviewed release record on the approved branch with the required
+   trailers from `AGENTS.md`. Use a new version, not the example's prior tag.
+   Create its annotated tag **locally**:
 
-   ```bash
-   git tag -a v1.5.0 -m "Short description of the release"
-   git push --tags
+   ```powershell
+   $version = 'vX.Y.Z' # replace with the approved unused version
+   git tag -a $version -m 'Release description'
    ```
 
-4. Run the suite. The release test checks the changelog and the tags agree.
+4. Validate that exact committed tree and tag before pushing. The release gate
+   includes the packet checks and additional release requirements:
 
    ```powershell
    ./tests/Test-ReleaseLog.ps1
+   node .ironclad/gate.mjs --stage release
+   git status --short
    ```
+
+   A failure means do not publish. Fix the cause; never move an already-published
+   tag. The release gate currently blocks while required unknowns are open.
+
+5. After approval and a passing gate, push **only** the release branch and its
+   specific tag through the repository's normal protected-branch workflow.
+   Do not use `git push --tags`, which also publishes unrelated local tags.
+
+   ```powershell
+   git push origin '<approved-release-branch>'
+   git push origin $version
+   git ls-remote --tags origin "refs/tags/$version"
+   ```
+
+**GitHub web alternative:** repository > Releases > Draft a new release >
+choose the already-validated tag, review notes and publish. It does not replace
+the local gate or approve a deployment. The Azure portal only operates the
+deployed gateway.
+
+## Verify and troubleshoot
+
+Check the remote tag and release resolve to the gated commit, all release-note
+links open, and no generated config, credentials or unredacted images are in the
+release. If `Test-ReleaseLog` reports an unreachable tag, inspect the branch/tag
+relationship instead of rewriting published history. If Test-All finishes
+unexpectedly early, read its full summary: all registered checks must run.
 
 ## What the test enforces
 
@@ -59,3 +98,8 @@ so plainly — v1.5.0 has an example.
 behaviour that is documented, measured, and not yet fixed — the sort of thing a
 reader needs before they trust a number. v1.5.0 records that the per-user token
 budget does not count cache tokens, and by how much.
+
+## Next steps
+
+[Operations](OPERATIONS.md#4-back-up-change-restore-verify) covers customer
+upgrade/restore preparation. A repository release does not deploy itself.

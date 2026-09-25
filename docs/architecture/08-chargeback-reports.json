@@ -3,7 +3,7 @@
   "id": "chargeback-reports",
   "kind": "flow",
   "title": "Monthly chargeback: private generation, scoped delivery",
-  "subtitle": "P50 pending merge · verified at d1a304f on chargeback-reports. A dedicated reports deployment reads existing gateway telemetry. It neither depends on Turnstile nor changes the inference path.",
+  "subtitle": "Merged P50 · a separate reports deployment reads existing gateway telemetry. Network choices are discovered, not assumed. It neither depends on Turnstile nor changes the inference path.",
   "width": 1280,
   "height": 1730,
   "outputs": ["docs/images/architecture/chargeback-reports.png"],
@@ -63,7 +63,8 @@
     "cron": { "label": "0 6 1 * *", "upstream": "infra", "match": "param cronExpression string = '0 6 1 * *'" },
     "settings": { "label": "configuration/settings.json", "upstream": "storage", "match": "-Container configuration -Name 'settings.json'" },
     "etag": { "label": "If-Match", "upstream": "storage", "match": "@{'If-Match'=$ETag}" },
-    "admin-payload": { "label": "REPORT_ADMIN_REQUEST", "upstream": "admin", "match": "name='REPORT_ADMIN_REQUEST';value=$encoded" },
+    "admin-payload": { "label": "REPORT_ADMIN_REQUEST", "source": "scripts/ClaudeChargebackAdministration.ps1", "match": "'REPORT_ADMIN_REQUEST' $encoded" },
+    "admin-json": { "label": "REPORT_ADMIN_JSON", "source": "scripts/ClaudeChargebackAdministration.ps1", "match": "REPORT_ADMIN_JSON" },
     "admin": { "label": "Invoke-ClaudeReportAdministration", "upstream": "admin", "match": "function Invoke-ClaudeReportAdministration {" },
     "archive": { "label": "Save-ClaudeReportArchive", "upstream": "storage", "match": "function Save-ClaudeReportArchive {" },
     "runs": { "label": "runs/<month>/<run>/", "upstream": "storage", "match": "$prefix=\"runs/$($Manifest.Month)/$($Manifest.RunId)\"" },
@@ -87,7 +88,7 @@
   "groups": [
     { "x": 0, "y": 0, "w": 834, "h": 250, "tone": "blue", "title": "Existing source APIs · authenticated, read-only access" },
     { "x": 868, "y": 0, "w": 412, "h": 250, "tone": "purple", "title": "Privileged operator" },
-    { "x": 0, "y": 290, "w": 1280, "h": 912, "tone": "teal", "title": "Dedicated reports VNet · Consumption environment, jobs subnet and endpoint subnet", "subtitle": "Private Blob endpoint + DNS link; job entry point: [[entrypoint]]" },
+    { "x": 0, "y": 290, "w": 1280, "h": 912, "tone": "teal", "title": "Reports network scope · discovered existing VNet or explicitly sized new VNet", "subtitle": "Private Blob + DNS; [[entrypoint]]" },
     { "x": 0, "y": 1236, "w": 628, "h": 286, "tone": "blue", "title": "Azure Communication Services · outbound HTTPS" },
     { "x": 668, "y": 1236, "w": 612, "h": 286, "tone": "amber", "title": "Recipient mailbox · outside storage retention" }
   ],
@@ -102,10 +103,10 @@
       "Budgets as read now.",
       "[[read-values]] only; no gateway writes."
     ] },
-    { "id": "operator", "x": 884, "y": 58, "w": 380, "h": 170, "tone": "purple", "title": "Start the manual admin job", "lines": [
-      "Structured [[admin-payload]]",
-      "Fixed pinned command, not supplied shell text.",
-      "Job-start access is configuration authority."
+    { "id": "operator", "x": 884, "y": 58, "w": 380, "h": 170, "tone": "purple", "compact": true, "title": "Start the manual admin job", "lines": [
+      "[[admin-payload]] or readable [[admin-json]]",
+      "Fixed command; no supplied shell text.",
+      "Starting it is configuration authority."
     ] },
     { "id": "generator", "x": 16, "y": 378, "w": 382, "h": 242, "tone": "teal", "compact": true, "title": "1 · Monthly generator job", "lines": [
       "[[generator]]",
@@ -167,7 +168,7 @@
       "No SAS / unrestricted download link. Team-specific recipients are deferred.",
       "ACS acceptance is not proof of inbox placement."
     ] },
-    { "id": "types", "x": 0, "y": 1558, "w": 1280, "h": 172, "tone": "slate", "title": "Additional resource types declared by P50 (pending merge)", "lines": [
+    { "id": "types", "x": 0, "y": 1558, "w": 1280, "h": 172, "tone": "slate", "title": "Additional resource types declared by the merged P50 profile", "lines": [
       "[[role-type]] · [[lifecycle-type]]",
       "[[email-type]] · [[domain-type]]",
       "[[acs-type]]"

@@ -271,19 +271,38 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       [ADR-0019](adr/0019-budget-enforcement-modes.md)), with a guard that rechecks Turnstile's
       revisions before an apply writes. Open: the manager-only live sign-in (P53)
 - [ ] P47 delegated management, phase 3 — acceptance: budget requests that go to the manager one
-      level up, boosts with an expiry, escalation, notifications at the warning threshold
+      level up, boosts with an expiry, escalation, notifications at the warning threshold.
+      Delivered **for the AUM service** (P55): requests, approve, reject, escalate, and boosts
+      whose expiry a timer reverts, proven live. Open: the same endpoints in Turnstile, and
+      delivering the warning notifications by email
 - [ ] P48 delegated management at 500,000 — acceptance: overrides and unit and team budgets in the
       projection, one queue-driven writer instead of a job run per save, usage sent hourly per
       person and model, access packages for joining a team
 - [ ] P49 network profiles — acceptance: one parameter chooses private (private endpoints for
       every component) or public (Entra-only access, no private endpoints or DNS zones), for the
       gateway, the projection and Turnstile, each priced by the bill-of-materials scripts
-- [ ] P50 chargeback reports — acceptance: one command writes each business unit's monthly
-      report (people, requests, every token kind, estimated cost, budget against use) that
-      reconciles to the month's total through an explicit unassigned line; recipients per unit and
-      for the admin team are changed by script with no redeploy and limited to allowed domains; a
-      scheduled job with a managed identity archives each run privately and emails each unit its
-      own report. In progress
+- [x] P50 chargeback reports — one command writes each business unit's monthly report (people,
+      requests, every token kind, estimated cost, budget against use), reconciled to the month's
+      total through an explicit unassigned line; recipients per unit and for the admin team are
+      set by script, limited to allowed domains; a private scheduled job archives each run and
+      emails each unit its own report. Live on 2026-09-24: both months' reports reached the
+      owner's inbox. [ADR-0020](adr/0020-chargeback-reports.md), `docs/CHARGEBACK-REPORTS.md`.
+      Follow-ups: a verified custom sender domain for broad delivery (an Azure-managed domain
+      sends 10 an hour), team-level recipients, `aum report`, recipients from the Turnstile catalog
+- [ ] P53 Turnstile, tested and captured live — phase 1 done: every Turnstile picture recaptured
+      live with a provenance record, the consent-free sign-in, a tier change and a budget mode
+      made in the UI and read on the gateway, then restored. Open: phase 2, the manager-only
+      journey (**U21**), and viewer-only evidence
+- [x] P55 the AUM service — an optional authority independent of Turnstile: its own Entra app
+      roles with consent-free tokens, scoped managers, audited conditional named-value writes,
+      and P47's requests and boosts; discovery-first deployment with cost and implications, and a
+      FinOps tooling selector. [ADR-0023](adr/0023-aum-service.md), `docs/AUM-SERVICE.md`.
+      Open: the manager-only journey and the AUM client's end-to-end journey on its test gateway
+- [x] P57 documentation review — eight reader journeys walked with the guides alone; 70
+      findings fixed, five task guides added (Operations, Budgets, FinOps, Reference, Data
+      governance), README from 710 to 278 lines, live names replaced by discovery commands, and
+      `tests/Test-DocReferences.ps1` guarding links, anchors, scripts and parameters. Open: the
+      portal walkthrough pictures, declared as capture specs for one batch after a fresh sign-in
 - [x] P51 terminal FinOps, first release — `claude-finops`, nine terminal views and scriptable
       commands over one engine, backed by Turnstile, the gateway directly, or example data. Budget
       changes are previewed, rechecked against the server and never retried. Managers see only

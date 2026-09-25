@@ -1,0 +1,45 @@
+[
+  {
+    "name": "empty",
+    "units": [],
+    "parents": {},
+    "members": {},
+    "overrides": {},
+    "modes": {},
+    "expected": {"registry": ",,", "parents": ",,", "members": ",,", "overrides": ",,", "modes": ",,"}
+  },
+  {
+    "name": "ordered-contoso",
+    "units": [
+      {"Id": "finance", "Group": "Contoso Finance", "TokensPerMonth": 9000000},
+      {"Id": "payroll", "Group": "Contoso Payroll", "TokensPerMonth": 3000000},
+      {"Id": "ops", "Group": "Contoso Operations", "TokensPerMonth": 6000000}
+    ],
+    "parents": {"payroll": "finance"},
+    "members": {"00000000-0000-0000-0000-000000000003": "payroll"},
+    "overrides": {"00000000-0000-0000-0000-000000000003": 12345},
+    "modes": {"finance": "strict", "payroll": "allowance:20", "ops": "notify"},
+    "expected": {
+      "registry": ",finance=Contoso Finance:9000000,payroll=Contoso Payroll:3000000,ops=Contoso Operations:6000000,",
+      "parents": ",payroll=finance,",
+      "members": ",00000000-0000-0000-0000-000000000003=payroll,",
+      "overrides": ",00000000-0000-0000-0000-000000000003=12345,",
+      "modes": ",payroll=allowance:20,ops=notify,"
+    }
+  },
+  {
+    "name": "edge-values",
+    "units": [
+      {"Id": "r-and-d", "Group": "Contoso R&D = Research", "TokensPerMonth": 9223372036854775807},
+      {"Id": "empty-budget", "Group": "Contoso Zero", "TokensPerMonth": 0}
+    ],
+    "parents": {},
+    "members": {},
+    "overrides": {},
+    "modes": {"r-and-d": "allowance:100", "empty-budget": "strict"},
+    "expected": {
+      "registry": ",r-and-d=Contoso R&D = Research:9223372036854775807,empty-budget=Contoso Zero:0,",
+      "parents": ",,", "members": ",,", "overrides": ",,", "modes": ",r-and-d=allowance:100,"
+    }
+  }
+]

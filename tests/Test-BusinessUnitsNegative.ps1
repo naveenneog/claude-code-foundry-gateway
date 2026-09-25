@@ -586,10 +586,10 @@ $mutations = @(
        To    = 'That is a known issue' }
 
     @{ Suite = 'Test-Scale.ps1'
-       Name  = 'the README implies the projection is the default and load-tested'
+       Name  = 'the README implies the projection is the default'
        File  = 'README.md'
-       From  = '**It is not the default, and it is not yet'
-       To    = '**It is the default, and it is' }
+       From  = '**It is not the default.**'
+       To    = '**It is the default.**' }
 
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'private networking stops being priced'
@@ -1424,7 +1424,7 @@ $mutations = @(
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'an empty resource list is read as a missing role'
        File  = 'docs/FOUNDRY-DIRECT.md'
-       From  = 'wrong tenant, not that you lack a role'
+       From  = 'empty list does not prove the tenant is wrong'
        To    = 'you lack a role on it' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
@@ -1670,7 +1670,7 @@ $mutations = @(
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'the budget page drops the measured cache gap'
        File  = 'docs/DECISIONS.md'
-       From  = '41.5'
+       From  = '38.7%'
        To    = '1.1' }
 
     @{ Suite = 'Test-Scale.ps1'
@@ -2217,7 +2217,7 @@ $mutations = @(
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the Cloud PC case stops being named'
        File  = 'docs/FOUNDRY-DIRECT.md'
-       From  = 'On a Cloud PC, a Dev Box or any Azure VM this is the default'
+       From  = 'On a Cloud PC, a Dev Box or an Azure VM with a managed identity'
        To    = 'This is rare' }
 
     @{ Suite = 'Test-AdminSurface.ps1'

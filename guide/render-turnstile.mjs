@@ -18,36 +18,18 @@ import { chromium } from 'playwright';
 import { readdir, readFile, mkdir } from 'node:fs/promises';
 import { dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Redactor } from './lib/turnstile-live.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const outDir = join(here, '..', 'docs', 'guide');
+const outDir = process.env.GUIDE_OUTPUT || join(here, '..', 'docs', 'guide');
 const source = process.env.TURNSTILE_TRANSCRIPTS;
 if (!source) {
   console.error('Set TURNSTILE_TRANSCRIPTS to the folder of transcripts.');
   process.exit(2);
 }
 
-const NAMES = [
-  [/[A-Za-z0-9._%+-]+_microsoft\.com#EXT#@[A-Za-z0-9-]+\.onmicrosoft\.com/g, 'amara.okafor_contoso.com#EXT#@contoso.onmicrosoft.com'],
-  [/[A-Za-z0-9._%+-]+@microsoft\.com/g, 'amara.okafor@contoso.com'],
-  [/\b[a-z0-9-]+\.onmicrosoft\.com\b/g, 'contoso.onmicrosoft.com'],
-  [/claude-team-ites-1/g, 'claude-team-sales-emea'],
-  [/claude-team-ites-2/g, 'claude-team-sales-apac'],
-  [/claude-bu-mcaps/g, 'claude-bu-sales'],
-  [/claude-bu-gbb/g, 'claude-bu-engineering'],
-  [/\bites-1\b/g, 'sales-emea'],
-  [/\bites-2\b/g, 'sales-apac'],
-  [/\bmcaps\b/gi, 'sales'],
-  [/\bgbb\b/gi, 'engineering'],
-  [/apim-claude-gw-[a-z0-9]+/g, 'apim-claude-gateway'],
-  [/log-claude-gw-[a-z0-9]+/g, 'log-claude-gateway'],
-  [/appi-claude-gw-[a-z0-9]+/g, 'appi-claude-gateway'],
-  [/func-claude-gw-[a-z0-9]+/g, 'func-claude-gateway'],
-  [/\brg-contosohub\b/g, 'rg-claude-gateway'],
-  [/\brg-turnstile-claudegw\b/g, 'rg-turnstile'],
-  [/([a-z]+)-tsclaude-[a-z0-9]+/g, '$1-turnstile-contoso'],
-  [/\bcrtsclaude[a-z0-9]+/g, 'crturnstilecontoso'],
-];
+if (!process.env.REDACTIONS_FILE) throw new Error('Set REDACTIONS_FILE to a private, deployment-specific replacement map');
+const redactor = new Redactor(JSON.parse((await readFile(process.env.REDACTIONS_FILE, 'utf8')).replace(/^\uFEFF/, '')));
 
 const guidPattern = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
 // Public, documented identifiers that a reader needs verbatim.
@@ -60,7 +42,11 @@ const placeholder = (g) => {
   return guids.get(key);
 };
 
-const redact = (s) => NAMES.reduce((acc, [from, to]) => acc.replace(from, to), s).replace(guidPattern, placeholder);
+const redact = (s) => {
+  const result = redactor.redact(s).replace(guidPattern, placeholder);
+  if (redactor.leaks(result).length) throw new Error('Refusing a transcript with a surviving identifier');
+  return result;
+};
 
 function colourise(line) {
   const esc = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -105,7 +91,7 @@ for (const f of files) {
   const out = `turnstile-t${basename(f, '.txt')}.png`;
   await page.setContent(html(title, rest.join('\n')));
   await page.locator('.frame').screenshot({ path: join(outDir, out) });
-  console.log(`  wrote docs/guide/${out}`);
+  console.log(`  wrote ${join(outDir, out)}`);
 }
 await browser.close();
 console.log(`\n${files.length} transcript(s) rendered; ${guids.size} distinct GUID(s) replaced.`);

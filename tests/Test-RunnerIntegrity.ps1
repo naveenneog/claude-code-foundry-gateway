@@ -107,7 +107,11 @@ try {
     Assert 'a passing full offline registration passes' ($r.Exit -eq 0) "exit $($r.Exit): $($r.Output.Substring(0, [math]::Min(350, $r.Output.Length)))"
     Assert 'every registered check is summarized once in registration order' (Has-CompleteSummary $r $registered)
     Assert 'every non-skipped check runs in its own process' ($r.Ran.Count -eq $expectedRan -and @($r.Ran.Pid | Sort-Object -Unique).Count -eq $expectedRan) "$($r.Ran.Count) of $expectedRan"
-    Assert 'FinOps without its venv is an explicit counted SKIP' ($skipped.Count -eq 1 -and $skipped[0].Name -like 'Terminal FinOps*' -and $r.Output -match '1 check\(s\) skipped')
+    $expectedSkips = @('AUM service - authority, API and mutations', 'Terminal FinOps - commands, rules and pilot')
+    Assert 'both optional Python environments are explicit counted SKIPs' (
+        $skipped.Count -eq $expectedSkips.Count -and
+        ($skipped.Name -join '|') -ceq ($expectedSkips -join '|') -and
+        $r.Output -match '2 check\(s\) skipped')
     Assert 'each result has a duration, including skips' (@($r.Timings | Where-Object { $null -eq $_.Seconds -or $_.Seconds -lt 0 }).Count -eq 0)
     Assert 'the five slowest checks and timings path remain visible' ($r.Output -match '(?s)slowest:\s*(?:[^\r\n]+\r?\n\s*){5}timings:')
     Assert 'several independent checks really overlap' ((Get-MaxOverlap $r.Ran) -gt 1)
@@ -116,7 +120,7 @@ try {
 
     $allRegistered = @(Get-Registered $source -Azure)
     $r = Invoke-Scenario $source -Options @('-IncludeAzure', '-ThrottleLimit', '3', '-CheckTimeoutSeconds', '60')
-    Assert 'IncludeAzure adds all registered live checks (stubs only)' ($r.Exit -eq 0 -and (Has-CompleteSummary $r $allRegistered) -and $r.Ran.Count -eq ($allRegistered.Count - 1))
+    Assert 'IncludeAzure adds all registered live checks (stubs only)' ($r.Exit -eq 0 -and (Has-CompleteSummary $r $allRegistered) -and $r.Ran.Count -eq ($allRegistered.Count - $expectedSkips.Count))
     $azureScripts = @($allRegistered | Select-Object -Skip $registered.Count | ForEach-Object Script)
     $live = @($r.Ran | Where-Object { $_.Script -in $azureScripts -and -not $_.SkipLive })
     $offlineEnd = ($r.Ran | Where-Object { $_.Pid -notin $live.Pid } | Measure-Object End -Maximum).Maximum

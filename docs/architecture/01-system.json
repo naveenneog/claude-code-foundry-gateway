@@ -5,7 +5,7 @@
   "title": "One gateway. Separate request and governance paths.",
   "subtitle": "The customer owns the Entra tenant, Azure resources and Foundry Claude deployment. Optional profiles add services; they do not replace the gateway as the enforcer.",
   "width": 1280,
-  "height": 1712,
+  "height": 1916,
   "outputs": ["docs/images/architecture/system-overview.png", "docs/images/architecture.png"],
   "sources": ["infra/main.bicep", "infra/foundry-role.bicep", "infra/projection.bicep", "infra/projection-network.bicep", "infra/resolver.bicep", "infra/turnstile-schedule.bicep", "scripts/Setup-ClaudeWorkstation.ps1", "scripts/Connect-ClaudeTurnstile.ps1"],
   "identifiers": {
@@ -42,7 +42,7 @@
     { "x": 0, "y": 544, "w": 1280, "h": 276, "tone": "blue", "title": "Telemetry · customer Log Analytics workspace" },
     { "x": 0, "y": 852, "w": 618, "h": 526, "tone": "purple", "title": "Optional Turnstile governance" },
     { "x": 650, "y": 852, "w": 630, "h": 526, "tone": "teal", "title": "Optional projection · private VNet profile" },
-    { "x": 0, "y": 1410, "w": 1280, "h": 302, "tone": "blue", "title": "Optional P50 chargeback reports · pending merge · independent of Turnstile" }
+    { "x": 0, "y": 1410, "w": 1280, "h": 302, "tone": "blue", "title": "Optional P50 chargeback reports · merged · independent of Turnstile" }
   ],
   "nodes": [
     { "id": "code", "x": 16, "y": 60, "w": 278, "h": 90, "tone": "slate", "compact": true, "title": "Claude Code", "lines": ["Azure CLI sign-in"] },
@@ -130,7 +130,7 @@
     { "id": "reports", "x": 16, "y": 1470, "w": 382, "h": 222, "tone": "blue", "compact": true, "title": "Monthly generator", "lines": [
       "Reads the workspace's saved functions and gateway budget catalog.",
       "Reconciles units and people before publishing CSV / HTML.",
-      "Dedicated Consumption environment and reports VNet; no inference calls."
+      "Dedicated Consumption environment; discovered network choices; no inference calls."
     ] },
     { "id": "report-store", "x": 450, "y": 1470, "w": 382, "h": 222, "tone": "teal", "compact": true, "title": "Private Blob archive / outbox", "lines": [
       "Private endpoint and DNS; configuration in its own versioned container.",
@@ -141,6 +141,11 @@
       "Blob-triggered dispatcher: min 0, max 1; 420-second polling.",
       "Current recipient/domain checks; per-unit BCC; no unrestricted links.",
       "Azure-managed domain: 10 sends/hour; large rollouts need custom-domain quota."
+    ] },
+    { "id": "aum-service", "x": 0, "y": 1750, "w": 1280, "h": 166, "tone": "purple", "title": "Optional P55 AUM service · an alternative administrative authority", "lines": [
+      "Python Functions + keyless Blob/Table state; delegated Admin / Viewer / Manager roles and scoped HTTP APIs.",
+      "Lease, revisions, audit, ETags and read-back protect named-value writes. Requests, boosts and warning timers stay out of inference.",
+      "Refuses to become a second writer while Turnstile owns gateway governance. Client integration is a separate contract."
     ] }
   ],
   "edges": [

@@ -84,5 +84,5 @@
     { "from": "direct", "to": "azure", "kind": "identity", "points": [[640, 800], [640, 830], [830, 830], [830, 1000], [822, 1000]] },
     { "from": "fake", "to": "fixtures", "kind": "data", "points": [[1082, 800], [1082, 830], [1272, 830], [1272, 1000], [1264, 1000]] }
   ],
-  "notice": "Terminal implementation merged at c7f0a29; AUM command naming is staged on branch aum. A Turnstile person budget is not an APIM daily quota override. A saved value does not prove gateway enforcement. Cost is estimated, not an Azure invoice."
+  "notice": "This sheet shows the terminal's three implemented backends. The separately deployed P55 AUM service has its own API/capability contract; do not infer a completed client adapter from its existence. A Turnstile person budget is not an APIM daily quota. Saved values do not prove enforcement; cost is estimated."
 }

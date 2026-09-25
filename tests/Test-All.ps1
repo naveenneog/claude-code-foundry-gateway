@@ -167,6 +167,7 @@ try {
     Invoke-Check 'Format strings parse and run'            'Test-FormatStrings.ps1'
     Invoke-Check 'Screenshots and the docs that show them' 'Test-Screenshots.ps1'
     Invoke-Check 'Architecture sources, images and code agree' 'Test-Architecture.ps1'
+    Invoke-Check 'Documentation links and commands'        'Test-DocReferences.ps1'
     Invoke-Check 'Resolver - the entitlement read path'   'Test-Resolver.ps1'
     Invoke-Check 'Named value writes fail loudly'          'Test-NamedValueWrites.ps1' @{ SkipLive = $true }
     Invoke-Check 'Release log hygiene'                     'Test-ReleaseLog.ps1'
@@ -180,6 +181,16 @@ try {
     Invoke-Check 'Capability scoping per tier'             'Test-CapabilityScoping.ps1' @{ SkipLive = $true }
     Invoke-Check 'Compliance retrieval and deletion'       'Test-Compliance.ps1' @{ SkipLive = $true }
     Invoke-Check 'Chargeback ledger'                       'Test-Ledger.ps1' @{ SkipLive = $true }
+    Invoke-Check 'Chargeback report generation'            'Test-ChargebackReports.ps1'
+    Invoke-Check 'Chargeback recipients and attachments'   'Test-ChargebackDelivery.ps1'
+    Invoke-Check 'Chargeback durable email outbox'         'Test-ChargebackOutbox.ps1'
+    Invoke-Check 'Chargeback queue preserves attachments'  'Test-ChargebackQueue.ps1'
+    Invoke-Check 'Chargeback configuration and archive'    'Test-ChargebackStorage.ps1'
+    Invoke-Check 'Chargeback private administration'       'Test-ChargebackAdministration.ps1'
+    Invoke-Check 'Chargeback selectable discovery'         'Test-ChargebackDiscovery.ps1'
+    Invoke-Check 'Chargeback portal redaction'             'Test-ChargebackCapture.ps1'
+    Invoke-Check 'Chargeback scheduled jobs'               'Test-ChargebackSchedule.ps1'
+    Invoke-Check 'Chargeback mutations detect breakage'    'Test-ChargebackNegative.ps1'
     Invoke-Check 'Business unit chargeback'                'Test-BusinessUnits.ps1'
     Invoke-Check 'Teams and the budget cascade'            'Test-Teams.ps1'
     Invoke-Check 'Model discovery and deployment'          'Test-ModelDeployment.ps1'
@@ -200,6 +211,14 @@ try {
     Invoke-Check 'Turnstile checks detect breakage [1/2]'   'Test-TurnstileNegative.ps1' @{ Shard = '1/2' } -SerialLane:$bicepNeedsAz
     Invoke-Check 'No deployment written into the code'     'Test-NoDeploymentValues.ps1'
     Invoke-Check 'Foundry bypass audit'                    'Test-Bypass.ps1' @{ SkipLive = $true }
+    Invoke-Check 'AUM service - discovery and administrator choices' 'Test-AumDeployment.ps1' -SerialLane
+
+    $aumPython = Join-Path $root '.venv-aum-service\Scripts\python.exe'
+    $aumUnixPython = Join-Path $root '.venv-aum-service\bin\python'
+    $aumSkip = if (-not ((Test-Path $aumPython) -or (Test-Path $aumUnixPython))) {
+        'AUM service: worktree .venv-aum-service is missing. See docs/AUM-SERVICE.md.'
+    } else { '' }
+    Invoke-Check 'AUM service - authority, API and mutations' 'Test-AumService.ps1' -SkipReason $aumSkip
 
     $finopsPython = Join-Path $root '.venv-finops\Scripts\python.exe'
     $finopsUnixPython = Join-Path $root '.venv-finops\bin\python'

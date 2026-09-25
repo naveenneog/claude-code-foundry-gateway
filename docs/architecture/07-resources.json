@@ -6,7 +6,7 @@
   "subtitle": "A type inventory, not a bill of materials. Existing references and child configuration resources are included; conditional declarations do not mean every deployment creates them.",
   "width": 1280,
   "outputs": ["docs/images/architecture/azure-resource-inventory.png"],
-  "sources": ["infra/main.bicep", "infra/foundry-role.bicep", "infra/projection.bicep", "infra/projection-network.bicep", "infra/resolver.bicep", "infra/turnstile-schedule.bicep"],
+  "sources": ["infra/main.bicep", "infra/foundry-role.bicep", "infra/projection.bicep", "infra/projection-network.bicep", "infra/resolver.bicep", "infra/turnstile-schedule.bicep", "infra/chargeback-reports.bicep", "infra/chargeback-dns.bicep", "infra/aum-service.bicep"],
   "identifiers": {},
   "sections": [
     {
@@ -69,6 +69,25 @@
         "Microsoft.ManagedIdentity/userAssignedIdentities",
         "Microsoft.App/managedEnvironments",
         "Microsoft.App/jobs"
+      ]
+    },
+    {
+      "title": "Optional P50 reports · retention, scoped roles and email",
+      "note": "Report jobs reuse the network, storage, identity and Container Apps resource types above. These additional declarations control archive lifecycle and dedicated ACS Email. Existing shared network/DNS choices are discovered rather than assumed.",
+      "types": [
+        "Microsoft.Storage/storageAccounts/managementPolicies",
+        "Microsoft.Authorization/roleDefinitions",
+        "Microsoft.Communication/emailServices",
+        "Microsoft.Communication/emailServices/domains",
+        "Microsoft.Communication/communicationServices"
+      ]
+    },
+    {
+      "title": "Optional AUM service · keyless operational state",
+      "note": "The independent administrative service adds a Table service and AumState table. Its Function, Blob storage, network endpoints and role assignments use types already shown above; the dedicated service diagram explains authority and write safety.",
+      "types": [
+        "Microsoft.Storage/storageAccounts/tableServices",
+        "Microsoft.Storage/storageAccounts/tableServices/tables"
       ]
     }
   ],

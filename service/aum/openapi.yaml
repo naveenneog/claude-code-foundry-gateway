@@ -1,0 +1,477 @@
+openapi: 3.0.3
+info:
+  title: AUM service
+  version: 1.0.2
+  description: |
+    Optional Azure Usage Management authority; no Turnstile dependency.
+    All paths require a delegated Entra v2 bearer token for this app with
+    AUM.Access and AUM.Admin, AUM.Viewer or AUM.Manager. Precedence is
+    Admin > Viewer > Manager. Missing/overage groups grant no managed scope.
+    Budgets are gateway tokens, not dollars. Units/teams are monthly; people
+    are daily. Costs are estimates, never an invoice guarantee.
+    Every mutation requires a reason and is audited. Budget/configuration
+    mutations require If-Match with the revision from a fresh GET /budgets.
+servers:
+  - url: https://func-aum-contoso.azurewebsites.net
+security:
+  - bearer: []
+paths:
+  /api/v1/me:
+    get:
+      operationId: me
+      responses:
+        '200':
+          description: Identity and server-resolved scope; null is unrestricted, an empty object is still scoped.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Identity'}
+  /api/v1/capabilities:
+    get:
+      operationId: capabilities
+      responses:
+        '200':
+          description: Versioned feature flags, narrowed to the current caller. Unknown flags must default to false.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Capabilities'}
+  /api/v1/usage:
+    get:
+      operationId: usage
+      parameters:
+        - {$ref: '#/components/parameters/From'}
+        - {$ref: '#/components/parameters/To'}
+        - {$ref: '#/components/parameters/Organization'}
+        - {$ref: '#/components/parameters/Department'}
+        - {$ref: '#/components/parameters/User'}
+      responses:
+        '200':
+          description: Aggregated saved ClaudeCost data filtered before aggregation.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requests: {type: integer}
+                  prompt_tokens: {type: number}
+                  completion_tokens: {type: number}
+                  cache_read_tokens: {type: number}
+                  usd: {type: number}
+                  cost_is_estimate: {type: boolean, enum: [true]}
+                  cache_write_known: {type: boolean, enum: [false]}
+                  as_of: {type: string, format: date-time}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/trends:
+    get:
+      operationId: trends
+      parameters:
+        - {$ref: '#/components/parameters/From'}
+        - {$ref: '#/components/parameters/To'}
+        - {$ref: '#/components/parameters/Organization'}
+        - {$ref: '#/components/parameters/Department'}
+      responses:
+        '200':
+          description: Daily saved ClaudeCost aggregates in items; UTC, maximum 93 days.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Page'}}}
+  /api/v1/people:
+    get:
+      operationId: people
+      parameters:
+        - {name: search, in: query, schema: {type: string, maxLength: 100}}
+        - {$ref: '#/components/parameters/Organization'}
+        - {$ref: '#/components/parameters/Department'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+      responses:
+        '200':
+          description: |
+            Observed people only; saved ClaudeCost, not an Entra directory scan.
+            Items carry id, name, parent_id, organization_id, department_id.
+            Stable id keyset cursor; scope is revalidated on every page.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Page'}}}
+  /api/v1/requests:
+    get:
+      operationId: requests
+      parameters:
+        - {$ref: '#/components/parameters/From'}
+        - {$ref: '#/components/parameters/To'}
+        - {$ref: '#/components/parameters/Organization'}
+        - {$ref: '#/components/parameters/Department'}
+        - {$ref: '#/components/parameters/User'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+      responses:
+        '200':
+          description: Saved ClaudeChargeback request rows. Unknown cache values remain null.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Page'}}}
+  /api/v1/budgets:
+    get:
+      operationId: budgets
+      responses:
+        '200':
+          description: Scoped budgets and opaque configuration revision.
+          headers:
+            ETag:
+              description: Quoted HTTP entity-tag, suitable for If-Match.
+              schema: {type: string}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, revision]
+                properties:
+                  revision: {type: string}
+                  items:
+                    type: array
+                    items: {$ref: '#/components/schemas/Budget'}
+  /api/v1/budgets/{scope_type}/{scope_id}:
+    parameters:
+      - {$ref: '#/components/parameters/ScopeType'}
+      - {$ref: '#/components/parameters/ScopeId'}
+    put:
+      operationId: setBudget
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/BudgetWrite'}}}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: clearBudget
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/Reason'}}}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '409':
+          description: Clearing to an unlimited/default budget would exceed a finite parent.
+  /api/v1/catalog:
+    get:
+      operationId: catalog
+      responses:
+        '200':
+          description: |
+            organizations and departments. A team manager's parent organization
+            is display context only. Each entity has id, name, parent_id,
+            external_ref and attributes (enforcement, allowance_percent).
+          content: {application/json: {schema: {type: object}}}
+    put:
+      operationId: setCatalog
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [entities, reason]
+              properties:
+                entities: {type: array, items: {$ref: '#/components/schemas/Entity'}}
+                reason: {type: string, minLength: 1, maxLength: 500}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/tiers:
+    get:
+      operationId: tiers
+      responses:
+        '200':
+          description: standard/premium items with tokens_per_day, tokens_per_minute and models.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Page'}}}
+  /api/v1/tiers/{tier}:
+    parameters:
+      - {name: tier, in: path, required: true, schema: {type: string, enum: [standard, premium]}}
+    put:
+      operationId: setTier
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tokens_per_day, tokens_per_minute, models, reason]
+              properties:
+                tokens_per_day: {type: integer, minimum: 1}
+                tokens_per_minute: {type: integer, minimum: 1}
+                models: {type: array, items: {type: string}}
+                reason: {type: string, minLength: 1, maxLength: 500}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+  /api/v1/modes/{scope_id}:
+    parameters: [{$ref: '#/components/parameters/ScopeId'}]
+    put:
+      operationId: setMode
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enforcement, reason]
+              properties:
+                enforcement: {type: string, enum: [strict, allowance, notify]}
+                allowance_percent: {type: integer, minimum: 1, maximum: 100}
+                reason: {type: string, minLength: 1, maxLength: 500}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+  /api/v1/manager-groups/{scope_id}:
+    parameters: [{$ref: '#/components/parameters/ScopeId'}]
+    put:
+      operationId: setManagerGroup
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [manager_group_id, reason]
+              properties:
+                manager_group_id: {type: string, format: uuid, nullable: true}
+                reason: {type: string, minLength: 1, maxLength: 500}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+  /api/v1/budget-requests:
+    get:
+      operationId: budgetRequests
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+      responses:
+        '200':
+          description: Requests made by the caller or actionable by them; Admin sees all, Viewer cannot access workflows.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Page'}}}
+    post:
+      operationId: createBudgetRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/RequestedBudget'}
+                - type: object
+                  required: [scope_type, scope_id]
+                  properties:
+                    scope_type: {type: string, enum: [organization, department, user]}
+                    scope_id: {type: string}
+      responses:
+        '201':
+          description: Workflow record with id, state=pending, requester, approver_scope, version and UTC creation time.
+          content: {application/json: {schema: {type: object}}}
+  /api/v1/budget-requests/{id}/{action}:
+    post:
+      operationId: decideBudgetRequest
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: action, in: path, required: true, schema: {type: string, enum: [approve, reject, escalate]}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/Reason'}
+                - type: object
+                  required: [version]
+                  properties:
+                    version: {type: integer, minimum: 1}
+                    admin_override:
+                      type: boolean
+                      default: false
+                      description: Explicit Admin-only self-decision override, audited; never bypasses headroom.
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/boosts:
+    get:
+      operationId: boosts
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+      responses:
+        '200':
+          description: Scoped boost records with pending/active/expired/superseded/failed state.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Page'}}}
+    post:
+      operationId: createBoost
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/RequestedBudget'}
+                - type: object
+                  required: [scope_type, scope_id, expires_at]
+                  properties:
+                    scope_type: {type: string, enum: [organization, department, user]}
+                    scope_id: {type: string}
+                    expires_at: {type: string, format: date-time}
+      responses:
+        '201': {$ref: '#/components/responses/Mutation'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/notifications:
+    get:
+      operationId: notifications
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+      responses:
+        '200':
+          description: Scoped budget.warning records; delivery_status=pending, no email-delivery claim.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Page'}}}
+  /api/v1/audit:
+    get:
+      operationId: audit
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+      responses:
+        '200':
+          description: Admin-only audit intents and outcomes (who, what, before, after, UTC time).
+          content: {application/json: {schema: {$ref: '#/components/schemas/Page'}}}
+components:
+  securitySchemes:
+    bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    From: {name: from, in: query, schema: {type: string, format: date-time}}
+    To: {name: to, in: query, schema: {type: string, format: date-time}}
+    Organization: {name: organization_id, in: query, schema: {type: string}}
+    Department: {name: department_id, in: query, schema: {type: string}}
+    User: {name: user_id, in: query, schema: {type: string, format: uuid}}
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 100}}
+    Cursor: {name: cursor, in: query, schema: {type: string, maxLength: 2048}}
+    ScopeType: {name: scope_type, in: path, required: true, schema: {type: string, enum: [organization, department, user]}}
+    ScopeId: {name: scope_id, in: path, required: true, schema: {type: string}}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Quoted HTTP entity-tag from ETag, or the JSON revision wrapped in double quotes.
+      schema: {type: string}
+  responses:
+    Forbidden:
+      description: Not in your scope or role; never an empty success response.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Conflict:
+      description: Stale revision, insufficient parent headroom, active boost, writer conflict, or named-value capacity.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Mutation:
+      description: Audited outcome; includes audit_id, revision and result. Do not retry a write automatically.
+      content: {application/json: {schema: {type: object}}}
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+    Reason:
+      type: object
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 1, maxLength: 500}
+    BudgetWrite:
+      allOf:
+        - {$ref: '#/components/schemas/Reason'}
+        - type: object
+          required: [token_limit]
+          properties:
+            token_limit: {type: integer, minimum: 1, maximum: 9223372036854775807}
+            warning_threshold_percent: {type: integer, minimum: 1, maximum: 100, default: 80}
+    RequestedBudget:
+      allOf:
+        - {$ref: '#/components/schemas/Reason'}
+        - type: object
+          required: [token_limit]
+          properties:
+            token_limit: {type: integer, minimum: 1, maximum: 9223372036854775807}
+    Entity:
+      type: object
+      required: [id, name, parent_id, external_ref]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        parent_id: {type: string, nullable: true}
+        external_ref: {type: string, description: 'entra-group:<group display name>'}
+        attributes: {type: object}
+    Budget:
+      type: object
+      properties:
+        scope_type: {type: string, enum: [organization, department, user]}
+        scope_id: {type: string}
+        token_limit: {type: integer, nullable: true}
+        period: {type: string, enum: [month, day]}
+        warning_threshold_percent: {type: integer}
+        enforcement: {type: string, enum: [strict, allowance, notify]}
+        allowance_percent: {type: integer, nullable: true}
+        writable: {type: boolean}
+    Page:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: {type: array, items: {type: object}}
+        next_cursor: {type: string, nullable: true}
+    Identity:
+      type: object
+      required: [id, role, access, method, manager_scope]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        email: {type: string}
+        role: {type: string, enum: [owner, member]}
+        access: {type: string, enum: [admin, viewer, manager]}
+        method: {type: string, enum: [entra]}
+        session_expires_at: {type: string, format: date-time}
+        manager_scope:
+          type: object
+          nullable: true
+          required: [organizations, departments, writable_department_ids]
+          properties:
+            organizations: {type: array, items: {$ref: '#/components/schemas/Entity'}}
+            departments: {type: array, items: {$ref: '#/components/schemas/Entity'}}
+            writable_department_ids: {type: array, items: {type: string}}
+    Capabilities:
+      type: object
+      required: [schema_version, backend, capabilities, limits]
+      properties:
+        schema_version: {type: integer, enum: [1]}
+        backend: {type: string, enum: [aum-service]}
+        capabilities:
+          type: object
+          additionalProperties: {type: boolean}
+          example:
+            usage_read: true
+            budgets_read: true
+            budget_write: true
+            manager_budget_write: true
+            catalog_write: true
+            tiers_write: true
+            modes_write: true
+            budget_requests: true
+            approvals: true
+            approval_admin_override: true
+            boosts: true
+            notifications: true
+            audit_read: true
+            email_delivery: false
+        limits:
+          type: object
+          properties:
+            page_size: {type: integer, enum: [200]}
+            named_value_characters: {type: integer, enum: [4096]}
+            analytics_window_days: {type: integer, enum: [93]}
