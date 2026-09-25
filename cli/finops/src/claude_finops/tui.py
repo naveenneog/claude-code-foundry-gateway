@@ -645,8 +645,8 @@ class FinOpsApp(FeatureUI, App):
                     limitations=("Person limits are gateway DAILY overrides; units/teams remain monthly."
                                  if self.engine.backend.person_budget_period == "day"
                                  else "Person monthly budgets are Turnstile records, not gateway quotas.") + " Cost is estimated, not an invoice.",
-                    sign_in="Run az login. AADSTS50105: ask an admin to assign a Turnstile role.",
-                    access="Viewers are read-only; managers edit only server-advertised writable budgets.")
+                    sign_in="Run az login for the selected backend. AADSTS50105: check that backend's existing app-role assignment.",
+                    access="Direct is Azure RBAC admin access; optional servers enforce viewer/manager roles and writable scope.")
         if self.editable:
             keys["owner_actions"] = "e edits selected row. Palette: add/remove scope, edit tiers, Apply now."
         self.push_screen(DetailScreen("AUM | tour and keys", keys))

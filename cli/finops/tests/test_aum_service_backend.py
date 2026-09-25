@@ -284,3 +284,9 @@ async def test_service_people_do_not_require_catalog_rows_for_observed_search():
         query = next(call.url.params for call in calls if call.url.path == "/api/v1/people")
         assert "department_id" not in query and "organization_id" not in query
         assert sum(call.url.path == "/api/v1/people" for call in calls) == 1
+
+
+@pytest.mark.parametrize("status", [401, 405])
+def test_shared_http_errors_do_not_require_turnstile_for_independent_service(status):
+    from claude_finops.errors import http_error
+    assert "Turnstile" not in str(http_error(status))

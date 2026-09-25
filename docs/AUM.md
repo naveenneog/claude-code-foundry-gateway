@@ -692,7 +692,7 @@ Interactive `:` → **Export complete chargeback CSV** writes under
 | 3, 401 | Run `az login` in the correct tenant |
 | 4, AADSTS50105 | Ask an existing administrator to check your Turnstile assignment |
 | 4, 403 | Choose an assigned scope; see Settings |
-| 5, missing scope/route | Check month/id; deploy the compatible Turnstile fork for 405 |
+| 5, missing scope/route | Check month/id and the selected backend's advertised API version; do not install another authority to bypass an unavailable route |
 | 6, conflict | Refresh and preview again |
 | 7, service/job failure | Check network, Azure access and job logs; do not blindly repeat a write |
 | 8, apply still pending | Follow `aum governance show`; the save may already have succeeded |
