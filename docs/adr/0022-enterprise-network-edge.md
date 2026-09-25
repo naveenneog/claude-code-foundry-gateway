@@ -81,6 +81,37 @@ firewall policy and optional application/monitoring network changes remain
 explicit administrator decisions. Front Door Premium is an alternative
 reference topology, not silently substituted for a regional Application Gateway.
 
+## Owner addition: decisions, cost deltas and impact, 2026-09-25
+
+Every planned network change must be an explicit administrator decision.
+Topology, region, edge type (Application Gateway, Front Door Premium or none),
+WAF mode/rules, each component's public/private state, reuse/create choices,
+firewall/DNS and certificate source must carry a dated regional list-price
+comparison and concrete security, availability, operational, reversibility
+and dependency implications. A configuration-only choice is identified as
+such, not given a fictitious service charge. Shared resources are not free:
+show their current allocated cost separately from incremental deployment cost.
+Unpriced variable consumption and unavailable tariffs remain unknown.
+
+Before any Azure write, show one complete create/change/remove plan and its
+cost delta. WhatIf performs the same read-only discovery and impact queries
+and prints the same summary. Non-interactive execution requires an explicit
+approval, not merely a default ShouldProcess result. Access-reducing changes
+also require acknowledgement of the exact historical-impact report.
+
+Impact comes from the selected gateway's actual diagnostic destinations, not
+a workspace name. Query a bounded, administrator-selected UTC window; scope
+every row to that gateway; distinguish Entra identity, APIM portal user IDs,
+gateway peer IPs and trusted original-client IPs. Unknown or privacy-masked
+IPs, missing tables, sampling, truncation and consumers bypassing the gateway
+must not be counted as safe. A private backend alone does not require an
+otherwise public gateway's developers to join a VNet.
+
+The reference gateway is used only for read-only impact validation. Its
+GatewayLogs category is not enabled and its Insights destinations differ, so
+coverage must be measured rather than assumed. No logging, network, policy
+or permission change on that reference is part of this addition.
+
 ## Sources
 
 Verified 2026-09-24:

@@ -51,13 +51,51 @@ param(
     [switch]$CloseFoundryPublicAccess,
     [switch]$ConfirmApimChange,
     [string]$StatePath,
+    [string]$ReviewPath,
+    [string]$ApprovedPlanFingerprint,
+    [string]$ImpactAcknowledgement,
+    [switch]$AcceptUnknownImpact,
+    [switch]$AcceptUnknownCosts,
     [switch]$NonInteractive
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ClaudeNetwork.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeNetworkPolicy.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeNetworkPricing.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeNetworkImpact.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeNetworkReview.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeNetworkEstate.ps1')
 $root = Split-Path $PSScriptRoot -Parent
+$reviewNonInteractive=[bool]$NonInteractive
+if(-not $DiscoverOnly){
+    if(-not $ReviewPath){throw 'Prepare a priced administrator review with Get-ClaudeNetworkPlan.ps1, then pass -ReviewPath. No network defaults are deployment approval.'}
+    $review=Read-ClaudeNetworkReview -Path $ReviewPath
+    if(@($review.Plan.Blockers).Count){Show-ClaudeNetworkReview $review;if($WhatIfPreference){return $review};throw 'Unmet review dependencies block this plan before any Azure write.'}
+    if($review.Plan.Parameters.EdgeType -eq 'none' -and @($review.Plan.Actions|Where-Object{$_.Verb -ne 'Retain'}).Count -eq 0){
+        $explicit=$PSBoundParameters.ContainsKey('Confirm') -and -not [bool]$PSBoundParameters['Confirm']
+        [void](Confirm-ClaudeNetworkReview -Review $review -NonInteractive:$reviewNonInteractive -ExplicitConfirmation:$explicit -ApprovedPlanFingerprint $ApprovedPlanFingerprint -ImpactAcknowledgement $ImpactAcknowledgement -AcceptUnknownImpact:$AcceptUnknownImpact -AcceptUnknownCosts:$AcceptUnknownCosts -WhatIf:$WhatIfPreference)
+        Write-Host 'The administrator selected no edge and no changes. No Azure resource was created, modified or removed.'
+        return $review
+    }
+    $allowedParameters=@('SubscriptionId','DiscoverySubscriptionId','InventoryPath','ApimId','ApiId','NetworkProfile','BackendAccess','EdgeResourceGroup','Name','Location','WorkspaceId','VnetId','EdgeSubnetId','EndpointsSubnetId','ApimIntegrationSubnetId','VerificationSubnetId','AddressPrefix','IpamConfirmed','PrivateDnsZoneId','PublicIpId','ListenerHostName','KeyVaultId','CertificateName','TestCertificate','ManagedRuleSet','WafMode','GlobalWafPolicyId','MessagesWafPolicyId','ExclusionsPath','BodyLimitKb','BackendTimeoutSeconds','MinimumCapacity','MaximumCapacity','EdgeRouteTableId','ApimRouteTableId','DdosProtectionPlanId','EnableNetworkIsolation','CloseFoundryPublicAccess','StatePath')
+    foreach($parameter in $review.Plan.Parameters.PSObject.Properties){
+        if($allowedParameters -notcontains $parameter.Name){continue}
+        if($PSBoundParameters.ContainsKey($parameter.Name) -and (($PSBoundParameters[$parameter.Name]|ConvertTo-Json -Depth 20 -Compress) -ne ($parameter.Value|ConvertTo-Json -Depth 20 -Compress))){throw "Parameter '$($parameter.Name)' differs from the reviewed choice. Prepare a new review."}
+        # Binding a reviewed value is local computation, not an Azure change.
+        # Set-Variable honors WhatIf and would otherwise leave targets empty.
+        $ExecutionContext.SessionState.PSVariable.Set($parameter.Name,$parameter.Value)
+    }
+    if($review.Plan.Parameters.EdgeType -ne 'application-gateway'){Show-ClaudeNetworkReview $review;if($WhatIfPreference){return $review};throw 'This executor applies only the regional Application Gateway plan. The selected alternative is a priced manual workflow; no partial network change was made.'}
+    if(@($review.Plan.Actions|Where-Object{$_.Verb -eq 'Change' -and $_.DecisionKey -in @('logs-access','turnstile-access','projection-access')}).Count){Show-ClaudeNetworkReview $review;if($WhatIfPreference){return $review};throw 'The selected optional-component conversion requires its service-specific workflow. No partial estate change was made.'}
+    foreach($snapshot in $review.Plan.Snapshots){
+        $current=Get-ClaudeNetworkResource $snapshot.Id
+        if($snapshot.Etag -and $current.etag -ne $snapshot.Etag){throw 'A reviewed resource changed after discovery. Refresh the entire plan and impact before applying.'}
+    }
+    $TestCertificate=$review.Plan.Parameters.CertificateSource -eq 'evaluation-ca'
+    $ConfirmApimChange=$true
+    $NonInteractive=$true
+}
 function Read-EdgeValue([string]$Label,[string]$Value,[string]$Recommendation) {
     if ($Value) { return $Value }
     if ($NonInteractive) { throw "Pass $Label explicitly for a non-interactive deployment." }
@@ -131,7 +169,10 @@ $foundryHost = ([uri]$api.properties.serviceUrl).DnsSafeHost
 $foundry = @($inventory.DetailedResources | Where-Object { $_.type -eq 'Microsoft.CognitiveServices/accounts' -and $foundryHost.StartsWith($_.name+'.',[StringComparison]::OrdinalIgnoreCase) })
 if ($foundry.Count -ne 1) { throw 'Could not uniquely discover the API Foundry account. Include its subscription in discovery.' }
 $foundry = Invoke-ClaudeNetworkArm "https://management.azure.com$($foundry[0].id)?api-version=2024-10-01"
-$privateFoundry = $NetworkProfile -ne 'public' -or $CloseFoundryPublicAccess -or $foundry.properties.publicNetworkAccess -eq 'Disabled'
+$foundryChoice=[string]$review.Plan.Parameters.FoundryAccess
+if($foundryChoice -notin @('preserve','private','public')){throw 'The review must explicitly choose Foundry public/private/preserve.'}
+$privateFoundry = $foundryChoice -eq 'private' -or ($foundryChoice -eq 'preserve' -and $foundry.properties.publicNetworkAccess -eq 'Disabled')
+$CloseFoundryPublicAccess=$foundryChoice -eq 'private' -and $foundry.properties.publicNetworkAccess -ne 'Disabled'
 if ($privateFoundry -and -not $cap.OutboundIntegration) { throw 'This APIM SKU cannot reach a private Foundry account.' }
 if ($privateFoundry -and $foundry.properties.publicNetworkAccess -ne 'Disabled' -and -not $CloseFoundryPublicAccess) { throw 'Private profile would close a shared Foundry account. Pass -CloseFoundryPublicAccess only after reviewing every consumer.' }
 if ($privateFoundry -and $Location -ne ($apim.location -replace ' ','').ToLowerInvariant()) { throw 'APIM integration and its VNet must be in the same region and subscription as APIM.' }
@@ -294,10 +335,8 @@ foreach ($zoneName in @($dnsZoneNames | Sort-Object -Unique)) {
 $plan = [ordered]@{ profile=$NetworkProfile; originAccess=$BackendAccess; apimId=$ApimId; apimSku=$apim.sku.name; foundryId=$foundry.id; foundryPrivate=$privateFoundry; region=$Location; resourceGroup=$EdgeResourceGroup; gatewayId=$gatewayId; vnetId=$VnetId; edgeSubnetId=$EdgeSubnetId; endpointSubnetId=$EndpointsSubnetId; workspaceId=$WorkspaceId; certificateVaultId=$KeyVaultId; listener=$ListenerHostName; wafMode=$WafMode; ruleSet="$($rule.ruleSetType)/$($rule.ruleSetVersion)"; bodyLimitKb=$BodyLimitKb; timeoutSeconds=$BackendTimeoutSeconds; responseBuffering=$false; newVnet=$newVnet; egressRouteTable=$EdgeRouteTableId; statePath=$StatePath }
 $plan.privateDns=$dnsSelections
 $plan.listenerPrivateDns=($NetworkProfile -ne 'public')
-$plan | ConvertTo-Json -Depth 10 | Write-Host
-Write-Host 'Existing hub peerings, firewalls, route tables and private DNS zones are in discovery. No unseen IPAM range or internet route is inferred.'
-if (-not $WhatIfPreference -and -not $ConfirmApimChange) { throw 'Review the plan, then pass -ConfirmApimChange. The service policy and public access of the selected APIM will change.' }
-if (-not $PSCmdlet.ShouldProcess($gatewayId,'Deploy the selected edge, private connectivity and APIM restriction')) { return [pscustomobject]$plan }
+$explicitConfirm=$PSBoundParameters.ContainsKey('Confirm') -and -not [bool]$PSBoundParameters['Confirm']
+if(-not (Confirm-ClaudeNetworkReview -Review $review -NonInteractive:$reviewNonInteractive -ExplicitConfirmation:$explicitConfirm -ApprovedPlanFingerprint $ApprovedPlanFingerprint -ImpactAcknowledgement $ImpactAcknowledgement -AcceptUnknownImpact:$AcceptUnknownImpact -AcceptUnknownCosts:$AcceptUnknownCosts -WhatIf:$WhatIfPreference)){return $review}
 
 if (-not $state) {
     $originalPolicy = Invoke-ClaudeNetworkArm "https://management.azure.com${ApimId}/policies/policy?api-version=2024-05-01" -AllowNotFound
@@ -470,7 +509,22 @@ if ($BackendAccess -eq 'private' -and $apim.properties.publicNetworkAccess -ne '
     [void](Invoke-ClaudeNetworkArm "https://management.azure.com${ApimId}?api-version=2024-05-01" -Method patch -Body @{properties=@{publicNetworkAccess='Disabled'}} -StateDirectory $stateDirectory)
     [void](Wait-ClaudeNetworkResourceReady -ResourceId $ApimId -ApiVersion '2024-05-01')
 }
+if($BackendAccess -eq 'public' -and $apim.properties.publicNetworkAccess -ne 'Enabled'){
+    [void](Invoke-ClaudeNetworkArm "https://management.azure.com${ApimId}?api-version=2024-05-01" -Method patch -Body @{properties=@{publicNetworkAccess='Enabled'}} -StateDirectory $stateDirectory)
+    [void](Wait-ClaudeNetworkResourceReady -ResourceId $ApimId -ApiVersion '2024-05-01')
+}
 if ($CloseFoundryPublicAccess) { [void](Invoke-ClaudeNetworkArm "https://management.azure.com$($foundry.id)?api-version=2024-10-01" -Method patch -Body @{properties=@{publicNetworkAccess='Disabled'}} -StateDirectory $stateDirectory) }
+if($foundryChoice -eq 'public' -and $foundry.properties.publicNetworkAccess -ne 'Enabled'){
+    [void](Invoke-ClaudeNetworkArm "https://management.azure.com$($foundry.id)?api-version=2024-10-01" -Method patch -Body @{properties=@{publicNetworkAccess='Enabled'}} -StateDirectory $stateDirectory)
+}
+$effectiveApim=Invoke-ClaudeNetworkArm "https://management.azure.com${ApimId}?api-version=2024-05-01"
+$expectedApim=if($BackendAccess -eq 'private'){'Disabled'}else{'Enabled'}
+if($effectiveApim.properties.publicNetworkAccess -ne $expectedApim){throw 'The effective APIM access does not match the reviewed choice. Check Azure Policy and retain the state for recovery.'}
+if($foundryChoice -ne 'preserve'){
+    $effectiveFoundry=Invoke-ClaudeNetworkArm "https://management.azure.com$($foundry.id)?api-version=2024-10-01"
+    $expectedFoundry=if($foundryChoice -eq 'private'){'Disabled'}else{'Enabled'}
+    if($effectiveFoundry.properties.publicNetworkAccess -ne $expectedFoundry){throw 'Azure Policy or service state did not accept the reviewed Foundry access. This plan is not reported successful.'}
+}
 $state.Endpoint = "https://$ListenerHostName/$($api.properties.path)"
 if ($newVnet) {
     $policyNsgs=Get-ClaudeNetworkOwnedNsgs -VnetId $VnetId -ResourceGroupId $rgId -OwnerId $owner

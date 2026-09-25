@@ -10,16 +10,33 @@
 param(
     [Parameter(Mandatory = $true)][string]$StatePath,
     [switch]$RestoreApim,
-    [switch]$RestoreFoundryPublicAccess
+    [switch]$RestoreFoundryPublicAccess,
+    [string]$ReviewPath,
+    [string]$ApprovedPlanFingerprint,
+    [string]$ImpactAcknowledgement,
+    [switch]$AcceptUnknownImpact,
+    [switch]$AcceptUnknownCosts,
+    [switch]$NonInteractive
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ClaudeNetwork.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeNetworkPolicy.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeNetworkPricing.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeNetworkImpact.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeNetworkReview.ps1')
 $StatePath = Get-ClaudeNetworkLocalPath $StatePath
 $state = Get-Content $StatePath -Raw | ConvertFrom-Json
 $directory = Split-Path $StatePath -Parent
 if ($state.Version -ne 1 -or -not $state.OwnerId -or -not $state.ApimId) { throw 'Invalid network-edge state.' }
 if ($state.Removed) { Write-Host 'The edge was already removed.'; return }
+if(-not $ReviewPath){throw 'Prepare Get-ClaudeNetworkRemovalPlan.ps1 and pass -ReviewPath before removing network resources.'}
+$review=Read-ClaudeNetworkReview -Path $ReviewPath
+if($review.Plan.Parameters.StatePath -ne $StatePath -or $review.Plan.Parameters.StateFingerprint -ne (Get-ClaudeNetworkReviewFingerprint (Get-Content $StatePath -Raw))){throw 'Removal state differs from the reviewed state. Prepare a fresh removal review.'}
+if([bool]$RestoreFoundryPublicAccess -ne [bool]$review.Plan.Parameters.RestoreFoundryPublicAccess){throw 'Foundry restore choice differs from the reviewed removal plan.'}
+foreach($snapshot in $review.Plan.Snapshots){
+    $now=Invoke-ClaudeNetworkArm "https://management.azure.com$($snapshot.Id)?api-version=$($snapshot.ApiVersion)" -AllowNotFound
+    if($now -and $snapshot.Etag -and $now.etag -ne $snapshot.Etag){throw 'An owned resource changed after the removal review. Refresh prices, state and impact before continuing.'}
+}
 if (-not $RestoreApim) { throw 'Pass -RestoreApim to confirm restoring the previous APIM public access and integration before the edge is deleted.' }
 if ($state.VnetSelection -eq 'new') {
     $rgId="/subscriptions/$($state.SubscriptionId)/resourceGroups/$($state.ResourceGroup)"
@@ -41,7 +58,8 @@ $apim = Invoke-ClaudeNetworkArm "https://management.azure.com$($state.ApimId)?ap
 $currentSubnet = $apim.properties.virtualNetworkConfiguration.subnetResourceId
 $originalSubnet = $state.OriginalApimNetwork.virtualNetworkConfiguration.subnetResourceId
 if ($currentSubnet -and $currentSubnet -ne $originalSubnet -and -not $currentSubnet.StartsWith($state.VnetId+'/',[StringComparison]::OrdinalIgnoreCase)) { throw 'APIM network changed outside this edge. Resolve the drift before removal.' }
-if (-not $PSCmdlet.ShouldProcess($state.GatewayId,'Restore the selected APIM and delete only manifest-owned edge resources')) { return }
+$explicitConfirm=$PSBoundParameters.ContainsKey('Confirm') -and -not [bool]$PSBoundParameters['Confirm']
+if(-not (Confirm-ClaudeNetworkReview -Review $review -NonInteractive:$NonInteractive -ExplicitConfirmation:$explicitConfirm -ApprovedPlanFingerprint $ApprovedPlanFingerprint -ImpactAcknowledgement $ImpactAcknowledgement -AcceptUnknownImpact:$AcceptUnknownImpact -AcceptUnknownCosts:$AcceptUnknownCosts -WhatIf:$WhatIfPreference)){return $review}
 Write-ClaudeNetworkState $state $StatePath
 $apim=Wait-ClaudeNetworkResourceReady -ResourceId $state.ApimId -ApiVersion '2024-05-01'
 $policy = Invoke-ClaudeNetworkArm "https://management.azure.com$($state.ApimId)/policies/policy?api-version=2024-05-01" -AllowNotFound

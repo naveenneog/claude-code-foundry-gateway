@@ -210,6 +210,147 @@ sending Application Insights telemetry.
 
 ## Deploy with the script
 
+> The administrator-review requirement below was added on 2026-09-25. The
+> earlier direct deployment examples are configuration references, not an
+> approval bypass: `New-ClaudeNetworkEdge.ps1` now requires a reviewed plan.
+
+### Administrator choices, prices and consequences
+
+`Get-ClaudeNetworkPlan.ps1` reads the selected deployment, current prices and
+actual telemetry. It prints numbered options with **current cost, proposed
+cost and delta**, USD/hour and USD/730-hour month, the selected and published
+price region, retrieval UTC, and seven implications: security, capability,
+availability, operations, what can break, rollback and dependencies.
+Non-interactive runs must supply every decision explicitly; even a
+recommended or single available choice is not assumed to be approved.
+
+Prices in this reference table are the measured East US 2 commercial list
+tariffs from 2026-09-24/25. The script refreshes them. Shared resources remain
+billed; reuse has zero *incremental* cost, not zero allocated cost. An
+unavailable tariff remains **UNKNOWN**. Configuration-only decisions carry
+no separate meter; their required resources are listed and priced separately.
+
+| Choice | Fixed price / delta basis | Implications to review in the portal too |
+|---|---|---|
+| Internal only | No topology-label charge; regional edge/PE/DNS/connectivity costs below | Removes internet ingress; requires routed corporate clients and private DNS. VPN/DNS failures can cut everyone off. Roll back listener/access/DNS under a change window |
+| Internet-facing | No label charge; add public IP where applicable | Remote clients need no tunnel, but keep TLS, Entra, budgets and origin restrictions. A new hostname still needs client rollout. Public exposure is a deliberate choice |
+| Hybrid | Same gateway, plus public IP and split DNS | Two paths must share policy; test both. Wrong DNS can break corporate clients alone. Restore the previous records/listeners to reverse |
+| Application Gateway WAF_v2 | $0.36/h fixed + $0.0144/CU-h; 20 CU core is $0.648/h / $473.04/month | Regional public/private listeners, measured SSE controls. Requires a dedicated subnet, certificate identity, WAF tuning and capacity. Another region needs a new deployment/cutover, not relocation |
+| Front Door Premium | $330/month / $0.45205 hourly equivalent, plus requests/transfer | Global **public** ingress and managed Private Link origin; not a private frontend or automatic origin HA. Requires approval, correct origin hostname, no inference caching and separate SSE/WAF tests. A **priced manual workflow** here; the regional executor refuses partial application |
+| No edge | $0 new edge charge; existing edges are not automatically retired or credited | APIM controls remain but there is no new WAF. A retain-only plan makes no changes. Migrating/removing an existing edge requires its own review and client endpoint change |
+| Region | The actual region's published meter, not another region's price | Select only discovered locations/SKUs. Private integration must match the existing APIM region/subscription. Account for residency, capacity, latency, transfer and non-in-place migration |
+| Gateway public / private / preserve | Flag change $0; new PE $0.01/h plus DNS; retained connections stay billed | Basic v2 cannot take the private option. Closing public access or adding edge-only filtering needs the caller report below. Restore recorded access only after checking clients and private backends |
+| Foundry public / private / preserve | Flag $0; a new PE + three zones is about $8.80/month | APIM needs a tested private backend path; public gateway clients need not themselves use VPN. Direct Foundry consumers are absent from gateway logs. Policy can reject a public setting; verify effective state |
+| Log Analytics public / private / preserve | Flag $0; an AMPLS PE + five new zones is about $9.80/month, excluding logs | Private queries/ingestion can break outside admins and workloads; shared monitor DNS affects other resources. Verify scope membership and both data paths before toggling. Service-specific conversion is manual, not silently applied by the edge command |
+| Turnstile public / private / preserve | UI flag $0; site PE + one new zone about $7.80/month, plus unchanged application/database costs | Private UI requires connected administrators; outbound database connectivity is separate. Entra consent/roles remain required. Database network-model migration is not an app flag. Optional-estate conversion is reviewed/manual here |
+| Projection public / private / preserve | Cosmos PE + zone about $7.80/month; full resolver/storage private network can need five PEs + five zones, about $39/month | A private resolver needs gateway outbound integration, private storage and a valid sync/lease path. Public endpoints still need Entra/RBAC and may be prohibited by policy. Do not call a Cosmos-only change a whole-projection migration |
+| Reuse VNet/subnets | $0 new VNet/subnet meter; current network allocation remains | Validate dedicated subnet purpose, delegation, NSG, routes and capacity. Shared networks are not overwritten. Remove only new owned associations to reverse |
+| Create VNet/subnets | VNet/subnets/NSGs have no fixed service charge; peering/traffic is separate | Explicit IPAM approval is required; discovered non-overlap is not corporate IPAM. New spokes are not automatically connected. Renumbering later requires migration |
+| Reuse private DNS | Existing zone allocation remains; no new zone charge | Every linked network must reach its answers. Do not replace a shared answer with an isolated endpoint IP. Cross-subscription IDs/permissions are explicit |
+| Create private DNS | First-tier $0.50/zone-month / $0.000685 hourly equivalent | Avoid duplicate namespace links and broad public-suffix shadowing. Operate forwarding and link lifecycle. Exact-hostname split DNS affects only the intended listener |
+| No new firewall | $0 new firewall charge; no unapproved savings from deleting an existing one | No new centralized egress inspection. Do not silently withdraw a forced route. Existing routing/security posture remains the administrator's responsibility |
+| Reuse firewall | Shared allocation, Standard $1.25/h / $912.50/month at this tariff; no automatic new fixed charge | Requires reviewed UDR, policy, DNS, SNAT and return paths. Missing Entra/vault/monitoring/image rules can stop clients/jobs. Network-owner workflow, not blind route injection |
+| New Standard / Premium firewall | $1.25 / $1.75 per hour plus IPs/processing | Adds an always-on dependency and policy operations. Modern network isolation and dedicated subnets are prerequisites. Restore routes before removing an owned firewall. Creation/routing is a priced manual workflow in this regional packet |
+| Existing / imported Key Vault certificate | No new fixed certificate meter; Standard operations $0.03/10K; external CA fees separate | Correct SAN, enabled exportable PFX, routed admin and edge secret-read identity. Preserve the old version until TLS is proved; import private keys only through the trusted vault workflow |
+| Evaluation CA | Temporary verifier $0.0494/h for 1 CPU/2 GiB, plus private vault PE/DNS/operations | Test-only two-day chain; distribute only the public CA, never disable TLS verification. Remove verifier/vault after testing. It is not production PKI |
+| Front Door managed TLS | Included managed-domain path; no App Gateway vault certificate | Available only with Front Door. Custom-domain validation/DNS and renewal remain operational dependencies |
+| Detection / Prevention | Same selected WAF SKU charge; logging volume varies | Detection observes, not blocks. Prevention can reject code/tool schemas. Use scrubbed logs, narrow measured exclusions and positive/negative replay; rollback mode/version deliberately |
+| DRS/CRS version | No independent rule-set fee | Choose from the discovered catalog. Exclusions are version-specific; old versions lack selected large-body controls. Keep the previous reviewed version for rollback |
+
+The final manifest deduplicates shared endpoints/zones, retains old edge
+costs until a separate retirement is approved, and shows every known
+create/change/remove/retain action. Policy-driven additions and variable
+consumption are called out rather than invented as free. Unsupported/manual
+combinations are **blocked before any partial Azure change**.
+
+### Historical access impact and acknowledgement
+
+Before gateway private access, edge-only source restrictions, Foundry private
+access or edge removal, run:
+
+```powershell
+.\scripts\Get-ClaudeNetworkImpact.ps1 -ApimId $apimId -LookbackDays 7 `
+    -PrivateClientCidrs $approvedClientPrefixes `
+    -Actions GatewayPrivate,EdgeOnly,FoundryPrivate -WhatIf
+```
+
+This is read-only, including under WhatIf. It follows the gateway's resource,
+service and API diagnostics to their real logger/workspace IDs, including
+other resource groups/subscriptions. It scopes modern/legacy gateway logs and
+Insights/ledger records to that gateway. It lists identity kind, caller range,
+outside/inside/unknown classification, most recent **UTC** and the potential
+effect for every grouped caller. APIM portal user IDs are not presented as
+Entra identities, and an original-client forwarding value is not proof of a
+trusted gateway peer.
+
+**Measured read-only on the reference:** two actual workspaces, five
+historical Entra identities in seven days, six grouped report rows including
+unattributed traffic, and **no reliable client-IP ranges**. GatewayLogs was not
+enabled; Insights IP masking was not disabled. Thus five known identities
+were potentially affected and their IP-path status was **unknown**, not safe.
+The reference resource ETag was unchanged. No logging, policy, permission or
+network setting was changed to manufacture better evidence.
+
+[Insights discards IPs by default][ip-masking]; turning logging on today cannot
+reconstruct older addresses. Missing tables, sampling, retention, truncation
+and failed destinations remain coverage warnings. Gateway history cannot
+enumerate clients that call Foundry directly. A CIDR match is also not proof
+that the proposed VPN, DNS or route works.
+
+### One review before any write
+
+Prepare a private, uncommitted choices/parameter file from discovery. The
+review contains personal/deployment data and belongs under `.network-state`
+or another controlled administrator location, never in source.
+
+```powershell
+$reviewJson = .\scripts\Get-ClaudeNetworkPlan.ps1 `
+    -SubscriptionId $subscriptionId -ApimId $apimId -ApiId $apiId `
+    -ChoicesPath .\.network-state\choices.json `
+    -DeploymentParameters $selectedParameters -LookbackDays 7 `
+    -PrivateClientCidrs $approvedClientPrefixes -NonInteractive -WhatIf -AsJson
+$reviewJson | Set-Content .\.network-state\review.json
+$review = $reviewJson | ConvertFrom-Json
+
+.\scripts\New-ClaudeNetworkEdge.ps1 -ReviewPath .\.network-state\review.json -WhatIf
+```
+
+The second command prints the **same frozen cost/action/impact summary** and
+authorizes nothing. Reviews expire after 30 minutes and fail if their
+fingerprint or reviewed resource state changes. The executor does not accept
+a legacy `-ConfirmApimChange` flag as a substitute for this review.
+
+For an unattended approved plan:
+
+```powershell
+.\scripts\New-ClaudeNetworkEdge.ps1 -ReviewPath .\.network-state\review.json `
+    -NonInteractive -Confirm:$false `
+    -ImpactAcknowledgement $review.Plan.Impact.Acknowledgement
+```
+
+If history is incomplete, add `-AcceptUnknownImpact` **only after reviewing
+the listed blind spots**. If prices are incomplete, `-AcceptUnknownCosts` is
+another deliberate acknowledgement, not a zero-cost assumption. Alternatively
+approve the exact plan fingerprint. Interactive execution requires typing
+`APPLY <fingerprint>` once, explicitly approving the full change/cost plan
+**and** its affected-user list and warnings. No Azure write precedes it.
+
+Removal uses the same review contract:
+
+```powershell
+$removalJson = .\scripts\Get-ClaudeNetworkRemovalPlan.ps1 `
+    -StatePath .\.network-state\edge.json -LookbackDays 7 -AsJson
+$removalJson | Set-Content .\.network-state\remove-review.json
+$removal = $removalJson | ConvertFrom-Json
+.\scripts\Remove-ClaudeNetworkEdge.ps1 -StatePath .\.network-state\edge.json `
+    -ReviewPath .\.network-state\remove-review.json -RestoreApim -WhatIf
+```
+
+Approve its exact impact token and cost/coverage warnings before omitting
+WhatIf. The remaining endpoint must actually serve clients; restoring a
+recorded VNet state can disconnect a private backend. Already-removed state
+remains a no-op.
+
 ### 1. Discover before choosing
 
 ```powershell
@@ -644,3 +785,4 @@ evaluation.
 [ddos]: https://learn.microsoft.com/azure/ddos-protection/ddos-protection-overview
 [scrubbing]: https://learn.microsoft.com/azure/web-application-firewall/ag/waf-sensitive-data-protection
 [frontdoor]: https://learn.microsoft.com/azure/frontdoor/standard-premium/how-to-enable-private-link-apim
+[ip-masking]: https://learn.microsoft.com/azure/azure-monitor/app/ip-collection
