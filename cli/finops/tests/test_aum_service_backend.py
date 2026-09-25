@@ -135,12 +135,13 @@ def test_service_request_detail_rechecks_authority_instead_of_serving_cache():
     assert failure.value.code == 4
 
 
-async def test_service_terminal_hides_unoffered_views_and_opens_real_core_tabs():
+@pytest.mark.parametrize("size", [(80, 24), (160, 48)])
+async def test_service_terminal_hides_unoffered_views_and_opens_real_core_tabs(size):
     from claude_finops.tui import FinOpsApp
     from textual.widgets import TabbedContent
     backend, calls = service()
     app = FinOpsApp(Engine(backend, "2026-09"), CONFIG, first_run=False)
-    async with app.run_test(size=(100, 32)) as pilot:
+    async with app.run_test(size=size) as pilot:
         await pilot.pause(.2)
         await app.workers.wait_for_complete()
         await pilot.pause(.2)
@@ -152,6 +153,7 @@ async def test_service_terminal_hides_unoffered_views_and_opens_real_core_tabs()
             await pilot.pause(.2)
             await app.workers.wait_for_complete()
             assert tab in app.data
+            assert app.query_one("#identity").region.width <= size[0]
         assert not any("observability" in call.url.path or "gateway-apply" in call.url.path for call in calls)
 
 
@@ -281,3 +283,4 @@ async def test_service_people_do_not_require_catalog_rows_for_observed_search():
         assert app.data["people"]["items"][0]["scope_id"] == OID
         query = next(call.url.params for call in calls if call.url.path == "/api/v1/people")
         assert "department_id" not in query and "organization_id" not in query
+        assert sum(call.url.path == "/api/v1/people" for call in calls) == 1

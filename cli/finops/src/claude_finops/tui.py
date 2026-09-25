@@ -326,13 +326,15 @@ class FinOpsApp(FeatureUI, App):
                 departments = [dict(id="__authorized__", name="All authorized observed people")] + departments + [dict(row, name=row["name"] + " (unit, including teams)")
                     for row in catalog.get("organizations", []) if not row.get("scope_context")]
             labels = self.present(departments)
-            select.set_options([(label["name"], row["id"]) for row, label in zip(departments, labels)])
             if self.team not in {row["id"] for row in departments}:
                 self.team = ""
             if not self.team and departments:
                 self.team = departments[0]["id"]
+            with select.prevent(Select.Changed):
+                select.set_options([(label["name"], row["id"]) for row, label in zip(departments, labels)])
+                if self.team:
+                    select.value = self.team
             if self.team:
-                select.value = self.team
                 paging = {"cursor": self.people_cursor} if enabled(self.feature_caps, "people_cursor") else {"offset": self.people_offset}
                 return await asyncio.to_thread(read, "people", **self.engine.backend.people_filter(self.team),
                                                 query=self.people_query, limit=50, **paging)
