@@ -2,8 +2,10 @@
 
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Static
+from datetime import datetime, timezone
 
 from .rules import human
+from .rules import month_window
 from .views import money
 
 
@@ -124,6 +126,19 @@ class Dashboard(Vertical):
         known = [r.get("forecast_tokens") for r in roots]
         forecast = human(sum(known)) if known and all(isinstance(v, (int, float)) for v in known) else "unknown"
         lines.append(f"Forecast {forecast} tokens (server)")
+        start, end = month_window(self.app.engine.month)
+        first = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        last = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        as_of = data.get("overview", {}).get("generated_at")
+        now = datetime.fromisoformat(as_of.replace("Z", "+00:00")) if as_of else datetime.now(timezone.utc)
+        elapsed = max(1, (min(last, now) - first).total_seconds() / 86400)
+        total = data.get("overview", {}).get("totals", {}).get("total_tokens")
+        if total is not None:
+            burn = human(round(total / elapsed))
+            if panel.size.height < 10:
+                lines[-1] = f"Forecast {forecast}; pace {burn}/day"
+            else:
+                lines.append(f"Burn {burn} tokens/day (calendar pace)")
         if panel.size.height >= 10:
             lines.append("UTC daily buckets | cost is not an invoice")
             if data.get("trends", {}).get("note"):
@@ -135,15 +150,19 @@ class Dashboard(Vertical):
         panel.detail = {"units": raw.get("ranking"), "teams": raw.get("teams"), "catalog": raw.get("catalog")}
         catalog = data.get("catalog", {})
         modes = {r["id"]: enforcement_badge(r) for key in ("organizations", "departments") for r in catalog.get(key, [])}
-        items = [("U", row) for row in data.get("ranking", {}).get("items", [])]
+        dimension = data.get("ranking", {}).get("dimension", "organization")
+        kind = {"organization": "U", "department": "T", "user": "P", "model": "M", "runtime": "S",
+                "tier": "Q", "project": "Q"}.get(dimension, "U")
+        panel.border_title = f"Top {dimension} / teams"
+        items = [(kind, row) for row in data.get("ranking", {}).get("items", [])]
         items += [("T", row) for row in data.get("teams", {}).get("items", [])]
         if query:
             items = [(kind, row) for kind, row in items if query.casefold() in str(row).casefold()]
         maximum = max((row.get("total_tokens", 0) for _, row in items), default=1) or 1
         lines = []
         available = max(2, panel.size.height - 2)
-        units = [item for item in items if item[0] == "U"][:max(1, available // 2)]
-        teams = [item for item in items if item[0] == "T"][:max(1, available - len(units))]
+        units = items[:max(1, available // 2)]
+        teams = [item for item in items if item not in units][:max(1, available - len(units))]
         for kind, row in units + teams:
             amount = row.get("total_tokens", 0)
             bar = ("#" if ascii_only else "━") * max(1, round(amount / maximum * 8))

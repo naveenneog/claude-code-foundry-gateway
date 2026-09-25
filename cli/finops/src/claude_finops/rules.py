@@ -22,6 +22,19 @@ def month_window(month: str) -> tuple[str, str]:
     return f"{start}T00:00:00Z", f"{end}T00:00:00Z"
 
 
+def query_window(month, start=None, end=None):
+    default_start, default_end = month_window(month)
+    start, end = start or default_start, end or default_end
+    try:
+        first = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        last = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        if first.tzinfo is None or last.tzinfo is None or last <= first:
+            raise ValueError()
+    except (ValueError, TypeError):
+        raise FinOpsError("Use an increasing ISO time range with UTC offsets, for example 2026-09-01T00:00:00Z.") from None
+    return start, end
+
+
 def parse_tokens(text: str | int) -> int:
     value = str(text).strip().replace(",", "")
     match = re.fullmatch(r"(\d+(?:\.\d+)?)([kKmMbB]?)", value)
@@ -43,6 +56,24 @@ def can_edit(identity: dict) -> bool:
 def require_owner(identity: dict) -> None:
     if not can_edit(identity):
         raise FinOpsError("Read-only role. Ask an Owner to make this change; manager writes are not enabled.", 4)
+
+
+def can_budget_write(identity, kind, key, department=None):
+    if can_edit(identity):
+        return True
+    scope = identity.get("manager_scope")
+    if identity.get("role") != "member" or not isinstance(scope, dict):
+        return False
+    if kind == "department":
+        return key in scope.get("writable_department_ids", [])
+    if kind == "user":
+        return department in {row.get("id") for row in scope.get("departments", []) if isinstance(row, dict)}
+    return False
+
+
+def require_budget_write(identity, kind, key, department=None):
+    if not can_budget_write(identity, kind, key, department):
+        raise FinOpsError("Read-only for this scope. Ask its Owner or parent-scope manager to make this change.", 4)
 
 
 def scope_type(value: str) -> str:

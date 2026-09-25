@@ -74,11 +74,11 @@ def discover(*, backend=None, subscription=None, resource_group=None, apim_name=
     mode = choose("backend", choices, selected=backend, default=choices[0]["id"], interactive=interactive,
                   picker=picker)["id"]
     config = Config(backend=mode, subscription=sub, resource_group=rg, apim_name=apim)
+    config.tenant_id = selected_sub.get("tenantId", "")
     portal = dict(tenant_id=selected_sub.get("tenantId"), subscription_id=sub,
                   apim_resource_id=selected_apim["id"])
     if mode == "turnstile":
         config.url, config.scope = integration["url"], integration["scope"]
-        return {"config": config.validate().public(), "portal": portal}
 
     def arm(resource_id, version):
         return json.loads(runner("rest", "--method", "get", "--url",
@@ -97,13 +97,20 @@ def discover(*, backend=None, subscription=None, resource_group=None, apim_name=
             break
         except (FinOpsError, KeyError):
             continue
-    workspaces = json.loads(runner("monitor", "log-analytics", "workspace", "list",
-                                  "--subscription", sub, "-o", "json"))
-    selected_ws = choose("Log Analytics workspace", workspaces, selected=workspace, default=preferred_workspace,
-                         interactive=interactive, picker=picker)
+    try:
+        workspaces = json.loads(runner("monitor", "log-analytics", "workspace", "list",
+                                      "--subscription", sub, "-o", "json"))
+        selected_ws = choose("Log Analytics workspace", workspaces, selected=workspace, default=preferred_workspace,
+                             interactive=interactive, picker=picker)
+    except FinOpsError:
+        if mode == "turnstile" and not workspace:
+            return {"config": config.validate().public(), "portal": portal,
+                    "ledger_note": "Turnstile is usable; ledger discovery needs an accessible workspace or explicit workspace selection."}
+        raise
     customer_id = selected_ws.get("customerId") or selected_ws.get("properties", {}).get("customerId")
     if not customer_id:
         customer_id = arm(selected_ws["id"], "2023-09-01")["properties"]["customerId"]
     config.workspace = customer_id
+    config.workspace_resource_id = selected_ws["id"]
     portal["workspace_resource_id"] = selected_ws["id"]
     return {"config": config.validate().public(), "portal": portal}

@@ -59,7 +59,7 @@ async def test_dashboard_panels_fit_and_receive_keyboard_focus(size):
         assert len(app.screen_stack) == 2
 
 
-async def test_slash_filters_current_table_and_lookup_remains_available():
+async def test_local_filter_and_revision_four_slash_lookup():
     app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"))
     async with app.run_test(size=(80, 24)) as pilot:
         await pilot.pause(.25)
@@ -67,11 +67,11 @@ async def test_slash_filters_current_table_and_lookup_remains_available():
         await pilot.press("2")
         await pilot.pause(.25)
         await app.workers.wait_for_complete()
-        await pilot.press("/")
+        await pilot.press("ctrl+f")
         app.query_one("#quick-filter", Input).value = "sales-emea"
         await pilot.pause()
         assert len(app.records["budgets"]) == 1
-        await pilot.press("escape", "ctrl+f")
+        await pilot.press("escape", "/")
         await pilot.pause()
         assert app.screen.query_one("#lookup-query", Input)
 
@@ -131,7 +131,7 @@ async def test_redacted_queries_do_not_leak_through_input_or_filter_echo():
         assert app.query_one("#people-query", Input).value == secret_id
         assert app.query_one("#people-query", Input).password
         assert secret_id not in app.export_screenshot()
-        await pilot.press("/")
+        await pilot.press("ctrl+f")
         app.query_one("#quick-filter", Input).value = "private@example.org"
         await pilot.pause(.25)
         assert "private@example.org" not in app.export_screenshot()

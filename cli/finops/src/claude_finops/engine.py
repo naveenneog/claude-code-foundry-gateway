@@ -4,24 +4,36 @@ import time
 
 from .errors import FinOpsError
 from .rules import (allocation_left, apply_state, identifier, month_window, parse_tokens,
-                    require_owner, scope_type, validate_budget)
+                    require_owner, require_budget_write, scope_type, validate_budget)
 from .scope import managed_catalog, profile, require_read
+from .feature_engine import FeatureEngine
+from .capabilities import READ_FEATURES
 
 
-class Engine:
+class Engine(FeatureEngine):
     def __init__(self, backend, month=None):
         self.backend = backend
         self.month = month or datetime.now(timezone.utc).strftime("%Y-%m")
         self._identity = None
+        self._capabilities = None
         month_window(self.month)
 
     def read(self, resource, **params):
         if resource == "whoami":
+            previous = self._identity
             self._identity = self.backend.read(resource, month=self.month, **params)
+            identity_keys = ("id", "email", "role", "manager_scope")
+            if previous and tuple(previous.get(k) for k in identity_keys) != tuple(self._identity.get(k) for k in identity_keys):
+                self._capabilities = None
             return self._identity
         if self._identity is None:
             self.read("whoami")
-        require_read(self._identity, resource, params)
+        if resource in READ_FEATURES:
+            self.require_feature(READ_FEATURES[resource])
+        else:
+            require_read(self._identity, resource, params)
+        if resource == "requests" and params.get("cursor"):
+            self.require_feature("request_cursor")
         result = self.backend.read(resource, month=self.month, **params)
         return managed_catalog(self._identity, result) if resource == "catalog" else result
 
@@ -51,8 +63,8 @@ class Engine:
 
     def budget_change(self, kind, key, amount=None, *, remove=False, apply=False,
                       confirm=None, warning=None, department_id=None):
-        require_owner(self.read("whoami"))
         kind, key = scope_type(kind), identifier(key)
+        require_budget_write(self.read("whoami"), kind, key, department_id)
         rows = self.read("budgets")["items"]
         if kind == "user":
             if not department_id:
@@ -203,6 +215,8 @@ class Engine:
         text = text.strip()[:200]
         if not text:
             return []
+        if self.has_feature("global_search"):
+            return self.read("global_search", query=text, limit=50)["items"]
         catalog = self.read("catalog")
         catalog = managed_catalog(self._identity, catalog, context=False)
         result = []
@@ -213,8 +227,13 @@ class Engine:
         for collection, kind in (("organizations", "unit"), ("departments", "team")):
             result += [dict(kind=kind, id=row["id"], name=row["name"], tab="budgets")
                        for row in catalog[collection] if matches(row["id"] + " " + row["name"])]
+        observed = self.read("distribution", dimension="model", limit=50)["items"]
+        result += [dict(kind="model", id=model["id"], name=model["name"], tab="usage")
+                   for model in observed if matches(model["name"])]
+        names = {model["name"] for model in observed}
         for tier in self.read("tiers")["items"]:
-            result += [dict(kind="model", id=model, name=model, tab="usage") for model in tier["models"] if matches(model)]
+            result += [dict(kind="configured-model", id=model, name=model, tab="governance")
+                       for model in tier["models"] if model not in names and matches(model)]
         if department_id:
             people = self.read("people", department_id=department_id, query=text, offset=0, limit=20)
             result += [dict(kind="person", id=row["scope_id"], name=row["scope_name"], tab="people")

@@ -1,14 +1,31 @@
 from .rules import human, apply_state
+from datetime import datetime, timezone
+
+
+def time_label(value, utc=False):
+    if not value:
+        return "unknown"
+    try:
+        stamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if stamp.tzinfo is None:
+            return str(value)
+        local = stamp.astimezone(timezone.utc) if utc else stamp.astimezone()
+        return local.strftime("%m-%d %H:%M %z")
+    except ValueError:
+        return str(value)
 
 TABS = [("overview", "1 Overview"), ("budgets", "2 Budgets"), ("people", "3 People"),
         ("governance", "4 Governance"), ("usage", "5 Usage"), ("trends", "6 Trends"),
         ("requests", "7 Requests"), ("anomalies", "8 Anomalies"), ("settings", "0 Settings")]
 DIMENSIONS = [("Units", "organization"), ("Teams", "department"), ("People", "user"),
-              ("Models", "model"), ("Surfaces", "runtime")]
+              ("Models", "model"), ("Surfaces", "runtime"), ("Tiers", "tier")]
 
 
-def view_rows(tab, data, *, ascii_only=False):
+def view_rows(tab, data, *, ascii_only=False, utc=False):
     """Return columns, display cells, exact row records and a context line."""
+    if tab in {"ask", "approvals", "advanced"} or (tab == "trends" and "comparison" in data):
+        from .feature_views import feature_rows
+        return feature_rows(tab, data)
     rows, records = [], []
     note = data.get("note", "")
     if tab == "overview":
@@ -84,27 +101,27 @@ def view_rows(tab, data, *, ascii_only=False):
             records.append(item)
         note = note or "Top 100 server-ranked rows. Estimates, not invoice costs. Enter: complete metrics."
     elif tab == "trends":
-        columns = ["Bucket (UTC)", "Tokens", "Volume", "Est. USD"]
+        columns = ["Bucket (offset)", "Tokens", "Volume", "Est. USD"]
         points = data.get("points", [])
         maximum = max((p["totals"]["total_tokens"] for p in points), default=1) or 1
         for item in points:
             total = item["totals"]
             bar = ("#" if ascii_only else "█") * max(1, round(total["total_tokens"] / maximum * 16))
-            rows.append((item["bucket_start"][:16].replace("T", " "), human(total["total_tokens"]), bar,
+            rows.append((time_label(item["bucket_start"], utc), human(total["total_tokens"]), bar,
                          money(total.get("estimated_cost"))))
             records.append(item)
         note = note or "UTC buckets. Bar length compares token volume within this window."
     elif tab == "requests":
-        columns = ["Request id", "Time (UTC)", "Person", "Model", "Tokens", "HTTP"]
+        columns = ["Request id", "Time (offset)", "Person", "Model", "Tokens", "HTTP"]
         for item in data.get("items", []):
-            rows.append((item["request_id"], item.get("timestamp", "")[11:19], item.get("user_name") or item.get("user_id", ""),
+            rows.append((item["request_id"], time_label(item.get("timestamp"), utc), item.get("user_name") or item.get("user_id", ""),
                          item.get("model_name", ""), human(item.get("total_tokens")), str(item.get("status_code") or "?")))
             records.append(item)
         note = data.get("note") or "Bounded server window; n/p page locally. Enter opens the complete request."
     elif tab == "anomalies":
-        columns = ["Severity", "Finding", "Scope", "Detected (UTC)"]
+        columns = ["Severity", "Finding", "Scope", "Detected (offset)"]
         for item in data.get("items", []):
-            rows.append((item["severity"], item["title"], item.get("dimension_name", ""), item["detected_at"][:16]))
+            rows.append((item["severity"], item["title"], item.get("dimension_name", ""), time_label(item["detected_at"], utc)))
             records.append(item)
         note = note or "Computed findings are read-only. This API has no acknowledge or false-positive action."
     else:

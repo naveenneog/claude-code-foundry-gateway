@@ -33,6 +33,7 @@ foreach ($value in $values) {
 }
 $registry = @(ConvertFrom-ClaudeBuRegistry $nv['bu-registry'])
 $parents = ConvertFrom-ClaudeBuParents $nv['bu-parents']
+$modes = ConvertFrom-ClaudeBuModes $nv['bu-modes']
 $result = $null
 
 switch ([string]$request.action) {
@@ -45,7 +46,7 @@ switch ([string]$request.action) {
                 models = @($nv["models-$tier"].Trim(',') -split ',' | Where-Object { $_ })
             }
         }
-        $catalog = ConvertTo-ClaudeTurnstileCatalog -Registry $registry -Parents $parents
+        $catalog = ConvertTo-ClaudeTurnstileCatalog -Registry $registry -Parents $parents -Modes $modes
         $result = [ordered]@{
             catalog = $catalog; tiers = @($tiers)
             registry = @($registry); parents = $parents
@@ -99,6 +100,21 @@ switch ([string]$request.action) {
             }
         }
         $result = @{ verified = $true; effect = 'Tier script completed. Read tier show to verify limits.' }
+    }
+    'mode' {
+        if ($nv['turnstile-integration'] -match 'governanceAuthority=Turnstile') { throw 'Turnstile owns modes. Use its backend.' }
+        $modeArgs = @{
+            Id = [string]$request.parameters.scope_id
+            Mode = [string]$request.body.mode
+            ResourceGroup = $ResourceGroup
+            ApimName = $ApimName
+        }
+        if ($null -ne $request.body.allowance_percent) { $modeArgs.AllowancePercent = [int]$request.body.allowance_percent }
+        & (Join-Path $PSScriptRoot 'Set-ClaudeBusinessUnit.ps1') @modeArgs 6>$null | Out-Null
+        $checked = ConvertFrom-ClaudeBuModes (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-modes')
+        $attributes = Get-ClaudeBudgetModeAttributes -Id $modeArgs.Id -Modes $checked
+        if ($attributes.enforcement -ne $request.body.mode) { throw 'Mode read-back did not match.' }
+        $result = @{ verified = $true; attributes = $attributes }
     }
     'catalog' {
         if ($nv['turnstile-integration'] -match 'governanceAuthority=Turnstile') { throw 'Turnstile owns the catalog. Use its backend.' }

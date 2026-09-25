@@ -10,10 +10,11 @@ import httpx
 from .backend import Backend
 from .config import az
 from .errors import FinOpsError, http_error
-from .rules import identifier, month_window
+from .rules import identifier, month_window, query_window
+from .capabilities import current_capabilities
 
 DIMENSIONS = {"organization": "business_unit", "department": "business_unit", "user": "actor",
-              "model": "model", "runtime": "client_surface"}
+              "model": "model", "runtime": "client_surface", "tier": "tier"}
 
 
 class DirectBackend(Backend):
@@ -68,8 +69,8 @@ class DirectBackend(Backend):
         finally:
             access = ""
 
-    def _ledger(self, month):
-        start, end = month_window(month)
+    def _ledger(self, month, start=None, end=None):
+        start, end = query_window(month, start, end)
         source = (self.root / "analytics" / "chargeback-ledger.kql").read_text(encoding="utf-8-sig")
         return source.replace("let _from = ago(1d);", f"let _from = datetime({start});").replace(
             "let _to = now();", f"let _to = datetime({end});")
@@ -82,6 +83,10 @@ class DirectBackend(Backend):
         return az(*args, *(("--subscription", self.config.subscription) if self.config.subscription else ()))
 
     def read(self, resource, **params):
+        if resource == "capabilities":
+            result = current_capabilities(params.get("identity") or self.read("whoami"))
+            result["features"]["bulk_budget"] = {"enabled": False, "actions": []}
+            return result
         if resource == "whoami":
             account = json.loads(self._az("account", "show", "-o", "json"))
             can_write = False
@@ -126,9 +131,10 @@ class DirectBackend(Backend):
                                  warning_threshold_percent=80, historical_limit=False))
             return dict(items=rows, period=month, note="Current gateway limits; historical budget versions are unavailable.",
                         quota_org=state["quota_org"])
-        ledger = self._ledger(params.get("month", datetime.now(timezone.utc).strftime("%Y-%m")))
+        ledger = self._ledger(params.get("month", datetime.now(timezone.utc).strftime("%Y-%m")),
+                              params.get("from"), params.get("to"))
         for key, column in (("department_id", "business_unit"), ("organization_id", "business_unit"),
-                            ("model_id", "model"), ("user_id", "actor")):
+                            ("model_id", "model"), ("user_id", "actor"), ("runtime", "client_surface"), ("tier", "tier")):
             if params.get(key):
                 ledger += f"\n| where {column} == {self._quote(params[key])}"
         if resource == "people":
@@ -159,9 +165,10 @@ class DirectBackend(Backend):
                     raise FinOpsError("Request not found in this month's ledger.", 5)
                 return rows[0]
             return dict(items=rows, page={"next_cursor": None}, note="Ledger lower bound: per-request cache and cost are unknown.")
-        start, end = month_window(params["month"])
+        start, end = query_window(params["month"], params.get("from"), params.get("to"))
         cost = f"ClaudeCost(datetime({start}), datetime({end}))"
-        for key, column in (("department_id", "business_unit"), ("model_id", "model"), ("user_id", "actor")):
+        for key, column in (("department_id", "business_unit"), ("model_id", "model"), ("user_id", "actor"),
+                            ("runtime", "client_surface"), ("tier", "tier")):
             if params.get(key):
                 cost += f"\n| where {column} == {self._quote(params[key])}"
         if params.get("organization_id"):

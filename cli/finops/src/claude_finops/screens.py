@@ -54,6 +54,12 @@ class MonthScreen(ModalScreen):
             self.query_one("#month-error", Static).update(str(error))
             return
         self.app.engine.month = value
+        self.app.reset_paging()
+        self.app.scope_filters.pop("from", None)
+        self.app.scope_filters.pop("to", None)
+        self.app.request_before = ""
+        self.app.query_one("#request-before", Input).value = ""
+        self.app.update_filter_chips()
         self.dismiss()
         self.app.action_refresh()
 
@@ -68,15 +74,35 @@ class LookupScreen(ModalScreen):
     def compose(self):
         with Vertical(id="lookup-dialog"):
             yield Label("Find units, teams, models; people in the selected team", markup=False)
+            yield Select([], prompt="Choose a team for people (global search when advertised)", id="lookup-team")
             yield Input(placeholder="Search; request:<id> for a request. Enter to search.", id="lookup-query",
                         password=self.app.redactor.enabled)
             yield Static("People are searched on the server, never loaded in full.", id="lookup-status", markup=False)
             yield DataTable(id="lookup-results", cursor_type="row", zebra_stripes=True)
 
+    @work(exclusive=True, group="lookup-catalog")
+    async def on_mount(self):
+        self.query_one("#lookup-query", Input).focus()
+        try:
+            catalog = await asyncio.to_thread(self.app.engine.read, "catalog")
+            rows = catalog.get("departments", [])
+            shown = self.app.present(rows)
+            selector = self.query_one("#lookup-team", Select)
+            selector.set_options([(label["name"], row["id"]) for row, label in zip(rows, shown)])
+            if self.app.team in {row["id"] for row in rows}:
+                selector.value = self.app.team
+        except FinOpsError as error:
+            self.query_one("#lookup-status", Static).update(str(error))
+
+    @on(Select.Changed, "#lookup-team")
+    def choose_team(self, event):
+        if event.value is not Select.BLANK:
+            self.app.team = str(event.value)
+
     @on(Input.Submitted, "#lookup-query")
     @work(exclusive=True)
     async def search(self):
-        query = self.query_one(Input).value
+        query = self.query_one("#lookup-query", Input).value
         self.query_one("#lookup-status", Static).update("Searching...")
         try:
             self.results = await asyncio.to_thread(self.app.engine.lookup, query, self.app.team)
@@ -144,6 +170,7 @@ class ChangeScreen(ModalScreen):
                 yield Button("Cancel", id="cancel-change")
                 yield Button("Preview", id="preview", variant="default")
                 yield Button("Apply", id="apply-change", variant="primary", disabled=True)
+                yield Button("Request difference", id="request-difference", classes="request-difference")
 
     def value(self, key, fallback=""):
         result = self.query(f"#{key}")
@@ -204,6 +231,15 @@ class ChangeScreen(ModalScreen):
         except FinOpsError as error:
             self.query_one("#form-status", Static).update(str(error))
             self.query_one("#apply-change", Button).disabled = True
+            if "headroom" in str(error).lower() and self.app.engine.has_feature("approvals", "request"):
+                self.query_one("#request-difference", Button).display = True
+
+    @on(Button.Pressed, "#request-difference")
+    def request_difference(self):
+        amount = self.value("amount")
+        row = self.row
+        self.dismiss()
+        self.app.action_request_budget(amount=amount, row=row)
 
     @on(Button.Pressed, "#apply-change")
     @work(exclusive=True, group="change")

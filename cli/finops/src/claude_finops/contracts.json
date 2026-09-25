@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "discovery": "GET /api/v1/finops/capabilities",
+  "advertisement": {
+    "schema_version": 1,
+    "features": {
+      "approvals": {"enabled": true, "actions": ["read", "request", "approve", "reject", "escalate"]},
+      "boosts": {"enabled": true, "actions": ["read", "create", "revoke"]},
+      "notifications": {"enabled": true, "actions": ["read", "mark_read"]},
+      "request_cursor": {"enabled": true, "actions": ["read"]},
+      "conditional_writes": {"enabled": true, "actions": ["write"]},
+      "anomaly_dispositions": {"enabled": true, "actions": ["read", "acknowledge", "false_positive"]},
+      "global_search": {"enabled": true, "actions": ["read"]}
+    }
+  },
+  "endpoints": {
+    "approvals": {
+      "list": "GET /api/v1/budget-requests?view=mine|waiting|history&limit=50&cursor=",
+      "get": "GET /api/v1/budget-requests/{request_id}",
+      "create": "POST /api/v1/budget-requests",
+      "create_body": {"scope_type": "organization|department|user", "scope_id": "stable-id", "period": "YYYY-MM", "token_limit": 1000000, "reason": "required", "expires_at": null},
+      "decision": "POST /api/v1/budget-requests/{request_id}/decisions",
+      "decision_body": {"decision": "approve|reject", "reason": "required", "revision": "opaque-revision"},
+      "escalate": "POST /api/v1/budget-requests/{request_id}/escalations",
+      "escalate_body": {"reason": "required", "revision": "opaque-revision"},
+      "record_fields": ["id", "requester_id", "scope_type", "scope_id", "period", "token_limit", "reason", "state", "revision", "allowed_actions", "created_at"],
+      "rules": "Server scopes every query; checks parent headroom atomically; never allows self-approval. Decisions reserve allocation and return apply status."
+    },
+    "boosts": {
+      "list": "GET /api/v1/budget-boosts?period=YYYY-MM&limit=50&cursor=",
+      "create": "POST /api/v1/budget-boosts",
+      "create_body": {"scope_type": "user", "scope_id": "stable-id", "department_id": "managed-team", "window": "daily|monthly", "extra_tokens": 1000000, "expires_at": "UTC ISO8601", "reason": "required"},
+      "revoke": "DELETE /api/v1/budget-boosts/{boost_id}",
+      "rules": "Server reserves parent headroom, restores the baseline on expiry/revoke, audits changes and returns expiry/apply state."
+    },
+    "notifications": {
+      "list": "GET /api/v1/notifications?limit=50&cursor=",
+      "mark_read": "POST /api/v1/notifications/{notification_id}/read",
+      "record_fields": ["id", "title", "body", "severity", "created_at", "read_at", "scope_type", "scope_id"]
+    },
+    "request_cursor": {
+      "list": "GET /api/v1/observability/requests?from=ISO8601&to=ISO8601&limit=50&cursor=opaque",
+      "response": {"items": [], "page": {"next_cursor": null, "has_more": false}},
+      "rules": "Cursor binds caller, filters and stable snapshot; ordered by timestamp and request_id so timestamp ties are not lost."
+    },
+    "conditional_writes": {
+      "read": "GET /api/v1/enterprise-catalog and GET /api/v1/gateway-tiers return ETag",
+      "write": "PUT same endpoint requires If-Match",
+      "rules": "412 on stale revision; no mutation on mismatch. Client never retries a write."
+    },
+    "anomaly_dispositions": {
+      "write": "PUT /api/v1/observability/anomalies/{anomaly_id}/disposition",
+      "body": {"status": "acknowledged|false_positive", "reason": "required"},
+      "rules": "Server checks the finding's scope and records actor/time; read response includes disposition and allowed_actions."
+    },
+    "global_search": {
+      "list": "GET /api/v1/search?query=text&limit=50&cursor=opaque",
+      "response": {"items": [{"kind": "unit|team|person|model|request", "id": "stable-id", "name": "display label", "department_id": "required for person"}], "page": {"next_cursor": null}},
+      "rules": "Server scopes and ranks all kinds. Without this advertised feature, the client uses catalog lookup and an explicit team selector for server-side people search."
+    }
+  },
+  "common": {
+    "lists": "items plus page.next_cursor and page.has_more; all server-filtered",
+    "mutations": "Idempotency-Key UUID header; return the saved record and optional apply object",
+    "errors": {"401": "sign-in required", "403": "not in scope", "409": "allocation or transition conflict", "412": "stale revision", "422": "invalid fields"},
+    "security": "Advertisement is role-aware but never replaces server authorization. No credentials or bearer tokens in responses."
+  }
+}

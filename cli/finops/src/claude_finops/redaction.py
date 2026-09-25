@@ -8,7 +8,7 @@ GUID = re.compile(r"\b[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\b")
 HOST = re.compile(r"\b[A-Za-z0-9.-]+\.(?:azurewebsites\.net|azure-api\.net)\b", re.I)
 URL = re.compile(r"https?://[^\s\"'<>]+", re.I)
 PERSON_KEYS = {"email", "user_name", "user_id", "actor", "updated_by", "changed_by", "created_by"}
-PRIVATE_TEXT = {"description", "reason", "error_message", "ingest_error"}
+PRIVATE_TEXT = {"description", "reason", "error_message", "ingest_error", "message", "content", "question", "original_question"}
 PRIVATE_FIELDS = {"tenant", "tenant_id", "app_id", "client_id", "subscription_id", "workspace",
                   "repository", "resource_group", "apim_name", "entra_group", "external_ref"}
 ENUM_FIELDS = {"role", "method", "status", "scope_type", "severity", "kind", "enforcement",

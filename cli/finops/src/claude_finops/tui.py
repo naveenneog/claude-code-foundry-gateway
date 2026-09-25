@@ -7,7 +7,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.theme import Theme
-from textual.widgets import Button, DataTable, Input, Select, Static, TabbedContent, TabPane
+from textual.widgets import Button, DataTable, Input, Select, Static, TabbedContent, TabPane, TextArea
 
 from .errors import FinOpsError
 from .accessibility import AsciiFilter
@@ -15,26 +15,35 @@ from .brand import BANNER, COMPACT, PRODUCT
 from .dashboard import Dashboard, DashboardPanel, enforcement_badge
 from .output import safe_text
 from .palette import FinOpsCommands
-from .rules import can_edit
+from .rules import can_edit, can_budget_write
 from .redaction import Redactor
 from .scope import scope_label, visible_tabs
 from .screens import ChangeScreen, DetailScreen, ExportScreen, LookupScreen, MonthScreen
 from .views import DIMENSIONS, TABS, view_rows
+from .ui_features import FeatureUI, EXTRA_TABS
+from .capabilities import enabled
 
 
-class FinOpsApp(App):
+class FinOpsApp(FeatureUI, App):
     TITLE = PRODUCT
     CSS_PATH = "terminal.tcss"
     COMMANDS = {FinOpsCommands}
     BINDINGS = [
-        *[Binding(label[0], f"tab('{tab}')", label[2:], show=False) for tab, label in TABS],
-        Binding("/", "filter", "Filter"),
-        Binding("ctrl+f", "lookup", "Lookup", show=False),
+        *[Binding(label[0], f"tab('{tab}')", label[2:], show=False, priority=True) for tab, label in TABS],
+        Binding("/", "lookup", "Lookup"),
+        Binding("ctrl+f", "filter", "Filter rows", show=False),
+        Binding("f", "scope_filters", "Filters", show=False),
+        Binding("v", "load_view", "Views", show=False),
+        Binding("9", "tab('approvals')", "Approvals", show=False, priority=True),
+        Binding("a", "tab('ask')", "Ask", show=False, priority=True),
+        Binding("c", "copy_request", "Copy id", show=False),
+        Binding("o", "open_ledger", "Ledger", show=False),
+        Binding("d", "exact_detail", "Exact detail", show=False),
         Binding("escape", "clear_filter", "Clear filter", show=False),
         Binding("colon", "command_palette", "Commands", key_display=":"),
         Binding("m", "month", "Month"),
         Binding("e", "edit", "Edit"),
-        Binding("a", "apply", "Apply"),
+        Binding("ctrl+a", "apply", "Apply"),
         Binding("n", "next_page", "Next"),
         Binding("p", "previous_page", "Previous"),
         Binding("r", "refresh", "Refresh", show=False),
@@ -42,7 +51,7 @@ class FinOpsApp(App):
         Binding("q", "quit", "Quit"),
     ]
 
-    def __init__(self, engine, config, no_color=False, preview_only=False, redact=False):
+    def __init__(self, engine, config, no_color=False, preview_only=False, redact=False, first_run=None):
         super().__init__()
         self.animation_level = "none"
         self.engine, self.config = engine, config
@@ -63,6 +72,9 @@ class FinOpsApp(App):
         self.records = {}
         self.pending_selection = None
         self.filters = {}
+        self.budget_parent = None
+        self.breadcrumbs = []
+        self.initialize_features(first_run)
         self.register_theme(Theme(name="gateway", primary="#F2A007", accent="#F2A007", secondary="#8FADEC",
                                   foreground="#F2F4FA", background="#0D1117", surface="#161D2D", panel="#1E2761",
                                   warning="#F2A007", error="#FF9292", success="#8DE0AA", dark=True))
@@ -77,11 +89,14 @@ class FinOpsApp(App):
     def compose(self) -> ComposeResult:
         yield Static(COMPACT, id="brand", markup=False)
         yield Static("Signing in through Azure CLI...", id="identity", markup=False)
-        yield Input(placeholder="/ Filter visible rows (Esc clears; Ctrl+F searches the server)", id="quick-filter",
+        yield Static("", id="filter-chips", markup=False)
+        yield Input(placeholder="Filter visible rows (Esc clears; / searches the server)", id="quick-filter",
                     password=self.redactor.enabled)
         with TabbedContent(initial="overview", id="main-tabs"):
-            for tab, title in TABS:
+            for tab, title in TABS + EXTRA_TABS:
                 with TabPane(title, id=tab):
+                    if tab in {"ask", "approvals", "advanced"}:
+                        yield from self.compose_feature(tab)
                     if tab == "people":
                         with Horizontal(classes="toolbar"):
                             yield Select([], id="people-team", prompt="Choose a team")
@@ -107,6 +122,10 @@ class FinOpsApp(App):
                                           ("No color", "no-color"), ("Light", "textual-light")],
                                          value=self.theme, id="theme-choice", allow_blank=False)
                             yield Static("Use --plain for a linear screen-reader view", classes="toolbar-note")
+                        with Horizontal(classes="toolbar"):
+                            yield Button("Profile / backend", id="settings-profile")
+                            yield Button("Sign out", id="settings-signout")
+                            yield Button("Tour", id="settings-tour")
                     yield Static("Loading...", id=f"note-{tab}", classes="context", markup=False)
                     if tab == "overview":
                         yield Dashboard(id="dashboard")
@@ -118,19 +137,21 @@ class FinOpsApp(App):
     def on_mount(self):
         if self.config.ascii:
             self.add_class("ascii")
-        for tab, label in TABS:
-            self.query_one(f"#table-{tab}", DataTable).border_title = label[2:]
+        for tab, label in TABS + EXTRA_TABS:
+            self.query_one(f"#table-{tab}", DataTable).border_title = label if tab == "advanced" else label[2:]
         self.update_brand()
         self.update_key_hints()
+        for tab, _ in EXTRA_TABS:
+            self.query_one("#main-tabs").hide_tab(tab)
 
     def update_key_hints(self):
         if not self.query("#key-hints"):
             return
-        keys = ["/ Filter", ": Command", "m Month"]
+        keys = ["/ Find", ": Command", "f Filters", "m Month"]
         if self.check_action("edit", ()):
             keys.append("e Edit")
         if self.check_action("apply", ()):
-            keys.append("a Apply")
+            keys.append("Ctrl+A Apply")
         if self.check_action("next_page", ()):
             keys.append("n/p Page")
         keys.extend(["? Help", "q Quit"])
@@ -164,15 +185,27 @@ class FinOpsApp(App):
 
     def check_action(self, action, parameters):
         if action == "tab":
+            if len(self.screen_stack) > 1 or isinstance(self.focused, Input):
+                return False
+            if isinstance(self.focused, TextArea) and not self.focused.read_only:
+                return False
             return bool(parameters) and parameters[0] in self.allowed_tabs
         if action == "export":
             return "usage" in self.allowed_tabs
         if action == "edit":
-            return self.editable and self.active in {"budgets", "people", "governance"}
+            if self.redactor.enabled:
+                return False
+            if self.active in {"budgets", "people"}:
+                row = self.selected()
+                return can_budget_write(self.identity, row.get("scope_type"), row.get("scope_id"),
+                                        row.get("parent_scope_id"))
+            return self.editable and self.active == "governance"
         if action == "apply":
             return self.editable and self.active == "governance" and self.engine.backend.name != "Direct"
         if action in {"next_page", "previous_page"}:
             return self.active in {"people", "requests"}
+        if action in {"copy_request", "open_ledger"}:
+            return self.active == "requests" and not self.redactor.enabled
         return True
 
     def action_tab(self, tab):
@@ -189,8 +222,8 @@ class FinOpsApp(App):
         self.action_refresh()
 
     def update_access(self, identity):
-        before = (self.identity.get("role"), self.identity.get("manager_scope"))
-        after = (identity.get("role"), identity.get("manager_scope"))
+        before = tuple(self.identity.get(key) for key in ("id", "email", "role", "manager_scope"))
+        after = tuple(identity.get(key) for key in ("id", "email", "role", "manager_scope"))
         self.identity = identity
         if before == after:
             return
@@ -199,11 +232,8 @@ class FinOpsApp(App):
         if before != after:
             self.data.clear()
             self.records.clear()
-            self.request_filters = {}
-            self.filters = {}
-            self.team = ""
-            self.people_offset = self.request_page = 0
-            for tab, _ in TABS:
+            self.clear_query_context()
+            for tab, _ in TABS + EXTRA_TABS:
                 self.query_one(f"#table-{tab}", DataTable).clear(columns=True)
             self.query_one(Dashboard).clear()
         tabs = self.query_one("#main-tabs", TabbedContent)
@@ -224,6 +254,7 @@ class FinOpsApp(App):
         try:
             identity = await asyncio.to_thread(self.engine.read, "whoami")
             self.update_access(identity)
+            await self.refresh_features()
             if tab not in self.allowed_tabs:
                 return
             data = await self.load_tab(tab)
@@ -243,11 +274,12 @@ class FinOpsApp(App):
                 identity += " | " + scope
             self.query_one("#identity", Static).update(safe_text(identity))
             mode = "[redacted/read-only] " if self.redactor.enabled else ""
-            self.query_one("#status", Static).update(mode + "<Enter> details <Tab> panel <Ctrl+F> lookup <r> refresh")
+            self.query_one("#status", Static).update(mode + "<Enter> details <Tab> panel </> lookup <r> refresh")
             if tab == "overview":
                 self.query_one("#dash-kpis", DashboardPanel).focus()
             else:
                 self.query_one(f"#table-{tab}", DataTable).focus()
+            self.maybe_tour()
         except FinOpsError as error:
             self.data.pop(tab, None)
             self.records.pop(tab, None)
@@ -260,20 +292,25 @@ class FinOpsApp(App):
 
     async def load_tab(self, tab):
         read = self.engine.read
+        if tab in {"ask", "approvals", "advanced"}:
+            return await self.load_feature_tab(tab)
         if tab == "overview":
             overview, budgets, ranking, teams, trends, anomalies, catalog = await asyncio.gather(
-                asyncio.to_thread(read, "overview"), asyncio.to_thread(read, "budgets"),
-                asyncio.to_thread(read, "distribution", dimension="organization", limit=10),
-                asyncio.to_thread(read, "distribution", dimension="department", limit=10),
-                asyncio.to_thread(read, "trends", interval="day", group_by="none"),
-                asyncio.to_thread(read, "anomalies", limit=10),
+                asyncio.to_thread(read, "overview", **self.scope_filters), asyncio.to_thread(read, "budgets"),
+                asyncio.to_thread(read, "distribution", dimension=self.ranking_dimension, limit=10, **self.scope_filters),
+                asyncio.to_thread(read, "distribution", dimension="department", limit=10, **self.scope_filters),
+                asyncio.to_thread(read, "trends", interval="day", group_by="none", **self.scope_filters),
+                asyncio.to_thread(read, "anomalies", limit=10, **self.scope_filters),
                 asyncio.to_thread(read, "catalog"))
             return dict(overview=overview, budgets=budgets, ranking=ranking, teams=teams,
                         trends=trends, anomalies=anomalies, catalog=catalog)
         if tab == "budgets":
             budgets, catalog = await asyncio.gather(asyncio.to_thread(read, "budgets"), asyncio.to_thread(read, "catalog"))
             modes = {row["id"]: enforcement_badge(row) for key in ("organizations", "departments") for row in catalog[key]}
-            return dict(budgets, enforcement_modes=modes)
+            rows = budgets["items"]
+            if self.budget_parent:
+                rows = [row for row in rows if row["scope_id"] == self.budget_parent or row.get("parent_scope_id") == self.budget_parent]
+            return dict(budgets, items=rows, enforcement_modes=modes)
         if tab == "people":
             catalog = await asyncio.to_thread(read, "catalog")
             select = self.query_one("#people-team", Select)
@@ -292,17 +329,26 @@ class FinOpsApp(App):
         if tab == "governance":
             return await asyncio.to_thread(self.engine.governance)
         if tab == "usage":
-            return await asyncio.to_thread(read, "distribution", dimension=self.dimension, limit=100, **self.request_filters)
+            return await asyncio.to_thread(read, "distribution", dimension=self.dimension, limit=100, **(self.scope_filters | self.request_filters))
         if tab == "trends":
-            return await asyncio.to_thread(read, "trends", interval=self.interval, group_by="none")
+            if self.compare_period:
+                return await asyncio.to_thread(self.engine.compare_trends, self.compare_period,
+                                               interval=self.interval, group_by="none", **self.scope_filters)
+            return await asyncio.to_thread(read, "trends", interval=self.interval, group_by="none", **self.scope_filters)
         if tab == "requests":
-            data = await asyncio.to_thread(read, "requests", limit=200, before=self.request_before or None, **self.request_filters)
+            if enabled(self.feature_caps, "request_cursor"):
+                data = await asyncio.to_thread(read, "requests", limit=50, cursor=self.request_cursor,
+                                               before=self.request_before or None, **(self.scope_filters | self.request_filters))
+                return dict(data, all_items=data.get("items", []),
+                            note=f"Server cursor page {len(self.cursor_stack) + 1}; tied timestamps are retained by the server.")
+            data = await asyncio.to_thread(read, "requests", limit=200, before=self.request_before or None,
+                                           **(self.scope_filters | self.request_filters))
             data["all_items"] = data.get("items", [])
             data["items"] = data["all_items"][self.request_page * 50:(self.request_page + 1) * 50]
             data["note"] = f"Page {self.request_page + 1} | newest {len(data['all_items'])} in window (server cap 200). Set Before for older."
             return data
         if tab == "anomalies":
-            return await asyncio.to_thread(read, "anomalies", limit=100)
+            return await asyncio.to_thread(read, "anomalies", limit=100, **self.scope_filters)
         return dict(**self.identity, backend=self.engine.backend.name, month=self.engine.month,
                     url=self.config.url or "(not used)", config="~/.aum/config.json (legacy config supported)",
                     theme=self.theme, ascii=self.config.ascii,
@@ -310,8 +356,9 @@ class FinOpsApp(App):
                     accessibility="--plain, --no-color, --ascii; Tab/Shift+Tab; all states have words")
 
     def render_tab(self, tab, data):
-        _, _, records, _ = view_rows(tab, data, ascii_only=self.config.ascii)
-        columns, rows, _, note = view_rows(tab, self.present(data), ascii_only=self.config.ascii)
+        utc = self.engine.backend.name == "Example"
+        _, _, records, _ = view_rows(tab, data, ascii_only=self.config.ascii, utc=utc)
+        columns, rows, _, note = view_rows(tab, self.present(data), ascii_only=self.config.ascii, utc=utc)
         query = self.filters.get(tab, "")
         if tab == "overview":
             self.query_one(Dashboard).update_data(self.present(data), data, query)
@@ -336,6 +383,32 @@ class FinOpsApp(App):
                     break
             self.pending_selection = None
 
+    @on(Button.Pressed)
+    def extra_button(self, event):
+        if self.feature_button(event.button.id):
+            event.stop()
+
+    @on(Select.Changed, "#approval-view")
+    @on(Select.Changed, "#advanced-view")
+    def extra_select(self, event):
+        self.feature_select(event)
+
+    @on(Input.Submitted, "#ask-question")
+    def ask_submitted(self):
+        self.run_worker(self.ask_current(), group="ask", exclusive=True)
+
+    @on(DataTable.RowHighlighted)
+    def exact_on_focus(self, event):
+        if len(self.screen_stack) != 1 or not event.data_table.display or event.data_table.id != f"table-{self.active}":
+            return
+        row = self.selected()
+        key = row.get("scope_id", row.get("request_id", row.get("id", "")))
+        parent = row.get("parent_scope_id")
+        path = f"AUM / {self.active}" + (f" / {parent}" if parent else "") + (f" / {key}" if key else "")
+        values = {k: v for k, v in row.items() if k in {"used_tokens", "token_limit", "remaining_tokens", "total_tokens", "estimated_cost"}}
+        prefix = "[redacted/read-only] " if self.redactor.enabled else ""
+        self.query_one("#status", Static).update(self.redactor.text(prefix + path + "\n" + ", ".join(f"{k}={v}" for k, v in values.items())))
+
     def action_filter(self):
         field = self.query_one("#quick-filter", Input)
         field.display = True
@@ -357,6 +430,12 @@ class FinOpsApp(App):
         self.query_one("#quick-filter", Input).value = ""
         self.query_one("#quick-filter", Input).display = False
         self.filters.pop(self.active, None)
+        if self.breadcrumbs:
+            tab, parent = self.breadcrumbs.pop()
+            self.budget_parent = parent
+            self.action_tab(tab)
+            self.action_refresh()
+            return
         if self.active in self.data:
             self.render_tab(self.active, self.data[self.active])
         self.query_one("#dash-kpis" if self.active == "overview" else f"#table-{self.active}").focus()
@@ -396,7 +475,7 @@ class FinOpsApp(App):
     def filter_requests(self):
         self.request_filters = {"model_id": self.query_one("#request-model", Input).value or None}
         self.request_before = self.query_one("#request-before", Input).value
-        self.request_page = 0
+        self.reset_paging()
         self.action_refresh()
 
     def selected(self):
@@ -410,6 +489,21 @@ class FinOpsApp(App):
             return
         row = self.selected()
         if row:
+            if self.active == "budgets" and row.get("scope_type") == "organization" and not self.budget_parent:
+                self.breadcrumbs.append(("budgets", None))
+                self.budget_parent = row["scope_id"]
+                self.action_refresh()
+                return
+            if self.active == "budgets" and row.get("scope_type") == "department":
+                self.breadcrumbs.append(("budgets", self.budget_parent))
+                self.team = row["scope_id"]
+                self.action_tab("people")
+                return
+            self.open_detail(row)
+
+    def action_exact_detail(self):
+        row = self.selected()
+        if row:
             self.open_detail(row)
 
     @work(exclusive=True, group="detail")
@@ -417,6 +511,10 @@ class FinOpsApp(App):
         try:
             if self.active == "requests":
                 row = await asyncio.to_thread(self.engine.read, "request", request_id=row["request_id"])
+            elif self.active == "people" and row.get("scope_id"):
+                row = await asyncio.to_thread(self.engine.person_detail, row["scope_id"], row["parent_scope_id"])
+            elif self.active == "advanced" and self.advanced_view in {"releases", "subscriptions"}:
+                row = await asyncio.to_thread(self.engine.read, "release" if self.advanced_view == "releases" else "application", id=row["id"])
             self.push_screen(DetailScreen("Exact values | Esc returns", row))
         except FinOpsError as error:
             self.query_one("#status", Static).update(str(error))
@@ -428,6 +526,7 @@ class FinOpsApp(App):
         if result["kind"] == "team":
             self.team = result["id"]
         elif result["kind"] == "person":
+            self.team = result.get("department_id") or self.team
             self.people_query = result["id"]
             self.query_one("#people-query", Input).value = result["id"]
         elif result["kind"] == "model":
@@ -483,6 +582,13 @@ class FinOpsApp(App):
                 return
             self.people_offset += 50
         elif self.active == "requests":
+            if enabled(self.feature_caps, "request_cursor"):
+                cursor = self.data.get("requests", {}).get("page", {}).get("next_cursor")
+                if cursor:
+                    self.cursor_stack.append(self.request_cursor)
+                    self.request_cursor = cursor
+                    self.action_refresh()
+                return
             if (self.request_page + 1) * 50 >= len(self.data.get("requests", {}).get("all_items", [])):
                 self.notify("End of server window. Set Before to see older requests.")
                 return
@@ -493,21 +599,26 @@ class FinOpsApp(App):
         if self.active == "people":
             self.people_offset = max(0, self.people_offset - 50)
         elif self.active == "requests":
+            if enabled(self.feature_caps, "request_cursor"):
+                if self.cursor_stack:
+                    self.request_cursor = self.cursor_stack.pop()
+                    self.action_refresh()
+                return
             self.request_page = max(0, self.request_page - 1)
         self.action_refresh()
 
     def action_help(self):
-        keys = dict(tabs=", ".join(label for tab, label in TABS if tab in self.allowed_tabs),
+        keys = dict(tabs=", ".join(label for tab, label in TABS + EXTRA_TABS if tab in self.allowed_tabs),
                     navigation="Tab / Shift+Tab changes focus; arrows move; Enter opens exact values; Esc goes back.",
-                    lookup="Ctrl+F searches scopes, people, models and request:<id>; / filters the current view.",
+                    lookup="/ searches scopes, people, models and request:<id>; Ctrl+F filters rows; f sets server filters.",
                     commands=": opens the command palette; m changes month; r refreshes; q quits.",
                     current_view=self.active, role=self.identity.get("role", "unknown"),
-                    pagination="n next / p previous on People and Requests; requests are capped at 200 per window.",
+                    pagination="n next / p previous; cursor pages when advertised, otherwise 200 requests per window.",
                     safety="Preview first, then Apply. Removing or lowering below usage requires the identifier.",
                     freshness="Header time is fetch time, not ingestion time. Request ledger can lag.",
                     limitations="Person budgets do not enforce gateway quotas. Cost is estimated, not an invoice.",
                     sign_in="Run az login. AADSTS50105: ask an admin to assign a Turnstile role.",
-                    access="Members are read-only. Scoped views are enforced by Turnstile.")
+                    access="Viewers are read-only; managers edit only server-advertised writable budgets.")
         if self.editable:
             keys["owner_actions"] = "e edits selected row. Palette: add/remove scope, edit tiers, Apply now."
         self.push_screen(DetailScreen("AUM | tour and keys", keys))

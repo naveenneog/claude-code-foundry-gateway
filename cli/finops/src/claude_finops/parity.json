@@ -1,23 +1,89 @@
 {
-  "reference": "naveenneog/turnstile claude-gateway c17f4bc26a658033a52359e5f523ecae75971e08",
+  "design": "enterprise-delegation-design.md Revision 4",
+  "reference": "Turnstile claude-gateway c0c345a; gateway modes 690015d",
   "pages": {
-    "Executive Overview": {"tab": "overview", "reads": ["overview", "distribution", "budgets"], "writes": []},
-    "Budget Management": {"tab": "budgets", "reads": ["budgets"], "writes": ["budget", "budget_remove"]},
-    "People panel": {"tab": "people", "reads": ["people"], "writes": ["budget", "budget_remove"]},
-    "Gateway governance": {"tab": "governance", "reads": ["catalog", "tiers", "apply"], "writes": ["catalog", "tiers", "apply"]},
-    "Usage Breakdown": {"tab": "usage", "reads": ["distribution"], "writes": []},
-    "Usage Trends": {"tab": "trends", "reads": ["trends"], "writes": []},
-    "Request Trace": {"tab": "requests", "reads": ["requests", "request"], "writes": []},
-    "Anomaly Governance findings": {"tab": "anomalies", "reads": ["anomalies"], "writes": []},
-    "Settings": {"tab": "settings", "reads": ["whoami"], "writes": []}
+    "Executive Overview": {
+      "tab": "overview", "status": "implemented",
+      "features": ["month_budget_usage", "burn_forecast", "ranking_dimensions", "exact_panel_detail"],
+      "tests": ["test_dashboard.py", "test_revision4_tui.py"]
+    },
+    "Budget Management": {
+      "tab": "budgets", "status": "implemented",
+      "features": ["unit_team_person_drilldown", "set_raise_lower_remove", "parent_headroom", "modes", "bulk_csv"],
+      "waiting": {"boost_expiry": "boosts", "request_difference": "approvals"},
+      "tests": ["test_rules.py", "test_tui.py", "test_revision4_engine.py"]
+    },
+    "People panel": {
+      "tab": "people", "status": "implemented",
+      "features": ["server_search_paging", "monthly_override", "request_based_tier_unit_team_last_seen"],
+      "waiting": {"boost_expiry": "boosts", "global_people_lookup": "global_search"},
+      "manual": "Membership moves are performed in Entra; AUM never invents directory write permissions.",
+      "tests": ["test_backends.py", "test_manager_scope.py", "test_revision4_engine.py"]
+    },
+    "Gateway governance": {
+      "tab": "governance", "status": "implemented",
+      "features": ["catalog_groups", "tier_limits_models", "owner_modes", "apply_tracking"],
+      "waiting": {"atomic_collection_edits": "conditional_writes"},
+      "tests": ["test_tui.py", "test_revision4_tui.py", "test_revision4_contracts.py"]
+    },
+    "Usage Breakdown": {
+      "tab": "usage", "status": "implemented",
+      "features": ["unit_team_person_model_surface_tier", "filter_chips", "complete_scope_export"],
+      "tests": ["test_cli.py", "test_safety.py"]
+    },
+    "Usage Trends": {
+      "tab": "trends", "status": "implemented",
+      "features": ["range", "hour_day_week", "period_comparison", "unknown_values_preserved"],
+      "tests": ["test_revision4_engine.py", "test_preferences_links.py"]
+    },
+    "Request Trace": {
+      "tab": "requests", "status": "implemented",
+      "features": ["bounded_window_pages", "full_detail", "copy_id", "discovered_ledger_link"],
+      "waiting": {"lossless_server_paging": "request_cursor"},
+      "tests": ["test_cli.py", "test_revision4_contracts.py", "test_preferences_links.py"]
+    },
+    "Anomaly Governance": {
+      "tab": "anomalies", "status": "implemented",
+      "features": ["severity_scope_time_detail"],
+      "waiting": {"acknowledge_false_positive": "anomaly_dispositions"},
+      "tests": ["test_revision4_engine.py", "test_revision4_contracts.py"]
+    },
+    "Approvals": {
+      "tab": "approvals", "status": "waiting",
+      "endpoint": "approvals",
+      "features": ["client_mine_waiting_history", "client_request_approve_reject_escalate"],
+      "waiting": {"notifications": "notifications"},
+      "tests": ["test_revision4_engine.py", "test_revision4_tui.py", "test_revision4_contracts.py"]
+    },
+    "FinOps Assistant": {
+      "tab": "ask", "status": "implemented",
+      "features": ["ask_server", "conversation_history", "pin_server_chart", "model_settings"],
+      "tests": ["test_revision4_engine.py", "test_revision4_tui.py"]
+    },
+    "Settings": {
+      "tab": "settings", "status": "implemented",
+      "features": ["identity_role_scope", "profile_backend_switch", "explicit_sign_out", "themes", "first_run_tour", "saved_views_per_identity"],
+      "tests": ["test_preferences_links.py", "test_revision4_tui.py", "test_aum_brand.py"]
+    },
+    "Advanced model gateway": {
+      "tab": "advanced", "status": "implemented",
+      "conditional": "Only when configured and authorized; all views are read-only.",
+      "features": ["models", "backend_pools", "releases", "application_subscriptions"],
+      "tests": ["test_revision4_tui.py", "test_revision4_contracts.py"]
+    }
   },
-  "deferred": {
-    "Approvals": "P47: outside release API contract",
-    "FinOps Assistant": "Assistant API outside release scope",
-    "Bulk person allocation and model policy": "Not in enumerated release endpoints",
-    "Anomaly rule editing and audit finding disposition": "Separate governance endpoints, not the read-only usage anomalies API",
-    "Enforcement modes": "Owned by the parallel modes packet; not guessed from Turnstile's block/audit fields",
-    "Boosts with expiry and Entra membership moves": "No expiry or directory-write API in this release",
-    "Advanced model gateway pages": "Turnstile model gateway, not Claude gateway governance"
+  "cross_cutting": {
+    "status": "implemented",
+    "features": ["keyboard_mouse", "responsive_80x24_160x48", "lookup_palette", "breadcrumbs", "exact_focus",
+                 "preview_apply_confirmation", "scope_hidden_actions", "ascii_monochrome_high_contrast",
+                 "plain_screen_reader", "local_time_offsets", "no_motion", "redaction", "live_manifest_guard"],
+    "tests": ["test_tui.py", "test_dashboard.py", "test_redaction.py", "test_publication.py", "test_manager_scope.py"]
+  },
+  "integrations": {
+    "P50_report_generator": {
+      "client": "report generate",
+      "activation": "scripts/New-ClaudeChargebackReport.ps1 exists after the P50 merge",
+      "existing_export": "report chargeback remains a complete authorized-scope CSV export"
+    }
   }
 }

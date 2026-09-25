@@ -220,10 +220,10 @@ def catalog_remove(ctx: typer.Context, kind: str, key: str, apply: bool = False,
 @groups["requests"].command("list")
 def requests_list(ctx: typer.Context, limit: Annotated[int, typer.Option(min=1, max=200)] = 50,
                   before: str | None = None, unit: str | None = None, team: str | None = None,
-                  model: str | None = None, person: str | None = None):
+                  model: str | None = None, person: str | None = None, cursor: str | None = None):
     """List a bounded request window; --before selects older requests."""
     emit(ctx, lambda e: e.read("requests", limit=limit, before=before, organization_id=unit,
-                               department_id=team, model_id=model, user_id=person))
+                               department_id=team, model_id=model, user_id=person, cursor=cursor))
 
 
 @groups["requests"].command("show")
@@ -243,8 +243,10 @@ def usage_show(ctx: typer.Context, dimension: str = "organization", split_by: st
 
 
 @groups["trends"].command("show")
-def trends_show(ctx: typer.Context, interval: str = "day", group_by: str = "none"):
-    emit(ctx, lambda e: e.read("trends", interval=interval, group_by=group_by))
+def trends_show(ctx: typer.Context, interval: str = "day", group_by: str = "none",
+                compare: str | None = None, start: str | None = None, end: str | None = None):
+    emit(ctx, lambda e: e.compare_trends(compare, interval=interval, group_by=group_by) if compare else
+         e.read("trends", interval=interval, group_by=group_by, **{"from": start, "to": end}))
 
 
 @groups["report"].command("chargeback")
@@ -268,6 +270,10 @@ def main():
 
 from .configure import configure
 app.command()(configure)
+from .commands_v4 import register
+register(app, groups, emit)
+from .commands_local import register as register_local
+register_local(app, groups, emit)
 
 
 def legacy_main():

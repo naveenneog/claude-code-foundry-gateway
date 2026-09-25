@@ -13,6 +13,7 @@ def http_error(status: int) -> FinOpsError:
         404: ("Not found. Check the identifier, month and assigned scope.", 5),
         405: ("This server lacks this API. Deploy the claude-gateway Turnstile fork.", 5),
         409: ("Conflict. Refresh the parent budget and allocation; preview the change again.", 6),
+        412: ("State changed since preview. Refresh the collection and preview again; nothing was overwritten.", 6),
         422: ("Server rejected the fields. Refresh and check limits, groups and parent allocation.", 2),
         429: ("Service throttled. Wait and retry; no write was automatically repeated.", 7),
     }

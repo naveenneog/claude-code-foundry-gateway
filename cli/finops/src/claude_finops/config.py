@@ -56,6 +56,8 @@ class Config:
     apim_name: str = ""
     repository: str = ""
     workspace: str = ""
+    workspace_resource_id: str = ""
+    tenant_id: str = ""
     theme: str = "gateway"
     ascii: bool = False
 

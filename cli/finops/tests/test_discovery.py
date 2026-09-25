@@ -58,6 +58,7 @@ def test_turnstile_comes_from_selected_gateway_without_global_account_change():
     result = discover(backend="turnstile", runner=run, target_reader=lambda _: "", interactive=False)
     assert result["config"]["url"] == "https://api.contoso.com"
     assert result["config"]["subscription"] == SUB
+    assert result["config"]["workspace_resource_id"] == WS_ID
     assert not any(call[:2] == ("account", "set") for call in calls)
     assert all("--subscription" in call for call in calls if call[0] == "apim")
 

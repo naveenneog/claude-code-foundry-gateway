@@ -91,3 +91,34 @@ Research sources (2026-09-24): `rothgar/awesome-tuis`, btop, bottom, k9s, lazygi
 WTF, Dolphie and Posting. Patterns and exact source links are recorded in the
 delivery report. Their code/assets are not copied. Tests must preserve the P51
 role, scope, preview, confirmation, headroom and apply-status guarantees.
+
+## P52 amendment: full revision-4 acceptance, 2026-09-25
+
+The owner's subsequent instruction explicitly supersedes this ADR's bounded-release
+scope and read-only-manager decision above. Implement every supported revision-4
+row in both faces. The deployed P46 `writable_department_ids` contract now permits
+manager team/person budget forms only for authorized objects; units, modes, tiers,
+catalog and explicit gateway apply remain Owner-only.
+
+Use the existing assistant API and optional model-gateway reads rather than a
+second assistant or model registry. Server-authored charts are displayed and pinned
+without client-invented data. Ask can incur model cost and persist conversations,
+so preview and redacted capture modes never submit a question.
+
+Approvals, expiring boosts, notifications, lossless request cursors, conditional
+collection writes, anomaly dispositions and global search need named server
+contracts. The packaged `contracts.json` pins those contracts. Their tested clients
+remain hidden until a schema-versioned, role-aware advertisement enables the action;
+unknown versions and malformed advertisements fail closed. Server authorization is
+still authoritative. No automatic write retry or client-side scope widening is added.
+
+Saved views and the first-run tour are private to a hashed identity/profile pair.
+Changing profile verifies the prospective sign-in before replacing the working
+backend. Changing identity, month or filters discards bound cursors and stale context.
+Ledger links use discovered workspace/tenant values and never deployment defaults.
+
+P50 report generation delegates to the repository generator when installed; AUM
+does not duplicate report accounting or storage logic. The parity manifest records
+implementation tests and named server dependencies separately from live acceptance.
+Live portal evidence is not complete while the capture profile requires sign-in:
+that fact remains a failing publication check, not an exception or silent skip.
