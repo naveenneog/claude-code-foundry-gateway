@@ -124,7 +124,10 @@ def validate_portal_manifest(folder):
             continue
         if sha256(image.read_bytes()).hexdigest() != entry.get("sha256"):
             problems.append(name + ": image hash does not match provenance")
-        problems += [name + ": " + issue for issue in privacy_problems(transcript.read_text(encoding="utf-8"))]
+        text = transcript.read_text(encoding="utf-8")
+        problems += [name + ": " + issue for issue in privacy_problems(text)]
+        if name == "turnstile-overview.png" and re.search(r"Welcome to the App Service preview|Step \d of \d", text):
+            problems.append(name + ": onboarding obscures the actual blade")
     for image in folder.glob("*.png"):
         if image.name not in seen:
             problems.append("portal image has no manifest: " + image.name)

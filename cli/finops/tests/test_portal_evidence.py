@@ -44,3 +44,12 @@ def test_log_editor_without_verified_query_results_is_not_evidence():
     with patch.object(Path, "read_text", lambda path, *args, **kwargs:
                       json.dumps(data) if path == folder / "manifest.json" else original(path, *args, **kwargs)):
         assert any("query result not verified" in issue for issue in validate_portal_manifest(folder))
+
+
+def test_app_service_onboarding_overlay_is_not_completed_blade_evidence():
+    folder = Path(__file__).resolve().parents[3] / "docs" / "images" / "aum-portal"
+    original = Path.read_text
+    with patch.object(Path, "read_text", lambda path, *args, **kwargs:
+                      "Welcome to the App Service preview" if path.name == "turnstile-overview.txt"
+                      else original(path, *args, **kwargs)):
+        assert any("onboarding obscures" in issue for issue in validate_portal_manifest(folder))

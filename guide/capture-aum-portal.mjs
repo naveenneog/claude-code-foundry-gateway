@@ -79,6 +79,28 @@ async function visibleText(page, fields = false) {
   return texts.join('\n');
 }
 
+async function settleAppServiceTour(page) {
+  let quiet = 0;
+  const deadline = Date.now() + 90000;
+  while (Date.now() < deadline) {
+    const text = await visibleText(page);
+    if (/Welcome to the App Service preview|Step \d of \d/.test(text)) {
+      quiet = 0;
+      for (const frame of await visibleFrames(page)) {
+        for (const label of ['Get started', 'Next', 'Done', 'Got it', 'Finish']) {
+          const button = frame.getByRole('button', { name: label, exact: true }).first();
+          if (await button.isVisible().catch(() => false)) { await button.click(); break; }
+        }
+      }
+    } else if (++quiet >= 10) {
+      await page.keyboard.press('Escape');
+      return;
+    }
+    await page.waitForTimeout(1000);
+  }
+  throw new Error('App Service onboarding did not settle; no screenshot is valid.');
+}
+
 try {
   const page = context.pages()[0] ?? await context.newPage();
   for (const step of selectedSteps) {
@@ -271,6 +293,7 @@ try {
       fs.writeFileSync(path.resolve('.aum-evidence', `portal-not-ready-${step.file}.txt`), diagnostic);
       continue;
     }
+    if (step.file === 'turnstile-overview') await settleAppServiceTour(page);
     body = await visibleText(page);
     if (/Pick an account|Enter password|Sign in to your account|Sign in again/i.test(body)) {
       authBlocked = true;
@@ -311,6 +334,9 @@ try {
       if (groupPage) for (const image of document.querySelectorAll('img,.ms-Persona-initials,.fui-Avatar')) image.style.visibility = 'hidden';
     }, { replacements, main: frame === page.mainFrame(), groupPage: step.file.startsWith('group-') });
     const visible = await visibleText(page, true);
+    if (step.file === 'turnstile-overview' && /Welcome to the App Service preview|Step \d of \d/.test(visible)) {
+      throw new Error('App Service onboarding returned after readiness checks.');
+    }
     const unsafe = /\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/i.test(visible) ||
       /\b[A-Za-z0-9.-]+\.(?:azurewebsites\.net|azure-api\.net)\b/i.test(visible) ||
       [...visible.matchAll(/[A-Za-z0-9._+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g)].some(match => match[1] !== 'contoso.com');
@@ -319,6 +345,9 @@ try {
     const filename = `${step.file}.png`;
     const pixels = await page.screenshot();
     const after = await visibleText(page, true);
+    if (step.file === 'turnstile-overview' && /Welcome to the App Service preview|Step \d of \d/.test(after)) {
+      throw new Error('App Service onboarding obscured the screenshot; not publishing it.');
+    }
     if (/\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/i.test(after) ||
         /\b[A-Za-z0-9.-]+\.(?:azurewebsites\.net|azure-api\.net)\b/i.test(after) ||
         [...after.matchAll(/[A-Za-z0-9._+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g)].some(match => match[1] !== 'contoso.com')) {
