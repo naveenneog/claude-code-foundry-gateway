@@ -12,12 +12,13 @@ Front Door, a corporate hub, ExpressRoute/VPN, Firewall and Azure Monitor
 Private Link Scope (AMPLS) are reference options, not infrastructure silently
 created by the edge installer.
 
-The requested SharePoint network deck was not accessible. The available local
-PowerPoint was the gateway governance deck, not that network deck. Its central
-requirement, one identity and budget enforcement point, is preserved. The
-enterprise designs below use Microsoft Learn's
+The SharePoint link required Microsoft sign-in. The owner subsequently
+provided an authorized, one-slide export of the owner's network architecture
+deck; it was reviewed on 2026-09-25. The protected deck and export are not
+distributed here. The enterprise designs use Microsoft Learn's
 [APIM landing zone architecture][landing-zone] and
-[network capability documentation][apim-network], checked 2026-09-24.
+[network capability documentation][apim-network], checked 2026-09-24, with the
+deck comparison below checked on 2026-09-25.
 
 ## Choose a topology
 
@@ -34,6 +35,60 @@ the gateway/Foundry network requirements. It does **not** move an existing
 Turnstile database, projection, job environment or corporate hub. That wider
 one-switch migration is the remaining orchestration work in P49. Do not label
 an entire estate private merely because its inference edge is private.
+
+### Source-backed topology diagrams
+
+These are designs, not portal screenshots. Each diagram distinguishes the
+live-tested regional path from reference-only enterprise dependencies. Sources
+are under `docs/architecture/`; the repository architecture renderer verifies
+resource declarations, source hashes and image references.
+
+![Internal-only regional WAF and private origins](images/architecture/network-private.png)
+
+![Internet regional WAF with private origins](images/architecture/network-public.png)
+
+![Hybrid split-DNS listeners with one governed origin](images/architecture/network-hybrid.png)
+
+### Review against the owner's network architecture deck
+
+The deck combines a WAF/APIM hub, private Foundry and application spokes,
+corporate egress filtering, private administration and optional resilience.
+Those goals fit the three designs above, with these important qualifications:
+
+| Deck decision | Implementable interpretation and packet boundary |
+|---|---|
+| Premium v2, zones and private APIM | [Premium v2 injection][apim-injection] is a creation-time private gateway option, with an exclusive `Microsoft.Web/hostingEnvironments` subnet. It is not the `Microsoft.Web/serverFarms` outbound integration tested here. Standard v2 with inbound PE plus outbound integration is the lower-cost measured option |
+| Two units across zones | [Standard/Premium v2 zone redundancy][apim-zones] is enabled at creation. [The platform distributes units on a best-effort basis][apim-reliability]; a single unit's two underlying compute resources can span two zones. Administrators cannot select the deck's particular unit-to-zone placement. This evaluation did not test an outage or zone redundancy |
+| Hub DNS and private endpoints | Private DNS zones are linked resources, not objects placed in a subnet. [Resolver inbound and outbound endpoints each need an exclusive subnet][dns-resolver], separate from the non-delegated PE subnet. Forward DNS over UDP/TCP 53 and verify both on-premises and Azure answers |
+| NAT or Firewall | NAT supplies outbound source translation, not destination inspection or an allowlist. A firewall requires its real private next hop, policy, UDRs and return routing. Neither is automatically installed by the regional executor |
+| Injected agents and app-spoke callers | [Foundry Agent Service's BYO network][agents-network] requires a dedicated `Microsoft.App/environments` subnet and a creation-time account design. An inbound Foundry PE alone does not isolate agent egress. Configure and verify model/tool endpoints individually; subnet injection does not redirect every call through this Claude gateway |
+| Direct app-spoke to APIM | This can retain APIM governance but skips WAF. The shipped edge-only source policy deliberately rejects it. Adding an application identity/path requires a separate authorization and source review, not an exception silently introduced by a VNet peering |
+| Corporate/Zscaler egress addresses | Discover the organization's actual stable egress CIDRs from its network owner. A negated `RemoteAddr`/`IPMatch` custom **Block** rule can restrict a public listener without a custom Allow that skips managed rules. Apply consistent restrictions to global and path policies; explicitly account for private clients. This additional rule is a manual design, not a live-tested script option |
+| MFA/Conditional Access | Retain the organization's existing Entra policy. Subscription Owner or ownership of an app registration does not authorize changing tenant Conditional Access. No new tenant-admin grant is assumed |
+| Second APIM and global routing | Independent APIM instances need policy/configuration, entitlement and DNS synchronization, failover testing and consideration of **per-instance quota counters**. Front Door/Traffic Manager does not create one shared hard budget or make a single Foundry deployment multi-region |
+| Exceptional direct Foundry access | This bypasses APIM entitlement, budgets and the gateway ledger. It is not enabled here. Any separately approved exception needs a narrowly scoped principal, owner, expiry, separate attribution and revocation test |
+| Bastion, AKS, data stores and Grafana | Reference-only workload additions. Choose real SKUs, worker counts, retention and data volumes before pricing. Unknown meters are not zero; none was deployed as part of this packet |
+
+For the manual corporate-egress rule: **Web Application Firewall policies
+(WAF)** > selected policy > **Custom rules** > **Add custom rule**. Use a
+unique name and priority, **Match rule**, **RemoteAddr**, **IPMatch**, the
+administrator-approved CIDRs, **Negate condition**, and action **Block**.
+Review both the global and Messages-path policy before saving; a hybrid path
+needs its private source ranges or a separately scoped listener policy.
+`infra/network-edge-waf.bicep` accepts an explicit `customRules` parameter for
+this manual module workflow. The reviewed edge executor does not construct
+or apply that rule; do not infer it from the topology name.
+
+Regional commercial USD rates retrieved 2026-09-25, at 730 hours/month:
+Basic v2 one unit is about **$150/month** ($0.20548/hour), Standard v2 one
+unit **$700/month** ($0.95890/hour), Premium v2 one unit **$2,800/month**
+($3.83562/hour), and two Premium v2 units **$5,600/month** ($7.67124/hour).
+These are APIM allocations only, excluding edge, data, networking and usage.
+The live regional plan used Standard v2; the deck's Premium/HA option was not
+deployed. NAT's published gateway fee was $0.045/hour plus $0.045/GB processed;
+AKS Standard's control-plane fee was $0.10/hour, excluding all worker VMs.
+The deck does not specify enough SKU/quantity data to price Bastion, Search,
+Redis, Grafana, storage or agent compute as an honest complete total.
 
 ### Front Door Premium alternative
 
@@ -283,13 +338,24 @@ effect for every grouped caller. APIM portal user IDs are not presented as
 Entra identities, and an original-client forwarding value is not proof of a
 trusted gateway peer.
 
-**Measured read-only on the reference:** two actual workspaces, five
+**Measured read-only on the reference, 2026-09-25 at 02:59 UTC:** two actual workspaces, five
 historical Entra identities in seven days, six grouped report rows including
-unattributed traffic, and **no reliable client-IP ranges**. GatewayLogs was not
-enabled; Insights IP masking was not disabled. Thus five known identities
+unattributed traffic, and **no reliable client-IP ranges**. **GatewayLlmLogs
+was enabled; GatewayLogs was not**. Insights IP masking was not disabled.
+The retained ledger/trace identity fields establish the five Entra identities;
+they do not establish their original source addresses or trusted gateway peer
+addresses. Thus five known identities
 were potentially affected and their IP-path status was **unknown**, not safe.
-The reference resource ETag was unchanged. No logging, policy, permission or
-network setting was changed to manufacture better evidence.
+The query and unchanged-state verification took 12.0 seconds. The reference
+resource ETag and network state were unchanged. No logging, policy, permission
+or network setting was changed to manufacture better evidence.
+
+![Rendered terminal receipt of the live read-only gateway impact query](guide/network-04-impact-receipt.png)
+
+This is a rendered terminal receipt from the real query, not a portal capture.
+It intentionally shows counts and coverage rather than exporting personal
+identifiers. The administrator's local report retains per-identity last-seen
+UTC and the exact acknowledgement; it is not committed.
 
 [Insights discards IPs by default][ip-masking]; turning logging on today cannot
 reconstruct older addresses. Missing tables, sampling, retention, truncation
@@ -428,8 +494,11 @@ instructions to paste unknown deployment IDs into a template.
 > **Portal evidence coverage:** the three images in this article are live
 > captures with deployment values redacted. The dedicated capture session
 > expired on 2026-09-24 at 18:47 UTC and capture stopped. They do not prove
-> every final edge/WAF blade. Complete those captures from a refreshed
-> dedicated profile; do not substitute screenshots of a sign-in page.
+> every final edge/WAF blade. The terminal impact receipt above is separate
+> evidence, not a portal screenshot. Final portal captures are pending the
+> lead's central batch and an explicitly selected evaluation redeployment:
+> the original evaluation resources were removed. Do not capture the reference
+> gateway as a substitute or retry authentication from an expired profile.
 
 | Step | Exact portal navigation and fields | CLI/module equivalent |
 |---|---|---|
@@ -458,6 +527,48 @@ instructions to paste unknown deployment IDs into a template.
 | Restrict origin | APIM > **APIs** > **All APIs** > inbound policy code editor; insert the edge source filter before other inbound rules and preserve existing policy. Ensure every API inherits service inbound first | `scripts\ClaudeNetworkPolicy.ps1`; no caller-provided forwarding header is an origin authenticator |
 | Enable diagnostics | Gateway > **Monitoring** > **Diagnostic settings** > **Add diagnostic setting** > access and firewall logs > chosen Log Analytics workspace | The module uses resource-specific tables `AGWAccessLogs` and `AGWFirewallLogs` |
 | Verify backend | Gateway > **Backend health**; require healthy APIM. Then run real client requests and inspect firewall logs, not just the health probe | `Test-ClaudeNetworkEdge.ps1` |
+
+### Pending central-batch portal images
+
+`guide/captures/p54.json` follows the version-1 shared capture protocol.
+Every target uses a discovered resource type and an operator-provided
+`P54_*_NAME_FILTER` environment value, never an embedded resource name.
+Confirm its `selectionKey` points to the approved evaluation resource.
+Supply the private `PORTAL_REDACTIONS_FILE`, including names, hostnames and
+address ranges. These inline paths deliberately do not masquerade as images.
+All rows are **pending batch capture**; blade navigation is not claimed live
+verified until the runner satisfies the text checks and the images are reviewed.
+
+| Spec id | Manual blade to verify | Final output, capture pending |
+|---|---|---|
+| `p54-vnet-subnets` | VNet > Subnets; prefixes, delegations and NSGs | `docs/guide/network-final-subnets.png` |
+| `p54-vnet-peerings` | VNet > Peerings; both directions and forwarded traffic | `docs/guide/network-final-peerings.png` |
+| `p54-vnet-dns` | VNet > DNS servers; actual resolver configuration | `docs/guide/network-final-vnet-dns.png` |
+| `p54-route-table` | Route table > Routes; next hop and prefixes | `docs/guide/network-final-routes.png` |
+| `p54-public-ip` | Public IP > Configuration; SKU, assignment, timeout | `docs/guide/network-final-public-ip.png` |
+| `p54-edge-identity` | User-assigned identity > Overview; selected certificate identity | `docs/guide/network-final-identity.png` |
+| `p54-vault-certificate` | Vault > Certificates; enabled listener certificate, from a routed browser | `docs/guide/network-final-certificate.png` |
+| `p54-vault-role` | Vault > Access control (IAM) > Role assignments; edge Secrets User | `docs/guide/network-final-vault-role.png` |
+| `p54-private-endpoint` | Private endpoint > DNS configuration; approved origin address | `docs/guide/network-final-endpoint.png` |
+| `p54-private-dns` | Private DNS zone > Virtual network links; selected VNet | `docs/guide/network-final-dns-links.png` |
+| `p54-apim-network` | APIM > Network; inbound approval, public state and outbound integration | `docs/guide/network-final-apim-network.png` |
+| `p54-foundry-network` | Foundry > Networking; private approval and public state | `docs/guide/network-final-foundry-network.png` |
+| `p54-waf-settings` | WAF > Policy settings; Prevention, body limits, log scrubbing | `docs/guide/network-final-waf-settings.png` |
+| `p54-waf-managed` | WAF > Managed rules; selected version and exclusions | `docs/guide/network-final-waf-managed.png` |
+| `p54-edge-overview` | Gateway > Overview; running WAF v2 and frontend addresses | `docs/guide/network-final-edge.png` |
+| `p54-edge-listeners` | Gateway > Listeners; HTTPS/443, host and certificate | `docs/guide/network-final-listeners.png` |
+| `p54-edge-pools` | Gateway > Backend pools; actual APIM hostname | `docs/guide/network-final-pools.png` |
+| `p54-edge-settings` | Gateway > Backend settings; HTTPS, hostname, timeout and draining | `docs/guide/network-final-settings.png` |
+| `p54-edge-probes` | Gateway > Health probes; HTTPS status path | `docs/guide/network-final-probes.png` |
+| `p54-edge-rules` | Gateway > Rules; global and Messages-path policy association | `docs/guide/network-final-rules.png` |
+| `p54-edge-rewrites` | Gateway > Rewrites; socket-derived client-IP replacement | `docs/guide/network-final-rewrites.png` |
+| `p54-apim-policy` | APIM > APIs > All APIs; source restriction before inherited inbound policy | `docs/guide/network-final-apim-policy.png` |
+| `p54-edge-diagnostics` | Gateway > Diagnostic settings; access/firewall log destination | `docs/guide/network-final-diagnostics.png` |
+| `p54-edge-health` | Gateway > Backend health; APIM healthy, then real client test | `docs/guide/network-final-health.png` |
+
+The optional hub route/peering rows also require an existing explicitly
+selected hub or a separately approved reference deployment. They are not
+implicitly provisioned by the regional edge test.
 
 ### A private vault also blocks the portal's data-plane views
 
@@ -775,6 +886,9 @@ evaluation.
 [apim-pe]: https://learn.microsoft.com/azure/api-management/private-endpoint
 [apim-outbound]: https://learn.microsoft.com/azure/api-management/integrate-vnet-outbound
 [apim-injection]: https://learn.microsoft.com/azure/api-management/inject-vnet-v2
+[apim-zones]: https://learn.microsoft.com/azure/api-management/enable-availability-zone-support
+[apim-reliability]: https://learn.microsoft.com/azure/reliability/reliability-api-management
+[agents-network]: https://learn.microsoft.com/azure/foundry/agents/concepts/networking-options
 [sku-api]: https://learn.microsoft.com/rest/api/apimanagement/api-management-skus/list
 [private-appgw]: https://learn.microsoft.com/azure/application-gateway/application-gateway-private-deployment
 [firewall]: https://learn.microsoft.com/azure/firewall/forced-tunneling
