@@ -500,6 +500,12 @@ If CLI token caching retains Admin claims, the script refuses to call it a
 manager test. Supply `-TokenAcquirer` with a script block that returns a freshly
 issued delegated token for the supplied scope/phase. It never clears the shared
 CLI cache, and always restores access in `finally`.
+The Windows broker may retain claims despite MSAL `force_refresh`. The measured
+journey used the repository's `guide/renew-entra-token.py` through that callback,
+capturing its token only in memory. Both decoded expected claims and the
+server-authenticated `/me` scope must agree before any manager-only operation.
+Privileged groups are restored before direct assignments; recreated assignment
+record IDs may differ, but principal/resource/role tuples must match the snapshot.
 
 ## API reference
 
@@ -553,8 +559,9 @@ The following is a **dated example**, not a deployment default: Canada Central,
 Blob package/host storage, Table operations, bandwidth and retained audit growth
 are additional usage charges. A timer running each minute is not literally zero
 activity at rest. With no warm instance, public Entra-only access, Insights off
-and a small retained ledger, there is no fixed compute/network bill. Measure
-actual consumption; never promise a free service based on subscription grants.
+and a small retained ledger, there is no fixed compute/network bill **only if
+public storage is also permitted**. The measured subscription forced private
+storage. Measure consumption; never promise a free or sub-$5 service there.
 
 Turnstile's approximately $58-159/month examples describe its different
 architectures, not a required AUM cost. See [Turnstile costs](TURNSTILE.md#what-it-costs).
@@ -602,6 +609,8 @@ count, audit retention, query latency and manager concurrency explicitly.
 | `rollback_failed` | Azure/external writer prevented compensation | Inspect audit and current named values; reconcile only affected entries |
 | `analytics_incomplete` | Partial/failed query, missing saved function or permission | Publish queries; verify workspace selection and Log Analytics Reader; do not report zero usage |
 | KQL `SEM0064: Cannot compare values of types string and string` | Relational comparison on a string cursor | Use the current service, which applies `strcmp()` to people/request IDs |
+| KQL `SYN0002` at `latest` during a person write | An unquoted reserved binding in the old membership query | Deploy the fixed service using `last_observations`; never bypass observed-person scope |
+| APIM 500, `Expression value is invalid. The value field is required.` | Empty budget-trace `Notice` or `ParentUnit` | Deploy the current gateway policy; absent metadata uses `none`, while real notices are preserved |
 | `writer_busy` / `lease_lost` | Another writer or storage connectivity loss | Read state before retrying; inspect private DNS/RBAC |
 | ARM `RequestDisallowedByPolicy` | Tenant policy rejects chosen public/service shape | Choose a compliant private topology; do not re-enable shared keys |
 | Storage `AuthorizationPermissionMismatch` | Data-role propagation or wrong identity | Verify Blob Data Owner and Table Data Contributor on this account, then retry reads later |
@@ -636,6 +645,14 @@ Admin decisions, escalation and a short boost reverted by the actual timer.
 It does not change any Entra membership. Use only the discovered isolated test
 gateway; never run it against an existing business catalog.
 
+`scripts/Test-ClaudeAumGateway.ps1` prepares a local-only plan by default.
+Its explicitly approved fallback uses **direct HTTP with Azure CLI tokens**,
+not the AUM command face. Execution requires `-Execute -PriorWindowClosed` and
+can enforce `-NotBeforeUtc`. It creates only owned temporary groups, targets
+only the recorded `rg-aum-e2e-*` gateway, tests real Claude strict/allowance/notify
+and attribution, and restores/deletes in `finally`. Never label those receipts
+as AUM-client evidence. `-WaitForWarning` also waits for the actual warning timer.
+
 Before removal, export audit/history and resolve outstanding boosts. The service
 does not restore every budget merely because its resources are removed.
 
@@ -646,43 +663,29 @@ does not restore every budget merely because its resources are removed.
 .\scripts\Remove-ClaudeAumService.ps1 -RemoveAppRegistration
 ```
 
-Removal uses the deployment record, deletes only its service resources and
-external role assignments, and leaves the gateway, workspace, resource group
+Removal matches recorded names **and types**, honors selected options and removes
+external role assignments. It leaves the gateway, workspace, resource group
 and reused resources. Do not delete a shared resource group as a shortcut.
 Tenant policy can create extra NSGs. Inspect any remainder and delete an isolated
 test group only after confirming no shared or attached resource remains.
 
 ## Live verification receipt
 
-Measured 2026-09-24 UTC, against the isolated non-production gateway/workspace,
-not the reference gateway's Turnstile authority:
+[Measured results and redacted API receipts](aum-service/LIVE-VERIFICATION.md)
+separate the September 24 pilot from the September 25 dedicated Basic v2 proof:
 
-| Flow | Result |
-|---|---|
-| Owned AUM registration and Azure CLI token | `AUM.Admin`, v2 `AUM.Access`, audience matched; no consent prompt |
-| `/me`, capabilities, usage, budgets, people, trends, requests | HTTP 200; anonymous `/me` 401 |
-| Real analytics | 3,883 requests, one observed person; four unpriced rows, so the priced subtotal is not a zero-cost claim |
-| Request cursor | Two real 100-row pages, no overlapping request IDs; both returned a continuation |
-| Test-team limit | Changed through the Function, read from ARM, restored byte-identically at 20:25:38Z |
-| Headroom | Above-parent write returned 409 |
-| Approval/rejection/escalation | Default self-approval 403; explicit audited Admin override and versioned decisions succeeded |
-| Boost | Expiry 20:27:04Z; observed expired and byte-identical registry restoration at 20:28:09Z, performed by the real minute timer |
-| Manager-only journey | Read-only preparation passed at 20:29:47Z; execution held for the lead's explicit go-ahead |
-| Portal | Two resource captures; stopped at Entra sign-in, as required |
-| Final restoration | At 20:53:06Z the original empty registry matched byte-for-byte, no boosts were active, Admin access remained, and 38 audit records were exported |
-| Cost cleanup | At 21:11:56Z all paid pilot resources and the isolated group were removed; only the free owned AUM registration remains |
-
-The following images render the **actual saved API receipts**, with IDs removed.
-They are API evidence, not screenshots of an AUM or Azure portal interface.
-
-![Live authenticated AUM API read receipts](guide/aum-09-live-reads.png)
-![Live budget changes, headroom refusal and workflow decisions](guide/aum-10-live-writes.png)
-![Live timer expiry and byte-identical named-value restoration](guide/aum-11-live-expiry.png)
+- Real Claude strict/allowance/notify, attributed usage and the scheduled warning
+  fact passed. Policy, named values, memberships and groups were restored.
+- Fresh team-only and unit-only Manager tokens proved person/team writes and
+  four protected-operation 403s. All 14 memberships and 22 direct assignment
+  tuples matched the snapshot; Admin access and all configuration were restored.
+- These are **direct HTTP/CLI-token receipts, not native AUM-client or portal
+  screenshots**. Twelve owner-batch portal captures remain pending.
 
 ## Next steps
 
-- Configure the AUM client with the returned endpoint and scope. It uses
-  `/capabilities` to show only supported operations.
+- Use an AUM build with an explicit service adapter, endpoint and scope; this
+  service's HTTP proof does not establish a particular client release's support.
 - Assign a Viewer and a scoped Manager and verify both with fresh tokens.
 - Choose an audit retention/export policy before large-scale use.
 - Connect warning delivery to the chargeback-report notification pipeline when

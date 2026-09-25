@@ -128,8 +128,8 @@ class LogAnalytics:
             return {}
         selected = ",".join(literal(object_id(id_)) for id_ in ids)
         query = (f"let observed = ClaudeChargeback(ago(93d), now())\n| where user_id in ({selected});"
-                 "\nlet latest = observed | summarize last_timestamp=max(timestamp) by user_id;"
-                 "\nobserved | join kind=inner latest on user_id"
+                 "\nlet last_observations = observed | summarize last_timestamp=max(timestamp) by user_id;"
+                 "\nobserved | join kind=inner last_observations on user_id"
                  "\n| where timestamp == last_timestamp"
                  "\n| summarize units=make_set(business_unit, 2) by user_id"
                  "\n| where array_length(units) == 1"
