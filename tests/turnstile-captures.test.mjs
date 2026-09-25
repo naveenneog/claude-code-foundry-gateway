@@ -107,6 +107,7 @@ test('a cached Admin, Viewer, missing group or overage token can never be presen
   assert.equal(managerClaims(manager, 'unit-group'), true);
   assert.equal(managerClaims({ ...manager, roles: [...manager.roles, 'Turnstile.Admin'] }, 'unit-group'), false);
   assert.equal(managerClaims({ ...manager, roles: [...manager.roles, 'Turnstile.Viewer'] }, 'unit-group'), false);
+  assert.equal(managerClaims({ ...manager, roles: [...manager.roles, 'Another.Role'] }, 'unit-group'), false);
   assert.equal(managerClaims(manager, 'other-group'), false);
   assert.equal(managerClaims({ ...manager, hasgroups: true }, 'unit-group'), false);
   assert.equal(managerClaims({ ...manager, hasgroups: false }, 'unit-group'), false);
@@ -116,6 +117,8 @@ test('role-transition proof rejects tokens minted before the transition', () => 
   assert.equal(freshRole({ iat: 98, roles: ['Turnstile.Manager'] }, 'Turnstile.Manager', 100_000), false);
   assert.equal(freshRole({ iat: 100, roles: ['Turnstile.Admin'] }, 'Turnstile.Manager', 100_000), false);
   assert.equal(freshRole({ roles: ['Turnstile.Admin'] }, 'Turnstile.Admin', 100_000), false);
+  assert.equal(freshRole({ iat: 700, roles: ['Turnstile.Manager'] }, 'Turnstile.Manager', 1_000_000, 300), true);
+  assert.equal(freshRole({ iat: 698, roles: ['Turnstile.Manager'] }, 'Turnstile.Manager', 1_000_000, 300), false);
 });
 test('direct Admin or Viewer assignments block a group-only manager transition before writes', () => {
   const roles = [{ id: 'admin', value: 'Turnstile.Admin' }, { id: 'viewer', value: 'Turnstile.Viewer' },

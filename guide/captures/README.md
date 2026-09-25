@@ -82,6 +82,10 @@ real portal URLs **without opening a browser**. Use `--subscription`, `--resourc
 `--select key=value` and `--non-interactive` for automation. Real choices belong in runtime
 parameters/environment, not in spec files.
 
+ARM discovery passes the selected subscription explicitly. Entra discovery uses the current
+Azure CLI tenant and refuses a selected subscription in another tenant; it never changes the
+CLI account or passes ARM's `--subscription` option to directory commands.
+
 The lead runs the authenticated batch against the one original profile immediately after
 the owner's sign-in. Other agents must not launch that profile. The runner requires an
 explicit `--profile`, takes an exclusive lock for that profile and opens one browser.

@@ -253,6 +253,22 @@ explicit authorization. The authorized group-only attempt on 2026-09-24 was stop
 because a direct Admin assignment kept the token broader than Manager. The account,
 catalog and named values were restored; no Manager-only screenshot is claimed.
 
+A retry that also removes a direct Admin assignment is a **separately authorized plan**.
+Only that plan may add `--include-direct-admin`. It snapshots the complete
+`appRoleAssignedTo` record, deletes it only after adding the test-group membership and
+removing Admin-group membership, then restores **Admin group first**, recreates the same
+principal/resource/appRole tuple, removes the test membership and restores the catalog.
+Graph may generate a new assignment id; compare the authorization tuple and retain both
+records. A direct Viewer assignment still blocks execution.
+
+Scope spelling is not itself a freshness proof: CLI cache keys can normalize aliases.
+The retry records previously used forms, requires only Manager plus the expected group
+before opening a session, compares the token with the pre-transition Owner token, and
+checks issue timestamps with the observed provider backdating allowance. Owner recovery
+separately verifies Graph, memberships, catalog, named values, successful apply and the
+new Owner session. No nonce scope, app-manifest change or extra grant is created by this
+capture script. Execution remains held until the AUM client-journey window closes.
+
 ## 6. Capture/render tools and the local inspector
 
 - `guide/capture.mjs` discovers real Azure targets; pass environment/CLI selections for

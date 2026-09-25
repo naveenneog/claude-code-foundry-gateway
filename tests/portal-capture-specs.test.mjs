@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { specProblems, loadSteps, selectSteps, documentedOutputs, documentationProblems } from '../guide/lib/portal-specs.mjs';
 import { AuthenticationSurface, authenticationReason, parseArguments, portalUrl, resolvePlan, runBatch } from '../guide/lib/portal-batch.mjs';
 import { lockProfile } from '../guide/lib/portal-profile.mjs';
+import * as discovery from '../guide/lib/portal-discovery.mjs';
 
 test('the repository publishes a portal capture spec contract and Turnstile example', () => {
   assert.ok(fs.existsSync(path.resolve('guide/captures/README.md')), 'Portal capture spec contract is missing');
@@ -96,6 +97,29 @@ const tenant = '00000000-0000-0000-0000-000000000001';
 const app = '00000000-0000-0000-0000-000000000002';
 const principal = '00000000-0000-0000-0000-000000000003';
 const target = { id: `/subscriptions/${tenant}/resourceGroups/example/providers/Microsoft.ApiManagement/service/example`, tenantId: tenant };
+test('Entra discovery never passes the ARM-only subscription argument', () => {
+  assert.equal(typeof discovery.discoveryArguments, 'function');
+  const account = { id: 'example-subscription', tenantId: tenant };
+  for (const command of [
+    ['ad', 'app', 'list', '--display-name', 'example', '--all'],
+    ['ad', 'group', 'list', '--display-name', 'example'],
+    ['ad', 'sp', 'show', '--id', app],
+  ]) {
+    assert.deepEqual(discovery.discoveryArguments(command, account, account), [...command, '-o', 'json']);
+  }
+});
+test('ARM discovery retains explicit subscription selection without changing the CLI account', () => {
+  assert.equal(typeof discovery.discoveryArguments, 'function');
+  const command = ['resource', 'list', '--resource-type', 'Microsoft.App/jobs'];
+  assert.deepEqual(discovery.discoveryArguments(command,
+    { id: 'selected-subscription', tenantId: tenant }, { id: 'current-subscription', tenantId: tenant }),
+  [...command, '--subscription', 'selected-subscription', '-o', 'json']);
+});
+test('Entra discovery refuses a different tenant instead of mislabelling the current directory', () => {
+  assert.equal(typeof discovery.discoveryArguments, 'function');
+  assert.throws(() => discovery.discoveryArguments(['ad', 'app', 'list'],
+    { tenantId: principal }, { tenantId: tenant }), /selected subscription.*current Azure CLI tenant/i);
+});
 test('dry-run planning resolves every unique target with no browser dependency', async () => {
   let calls = 0;
   const plan = await resolvePlan([step, { ...step, id: 'second', blade: '/identity' }], async () => { calls++; return target; });
