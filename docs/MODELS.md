@@ -91,6 +91,16 @@ and check the priced ledger's `priced_ok` after ingestion and query publication.
 A model working in Foundry's playground proves the operator's access, not the
 developer's gateway tier.
 
+In the account's deployment view, verify the **Deployment name**, **Model**,
+**Version**, **Deployment type/SKU** and **Provisioning state**. Choose the
+actual deployed name for client aliases and the allowlist; the catalogue model
+name alone is not sufficient.
+
+**Pending batch capture (`docs-review-foundry-deployments`).**
+
+Planned image: `docs/guide/docs-review-foundry-deployments.png` — the
+account's model deployment list and identities.
+
 ---
 
 ## The four things that have to agree

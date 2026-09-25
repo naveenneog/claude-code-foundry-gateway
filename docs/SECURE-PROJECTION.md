@@ -119,6 +119,11 @@ key authentication off and TLS 1.2.
 still require an explicit `networkAccess=public` or `networkAccess=selected-ips`;
 this does not override an Azure Policy that enforces private networking.
 
+**Pending batch capture (`docs-review-cosmos-networking`).**
+
+Planned image: `docs/guide/docs-review-cosmos-networking.png` — the
+projection account's Networking public-access controls.
+
 ### 2. Connect it to your network
 
 Pass the subnets you were given. The template creates only the Cosmos private
@@ -234,6 +239,16 @@ authentication and allowed principals), Networking (integration/storage paths)
 and Identity. The template also creates Cosmos read access for the resolver;
 do not replace it with a broad writer role.
 
+In **Authentication**, verify the Microsoft identity provider and that
+unauthenticated requests require authentication. Inspect the configured tenant,
+audience and allowed caller identities against the discovered gateway identity;
+do not widen the allowlist to make a failing request succeed.
+
+**Pending batch capture (`docs-review-resolver-authentication`).**
+
+Planned image: `docs/guide/docs-review-resolver-authentication.png` — the
+resolver's configured identity provider.
+
 ### 5. Publish the resolver code
 
 ```powershell
@@ -277,6 +292,15 @@ change and a verified close afterwards, not an automatic troubleshooting step.
 endpoint; Public network access must be Disabled after the deployment. Test
 resolution and a request from inside and outside before proceeding.
 
+Verify **Virtual network integration** names the approved resolver subnet and
+the private endpoint is approved. The subnet and DNS-zone IDs come from the
+network deployment outputs, not a screenshot or another environment.
+
+**Pending batch capture (`docs-review-resolver-networking`).**
+
+Planned image: `docs/guide/docs-review-resolver-networking.png` — resolver
+VNet integration and private-endpoint entry points.
+
 ### 7. Integrate the gateway with the VNet
 
 Standard v2 and Premium v2 only. The gateway stays public; its outbound traffic
@@ -311,6 +335,11 @@ change; a shared account is not owned exclusively by this accelerator.
 **Verify:** a gateway request still succeeds and an outside direct request is
 refused. If it fails, inspect private DNS from the APIM network before reopening
 public access. [Network](NETWORK.md) distinguishes client and backend routes.
+
+**Pending batch capture (`docs-review-foundry-networking`).**
+
+Planned image: `docs/guide/docs-review-foundry-networking.png` — Foundry's
+public-network-access setting.
 
 ### 8. Populate the projection from inside the network
 

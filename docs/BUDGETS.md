@@ -59,10 +59,30 @@ may have different values.
 ./scripts/Get-ClaudeBudget.ps1 -ResourceGroup $rg -ApimName $apim
 ```
 
+**Azure CLI read equivalent**, using the selected subscription and gateway:
+
+```powershell
+az apim nv list --subscription '<selected-subscription-id>' -g $rg --service-name $apim -o json |
+    ConvertFrom-Json |
+    Where-Object { $_.name -match '^(tpm|quota)-(standard|premium)$|^quota-org$|^calls-per-minute$' } |
+    Select-Object name, value
+```
+
+This transcript was rendered from a live read on 2026-09-24 UTC, with identifiers
+replaced. It is not a portal screenshot, a recommended allocation or proof of a
+budget change. No values or shared CLI subscription settings were changed.
+
+![Redacted transcript of a live Azure CLI read showing the discovered gateway's token-limit named values](guide/docs-review-live-tier-read.png)
+
 **Portal:** API Management > your gateway > APIs > Named values. Read the values
 above, then find the person's object ID in Entra ID > Users > Overview. An
 entry in `quota-overrides` replaces their tier's daily quota. Month-to-date
 metrics in `Get-ClaudeBudget.ps1` are not the chargeback ledger or dollars.
+
+**Pending batch capture (`docs-review-named-values`).**
+
+Planned image: `docs/guide/docs-review-named-values.png` — tier limits and
+quota settings in the Named values list.
 
 ## 2. Change a tier or the organisation ceiling
 
@@ -74,6 +94,16 @@ az apim nv update -g $rg --service-name $apim --named-value-id quota-org --value
 
 **Portal:** Named values > select `tpm-standard`, `quota-standard` or `quota-org`
 > Edit > Value > Save. Save the original values before editing.
+
+In the editor, verify **Name** / **Display name** identifies the intended
+setting, retain its existing non-secret type, change only **Value** to the
+approved whole-token amount and save. Inspecting the editor does not apply a
+change; read the value back and test the caller after propagation.
+
+**Pending batch capture (`docs-review-daily-quota-editor`).**
+
+Planned image: `docs/guide/docs-review-daily-quota-editor.png` — the standard
+daily-quota editor and its Value field.
 
 No redeployment is needed. Wait for configuration propagation and verify a
 request; a successful ARM write is not proof the running policy has changed.

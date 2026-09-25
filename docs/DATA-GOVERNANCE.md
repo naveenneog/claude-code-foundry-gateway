@@ -26,6 +26,15 @@ Review the configured data, table plan and retention with the privacy owner.
 Client content capture is a separate MDM/local setting, not an APIM portal switch.
 See [Migration](MIGRATION.md#where-history-lives-afterwards-local-or-cloud).
 
+In **Tables**, locate the actual table, open **Manage table**, and inspect its
+**Table plan** and retention settings. Do not change a plan or retention period
+merely to complete an inspection; obtain the privacy owner's approval first.
+
+**Pending batch capture (`docs-review-workspace-tables`).**
+
+Planned image: `docs/guide/docs-review-workspace-tables.png` — the
+AppMetrics table plan and retention entry point.
+
 Choose retention before enabling capture. A lower-cost table plan can forfeit
 selective purge: the recorded U7 constraints allow Analytics-plan tables, not
 Basic/Auxiliary. Exports and Sentinel data-lake mirrors have separate lifecycles.
