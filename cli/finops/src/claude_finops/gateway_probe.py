@@ -13,6 +13,8 @@ def tiny_request(config, model="claude-sonnet-5", *, apply=False):
                 effect="Consumes real model tokens and is recorded in the gateway ledger. No bypass endpoint or stored key is used.")
     if not apply:
         return plan
+    if config.backend == "fake":
+        raise FinOpsError("Example mode cannot send real model requests. Select an explicit live backend.", 5)
     if not config.resource_group or not config.apim_name:
         raise FinOpsError("Discover the gateway with aum configure before sending an enforcement probe.")
     selected = ("--subscription", config.subscription) if config.subscription else ()

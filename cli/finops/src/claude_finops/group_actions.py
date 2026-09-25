@@ -5,6 +5,12 @@ from .groups import EntraGroups
 from .rules import identifier, require_owner
 
 
+def probe_gateway(engine, config, model="claude-sonnet-5", *, apply=False):
+    require_owner(engine.read("whoami"))
+    from .gateway_probe import tiny_request
+    return tiny_request(config, model, apply=apply)
+
+
 def group_call(engine, operation, *args, **kwargs):
     require_owner(engine.read("whoami"))
     if engine.backend.name == "Example" and not hasattr(engine, "group_factory"):

@@ -16,8 +16,8 @@ def register(app, groups, emit):
     @groups["requests"].command("probe")
     def probe(ctx: typer.Context, model: str = "claude-sonnet-5", apply: bool = False):
         """Preview/send one tiny real request through the discovered gateway."""
-        from .gateway_probe import tiny_request
-        emit(ctx, lambda e: tiny_request(ctx.obj["config"], model, apply=apply and not ctx.obj["what_if"]))
+        from .group_actions import probe_gateway
+        emit(ctx, lambda e: probe_gateway(e, ctx.obj["config"], model, apply=apply and not ctx.obj["what_if"]))
 
     @group.command("find")
     def find(ctx: typer.Context, query: str, cursor: str | None = None, limit: int = typer.Option(50, min=1, max=100)):

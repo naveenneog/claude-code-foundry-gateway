@@ -7,7 +7,7 @@
   "width": 1280,
   "height": 1300,
   "outputs": ["docs/images/architecture/terminal-finops.png"],
-  "sources": ["scripts/New-ClaudeTurnstileEntraApp.ps1", "scripts/New-ClaudeAumEntraApp.ps1", "scripts/Set-ClaudeTier.ps1", "scripts/Set-ClaudeBudget.ps1", "scripts/ClaudeAumDirectWrites.ps1", "scripts/Sync-AumMembership.ps1", "scripts/ApimNamedValue.ps1", "analytics/chargeback-ledger.kql", "cli/finops/pyproject.toml", "cli/finops/src/claude_finops/cli.py", "cli/finops/src/claude_finops/direct.py", "cli/finops/src/claude_finops/direct_analytics.py", "cli/finops/src/claude_finops/scope.py", "cli/finops/src/claude_finops/service_models.py", "cli/finops/src/claude_finops/service_writes.py", "cli/finops/src/claude_finops/groups.py"],
+  "sources": ["scripts/New-ClaudeTurnstileEntraApp.ps1", "scripts/New-ClaudeAumEntraApp.ps1", "scripts/Set-ClaudeTier.ps1", "scripts/Set-ClaudeBudget.ps1", "scripts/ClaudeAumDirectWrites.ps1", "scripts/Sync-AumMembership.ps1", "scripts/ApimNamedValue.ps1", "analytics/chargeback-ledger.kql", "cli/finops/pyproject.toml", "cli/finops/src/claude_finops/cli.py", "cli/finops/src/claude_finops/config.py", "cli/finops/src/claude_finops/ui_features.py", "cli/finops/src/claude_finops/direct.py", "cli/finops/src/claude_finops/direct_analytics.py", "cli/finops/src/claude_finops/scope.py", "cli/finops/src/claude_finops/service_models.py", "cli/finops/src/claude_finops/service_writes.py", "cli/finops/src/claude_finops/groups.py", "cli/finops/src/claude_finops/group_actions.py", "cli/finops/src/claude_finops/gateway_probe.py", "cli/finops/src/claude_finops/commands_groups.py"],
   "namingEvidence": {
     "repository": "naveenneog/claude-code-foundry-gateway",
     "revision": "8b79830462701fcaef71e7422ca77add4abdd8f1",

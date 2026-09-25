@@ -40,10 +40,10 @@ class FeatureUI:
     def action_gateway_probe(self):
         if self.identity.get("role") != "owner" or self.redactor.enabled:
             return
-        from .gateway_probe import tiny_request
+        from .group_actions import probe_gateway
         self.push_screen(ActionForm("Send a tiny governed request", [
             ("model", "Deployed Claude model", "claude-sonnet-5", None)],
-            lambda values, apply: tiny_request(self.config, values["model"], apply=apply)))
+            lambda values, apply: probe_gateway(self.engine, self.config, values["model"], apply=apply)))
 
     def action_group_lookup(self):
         if self.identity.get("role") == "owner" and not self.redactor.enabled:
