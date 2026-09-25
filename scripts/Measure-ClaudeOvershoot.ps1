@@ -39,8 +39,8 @@
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)][string]$ResourceGroup,
-    [Parameter(Mandatory = $true)][string]$ApimName,
+    [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
+    [string]$ApimName,
     [int]$JobIntervalSeconds = 300,
     [int]$TimeoutSeconds = 600,
     [int]$PollSeconds = 5,
@@ -50,7 +50,20 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 $root = Split-Path $PSScriptRoot -Parent
+if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
+if (-not $ApimName) { $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup }
+
+# Resolve every choice before the first budget write.
+if ($WorkspaceName) {
+    $wsId = az monitor log-analytics workspace show -g $ResourceGroup -n $WorkspaceName --query customerId -o tsv 2>$null
+} else {
+    $chosenWorkspaceId = Select-ClaudeWorkspace -ResourceGroup $ResourceGroup -ApimName $ApimName `
+        -AmbiguousMessage "Multiple workspaces in '$ResourceGroup'. Pass -WorkspaceName to say which holds the gateway's telemetry."
+    $WorkspaceName = ($chosenWorkspaceId -split '/')[-1]
+    $wsId = az monitor log-analytics workspace show --ids $chosenWorkspaceId --query customerId -o tsv 2>$null
+}
 
 $sub = az account show --query id -o tsv
 $base = "https://management.azure.com/subscriptions/$sub/resourceGroups/$ResourceGroup/providers/Microsoft.ApiManagement/service/$ApimName"
@@ -143,21 +156,7 @@ try {
     # first run reported "no requests in the last 24h" against a ledger holding
     # 29. Same shape as the bypass audit picking the wrong Foundry account.
     #
-    # One workspace is unambiguous. More than one has to be named.
-    $wsId = $null
-    if ($WorkspaceName) {
-        $wsId = az monitor log-analytics workspace show -g $ResourceGroup -n $WorkspaceName --query customerId -o tsv 2>$null
-    } else {
-        $found = az monitor log-analytics workspace list -g $ResourceGroup --query "[].name" -o tsv 2>$null
-        $names = @($found -split "`n" | Where-Object { $_ })
-        if ($names.Count -eq 1) {
-            $WorkspaceName = $names[0].Trim()
-            $wsId = az monitor log-analytics workspace show -g $ResourceGroup -n $WorkspaceName --query customerId -o tsv 2>$null
-        } elseif ($names.Count -gt 1) {
-            throw ("$($names.Count) workspaces in '$ResourceGroup': " + ($names -join ', ') +
-                   ". Pass -WorkspaceName to say which holds the gateway's telemetry.")
-        }
-    }
+    # The workspace was resolved before writing the probe budget.
 
     if (-not $wsId) {
         Write-Host '    no Log Analytics workspace found in this resource group - skipped' -ForegroundColor Yellow

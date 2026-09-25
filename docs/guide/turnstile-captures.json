@@ -229,56 +229,53 @@
     {
       "image": "turnstile-entra-1-overview.png",
       "live": true,
-      "captured_at_utc": "2026-09-24T20:15:26.201Z",
-      "accel_commit": "78d4537c3083f1d997bc82f6d1082236db527d21",
+      "captured_at_utc": "2026-09-25T13:24:15.113Z",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
       "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
       "tool": "Playwright 1.62.1",
       "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/Overview/appId/00000000-0000-0000-0000-000000000000",
-      "identity_kind": "owner_portal",
-      "surface": "App registrations / Overview",
-      "state": "existing authenticated portal session; read only; no directory mutation",
+      "identity_kind": "authenticated_portal_profile",
+      "surface": "turnstile-app-overview",
       "redaction": {
         "applied": true,
         "leak_check_passed": true,
         "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "34ce412b42906895b71ad0643e4dfcf50bfe446f9730e27b08e7e1b47181a441"
+      "sha256": "27f45a100c65a5b49b9b1bb922009a3a00092c062758675e9de1b4dd3f60002f"
     },
     {
       "image": "turnstile-entra-2-expose-api.png",
       "live": true,
-      "captured_at_utc": "2026-09-24T20:16:32.402Z",
-      "accel_commit": "78d4537c3083f1d997bc82f6d1082236db527d21",
+      "captured_at_utc": "2026-09-25T13:24:26.681Z",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
       "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
       "tool": "Playwright 1.62.1",
       "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/ProtectAnAPI/appId/00000000-0000-0000-0000-000000000000",
-      "identity_kind": "owner_portal",
-      "surface": "App registrations / Expose an API",
-      "state": "existing authenticated portal session; read only; no directory mutation",
+      "identity_kind": "authenticated_portal_profile",
+      "surface": "turnstile-expose-api",
       "redaction": {
         "applied": true,
         "leak_check_passed": true,
         "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "6aa6dc7dad7771d25cc03fb9e68d27b053c009bfc2eafb5e3878bfc2da06946a"
+      "sha256": "bf77bb8bd32a52073be7d9a6b8a3d0cf3f6f0c9ce77fbbca110b2bebec146597"
     },
     {
       "image": "turnstile-entra-3-app-roles.png",
       "live": true,
-      "captured_at_utc": "2026-09-24T20:16:38.628Z",
-      "accel_commit": "78d4537c3083f1d997bc82f6d1082236db527d21",
+      "captured_at_utc": "2026-09-25T13:26:17.085Z",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
       "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
       "tool": "Playwright 1.62.1",
       "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/AppRoles/appId/00000000-0000-0000-0000-000000000000",
-      "identity_kind": "owner_portal",
-      "surface": "App registrations / App roles",
-      "state": "existing authenticated portal session; read only; no directory mutation",
+      "identity_kind": "authenticated_portal_profile",
+      "surface": "turnstile-app-roles",
       "redaction": {
         "applied": true,
         "leak_check_passed": true,
         "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "83845d5ec07a4faeca483c674da6398aa15bbbf3da0a36b69f30ae4ca5d93fad"
+      "sha256": "a07b350ea777dec7a84fcffa4fe6c29516769ead1fe81c2ddeb99987b4fe6464"
     },
     {
       "image": "turnstile-manager-budgets.png",
@@ -530,20 +527,19 @@
     {
       "image": "turnstile-t08-entra-config.png",
       "live": true,
-      "captured_at_utc": "2026-09-24T20:16:49.754Z",
-      "accel_commit": "78d4537c3083f1d997bc82f6d1082236db527d21",
+      "captured_at_utc": "2026-09-25T13:26:33.159Z",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
       "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
       "tool": "Playwright 1.62.1",
       "route": "https://portal.azure.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Properties/objectId/00000000-0000-0000-0000-000000000000/appId/00000000-0000-0000-0000-000000000000",
-      "identity_kind": "owner_portal",
-      "surface": "Enterprise applications / Properties",
-      "state": "existing authenticated portal session; read only; no directory mutation",
+      "identity_kind": "authenticated_portal_profile",
+      "surface": "turnstile-enterprise-properties",
       "redaction": {
         "applied": true,
         "leak_check_passed": true,
         "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "292678db483e5c1c8a033645286fa8d8bee5c484d847528241749ec46ff58aa3"
+      "sha256": "74b76235a7e26dac94db2de837380df0d128277c54cac7aa96baeb04607111a5"
     },
     {
       "image": "turnstile-t09-entra-mutation.png",

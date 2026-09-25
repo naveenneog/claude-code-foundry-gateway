@@ -58,34 +58,20 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 
 $sub = az account show --query id -o tsv 2>$null
 if (-not $sub) { throw 'Not signed in. Run: az login' }
 
-if (-not $ApimName) { $ApimName = az apim list -g $ResourceGroup --query "[0].name" -o tsv 2>$null }
+if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
+if (-not $ApimName) { $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup }
 
 # Which Foundry account? The one the gateway actually calls, read from its API
 # backend, not the first one in the resource group. A group can hold several
 # Cognitive Services accounts, and auditing the wrong one returns a clean result
 # for a resource nobody is using.
-if (-not $FoundryAccount -and $ApimName) {
-    $serviceUrl = az apim api show -g $ResourceGroup --service-name $ApimName --api-id claude-foundry --query serviceUrl -o tsv 2>$null
-    if ($serviceUrl -and $serviceUrl -match '^https://([^./]+)\.') {
-        $candidate = $Matches[1]
-        if (az cognitiveservices account show -g $ResourceGroup -n $candidate --query id -o tsv 2>$null) {
-            $FoundryAccount = $candidate
-            Write-Verbose "Foundry account taken from the gateway backend: $FoundryAccount"
-        }
-    }
-}
 if (-not $FoundryAccount) {
-    $accounts = az cognitiveservices account list -g $ResourceGroup --query "[].name" -o tsv 2>$null
-    $names = @($accounts -split '\r?\n' | Where-Object { $_ })
-    if (-not $names.Count) { throw "No Cognitive Services account in $ResourceGroup. Pass -FoundryAccount." }
-    if ($names.Count -gt 1) {
-        Write-Warning ("$ResourceGroup holds {0} Cognitive Services accounts and the gateway's backend could not be read. Auditing '{1}'. Pass -FoundryAccount to choose: {2}" -f $names.Count, $names[0], ($names -join ', '))
-    }
-    $FoundryAccount = $names[0]
+    $FoundryAccount = Select-ClaudeFoundryAccount -ResourceGroup $ResourceGroup -ApimName $ApimName
 }
 $scope = az cognitiveservices account show -g $ResourceGroup -n $FoundryAccount --query id -o tsv 2>$null
 if (-not $scope) { throw "Foundry account '$FoundryAccount' not found in $ResourceGroup." }

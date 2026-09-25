@@ -79,10 +79,10 @@ above, then find the person's object ID in Entra ID > Users > Overview. An
 entry in `quota-overrides` replaces their tier's daily quota. Month-to-date
 metrics in `Get-ClaudeBudget.ps1` are not the chargeback ledger or dollars.
 
-**Pending batch capture (`docs-review-named-values`).**
+![Live Named values list for the discovered gateway: allow lists, business-unit maps, entitlement settings, models and quota-org, with identifiers redacted and read-only values hidden](guide/a6-named-values.png)
 
-Planned image: `docs/guide/docs-review-named-values.png` — tier limits and
-quota settings in the Named values list.
+The first page ends at `quota-overrides`; select **Load more** for the tier rows
+(`quota-premium`, `quota-standard`, `tpm-premium`, `tpm-standard`).
 
 ## 2. Change a tier or the organisation ceiling
 
@@ -100,10 +100,7 @@ setting, retain its existing non-secret type, change only **Value** to the
 approved whole-token amount and save. Inspecting the editor does not apply a
 change; read the value back and test the caller after propagation.
 
-**Pending batch capture (`docs-review-daily-quota-editor`).**
-
-Planned image: `docs/guide/docs-review-daily-quota-editor.png` — the standard
-daily-quota editor and its Value field.
+![Live editor for the quota-standard named value: Name, Display name, Type Plain and the whole-token Value, opened read-only with no change saved](guide/docs-review-daily-quota-editor.png)
 
 No redeployment is needed. Wait for configuration propagation and verify a
 request; a successful ARM write is not proof the running policy has changed.

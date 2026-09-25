@@ -41,6 +41,51 @@ against stale runs is being added with the modes, and a single queue-driven writ
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
 
+## Portal pictures recaptured live, and the test environments removed, 2026-09-25
+
+Asked by the owner: every portal picture live, from his own sign-in, not from another
+repository. One batch runner, one original profile, 75 steps across the gateway, Foundry,
+the telemetry workspace, the projection and resolver, the report resources, Turnstile and
+AUM's Entra registrations. Each capture is recorded in `docs/guide/portal-captures.json`
+with its route, time, redaction result and the SHA-256 of the published pixels; the tests
+fail if a published image differs from its record. The documents that said "pending batch
+capture" now show the pictures.
+
+Found by doing it, and fixed test-first:
+
+- **A mapped suffix inside a longer name escaped redaction.** Pairs matched only at word
+  boundaries, so a report storage account named from a deployment suffix appeared on the
+  admin job's environment-variable blade, and the leak check, using the same rule, passed it.
+  Distinctive values now match anywhere.
+- **Colleagues' names on a group's Members blade.** People are not in any private map. The
+  discovery now reads the page's own members or assigned principals, shows each as
+  `Contoso user N`, hides initials, and refuses to capture a people page without them.
+- **Eighteen steps failed on blades that had rendered**, because the runner took the first DOM
+  match for a label and the portal keeps hidden copies. Visible-first matching, locator names
+  in timeouts, and spec fixes from replaying each failure (see the CHANGELOG).
+
+Neither leak reached a commit: both were in uncommitted batch output, found on review, and
+every resource image was recaptured afterwards (63 steps, 13:51-14:14Z). Entra blades asked for
+step-up approval every few pages, so the resource and Entra steps now run as separate batches.
+Three Entra pictures were recaptured under the new rules; the owner's sign-in lapsed before the
+other nine. Seven of those were taken at 13:20-13:26Z under the earlier rules and are kept after
+a review of each (app registrations and properties: identifiers zeroed, no person shown). AUM's
+Users and groups picture showed the owner's initials beside his pseudonym and was dropped; it
+and Turnstile's assignments page wait for the next step-up.
+
+Still pending, and why: the 24 P54 edge pictures and 7 AUM Function and storage pictures
+target test deployments that were torn down after their terminal evidence was recorded.
+They need those deployments again; the documents keep them as inline pending paths.
+
+**Test environments removed.** The SKU tests (the Basic v2 test gateway, and the second test
+resource group with its Foundry account, deleted and purged at 10:06-10:19Z). The Premium v2
+environment's resource group (the Premium v2 gateway, the projection's Cosmos account, the
+resolver, their private endpoints and DNS zones) after its pictures were recaptured: deletion
+started 14:28Z; its gateway and Foundry account are purged once it completes. The Standard v2 SKU-test gateway,
+about $700 a month, is kept: Turnstile's model-gateway integration points at it (its
+`APIM_SERVICE_NAME` setting, and roles on Turnstile's Event Hubs and ledger table), and
+deleting it would break those features. It is the owner's decision.
+
 ## FinOps tools in one guide, 2026-09-25
 
 Asked by the owner, who had no single place that compared the FinOps tools, how each person signs
@@ -88,9 +133,24 @@ Applied to the monitoring flow: `Publish-ClaudeQueries.ps1`, `Publish-ClaudeWork
 and now prints the linked `Workspace`. On the reference gateway the workbook publisher chose the
 workspace behind the gateway's Application Insights out of three in its group, and published the
 owner's "Claude gateway - platform" workbook. `tests/Test-ClaudeChoice.ps1`:
-34 assertions on PowerShell 7 and 5.1, and four mutations in the business-unit harness. Nothing
-architectural changed. Still guessing: 24 other scripts take the first match (`[0].name`) or
-stop with "Pass -X"; they move to the same helper next.
+34 assertions on PowerShell 7 and 5.1, and four mutations in the business-unit harness. Nothing architectural changed.
+
+**Sweep, merged 2026-09-25 from `script-choices` at `c62b4b4`** (gate PASS, 928 s, 63 checks passed,
+none skipped). The same chooser now covers administration, Turnstile, reporting, model probes and
+workstation migration, about 24 more scripts. New selectors pick the Foundry account (the gateway's
+backend recommended), the Turnstile resource group and identities, report resources, models,
+Application Insights and local backups (newest first). Restore choices are settled before any
+write. The two Turnstile jobs and the three report jobs pass their targets explicitly in their
+Bicep command lines, so none of them can reach a prompt; no job was repinned.
+
+Test coverage: 191 chooser assertions and 20 in-process mutations, on PowerShell 7 and 5.1.
+
+Read-only checks against the reference gateway left its named values byte-identical. The bypass
+audit reported 13 principals with full data-plane access to the Foundry account, which skips every
+control here. That is up from 7 in the earlier audit; they are the tenant's to review, and none
+was changed.
+
+One exception is kept on purpose: the Turnstile apply job's exact-name custom-role lookup.
 
 ## Premium v2 injection: where the private IP is, 2026-09-25
 
@@ -257,6 +317,12 @@ and a private endpoint needed its provider-specific delete.
 Still open: the AUM client (P52) driving the service end to end. The journeys above are HTTP
 receipts, not the terminal app. Also still open: twelve portal pictures, which now need a fresh,
 priced deployment because the test one is gone.
+
+**Rolled out to the reference gateway on 2026-09-25 at 09:48:52Z**, in a gap between P52's live
+windows. The deploy took 4.3 s. The live policy then equalled main's, and all 28 named values were
+unchanged. A real request returned 200 with every budget header (unit, parent, organisation and
+daily remaining quota) and the new `x-claude-gateway-request-id`. This also shipped P54's
+`ClientIp` trace field.
 
 ## P53 Turnstile, tested and captured live, 2026-09-24 (phase 1)
 

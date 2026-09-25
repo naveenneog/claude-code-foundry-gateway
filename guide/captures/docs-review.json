@@ -6,7 +6,7 @@
       "output": "docs/guide/docs-review-live-apim-overview.png",
       "target": { "discover": "gateway", "selectionKey": "gateway" },
       "blade": "/overview",
-      "waitFor": { "selector": "[aria-label^=\"Copy to clipboard the value for Tier \"]" },
+      "waitFor": { "text": "Gateway URL" },
       "settle": 6000,
       "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
     },
@@ -20,30 +20,30 @@
       "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
     },
     {
-      "id": "docs-review-named-values",
-      "output": "docs/guide/docs-review-named-values.png",
-      "target": { "discover": "gateway", "selectionKey": "gateway" },
-      "blade": "/namedValues",
-      "waitFor": { "text": "quota-standard", "exact": true },
-      "settle": 5000,
-      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
-    },
-    {
       "id": "docs-review-daily-quota-editor",
       "output": "docs/guide/docs-review-daily-quota-editor.png",
       "target": { "discover": "gateway", "selectionKey": "gateway" },
-      "blade": "/namedValues",
-      "clicks": [{ "text": "quota-standard", "exact": true }],
-      "waitFor": { "text": "Display name" },
+      "blade": "/overview",
+      "waitFor": { "text": "Gateway URL" },
+      "clicks": [
+        { "text": "APIs", "exact": true, "settle": 1000, "waitFor": { "text": "Named values", "exact": true } },
+        { "text": "Named values", "exact": true, "waitFor": { "text": "allow-standard" } },
+        { "text": "Load more", "exact": true, "waitFor": { "text": "quota-standard", "exact": true } },
+        { "text": "quota-standard", "exact": true, "waitFor": { "text": "Display name" } }
+      ],
       "settle": 4000,
-      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE", "hideSelectors": ["input[readonly]"] }
     },
     {
       "id": "docs-review-gateway-identity",
       "output": "docs/guide/docs-review-gateway-identity.png",
       "target": { "discover": "gateway", "selectionKey": "gateway" },
-      "blade": "/identity",
-      "waitFor": { "text": "System assigned" },
+      "blade": "/overview",
+      "waitFor": { "text": "Gateway URL" },
+      "clicks": [
+        { "text": "Security", "exact": true, "waitFor": { "text": "Managed identities", "exact": true } },
+        { "text": "Managed identities", "exact": true, "waitFor": { "text": "System assigned" } }
+      ],
       "settle": 5000,
       "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
     },
@@ -51,12 +51,14 @@
       "id": "docs-review-api-settings",
       "output": "docs/guide/docs-review-api-settings.png",
       "target": { "discover": "gateway", "selectionKey": "gateway" },
-      "blade": "/apis",
+      "blade": "/overview",
+      "waitFor": { "text": "Gateway URL" },
       "clicks": [
-        { "text": "Claude on Foundry (governed)", "exact": true },
-        { "text": "Settings", "exact": true }
+        { "text": "APIs", "exact": true, "settle": 1000, "waitFor": { "text": "Named values", "exact": true } },
+        { "selector": "a.fxc-menu-item >> text=\"APIs\"", "waitFor": { "text": "Add API", "exact": true } },
+        { "text": "Claude on Foundry (governed)", "exact": true, "waitFor": { "text": "All operations", "exact": true } },
+        { "selector": "role=tab[name=\"Settings\"]", "waitFor": { "text": "Web service URL" } }
       ],
-      "waitFor": { "text": "Web service URL" },
       "settle": 5000,
       "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
     },
@@ -64,12 +66,14 @@
       "id": "docs-review-api-policy",
       "output": "docs/guide/docs-review-api-policy.png",
       "target": { "discover": "gateway", "selectionKey": "gateway" },
-      "blade": "/apis",
+      "blade": "/overview",
+      "waitFor": { "text": "Gateway URL" },
       "clicks": [
-        { "text": "Claude on Foundry (governed)", "exact": true },
-        { "text": "All operations", "exact": true }
+        { "text": "APIs", "exact": true, "settle": 1000, "waitFor": { "text": "Named values", "exact": true } },
+        { "selector": "a.fxc-menu-item >> text=\"APIs\"", "waitFor": { "text": "Add API", "exact": true } },
+        { "text": "Claude on Foundry (governed)", "exact": true, "waitFor": { "text": "All operations", "exact": true } },
+        { "text": "All operations", "exact": true, "waitFor": { "text": "Inbound processing" } }
       ],
-      "waitFor": { "text": "Inbound processing" },
       "settle": 5000,
       "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
     },
@@ -96,8 +100,13 @@
       "output": "docs/guide/docs-review-workspace-functions.png",
       "target": { "discover": "workspace", "selectionKey": "workspace" },
       "blade": "/logs",
-      "clicks": [{ "text": "Functions", "exact": true }],
-      "waitFor": { "text": "ClaudeCost" },
+      "waitFor": { "text": "Queries hub" },
+      "clicks": [
+        { "text": "Simple mode", "exact": true, "waitFor": { "text": "KQL mode", "exact": true } },
+        { "text": "KQL mode", "exact": true, "waitFor": { "selector": "[role=\"tab\"][aria-label=\"Functions\"]" } },
+        { "selector": "[role=\"tab\"][aria-label=\"Functions\"]", "waitFor": { "text": "Workspace functions", "exact": true } },
+        { "text": "Workspace functions", "exact": true, "waitFor": { "text": "ClaudeCost", "exact": true } }
+      ],
       "settle": 10000,
       "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
     },
@@ -120,15 +129,6 @@
       "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
     },
     {
-      "id": "docs-review-foundry-deployments",
-      "output": "docs/guide/docs-review-foundry-deployments.png",
-      "target": { "discover": "foundry", "selectionKey": "foundry" },
-      "blade": "/deployments",
-      "waitFor": { "text": "Deployments" },
-      "settle": 6000,
-      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
-    },
-    {
       "id": "docs-review-entra-groups",
       "output": "docs/guide/docs-review-entra-groups.png",
       "target": {
@@ -137,16 +137,20 @@
         "selectionKey": "docs-entitlement-group"
       },
       "entraBlade": { "kind": "group", "name": "Members" },
-      "waitFor": { "text": "Members", "exact": true },
+      "waitFor": { "text": "group members found" },
       "settle": 6000,
-      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE", "people": true, "hideSelectors": [".ext-icon-initials"] }
     },
     {
       "id": "docs-review-foundry-networking",
       "output": "docs/guide/docs-review-foundry-networking.png",
       "target": { "discover": "foundry", "selectionKey": "foundry" },
-      "blade": "/networking",
-      "waitFor": { "text": "Public network access" },
+      "blade": "/overview",
+      "waitFor": { "text": "Essentials" },
+      "clicks": [
+        { "text": "Resource Management", "exact": true, "waitFor": { "text": "Networking", "exact": true } },
+        { "text": "Networking", "exact": true, "waitFor": { "text": "Firewalls and virtual networks" } }
+      ],
       "settle": 6000,
       "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
     },
@@ -159,8 +163,12 @@
         "nameFilterEnv": "DOCS_RESOLVER_NAME_FILTER",
         "selectionKey": "docs-resolver"
       },
-      "blade": "/networking",
-      "waitFor": { "text": "Virtual network integration" },
+      "blade": "/overview",
+      "waitFor": { "text": "Essentials" },
+      "clicks": [
+        { "text": "Settings", "exact": true, "waitFor": { "text": "Networking", "exact": true } },
+        { "text": "Networking", "exact": true, "waitFor": { "text": "Virtual network integration" } }
+      ],
       "settle": 6000,
       "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
     },
@@ -173,8 +181,12 @@
         "nameFilterEnv": "DOCS_RESOLVER_NAME_FILTER",
         "selectionKey": "docs-resolver"
       },
-      "blade": "/authsettings",
-      "waitFor": { "text": "Identity provider" },
+      "blade": "/overview",
+      "waitFor": { "text": "Essentials" },
+      "clicks": [
+        { "text": "Settings", "exact": true, "waitFor": { "text": "Authentication", "exact": true } },
+        { "text": "Authentication", "exact": true, "waitFor": { "text": "Identity provider" } }
+      ],
       "settle": 6000,
       "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
     },

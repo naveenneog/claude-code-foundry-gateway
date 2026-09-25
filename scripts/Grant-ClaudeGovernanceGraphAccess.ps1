@@ -40,12 +40,13 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 $graphAppId = '00000003-0000-0000-c000-000000000000'  # Microsoft Graph, the same in every tenant
 $permission = 'GroupMember.Read.All'
 
 if (-not $PrincipalId) {
-    $PrincipalId = az identity list -g $ResourceGroup --query "[?starts_with(name, 'id-turnstile-')].principalId | [0]" -o tsv 2>$null
-    if (-not $PrincipalId) { throw "No Turnstile job identity (id-turnstile-*) in $ResourceGroup. Register the schedule first, or pass -PrincipalId." }
+    if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
+    $PrincipalId = Select-ClaudeTurnstileIdentity -ResourceGroup $ResourceGroup
 }
 $graph = az ad sp show --id $graphAppId --query "{id:id, role:appRoles[?value=='$permission'].id | [0]}" -o json | ConvertFrom-Json
 $existing = @((az rest --method get --url "https://graph.microsoft.com/v1.0/servicePrincipals/$PrincipalId/appRoleAssignments" | ConvertFrom-Json).value |

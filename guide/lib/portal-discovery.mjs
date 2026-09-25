@@ -55,7 +55,28 @@ export async function createResolver(options) {
       let principal;
       try { principal = json(['ad', 'sp', 'show', '--id', selected.appId]); }
       catch { /* Registration-only captures still work; enterprise URL resolution fails closed. */ }
-      return { ...selected, servicePrincipalId: principal?.id, tenantId: account.tenantId, subscriptionName: account.name };
+      // Users and service principals assigned to the application appear on its Users and
+      // groups page; the capture pseudonymises them (peopleRedactionPairs).
+      let people;
+      if (principal?.id) {
+        try {
+          people = JSON.parse(az(['rest', '--method', 'GET', '--url',
+            `https://graph.microsoft.com/v1.0/servicePrincipals/${principal.id}/appRoleAssignedTo?$select=principalDisplayName,principalType`, '-o', 'json']))
+            .value.filter((item) => item.principalType !== 'Group').map((item) => ({ displayName: item.principalDisplayName }));
+        } catch { /* A page that needs them refuses to capture without them. */ }
+      }
+      return { ...selected, servicePrincipalId: principal?.id, people, tenantId: account.tenantId, subscriptionName: account.name };
+    }
+    if (target.discover === 'entra-group') {
+      // A group's direct members are shown on its Members page; groups among them are this
+      // deployment's governance groups, people are pseudonymised by the capture.
+      let people;
+      try {
+        people = json(['ad', 'group', 'member', 'list', '--group', selected.id])
+          .filter((item) => !String(item['@odata.type'] ?? '').endsWith('.group'))
+          .map((item) => ({ displayName: item.displayName }));
+      } catch { /* A page that needs them refuses to capture without them. */ }
+      return { ...selected, people, tenantId: account.tenantId, subscriptionName: account.name };
     }
     return { ...selected, tenantId: account.tenantId, subscriptionName: account.name };
   };

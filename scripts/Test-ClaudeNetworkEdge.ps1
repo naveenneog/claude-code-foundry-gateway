@@ -18,6 +18,7 @@ param(
     [string]$OutputPath
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeNetwork.ps1')
 $state = Get-Content $StatePath -Raw | ConvertFrom-Json
 if ($state.Version -ne 1 -or -not $state.Endpoint -or $state.Removed) { throw 'Expected an active network-edge state file.' }
@@ -51,8 +52,10 @@ Check "DNS from $NetworkLocation" ($addresses.Count -gt 0 -and $private -eq $exp
 if (-not $Model) {
     $deployments = Get-ClaudeNetworkPages "https://management.azure.com$($state.FoundryId)/deployments?api-version=2024-10-01"
     $models = @($deployments | Where-Object { $_.properties.model.format -eq 'Anthropic' -and $_.properties.provisioningState -eq 'Succeeded' })
-    if (-not $models.Count) { throw 'No succeeded Anthropic deployment was discovered. Pass a deployed model explicitly.' }
-    $Model = @($models | Sort-Object { if($_.properties.model.name -match 'haiku'){0}elseif($_.properties.model.name -match 'sonnet'){1}else{2} })[0].name
+    $Model = Select-ClaudeModel -Names @($models | ForEach-Object { $_.name }) -Source "succeeded Anthropic deployments on $($state.FoundryId)" -WhereToFind @(
+        "az rest --method get --url https://management.azure.com$($state.FoundryId)/deployments?api-version=2024-10-01"
+        'Azure portal: the Foundry resource in the reviewed network state > Deployments'
+    )
 }
 if ($PSCmdlet.ShouldProcess($state.Endpoint,'Spend a small number of tokens to test TLS, SSE and authenticated direct-origin refusal')) {
     $token = Invoke-ClaudeNetworkAz @('account','get-access-token','--resource','https://cognitiveservices.azure.com','--subscription',$state.SubscriptionId)

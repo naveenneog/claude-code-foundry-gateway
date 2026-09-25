@@ -236,10 +236,7 @@ Verify **Status** is **On**, then copy **Object (principal) ID** for the Foundry
 role assignment. If it is Off, an authorised operator enables it and saves
 before assigning the role; do not copy an application/client ID instead.
 
-**Pending batch capture (`docs-review-gateway-identity`).**
-
-Planned image: `docs/guide/docs-review-gateway-identity.png` — system-assigned
-identity, Status and Object (principal) ID.
+![Live Managed identities blade of the gateway: System assigned tab with Status On, the Object (principal) ID field (redacted) and the Azure role assignments button](guide/docs-review-gateway-identity.png)
 
 ### 2.3 Developers
 
@@ -585,10 +582,7 @@ open the policy code editor to review the token, entitlement and quota policies.
 Do not select **Save** merely to inspect the policy. If the API was renamed,
 identify it from its `claude-foundry` API ID and `/claude` path first.
 
-**Pending batch capture (`docs-review-api-policy`).**
-
-Planned image: `docs/guide/docs-review-api-policy.png` — the Claude API's
-All operations view and inbound policy controls.
+![Live Design tab of the governed Claude API with All operations selected: its Count Tokens, Create Message and Health Probe operations, the inbound policy chain (base, validate-azure-ad-token, set-variable), outbound processing and the Foundry backend with forward-request](guide/docs-review-api-policy.png)
 
 ### 4.1 Confirm the tier is v2
 
