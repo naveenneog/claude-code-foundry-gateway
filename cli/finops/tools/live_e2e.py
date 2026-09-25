@@ -23,6 +23,7 @@ from claude_finops.screens import DetailScreen
 from claude_finops.tui import FinOpsApp
 
 from e2e_support import GatewayState, Journal, utc
+from e2e_cleanup import restore_turnstile
 
 ROOT = Path(__file__).resolve().parents[3]
 RESTORE_NAMES = ["bu-members", "bu-modes", "bu-parents", "bu-registry", "turnstile-integration",
@@ -181,17 +182,8 @@ async def journey(args):
         if mutated and snapshot:
             try:
                 if backend.name == "Turnstile" and original_catalog:
-                    for key in (team, unit):
-                        backend.write("budget_remove", scope_type="department" if key == team else "organization", scope_id=key, month=engine.month)
-                    restored = engine._replace("catalog", configured_catalog(original_catalog), None, True)
-                    if restored.get("requested_at"):
-                        engine.wait_for_apply(restored["requested_at"], timeout=480, interval=8)
-                    deadline = time.monotonic() + 480
-                    while any(row.get("status", "").lower() in {"running", "processing", "pending"}
-                              for row in engine.read("apply").get("executions", [])):
-                        if time.monotonic() > deadline:
-                            raise RuntimeError("Apply jobs did not drain before exact gateway restore.")
-                        time.sleep(8)
+                    failures = restore_turnstile(engine, configured_catalog(original_catalog), unit, team)
+                    cleanup["errors"] += [journal.redactor.text(error) for error in failures]
                 cleanup["gateway"] = arm.restore(snapshot, RESTORE_NAMES)
             except Exception as error:
                 cleanup["errors"].append(journal.redactor.text(str(error)))

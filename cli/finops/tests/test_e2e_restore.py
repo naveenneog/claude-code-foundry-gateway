@@ -35,3 +35,28 @@ def test_restore_failure_is_not_reported_as_clean():
     state.put = lambda *args: (_ for _ in ()).throw(RuntimeError("restore refused"))
     with pytest.raises(FinOpsError, match="RESTORE INCOMPLETE"):
         state.restore({"bu-members": {"value": ",,"}}, ["bu-members"])
+
+
+def test_budget_cleanup_failure_does_not_suppress_catalog_restore():
+    path = Path(__file__).resolve().parents[1] / "tools" / "e2e_cleanup.py"
+    spec = importlib.util.spec_from_file_location("e2e_cleanup", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    calls = []
+    class Engine:
+        month = "2026-09"
+        backend = None
+        def write(self, *args, **kwargs):
+            calls.append(kwargs["scope_id"])
+            if len(calls) == 1:
+                raise RuntimeError("first delete failed")
+        def _replace(self, *args):
+            calls.append("catalog-restored")
+            return {}
+        def read(self, *_):
+            return {"executions": []}
+    engine = Engine()
+    engine.backend = engine
+    errors = module.restore_turnstile(engine, {}, "unit", "team")
+    assert errors == ["first delete failed"]
+    assert calls == ["team", "unit", "catalog-restored"]
