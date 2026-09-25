@@ -30,10 +30,7 @@ In **Tables**, locate the actual table, open **Manage table**, and inspect its
 **Table plan** and retention settings. Do not change a plan or retention period
 merely to complete an inspection; obtain the privacy owner's approval first.
 
-**Pending batch capture (`docs-review-workspace-tables`).**
-
-Planned image: `docs/guide/docs-review-workspace-tables.png` — the
-AppMetrics table plan and retention entry point.
+![Live workspace Tables blade: 32 tables including ApiManagementGatewayLlmLog, each with its Analytics plan, 30-day workspace-default interactive retention and total retention](guide/docs-review-workspace-tables.png)
 
 Choose retention before enabling capture. A lower-cost table plan can forfeit
 selective purge: the recorded U7 constraints allow Analytics-plan tables, not

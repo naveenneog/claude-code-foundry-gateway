@@ -74,20 +74,14 @@ the reporting functions and workbooks.
    for GatewayLlmLogs. Open the linked Application Insights resource and its
    workspace; do not select the first resource with a similar name.
 
-   **Pending batch capture (`docs-review-api-settings`).**
-
-   Planned image: `docs/guide/docs-review-api-settings.png` — API backend and
-   diagnostics settings.
+   ![Live Settings tab of the governed Claude API: display name, name, Web service URL pointing at the Foundry Anthropic endpoint (redacted), HTTPS scheme and the claude URL suffix; its Diagnostics section is further down the same tab](guide/docs-review-api-settings.png)
 
    In the resource's **Diagnostic settings**, select the setting that sends
    **GatewayLlmLogs** and verify its **Send to Log Analytics workspace**
    destination. Do not create a second route just because another workspace is
    easier to find.
 
-   **Pending batch capture (`docs-review-gateway-diagnostics`).**
-
-   Planned image: `docs/guide/docs-review-gateway-diagnostics.png` — the actual
-   LLM-log destination in Diagnostic settings.
+   ![Live Diagnostic settings for the gateway: one setting, claude-llm-logs, sending to the gateway's Log Analytics workspace, with no storage account, event hub or partner destination](guide/docs-review-gateway-diagnostics.png)
 3. Resolve each remaining placeholder from that linked resource:
 
    | Value | Portal field | CLI read |
@@ -107,10 +101,7 @@ Application Insights and workspace groups when they differ.
 when a command asks for the query client's workspace GUID, not the resource
 name or ARM resource ID.
 
-**Pending batch capture (`docs-review-workspace-properties`).**
-
-Planned image: `docs/guide/docs-review-workspace-properties.png` — the
-workspace Properties and Workspace ID field.
+![Live workspace Properties: Workspace ID, Resource ID, subscription, resource group, East US 2, Pay-as-you-go tier and the access-control and data-authorization modes, with identifiers replaced by zeros and Contoso names](guide/docs-review-workspace-properties.png)
 
 ---
 
@@ -383,10 +374,12 @@ published alias and inspect the definition/parameters before invoking it.
 `ClaudeCost` must contain populated generated tables, not the repository's
 unpublished placeholders.
 
-**Pending batch capture (`docs-review-workspace-functions`).**
+![Live Logs Functions pane in KQL mode: Workspace functions lists the published ClaudeChargeback, ClaudeCodeDaily and ClaudeCost](guide/docs-review-workspace-functions.png)
 
-Planned image: `docs/guide/docs-review-workspace-functions.png` — the
-published Claude cost function in Logs.
+In the current Logs experience the Functions list is in **KQL mode**: switch the
+mode selector from **Simple mode**, then select **Functions** ({fx}) in the left
+rail and expand **Workspace functions**. The first visit can show a **Welcome to
+Log Analytics** dialog; close it first.
 
 The `.kql` files stay the source. The publisher rewrites only the window lines
 at the top of each file into function parameters, and **refuses to publish if it
@@ -431,10 +424,7 @@ For an existing workbook, use the discovered workspace > **Workbooks**, choose
 the saved workbook and verify its workspace/time-range parameters. The gallery
 is an entry point, not evidence that a query completed or a period reconciled.
 
-**Pending batch capture (`docs-review-workspace-workbooks`).**
-
-Planned image: `docs/guide/docs-review-workspace-workbooks.png` — the
-workspace Workbooks gallery.
+![Live workspace Workbooks gallery: Recently modified workbooks shows the three published Claude workbooks - Claude gateway, Claude gateway - platform and Claude gateway - chargeback](guide/docs-review-workspace-workbooks.png)
 
 ### What it shows
 

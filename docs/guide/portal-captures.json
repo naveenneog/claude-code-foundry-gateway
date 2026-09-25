@@ -1,0 +1,1173 @@
+{
+  "version": 1,
+  "captures": [
+    {
+      "id": "p55-aum-api-scope",
+      "output": "docs/guide/p55-aum-api-scope.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:20:08.732Z",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/ProtectAnAPI/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p55.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "ff89c9bcad124af2f1dd4476dd9c261b1689cad4c1b0a5fde77511565dc5f3d2"
+    },
+    {
+      "id": "p55-aum-token-manifest",
+      "output": "docs/guide/p55-aum-token-manifest.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:20:21.925Z",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/Manifest/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p55.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "903270083618750e3aa54a75a4418e79d7b2816066b7aa5d7409e8c53339ad6e"
+    },
+    {
+      "id": "p55-aum-assignment-required",
+      "output": "docs/guide/p55-aum-assignment-required.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:20:38.589Z",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Properties/objectId/00000000-0000-0000-0000-000000000000/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p55.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "846787846cb47c6d2c43f4295a82650ac5843292a7d5d783166e7419da70cdc7"
+    },
+    {
+      "id": "turnstile-app-overview",
+      "output": "docs/guide/turnstile-entra-1-overview.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:24:15.032Z",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/Overview/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "turnstile.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "27f45a100c65a5b49b9b1bb922009a3a00092c062758675e9de1b4dd3f60002f"
+    },
+    {
+      "id": "turnstile-expose-api",
+      "output": "docs/guide/turnstile-entra-2-expose-api.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:24:26.620Z",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/ProtectAnAPI/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "turnstile.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "bf77bb8bd32a52073be7d9a6b8a3d0cf3f6f0c9ce77fbbca110b2bebec146597"
+    },
+    {
+      "id": "turnstile-app-roles",
+      "output": "docs/guide/turnstile-entra-3-app-roles.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:26:17.000Z",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/AppRoles/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "turnstile.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "a07b350ea777dec7a84fcffa4fe6c29516769ead1fe81c2ddeb99987b4fe6464"
+    },
+    {
+      "id": "turnstile-enterprise-properties",
+      "output": "docs/guide/turnstile-t08-entra-config.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:26:33.068Z",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Properties/objectId/00000000-0000-0000-0000-000000000000/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "turnstile.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "74b76235a7e26dac94db2de837380df0d128277c54cac7aa96baeb04607111a5"
+    },
+    {
+      "id": "gateway-overview",
+      "output": "docs/guide/a3-apim-overview.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:51:43.918Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso-gateway/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "built-in",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "ac6e31aaba914088f2e28a5f6aa236f640e61222dd9f714cb8407976dab24982"
+    },
+    {
+      "id": "gateway-identity",
+      "output": "docs/guide/a4-identity.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:52:01.440Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso-gateway/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "built-in",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "7041322d80ef7fb2bb6512c53de0c128a326b12b94f48704997e5a5f7b375a6e"
+    },
+    {
+      "id": "gateway-named-values",
+      "output": "docs/guide/a6-named-values.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:52:19.221Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso-gateway/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "built-in",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "225b213d0d20fe8a1331a48850d50897666687d13ce460cbe11fc2dbb49444b5"
+    },
+    {
+      "id": "architecture-gateway-overview",
+      "output": "docs/images/architecture-live/gateway-overview.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:52:35.679Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso-gateway/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "730cac45508115d0e7363e1454419ca385bfc74fd8dbd0dc4751741fbe22b43e"
+    },
+    {
+      "id": "architecture-gateway-identity",
+      "output": "docs/images/architecture-live/gateway-identity.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:52:52.043Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso-gateway/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "7041322d80ef7fb2bb6512c53de0c128a326b12b94f48704997e5a5f7b375a6e"
+    },
+    {
+      "id": "architecture-gateway-named-values",
+      "output": "docs/images/architecture-live/gateway-named-values.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:53:08.174Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso-gateway/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "017e1dd7b42b1a756d5ea7cc0514d1d57fb2c0a58ea05b5a212842ed83edf554"
+    },
+    {
+      "id": "architecture-gateway-apis",
+      "output": "docs/images/architecture-live/gateway-apis.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:53:31.513Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso-gateway/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "07d1bbdfcde609686fcf9aec1bfa8fd3ca993a5a0b8149fa20b5311aad98ec9e"
+    },
+    {
+      "id": "architecture-foundry-overview",
+      "output": "docs/images/architecture-live/foundry-overview.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:53:49.435Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.CognitiveServices/accounts/ai-contoso-foundry/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "cf23f0a5612c2fe2ee54c33ee6dc8d833724e9622a3ebd95c56b0e4c9160923d"
+    },
+    {
+      "id": "architecture-foundry-access",
+      "output": "docs/images/architecture-live/foundry-access.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:54:04.700Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.CognitiveServices/accounts/ai-contoso-foundry/users",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "b4a485a78983dac016f68a2bc457a7e11d70dbb62d4d6ce09a5da56f084734a1"
+    },
+    {
+      "id": "architecture-telemetry-workspace",
+      "output": "docs/images/architecture-live/telemetry-workspace.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:54:15.687Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.OperationalInsights/workspaces/log-contoso-gateway/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "d00dd71e9abc71a4f2fc52d0cf3d9a5d8444ff0159c61d0fae1c9c0f6802c2d8"
+    },
+    {
+      "id": "architecture-telemetry-tables",
+      "output": "docs/images/architecture-live/telemetry-tables.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:54:30.373Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.OperationalInsights/workspaces/log-contoso-gateway/tables",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "87343a64b02fe766c614df3760ae76455a7bf8749260c297911f885c6e9b6324"
+    },
+    {
+      "id": "architecture-resolver-networking",
+      "output": "docs/images/architecture-live/resolver-networking.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:56:17.696Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Web/sites/func-resolver-contoso/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "ce93ed8d5a78a8b4402818a840c6c83b600884d45aa2d2638891ec98daada528"
+    },
+    {
+      "id": "architecture-projection-networking",
+      "output": "docs/images/architecture-live/projection-networking.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:56:31.915Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-log-contoso-2ion/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "00b9afcded9b91f9bc6252afd1a34ff853cb0f43712fc263d5cb8846aacbea85"
+    },
+    {
+      "id": "architecture-governance-apply-job",
+      "output": "docs/images/architecture-live/governance-apply-job.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:56:44.558Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.App/jobs/job-contoso-4/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "706f22c5a2d44c082960a565c8ead4fdb953e2d6707e9f7ac9f93afca32b4054"
+    },
+    {
+      "id": "architecture-reports-generator-job",
+      "output": "docs/images/architecture-live/reports-generator-job.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:56:59.464Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.App/jobs/job-contoso-3/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "d0851e472b587865b73169dcacd94955b0b0baa1dc1a0b3c47ce24122475fb3d"
+    },
+    {
+      "id": "architecture-reports-dispatcher-job",
+      "output": "docs/images/architecture-live/reports-dispatcher-job.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:57:12.030Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.App/jobs/job-contoso-2/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "e015e0b28c69550bf4c07fd8dce528ab073d6dcee674327605256ced48d6cbf5"
+    },
+    {
+      "id": "architecture-reports-admin-job",
+      "output": "docs/images/architecture-live/reports-admin-job.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:57:24.746Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.App/jobs/job-contoso-1/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "3921f4f47fbeb43bd63c6ea9e3fd4877def19a0a8746b4a8929272fc1ae3ae50"
+    },
+    {
+      "id": "architecture-reports-networking",
+      "output": "docs/images/architecture-live/reports-networking.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:57:35.453Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Storage/storageAccounts/resource-contoso/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "7db68c3f6de11de231b4066e7fc26ddbfd613a101eeaf66265397ec853372c5b"
+    },
+    {
+      "id": "architecture-reports-email",
+      "output": "docs/images/architecture-live/reports-email.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:57:49.391Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Communication/CommunicationServices/acs-contoso-1/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "3b6f7b9683c8ca6b59505338dc4f734e7860308797e97f8716cb5aecac5fc3fe"
+    },
+    {
+      "id": "architecture-turnstile-database",
+      "output": "docs/images/architecture-live/turnstile-database.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:58:01.391Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.DBforPostgreSQL/flexibleServers/pg-contoso-1/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "95136fe8ba29df125d49db4a8da14f37d38203a871b5344a02fdd10fd751fe73"
+    },
+    {
+      "id": "docs-review-gateway-overview",
+      "output": "docs/guide/docs-review-live-apim-overview.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:58:15.838Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso-gateway/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "docs-review.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "9cd3d2d003c53ad3f6adeb4562e3bfb4e6282f6e1dea617c79efacf3fe1ce48f"
+    },
+    {
+      "id": "docs-review-foundry-iam",
+      "output": "docs/guide/docs-review-live-foundry-iam.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:58:29.510Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.CognitiveServices/accounts/ai-contoso-foundry/users",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "docs-review.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "b4a485a78983dac016f68a2bc457a7e11d70dbb62d4d6ce09a5da56f084734a1"
+    },
+    {
+      "id": "docs-review-daily-quota-editor",
+      "output": "docs/guide/docs-review-daily-quota-editor.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:58:59.641Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso-gateway/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "docs-review.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "7f6b869979a92c98d2d9c5bf54deb42104124814e90bf903fcca1307522ba9e5"
+    },
+    {
+      "id": "docs-review-gateway-identity",
+      "output": "docs/guide/docs-review-gateway-identity.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:59:15.418Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso-gateway/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "docs-review.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "7041322d80ef7fb2bb6512c53de0c128a326b12b94f48704997e5a5f7b375a6e"
+    },
+    {
+      "id": "docs-review-api-settings",
+      "output": "docs/guide/docs-review-api-settings.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T13:59:41.494Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso-gateway/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "docs-review.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "2e56cd16d0e229beca0f359720e885c1d667d701fe23fd344079f812d7b1b777"
+    },
+    {
+      "id": "docs-review-api-policy",
+      "output": "docs/guide/docs-review-api-policy.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:00:09.219Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso-gateway/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "docs-review.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "20a8801da4dd25203b15c54975b1729cafd6d0bedd587691d6b7885b16f2defc"
+    },
+    {
+      "id": "docs-review-gateway-diagnostics",
+      "output": "docs/guide/docs-review-gateway-diagnostics.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:00:23.397Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso-gateway/diagnostics",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "docs-review.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "6ac11adbb28c01a0e9f1e2b1f69c27abdbc36589448bd6e8385b055c90b9399b"
+    },
+    {
+      "id": "docs-review-workspace-properties",
+      "output": "docs/guide/docs-review-workspace-properties.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:00:34.213Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.OperationalInsights/workspaces/log-contoso-gateway/properties",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "docs-review.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "63b3be431605a8ead11020e55f18261b13bdeb59ecb5f766c644db4e557b686a"
+    },
+    {
+      "id": "docs-review-workspace-functions",
+      "output": "docs/guide/docs-review-workspace-functions.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:00:49.101Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.OperationalInsights/workspaces/log-contoso-gateway/logs",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "docs-review.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "0634733d4159e9666d679ca8627e13f2a7d6e285adfc3bc3cf3743999fb6b03e"
+    },
+    {
+      "id": "docs-review-workspace-workbooks",
+      "output": "docs/guide/docs-review-workspace-workbooks.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:00:59.487Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.OperationalInsights/workspaces/log-contoso-gateway/workbooks",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "docs-review.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "d24bb93cfee204fda34d8a4bf5147222978ac0f7ee2b5b7a769e557d0ef20aff"
+    },
+    {
+      "id": "docs-review-workspace-tables",
+      "output": "docs/guide/docs-review-workspace-tables.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:01:14.662Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.OperationalInsights/workspaces/log-contoso-gateway/tables",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "docs-review.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "87343a64b02fe766c614df3760ae76455a7bf8749260c297911f885c6e9b6324"
+    },
+    {
+      "id": "docs-review-foundry-networking",
+      "output": "docs/guide/docs-review-foundry-networking.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:01:27.908Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.CognitiveServices/accounts/ai-contoso-foundry/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "docs-review.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "cc930ef305d6f8982186186d85835bc4181db127fbf15d8c7ef13b11850932ce"
+    },
+    {
+      "id": "docs-review-cosmos-networking",
+      "output": "docs/guide/docs-review-cosmos-networking.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:03:31.912Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-log-contoso-2ion/networking",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "docs-review.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "a8e5ddd90f9de1446210253f7af242e036a354b62eccfa74331e4dc634715756"
+    },
+    {
+      "id": "p50-storage-overview",
+      "output": "docs/images/chargeback-reports/portal-storage.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:03:42.534Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Storage/storageAccounts/resource-contoso/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "b447189a2d1037c02fb63ee727a376532ea2481f096633ba0dbbba9bfa6aae06"
+    },
+    {
+      "id": "p50-storage-network",
+      "output": "docs/images/chargeback-reports/portal-storage-network.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:03:54.159Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Storage/storageAccounts/resource-contoso/networking",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "7360900a4a1199475d873933a681b053fd9eecf6fb83275cc1b45a7d06661d2d"
+    },
+    {
+      "id": "p50-storage-protection",
+      "output": "docs/images/chargeback-reports/portal-storage-protection.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:04:05.455Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Storage/storageAccounts/resource-contoso/dataProtection",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "7bc74e9e4dab0ad789984beeb22450191f222ec6b81aee2a83b69d209770df13"
+    },
+    {
+      "id": "p50-storage-retention",
+      "output": "docs/images/chargeback-reports/portal-storage-retention.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:04:19.588Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Storage/storageAccounts/resource-contoso/managementPolicies",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "b34e3417206dd2d301928e90c02cc4b078ca286cd314b301db922c0e7dbe0c2f"
+    },
+    {
+      "id": "p50-storage-containers",
+      "output": "docs/images/chargeback-reports/portal-storage-containers.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:04:30.892Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Storage/storageAccounts/resource-contoso/containersList",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "a7510f112656e9443e58cef0968ba84beb9b6524e7ca5e774830544a150c88ca"
+    },
+    {
+      "id": "p50-storage-settings-blob",
+      "output": "docs/images/chargeback-reports/portal-storage-settings-blob.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:04:53.502Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Storage/storageAccounts/resource-contoso/containersList",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "d0df8147c5a69a7baed8a8681535047520dffd215e7796a15046d6f9c0cfcf1b"
+    },
+    {
+      "id": "p50-storage-archive",
+      "output": "docs/images/chargeback-reports/portal-storage-archive.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:05:14.734Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Storage/storageAccounts/resource-contoso/containersList",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "edfa78c7eeef4fc246288a88195e9bf1f337126c6aa0afa699fd5c91370ba83b"
+    },
+    {
+      "id": "p50-generator-overview",
+      "output": "docs/images/chargeback-reports/portal-generator.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:05:28.701Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.App/jobs/job-contoso-3/containerappjobs",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "c7a9ee4a5bbdf79f187344a209fc570869ab98add4a15e9e7e10267fa3803ae9"
+    },
+    {
+      "id": "p50-generator-schedule",
+      "output": "docs/images/chargeback-reports/portal-generator-schedule.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:05:40.452Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.App/jobs/job-contoso-3/configuration",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "4ca099d38b134fb89e96f5ffa5f533c9092ecc6b6ea9e0dac6b90c26a1496d51"
+    },
+    {
+      "id": "p50-generator-history",
+      "output": "docs/images/chargeback-reports/portal-generator-history.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:05:52.907Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.App/jobs/job-contoso-3/executionHistory",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "0c497386f739c73992bbbf9068715bfb154da9e0677d649b0f053923145f6267"
+    },
+    {
+      "id": "p50-dispatcher-overview",
+      "output": "docs/images/chargeback-reports/portal-dispatcher.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:06:03.766Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.App/jobs/job-contoso-2/containerappjobs",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "f3ee5f6893693ed827a6bce566c42ff97c2857dad658f78fe6819116bbb1ec97"
+    },
+    {
+      "id": "p50-dispatcher-configuration",
+      "output": "docs/images/chargeback-reports/portal-dispatcher-rules.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:06:18.713Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.App/jobs/job-contoso-2/configuration",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "99eff0ada4f5c0faf06573c1a659feba1d8f5178acab10f731852278302d0e1b"
+    },
+    {
+      "id": "p50-event-scaling",
+      "output": "docs/images/chargeback-reports/portal-event-scaling.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:06:31.578Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.App/jobs/job-contoso-2/scaleRules",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "f694fac4c8e3bc7196c72254533887d95c4bd09c8a3500e6cb70cb37310b3f4e"
+    },
+    {
+      "id": "p50-admin-overview",
+      "output": "docs/images/chargeback-reports/portal-admin.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:06:43.138Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.App/jobs/job-contoso-1/containerappjobs",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "a7e5e765765d6252951e3e15ea49adb7ce361db0e82d715f8605bf0fcdc791a4"
+    },
+    {
+      "id": "p50-admin-containers",
+      "output": "docs/images/chargeback-reports/portal-admin-containers.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:06:55.153Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.App/jobs/job-contoso-1/containers",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "28b7bac7bf6134c41f82a898d135f7475e5abf721dbd7ddae67370ec5c85cbec"
+    },
+    {
+      "id": "p50-admin-environment",
+      "output": "docs/images/chargeback-reports/portal-admin-environment.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:07:28.495Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.App/jobs/job-contoso-1/containers",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "a7dcefb892885e672d051a69fbcb4f443755d4d07df35dd4982707374d173335"
+    },
+    {
+      "id": "p50-job-identity",
+      "output": "docs/images/chargeback-reports/portal-job-identity.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:07:44.021Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.App/jobs/job-contoso-3/msi",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "86b499e0501c176fa386b160af176277e340a61683f671289470b544e4b3050e"
+    },
+    {
+      "id": "p50-environment",
+      "output": "docs/images/chargeback-reports/portal-environment.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:07:56.402Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.App/managedEnvironments/cae-contoso-2/containerAppEnvironment",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "03d41d12dbdea6edb82a383fbd8a0977ecc9ccf6798a4285689c3571aa68b5d4"
+    },
+    {
+      "id": "p50-identity-overview",
+      "output": "docs/images/chargeback-reports/portal-identity.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:08:08.595Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-contoso-3/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "4c6e0e8f616eae10a8679eeeb3ff73bea3ad1e4e075e212e3f130c72ae174c0c"
+    },
+    {
+      "id": "p50-identity-roles",
+      "output": "docs/images/chargeback-reports/portal-identity-roles.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:08:23.027Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-contoso-3/azure_resources",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "5f8ddeea5011a9f85505dd8e27764b0ab1b8aa07bf73a153a3269c8be7f33eda"
+    },
+    {
+      "id": "p50-network-subnets",
+      "output": "docs/images/chargeback-reports/portal-network-subnets.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:08:34.408Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Network/virtualNetworks/vnet-contoso-2/subnets",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "3c0527b4d554d77b7139b8742658353a1a80e52977da99b46e28a9730c2add4f"
+    },
+    {
+      "id": "p50-private-endpoint",
+      "output": "docs/images/chargeback-reports/portal-private-endpoint.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:08:45.965Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Network/privateEndpoints/pe-contoso-5/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "f57071b15dd14163b248ff8ac65723e1769e7b37134a4776e46ec49f996f3bb1"
+    },
+    {
+      "id": "p50-dns-links",
+      "output": "docs/images/chargeback-reports/portal-dns-links.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:08:56.571Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Network/privateDnsZones/private-dns-contoso/vnetLinks",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "73c68c6c9686c757384299e8757e0c73fb356a433c722f9793322c40654c31d6"
+    },
+    {
+      "id": "p50-email-service",
+      "output": "docs/images/chargeback-reports/portal-email-service.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:09:09.528Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Communication/EmailServices/email-contoso-1/resourceOverviewId",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "0096a386d77f7126d050361ee658e72bee2e326687a61013f27320037fa2e6e8"
+    },
+    {
+      "id": "p50-email-domains",
+      "output": "docs/images/chargeback-reports/portal-email-domains.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:09:20.289Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Communication/EmailServices/email-contoso-1/settings_domainitem",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "c633eb604877acb591bd330783e5a73f66a2c595f761afb49e8952b7fd5ce194"
+    },
+    {
+      "id": "p50-communication",
+      "output": "docs/images/chargeback-reports/portal-communication.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:09:31.601Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Communication/CommunicationServices/acs-contoso-1/resource_overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "49166796c3d51358479308fa632b84f2d66097aa61a345ab5460b08aa0b1ff55"
+    },
+    {
+      "id": "p50-connected-domain",
+      "output": "docs/images/chargeback-reports/portal-connected-domain.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:09:43.978Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Communication/CommunicationServices/acs-contoso-1/email_domains",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p50.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "badec4f7002ebb1d12aefb65bb08a9c8788423241dc5ab3ec150dce1c6d0fb60"
+    },
+    {
+      "id": "architecture-resolver-authentication",
+      "output": "docs/images/architecture-live/resolver-authentication.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:14:09.464Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Web/sites/func-resolver-contoso/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "1a2e56d69ad4e1234dc4a978d02c510d19b1fb698a84e631dec4f10bc13d4643"
+    },
+    {
+      "id": "docs-review-resolver-networking",
+      "output": "docs/guide/docs-review-resolver-networking.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:14:22.288Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Web/sites/func-resolver-contoso/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "docs-review.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "ce93ed8d5a78a8b4402818a840c6c83b600884d45aa2d2638891ec98daada528"
+    },
+    {
+      "id": "docs-review-resolver-authentication",
+      "output": "docs/guide/docs-review-resolver-authentication.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:14:37.471Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Web/sites/func-resolver-contoso/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "docs-review.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "1a2e56d69ad4e1234dc4a978d02c510d19b1fb698a84e631dec4f10bc13d4643"
+    },
+    {
+      "id": "architecture-turnstile-app-roles",
+      "output": "docs/images/architecture-live/turnstile-app-roles.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:24:27.858Z",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/AppRoles/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "architecture.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "38974277aa23c02435e534803f8291668add0c99a89e389b2df895ed794fa92c"
+    },
+    {
+      "id": "docs-review-entra-groups",
+      "output": "docs/guide/docs-review-entra-groups.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:24:43.954Z",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Members/groupId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "docs-review.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "c794a37f8584f5ad74d6fcbce2b6164d266865003a4a16550d82e3b94ca53aee"
+    },
+    {
+      "id": "p55-aum-app-roles",
+      "output": "docs/guide/p55-aum-app-roles.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T14:24:56.106Z",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/AppRoles/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p55.json",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "e09435bf7771471f718c1b099d84f180e4ac5f160456a463e9e46be0ecd1db98"
+    }
+  ]
+}

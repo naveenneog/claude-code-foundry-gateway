@@ -3,8 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { specProblems, loadSteps, selectSteps, documentedOutputs, documentationProblems } from '../guide/lib/portal-specs.mjs';
-import { AuthenticationSurface, authenticationReason, parseArguments, portalUrl, resolvePlan, runBatch } from '../guide/lib/portal-batch.mjs';
+import { AuthenticationSurface, authenticationReason, parseArguments, peopleRedactionPairs, portalUrl, resolvePlan, runBatch } from '../guide/lib/portal-batch.mjs';
 import { lockProfile } from '../guide/lib/portal-profile.mjs';
 import * as discovery from '../guide/lib/portal-discovery.mjs';
 
@@ -42,6 +43,10 @@ test('logical selectors and operator-supplied name filters are valid', () => {
     ...step, blade: undefined, target: { discover: 'entra-app', nameFilterEnv: 'APP_FILTER' },
     entraBlade: { kind: 'app-registration', name: 'Overview' },
   })), []);
+  assert.deepEqual(specProblems(document({
+    ...step, blade: undefined, target: { discover: 'entra-group', nameFilterEnv: 'GROUP_FILTER' },
+    entraBlade: { kind: 'group', name: 'Members' }, redaction: { mapEnv: 'PORTAL_REDACTIONS_FILE', people: true },
+  })), []);
 });
 
 for (const [name, mutation] of [
@@ -65,6 +70,7 @@ for (const [name, mutation] of [
   ['named destructive action', (value) => { value.clicks = [{ text: 'Delete resource' }]; }],
   ['consent action', (value) => { value.clicks = [{ text: 'Grant admin consent for this tenant' }]; }],
   ['typing action', (value) => { value.clicks = [{ selector: 'input', fill: 'secret' }]; }],
+  ['people redaction on a resource page', (value) => { value.redaction.people = true; }],
   ['negative settle', (value) => { value.settle = -1; }],
   ['unbounded settle', (value) => { value.settle = 100000; }],
 ]) {
@@ -81,6 +87,26 @@ test('duplicate IDs/outputs and undocumented destinations fail the actual valida
   assert.throws(() => loadSteps(process.cwd(), { builtins: [step, { ...step, id: 'other' }] }), /duplicate output/);
   assert.deepEqual(documentationProblems([step], new Set([step.output])), []);
   assert.match(documentationProblems([step], new Set())[0], /not referenced by a document/);
+});
+
+test('the batch manifest records only live, redacted captures of declared outputs whose pixels are unchanged', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.resolve('docs/guide/portal-captures.json'), 'utf8'));
+  const outputs = new Set(loadSteps(process.cwd()).map((item) => item.output));
+  const zero = '00000000-0000-0000-0000-000000000000';
+  assert.equal(manifest.version, 1);
+  assert.ok(manifest.captures.length > 0);
+  assert.equal(new Set(manifest.captures.map((record) => record.output)).size, manifest.captures.length, 'duplicate output record');
+  for (const record of manifest.captures) {
+    assert.ok(outputs.has(record.output), `${record.output} is not a declared spec output`);
+    assert.equal(record.live, true, record.output);
+    assert.match(record.captured_at_utc, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/, record.output);
+    assert.deepEqual(record.redaction, { applied: true, leak_check_passed: true }, record.output);
+    for (const [guid] of record.route.matchAll(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi))
+      assert.equal(guid, zero, `${record.output} route keeps a real identifier`);
+    assert.doesNotMatch(record.route, /\/subscriptions\/(?!0{8}-)/i, record.output);
+    const pixels = fs.readFileSync(path.resolve(record.output));
+    assert.equal(createHash('sha256').update(pixels).digest('hex'), record.sha256, `${record.output} differs from its recorded capture`);
+  }
 });
 
 test('argument parsing keeps profile use explicit and supports repeatable selections', () => {
@@ -168,6 +194,20 @@ test('a non-auth blade failure is counted and does not masquerade as a capture',
   });
   assert.equal(result.failed.length, 1);
   assert.equal(result.captured.length, 0);
+});
+
+test('people a directory page lists are pseudonymised, and a page listing people nobody discovered is refused', () => {
+  const people = [
+    { displayName: 'Private Person', userPrincipalName: 'private.person@private.example.org' },
+    { displayName: 'Private Person', userPrincipalName: 'duplicate@private.example.org' },
+    { displayName: 'Another Private', mail: 'another@private.example.org' },
+    { displayName: '' },
+  ];
+  assert.deepEqual(peopleRedactionPairs(people), [['Private Person', 'Contoso user 1'], ['Another Private', 'Contoso user 2']]);
+  assert.deepEqual(peopleRedactionPairs(undefined), []);
+  // A people page with no discovered principals cannot be proven redacted.
+  assert.throws(() => peopleRedactionPairs(undefined, { required: true }), /discover the principals/);
+  assert.throws(() => peopleRedactionPairs([], { required: true }), /discover the principals/);
 });
 
 test('the profile lock refuses a second browser and releases only once, using in-memory IO', () => {

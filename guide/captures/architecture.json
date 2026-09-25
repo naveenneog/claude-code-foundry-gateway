@@ -43,8 +43,8 @@
       "blade": "/overview",
       "waitFor": { "text": "Gateway URL" },
       "clicks": [
-        { "text": "APIs", "exact": true, "settle": 1000 },
-        { "selector": "text=\"APIs\" >> nth=-1", "waitFor": { "text": "Add API", "exact": true } }
+        { "text": "APIs", "exact": true, "settle": 1000, "waitFor": { "text": "Named values", "exact": true } },
+        { "selector": "a.fxc-menu-item >> text=\"APIs\"", "waitFor": { "text": "Add API", "exact": true } }
       ],
       "settle": 1500,
       "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
@@ -131,8 +131,7 @@
       "blade": "/overview",
       "waitFor": { "text": "Trigger Type" },
       "clicks": [
-        { "text": "Monitoring", "exact": true, "waitFor": { "text": "Execution history", "exact": true } },
-        { "text": "Execution history", "exact": true, "waitFor": { "text": "Recent executions" } }
+        { "text": "View", "exact": true, "waitFor": { "text": "Recent executions" } }
       ],
       "settle": 1500,
       "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
@@ -153,8 +152,7 @@
       "blade": "/overview",
       "waitFor": { "text": "Cron expression" },
       "clicks": [
-        { "text": "Monitoring", "exact": true, "waitFor": { "text": "Execution history", "exact": true } },
-        { "text": "Execution history", "exact": true, "waitFor": { "text": "Recent executions" } }
+        { "text": "View", "exact": true, "waitFor": { "text": "Recent executions" } }
       ],
       "settle": 1500,
       "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
@@ -166,8 +164,7 @@
       "blade": "/overview",
       "waitFor": { "text": "Trigger Type" },
       "clicks": [
-        { "text": "Monitoring", "exact": true, "waitFor": { "text": "Execution history", "exact": true } },
-        { "text": "Execution history", "exact": true, "waitFor": { "text": "Recent executions" } }
+        { "text": "View", "exact": true, "waitFor": { "text": "Recent executions" } }
       ],
       "settle": 1500,
       "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
@@ -179,8 +176,7 @@
       "blade": "/overview",
       "waitFor": { "text": "Trigger Type" },
       "clicks": [
-        { "text": "Monitoring", "exact": true, "waitFor": { "text": "Execution history", "exact": true } },
-        { "text": "Execution history", "exact": true, "waitFor": { "text": "Recent executions" } }
+        { "text": "View", "exact": true, "waitFor": { "text": "Recent executions" } }
       ],
       "settle": 1500,
       "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }

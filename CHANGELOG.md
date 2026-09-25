@@ -678,6 +678,27 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Fixed
 
+- **A deployment suffix inside a longer name escaped redaction, and people on directory pages
+  were not redacted at all.** The capture redactor matched private values only at word
+  boundaries, so a mapped suffix inside a name built from it (a report storage account shown as
+  an environment variable on the admin job's blade) survived, and the leak check, using the same
+  rule, passed it. A value of 8 or more characters, or a 6+ character mix of letters and digits,
+  is now replaced and checked wherever it occurs; a replacement that happens to contain another
+  private value is not itself a leak. Separately, a group's Members blade showed colleagues' real
+  names, which no private map lists: Entra group and application pages now read the page's own
+  members or assigned principals at discovery, show them as `Contoso user N`, hide their initials,
+  and refuse to capture when none were discovered (`redaction.people`). Both were found by
+  reviewing uncommitted batch images; neither reached a commit. Every portal image was then
+  recaptured under the new rules.
+- **Portal batch steps failed on blades that had rendered.** The runner took the first DOM match
+  for a label, and the portal keeps hidden copies of many (collapsed menus, tooltips, other
+  blades); it now takes the first visible match, and a timeout names the locator. Spec fixes found
+  by replaying each failure: jobs reach execution history through the overview's `View` link;
+  the gateway's APIs item is addressed inside the menu; Log Analytics Functions need KQL mode;
+  top-level waits sit on the landing blade; deep links that no longer render became menu clicks.
+  The Azure portal has no deployments blade for a Foundry resource, so that picture is a live CLI
+  read instead. `docs/guide/portal-captures.json` records every capture, and the tests now fail if
+  a published image differs from its record.
 - **A root unit in allowance or notify mode got HTTP 500.** The gateway's budget trace sent an
   empty `ParentUnit` (a unit has no parent) or `Notice` (no advisory yet), and APIM rejects empty
   trace metadata: "The value field is required". Absent values are now `none`, and a test

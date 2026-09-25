@@ -46,15 +46,31 @@ export function privateJson(name, value) {
   fs.writeFileSync(path.join(evidenceDir, name), JSON.stringify(value, null, 2));
 }
 
+// A distinctive private value - long, or a short random-looking suffix of letters and digits -
+// also appears inside names derived from it (a storage account built from a deployment
+// suffix), so it is matched anywhere. A short plain word keeps word boundaries, so a product
+// word such as AUM is not rewritten inside another word.
+function valuePattern(real) {
+  const distinctive = real.length >= 8 || (real.length >= 6 && /\d/.test(real) && /[a-z]/i.test(real) && !/\s/.test(real));
+  return distinctive ? escape(real) : `(?<![\\w])${escape(real)}(?![\\w])`;
+}
+
 export class Redactor {
   constructor(pairs = []) {
     this.pairs = pairs.filter(([real, fake]) => real && real !== fake)
       .sort((a, b) => b[0].length - a[0].length);
+    // A replacement can happen to contain another private value (a replacement
+    // "contoso-projection" contains a real "contoso-project"). Its own text is not a leak;
+    // only these replacements are set aside before the check, so a common one cannot hide
+    // a real value.
+    this.shadowing = [...new Set(this.pairs.map(([, fake]) => fake))]
+      .filter((fake) => fake && this.pairs.some(([real]) => new RegExp(valuePattern(real), 'i').test(fake)))
+      .sort((a, b) => b.length - a.length);
   }
 
   rules() {
     return [
-      ...this.pairs.map(([real, fake]) => [`(?<![\\w])${escape(real)}(?![\\w])`, 'gi', fake]),
+      ...this.pairs.map(([real, fake]) => [valuePattern(real), 'gi', fake]),
       ['[A-Za-z0-9._%+-]+#EXT#@[A-Za-z0-9.-]+', 'gi', 'developer_contoso.com#EXT#@contoso.onmicrosoft.com'],
       ['[A-Za-z0-9._%+-]+@(?!(?:contoso|example)\\.(?:com|onmicrosoft\\.com)\\b)[A-Za-z0-9.-]+\\.[A-Za-z]{2,}', 'gi', 'developer@contoso.com'],
       ['(?<=login_code=)[A-Za-z0-9_-]+', 'g', '[single-use-code-removed]'],
@@ -74,7 +90,8 @@ export class Redactor {
 
   leaks(text) {
     const problems = [];
-    for (const [real] of this.pairs) if (new RegExp(`(?<![\\w])${escape(real)}(?![\\w])`, 'i').test(text)) problems.push('known identifier');
+    const visible = this.shadowing.reduce((value, fake) => value.split(fake).join(' '), String(text));
+    for (const [real] of this.pairs) if (new RegExp(valuePattern(real), 'i').test(visible)) problems.push('known identifier');
     if ([...text.matchAll(guid)].some(([g]) => g.toLowerCase() !== publicGuid && !g.startsWith('00000000-0000-0000-0000-'))) problems.push('object id');
     if (/[A-Za-z0-9._%+-]+@(?!(?:contoso|example)\.(?:com|onmicrosoft\.com)\b)[A-Za-z0-9.-]+\.[A-Za-z]{2,}/i.test(text)) problems.push('email');
     if (/eyJ[\w-]{12,}\.[\w-]+\.[\w-]+|login_code=[A-Za-z0-9_-]{20,}/.test(text)) problems.push('credential');

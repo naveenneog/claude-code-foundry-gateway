@@ -432,35 +432,44 @@ uncommitted array of `[real value, Contoso replacement]` pairs. Include resource
 Entra display-name and configuration-map values. The named-value capture additionally
 hides read-only value inputs; it does not expose entitlement maps or secrets.
 
-### Pending portal batch
+### Portal batch capture
 
-All rows await the lead's next batch. Eighteen output paths already contain individually
-reviewed earlier live images; they remain dated evidence, not proof of a new capture.
-The database recovery output is new and is an inline path only, not a broken image.
-Its manual path is **Azure Database for PostgreSQL flexible servers > selected server >
-Overview**: inspect **Server name** and state; the spec does not click **Start** or **Stop**.
+The lead's batch recaptured every row below on 2026-09-25 with the shared runner and
+the owner's single original profile. Each has a record in `docs/guide/portal-captures.json`
+(route, time, commit, redaction and leak-check result, and the SHA-256 of the published
+pixels; the tests fail if a published file differs from its record). Identifiers are
+replaced with Contoso values before the rendered-DOM leak check.
 
-| Pending state | Final output |
+The Turnstile database is new in this set. Its manual path is **Azure Database for
+PostgreSQL flexible servers > selected server > Overview**: inspect **Server name** and
+state; the spec does not click **Start** or **Stop**.
+
+![Live Turnstile PostgreSQL flexible server overview: Ready in Central US, Burstable B1ms, PostgreSQL 16, with the subscription, resource group and server replaced by Contoso values](../images/architecture-live/turnstile-database.png)
+
+| State | Final output |
 |---|---|
-| pending batch capture (architecture-gateway-overview) | `docs/images/architecture-live/gateway-overview.png` |
-| pending batch capture (architecture-gateway-identity) | `docs/images/architecture-live/gateway-identity.png` |
-| pending batch capture (architecture-gateway-named-values) | `docs/images/architecture-live/gateway-named-values.png` |
-| pending batch capture (architecture-gateway-apis) | `docs/images/architecture-live/gateway-apis.png` |
-| pending batch capture (architecture-foundry-overview) | `docs/images/architecture-live/foundry-overview.png` |
-| pending batch capture (architecture-foundry-access) | `docs/images/architecture-live/foundry-access.png` |
-| pending batch capture (architecture-telemetry-workspace) | `docs/images/architecture-live/telemetry-workspace.png` |
-| pending batch capture (architecture-telemetry-tables) | `docs/images/architecture-live/telemetry-tables.png` |
-| pending batch capture (architecture-resolver-authentication) | `docs/images/architecture-live/resolver-authentication.png` |
-| pending batch capture (architecture-resolver-networking) | `docs/images/architecture-live/resolver-networking.png` |
-| pending batch capture (architecture-projection-networking) | `docs/images/architecture-live/projection-networking.png` |
-| pending batch capture (architecture-governance-apply-job) | `docs/images/architecture-live/governance-apply-job.png` |
-| pending batch capture (architecture-turnstile-app-roles) | `docs/images/architecture-live/turnstile-app-roles.png` |
-| pending batch capture (architecture-reports-generator-job) | `docs/images/architecture-live/reports-generator-job.png` |
-| pending batch capture (architecture-reports-dispatcher-job) | `docs/images/architecture-live/reports-dispatcher-job.png` |
-| pending batch capture (architecture-reports-admin-job) | `docs/images/architecture-live/reports-admin-job.png` |
-| pending batch capture (architecture-reports-networking) | `docs/images/architecture-live/reports-networking.png` |
-| pending batch capture (architecture-reports-email) | `docs/images/architecture-live/reports-email.png` |
-| pending batch capture (architecture-turnstile-database) | `docs/images/architecture-live/turnstile-database.png` |
+| live batch capture (architecture-gateway-overview), 2026-09-25 | `docs/images/architecture-live/gateway-overview.png` |
+| live batch capture (architecture-gateway-identity), 2026-09-25 | `docs/images/architecture-live/gateway-identity.png` |
+| live batch capture (architecture-gateway-named-values), 2026-09-25 | `docs/images/architecture-live/gateway-named-values.png` |
+| live batch capture (architecture-gateway-apis), 2026-09-25 | `docs/images/architecture-live/gateway-apis.png` |
+| live batch capture (architecture-foundry-overview), 2026-09-25 | `docs/images/architecture-live/foundry-overview.png` |
+| live batch capture (architecture-foundry-access), 2026-09-25 | `docs/images/architecture-live/foundry-access.png` |
+| live batch capture (architecture-telemetry-workspace), 2026-09-25 | `docs/images/architecture-live/telemetry-workspace.png` |
+| live batch capture (architecture-telemetry-tables), 2026-09-25 | `docs/images/architecture-live/telemetry-tables.png` |
+| live batch capture (architecture-resolver-authentication), 2026-09-25 | `docs/images/architecture-live/resolver-authentication.png` |
+| live batch capture (architecture-resolver-networking), 2026-09-25 | `docs/images/architecture-live/resolver-networking.png` |
+| live batch capture (architecture-projection-networking), 2026-09-25 | `docs/images/architecture-live/projection-networking.png` |
+| live batch capture (architecture-governance-apply-job), 2026-09-25 | `docs/images/architecture-live/governance-apply-job.png` |
+| live batch capture (architecture-turnstile-app-roles), 2026-09-25 | `docs/images/architecture-live/turnstile-app-roles.png` |
+| live batch capture (architecture-reports-generator-job), 2026-09-25 | `docs/images/architecture-live/reports-generator-job.png` |
+| live batch capture (architecture-reports-dispatcher-job), 2026-09-25 | `docs/images/architecture-live/reports-dispatcher-job.png` |
+| live batch capture (architecture-reports-admin-job), 2026-09-25 | `docs/images/architecture-live/reports-admin-job.png` |
+| live batch capture (architecture-reports-networking), 2026-09-25 | `docs/images/architecture-live/reports-networking.png` |
+| live batch capture (architecture-reports-email), 2026-09-25 | `docs/images/architecture-live/reports-email.png` |
+| live batch capture (architecture-turnstile-database), 2026-09-25 | `docs/images/architecture-live/turnstile-database.png` |
+
+The projection and resolver rows were captured before the Premium v2 test environment
+that hosted them was deleted on 2026-09-25; they are dated evidence of that deployment.
 
 ## Live coverage and limitations
 

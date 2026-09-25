@@ -76,6 +76,26 @@ test('runtime redaction removes names, emails, private object ids and sign-in co
   assert.deepEqual(redact.leaks(redact.redact(raw)), []);
   assert.match(redact.redact(raw), /Example Owner sales-emea developer@contoso.com/);
 });
+test('a distinctive private value is removed inside a longer derived name, and one that survives is a leak', () => {
+  // A deployment suffix reappears inside names built from it, such as a storage account
+  // shown as an environment variable on another resource's blade.
+  const redact = new Redactor([['privatesuffix', 'contoso'], ['ab12cd', 'contoso'], ['AUM', 'Product']]);
+  const raw = 'streportsprivatesuffix stab12cdlogs AUM.Manager aumovio-pipeline';
+  assert.ok(redact.leaks(raw).includes('known identifier'));
+  assert.ok(redact.leaks('streportsprivatesuffix').includes('known identifier'));
+  assert.ok(redact.leaks('stab12cdlogs').includes('known identifier'));
+  assert.deepEqual(redact.leaks('aumovio-pipeline'), []);
+  const safe = redact.redact(raw);
+  assert.deepEqual(redact.leaks(safe), []);
+  assert.equal(safe, 'streportscontoso stcontosologs Product.Manager aumovio-pipeline');
+});
+test('a replacement that happens to contain another private value is not itself a leak', () => {
+  const redact = new Redactor([['private-project', 'contoso-app'], ['privatesuffix', 'private-projection']]);
+  const safe = redact.redact('resolver-privatesuffix');
+  assert.equal(safe, 'resolver-private-projection');
+  assert.deepEqual(redact.leaks(safe), []);
+  assert.ok(redact.leaks('private-project resolver-private-projection').includes('known identifier'));
+});
 test('a surviving unknown email or token refuses a capture rather than claiming redaction', () => {
   const redact = new Redactor();
   assert.ok(redact.leaks('another@private.example.org').includes('email'));

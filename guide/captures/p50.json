@@ -114,7 +114,7 @@
       "target": { "discover": "resource", "resourceType": "Microsoft.App/jobs", "tags": { "claude-chargeback-owner": "P50" }, "selectionKey": "p50-admin" },
       "blade": "/containers", "waitFor": { "text": "reports", "exact": true },
       "clicks": [
-        { "text": "reports", "exact": true, "waitFor": { "text": "Edit a container" }, "settle": 500 },
+        { "text": "reports", "exact": true, "waitFor": { "text": "Edit a container", "exact": true }, "settle": 500 },
         { "text": "Environment variables", "exact": true, "waitFor": { "text": "Manual entry" }, "settle": 500 }
       ],
       "settle": 1500, "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }

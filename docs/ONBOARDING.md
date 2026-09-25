@@ -264,10 +264,10 @@ not a similarly named group. The batch resolves that group from the operator's
 runtime filter and opens its Members blade; publication/verification remain
 separate from this directory view.
 
-**Pending batch capture (`docs-review-entra-groups`).**
+![Live Members blade of the discovered standard-tier group: five direct members - three people shown as Contoso pseudonyms and two nested business-unit and team groups - with emails and object IDs redacted](guide/docs-review-entra-groups.png)
 
-Planned image: `docs/guide/docs-review-entra-groups.png` — the discovered
-entitlement group's Members blade.
+People on a directory page are pseudonymised from the group's own member list read at
+capture time (`redaction.people` in the capture spec); their initials are hidden.
 
 ### Then run the sync — this is the step people miss
 

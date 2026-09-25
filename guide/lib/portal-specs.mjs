@@ -115,7 +115,11 @@ export function specProblems(document, file = 'spec') {
     }
     if (!object(step.redaction)) errors.push(`${label}: redaction rules are required`);
     else {
-      unknownKeys(step.redaction, ['mapEnv', 'hideSelectors'], `${label} redaction`, errors);
+      unknownKeys(step.redaction, ['mapEnv', 'hideSelectors', 'keepTargetName', 'people'], `${label} redaction`, errors);
+    if (step.redaction.keepTargetName !== undefined && typeof step.redaction.keepTargetName !== 'boolean')
+      errors.push(`${label}: redaction.keepTargetName must be true or false`);
+      if (step.redaction.people !== undefined && (typeof step.redaction.people !== 'boolean' || !entra))
+        errors.push(`${label}: redaction.people must be true or false, on an Entra group or application page`);
       if (!ENV.test(step.redaction.mapEnv ?? '')) errors.push(`${label}: redaction.mapEnv must name a private replacement-map variable`);
       if (step.redaction.hideSelectors !== undefined && (!Array.isArray(step.redaction.hideSelectors)
         || step.redaction.hideSelectors.some((selector) => !text(selector) || selector.length > 500 || LITERAL_TARGET.test(selector))))
@@ -128,10 +132,19 @@ export function specProblems(document, file = 'spec') {
 export const BUILTIN_STEPS = [
   { id: 'gateway-overview', output: 'docs/guide/a3-apim-overview.png', target: { discover: 'gateway', selectionKey: 'gateway' },
     blade: '/overview', waitFor: { text: 'Gateway URL' }, settle: 1500, redaction: { mapEnv: 'PORTAL_REDACTIONS_FILE' } },
+  // Reached by the blade menu rather than a deep link: the direct '/identity' and '/namedValues'
+  // routes stopped rendering their headings in the current portal, and the menu path is the one
+  // the architecture captures proved live.
   { id: 'gateway-identity', output: 'docs/guide/a4-identity.png', target: { discover: 'gateway', selectionKey: 'gateway' },
-    blade: '/identity', waitFor: { text: 'System assigned' }, settle: 1500, redaction: { mapEnv: 'PORTAL_REDACTIONS_FILE' } },
+    blade: '/overview', waitFor: { text: 'Gateway URL' },
+    clicks: [{ text: 'Security', exact: true, waitFor: { text: 'Managed identities', exact: true } },
+      { text: 'Managed identities', exact: true, waitFor: { text: 'Object (principal) ID' } }],
+    settle: 1500, redaction: { mapEnv: 'PORTAL_REDACTIONS_FILE' } },
   { id: 'gateway-named-values', output: 'docs/guide/a6-named-values.png', target: { discover: 'gateway', selectionKey: 'gateway' },
-    blade: '/namedValues', waitFor: { text: 'Named values' }, settle: 1500, redaction: { mapEnv: 'PORTAL_REDACTIONS_FILE' } },
+    blade: '/overview', waitFor: { text: 'Gateway URL' },
+    clicks: [{ text: 'APIs', exact: true, waitFor: { text: 'Named values', exact: true } },
+      { text: 'Named values', exact: true, waitFor: { text: 'allow-standard' } }],
+    settle: 1500, redaction: { mapEnv: 'PORTAL_REDACTIONS_FILE' } },
 ];
 
 export function loadSteps(root, { builtins = BUILTIN_STEPS } = {}) {
