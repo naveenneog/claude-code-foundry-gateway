@@ -77,6 +77,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeTurnstile.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeTurnstileGovernance.ps1')
@@ -84,10 +85,8 @@ $ErrorActionPreference = 'Stop'
 
 $sub = az account show --query id -o tsv 2>$null
 if (-not $sub) { throw 'Not signed in. Run: az login' }
-if (-not $ApimName) {
-    $ApimName = az apim list -g $ResourceGroup --query "[0].name" -o tsv 2>$null
-    if (-not $ApimName) { throw "No API Management instance in $ResourceGroup. Pass -ApimName." }
-}
+if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
+if (-not $ApimName) { $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup }
 
 $current = ConvertFrom-ClaudeTurnstileIntegrationValue (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $script:TurnstileIntegrationNamedValue)
 
@@ -106,8 +105,9 @@ if ($Disconnect) {
 }
 
 # --- Discover, or reuse what is stored ---------------------------------------------------
-$rg = if ($TurnstileResourceGroup) { $TurnstileResourceGroup } elseif ($current) { [string]$current['resourceGroup'] } else { $null }
-if (-not $rg) { throw 'Pass -TurnstileResourceGroup: the resource group the Turnstile deployment created.' }
+$rg = if ($TurnstileResourceGroup) { $TurnstileResourceGroup } else {
+    Select-ClaudeTurnstileResourceGroup -ResourceGroup $ResourceGroup -ApimName $ApimName -Integration $current
+}
 
 $apiApp = $null
 $entra = @{}

@@ -93,6 +93,10 @@ try {
     $script:Workspaces = @($other1)
     $r = Invoke-Choice { Select-ClaudeWorkspace -ResourceGroup rg-app -TelemetryScript $telemetryBroken -Interactive $false -Reader $never }
     Assert 'with no link, the only workspace in the group is taken' ($r -eq $other1) "got $r"
+    $localOnly = $other1.Replace('/rg-app/', '/rg-local/')
+    $script:Workspaces = @($localOnly)
+    $r = Invoke-Choice { Select-ClaudeWorkspace -ResourceGroup rg-local -TelemetryScript $telemetryOk -LocalOnly -Interactive $false -Reader $never }
+    Assert 'a local-only backup does not choose a linked workspace in another group' ($r -eq $localOnly) "got $r"
 
     $env:CLAUDE_TEST_RECORDED_APIM = 'apim-two'
     $r = Invoke-Choice { Select-ClaudeGateway -ResourceGroup rg-app -ScriptRoot $scratch -Interactive $false -Reader $never }
@@ -213,6 +217,39 @@ $queries = Get-Content (Join-Path $root 'scripts/Publish-ClaudeQueries.ps1') -Ra
 Assert 'membership asks for the gateway too' ($queries -notmatch '\[0\]\.name' -and $queries -match 'Select-ClaudeGateway -ResourceGroup')
 $grafana = Get-Content (Join-Path $root 'scripts/Publish-ClaudeGrafana.ps1') -Raw
 Assert 'Grafana offers the existing instances' ($grafana -match 'Select-ClaudeChoice -Parameter GrafanaName')
+
+foreach ($name in @(
+    'Get-ClaudeBudget.ps1', 'Set-ClaudeBudget.ps1', 'Get-ClaudeBusinessUnit.ps1', 'Set-ClaudeBusinessUnit.ps1',
+    'Connect-ClaudeTurnstile.ps1', 'Export-ClaudeTurnstileUsage.ps1', 'Invoke-ClaudeTurnstileSchedule.ps1',
+    'Register-ClaudeTurnstileSchedule.ps1', 'Sync-ClaudeTurnstileGovernance.ps1', 'Get-ClaudeTurnstileBom.ps1',
+    'Open-ClaudeTurnstile.ps1', 'Get-ClaudeBypass.ps1', 'Add-ClaudeModel.ps1', 'Get-ClaudeBom.ps1',
+    'Backup-ClaudeGateway.ps1', 'Set-ClaudeTier.ps1', 'Set-ClaudeDeveloper.ps1'
+)) {
+    $text = Get-Content (Join-Path $root "scripts/$name") -Raw
+    Assert "$name loads the shared chooser" ($text -match '\. \(Join-Path \$PSScriptRoot ''ClaudeChoice\.ps1''\)')
+    Assert "$name chooses the gateway rather than the first name" ($text -match 'Select-ClaudeGateway -ResourceGroup' -and $text -notmatch '\[0\]\.name')
+    Assert "$name asks when the resource group is unknown" ($text -match 'Select-ClaudeResourceGroup')
+}
+foreach ($name in 'Get-ClaudeBypass.ps1', 'Add-ClaudeModel.ps1') {
+    $text = Get-Content (Join-Path $root "scripts/$name") -Raw
+    Assert "$name offers the Foundry account" ($text -match 'Select-ClaudeFoundryAccount -ResourceGroup')
+}
+foreach ($name in 'Connect-ClaudeTurnstile.ps1', 'Get-ClaudeTurnstileBom.ps1') {
+    $text = Get-Content (Join-Path $root "scripts/$name") -Raw
+    Assert "$name offers an unrecorded Turnstile group" ($text -match 'Select-ClaudeTurnstileResourceGroup')
+}
+$migration = Get-Content (Join-Path $root 'scripts/Migrate-ClaudeWorkstation.ps1') -Raw
+Assert 'workstation restore loads the chooser and stops silently taking the newest' ($migration -match 'ClaudeChoice\.ps1' -and $migration -match 'Select-ClaudeBackup' -and $migration -notmatch '\[0\]\.name')
+Assert 'workstation restore permits an explicit archive for automation' ($migration -match '\[string\]\$CodeBackup' -and $migration -match '\[string\]\$DesktopBackup')
+$overshoot = Get-Content (Join-Path $root 'scripts/Measure-ClaudeOvershoot.ps1') -Raw
+Assert 'overshoot offers a workspace with lookup guidance' ($overshoot -match 'ClaudeChoice\.ps1' -and $overshoot -match 'Select-ClaudeWorkspace -ResourceGroup')
+$backup = Get-Content (Join-Path $root 'scripts/Backup-ClaudeGateway.ps1') -Raw
+Assert 'gateway backup offers a workspace when no local diagnostic target is certain' ($backup -match 'Select-ClaudeWorkspace -ResourceGroup')
+
+$turnstileJob = Get-Content (Join-Path $root 'infra/turnstile-schedule.bicep') -Raw
+$reportJob = Get-Content (Join-Path $root 'infra/chargeback-reports.bicep') -Raw
+Assert 'Turnstile jobs pass both target values explicitly' ($turnstileJob.Contains('-ResourceGroup "${CLAUDE_RG}" -ApimName "${CLAUDE_APIM}"'))
+Assert 'chargeback jobs pass storage and record both target environment values' ($reportJob.Contains('-StorageAccount "${REPORT_STORAGE}"') -and $reportJob -match "name: 'CLAUDE_RG', value: resourceGroup\(\).name" -and $reportJob -match "name: 'CLAUDE_APIM', value: gatewayApimName")
 
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }

@@ -320,7 +320,8 @@ Assert 'it sends the token to Turnstile and never shows it'  ($openTurnstile -ma
 Assert 'the link carries only the one-time code'             ($openTurnstile -match 'login_code=\$\(\[uri\]::EscapeDataString\(\$grant\.code\)\)')
 Assert 'Graph bodies go through a file, not cmd.exe'         ($entraApp -match '''--body'', "@\$file"')
 Assert 'an unknown price is not known, never zero'           ($bom -match 'MonthlyUsd = \$\(if \(\$null -eq \$Monthly\) \{ \$null \}' -and $bom -notmatch 'MonthlyUsd = 0')
-Assert 'the bill reads the deployment from the connection'   ($bom -match "\`$integration\['resourceGroup'\]")
+Assert 'the bill reads the deployment from the connection'   ($bom.Contains('Select-ClaudeTurnstileResourceGroup -ResourceGroup $ResourceGroup -ApimName $ApimName -Integration $integration') -and
+    (Get-Content (Join-Path $root 'scripts/ClaudeChoice.ps1') -Raw).Contains('return [string]$Integration.resourceGroup'))
 Assert 'private endpoints are priced where they are published' ($bom -match "Find-Meter 'Virtual Network' 'Global'")
 # The picture scripts must carry patterns, never real values. Checked by shape, so this file
 # does not have to name what it keeps out: a literal address outside the example domains, or

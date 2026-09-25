@@ -90,6 +90,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 
 # Money, converted once and by the same function business-unit budgets use.
 # Two implementations of "what is a dollar worth in tokens" is how a per-person
@@ -123,10 +124,8 @@ if ($PSCmdlet.ParameterSetName -eq 'SetUsd') {
 
 $sub = az account show --query id -o tsv 2>$null
 if (-not $sub) { throw 'Not signed in. Run: az login' }
-if (-not $ApimName) {
-    $ApimName = az apim list -g $ResourceGroup --query "[0].name" -o tsv 2>$null
-    if (-not $ApimName) { throw "No API Management instance in $ResourceGroup. Pass -ApimName." }
-}
+if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
+if (-not $ApimName) { $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup }
 
 $armToken = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv 2>$null
 $H = @{ Authorization = 'Bearer ' + $armToken.Trim(); 'Content-Type' = 'application/json' }

@@ -43,6 +43,8 @@ param(
 
     [Parameter(ParameterSetName = 'Restore')][switch]$Apply,
     [Parameter(ParameterSetName = 'Restore')][switch]$Force,
+    [Parameter(ParameterSetName = 'Restore')][string]$CodeBackup,
+    [Parameter(ParameterSetName = 'Restore')][string]$DesktopBackup,
     [Parameter(ParameterSetName = 'Backup')][switch]$IgnoreRunning,
 
     [Parameter(ParameterSetName = 'Configure')][string]$GatewayUrl,
@@ -51,6 +53,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 $here = $PSScriptRoot
 if (-not $Folder) { $Folder = Join-Path (Split-Path $here -Parent) 'claude-code-backups' }
 
@@ -178,23 +181,26 @@ if ($Restore) {
     $code = @(Get-ChildItem $Folder -Filter 'claude-code-*.zip' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
     $desk = @(Get-ChildItem $Folder -Filter 'claude-desktop-*.zip' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
 
-    if (-not $code.Count -and -not $desk.Count) {
-        throw "No backups in '$Folder'. Pass -Folder to say where they are."
+    if (-not $code.Count -and -not $desk.Count -and -not $CodeBackup -and -not $DesktopBackup) {
+        throw ("No backups in '$Folder'. Pass -Folder to say where they are. " +
+            "Where to find it: Get-ChildItem -LiteralPath '$Folder' -Filter '*.zip'; File Explorer: the source machine's backup folder (not an Azure portal resource).")
     }
 
+    if (-not $CodeBackup -and $code.Count) { $CodeBackup = Select-ClaudeBackup -Folder $Folder -Pattern 'claude-code-*.zip' -Parameter CodeBackup }
+    if (-not $DesktopBackup -and $desk.Count) { $DesktopBackup = Select-ClaudeBackup -Folder $Folder -Pattern 'claude-desktop-*.zip' -Parameter DesktopBackup }
     $common = @{}
     if ($Apply) { $common.Apply = $true }
     if ($Force) { $common.Force = $true }
 
-    if ($code.Count) {
+    if ($CodeBackup) {
         Write-Host ''
-        Write-Host ("  1. Claude Code history  <- {0}" -f $code[0].Name) -ForegroundColor Cyan
-        & (Join-Path $here 'Restore-ClaudeCode.ps1') -Path $code[0].FullName @common
+        Write-Host ("  1. Claude Code history  <- {0}" -f $CodeBackup) -ForegroundColor Cyan
+        & (Join-Path $here 'Restore-ClaudeCode.ps1') -Path $CodeBackup @common
     }
-    if ($desk.Count) {
+    if ($DesktopBackup) {
         Write-Host ''
-        Write-Host ("  2. Claude Desktop       <- {0}" -f $desk[0].Name) -ForegroundColor Cyan
-        & (Join-Path $here 'Restore-ClaudeDesktop.ps1') -Path $desk[0].FullName @common
+        Write-Host ("  2. Claude Desktop       <- {0}" -f $DesktopBackup) -ForegroundColor Cyan
+        & (Join-Path $here 'Restore-ClaudeDesktop.ps1') -Path $DesktopBackup @common
     }
 
     if (-not $Apply) {

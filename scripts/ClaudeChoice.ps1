@@ -197,6 +197,7 @@ function Select-ClaudeWorkspace {
         [Parameter(Mandatory = $true)][string]$ResourceGroup,
         [string]$ApimName,
         [string]$AmbiguousMessage,
+        [switch]$LocalOnly,
         [string]$ScriptRoot = $PSScriptRoot,
         [string]$TelemetryScript,
         [object]$Interactive = $null,
@@ -217,6 +218,10 @@ function Select-ClaudeWorkspace {
         Write-Host ("  The gateway's Application Insights link could not be read: {0}" -f $_.Exception.Message) -ForegroundColor DarkGray
     }
 
+    if ($LocalOnly -and $linked -and ($linked -split '/')[4] -ine $ResourceGroup) {
+        Write-Host "  The linked workspace is outside $ResourceGroup; this operation needs a workspace in the gateway's own group." -ForegroundColor DarkGray
+        $linked = $null
+    }
     $options = @()
     if ($linked) {
         $options += New-ClaudeChoiceOption -Value $linked -Label ('{0} ({1})' -f ($linked -split '/')[-1], ($linked -split '/')[4]) `

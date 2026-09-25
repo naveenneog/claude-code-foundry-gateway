@@ -2963,6 +2963,12 @@ $mutations = @(
        File  = 'scripts/ClaudeChoice.ps1'
        From  = 'AcceptRecommendedWithoutConsole = ($files.Count -eq 1)'
        To    = 'AcceptRecommendedWithoutConsole = $true' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'a local-only backup follows telemetry into another resource group'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = 'if ($LocalOnly -and $linked -and ($linked -split ''/'')[4] -ine $ResourceGroup) {'
+       To    = 'if ($false) {' }
 )
 
 # END MUTATION MANIFEST
