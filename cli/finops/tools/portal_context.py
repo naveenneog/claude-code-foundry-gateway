@@ -46,9 +46,10 @@ def context(config_path):
             replacements[entity["name"]] = "contoso-group-" + digest(entity["id"])
             replacements[entity["id"]] = "contoso-scope-" + digest(entity["id"])
     try:
-        own = json.loads(az("ad", "signed-in-user", "show", "-o", "json", "--subscription", subscription))
+        own = json.loads(az("ad", "signed-in-user", "show", "-o", "json"))
         if own.get("displayName"):
             replacements[own["displayName"]] = "Contoso administrator"
+            found["portal"]["signed_in_display_name"] = own["displayName"]
     except FinOpsError:
         pass
     try:

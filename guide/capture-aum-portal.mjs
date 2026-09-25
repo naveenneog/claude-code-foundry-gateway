@@ -31,7 +31,26 @@ const steps = [
   { file: 'workspace-logs', title: 'Open the live query editor', id: targets.workspace_resource_id, suffix: '/logs' },
   { file: 'turnstile-overview', title: 'Open the connected usage service', id: targets.turnstile_resource_id, suffix: '/overview' },
 ].filter(step => step.id);
+const groupId = option('--group-id');
+if (groupId) {
+  if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(groupId)) throw new Error('Pass a discovered group object id.');
+  const groupProbe = spawnSync(python, [path.resolve('cli', 'finops', 'tools', 'portal_group_context.py'),
+    '--config', config, '--group-id', groupId], { encoding: 'utf8', timeout: 180000 });
+  if (groupProbe.status !== 0) throw new Error('Only the current administrator-owned, test-only group can be captured.');
+  const verified = JSON.parse(groupProbe.stdout);
+  const groupName = verified.group_name;
+  replacements[groupName] = 'Contoso test security group';
+  replacements[verified.owner_name] = 'Contoso administrator';
+  targets.signed_in_display_name = verified.owner_name;
+  for (const [part, title] of [['Overview', 'Verify the security group created by AUM'],
+    ['Owners', 'Verify the signed-in administrator owns the test group'], ['Members', 'Verify the temporary test member']]) {
+    steps.push({ file: `group-${part.toLowerCase()}`, title,
+      url: `https://portal.azure.com/#@${targets.tenant_id}/view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/${part}/groupId/${groupId}`,
+      required: part === 'Overview' ? ['Security', groupName ?? 'Object Id'] : [targets.signed_in_display_name] });
+  }
+}
 const selected = option('--only');
+const selectedNames = selected?.split(',');
 const context = await chromium.launchPersistentContext(profile, {
   channel: 'msedge', headless: !args.includes('--headed'),
   viewport: { width: 1600, height: 1000 }, args: ['--no-first-run', '--no-default-browser-check'],
@@ -61,8 +80,8 @@ async function visibleText(page, fields = false) {
 
 try {
   const page = context.pages()[0] ?? await context.newPage();
-  for (const step of steps.filter(step => !selected || step.file === selected)) {
-    await page.goto(portal(step.id), { waitUntil: 'domcontentloaded', timeout: 90000 });
+  for (const step of steps.filter(step => !selectedNames || selectedNames.includes(step.file))) {
+    await page.goto(step.url ?? portal(step.id), { waitUntil: 'domcontentloaded', timeout: 90000 });
     await page.waitForTimeout(12000);
     let body = await visibleText(page);
     if (/login\.microsoftonline\.com|login\.live\.com|login\.windows\.net/i.test(page.url()) ||
@@ -91,16 +110,24 @@ try {
       }
       await logs.first().click({ timeout: 30000 });
     }
-    const required = step.file === 'gateway-named-values' ? ['bu-registry']
+    const required = step.required ?? (step.file === 'gateway-named-values' ? ['bu-registry']
       : step.file === 'gateway-apis' ? [targets.api_display_name ?? 'claude-foundry']
       : step.file === 'workspace-logs' ? ['New query', 'Run', 'Queries hub']
       : step.file === 'turnstile-overview' ? ['Essentials', 'Default domain', 'Operating System']
-      : ['Essentials', 'Subscription ID', 'Subscription ID:', 'Workspace ID'];
+      : ['Essentials', 'Subscription ID', 'Subscription ID:', 'Workspace ID']);
     try {
       const deadline = Date.now() + 90000;
       let ready = false;
       while (Date.now() < deadline) {
         const content = await visibleText(page);
+        if (step.file === 'turnstile-overview' && /Welcome to the App Service preview/i.test(content)) {
+          for (const frame of await visibleFrames(page)) {
+            const start = frame.getByRole('button', { name: 'Get started', exact: true }).first();
+            if (await start.isVisible().catch(() => false)) await start.click();
+          }
+          await page.waitForTimeout(1500);
+          continue;
+        }
         if (step.file === 'workspace-logs') {
           for (const frame of await visibleFrames(page)) {
             const text = await frame.locator('body').innerText({ timeout: 1000 }).catch(() => '');
@@ -141,7 +168,8 @@ try {
           continue;
         }
         if (step.file !== 'workspace-logs' &&
-            required.some(marker => content.toLowerCase().includes(marker.toLowerCase()))) { ready = true; break; }
+            (step.required ? required.every(marker => content.toLowerCase().includes(marker.toLowerCase()))
+              : required.some(marker => content.toLowerCase().includes(marker.toLowerCase())))) { ready = true; break; }
         if (/Pick an account|Enter password|Sign in to your account|Sign in again/i.test(content)) {
           authBlocked = true;
           break;
@@ -150,6 +178,33 @@ try {
       }
       if (!ready) throw new Error('Resource frame not ready');
       await page.waitForTimeout(2500);
+      if (step.file === 'workspace-logs') {
+        const query = 'ClaudeCost(startofmonth(now()), now())\n'
+          + '| summarize tokens=sum(prompt_tokens + completion_tokens), requests=sum(requests), cache_read_tokens=sum(cache_read_tokens), estimated_usd=sum(usd), unpriced=countif(not(priced_ok)) by business_unit\n'
+          + '| extend estimated_usd=iff(unpriced > 0, real(null), estimated_usd)';
+        let editorFrame;
+        for (const candidate of await visibleFrames(page)) {
+          if (await candidate.locator('.monaco-editor textarea').first().isVisible().catch(() => false)) {
+            editorFrame = candidate;
+            break;
+          }
+        }
+        if (!editorFrame) throw new Error('Visible KQL editor not found');
+        await editorFrame.locator('.monaco-editor textarea').first().focus();
+        await page.keyboard.press('Control+A');
+        await page.keyboard.insertText(query);
+        const reply = page.waitForResponse(response => response.request().method() === 'POST'
+          && /loganalytics/i.test(response.url()) && /\/query(?:\?|$)/i.test(response.url()), { timeout: 90000 }).catch(() => null);
+        await editorFrame.getByText('Run', { exact: true }).first().click();
+        const response = await reply;
+        if (!response) throw new Error('No Log Analytics query response was observed');
+        const payload = await response.json();
+        const rows = payload.tables?.reduce((count, table) => count + (table.rows?.length ?? 0), 0) ?? 0;
+        if (!response.ok() || !rows) throw new Error('KQL returned no verified result rows');
+        step.query_verified = true;
+        step.query_rows = rows;
+        await page.waitForTimeout(3000);
+      }
     } catch {
       if (authBlocked) {
         console.log('STOP: a visible portal frame requires sign-in. No sign-in attempted.');
@@ -182,7 +237,7 @@ try {
       console.log(`REFUSED ${step.file}: portal did not expose this resource.`);
       continue;
     }
-    for (const frame of await visibleFrames(page)) await frame.evaluate(({ replacements, main }) => {
+    for (const frame of await visibleFrames(page)) await frame.evaluate(({ replacements, main, groupPage }) => {
       const replace = text => {
         for (const [value, substitute] of Object.entries(replacements).sort((a, b) => b[0].length - a[0].length)) {
           if (value && value !== substitute) text = text.split(value).join(substitute);
@@ -209,7 +264,8 @@ try {
         input.value = replace(input.value ?? '');
       }
       for (const image of document.querySelectorAll('.ms-Persona-image,img[src*="/photo"]')) image.style.visibility = 'hidden';
-    }, { replacements, main: frame === page.mainFrame() });
+      if (groupPage) for (const image of document.querySelectorAll('img,.ms-Persona-initials,.fui-Avatar')) image.style.visibility = 'hidden';
+    }, { replacements, main: frame === page.mainFrame(), groupPage: step.file.startsWith('group-') });
     const visible = await visibleText(page, true);
     const unsafe = /\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/i.test(visible) ||
       /\b[A-Za-z0-9.-]+\.(?:azurewebsites\.net|azure-api\.net)\b/i.test(visible) ||
@@ -231,6 +287,7 @@ try {
     fs.writeFileSync(path.join(folder, `${step.file}.txt`), visible, 'utf8');
     images.push({ file: filename, text_file: `${step.file}.txt`, source: 'live', backend: 'Azure portal',
       captured_at: new Date().toISOString(), redaction: true, commit, title: step.title,
+      ...(step.query_verified ? { query_verified: true, query_rows: step.query_rows } : {}),
       sha256: createHash('sha256').update(fs.readFileSync(path.join(folder, filename))).digest('hex') });
     console.log(`LIVE ${step.file} captured with redaction.`);
   }

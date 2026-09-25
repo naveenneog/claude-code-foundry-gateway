@@ -33,3 +33,14 @@ def test_clearing_auth_flag_does_not_accept_missing_required_portal_flow():
     with patch.object(Path, "read_text", changed):
         assert any("required portal flow missing: workspace-logs.png" in issue
                    for issue in validate_portal_manifest(folder))
+
+
+def test_log_editor_without_verified_query_results_is_not_evidence():
+    folder = Path(__file__).resolve().parents[3] / "docs" / "images" / "aum-portal"
+    data = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+    entry = dict(data["images"][0], file="workspace-logs.png", query_verified=False, query_rows=0)
+    data["images"] = [row for row in data["images"] if row["file"] != "workspace-logs.png"] + [entry]
+    original = Path.read_text
+    with patch.object(Path, "read_text", lambda path, *args, **kwargs:
+                      json.dumps(data) if path == folder / "manifest.json" else original(path, *args, **kwargs)):
+        assert any("query result not verified" in issue for issue in validate_portal_manifest(folder))

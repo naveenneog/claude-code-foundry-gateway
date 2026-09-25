@@ -114,6 +114,9 @@ def validate_portal_manifest(folder):
         image, transcript = folder / name, folder / text_file
         if entry.get("source") != "live" or entry.get("redaction") is not True:
             problems.append(name + ": must be live and redacted")
+        if name == "workspace-logs.png" and (entry.get("query_verified") is not True
+                                             or not isinstance(entry.get("query_rows"), int) or entry["query_rows"] < 1):
+            problems.append(name + ": query result not verified")
         if not re.fullmatch(r"[a-f0-9]{40}", entry.get("commit", "")):
             problems.append(name + ": source commit missing")
         if not image.exists() or not transcript.exists():
