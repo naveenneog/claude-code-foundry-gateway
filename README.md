@@ -144,6 +144,12 @@ Platform deployment needs a Foundry account eligible to deploy Claude, an APIM
 [Setup](docs/SETUP.md#1-prerequisites). Developers need the platform team's
 configuration and entitlement, not those administrator roles.
 
+**USD budgets:** dollar inputs now retain their approved amount and dated tariff,
+with an optional reconciler publishing gateway stops. This includes observed
+cache categories, not a hard invoice or complete streaming-cost guarantee.
+See [dollar budgets](docs/BUDGETS.md#dollar-budgets-what-is-enforced) and the
+[AUM client API contract](docs/aum-usd-budgets-client-contract.md).
+
 > ### ⚠️ The SKU matters more than anything else here
 > Anthropic token parsing requires Basic v2, Standard v2 or Premium v2.
 > Classic tiers can accept the policy but meter zero tokens. Private resolver

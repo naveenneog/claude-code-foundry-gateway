@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Set or clear one developer's daily Claude token budget.
 
@@ -29,15 +29,15 @@
 .PARAMETER DailyUsd
     The same budget expressed as money, converted with the price book before it
     is written. The gateway counts tokens, not dollars, so what is stored is
-    still a token figure - this only removes the arithmetic, and the conversion
-    is the same one business-unit budgets use so the two cannot drift.
+    still an approximate realtime token guard. The original dollars are now
+    also persisted with their tariff date for delayed gateway reconciliation.
 
     Read the result as an approximation at list price, in one direction. The
     counter cannot see cached tokens: `llm-token-limit` counts prompt and
     completion only, and on thirty days of measured usage cache reads were 6.8M
     tokens against 320K prompt and 152K completion. A budget set from a dollar
-    figure therefore allows more real spend than the figure suggests, never
-    less.
+    figure can allow more real spend than that figure suggests. The category
+    mix determines the conversion error; no universal ratio is promised.
 
 .PARAMETER Model
     Which model's rates to convert at. Rates differ fivefold between Opus and
@@ -79,6 +79,9 @@ param(
     [Parameter(ParameterSetName = 'SetUsd')]
     [decimal]$OutputShare = 0.2,
 
+    [Parameter(ParameterSetName = 'SetUsd')]
+    [string]$PriceBookPath,
+
     [Parameter(ParameterSetName = 'Clear', Mandatory = $true)]
     [switch]$Clear,
 
@@ -90,6 +93,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeUsdBudgets.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
+if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
 
 # Money, converted once and by the same function business-unit budgets use.
 # Two implementations of "what is a dollar worth in tokens" is how a per-person
@@ -110,22 +116,19 @@ if ($PSCmdlet.ParameterSetName -eq 'SetUsd') {
     Write-Host ("    budget      {0:n0} tokens per day" -f $Tokens) -ForegroundColor DarkGray
     Write-Host ("    price book  {0}" -f $conv.PriceBookDate) -ForegroundColor DarkGray
     Write-Host ''
-    # Stated at the point of decision rather than in a document nobody opens
-    # while running this. The error is one-directional, which is the part worth
-    # knowing: a budget set from money always permits more real spend than the
-    # money implies, never less.
+    # Explain the measured cache omission without claiming a universal mix.
     Write-Host '  This is list price, and the counter cannot see cached tokens - llm-token-limit' -ForegroundColor Yellow
     Write-Host '  counts prompt and completion only. On measured usage cache reads were 6.8M' -ForegroundColor Yellow
-    Write-Host '  tokens against 320K prompt and 152K completion, so real spend against this' -ForegroundColor Yellow
-    Write-Host '  budget runs higher than the figure suggests. Never lower.' -ForegroundColor Yellow
+    Write-Host '  tokens against 320K prompt and 152K completion. In that measured sample the' -ForegroundColor Yellow
+    Write-Host '  token budget runs higher than the figure suggests; no universal ratio is promised.' -ForegroundColor Yellow
+    Write-Host '  USD reconciliation is separate and includes every observed priced category.' -ForegroundColor Yellow
     Write-Host ''
 }
 
 $sub = az account show --query id -o tsv 2>$null
 if (-not $sub) { throw 'Not signed in. Run: az login' }
 if (-not $ApimName) {
-    $ApimName = az apim list -g $ResourceGroup --query "[0].name" -o tsv 2>$null
-    if (-not $ApimName) { throw "No API Management instance in $ResourceGroup. Pass -ApimName." }
+    $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup -ScriptRoot $PSScriptRoot
 }
 
 $armToken = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv 2>$null
@@ -171,6 +174,7 @@ if ($List) {
 
 # Resolve to an object id. A UPN is what an administrator has to hand; the
 # policy keys on oid.
+Assert-ClaudeUsdAuthority -ResourceGroup $ResourceGroup -ApimName $ApimName
 $oid = $User.Trim()
 if ($oid -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
     $resolved = az ad user show --id $oid --query id -o tsv 2>$null
@@ -183,6 +187,13 @@ if ($oid -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}
     if (-not $resolved) { throw "Could not resolve '$User' to an object id. Pass the object id directly." }
     $oid = $resolved.Trim()
 }
+$oid = $oid.ToLowerInvariant()
+$usdArgs = $null
+if ($Clear -or $PSCmdlet.ParameterSetName -eq 'SetUsd') {
+    $usdArgs = @{ ResourceGroup = $ResourceGroup; ApimName = $ApimName; ScopeType = 'user'; ScopeId = $oid
+        AmountUsd = $DailyUsd; Period = 'day'; PriceBookPath = $PriceBookPath; Clear = [bool]$Clear }
+    Set-ClaudeUsdBudget @usdArgs -ValidateOnly
+}
 
 $entitled = (Split-Sentinel (Get-Nv 'allow-standard')) + (Split-Sentinel (Get-Nv 'allow-premium'))
 if ($entitled -notcontains $oid) {
@@ -191,7 +202,11 @@ if ($entitled -notcontains $oid) {
 
 $before = $map.Count
 if ($Clear) {
-    if (-not $map.Contains($oid)) { Write-Host "No override for $oid. Nothing to clear." -ForegroundColor DarkGray; exit 0 }
+    if (-not $map.Contains($oid)) {
+        if ($usdArgs) { Set-ClaudeUsdBudget @usdArgs }
+        Write-Host "No token override for $oid. Any USD override was cleared." -ForegroundColor DarkGray
+        exit 0
+    }
     $was = $map[$oid]
     $map.Remove($oid)
     $action = "cleared (was $('{0:n0}' -f $was) tokens/day)"
@@ -215,6 +230,7 @@ foreach ($k in $others) {
 }
 
 Set-Nv 'quota-overrides' $value
+if ($usdArgs) { Set-ClaudeUsdBudget @usdArgs }
 Write-Host ""
 Write-Host "  $oid $action" -ForegroundColor Green
 Write-Host ("  {0} override(s) before, {1} after. Others untouched." -f $before, $map.Count) -ForegroundColor DarkGray

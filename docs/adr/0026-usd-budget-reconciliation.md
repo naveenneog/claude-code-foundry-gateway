@@ -49,6 +49,12 @@ whole write; it never truncates a map. Empty objects leave old installations'
 behavior unchanged. An enabled dollar budget without a matching fresh state
 fails closed, not open. An obsolete configuration snapshot cannot lift a stop.
 
+State has a compact internal row encoding: shared period bounds and tariff date,
+with eight positional fields per scope. The service expands it losslessly before
+returning the HTTP contract, and the policy accepts both the full and compact
+schema-1 forms for a safe policy-first upgrade. A behavioral fixture of 20 unit
+decisions fits; this is not a promise of an arbitrary directory-size override map.
+
 A shared Python reconciler is used by the AUM Functions timer and an on-demand
 PowerShell entry point. The service retains its managed identity, narrow
 named-value permissions, workspace reader, storage lease and audit. Direct
@@ -117,3 +123,53 @@ prices, modes, scope, authority, stale snapshots, rollover and stop/lift. The
 isolated live proof must show nonstream cache creation/read arithmetic, the
 distinct 403, a budget raise, latency, cost and complete resource/grant removal.
 The architecture source, rendered image and manifest travel with the feature.
+
+## Measured refinements
+
+On the isolated Basic v2, 2026-09-25:
+
+- JSON usage and the policy-read copy agreed: a five-minute cache creation of
+  12,487 tokens, a read of 12,487, and a one-hour creation of 12,488. The
+  LLM log schema still had no cache columns. Cached-token metrics had
+  `Service ID` for gateway isolation and `UserId`/`Model` attribution, but
+  no cache-creation metric was observed.
+- Response-dependent increments of 60 against a limit of 100 worked.
+  Rate limiting refused the third sequential call; the quota probe admitted
+  an additional successful call before refusing. Literal `calls=2147483648`
+  failed both policies' validation. A quota increment returning `long` failed
+  with "Cannot implicitly convert type 'long' to 'int'". Thus micro-dollar
+  counters also have an approximately $2,147.48 literal ceiling and fractional
+  micro-dollar precision problems.
+- An SSE body reader returned all 7,084 response bytes into a response header,
+  demonstrating that it awaited the complete body. First-byte measurements in
+  this network arrived near completion both with and without the reader; they
+  do **not** establish a causal latency difference. Documentation, not an
+  invented stream callback, determines the safe production behavior.
+- APIM rejected `CultureInfo` and `DateTime.ToUniversalTime()` in expressions.
+  More subtly, converting a JSON date through `string` discarded its UTC
+  designator on the non-UTC test host. Typed `DateTimeOffset` conversion and
+  preserving the timestamp token fixed both policy evaluation and the 403 wire
+  timestamp. The actual expression is compiled/executed in tests. Its compiler
+  accepts only CS1701 for PowerShell's bundled net6 Newtonsoft/net10 reference
+  unification; every other warning/error fails. No gate setting is relaxed.
+- Notify must bypass its own snapshot dependency, not merely return a
+  non-blocking fresh decision. Missing/expired state never blocks a notify-only
+  scope, while an enforced parent or person still fails closed.
+- Some Claude LLM-log rows had an empty DeploymentName. The USD query then uses
+  the served ModelName, not a guessed client alias. Model ambiguity and unpriced
+  names remain visible errors. Failed zero-usage rows without any model/identity
+  are not fabricated into charges.
+- ARM accepted a definition before a GET exposed the new value. The script now
+  bounds read-back polling without replaying the write. A behavioral stub
+  reproduces this, and the PS 5.1 JSON-array enumeration difference is tested.
+- Complete JSON proof: $0.0364984 crossed $0.02; a distinct scoped 403 followed
+  reconciliation, and a $0.50 raise restored 200. The crossing-to-observed-403
+  interval was 175.9 seconds on demand. The guide contains the category arithmetic.
+
+The service schedule reuses its already deployed Functions timer, identity,
+lease and audit rather than cloning a second Container Apps schedule. Like the
+Turnstile and chargeback jobs, it is one bounded pass, with a later scheduled
+pass recovering a failure. Direct scheduling without the optional AUM service
+is an operator integration, not another automatically provisioned component.
+Cross-tool atomicity remains P48: ETags and fresh authority checks detect
+observed conflicts, but do not create a transaction across independent writers.

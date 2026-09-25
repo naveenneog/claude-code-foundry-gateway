@@ -194,10 +194,25 @@ class DollarDecisionTests(unittest.TestCase):
         self.assertEqual("0", state["items"]["user:" + PERSON]["spent_usd"])
         self.assertEqual("0.02802", state["items"]["department:payroll"]["spent_usd"])
 
+    def test_projection_never_uses_the_obsolete_membership_map(self):
+        config = configured()
+        config["entitlement-source"] = "projection"
+        config["bu-members"] = "," + PERSON + "=finance,"
+        state = calculate_state(config, [row()], NOW)
+        self.assertEqual("stop", state["items"]["department:payroll"]["status"])
+        self.assertEqual("0.02802", state["items"]["department:payroll"]["spent_usd"])
+
     def test_unknown_attribution_is_not_ignored(self):
         state = calculate_state(configured(), [row(user_id="", business_unit="")], NOW)
         self.assertEqual("unpriced", state["items"]["organization:finance"]["status"])
         self.assertFalse(state["items"]["organization:finance"]["exact"])
+
+    def test_unattributed_zero_usage_failure_is_not_invented_spend(self):
+        failed = row(user_id="", business_unit="", model="", deployment="", prompt_tokens=0,
+                     completion_tokens=0, cache_read_tokens=0, cache_write_5m_tokens=0)
+        state = calculate_state(configured(), [failed], NOW)
+        self.assertEqual("allow", state["items"]["organization:finance"]["status"])
+        self.assertEqual("0", state["items"]["organization:finance"]["spent_usd"])
 
     def test_repeat_evaluation_is_idempotent_and_expiry_is_bounded(self):
         config = configured()
@@ -205,6 +220,19 @@ class DollarDecisionTests(unittest.TestCase):
         self.assertEqual(state, calculate_state(config, [row()], NOW))
         self.assertEqual("2026-09-25T12:15:00Z", state["valid_until"])
         self.assertEqual(source_revision(config), state["source_revision"])
+
+    def test_twenty_unit_decisions_fit_the_existing_named_value_boundary(self):
+        doc = document()
+        sample = doc["items"]["organization:finance"]
+        doc["items"] = {"organization:unit-" + str(i): deepcopy(sample) for i in range(20)}
+        config = configured(doc)
+        config["bu-registry"] = "," + ",".join(f"unit-{i}=Contoso Group {i}:1000" for i in range(20)) + ","
+        config["bu-parents"], config["bu-members"], config["bu-modes"] = ",,", ",,", ",,"
+        state = calculate_state(config, [], NOW)
+        from aum_service.usd_budgets import encode_state, decode_state
+        packed = encode_state(state)
+        self.assertLessEqual(len(packed), 4096)
+        self.assertEqual(state, decode_state(packed))
 
 
 if __name__ == "__main__":

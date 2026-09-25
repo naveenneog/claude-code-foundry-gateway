@@ -118,6 +118,12 @@ param buParentsExisting string = ''
 @description('Budget enforcement exceptions to preserve: ",sales=allowance:10,sales-emea=notify,". Absent units are strict; ",," keeps every budget strict.')
 param buModesExisting string = ''
 
+@description('Preserve dated USD budgets (base64 JSON). Empty leaves the optional USD control disabled.')
+param usdBudgetsExisting string = ''
+
+@description('Preserve the USD reconciler snapshot (base64 JSON), including stops and its freshness deadline.')
+param usdBudgetStateExisting string = ''
+
 @description('What happens to a developer who belongs to no business unit. "allow" serves them and records the usage against no budget; "deny" refuses. The default is allow because no developer has a business unit at the moment this first deploys, and deny would refuse every request. Move to deny once assignment is complete - Get-ClaudeBusinessUnit.ps1 reports how many are unassigned.')
 @allowed([
   'allow'
@@ -191,6 +197,8 @@ var buRegistryValue = empty(buRegistryExisting) ? ',,' : buRegistryExisting
 var buMembersValue = empty(buMembersExisting) ? ',,' : buMembersExisting
 var buParentsValue = empty(buParentsExisting) ? ',,' : buParentsExisting
 var buModesValue = empty(buModesExisting) ? ',,' : buModesExisting
+var usdBudgetsValue = empty(usdBudgetsExisting) ? 'e30=' : usdBudgetsExisting
+var usdBudgetStateValue = empty(usdBudgetStateExisting) ? 'e30=' : usdBudgetStateExisting
 
 resource foundry 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
   name: foundryAccountName
@@ -366,6 +374,8 @@ var namedValues = [
   { key: 'bu-members', value: buMembersValue }
   { key: 'bu-parents', value: buParentsValue }
   { key: 'bu-modes', value: buModesValue }
+  { key: 'usd-budgets', value: usdBudgetsValue }
+  { key: 'usd-budget-state', value: usdBudgetStateValue }
   { key: 'bu-unassigned', value: buUnassigned }
   { key: 'calls-per-minute', value: string(callsPerMinute) }
   { key: 'allow-standard', value: allowStandardValue }

@@ -11,8 +11,8 @@
     counter, the ledger and every report use; the group behind it can be renamed
     without orphaning the history.
 
-    The budget is set in dollars and stored in tokens, converted once here rather
-    than per request. That conversion is an approximation and is reported as one:
+    The budget is stored in dollars with its dated tariff, and also converted to
+    tokens for the existing realtime guard. That conversion is an approximation:
     Claude's output tokens cost five times base input, so a dollar does not buy a
     fixed number of tokens, and the gateway's quota counter excludes cached
     tokens entirely - on thirty days of live usage, 38.7% of the real cost
@@ -25,7 +25,8 @@
     The Entra group whose members belong to it.
 
 .PARAMETER MonthlyBudgetUsd
-    Monthly budget in US dollars, converted to tokens on write.
+    Positive monthly budget in US dollars, also converted to the approximate
+    token guard. Removing a unit clears its dollar entry too.
 
 .PARAMETER Model
     Model to price the conversion against. Defaults to claude-sonnet-5.
@@ -87,6 +88,9 @@ param(
     [Parameter(ParameterSetName = 'Set')]
     [decimal]$OutputShare = 0.2,
 
+    [Parameter(ParameterSetName = 'Set')]
+    [string]$PriceBookPath,
+
     [Parameter(ParameterSetName = 'Remove', Mandatory = $true)]
     [switch]$Remove,
 
@@ -101,6 +105,9 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeUsdBudgets.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
+if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
 
 $requestedMode = $null
 if ($PSBoundParameters.ContainsKey('Mode') -or $PSBoundParameters.ContainsKey('AllowancePercent')) {
@@ -112,8 +119,7 @@ if ($PSBoundParameters.ContainsKey('Mode') -or $PSBoundParameters.ContainsKey('A
 
 if (-not (az account show --query id -o tsv 2>$null)) { throw 'Not signed in. Run: az login' }
 if (-not $ApimName) {
-    $ApimName = az apim list -g $ResourceGroup --query "[0].name" -o tsv 2>$null
-    if (-not $ApimName) { throw "No API Management instance in $ResourceGroup. Pass -ApimName." }
+    $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup -ScriptRoot $PSScriptRoot
 }
 
 $raw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'
@@ -168,9 +174,12 @@ if ($List) {
     exit 0
 }
 
+Assert-ClaudeUsdAuthority -ResourceGroup $ResourceGroup -ApimName $ApimName
 Test-ClaudeBuId $Id
 $existing = @($registry | Where-Object { $_.Id -eq $Id })
 $before = $registry.Count
+$originalUsdKind = if ($parents[$Id]) { 'department' } else { 'organization' }
+$originalUsdParent = [string]$parents[$Id]
 
 if ($Remove) {
     if (-not $existing.Count) { Write-Host "No business unit '$Id'. Nothing to remove." -ForegroundColor DarkGray; exit 0 }
@@ -273,6 +282,29 @@ else {
 $value = ConvertTo-ClaudeBuRegistry $registry
 $modeValue = ConvertTo-ClaudeBuModes $modes
 Test-ApimNamedValueLength -Id 'bu-modes' -Value $modeValue
+$usdArgs = $null
+if ($Remove -or $PSBoundParameters.ContainsKey('Parent')) {
+    $usdValues = Get-ClaudeUsdNamedValues -ResourceGroup $ResourceGroup -ApimName $ApimName
+    $usdDoc = ConvertFrom-ClaudeUsdValue $usdValues['usd-budgets']
+    if ($usdDoc.items) {
+        if (-not $Remove -and $originalUsdParent -ne [string]$parents[$Id] -and
+            $usdDoc.items.PSObject.Properties["$originalUsdKind`:$Id"]) {
+            throw 'Clear the existing USD budget through AUM before changing its hierarchy, then recreate it in the new scope.'
+        }
+        foreach ($orphan in @($orphans)) {
+            if ($usdDoc.items.PSObject.Properties["department:$orphan"]) {
+                throw "Clear the USD budget of team '$orphan' before removing its parent; no hierarchy values were written."
+            }
+        }
+    }
+}
+if ($Remove -or $PSBoundParameters.ContainsKey('MonthlyBudgetUsd')) {
+    $kind = if ($Remove) { $originalUsdKind } elseif ($parents[$Id]) { 'department' } else { 'organization' }
+    $usdArgs = @{ ResourceGroup = $ResourceGroup; ApimName = $ApimName; ScopeType = $kind; ScopeId = $Id
+        AmountUsd = $MonthlyBudgetUsd; Period = 'month'; PriceBookPath = $PriceBookPath
+        Clear = [bool]$Remove }
+    Set-ClaudeUsdBudget @usdArgs -ValidateOnly
+}
 
 # The write is only safe because the registry was read first. Assert that every
 # other business unit survived rather than trusting the string building - an
@@ -295,6 +327,7 @@ if ($modeValue -ne $modesRaw) {
         throw 'Budget modes did not read back as written.'
     }
 }
+if ($usdArgs) { Set-ClaudeUsdBudget @usdArgs }
 
 Write-Host ''
 Write-Host ("  {0} {1}" -f $Id, $action) -ForegroundColor Green
@@ -304,7 +337,7 @@ if ($orphans -and $orphans.Count) {
     Write-Host "  They keep their own budgets and are no longer charged to a parent." -ForegroundColor DarkGray
 }
 if ($conv) {
-    Write-Host ("  `${0:n0}/month -> {1:n0} tokens, at a blended `${2}/M for {3} assuming {4:p0} output." -f `
+    Write-Host ("  `${0}/month -> {1:n0} tokens, at a blended `${2}/M for {3} assuming {4:p0} output." -f `
         $conv.Usd, $conv.TokensPerMonth, $conv.BlendedUsdPerM, $conv.Model, $conv.OutputShare) -ForegroundColor DarkGray
     Write-Host ("  List price, price book {0}. The quota counter excludes cached tokens." -f $conv.PriceBookDate) -ForegroundColor DarkGray
 }

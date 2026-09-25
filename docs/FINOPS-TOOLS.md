@@ -147,10 +147,13 @@ Details: [Monitoring: dashboard](MONITORING.md#7-dashboard) and [FinOps reportin
 3. Every write is read back. A request above the limit is refused with 403, or in allowance and
    notify modes served with a notice ([budget modes](BUDGETS.md#business-unit-and-team-enforcement-modes)).
 
-The scripts themselves do not check which tool owns governance. While Turnstile owns it, its
-apply job writes Turnstile's catalog over whatever they changed on its next run, so change
-budgets in Turnstile instead. The terminal's Direct mode and the AUM service do check, and
-refuse. Details: [Budgets](BUDGETS.md) and [Business units](BUSINESS-UNITS.md).
+The business-unit and person budget scripts now check `turnstile-integration`
+and refuse when Turnstile owns governance, as the terminal's Direct mode and
+AUM service do. Do not use other raw named-value writers as an authority bypass.
+Dollar inputs also persist the original amount and dated tariff; the token
+conversion remains only the realtime guard. Dollar enforcement additionally
+requires the current policy/ledger and a healthy reconciler.
+Details: [USD budgets](BUDGETS.md#dollar-budgets-what-is-enforced).
 
 ### Flow 3: Terminal FinOps, Direct
 
@@ -271,7 +274,31 @@ domain for broad delivery. Details: [Chargeback reports](CHARGEBACK-REPORTS.md).
 | 1. The authority writes | Scripts, the AUM service or Turnstile's apply job writes the gateway's named values (`bu-registry`, `bu-members`, `bu-parents`, `bu-modes`, `quota-overrides`, tiers) | Every writer reads the value back; the AUM service uses conditional revisions |
 | 2. The gateway enforces | APIM `llm-token-limit` per unit, team, person and tier, in strict, allowance or notify mode | A request above the limit gets 403, or is served with a notice |
 | 3. The ledger records | Each request's trace lands in Log Analytics with its person, tier, unit, model and tokens | `ClaudeChargeback()` and `ClaudeCost()` |
-| 4. The tools report | Workbooks, the terminal, Turnstile's usage export, the reports job | The same functions, so every tool shows the same totals |
+| 4. The tools report | Workbooks, the terminal, Turnstile's usage export, the reports job | Read each tool's usage basis; legacy `ClaudeCost` still excludes cache writes |
+
+**Dollar stops add a fifth step.** The AUM service's five-minute timer (or
+`Sync-ClaudeUsdBudgets.ps1` on demand) reads categorized integer counts,
+uses exact decimal category prices from `usd-budgets`, and writes
+`usd-budget-state`. APIM enforces the resulting scope decision; the reconciler
+never proxies a model request. The service uses its existing managed identity,
+lease and audit, so this adds timer execution/query/ingestion, not another
+standing Azure service. Without AUM service, the caller must arrange a
+managed-identity schedule; setting a budget does not create one.
+
+This is a delayed observed-cost stop, **not a complete exact streaming dollar
+ceiling or invoice cap**. JSON responses can supply the cache-write TTL split;
+SSE bodies are never read, streaming writes remain unknown, and cache-read
+metrics have cardinality limits. The client must use the new USD-status API,
+not `/usage` or a token-to-dollar conversion, for the enforcement snapshot.
+[Client fields and permissions](aum-usd-budgets-client-contract.md).
+
+Measured on an isolated Basic v2 on 2026-09-25: **$0.0364984** of complete JSON
+category costs crossed **$0.02**, reconciliation stopped the next request with
+`usd_budget_exceeded`, and raising to **$0.50** restored service. Crossing to
+observed 403 took **175.9 seconds** on demand; a five-minute schedule can add
+up to 300 seconds to that sample, and Azure ingestion supplies no hard maximum.
+The [arithmetic, delay and limits](BUDGETS.md#measured-delay-and-arithmetic-isolated-basic-v2)
+are explicit. Stale enforced snapshots fail closed after 15 minutes.
 
 ![Budget enforcement modes: strict, allowance and notify](images/architecture/budget-modes.png)
 
@@ -346,7 +373,8 @@ Three limits hold for every figure:
   meter, and private-offer discounts apply before that conversion (**U2**).
 - **The limiter does not see cached tokens.** `llm-token-limit` counts prompt and completion
   tokens only. On thirty days of live usage, cache reads were 38.7% of the real cost weight, so
-  budgets bound less spend than they appear to (**U13**).
+  token budgets can allow more cost than their conversion suggests. The separate USD stop
+  includes observed cache categories; complete streaming accounting remains **U13**.
 - **Unpriced models make the total unknown.** A model missing from the price book leaves its
   rows unpriced, and the total then shows as unknown rather than a false lower figure. Add
   prices with `./scripts/Add-ClaudeModel.ps1` and republish with `./scripts/Publish-ClaudeQueries.ps1`.
@@ -373,8 +401,9 @@ Read with the commands above on 2026-09-25:
   new value. `llm-token-limit`'s remaining count is an estimate across gateway instances, so the
   exact request that crosses a limit is not guaranteed
   ([the budget is a delayed kill switch](SCALE.md#the-budget-is-a-delayed-kill-switch-not-a-hard-cap)).
-- The PowerShell `Set-*` scripts do not yet refuse while Turnstile owns governance; see
-  [flow 2](#flow-2-budgets-from-scripts).
+- Business-unit/person dollar writers and the reconciler refuse Turnstile authority.
+  A raw ARM write remains a privileged administrative bypass, not a second supported
+  governance authority.
 - Still open: Turnstile's budget requests and boosts (P47 is delivered for the AUM service
   only), P48's single queue-driven writer at 500,000 people, the viewer-only evidence, and the
   portal pictures, which need one owner sign-in.

@@ -16,6 +16,10 @@ DECIMAL = re.compile(r"^[0-9]{1,12}(?:\.[0-9]{1,9})?$")
 SCOPE = re.compile(r"^(organization|department|user):([a-z0-9-]{1,100})$")
 
 
+class JsonNumber(str):
+    pass
+
+
 def timestamp(value):
     return value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -32,7 +36,8 @@ def decode_document(raw):
         return result
     try:
         checked_value(raw)
-        result = json.loads(base64.b64decode(raw, validate=True).decode("ascii"), object_pairs_hook=unique)
+        result = json.loads(base64.b64decode(raw, validate=True).decode("ascii"),
+                            object_pairs_hook=unique, parse_float=JsonNumber)
         if not isinstance(result, dict):
             raise ValueError("object required")
         return result
@@ -45,8 +50,48 @@ def encode_document(document):
     return checked_value(base64.b64encode(raw.encode("ascii")).decode("ascii"))
 
 
+def encode_state(state):
+    if not state:
+        return encode_document({})
+    packed = {k: v for k, v in state.items() if k != "items"}
+    packed.update(encoding="compact-v1", periods={}, items={})
+    for key, item in state["items"].items():
+        packed["price_book_date"] = item["price_book_date"]
+        packed["periods"][item["period"]] = [item["period_start"], item["period_end"]]
+        flags = int(item["exact"]) | (int(item["cache_read_known"]) << 1) | (int(item["cache_write_known"]) << 2)
+        packed["items"][key] = [item["period"], item["budget_usd"], item["effective_budget_usd"],
+                                item["spent_usd"], item["status"], item["enforcement"], flags,
+                                item["unpriced_models"]]
+    return encode_document(packed)
+
+
+def decode_state(raw):
+    packed = decode_document(raw)
+    if packed.get("encoding") != "compact-v1":
+        return packed
+    state = {k: v for k, v in packed.items() if k not in ("encoding", "periods", "price_book_date", "items")}
+    state["items"] = {}
+    try:
+        for key, data in packed["items"].items():
+            if len(data) != 8 or type(data[6]) is not int or not 0 <= data[6] <= 7:
+                raise ValueError()
+            kind, target = key.split(":", 1)
+            start, end = packed["periods"][data[0]]
+            state["items"][key] = {
+                "scope_type": kind, "scope_id": target, "period": data[0],
+                "period_start": start, "period_end": end, "price_book_date": packed["price_book_date"],
+                "budget_usd": data[1], "effective_budget_usd": data[2], "spent_usd": data[3],
+                "status": data[4], "enforcement": data[5], "exact": bool(data[6] & 1),
+                "cache_read_known": bool(data[6] & 2), "cache_write_known": bool(data[6] & 4),
+                "unpriced_models": data[7],
+            }
+    except (KeyError, TypeError, ValueError) as error:
+        raise Conflict("Invalid compact USD state", "usd_invalid_configuration") from error
+    return state
+
+
 def dollars(value):
-    if not isinstance(value, str) or not DECIMAL.fullmatch(value):
+    if type(value) is not str or not DECIMAL.fullmatch(value):
         raise invalid("USD amounts must be nonnegative decimal strings with at most 9 fractional digits")
     return Decimal(value)
 
@@ -55,7 +100,8 @@ def parse_budgets(raw):
     doc = decode_document(raw)
     if not doc:
         return {}
-    if set(doc) != {"schema_version", "price_book", "items"} or doc["schema_version"] != 1:
+    if (set(doc) != {"schema_version", "price_book", "items"}
+            or type(doc["schema_version"]) is not int or doc["schema_version"] != 1):
         raise invalid("USD budget schema_version must be 1")
     book = doc["price_book"]
     if not isinstance(book, dict) or not isinstance(book.get("models"), dict) or not book["models"]:
@@ -118,6 +164,8 @@ def money(value):
 
 
 def price_row(row, book):
+    if row.get("ambiguous_model"):
+        raise ServiceError(503, "usd_unpriced", "A deployment served multiple model versions in this period")
     deployment = row.get("deployment") or row.get("model")
     model = book.get("models", {}).get(deployment)
     if not isinstance(model, dict):
@@ -162,6 +210,7 @@ def calculate_state(values, rows, now, freshness_seconds=900):
     now = now.astimezone(UTC)
     config = Config(values)
     state = {"schema_version": 1, "source_revision": source_revision(values),
+             "policy_revision": hashlib.sha256("\n".join(values.get(k, "") for k in USD_NAMES[:-1]).encode("utf-8")).hexdigest(),
              "reconciled_at": timestamp(now), "valid_until": timestamp(now + timedelta(seconds=freshness_seconds)),
              "items": {}}
     for key, budget in doc["items"].items():
@@ -180,8 +229,14 @@ def calculate_state(values, rows, now, freshness_seconds=900):
             if not start <= observed < min(end, now + timedelta(microseconds=1)):
                 continue
             user = row.get("user_id")
-            leaf = config.members.get(user, row.get("business_unit"))
+            leaf = (row.get("business_unit") if config.values.get("entitlement-source") == "projection"
+                    else config.members.get(user, row.get("business_unit")))
             if not user or not leaf:
+                if not row.get("model") and not row.get("deployment") and all(
+                    quantity(row.get(k + "_tokens")) == 0
+                    for k in ("prompt", "completion", "cache_read", "cache_write_5m", "cache_write_1h")
+                ):
+                    continue
                 problems.add("unattributed-usage")
                 continue
             if kind == "user":
@@ -223,5 +278,5 @@ def calculate_state(values, rows, now, freshness_seconds=900):
             "exact": exact and not problems, "cache_read_known": read_known and not problems,
             "cache_write_known": write_known and not problems, "unpriced_models": sorted(problems),
         }
-    encode_document(state)
+    encode_state(state)
     return state
