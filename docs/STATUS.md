@@ -41,6 +41,27 @@ against stale runs is being added with the modes, and a single queue-driven writ
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
 
+## Scripts ask for what they were not given, 2026-09-25
+
+Asked by the owner after `Publish-ClaudeWorkbook.ps1` stopped with "3 workspaces in
+rg-...: Pass -WorkspaceName" and gave no way to tell which. `scripts/ClaudeChoice.ps1` is the
+shared answer: a value a script was not given is offered from what Azure actually holds,
+numbered, with where each option comes from, where to look it up (command and portal path),
+and the one the deployment points at marked recommended; Enter takes it. Without a console
+(a pipeline, a scheduled job, the test suite, `pwsh -NonInteractive`, `CLAUDE_NONINTERACTIVE=1`)
+a certain recommendation is used and its source printed, and anything else stops, naming the
+candidates. A value the installer recorded counts as given and is not asked for.
+
+Applied to the monitoring flow: `Publish-ClaudeQueries.ps1`, `Publish-ClaudeWorkbook.ps1` and
+`Publish-ClaudeGrafana.ps1` (resource group, gateway, workspace, Grafana instance), and
+`Get-ClaudeTelemetry.ps1`, which no longer takes the first API Management instance in a group
+and now prints the linked `Workspace`. On the reference gateway the workbook publisher chose the
+workspace behind the gateway's Application Insights out of three in its group, and published the
+owner's "Claude gateway - platform" workbook. `tests/Test-ClaudeChoice.ps1`:
+34 assertions on PowerShell 7 and 5.1, and four mutations in the business-unit harness. Nothing
+architectural changed. Still guessing: 24 other scripts take the first match (`[0].name`) or
+stop with "Pass -X"; they move to the same helper next.
+
 ## Premium v2 injection: where the private IP is, 2026-09-25
 
 Asked by the owner, whose own injected Premium v2 gateway showed no private IP, so its URL could

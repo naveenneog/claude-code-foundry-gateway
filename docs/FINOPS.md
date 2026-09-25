@@ -38,17 +38,19 @@ named value. Do not derive a client ID from an account or tenant ID.
 Have a platform owner run these from the repository root, with explicit targets:
 
 ```powershell
-./scripts/Publish-ClaudeQueries.ps1 -ResourceGroup '<workspace-resource-group>' `
+./scripts/Publish-ClaudeQueries.ps1 -ResourceGroup '<gateway-resource-group>' `
     -ApimName '<apim-name>' -WorkspaceName '<ledger-workspace>'
-./scripts/Publish-ClaudeWorkbook.ps1 -ResourceGroup '<workspace-resource-group>' `
+./scripts/Publish-ClaudeWorkbook.ps1 -ResourceGroup '<gateway-resource-group>' `
     -WorkspaceName '<ledger-workspace>' -WorkbookFile infra/workbook-chargeback.json `
     -Name 'Claude gateway - chargeback'
 ```
 
-The publisher expects the gateway and target workspace in the supplied resource
-group. If they are in different groups, do not pass a convenient but wrong name:
-use the manual path below or have the platform owner arrange publication for
-that layout.
+The ledger workspace is the one linked to the gateway's Application Insights:
+`./scripts/Get-ClaudeTelemetry.ps1` prints it as `Workspace`. Omit `-WorkspaceName`
+and each publisher offers that workspace, even when it is in another resource group,
+and asks in a console. A `-WorkspaceName` you pass is looked up in the supplied
+resource group; if the workspace is elsewhere, omit it rather than pass a convenient
+but wrong name.
 
 **Portal/manual:** Log Analytics workspace > Logs > Functions. Publish
 `analytics/chargeback-ledger.kql` as `ClaudeChargeback` with the `p_from` and

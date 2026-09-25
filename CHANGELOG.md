@@ -626,6 +626,14 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Changed
 
+- **Scripts ask for a value they were not given, and say where it comes from.**
+  `scripts/ClaudeChoice.ps1` offers the options discovered in Azure, numbered, with the one the
+  deployment points at recommended and the command and portal path to look it up; without a
+  console it uses a certain recommendation and otherwise stops naming the candidates. The
+  publishers (`Publish-ClaudeQueries.ps1`, `Publish-ClaudeWorkbook.ps1`, `Publish-ClaudeGrafana.ps1`)
+  now find the workspace behind the gateway's Application Insights instead of refusing when a
+  resource group holds several, and `Get-ClaudeTelemetry.ps1` prints that `Workspace` and no
+  longer takes the first API Management instance in a group.
 - **The chargeback ledger records the caller's address.** `analytics/chargeback-ledger.kql` has a
   `client_ip` column, from a new `ClientIp` field in the gateway's identity trace: behind the P54
   edge it is the edge's socket peer, otherwise the address APIM saw. It is personal data; review

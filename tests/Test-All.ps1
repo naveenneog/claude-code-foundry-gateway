@@ -196,6 +196,7 @@ try {
     Invoke-Check 'Teams and the budget cascade'            'Test-Teams.ps1'
     Invoke-Check 'Model discovery and deployment'          'Test-ModelDeployment.ps1'
     Invoke-Check 'Client attribution and the workbook'     'Test-Observability.ps1'
+    Invoke-Check 'Scripts ask for what they were not given' 'Test-ClaudeChoice.ps1'
     # Shard 0 also carries the mutation that runs the PS 5.1 wizard (Test-On-PS51.ps1), about
     # 100 s alone and up to 300 s on a loaded machine; measured 520 s against the others' ~220 s.
     Invoke-Check 'Business unit checks detect breakage [0/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '0/4' } -TimeoutSeconds 900
