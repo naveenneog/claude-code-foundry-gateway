@@ -344,6 +344,12 @@ allocated child tokens". A tier is a ceiling each person may reach, not a share 
 mirroring tiers as person budgets blocks ordinary unit budgets once a department has more than a
 handful of people. Tiers travel on every usage row instead, as the project `tier-<tier>`.
 
+The connection's `personBudgets` option is an outbound mirror: the **ToTurnstile**
+sync allocates each discovered person's tier daily quota times the days in the month,
+where that fits. Neither **FromTurnstile** path imports person budgets or writes
+`quota-overrides`. Personal daily overrides through `Set-ClaudeBudget.ps1` therefore
+remain available regardless of this option or the governance authority.
+
 Turnstile also refuses a team budget larger than its unit's. The gateway allows that, because the
 unit caps its teams together ([ADR-0008](DECISIONS.md)). The sync reports the refusal and carries
 on; the gateway still enforces both.
@@ -473,6 +479,13 @@ Measured round trip, with the `sales-emea` budget set to 1,000 tokens in Turnsti
 With only budgets authored in Turnstile, structure stays the gateway's: a unit added in Turnstile
 is not created in the gateway. To manage units, teams, groups and tiers in Turnstile as well, see
 [Manage everything in Turnstile](#manage-everything-in-turnstile).
+
+`Set-ClaudeBusinessUnit.ps1 -MonthlyBudgetUsd` now refuses before writing while this
+budget authority is selected, including a combined group-and-budget edit. Use
+Turnstile > **Budgets** instead. Group, parent, mode, removal and tier edits remain
+available: this apply changes only `TokensPerMonth` for existing, matching unit/team
+entries in `bu-registry`. A budget removed in Turnstile is reported, not applied;
+unknown scopes and person budgets are not imported.
 
 ## Run it on a schedule
 
@@ -725,6 +738,18 @@ When the gateway reads entitlement from the projection, as it must beyond about 
 
 ### What is applied, and what is not
 
+- Full governance owns `bu-registry` (ids, group mappings and monthly amounts),
+  `bu-parents`, `bu-modes`, and `tpm-*`, `quota-*` and `models-*` for `standard`
+  and `premium`. `Set-ClaudeBusinessUnit.ps1` and `Set-ClaudeTier.ps1` refuse
+  competing mutations, naming this Turnstile's URL and the page to use. List
+  modes remain available. Authority read failures stop writes, not the lists;
+  an absent or explicitly disconnected connection means gateway ownership.
+- Neither authority owns `quota-overrides`, `quota-org`, `calls-per-minute`,
+  `bu-unassigned` or the Entra groups' membership. `Set-ClaudeBudget.ps1`
+  daily overrides and `Set-ClaudeDeveloper.ps1` group membership edits remain
+  available. The apply may refresh derived `allow-standard`, `allow-premium`
+  and `bu-members` from those groups, under the conditions above; it never
+  writes membership back to Entra.
 - Only the tiers the policy enforces, `standard` and `premium`. Another tier is named in the run
   and not applied: a third tier is a policy change.
 - A unit or team id is lower-case letters, digits and hyphens. A unit with no Entra group is not
@@ -742,11 +767,19 @@ When the gateway reads entitlement from the projection, as it must beyond about 
 ### Move governance back to the gateway
 
 ```powershell
-./scripts/Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Gateway
+./scripts/Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Gateway -BudgetAuthority Gateway
 ```
 
 It clears `GATEWAY_APPLY_JOB_ID` and removes the writer role. The gateway keeps what was last
-applied, and from then on the hourly run shows the gateway's state in Turnstile again.
+applied, and with **both** authorities set to Gateway the hourly run shows that state in
+Turnstile again. `-GovernanceAuthority Gateway` alone preserves the existing budget authority,
+so monthly budgets can remain Turnstile-owned. Use the same `-ResourceGroup` and `-ApimName`
+as the refused command; its error prints the complete switch command.
+
+This is the explicit, recorded administrator choice. The Set scripts have no force bypass.
+Their checks do not replace Azure RBAC: a raw portal or Azure CLI named-value edit is still
+possible and would still compete with the apply while Turnstile owns that value.
+
 ## Admin-only access
 
 Three layers, each measured.
