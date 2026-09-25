@@ -13,7 +13,7 @@ from textual.widgets import TabbedContent
 from claude_finops.backend import connect
 from claude_finops.config import load_config
 from claude_finops.engine import Engine
-from claude_finops.publication import validate_capture, validate_manifest
+from claude_finops.publication import validate_capture, validate_manifest, capture_lock
 from claude_finops.tui import FinOpsApp
 from claude_finops.views import TABS
 from claude_finops.ui_features import EXTRA_TABS
@@ -99,4 +99,5 @@ if __name__ == "__main__":
     parser.add_argument("--month", required=True)
     parser.add_argument("--tabs")
     parser.add_argument("--phase", choices=["before", "after"], default="after")
-    asyncio.run(capture(parser.parse_args()))
+    with capture_lock(ROOT / ".aum-evidence"):
+        asyncio.run(capture(parser.parse_args()))

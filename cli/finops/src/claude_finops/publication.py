@@ -5,8 +5,26 @@ import json
 from hashlib import sha256
 import re
 from xml.etree import ElementTree
+from contextlib import contextmanager
 
 from .redaction import privacy_problems
+
+
+@contextmanager
+def capture_lock(folder):
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "live-capture.lock"
+    try:
+        handle = path.open("x", encoding="utf-8")
+    except FileExistsError:
+        raise RuntimeError("Another live capture owns the publication manifest. Wait for it to finish.") from None
+    try:
+        with handle:
+            handle.write("Live capture in progress; remove only after verifying that publisher stopped.\n")
+            handle.flush()
+            yield
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def validate_capture(svg, entry):

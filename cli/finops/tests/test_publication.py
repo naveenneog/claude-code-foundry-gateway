@@ -55,3 +55,13 @@ def test_missing_manifest_entry_mutation_is_caught():
         return json.dumps(document) if path == folder / "manifest.json" else original(path, *args, **kwargs)
     with patch.object(Path, "read_text", altered):
         assert any("no manifest" in problem for problem in validate_manifest(folder))
+def test_capture_manifest_lock_rejects_overlapping_publishers():
+    from claude_finops.publication import capture_lock
+    import pytest
+    folder = Path(__file__).resolve().parents[3] / ".aum-evidence"
+    with capture_lock(folder):
+        with pytest.raises(RuntimeError, match="capture"):
+            with capture_lock(folder):
+                raise AssertionError("A second publisher must not acquire the manifest.")
+    with capture_lock(folder):
+        pass

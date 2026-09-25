@@ -1,6 +1,38 @@
 {
   "design": "enterprise-delegation-design.md Revision 4",
-  "reference": "Turnstile claude-gateway c0c345a; gateway modes 690015d",
+  "reference": "Turnstile claude-gateway c0c345a; gateway modes 690015d; independent AUM service OpenAPI 1.0.3",
+  "backends": {
+    "direct": {
+      "default_when_no_http_profile": true,
+      "authority": "Azure RBAC administrative access only; never a unit-scoped manager boundary",
+      "implemented": ["observed_people_server_search_paging", "daily_person_overrides", "hourly_request_token_trends",
+        "daily_statistical_cost_anomalies", "budget_modes_existing_writer", "readback_and_conflict_aware_compensation"],
+      "tests": ["test_independent_direct.py", "test_direct_write_bridge.py", "test_discovery.py"],
+      "limits": ["4096-character override capacity", "daily cost uses published workspace function", "no stored warning threshold or manager authority"]
+    },
+    "aum-service": {
+      "authority": "Independent P55 Entra AUM.Admin/AUM.Viewer/AUM.Manager server; null scope unrestricted, empty scope still scoped",
+      "implemented": ["identity", "native_boolean_capabilities", "usage_totals", "current_month_scope_daily_person_budgets",
+        "people_cursor", "request_cursor", "daily_trends", "catalog", "tiers", "modes", "manager_groups",
+        "reason_and_if_match", "requests_approve_reject_escalate", "daily_person_boost", "warning_facts", "audit_reads"],
+      "tests": ["test_aum_service_backend.py", "test_discovery.py"],
+      "unavailable_in_contract_1_0_3": {
+        "usage_breakdown": "GET /api/v1/distribution",
+        "hourly_trends": "interval=hour on GET /api/v1/trends",
+        "anomalies": "GET /api/v1/anomalies",
+        "indexed_request_detail": "GET /api/v1/requests/{id}",
+        "workflow_detail": "GET /api/v1/budget-requests/{id}",
+        "boost_revocation": "DELETE /api/v1/boosts/{id}",
+        "notification_mark_read": "POST /api/v1/notifications/{id}/read",
+        "assistant": "assistant API, if the service chooses to offer one"
+      }
+    },
+    "turnstile": {
+      "optional": true,
+      "authority": "Existing optional Turnstile server; never required by Direct or AUM service",
+      "tests": ["test_backends.py", "test_revision4_contracts.py", "test_manager_scope.py"]
+    }
+  },
   "pages": {
     "Executive Overview": {
       "tab": "overview", "status": "implemented",
