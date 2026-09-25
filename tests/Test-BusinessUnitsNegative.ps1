@@ -3011,6 +3011,36 @@ $mutations = @(
        File  = 'scripts/Get-ClaudeTelemetry.ps1'
        From  = 'if (-not $componentId) { $componentId = '
        To    = 'if ($true) { $componentId = ' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'a sole Turnstile identity no longer works unattended'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = '-Recommended:($identities.Count -eq 1)'
+       To    = '-Recommended:$false' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'fleet policy ignores the installer configuration'
+       File  = 'scripts/New-ClaudeCodePolicy.ps1'
+       From  = 'if (Test-Path -LiteralPath $recordedConfig) {'
+       To    = 'if ($false) {' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'restore starts before checking the second archive exists'
+       File  = 'scripts/Migrate-ClaudeWorkstation.ps1'
+       From  = 'if ($archive.Path -and -not (Test-Path -LiteralPath $archive.Path -PathType Leaf)) {'
+       To    = 'if ($false) {' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'direct account discovery names a parameter the caller does not accept'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = 'Parameter = $Parameter; Question = "Which Foundry account in $scope?"'
+       To    = 'Parameter = ''FoundryAccount''; Question = "Which Foundry account in $scope?"' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'the direct family alias silently takes the first deployment again'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = 'Select-ClaudeModel @choice'
+       To    = 'return $hits[0].name' }
 )
 
 # END MUTATION MANIFEST

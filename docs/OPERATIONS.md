@@ -87,6 +87,9 @@ to the gateway's Application Insights, not the first workspace in its group.
 Enter takes the recommendation. In a pipeline, CI or `pwsh -NonInteractive`,
 only a certain choice is accepted; ambiguity names the candidates and the
 parameter to pass. Supply explicit parameters for scheduled automation.
+`New-ClaudeCodePolicy.ps1` also reuses the installer file when neither its URL
+nor config path was supplied. If that file is absent, give it the approved
+client endpoint; it does not infer a direct APIM URL that could bypass an edge.
 
 ## 2. Check health and headroom
 

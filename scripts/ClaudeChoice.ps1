@@ -59,6 +59,7 @@ function Select-ClaudeChoice {
         [scriptblock]$Reader = { param($Prompt) Read-Host $Prompt }
     )
     $Options = @($Options | Where-Object { $null -ne $_ })
+    $WhereToFind = @($WhereToFind | Where-Object { $_ })
     $recommended = @($Options | Where-Object { $_.Recommended })
     $console = if ($null -ne $Interactive) { [bool]$Interactive } else { Test-ClaudeInteractive }
     $hint = if ($WhereToFind.Count) { ' Where to find it: ' + ($WhereToFind -join '; ') + '.' } else { '' }
@@ -259,13 +260,18 @@ function Select-ClaudeWorkspace {
 
 function Select-ClaudeFoundryAccount {
     param(
-        [Parameter(Mandatory = $true)][string]$ResourceGroup,
+        [string]$ResourceGroup,
         [string]$ApimName,
         [string]$Kind,
+        [string]$Parameter = 'FoundryAccount',
         [object]$Interactive = $null,
         [scriptblock]$Reader
     )
-    $discovered = az cognitiveservices account list -g $ResourceGroup -o json 2>$null | ConvertFrom-Json
+    $groupArgs = if ($ResourceGroup) { @('-g', $ResourceGroup) } else { @() }
+    $scope = if ($ResourceGroup) { $ResourceGroup } else { 'the selected subscription' }
+    $discovered = $null
+    try { $discovered = az cognitiveservices account list @groupArgs -o json 2>$null | ConvertFrom-Json }
+    catch { Write-Host '  Account discovery failed; check az login and the selected subscription (az account show).' -ForegroundColor DarkGray }
     $accounts = @($discovered | Where-Object { $_.name -and (-not $Kind -or $_.kind -eq $Kind) })
     $backend = $null
     if ($ApimName) {
@@ -292,18 +298,19 @@ function Select-ClaudeFoundryAccount {
         $recommended = ($linked.Count -eq 1 -and $linked[0].name -eq $account.name) -or $accounts.Count -eq 1
         $reason = if ($linked.Count -eq 1 -and $linked[0].name -eq $account.name) {
             "the gateway $ApimName backend points at this account's endpoint"
-        } elseif ($accounts.Count -eq 1) { "the only matching Cognitive Services account in $ResourceGroup" } else { '' }
-        New-ClaudeChoiceOption -Value $account.name -Detail ("az cognitiveservices account list: {0}, {1}, {2}" -f $ResourceGroup, $account.kind, $account.location) `
+        } elseif ($accounts.Count -eq 1) { "the only matching Cognitive Services account in $scope" } else { '' }
+        $group = if ($account.resourceGroup) { $account.resourceGroup } else { $scope }
+        New-ClaudeChoiceOption -Value $account.name -Detail ("az cognitiveservices account list: {0}, {1}, {2}" -f $group, $account.kind, $account.location) `
             -Recommended:$recommended -Reason $reason
     }
     $choice = @{
-        Parameter = 'FoundryAccount'; Question = "Which Foundry account in $ResourceGroup?"
+        Parameter = $Parameter; Question = "Which Foundry account in $scope?"
         Options = @($options); Interactive = $Interactive; AcceptRecommendedWithoutConsole = $true
-        NoneMessage = "No matching Cognitive Services account is visible in $ResourceGroup."
+        NoneMessage = "No matching Cognitive Services account is visible in $scope."
         WhereToFind = @(
-            "az cognitiveservices account list -g $ResourceGroup -o table"
-            "az apim api show -g $ResourceGroup --service-name $ApimName --api-id claude-foundry --query serviceUrl -o tsv"
-            "Azure portal: Resource groups > $ResourceGroup > Foundry resource > Keys and Endpoint; API Management > APIs > claude-foundry > Settings > Web service URL"
+            ('az cognitiveservices account list ' + ($groupArgs -join ' ') + ' -o table')
+            $(if ($ApimName) { "az apim api show -g $ResourceGroup --service-name $ApimName --api-id claude-foundry --query serviceUrl -o tsv" })
+            'Azure portal: All resources > the Foundry resource > Keys and Endpoint; API Management > APIs > claude-foundry > Settings > Web service URL'
         )
     }
     if ($Reader) { $choice.Reader = $Reader }
@@ -467,6 +474,32 @@ function Select-ClaudeAppInsights {
         WhereToFind = @(
             "az resource list -g $ResourceGroup --resource-type Microsoft.Insights/components -o table"
             'Azure portal: API Management > APIs > Claude API > Settings > Diagnostics > Application Insights; open that component > Overview'
+        )
+    }
+    if ($Reader) { $choice.Reader = $Reader }
+    Select-ClaudeChoice @choice
+}
+
+function Select-ClaudeTurnstileIdentity {
+    param(
+        [Parameter(Mandatory = $true)][string]$ResourceGroup,
+        [object]$Interactive = $null,
+        [scriptblock]$Reader
+    )
+    $raw = az identity list -g $ResourceGroup -o json 2>$null | ConvertFrom-Json
+    $identities = @($raw | Where-Object { $_.name -like 'id-turnstile-*' -and $_.principalId })
+    $options = foreach ($identity in $identities) {
+        New-ClaudeChoiceOption -Value $identity.principalId -Label $identity.name `
+            -Detail ("az identity list: {0}; {1}; principal {2}" -f $identity.id, $identity.location, $identity.principalId) `
+            -Recommended:($identities.Count -eq 1) -Reason "the only Turnstile job identity in $ResourceGroup"
+    }
+    $choice = @{
+        Parameter = 'PrincipalId'; Question = 'Which Turnstile job identity should receive the Graph permission?'
+        Options = @($options); Interactive = $Interactive; AcceptRecommendedWithoutConsole = $true
+        NoneMessage = 'No Turnstile job identity is visible. Run Register-ClaudeTurnstileSchedule.ps1 first.'
+        WhereToFind = @(
+            "az identity list -g $ResourceGroup -o table"
+            "Azure portal: Resource groups > $ResourceGroup > the Turnstile managed identity > Overview > Object (principal) ID; verify it on the apply job > Identity"
         )
     }
     if ($Reader) { $choice.Reader = $Reader }

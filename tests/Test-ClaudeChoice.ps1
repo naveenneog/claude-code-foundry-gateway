@@ -153,9 +153,13 @@ Assert 'Foundry ambiguity names both accounts and where to find them' ($m -match
 $script:Accounts = @($script:Accounts[0])
 $r = Invoke-Choice { Select-ClaudeFoundryAccount -ResourceGroup rg-app -ApimName apim-one -Interactive $false -Reader $never }
 Assert 'a sole Foundry account is certain without a backend link' ($r -eq 'ai-other') "got $r"
+$r = Invoke-Choice { Select-ClaudeFoundryAccount -Parameter Resource -Kind AIServices -Interactive $false -Reader $never }
+Assert 'direct setup can discover a sole account without knowing a gateway group' ($r -eq 'ai-other') "got $r"
 $script:Accounts = @()
 $m = Get-Thrown { Select-ClaudeFoundryAccount -ResourceGroup rg-app -Interactive $false -Reader $never }
 Assert 'no Foundry account names the command and portal, not a bare refusal' ($m -match 'Pass -FoundryAccount' -and $m -match 'az cognitiveservices account list' -and $m -match 'Azure portal:') $m
+$m = Get-Thrown { Select-ClaudeFoundryAccount -Parameter Resource -Kind AIServices -Interactive $false -Reader $never }
+Assert 'direct account discovery names the real Resource parameter' ($m -match 'Pass -Resource\.' -and $m -notmatch 'Pass -FoundryAccount' -and $m -match 'az cognitiveservices account list' -and $m -match 'Azure portal:') $m
 
 $recorded = @{ resourceGroup = 'rg-recorded'; url = 'https://api-recorded.azurewebsites.net' }
 foreach ($console in $true, $false) {
@@ -358,6 +362,92 @@ Assert 'a missing logger can use a sole discovered component without a console' 
 Remove-Item Function:\Invoke-RestMethod
 
 Write-Host ''
+Write-Host 'Given configuration and explicit restore paths' -ForegroundColor Cyan
+$scratch = Join-Path ([IO.Path]::GetTempPath()) "claude-given-choice-$PID-$(Get-Random)"
+New-Item -ItemType Directory -Path (Join-Path $scratch 'scripts'), (Join-Path $scratch 'onboarding') -Force | Out-Null
+try {
+    foreach ($name in 'ClaudeChoice.ps1', 'Migrate-ClaudeWorkstation.ps1', 'New-ClaudeCodePolicy.ps1') {
+        Copy-Item (Join-Path $root "scripts/$name") (Join-Path $scratch "scripts/$name")
+    }
+    $recordedPath = Join-Path $scratch 'onboarding/claude-gateway.json'
+    Set-Content $recordedPath '{"gatewayUrl":"https://gateway.contoso.com/claude","models":["model-sonnet"]}'
+    $policyScript = Join-Path $scratch 'scripts/New-ClaudeCodePolicy.ps1'
+    $output = Join-Path $scratch 'policy'
+    $r = Invoke-Choice { & $policyScript -OutputPath $output }
+    $settingsFile = Join-Path $output 'claude-code.managed-settings.json'
+    $settings = if (Test-Path $settingsFile) { Get-Content $settingsFile -Raw | ConvertFrom-Json } else { $null }
+    Assert 'fleet policy treats the installer gateway URL as given' ($settings.env.ANTHROPIC_FOUNDRY_BASE_URL -eq 'https://gateway.contoso.com/claude') "$r"
+    $r = Invoke-Choice { & $policyScript -GatewayUrl 'https://override.contoso.com/claude' -OutputPath $output }
+    $settings = if (Test-Path $settingsFile) { Get-Content $settingsFile -Raw | ConvertFrom-Json } else { $null }
+    Assert 'an explicit fleet gateway URL wins over the recorded file' ($settings.env.ANTHROPIC_FOUNDRY_BASE_URL -eq 'https://override.contoso.com/claude') "$r"
+    Remove-Item $recordedPath
+    $m = Get-Thrown { & $policyScript -OutputPath $output }
+    Assert 'no approved fleet endpoint includes local and portal lookup guidance' ($m -match 'Pass -GatewayUrl' -and $m -match 'Get-Content' -and $m -match 'Azure portal:') $m
+
+    $codeFile = Join-Path $scratch 'chosen-code.zip'
+    $deskFile = Join-Path $scratch 'chosen-desktop.zip'
+    $marker = Join-Path $scratch 'restored.txt'
+    Set-Content $codeFile 'fixture'
+    Set-Content $deskFile 'fixture'
+    $restoreStub = 'param($Path,[switch]$Apply,[switch]$Force) if(-not(Test-Path -LiteralPath $Path)){throw "missing archive"}; Add-Content (Join-Path (Split-Path $PSScriptRoot -Parent) "restored.txt") $Path'
+    Set-Content (Join-Path $scratch 'scripts/Restore-ClaudeCode.ps1') $restoreStub
+    Set-Content (Join-Path $scratch 'scripts/Restore-ClaudeDesktop.ps1') $restoreStub
+    $migrate = Join-Path $scratch 'scripts/Migrate-ClaudeWorkstation.ps1'
+    $r = Invoke-Choice { & $migrate -Restore -Folder $scratch -CodeBackup $codeFile -DesktopBackup $deskFile -Apply }
+    $restored = if (Test-Path $marker) { @(Get-Content $marker) } else { @() }
+    Assert 'given restore archives bypass discovery and reach both restore tools' ($restored.Count -eq 2 -and $restored[0] -eq $codeFile -and $restored[1] -eq $deskFile) "$r"
+    Remove-Item $marker -ErrorAction SilentlyContinue
+    Remove-Item $deskFile
+    $m = Get-Thrown { & $migrate -Restore -Folder $scratch -CodeBackup $codeFile -DesktopBackup $deskFile -Apply }
+    Assert 'a missing second archive refuses before restoring the first' (-not (Test-Path $marker) -and $m -match 'DesktopBackup' -and $m -match 'Get-ChildItem') $m
+}
+finally { Remove-Item $scratch -Recurse -Force -ErrorAction SilentlyContinue }
+
+$script:Identities = @(
+    [pscustomobject]@{name='id-turnstile-one';principalId='principal-one';id='/identities/one';location='region-a'}
+    [pscustomobject]@{name='id-turnstile-two';principalId='principal-two';id='/identities/two';location='region-b'}
+    [pscustomobject]@{name='id-unrelated';principalId='principal-other';id='/identities/other';location='region-c'}
+)
+function az {
+    $global:LASTEXITCODE = 0
+    if (($args -join ' ') -like 'identity list*') { return (ConvertTo-Json -InputObject @($script:Identities)) }
+    throw "unexpected az $($args -join ' ')"
+}
+$r = Invoke-Choice { Select-ClaudeTurnstileIdentity -ResourceGroup rg-app -Interactive $true -Reader (New-Reader @('2')) }
+Assert 'Turnstile identity number returns that identity principal' ($r -eq 'principal-two') "got $r"
+$m = Get-Thrown { Select-ClaudeTurnstileIdentity -ResourceGroup rg-app -Interactive $false -Reader $never }
+Assert 'several Turnstile identities name candidates and the lookup rather than granting to the first' ($m -match 'id-turnstile-one, id-turnstile-two' -and $m -notmatch 'id-unrelated' -and $m -match 'Pass -PrincipalId' -and $m -match 'az identity list' -and $m -match 'Azure portal:') $m
+$script:Identities = @($script:Identities[0])
+foreach ($console in $true, $false) {
+    $r = Invoke-Choice { Select-ClaudeTurnstileIdentity -ResourceGroup rg-app -Interactive $console -Reader (New-Reader @('')) }
+    Assert "the sole Turnstile identity is recommended (console=$console)" ($r -eq 'principal-one') "got $r"
+}
+$shown = try { Select-ClaudeTurnstileIdentity -ResourceGroup rg-app -Interactive $true -Reader (New-Reader @('')) 6>&1 | Out-String } catch { "<threw: $($_.Exception.Message)>" }
+Assert 'Turnstile identity options print their Azure source and principal id' ($shown -match '/identities/one' -and $shown -match 'principal-one' -and $shown -match 'region-a') $shown
+$script:Identities = @()
+$m = Get-Thrown { Select-ClaudeTurnstileIdentity -ResourceGroup rg-app -Interactive $false -Reader $never }
+Assert 'no Turnstile identity explains registration and where to look' ($m -match 'Register-ClaudeTurnstileSchedule' -and $m -match 'Pass -PrincipalId' -and $m -match 'az identity list' -and $m -match 'Azure portal:') $m
+
+$directAst = [Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'scripts/Setup-ClaudeFoundryDirect.ps1'), [ref]$null, [ref]$null)
+$familyFunction = $directAst.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Find-Deployment'}, $true)
+. ([scriptblock]::Create($familyFunction.Extent.Text))
+$DefaultModel = ''
+$Resource = 'ai-fixture'
+$family = @([pscustomobject]@{name='fast-a';model='claude-sonnet-a'}, [pscustomobject]@{name='fast-b';model='claude-sonnet-b'})
+$r = Invoke-Choice { Find-Deployment -Pool $family -Family sonnet -Interactive $true -Reader (New-Reader @('2')) }
+Assert 'direct family aliases choose among actual deployment names' ($r -eq 'fast-b') "got $r"
+$m = Get-Thrown { Find-Deployment -Pool $family -Family sonnet -Interactive $false -Reader $never }
+Assert 'multiple family deployments are not silently chosen in automation' ($m -match 'fast-a, fast-b' -and $m -match 'Pass -Models' -and $m -match 'Azure portal:') $m
+$DefaultModel = 'fast-b'
+$r = Invoke-Choice { Find-Deployment -Pool $family -Family sonnet -Interactive $true -Reader $never }
+Assert 'an explicit DefaultModel is given for its family, not asked for again' ($r -eq 'fast-b') "got $r"
+$DefaultModel = ''
+$r = Invoke-Choice { Find-Deployment -Pool @($family[0]) -Family sonnet -Interactive $false -Reader $never }
+Assert 'a sole family deployment still resolves without a console' ($r -eq 'fast-a') "got $r"
+$r = Invoke-Choice { Find-Deployment -Pool $family -Family opus -Interactive $false -Reader $never }
+Assert 'a missing model family still returns no alias for fallback' ($null -eq $r) "got $r"
+
+Write-Host ''
 Write-Host 'Scripts that use it' -ForegroundColor Cyan
 foreach ($name in 'Publish-ClaudeWorkbook.ps1', 'Publish-ClaudeQueries.ps1', 'Publish-ClaudeGrafana.ps1') {
     $text = Get-Content (Join-Path $root "scripts/$name") -Raw
@@ -404,6 +494,8 @@ foreach ($name in 'Show-Governance.ps1', 'Setup-ClaudeFoundryDirect.ps1', 'Test-
     $text = Get-Content (Join-Path $root "scripts/$name") -Raw
     Assert "$name offers the model instead of silently taking a deployment" ($text -match 'ClaudeChoice\.ps1' -and $text -match 'Select-ClaudeModel' -and $text -notmatch '\[0\]\.name')
 }
+$directSetup = Get-Content (Join-Path $root 'scripts/Setup-ClaudeFoundryDirect.ps1') -Raw
+Assert 'direct setup offers the Foundry resource when it was not supplied or recorded' ($directSetup.Contains('Select-ClaudeFoundryAccount -Kind AIServices -Parameter Resource'))
 foreach ($name in 'ClaudeChargebackStorage.ps1', 'ClaudeChargebackAdministration.ps1') {
     $text = Get-Content (Join-Path $root "scripts/$name") -Raw
     Assert "$name offers the tagged resource with the shared selector" ($text -match 'ClaudeChoice\.ps1' -and $text -match 'Select-ClaudeReportResource' -and $text -notmatch '\[0\]\.name')
@@ -416,6 +508,10 @@ Assert 'a manual reports pass asks only for inputs the job already supplies' ($r
 Assert 'telemetry offers a component when neither diagnostic nor explicit value identifies it' ($telemetry -match 'Select-ClaudeAppInsights -ResourceGroup')
 $reportNetwork = Get-Content (Join-Path $root 'scripts/ClaudeChargebackNetwork.ps1') -Raw
 Assert 'reports network choices name their parameters and lookup locations' ($reportNetwork -match 'ClaudeChoice\.ps1' -and $reportNetwork -match '\-WhereToFind' -and $reportNetwork -notmatch '\[0\]\.name')
+$grant = Get-Content (Join-Path $root 'scripts/Grant-ClaudeGovernanceGraphAccess.ps1') -Raw
+Assert 'Graph permission grants choose the identity instead of the first principal' ($grant -match 'ClaudeChoice\.ps1' -and $grant -match 'Select-ClaudeTurnstileIdentity -ResourceGroup' -and $grant -notmatch "principalId \| \[0\]")
+$fleet = Get-Content (Join-Path $root 'scripts/New-ClaudeCodePolicy.ps1') -Raw
+Assert 'fleet policy reuses the installer file before refusing a missing endpoint' ($fleet -match 'recordedConfig' -and $fleet -notmatch '\[0\]\.name')
 foreach ($name in 'Set-ClaudeChargebackRecipients.ps1', 'Set-ClaudeChargebackSettings.ps1') {
     $text = Get-Content (Join-Path $root "scripts/$name") -Raw
     Assert "$name forwards its explicit job and headless setting" ($text.Contains('Invoke-ClaudeReportAdminRequest $ResourceGroup $ApimName $request $JobName -NonInteractive:$NonInteractive') -and $text -match '\[string\]\$JobName' -and $text -notmatch '\[0\]\.name')
@@ -425,6 +521,11 @@ $turnstileJob = Get-Content (Join-Path $root 'infra/turnstile-schedule.bicep') -
 $reportJob = Get-Content (Join-Path $root 'infra/chargeback-reports.bicep') -Raw
 Assert 'Turnstile jobs pass both target values explicitly' ($turnstileJob.Contains('-ResourceGroup "${CLAUDE_RG}" -ApimName "${CLAUDE_APIM}"'))
 Assert 'chargeback jobs pass storage and record both target environment values' ($reportJob.Contains('-StorageAccount "${REPORT_STORAGE}"') -and $reportJob -match "name: 'CLAUDE_RG', value: resourceGroup\(\).name" -and $reportJob -match "name: 'CLAUDE_APIM', value: gatewayApimName")
+$applyRole = Get-Content (Join-Path $root 'scripts/ClaudeTurnstileApply.ps1') -Raw
+# This remaining [0].name is not a choice: custom role display names are tenant-unique,
+# and the CLI query already names the exact role to reuse. Never prompt an apply job here.
+Assert 'the retained apply role lookup is explicitly name-scoped, not a resource pick' ($applyRole.Contains('az role definition list --custom-role-only true --name $script:ClaudeGovernanceWriterRole') -and
+    $applyRole.Contains('if ($existing.Count) { $definition[''Id''] = $existing[0].name }'))
 
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }

@@ -188,6 +188,12 @@ if ($Restore) {
 
     if (-not $CodeBackup -and $code.Count) { $CodeBackup = Select-ClaudeBackup -Folder $Folder -Pattern 'claude-code-*.zip' -Parameter CodeBackup }
     if (-not $DesktopBackup -and $desk.Count) { $DesktopBackup = Select-ClaudeBackup -Folder $Folder -Pattern 'claude-desktop-*.zip' -Parameter DesktopBackup }
+    foreach ($archive in @(@{ Parameter = 'CodeBackup'; Path = $CodeBackup }, @{ Parameter = 'DesktopBackup'; Path = $DesktopBackup })) {
+        if ($archive.Path -and -not (Test-Path -LiteralPath $archive.Path -PathType Leaf)) {
+            throw ("Backup not found: $($archive.Path). Pass -$($archive.Parameter). Where to find it: " +
+                "Get-ChildItem -LiteralPath '$Folder' -Filter '*.zip'; File Explorer: $Folder (local archives, not Azure resources).")
+        }
+    }
     $common = @{}
     if ($Apply) { $common.Apply = $true }
     if ($Force) { $common.Force = $true }

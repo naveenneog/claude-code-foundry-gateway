@@ -129,6 +129,13 @@ if (Test-Path $banner) { . $banner; Show-ClaudeBanner -Subtitle 'Claude Code man
 
 # The wizard writes onboarding/claude-gateway.json; reuse it so the same values
 # cannot drift between the developer path and the fleet path.
+if (-not $ConfigPath -and -not $GatewayUrl) {
+    $recordedConfig = Join-Path (Split-Path $PSScriptRoot -Parent) 'onboarding/claude-gateway.json'
+    if (Test-Path -LiteralPath $recordedConfig) {
+        $ConfigPath = $recordedConfig
+        Write-Host "  Gateway configuration: recorded by the installer in $ConfigPath" -ForegroundColor DarkGray
+    }
+}
 if ($ConfigPath) {
     if (-not (Test-Path $ConfigPath)) { throw "Config not found: $ConfigPath" }
     $cfg = Get-Content $ConfigPath -Raw | ConvertFrom-Json
@@ -142,7 +149,9 @@ if ($ConfigPath) {
 }
 
 if (-not $GatewayUrl) {
-    throw 'Pass -GatewayUrl, or -ConfigPath pointing at onboarding/claude-gateway.json.'
+    throw ("Pass -GatewayUrl, or -ConfigPath pointing at onboarding/claude-gateway.json. Where to find it: " +
+        "Get-Content .\onboarding\claude-gateway.json; Azure portal: API Management > APIs > Claude API > Settings > Gateway URL, " +
+        "or Application Gateway > the reviewed listener and hostname. Use the approved client endpoint, not an assumed direct APIM URL.")
 }
 if (-not $HaikuModel) { $HaikuModel = $SonnetModel }
 

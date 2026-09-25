@@ -86,10 +86,22 @@ function Note($m) { Write-Host "         $m" -ForegroundColor DarkGray }
 # at which point Claude Code falls back to its own built-in model names, none
 # of which exist on a Foundry resource.
 function Find-Deployment {
-    param([object[]]$Pool, [string]$Family)
-    $hit = $Pool | Where-Object { $_.model -and $_.model -match $Family } | Select-Object -First 1
-    if (-not $hit) { $hit = $Pool | Where-Object { $_.name -match $Family } | Select-Object -First 1 }
-    if ($hit) { $hit.name } else { $null }
+    param([object[]]$Pool, [string]$Family, [object]$Interactive = $null, [scriptblock]$Reader)
+    $hits = @($Pool | Where-Object { $_.model -and $_.model -match $Family })
+    if (-not $hits.Count) { $hits = @($Pool | Where-Object { $_.name -match $Family }) }
+    if (-not $hits.Count) { return $null }
+    if ($DefaultModel -and @($hits | Where-Object name -eq $DefaultModel).Count -eq 1) {
+        Write-Host "  $Family alias: $DefaultModel (given by -DefaultModel)" -ForegroundColor DarkGray
+        return $DefaultModel
+    }
+    $choice = @{
+        Names = @($hits | ForEach-Object { $_.name }); Parameter = 'Models'; Interactive = $Interactive
+        Source = "$Family deployments on $Resource; pass -DefaultModel or narrow -Models to select an alias"
+        WhereToFind = @("az cognitiveservices account deployment list --name $Resource --resource-group <resource-group> -o table",
+            "Azure portal: Foundry > $Resource > Deployments > Model")
+    }
+    if ($Reader) { $choice.Reader = $Reader }
+    Select-ClaudeModel @choice
 }
 
 # The error Foundry returns on a refused call names a "Principal" and nothing
@@ -287,7 +299,12 @@ if ($ConfigPath) {
 }
 
 if (-not $ShowConfig -and -not $Resource) {
-    throw "-Resource is required, or pass -ConfigPath. Use -ShowConfig to read the settings off a machine that already works."
+    if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
+        throw ("Pass -Resource or -ConfigPath, or install Azure CLI and sign in to discover accounts. Where to find it: " +
+            "az cognitiveservices account list -o table; Azure portal: All resources > the Foundry resource > Overview > Name. " +
+            "Use -ShowConfig on a machine that already works.")
+    }
+    $Resource = Select-ClaudeFoundryAccount -Kind AIServices -Parameter Resource
 }
 
 Write-Host ''
@@ -525,7 +542,10 @@ $modelLookup = @(
 if ($DefaultModel -and $Models -notcontains $DefaultModel) {
     throw ("Pass -DefaultModel from the deployed names: " + ($Models -join ', ') + '. Where to find it: ' + ($modelLookup -join '; '))
 }
-$probeModel = if ($DefaultModel) { $DefaultModel } else { Find-Deployment -Pool $deployments -Family 'sonnet' }
+$sonnet = Find-Deployment -Pool $deployments -Family 'sonnet'
+$opus   = Find-Deployment -Pool $deployments -Family 'opus'
+$haiku  = Find-Deployment -Pool $deployments -Family 'haiku'
+$probeModel = if ($DefaultModel) { $DefaultModel } else { $sonnet }
 if (-not $probeModel) {
     $probeModel = Select-ClaudeModel -Names $Models -Parameter DefaultModel -Source "the discovered or supplied deployments on $Resource" -WhereToFind $modelLookup
 }
@@ -587,10 +607,6 @@ $envBlock = [ordered]@{
 }
 if ($TenantId) { $envBlock['AZURE_TENANT_ID'] = $TenantId }
 if ($ClientId) { $envBlock['AZURE_CLIENT_ID'] = $ClientId }
-
-$sonnet = Find-Deployment -Pool $deployments -Family 'sonnet'
-$opus   = Find-Deployment -Pool $deployments -Family 'opus'
-$haiku  = Find-Deployment -Pool $deployments -Family 'haiku'
 
 # Every alias has to name a deployment that exists here. Leaving one unset does
 # not mean "unused" - Claude Code falls back to its own built-in model name for
