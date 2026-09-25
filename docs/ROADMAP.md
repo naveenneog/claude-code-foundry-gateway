@@ -309,7 +309,9 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       roles with consent-free tokens, scoped managers, audited conditional named-value writes,
       and P47's requests and boosts; discovery-first deployment with cost and implications, and a
       FinOps tooling selector. [ADR-0023](adr/0023-aum-service.md), `docs/AUM-SERVICE.md`.
-      Open: the manager-only journey and the AUM client's end-to-end journey on its test gateway
+      Real Claude enforcement in all three modes and a Manager-only proof ran live through the
+      service on an isolated gateway (2026-09-25), then everything was restored and retired.
+      Open: the AUM client (P52) driving the service end to end, and its portal pictures
 - [x] P57 documentation review — eight reader journeys walked with the guides alone; 70
       findings fixed, five task guides added (Operations, Budgets, FinOps, Reference, Data
       governance), README from 710 to 278 lines, live names replaced by discovery commands, and

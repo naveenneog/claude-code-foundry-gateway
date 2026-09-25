@@ -84,7 +84,7 @@ transport state. Email delivery is not implemented.
 | DOCUMENTED | `ClaudeTurnstileApply.ps1::Set-ClaudeGovernanceWriterRole` defines the narrow named-value writer role | Role-action allow-list test |
 | ASSUMED | Public Entra-only Functions and Storage are permitted by the target subscription's policies | ARM what-if/deployment; report policy denial rather than weaken controls |
 | ASSUMED | Retail meters in the discovered region price optional warm instances, redundancy and telemetry | Live Retail API; unknown is never zero |
-| OPEN | Full live manager journey changes shared group membership | Explicit lead go-ahead, dry run, finally restoration and access proof |
+| RESOLVED 2026-09-25 | Full live manager journey changes shared group membership | Lead-approved team/unit Manager-only proof; fresh Admin and exact directory/configuration restoration verified at 03:45:17Z |
 | OPEN | 500,000 observed developers with the current Log Analytics query envelope | Bounded-query tests; no claim of measured full-directory latency |
 
 Sources retrieved 2026-09-24. Measured outcomes belong in the guide and delivery
@@ -132,3 +132,34 @@ conflict; they never truncate, widen scope, or silently stop enforcing.
 - **Measured:** the copied portal session required sign-in on the Entra blade.
   Capture stopped. Existing resource screenshots are not evidence of an Entra
   UI journey; CLI registration and token evidence are recorded separately.
+- **Measured, 2026-09-25:** a real manager-only person-budget call exposed a
+  Kusto syntax error in the observed-membership lookup: `latest` cannot be an
+  unquoted `let` binding. The same bounded query with `last_observations`
+  returned the last real request's team. Keep the timestamp/tie-denial logic,
+  add a regression against the rejected binding, and verify the deployed
+  manager write; mocked analytics alone did not prove query compilation.
+- **Measured, 2026-09-25:** APIM returned 500 when budget-trace `Notice` or
+  `ParentUnit` metadata was empty: `The value field is required.` Use the
+  nonempty sentinel `none` only for absent values. Tests compile the actual
+  policy expressions. The lead-authorized dedicated gateway then served real
+  Claude requests under strict/allowance/notify; the original test policy and
+  all named values were restored. The service still never edits gateway policy.
+- **Verified, 2026-09-25:** fresh team-only and unit-only Manager tokens proved
+  positive person/team writes and four 403 boundaries. Recovery restored the
+  original Admin authority, all 14 memberships and 22 direct assignment tuples,
+  catalog and named values; all three temporary groups were independently absent.
+  This was HTTP/API proof, not a native AUM-client journey.
+- **Harness contract:** publish test membership before probing attribution, but
+  restore the exact saved `ClaudeCost` properties in `finally`, even if catalog
+  cleanup fails. Regenerating a query is not snapshot restoration across days.
+  Offline tests execute the actual restoration request against an original-date
+  fixture. The live receipt separately verified authored-field equality.
+- **Measured cleanup:** generic `az resource delete` failed without deleting a
+  recorded private endpoint. The network-specific `az network private-endpoint
+  delete --ids` succeeded for that same endpoint. Use the scoped provider
+  operation before DNS deletion, covered by the cleanup regression.
+- **Cleanup boundary:** a resource name is not globally unique across ARM
+  types. Removal matches the recorded name **and type**, and includes optional
+  Insights/site/storage endpoints only when their recorded deployment choice
+  enabled them. A same-named VM and unselected optional resources are retained.
+  An isolated failing regression exposed the gap; no live collision existed.

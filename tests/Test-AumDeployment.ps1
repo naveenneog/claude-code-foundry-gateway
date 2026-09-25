@@ -96,7 +96,7 @@ $script:missingComparison = 'Event Hubs'
 $unknownComparison = Get-ClaudeFinOpsComparisonPrice -Region 'contoso-region' -AumPrices $prices
 Assert ($null -eq $unknownComparison.LeanMonthly) 'one missing comparison meter makes the total unknown, never cheaper'
 
-foreach ($file in @('Deploy-ClaudeAumService.ps1','Publish-ClaudeAumService.ps1','Remove-ClaudeAumService.ps1','Select-ClaudeFinOpsTooling.ps1','New-ClaudeAumEntraApp.ps1')) {
+foreach ($file in @('Deploy-ClaudeAumService.ps1','Publish-ClaudeAumService.ps1','Remove-ClaudeAumService.ps1','Select-ClaudeFinOpsTooling.ps1','New-ClaudeAumEntraApp.ps1','Test-ClaudeAumGateway.ps1')) {
     $path = Join-Path $root "scripts\$file"
     Assert (Test-Path $path) "$file exists"
     $tokens = $null; $errors = $null
@@ -120,6 +120,14 @@ Assert (@($role.Actions | Where-Object { $_ -match 'policies|delete|\*' }).Count
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
 & (Join-Path $PSScriptRoot 'Test-AumRemoval.ps1')
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
+& (Join-Path $PSScriptRoot 'Test-AumGatewayPlan.ps1')
+if ($LASTEXITCODE) { exit $LASTEXITCODE }
+& (Join-Path $PSScriptRoot 'Test-AumPolicyNotices.ps1')
+if ($LASTEXITCODE) { exit $LASTEXITCODE }
+& (Join-Path $PSScriptRoot 'Test-AumManagerClaims.ps1')
+if ($LASTEXITCODE) { exit $LASTEXITCODE }
+& node --test --test-reporter=tap (Join-Path $PSScriptRoot 'aum-proof-receipts.test.mjs')
+Assert ($LASTEXITCODE -eq 0) 'measured receipt rendering requires restored proof and whitelists public fields'
 foreach ($template in @('aum-service.bicep','aum-service-network.bicep')) {
     $build = & az bicep build --file (Join-Path $root "infra\$template") --stdout --only-show-errors 2>&1 | Out-String
     Assert ($LASTEXITCODE -eq 0) "$template compiles: $build"

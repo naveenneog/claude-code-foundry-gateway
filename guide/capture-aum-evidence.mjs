@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { buildAumProofScenarios } from './aum-proof-receipts.mjs';
 
 const load = file => JSON.parse(fs.readFileSync(path.join('.aum-local', file), 'utf8').replace(/^\uFEFF/, ''));
 const evidence = load('live-evidence.json');
@@ -33,6 +34,14 @@ const scenarios = [
     '\n\n' + proof('timer-restored-byte-identically'),
     'Expiry was performed by the scheduled Azure Function, not by a manual timer invocation or a local fake.'],
 ];
+if (process.argv.includes('--expanded')) {
+  scenarios.push(...buildAumProofScenarios({
+    gateway: load('gateway-live-evidence.json'),
+    gatewayClose: load('aum-journey-window-closed.json'),
+    manager: load('manager-live-evidence.json'),
+    managerVerified: load('manager-verified-receipt.json'),
+  }));
+}
 const escape = s => String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'})[c]);
 fs.mkdirSync(path.join('.aum-local', 'api-evidence-profile'), { recursive: true });
 const context = await chromium.launchPersistentContext(path.resolve('.aum-local', 'api-evidence-profile'), {

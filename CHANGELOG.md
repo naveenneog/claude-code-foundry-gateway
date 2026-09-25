@@ -673,6 +673,11 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Fixed
 
+- **A root unit in allowance or notify mode got HTTP 500.** The gateway's budget trace sent an
+  empty `ParentUnit` (a unit has no parent) or `Notice` (no advisory yet), and APIM rejects empty
+  trace metadata: "The value field is required". Absent values are now `none`, and a test
+  compiles and runs the policy's actual expressions. Found live by the AUM service's enforcement
+  journey; the reference gateway, all strict, could not reach it.
 - **The resolver check could fail with every test passing, and three runner gaps.** Under a
   headless console on code page 437, Node's Unicode summary line did not match the wrapper's
   pattern, so it counted zero passes; `tests/Test-Resolver.ps1` now asks for ASCII TAP output and

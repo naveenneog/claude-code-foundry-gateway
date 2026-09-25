@@ -71,6 +71,7 @@ class AzureAdapterTests(unittest.TestCase):
         self.assertIn("array_length(units) == 1", query)
         self.assertIn("ClaudeChargeback(", query)
         self.assertNotIn("ClaudeCost(", query)
+        self.assertNotRegex(query, r"\blet\s+latest\s*=")
 
 
 class StorageEncodingTests(unittest.TestCase):
