@@ -234,6 +234,13 @@ output; a missing script behind a prerequisite SKIP was reported as skipped inst
 timed-out check lost the output it had printed; and a check started late could have outlived the
 gate's budget, which set the 600 s default deadline.
 
+**One deadline raised, 2026-09-25.** Business-unit shard 0 is always the slowest: 332-430 s in the
+four gates before, against 227-307 s for shard 1, and 520.3 s in the gate on `d55fdc9` (the other
+three shards 210-229 s) while two agents ran their own suites. It is the only shard that holds a
+mutation running the PS 5.1 wizard (`Test-On-PS51.ps1`, 100 s alone). Its registration now carries
+`-TimeoutSeconds 900`, the per-check override ADR-0025 provides; every other check keeps 600 s and
+nothing it asserts changed.
+
 ## A gate that passed on 9 of 32 checks, 2026-09-24
 
 Found while merging P19, before anything was pushed: the packet gate on `c938ec9` passed in 57
