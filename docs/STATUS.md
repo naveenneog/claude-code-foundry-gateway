@@ -258,6 +258,12 @@ Still open: the AUM client (P52) driving the service end to end. The journeys ab
 receipts, not the terminal app. Also still open: twelve portal pictures, which now need a fresh,
 priced deployment because the test one is gone.
 
+**Rolled out to the reference gateway on 2026-09-25 at 09:48:52Z**, in a gap between P52's live
+windows. The deploy took 4.3 s. The live policy then equalled main's, and all 28 named values were
+unchanged. A real request returned 200 with every budget header (unit, parent, organisation and
+daily remaining quota) and the new `x-claude-gateway-request-id`. This also shipped P54's
+`ClientIp` trace field.
+
 ## P53 Turnstile, tested and captured live, 2026-09-24 (phase 1)
 
 Merged at `146fd12`.
