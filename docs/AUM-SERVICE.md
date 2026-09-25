@@ -274,22 +274,35 @@ Entra/Functions screenshots as completed portal tests.
 
 ![Live storage configuration with shared-key and anonymous access disabled](guide/aum-04-storage.png)
 
-### Pending owner batch captures
+### Portal pictures
 
-The lead captures version-1 `guide/captures/p55.json` after fresh owner sign-in.
-These inline paths are deliberately pending, not broken images, placeholders or
-passing evidence. Resource discovery uses the logical `component=aum-service`
-tag; Entra discovery uses the operator's `AUM_APP_DISPLAY_FILTER`. Runtime
-`--select` values choose discovered candidates. The spec explicitly distinguishes
-app-registration from enterprise-application blades and uses a private redaction map.
+Captured live by the lead's batch on 2026-09-25 (records in `docs/guide/portal-captures.json`):
+
+![Live AUM app registration App roles: Admin, Viewer and Manager roles enabled for users and groups](guide/p55-aum-app-roles.png)
+
+![Live AUM Expose an API: the AUM.Access scope enabled for admins and users, and the Azure CLI's public client ID under Authorized client applications](guide/p55-aum-api-scope.png)
+
+![Live AUM Microsoft Graph manifest: groupMembershipClaims ApplicationGroup, a single-tenant sign-in audience and the redacted identifier URI](guide/p55-aum-token-manifest.png)
+
+![Live AUM enterprise application Properties: enabled for sign-in, Assignment required Yes, visible to users](guide/p55-aum-assignment-required.png)
+
+Still pending. The Users and groups page needs the owner's Entra step-up at the next batch.
+The Function and storage pages need a deployed AUM service: the pilot deployment was removed
+after its live journeys, and a new one is a priced, lead-approved deployment. These inline
+paths are deliberately pending, not broken images or passing evidence. Resource discovery
+uses the logical `component=aum-service` tag; Entra discovery uses the operator's
+`AUM_APP_DISPLAY_FILTER`.
 
 | Pending batch capture (spec id) | Exact portal verification | Image |
 |---|---|---|
-| `p55-aum-app-roles` | App registrations > AUM > App roles: Admin, Viewer, Manager enabled for Users/Groups | `docs/guide/p55-aum-app-roles.png` |
-| `p55-aum-api-scope` | Expose an API: AUM.Access enabled; Azure CLI listed under Authorized client applications | `docs/guide/p55-aum-api-scope.png` |
-| `p55-aum-token-manifest` | Manifest: requestedAccessTokenVersion 2, groupMembershipClaims ApplicationGroup | `docs/guide/p55-aum-token-manifest.png` |
-| `p55-aum-assignment-required` | Enterprise applications > AUM > Properties: Assignment required? Yes | `docs/guide/p55-aum-assignment-required.png` |
 | `p55-aum-assigned-roles` | Enterprise applications > AUM > Users and groups: correct user/group roles | `docs/guide/p55-aum-assigned-roles.png` |
+| `p55-aum-function-overview` | Function App > Overview: Running, selected region, Python runtime | `docs/guide/p55-aum-function-overview.png` |
+| `p55-aum-function-identity` | Settings > Identity > System assigned: Status On | `docs/guide/p55-aum-function-identity.png` |
+| `p55-aum-function-triggers` | Functions: http_api, expire_boosts, warning_thresholds | `docs/guide/p55-aum-function-triggers.png` |
+| `p55-aum-scale-choice` | Scale and concurrency: administrator-selected always-ready count and 512-MiB instance size | `docs/guide/p55-aum-scale-choice.png` |
+| `p55-aum-private-routing` | Networking > VNet integration: service subnet, all outbound traffic routed | `docs/guide/p55-aum-private-routing.png` |
+| `p55-aum-storage-keyless` | Storage > Configuration: shared-key and anonymous blob access Disabled | `docs/guide/p55-aum-storage-keyless.png` |
+| `p55-aum-storage-private` | Storage > Networking: Public network access Disabled; private endpoint connections Approved | `docs/guide/p55-aum-storage-private.png` |
 | `p55-aum-function-overview` | Function App > Overview: Running, selected region, Python runtime | `docs/guide/p55-aum-function-overview.png` |
 | `p55-aum-function-identity` | Settings > Identity > System assigned: Status On | `docs/guide/p55-aum-function-identity.png` |
 | `p55-aum-function-triggers` | Functions: http_api, expire_boosts, warning_thresholds | `docs/guide/p55-aum-function-triggers.png` |

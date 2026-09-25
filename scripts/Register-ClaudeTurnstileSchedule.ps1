@@ -41,6 +41,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeTurnstile.ps1')
@@ -48,10 +49,8 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 
 if (-not (az account show --query id -o tsv 2>$null)) { throw 'Not signed in. Run: az login' }
-if (-not $ApimName) {
-    $ApimName = az apim list -g $ResourceGroup --query "[0].name" -o tsv 2>$null
-    if (-not $ApimName) { throw "No API Management instance in $ResourceGroup. Pass -ApimName." }
-}
+if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
+if (-not $ApimName) { $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup }
 $integration = ConvertFrom-ClaudeTurnstileIntegrationValue (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $script:TurnstileIntegrationNamedValue)
 if (-not $integration) { throw "$ApimName is not connected to Turnstile. Run ./scripts/Connect-ClaudeTurnstile.ps1 first." }
 $workspace = Get-ClaudeGatewayWorkspaceId -ResourceGroup $ResourceGroup -ApimName $ApimName

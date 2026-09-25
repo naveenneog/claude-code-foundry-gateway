@@ -124,10 +124,7 @@ key authentication off and TLS 1.2.
 still require an explicit `networkAccess=public` or `networkAccess=selected-ips`;
 this does not override an Azure Policy that enforces private networking.
 
-**Pending batch capture (`docs-review-cosmos-networking`).**
-
-Planned image: `docs/guide/docs-review-cosmos-networking.png` — the
-projection account's Networking public-access controls.
+![Live Networking blade of the projection's Cosmos DB account: Public access tab with Public network access set to Disabled, so no public traffic can reach it](guide/docs-review-cosmos-networking.png)
 
 ### 2. Connect it to your network
 
@@ -249,10 +246,7 @@ unauthenticated requests require authentication. Inspect the configured tenant,
 audience and allowed caller identities against the discovered gateway identity;
 do not widen the allowlist to make a failing request succeed.
 
-**Pending batch capture (`docs-review-resolver-authentication`).**
-
-Planned image: `docs/guide/docs-review-resolver-authentication.png` — the
-resolver's configured identity provider.
+![Live resolver Authentication blade: App Service authentication Enabled, Require authentication, unauthenticated requests get HTTP 401, token store Disabled, and one Microsoft identity provider bound to the resolver's app registration](guide/docs-review-resolver-authentication.png)
 
 ### 5. Publish the resolver code
 
@@ -301,10 +295,7 @@ Verify **Virtual network integration** names the approved resolver subnet and
 the private endpoint is approved. The subnet and DNS-zone IDs come from the
 network deployment outputs, not a screenshot or another environment.
 
-**Pending batch capture (`docs-review-resolver-networking`).**
-
-Planned image: `docs/guide/docs-review-resolver-networking.png` — resolver
-VNet integration and private-endpoint entry points.
+![Live resolver Networking blade: public network access Disabled, one private endpoint, outbound virtual network integration into the resolver subnet with its network security group, and no NAT gateway or route](guide/docs-review-resolver-networking.png)
 
 ### 7. Integrate the gateway with the VNet
 
@@ -341,10 +332,12 @@ change; a shared account is not owned exclusively by this accelerator.
 refused. If it fails, inspect private DNS from the APIM network before reopening
 public access. [Network](NETWORK.md) distinguishes client and backend routes.
 
-**Pending batch capture (`docs-review-foundry-networking`).**
+![Live Foundry Networking blade, Firewalls and virtual networks tab, with its Private endpoint connections and Network Injection tabs: this shared reference account still allows All networks, the state before this step](guide/docs-review-foundry-networking.png)
 
-Planned image: `docs/guide/docs-review-foundry-networking.png` — Foundry's
-public-network-access setting.
+The reference account in this picture is shared with other workloads and is
+still public. That is the state this step changes: after the private endpoint
+and DNS are verified, select **Disabled** (or **Selected Networks and Private
+Endpoints**), save, and repeat the verification above.
 
 ### 8. Populate the projection from inside the network
 

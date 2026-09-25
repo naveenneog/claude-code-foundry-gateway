@@ -1233,6 +1233,8 @@ Assert 'the break-even advice uses it'           ($cmp -match 'the \$150/month g
 # The functions are lifted out of the script by its syntax tree and run against
 # a stand-in az, so these are the real resolvers, not a description of them.
 $govPath = Join-Path $root 'scripts/Show-Governance.ps1'
+. (Join-Path $root 'scripts/ClaudeChoice.ps1')
+function Invoke-Choice([scriptblock]$Block) { try { & $Block 6> $null } catch { "<threw: $($_.Exception.Message)>" } }
 $govText = Get-Content $govPath -Raw
 $govAst = [System.Management.Automation.Language.Parser]::ParseFile($govPath, [ref]$null, [ref]$null)
 $govFns = @($govAst.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true))
@@ -1278,11 +1280,13 @@ function az {
 $okFns = [bool](Get-Command Resolve-GovernanceModel -ErrorAction SilentlyContinue) -and [bool](Get-Command Resolve-GatewayAppInsights -ErrorAction SilentlyContinue)
 Assert 'the resolvers exist in the script' $okFns
 if ($okFns) {
-    Assert 'the model comes from what the tier allows'  ((Resolve-GovernanceModel) -eq 'claude-haiku-4-5')
+    Assert 'the model comes from what the tier allows'  ((Invoke-Choice { Resolve-GovernanceModel -Interactive $false }) -eq 'claude-haiku-4-5')
     $script:fake.premium = ',me-oid,'
-    Assert 'and from the premium list for a premium caller' ((Resolve-GovernanceModel) -eq 'claude-opus-5')
+    Assert 'and from the premium list for a premium caller' ((Invoke-Choice { Resolve-GovernanceModel -Interactive $false }) -eq 'claude-opus-5')
     $script:fake.premium = ',someone-else,'; $script:fake.standardModels = ',,'
-    Assert 'an unrestricted tier uses a Claude deployment on the account' ((Resolve-GovernanceModel) -eq 'claude-haiku-4-5')
+    Assert 'an unrestricted tier uses a Claude deployment on the account' ((Invoke-Choice { Resolve-GovernanceModel -Interactive $true -Reader { param($Prompt) '1' } }) -eq 'claude-haiku-4-5')
+    $ambiguousModel = Invoke-Choice { Resolve-GovernanceModel -Interactive $false }
+    Assert 'several unrestricted models are not guessed without a console' ($ambiguousModel -match 'claude-haiku-4-5, claude-sonnet-5' -and $ambiguousModel -match 'Pass -Model')
     Assert 'the component is the one the Claude API writes to' ((Resolve-GatewayAppInsights) -eq '/x/components/appi-api-level')
     $script:fake.apiDiag = $false
     Assert 'falling back to the service-level diagnostic' ((Resolve-GatewayAppInsights) -eq '/x/components/appi-service-level')

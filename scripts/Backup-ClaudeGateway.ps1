@@ -48,6 +48,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 
 # Bumped when the shape of the file changes. Restore refuses a version it does
 # not know rather than applying half of it.
@@ -60,12 +61,8 @@ function Get-Token {
 }
 
 if (-not $SubscriptionId) { $SubscriptionId = az account show --query id -o tsv }
-if (-not $ApimName) {
-    $found = @((az apim list -g $ResourceGroup --query "[].name" -o tsv 2>$null) -split "`n" | Where-Object { $_ })
-    if ($found.Count -eq 1) { $ApimName = $found[0].Trim() }
-    elseif ($found.Count -eq 0) { throw "No API Management instance in '$ResourceGroup'. Pass -ApimName." }
-    else { throw ("$($found.Count) API Management instances in '$ResourceGroup': " + ($found -join ', ') + ". Pass -ApimName.") }
-}
+if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
+if (-not $ApimName) { $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup }
 
 $headers = @{ Authorization = "Bearer $(Get-Token)"; 'Content-Type' = 'application/json' }
 $rg = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup"
@@ -131,15 +128,16 @@ if (-not $WorkspaceName) {
         $WorkspaceName = ($sameGroup[0] -split '/')[-1]
         $workspaceHow = 'named by the gateway diagnostic setting'
     }
-    elseif ($diagWs.Count -gt 0 -and $sameGroup.Count -eq 0) {
-        $workspaceElsewhere = $diagWs -join ', '
-    }
     else {
-        $ws = @((az monitor log-analytics workspace list -g $ResourceGroup --query "[].name" -o tsv 2>$null) -split "`n" | Where-Object { $_ })
-        if ($ws.Count -eq 1) {
-            $WorkspaceName = $ws[0].Trim()
-            $workspaceHow = 'the only one in the group'
+        if ($diagWs.Count -gt 0 -and $sameGroup.Count -eq 0) {
+            $workspaceElsewhere = $diagWs -join ', '
+            Write-Host "  The gateway writes to $workspaceElsewhere," -ForegroundColor Yellow
+            Write-Host "  outside '$ResourceGroup', and restore publishes into the gateway's own group." -ForegroundColor Yellow
         }
+        $chosenWorkspaceId = Select-ClaudeWorkspace -ResourceGroup $ResourceGroup -ApimName $ApimName -LocalOnly `
+            -AmbiguousMessage 'Pass -WorkspaceName to choose the saved functions to back up; silently omitting them leaves restored workbooks broken.'
+        $WorkspaceName = ($chosenWorkspaceId -split '/')[-1]
+        $workspaceHow = 'selected from the gateway telemetry link or local workspace inventory'
     }
 }
 if ($WorkspaceName) {
@@ -159,14 +157,6 @@ if ($WorkspaceName) {
         Write-Host ("  functions      {0} from {1} - {2}" -f $functions.Count, $WorkspaceName, $workspaceHow) -ForegroundColor Green
     }
     catch { Write-Warning "Could not read saved functions from '$WorkspaceName': $($_.Exception.Message)" }
-}
-elseif ($workspaceElsewhere) {
-    Write-Host "  functions      skipped - the gateway writes to $workspaceElsewhere," -ForegroundColor Yellow
-    Write-Host "                 outside '$ResourceGroup', and restore publishes into the gateway's own group." -ForegroundColor Yellow
-    Write-Host '                 Pass -WorkspaceName to choose.' -ForegroundColor Yellow
-}
-else {
-    Write-Host "  functions      skipped - no diagnostic setting names a workspace, and '$ResourceGroup' does not hold exactly one. Pass -WorkspaceName" -ForegroundColor Yellow
 }
 
 # --- workbooks --------------------------------------------------------------

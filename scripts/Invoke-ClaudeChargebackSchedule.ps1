@@ -7,12 +7,18 @@
 [CmdletBinding()]
 param(
     [ValidateSet('generator','dispatcher','admin')][string]$Mode='generator',
-    [Parameter(Mandatory)][string]$StorageAccount,
+    [string]$StorageAccount,
     [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$ApimName = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ApimName)
 )
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 foreach($helper in @('Report','Query','Configuration','Storage','Email','Outbox')) {. (Join-Path $PSScriptRoot "ClaudeChargeback$helper.ps1")}
+if(-not $StorageAccount) {
+    if(-not $ResourceGroup) {$ResourceGroup=Select-ClaudeResourceGroup}
+    if(-not $ApimName) {$ApimName=Select-ClaudeGateway -ResourceGroup $ResourceGroup}
+    $StorageAccount=Get-ClaudeReportStorageAccount $ResourceGroup $ApimName
+}
 if($Mode -eq 'admin') {
     . (Join-Path $PSScriptRoot 'ClaudeChargebackAdministration.ps1')
     $request=ConvertFrom-ClaudeReportAdminPayload -Encoded $env:REPORT_ADMIN_REQUEST -Json $env:REPORT_ADMIN_JSON

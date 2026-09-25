@@ -42,9 +42,9 @@
       "output": "docs/guide/turnstile-t09-entra-mutation.png",
       "target": { "discover": "entra-app", "nameFilterEnv": "TURNSTILE_APP_DISPLAY_FILTER", "selectionKey": "turnstile-app" },
       "entraBlade": { "kind": "enterprise-application", "name": "Users" },
-      "waitFor": { "text": "Turnstile administrator" },
+      "waitFor": { "text": "Role assigned" },
       "settle": 1500,
-      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE", "people": true, "hideSelectors": [".ext-icon-initials"] }
     }
   ]
 }

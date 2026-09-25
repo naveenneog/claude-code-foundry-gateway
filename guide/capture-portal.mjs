@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { loadSteps, selectSteps, documentedOutputs, documentationProblems, isBlockedAction } from './lib/portal-specs.mjs';
-import { AuthenticationSurface, authenticationReason, parseArguments, resolvePlan, runBatch } from './lib/portal-batch.mjs';
+import { AuthenticationSurface, authenticationReason, parseArguments, peopleRedactionPairs, resolvePlan, runBatch } from './lib/portal-batch.mjs';
 import { lockProfile } from './lib/portal-profile.mjs';
 
 const root = process.cwd();
@@ -66,10 +66,19 @@ if (options.list) {
           const texts = [];
           let credentialInput = false;
           for (const frame of openPage.frames()) {
-            const body = await frame.evaluate(() => ({
-              text: document.body?.innerText ?? '',
-              credentialInput: !!document.querySelector('input[type="password"],input[name="loginfmt"]'),
-            }));
+            let body;
+            try {
+              body = await frame.evaluate(() => ({
+                text: document.body?.innerText ?? '',
+                credentialInput: !!document.querySelector('input[type="password"],input[name="loginfmt"]'),
+              }));
+            } catch (error) {
+              // The portal redirects after load, so a frame can navigate or detach while it is
+              // read. It has nothing to judge yet; the next check reads its replacement, and a
+              // sign-in page is still caught by its URL below or on that next check.
+              if (/Execution context was destroyed|frame was detached|Target page, context or browser has been closed|Cannot find context/i.test(String(error?.message))) continue;
+              throw error;
+            }
             texts.push(body.text);
             credentialInput ||= body.credentialInput;
           }
@@ -78,10 +87,16 @@ if (options.list) {
         }
       }
       async function find(locator) {
+        // The portal keeps hidden copies of many labels (collapsed menus, tooltips, other
+        // blades), so the first match in the DOM is often not the one on screen.
         for (const frame of page.frames()) {
-          const target = locator.selector ? frame.locator(locator.selector).first()
-            : frame.getByText(locator.text, { exact: locator.exact ?? false }).first();
-          if (await target.isVisible().catch(() => false)) return target;
+          const matches = locator.selector ? frame.locator(locator.selector)
+            : frame.getByText(locator.text, { exact: locator.exact ?? false });
+          const count = await matches.count().catch(() => 0);
+          for (let index = 0; index < Math.min(count, 20); index++) {
+            const target = matches.nth(index);
+            if (await target.isVisible().catch(() => false)) return target;
+          }
         }
         return null;
       }
@@ -93,7 +108,9 @@ if (options.list) {
           if (found) return found;
           await page.waitForTimeout(500);
         }
-        throw new Error('Expected blade/selector did not render within 90 seconds');
+        // Name the locator: a batch report that only says "did not render" cannot be fixed
+        // without replaying the step. Spec locators are repository text, never deployment names.
+        throw new Error(`Expected ${locator.selector ? `selector ${locator.selector}` : `text "${locator.text}"`} did not render within 90 seconds`);
       }
       const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
       const tool = `Playwright ${JSON.parse(fs.readFileSync('node_modules/playwright/package.json', 'utf8')).version} / Chromium CDP`;
@@ -103,7 +120,9 @@ if (options.list) {
         ensureAuthenticated,
         wait,
         settle: async (ms) => {
-          const deadline = Date.now() + ms;
+          // Blades render their frame first and fill values from later calls, so a short spec
+          // settle captured "undefined" and "NaN". A floor applies to every step.
+          const deadline = Date.now() + Math.max(ms, Number(process.env.PORTAL_MIN_SETTLE_MS ?? 8000));
           while (Date.now() < deadline) {
             await ensureAuthenticated();
             await page.waitForTimeout(Math.min(500, deadline - Date.now()));
@@ -111,6 +130,10 @@ if (options.list) {
           await ensureAuthenticated();
         },
         click: async (locator) => {
+          // A menu group toggles, and the portal remembers it open: clicking one that is already
+          // open closes it and hides the item the next click needs. A click whose expected result
+          // is already on screen is not needed.
+          if (locator.waitFor && await find(locator.waitFor)) return;
           const target = await wait(locator);
           const labels = await target.evaluate((node) => {
             const control = node.closest('button,a,input,[role="button"]') ?? node;
@@ -123,9 +146,12 @@ if (options.list) {
         },
         capture: async ({ step, target, url }) => {
           const pairs = [...maps.get(step.redaction.mapEnv)];
-          if (target.name) pairs.push([target.name, `${step.target.discover}-contoso`]);
+          // A target named with the product's own word (the AUM registration is "AUM") is not
+          // a tenant secret, and replacing it would also rewrite values such as AUM.Manager.
+          if (target.name && !step.redaction.keepTargetName) pairs.push([target.name, `${step.target.discover}-contoso`]);
           if (target.resourceGroup) pairs.push([target.resourceGroup, 'rg-contoso']);
           if (target.subscriptionName) pairs.push([target.subscriptionName, 'Contoso subscription']);
+          pairs.push(...peopleRedactionPairs(target.people, { required: step.redaction.people === true }));
           const redactor = new Redactor(pairs);
           for (const frame of page.frames()) for (const selector of step.redaction.hideSelectors ?? [])
             await frame.locator(selector).evaluateAll((nodes) => nodes.forEach((node) => { node.style.visibility = 'hidden'; }));
@@ -146,7 +172,9 @@ if (options.list) {
             redaction: { applied: true, leak_check_passed: true },
             sha256: createHash('sha256').update(pixels).digest('hex'),
           };
-          if (redactor.leaks(JSON.stringify(captured)).length) throw new Error('Public capture metadata contains an identifier');
+          // Only the route comes from the deployment; the id, output and spec file are this
+          // repository's own names, and a short target name can occur inside them.
+          if (redactor.leaks(JSON.stringify({ route: captured.route })).length) throw new Error('Public capture metadata contains an identifier');
           if (step.output.startsWith('docs/guide/turnstile-')) {
             recordCapture(path.basename(step.output), pixels, {
               route: captured.route, identity_kind: captured.identity_kind, surface: step.id,

@@ -22,9 +22,9 @@
         "resolver/src/index.mjs": "b6b755fbbc56ef62e7b535a4bde2756111c2b5fc9913c16a893b45cb6dce33a3",
         "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
         "scripts/ClaudeTurnstileGovernance.ps1": "ec6eb0fbcfabbe9c13eab90c2f652fb89350110d9a8d97a10e8a1e4fe21c18f5",
-        "scripts/Connect-ClaudeTurnstile.ps1": "a698919454b1fcf0715346bd26b0af0d9782c357fade14c4f4b2c7ee90535a19",
-        "scripts/Export-ClaudeTurnstileUsage.ps1": "8976d8891fce6c355d6645be743655a75828541b201254b009c4f12089764b43",
-        "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "eb7f4cd920c4c4b1caca61baf24c63a221078cb0fa23382027a002e2e329707b",
+        "scripts/Connect-ClaudeTurnstile.ps1": "cc4e2c094aaab8ce75856a3ba770d844bd32333d4f8b42f53f91cabdd1129201",
+        "scripts/Export-ClaudeTurnstileUsage.ps1": "d68e00c953f4bb47492b39862b263377d33ccdf39f15c0e26bb2fbfa783efdb6",
+        "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
         "scripts/Publish-ClaudeQueries.ps1": "d54164f58a76b5d352d46d615da8f877f16df61ce9d2ecb0f3d3c1e7c6a7c72b",
         "scripts/Setup-ClaudeWorkstation.ps1": "52eb88794e60be9b3d5001090d582956e192b50efc7ec03d5eb8c373c41d2167",
         "scripts/Sync-ClaudeAccess.ps1": "e460190d4c8453059295b1937aad28a1523df42c412db65c69c4d9792b2754f6",
@@ -85,12 +85,12 @@
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ApimNamedValue.ps1": "4e12f047b61c586f215a66f73535708488c917b69e2163e6fa6f19253b77fe08",
         "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
-        "scripts/Connect-ClaudeTurnstile.ps1": "a698919454b1fcf0715346bd26b0af0d9782c357fade14c4f4b2c7ee90535a19",
-        "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "eb7f4cd920c4c4b1caca61baf24c63a221078cb0fa23382027a002e2e329707b",
-        "scripts/Invoke-ClaudeTurnstileSchedule.ps1": "bd51af7bd733a2f7a8bda78fdca70fa60411ec831ef74ffbed7bda08861c4978",
+        "scripts/Connect-ClaudeTurnstile.ps1": "cc4e2c094aaab8ce75856a3ba770d844bd32333d4f8b42f53f91cabdd1129201",
+        "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
+        "scripts/Invoke-ClaudeTurnstileSchedule.ps1": "9a1d8c6dcd25615b2bf9bd11c62306de517c08e0529aee924d5212c758f1d0b9",
         "scripts/Sync-ClaudeAccess.ps1": "e460190d4c8453059295b1937aad28a1523df42c412db65c69c4d9792b2754f6",
         "scripts/Sync-ClaudeProjection.ps1": "ddbd769cb42acd5290db364633441ca5f73af9de980d1ef3d596c299e37ffe8e",
-        "scripts/Sync-ClaudeTurnstileGovernance.ps1": "7f90c4d5f90d33c8082135fa5ece2a06a93b069b32f8441d580dd335ddd7b69e"
+        "scripts/Sync-ClaudeTurnstileGovernance.ps1": "da01488a95c46bc13c130319c14ee1dc59e3aa886d43937926ebe74d2a71e1b2"
       },
       "outputs": [
         {
@@ -109,7 +109,7 @@
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/New-ClaudeTurnstileEntraApp.ps1": "0262606c6f2b747ae4dff7534c15d113099ff6fae06b40580eb62daffaf1db1d",
-        "scripts/Open-ClaudeTurnstile.ps1": "194a62ab3ed16a228f20f10d77c76dd31987890e587481c5c51a14ad96c7a393"
+        "scripts/Open-ClaudeTurnstile.ps1": "e073250cf59fe6b814f449c8bf1eb070f266703e66dadcb2277c98c5a48eb403"
       },
       "outputs": [
         {
@@ -167,7 +167,7 @@
         "scripts/ApimNamedValue.ps1": "4e12f047b61c586f215a66f73535708488c917b69e2163e6fa6f19253b77fe08",
         "scripts/Invoke-ClaudeFinOps.ps1": "33e003342bf91dd4fb03c242fb4a112f40f155c9182f4c193fdd9683bbe6d4cf",
         "scripts/New-ClaudeTurnstileEntraApp.ps1": "0262606c6f2b747ae4dff7534c15d113099ff6fae06b40580eb62daffaf1db1d",
-        "scripts/Set-ClaudeTier.ps1": "6cee327ee047365894c21e2237ec37b9d35bda5885298098ff4d80a77132f092"
+        "scripts/Set-ClaudeTier.ps1": "0d66166dce920be8100d8953a71d195c9553dad8c9e9cbcddedfbb2796af94df"
       },
       "outputs": [
         {
@@ -214,12 +214,12 @@
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/chargeback-reports.bicep": "8a3f09f34cbb332496d41f116ab450c7fa8f3892d788a489ffbb2d9334e7659d",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "scripts/ClaudeChargebackAdministration.ps1": "146ca717a8b311119a4ae381ccabf4113a7e7e3f4062d9121ff4c823c8327499",
+        "scripts/ClaudeChargebackAdministration.ps1": "6e5efdf2e5e12cc7e82917510baa52d6fcad9735d312c359a6fb63e73a406796",
         "scripts/ClaudeChargebackEmail.ps1": "da8678777a36a1988c67ece872d38a873383c41fe9104b0f9e4e85d87b25b2ca",
         "scripts/ClaudeChargebackOutbox.ps1": "95997c31730c099bbedbd17b79c07a03e4ebd075d377a76fc436da753fb27f25",
         "scripts/ClaudeChargebackQuery.ps1": "2dc713c7bd244848e206e09860b791a4a2c713639dd1516e4003fd56559d75a5",
-        "scripts/ClaudeChargebackStorage.ps1": "71d217a035d81f98c67170c006d4f6dfe0ffb42335981805132ff756d858bd4f",
-        "scripts/Invoke-ClaudeChargebackSchedule.ps1": "5dbdf4149255ec84dedb8d333d5e8e2acfda74eea7eb67f030300e1285bb7d42",
+        "scripts/ClaudeChargebackStorage.ps1": "84ff430d005e37806a8be282ff5628bc011bc8ca9cc12b43203d5b1b3f9df4e1",
+        "scripts/Invoke-ClaudeChargebackSchedule.ps1": "6e6dceac5c7d8f68340d4d8688fc4ff25ffa4e01feaf85bf26c115ad067a74ed",
         "scripts/Publish-ClaudeQueries.ps1": "d54164f58a76b5d352d46d615da8f877f16df61ce9d2ecb0f3d3c1e7c6a7c72b"
       },
       "outputs": [
@@ -243,7 +243,7 @@
         "scripts/ClaudeBudgetModes.ps1": "d27db15c9e257e2e923355978896737bb07cd2227135fa29625b003655f70946",
         "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
         "scripts/ClaudeTurnstileGovernance.ps1": "ec6eb0fbcfabbe9c13eab90c2f652fb89350110d9a8d97a10e8a1e4fe21c18f5",
-        "scripts/Set-ClaudeBusinessUnit.ps1": "a08fae2d6a3b0b7bac76eb70ec24af2f0324c06f25591e29374eb013e13075e8"
+        "scripts/Set-ClaudeBusinessUnit.ps1": "8a534ff09cf9a60521807f4bf5f574f7a33ae270a7296cbf9dddb36a70a38964"
       },
       "outputs": [
         {
@@ -285,7 +285,7 @@
       "id": "network-private",
       "source": "docs/architecture/11-network-private.json",
       "inputs": {
-        "docs/NETWORK-ENTERPRISE.md": "3e7468fec7222263e381b1e79f7a2472311c0d89aa2ecd68314a4d58429a5743",
+        "docs/NETWORK-ENTERPRISE.md": "e98ec640d2bb65b2eec7a271c0b4446e4c3a596ef846419a4210d9de6fd161ae",
         "docs/architecture/11-network-private.json": "0a7649f7c1029dd7da0b0e63d17479086d3515c7359a36d3705dd5c272f0afaf",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
@@ -311,7 +311,7 @@
       "id": "network-public",
       "source": "docs/architecture/12-network-public.json",
       "inputs": {
-        "docs/NETWORK-ENTERPRISE.md": "3e7468fec7222263e381b1e79f7a2472311c0d89aa2ecd68314a4d58429a5743",
+        "docs/NETWORK-ENTERPRISE.md": "e98ec640d2bb65b2eec7a271c0b4446e4c3a596ef846419a4210d9de6fd161ae",
         "docs/architecture/12-network-public.json": "71187267e6c49b7dd686e266396b45b8e2f503d8fb7ae28b93dd1b3bd8cbc76d",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
@@ -336,7 +336,7 @@
       "id": "network-hybrid",
       "source": "docs/architecture/13-network-hybrid.json",
       "inputs": {
-        "docs/NETWORK-ENTERPRISE.md": "3e7468fec7222263e381b1e79f7a2472311c0d89aa2ecd68314a4d58429a5743",
+        "docs/NETWORK-ENTERPRISE.md": "e98ec640d2bb65b2eec7a271c0b4446e4c3a596ef846419a4210d9de6fd161ae",
         "docs/architecture/13-network-hybrid.json": "7540f67ef2881f2a329edbcbd38d1e5ec76602277636c7cda1d45d24067226ab",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",

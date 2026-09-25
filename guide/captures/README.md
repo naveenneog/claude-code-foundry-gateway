@@ -32,7 +32,7 @@ Built-in capture catalogue:
 | ID | Documented output | Surface |
 |---|---|---|
 | `gateway-overview` | `docs/guide/a3-apim-overview.png` | API Management Overview |
-| `gateway-identity` | `docs/guide/a4-identity.png` | System-assigned identity; batch capture pending |
+| `gateway-identity` | `docs/guide/a4-identity.png` | System-assigned identity |
 | `gateway-named-values` | `docs/guide/a6-named-values.png` | Named values |
 
 ## Fields
@@ -59,15 +59,37 @@ Built-in capture catalogue:
   `group`; `name` is the portal blade identifier, such as `Overview`, `ProtectAnAPI`,
   `AppRoles`, `Properties`, `Users`, `Members` or `Owners`.
 - `waitFor`: exactly one of `text` or `selector`; optional `exact` for text.
-  All frames are checked. Do not put real resource names or IDs into selectors.
+  All frames are checked, and the **first visible** match counts: the portal keeps hidden
+  copies of many labels (collapsed menus, tooltips, other blades), so the first match in
+  the DOM is often not the one on screen. Do not put real resource names or IDs into
+  selectors. A timeout names the locator that did not render.
 - `clicks`: optional ordered navigation actions, each with `text` or `selector`, optional
   `exact`, optional `waitFor`, and optional `settle`. Authentication and commit actions
   (Sign in, Save, Delete, Create, Grant, etc.) are refused. There is no credential typing.
-- `settle`: milliseconds, 0–60000.
+  A click whose `waitFor` is already on screen is skipped: the portal remembers menu groups
+  open, and clicking an open group closes it. The top-level `waitFor` is checked **before**
+  the clicks, so it must be on the landing blade, not on the page the clicks reach.
+- Prefer `/overview` plus menu clicks to deep links. `/namedValues`, `/identity`, `/apis`,
+  `/networking` and `/deployments` stopped rendering their content in the current portal.
+  Proven patterns: a gateway menu item under the APIs group is
+  `{"selector":"a.fxc-menu-item >> text=\"APIs\""}` (the group header has the same text);
+  a job's execution history is the overview's `View` link; Log Analytics Functions are in
+  KQL mode (`Simple mode` > `KQL mode` > `[role="tab"][aria-label="Functions"]` >
+  `Workspace functions`). A Foundry resource has no deployments blade in the Azure portal.
+- `settle`: milliseconds, 0–60000. Every settle, including a click's, lasts at least
+  `PORTAL_MIN_SETTLE_MS` (default 8000), because blades render their frame first and fill
+  values from later calls.
 - `redaction.mapEnv`: names an environment variable pointing to a **private**, uncommitted
   JSON array of `[real, Contoso replacement]` pairs. Common email, UUID, resource-host and
   photo redaction remains mandatory. Optional `hideSelectors` hides sensitive UI regions
-  before the shared rendered-DOM leak check.
+  before the shared rendered-DOM leak check. A value of 8 or more characters, or a 6+
+  character mix of letters and digits (a deployment suffix), is replaced and leak-checked
+  wherever it occurs, including inside a longer name built from it; shorter plain words
+  keep word boundaries. `keepTargetName` keeps a target named with the product's own word.
+- `redaction.people`: on an Entra group or application page that lists people, require the
+  principals discovery read from the directory (the group's direct members, or the users and
+  service principals assigned to the application). Each is shown as `Contoso user N`; the
+  capture is refused when none were discovered, because no private map can list people.
 
 ## Run one batch
 
@@ -96,6 +118,13 @@ At the first **actual authentication surface** (not a silent redirect), the runn
 does not click or type anything, and reports the current and remaining steps. The summary
 lists captured, skipped and failed IDs. A stale profile or a missed blade is never saved
 as evidence of the requested page. Failed/skipped steps make the process nonzero.
+
+Entra blades (app registrations, enterprise applications, groups) intermittently ask for
+a step-up approval (**Approve sign in request**) even in a signed-in profile. Run the
+resource steps and the Entra steps as separate batches, so a step-up cannot strand the
+rest. When the runner stops on one, the owner opens that blade in a headed window of the
+same profile, approves it, closes the window, and the lead reruns the remaining IDs from
+the report.
 
 Batch metadata is written to `docs/guide/portal-captures.json`; Turnstile outputs also update
 their existing manifest and require `TURNSTILE_FORK_COMMIT` for that version record.

@@ -102,12 +102,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeUsdBudgets.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
-if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
 
 $requestedMode = $null
 if ($PSBoundParameters.ContainsKey('Mode') -or $PSBoundParameters.ContainsKey('AllowancePercent')) {
@@ -118,9 +118,8 @@ if ($PSBoundParameters.ContainsKey('Mode') -or $PSBoundParameters.ContainsKey('A
 }
 
 if (-not (az account show --query id -o tsv 2>$null)) { throw 'Not signed in. Run: az login' }
-if (-not $ApimName) {
-    $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup -ScriptRoot $PSScriptRoot
-}
+if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
+if (-not $ApimName) { $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup }
 
 $raw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'
 if ($null -eq $raw) {

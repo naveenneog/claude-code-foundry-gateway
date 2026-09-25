@@ -698,6 +698,13 @@ Administrator) can grant:
 ./scripts/Grant-ClaudeGovernanceGraphAccess.ps1
 ```
 
+If several Turnstile job identities exist, the script asks which one, listing
+their principal IDs, ARM IDs and regions rather than granting to the first.
+Enter takes a sole discovered identity; automation must pass `-PrincipalId`
+when there are several. Look it up with `az identity list -g <gateway-group> -o table`,
+or **Resource groups > the Turnstile managed identity > Overview > Object
+(principal) ID**, and verify the identity on the apply job's **Identity** blade.
+
 | | Without `GroupMember.Read.All` | With it |
 |---|---|---|
 | Budgets and tier limits | Applied | Applied |

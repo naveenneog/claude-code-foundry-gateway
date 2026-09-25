@@ -8,7 +8,7 @@
       "entraBlade": {"kind": "app-registration", "name": "AppRoles"},
       "waitFor": {"text": "AUM.Manager"},
       "settle": 5000,
-      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE", "keepTargetName": true}
     },
     {
       "id": "p55-aum-api-scope",
@@ -17,7 +17,7 @@
       "entraBlade": {"kind": "app-registration", "name": "ProtectAnAPI"},
       "waitFor": {"text": "AUM.Access"},
       "settle": 5000,
-      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE", "keepTargetName": true}
     },
     {
       "id": "p55-aum-token-manifest",
@@ -26,7 +26,7 @@
       "entraBlade": {"kind": "app-registration", "name": "Manifest"},
       "waitFor": {"text": "groupMembershipClaims"},
       "settle": 5000,
-      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE", "keepTargetName": true}
     },
     {
       "id": "p55-aum-assignment-required",
@@ -35,16 +35,16 @@
       "entraBlade": {"kind": "enterprise-application", "name": "Properties"},
       "waitFor": {"text": "Assignment required?"},
       "settle": 5000,
-      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE", "keepTargetName": true}
     },
     {
       "id": "p55-aum-assigned-roles",
       "output": "docs/guide/p55-aum-assigned-roles.png",
       "target": {"discover": "entra-app", "nameFilterEnv": "AUM_APP_DISPLAY_FILTER", "selectionKey": "p55-aum-app"},
       "entraBlade": {"kind": "enterprise-application", "name": "Users"},
-      "waitFor": {"text": "Users and groups"},
+      "waitFor": {"text": "Role assigned"},
       "settle": 5000,
-      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE", "keepTargetName": true, "people": true, "hideSelectors": [".ext-icon-initials"]}
     },
     {
       "id": "p55-aum-function-overview",

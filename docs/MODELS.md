@@ -96,10 +96,15 @@ In the account's deployment view, verify the **Deployment name**, **Model**,
 actual deployed name for client aliases and the allowlist; the catalogue model
 name alone is not sufficient.
 
-**Pending batch capture (`docs-review-foundry-deployments`).**
+The Azure portal no longer lists deployments for a Foundry resource: its
+**Resource Management** menu has Projects, Keys and Endpoint, Encryption,
+Networking, Identity, Cost analysis and Properties, and **Overview** sends you
+to the Foundry portal. There, select **Build** > **Models** (**Models +
+endpoints** in the classic portal;
+[Microsoft Learn](https://learn.microsoft.com/azure/foundry/foundry-models/how-to/deploy-foundry-models)).
+The same fields from the CLI, read live on 2026-09-25 and filtered to Claude:
 
-Planned image: `docs/guide/docs-review-foundry-deployments.png` — the
-account's model deployment list and identities.
+![Live Azure CLI read of the Foundry account's Claude deployments: claude-opus-5 and claude-sonnet-5, version 2, GlobalStandard, capacities 40 and 20, both Succeeded](guide/docs-review-live-foundry-deployments.png)
 
 ---
 

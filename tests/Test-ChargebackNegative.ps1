@@ -13,7 +13,7 @@ $cases=@(
     @{Name='BOM breaks private blob listing';File='ClaudeChargebackStorage.ps1';From='return $text.TrimStart([char]0xfeff)';To='return $text';Test='Test-ChargebackStorage.ps1'}
     @{Name='double-slash event prefix stalls delivery';Directory='infra';File='chargeback-reports.bicep';From="blobPrefix: 'outbox'";To="blobPrefix: 'outbox/'";Test='Test-ChargebackSchedule.ps1'}
     @{Name='resend overwrites a pending compressed attachment';File='ClaudeChargebackOutbox.ps1';From='$blob="$Prefix/delivery/$scopeName/$hash-$($a.Name)"';To='$blob="$Prefix/delivery/$scopeName/$($a.Name)"';Test='Test-ChargebackQueue.ps1'}
-    @{Name='ambiguous discovery silently picks first';File='ClaudeChargebackDiscovery.ps1';From='throw "$Prompt is ambiguous. Supply an explicit parameter or run the numbered picker interactively."';To='return $items[0]';Test='Test-ChargebackDiscovery.ps1'}
+    @{Name='ambiguous discovery silently picks first';File='ClaudeChargebackDiscovery.ps1';From='$selected=Select-ClaudeChoice @choice';To='$selected=$items[0].Id';Test='Test-ChargebackDiscovery.ps1'}
     @{Name='overlapping private subnets accepted';File='ClaudeChargebackDiscovery.ps1';From='if($jobs.Start -le $endpoints.End -and $endpoints.Start -le $jobs.End)';To='if($false)';Test='Test-ChargebackDiscovery.ps1'}
 )
 $caught=0
@@ -23,6 +23,7 @@ try {
     Get-ChildItem (Join-Path $root 'scripts') -Filter '*ClaudeChargeback*.ps1' | Copy-Item -Destination (Join-Path $baseline 'scripts')
     Copy-Item (Join-Path $root 'scripts\ClaudeBusinessUnit.ps1') (Join-Path $baseline 'scripts')
     Copy-Item (Join-Path $root 'scripts\ClaudeBudgetModes.ps1') (Join-Path $baseline 'scripts')
+    Copy-Item (Join-Path $root 'scripts\ClaudeChoice.ps1') (Join-Path $baseline 'scripts')
     New-Item -ItemType Directory (Join-Path $baseline 'infra') | Out-Null
     Get-ChildItem (Join-Path $root 'infra') -Filter 'chargeback*.bicep' | Copy-Item -Destination (Join-Path $baseline 'infra')
     foreach($suite in @($cases.Test | Sort-Object -Unique)) {

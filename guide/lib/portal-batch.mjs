@@ -12,6 +12,17 @@ export function authenticationReason({ url, texts = [], credentialInput = false 
   return null; // A silent redirect without a prompt may return by itself.
 }
 
+// People are not deployment resources, so no private map can list them all in advance. A
+// directory page (a group's members, an application's assignments) is redacted with the
+// principals discovery read from the directory for that page; emails are removed by the
+// Redactor's own rule. A people page whose principals were not discovered is refused.
+export function peopleRedactionPairs(people, { required = false } = {}) {
+  const names = [...new Set((people ?? []).map((person) => person?.displayName?.trim()).filter(Boolean))];
+  if (required && !names.length)
+    throw new Error('A page that lists people needs discovery to read them first; discover the principals before capturing');
+  return names.map((name, index) => [name, `Contoso user ${index + 1}`]);
+}
+
 export function portalUrl(step, target) {
   const guid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
   const requireGuid = (value, name) => {

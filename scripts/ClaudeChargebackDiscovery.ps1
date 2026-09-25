@@ -1,4 +1,5 @@
 # Numbered choices follow the installer: configured/active choices are defaults, not guesses.
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 function Invoke-ClaudeReportAzOptional {
     param([scriptblock]$Command)
     $saved=$ErrorActionPreference;$ErrorActionPreference='Continue'
@@ -9,28 +10,43 @@ function Invoke-ClaudeReportAzOptional {
 
 function Select-ClaudeReportOption {
     param([string]$Prompt,[object[]]$Options,[string]$SelectedId,[string]$DefaultId,[switch]$NonInteractive,
+        [string]$Parameter='Selection',[string[]]$WhereToFind=@(),
         [scriptblock]$ReadSelection={param($label,$default) Read-Host "$label [$default]"})
     $items=@($Options | Where-Object {$null -ne $_})
-    if(-not $items.Count){throw "No $Prompt options were discovered."}
     if($SelectedId){
         $match=@($items|Where-Object {$_.Id -eq $SelectedId -or $_.Name -eq $SelectedId})
-        if($match.Count -ne 1){throw "$Prompt selection was not found or is not unique."}
+        if($match.Count -ne 1){throw ("$Prompt selection was not found or is not unique. Pass -$Parameter. Where to find it: " + ($WhereToFind -join '; '))}
         return $match[0]
     }
     $default=0
-    for($i=0;$i -lt $items.Count;$i++){if($DefaultId -and $items[$i].Id -eq $DefaultId){$default=$i;break}}
-    if($NonInteractive){
-        if($items.Count -eq 1 -or ($DefaultId -and @($items|Where-Object Id -eq $DefaultId).Count -eq 1)){return $items[$default]}
-        throw "$Prompt is ambiguous. Supply an explicit parameter or run the numbered picker interactively."
+    $choices=@(for($i=0;$i -lt $items.Count;$i++){
+        $recommended=$items.Count -eq 1 -or ($DefaultId -and $items[$i].Id -eq $DefaultId)
+        if($recommended){$default=$i+1}
+        $reason=if($items.Count -eq 1){'the only discovered option'}else{'the configured or active resource supplied by the caller'}
+        $source=if($WhereToFind.Count){$WhereToFind[0]}else{"the discovered $Prompt inventory"}
+        New-ClaudeChoiceOption -Value $items[$i].Id -Label $items[$i].Name -Detail "from $source; id $($items[$i].Id)" -Recommended:$recommended -Reason $reason
+    })
+    $console=if($NonInteractive){$false}elseif($PSBoundParameters.ContainsKey('ReadSelection')){$true}else{Test-ClaudeInteractive}
+    $choice=@{
+        Parameter=$Parameter;Question=$Prompt;Options=$choices;WhereToFind=$WhereToFind
+        Interactive=$console;AcceptRecommendedWithoutConsole=$true
+        NoneMessage="No $Prompt options were discovered."
+        AmbiguousMessage="$Prompt is ambiguous. Supply an explicit parameter or run the numbered picker interactively."
     }
-    Write-Host "`n$Prompt" -ForegroundColor Cyan
-    for($i=0;$i -lt $items.Count;$i++){Write-Host ("  {0}. {1}{2}" -f ($i+1),$items[$i].Name,$(if($i -eq $default){' (default)'}else{''}))}
-    $answer=& $ReadSelection 'Choose a number' ($default+1)
-    if([string]::IsNullOrWhiteSpace($answer)){return $items[$default]}
-    $number=0
-    if(-not [int]::TryParse([string]$answer,[ref]$number)){throw 'Enter a number from the discovered list.'}
-    if($number -lt 1 -or $number -gt $items.Count){throw 'The selected number is outside the discovered range.'}
-    return $items[$number-1]
+    $choice.Reader={
+        param($label)
+        $answer=& $ReadSelection $label $default
+        if(-not [string]::IsNullOrWhiteSpace($answer) -and $answer -notin @('q','quit')){
+            $number=0
+            if(-not [int]::TryParse([string]$answer,[ref]$number)){throw 'Enter a number from the discovered list.'}
+            if($number -lt 1 -or $number -gt $items.Count){throw 'The selected number is outside the discovered range.'}
+        }
+        $answer
+    }.GetNewClosure()
+    $selected=Select-ClaudeChoice @choice
+    $match=@($items|Where-Object Id -eq $selected)
+    if($match.Count -ne 1){throw "$Prompt selection was not found or is not unique."}
+    return $match[0]
 }
 
 function Resolve-ClaudeReportTarget {
@@ -43,14 +59,17 @@ function Resolve-ClaudeReportTarget {
     $accounts=@(az account list -o json | ConvertFrom-Json | Where-Object state -eq Enabled)
     if($LASTEXITCODE -ne 0){throw 'Could not discover accessible subscriptions.'}
     $options=@($accounts|ForEach-Object {[pscustomobject]@{Id=$_.id;Name="$($_.name) ($($_.id))"}})
-    $sub=Select-ClaudeReportOption -Prompt Subscription -Options $options -SelectedId $SubscriptionId -DefaultId $current.id -NonInteractive:$NonInteractive
+    $sub=Select-ClaudeReportOption -Prompt Subscription -Parameter SubscriptionId -Options $options -SelectedId $SubscriptionId -DefaultId $current.id -NonInteractive:$NonInteractive `
+        -WhereToFind @('az account list -o table','Azure portal: Subscriptions > Overview > Subscription ID')
     if($sub.Id -ne $current.id){az account set --subscription $sub.Id;if($LASTEXITCODE -ne 0){throw 'Could not select the subscription.'}}
     $gateways=@(az apim list -o json | ConvertFrom-Json)
     if($LASTEXITCODE -ne 0){throw 'Could not discover API Management gateways.'}
     $groups=@($gateways|Select-Object -ExpandProperty resourceGroup -Unique|Sort-Object|ForEach-Object {[pscustomobject]@{Id=$_;Name=$_}})
-    $group=Select-ClaudeReportOption -Prompt 'Gateway resource group' -Options $groups -SelectedId $ResourceGroup -NonInteractive:$NonInteractive
+    $group=Select-ClaudeReportOption -Prompt 'Gateway resource group' -Parameter ResourceGroup -Options $groups -SelectedId $ResourceGroup -NonInteractive:$NonInteractive `
+        -WhereToFind @('az apim list -o table','Azure portal: API Management services > the gateway > Overview > Resource group')
     $options=@($gateways|Where-Object resourceGroup -eq $group.Id|ForEach-Object {[pscustomobject]@{Id=$_.name;Name="$($_.name) - $($_.location), $($_.sku.name)"}})
-    $gateway=Select-ClaudeReportOption -Prompt Gateway -Options $options -SelectedId $ApimName -NonInteractive:$NonInteractive
+    $gateway=Select-ClaudeReportOption -Prompt Gateway -Parameter ApimName -Options $options -SelectedId $ApimName -NonInteractive:$NonInteractive `
+        -WhereToFind @("az apim list -g $($group.Id) -o table","Azure portal: Resource groups > $($group.Id) > API Management service")
     [pscustomobject]@{ResourceGroup=$group.Id;ApimName=$gateway.Id;SubscriptionId=$sub.Id}
 }
 

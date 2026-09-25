@@ -13,6 +13,7 @@ param(
     [Parameter(Mandatory,ParameterSetName='Remove')][string[]]$Remove,
     [Parameter(ParameterSetName='List')][switch]$List,
     [string]$StorageAccount,[switch]$ViaJob,[string]$SubscriptionId,[switch]$NonInteractive,
+    [string]$JobName,
     [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$ApimName = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ApimName)
 )
@@ -35,7 +36,7 @@ $scope=if($AllUnits) {'all'} else {$BusinessUnit}
 if($ViaJob) {
     $request=if($PSCmdlet.ParameterSetName -eq 'List') {@{Operation='Inspect'}} else {@{Operation='Recipients';Scope=$scope;Add=@($Add);Remove=@($Remove)}}
     if($PSCmdlet.ShouldProcess('Private report administration job',"$($request.Operation) (logs contain counts, not addresses)")) {
-        Invoke-ClaudeReportAdminRequest $ResourceGroup $ApimName $request
+        Invoke-ClaudeReportAdminRequest $ResourceGroup $ApimName $request $JobName -NonInteractive:$NonInteractive
     }
     return
 }

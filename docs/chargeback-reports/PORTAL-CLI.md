@@ -519,11 +519,13 @@ uncommitted array of `[real, Contoso replacement]` pairs. Include resource names
 role/DNS-link suffixes, subscription/tenant labels and any identity display names. The
 shared runner also performs mandatory identifier, email, host and photo redaction.
 
-The blades below were previously observed live. The lead's **new batch refresh** is
-pending; existing images above remain dated live captures, not placeholders. Each entry
-is **pending batch capture (spec id)**:
+The lead's batch refreshed every blade below live on 2026-09-25 with the shared runner;
+the images above are those captures. Each has a record in
+`docs/guide/portal-captures.json` (route, time, redaction and leak check, and the SHA-256
+of the published pixels, which the tests compare with the file). Each entry is a
+**live batch capture (spec id)**:
 
-| Spec id | Final output |
+| Spec id | Output |
 |---|---|
 | `p50-storage-overview` | `docs/images/chargeback-reports/portal-storage.png` |
 | `p50-storage-network` | `docs/images/chargeback-reports/portal-storage-network.png` |

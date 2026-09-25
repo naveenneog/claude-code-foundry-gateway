@@ -78,11 +78,18 @@ can differ from access to one known resource.
    Properties for its name and workspace ID. These are different from the
    Application Insights AppId and ARM resource ID.
 
-Pass `-ResourceGroup` and `-ApimName` explicitly when a group holds multiple
-gateways. Commands using `Get-ClaudeGatewayTarget.ps1` otherwise use
-`CLAUDE_RG`/`CLAUDE_APIM` before the generated onboarding file. Publishers also
-need `-WorkspaceName` when discovery is ambiguous; their resource-group argument
-must match where the target workspace lives. Do not silently choose the first.
+Commands using `Get-ClaudeGatewayTarget.ps1` use `CLAUDE_RG`/`CLAUDE_APIM`
+before the generated onboarding file; a recorded target counts as already given.
+The budget, business-unit, model, backup and Turnstile scripts ask for missing
+targets with numbered choices, their sources, a recommendation when justified,
+and command/portal lookup instructions. Publishers recommend the workspace linked
+to the gateway's Application Insights, not the first workspace in its group.
+Enter takes the recommendation. In a pipeline, CI or `pwsh -NonInteractive`,
+only a certain choice is accepted; ambiguity names the candidates and the
+parameter to pass. Supply explicit parameters for scheduled automation.
+`New-ClaudeCodePolicy.ps1` also reuses the installer file when neither its URL
+nor config path was supplied. If that file is absent, give it the approved
+client endpoint; it does not infer a direct APIM URL that could bypass an edge.
 
 ## 2. Check health and headroom
 

@@ -3001,6 +3001,102 @@ $mutations = @(
        File  = 'Install-ClaudeGateway.ps1'
        From  = '$usdSavedValues = Get-ClaudeUsdNamedValues -ResourceGroup'
        To    = '$usdSavedValues = @{} # -ResourceGroup' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'the Foundry chooser loses the gateway backend recommendation'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = 'if ([uri]::TryCreate([string]$url, [UriKind]::Absolute, [ref]$parsed)) { $backend = $parsed.Host }'
+       To    = '$backend = $null' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'a recorded Turnstile resource group is asked for again'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = 'if ($Integration -and $Integration.resourceGroup) {'
+       To    = 'if ($false) {' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'an unattended restore treats the newest backup as certain'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = 'AcceptRecommendedWithoutConsole = ($files.Count -eq 1)'
+       To    = 'AcceptRecommendedWithoutConsole = $true' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'a local-only backup follows telemetry into another resource group'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = 'if ($LocalOnly -and $linked -and ($linked -split ''/'')[4] -ine $ResourceGroup) {'
+       To    = 'if ($false) {' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'reports discovery offers another gateway''s resources'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = '$_.type -eq $type -and $_.tags.''claude-chargeback-gateway'' -eq $ApimName -and'
+       To    = '$_.type -eq $type -and' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'a recorded reports resource is asked for again'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = 'if ($recordedMatch.Count -eq 1) {'
+       To    = 'if ($false) {' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'the alphabetical model recommendation becomes certain in automation'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = 'AcceptRecommendedWithoutConsole = ($models.Count -eq 1)'
+       To    = 'AcceptRecommendedWithoutConsole = $true' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'a sole Application Insights is no longer certain'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = '-Recommended:($components.Count -eq 1)'
+       To    = '-Recommended:$false' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'a sole gateway group is no longer certain'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = '-Recommended:($groups.Count -eq 1) -Reason ''the only resource group with a visible API Management instance'''
+       To    = '-Recommended:$false -Reason ''the only resource group with a visible API Management instance''' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'reports options ask for input in a headless process'
+       File  = 'scripts/ClaudeChargebackDiscovery.ps1'
+       From  = 'else{Test-ClaudeInteractive}'
+       To    = 'else{$true}' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'telemetry guesses the recorded component is in the gateway group'
+       File  = 'scripts/Get-ClaudeTelemetry.ps1'
+       From  = 'if (-not $componentId) { $componentId = '
+       To    = 'if ($true) { $componentId = ' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'a sole Turnstile identity no longer works unattended'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = '-Recommended:($identities.Count -eq 1)'
+       To    = '-Recommended:$false' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'fleet policy ignores the installer configuration'
+       File  = 'scripts/New-ClaudeCodePolicy.ps1'
+       From  = 'if (Test-Path -LiteralPath $recordedConfig) {'
+       To    = 'if ($false) {' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'restore starts before checking the second archive exists'
+       File  = 'scripts/Migrate-ClaudeWorkstation.ps1'
+       From  = 'if ($archive.Path -and -not (Test-Path -LiteralPath $archive.Path -PathType Leaf)) {'
+       To    = 'if ($false) {' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'direct account discovery names a parameter the caller does not accept'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = 'Parameter = $Parameter; Question = "Which Foundry account in $scope?"'
+       To    = 'Parameter = ''FoundryAccount''; Question = "Which Foundry account in $scope?"' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'the direct family alias silently takes the first deployment again'
+       File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
+       From  = 'Select-ClaudeModel @choice'
+       To    = 'return $hits[0].name' }
 )
 
 # END MUTATION MANIFEST
