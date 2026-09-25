@@ -2,6 +2,15 @@ import { az, ps } from './turnstile-live.mjs';
 import { choose } from './azure-targets.mjs';
 import { DISCOVERY_TYPES } from './portal-specs.mjs';
 
+export function discoveryArguments(args, account, current) {
+  if (args[0] === 'ad') {
+    if (!account.tenantId || account.tenantId.toLowerCase() !== current.tenantId?.toLowerCase())
+      throw new Error('Entra discovery requires the selected subscription to use the current Azure CLI tenant');
+    return [...args, '-o', 'json'];
+  }
+  return [...args, '--subscription', account.id, '-o', 'json'];
+}
+
 export async function createResolver(options) {
   const unattended = options.nonInteractive || !process.stdin.isTTY;
   const current = JSON.parse(az(['account', 'show', '-o', 'json']));
@@ -12,7 +21,7 @@ export async function createResolver(options) {
   const recordedGroup = ps('& ./scripts/Get-ClaudeGatewayTarget.ps1 ResourceGroup 3>$null');
   const recordedGateway = ps('& ./scripts/Get-ClaudeGatewayTarget.ps1 ApimName 3>$null');
   const lists = new Map();
-  const json = (args) => JSON.parse(az([...args, '--subscription', account.id, '-o', 'json']));
+  const json = (args) => JSON.parse(az(discoveryArguments(args, account, current)));
   return async (target) => {
     let candidates;
     const filter = target.nameFilterEnv ? process.env[target.nameFilterEnv]?.trim() : undefined;
