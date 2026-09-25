@@ -490,3 +490,71 @@ the verification steps or turn a successful job into proof of mailbox delivery.
 Return to [Chargeback reports](../CHARGEBACK-REPORTS.md) for schema, limits, cost basis, columns
 and caveats. Confirm your organizational recipient authorization and email-domain quota
 before enabling delivery to additional units.
+
+## Centralized portal batch handoff
+
+The lead's batch protocol supersedes individual portal retries. Do not reopen or retry a
+portal profile after an authentication surface, and do not attempt sign-in. The lead runs
+the single original-profile batch immediately after the owner's next sign-in.
+
+The version-1 manifest is `guide/captures/p50.json`. Its targets use resource discovery,
+the logical `claude-chargeback-owner=P50` tag and reusable selection keys. It contains no
+deployed resource names, IDs, hostnames or resolved URLs. The network/DNS targets use the
+generic discovery aliases because a deployment may reuse untagged existing resources.
+
+Select **generator**, **dispatcher**, **admin job** and **reporting identity** separately;
+their resource types alone are not unique. The batch runner's numbered picker shows real
+resources, or the lead supplies discovered IDs with:
+
+```powershell
+node guide/capture-portal.mjs --list
+node guide/capture-portal.mjs --dry-run --only p50-generator-overview `
+  --select "p50-generator=$($generator.id)"
+```
+
+Other keys are `p50-storage`, `p50-dispatcher`, `p50-admin`, `p50-environment`,
+`p50-reporting-identity`, `p50-network`, `p50-private-endpoint`, `p50-dns`,
+`p50-email-service` and `p50-communication`. Set `PORTAL_REDACTIONS_FILE` to a private,
+uncommitted array of `[real, Contoso replacement]` pairs. Include resource names, custom
+role/DNS-link suffixes, subscription/tenant labels and any identity display names. The
+shared runner also performs mandatory identifier, email, host and photo redaction.
+
+The blades below were previously observed live. The lead's **new batch refresh** is
+pending; existing images above remain dated live captures, not placeholders. Each entry
+is **pending batch capture (spec id)**:
+
+| Spec id | Final output |
+|---|---|
+| `p50-storage-overview` | `docs/images/chargeback-reports/portal-storage.png` |
+| `p50-storage-network` | `docs/images/chargeback-reports/portal-storage-network.png` |
+| `p50-storage-protection` | `docs/images/chargeback-reports/portal-storage-protection.png` |
+| `p50-storage-retention` | `docs/images/chargeback-reports/portal-storage-retention.png` |
+| `p50-storage-containers` | `docs/images/chargeback-reports/portal-storage-containers.png` |
+| `p50-storage-settings-blob` | `docs/images/chargeback-reports/portal-storage-settings-blob.png` |
+| `p50-storage-archive` | `docs/images/chargeback-reports/portal-storage-archive.png` |
+| `p50-generator-overview` | `docs/images/chargeback-reports/portal-generator.png` |
+| `p50-generator-schedule` | `docs/images/chargeback-reports/portal-generator-schedule.png` |
+| `p50-generator-history` | `docs/images/chargeback-reports/portal-generator-history.png` |
+| `p50-dispatcher-overview` | `docs/images/chargeback-reports/portal-dispatcher.png` |
+| `p50-dispatcher-configuration` | `docs/images/chargeback-reports/portal-dispatcher-rules.png` |
+| `p50-event-scaling` | `docs/images/chargeback-reports/portal-event-scaling.png` |
+| `p50-admin-overview` | `docs/images/chargeback-reports/portal-admin.png` |
+| `p50-admin-containers` | `docs/images/chargeback-reports/portal-admin-containers.png` |
+| `p50-admin-environment` | `docs/images/chargeback-reports/portal-admin-environment.png` |
+| `p50-job-identity` | `docs/images/chargeback-reports/portal-job-identity.png` |
+| `p50-environment` | `docs/images/chargeback-reports/portal-environment.png` |
+| `p50-identity-overview` | `docs/images/chargeback-reports/portal-identity.png` |
+| `p50-identity-roles` | `docs/images/chargeback-reports/portal-identity-roles.png` |
+| `p50-network-subnets` | `docs/images/chargeback-reports/portal-network-subnets.png` |
+| `p50-private-endpoint` | `docs/images/chargeback-reports/portal-private-endpoint.png` |
+| `p50-dns-links` | `docs/images/chargeback-reports/portal-dns-links.png` |
+| `p50-email-service` | `docs/images/chargeback-reports/portal-email-service.png` |
+| `p50-email-domains` | `docs/images/chargeback-reports/portal-email-domains.png` |
+| `p50-communication` | `docs/images/chargeback-reports/portal-communication.png` |
+| `p50-connected-domain` | `docs/images/chargeback-reports/portal-connected-domain.png` |
+
+The two private blob views intentionally expect the documented off-network 403. They
+must not be mislabeled as successful blob access. No spec clicks Save, Run, Delete,
+Create or a credential/consent action. The admin editor spec opens the existing container
+and its environment-variable tab read-only. The batch metadata must retain captured,
+failed and skipped IDs; a sign-in page is never evidence for one of these steps.

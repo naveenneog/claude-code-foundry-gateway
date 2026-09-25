@@ -147,3 +147,13 @@ explicit inline pending paths rather than fabricated placeholders.
 Only the lead operates the shared original-profile batch after the owner's fresh sign-in.
 Non-portal console evidence remains available through the CLI code flow in an isolated
 browser with management writes blocked. Neither path changes the recorded acceptance gaps.
+
+## Subsequent main integration
+
+Main advanced through the P50/P55/P53 and documentation integrations while the batch
+handoff was being prepared. The architecture adopts those sources rather than continuing
+to describe them as unmerged: P50's discovered network choices and readable administration
+JSON, the independent AUM service and its Blob/Table resources, and the canonical P53
+batch validator. The service diagram does not imply a completed terminal adapter or a
+new live manager test. Service warning/OpenAPI files are explicit diagram inputs so
+their contract changes invalidate its rendering.

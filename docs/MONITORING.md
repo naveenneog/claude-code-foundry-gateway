@@ -73,6 +73,21 @@ the reporting functions and workbooks.
    its logger. APIM > Monitoring > Diagnostic settings identifies the destination
    for GatewayLlmLogs. Open the linked Application Insights resource and its
    workspace; do not select the first resource with a similar name.
+
+   **Pending batch capture (`docs-review-api-settings`).**
+
+   Planned image: `docs/guide/docs-review-api-settings.png` — API backend and
+   diagnostics settings.
+
+   In the resource's **Diagnostic settings**, select the setting that sends
+   **GatewayLlmLogs** and verify its **Send to Log Analytics workspace**
+   destination. Do not create a second route just because another workspace is
+   easier to find.
+
+   **Pending batch capture (`docs-review-gateway-diagnostics`).**
+
+   Planned image: `docs/guide/docs-review-gateway-diagnostics.png` — the actual
+   LLM-log destination in Diagnostic settings.
 3. Resolve each remaining placeholder from that linked resource:
 
    | Value | Portal field | CLI read |
@@ -87,6 +102,15 @@ The AppId, Workspace ID and ARM resource ID are different identifiers.
 Publishers need the workspace **name**, in the selected resource group; the
 Log Analytics query client uses `customerId`. Preserve separate gateway,
 Application Insights and workspace groups when they differ.
+
+**Portal:** workspace > **Properties** > **Workspace ID**. Copy that field only
+when a command asks for the query client's workspace GUID, not the resource
+name or ARM resource ID.
+
+**Pending batch capture (`docs-review-workspace-properties`).**
+
+Planned image: `docs/guide/docs-review-workspace-properties.png` — the
+workspace Properties and Workspace ID field.
 
 ---
 
@@ -342,6 +366,16 @@ the same default-window logic. `ClaudeCost` additionally needs populated
 PRICE-BOOK and MEMBERSHIP blocks; [FinOps](FINOPS.md#1-publish-or-refresh-the-reporting-definitions)
 explains why the unpopulated file is not a working manual publication.
 
+To inspect an existing function, open **Logs** > **Functions**, locate its
+published alias and inspect the definition/parameters before invoking it.
+`ClaudeCost` must contain populated generated tables, not the repository's
+unpublished placeholders.
+
+**Pending batch capture (`docs-review-workspace-functions`).**
+
+Planned image: `docs/guide/docs-review-workspace-functions.png` — the
+published Claude cost function in Logs.
+
 The `.kql` files stay the source. The publisher rewrites only the window lines
 at the top of each file into function parameters, and **refuses to publish if it
 cannot find them** — a function silently pinned to "yesterday" would answer
@@ -376,6 +410,15 @@ empty and reads as no usage.
 **Portal:** Azure Monitor > Workbooks > New > Edit > Advanced editor. Paste the
 appropriate `infra/workbook*.json`, bind the workspace, Apply and Save.
 Verify a known recent request in a tile, not just that the workbook opens.
+
+For an existing workbook, use the discovered workspace > **Workbooks**, choose
+the saved workbook and verify its workspace/time-range parameters. The gallery
+is an entry point, not evidence that a query completed or a period reconciled.
+
+**Pending batch capture (`docs-review-workspace-workbooks`).**
+
+Planned image: `docs/guide/docs-review-workspace-workbooks.png` — the
+workspace Workbooks gallery.
 
 ### What it shows
 

@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "id": "p55-aum-app-roles",
+      "output": "docs/guide/p55-aum-app-roles.png",
+      "target": {"discover": "entra-app", "nameFilterEnv": "AUM_APP_DISPLAY_FILTER", "selectionKey": "p55-aum-app"},
+      "entraBlade": {"kind": "app-registration", "name": "AppRoles"},
+      "waitFor": {"text": "AUM.Manager"},
+      "settle": 5000,
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+    },
+    {
+      "id": "p55-aum-api-scope",
+      "output": "docs/guide/p55-aum-api-scope.png",
+      "target": {"discover": "entra-app", "nameFilterEnv": "AUM_APP_DISPLAY_FILTER", "selectionKey": "p55-aum-app"},
+      "entraBlade": {"kind": "app-registration", "name": "ProtectAnAPI"},
+      "waitFor": {"text": "AUM.Access"},
+      "settle": 5000,
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+    },
+    {
+      "id": "p55-aum-token-manifest",
+      "output": "docs/guide/p55-aum-token-manifest.png",
+      "target": {"discover": "entra-app", "nameFilterEnv": "AUM_APP_DISPLAY_FILTER", "selectionKey": "p55-aum-app"},
+      "entraBlade": {"kind": "app-registration", "name": "Manifest"},
+      "waitFor": {"text": "groupMembershipClaims"},
+      "settle": 5000,
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+    },
+    {
+      "id": "p55-aum-assignment-required",
+      "output": "docs/guide/p55-aum-assignment-required.png",
+      "target": {"discover": "entra-app", "nameFilterEnv": "AUM_APP_DISPLAY_FILTER", "selectionKey": "p55-aum-app"},
+      "entraBlade": {"kind": "enterprise-application", "name": "Properties"},
+      "waitFor": {"text": "Assignment required?"},
+      "settle": 5000,
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+    },
+    {
+      "id": "p55-aum-assigned-roles",
+      "output": "docs/guide/p55-aum-assigned-roles.png",
+      "target": {"discover": "entra-app", "nameFilterEnv": "AUM_APP_DISPLAY_FILTER", "selectionKey": "p55-aum-app"},
+      "entraBlade": {"kind": "enterprise-application", "name": "Users"},
+      "waitFor": {"text": "Users and groups"},
+      "settle": 5000,
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+    },
+    {
+      "id": "p55-aum-function-overview",
+      "output": "docs/guide/p55-aum-function-overview.png",
+      "target": {"discover": "resource", "resourceType": "Microsoft.Web/sites", "tags": {"component": "aum-service"}, "selectionKey": "p55-function"},
+      "blade": "/overview",
+      "waitFor": {"text": "Running"},
+      "settle": 6000,
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+    },
+    {
+      "id": "p55-aum-function-identity",
+      "output": "docs/guide/p55-aum-function-identity.png",
+      "target": {"discover": "resource", "resourceType": "Microsoft.Web/sites", "tags": {"component": "aum-service"}, "selectionKey": "p55-function"},
+      "blade": "/msi",
+      "waitFor": {"text": "System assigned"},
+      "settle": 5000,
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+    },
+    {
+      "id": "p55-aum-function-triggers",
+      "output": "docs/guide/p55-aum-function-triggers.png",
+      "target": {"discover": "resource", "resourceType": "Microsoft.Web/sites", "tags": {"component": "aum-service"}, "selectionKey": "p55-function"},
+      "blade": "/functions",
+      "waitFor": {"text": "expire_boosts"},
+      "settle": 6000,
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+    },
+    {
+      "id": "p55-aum-scale-choice",
+      "output": "docs/guide/p55-aum-scale-choice.png",
+      "target": {"discover": "resource", "resourceType": "Microsoft.Web/sites", "tags": {"component": "aum-service"}, "selectionKey": "p55-function"},
+      "blade": "/scaleAndConcurrency",
+      "waitFor": {"text": "Always ready"},
+      "settle": 6000,
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+    },
+    {
+      "id": "p55-aum-private-routing",
+      "output": "docs/guide/p55-aum-private-routing.png",
+      "target": {"discover": "resource", "resourceType": "Microsoft.Web/sites", "tags": {"component": "aum-service"}, "selectionKey": "p55-function"},
+      "blade": "/networking",
+      "waitFor": {"text": "Virtual network integration"},
+      "settle": 6000,
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+    },
+    {
+      "id": "p55-aum-storage-keyless",
+      "output": "docs/guide/p55-aum-storage-keyless.png",
+      "target": {"discover": "resource", "resourceType": "Microsoft.Storage/storageAccounts", "tags": {"component": "aum-service"}, "selectionKey": "p55-storage"},
+      "blade": "/configuration",
+      "waitFor": {"text": "Allow storage account key access"},
+      "settle": 5000,
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+    },
+    {
+      "id": "p55-aum-storage-private",
+      "output": "docs/guide/p55-aum-storage-private.png",
+      "target": {"discover": "resource", "resourceType": "Microsoft.Storage/storageAccounts", "tags": {"component": "aum-service"}, "selectionKey": "p55-storage"},
+      "blade": "/networking",
+      "waitFor": {"text": "Public network access"},
+      "settle": 5000,
+      "redaction": {"mapEnv": "PORTAL_REDACTIONS_FILE"}
+    }
+  ]
+}

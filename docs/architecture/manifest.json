@@ -256,7 +256,7 @@
       "id": "aum-service",
       "source": "docs/architecture/10-aum-service.json",
       "inputs": {
-        "docs/architecture/10-aum-service.json": "757025e4956da043436b4b5edcd5fbcd615fa617ce93525e3862dc0b21e3e8df",
+        "docs/architecture/10-aum-service.json": "a9f5b3bce3412f6b605764a4b34864def038fa103fa9cf2729c13386d6870662",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -265,12 +265,14 @@
         "scripts/New-ClaudeAumEntraApp.ps1": "489aa5051af325ca4d96e5b9123d29577195f08318976898a8a592aeea2a05fe",
         "service/aum/aum_service/api.py": "8e37c33e339d8eed072b7f5c7a90ccf2617e57e9d15e8eb7fba7614431319dda",
         "service/aum/aum_service/auth.py": "5b5b2beff81afd3d5aa7d7be47f5ee416f7bf2ef4ae2340e1c75a39634872249",
+        "service/aum/aum_service/notifications.py": "d4091b3797e03238504aa993eb67423e6b5e58d4fd8a08b076364f8c235eaf0d",
         "service/aum/aum_service/queries.py": "588b4c0771e545a56d098285baeba3029450dd68f1b3d7360fa2d3db7b706548",
         "service/aum/aum_service/service.py": "52fd82c478aeb6c3c883ff248013799206b9fb960a3b1d2151445aa52acfb1ad",
         "service/aum/aum_service/storage.py": "1d7f5bb8aa828f8406b746161d18126951940ee78c6dfc4fe6889d243e6d6418",
         "service/aum/aum_service/transactions.py": "606c7698df08f8e7de9e10605ef39eea0c50235590878ed0d4f1926781c138c0",
         "service/aum/aum_service/workflows.py": "afe22a6e5bda94c73898d9b13eb500627349483195a0645405355a851d325128",
-        "service/aum/function_app.py": "a3f2e8a593b2c1e3cd88bb3898dbeb478fc56959dc1160654255b9c25a3b64f1"
+        "service/aum/function_app.py": "a3f2e8a593b2c1e3cd88bb3898dbeb478fc56959dc1160654255b9c25a3b64f1",
+        "service/aum/openapi.yaml": "b1ed35132c32b0c511515c481e4c266f6d85ca5d739908694ceda342acf38fb6"
       },
       "outputs": [
         {

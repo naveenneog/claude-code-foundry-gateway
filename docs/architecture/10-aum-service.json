@@ -7,7 +7,7 @@
   "width": 1280,
   "height": 1284,
   "outputs": ["docs/images/architecture/aum-service.png"],
-  "sources": ["infra/aum-service.bicep", "scripts/New-ClaudeAumEntraApp.ps1", "service/aum/function_app.py", "service/aum/aum_service/api.py", "service/aum/aum_service/auth.py", "service/aum/aum_service/service.py", "service/aum/aum_service/storage.py", "service/aum/aum_service/transactions.py", "service/aum/aum_service/workflows.py", "service/aum/aum_service/queries.py"],
+  "sources": ["infra/aum-service.bicep", "scripts/New-ClaudeAumEntraApp.ps1", "service/aum/function_app.py", "service/aum/openapi.yaml", "service/aum/aum_service/api.py", "service/aum/aum_service/auth.py", "service/aum/aum_service/service.py", "service/aum/aum_service/storage.py", "service/aum/aum_service/transactions.py", "service/aum/aum_service/workflows.py", "service/aum/aum_service/notifications.py", "service/aum/aum_service/queries.py"],
   "identifiers": {
     "access": { "label": "AUM.Access", "source": "service/aum/aum_service/auth.py", "match": "\"AUM.Access\" not in scope.split()" },
     "roles": { "label": "AUM.Admin > AUM.Viewer > AUM.Manager", "source": "scripts/New-ClaudeAumEntraApp.ps1", "match": "foreach ($name in @('Admin','Viewer','Manager'))" },

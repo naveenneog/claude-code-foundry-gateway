@@ -274,6 +274,30 @@ Entra/Functions screenshots as completed portal tests.
 
 ![Live storage configuration with shared-key and anonymous access disabled](guide/aum-04-storage.png)
 
+### Pending owner batch captures
+
+The lead captures version-1 `guide/captures/p55.json` after fresh owner sign-in.
+These inline paths are deliberately pending, not broken images, placeholders or
+passing evidence. Resource discovery uses the logical `component=aum-service`
+tag; Entra discovery uses the operator's `AUM_APP_DISPLAY_FILTER`. Runtime
+`--select` values choose discovered candidates. The spec explicitly distinguishes
+app-registration from enterprise-application blades and uses a private redaction map.
+
+| Pending batch capture (spec id) | Exact portal verification | Image |
+|---|---|---|
+| `p55-aum-app-roles` | App registrations > AUM > App roles: Admin, Viewer, Manager enabled for Users/Groups | `docs/guide/p55-aum-app-roles.png` |
+| `p55-aum-api-scope` | Expose an API: AUM.Access enabled; Azure CLI listed under Authorized client applications | `docs/guide/p55-aum-api-scope.png` |
+| `p55-aum-token-manifest` | Manifest: requestedAccessTokenVersion 2, groupMembershipClaims ApplicationGroup | `docs/guide/p55-aum-token-manifest.png` |
+| `p55-aum-assignment-required` | Enterprise applications > AUM > Properties: Assignment required? Yes | `docs/guide/p55-aum-assignment-required.png` |
+| `p55-aum-assigned-roles` | Enterprise applications > AUM > Users and groups: correct user/group roles | `docs/guide/p55-aum-assigned-roles.png` |
+| `p55-aum-function-overview` | Function App > Overview: Running, selected region, Python runtime | `docs/guide/p55-aum-function-overview.png` |
+| `p55-aum-function-identity` | Settings > Identity > System assigned: Status On | `docs/guide/p55-aum-function-identity.png` |
+| `p55-aum-function-triggers` | Functions: http_api, expire_boosts, warning_thresholds | `docs/guide/p55-aum-function-triggers.png` |
+| `p55-aum-scale-choice` | Scale and concurrency: administrator-selected always-ready count and 512-MiB instance size | `docs/guide/p55-aum-scale-choice.png` |
+| `p55-aum-private-routing` | Networking > VNet integration: service subnet, all outbound traffic routed | `docs/guide/p55-aum-private-routing.png` |
+| `p55-aum-storage-keyless` | Storage > Configuration: shared-key and anonymous blob access Disabled | `docs/guide/p55-aum-storage-keyless.png` |
+| `p55-aum-storage-private` | Storage > Networking: Public network access Disabled; private endpoint connections Approved | `docs/guide/p55-aum-storage-private.png` |
+
 Optional Insights uses a **non-secret routing connection string** and
 `APPLICATIONINSIGHTS_AUTHENTICATION_STRING=Authorization=AAD`. It is not a
 storage/authentication credential. `DisableLocalAuth=true` makes the routing
@@ -435,10 +459,17 @@ Do not allocate permanent child budgets into temporary parent headroom: the
 server checks against the parent's post-expiry baseline too. Overlapping boosts
 and normal edits to an actively boosted target are refused.
 
-The 15-minute warning timer writes `budget.warning` notification records. These
-are idempotent per budget, UTC period and threshold. `delivery_status=pending`
-means **no email has been sent**. ACS email integration can consume these records
-later; the capability `email_delivery` is false.
+The 15-minute warning timer writes version-1 `budget.warning` facts: tokens,
+`prompt_completion_only` basis, exact decimal usage text, exclusive UTC period
+bounds, source and an effective-limit version (a stable policy/content
+fingerprint, not a monotonically increasing revision). The deterministic ID includes the
+scope, interval, threshold, basis and limit version. A changed nominal limit
+rearms a warning; restoring an identical limit reuses its earlier fact.
+Facts contain no recipient addresses or transport status. Future delivery must
+resolve current scope recipients/domain policy separately. Email is not
+configured: `email_delivery` is false. [ACS's Azure-managed-domain quota](https://learn.microsoft.com/azure/communication-services/concepts/service-limits#email) of ten
+sends per subscription/hour requires aggregated digests, not a promise of
+real-time per-person emails at 500,000.
 
 An Admin can explicitly include `admin_override: true` on a decision, with a
 reason. Managers cannot use it. It is recorded in both the decision and audit,

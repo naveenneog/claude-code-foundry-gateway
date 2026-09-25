@@ -1205,17 +1205,41 @@ node .ironclad/gate.mjs --stage packet                  # definition of done
 
 ## Next
 
-P14 — the plugin marketplace — is the only packet left, and U6 rewrote its acceptance criterion.
-Claude Code has no plugin signing scheme, so "signed accepted, unsigned refused" cannot be tested.
-What can be tested is immutable approved content: a plugin pinned to a commit sha or archive
-hash, a modified one refused on hash mismatch, marketplaces outside `strictKnownMarketplaces`
-rejected, and `isDesktopExtensionSignatureRequired` enforcing publisher signing for `.mcpb`
-bundles only. `docs/UNKNOWNS.md` U6 has the keys and the blast radius.
+In flight on 2026-09-24, each on its own branch and merged when its gate passes:
 
-Three unknowns remain open. **U2** blocks putting a currency figure on spend. **U8** blocks the
-four productivity fields P10 returns as null. **U3** — whether Claude in Chrome applies under a
-third-party provider — is unexamined and affects only a parity-matrix row.
+- **P52 AUM (Azure Usage Management).** The terminal console renamed, redesigned as a
+  dashboard, and independent of Turnstile (the gateway directly as a first-class backend, and the
+  AUM service), with live redacted screens; then the end-to-end journeys driven from AUM on each
+  backend: groups, unit and team, budgets, modes, and enforcement proven with real requests.
+- **P54 the enterprise network.** The owner's hub-and-spoke design (Application Gateway WAF_v2
+  in front of the gateway, a private Foundry, egress through NAT Gateway or Azure Firewall), with
+  streaming, timeouts, request size and WAF false positives on code measured live, and every
+  choice shown with its cost and implications before it is made. It delivers and extends P49.
+- **P58 architecture generation.** A diagram for each feature from text sources, and a test that
+  fails when a feature changes the architecture without its diagram.
+- **P53 phase 2 and P55's journey.** The manager-only journeys (**U21**), and AUM driving the AUM
+  service on its dedicated test gateway.
 
-One thing outside the packet queue and worth doing: seven principals hold `Cognitive Services
-User` directly on the Foundry account, which bypasses every budget in this repository.
-`SETUP.md` section 4.2 has the audit commands.
+Waiting on the owner:
+
+- **One portal sign-in**, for one batch capture of every packet's portal pictures: run
+  `node guide/auth.mjs` with `AZURE_TENANT` set, then the lead runs all `guide/captures/*.json`
+  specs in one window with the original profile.
+- **Cost decisions on running test resources**: the Premium v2 test gateway (about $2,800 a month
+  at list price), the dedicated AUM test gateway (Basic v2, about $150 a month), and the chargeback
+  reports deployment ($29.70 a month standing).
+
+Waiting on a tenant administrator: **U17** (Graph `GroupMember.Read.All`, so the apply job can
+refresh membership itself) and **U19** (consent for Turnstile's web sign-in button). Neither
+blocks use today: an admin's own delegated refresh and the consent-free Azure CLI sign-in work.
+
+Planned: P47's endpoints in Turnstile, so AUM is complete on that backend too; P48, budgets and
+overrides in the projection with one queue-driven writer; P14, the plugin marketplace, whose
+acceptance U6 rewrote to immutable approved content rather than signing; and P19's installer
+default (`cos-default`, `cos-upgrade`).
+
+Thirteen unknowns are open: U2, U3, U8, U9, U10, U11, U13, U16, U17, U18, U19, U20 and U21.
+
+Outside the packet queue: an earlier audit found seven principals holding `Cognitive Services
+User` directly on the Foundry account, which bypasses every budget here. Re-run the audit in
+`SETUP.md` section 4.2.
