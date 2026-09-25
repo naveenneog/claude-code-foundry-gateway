@@ -1,0 +1,251 @@
+<#
+.SYNOPSIS
+    Asks for a value a script was not given, from the options discovered in Azure.
+
+.DESCRIPTION
+    Dot-source this. When a script cannot work out a value it needs, it should neither
+    guess nor just stop. In an interactive session Select-ClaudeChoice lists what it
+    discovered, numbered, says where each option comes from and where to look it up, marks
+    the one the deployment itself points at, and asks. Enter takes the recommended option.
+
+    Without a console - a pipeline, a scheduled job, the test suite, pwsh -NonInteractive,
+    or CLAUDE_NONINTERACTIVE=1 - it takes a recommended option only when the caller says it
+    is certain, and otherwise stops with the same options and the parameter to pass.
+
+    A value the deployment recorded (onboarding/claude-gateway.json, CLAUDE_RG, CLAUDE_APIM)
+    counts as given: it is used, and where it came from is printed, without a question.
+#>
+
+function Test-ClaudeInteractive {
+    if ($env:CLAUDE_NONINTERACTIVE -eq '1' -or $env:CI -or $env:TF_BUILD -or $env:GITHUB_ACTIONS) { return $false }
+    if (@([Environment]::GetCommandLineArgs() | Where-Object { $_ -match '^-noni' }).Count) { return $false }
+    try { if ([Console]::IsInputRedirected) { return $false } } catch { return $false }
+    return [Environment]::UserInteractive
+}
+
+function New-ClaudeChoiceOption {
+    param(
+        [Parameter(Mandatory = $true)][string]$Value,
+        [string]$Label,
+        [string]$Detail,
+        [switch]$Recommended,
+        [string]$Reason
+    )
+    [pscustomobject]@{
+        Value       = $Value
+        Label       = $(if ($Label) { $Label } else { $Value })
+        Detail      = $Detail
+        Recommended = [bool]$Recommended
+        Reason      = $Reason
+    }
+}
+
+function Select-ClaudeChoice {
+    <#
+    .SYNOPSIS
+        One value for -Parameter: asked for in a console, refused with the options without one.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Parameter,
+        [Parameter(Mandatory = $true)][string]$Question,
+        [object[]]$Options = @(),
+        [string[]]$WhereToFind = @(),
+        [string]$NoneMessage,
+        [string]$AmbiguousMessage,
+        # The recommended option is certain (the deployment points at it), so a run without a
+        # console may take it. Leave this off when the recommendation is only a best guess.
+        [switch]$AcceptRecommendedWithoutConsole,
+        [object]$Interactive = $null,
+        [scriptblock]$Reader = { param($Prompt) Read-Host $Prompt }
+    )
+    $Options = @($Options | Where-Object { $null -ne $_ })
+    $recommended = @($Options | Where-Object { $_.Recommended })
+    $console = if ($null -ne $Interactive) { [bool]$Interactive } else { Test-ClaudeInteractive }
+    $hint = if ($WhereToFind.Count) { ' Where to find it: ' + ($WhereToFind -join '; ') + '.' } else { '' }
+    $passIt = "Pass -$Parameter."
+
+    if (-not $Options.Count) {
+        $message = if ($NoneMessage) { $NoneMessage } else { "Nothing was found to choose for -$Parameter." }
+        if ($message -notmatch [regex]::Escape("Pass -$Parameter")) { $message = "$message $passIt" }
+        throw ($message + $hint)
+    }
+
+    if (-not $console) {
+        if ($AcceptRecommendedWithoutConsole -and $recommended.Count -eq 1) {
+            Write-Host ("  -{0} {1}: {2}" -f $Parameter, $recommended[0].Label, $recommended[0].Reason) -ForegroundColor DarkGray
+            return $recommended[0].Value
+        }
+        $list = ($Options | ForEach-Object { $_.Label }) -join ', '
+        $message = "$($Options.Count) candidate(s) for -${Parameter}: $list."
+        if ($AmbiguousMessage) { $message = "$message $AmbiguousMessage" }
+        if ($message -notmatch [regex]::Escape("Pass -$Parameter")) { $message = "$message $passIt" }
+        throw ($message + $hint)
+    }
+
+    Write-Host ''
+    Write-Host $Question -ForegroundColor Cyan
+    $number = 0
+    foreach ($option in $Options) {
+        $number++
+        $tag = if ($option.Recommended) { ' [recommended]' } else { '' }
+        Write-Host ("  {0}. {1}{2}" -f $number, $option.Label, $tag)
+        if ($option.Recommended -and $option.Reason) { Write-Host ("     {0}" -f $option.Reason) -ForegroundColor DarkGray }
+        if ($option.Detail) { Write-Host ("     {0}" -f $option.Detail) -ForegroundColor DarkGray }
+    }
+    if ($WhereToFind.Count) {
+        Write-Host '  Where to find it:' -ForegroundColor DarkGray
+        foreach ($line in $WhereToFind) { Write-Host ("    {0}" -f $line) -ForegroundColor DarkGray }
+    }
+    $default = 0
+    if ($recommended.Count -eq 1) { $default = [array]::IndexOf($Options, $recommended[0]) + 1 }
+    $prompt = if ($default) { "Choose 1-$($Options.Count) (Enter for $default, q to stop)" } else { "Choose 1-$($Options.Count) (q to stop)" }
+    while ($true) {
+        $answer = ([string](& $Reader $prompt)).Trim()
+        if (-not $answer -and $default) { return $Options[$default - 1].Value }
+        if ($answer -eq 'q' -or $answer -eq 'quit') { throw ("Stopped: no -$Parameter was chosen. $passIt" + $hint) }
+        $picked = 0
+        if ([int]::TryParse($answer, [ref]$picked) -and $picked -ge 1 -and $picked -le $Options.Count) {
+            return $Options[$picked - 1].Value
+        }
+        Write-Host ("  Type a number from 1 to {0}." -f $Options.Count) -ForegroundColor Yellow
+    }
+}
+
+function Select-ClaudeResourceGroup {
+    <#
+    .SYNOPSIS
+        The gateway's resource group, from the resource groups that hold API Management.
+    #>
+    param([object]$Interactive = $null, [scriptblock]$Reader)
+    $rows = az apim list --query "[].{name:name,group:resourceGroup}" -o json 2>$null | ConvertFrom-Json
+    $groups = @($rows | Group-Object group | Sort-Object Name)
+    $options = foreach ($g in $groups) {
+        New-ClaudeChoiceOption -Value $g.Name -Detail ('API Management: ' + (($g.Group | ForEach-Object { $_.name }) -join ', '))
+    }
+    $choice = @{
+        Parameter   = 'ResourceGroup'
+        Question    = 'Which resource group holds the Claude gateway?'
+        Options     = @($options)
+        WhereToFind = @(
+            'Install-ClaudeGateway.ps1 records it in onboarding/claude-gateway.json; CLAUDE_RG overrides it'
+            'Azure portal: API Management services > the gateway > Overview > Resource group'
+            'az apim list --query "[].{name:name, group:resourceGroup}" -o table'
+        )
+        NoneMessage = 'No API Management instance is visible in this subscription (az account show).'
+        Interactive = $Interactive
+    }
+    if ($Reader) { $choice.Reader = $Reader }
+    Select-ClaudeChoice @choice
+}
+
+function Select-ClaudeGateway {
+    <#
+    .SYNOPSIS
+        The gateway's API Management name in a resource group; the recorded one is recommended.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$ResourceGroup,
+        [string]$ScriptRoot = $PSScriptRoot,
+        [object]$Interactive = $null,
+        [scriptblock]$Reader
+    )
+    $recorded = [string](& (Join-Path $ScriptRoot 'Get-ClaudeGatewayTarget.ps1') ApimName 3>$null)
+    $names = @((az apim list -g $ResourceGroup --query "[].name" -o tsv 2>$null) -split "`n" |
+        ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    # A gateway the installer recorded counts as given: say where it came from, do not ask.
+    $match = @($names | Where-Object { $recorded -and $_ -ieq $recorded })
+    if ($match.Count -eq 1) {
+        Write-Host ("  -ApimName {0}: recorded by the installer (onboarding/claude-gateway.json, or CLAUDE_APIM)" -f $match[0]) -ForegroundColor DarkGray
+        return $match[0]
+    }
+    if ($recorded) {
+        Write-Host ("  The recorded gateway {0} is not in {1}; choose from what is there." -f $recorded, $ResourceGroup) -ForegroundColor Yellow
+    }
+    $options = foreach ($name in $names) {
+        if ($names.Count -eq 1) {
+            New-ClaudeChoiceOption -Value $name -Recommended -Reason "the only API Management instance in $ResourceGroup"
+        }
+        else { New-ClaudeChoiceOption -Value $name }
+    }
+    $choice = @{
+        Parameter   = 'ApimName'
+        Question    = "Which API Management instance in $ResourceGroup is the Claude gateway?"
+        Options     = @($options)
+        WhereToFind = @(
+            'Install-ClaudeGateway.ps1 records it in onboarding/claude-gateway.json; CLAUDE_APIM overrides it'
+            "Azure portal: Resource groups > $ResourceGroup, resources of type API Management service"
+            "az apim list -g $ResourceGroup --query [].name -o tsv"
+        )
+        NoneMessage = "No API Management instance in $ResourceGroup."
+        Interactive = $Interactive
+        AcceptRecommendedWithoutConsole = $true
+    }
+    if ($Reader) { $choice.Reader = $Reader }
+    Select-ClaudeChoice @choice
+}
+
+function Select-ClaudeWorkspace {
+    <#
+    .SYNOPSIS
+        The ARM id of the Log Analytics workspace that holds the gateway's telemetry.
+
+    .DESCRIPTION
+        Recommends the workspace linked to the gateway's Application Insights, which is where
+        its telemetry lands, and offers the other workspaces in the resource group beside it.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$ResourceGroup,
+        [string]$ApimName,
+        [string]$AmbiguousMessage,
+        [string]$ScriptRoot = $PSScriptRoot,
+        [string]$TelemetryScript,
+        [object]$Interactive = $null,
+        [scriptblock]$Reader
+    )
+    if (-not $TelemetryScript) { $TelemetryScript = Join-Path $ScriptRoot 'Get-ClaudeTelemetry.ps1' }
+    $linked = $null
+    $appInsights = $null
+    try {
+        $telemetryArgs = @{ ResourceGroup = $ResourceGroup }
+        if ($ApimName) { $telemetryArgs.ApimName = $ApimName }
+        if ($null -ne $Interactive) { $telemetryArgs.Interactive = $Interactive }
+        $telemetry = & $TelemetryScript @telemetryArgs 3>$null
+        $linked = [string]$telemetry.WorkspaceResourceId
+        $appInsights = [string]$telemetry.AppInsights
+    }
+    catch {
+        Write-Host ("  The gateway's Application Insights link could not be read: {0}" -f $_.Exception.Message) -ForegroundColor DarkGray
+    }
+
+    $options = @()
+    if ($linked) {
+        $options += New-ClaudeChoiceOption -Value $linked -Label ('{0} ({1})' -f ($linked -split '/')[-1], ($linked -split '/')[4]) `
+            -Recommended -Reason "linked to the gateway's Application Insights $appInsights, which is where its telemetry lands"
+    }
+    $ids = @((az monitor log-analytics workspace list -g $ResourceGroup --query "[].id" -o tsv 2>$null) -split "`n" |
+        ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    foreach ($id in $ids) {
+        if ($linked -and $id -ieq $linked) { continue }
+        $detail = if ($linked) { "in $ResourceGroup, but not linked to the gateway's Application Insights" } else { $null }
+        $options += New-ClaudeChoiceOption -Value $id -Label ('{0} ({1})' -f ($id -split '/')[-1], $ResourceGroup) -Detail $detail
+    }
+    if (-not $linked -and $options.Count -eq 1) {
+        $options[0].Recommended = $true
+        $options[0].Reason = "the only Log Analytics workspace in $ResourceGroup"
+    }
+    $choice = @{
+        Parameter        = 'WorkspaceName'
+        Question         = "Which Log Analytics workspace holds the gateway's telemetry?"
+        Options          = $options
+        WhereToFind      = @(
+            './scripts/Get-ClaudeTelemetry.ps1 prints it as Workspace'
+            "Azure portal: API Management > Monitoring > Application Insights names the gateway's Application Insights; open it > Overview > Workspace"
+        )
+        NoneMessage      = "No Log Analytics workspace in '$ResourceGroup', and none is linked to the gateway's Application Insights."
+        AmbiguousMessage = $AmbiguousMessage
+        Interactive      = $Interactive
+        AcceptRecommendedWithoutConsole = $true
+    }
+    if ($Reader) { $choice.Reader = $Reader }
+    Select-ClaudeChoice @choice
+}

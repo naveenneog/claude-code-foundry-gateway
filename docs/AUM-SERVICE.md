@@ -17,6 +17,12 @@ budget requests, next-level decisions, temporary boosts and warning records.
 > they do not turn delayed telemetry or APIM's approximate counters into a
 > reservation ledger. Dollars remain estimated list-price showback.
 
+> [!WARNING]
+> This release does not bind analytics to one gateway inside a shared workspace.
+> Reads, observed-person scope and warnings use workspace-wide saved functions.
+> Use only a workspace dedicated to this gateway; deployment does not enforce
+> exclusivity. Shared-workspace Manager isolation has not been established.
+
 ## Choose a FinOps tool
 
 Run the selector before creating infrastructure:

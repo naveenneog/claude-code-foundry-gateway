@@ -60,6 +60,17 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   and verified. On Windows the account broker kept serving the old token; MSAL's
   `set_access_token_to_renew`, behind a helper that fails closed, renews it without deleting any
   cache or adding any grant.
+- **Every FinOps tool in one guide.** `docs/FINOPS-TOOLS.md` compares the saved queries and
+  workbooks, the scripts, Terminal FinOps, the AUM service, Turnstile, chargeback reports and
+  Grafana. It covers who signs in to what and with which method, six end-to-end flows with their
+  commands, and a bill of materials from live list prices, with the command that recalculates
+  each line.
+- **Where a Premium v2 injected gateway's private IP is, measured.** ARM returns it in
+  `properties.privateIPAddresses` only at api-versions `2024-05-01`, `2023-09-01-preview` and
+  `2023-05-01-preview`, and Resource Graph shows it; `az apim show` (`2022-08-01`) and every
+  newer preview return `null`. Azure publishes no DNS for the gateway name.
+  `docs/NETWORK-ENTERPRISE.md` gives the command, the portal path (JSON View at `2024-05-01`) and
+  the per-host private DNS zone that made it answer by name from a peered VNet.
 - **An enterprise network edge, chosen and priced by the administrator.**
   `scripts/New-ClaudeNetworkEdge.ps1` puts a regional Application Gateway WAF_v2 in front of the
   gateway as its only ingress, with internal, internet or hybrid listeners, and Foundry, Key Vault
@@ -620,6 +631,14 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Changed
 
+- **Scripts ask for a value they were not given, and say where it comes from.**
+  `scripts/ClaudeChoice.ps1` offers the options discovered in Azure, numbered, with the one the
+  deployment points at recommended and the command and portal path to look it up; without a
+  console it uses a certain recommendation and otherwise stops naming the candidates. The
+  publishers (`Publish-ClaudeQueries.ps1`, `Publish-ClaudeWorkbook.ps1`, `Publish-ClaudeGrafana.ps1`)
+  now find the workspace behind the gateway's Application Insights instead of refusing when a
+  resource group holds several, and `Get-ClaudeTelemetry.ps1` prints that `Workspace` and no
+  longer takes the first API Management instance in a group.
 - **The chargeback ledger records the caller's address.** `analytics/chargeback-ledger.kql` has a
   `client_ip` column, from a new `ClientIp` field in the gateway's identity trace: behind the P54
   edge it is the edge's socket peer, otherwise the address APIM saw. It is personal data; review
@@ -659,6 +678,11 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Fixed
 
+- **A root unit in allowance or notify mode got HTTP 500.** The gateway's budget trace sent an
+  empty `ParentUnit` (a unit has no parent) or `Notice` (no advisory yet), and APIM rejects empty
+  trace metadata: "The value field is required". Absent values are now `none`, and a test
+  compiles and runs the policy's actual expressions. Found live by the AUM service's enforcement
+  journey; the reference gateway, all strict, could not reach it.
 - **The resolver check could fail with every test passing, and three runner gaps.** Under a
   headless console on code page 437, Node's Unicode summary line did not match the wrapper's
   pattern, so it counted zero passes; `tests/Test-Resolver.ps1` now asks for ASCII TAP output and

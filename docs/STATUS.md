@@ -41,6 +41,73 @@ against stale runs is being added with the modes, and a single queue-driven writ
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
 
+## FinOps tools in one guide, 2026-09-25
+
+Asked by the owner, who had no single place that compared the FinOps tools, how each person signs
+in, the end-to-end flow for each, and what each costs. [FINOPS-TOOLS.md](FINOPS-TOOLS.md) puts them
+side by side:
+
+- saved queries and workbooks, the scripts, Terminal FinOps (Direct and Turnstile), the AUM
+  service, Turnstile, chargeback reports and Grafana;
+- a matrix of who signs in to what, and eight sign-in methods: Azure CLI interactive and device
+  code, consent-free API tokens, Turnstile's web sign-in and one-use code, break-glass, managed
+  identities, developers;
+- six end-to-end flows with their commands;
+- a bill of materials from live list prices on 2026-09-25.
+
+Measured for it, read-only:
+
+| Measured | Result |
+|---|---|
+| Gateway | Basic v2, $150.00/month |
+| Connected Turnstile, Central US | $158.84/month at rest, $0.52 of usage in 30 days |
+| Turnstile shapes, East US 2 | $55.47/month lean, $150.54/month dedicated and private |
+| Terminal FinOps in Direct mode | Month status came back with role `owner` through `azure-rbac` |
+| Month's estimated cost | Unknown: 10 usage rows had no price. `ClaudeCost` priced 534 `claude-sonnet-5` requests at $1.59 |
+
+**Found while writing it.** `Set-ClaudeBusinessUnit.ps1`, `Set-ClaudeBudget.ps1` and
+`Set-ClaudeTier.ps1` do not check which tool owns governance. Terminal Direct mode and the AUM
+service do, and refuse. While Turnstile owns a gateway, a script edit lasts only until the apply
+job's next run. The guide says so. The scripts should refuse the same way; that is queued behind
+the script-choices sweep, which edits the same files.
+
+## Scripts ask for what they were not given, 2026-09-25
+
+Asked by the owner after `Publish-ClaudeWorkbook.ps1` stopped with "3 workspaces in
+rg-...: Pass -WorkspaceName" and gave no way to tell which. `scripts/ClaudeChoice.ps1` is the
+shared answer: a value a script was not given is offered from what Azure actually holds,
+numbered, with where each option comes from, where to look it up (command and portal path),
+and the one the deployment points at marked recommended; Enter takes it. Without a console
+(a pipeline, a scheduled job, the test suite, `pwsh -NonInteractive`, `CLAUDE_NONINTERACTIVE=1`)
+a certain recommendation is used and its source printed, and anything else stops, naming the
+candidates. A value the installer recorded counts as given and is not asked for.
+
+Applied to the monitoring flow: `Publish-ClaudeQueries.ps1`, `Publish-ClaudeWorkbook.ps1` and
+`Publish-ClaudeGrafana.ps1` (resource group, gateway, workspace, Grafana instance), and
+`Get-ClaudeTelemetry.ps1`, which no longer takes the first API Management instance in a group
+and now prints the linked `Workspace`. On the reference gateway the workbook publisher chose the
+workspace behind the gateway's Application Insights out of three in its group, and published the
+owner's "Claude gateway - platform" workbook. `tests/Test-ClaudeChoice.ps1`:
+34 assertions on PowerShell 7 and 5.1, and four mutations in the business-unit harness. Nothing
+architectural changed. Still guessing: 24 other scripts take the first match (`[0].name`) or
+stop with "Pass -X"; they move to the same helper next.
+
+## Premium v2 injection: where the private IP is, 2026-09-25
+
+Asked by the owner, whose own injected Premium v2 gateway showed no private IP, so its URL could
+not be reached or given a DNS record. Tested live on a new instance, `virtualNetworkType:
+Internal`, in a /24 `Microsoft.Web/hostingEnvironments` subnet in Canada Central (729 s to
+create; deleted and purged afterwards, under $4 at list price). The VIP, `10.232.4.4`, is in
+ARM `properties.privateIPAddresses` only at api-versions `2024-05-01`, `2023-09-01-preview` and
+`2023-05-01-preview`, and in Azure Resource Graph. It is `null` at `2022-08-01`, which
+`az apim show` requests, and at every newer preview through `2025-09-01-preview`. While the
+instance is `Activating` the property shows a transient `100.96.x.x` address. The injection subnet
+shows only an IP configuration of a load balancer in a Microsoft-managed subscription. Azure
+publishes no DNS for the gateway name, publicly or in the VNet. A per-host private zone
+(`<name>.azure-api.net`, apex A record) linked to a peered VNet made it answer 200 by name; before
+that, the same request pinned to the IP answered 200 with a valid certificate. Steps are in
+[NETWORK-ENTERPRISE.md](NETWORK-ENTERPRISE.md#find-a-premium-v2-injected-gateways-private-ip).
+
 ## P54 the enterprise network, 2026-09-25
 
 Merged from `enterprise-network` at `50dd6d4`, gated on that commit: 816.8 s, 61 checks passed and
@@ -168,6 +235,28 @@ gateway Turnstile governs, so the reference gateway stays Turnstile's.
 
 Open: the manager-only journey (after P53's), the AUM client's end-to-end journey on the dedicated
 test gateway, and the portal pictures (after the owner signs in again).
+
+**Follow-up, merged 2026-09-25 from `9ee7304`** (gate PASS, 864 s, 61 checks passed and the missing
+FinOps environment skipped). Tested live on an isolated Basic v2 gateway through the service's API
+with Azure CLI tokens, then retired with its resource group:
+
+| Journey | Result |
+|---|---|
+| Real Claude enforcement, 02:30-02:33Z | 200 for a standard entitlement; strict refused with 403 at its limit; allowance 100% served above nominal with an advisory notice and refused at its effective limit (163 nominal, 326 effective tokens); notify served above nominal with `usage-reported` |
+| Attribution | 17 requests, 221 prompt and 68 completion tokens in the ledger, $0.001122 at list price, no unpriced rows |
+| Manager-only authority, 03:42-03:45Z | A fresh team-manager token wrote and restored a person budget; a unit manager wrote a team budget; 4 protected operations returned 403. Admin, 14 memberships, 22 direct assignments and every named value restored exactly |
+
+**Found by testing live.** A root unit, or a scope with no notice, in allowance or notify mode made
+APIM answer 500 ("The value field is required"): the budget trace sent an empty `ParentUnit` or
+`Notice`, and APIM trace metadata cannot be empty. Absent values are now `none`, and a test runs
+the policy's actual expressions. P46's live probes had used a team with a parent and a notice, so
+they never met it. The reference gateway had every unit strict and could not reach it until the
+fixed policy was deployed. Also: Kusto keyset cursors needed `strcmp`, `If-Match` has to be quoted,
+and a private endpoint needed its provider-specific delete.
+
+Still open: the AUM client (P52) driving the service end to end. The journeys above are HTTP
+receipts, not the terminal app. Also still open: twelve portal pictures, which now need a fresh,
+priced deployment because the test one is gone.
 
 ## P53 Turnstile, tested and captured live, 2026-09-24 (phase 1)
 

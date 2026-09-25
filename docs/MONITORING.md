@@ -350,6 +350,18 @@ exists.
 ./scripts/Publish-ClaudeQueries.ps1 -Remove   # take them away again
 ```
 
+**Which workspace.** Both publishers write to the Log Analytics workspace that holds
+the gateway's telemetry: the one its Application Insights is linked to. Find it with
+`./scripts/Get-ClaudeTelemetry.ps1` (the `Workspace` line), or in the portal: API
+Management > **Monitoring** > **Application Insights** names the resource; open it >
+**Overview** > **Workspace**. When you omit `-WorkspaceName`, the publishers do this
+themselves: in a console they list the linked workspace first, marked recommended,
+beside the other workspaces in the resource group, and ask (Enter takes the
+recommended one). Without a console they use the linked workspace and print where it
+came from, and stop, naming the candidates, when there is no link to follow. A
+missing resource group or an ambiguous gateway is asked for the same way; a value the
+installer recorded in `onboarding/claude-gateway.json` is used without asking.
+
 ![Publishing both queries as workspace functions, each printing the parameters it takes and how to call it](guide/obs-1-publish-queries.png)
 
 | Function | Call it | Returns |

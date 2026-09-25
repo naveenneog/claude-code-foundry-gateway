@@ -234,6 +234,7 @@ there; [Operations](docs/OPERATIONS.md) maps tasks to commands and portal paths.
 | [Setup](docs/SETUP.md) | Prerequisites, roles, deployment and bypass closure |
 | [Operations](docs/OPERATIONS.md) / [Onboarding](docs/ONBOARDING.md) | Daily administration, people, backup and retirement |
 | [Budgets](docs/BUDGETS.md) / [Business units](docs/BUSINESS-UNITS.md) | Personal, tier, organisation, unit and team limits |
+| [FinOps tools](docs/FINOPS-TOOLS.md) | Every FinOps tool side by side: sign-in for each person, end-to-end flows and the priced bill of materials |
 | [FinOps](docs/FINOPS.md) / [Monitoring](docs/MONITORING.md) | Monthly close, ledger, workbooks, alerts and gaps |
 | [Chargeback reports](docs/CHARGEBACK-REPORTS.md) | Generate monthly business-unit reports, configure recipients and schedule private ACS email delivery |
 | [AUM (Azure Usage Management)](docs/CLI-FINOPS.md) | Terminal FinOps console, reports and preview-before-apply commands |
