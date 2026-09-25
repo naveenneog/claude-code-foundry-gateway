@@ -18,6 +18,15 @@
     tokens entirely - on thirty days of live usage, 38.7% of the real cost
     weight. It is a spend guide, not an accounting figure.
 
+    When Turnstile owns governance, mutations are refused before any write;
+    use Turnstile > Gateway governance or Budgets instead. With only budget
+    authority in Turnstile, -MonthlyBudgetUsd is refused, while group, parent,
+    mode and removal changes remain gateway-owned. -List always stays available.
+    A failed authority read stops a mutation rather than assuming ownership.
+    To deliberately return both authorities to scripts, run
+    Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Gateway -BudgetAuthority Gateway
+    with the same -ResourceGroup and -ApimName. There is no force bypass.
+
 .PARAMETER Id
     The business unit's stable identifier: lower-case letters, digits, hyphens.
 
@@ -102,6 +111,7 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeTurnstileGovernance.ps1')
 
 $requestedMode = $null
 if ($PSBoundParameters.ContainsKey('Mode') -or $PSBoundParameters.ContainsKey('AllowancePercent')) {
@@ -170,6 +180,12 @@ if ($List) {
 Test-ClaudeBuId $Id
 $existing = @($registry | Where-Object { $_.Id -eq $Id })
 $before = $registry.Count
+
+if (-not $Remove -or $existing.Count) {
+    $writes = @('BusinessUnits')
+    if ($PSBoundParameters.ContainsKey('MonthlyBudgetUsd')) { $writes += 'Budgets' }
+    Assert-ClaudeGatewayOwnsGovernance -ResourceGroup $ResourceGroup -ApimName $ApimName -Write $writes
+}
 
 if ($Remove) {
     if (-not $existing.Count) { Write-Host "No business unit '$Id'. Nothing to remove." -ForegroundColor DarkGray; exit 0 }

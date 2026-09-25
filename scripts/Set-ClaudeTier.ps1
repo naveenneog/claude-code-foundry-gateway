@@ -20,6 +20,13 @@
     change, and pretending otherwise here would produce a tier the gateway
     ignores.
 
+    When Turnstile owns governance, writes are refused; change tiers on its
+    Gateway governance page instead. Budget-only authority does not own these
+    tier settings. -List remains available even if authority cannot be read.
+    To deliberately return governance and monthly budgets to scripts, use
+    Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Gateway -BudgetAuthority Gateway
+    with the same -ResourceGroup and -ApimName. There is no force bypass.
+
 .PARAMETER Tier
     standard or premium.
 
@@ -60,6 +67,7 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeTurnstileGovernance.ps1')
 
 if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
 if (-not $ApimName) { $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup }
@@ -95,6 +103,8 @@ if (-not ($PSBoundParameters.ContainsKey('TokensPerMinute') -or
           $PSBoundParameters.ContainsKey('Models'))) {
     throw "Nothing to change. Pass -TokensPerMinute, -DailyQuota or -Models, or use -List."
 }
+
+Assert-ClaudeGatewayOwnsGovernance -ResourceGroup $ResourceGroup -ApimName $ApimName -Write Tiers
 
 $changes = @()
 
