@@ -3,11 +3,24 @@ import os
 import re
 import shutil
 import subprocess
+import base64
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from .errors import FinOpsError
+
+
+def token_needs_refresh(value):
+    if not value:
+        return True
+    try:
+        payload = value.split(".")[1]
+        expiry = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))["exp"]
+        return float(expiry) <= time.time() + 120
+    except (IndexError, KeyError, ValueError, TypeError):
+        return False
 
 
 def az(*args: str) -> str:

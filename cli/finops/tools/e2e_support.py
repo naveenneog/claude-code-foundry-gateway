@@ -9,7 +9,7 @@ import time
 
 import httpx
 
-from claude_finops.config import az
+from claude_finops.config import az, token_needs_refresh
 from claude_finops.errors import FinOpsError
 from claude_finops.redaction import Redactor
 
@@ -36,6 +36,9 @@ class GatewayState:
         self.client.close()
 
     def call(self, method, suffix, body=None, allow_missing=False):
+        if token_needs_refresh(self.token):
+            self.token = az("account", "get-access-token", "--resource", "https://management.azure.com",
+                            "--query", "accessToken", "-o", "tsv", "--subscription", self.config.subscription)
         response = self.client.request(method, self.path + suffix, params={"api-version": "2024-05-01"},
                                        headers={"Authorization": "Bearer " + self.token}, json=body)
         if response.status_code == 404 and allow_missing:
@@ -128,3 +131,14 @@ class Journal:
 
 def assert_restored(snapshot, actual, names):
     return all(actual.get(name, {}).get("value") == snapshot.get(name, {}).get("value") for name in names)
+
+
+def enforcement_matches(probe, mode, scope):
+    status = probe.get("status_code")
+    error = probe.get("error") or {}
+    notice = probe.get("headers", {}).get("x-claude-budget-notice", "")
+    if mode == "strict":
+        return (status in {403, 429} and isinstance(error, dict) and error.get("type") == "rate_limit_error"
+                and error.get("budget") == "business unit" and scope in error.get("message", ""))
+    required = "estimated-over-budget" if mode == "allowance" else "usage-reported"
+    return status == 200 and scope + ";" in notice and required in notice

@@ -60,3 +60,13 @@ def test_budget_cleanup_failure_does_not_suppress_catalog_restore():
     errors = module.restore_turnstile(engine, {}, "unit", "team")
     assert errors == ["first delete failed"]
     assert calls == ["team", "unit", "catalog-restored"]
+
+
+def test_enforcement_uses_actual_quota_403_not_generic_permission_denial():
+    matches = support().enforcement_matches
+    assert matches(dict(status_code=403, error=dict(type="rate_limit_error", budget="business unit",
+        message="Budget for aum-e2e-team-test is spent")), "strict", "aum-e2e-team-test")
+    assert not matches(dict(status_code=403, error=dict(type="permission_error",
+        message="Not permitted aum-e2e-team-test")), "strict", "aum-e2e-team-test")
+    assert matches(dict(status_code=200, headers={"x-claude-budget-notice":
+        "aum-e2e-team-test;mode=allowance:10;status=estimated-over-budget"}), "allowance", "aum-e2e-team-test")

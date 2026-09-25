@@ -22,7 +22,7 @@ from claude_finops.publication import capture_lock, validate_capture
 from claude_finops.screens import DetailScreen
 from claude_finops.tui import FinOpsApp
 
-from e2e_support import GatewayState, Journal, utc
+from e2e_support import GatewayState, Journal, utc, enforcement_matches
 from e2e_cleanup import restore_turnstile
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -154,10 +154,7 @@ async def journey(args):
             while time.monotonic() < deadline:
                 probe = journal.call("probe-" + mode, lambda: tiny_request(config, apply=True))
                 probes.append(probe)
-                notice = probe.get("headers", {}).get("x-claude-budget-notice", "")
-                success = ((mode == "strict" and probe["status_code"] == 429 and team in json.dumps(probe.get("error"))) or
-                           (mode == "allowance" and probe["status_code"] == 200 and team in notice and "estimated-over-budget" in notice) or
-                           (mode == "notify" and probe["status_code"] == 200 and team in notice and "usage-reported" in notice))
+                success = enforcement_matches(probe, mode, team)
                 if success:
                     await screenshot(engine, config, journal, "enforcement-" + mode, probe)
                     break
@@ -168,7 +165,16 @@ async def journey(args):
         while time.monotonic() - started < args.ingestion_timeout:
             rows = await asyncio.to_thread(engine.read, "requests", department_id=team, limit=50)
             if rows.get("items"):
-                journal.record("attribution", dict(rows=len(rows["items"]), ingestion_wait_seconds=time.monotonic() - started))
+                first = next((row["at"] for row in probes if row.get("status_code") == 200), None)
+                observed = datetime.now(timezone.utc)
+                upper = (observed - datetime.fromisoformat(first.replace("Z", "+00:00"))).total_seconds() if first else None
+                journal.record("attribution", dict(rows=len(rows["items"]), ingestion_wait_seconds=time.monotonic() - started,
+                    first_request_at=first, first_observed_at=observed.isoformat(), observed_delay_upper_bound_seconds=upper,
+                    basis="First observation after mode checks; ingestion may have completed earlier."))
+                if args.backend == "direct":
+                    usage = await asyncio.to_thread(engine.read, "distribution", dimension="department", basis="ledger", department_id=team)
+                    journal.record("request-time-usage", usage)
+                    await screenshot(engine, config, journal, "usage-attribution", usage)
                 await screenshot(engine, config, journal, "request-attribution", rows)
                 break
             await asyncio.sleep(20)

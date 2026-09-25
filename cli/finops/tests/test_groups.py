@@ -125,3 +125,15 @@ def test_deletion_waits_for_replication_without_repeating_delete(monkeypatch):
         return httpx.Response(200, json={"id": group, "displayName": "test"})
     graph(respond).delete(group, "test", apply=True, confirm="test")
     assert len(deletes) == 1 and len(reads) == 3
+
+
+def test_expiring_graph_token_is_refreshed_before_cleanup_request():
+    import base64
+    from claude_finops.groups import EntraGroups
+    acquired = []
+    client = EntraGroups(token_provider=lambda: acquired.append(1) or "fresh-test-only",
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json={"id": "me"})))
+    body = base64.urlsafe_b64encode(json.dumps({"exp": 1}).encode()).decode().rstrip("=")
+    client.token = "header." + body + ".signature"
+    client.me()
+    assert acquired == [1]

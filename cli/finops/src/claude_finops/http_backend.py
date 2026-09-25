@@ -3,7 +3,7 @@
 import httpx
 
 from .backend import Backend
-from .config import token
+from .config import token, token_needs_refresh
 from .errors import FinOpsError, http_error
 
 
@@ -20,7 +20,7 @@ class HttpBackend(Backend):
 
     def _request(self, method, path, params=None, body=None, extra_headers=None, optional=False):
         for attempt in range(2 if method == "GET" else 1):
-            if not self._token:
+            if token_needs_refresh(self._token):
                 self._token = self._token_provider()
             try:
                 response = self._client.request(method, path, params=params, json=body,

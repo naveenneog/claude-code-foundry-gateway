@@ -10,7 +10,7 @@ from uuid import UUID
 
 import httpx
 
-from .config import az
+from .config import az, token_needs_refresh
 from .errors import FinOpsError
 from .redaction import mask_identifiers
 
@@ -45,7 +45,7 @@ class EntraGroups:
         url = urlsplit(path if path.startswith("http") else GRAPH + path)
         if url.scheme != "https" or url.netloc != "graph.microsoft.com" or not url.path.startswith("/v1.0/"):
             raise FinOpsError("Refusing a continuation outside Microsoft Graph.")
-        if not self.token:
+        if token_needs_refresh(self.token):
             self.token = self.provider()
         try:
             result = self.client.request(method, path, params=params, json=body,
