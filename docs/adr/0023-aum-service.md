@@ -158,3 +158,8 @@ conflict; they never truncate, widen scope, or silently stop enforcing.
   recorded private endpoint. The network-specific `az network private-endpoint
   delete --ids` succeeded for that same endpoint. Use the scoped provider
   operation before DNS deletion, covered by the cleanup regression.
+- **Cleanup boundary:** a resource name is not globally unique across ARM
+  types. Removal matches the recorded name **and type**, and includes optional
+  Insights/site/storage endpoints only when their recorded deployment choice
+  enabled them. A same-named VM and unselected optional resources are retained.
+  An isolated failing regression exposed the gap; no live collision existed.

@@ -17,13 +17,21 @@ if (-not (Test-Path $RecordPath)) { throw 'No deployment record. Pass -RecordPat
 $record = Get-Content -Raw $RecordPath | ConvertFrom-Json
 if ($record.schemaVersion -ne 1 -or -not $record.functionName -or -not $record.subscriptionId) { throw 'Not an AUM service deployment record.' }
 $resources = @(Invoke-ClaudeAumAz @('resource','list','--resource-group',$record.resourceGroup,'--subscription',$record.subscriptionId,'-o','json'))
-$names = @($record.functionName)
-if (-not $record.planReused) { $names += $record.planName }
-if (-not $record.storageReused) { $names += $record.storageName }
+$expected = @{}
+$expected[$record.functionName] = 'Microsoft.Web/sites'
+if (-not $record.planReused) { $expected[$record.planName] = 'Microsoft.Web/serverFarms' }
+if (-not $record.storageReused) { $expected[$record.storageName] = 'Microsoft.Storage/storageAccounts' }
 $prefix = $record.functionName -replace '^func-aum-',''
-$names += "appi-aum-$prefix"
-$names += @("pe-aum-$prefix-sites","pe-aum-$prefix-blob","pe-aum-$prefix-table")
-$selected = @($resources | Where-Object { $_.name -in $names -or $_.id -in @($record.networkResourceIds) })
+if ($record.choices.insights -eq 'On') { $expected["appi-aum-$prefix"] = 'Microsoft.Insights/components' }
+if ($record.choices.network -eq 'Private') { $expected["pe-aum-$prefix-sites"] = 'Microsoft.Network/privateEndpoints' }
+if ($record.choices.network -eq 'Private' -or $record.choices.storageNetwork -eq 'Private') {
+    $expected["pe-aum-$prefix-blob"] = 'Microsoft.Network/privateEndpoints'
+    $expected["pe-aum-$prefix-table"] = 'Microsoft.Network/privateEndpoints'
+}
+$selected = @($resources | Where-Object {
+    ($expected.ContainsKey($_.name) -and $_.type -eq $expected[$_.name]) -or
+    $_.id -in @($record.networkResourceIds)
+})
 Write-Host 'This deletes dedicated audit/history storage. It does not undo budget changes or active boosts.' -ForegroundColor Yellow
 Write-Host 'Before removing, wait for boosts to expire or restore their budgets and export audit records.'
 foreach ($r in $selected) { Write-Host "  Delete $($r.type): $($r.name)" }

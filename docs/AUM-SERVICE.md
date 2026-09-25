@@ -663,8 +663,8 @@ does not restore every budget merely because its resources are removed.
 .\scripts\Remove-ClaudeAumService.ps1 -RemoveAppRegistration
 ```
 
-Removal uses the deployment record, deletes only its service resources and
-external role assignments, and leaves the gateway, workspace, resource group
+Removal matches recorded names **and types**, honors selected options and removes
+external role assignments. It leaves the gateway, workspace, resource group
 and reused resources. Do not delete a shared resource group as a shortcut.
 Tenant policy can create extra NSGs. Inspect any remainder and delete an isolated
 test group only after confirming no shared or attached resource remains.
