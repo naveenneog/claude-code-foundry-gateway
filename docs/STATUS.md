@@ -1,6 +1,6 @@
 # Status
 
-**Active packets:** P52 AUM and P55's end-to-end journey. P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets:** P52 AUM, P59 exact dollar budgets at the gateway, P60 Claude Desktop sign-in chosen by the admin, and P61 the Cosmos entitlement store on every v2 tier, including Basic v2 ([below](#portal-pictures-recaptured-live-and-the-test-environments-removed-2026-09-25)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P46 acceptance criteria — managers scoped, and budget modes
 
@@ -80,11 +80,28 @@ They need those deployments again; the documents keep them as inline pending pat
 **Test environments removed.** The SKU tests (the Basic v2 test gateway, and the second test
 resource group with its Foundry account, deleted and purged at 10:06-10:19Z). The Premium v2
 environment's resource group (the Premium v2 gateway, the projection's Cosmos account, the
-resolver, their private endpoints and DNS zones) after its pictures were recaptured: deletion
-started 14:28Z; its gateway and Foundry account are purged once it completes. The Standard v2 SKU-test gateway,
+resolver, their private endpoints and DNS zones), after its pictures were recaptured: gone at
+16:10Z, its gateway and Foundry account purged, all three ARM reads 404 at 16:17Z. Found by doing
+it: five group deletes rolled back on the resolver's Flex Consumption plan, which ARM listed and
+the Web provider called NotFound; re-creating it under the same name and deleting it cleared it
+([Troubleshooting](TROUBLESHOOTING.md#deployment)). The Standard v2 SKU-test gateway,
 about $700 a month, is kept: Turnstile's model-gateway integration points at it (its
 `APIM_SERVICE_NAME` setting, and roles on Turnstile's Event Hubs and ledger table), and
 deleting it would break those features. It is the owner's decision.
+
+**Review of the recapture, fixed in `fbc0307`** (gate PASS, 63 checks, on the second run: the first
+failed Terminal FinOps once under six agents' concurrent load and it passed unchanged on the
+rerun). A code review found four gaps, each fixed test-first: a tenant-name pair could put a
+colleague's address on the placeholder domain; a real value running past a replacement was
+hidden; an application's assignments were read from Graph's first page only; and the records
+named a commit that did not contain the code that took them. The runner now refuses to capture
+from uncommitted capture code, and today's records are marked `accel_dirty` with a provenance note.
+
+**Next, started 2026-09-25 on the owner's request.** P60: the admin chooses how Claude Desktop
+signs in (today it always uses the Azure CLI credential helper) and the developer scripts write the
+matching Desktop configuration. P61: the Cosmos entitlement store as an installer choice, including
+on Basic v2 through an Entra-authenticated public resolver, for 100-500 developers, which named
+values cannot hold (about 93).
 
 ## FinOps tools in one guide, 2026-09-25
 

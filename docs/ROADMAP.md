@@ -302,21 +302,23 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       frozen review, including the identities that may lose access, confirmed before any write.
       Streaming, timeouts, body size, WAF on code and client-address trust measured live; the
       evaluation removed. [ADR-0022](adr/0022-enterprise-network-edge.md),
-      `docs/NETWORK-ENTERPRISE.md`. Open: 24 portal pictures, which need an approved redeployment;
-      Front Door, hub routing and corporate egress as tested automation; callers' existing private
-      routes (**U22**)
+      `docs/NETWORK-ENTERPRISE.md`. Open: 24 portal pictures, for which a short-lived isolated
+      redeployment was approved and started on 2026-09-25; Front Door, hub routing and corporate
+      egress as tested automation; callers' existing private routes (**U22**)
 - [x] P55 the AUM service — an optional authority independent of Turnstile: its own Entra app
       roles with consent-free tokens, scoped managers, audited conditional named-value writes,
       and P47's requests and boosts; discovery-first deployment with cost and implications, and a
       FinOps tooling selector. [ADR-0023](adr/0023-aum-service.md), `docs/AUM-SERVICE.md`.
       Real Claude enforcement in all three modes and a Manager-only proof ran live through the
       service on an isolated gateway (2026-09-25), then everything was restored and retired.
-      Open: the AUM client (P52) driving the service end to end, and its portal pictures
+      Open: the AUM client (P52) driving the service end to end, the Users and groups picture (the
+      next Entra step-up) and the Function and storage pictures (a deployed service); the four
+      registration pictures were captured live on 2026-09-25
 - [x] P57 documentation review — eight reader journeys walked with the guides alone; 70
       findings fixed, five task guides added (Operations, Budgets, FinOps, Reference, Data
       governance), README from 710 to 278 lines, live names replaced by discovery commands, and
-      `tests/Test-DocReferences.ps1` guarding links, anchors, scripts and parameters. Open: the
-      portal walkthrough pictures, declared as capture specs for one batch after a fresh sign-in
+      `tests/Test-DocReferences.ps1` guarding links, anchors, scripts and parameters. Its portal
+      walkthrough pictures were captured live on 2026-09-25 by the lead's batch
 - [x] P58 architecture after every feature — ten diagrams from text sources under
       `docs/architecture/`, rendered by one command with a hash manifest; `docs/ARCHITECTURE.md`
       rewritten around them; an `AGENTS.md` rule that every feature packet updates its diagram;
@@ -340,6 +342,21 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       proves the shards cover exactly the 476 and 108 mutations, in order. Three busy full runs:
       927.2, 830.6 and 790.0 s, against 1,829 s serially; the gate's command budget is back to
       1,800 s. [ADR-0025](adr/0025-parallel-test-suite.md)
+- [ ] P60 Claude Desktop sign-in, chosen by the admin — acceptance: the installer offers Desktop's
+      credential kinds that work with this gateway (the Azure CLI credential helper, today's only
+      option; Desktop's own sign-in through an Entra app registration, in the system browser or
+      the Entra broker), each with what it needs (app registration, consent, Conditional Access,
+      the audience the gateway must accept) and implies; the choice is recorded in
+      `claude-gateway.json` and the developer scripts and MDM payloads write exactly the matching
+      Desktop keys; a helper-script install is unchanged; the token path is proven live on an
+      isolated gateway
+- [ ] P61 the Cosmos entitlement store as an installer choice, including Basic v2 — acceptance:
+      for 100-500 developers, which named values cannot hold (about 93), the installer offers the
+      projection by SKU: private on Standard v2 and Premium v2; on Basic v2 through a resolver with
+      a public, Entra-authenticated endpoint in front of a private Cosmos account, with the risk and
+      the cost at 100 and 500 developers stated; one command deploys, populates from Entra,
+      compares against the lists and flips only after a clean comparison; proven live on an
+      isolated Basic v2 gateway and removed
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so
