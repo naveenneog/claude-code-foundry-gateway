@@ -41,7 +41,7 @@ class FeatureUI:
             self.push_screen(GroupPicker())
 
     def action_refresh_membership(self):
-        if self.editable and self.engine.backend.name == "Direct":
+        if self.editable and self.engine.backend.name in {"Direct", "Turnstile"}:
             from .group_screens import refresh_membership_form
             refresh_membership_form(self)
 

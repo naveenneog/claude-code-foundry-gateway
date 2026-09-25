@@ -4,7 +4,8 @@
 #>
 [CmdletBinding()]
 param([Parameter(Mandatory)][string]$ResourceGroup,[Parameter(Mandatory)][string]$ApimName,
-      [Parameter(Mandatory)][string[]]$ScopeIds,[switch]$Apply,[switch]$AllowReassignment)
+      [Parameter(Mandatory)][string[]]$ScopeIds,[switch]$Apply,[switch]$AllowReassignment,
+      [ValidateSet('Gateway','Turnstile')][string]$GovernanceSource='Gateway')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
@@ -12,8 +13,9 @@ $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'ClaudeAumMembership.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeAumDirectWrites.ps1')
 $before=Get-AumNamedValueMap -ResourceGroup $ResourceGroup -ApimName $ApimName
-if($before['turnstile-integration'] -match '(?:governanceAuthority|budgetAuthority)=Turnstile'){
-    throw 'Turnstile owns membership publication. Save its catalog and follow its apply job instead.'
+$authority=if($before['turnstile-integration'] -match '(?:governanceAuthority|budgetAuthority)=Turnstile'){'Turnstile'}else{'Gateway'}
+if($authority -ne $GovernanceSource){
+    throw 'Selected membership source does not match the gateway authority. Choose the matching backend; no refresh performed.'
 }
 if($before['entitlement-source'] -eq 'projection'){
     throw 'This gateway uses the projection authority. Refresh its projection pipeline instead of writing an inactive bu-members map.'
@@ -37,6 +39,7 @@ try {
 } finally {$graphToken=$null}
 $plan=New-AumMembershipPlan -Registry $registry -Parents $parents -Current $current -ScopeIds $ScopeIds -Members $members
 $result=@{preview=(-not $Apply);action='Refresh selected memberships';scopes=$ScopeIds;
+          source_authority=$GovernanceSource;publisher='Signed-in Azure administrator, delegated Graph';
           before=$before['bu-members'];after=$plan.Value;reassigned=$plan.Reassigned;
           effect='Only selected scopes are resolved. Unrelated mappings and tier entitlement are preserved. Gateway propagation may lag.'}
 if($Apply){

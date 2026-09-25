@@ -19,12 +19,18 @@ def group_call(engine, operation, *args, **kwargs):
 
 def membership_refresh(engine, scopes, *, apply=False, allow_reassignment=False):
     require_owner(engine.read("whoami"))
-    if engine.backend.name != "Direct":
-        raise FinOpsError("Membership refresh uses Direct delegated Graph access. Other authorities publish through their own apply/projection path.", 5)
+    if engine.backend.name not in {"Direct", "Turnstile"}:
+        raise FinOpsError("Membership refresh requires an explicit Direct or Turnstile authority and delegated Azure administrator access.", 5)
     scopes = [identifier(scope) for scope in scopes]
     if not scopes:
         raise FinOpsError("Choose at least one existing scope to refresh.")
-    return engine.backend._bridge("membership", scope_ids=scopes, apply=apply, allow_reassignment=allow_reassignment)
+    if engine.backend.name == "Direct":
+        bridge, authority = engine.backend, "Gateway"
+    else:
+        from .direct import DirectBackend
+        bridge, authority = DirectBackend(engine.backend.config), "Turnstile"
+    return bridge._bridge("membership", scope_ids=scopes, apply=apply, allow_reassignment=allow_reassignment,
+                          source_authority=authority)
 
 
 def publish_as_signed_in_admin(engine, config, *, apply=False):

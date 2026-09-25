@@ -16,7 +16,7 @@ from claude_finops.config import load_config
 from claude_finops.engine import Engine
 from claude_finops.errors import FinOpsError
 from claude_finops.gateway_probe import tiny_request
-from claude_finops.group_actions import group_call, membership_refresh
+from claude_finops.group_actions import group_call, membership_refresh, publish_as_signed_in_admin
 from claude_finops.groups import EntraGroups
 from claude_finops.publication import capture_lock, validate_capture
 from claude_finops.screens import DetailScreen
@@ -25,7 +25,9 @@ from claude_finops.tui import FinOpsApp
 from e2e_support import GatewayState, Journal, utc
 
 ROOT = Path(__file__).resolve().parents[3]
-RESTORE_NAMES = ["bu-members", "bu-modes", "bu-parents", "bu-registry", "turnstile-integration"]
+RESTORE_NAMES = ["bu-members", "bu-modes", "bu-parents", "bu-registry", "turnstile-integration",
+                 "allow-standard", "allow-premium", "tpm-standard", "tpm-premium",
+                 "quota-standard", "quota-premium", "models-standard", "models-premium"]
 
 
 async def screenshot(engine, config, journal, stage, result):
@@ -109,6 +111,14 @@ async def journey(args):
                 engine.catalog_change(kind, key, name=key, group=group, parent=parent, apply=True))
             if result.get("requested_at"):
                 journal.call("apply-register-" + kind, lambda result=result: engine.wait_for_apply(result["requested_at"], timeout=480, interval=8))
+                current = arm.snapshot()
+                if f",{key}=" not in current["bu-registry"]["value"]:
+                    journal.record("job-did-not-register-" + kind, {
+                        "state": "Apply job completed but test group is not in the registry; new group validation may be unavailable to its identity.",
+                        "fallback": "Explicit signed-in-administrator publication using the repository writer; no new permissions."})
+                    delegated = journal.call("delegated-bootstrap-" + kind,
+                                             lambda: publish_as_signed_in_admin(engine, config, apply=True))
+                    await screenshot(engine, config, journal, "delegated-bootstrap-" + kind, delegated)
             await screenshot(engine, config, journal, "registered-" + kind, result)
         for kind, key, amount in (("unit", unit, "100000"), ("team", team, "1")):
             result = journal.call("budget-" + kind, lambda kind=kind, key=key, amount=amount:
@@ -116,7 +126,7 @@ async def journey(args):
             if result.get("requested_at"):
                 journal.call("apply-budget-" + kind, lambda result=result: engine.wait_for_apply(result["requested_at"], timeout=480, interval=8))
             await screenshot(engine, config, journal, "budget-" + kind, result)
-        if args.backend == "direct":
+        if args.backend in {"direct", "turnstile"}:
             result = journal.call("membership-refresh", lambda: membership_refresh(engine, [unit, team], apply=True, allow_reassignment=True))
             await screenshot(engine, config, journal, "membership-refreshed", result)
         mapping = arm.snapshot()["bu-members"]["value"]
