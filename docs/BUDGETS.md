@@ -14,8 +14,9 @@ use [FinOps](FINOPS.md). A token allowance is not an invoice cap.
   Run commands at the repository root.
 - Resolve `$rg`, `$apim` and the telemetry resources with the
   [operations target checklist](OPERATIONS.md#1-select-the-gateway-and-workspace).
-- Check who owns governance first. When Turnstile is the authority, change its
-  catalog and budgets there; a direct edit can be overwritten by its next apply.
+- Check who owns governance first. The unit and tier scripts refuse writes
+  owned by Turnstile and name its URL and page; a raw portal or Azure CLI edit
+  can still be overwritten by its next apply.
   See [Manage everything in Turnstile](TURNSTILE.md#manage-everything-in-turnstile).
 
 ### Find the values for the commands
@@ -33,6 +34,26 @@ not discovered policy or deployment defaults. Replace them only after selecting
 the real target and approving the change. The live
 [gateway Overview](OPERATIONS.md#1-select-the-gateway-and-workspace) shows where
 the gateway values come from; its Online status does not prove a budget edit.
+
+### Who may write which budgets
+
+With `governanceAuthority=Turnstile`, use Turnstile's **Gateway governance**
+page for unit/team structure, group mappings, modes and tier limits, and
+**Budgets** for monthly allocations. `Set-ClaudeBusinessUnit.ps1` and
+`Set-ClaudeTier.ps1` refuse those mutations before any write. With only
+`budgetAuthority=Turnstile`, only `-MonthlyBudgetUsd` is refused; structure,
+modes and tier settings remain gateway-owned. List modes still work, including
+when authority cannot be read. A failed authority read never permits a mutation.
+
+`quota-overrides`, `quota-org` and `calls-per-minute` are not written by either
+Turnstile apply path. In particular, `Set-ClaudeBudget.ps1` still sets and clears
+personal **daily** overrides. `personBudgets` only mirrors tier daily quotas
+as monthly allocations **to** Turnstile; it does not import person budgets.
+
+There is no force bypass. To deliberately return ownership to scripts, use
+`Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Gateway -BudgetAuthority Gateway`
+on the same gateway ([authority switch](TURNSTILE.md#move-governance-back-to-the-gateway)).
+The second switch matters because Connect preserves an existing budget authority.
 
 ## Reference: shipped defaults
 
@@ -215,8 +236,9 @@ When the gateway owns governance, first obtain the actual unit identifier from
 
 The percentage is an illustrative input, not a recommendation. Omit `-Mode` to
 preserve the existing mode when editing another property. When Turnstile owns
-governance, use its owner-only Gateway governance controls instead; the apply
-job writes `bu-modes` and will overwrite a competing gateway-authored change.
+governance, use its owner-only Gateway governance controls instead; the script
+refuses rather than letting its apply job overwrite the change. Budget-only
+authority does not own modes.
 
 **Portal/manual:** APIM > APIs > Named values > `bu-modes` > Edit > Value.
 For the example, preserve all other entries and add `<unit-id>=allowance:10`

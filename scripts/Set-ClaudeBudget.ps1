@@ -20,6 +20,12 @@
     once emptied by a write that assumed an incomplete read, revoking everyone,
     and this is the same failure mode with the same shape.
 
+    Personal daily overrides remain gateway-owned even when Turnstile owns
+    governance or monthly unit/team budgets: its apply never writes
+    quota-overrides. The connection's personBudgets option only mirrors tier
+    daily quotas as monthly allocations TO Turnstile; it does not pull person
+    budgets back. This script therefore remains available under either authority.
+
 .PARAMETER User
     The developer, by UPN or object id.
 

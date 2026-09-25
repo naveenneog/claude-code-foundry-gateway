@@ -41,6 +41,23 @@ against stale runs is being added with the modes, and a single queue-driven writ
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
 
+## The scripts refuse what Turnstile would overwrite, merged 2026-09-25
+
+The FinOps guide's open gap: while Turnstile owned governance, `Set-ClaudeBusinessUnit.ps1` and
+`Set-ClaudeTier.ps1` wrote named values that Turnstile's next apply replaced. They now refuse,
+before any write, exactly what the apply owns, name the Turnstile page to use instead, and show
+the explicit switch (`Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Gateway -BudgetAuthority
+Gateway`); there is no force option. Read from the apply's code: full governance owns the unit
+registry, parents and modes and both tiers' limits and models; budget-only authority owns the
+monthly amounts of existing units and teams. Neither owns personal daily overrides
+(`Set-ClaudeBudget.ps1`) or Entra membership (`Set-ClaudeDeveloper.ps1`), so those stay
+available; `personBudgets` is an outbound monthly mirror, not an inbound owner. A failed read of
+the integration value stops the write; an absent or disconnected one leaves the gateway in
+charge. 114 assertions on PowerShell 7 and 5.1, five mutations caught, and both guarded scripts
+refused live against the Turnstile-governed reference gateway with zero write attempts. Branch
+`authority-guard` at `a002617` (its own gate PASS, 62 checks), merged into main. Not closed by it:
+P48's single writer and races around an authority switch.
+
 ## Portal pictures recaptured live, and the test environments removed, 2026-09-25
 
 Asked by the owner: every portal picture live, from his own sign-in, not from another
