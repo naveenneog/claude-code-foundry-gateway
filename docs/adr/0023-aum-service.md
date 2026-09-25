@@ -132,3 +132,9 @@ conflict; they never truncate, widen scope, or silently stop enforcing.
 - **Measured:** the copied portal session required sign-in on the Entra blade.
   Capture stopped. Existing resource screenshots are not evidence of an Entra
   UI journey; CLI registration and token evidence are recorded separately.
+- **Measured, 2026-09-25:** a real manager-only person-budget call exposed a
+  Kusto syntax error in the observed-membership lookup: `latest` cannot be an
+  unquoted `let` binding. The same bounded query with `last_observations`
+  returned the last real request's team. Keep the timestamp/tie-denial logic,
+  add a regression against the rejected binding, and verify the deployed
+  manager write; mocked analytics alone did not prove query compilation.
