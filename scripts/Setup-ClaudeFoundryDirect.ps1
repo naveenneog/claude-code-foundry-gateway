@@ -53,6 +53,7 @@ param(
     [string]$ClientId,
     [ValidateSet('device', 'interactive', 'current')][string]$Auth = 'device',
     [string[]]$Models,
+    [string]$DefaultModel,
     [switch]$SkipVerify,
     [switch]$ShowConfig,
     # Claude Desktop holds its configuration in memory and rewrites it on exit,
@@ -71,6 +72,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "  [OK]   $m" -ForegroundColor Green }
@@ -516,8 +518,17 @@ else {
 # it belongs here rather than at the end: a machine that cannot reach Foundry is
 # then left exactly as it was found, instead of carrying a settings file that
 # points somewhere it cannot go.
-$probeModel = Find-Deployment -Pool $deployments -Family 'sonnet'
-if (-not $probeModel) { $probeModel = $deployments[0].name }
+$modelLookup = @(
+    "az cognitiveservices account deployment list --name $Resource --resource-group <resource-group> -o table"
+    "Azure portal: Foundry > $Resource > Deployments; use the deployment name, not just the model family"
+)
+if ($DefaultModel -and $Models -notcontains $DefaultModel) {
+    throw ("Pass -DefaultModel from the deployed names: " + ($Models -join ', ') + '. Where to find it: ' + ($modelLookup -join '; '))
+}
+$probeModel = if ($DefaultModel) { $DefaultModel } else { Find-Deployment -Pool $deployments -Family 'sonnet' }
+if (-not $probeModel) {
+    $probeModel = Select-ClaudeModel -Names $Models -Parameter DefaultModel -Source "the discovered or supplied deployments on $Resource" -WhereToFind $modelLookup
+}
 
 if (-not $SkipVerify) {
     Step 'Access check'
@@ -586,7 +597,8 @@ $haiku  = Find-Deployment -Pool $deployments -Family 'haiku'
 # that family, and that name is not a deployment on anybody's Foundry resource.
 # Measured on a resource carrying only claude-opus-4-7: the Sonnet alias went
 # unset and every turn that selected Sonnet failed with DeploymentNotFound.
-$fallback = if ($sonnet) { $sonnet } elseif ($opus) { $opus } else { $deployments[0].name }
+$fallback = if ($sonnet) { $sonnet } elseif ($opus) { $opus } else { $probeModel }
+if ($DefaultModel) { $fallback = $DefaultModel }
 $envBlock['ANTHROPIC_DEFAULT_OPUS_MODEL']   = if ($opus)   { $opus }   else { $fallback }
 $envBlock['ANTHROPIC_DEFAULT_SONNET_MODEL'] = if ($sonnet) { $sonnet } else { $fallback }
 # Claude Code uses a small model for background work.

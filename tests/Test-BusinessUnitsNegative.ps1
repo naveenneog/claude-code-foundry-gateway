@@ -2969,6 +2969,48 @@ $mutations = @(
        File  = 'scripts/ClaudeChoice.ps1'
        From  = 'if ($LocalOnly -and $linked -and ($linked -split ''/'')[4] -ine $ResourceGroup) {'
        To    = 'if ($false) {' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'reports discovery offers another gateway''s resources'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = '$_.type -eq $type -and $_.tags.''claude-chargeback-gateway'' -eq $ApimName -and'
+       To    = '$_.type -eq $type -and' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'a recorded reports resource is asked for again'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = 'if ($recordedMatch.Count -eq 1) {'
+       To    = 'if ($false) {' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'the alphabetical model recommendation becomes certain in automation'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = 'AcceptRecommendedWithoutConsole = ($models.Count -eq 1)'
+       To    = 'AcceptRecommendedWithoutConsole = $true' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'a sole Application Insights is no longer certain'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = '-Recommended:($components.Count -eq 1)'
+       To    = '-Recommended:$false' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'a sole gateway group is no longer certain'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = '-Recommended:($groups.Count -eq 1) -Reason ''the only resource group with a visible API Management instance'''
+       To    = '-Recommended:$false -Reason ''the only resource group with a visible API Management instance''' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'reports options ask for input in a headless process'
+       File  = 'scripts/ClaudeChargebackDiscovery.ps1'
+       From  = 'else{Test-ClaudeInteractive}'
+       To    = 'else{$true}' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'telemetry guesses the recorded component is in the gateway group'
+       File  = 'scripts/Get-ClaudeTelemetry.ps1'
+       From  = 'if (-not $componentId) { $componentId = '
+       To    = 'if ($true) { $componentId = ' }
 )
 
 # END MUTATION MANIFEST

@@ -816,6 +816,12 @@ query strings, authentication headers or other applications on the gateway.
     -RequirePrivateFoundry -CaCertificatePath $publicTestCertificate
 ```
 
+With no `-Model`, the verifier offers the succeeded Anthropic deployment names,
+their source and the command/portal lookup. Enter takes the alphabetical
+recommendation, not an inferred cheapest model. An unattended verifier with
+multiple deployments must pass `-Model <deployment-name>` explicitly. This does
+not change the priced network review or its approved state file.
+
 Repeat from a **Corporate** client and a **Spoke** verifier when those paths
 are part of the topology. Writing `-NetworkLocation Spoke` does not connect a
 workstation to that VNet. The verifier checks DNS, TLS validation, actual

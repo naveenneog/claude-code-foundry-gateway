@@ -110,6 +110,16 @@ All administration commands accept `-SubscriptionId` and `-NonInteractive` in ad
 gateway parameters. Explicit choices can be automated; an ambiguous missing choice fails
 in noninteractive mode instead of selecting the first resource silently.
 
+Missing choices use the shared numbered picker, with their discovery source,
+lookup command and Azure portal path. Enter takes a displayed recommendation.
+Headless execution is detected even without `-NonInteractive`. Storage and
+administration jobs recorded in `chargeback-<gateway>` deployment outputs count
+as given when their gateway tag still matches; otherwise you choose from that
+gateway's tagged resources. For unattended administration use `-StorageAccount`
+or, with `-ViaJob`, `-JobName` when the refusal names several candidates.
+The generator, dispatcher and admin job bootstrap always passes its storage
+account and records the gateway resource group and name in environment variables.
+
 Portal: **Resource groups > your group > API Management service**. For the workspace,
 follow the API's **Diagnostics settings / Application Insights diagnostic > Logger >
 Application Insights > Properties > Workspace**. Do not select the first similarly
@@ -622,10 +632,10 @@ Write commands support `-WhatIf` and `-Confirm`.
 |---|---|
 | `New-ClaudeChargebackReport.ps1` | `Month` (`yyyy-MM`, previous month by default), `MonthToDate`, `BusinessUnit` array, `OutputPath`, `Format` array, `Send`, `StorageAccount`, `WorkspaceResourceId` |
 | `Send-ClaudeChargebackReport.ps1` | `ReportPath`, `BusinessUnit` array or `AllUnits`, `Dispatch`, `Resend`, `StorageAccount` |
-| `Set-ClaudeChargebackRecipients.ps1` | `BusinessUnit` or `AllUnits`; exactly one of `Add` array, `Remove` array, `List`; `StorageAccount`, `ViaJob` |
-| `Set-ClaudeChargebackSettings.ps1` | `AllowedDomains`, `BusinessUnit` array (empty selects all), `Format`, nullable Boolean `MonthToDate`/`DeliveryEnabled`, `RetentionDays`, `List`, `StorageAccount`, `ViaJob` |
-| `Register-ClaudeChargebackSchedule.ps1` | `Cron`, initial `AllowedDomains`, `MonthToDate`, `RunNow`, `Remove`, `PurgeArchive`, `BreakDispatchLease`, `RepositoryUrl`, `RepositoryRef`, `Location`, `OperatorObjectId`, `OperatorPrincipalType`, `RetentionDays` |
-| `Invoke-ClaudeChargebackSchedule.ps1` | `Mode` (`generator`, `dispatcher`, internal structured `admin`), required `StorageAccount` |
+| `Set-ClaudeChargebackRecipients.ps1` | `BusinessUnit` or `AllUnits`; exactly one of `Add` array, `Remove` array, `List`; `StorageAccount`, `ViaJob`, `JobName` |
+| `Set-ClaudeChargebackSettings.ps1` | `AllowedDomains`, `BusinessUnit` array (empty selects all), `Format`, nullable Boolean `MonthToDate`/`DeliveryEnabled`, `RetentionDays`, `List`, `StorageAccount`, `ViaJob`, `JobName` |
+| `Register-ClaudeChargebackSchedule.ps1` | `Cron`, initial `AllowedDomains`, `MonthToDate`, `RunNow`, `Remove`, `PurgeArchive`, `BreakDispatchLease`, `RepositoryUrl`, `RepositoryRef`, `Location`, `OperatorObjectId`, `OperatorPrincipalType`, `RetentionDays`, `StorageAccount` |
+| `Invoke-ClaudeChargebackSchedule.ps1` | `Mode` (`generator`, `dispatcher`, internal structured `admin`), `StorageAccount` (explicit in every job; discovered or chosen for a manual pass) |
 | `Get-ClaudeChargebackTarget.ps1` | `SubscriptionId`, `ResourceGroup`, `ApimName`, `NonInteractive`, `Inventory`, `AsJson` |
 
 Registration additionally accepts `VirtualNetworkId`, `JobsSubnetId`, `EndpointSubnetId`,

@@ -1,3 +1,4 @@
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 function Resolve-ClaudeReportLocation {
     param([string]$Location,[string]$SuggestedLocation,[switch]$NonInteractive)
     $locations=@(az account list-locations -o json|ConvertFrom-Json)
@@ -10,22 +11,25 @@ function Resolve-ClaudeReportLocation {
     if($Location -and $explicit.Count -ne 1){throw 'The selected location does not advertise Container Apps environments in this subscription.'}
     $suggested=@($offered|Where-Object {$_.name -eq $SuggestedLocation -or $_.displayName -eq $SuggestedLocation})
     $options=@($offered|Sort-Object displayName|ForEach-Object {[pscustomobject]@{Id=$_.name;Name="$($_.displayName) ($($_.name))"}})
-    $selection=Select-ClaudeReportOption -Prompt 'Reports region (actual Container Apps locations)' -Options $options `
-        -SelectedId $(if($Location){$explicit[0].name}else{''}) -DefaultId $(if($suggested.Count -eq 1){$suggested[0].name}else{''}) -NonInteractive:$NonInteractive
+    $selection=Select-ClaudeReportOption -Prompt 'Reports region (actual Container Apps locations)' -Parameter Location -Options $options `
+        -SelectedId $(if($Location){[string]$explicit.name}else{''}) -DefaultId $(if($suggested.Count -eq 1){[string]$suggested.name}else{''}) -NonInteractive:$NonInteractive `
+        -WhereToFind @('az account list-locations -o table; az provider show --namespace Microsoft.App -o json','Azure portal: Subscriptions > Resource providers > Microsoft.App; API Management > Overview > Location')
     return $selection.Id
 }
 
 function Resolve-ClaudeReportNetwork {
     param([string]$ResourceGroup,[string]$Location,[string]$VirtualNetworkId,[string]$JobsSubnetId,[string]$EndpointSubnetId,
         [string]$VirtualNetworkPrefix,[string]$JobsSubnetPrefix,[string]$EndpointSubnetPrefix,[string]$PrivateDnsZoneId,[switch]$NonInteractive)
+    if(-not (Test-ClaudeInteractive)){$NonInteractive=$true}
     $vnets=@(az network vnet list -o json | ConvertFrom-Json | Where-Object location -eq $Location)
     if($LASTEXITCODE -ne 0){throw 'Could not discover regional VNets and subnets.'}
     $newNetwork=[bool]($VirtualNetworkPrefix -or $JobsSubnetPrefix -or $EndpointSubnetPrefix)
     if(-not $VirtualNetworkId -and -not $newNetwork){
         $options=@([pscustomobject]@{Id='new';Name='Create a dedicated reports VNet with an explicit private address plan'})
         $options+=@($vnets|ForEach-Object {[pscustomobject]@{Id=$_.id;Name="$($_.name) ($($_.resourceGroup)) - $($_.addressSpace.addressPrefixes -join ', ')"} })
-        if($NonInteractive){throw 'Choose -VirtualNetworkId with both subnet IDs, or supply the three new-network CIDR parameters.'}
-        $chosen=Select-ClaudeReportOption -Prompt 'Reports network' -Options $options -DefaultId new
+        if($NonInteractive){throw 'Choose -VirtualNetworkId with both subnet IDs, or supply the three new-network CIDR parameters. Where to find it: az network vnet list -o json; Azure portal: Virtual networks > Address space and Subnets. A new address plan is an operator decision, not a discovered value.'}
+        $chosen=Select-ClaudeReportOption -Prompt 'Reports network' -Parameter VirtualNetworkId -Options $options -DefaultId new `
+            -WhereToFind @('az network vnet list -o json','Azure portal: Virtual networks > Overview > Resource ID; Address space')
         if($chosen.Id -ne 'new'){$VirtualNetworkId=$chosen.Id}else{$newNetwork=$true}
     }
     if($VirtualNetworkId){
@@ -35,9 +39,11 @@ function Resolve-ClaudeReportNetwork {
         $jobs=@($vnet[0].subnets|Where-Object {
             @($_.delegations|Where-Object {$_.serviceName -eq 'Microsoft.App/environments' -or $_.properties.serviceName -eq 'Microsoft.App/environments'}).Count -gt 0
         }|ForEach-Object {[pscustomobject]@{Id=$_.id;Name="$($_.name) - $($_.addressPrefix) (Container Apps delegation)"}})
-        $job=Select-ClaudeReportOption -Prompt 'Delegated jobs subnet (must be unused by another environment)' -Options $jobs -SelectedId $JobsSubnetId -NonInteractive:$NonInteractive
+        $job=Select-ClaudeReportOption -Prompt 'Delegated jobs subnet (must be unused by another environment)' -Parameter JobsSubnetId -Options $jobs -SelectedId $JobsSubnetId -NonInteractive:$NonInteractive `
+            -WhereToFind @("az network vnet show --ids $VirtualNetworkId --query subnets -o json",'Azure portal: Virtual networks > the selected VNet > Subnets > Microsoft.App/environments delegation')
         $ends=@($vnet[0].subnets|Where-Object {$_.id -ne $job.Id -and -not @($_.delegations|Where-Object {$_}).Count}|ForEach-Object {[pscustomobject]@{Id=$_.id;Name="$($_.name) - $($_.addressPrefix)"}})
-        $endpoint=Select-ClaudeReportOption -Prompt 'Private endpoint subnet' -Options $ends -SelectedId $EndpointSubnetId -NonInteractive:$NonInteractive
+        $endpoint=Select-ClaudeReportOption -Prompt 'Private endpoint subnet' -Parameter EndpointSubnetId -Options $ends -SelectedId $EndpointSubnetId -NonInteractive:$NonInteractive `
+            -WhereToFind @("az network vnet show --ids $VirtualNetworkId --query subnets -o json",'Azure portal: Virtual networks > the selected VNet > Subnets > an undelegated subnet')
         $JobsSubnetId=$job.Id;$EndpointSubnetId=$endpoint.Id
     } else {
         if(-not $VirtualNetworkPrefix -and -not $NonInteractive){
@@ -55,12 +61,13 @@ function Resolve-ClaudeReportNetwork {
         $local=@($zones|Where-Object resourceGroup -eq $ResourceGroup)
         if($NonInteractive){
             if($local.Count -eq 1){$PrivateDnsZoneId=$local[0].id}
-            elseif($zones.Count){throw 'Existing blob DNS zones were found. Supply -PrivateDnsZoneId or choose one interactively.'}
+            elseif($zones.Count){throw ('Existing blob DNS zones were found: ' + (($zones | ForEach-Object {$_.id}) -join ', ') + '. Pass -PrivateDnsZoneId or choose one interactively. Where to find it: az network private-dns zone list -o table; Azure portal: Private DNS zones > privatelink.blob.core.windows.net > Overview.')}
         } else {
             $options=@([pscustomobject]@{Id='new';Name="Create a blob private DNS zone in $ResourceGroup"})
             $options+=@($zones|ForEach-Object {[pscustomobject]@{Id=$_.id;Name="$($_.name) ($($_.resourceGroup))"}})
             $default=if($local.Count -eq 1){$local[0].id}else{'new'}
-            $choice=Select-ClaudeReportOption -Prompt 'Blob private DNS zone' -Options $options -DefaultId $default
+            $choice=Select-ClaudeReportOption -Prompt 'Blob private DNS zone' -Parameter PrivateDnsZoneId -Options $options -DefaultId $default `
+                -WhereToFind @('az network private-dns zone list -o table','Azure portal: Private DNS zones > privatelink.blob.core.windows.net > Overview')
             if($choice.Id -ne 'new'){$PrivateDnsZoneId=$choice.Id}
         }
     }

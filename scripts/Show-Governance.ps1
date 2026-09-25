@@ -21,8 +21,8 @@
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)][string]$ApimName,
-    [Parameter(Mandatory = $true)][string]$ResourceGroup,
+    [string]$ApimName,
+    [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$SecondIdentityPath = "$env:TEMP\bob.json",
     # Both resolved from the gateway when omitted. Fixed defaults were wrong on
     # real gateways - see Resolve-GovernanceModel and Resolve-GatewayAppInsights.
@@ -32,6 +32,9 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
+if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
+if (-not $ApimName) { $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup }
 
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 $gw = "https://$ApimName.azure-api.net/claude"
@@ -84,12 +87,20 @@ function Resolve-GovernanceModel {
         model_not_allowed and a healthy install was reported as failed
         (measured on a new gateway, 2026-09-23).
     #>
+    param([object]$Interactive = $null, [scriptblock]$Reader)
+    $choice = @{ Interactive = $Interactive }
+    if ($Reader) { $choice.Reader = $Reader }
     $oid = az ad signed-in-user show --query id -o tsv 2>$null
     $premium = az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id allow-premium --query value -o tsv 2>$null
     $tier = if ($oid -and "$premium" -like "*,$oid,*") { 'premium' } else { 'standard' }
     $listed = az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id "models-$tier" --query value -o tsv 2>$null
-    $first = @("$listed".Trim(',') -split ',' | Where-Object { $_ })[0]
-    if ($first) { return $first }
+    $allowed = @("$listed".Trim(',') -split ',' | Where-Object { $_ })
+    if ($allowed.Count) {
+        return (Select-ClaudeModel -Names $allowed -Source "the models-$tier named value on $ApimName" -WhereToFind @(
+            "az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id models-$tier --query value -o tsv"
+            "Azure portal: API Management > $ApimName > Named values > models-$tier"
+        ) @choice)
+    }
 
     # An empty list means the tier is not restricted, so any deployment will do.
     $api = Get-ClaudeApi
@@ -102,7 +113,12 @@ function Resolve-GovernanceModel {
         if ($accountRg) {
             $deployments = az cognitiveservices account deployment list -g $accountRg -n $account -o json 2>$null | Out-String | ConvertFrom-Json
             $claude = @($deployments | Where-Object { $_.name -like 'claude-*' } | Sort-Object name)
-            if ($claude.Count) { return $claude[0].name }
+            if ($claude.Count) {
+                return (Select-ClaudeModel -Names @($claude | ForEach-Object { $_.name }) -Source "the Claude deployments on $account ($accountRg)" -WhereToFind @(
+                    "az cognitiveservices account deployment list -g $accountRg -n $account -o table"
+                    "Azure portal: Foundry > $account > Deployments"
+                ) @choice)
+            }
         }
     }
     return $null
@@ -111,8 +127,9 @@ function Resolve-GovernanceModel {
 if (-not $Model) {
     $Model = Resolve-GovernanceModel
     if (-not $Model) {
-        $Model = 'claude-sonnet-5'
-        Write-Host "  (could not read which model this gateway allows; asking for $Model - pass -Model to choose)" -ForegroundColor DarkYellow
+        throw ("No allowed Claude model could be discovered. Pass -Model. Where to find it: " +
+            "az apim nv list -g $ResourceGroup --service-name $ApimName -o table; " +
+            "Azure portal: API Management > $ApimName > Named values > models-standard or models-premium; Foundry > Deployments.")
     }
 }
 
@@ -265,12 +282,11 @@ $sub = az account show --query id -o tsv
 $ai = if ($AppInsightsName) {
     "/subscriptions/$sub/resourceGroups/$ResourceGroup/providers/Microsoft.Insights/components/$AppInsightsName"
 }
-else { Resolve-GatewayAppInsights }
-if ($ai) { Write-Host ("         component: {0}" -f ($ai -split '/')[-1]) -ForegroundColor DarkGray }
 else {
-    Write-Host "         could not find the Application Insights component the gateway's Claude API" -ForegroundColor DarkYellow
-    Write-Host "         writes to; pass -AppInsightsName" -ForegroundColor DarkYellow
+    $linked = Resolve-GatewayAppInsights
+    if ($linked) { $linked } else { Select-ClaudeAppInsights -ResourceGroup $ResourceGroup }
 }
+if ($ai) { Write-Host ("         component: {0}" -f ($ai -split '/')[-1]) -ForegroundColor DarkGray }
 $tok = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv
 $ts = "$((Get-Date).ToUniversalTime().AddHours(-1).ToString('yyyy-MM-ddTHH:mm:ssZ'))/$((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))"
 $filter = [uri]::EscapeDataString("User eq '*'")

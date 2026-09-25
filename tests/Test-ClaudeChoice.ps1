@@ -204,6 +204,160 @@ try {
 finally { Remove-Item $scratch -Recurse -Force -ErrorAction SilentlyContinue }
 
 Write-Host ''
+Write-Host 'Choosing report resources, models and Application Insights' -ForegroundColor Cyan
+$script:ReportResources = @()
+$script:ReportOutputs = @{}
+$script:Insights = @(
+    [pscustomobject]@{ name = 'appi-a'; id = '/subscriptions/s/resourceGroups/rg-app/providers/Microsoft.Insights/components/appi-a'; location = 'region-a' }
+    [pscustomobject]@{ name = 'appi-b'; id = '/subscriptions/s/resourceGroups/rg-app/providers/Microsoft.Insights/components/appi-b'; location = 'region-b' }
+)
+$script:GatewayGroups = @([pscustomobject]@{ name = 'apim-a'; group = 'rg-a' }, [pscustomobject]@{ name = 'apim-b'; group = 'rg-b' })
+function az {
+    $global:LASTEXITCODE = 0
+    $line = $args -join ' '
+    if ($line -like 'resource list*Microsoft.Insights/components*') { return (ConvertTo-Json -InputObject @($script:Insights)) }
+    if ($line -like 'resource list*') { return (ConvertTo-Json -InputObject @($script:ReportResources) -Depth 5) }
+    if ($line -like 'deployment group show*') { return (ConvertTo-Json -InputObject $script:ReportOutputs -Depth 5) }
+    if ($line -like 'apim list --query*') { return (ConvertTo-Json -InputObject @($script:GatewayGroups)) }
+    throw "unexpected az $line"
+}
+foreach ($kind in 'StorageAccount', 'AdministrationJob') {
+    $parameter = if ($kind -eq 'StorageAccount') { 'StorageAccount' } else { 'JobName' }
+    $type = if ($kind -eq 'StorageAccount') { 'Microsoft.Storage/storageAccounts' } else { 'Microsoft.App/jobs' }
+    $prefix = if ($kind -eq 'StorageAccount') { 'streports' } else { 'job-reports-admin-' }
+    $field = if ($kind -eq 'StorageAccount') { 'storageAccount' } else { 'adminJobName' }
+    $script:ReportResources = @(
+        [pscustomobject]@{ name = "${prefix}one"; type = $type; location = 'region-a'; tags = @{ 'claude-chargeback-gateway' = 'apim-one' } }
+        [pscustomobject]@{ name = "${prefix}two"; type = $type; location = 'region-b'; tags = @{ 'claude-chargeback-gateway' = 'apim-one' } }
+        [pscustomobject]@{ name = "${prefix}foreign"; type = $type; location = 'region-c'; tags = @{ 'claude-chargeback-gateway' = 'another-gateway' } }
+    )
+    $script:ReportOutputs = @{}
+    $r = Invoke-Choice { Select-ClaudeReportResource -ResourceGroup rg-app -ApimName apim-one -Kind $kind -Interactive $true -Reader (New-Reader @('2')) }
+    Assert "$kind number picks only from this gateway's tagged resources" ($r -eq "${prefix}two") "got $r"
+    $m = Get-Thrown { Select-ClaudeReportResource -ResourceGroup rg-app -ApimName apim-one -Kind $kind -Interactive $false -Reader $never }
+    Assert "$kind ambiguity names candidates, the parameter and lookup locations" ($m -match "${prefix}one" -and $m -match "${prefix}two" -and $m -notmatch "${prefix}foreign" -and $m -match "Pass -$parameter" -and $m -match 'az resource list' -and $m -match 'Azure portal:') $m
+    $script:ReportOutputs[$field] = @{ value = "${prefix}two" }
+    foreach ($console in $true, $false) {
+        $r = Invoke-Choice { Select-ClaudeReportResource -ResourceGroup rg-app -ApimName apim-one -Kind $kind -Interactive $console -Reader $never }
+        Assert "$kind deployment output counts as given (console=$console)" ($r -eq "${prefix}two") "got $r"
+    }
+    $script:ReportOutputs = @{}
+    $script:ReportResources = @($script:ReportResources[0])
+    foreach ($console in $true, $false) {
+        $r = Invoke-Choice { Select-ClaudeReportResource -ResourceGroup rg-app -ApimName apim-one -Kind $kind -Interactive $console -Reader (New-Reader @('')) }
+        Assert "$kind sole tagged resource is recommended (console=$console)" ($r -eq "${prefix}one") "got $r"
+    }
+    $shown = try { Select-ClaudeReportResource -ResourceGroup rg-app -ApimName apim-one -Kind $kind -Interactive $true -Reader (New-Reader @('')) 6>&1 | Out-String } catch { "<threw: $($_.Exception.Message)>" }
+    Assert "$kind options identify the gateway tag and Azure source" ($shown -match 'claude-chargeback-gateway' -and $shown -match 'region-a' -and $shown -match 'az resource list') $shown
+    $script:ReportResources = @()
+    $m = Get-Thrown { Select-ClaudeReportResource -ResourceGroup rg-app -ApimName apim-one -Kind $kind -Interactive $false -Reader $never }
+    Assert "$kind empty discovery explains how to register and look it up" ($m -match 'Register-ClaudeChargebackSchedule' -and $m -match 'Azure portal:' -and $m -match "Pass -$parameter") $m
+}
+
+$modelArgs = @{ Names = @('model-b', 'model-a'); Source = 'the deployed Anthropic models on ai-one'; WhereToFind = @('az cognitiveservices account deployment list -g rg-app -n ai-one -o table', 'Azure portal: Foundry > Deployments') }
+$r = Invoke-Choice { Select-ClaudeModel @modelArgs -Interactive $true -Reader (New-Reader @('')) }
+Assert 'model Enter takes the displayed alphabetical recommendation' ($r -eq 'model-a') "got $r"
+$r = Invoke-Choice { Select-ClaudeModel @modelArgs -Interactive $true -Reader (New-Reader @('2')) }
+Assert 'model number chooses the other deployment' ($r -eq 'model-b') "got $r"
+$m = Get-Thrown { Select-ClaudeModel @modelArgs -Interactive $false -Reader $never }
+Assert 'several models never become a certain unattended price decision' ($m -match 'model-a, model-b' -and $m -match 'Pass -Model' -and $m -match 'az cognitiveservices' -and $m -match 'Azure portal:') $m
+$shown = try { Select-ClaudeModel @modelArgs -Interactive $true -Reader (New-Reader @('')) 6>&1 | Out-String } catch { "<threw: $($_.Exception.Message)>" }
+Assert 'model choices explain the deployment source and uncertain recommendation' ($shown -match 'ai-one' -and $shown -match 'alphabetical' -and $shown -match 'not a price') $shown
+$r = Invoke-Choice { Select-ClaudeModel -Names @('model-a') -Source 'configured tier' -WhereToFind $modelArgs.WhereToFind -Interactive $false -Reader $never }
+Assert 'a sole allowed model is certain without a console' ($r -eq 'model-a') "got $r"
+$m = Get-Thrown { Select-ClaudeModel -Names @() -Source 'configured tier' -WhereToFind $modelArgs.WhereToFind -Parameter DefaultModel -Interactive $false -Reader $never }
+Assert 'no models names the actual parameter and lookup locations' ($m -match 'Pass -DefaultModel' -and $m -match 'Azure portal:' -and $m -match 'az cognitiveservices') $m
+
+$r = Invoke-Choice { Select-ClaudeAppInsights -ResourceGroup rg-app -Interactive $true -Reader (New-Reader @('2')) }
+Assert 'Application Insights number returns that component ARM id' ($r -eq $script:Insights[1].id) "got $r"
+$m = Get-Thrown { Select-ClaudeAppInsights -ResourceGroup rg-app -Interactive $false -Reader $never }
+Assert 'Application Insights ambiguity names candidates and lookup locations' ($m -match 'appi-a, appi-b' -and $m -match 'Pass -AppInsightsName' -and $m -match 'az resource list' -and $m -match 'Azure portal:') $m
+$script:Insights = @($script:Insights[0])
+foreach ($console in $true, $false) {
+    $r = Invoke-Choice { Select-ClaudeAppInsights -ResourceGroup rg-app -Interactive $console -Reader (New-Reader @('')) }
+    Assert "the sole Application Insights is recommended (console=$console)" ($r -eq $script:Insights[0].id) "got $r"
+}
+$shown = try { Select-ClaudeAppInsights -ResourceGroup rg-app -Interactive $true -Reader (New-Reader @('')) 6>&1 | Out-String } catch { "<threw: $($_.Exception.Message)>" }
+Assert 'Application Insights options identify their ARM source and region' ($shown -match 'region-a' -and $shown -match 'Microsoft.Insights/components/appi-a' -and $shown -match 'az resource list') $shown
+$script:Insights = @()
+$m = Get-Thrown { Select-ClaudeAppInsights -ResourceGroup rg-app -Interactive $false -Reader $never }
+Assert 'no Application Insights includes command and portal guidance' ($m -match 'Pass -AppInsightsName' -and $m -match 'az resource list' -and $m -match 'Azure portal:') $m
+
+$r = Invoke-Choice { Select-ClaudeResourceGroup -Interactive $true -Reader (New-Reader @('2')) }
+Assert 'resource group number chooses from gateways across the subscription' ($r -eq 'rg-b') "got $r"
+$m = Get-Thrown { Select-ClaudeResourceGroup -Interactive $false -Reader $never }
+Assert 'resource group ambiguity names groups and lookup locations' ($m -match 'rg-a, rg-b' -and $m -match 'az apim list' -and $m -match 'Azure portal:') $m
+$script:GatewayGroups = @($script:GatewayGroups[0])
+foreach ($console in $true, $false) {
+    $r = Invoke-Choice { Select-ClaudeResourceGroup -Interactive $console -Reader (New-Reader @('')) }
+    Assert "a sole gateway resource group is recommended (console=$console)" ($r -eq 'rg-a') "got $r"
+}
+
+. (Join-Path $root 'scripts/ClaudeChargebackDiscovery.ps1')
+$reportOptions = @([pscustomobject]@{Id='region-a';Name='Region A'}, [pscustomobject]@{Id='region-b';Name='Region B'})
+$reportWhere = @('az account list-locations -o table', 'Azure portal: Subscriptions > Locations')
+$r = Invoke-Choice { Select-ClaudeReportOption -Prompt Location -Parameter Location -Options $reportOptions -DefaultId region-b -WhereToFind $reportWhere -ReadSelection { param($p,$d) '' } }
+Assert 'the reports adapter keeps Enter on the gateway region' ($r.Id -eq 'region-b') "got $r"
+$r = Invoke-Choice { Select-ClaudeReportOption -Prompt Location -Parameter Location -Options $reportOptions -WhereToFind $reportWhere -ReadSelection { param($p,$d) '2' } }
+Assert 'the reports adapter numbers the discovered options' ($r.Id -eq 'region-b') "got $r"
+$r = Invoke-Choice { Select-ClaudeReportOption -Prompt Location -Parameter Location -Options $reportOptions -DefaultId region-b -WhereToFind $reportWhere -NonInteractive }
+Assert 'the reports adapter accepts a configured region without a console' ($r.Id -eq 'region-b') "got $r"
+$m = Get-Thrown { Select-ClaudeReportOption -Prompt Location -Parameter Location -Options $reportOptions -WhereToFind $reportWhere -NonInteractive }
+Assert 'the reports adapter ambiguity names candidates and where to find them' ($m -match 'Region A, Region B' -and $m -match 'Pass -Location' -and $m -match 'az account list-locations' -and $m -match 'Azure portal:') $m
+$savedInteractive = $env:CLAUDE_NONINTERACTIVE
+$env:CLAUDE_NONINTERACTIVE = '1'
+try {
+    $m = Get-Thrown { Select-ClaudeReportOption -Prompt Location -Parameter Location -Options $reportOptions -WhereToFind $reportWhere }
+    Assert 'the reports adapter detects headless execution without a switch' ($m -match 'ambiguous' -and $m -match 'Pass -Location') $m
+}
+finally { $env:CLAUDE_NONINTERACTIVE = $savedInteractive }
+
+Write-Host ''
+Write-Host 'Telemetry keeps an existing job target without asking' -ForegroundColor Cyan
+$telemetryFixture = @{
+    Mode = 'linked'; InventoryReads = 0
+    Linked = '/subscriptions/s/resourceGroups/rg-else/providers/Microsoft.Insights/components/appi-linked'
+    Local = '/subscriptions/s/resourceGroups/rg-app/providers/Microsoft.Insights/components/appi-a'
+}
+$azMock = {
+    $global:LASTEXITCODE = 0
+    $line = $args -join ' '
+    if ($line -like 'account show*') { return 's' }
+    if ($line -like 'account get-access-token*') { return 'fixture-token' }
+    if ($line -like 'resource list*Microsoft.Insights/components*') {
+        $telemetryFixture.InventoryReads++
+        return ('[{"name":"appi-a","id":"' + $telemetryFixture.Local + '","location":"region-a"}]')
+    }
+    throw "unexpected az $line"
+}.GetNewClosure()
+Set-Item Function:\az $azMock
+$armMock = {
+    param($Uri, $Headers)
+    if ($Uri -like '*/diagnostics/applicationinsights?*') {
+        if ($telemetryFixture.Mode -eq 'linked') { return [pscustomobject]@{ properties = @{ loggerId = '/subscriptions/s/resourceGroups/rg-app/providers/Microsoft.ApiManagement/service/apim-one/loggers/current'; metrics = $true } } }
+        return $null
+    }
+    if ($Uri -like '*/loggers/current?*') { return [pscustomobject]@{ properties = @{ resourceId = $telemetryFixture.Linked } } }
+    $id = if ($telemetryFixture.Mode -eq 'linked') { $telemetryFixture.Linked } else { $telemetryFixture.Local }
+    if ($Uri -eq "https://management.azure.com$id`?api-version=2020-02-02") {
+        return [pscustomobject]@{ properties = @{ AppId = 'fixture-app'; WorkspaceResourceId = '/subscriptions/s/resourceGroups/rg-logs/providers/Microsoft.OperationalInsights/workspaces/log-linked' } }
+    }
+    throw "unexpected ARM read: $Uri"
+}.GetNewClosure()
+Set-Item Function:\Invoke-RestMethod $armMock
+$telemetryScript = Join-Path $root 'scripts/Get-ClaudeTelemetry.ps1'
+$r = Invoke-Choice { & $telemetryScript -ResourceGroup rg-app -ApimName apim-one -Interactive $false }
+Assert 'a recorded diagnostic keeps the cross-group component ARM id' ($r.AppInsights -eq 'appi-linked' -and $r.Workspace -eq 'log-linked') "$r"
+Assert 'a working scheduled telemetry path never inventories choices' ($telemetryFixture.InventoryReads -eq 0)
+$telemetryFixture.Mode = 'explicit'
+$r = Invoke-Choice { & $telemetryScript -ResourceGroup rg-app -ApimName apim-one -AppInsightsName appi-a -Interactive $false }
+Assert 'an explicit telemetry component is given, not asked for' ($r.AppInsights -eq 'appi-a' -and $telemetryFixture.InventoryReads -eq 0) "$r"
+$telemetryFixture.Mode = 'discovered'
+$r = Invoke-Choice { & $telemetryScript -ResourceGroup rg-app -ApimName apim-one -Interactive $false }
+Assert 'a missing logger can use a sole discovered component without a console' ($r.AppInsights -eq 'appi-a' -and $telemetryFixture.InventoryReads -eq 1) "$r"
+Remove-Item Function:\Invoke-RestMethod
+
+Write-Host ''
 Write-Host 'Scripts that use it' -ForegroundColor Cyan
 foreach ($name in 'Publish-ClaudeWorkbook.ps1', 'Publish-ClaudeQueries.ps1', 'Publish-ClaudeGrafana.ps1') {
     $text = Get-Content (Join-Path $root "scripts/$name") -Raw
@@ -245,6 +399,27 @@ $overshoot = Get-Content (Join-Path $root 'scripts/Measure-ClaudeOvershoot.ps1')
 Assert 'overshoot offers a workspace with lookup guidance' ($overshoot -match 'ClaudeChoice\.ps1' -and $overshoot -match 'Select-ClaudeWorkspace -ResourceGroup')
 $backup = Get-Content (Join-Path $root 'scripts/Backup-ClaudeGateway.ps1') -Raw
 Assert 'gateway backup offers a workspace when no local diagnostic target is certain' ($backup -match 'Select-ClaudeWorkspace -ResourceGroup')
+
+foreach ($name in 'Show-Governance.ps1', 'Setup-ClaudeFoundryDirect.ps1', 'Test-ClaudeNetworkEdge.ps1') {
+    $text = Get-Content (Join-Path $root "scripts/$name") -Raw
+    Assert "$name offers the model instead of silently taking a deployment" ($text -match 'ClaudeChoice\.ps1' -and $text -match 'Select-ClaudeModel' -and $text -notmatch '\[0\]\.name')
+}
+foreach ($name in 'ClaudeChargebackStorage.ps1', 'ClaudeChargebackAdministration.ps1') {
+    $text = Get-Content (Join-Path $root "scripts/$name") -Raw
+    Assert "$name offers the tagged resource with the shared selector" ($text -match 'ClaudeChoice\.ps1' -and $text -match 'Select-ClaudeReportResource' -and $text -notmatch '\[0\]\.name')
+}
+$schedule = Get-Content (Join-Path $root 'scripts/Register-ClaudeChargebackSchedule.ps1') -Raw
+Assert 'reports registration selects storage before a settings write' ($schedule -match 'Get-ClaudeReportStorageAccount' -and $schedule -notmatch '\[0\]\.name' -and
+    $schedule.IndexOf('$StorageAccount=Get-ClaudeReportStorageAccount') -lt $schedule.IndexOf("if(`$changes.Count)"))
+$reportPass = Get-Content (Join-Path $root 'scripts/Invoke-ClaudeChargebackSchedule.ps1') -Raw
+Assert 'a manual reports pass asks only for inputs the job already supplies' ($reportPass -match 'ClaudeChoice\.ps1' -and $reportPass -match 'if\(-not \$StorageAccount\)' -and $reportPass -match 'Get-ClaudeReportStorageAccount')
+Assert 'telemetry offers a component when neither diagnostic nor explicit value identifies it' ($telemetry -match 'Select-ClaudeAppInsights -ResourceGroup')
+$reportNetwork = Get-Content (Join-Path $root 'scripts/ClaudeChargebackNetwork.ps1') -Raw
+Assert 'reports network choices name their parameters and lookup locations' ($reportNetwork -match 'ClaudeChoice\.ps1' -and $reportNetwork -match '\-WhereToFind' -and $reportNetwork -notmatch '\[0\]\.name')
+foreach ($name in 'Set-ClaudeChargebackRecipients.ps1', 'Set-ClaudeChargebackSettings.ps1') {
+    $text = Get-Content (Join-Path $root "scripts/$name") -Raw
+    Assert "$name forwards its explicit job and headless setting" ($text.Contains('Invoke-ClaudeReportAdminRequest $ResourceGroup $ApimName $request $JobName -NonInteractive:$NonInteractive') -and $text -match '\[string\]\$JobName' -and $text -notmatch '\[0\]\.name')
+}
 
 $turnstileJob = Get-Content (Join-Path $root 'infra/turnstile-schedule.bicep') -Raw
 $reportJob = Get-Content (Join-Path $root 'infra/chargeback-reports.bicep') -Raw

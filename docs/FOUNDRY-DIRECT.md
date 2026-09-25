@@ -185,7 +185,16 @@ Two details that are easy to get wrong:
   background work; left unset it asks for one that does not exist and the
   session fails with `DeploymentNotFound` partway through, which reads as a
   bug rather than a setting. A genuine Haiku deployment is used if the resource
-  has one, and Sonnet otherwise.
+  has one; missing families use Sonnet, then Opus, then the selected fallback.
+
+If no Sonnet deployment identifies the access-check model, setup offers the
+deployment names with their discovery source and command/portal lookup. Enter
+takes the alphabetical recommendation, which is not a price recommendation.
+Without a console, multiple choices require `-DefaultModel <deployment-name>`.
+That parameter is checked against the discovered or supplied `-Models`, is used
+for the access check, and supplies missing-family aliases. An existing family
+alias still uses that family's deployment. No client settings are written
+until the choice and access check succeed.
 
 ### Deployment names are not model names
 

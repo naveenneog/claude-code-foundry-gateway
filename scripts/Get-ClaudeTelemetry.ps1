@@ -20,6 +20,7 @@
       1. the API's own diagnostic       apis/{api}/diagnostics/applicationinsights
       2. the service-level diagnostic   diagnostics/applicationinsights
       3. -AppInsightsName, if given
+      4. discovered components, offered with their command and portal lookup
 
 .PARAMETER Quiet
     Emit only the app id, for use in a pipeline.
@@ -81,19 +82,22 @@ else {
 }
 
 $componentName = $null
+$componentId = $null
 if ($loggerId) {
     $logger = Get-Arm ("https://management.azure.com" + $loggerId + $v)
     if ($logger -and $logger.properties.resourceId) {
+        $componentId = [string]$logger.properties.resourceId
         $componentName = ($logger.properties.resourceId -split '/')[-1]
     }
 }
 if (-not $componentName) { $componentName = $AppInsightsName }
 if (-not $componentName) {
-    throw "Could not work out which Application Insights $ApimName logs to. Pass -AppInsightsName."
+    $componentId = Select-ClaudeAppInsights -ResourceGroup $ResourceGroup -Interactive $Interactive
+    $componentName = ($componentId -split '/')[-1]
 }
 
-$component = Get-Arm ("https://management.azure.com/subscriptions/$sub/resourceGroups/$ResourceGroup" +
-                      "/providers/Microsoft.Insights/components/$componentName" + '?api-version=2020-02-02')
+if (-not $componentId) { $componentId = "/subscriptions/$sub/resourceGroups/$ResourceGroup/providers/Microsoft.Insights/components/$componentName" }
+$component = Get-Arm ("https://management.azure.com$componentId" + '?api-version=2020-02-02')
 if (-not $component) { throw "Application Insights '$componentName' not found in $ResourceGroup." }
 
 if ($Quiet) { $component.properties.AppId; exit 0 }
