@@ -104,6 +104,16 @@ real portal URLs **without opening a browser**. Use `--subscription`, `--resourc
 `--select key=value` and `--non-interactive` for automation. Real choices belong in runtime
 parameters/environment, not in spec files.
 
+A blade whose data plane is private (a private Key Vault's **Certificates** list) loads only
+when the browser reaches that host through a route inside the network. Set
+`PORTAL_PROXY_PAC_URL` to a PAC file served on this machine (`http://127.0.0.1:<port>/<name>.pac`)
+that sends only that host through such a route; any other value is refused. The runner never
+disables TLS checks or adds other browser switches.
+
+The runner refuses to start while its own code (`guide/*.mjs`, `guide/lib/**`) differs from
+the commit, because every record names the commit that took it; spec files may differ, and each
+record carries the hash of the step it ran (`spec_sha256`).
+
 ARM discovery passes the selected subscription explicitly. Entra discovery uses the current
 Azure CLI tenant and refuses a selected subscription in another tenant; it never changes the
 CLI account or passes ARM's `--subscription` option to directory commands.

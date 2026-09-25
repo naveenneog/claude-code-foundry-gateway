@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { loadSteps, selectSteps, documentedOutputs, documentationProblems, isBlockedAction } from './lib/portal-specs.mjs';
-import { AuthenticationSurface, authenticationReason, parseArguments, peopleRedactionPairs, resolvePlan, runBatch, uncommittedCaptureCode } from './lib/portal-batch.mjs';
+import { AuthenticationSurface, authenticationReason, parseArguments, peopleRedactionPairs, proxyPacArguments, resolvePlan, runBatch, uncommittedCaptureCode } from './lib/portal-batch.mjs';
 import { lockProfile } from './lib/portal-profile.mjs';
 
 const root = process.cwd();
@@ -61,7 +61,7 @@ if (options.list) {
     try {
       context = await chromium.launchPersistentContext(path.resolve(options.profile), {
         channel: 'msedge', headless: !options.headed, viewport: { width: 1600, height: 1000 },
-        args: ['--no-first-run'],
+        args: ['--no-first-run', ...proxyPacArguments(process.env.PORTAL_PROXY_PAC_URL)],
       });
       const page = context.pages()[0] ?? await context.newPage();
       async function ensureAuthenticated() {

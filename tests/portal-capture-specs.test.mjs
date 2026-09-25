@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { specProblems, loadSteps, selectSteps, documentedOutputs, documentationProblems } from '../guide/lib/portal-specs.mjs';
-import { AuthenticationSurface, authenticationReason, parseArguments, peopleRedactionPairs, portalUrl, resolvePlan, runBatch, uncommittedCaptureCode } from '../guide/lib/portal-batch.mjs';
+import { AuthenticationSurface, authenticationReason, parseArguments, peopleRedactionPairs, portalUrl, proxyPacArguments, resolvePlan, runBatch, uncommittedCaptureCode } from '../guide/lib/portal-batch.mjs';
 import { lockProfile } from '../guide/lib/portal-profile.mjs';
 import * as discovery from '../guide/lib/portal-discovery.mjs';
 
@@ -229,6 +229,15 @@ test('a batch refuses to record pictures taken by uncommitted capture code', () 
   assert.deepEqual(uncommittedCaptureCode(''), []);
   assert.deepEqual(uncommittedCaptureCode(' M guide/lib/turnstile-live.mjs\n M guide/captures/p50.json\n'), ['guide/lib/turnstile-live.mjs']);
   assert.deepEqual(uncommittedCaptureCode('M  guide/capture-portal.mjs\n'), ['guide/capture-portal.mjs']);
+});
+
+test('a proxy route for a private blade is accepted only as a loopback PAC file', () => {
+  assert.deepEqual(proxyPacArguments(undefined), []);
+  assert.deepEqual(proxyPacArguments(''), []);
+  assert.deepEqual(proxyPacArguments('http://127.0.0.1:56060/proxy.pac'), ['--proxy-pac-url=http://127.0.0.1:56060/proxy.pac']);
+  for (const value of ['http://proxy.example.org/proxy.pac', 'https://127.0.0.1:56060/proxy.pac', 'http://127.0.0.1.example.org/p.pac',
+    'http://127.0.0.1:56060/proxy.pac --disable-web-security', 'file:///C:/proxy.pac'])
+    assert.throws(() => proxyPacArguments(value), /loopback PAC/, value);
 });
 
 test('the profile lock refuses a second browser and releases only once, using in-memory IO', () => {
