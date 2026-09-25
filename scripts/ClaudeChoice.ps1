@@ -249,3 +249,119 @@ function Select-ClaudeWorkspace {
     if ($Reader) { $choice.Reader = $Reader }
     Select-ClaudeChoice @choice
 }
+
+function Select-ClaudeFoundryAccount {
+    param(
+        [Parameter(Mandatory = $true)][string]$ResourceGroup,
+        [string]$ApimName,
+        [string]$Kind,
+        [object]$Interactive = $null,
+        [scriptblock]$Reader
+    )
+    $discovered = az cognitiveservices account list -g $ResourceGroup -o json 2>$null | ConvertFrom-Json
+    $accounts = @($discovered | Where-Object { $_.name -and (-not $Kind -or $_.kind -eq $Kind) })
+    $backend = $null
+    if ($ApimName) {
+        try {
+            $url = az apim api show -g $ResourceGroup --service-name $ApimName --api-id claude-foundry --query serviceUrl -o tsv 2>$null
+            $parsed = $null
+            if ([uri]::TryCreate([string]$url, [UriKind]::Absolute, [ref]$parsed)) { $backend = $parsed.Host }
+        }
+        catch { Write-Verbose 'The gateway backend could not be read; offering the discovered accounts.' }
+    }
+    $linked = @($accounts | Where-Object {
+        $hosts = @()
+        $endpoints = @($_.properties.endpoint)
+        if ($_.properties.endpoints) { $endpoints += @($_.properties.endpoints.PSObject.Properties | ForEach-Object { $_.Value }) }
+        foreach ($endpoint in $endpoints) {
+            $parsed = $null
+            if ($endpoint -and [uri]::TryCreate([string]$endpoint, [UriKind]::Absolute, [ref]$parsed)) { $hosts += $parsed.Host }
+        }
+        $backend -and ($hosts -contains $backend -or
+            ($_.properties.customSubDomainName -and ($backend -split '\.')[0] -ieq $_.properties.customSubDomainName) -or
+            (-not $hosts.Count -and ($backend -split '\.')[0] -ieq $_.name))
+    })
+    $options = foreach ($account in $accounts) {
+        $recommended = ($linked.Count -eq 1 -and $linked[0].name -eq $account.name) -or $accounts.Count -eq 1
+        $reason = if ($linked.Count -eq 1 -and $linked[0].name -eq $account.name) {
+            "the gateway $ApimName backend points at this account's endpoint"
+        } elseif ($accounts.Count -eq 1) { "the only matching Cognitive Services account in $ResourceGroup" } else { '' }
+        New-ClaudeChoiceOption -Value $account.name -Detail ("az cognitiveservices account list: {0}, {1}, {2}" -f $ResourceGroup, $account.kind, $account.location) `
+            -Recommended:$recommended -Reason $reason
+    }
+    $choice = @{
+        Parameter = 'FoundryAccount'; Question = "Which Foundry account in $ResourceGroup?"
+        Options = @($options); Interactive = $Interactive; AcceptRecommendedWithoutConsole = $true
+        NoneMessage = "No matching Cognitive Services account is visible in $ResourceGroup."
+        WhereToFind = @(
+            "az cognitiveservices account list -g $ResourceGroup -o table"
+            "az apim api show -g $ResourceGroup --service-name $ApimName --api-id claude-foundry --query serviceUrl -o tsv"
+            "Azure portal: Resource groups > $ResourceGroup > Foundry resource > Keys and Endpoint; API Management > APIs > claude-foundry > Settings > Web service URL"
+        )
+    }
+    if ($Reader) { $choice.Reader = $Reader }
+    Select-ClaudeChoice @choice
+}
+
+function Select-ClaudeTurnstileResourceGroup {
+    param(
+        [string]$ResourceGroup,
+        [string]$ApimName,
+        $Integration,
+        [object]$Interactive = $null,
+        [scriptblock]$Reader
+    )
+    if ($Integration -and $Integration.resourceGroup) {
+        Write-Host ("  -TurnstileResourceGroup {0}: recorded in {1}'s turnstile-integration named value" -f $Integration.resourceGroup, $ApimName) -ForegroundColor DarkGray
+        return [string]$Integration.resourceGroup
+    }
+    $apps = az webapp list --query "[].{name:name,resourceGroup:resourceGroup}" -o json 2>$null | ConvertFrom-Json
+    $groups = @($apps | Where-Object { $_.resourceGroup } | Group-Object resourceGroup | Sort-Object Name)
+    $options = foreach ($group in $groups) {
+        New-ClaudeChoiceOption -Value $group.Name -Detail ('az webapp list: ' + (($group.Group | ForEach-Object { $_.name }) -join ', ')) `
+            -Recommended:($groups.Count -eq 1) -Reason 'the only resource group with a visible web app; the connection step verifies its Turnstile settings'
+    }
+    $choice = @{
+        Parameter = 'TurnstileResourceGroup'; Question = 'Which resource group contains your Turnstile deployment?'
+        Options = @($options); Interactive = $Interactive; AcceptRecommendedWithoutConsole = $true
+        NoneMessage = 'No web app resource group is visible. Check the Turnstile deployment and the selected subscription.'
+        WhereToFind = @(
+            "az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id turnstile-integration --query value -o tsv"
+            'az webapp list --query "[].{name:name,resourceGroup:resourceGroup}" -o table'
+            'Azure portal: API Management > Named values > turnstile-integration > resourceGroup; or the Turnstile App Service > Overview > Resource group'
+        )
+    }
+    if ($Reader) { $choice.Reader = $Reader }
+    Select-ClaudeChoice @choice
+}
+
+function Select-ClaudeBackup {
+    param(
+        [Parameter(Mandatory = $true)][string]$Folder,
+        [string]$Pattern = '*.zip',
+        [string]$Parameter = 'Path',
+        [object]$Interactive = $null,
+        [scriptblock]$Reader
+    )
+    $files = @(Get-ChildItem -LiteralPath $Folder -Filter $Pattern -File -ErrorAction SilentlyContinue |
+        Sort-Object @{ Expression = 'LastWriteTimeUtc'; Descending = $true }, Name)
+    $options = for ($i = 0; $i -lt $files.Count; $i++) {
+        $file = $files[$i]
+        New-ClaudeChoiceOption -Value $file.FullName -Label $file.Name `
+            -Detail ("{0}; modified {1:u} UTC; {2} bytes" -f $file.DirectoryName, $file.LastWriteTimeUtc, $file.Length) `
+            -Recommended:($i -eq 0) -Reason 'newest modified archive in this folder; check the source machine before restoring'
+    }
+    $choice = @{
+        Parameter = $Parameter; Question = "Which $Pattern backup should be restored?"
+        Options = @($options); Interactive = $Interactive
+        AcceptRecommendedWithoutConsole = ($files.Count -eq 1)
+        NoneMessage = "No $Pattern backups in '$Folder'. Pass -Folder to say where they are."
+        WhereToFind = @(
+            "Get-ChildItem -LiteralPath '$Folder' -Filter '$Pattern' | Sort-Object LastWriteTimeUtc -Descending"
+            "File Explorer: $Folder (local archives, not an Azure portal resource)"
+            'Migrate-ClaudeWorkstation.ps1 -Backup -Folder <folder> creates the archives on the source machine'
+        )
+    }
+    if ($Reader) { $choice.Reader = $Reader }
+    Select-ClaudeChoice @choice
+}

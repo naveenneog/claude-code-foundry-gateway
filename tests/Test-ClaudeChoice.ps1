@@ -117,6 +117,89 @@ finally {
 }
 
 Write-Host ''
+Write-Host 'Choosing the Foundry account, Turnstile group and backup' -ForegroundColor Cyan
+$script:Accounts = @(
+    [pscustomobject]@{ name = 'ai-other'; kind = 'AIServices'; location = 'region-a'; properties = @{ endpoint = 'https://other-endpoint.services.ai.azure.com/' } }
+    [pscustomobject]@{ name = 'ai-linked'; kind = 'AIServices'; location = 'region-b'; properties = @{ endpoint = 'https://backend-endpoint.services.ai.azure.com/' } }
+)
+$script:Backend = 'https://backend-endpoint.services.ai.azure.com/anthropic'
+$script:Apps = @(
+    [pscustomobject]@{ name = 'api-a'; resourceGroup = 'rg-turnstile-a' }
+    [pscustomobject]@{ name = 'api-b'; resourceGroup = 'rg-turnstile-b' }
+)
+function az {
+    $global:LASTEXITCODE = 0
+    $line = $args -join ' '
+    if ($line -like 'cognitiveservices account list*') { return (ConvertTo-Json -InputObject @($script:Accounts) -Depth 5) }
+    if ($line -like 'apim api show*') { return $script:Backend }
+    if ($line -like 'webapp list*') { return (ConvertTo-Json -InputObject @($script:Apps)) }
+    throw "unexpected az $line"
+}
+$r = Invoke-Choice { Select-ClaudeFoundryAccount -ResourceGroup rg-app -ApimName apim-one -Interactive $true -Reader (New-Reader @('')) }
+Assert 'Foundry Enter takes the account whose endpoint the backend uses' ($r -eq 'ai-linked') "got $r"
+$r = Invoke-Choice { Select-ClaudeFoundryAccount -ResourceGroup rg-app -ApimName apim-one -Interactive $true -Reader (New-Reader @('1')) }
+Assert 'Foundry number can choose the other account' ($r -eq 'ai-other') "got $r"
+$r = Invoke-Choice { Select-ClaudeFoundryAccount -ResourceGroup rg-app -ApimName apim-one -Interactive $false -Reader $never }
+Assert 'the backend is a certain Foundry recommendation without a console' ($r -eq 'ai-linked') "got $r"
+$shown = try { Select-ClaudeFoundryAccount -ResourceGroup rg-app -ApimName apim-one -Interactive $true -Reader (New-Reader @('')) 6>&1 | Out-String } catch { "<threw: $($_.Exception.Message)>" }
+Assert 'Foundry options name their source and lookup command and portal path' ($shown -match 'gateway.*backend' -and $shown -match 'az cognitiveservices account list' -and $shown -match 'Azure portal:' -and $shown -match 'region-a') $shown
+$script:Backend = 'https://not-a-listed-endpoint.services.ai.azure.com/anthropic'
+$m = Get-Thrown { Select-ClaudeFoundryAccount -ResourceGroup rg-app -ApimName apim-one -Interactive $false -Reader $never }
+Assert 'Foundry ambiguity names both accounts and where to find them' ($m -match 'ai-other' -and $m -match 'ai-linked' -and $m -match 'Pass -FoundryAccount' -and $m -match 'az cognitiveservices account list' -and $m -match 'Azure portal:') $m
+$script:Accounts = @($script:Accounts[0])
+$r = Invoke-Choice { Select-ClaudeFoundryAccount -ResourceGroup rg-app -ApimName apim-one -Interactive $false -Reader $never }
+Assert 'a sole Foundry account is certain without a backend link' ($r -eq 'ai-other') "got $r"
+$script:Accounts = @()
+$m = Get-Thrown { Select-ClaudeFoundryAccount -ResourceGroup rg-app -Interactive $false -Reader $never }
+Assert 'no Foundry account names the command and portal, not a bare refusal' ($m -match 'Pass -FoundryAccount' -and $m -match 'az cognitiveservices account list' -and $m -match 'Azure portal:') $m
+
+$recorded = @{ resourceGroup = 'rg-recorded'; url = 'https://api-recorded.azurewebsites.net' }
+foreach ($console in $true, $false) {
+    $r = Invoke-Choice { Select-ClaudeTurnstileResourceGroup -ResourceGroup rg-app -ApimName apim-one -Integration $recorded -Interactive $console -Reader $never }
+    Assert "a recorded Turnstile group counts as given (console=$console)" ($r -eq 'rg-recorded') "got $r"
+}
+$r = Invoke-Choice { Select-ClaudeTurnstileResourceGroup -ResourceGroup rg-app -ApimName apim-one -Interactive $true -Reader (New-Reader @('2')) }
+Assert 'Turnstile group number picks from discovered web app groups' ($r -eq 'rg-turnstile-b') "got $r"
+$m = Get-Thrown { Select-ClaudeTurnstileResourceGroup -ResourceGroup rg-app -ApimName apim-one -Interactive $false -Reader $never }
+Assert 'unrecorded Turnstile ambiguity names groups, command and portal' ($m -match 'rg-turnstile-a' -and $m -match 'rg-turnstile-b' -and $m -match 'Pass -TurnstileResourceGroup' -and $m -match 'az webapp list' -and $m -match 'Azure portal:') $m
+$script:Apps = @($script:Apps[0])
+foreach ($console in $true, $false) {
+    $r = Invoke-Choice { Select-ClaudeTurnstileResourceGroup -ResourceGroup rg-app -ApimName apim-one -Interactive $console -Reader (New-Reader @('')) }
+    Assert "a sole web app group is recommended (console=$console)" ($r -eq 'rg-turnstile-a') "got $r"
+}
+$shown = try { Select-ClaudeTurnstileResourceGroup -ResourceGroup rg-app -ApimName apim-one -Interactive $true -Reader (New-Reader @('')) 6>&1 | Out-String } catch { "<threw: $($_.Exception.Message)>" }
+Assert 'Turnstile group options name the app and recorded named value lookup' ($shown -match 'api-a' -and $shown -match 'turnstile-integration' -and $shown -match 'az apim nv show') $shown
+$script:Apps = @()
+$m = Get-Thrown { Select-ClaudeTurnstileResourceGroup -ResourceGroup rg-app -ApimName apim-one -Interactive $false -Reader $never }
+Assert 'no Turnstile group has command and portal guidance' ($m -match 'Pass -TurnstileResourceGroup' -and $m -match 'az webapp list' -and $m -match 'Azure portal:') $m
+
+$scratch = Join-Path ([IO.Path]::GetTempPath()) "claude-backup-choice-$PID-$(Get-Random)"
+New-Item -ItemType Directory -Path $scratch -Force | Out-Null
+try {
+    $older = Join-Path $scratch 'claude-code-old.zip'
+    $newer = Join-Path $scratch 'claude-code-new.zip'
+    Set-Content $older 'fixture'
+    Set-Content $newer 'fixture'
+    (Get-Item $older).LastWriteTimeUtc = [datetime]'2026-01-01T00:00:00Z'
+    (Get-Item $newer).LastWriteTimeUtc = [datetime]'2026-02-01T00:00:00Z'
+    $r = Invoke-Choice { Select-ClaudeBackup -Folder $scratch -Pattern 'claude-code-*.zip' -Parameter CodeBackup -Interactive $true -Reader (New-Reader @('')) }
+    Assert 'backup Enter recommends the newest by modification time' ($r -eq $newer) "got $r"
+    $r = Invoke-Choice { Select-ClaudeBackup -Folder $scratch -Pattern 'claude-code-*.zip' -Parameter CodeBackup -Interactive $true -Reader (New-Reader @('2')) }
+    Assert 'backup number can choose an older archive' ($r -eq $older) "got $r"
+    $m = Get-Thrown { Select-ClaudeBackup -Folder $scratch -Pattern 'claude-code-*.zip' -Parameter CodeBackup -Interactive $false -Reader $never }
+    Assert 'newest does not mean certain: unattended backup ambiguity refuses' ($m -match 'claude-code-new.zip' -and $m -match 'claude-code-old.zip' -and $m -match 'Pass -CodeBackup' -and $m -match 'Get-ChildItem' -and $m -match 'File Explorer:') $m
+    $shown = try { Select-ClaudeBackup -Folder $scratch -Pattern 'claude-code-*.zip' -Parameter CodeBackup -Interactive $true -Reader (New-Reader @('')) 6>&1 | Out-String } catch { "<threw: $($_.Exception.Message)>" }
+    Assert 'backup options show source folder, UTC time and recommendation reason' ($shown.Contains($scratch) -and $shown -match '2026-02-01' -and $shown -match 'newest' -and $shown -match 'UTC') $shown
+    Remove-Item $newer
+    $r = Invoke-Choice { Select-ClaudeBackup -Folder $scratch -Pattern 'claude-code-*.zip' -Parameter CodeBackup -Interactive $false -Reader $never }
+    Assert 'a sole backup is certain without a console' ($r -eq $older) "got $r"
+    Remove-Item $older
+    $m = Get-Thrown { Select-ClaudeBackup -Folder $scratch -Pattern 'claude-code-*.zip' -Parameter CodeBackup -Interactive $false -Reader $never }
+    Assert 'no backups names the local lookup instead of an Azure portal' ($m -match 'Pass -CodeBackup' -and $m -match 'Get-ChildItem' -and $m -match 'File Explorer:') $m
+}
+finally { Remove-Item $scratch -Recurse -Force -ErrorAction SilentlyContinue }
+
+Write-Host ''
 Write-Host 'Scripts that use it' -ForegroundColor Cyan
 foreach ($name in 'Publish-ClaudeWorkbook.ps1', 'Publish-ClaudeQueries.ps1', 'Publish-ClaudeGrafana.ps1') {
     $text = Get-Content (Join-Path $root "scripts/$name") -Raw

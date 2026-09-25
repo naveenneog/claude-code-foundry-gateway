@@ -2945,6 +2945,24 @@ $mutations = @(
        File  = 'scripts/Publish-ClaudeWorkbook.ps1'
        From  = '$chosenWorkspaceId = Select-ClaudeWorkspace -ResourceGroup'
        To    = '$chosenWorkspaceId = $null # -ResourceGroup' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'the Foundry chooser loses the gateway backend recommendation'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = 'if ([uri]::TryCreate([string]$url, [UriKind]::Absolute, [ref]$parsed)) { $backend = $parsed.Host }'
+       To    = '$backend = $null' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'a recorded Turnstile resource group is asked for again'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = 'if ($Integration -and $Integration.resourceGroup) {'
+       To    = 'if ($false) {' }
+
+    @{ Suite = 'Test-ClaudeChoice.ps1'
+       Name  = 'an unattended restore treats the newest backup as certain'
+       File  = 'scripts/ClaudeChoice.ps1'
+       From  = 'AcceptRecommendedWithoutConsole = ($files.Count -eq 1)'
+       To    = 'AcceptRecommendedWithoutConsole = $true' }
 )
 
 # END MUTATION MANIFEST
