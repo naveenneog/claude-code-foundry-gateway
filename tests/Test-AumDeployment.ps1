@@ -126,6 +126,8 @@ if ($LASTEXITCODE) { exit $LASTEXITCODE }
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
 & (Join-Path $PSScriptRoot 'Test-AumManagerClaims.ps1')
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
+& node --test --test-reporter=tap (Join-Path $PSScriptRoot 'aum-proof-receipts.test.mjs')
+Assert ($LASTEXITCODE -eq 0) 'measured receipt rendering requires restored proof and whitelists public fields'
 foreach ($template in @('aum-service.bicep','aum-service-network.bicep')) {
     $build = & az bicep build --file (Join-Path $root "infra\$template") --stdout --only-show-errors 2>&1 | Out-String
     Assert ($LASTEXITCODE -eq 0) "$template compiles: $build"
