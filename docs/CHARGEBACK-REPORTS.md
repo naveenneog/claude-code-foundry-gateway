@@ -529,6 +529,7 @@ network resources must also be included in a deployed bill of materials.
 | `'charmap' codec can't encode character '\ufeff'` in `az containerapp job logs show` | The Windows CLI log-stream decoder failed on the BOM. Read the durable workspace log through the query API |
 | Filtering console logs by the ARM environment name returns no rows | `EnvironmentName` is the runtime-generated name, not necessarily the ARM name. Filter by the exact `JobName` or execution's `ContainerGroupName` |
 | Every mutation is caught, but Test-All reports the mutation check as FAIL | A final expected native failure left `LASTEXITCODE=1`. The harness explicitly exits zero only after all mutations are caught |
+| A mutation appears caught because `ClaudeBudgetModes.ps1` is missing | The upstream business-unit helper gained that dependency. The isolated copy now includes it, and every unmutated suite must pass before any mutation can be counted; a setup failure is not mutation evidence |
 | A BOM assertion fails after the BOM was removed | Culture-sensitive `StartsWith` can treat U+FEFF as ignorable. Compare with `StringComparison.Ordinal` |
 | `Output month contains files not owned by this report.` | Move administrator notes or spreadsheets out of the generated month folder, or choose a new output root; the script will not delete them |
 | A negative test throws for missing parameters rather than its intended scenario | `$args` is an automatic variable and can be shadowed in callbacks. Use a named splat; do not override a splatted parameter on PowerShell 5.1 |
