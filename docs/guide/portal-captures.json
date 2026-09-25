@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "provenance": "Records marked accel_dirty were captured on 2026-09-25 from uncommitted capture code on top of their accel_commit (280a16e). That code was committed in 1da331b. Records captured before 13:51Z predate its distinctive-value and people redaction and were reviewed image by image. The runner now refuses to capture from uncommitted capture code, so later records name the exact commit and carry the hash of the step they ran (spec_sha256).",
   "captures": [
     {
       "id": "p55-aum-api-scope",
@@ -15,7 +16,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "ff89c9bcad124af2f1dd4476dd9c261b1689cad4c1b0a5fde77511565dc5f3d2"
+      "sha256": "ff89c9bcad124af2f1dd4476dd9c261b1689cad4c1b0a5fde77511565dc5f3d2",
+      "accel_dirty": true
     },
     {
       "id": "p55-aum-token-manifest",
@@ -31,7 +33,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "903270083618750e3aa54a75a4418e79d7b2816066b7aa5d7409e8c53339ad6e"
+      "sha256": "903270083618750e3aa54a75a4418e79d7b2816066b7aa5d7409e8c53339ad6e",
+      "accel_dirty": true
     },
     {
       "id": "p55-aum-assignment-required",
@@ -47,7 +50,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "846787846cb47c6d2c43f4295a82650ac5843292a7d5d783166e7419da70cdc7"
+      "sha256": "846787846cb47c6d2c43f4295a82650ac5843292a7d5d783166e7419da70cdc7",
+      "accel_dirty": true
     },
     {
       "id": "turnstile-app-overview",
@@ -63,7 +67,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "27f45a100c65a5b49b9b1bb922009a3a00092c062758675e9de1b4dd3f60002f"
+      "sha256": "27f45a100c65a5b49b9b1bb922009a3a00092c062758675e9de1b4dd3f60002f",
+      "accel_dirty": true
     },
     {
       "id": "turnstile-expose-api",
@@ -79,7 +84,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "bf77bb8bd32a52073be7d9a6b8a3d0cf3f6f0c9ce77fbbca110b2bebec146597"
+      "sha256": "bf77bb8bd32a52073be7d9a6b8a3d0cf3f6f0c9ce77fbbca110b2bebec146597",
+      "accel_dirty": true
     },
     {
       "id": "turnstile-app-roles",
@@ -95,7 +101,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "a07b350ea777dec7a84fcffa4fe6c29516769ead1fe81c2ddeb99987b4fe6464"
+      "sha256": "a07b350ea777dec7a84fcffa4fe6c29516769ead1fe81c2ddeb99987b4fe6464",
+      "accel_dirty": true
     },
     {
       "id": "turnstile-enterprise-properties",
@@ -111,7 +118,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "74b76235a7e26dac94db2de837380df0d128277c54cac7aa96baeb04607111a5"
+      "sha256": "74b76235a7e26dac94db2de837380df0d128277c54cac7aa96baeb04607111a5",
+      "accel_dirty": true
     },
     {
       "id": "gateway-overview",
@@ -127,7 +135,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "ac6e31aaba914088f2e28a5f6aa236f640e61222dd9f714cb8407976dab24982"
+      "sha256": "ac6e31aaba914088f2e28a5f6aa236f640e61222dd9f714cb8407976dab24982",
+      "accel_dirty": true
     },
     {
       "id": "gateway-identity",
@@ -143,7 +152,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "7041322d80ef7fb2bb6512c53de0c128a326b12b94f48704997e5a5f7b375a6e"
+      "sha256": "7041322d80ef7fb2bb6512c53de0c128a326b12b94f48704997e5a5f7b375a6e",
+      "accel_dirty": true
     },
     {
       "id": "gateway-named-values",
@@ -159,7 +169,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "225b213d0d20fe8a1331a48850d50897666687d13ce460cbe11fc2dbb49444b5"
+      "sha256": "225b213d0d20fe8a1331a48850d50897666687d13ce460cbe11fc2dbb49444b5",
+      "accel_dirty": true
     },
     {
       "id": "architecture-gateway-overview",
@@ -175,7 +186,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "730cac45508115d0e7363e1454419ca385bfc74fd8dbd0dc4751741fbe22b43e"
+      "sha256": "730cac45508115d0e7363e1454419ca385bfc74fd8dbd0dc4751741fbe22b43e",
+      "accel_dirty": true
     },
     {
       "id": "architecture-gateway-identity",
@@ -191,7 +203,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "7041322d80ef7fb2bb6512c53de0c128a326b12b94f48704997e5a5f7b375a6e"
+      "sha256": "7041322d80ef7fb2bb6512c53de0c128a326b12b94f48704997e5a5f7b375a6e",
+      "accel_dirty": true
     },
     {
       "id": "architecture-gateway-named-values",
@@ -207,7 +220,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "017e1dd7b42b1a756d5ea7cc0514d1d57fb2c0a58ea05b5a212842ed83edf554"
+      "sha256": "017e1dd7b42b1a756d5ea7cc0514d1d57fb2c0a58ea05b5a212842ed83edf554",
+      "accel_dirty": true
     },
     {
       "id": "architecture-gateway-apis",
@@ -223,7 +237,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "07d1bbdfcde609686fcf9aec1bfa8fd3ca993a5a0b8149fa20b5311aad98ec9e"
+      "sha256": "07d1bbdfcde609686fcf9aec1bfa8fd3ca993a5a0b8149fa20b5311aad98ec9e",
+      "accel_dirty": true
     },
     {
       "id": "architecture-foundry-overview",
@@ -239,7 +254,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "cf23f0a5612c2fe2ee54c33ee6dc8d833724e9622a3ebd95c56b0e4c9160923d"
+      "sha256": "cf23f0a5612c2fe2ee54c33ee6dc8d833724e9622a3ebd95c56b0e4c9160923d",
+      "accel_dirty": true
     },
     {
       "id": "architecture-foundry-access",
@@ -255,7 +271,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "b4a485a78983dac016f68a2bc457a7e11d70dbb62d4d6ce09a5da56f084734a1"
+      "sha256": "b4a485a78983dac016f68a2bc457a7e11d70dbb62d4d6ce09a5da56f084734a1",
+      "accel_dirty": true
     },
     {
       "id": "architecture-telemetry-workspace",
@@ -271,7 +288,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "d00dd71e9abc71a4f2fc52d0cf3d9a5d8444ff0159c61d0fae1c9c0f6802c2d8"
+      "sha256": "d00dd71e9abc71a4f2fc52d0cf3d9a5d8444ff0159c61d0fae1c9c0f6802c2d8",
+      "accel_dirty": true
     },
     {
       "id": "architecture-telemetry-tables",
@@ -287,7 +305,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "87343a64b02fe766c614df3760ae76455a7bf8749260c297911f885c6e9b6324"
+      "sha256": "87343a64b02fe766c614df3760ae76455a7bf8749260c297911f885c6e9b6324",
+      "accel_dirty": true
     },
     {
       "id": "architecture-resolver-networking",
@@ -303,7 +322,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "ce93ed8d5a78a8b4402818a840c6c83b600884d45aa2d2638891ec98daada528"
+      "sha256": "ce93ed8d5a78a8b4402818a840c6c83b600884d45aa2d2638891ec98daada528",
+      "accel_dirty": true
     },
     {
       "id": "architecture-projection-networking",
@@ -319,7 +339,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "00b9afcded9b91f9bc6252afd1a34ff853cb0f43712fc263d5cb8846aacbea85"
+      "sha256": "00b9afcded9b91f9bc6252afd1a34ff853cb0f43712fc263d5cb8846aacbea85",
+      "accel_dirty": true
     },
     {
       "id": "architecture-governance-apply-job",
@@ -335,7 +356,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "706f22c5a2d44c082960a565c8ead4fdb953e2d6707e9f7ac9f93afca32b4054"
+      "sha256": "706f22c5a2d44c082960a565c8ead4fdb953e2d6707e9f7ac9f93afca32b4054",
+      "accel_dirty": true
     },
     {
       "id": "architecture-reports-generator-job",
@@ -351,7 +373,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "d0851e472b587865b73169dcacd94955b0b0baa1dc1a0b3c47ce24122475fb3d"
+      "sha256": "d0851e472b587865b73169dcacd94955b0b0baa1dc1a0b3c47ce24122475fb3d",
+      "accel_dirty": true
     },
     {
       "id": "architecture-reports-dispatcher-job",
@@ -367,7 +390,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "e015e0b28c69550bf4c07fd8dce528ab073d6dcee674327605256ced48d6cbf5"
+      "sha256": "e015e0b28c69550bf4c07fd8dce528ab073d6dcee674327605256ced48d6cbf5",
+      "accel_dirty": true
     },
     {
       "id": "architecture-reports-admin-job",
@@ -383,7 +407,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "3921f4f47fbeb43bd63c6ea9e3fd4877def19a0a8746b4a8929272fc1ae3ae50"
+      "sha256": "3921f4f47fbeb43bd63c6ea9e3fd4877def19a0a8746b4a8929272fc1ae3ae50",
+      "accel_dirty": true
     },
     {
       "id": "architecture-reports-networking",
@@ -399,7 +424,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "7db68c3f6de11de231b4066e7fc26ddbfd613a101eeaf66265397ec853372c5b"
+      "sha256": "7db68c3f6de11de231b4066e7fc26ddbfd613a101eeaf66265397ec853372c5b",
+      "accel_dirty": true
     },
     {
       "id": "architecture-reports-email",
@@ -415,7 +441,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "3b6f7b9683c8ca6b59505338dc4f734e7860308797e97f8716cb5aecac5fc3fe"
+      "sha256": "3b6f7b9683c8ca6b59505338dc4f734e7860308797e97f8716cb5aecac5fc3fe",
+      "accel_dirty": true
     },
     {
       "id": "architecture-turnstile-database",
@@ -431,7 +458,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "95136fe8ba29df125d49db4a8da14f37d38203a871b5344a02fdd10fd751fe73"
+      "sha256": "95136fe8ba29df125d49db4a8da14f37d38203a871b5344a02fdd10fd751fe73",
+      "accel_dirty": true
     },
     {
       "id": "docs-review-gateway-overview",
@@ -447,7 +475,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "9cd3d2d003c53ad3f6adeb4562e3bfb4e6282f6e1dea617c79efacf3fe1ce48f"
+      "sha256": "9cd3d2d003c53ad3f6adeb4562e3bfb4e6282f6e1dea617c79efacf3fe1ce48f",
+      "accel_dirty": true
     },
     {
       "id": "docs-review-foundry-iam",
@@ -463,7 +492,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "b4a485a78983dac016f68a2bc457a7e11d70dbb62d4d6ce09a5da56f084734a1"
+      "sha256": "b4a485a78983dac016f68a2bc457a7e11d70dbb62d4d6ce09a5da56f084734a1",
+      "accel_dirty": true
     },
     {
       "id": "docs-review-daily-quota-editor",
@@ -479,7 +509,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "7f6b869979a92c98d2d9c5bf54deb42104124814e90bf903fcca1307522ba9e5"
+      "sha256": "7f6b869979a92c98d2d9c5bf54deb42104124814e90bf903fcca1307522ba9e5",
+      "accel_dirty": true
     },
     {
       "id": "docs-review-gateway-identity",
@@ -495,7 +526,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "7041322d80ef7fb2bb6512c53de0c128a326b12b94f48704997e5a5f7b375a6e"
+      "sha256": "7041322d80ef7fb2bb6512c53de0c128a326b12b94f48704997e5a5f7b375a6e",
+      "accel_dirty": true
     },
     {
       "id": "docs-review-api-settings",
@@ -511,7 +543,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "2e56cd16d0e229beca0f359720e885c1d667d701fe23fd344079f812d7b1b777"
+      "sha256": "2e56cd16d0e229beca0f359720e885c1d667d701fe23fd344079f812d7b1b777",
+      "accel_dirty": true
     },
     {
       "id": "docs-review-api-policy",
@@ -527,7 +560,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "20a8801da4dd25203b15c54975b1729cafd6d0bedd587691d6b7885b16f2defc"
+      "sha256": "20a8801da4dd25203b15c54975b1729cafd6d0bedd587691d6b7885b16f2defc",
+      "accel_dirty": true
     },
     {
       "id": "docs-review-gateway-diagnostics",
@@ -543,7 +577,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "6ac11adbb28c01a0e9f1e2b1f69c27abdbc36589448bd6e8385b055c90b9399b"
+      "sha256": "6ac11adbb28c01a0e9f1e2b1f69c27abdbc36589448bd6e8385b055c90b9399b",
+      "accel_dirty": true
     },
     {
       "id": "docs-review-workspace-properties",
@@ -559,7 +594,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "63b3be431605a8ead11020e55f18261b13bdeb59ecb5f766c644db4e557b686a"
+      "sha256": "63b3be431605a8ead11020e55f18261b13bdeb59ecb5f766c644db4e557b686a",
+      "accel_dirty": true
     },
     {
       "id": "docs-review-workspace-functions",
@@ -575,7 +611,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "0634733d4159e9666d679ca8627e13f2a7d6e285adfc3bc3cf3743999fb6b03e"
+      "sha256": "0634733d4159e9666d679ca8627e13f2a7d6e285adfc3bc3cf3743999fb6b03e",
+      "accel_dirty": true
     },
     {
       "id": "docs-review-workspace-workbooks",
@@ -591,7 +628,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "d24bb93cfee204fda34d8a4bf5147222978ac0f7ee2b5b7a769e557d0ef20aff"
+      "sha256": "d24bb93cfee204fda34d8a4bf5147222978ac0f7ee2b5b7a769e557d0ef20aff",
+      "accel_dirty": true
     },
     {
       "id": "docs-review-workspace-tables",
@@ -607,7 +645,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "87343a64b02fe766c614df3760ae76455a7bf8749260c297911f885c6e9b6324"
+      "sha256": "87343a64b02fe766c614df3760ae76455a7bf8749260c297911f885c6e9b6324",
+      "accel_dirty": true
     },
     {
       "id": "docs-review-foundry-networking",
@@ -623,7 +662,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "cc930ef305d6f8982186186d85835bc4181db127fbf15d8c7ef13b11850932ce"
+      "sha256": "cc930ef305d6f8982186186d85835bc4181db127fbf15d8c7ef13b11850932ce",
+      "accel_dirty": true
     },
     {
       "id": "docs-review-cosmos-networking",
@@ -639,7 +679,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "a8e5ddd90f9de1446210253f7af242e036a354b62eccfa74331e4dc634715756"
+      "sha256": "a8e5ddd90f9de1446210253f7af242e036a354b62eccfa74331e4dc634715756",
+      "accel_dirty": true
     },
     {
       "id": "p50-storage-overview",
@@ -655,7 +696,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "b447189a2d1037c02fb63ee727a376532ea2481f096633ba0dbbba9bfa6aae06"
+      "sha256": "b447189a2d1037c02fb63ee727a376532ea2481f096633ba0dbbba9bfa6aae06",
+      "accel_dirty": true
     },
     {
       "id": "p50-storage-network",
@@ -671,7 +713,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "7360900a4a1199475d873933a681b053fd9eecf6fb83275cc1b45a7d06661d2d"
+      "sha256": "7360900a4a1199475d873933a681b053fd9eecf6fb83275cc1b45a7d06661d2d",
+      "accel_dirty": true
     },
     {
       "id": "p50-storage-protection",
@@ -687,7 +730,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "7bc74e9e4dab0ad789984beeb22450191f222ec6b81aee2a83b69d209770df13"
+      "sha256": "7bc74e9e4dab0ad789984beeb22450191f222ec6b81aee2a83b69d209770df13",
+      "accel_dirty": true
     },
     {
       "id": "p50-storage-retention",
@@ -703,7 +747,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "b34e3417206dd2d301928e90c02cc4b078ca286cd314b301db922c0e7dbe0c2f"
+      "sha256": "b34e3417206dd2d301928e90c02cc4b078ca286cd314b301db922c0e7dbe0c2f",
+      "accel_dirty": true
     },
     {
       "id": "p50-storage-containers",
@@ -719,7 +764,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "a7510f112656e9443e58cef0968ba84beb9b6524e7ca5e774830544a150c88ca"
+      "sha256": "a7510f112656e9443e58cef0968ba84beb9b6524e7ca5e774830544a150c88ca",
+      "accel_dirty": true
     },
     {
       "id": "p50-storage-settings-blob",
@@ -735,7 +781,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "d0df8147c5a69a7baed8a8681535047520dffd215e7796a15046d6f9c0cfcf1b"
+      "sha256": "d0df8147c5a69a7baed8a8681535047520dffd215e7796a15046d6f9c0cfcf1b",
+      "accel_dirty": true
     },
     {
       "id": "p50-storage-archive",
@@ -751,7 +798,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "edfa78c7eeef4fc246288a88195e9bf1f337126c6aa0afa699fd5c91370ba83b"
+      "sha256": "edfa78c7eeef4fc246288a88195e9bf1f337126c6aa0afa699fd5c91370ba83b",
+      "accel_dirty": true
     },
     {
       "id": "p50-generator-overview",
@@ -767,7 +815,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "c7a9ee4a5bbdf79f187344a209fc570869ab98add4a15e9e7e10267fa3803ae9"
+      "sha256": "c7a9ee4a5bbdf79f187344a209fc570869ab98add4a15e9e7e10267fa3803ae9",
+      "accel_dirty": true
     },
     {
       "id": "p50-generator-schedule",
@@ -783,7 +832,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "4ca099d38b134fb89e96f5ffa5f533c9092ecc6b6ea9e0dac6b90c26a1496d51"
+      "sha256": "4ca099d38b134fb89e96f5ffa5f533c9092ecc6b6ea9e0dac6b90c26a1496d51",
+      "accel_dirty": true
     },
     {
       "id": "p50-generator-history",
@@ -799,7 +849,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "0c497386f739c73992bbbf9068715bfb154da9e0677d649b0f053923145f6267"
+      "sha256": "0c497386f739c73992bbbf9068715bfb154da9e0677d649b0f053923145f6267",
+      "accel_dirty": true
     },
     {
       "id": "p50-dispatcher-overview",
@@ -815,7 +866,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "f3ee5f6893693ed827a6bce566c42ff97c2857dad658f78fe6819116bbb1ec97"
+      "sha256": "f3ee5f6893693ed827a6bce566c42ff97c2857dad658f78fe6819116bbb1ec97",
+      "accel_dirty": true
     },
     {
       "id": "p50-dispatcher-configuration",
@@ -831,7 +883,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "99eff0ada4f5c0faf06573c1a659feba1d8f5178acab10f731852278302d0e1b"
+      "sha256": "99eff0ada4f5c0faf06573c1a659feba1d8f5178acab10f731852278302d0e1b",
+      "accel_dirty": true
     },
     {
       "id": "p50-event-scaling",
@@ -847,7 +900,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "f694fac4c8e3bc7196c72254533887d95c4bd09c8a3500e6cb70cb37310b3f4e"
+      "sha256": "f694fac4c8e3bc7196c72254533887d95c4bd09c8a3500e6cb70cb37310b3f4e",
+      "accel_dirty": true
     },
     {
       "id": "p50-admin-overview",
@@ -863,7 +917,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "a7e5e765765d6252951e3e15ea49adb7ce361db0e82d715f8605bf0fcdc791a4"
+      "sha256": "a7e5e765765d6252951e3e15ea49adb7ce361db0e82d715f8605bf0fcdc791a4",
+      "accel_dirty": true
     },
     {
       "id": "p50-admin-containers",
@@ -879,7 +934,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "28b7bac7bf6134c41f82a898d135f7475e5abf721dbd7ddae67370ec5c85cbec"
+      "sha256": "28b7bac7bf6134c41f82a898d135f7475e5abf721dbd7ddae67370ec5c85cbec",
+      "accel_dirty": true
     },
     {
       "id": "p50-admin-environment",
@@ -895,7 +951,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "a7dcefb892885e672d051a69fbcb4f443755d4d07df35dd4982707374d173335"
+      "sha256": "a7dcefb892885e672d051a69fbcb4f443755d4d07df35dd4982707374d173335",
+      "accel_dirty": true
     },
     {
       "id": "p50-job-identity",
@@ -911,7 +968,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "86b499e0501c176fa386b160af176277e340a61683f671289470b544e4b3050e"
+      "sha256": "86b499e0501c176fa386b160af176277e340a61683f671289470b544e4b3050e",
+      "accel_dirty": true
     },
     {
       "id": "p50-environment",
@@ -927,7 +985,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "03d41d12dbdea6edb82a383fbd8a0977ecc9ccf6798a4285689c3571aa68b5d4"
+      "sha256": "03d41d12dbdea6edb82a383fbd8a0977ecc9ccf6798a4285689c3571aa68b5d4",
+      "accel_dirty": true
     },
     {
       "id": "p50-identity-overview",
@@ -943,7 +1002,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "4c6e0e8f616eae10a8679eeeb3ff73bea3ad1e4e075e212e3f130c72ae174c0c"
+      "sha256": "4c6e0e8f616eae10a8679eeeb3ff73bea3ad1e4e075e212e3f130c72ae174c0c",
+      "accel_dirty": true
     },
     {
       "id": "p50-identity-roles",
@@ -959,7 +1019,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "5f8ddeea5011a9f85505dd8e27764b0ab1b8aa07bf73a153a3269c8be7f33eda"
+      "sha256": "5f8ddeea5011a9f85505dd8e27764b0ab1b8aa07bf73a153a3269c8be7f33eda",
+      "accel_dirty": true
     },
     {
       "id": "p50-network-subnets",
@@ -975,7 +1036,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "3c0527b4d554d77b7139b8742658353a1a80e52977da99b46e28a9730c2add4f"
+      "sha256": "3c0527b4d554d77b7139b8742658353a1a80e52977da99b46e28a9730c2add4f",
+      "accel_dirty": true
     },
     {
       "id": "p50-private-endpoint",
@@ -991,7 +1053,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "f57071b15dd14163b248ff8ac65723e1769e7b37134a4776e46ec49f996f3bb1"
+      "sha256": "f57071b15dd14163b248ff8ac65723e1769e7b37134a4776e46ec49f996f3bb1",
+      "accel_dirty": true
     },
     {
       "id": "p50-dns-links",
@@ -1007,7 +1070,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "73c68c6c9686c757384299e8757e0c73fb356a433c722f9793322c40654c31d6"
+      "sha256": "73c68c6c9686c757384299e8757e0c73fb356a433c722f9793322c40654c31d6",
+      "accel_dirty": true
     },
     {
       "id": "p50-email-service",
@@ -1023,7 +1087,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "0096a386d77f7126d050361ee658e72bee2e326687a61013f27320037fa2e6e8"
+      "sha256": "0096a386d77f7126d050361ee658e72bee2e326687a61013f27320037fa2e6e8",
+      "accel_dirty": true
     },
     {
       "id": "p50-email-domains",
@@ -1039,7 +1104,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "c633eb604877acb591bd330783e5a73f66a2c595f761afb49e8952b7fd5ce194"
+      "sha256": "c633eb604877acb591bd330783e5a73f66a2c595f761afb49e8952b7fd5ce194",
+      "accel_dirty": true
     },
     {
       "id": "p50-communication",
@@ -1055,7 +1121,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "49166796c3d51358479308fa632b84f2d66097aa61a345ab5460b08aa0b1ff55"
+      "sha256": "49166796c3d51358479308fa632b84f2d66097aa61a345ab5460b08aa0b1ff55",
+      "accel_dirty": true
     },
     {
       "id": "p50-connected-domain",
@@ -1071,7 +1138,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "badec4f7002ebb1d12aefb65bb08a9c8788423241dc5ab3ec150dce1c6d0fb60"
+      "sha256": "badec4f7002ebb1d12aefb65bb08a9c8788423241dc5ab3ec150dce1c6d0fb60",
+      "accel_dirty": true
     },
     {
       "id": "architecture-resolver-authentication",
@@ -1087,7 +1155,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "1a2e56d69ad4e1234dc4a978d02c510d19b1fb698a84e631dec4f10bc13d4643"
+      "sha256": "1a2e56d69ad4e1234dc4a978d02c510d19b1fb698a84e631dec4f10bc13d4643",
+      "accel_dirty": true
     },
     {
       "id": "docs-review-resolver-networking",
@@ -1103,7 +1172,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "ce93ed8d5a78a8b4402818a840c6c83b600884d45aa2d2638891ec98daada528"
+      "sha256": "ce93ed8d5a78a8b4402818a840c6c83b600884d45aa2d2638891ec98daada528",
+      "accel_dirty": true
     },
     {
       "id": "docs-review-resolver-authentication",
@@ -1119,7 +1189,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "1a2e56d69ad4e1234dc4a978d02c510d19b1fb698a84e631dec4f10bc13d4643"
+      "sha256": "1a2e56d69ad4e1234dc4a978d02c510d19b1fb698a84e631dec4f10bc13d4643",
+      "accel_dirty": true
     },
     {
       "id": "architecture-turnstile-app-roles",
@@ -1135,7 +1206,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "38974277aa23c02435e534803f8291668add0c99a89e389b2df895ed794fa92c"
+      "sha256": "38974277aa23c02435e534803f8291668add0c99a89e389b2df895ed794fa92c",
+      "accel_dirty": true
     },
     {
       "id": "docs-review-entra-groups",
@@ -1151,7 +1223,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "c794a37f8584f5ad74d6fcbce2b6164d266865003a4a16550d82e3b94ca53aee"
+      "sha256": "c794a37f8584f5ad74d6fcbce2b6164d266865003a4a16550d82e3b94ca53aee",
+      "accel_dirty": true
     },
     {
       "id": "p55-aum-app-roles",
@@ -1167,7 +1240,8 @@
         "applied": true,
         "leak_check_passed": true
       },
-      "sha256": "e09435bf7771471f718c1b099d84f180e4ac5f160456a463e9e46be0ecd1db98"
+      "sha256": "e09435bf7771471f718c1b099d84f180e4ac5f160456a463e9e46be0ecd1db98",
+      "accel_dirty": true
     }
   ]
 }

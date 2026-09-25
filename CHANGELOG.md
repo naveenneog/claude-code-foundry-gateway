@@ -678,6 +678,15 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Fixed
 
+- **Four gaps a review found in the new capture redaction.** A tenant-name pair could turn a
+  colleague's address into one on the placeholder domain, which the address rule then kept:
+  addresses are now replaced before any pair. A real value that started inside a replacement and
+  ran past it was hidden by the shadowing rule: only a match wholly inside a replacement is now
+  ignored. An application's assigned principals were read from Graph's first page only: every
+  page is read, and a list that never ends is refused. And every record named a commit that did
+  not contain the code that took it: the runner now refuses to capture from uncommitted capture
+  code and records each step's hash; the existing records are marked `accel_dirty` with a
+  provenance note.
 - **A deployment suffix inside a longer name escaped redaction, and people on directory pages
   were not redacted at all.** The capture redactor matched private values only at word
   boundaries, so a mapped suffix inside a name built from it (a report storage account shown as
