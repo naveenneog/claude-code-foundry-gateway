@@ -65,9 +65,9 @@ Ctrl+C to copy
 Copy to clipboard the value for Instrumentation key [redacted-id]
 Connection string
 :
-InstrumentationKey=[redacted-id];IngestionEndpoint=https://eastus2-3.in.applicationinsights.azure.com/;LiveEndpoint=https://eastus2.livediagnostics.monitor.azure.com/;ApplicationId=[redacted-id]
+InstrumentationKey=[redacted-id];IngestionEndpoint=https://service.contoso.com
 Ctrl+C to copy
-Copy to clipboard the value for Connection string InstrumentationKey=[redacted-id];IngestionEndpoint=https://eastus2-3.in.applicationinsights.azure.com/;LiveEndpoint=https://eastus2.livediagnostics.monitor.azure.com/;ApplicationId=[redacted-id]
+Copy to clipboard the value for Connection string InstrumentationKey=[redacted-id];IngestionEndpoint=https://service.contoso.com
 Logs workspace
 :
 contoso-logs
@@ -153,7 +153,7 @@ East US 2
 Contoso subscription
 [redacted-id]
 [redacted-id]
-InstrumentationKey=[redacted-id];IngestionEndpoint=https://eastus2-3.in.applicationinsights.azure.com/;LiveEndpoint=https://eastus2.livediagnostics.monitor.azure.com/;ApplicationId=[redacted-id]
+InstrumentationKey=[redacted-id];IngestionEndpoint=https://service.contoso.com
 contoso-logs
 Turn on OTLP support
 1800000

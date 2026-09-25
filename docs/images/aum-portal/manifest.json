@@ -75,5 +75,6 @@
       "file": "turnstile-overview.png",
       "reason": "Welcome dialog obscured the blade; not successful GUI-flow evidence."
     }
-  ]
+  ],
+  "transcript_review": "Deployment URLs hidden; layout-only trailing whitespace normalized after pixel review."
 }

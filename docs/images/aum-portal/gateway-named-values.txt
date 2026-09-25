@@ -45,254 +45,254 @@ Refresh
 
 Named values let you define common values or secrets in your API Management instance, which can be referenced from policies. Learn more
 
-Filter by tags	
+Filter by tags
 Name
-	
+
 Value
-	
+
 Key vault name
-	
+
 Secret name
-	
+
 Key vault fetch status
-	
+
 Details
-	
+
 Last key vault fetch
-	
+
 Tags
-	
+
 allow-premium
-	
+
 Ctrl+C to copy
 Copy to clipboard
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
 
 allow-standard
-	
+
 Ctrl+C to copy
 Copy to clipboard
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
 
 bu-members
-	
+
 Ctrl+C to copy
 Copy to clipboard
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
 
 bu-modes
-	
+
 Ctrl+C to copy
 Copy to clipboard
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
 
 bu-parents
-	
+
 Ctrl+C to copy
 Copy to clipboard
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
 
 bu-registry
-	
+
 Ctrl+C to copy
 Copy to clipboard
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
 
 bu-unassigned
-	
+
 Ctrl+C to copy
 Copy to clipboard
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
 
 calls-per-minute
-	
+
 Ctrl+C to copy
 Copy to clipboard
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
 
 entitlement-cache-seconds
-	
+
 Ctrl+C to copy
 Copy to clipboard
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
 
 entitlement-resolver-audience
-	
+
 Ctrl+C to copy
 Copy to clipboard
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
 
 entitlement-resolver-url
-	
+
 Ctrl+C to copy
 Copy to clipboard
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
 
 entitlement-source
-	
+
 Ctrl+C to copy
 Copy to clipboard
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
 
 6a7da5724be15c02682a4685
-	
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
+
 
 6a959b891dd7e41f54d7f467
-	
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
+
 
 6a959d000484d11f5c99d900
-	
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
+
 
 6a959d3a1ed6d3000899baff
-	
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
+
 
 models-premium
-	
+
 Ctrl+C to copy
 Copy to clipboard
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
 
 models-standard
-	
+
 Ctrl+C to copy
 Copy to clipboard
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
 
 quota-org
-	
+
 Ctrl+C to copy
 Copy to clipboard
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
 
 quota-overrides
-	
+
 Ctrl+C to copy
 Copy to clipboard
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
 Load more
 Microsoft Azure portal is loading.
 Microsoft Azure portal is ready.
@@ -314,8 +314,8 @@ Loaded 20 rows. More rows can be loaded.
 allow
 120
 3600
-https://resolver-not-deployed.invalid
-https://resolver-not-deployed.invalid
+https://service.contoso.com
+https://service.contoso.com
 named-value
 ,,
 ,,
