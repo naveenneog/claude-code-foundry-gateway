@@ -298,7 +298,7 @@
         "infra/network-private-endpoint.bicep": "0065fc6c625d45d5bd004d539707d80045b86bb1a718cbb63932d35a676c29bf",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeNetworkPolicy.ps1": "31540eaf2772d49e569c961538caa8c44beccdf9577f8a38133b981577bdfed0",
-        "scripts/New-ClaudeNetworkEdge.ps1": "661e99fe3a712bc9c1609ebf41262d037c1a6e12d55988afe9ed1005ef255a8e"
+        "scripts/New-ClaudeNetworkEdge.ps1": "027d361e9bdc27daf69e4e824f81ea3d7f7dee67fee6bbabc0be74a4736f3704"
       },
       "outputs": [
         {
@@ -323,7 +323,7 @@
         "infra/network-private-endpoint.bicep": "0065fc6c625d45d5bd004d539707d80045b86bb1a718cbb63932d35a676c29bf",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeNetworkPolicy.ps1": "31540eaf2772d49e569c961538caa8c44beccdf9577f8a38133b981577bdfed0",
-        "scripts/New-ClaudeNetworkEdge.ps1": "661e99fe3a712bc9c1609ebf41262d037c1a6e12d55988afe9ed1005ef255a8e"
+        "scripts/New-ClaudeNetworkEdge.ps1": "027d361e9bdc27daf69e4e824f81ea3d7f7dee67fee6bbabc0be74a4736f3704"
       },
       "outputs": [
         {
@@ -348,7 +348,7 @@
         "infra/network-private-dns.bicep": "82999c5e3833870fea5e2dbc622e0517690506c2422a96975a6083eb72142bfa",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeNetworkPolicy.ps1": "31540eaf2772d49e569c961538caa8c44beccdf9577f8a38133b981577bdfed0",
-        "scripts/New-ClaudeNetworkEdge.ps1": "661e99fe3a712bc9c1609ebf41262d037c1a6e12d55988afe9ed1005ef255a8e"
+        "scripts/New-ClaudeNetworkEdge.ps1": "027d361e9bdc27daf69e4e824f81ea3d7f7dee67fee6bbabc0be74a4736f3704"
       },
       "outputs": [
         {
