@@ -1,6 +1,6 @@
 // Phase 2 is deliberately separate. Default/--dry-run performs reads only.
 // Execute only after the lead explicitly authorizes the exclusive mutation window:
-//   node guide/capture-turnstile-manager.mjs --execute --lead-go --include-direct-admin
+//   node guide/capture-turnstile-manager.mjs --execute --lead-go --include-direct-admin --renew-broker-token
 // The CLI account must already OWN all three groups; no grants/users/groups are created.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { chromium } from 'playwright';
+import { entraToken } from './lib/entra-token.mjs';
 import {
   az, api, captureMetadata, capturePage, catalogWrite, cliSignIn, evidenceDir,
   privateJson, Redactor, renderTranscript, requireEnvironment, sleep, utc,
@@ -41,6 +42,7 @@ export function directWiderRoles(assignments, appRoles, userId) {
 async function main() {
   const mode = executionMode(process.argv.slice(2));
   const includeDirectAdmin = process.argv.includes('--include-direct-admin');
+  const renewBrokerToken = process.argv.includes('--renew-broker-token');
   requireEnvironment('TURNSTILE_URL', 'TURNSTILE_SCOPE', 'TURNSTILE_SP_ID', 'GATEWAY_RG', 'GATEWAY_APIM');
   const base = process.env.TURNSTILE_URL.replace(/\/$/, '');
   const scope = process.env.TURNSTILE_SCOPE;
@@ -66,7 +68,7 @@ async function main() {
     privateJson('phase2-scope-history.json', history);
   };
   const graphToken = az(['account', 'get-access-token', '--resource', 'https://graph.microsoft.com', '--query', 'accessToken', '-o', 'tsv']);
-  const ownerToken = az(['account', 'get-access-token', '--scope', scope, '--query', 'accessToken', '-o', 'tsv']);
+  const ownerToken = entraToken(scope, { renew: renewBrokerToken });
   if (mode === 'execute') {
     assert.ok(decode(ownerToken).exp * 1000 - Date.now() > 15 * 60_000, 'Recovery Owner token needs at least 15 minutes remaining before mutation');
     assert.ok(decode(graphToken).exp * 1000 - Date.now() > 15 * 60_000, 'Recovery Graph token needs at least 15 minutes remaining before mutation');
@@ -142,6 +144,7 @@ async function main() {
     fresh_scopes: { manager: managerScope, owner_restore: restoreScope },
     blocking_direct_roles: widerDirectRoles,
     direct_admin_plan_authorized: includeDirectAdmin,
+    token_renewal: renewBrokerToken ? 'Windows broker AccessTokenToRenew' : 'Azure CLI cache',
   };
   privateJson('phase2-plan.json', plan);
   const priorRedactions = path.join(evidenceDir, 'redactions.json');
@@ -198,7 +201,7 @@ async function main() {
     privateJson('phase2-progress.json', { utc: utc(), state: 'manager group added; Admin membership and authorized direct assignment removed', user_id: me.id });
     await sleep(60_000);
     rememberScope(managerScope, 'manager proof');
-    const token = az(['account', 'get-access-token', '--scope', managerScope, '--query', 'accessToken', '-o', 'tsv']);
+    const token = entraToken(managerScope, { renew: renewBrokerToken });
     const claims = decode(token);
     assert.ok(managerClaims(claims, groups.unit.id), 'Token is cached/unpropagated or has a wider role; stop and restore, never show it as Manager');
     assert.ok(!claims.groups.includes(groups.admin.id), 'Manager token still carries the Admin group');
@@ -341,7 +344,7 @@ async function main() {
       try {
         ownerBrowser = await chromium.launch({ headless: true });
         rememberScope(restoreScope, 'owner restoration proof');
-        const freshOwnerToken = az(['account', 'get-access-token', '--scope', restoreScope, '--query', 'accessToken', '-o', 'tsv']);
+        const freshOwnerToken = entraToken(restoreScope, { renew: renewBrokerToken });
         const ownerClaims = decode(freshOwnerToken);
         const tokenFreshnessVerified = freshRole(ownerClaims, 'Turnstile.Admin', adminRestoredAt, 300)
           && sha256(freshOwnerToken) !== sha256(ownerToken);

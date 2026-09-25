@@ -128,6 +128,29 @@ test('direct Admin or Viewer assignments block a group-only manager transition b
   assert.deepEqual(directWiderRoles(assignments, roles, 'self'), ['Turnstile.Admin', 'Turnstile.Viewer']);
   assert.deepEqual(directWiderRoles(assignments, roles, 'unassigned'), []);
 });
+test('broker renewal is explicit and passes the scope through the environment, never shell interpolation', async () => {
+  const { entraToken } = await import('../guide/lib/entra-token.mjs');
+  const scope = 'api://example/Turnstile.Manage';
+  assert.equal(entraToken(scope, { runAz: (args) => {
+    assert.deepEqual(args, ['account', 'get-access-token', '--scope', scope, '--query', 'accessToken', '-o', 'tsv']);
+    return 'ordinary-token';
+  } }), 'ordinary-token');
+  assert.equal(entraToken(scope, { renew: true, runAz: () => assert.fail('must not fall back to cached acquisition'),
+    runPs: (script, env) => {
+      assert.equal(env.P53_RENEW_SCOPE, scope);
+      assert.ok(env.P53_RENEW_SCRIPT.endsWith('renew-entra-token.py'));
+      assert.ok(!script.includes(scope));
+      return 'renewed-token';
+    },
+  }), 'renewed-token');
+});
+test('failed broker renewal propagates instead of silently accepting a cached token', async () => {
+  const { entraToken } = await import('../guide/lib/entra-token.mjs');
+  assert.throws(() => entraToken('api://example/.default', { renew: true,
+    runPs: () => { throw new Error('renewal unavailable'); },
+    runAz: () => assert.fail('must not retry through cache'),
+  }), /renewal unavailable/);
+});
 test('the frozen rendered-DOM detector joins split SVG labels and checks displayed input values', () => {
   const snapshot = {
     strings: ['visible', 'block', 'text', 'tspan', '#text', 'person@pri', 'vate.example.org', 'INPUT', 'another@private.example.org'],
