@@ -451,6 +451,12 @@ functions and reconciliation before publishing local files. `--send` is separate
 explicit, and requires an already-configured delivery path; AUM never silently
 emails a report. Its Azure subscription remains process-local.
 
+The recorded live report on **2026-09-25** completed in **80.289 seconds**:
+884 ledger requests, six people, matched source reconciliation and nine unpriced
+rows. CSV and HTML were written locally; no delivery was requested. These are
+dated capture facts, not an estimate of your workload or a claim that Turnstile
+ingestion and the gateway ledger use identical accounting bases.
+
 Bulk CSV uses a header `team,person,tokens` and optional `warning` percentage.
 It accepts at most 500 rows/2 MB, rejects duplicates, validates total allocation
 across the complete plan, and shows every normalized change before Apply.
