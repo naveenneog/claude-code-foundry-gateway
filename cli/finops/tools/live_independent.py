@@ -30,6 +30,12 @@ async def journey(args):
     team = next((row for row in catalog["departments"] if not row.get("scope_context")), None)
     if team is None:
         team = next(iter(catalog["organizations"]), None)
+    if args.backend == "direct":
+        observed = engine.read("distribution", dimension="department", limit=100)["items"]
+        choices = {row["id"]: row for row in catalog["departments"]}
+        preferred = next((row["id"] for row in observed if row["id"] in choices), None)
+        if preferred:
+            team = choices[preferred]
     commands = [
         ("whoami", ["whoami"]), ("status", ["status"]), ("budgets", ["budget", "list"]),
         ("governance", ["governance", "show"]), ("requests", ["requests", "list", "--limit", "50"]),
@@ -54,6 +60,12 @@ async def journey(args):
     if budget:
         commands += [("budget-preview", ["budget", "set", "team", budget["scope_id"], str(budget["token_limit"]),
                                           "--reason", "AUM read-only acceptance preview", "--what-if"])]
+    if team and args.backend == "direct":
+        people = engine.read("people", **backend.people_filter(team["id"]), query="", limit=50, offset=0)
+        person = next((row for row in people["items"] if row.get("writable") and row.get("token_limit")), None)
+        if person:
+            commands += [("daily-person-preview", ["budget", "set", "person", person["scope_id"],
+                str(person["token_limit"]), "--team", team["id"], "--what-if"])]
     raw = {}
     try:
         for name, command in commands:

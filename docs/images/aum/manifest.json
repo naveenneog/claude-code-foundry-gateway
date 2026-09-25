@@ -634,34 +634,6 @@
       "phase": "after"
     },
     {
-      "file": "direct-overview-80x24-after.svg",
-      "source": "live",
-      "backend": "Direct",
-      "captured_at": "2026-09-25T01:05:41.134626Z",
-      "redaction": true,
-      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
-      "size": [
-        80,
-        24
-      ],
-      "tab": "overview",
-      "phase": "after"
-    },
-    {
-      "file": "direct-overview-160x48-after.svg",
-      "source": "live",
-      "backend": "Direct",
-      "captured_at": "2026-09-25T01:06:17.484783Z",
-      "redaction": true,
-      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
-      "size": [
-        160,
-        48
-      ],
-      "tab": "overview",
-      "phase": "after"
-    },
-    {
       "file": "direct-flow-r4-report-110x36-after.svg",
       "source": "live",
       "backend": "Direct",
@@ -675,6 +647,510 @@
       "flow": "reconciled-local-report",
       "artifact_generated_at": "2026-09-25T01:05:10.5006938Z",
       "tab": "report",
+      "phase": "after"
+    },
+    {
+      "file": "aum-service-overview-80x24-after.svg",
+      "source": "live",
+      "backend": "AUM service",
+      "captured_at": "2026-09-25T05:12:43.111450Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "overview",
+      "phase": "after"
+    },
+    {
+      "file": "aum-service-budgets-80x24-after.svg",
+      "source": "live",
+      "backend": "AUM service",
+      "captured_at": "2026-09-25T05:12:45.381133Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "budgets",
+      "phase": "after"
+    },
+    {
+      "file": "aum-service-people-80x24-after.svg",
+      "source": "live",
+      "backend": "AUM service",
+      "captured_at": "2026-09-25T05:12:49.603413Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "people",
+      "phase": "after"
+    },
+    {
+      "file": "aum-service-governance-80x24-after.svg",
+      "source": "live",
+      "backend": "AUM service",
+      "captured_at": "2026-09-25T05:12:51.832473Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "governance",
+      "phase": "after"
+    },
+    {
+      "file": "aum-service-trends-80x24-after.svg",
+      "source": "live",
+      "backend": "AUM service",
+      "captured_at": "2026-09-25T05:12:53.941312Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "trends",
+      "phase": "after"
+    },
+    {
+      "file": "aum-service-requests-80x24-after.svg",
+      "source": "live",
+      "backend": "AUM service",
+      "captured_at": "2026-09-25T05:12:55.910706Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "requests",
+      "phase": "after"
+    },
+    {
+      "file": "aum-service-settings-80x24-after.svg",
+      "source": "live",
+      "backend": "AUM service",
+      "captured_at": "2026-09-25T05:12:57.234194Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "settings",
+      "phase": "after"
+    },
+    {
+      "file": "aum-service-approvals-80x24-after.svg",
+      "source": "live",
+      "backend": "AUM service",
+      "captured_at": "2026-09-25T05:12:58.961230Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "approvals",
+      "phase": "after"
+    },
+    {
+      "file": "aum-service-overview-160x48-after.svg",
+      "source": "live",
+      "backend": "AUM service",
+      "captured_at": "2026-09-25T05:13:03.848149Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "overview",
+      "phase": "after"
+    },
+    {
+      "file": "aum-service-budgets-160x48-after.svg",
+      "source": "live",
+      "backend": "AUM service",
+      "captured_at": "2026-09-25T05:13:05.993614Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "budgets",
+      "phase": "after"
+    },
+    {
+      "file": "aum-service-people-160x48-after.svg",
+      "source": "live",
+      "backend": "AUM service",
+      "captured_at": "2026-09-25T05:13:09.193146Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "people",
+      "phase": "after"
+    },
+    {
+      "file": "aum-service-governance-160x48-after.svg",
+      "source": "live",
+      "backend": "AUM service",
+      "captured_at": "2026-09-25T05:13:11.537983Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "governance",
+      "phase": "after"
+    },
+    {
+      "file": "aum-service-trends-160x48-after.svg",
+      "source": "live",
+      "backend": "AUM service",
+      "captured_at": "2026-09-25T05:13:13.724287Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "trends",
+      "phase": "after"
+    },
+    {
+      "file": "aum-service-requests-160x48-after.svg",
+      "source": "live",
+      "backend": "AUM service",
+      "captured_at": "2026-09-25T05:13:16.020928Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "requests",
+      "phase": "after"
+    },
+    {
+      "file": "aum-service-settings-160x48-after.svg",
+      "source": "live",
+      "backend": "AUM service",
+      "captured_at": "2026-09-25T05:13:17.457860Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "settings",
+      "phase": "after"
+    },
+    {
+      "file": "aum-service-approvals-160x48-after.svg",
+      "source": "live",
+      "backend": "AUM service",
+      "captured_at": "2026-09-25T05:13:19.338338Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "approvals",
+      "phase": "after"
+    },
+    {
+      "file": "direct-overview-80x24-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:13:55.210627Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "overview",
+      "phase": "after"
+    },
+    {
+      "file": "direct-budgets-80x24-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:14:05.957831Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "budgets",
+      "phase": "after"
+    },
+    {
+      "file": "direct-people-80x24-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:14:26.040943Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "people",
+      "phase": "after"
+    },
+    {
+      "file": "direct-governance-80x24-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:14:39.315132Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "governance",
+      "phase": "after"
+    },
+    {
+      "file": "direct-usage-80x24-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:14:46.517738Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "usage",
+      "phase": "after"
+    },
+    {
+      "file": "direct-trends-80x24-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:14:53.262185Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "trends",
+      "phase": "after"
+    },
+    {
+      "file": "direct-requests-80x24-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:15:01.695020Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "requests",
+      "phase": "after"
+    },
+    {
+      "file": "direct-anomalies-80x24-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:15:10.682607Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "anomalies",
+      "phase": "after"
+    },
+    {
+      "file": "direct-settings-80x24-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:15:15.098724Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "settings",
+      "phase": "after"
+    },
+    {
+      "file": "direct-overview-160x48-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:15:47.894969Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "overview",
+      "phase": "after"
+    },
+    {
+      "file": "direct-budgets-160x48-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:15:58.832887Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "budgets",
+      "phase": "after"
+    },
+    {
+      "file": "direct-people-160x48-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:16:16.100160Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "people",
+      "phase": "after"
+    },
+    {
+      "file": "direct-governance-160x48-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:16:31.048486Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "governance",
+      "phase": "after"
+    },
+    {
+      "file": "direct-usage-160x48-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:16:38.886813Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "usage",
+      "phase": "after"
+    },
+    {
+      "file": "direct-trends-160x48-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:16:46.733819Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "trends",
+      "phase": "after"
+    },
+    {
+      "file": "direct-requests-160x48-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:16:54.556014Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "requests",
+      "phase": "after"
+    },
+    {
+      "file": "direct-anomalies-160x48-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:17:01.347723Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "anomalies",
+      "phase": "after"
+    },
+    {
+      "file": "direct-settings-160x48-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:17:05.898168Z",
+      "redaction": true,
+      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "settings",
+      "phase": "after"
+    },
+    {
+      "file": "direct-trends-hour-80x24-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:18:34.972808Z",
+      "redaction": true,
+      "commit": "6e3765c6c724ae2942465f1e4a3fba77d0b63a2b",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "trends",
+      "phase": "after"
+    },
+    {
+      "file": "direct-trends-hour-160x48-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T05:19:04.674249Z",
+      "redaction": true,
+      "commit": "6e3765c6c724ae2942465f1e4a3fba77d0b63a2b",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "trends",
       "phase": "after"
     }
   ]
