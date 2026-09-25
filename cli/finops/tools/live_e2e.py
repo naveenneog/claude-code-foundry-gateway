@@ -83,10 +83,12 @@ async def journey(args):
         for name in (unit, team):
             preview = journal.call("group-preview-" + ("unit" if name == unit else "team"),
                                    lambda name=name: group_call(engine, "create", name, "AUM temporary E2E acceptance group; delete after test"))
+            def retain_created(row, name=name):
+                created.append((row["id"], name))
+                (journal.folder / "created-groups.json").write_text(json.dumps(created), encoding="utf-8")
             result = journal.call("group-create-" + ("unit" if name == unit else "team"),
                 lambda name=name: group_call(engine, "create", name, "AUM temporary E2E acceptance group; delete after test",
-                                             apply=True, confirm=name))
-            created.append((result["result"]["id"], name))
+                                             apply=True, confirm=name, on_created=retain_created))
             await screenshot(engine, config, journal, "group-created-" + ("unit" if name == unit else "team"), result)
         for group, name in created:
             journal.call("member-add-" + ("unit" if name == unit else "team"),
@@ -189,6 +191,9 @@ async def journey(args):
             cleanup["gateway"] = {"verified": arm.snapshot() == snapshot, "mutation_started": False}
         for group, name in reversed(created):
             try:
+                if graph.request("GET", f"/v1.0/groups/{group}", allow_missing=True) is None:
+                    cleanup["groups_deleted"].append(name)
+                    continue
                 group_call(engine, "member", group, remove=True, apply=True)
                 group_call(engine, "delete", group, name, apply=True, confirm=name)
                 cleanup["groups_deleted"].append(name)

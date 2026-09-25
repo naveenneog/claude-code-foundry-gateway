@@ -78,3 +78,50 @@ def test_graph_error_never_includes_tokens_and_carries_exact_safe_message():
         client.search("aum")
     assert "Authorization_RequestDenied: Insufficient privileges to complete the operation." in str(failure.value)
     assert "test-only" not in str(failure.value)
+
+
+def test_created_group_owners_retry_replication_reads_without_repeating_create(monkeypatch):
+    import claude_finops.groups as groups
+    monkeypatch.setattr(groups.time, "sleep", lambda _: None)
+    calls, reads = [], []
+    oid = "00000000-0000-0000-0000-000000000001"
+    group = "00000000-0000-0000-0000-000000000002"
+    def respond(request):
+        calls.append(request)
+        if request.url.path.endswith("/me"):
+            return httpx.Response(200, json={"id": oid})
+        if request.method == "POST":
+            return httpx.Response(201, json={"id": group, "displayName": "aum-e2e-unit-test"})
+        if request.url.path.endswith("/owners"):
+            reads.append(1)
+            if len(reads) < 3:
+                return httpx.Response(404, json={"error": {"code": "Request_ResourceNotFound", "message": "Not replicated yet."}})
+            return httpx.Response(200, json={"value": [{"id": oid}]})
+        return httpx.Response(200, json={"value": []})
+    created = []
+    result = graph(respond).create("aum-e2e-unit-test", apply=True, confirm="aum-e2e-unit-test",
+                                   on_created=lambda row: created.append(row["id"]))
+    assert result["owner_verified"] and created == [group]
+    assert sum(call.method == "POST" for call in calls) == 1
+
+
+def test_deletion_waits_for_replication_without_repeating_delete(monkeypatch):
+    import claude_finops.groups as groups
+    monkeypatch.setattr(groups.time, "sleep", lambda _: None)
+    oid, group = "00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"
+    deletes, reads = [], []
+    def respond(request):
+        if request.url.path.endswith("/me"):
+            return httpx.Response(200, json={"id": oid})
+        if request.url.path.endswith("/owners"):
+            return httpx.Response(200, json={"value": [{"id": oid}]})
+        if request.method == "DELETE":
+            deletes.append(1)
+            return httpx.Response(204)
+        if deletes:
+            reads.append(1)
+            if len(reads) > 2:
+                return httpx.Response(404)
+        return httpx.Response(200, json={"id": group, "displayName": "test"})
+    graph(respond).delete(group, "test", apply=True, confirm="test")
+    assert len(deletes) == 1 and len(reads) == 3

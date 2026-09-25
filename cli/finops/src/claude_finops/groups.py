@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import re
+import time
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -101,7 +102,25 @@ class EntraGroups:
             raise FinOpsError("The signed-in account is not an owner of this group. Choose a group you own; AUM will not grant broader permissions.", 4)
         return me
 
-    def create(self, name, description="", *, apply=False, confirm=None):
+    def replicated_owners(self, group):
+        for attempt in range(31):
+            try:
+                return self.owners(group)
+            except FinOpsError as error:
+                if "Graph HTTP 404:" not in str(error) or attempt == 30:
+                    raise
+                time.sleep(2)
+
+    def wait_member(self, group, member, present):
+        for attempt in range(31):
+            value = self.request("GET", f"/v1.0/groups/{group}/members/{member}", allow_missing=True)
+            if (value is not None) == present:
+                return
+            if attempt < 30:
+                time.sleep(2)
+        raise FinOpsError("Membership write could not be verified after propagation wait. Refresh before retrying.", 7)
+
+    def create(self, name, description="", *, apply=False, confirm=None, on_created=None):
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._ -]{0,119}", name):
             raise FinOpsError("Use a group name of 1-120 letters, numbers, spaces, dot, underscore or hyphen.")
         if len(description) > 1000:
@@ -121,14 +140,20 @@ class EntraGroups:
         created = self.request("POST", "/v1.0/groups", body=dict(displayName=name, description=description,
             mailEnabled=False, mailNickname=nickname, securityEnabled=True, groupTypes=[]))
         key = created["id"]
+        if on_created:
+            on_created(created)
         try:
             # Graph automatically owns delegated non-admin creations; an admin
             # security-group creation needs an explicit owner if none was added.
-            if owner not in self.owners(key):
+            if owner not in self.replicated_owners(key):
                 self.request("POST", f"/v1.0/groups/{object_id(key)}/owners/$ref",
                              body={"@odata.id": GRAPH + "/v1.0/users/" + object_id(owner)})
-            if owner not in self.owners(key):
-                raise FinOpsError("Created group owner could not be verified.", 7)
+            for attempt in range(31):
+                if owner in self.replicated_owners(key):
+                    break
+                if attempt == 30:
+                    raise FinOpsError("Created group owner could not be verified.", 7)
+                time.sleep(2)
         except FinOpsError:
             try:
                 self.request("DELETE", f"/v1.0/groups/{object_id(key)}")
@@ -151,9 +176,7 @@ class EntraGroups:
             else:
                 self.request("POST", f"/v1.0/groups/{group}/members/$ref",
                              body={"@odata.id": GRAPH + "/v1.0/directoryObjects/" + member})
-            verified = self.request("GET", f"/v1.0/groups/{group}/members/{member}", allow_missing=True)
-            if (verified is not None) == remove:
-                raise FinOpsError("Membership write could not be verified. Refresh before retrying.", 7)
+            self.wait_member(group, member, not remove)
         return plan
 
     def delete(self, group, name, *, apply=False, confirm=None):
@@ -166,6 +189,10 @@ class EntraGroups:
             if current["displayName"] != name:
                 raise FinOpsError("Group name changed since preview. Refresh before deletion.", 6)
             self.request("DELETE", f"/v1.0/groups/{object_id(group)}")
-            if self.request("GET", f"/v1.0/groups/{object_id(group)}", allow_missing=True) is not None:
-                raise FinOpsError("Group deletion could not be verified.", 7)
+            for attempt in range(31):
+                if self.request("GET", f"/v1.0/groups/{object_id(group)}", allow_missing=True) is None:
+                    break
+                if attempt == 30:
+                    raise FinOpsError("Group deletion could not be verified after propagation wait.", 7)
+                time.sleep(2)
         return plan
