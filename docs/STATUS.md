@@ -90,9 +90,16 @@ a review of each (app registrations and properties: identifiers zeroed, no perso
 Users and groups picture showed the owner's initials beside his pseudonym and was dropped; it
 and Turnstile's assignments page wait for the next step-up.
 
-Still pending, and why: the 24 P54 edge pictures and 7 AUM Function and storage pictures
-target test deployments that were torn down after their terminal evidence was recorded.
-They need those deployments again; the documents keep them as inline pending paths.
+Still pending, and why: 7 AUM Function and storage pictures target a service deployment that was
+removed after its live journeys; the documents keep them as inline pending paths. The 24 P54
+edge pictures were captured later the same day from a short-lived isolated copy of the
+evaluation estate (Standard v2 gateway, WAF_v2 edge, private Foundry and vault; list price about
+$1.55 an hour), with the private vault's Certificates list reached through a loopback PAC route
+into the network (`PORTAL_PROXY_PAC_URL`). Eleven steps first failed or captured the wrong page:
+deep links that no longer render, and click waits that matched the landing page (a non-exact
+`Port` matches **Report a bug**); each was fixed in the spec and every picture reviewed. The
+vault's Role assignments tab was deliberately not captured, because it lists inherited
+assignments that name other people.
 
 **Test environments removed.** The SKU tests (the Basic v2 test gateway, and the second test
 resource group with its Foundry account, deleted and purged at 10:06-10:19Z). The Premium v2

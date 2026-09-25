@@ -652,43 +652,46 @@ instructions to paste unknown deployment IDs into a template.
 | Enable diagnostics | Gateway > **Monitoring** > **Diagnostic settings** > **Add diagnostic setting** > access and firewall logs > chosen Log Analytics workspace | The module uses resource-specific tables `AGWAccessLogs` and `AGWFirewallLogs` |
 | Verify backend | Gateway > **Backend health**; require healthy APIM. Then run real client requests and inspect firewall logs, not just the health probe | `Test-ClaudeNetworkEdge.ps1` |
 
-### Pending central-batch portal images
+### Portal pictures, captured live
 
-`guide/captures/p54.json` follows the version-1 shared capture protocol.
-Every target uses a discovered resource type and an operator-provided
-`P54_*_NAME_FILTER` environment value, never an embedded resource name.
-Confirm its `selectionKey` points to the approved evaluation resource.
-Supply the private `PORTAL_REDACTIONS_FILE`, including names, hostnames and
-address ranges. These inline paths deliberately do not masquerade as images.
-All rows are **pending batch capture**; blade navigation is not claimed live
-verified until the runner satisfies the text checks and the images are reviewed.
+The lead's batch captured every row on 2026-09-25 from a short-lived, isolated copy of the
+evaluation estate: a public WAF_v2 edge in front of a private Standard v2 gateway and a private
+Foundry account, built with the procedure above and removed afterwards. Each picture has a record
+in `docs/guide/portal-captures.json`; names are replaced with Contoso values. The WAF policy ran
+in Detection, the documented first rollout step, so these pictures are not Prevention evidence.
+No model was deployed: backend health is real, inference through this estate was not repeated.
 
-| Spec id | Manual blade to verify | Final output, capture pending |
+| Spec id | Manual blade to verify | Picture |
 |---|---|---|
-| `p54-vnet-subnets` | VNet > Subnets; prefixes, delegations and NSGs | `docs/guide/network-final-subnets.png` |
-| `p54-vnet-peerings` | VNet > Peerings; both directions and forwarded traffic | `docs/guide/network-final-peerings.png` |
-| `p54-vnet-dns` | VNet > DNS servers; actual resolver configuration | `docs/guide/network-final-vnet-dns.png` |
-| `p54-route-table` | Route table > Routes; next hop and prefixes | `docs/guide/network-final-routes.png` |
-| `p54-public-ip` | Public IP > Configuration; SKU, assignment, timeout | `docs/guide/network-final-public-ip.png` |
-| `p54-edge-identity` | User-assigned identity > Overview; selected certificate identity | `docs/guide/network-final-identity.png` |
-| `p54-vault-certificate` | Vault > Certificates; enabled listener certificate, from a routed browser | `docs/guide/network-final-certificate.png` |
-| `p54-vault-role` | Vault > Access control (IAM) > Role assignments; edge Secrets User | `docs/guide/network-final-vault-role.png` |
-| `p54-private-endpoint` | Private endpoint > DNS configuration; approved origin address | `docs/guide/network-final-endpoint.png` |
-| `p54-private-dns` | Private DNS zone > Virtual network links; selected VNet | `docs/guide/network-final-dns-links.png` |
-| `p54-apim-network` | APIM > Network; inbound approval, public state and outbound integration | `docs/guide/network-final-apim-network.png` |
-| `p54-foundry-network` | Foundry > Networking; private approval and public state | `docs/guide/network-final-foundry-network.png` |
-| `p54-waf-settings` | WAF > Policy settings; Prevention, body limits, log scrubbing | `docs/guide/network-final-waf-settings.png` |
-| `p54-waf-managed` | WAF > Managed rules; selected version and exclusions | `docs/guide/network-final-waf-managed.png` |
-| `p54-edge-overview` | Gateway > Overview; running WAF v2 and frontend addresses | `docs/guide/network-final-edge.png` |
-| `p54-edge-listeners` | Gateway > Listeners; HTTPS/443, host and certificate | `docs/guide/network-final-listeners.png` |
-| `p54-edge-pools` | Gateway > Backend pools; actual APIM hostname | `docs/guide/network-final-pools.png` |
-| `p54-edge-settings` | Gateway > Backend settings; HTTPS, hostname, timeout and draining | `docs/guide/network-final-settings.png` |
-| `p54-edge-probes` | Gateway > Health probes; HTTPS status path | `docs/guide/network-final-probes.png` |
-| `p54-edge-rules` | Gateway > Rules; global and Messages-path policy association | `docs/guide/network-final-rules.png` |
-| `p54-edge-rewrites` | Gateway > Rewrites; socket-derived client-IP replacement | `docs/guide/network-final-rewrites.png` |
-| `p54-apim-policy` | APIM > APIs > All APIs; source restriction before inherited inbound policy | `docs/guide/network-final-apim-policy.png` |
-| `p54-edge-diagnostics` | Gateway > Diagnostic settings; access/firewall log destination | `docs/guide/network-final-diagnostics.png` |
-| `p54-edge-health` | Gateway > Backend health; APIM healthy, then real client test | `docs/guide/network-final-health.png` |
+| `p54-vnet-subnets` | VNet > Subnets; prefixes, delegations and NSGs | ![Subnets: edge 10.0.0.0/24, apim-integration 10.0.1.0/24 delegated with an NSG and route table, private-endpoints 10.0.2.0/26, verification 10.0.2.64/27](guide/network-final-subnets.png) |
+| `p54-vnet-peerings` | VNet > Peerings; both directions and forwarded traffic | ![One peering to the evaluation VNet, Fully Synchronized and Connected](guide/network-final-peerings.png) |
+| `p54-vnet-dns` | VNet > DNS servers; actual resolver configuration | ![The edge VNet's DNS blade: Azure-provided DNS, no private resolver, and its five private DNS zone links](guide/network-final-vnet-dns.png) |
+| `p54-route-table` | Route table > Routes; next hop and prefixes | ![The integration subnet's route table: one route, evaluation-direct-egress, 0.0.0.0/0 to Internet](guide/network-final-routes.png) |
+| `p54-public-ip` | Public IP > Configuration; SKU, assignment, timeout | ![Public IP configuration: Static, a documentation-range address, 30-minute idle timeout and a DNS name label](guide/network-final-public-ip.png) |
+| `p54-edge-identity` | User-assigned identity > Overview; selected certificate identity | ![The edge's user-assigned managed identity, identifiers zeroed](guide/network-final-identity.png) |
+| `p54-vault-certificate` | Vault > Certificates; enabled listener certificate, from a routed browser | ![Private vault Certificates list reached through the in-network route: the listener certificate, Enabled, with its thumbprint and expiry](guide/network-final-certificate.png) |
+| `p54-vault-role` | Vault > Access control (IAM) > Role assignments; edge Secrets User | ![The vault's Access control (IAM) entry point; the role assignment itself is verified with the CLI below](guide/network-final-vault-role.png) |
+| `p54-private-endpoint` | Private endpoint > DNS configuration; approved origin address | ![The gateway's private endpoint: customer-visible FQDN, private address 10.0.2.5 and its private DNS zone group](guide/network-final-endpoint.png) |
+| `p54-private-dns` | Private DNS zone > Virtual network links; selected VNet | ![The gateway's private DNS zone: one virtual network link to the edge VNet, Completed, auto-registration Disabled](guide/network-final-dns-links.png) |
+| `p54-apim-network` | APIM > Network; inbound approval, public state and outbound integration | ![Gateway Network blade: public network access Disabled, one private endpoint, outbound virtual network integration Enabled](guide/network-final-apim-network.png) |
+| `p54-foundry-network` | Foundry > Networking; private approval and public state | ![Foundry Networking: public access Disabled, private endpoints the only path, trusted Azure services allowed](guide/network-final-foundry-network.png) |
+| `p54-waf-settings` | WAF > Policy settings; Prevention, body limits, log scrubbing | ![WAF policy settings: request body inspection on, 2000 KB inspection and body limits, 100 MB upload limit](guide/network-final-waf-settings.png) |
+| `p54-waf-managed` | WAF > Managed rules; selected version and exclusions | ![WAF managed rules: Microsoft_DefaultRuleSet_2.1, 190 rules, policy in Detection mode](guide/network-final-waf-managed.png) |
+| `p54-edge-overview` | Gateway > Overview; running WAF v2 and frontend addresses | ![Application Gateway overview: WAF V2 tier, frontend public address, the edge subnet](guide/network-final-edge.png) |
+| `p54-edge-listeners` | Gateway > Listeners; HTTPS/443, host and certificate | ![One HTTPS listener on 443 for the edge host name, with the TLS 1.2 predefined SSL policy](guide/network-final-listeners.png) |
+| `p54-edge-pools` | Gateway > Backend pools; actual APIM hostname | ![One backend pool, apim, with one target and one rule](guide/network-final-pools.png) |
+| `p54-edge-settings` | Gateway > Backend settings; HTTPS, hostname, timeout and draining | ![Backend setting apim-https: port 443, HTTPS, cookie affinity disabled, custom probe apim-status](guide/network-final-settings.png) |
+| `p54-edge-probes` | Gateway > Health probes; HTTPS status path | ![Health probe apim-status: HTTPS on the gateway's status path, 30-second timeout](guide/network-final-probes.png) |
+| `p54-edge-rules` | Gateway > Rules; global and Messages-path policy association | ![One path-based routing rule, public-route, on the public-https listener, priority 100](guide/network-final-rules.png) |
+| `p54-edge-rewrites` | Gateway > Rewrites; socket-derived client-IP replacement | ![Rewrite set trusted-client-address with one rewrite applied to two rules](guide/network-final-rewrites.png) |
+| `p54-apim-policy` | APIM > APIs > All APIs; source restriction before inherited inbound policy | ![All APIs inbound policy: ip-filter, set-variable and set-header before forward-request](guide/network-final-apim-policy.png) |
+| `p54-edge-diagnostics` | Gateway > Diagnostic settings; access/firewall log destination | ![Diagnostic setting network-edge sending to the evaluation Log Analytics workspace](guide/network-final-diagnostics.png) |
+| `p54-edge-health` | Gateway > Backend health; APIM healthy, then real client test | ![Backend health: the gateway's private host Healthy on 443 over HTTPS, received 200](guide/network-final-health.png) |
+
+The vault's Role assignments tab was not opened for the picture: it lists every assignment
+inherited from the subscription, which names other people in the tenant. Read the edge
+identity's assignment with `az role assignment list --scope <vault-resource-id> --assignee
+<edge-identity-principal-id> -o table` instead.
 
 The optional hub route/peering rows also require an existing explicitly
 selected hub or a separately approved reference deployment. They are not

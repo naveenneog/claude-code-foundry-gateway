@@ -68,7 +68,11 @@ Built-in capture catalogue:
   (Sign in, Save, Delete, Create, Grant, etc.) are refused. There is no credential typing.
   A click whose `waitFor` is already on screen is skipped: the portal remembers menu groups
   open, and clicking an open group closes it. The top-level `waitFor` is checked **before**
-  the clicks, so it must be on the landing blade, not on the page the clicks reach.
+  the clicks, so it must be on the landing blade, not on the page the clicks reach. For the
+  same reason a click's `waitFor` must appear only on the page the click opens: a non-exact
+  `Port` also matches **Report a bug** in the portal header, and `Listener` matches the menu
+  item **Listeners**, so the click is skipped and the landing page is captured. Prefer an exact
+  column header of the target blade (`Cookie based affinity`, `Rules associated`).
 - Prefer `/overview` plus menu clicks to deep links. `/namedValues`, `/identity`, `/apis`,
   `/networking` and `/deployments` stopped rendering their content in the current portal.
   Proven patterns: a gateway menu item under the APIs group is
