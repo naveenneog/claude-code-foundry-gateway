@@ -65,3 +65,16 @@ def test_capture_manifest_lock_rejects_overlapping_publishers():
                 raise AssertionError("A second publisher must not acquire the manifest.")
     with capture_lock(folder):
         pass
+
+
+def test_independent_backends_have_live_redacted_tab_evidence():
+    folder = Path(__file__).resolve().parents[3] / "docs" / "images" / "aum"
+    entries = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))["images"]
+    actual = {(row["backend"], row.get("tab"), tuple(row.get("size", []))) for row in entries
+              if row.get("source") == "live" and row.get("redaction") is True and row.get("phase") == "after"}
+    from claude_finops.views import TABS
+    expected = {("Direct", tab, size) for tab, _ in TABS for size in ((80, 24), (160, 48))}
+    expected |= {("AUM service", tab, size) for tab in
+        ("overview", "budgets", "people", "governance", "trends", "requests", "settings", "approvals")
+        for size in ((80, 24), (160, 48))}
+    assert expected <= actual

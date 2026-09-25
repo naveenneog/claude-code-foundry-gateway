@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import time
 
-from textual.widgets import TabbedContent
+from textual.widgets import TabbedContent, Select
 
 from claude_finops.backend import connect
 from claude_finops.config import load_config
@@ -40,6 +40,9 @@ async def capture(args):
                 await pilot.pause(.25)
                 await app.workers.wait_for_complete()
                 await pilot.wait_for_scheduled_animations()
+                if args.trends_interval != "day":
+                    app.interval = args.trends_interval
+                    app.query_one("#interval", Select).value = args.trends_interval
                 available = tabs or [key for key, _ in TABS + EXTRA_TABS if key in app.allowed_tabs]
                 for tab in available:
                     started = time.monotonic()
@@ -64,7 +67,8 @@ async def capture(args):
                     if tab not in app.data:
                         state = app.redactor.text(str(app.query_one(f"#note-{tab}").render()))
                         raise RuntimeError(f"Live {tab} failed; no image published. {state}")
-                    filename = f"{config.backend}-{tab}-{size[0]}x{size[1]}-{args.phase}.svg"
+                    label = tab + ("-" + args.trends_interval if tab == "trends" and args.trends_interval != "day" else "")
+                    filename = f"{config.backend}-{label}-{size[0]}x{size[1]}-{args.phase}.svg"
                     entry = dict(file=filename, source="live", backend=backend.name,
                                  captured_at=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                                  redaction=app.redactor.enabled, commit=commit, size=list(size), tab=tab, phase=args.phase)
@@ -99,5 +103,6 @@ if __name__ == "__main__":
     parser.add_argument("--month", required=True)
     parser.add_argument("--tabs")
     parser.add_argument("--phase", choices=["before", "after"], default="after")
+    parser.add_argument("--trends-interval", choices=["day", "hour", "week"], default="day")
     with capture_lock(ROOT / ".aum-evidence"):
         asyncio.run(capture(parser.parse_args()))
