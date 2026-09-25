@@ -21,6 +21,16 @@ EXTRA_TABS = [("approvals", "9 Approvals"), ("ask", "a Ask"), ("advanced", "Adva
 
 
 class FeatureUI:
+    def action_refresh_usage(self):
+        if self.editable and self.engine.backend.name == "Turnstile":
+            from datetime import datetime, timezone, timedelta
+            from .usage_refresh import refresh_usage
+            now = datetime.now(timezone.utc).replace(microsecond=0)
+            self.push_screen(ActionForm("Refresh recent usage, not governance", [
+                ("start", "UTC range start (maximum two hours)", (now - timedelta(minutes=30)).isoformat(), None),
+                ("end", "UTC range end", now.isoformat(), None)],
+                lambda values, apply: refresh_usage(self.engine, self.config, values["start"], values["end"], apply=apply)))
+
     def action_publish_as_admin(self):
         if self.editable and self.engine.backend.name == "Turnstile":
             from .group_actions import publish_as_signed_in_admin

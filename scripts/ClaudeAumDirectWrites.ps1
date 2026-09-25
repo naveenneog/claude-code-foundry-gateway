@@ -67,7 +67,7 @@ function Get-AumNamedValueMap {
     $map = @{}
     foreach ($value in @($raw | ConvertFrom-Json)) {
         if (-not $value.secret) { $map[[string]$value.name] = [string]$value.value }
-        elseif ($value.name -match '^(bu-|quota-|tpm-|models-)') {
+        elseif ($value.name -match '^(bu-|quota-|tpm-|models-|allow-|turnstile-integration$)') {
             throw 'Governance named values must be nonsecret. Inspect the gateway configuration.'
         }
     }

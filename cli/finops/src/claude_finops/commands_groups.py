@@ -7,6 +7,12 @@ def register(app, groups, emit):
     group = typer.Typer(rich_markup_mode=None, help="Delegated Entra security groups; existing admin rights, no consent changes.")
     app.add_typer(group, name="group")
 
+    @groups["usage"].command("refresh")
+    def refresh_recent_usage(ctx: typer.Context, start: str, end: str, apply: bool = False):
+        """Run the existing Turnstile exporter once for a bounded usage-only window."""
+        from .usage_refresh import refresh_usage
+        emit(ctx, lambda e: refresh_usage(e, ctx.obj["config"], start, end, apply=apply and not ctx.obj["what_if"]))
+
     @groups["requests"].command("probe")
     def probe(ctx: typer.Context, model: str = "claude-sonnet-5", apply: bool = False):
         """Preview/send one tiny real request through the discovered gateway."""

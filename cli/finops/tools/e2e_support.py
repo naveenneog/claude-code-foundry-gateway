@@ -59,6 +59,9 @@ class GatewayState:
         result = {}
         while True:
             for row in response["value"]:
+                if row["properties"].get("secret") and row["name"].startswith(
+                        ("bu-", "allow-", "quota-", "tpm-", "models-", "turnstile-integration")):
+                    raise FinOpsError("Cannot safely snapshot secret governance values; no acceptance mutation is allowed.", 7)
                 if not row["properties"].get("secret"):
                     result[row["name"]] = deepcopy(row["properties"])
             if not response.get("nextLink"):

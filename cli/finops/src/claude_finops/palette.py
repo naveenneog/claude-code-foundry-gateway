@@ -57,6 +57,7 @@ class FinOpsCommands(Provider):
                 commands.append(("Apply governance now", self.app.action_apply, "Retry the configured gateway job"))
             if self.app.engine.backend.name == "Turnstile":
                 commands.append(("Publish Turnstile as signed-in admin", self.app.action_publish_as_admin, "Explicit delegated Graph and Azure RBAC; no new consent"))
+                commands.append(("Refresh recent Turnstile usage", self.app.action_refresh_usage, "One existing exporter execution; no schedule or governance changes"))
             if self.app.engine.backend.name in {"Direct", "Turnstile"}:
                 commands.append(("Refresh selected group membership", self.app.action_refresh_membership, "Delegated Graph; preserves unrelated mappings"))
             if enabled(self.app.feature_caps, "bulk_budget", "write"):

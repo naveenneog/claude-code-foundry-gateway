@@ -70,3 +70,14 @@ def test_enforcement_uses_actual_quota_403_not_generic_permission_denial():
         message="Not permitted aum-e2e-team-test")), "strict", "aum-e2e-team-test")
     assert matches(dict(status_code=200, headers={"x-claude-budget-notice":
         "aum-e2e-team-test;mode=allowance:10;status=estimated-over-budget"}), "allowance", "aum-e2e-team-test")
+
+
+def test_secret_governance_values_never_look_absent_to_restore():
+    import pytest
+    from claude_finops.errors import FinOpsError
+    module = support()
+    state = module.GatewayState.__new__(module.GatewayState)
+    state.call = lambda *args, **kwargs: {"value": [
+        {"name": "allow-standard", "properties": {"secret": True, "value": None}}]}
+    with pytest.raises(FinOpsError, match="secret governance"):
+        state.snapshot()
