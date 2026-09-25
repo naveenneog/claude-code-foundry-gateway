@@ -49,8 +49,13 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 
 if (-not $Remove -and -not $Tier) { throw "Say which tier: -Tier standard or -Tier premium. Use -Remove to take someone out." }
+if ($Remove -or $BusinessUnit -or $Sync) {
+    if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
+    if (-not $ApimName) { $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup }
+}
 
 function Get-GraphToken {
     $t = az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv 2>$null
@@ -149,10 +154,6 @@ if ($Remove) {
     # half done. Every unit is cleared, not just a named one.
     . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
     . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
-    if (-not $ApimName) {
-        $found = @((az apim list -g $ResourceGroup --query "[].name" -o tsv 2>$null) -split "`n" | Where-Object { $_ })
-        if ($found.Count -eq 1) { $ApimName = $found[0].Trim() }
-    }
     if ($ApimName) {
         $registry = @(ConvertFrom-ClaudeBuRegistry (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'))
         $units = if ($BusinessUnit) { @($registry | Where-Object { $_.Id -eq $BusinessUnit }) } else { $registry }
@@ -164,9 +165,6 @@ if ($Remove) {
                 catch { Write-Warning "Could not check $($u.Group): $($_.Exception.Message)" }
             }
         }
-    }
-    else {
-        Write-Warning "Could not find the gateway to read the business unit registry, so business unit membership was not cleared. Pass -ApimName."
     }
 }
 else {
@@ -184,11 +182,6 @@ else {
 if ($BusinessUnit) {
     . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
     . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
-    if (-not $ApimName) {
-        $found = @((az apim list -g $ResourceGroup --query "[].name" -o tsv 2>$null) -split "`n" | Where-Object { $_ })
-        if ($found.Count -eq 1) { $ApimName = $found[0].Trim() }
-    }
-    if (-not $ApimName) { throw "Could not find the gateway to read the business unit registry. Pass -ApimName." }
 
     $registry = @(ConvertFrom-ClaudeBuRegistry (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'))
     $unit = @($registry | Where-Object { $_.Id -eq $BusinessUnit })

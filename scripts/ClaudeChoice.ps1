@@ -59,6 +59,7 @@ function Select-ClaudeChoice {
         [scriptblock]$Reader = { param($Prompt) Read-Host $Prompt }
     )
     $Options = @($Options | Where-Object { $null -ne $_ })
+    $WhereToFind = @($WhereToFind | Where-Object { $_ })
     $recommended = @($Options | Where-Object { $_.Recommended })
     $console = if ($null -ne $Interactive) { [bool]$Interactive } else { Test-ClaudeInteractive }
     $hint = if ($WhereToFind.Count) { ' Where to find it: ' + ($WhereToFind -join '; ') + '.' } else { '' }
@@ -120,7 +121,8 @@ function Select-ClaudeResourceGroup {
     $rows = az apim list --query "[].{name:name,group:resourceGroup}" -o json 2>$null | ConvertFrom-Json
     $groups = @($rows | Group-Object group | Sort-Object Name)
     $options = foreach ($g in $groups) {
-        New-ClaudeChoiceOption -Value $g.Name -Detail ('API Management: ' + (($g.Group | ForEach-Object { $_.name }) -join ', '))
+        New-ClaudeChoiceOption -Value $g.Name -Detail ('az apim list: ' + (($g.Group | ForEach-Object { $_.name }) -join ', ')) `
+            -Recommended:($groups.Count -eq 1) -Reason 'the only resource group with a visible API Management instance'
     }
     $choice = @{
         Parameter   = 'ResourceGroup'
@@ -133,6 +135,7 @@ function Select-ClaudeResourceGroup {
         )
         NoneMessage = 'No API Management instance is visible in this subscription (az account show).'
         Interactive = $Interactive
+        AcceptRecommendedWithoutConsole = $true
     }
     if ($Reader) { $choice.Reader = $Reader }
     Select-ClaudeChoice @choice
@@ -163,9 +166,9 @@ function Select-ClaudeGateway {
     }
     $options = foreach ($name in $names) {
         if ($names.Count -eq 1) {
-            New-ClaudeChoiceOption -Value $name -Recommended -Reason "the only API Management instance in $ResourceGroup"
+            New-ClaudeChoiceOption -Value $name -Detail "az apim list -g $ResourceGroup" -Recommended -Reason "the only API Management instance in $ResourceGroup"
         }
-        else { New-ClaudeChoiceOption -Value $name }
+        else { New-ClaudeChoiceOption -Value $name -Detail "az apim list -g $ResourceGroup" }
     }
     $choice = @{
         Parameter   = 'ApimName'
@@ -197,6 +200,7 @@ function Select-ClaudeWorkspace {
         [Parameter(Mandatory = $true)][string]$ResourceGroup,
         [string]$ApimName,
         [string]$AmbiguousMessage,
+        [switch]$LocalOnly,
         [string]$ScriptRoot = $PSScriptRoot,
         [string]$TelemetryScript,
         [object]$Interactive = $null,
@@ -217,6 +221,10 @@ function Select-ClaudeWorkspace {
         Write-Host ("  The gateway's Application Insights link could not be read: {0}" -f $_.Exception.Message) -ForegroundColor DarkGray
     }
 
+    if ($LocalOnly -and $linked -and ($linked -split '/')[4] -ine $ResourceGroup) {
+        Write-Host "  The linked workspace is outside $ResourceGroup; this operation needs a workspace in the gateway's own group." -ForegroundColor DarkGray
+        $linked = $null
+    }
     $options = @()
     if ($linked) {
         $options += New-ClaudeChoiceOption -Value $linked -Label ('{0} ({1})' -f ($linked -split '/')[-1], ($linked -split '/')[4]) `
@@ -226,7 +234,7 @@ function Select-ClaudeWorkspace {
         ForEach-Object { $_.Trim() } | Where-Object { $_ })
     foreach ($id in $ids) {
         if ($linked -and $id -ieq $linked) { continue }
-        $detail = if ($linked) { "in $ResourceGroup, but not linked to the gateway's Application Insights" } else { $null }
+        $detail = "az monitor log-analytics workspace list -g $ResourceGroup" + $(if ($linked) { "; not linked to the gateway's Application Insights" })
         $options += New-ClaudeChoiceOption -Value $id -Label ('{0} ({1})' -f ($id -split '/')[-1], $ResourceGroup) -Detail $detail
     }
     if (-not $linked -and $options.Count -eq 1) {
@@ -245,6 +253,254 @@ function Select-ClaudeWorkspace {
         AmbiguousMessage = $AmbiguousMessage
         Interactive      = $Interactive
         AcceptRecommendedWithoutConsole = $true
+    }
+    if ($Reader) { $choice.Reader = $Reader }
+    Select-ClaudeChoice @choice
+}
+
+function Select-ClaudeFoundryAccount {
+    param(
+        [string]$ResourceGroup,
+        [string]$ApimName,
+        [string]$Kind,
+        [string]$Parameter = 'FoundryAccount',
+        [object]$Interactive = $null,
+        [scriptblock]$Reader
+    )
+    $groupArgs = if ($ResourceGroup) { @('-g', $ResourceGroup) } else { @() }
+    $scope = if ($ResourceGroup) { $ResourceGroup } else { 'the selected subscription' }
+    $discovered = $null
+    try { $discovered = az cognitiveservices account list @groupArgs -o json 2>$null | ConvertFrom-Json }
+    catch { Write-Host '  Account discovery failed; check az login and the selected subscription (az account show).' -ForegroundColor DarkGray }
+    $accounts = @($discovered | Where-Object { $_.name -and (-not $Kind -or $_.kind -eq $Kind) })
+    $backend = $null
+    if ($ApimName) {
+        try {
+            $url = az apim api show -g $ResourceGroup --service-name $ApimName --api-id claude-foundry --query serviceUrl -o tsv 2>$null
+            $parsed = $null
+            if ([uri]::TryCreate([string]$url, [UriKind]::Absolute, [ref]$parsed)) { $backend = $parsed.Host }
+        }
+        catch { Write-Verbose 'The gateway backend could not be read; offering the discovered accounts.' }
+    }
+    $linked = @($accounts | Where-Object {
+        $hosts = @()
+        $endpoints = @($_.properties.endpoint)
+        if ($_.properties.endpoints) { $endpoints += @($_.properties.endpoints.PSObject.Properties | ForEach-Object { $_.Value }) }
+        foreach ($endpoint in $endpoints) {
+            $parsed = $null
+            if ($endpoint -and [uri]::TryCreate([string]$endpoint, [UriKind]::Absolute, [ref]$parsed)) { $hosts += $parsed.Host }
+        }
+        $backend -and ($hosts -contains $backend -or
+            ($_.properties.customSubDomainName -and ($backend -split '\.')[0] -ieq $_.properties.customSubDomainName) -or
+            (-not $hosts.Count -and ($backend -split '\.')[0] -ieq $_.name))
+    })
+    $options = foreach ($account in $accounts) {
+        $recommended = ($linked.Count -eq 1 -and $linked[0].name -eq $account.name) -or $accounts.Count -eq 1
+        $reason = if ($linked.Count -eq 1 -and $linked[0].name -eq $account.name) {
+            "the gateway $ApimName backend points at this account's endpoint"
+        } elseif ($accounts.Count -eq 1) { "the only matching Cognitive Services account in $scope" } else { '' }
+        $group = if ($account.resourceGroup) { $account.resourceGroup } else { $scope }
+        New-ClaudeChoiceOption -Value $account.name -Detail ("az cognitiveservices account list: {0}, {1}, {2}" -f $group, $account.kind, $account.location) `
+            -Recommended:$recommended -Reason $reason
+    }
+    $choice = @{
+        Parameter = $Parameter; Question = "Which Foundry account in $scope?"
+        Options = @($options); Interactive = $Interactive; AcceptRecommendedWithoutConsole = $true
+        NoneMessage = "No matching Cognitive Services account is visible in $scope."
+        WhereToFind = @(
+            ('az cognitiveservices account list ' + ($groupArgs -join ' ') + ' -o table')
+            $(if ($ApimName) { "az apim api show -g $ResourceGroup --service-name $ApimName --api-id claude-foundry --query serviceUrl -o tsv" })
+            'Azure portal: All resources > the Foundry resource > Keys and Endpoint; API Management > APIs > claude-foundry > Settings > Web service URL'
+        )
+    }
+    if ($Reader) { $choice.Reader = $Reader }
+    Select-ClaudeChoice @choice
+}
+
+function Select-ClaudeTurnstileResourceGroup {
+    param(
+        [string]$ResourceGroup,
+        [string]$ApimName,
+        $Integration,
+        [object]$Interactive = $null,
+        [scriptblock]$Reader
+    )
+    if ($Integration -and $Integration.resourceGroup) {
+        Write-Host ("  -TurnstileResourceGroup {0}: recorded in {1}'s turnstile-integration named value" -f $Integration.resourceGroup, $ApimName) -ForegroundColor DarkGray
+        return [string]$Integration.resourceGroup
+    }
+    $apps = az webapp list --query "[].{name:name,resourceGroup:resourceGroup}" -o json 2>$null | ConvertFrom-Json
+    $groups = @($apps | Where-Object { $_.resourceGroup } | Group-Object resourceGroup | Sort-Object Name)
+    $options = foreach ($group in $groups) {
+        New-ClaudeChoiceOption -Value $group.Name -Detail ('az webapp list: ' + (($group.Group | ForEach-Object { $_.name }) -join ', ')) `
+            -Recommended:($groups.Count -eq 1) -Reason 'the only resource group with a visible web app; the connection step verifies its Turnstile settings'
+    }
+    $choice = @{
+        Parameter = 'TurnstileResourceGroup'; Question = 'Which resource group contains your Turnstile deployment?'
+        Options = @($options); Interactive = $Interactive; AcceptRecommendedWithoutConsole = $true
+        NoneMessage = 'No web app resource group is visible. Check the Turnstile deployment and the selected subscription.'
+        WhereToFind = @(
+            "az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id turnstile-integration --query value -o tsv"
+            'az webapp list --query "[].{name:name,resourceGroup:resourceGroup}" -o table'
+            'Azure portal: API Management > Named values > turnstile-integration > resourceGroup; or the Turnstile App Service > Overview > Resource group'
+        )
+    }
+    if ($Reader) { $choice.Reader = $Reader }
+    Select-ClaudeChoice @choice
+}
+
+function Select-ClaudeBackup {
+    param(
+        [Parameter(Mandatory = $true)][string]$Folder,
+        [string]$Pattern = '*.zip',
+        [string]$Parameter = 'Path',
+        [object]$Interactive = $null,
+        [scriptblock]$Reader
+    )
+    $files = @(Get-ChildItem -LiteralPath $Folder -Filter $Pattern -File -ErrorAction SilentlyContinue |
+        Sort-Object @{ Expression = 'LastWriteTimeUtc'; Descending = $true }, Name)
+    $options = for ($i = 0; $i -lt $files.Count; $i++) {
+        $file = $files[$i]
+        New-ClaudeChoiceOption -Value $file.FullName -Label $file.Name `
+            -Detail ("{0}; modified {1:u} UTC; {2} bytes" -f $file.DirectoryName, $file.LastWriteTimeUtc, $file.Length) `
+            -Recommended:($i -eq 0) -Reason 'newest modified archive in this folder; check the source machine before restoring'
+    }
+    $choice = @{
+        Parameter = $Parameter; Question = "Which $Pattern backup should be restored?"
+        Options = @($options); Interactive = $Interactive
+        AcceptRecommendedWithoutConsole = ($files.Count -eq 1)
+        NoneMessage = "No $Pattern backups in '$Folder'. Pass -Folder to say where they are."
+        WhereToFind = @(
+            "Get-ChildItem -LiteralPath '$Folder' -Filter '$Pattern' | Sort-Object LastWriteTimeUtc -Descending"
+            "File Explorer: $Folder (local archives, not an Azure portal resource)"
+            'Migrate-ClaudeWorkstation.ps1 -Backup -Folder <folder> creates the archives on the source machine'
+        )
+    }
+    if ($Reader) { $choice.Reader = $Reader }
+    Select-ClaudeChoice @choice
+}
+
+function Select-ClaudeReportResource {
+    param(
+        [Parameter(Mandatory = $true)][string]$ResourceGroup,
+        [Parameter(Mandatory = $true)][string]$ApimName,
+        [ValidateSet('StorageAccount', 'AdministrationJob')][string]$Kind = 'StorageAccount',
+        [object[]]$Resources,
+        $DeploymentOutputs,
+        [object]$Interactive = $null,
+        [scriptblock]$Reader
+    )
+    $type = if ($Kind -eq 'StorageAccount') { 'Microsoft.Storage/storageAccounts' } else { 'Microsoft.App/jobs' }
+    $parameter = if ($Kind -eq 'StorageAccount') { 'StorageAccount' } else { 'JobName' }
+    $field = if ($Kind -eq 'StorageAccount') { 'storageAccount' } else { 'adminJobName' }
+    if (-not $PSBoundParameters.ContainsKey('Resources')) {
+        $raw = az resource list -g $ResourceGroup --resource-type $type -o json 2>$null | ConvertFrom-Json
+        $Resources = @($raw)
+    }
+    $candidates = @($Resources | Where-Object {
+        $_.type -eq $type -and $_.tags.'claude-chargeback-gateway' -eq $ApimName -and
+            ($Kind -eq 'StorageAccount' -or $_.name -like 'job-reports-admin-*')
+    })
+    if (-not $PSBoundParameters.ContainsKey('DeploymentOutputs')) {
+        try { $DeploymentOutputs = az deployment group show -g $ResourceGroup -n "chargeback-$ApimName" --query properties.outputs -o json 2>$null | ConvertFrom-Json }
+        catch { Write-Verbose 'Reports deployment outputs are unavailable; using the gateway-tagged inventory.' }
+    }
+    $recorded = if ($DeploymentOutputs) { [string]$DeploymentOutputs.$field.value } else { '' }
+    $recordedMatch = @($candidates | Where-Object { $recorded -and $_.name -eq $recorded })
+    if ($recordedMatch.Count -eq 1) {
+        Write-Host ("  -{0} {1}: recorded in chargeback-{2} deployment outputs, verified against the gateway tag" -f $parameter, $recorded, $ApimName) -ForegroundColor DarkGray
+        return $recorded
+    }
+    $options = foreach ($resource in $candidates) {
+        New-ClaudeChoiceOption -Value $resource.name -Detail ("az resource list: {0}, {1}; tag claude-chargeback-gateway={2}" -f $ResourceGroup, $resource.location, $ApimName) `
+            -Recommended:($candidates.Count -eq 1) -Reason "the only matching $Kind tagged for $ApimName"
+    }
+    $choice = @{
+        Parameter = $parameter; Question = "Which reports $Kind belongs to $ApimName?"
+        Options = @($options); Interactive = $Interactive; AcceptRecommendedWithoutConsole = $true
+        NoneMessage = "No reports $Kind tagged for this gateway. Run Register-ClaudeChargebackSchedule.ps1 first."
+        WhereToFind = @(
+            "az resource list -g $ResourceGroup --resource-type $type -o table"
+            "az deployment group show -g $ResourceGroup -n chargeback-$ApimName --query properties.outputs -o json"
+            "Azure portal: Resource groups > $ResourceGroup > Resources (tag claude-chargeback-gateway=$ApimName); Deployments > chargeback-$ApimName > Outputs"
+        )
+    }
+    if ($Reader) { $choice.Reader = $Reader }
+    Select-ClaudeChoice @choice
+}
+
+function Select-ClaudeModel {
+    param(
+        [string[]]$Names = @(),
+        [string]$Source,
+        [string[]]$WhereToFind,
+        [string]$Parameter = 'Model',
+        [object]$Interactive = $null,
+        [scriptblock]$Reader
+    )
+    $models = @($Names | Where-Object { $_ } | Sort-Object -Unique)
+    $options = for ($i = 0; $i -lt $models.Count; $i++) {
+        $reason = if ($models.Count -eq 1) { "the only model from $Source" } else { 'first in alphabetical order, not a price or capability recommendation' }
+        New-ClaudeChoiceOption -Value $models[$i] -Detail $Source -Recommended:($i -eq 0) -Reason $reason
+    }
+    $choice = @{
+        Parameter = $Parameter; Question = 'Which deployed model should this operation use?'
+        Options = @($options); Interactive = $Interactive; WhereToFind = $WhereToFind
+        NoneMessage = "No usable model was discovered from $Source."
+        AcceptRecommendedWithoutConsole = ($models.Count -eq 1)
+    }
+    if ($Reader) { $choice.Reader = $Reader }
+    Select-ClaudeChoice @choice
+}
+
+function Select-ClaudeAppInsights {
+    param(
+        [Parameter(Mandatory = $true)][string]$ResourceGroup,
+        [object]$Interactive = $null,
+        [scriptblock]$Reader
+    )
+    $raw = az resource list -g $ResourceGroup --resource-type Microsoft.Insights/components -o json 2>$null | ConvertFrom-Json
+    $components = @($raw | Where-Object { $_.id -and $_.name })
+    $options = foreach ($component in $components) {
+        New-ClaudeChoiceOption -Value $component.id -Label $component.name `
+            -Detail ("az resource list: {0}; {1}" -f $component.id, $component.location) `
+            -Recommended:($components.Count -eq 1) -Reason "the only Application Insights component in $ResourceGroup"
+    }
+    $choice = @{
+        Parameter = 'AppInsightsName'; Question = "Which Application Insights component receives the gateway's telemetry?"
+        Options = @($options); Interactive = $Interactive; AcceptRecommendedWithoutConsole = $true
+        NoneMessage = "No Application Insights component is visible in $ResourceGroup."
+        AmbiguousMessage = 'Pass -AppInsightsName only after checking the gateway diagnostic logger.'
+        WhereToFind = @(
+            "az resource list -g $ResourceGroup --resource-type Microsoft.Insights/components -o table"
+            'Azure portal: API Management > APIs > Claude API > Settings > Diagnostics > Application Insights; open that component > Overview'
+        )
+    }
+    if ($Reader) { $choice.Reader = $Reader }
+    Select-ClaudeChoice @choice
+}
+
+function Select-ClaudeTurnstileIdentity {
+    param(
+        [Parameter(Mandatory = $true)][string]$ResourceGroup,
+        [object]$Interactive = $null,
+        [scriptblock]$Reader
+    )
+    $raw = az identity list -g $ResourceGroup -o json 2>$null | ConvertFrom-Json
+    $identities = @($raw | Where-Object { $_.name -like 'id-turnstile-*' -and $_.principalId })
+    $options = foreach ($identity in $identities) {
+        New-ClaudeChoiceOption -Value $identity.principalId -Label $identity.name `
+            -Detail ("az identity list: {0}; {1}; principal {2}" -f $identity.id, $identity.location, $identity.principalId) `
+            -Recommended:($identities.Count -eq 1) -Reason "the only Turnstile job identity in $ResourceGroup"
+    }
+    $choice = @{
+        Parameter = 'PrincipalId'; Question = 'Which Turnstile job identity should receive the Graph permission?'
+        Options = @($options); Interactive = $Interactive; AcceptRecommendedWithoutConsole = $true
+        NoneMessage = 'No Turnstile job identity is visible. Run Register-ClaudeTurnstileSchedule.ps1 first.'
+        WhereToFind = @(
+            "az identity list -g $ResourceGroup -o table"
+            "Azure portal: Resource groups > $ResourceGroup > the Turnstile managed identity > Overview > Object (principal) ID; verify it on the apply job > Identity"
+        )
     }
     if ($Reader) { $choice.Reader = $Reader }
     Select-ClaudeChoice @choice

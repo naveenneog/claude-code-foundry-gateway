@@ -628,6 +628,15 @@ they carry different risk.
 for the per-resource editors and verification. There is no single portal export
 equivalent to this configuration backup.
 
+The backup uses the recorded gateway or asks you to choose one. For saved
+functions it first uses the gateway's diagnostic setting when that names one
+workspace in the gateway's group. Otherwise it offers local workspaces, with
+the Application Insights link recommended when available. It never silently
+omits functions because several workspaces exist. A workspace outside that group
+is reported, not selected: the restore publishes functions into the gateway's
+own group. Without a console, unresolved choices require `-ApimName` or
+`-WorkspaceName`; the refusal includes candidates and command/portal lookups.
+
 One file holds what makes the gateway behave the way it does: every named value
 — entitlement lists, per-tier limits, the organisation ceiling, per-user
 overrides, the business unit registry, the parent map, the membership map — plus
@@ -663,6 +672,14 @@ happen in:
 ./scripts/Migrate-ClaudeWorkstation.ps1 -Configure   # point it at the gateway
 ./scripts/Migrate-ClaudeWorkstation.ps1 -Restore -Apply
 ```
+
+Restore lists each kind of archive newest first, with its folder, modification
+time and size. Enter takes the newest recommendation; a number selects an older
+archive. Both choices happen before either restore writes. Newest is not proof
+of the intended source machine, so automation with multiple archives must pass
+`-CodeBackup <zip>` and/or `-DesktopBackup <zip>` explicitly. `-Folder` controls
+discovery; `Get-ChildItem -LiteralPath <folder> -Filter '*.zip'` or File Explorer
+shows the same files. Omit `-Apply` to preview.
 
 **Manual/client UI:** completely quit the clients, copy their data folders to
 controlled backup storage, and inspect the copy before configuring the new

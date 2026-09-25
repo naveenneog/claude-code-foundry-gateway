@@ -415,9 +415,13 @@ the workbook calls, which would open every tile on a resolver error.
 
 ![The publisher refusing because the target workspace has no ClaudeChargeback function, and naming the script to run first](guide/obs-3-workbook-guard.png)
 
-Pass `-WorkspaceName` when the resource group holds more than one workspace. The
-script will not guess, because a workbook bound to the wrong workspace renders
-empty and reads as no usage.
+Omit `-WorkspaceName` to choose from the discovered workspaces. The publisher
+marks the one linked to the gateway's Application Insights as recommended,
+explains where it came from, and shows the lookup command and portal path;
+Enter accepts it. Without a console it uses that link, or a sole workspace,
+and otherwise refuses with candidate names and `Pass -WorkspaceName`. It will
+not guess: a workbook bound to the wrong workspace renders empty and reads as
+no usage.
 
 **Portal:** Azure Monitor > Workbooks > New > Edit > Advanced editor. Paste the
 appropriate `infra/workbook*.json`, bind the workspace, Apply and Save.

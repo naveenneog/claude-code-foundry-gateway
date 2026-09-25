@@ -1,4 +1,5 @@
 # Structured operations only. No supplied script text is evaluated in the private admin job.
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 function ConvertFrom-ClaudeReportAdminPayload {
     param([string]$Encoded,[string]$Json)
     if($Encoded -and $Json){throw 'Supply only one administration payload: REPORT_ADMIN_REQUEST or REPORT_ADMIN_JSON.'}
@@ -77,12 +78,10 @@ function New-ClaudeReportExecutionTemplate {
 }
 
 function Invoke-ClaudeReportAdminRequest {
-    param([string]$ResourceGroup,[string]$ApimName,$Request,[string]$JobName)
+    param([string]$ResourceGroup,[string]$ApimName,$Request,[string]$JobName,[switch]$NonInteractive)
     if(-not $JobName) {
-        $jobs=@(az resource list -g $ResourceGroup --resource-type Microsoft.App/jobs -o json | ConvertFrom-Json |
-            Where-Object {$_.tags.'claude-chargeback-gateway' -eq $ApimName -and $_.name -like 'job-reports-admin-*'})
-        if($LASTEXITCODE -ne 0 -or $jobs.Count -ne 1) {throw 'No unique reports administration job. Register the schedule first.'}
-        $JobName=$jobs[0].name
+        $JobName=Select-ClaudeReportResource -ResourceGroup $ResourceGroup -ApimName $ApimName -Kind AdministrationJob `
+            -Interactive $(if($NonInteractive){$false}else{$null})
     }
     $json=$Request | ConvertTo-Json -Depth 30 -Compress
     if([Text.Encoding]::UTF8.GetByteCount($json) -gt 30000) {throw 'Administration request exceeds 30 KB. Apply smaller changes.'}

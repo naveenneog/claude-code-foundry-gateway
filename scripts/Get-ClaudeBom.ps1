@@ -34,15 +34,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'AzureRetailPrice.ps1')
 
-if (-not $ApimName) {
-    $found = @((az apim list -g $ResourceGroup --query "[].name" -o tsv 2>$null) -split "`n" | Where-Object { $_ })
-    if ($found.Count -eq 1) { $ApimName = $found[0].Trim() }
-    elseif ($found.Count -eq 0) { throw "No API Management instance in '$ResourceGroup'. Pass -ApimName." }
-    else { throw ("$($found.Count) instances in '$ResourceGroup': " + ($found -join ', ') + ". Pass -ApimName.") }
-}
+if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
+if (-not $ApimName) { $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup }
 
 # The gateway names everything after the APIM instance, which is what makes its
 # own resources separable from whatever else shares the group.

@@ -40,18 +40,22 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeTurnstileGovernance.ps1')
 
 if (-not $TurnstileUrl -or -not $Scope) {
     if (-not $ResourceGroup) { $ResourceGroup = & (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup 3>$null }
-    if ($ResourceGroup -and -not $ApimName) { $ApimName = az apim list -g $ResourceGroup --query "[0].name" -o tsv 2>$null }
+    if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
+    if (-not $ApimName) { $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup }
     $integration = $null
     if ($ResourceGroup -and $ApimName) {
         $integration = ConvertFrom-ClaudeTurnstileIntegrationValue (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $script:TurnstileIntegrationNamedValue)
     }
     if (-not $integration) {
-        throw 'Pass -TurnstileUrl and -Scope. The gateway''s Turnstile connection could not be read; an administrator can give you both values.'
+        throw ("Pass -TurnstileUrl and -Scope. The gateway's Turnstile connection could not be read; an administrator can give you both values. " +
+            "Where to find it: az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id turnstile-integration --query value -o tsv; " +
+            'Azure portal: API Management > Named values > turnstile-integration > url and scope.')
     }
     if (-not $TurnstileUrl) { $TurnstileUrl = [string]$integration['url'] }
     if (-not $Scope) { $Scope = [string]$integration['scope'] }

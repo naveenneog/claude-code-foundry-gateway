@@ -53,6 +53,7 @@ param(
     [string]$ClientId,
     [ValidateSet('device', 'interactive', 'current')][string]$Auth = 'device',
     [string[]]$Models,
+    [string]$DefaultModel,
     [switch]$SkipVerify,
     [switch]$ShowConfig,
     # Claude Desktop holds its configuration in memory and rewrites it on exit,
@@ -71,6 +72,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "  [OK]   $m" -ForegroundColor Green }
@@ -84,10 +86,22 @@ function Note($m) { Write-Host "         $m" -ForegroundColor DarkGray }
 # at which point Claude Code falls back to its own built-in model names, none
 # of which exist on a Foundry resource.
 function Find-Deployment {
-    param([object[]]$Pool, [string]$Family)
-    $hit = $Pool | Where-Object { $_.model -and $_.model -match $Family } | Select-Object -First 1
-    if (-not $hit) { $hit = $Pool | Where-Object { $_.name -match $Family } | Select-Object -First 1 }
-    if ($hit) { $hit.name } else { $null }
+    param([object[]]$Pool, [string]$Family, [object]$Interactive = $null, [scriptblock]$Reader)
+    $hits = @($Pool | Where-Object { $_.model -and $_.model -match $Family })
+    if (-not $hits.Count) { $hits = @($Pool | Where-Object { $_.name -match $Family }) }
+    if (-not $hits.Count) { return $null }
+    if ($DefaultModel -and @($hits | Where-Object name -eq $DefaultModel).Count -eq 1) {
+        Write-Host "  $Family alias: $DefaultModel (given by -DefaultModel)" -ForegroundColor DarkGray
+        return $DefaultModel
+    }
+    $choice = @{
+        Names = @($hits | ForEach-Object { $_.name }); Parameter = 'Models'; Interactive = $Interactive
+        Source = "$Family deployments on $Resource; pass -DefaultModel or narrow -Models to select an alias"
+        WhereToFind = @("az cognitiveservices account deployment list --name $Resource --resource-group <resource-group> -o table",
+            "Azure portal: Foundry > $Resource > Deployments > Model")
+    }
+    if ($Reader) { $choice.Reader = $Reader }
+    Select-ClaudeModel @choice
 }
 
 # The error Foundry returns on a refused call names a "Principal" and nothing
@@ -285,7 +299,12 @@ if ($ConfigPath) {
 }
 
 if (-not $ShowConfig -and -not $Resource) {
-    throw "-Resource is required, or pass -ConfigPath. Use -ShowConfig to read the settings off a machine that already works."
+    if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
+        throw ("Pass -Resource or -ConfigPath, or install Azure CLI and sign in to discover accounts. Where to find it: " +
+            "az cognitiveservices account list -o table; Azure portal: All resources > the Foundry resource > Overview > Name. " +
+            "Use -ShowConfig on a machine that already works.")
+    }
+    $Resource = Select-ClaudeFoundryAccount -Kind AIServices -Parameter Resource
 }
 
 Write-Host ''
@@ -516,8 +535,20 @@ else {
 # it belongs here rather than at the end: a machine that cannot reach Foundry is
 # then left exactly as it was found, instead of carrying a settings file that
 # points somewhere it cannot go.
-$probeModel = Find-Deployment -Pool $deployments -Family 'sonnet'
-if (-not $probeModel) { $probeModel = $deployments[0].name }
+$modelLookup = @(
+    "az cognitiveservices account deployment list --name $Resource --resource-group <resource-group> -o table"
+    "Azure portal: Foundry > $Resource > Deployments; use the deployment name, not just the model family"
+)
+if ($DefaultModel -and $Models -notcontains $DefaultModel) {
+    throw ("Pass -DefaultModel from the deployed names: " + ($Models -join ', ') + '. Where to find it: ' + ($modelLookup -join '; '))
+}
+$sonnet = Find-Deployment -Pool $deployments -Family 'sonnet'
+$opus   = Find-Deployment -Pool $deployments -Family 'opus'
+$haiku  = Find-Deployment -Pool $deployments -Family 'haiku'
+$probeModel = if ($DefaultModel) { $DefaultModel } else { $sonnet }
+if (-not $probeModel) {
+    $probeModel = Select-ClaudeModel -Names $Models -Parameter DefaultModel -Source "the discovered or supplied deployments on $Resource" -WhereToFind $modelLookup
+}
 
 if (-not $SkipVerify) {
     Step 'Access check'
@@ -577,16 +608,13 @@ $envBlock = [ordered]@{
 if ($TenantId) { $envBlock['AZURE_TENANT_ID'] = $TenantId }
 if ($ClientId) { $envBlock['AZURE_CLIENT_ID'] = $ClientId }
 
-$sonnet = Find-Deployment -Pool $deployments -Family 'sonnet'
-$opus   = Find-Deployment -Pool $deployments -Family 'opus'
-$haiku  = Find-Deployment -Pool $deployments -Family 'haiku'
-
 # Every alias has to name a deployment that exists here. Leaving one unset does
 # not mean "unused" - Claude Code falls back to its own built-in model name for
 # that family, and that name is not a deployment on anybody's Foundry resource.
 # Measured on a resource carrying only claude-opus-4-7: the Sonnet alias went
 # unset and every turn that selected Sonnet failed with DeploymentNotFound.
-$fallback = if ($sonnet) { $sonnet } elseif ($opus) { $opus } else { $deployments[0].name }
+$fallback = if ($sonnet) { $sonnet } elseif ($opus) { $opus } else { $probeModel }
+if ($DefaultModel) { $fallback = $DefaultModel }
 $envBlock['ANTHROPIC_DEFAULT_OPUS_MODEL']   = if ($opus)   { $opus }   else { $fallback }
 $envBlock['ANTHROPIC_DEFAULT_SONNET_MODEL'] = if ($sonnet) { $sonnet } else { $fallback }
 # Claude Code uses a small model for background work.

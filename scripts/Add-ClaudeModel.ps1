@@ -83,6 +83,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
@@ -94,14 +95,12 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'ClaudeModelDeployment.ps1')
 
 $priceBookPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'config/price-book.json'
+if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
+if (-not $ApimName -and (-not $FoundryAccount -or $Remove)) { $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup }
 
 function Get-DeployedModels {
     if (-not $FoundryAccount) {
-        $accounts = az cognitiveservices account list -g $ResourceGroup --query "[?kind=='AIServices'].name" -o tsv 2>$null
-        $names = @($accounts -split "`n" | Where-Object { $_ })
-        if ($names.Count -eq 1) { $script:FoundryAccount = $names[0].Trim() }
-        elseif ($names.Count -eq 0) { throw "No Foundry account in '$ResourceGroup'. Pass -FoundryAccount." }
-        else { throw ("$($names.Count) Foundry accounts in '$ResourceGroup': " + ($names -join ', ') + ". Pass -FoundryAccount.") }
+        $script:FoundryAccount = Select-ClaudeFoundryAccount -ResourceGroup $ResourceGroup -ApimName $ApimName -Kind AIServices
     }
     return @(Get-ClaudeDeployment -Account $FoundryAccount -ResourceGroup $ResourceGroup | ForEach-Object { $_.name })
 }
@@ -148,7 +147,7 @@ if ($List) {
 # --- add -------------------------------------------------------------------
 
 if ($Remove) {
-    if (-not $ApimName) { throw 'Removing a model changes the tier allow lists, so -ApimName is required.' }
+    if (-not $ApimName) { $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup }
     $targets = if ($Tier -eq 'both') { @('standard', 'premium') } else { @($Tier) }
     $changed = $false
     foreach ($t in $targets) {

@@ -18,6 +18,7 @@ param(
     [switch]$Remove,[switch]$PurgeArchive,[switch]$BreakDispatchLease,
     [string]$RepositoryUrl,[string]$RepositoryRef,[string]$Location,
     [string]$SubscriptionId,[switch]$NonInteractive,
+    [string]$StorageAccount,
     [string]$VirtualNetworkId,[string]$JobsSubnetId,[string]$EndpointSubnetId,[string]$PrivateDnsZoneId,
     [string]$VirtualNetworkPrefix,[string]$JobsSubnetPrefix,[string]$EndpointSubnetPrefix,
     [string]$OperatorObjectId,[ValidateSet('User','ServicePrincipal')][string]$OperatorPrincipalType='User',
@@ -65,7 +66,7 @@ if($Remove) {
         }
     }
     $storageResource=@($resources | Where-Object type -eq 'Microsoft.Storage/storageAccounts')
-    $suffix=if($storageResource.Count -eq 1) {$storageResource[0].name -replace '^streports',''} else {''}
+    $suffix=if($storageResource.Count -eq 1) {[string]$storageResource.name -replace '^streports',''} else {''}
     $roles=@(az role definition list --custom-role-only true -o json | ConvertFrom-Json | Where-Object {$suffix -and $_.roleName -in @("Claude reports catalog reader $suffix","Claude reports email sender $suffix")})
     foreach($role in $roles) {
         # Exact gateway-specific role IDs, not every report deployment's custom role.
@@ -79,8 +80,8 @@ $storage=@($resources | Where-Object type -eq 'Microsoft.Storage/storageAccounts
 $adminJobs=@($resources | Where-Object {$_.type -eq 'Microsoft.App/jobs' -and $_.name -like 'job-reports-admin-*'})
 $stored=$adminJobs.Count -eq 1
 if($BreakDispatchLease) {
-    if($storage.Count -ne 1) {throw 'Reports storage does not exist.'}
-    Invoke-ClaudeReportBlob -Account $storage[0].name -Name 'state/dispatch.json' -Method PUT -Query 'comp=lease' `
+    $StorageAccount=Get-ClaudeReportStorageAccount $ResourceGroup $ApimName $StorageAccount -NonInteractive:$NonInteractive
+    Invoke-ClaudeReportBlob -Account $StorageAccount -Name 'state/dispatch.json' -Method PUT -Query 'comp=lease' `
         -ExtraHeaders @{'x-ms-lease-action'='break';'x-ms-lease-break-period'='0'} | Out-Null
     Write-Host 'Dispatch lease broken. Check the last operation before resending anything.'
     return
@@ -97,6 +98,7 @@ if(-not $stored -or $refExplicit) {
 if($stored) {
     $outputs=az deployment group show -g $ResourceGroup -n "chargeback-$ApimName" --query properties.outputs -o json | ConvertFrom-Json
     if($LASTEXITCODE -ne 0 -or -not $outputs.adminJobName.value) {throw 'Reports deployment metadata is missing. Read the job names from the resource group before updating.'}
+    $StorageAccount=Get-ClaudeReportStorageAccount $ResourceGroup $ApimName $StorageAccount -NonInteractive:$NonInteractive
     $config=[pscustomobject]@{Connection=[pscustomobject]@{JobName=$outputs.jobName.value;DispatcherJobName=$outputs.dispatcherJobName.value}}
     if($AllowedDomains) {
         . (Join-Path $PSScriptRoot 'ClaudeTurnstileGovernance.ps1')
@@ -115,8 +117,8 @@ if($stored) {
     if($PSBoundParameters.ContainsKey('MonthToDate')) {$changes.MonthToDate=[bool]$MonthToDate}
     if($PSBoundParameters.ContainsKey('RetentionDays')) {$changes.RetentionDays=$RetentionDays}
     if($changes.Count) {Invoke-ClaudeReportAdminRequest $ResourceGroup $ApimName @{Operation='Settings';Settings=$changes} $outputs.adminJobName.value | Out-Null}
-    if($changes.ContainsKey('RetentionDays')) {Set-ClaudeReportRetention $ResourceGroup $storage[0].name $RetentionDays}
-    $account=$storage[0].name
+    if($changes.ContainsKey('RetentionDays')) {Set-ClaudeReportRetention $ResourceGroup $StorageAccount $RetentionDays}
+    $account=$StorageAccount
 }
 else {
     if(-not $AllowedDomains) {throw 'First registration requires -AllowedDomains. No recipient is configured automatically.'}
