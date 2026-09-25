@@ -3,7 +3,7 @@
 import argparse
 import asyncio
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 from pathlib import Path
 import re
@@ -21,8 +21,9 @@ from claude_finops.groups import EntraGroups
 from claude_finops.publication import capture_lock, validate_capture
 from claude_finops.screens import DetailScreen
 from claude_finops.tui import FinOpsApp
+from claude_finops.usage_refresh import refresh_usage
 
-from e2e_support import GatewayState, Journal, utc, enforcement_matches
+from e2e_support import GatewayState, Journal, utc, enforcement_matches, linked_turnstile, require_quiet_direct_window
 from e2e_cleanup import restore_turnstile
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -73,13 +74,34 @@ async def journey(args):
     journal.data["source_commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     arm, graph = GatewayState(config), EntraGroups()
     snapshot, original_catalog, created, mutated = None, None, [], False
+    original_memberships = None
+    related = related_catalog = None
+    original_budgets = related_budgets = None
     try:
         snapshot = journal.call("snapshot", lambda: arm.snapshot())
         # Raw restoration state is local-only and contains no access token.
         (journal.folder / "restore-state.json").write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
         me = graph.me()["id"]
+        original_memberships = graph.memberships()
+        (journal.folder / "original-memberships.json").write_text(json.dumps(original_memberships), encoding="utf-8")
         journal.redactor.present({"user_id": me})
         original_catalog = engine.read("catalog")
+        original_budgets = engine.read("budgets").get("items", [])
+        (journal.folder / "original-catalog.json").write_text(json.dumps(original_catalog), encoding="utf-8")
+        (journal.folder / "original-budgets.json").write_text(json.dumps(original_budgets), encoding="utf-8")
+        if {unit, team} & {row["id"] for key in ("organizations", "departments") for row in original_catalog[key]}:
+            raise RuntimeError("Generated test scope id already exists; no mutation is permitted.")
+        if args.backend == "direct":
+            related = linked_turnstile(config, snapshot)
+            if related:
+                from claude_finops.config import az
+                jobs = json.loads(az("containerapp", "job", "list", "-g", config.resource_group,
+                                     "--subscription", config.subscription, "-o", "json"))
+                require_quiet_direct_window(jobs, config, datetime.now(timezone.utc))
+                related_catalog = related.read("catalog")
+                related_budgets = related.read("budgets").get("items", [])
+                (journal.folder / "original-linked-turnstile-catalog.json").write_text(json.dumps(related_catalog), encoding="utf-8")
+                (journal.folder / "original-linked-turnstile-budgets.json").write_text(json.dumps(related_budgets), encoding="utf-8")
         if backend.name == "Turnstile":
             state = engine.read("apply")
             if any(row.get("status", "").lower() in {"running", "processing", "pending"} for row in state.get("executions", [])[:1]):
@@ -161,10 +183,29 @@ async def journey(args):
                 await asyncio.sleep(12)
             if not success:
                 raise RuntimeError("No measured gateway enforcement confirmation for " + mode + " before timeout.")
+        if args.backend == "turnstile":
+            from claude_finops.direct import DirectBackend
+            observer = DirectBackend(config)
+            deadline = time.monotonic() + args.ingestion_timeout
+            expected = len([row for row in probes if row.get("status_code") == 200])
+            while time.monotonic() < deadline:
+                observed = observer.read("requests", month=engine.month, department_id=team, limit=50)
+                if len({row["request_id"] for row in observed["items"]}) >= expected:
+                    journal.record("gateway-ledger-ready", {"requests": len(observed["items"]), "before_turnstile_export": True})
+                    break
+                await asyncio.sleep(20)
+            else:
+                raise RuntimeError("Gateway ledger did not contain all accepted probes before export.")
+            first = next(row["at"] for row in probes if row.get("status_code") == 200)
+            start = (datetime.fromisoformat(first.replace("Z", "+00:00")) - timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            end = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            exported = journal.call("explicit-usage-refresh", lambda: refresh_usage(engine, config, start, end, apply=True))
+            await screenshot(engine, config, journal, "usage-refreshed", exported)
         started = time.monotonic()
+        expected = len([row for row in probes if row.get("status_code") == 200])
         while time.monotonic() - started < args.ingestion_timeout:
             rows = await asyncio.to_thread(engine.read, "requests", department_id=team, limit=50)
-            if rows.get("items"):
+            if len({row["request_id"] for row in rows.get("items", [])}) >= expected:
                 first = next((row["at"] for row in probes if row.get("status_code") == 200), None)
                 observed = datetime.now(timezone.utc)
                 upper = (observed - datetime.fromisoformat(first.replace("Z", "+00:00"))).total_seconds() if first else None
@@ -188,7 +229,10 @@ async def journey(args):
         if mutated and snapshot:
             try:
                 if backend.name == "Turnstile" and original_catalog:
-                    failures = restore_turnstile(engine, configured_catalog(original_catalog), unit, team)
+                    failures = restore_turnstile(engine, configured_catalog(original_catalog), unit, team, original_budgets)
+                    cleanup["errors"] += [journal.redactor.text(error) for error in failures]
+                if related and related_catalog:
+                    failures = restore_turnstile(related, configured_catalog(related_catalog), unit, team, related_budgets)
                     cleanup["errors"] += [journal.redactor.text(error) for error in failures]
                 cleanup["gateway"] = arm.restore(snapshot, RESTORE_NAMES)
             except Exception as error:
@@ -210,6 +254,19 @@ async def journey(args):
                 cleanup["groups_deleted"].append(name)
             except Exception as error:
                 cleanup["errors"].append(journal.redactor.text(str(error)))
+        if original_memberships is not None:
+            try:
+                for attempt in range(31):
+                    membership = graph.memberships()
+                    if membership == original_memberships:
+                        cleanup["original_membership_set_restored"] = True
+                        cleanup["membership_count"] = len(membership)
+                        break
+                    if attempt == 30:
+                        raise RuntimeError("Original direct group membership set did not match after cleanup.")
+                    time.sleep(2)
+            except Exception as error:
+                cleanup["errors"].append(journal.redactor.text(str(error)))
         journal.data["cleanup"] = cleanup
         journal.data["finished_at"] = utc()
         journal.flush()
@@ -218,6 +275,8 @@ async def journey(args):
         except Exception as error:
             journal.record("cleanup-screenshot-error", {"error": str(error)})
         graph.close()
+        if related:
+            related.backend.close()
         backend.close()
         arm.close()
     print(json.dumps(dict(journal=str(journal.folder), completed=journal.data["completed"],

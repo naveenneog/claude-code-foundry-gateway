@@ -67,6 +67,14 @@ class EntraGroups:
     def me(self):
         return self.request("GET", "/v1.0/me", {"$select": "id,displayName,userPrincipalName"})
 
+    def memberships(self):
+        result, url = set(), "/v1.0/me/memberOf/microsoft.graph.group?$select=id&$top=100&$count=true"
+        while url:
+            page = self.request("GET", url)
+            result.update(row["id"] for row in page["value"])
+            url = page.get("@odata.nextLink")
+        return sorted(result)
+
     def search(self, text, limit=50, cursor=None):
         if not isinstance(text, str) or not 1 <= len(text.strip()) <= 100 or not 1 <= limit <= 100:
             raise FinOpsError("Enter a group-name prefix (1-100 characters); page size is 1-100.")

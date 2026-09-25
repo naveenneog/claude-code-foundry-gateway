@@ -32,7 +32,12 @@ def execution_plan(jobs, config, start, end):
     if len(choices) != 1:
         raise FinOpsError("Choose a gateway with exactly one configured usage exporter; no arbitrary job is started.", 5)
     job, container_name = choices[0]
-    template = deepcopy(job["properties"]["template"])
+    if job["properties"]["template"].get("volumes"):
+        raise FinOpsError("Exporter has volume definitions not supported by the execution-template contract.", 5)
+    template = {key: deepcopy(value) for key, value in job["properties"]["template"].items()
+                if key in {"containers", "initContainers"} and value is not None}
+    for row in template["containers"]:
+        row.pop("imageType", None)
     container = next(row for row in template["containers"] if row["name"] == container_name)
     command = container.get("command", [])
     if len(command) != 3 or command[:2] != ["/bin/bash", "-c"]:

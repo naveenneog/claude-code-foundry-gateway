@@ -137,3 +137,15 @@ def test_expiring_graph_token_is_refreshed_before_cleanup_request():
     client.token = "header." + body + ".signature"
     client.me()
     assert acquired == [1]
+
+
+def test_own_membership_snapshot_follows_pages_without_loading_people():
+    calls = []
+    def respond(request):
+        calls.append(request)
+        if len(calls) == 1:
+            return httpx.Response(200, json={"value": [{"id": "group-b"}],
+                "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/memberOf/microsoft.graph.group?$skiptoken=next"})
+        return httpx.Response(200, json={"value": [{"id": "group-a"}]})
+    assert graph(respond).memberships() == ["group-a", "group-b"]
+    assert all("/me/memberOf/" in call.url.path for call in calls)

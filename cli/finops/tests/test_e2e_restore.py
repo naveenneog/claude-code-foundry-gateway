@@ -53,7 +53,10 @@ def test_budget_cleanup_failure_does_not_suppress_catalog_restore():
         def _replace(self, *args):
             calls.append("catalog-restored")
             return {}
-        def read(self, *_):
+        def read(self, resource):
+            if resource == "budgets":
+                return {"items": [{"scope_type": "organization", "scope_id": "unit", "token_limit": 10},
+                                  {"scope_type": "department", "scope_id": "team", "token_limit": 1}]}
             return {"executions": []}
     engine = Engine()
     engine.backend = engine
@@ -81,3 +84,17 @@ def test_secret_governance_values_never_look_absent_to_restore():
         {"name": "allow-standard", "properties": {"secret": True, "value": None}}]}
     with pytest.raises(FinOpsError, match="secret governance"):
         state.snapshot()
+
+
+def test_direct_authority_switch_refuses_overlapping_scheduled_sync():
+    import pytest
+    from datetime import datetime, timezone
+    from claude_finops.config import Config
+    from claude_finops.errors import FinOpsError
+    module = support()
+    jobs = [dict(properties=dict(configuration=dict(scheduleTriggerConfig=dict(cronExpression="7 * * * *")),
+        template=dict(containers=[dict(env=[dict(name="CLAUDE_APIM", value="apim-contoso"),
+                                           dict(name="TURNSTILE_GOVERNANCE", value="true")])])))]
+    with pytest.raises(FinOpsError, match="overlap"):
+        module.require_quiet_direct_window(jobs, Config(apim_name="apim-contoso"), datetime(2026, 9, 25, 6, 58, tzinfo=timezone.utc))
+    module.require_quiet_direct_window(jobs, Config(apim_name="apim-contoso"), datetime(2026, 9, 25, 7, 10, tzinfo=timezone.utc))

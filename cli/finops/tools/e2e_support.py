@@ -12,6 +12,7 @@ import httpx
 from claude_finops.config import az, token_needs_refresh
 from claude_finops.errors import FinOpsError
 from claude_finops.redaction import Redactor
+from claude_finops.config import parse_integration
 
 
 def utc():
@@ -145,3 +146,39 @@ def enforcement_matches(probe, mode, scope):
                 and error.get("budget") == "business unit" and scope in error.get("message", ""))
     required = "estimated-over-budget" if mode == "allowance" else "usage-reported"
     return status == 200 and scope + ";" in notice and required in notice
+
+
+def linked_turnstile(config, snapshot):
+    from dataclasses import replace
+    from claude_finops.backend import connect
+    from claude_finops.engine import Engine
+    from claude_finops.rules import require_owner
+    value = snapshot.get("turnstile-integration", {}).get("value", "")
+    if not any(key + "=Turnstile" in value for key in ("governanceAuthority", "budgetAuthority")):
+        return None
+    settings = parse_integration(value)
+    related = Engine(connect(replace(config, backend="turnstile", url=settings["url"], scope=settings["scope"])))
+    require_owner(related.read("whoami"))
+    return related
+
+
+def require_quiet_direct_window(jobs, config, now):
+    for job in jobs:
+        properties = job["properties"]
+        env = {row["name"]: row.get("value") for container in properties.get("template", {}).get("containers", [])
+               for row in container.get("env", [])}
+        if env.get("CLAUDE_APIM") != config.apim_name or env.get("TURNSTILE_GOVERNANCE") != "true":
+            continue
+        schedule = (properties.get("configuration") or {}).get("scheduleTriggerConfig") or {}
+        cron = schedule.get("cronExpression")
+        if not cron:
+            continue
+        import re
+        match = re.fullmatch(r"(\d{1,2}) \* \* \* \*", cron)
+        if not match:
+            raise FinOpsError("A scheduled governance writer requires a separately coordinated quiet window before Direct authority testing.", 6)
+        seconds = ((int(match[1]) - now.minute) % 60) * 60 - now.second
+        if seconds <= 0:
+            seconds += 3600
+        if seconds < 45 * 60:
+            raise FinOpsError("The scheduled governance writer can overlap this Direct test. Wait for its next run to finish; no authority was changed.", 6)

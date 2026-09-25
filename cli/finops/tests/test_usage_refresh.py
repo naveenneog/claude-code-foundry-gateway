@@ -16,10 +16,14 @@ def job():
 def test_one_execution_export_override_preserves_job_and_never_runs_governance():
     from claude_finops.usage_refresh import execution_plan
     original = job()
+    original["properties"]["template"]["volumes"] = []
+    original["properties"]["template"]["containers"][0]["imageType"] = "ContainerImage"
     before = deepcopy(original)
     plan, template = execution_plan([original], Config(resource_group="rg-contoso", apim_name="apim-contoso"),
                                     "2026-09-25T07:30:00Z", "2026-09-25T07:40:00Z")
     assert original == before
+    assert "volumes" not in template
+    assert "imageType" not in template["containers"][0]
     script = template["containers"][0]["command"][2]
     assert "Export-ClaudeTurnstileUsage.ps1" in script and "-NoCacheEvents" in script
     assert "Invoke-ClaudeTurnstileSchedule.ps1" not in script
