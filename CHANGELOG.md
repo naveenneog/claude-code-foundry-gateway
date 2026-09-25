@@ -60,6 +60,16 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   and verified. On Windows the account broker kept serving the old token; MSAL's
   `set_access_token_to_renew`, behind a helper that fails closed, renews it without deleting any
   cache or adding any grant.
+- **An enterprise network edge, chosen and priced by the administrator.**
+  `scripts/New-ClaudeNetworkEdge.ps1` puts a regional Application Gateway WAF_v2 in front of the
+  gateway as its only ingress, with internal, internet or hybrid listeners, and Foundry, Key Vault
+  and a verifier behind private endpoints. It discovers the options, prices each from the retail
+  price list with its implications, and writes nothing until one frozen review, which names the
+  identities that may lose access, is confirmed; removal has its own review. Measured live:
+  complete SSE for code prompts in Prevention mode with 71 scoped WAF exclusions, Claude Code
+  through the edge with TLS verified, a 600-second backend timeout, and forged client-address
+  headers kept out of the ledger. `docs/NETWORK-ENTERPRISE.md`,
+  [ADR-0022](docs/adr/0022-enterprise-network-edge.md).
 - **Architecture that cannot drift from the code.** Ten diagrams generated from text sources under
   `docs/architecture/` by `node guide/render-architecture.mjs`, a rewritten `docs/ARCHITECTURE.md`,
   and an `AGENTS.md` rule that every feature packet updates its diagram. `tests/Test-Architecture.ps1`
@@ -610,6 +620,11 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Changed
 
+- **The chargeback ledger records the caller's address.** `analytics/chargeback-ledger.kql` has a
+  `client_ip` column, from a new `ClientIp` field in the gateway's identity trace: behind the P54
+  edge it is the edge's socket peer, otherwise the address APIM saw. It is personal data; review
+  who can read the ledger and how long it is kept. Every response also carries
+  `x-claude-gateway-request-id`, the id the ledger joins on.
 - **The documentation is organised by what a reader is trying to do.** README is a 278-line
   landing page with a documentation map, down from 710 lines, and five task guides were added:
   Operations, Budgets, FinOps, Reference and Data governance. Guides say where each value comes

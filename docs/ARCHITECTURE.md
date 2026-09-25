@@ -396,6 +396,25 @@ reader and policy are deployed. See
 [the migration and measurement guide](SCALE.md) and
 [ADR-0017](adr/0017-projection-freshness-and-admission.md).
 
+## Enterprise network ingress (P54)
+
+![Internal-only regional WAF and private origins](images/architecture/network-private.png)
+
+Sources: [11-network-private.json](architecture/11-network-private.json),
+[12-network-public.json](architecture/12-network-public.json) (internet listener, private
+origins) and [13-network-hybrid.json](architecture/13-network-hybrid.json) (split-DNS listeners,
+one governed origin); the other two images are in the
+[enterprise network design](NETWORK-ENTERPRISE.md#source-backed-topology-diagrams).
+
+A regional Application Gateway WAF_v2 is the only ingress to the gateway: APIM accepts traffic
+from the edge subnet alone and reads the caller's address from a header the edge sets from its
+socket peer, never from a forwarded header. Foundry, Key Vault and the verifier sit behind
+private endpoints. The script discovers every choice, prices it from the retail price list and
+states its implications, then shows one frozen review, including the identities that may lose
+access, before any write. It does not convert Turnstile, PostgreSQL, the projection or the
+scheduled jobs (P49); a plan that needs those fails before it writes. See
+[ADR-0022](adr/0022-enterprise-network-edge.md).
+
 ## AUM (Azure Usage Management) - terminal FinOps console
 
 ![AUM (Azure Usage Management), terminal FinOps console, command aum: Textual UI and Typer commands share one engine, which selects Turnstile HTTP, Direct Azure through ARM and Log Analytics with a PowerShell bridge, or a fake test backend.](images/architecture/terminal-finops.png)

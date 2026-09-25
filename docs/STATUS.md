@@ -1,6 +1,6 @@
 # Status
 
-**Active packets:** P52 AUM and P54 the enterprise network. P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets:** P52 AUM and P55's end-to-end journey. P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P46 acceptance criteria — managers scoped, and budget modes
 
@@ -41,6 +41,49 @@ against stale runs is being added with the modes, and a single queue-driven writ
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
 
+## P54 the enterprise network, 2026-09-25
+
+Merged from `enterprise-network` at `50dd6d4`, gated on that commit: 816.8 s, 61 checks passed and
+one explicit skip (the worktree had no FinOps environment; that check runs on main). The owner's
+hub-and-spoke deck was reviewed against Microsoft Learn; the result is a regional design, in
+[NETWORK-ENTERPRISE.md](NETWORK-ENTERPRISE.md) and [ADR-0022](adr/0022-enterprise-network-edge.md):
+an Application Gateway WAF_v2 as the gateway's only ingress (internal, internet or hybrid
+listeners), APIM accepting only the edge subnet, and Foundry, Key Vault and the verifier behind
+private endpoints.
+
+Nothing is hardcoded. `scripts/New-ClaudeNetworkEdge.ps1` discovers the regions, networks and
+resources an administrator can choose from and shows numbered options, each with its dated
+regional list price from the retail price list (or an explicit "unknown", never zero) and its
+security, availability, disruption and rollback implications. It then freezes one review with a
+fingerprint, valid for 30 minutes, that lists the current, proposed and incremental monthly cost
+and the identities that may lose access, and it writes nothing until that exact review is
+confirmed. Removal has its own reviewed plan. Front Door, firewall routing and conversions of the
+rest of the estate stop the whole plan before any write.
+
+| Measured live, 2026-09-24 and 25 | Result |
+|---|---|
+| Streaming through the WAF | Complete SSE for six code-heavy cases (SQL, HTML, shell, Python, JSON, JavaScript) in Detection and in Prevention; 8,192 output tokens streamed in 95.6 s |
+| Claude Code through the edge | Claude Code 2.1.272 finished a two-turn code review in 51.1 s, with TLS verified end to end |
+| Timeouts and size | A 20 s backend timeout returned 504 at 20.6 s; 600 s returned 200 at 47.0 s. Real bodies: Messages 134,434 bytes, count-tokens 226,701 bytes; a 2,150,500-byte body was blocked |
+| WAF on code | DRS 2.1 flags code prompts: 71 scoped exclusions (rule and field pairs) allow Prevention mode with the SQL injection probe still blocked. No global allow, no inspection turned off |
+| Client address | A forged `X-Forwarded-For` or `X-Claude-Client-IP` did not reach the ledger; the ledger's new `client_ip` column holds the edge's socket peer |
+| Paths | Private direct APIM refused with 403; private-only refused internet TLS; public and hybrid paths completed verified TLS and SSE. Azure rejected Private Link on Basic v2 |
+| Lifecycle | Rerun, WhatIf, removal, an interrupted cleanup retried and an already-removed no-op, on the evaluation deployment. The later review step was tested offline and with a live WhatIf only |
+| Access impact, reference gateway, read-only | 7 days, 12.0 s: 5 Entra identities observed, 0 reliable caller addresses; ETag and network unchanged |
+| Cost of the evaluation | Removed 2026-09-24 22:29Z; about $7.31 at list price for 4.7 h. A production shape (20 capacity units, with the APIM Standard v2 unit) is about $1,201.59 a month before the hub and variable meters |
+
+The access report is only as good as the logs. On the reference gateway GatewayLogs is off and the
+Application Insights components mask IP addresses, so the report can name the five identities
+that used it and ask the administrator to acknowledge them, but it cannot show which of them
+already have a private path (**U22**). The `client_ip` column is personal data: review its access
+and retention with the rest of the ledger.
+
+Open: the 24 portal pictures in `guide/captures/p54.json` (the evaluation edge no longer exists,
+so they need an approved redeployment, never the reference gateway); Front Door, hub peering,
+firewall routing, DNS Private Resolver and corporate egress allow-lists as tested automation;
+Premium v2 injection and multi-region; and P49, converting Turnstile, PostgreSQL, the projection
+and the jobs.
+
 ## P58 architecture generation, 2026-09-25
 
 Merged from `architecture` at `345a302`. Every diagram now comes from a text source under
@@ -57,8 +100,9 @@ fails on drift: a source edited without re-rendering, an image without a source 
 label naming a script, route or named value that no longer exists, or an Azure resource type in
 `infra/*.bicep` that appears in no diagram. 36 assertions with isolated mutations; 28 s.
 
-Pending: the AUM rename and the enterprise network topologies (their packets hand the diagram
-specifications over), and the portal pictures declared in `guide/captures/architecture.json`.
+Pending: the AUM rename (P52 hands its diagram over) and the portal pictures declared in
+`guide/captures/architecture.json`. The enterprise network topologies arrived with P54: three
+sources, `11-network-private`, `12-network-public` and `13-network-hybrid`.
 
 ## P57 documentation review, 2026-09-24
 
@@ -1225,26 +1269,25 @@ node .ironclad/gate.mjs --stage packet                  # definition of done
 
 ## Next
 
-In flight on 2026-09-24, each on its own branch and merged when its gate passes:
+In flight on 2026-09-25, each on its own branch and merged when its gate passes:
 
 - **P52 AUM (Azure Usage Management).** The terminal console renamed, redesigned as a
   dashboard, and independent of Turnstile (the gateway directly as a first-class backend, and the
   AUM service), with live redacted screens; then the end-to-end journeys driven from AUM on each
   backend: groups, unit and team, budgets, modes, and enforcement proven with real requests.
-- **P54 the enterprise network.** The owner's hub-and-spoke design (Application Gateway WAF_v2
-  in front of the gateway, a private Foundry, egress through NAT Gateway or Azure Firewall), with
-  streaming, timeouts, request size and WAF false positives on code measured live, and every
-  choice shown with its cost and implications before it is made. It delivers and extends P49.
-- **P58 architecture generation.** A diagram for each feature from text sources, and a test that
-  fails when a feature changes the architecture without its diagram.
-- **P53 phase 2 and P55's journey.** The manager-only journeys (**U21**), and AUM driving the AUM
-  service on its dedicated test gateway.
+- **P55's journey.** AUM driving the AUM service on its dedicated test gateway, and the
+  service's manager-only journey.
+
+Merged on 2026-09-25: P54, the regional enterprise network edge ([above](#p54-the-enterprise-network-2026-09-25)),
+which delivers the gateway's part of P49; P58 architecture generation; and P53 phase 2, the
+manager-only journeys (**U21**).
 
 Waiting on the owner:
 
 - **One portal sign-in**, for one batch capture of every packet's portal pictures: run
   `node guide/auth.mjs` with `AZURE_TENANT` set, then the lead runs all `guide/captures/*.json`
-  specs in one window with the original profile.
+  specs in one window with the original profile. P54's 24 edge pictures also need the owner to
+  approve a short-lived redeployment of the evaluation edge, because it was removed.
 - **Cost decisions on running test resources**: the Premium v2 test gateway (about $2,800 a month
   at list price), the dedicated AUM test gateway (Basic v2, about $150 a month), and the chargeback
   reports deployment ($29.70 a month standing).
@@ -1258,7 +1301,7 @@ overrides in the projection with one queue-driven writer; P14, the plugin market
 acceptance U6 rewrote to immutable approved content rather than signing; and P19's installer
 default (`cos-default`, `cos-upgrade`).
 
-Thirteen unknowns are open: U2, U3, U8, U9, U10, U11, U13, U16, U17, U18, U19, U20 and U21.
+Fourteen unknowns are open: U2, U3, U8, U9, U10, U11, U13, U16, U17, U18, U19, U20, U21 and U22.
 
 Outside the packet queue: an earlier audit found seven principals holding `Cognitive Services
 User` directly on the Foundry account, which bypasses every budget here. Re-run the audit in

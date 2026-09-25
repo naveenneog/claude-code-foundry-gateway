@@ -280,7 +280,9 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       person and model, access packages for joining a team
 - [ ] P49 network profiles — acceptance: one parameter chooses private (private endpoints for
       every component) or public (Entra-only access, no private endpoints or DNS zones), for the
-      gateway, the projection and Turnstile, each priced by the bill-of-materials scripts
+      gateway, the projection and Turnstile, each priced by the bill-of-materials scripts.
+      Delivered **for the gateway's ingress** by P54. Open: the projection, Turnstile, PostgreSQL
+      and the scheduled jobs
 - [x] P50 chargeback reports — one command writes each business unit's monthly report (people,
       requests, every token kind, estimated cost, budget against use), reconciled to the month's
       total through an explicit unassigned line; recipients per unit and for the admin team are
@@ -294,6 +296,15 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       and read on the gateway, then restored; and the live manager-only journey (2026-09-25),
       scoped to one unit, with admin routes refused and everything restored. Open: viewer-only
       evidence
+- [x] P54 the enterprise network — a regional Application Gateway WAF_v2 as the gateway's only
+      ingress (internal, internet or hybrid listeners) with private origins; every choice
+      discovered, priced from the retail price list and stated with its implications, then one
+      frozen review, including the identities that may lose access, confirmed before any write.
+      Streaming, timeouts, body size, WAF on code and client-address trust measured live; the
+      evaluation removed. [ADR-0022](adr/0022-enterprise-network-edge.md),
+      `docs/NETWORK-ENTERPRISE.md`. Open: 24 portal pictures, which need an approved redeployment;
+      Front Door, hub routing and corporate egress as tested automation; callers' existing private
+      routes (**U22**)
 - [x] P55 the AUM service — an optional authority independent of Turnstile: its own Entra app
       roles with consent-free tokens, scoped managers, audited conditional named-value writes,
       and P47's requests and boosts; discovery-first deployment with cost and implications, and a
@@ -308,7 +319,8 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       `docs/architecture/`, rendered by one command with a hash manifest; `docs/ARCHITECTURE.md`
       rewritten around them; an `AGENTS.md` rule that every feature packet updates its diagram;
       and `tests/Test-Architecture.ps1` failing on drift, stale labels, or an Azure resource type
-      in no diagram. Open: the AUM and enterprise network diagrams from their packets
+      in no diagram. Open: the AUM diagram from its packet; the enterprise network's three
+      topologies arrived with P54
 - [x] P51 terminal FinOps, first release — `claude-finops`, nine terminal views and scriptable
       commands over one engine, backed by Turnstile, the gateway directly, or example data. Budget
       changes are previewed, rechecked against the server and never retried. Managers see only
