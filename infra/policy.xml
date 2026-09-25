@@ -700,10 +700,11 @@
                     <metadata name="BusinessUnit" value="@((string)context.Variables["businessUnit"])" />
                     <metadata name="Mode" value="@((string)context.Variables["buMode"])" />
                     <metadata name="BaseTokens" value="@((string)context.Variables["buQuota"])" />
-                    <metadata name="ParentUnit" value="@((string)context.Variables["parentUnit"])" />
+                    <!-- Trace metadata requires a non-empty value even when this scope has no parent or notice. -->
+                    <metadata name="ParentUnit" value="@(string.IsNullOrEmpty((string)context.Variables["parentUnit"]) ? "none" : (string)context.Variables["parentUnit"])" />
                     <metadata name="ParentMode" value="@((string)context.Variables["parentMode"])" />
                     <metadata name="ParentBaseTokens" value="@((string)context.Variables["parentQuota"])" />
-                    <metadata name="Notice" value="@((string)context.Variables["budgetNotice"])" />
+                    <metadata name="Notice" value="@(string.IsNullOrEmpty((string)context.Variables["budgetNotice"]) ? "none" : (string)context.Variables["budgetNotice"])" />
                 </trace>
             </when>
         </choose>
