@@ -543,11 +543,13 @@ parallel checks and complete mutation shards restored the 30-minute gate command
 That supersedes [ADR-0024](adr/0024-test-suite-time-budget.md)'s temporary 60-minute
 budget. Use the merged contract, not a worktree-local timeout change.
 
-Live screenshots are separate from deterministic diagrams. The capture tools discover
-real resource choices, use only a copied worktree browser profile, stop at sign-in, wait
-for loaded visible frames and stage Contoso-redacted images privately. Publication
-requires explicit reviewed image ids. Hidden authentication fields and input values
-are not rewritten. These checks protect the evidence pipeline; a screenshot is not a
+Live screenshots are separate from deterministic diagrams. Current portal requirements
+are in `guide/captures/architecture.json` for the lead-operated batch after fresh sign-in;
+the earlier direct portal entry point is retired. Discovery choices remain runtime inputs.
+Pending batch ids and final output paths are listed in the verification guide. Non-portal
+console capture uses an isolated browser and a consent-free code, with management writes
+blocked. Publication requires reviewed image ids. Hidden authentication/input values are
+not rewritten. These checks protect the evidence pipeline; a screenshot is not a
 replacement for a successful flow test.
 
 The Turnstile fork carries small, pinned upstream code witnesses inside its spec. These

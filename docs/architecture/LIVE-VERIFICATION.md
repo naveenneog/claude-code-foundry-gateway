@@ -16,15 +16,21 @@ budgets or send reports. Review the relevant deployment guide before making chan
 A screenshot of a resource is evidence of its configuration, not proof of an entire
 data flow. The [coverage table](#live-coverage-and-limitations) distinguishes the two.
 
+> [!IMPORTANT]
+> Portal capture is now lead-operated. Tenant Conditional Access can require a fresh
+> sign-in on resource or Entra blades within about an hour. **Do not retry**, sign in,
+> or launch the original profile from this packet. The lead runs the shared batch
+> immediately after the owner's fresh sign-in. Existing dated images below remain
+> historical live evidence; the [batch table](#pending-portal-batch) tracks required captures.
+
 ## Prerequisites
 
 - An Azure CLI sign-in and Azure portal session in the deployment's tenant.
 - Permission to read the selected subscription, gateway and related resources.
 - A VNet-connected workstation for private **data-plane** operations. Subscription
   Owner does not bypass a private endpoint.
-- For the repository capture tools, `npm ci` in the repository root and a dedicated,
-  already signed-in browser profile copied to this worktree's `.pw-profile`.
-  Never share an active profile between browsers.
+- For local rendering/validation, `npm ci` in the repository root.
+  Only the lead operates the single original profile for the scheduled portal batch.
 
 Do not copy the placeholders in a screenshot into a deployment. Select your actual
 resources from discovery results.
@@ -281,6 +287,15 @@ The live API recognized the current account as Owner using Entra. The CLI sign-i
 exchange issued a 60-second code, redemption returned 200 and replay returned 401.
 The account is not manager-only; scoped manager authorization was not impersonated.
 
+The non-portal follow-up also redeemed a fresh code in a real, isolated browser and
+captured the live governance and budgets pages as that Owner. No portal profile was
+opened. Only the initial login-code redemption POST was permitted; management writes
+were blocked by the capture harness.
+
+![Live Turnstile governance page reached through the consent-free code, with Contoso units/groups and no management writes.](../images/architecture-live/console-governance.png)
+
+![Live Turnstile budgets page from the authenticated Owner session, with display-only Contoso replacements.](../images/architecture-live/console-budgets.png)
+
 Before considering a new apply, the read-only comparison found **one pending governance
 change**. No new save or apply was requested from this packet. Existing execution history
 included a successful apply; that is not a new end-to-end apply test.
@@ -353,29 +368,99 @@ the application's preview, allocation and delegated-scope engine. Use the
 
 ## Capture and publish evidence safely
 
-The repository tooling performs the same selections and inspections above:
+Portal requirements are declared in
+[`guide/captures/architecture.json`](../../guide/captures/architecture.json), using the
+shared P53 schema: version 1 with a `steps` array. Targets use discovery aliases,
+resource types with runtime filter variables/logical tags, and shared selection keys.
+There are no deployed names, ids or URLs in that file.
 
-1. `Get-ArchitectureCapturePlan.ps1` discovers the current subscription, configured gateways,
-   linked telemetry, projection, jobs and application. It presents real numbered choices.
-2. `capture-architecture-live.mjs` opens only the copied worktree profile, waits for actual
-   blade content, redacts visible text and stages PNGs under the ignored capture directory.
-   It never rewrites hidden OAuth fields, passwords or input values.
-3. Open every staged picture and verify that no real identity, resource name or address
-   survived. A loading spinner or wrong blade is not evidence.
-4. `publish-architecture-live.mjs` publishes only explicitly named, reviewed captures whose
-   hashes still match their receipts. It has no publish-all default.
+1. Prepare discovery and redaction inputs before the sign-in window.
+   `Get-ArchitectureCapturePlan.ps1` remains a read-only way to inspect actual choices.
+2. The lead validates the combined specs without a browser, resolves the real targets,
+   then runs one locked batch using the single original profile.
+3. At an authentication surface the batch stops without typing credentials. Remaining
+   ids stay pending, rather than becoming screenshots of a sign-in page.
+4. Review every redacted image and its output path before committing it.
+   Existing historical PNGs are not silently relabeled as new batch evidence.
 
 ```powershell
-node guide/capture-architecture-live.mjs gateway-overview foundry-overview
-# After visually reviewing those staged PNGs:
-node guide/publish-architecture-live.mjs gateway-overview foundry-overview
-node --test guide/architecture-live.test.mjs guide/architecture-live-browser.test.mjs
+# Lead, after the shared P53 runner is integrated:
+node guide/capture-portal.mjs --list
+node guide/capture-portal.mjs --dry-run --only architecture-gateway-overview
+# Only the lead supplies the explicitly authorized profile for the real batch.
+# Local, browser-free architecture-spec validation:
+node --test guide/architecture-batch.test.mjs
 ```
 
 Manual capture uses the same portal blades and a local screenshot/redaction tool.
 The Azure portal does not render repository diagrams, calculate Git source hashes or
 publish files into a checkout; those are local tooling operations, not hidden Azure steps.
-If a sign-in page appears, stop. The capture tool does not try to authenticate.
+The previous per-worktree portal command is retired. Non-portal terminal, console and
+report captures do not use the portal profile and remain separate.
+
+### Non-portal console capture
+
+The consent-free browser flow can still be captured without the portal:
+
+```powershell
+# Reuse the private discovered plan. This opens an isolated console-only browser.
+node guide/capture-architecture-console.mjs
+# Inspect both PNGs staged under .shots-entra/architecture-live/redacted first.
+```
+
+The script reuses `Open-ClaudeTurnstile.ps1 -NoBrowser`; it does not print or persist
+the one-minute link or bearer token. It reads the catalog/tiers for display redaction,
+blocks management writes and records the verified browser role. It never clicks the
+Microsoft web sign-in button, changes a role, edits a budget or starts an apply.
+
+### Runtime target choices
+
+Use the actual discovered objects, not names from an image. The lead can pass
+`--select architecture-gateway=<discovered-id-or-name>` and corresponding selection keys
+without a prompt; selections must still match discovered candidates. Generic/Entra
+filters are environment variables supplied for that run:
+
+- `ARCHITECTURE_RESOLVER_FILTER` and `ARCHITECTURE_COSMOS_FILTER`
+- `ARCHITECTURE_APPLY_JOB_FILTER`
+- `ARCHITECTURE_TURNSTILE_APP_FILTER` and `ARCHITECTURE_TURNSTILE_DATABASE_FILTER`
+- `ARCHITECTURE_REPORT_GENERATOR_FILTER`, `ARCHITECTURE_REPORT_DISPATCHER_FILTER`
+  and `ARCHITECTURE_REPORT_ADMIN_FILTER`
+
+Report storage and ACS use the logical `claude-chargeback-owner=P50` tag plus an explicit
+selection if more than one candidate matches. `PORTAL_REDACTIONS_FILE` points to a private,
+uncommitted array of `[real value, Contoso replacement]` pairs. Include resource, subnet,
+Entra display-name and configuration-map values. The named-value capture additionally
+hides read-only value inputs; it does not expose entitlement maps or secrets.
+
+### Pending portal batch
+
+All rows await the lead's next batch. Eighteen output paths already contain individually
+reviewed earlier live images; they remain dated evidence, not proof of a new capture.
+The database recovery output is new and is an inline path only, not a broken image.
+Its manual path is **Azure Database for PostgreSQL flexible servers > selected server >
+Overview**: inspect **Server name** and state; the spec does not click **Start** or **Stop**.
+
+| Pending state | Final output |
+|---|---|
+| pending batch capture (architecture-gateway-overview) | `docs/images/architecture-live/gateway-overview.png` |
+| pending batch capture (architecture-gateway-identity) | `docs/images/architecture-live/gateway-identity.png` |
+| pending batch capture (architecture-gateway-named-values) | `docs/images/architecture-live/gateway-named-values.png` |
+| pending batch capture (architecture-gateway-apis) | `docs/images/architecture-live/gateway-apis.png` |
+| pending batch capture (architecture-foundry-overview) | `docs/images/architecture-live/foundry-overview.png` |
+| pending batch capture (architecture-foundry-access) | `docs/images/architecture-live/foundry-access.png` |
+| pending batch capture (architecture-telemetry-workspace) | `docs/images/architecture-live/telemetry-workspace.png` |
+| pending batch capture (architecture-telemetry-tables) | `docs/images/architecture-live/telemetry-tables.png` |
+| pending batch capture (architecture-resolver-authentication) | `docs/images/architecture-live/resolver-authentication.png` |
+| pending batch capture (architecture-resolver-networking) | `docs/images/architecture-live/resolver-networking.png` |
+| pending batch capture (architecture-projection-networking) | `docs/images/architecture-live/projection-networking.png` |
+| pending batch capture (architecture-governance-apply-job) | `docs/images/architecture-live/governance-apply-job.png` |
+| pending batch capture (architecture-turnstile-app-roles) | `docs/images/architecture-live/turnstile-app-roles.png` |
+| pending batch capture (architecture-reports-generator-job) | `docs/images/architecture-live/reports-generator-job.png` |
+| pending batch capture (architecture-reports-dispatcher-job) | `docs/images/architecture-live/reports-dispatcher-job.png` |
+| pending batch capture (architecture-reports-admin-job) | `docs/images/architecture-live/reports-admin-job.png` |
+| pending batch capture (architecture-reports-networking) | `docs/images/architecture-live/reports-networking.png` |
+| pending batch capture (architecture-reports-email) | `docs/images/architecture-live/reports-email.png` |
+| pending batch capture (architecture-turnstile-database) | `docs/images/architecture-live/turnstile-database.png` |
 
 ## Live coverage and limitations
 
@@ -384,7 +469,7 @@ If a sign-in page appears, stop. The capture tool does not try to authenticate.
 | Default request / Foundry identity | 401 without a token; 200 with 14 input and 4 output tokens; gateway identity grant and live policy guards present | All client applications, streaming edge cases and exact quota limits |
 | Merged budget modes | Read-only live inspection found the default strict map and deployed mode, advisory-header and budget-trace code | No additional strict/allowance/notify mutation was performed by this architecture packet |
 | Meter / attribute / observe | The marked request joined exactly once across LLM log and trace | Invoice reconciliation and completeness of all historic telemetry |
-| Delegated sign-in | Live Owner role; 60-second code; 200 redemption; 401 replay | Manager-only or Viewer-only sessions |
+| Delegated sign-in | Live Owner role; 60-second code; 200 redemption; 401 replay; fresh console-only browser session and two populated pages | Manager-only or Viewer-only sessions |
 | Governance apply | Live status and prior successful execution; one pending change detected | A new save/apply cycle; it was deliberately not started |
 | Projection | VNet configuration, private Cosmos network setting and live 503 refusal | A fresh positive lookup, complete writer renewal and overload test |
 | P50 reports | Prior successful generator, dispatcher and administration executions | A newly generated-and-delivered report or recipient edit from this packet |

@@ -61,3 +61,10 @@ export function publicCaptureReceipt(result) {
   return Object.fromEntries(['id', 'title', 'status', 'image', 'sha256', 'capturedUtc']
     .filter(key => result[key] !== undefined).map(key => [key, result[key]]));
 }
+
+export function allowConsoleRequest(base, url, method, redeem = false) {
+  const target = new URL(url);
+  if (target.origin !== new URL(base).origin) return false;
+  if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return true;
+  return redeem && method === 'POST' && target.pathname === '/api/v1/auth/code';
+}

@@ -2,6 +2,22 @@
   "version": 1,
   "captures": [
     {
+      "id": "console-budgets",
+      "title": "Live Turnstile budgets - read-only capture",
+      "status": "captured",
+      "image": "docs/images/architecture-live/console-budgets.png",
+      "sha256": "26a3d23976b3082ccff0a9765f3a61563f4af90e3a713be8c84735586f50ce01",
+      "capturedUtc": "2026-09-25T00:03:47.004Z"
+    },
+    {
+      "id": "console-governance",
+      "title": "Live Turnstile governance - consent-free Owner session",
+      "status": "captured",
+      "image": "docs/images/architecture-live/console-governance.png",
+      "sha256": "303ffc9f194112e9c12bfba1af9c6d38a6cb3fd9b3f386cea2230ba52ac6f71f",
+      "capturedUtc": "2026-09-25T00:03:40.437Z"
+    },
+    {
       "id": "foundry-access",
       "title": "6. Foundry access control boundary",
       "status": "captured",

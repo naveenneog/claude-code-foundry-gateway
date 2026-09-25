@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  makePortalUrl, redactText, isSignInPage, isBladeReady, validateCapturePlan, publicCaptureReceipt,
+  makePortalUrl, redactText, isSignInPage, isBladeReady, validateCapturePlan, publicCaptureReceipt, allowConsoleRequest,
 } from './architecture-live.mjs';
 
 const tenant = '11111111-1111-1111-1111-111111111111';
@@ -94,6 +94,17 @@ test('public receipts cannot carry resource ids, tenant data or addresses', () =
     capturedUtc: '2026-09-24T18:00:00.000Z', resourceId: resource, tenantId: tenant,
     email: 'operator@fabrikam.example', url: makePortalUrl(tenant, resource),
   });
+
   assert.deepEqual(Object.keys(receipt).sort(), ['capturedUtc', 'id', 'image', 'sha256', 'status', 'title']);
   assert.doesNotMatch(JSON.stringify(receipt), /fabrikam|11111111|22222222|subscriptions/);
+});
+
+test('console capture allows code redemption once but blocks management writes', () => {
+  const base = 'https://console.contoso.example';
+  assert.equal(allowConsoleRequest(base, `${base}/api/v1/auth/code`, 'POST', true), true);
+  assert.equal(allowConsoleRequest(base, `${base}/api/v1/auth/code`, 'POST', false), false);
+  assert.equal(allowConsoleRequest(base, `${base}/api/v1/gateway-apply`, 'POST', true), false);
+  assert.equal(allowConsoleRequest(base, `${base}/api/v1/gateway-tiers`, 'PUT', false), false);
+  assert.equal(allowConsoleRequest(base, `${base}/api/v1/budgets`, 'GET', false), true);
+  assert.equal(allowConsoleRequest(base, 'https://other.contoso.example/api/v1/auth/code', 'POST', true), false);
 });

@@ -134,3 +134,16 @@ registration uses the normal parallel lane. Repeated source/path reads are cache
 check only, including proper cleanup on failure; a later check always starts fresh.
 Tests prove that edits and deletions between checks remain visible. No mutation was
 removed to improve timing.
+
+## Lead-operated portal batches
+
+The later Conditional Access protocol replaces packet-local portal sessions. Required
+shots now live in one versioned `guide/captures/architecture.json` spec, using P53's
+discovery-only schema and runtime selections. The guide names every pending id and final
+output path; existing earlier images remain dated evidence, and missing new images use
+explicit inline pending paths rather than fabricated placeholders.
+
+`capture-architecture-live.mjs` is retired and exits before importing browser code.
+Only the lead operates the shared original-profile batch after the owner's fresh sign-in.
+Non-portal console evidence remains available through the CLI code flow in an isolated
+browser with management writes blocked. Neither path changes the recorded acceptance gaps.

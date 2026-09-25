@@ -103,6 +103,21 @@
       "configurationChanged": false,
       "modeMutationRun": false,
       "checkedUtc": "2026-09-24T22:27:33.3089255Z"
+    },
+    {
+      "flow": "consent-free-browser-console",
+      "checkedUtc": "2026-09-25T00:03:47.348Z",
+      "role": "owner",
+      "method": "entra",
+      "managerScopePresent": false,
+      "authenticatedBrowser": true,
+      "managementWritesAllowed": false,
+      "blockedWrites": 0,
+      "capturedViews": [
+        "console-governance",
+        "console-budgets"
+      ],
+      "portalProfileOpened": false
     }
   ],
   "governancePreflight": {
