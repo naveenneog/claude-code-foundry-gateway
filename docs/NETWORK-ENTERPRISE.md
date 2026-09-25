@@ -269,6 +269,49 @@ sending Application Insights telemetry.
 > earlier direct deployment examples are configuration references, not an
 > approval bypass: `New-ClaudeNetworkEdge.ps1` now requires a reviewed plan.
 
+### The procedure in order
+
+Steps 1 to 5 are read-only. Run them from an administrative host that can
+reach any private resource you intend to select, and keep every file they
+write under `.network-state` (git-ignored): it holds deployment and personal
+data.
+
+1. **Discover** what exists: `.\scripts\New-ClaudeNetworkEdge.ps1 -DiscoverOnly`
+   ([details](#1-discover-before-choosing)). The inventory is valid for 30 minutes.
+2. **Price the shape** you have in mind with `.\scripts\Get-ClaudeNetworkCost.ps1`
+   ([details](#2-inspect-cost)).
+3. **See who could lose access** with `.\scripts\Get-ClaudeNetworkImpact.ps1 -WhatIf`
+   ([details](#historical-access-impact-and-acknowledgement)).
+4. **Choose.** Without `-NonInteractive`, `Get-ClaudeNetworkPlan.ps1` shows each
+   decision as numbered options, each with its current, proposed and incremental
+   cost and seven implications, and waits for a number. Nothing is chosen for you,
+   not even a recommended or single option.
+
+   ```powershell
+   $deployment = @{ EdgeResourceGroup = $edgeResourceGroup; Name = $edgeName
+                    StatePath = '.\.network-state\edge.json' }
+   .\scripts\Get-ClaudeNetworkPlan.ps1 -SubscriptionId $subscriptionId `
+       -ApimId $apimId -ApiId $apiId -DeploymentParameters $deployment `
+       -LookbackDays 7 -AsJson | Set-Content .\.network-state\review.json
+   ```
+
+5. **Preview** the frozen review. This prints the same actions, costs and
+   affected identities, and changes nothing:
+
+   ```powershell
+   .\scripts\New-ClaudeNetworkEdge.ps1 -ReviewPath .\.network-state\review.json -WhatIf
+   ```
+
+6. **Apply** within 30 minutes of step 4: run the same command without `-WhatIf`
+   and type `APPLY <fingerprint>` when asked. A resource that changed since the
+   review stops it before any write; prepare a new review.
+7. **Verify** from each client location with `Test-ClaudeNetworkEdge.ps1`
+   ([details](#verify-from-each-real-boundary)).
+8. **Remove** only through its own review, `Get-ClaudeNetworkRemovalPlan.ps1`
+   then `Remove-ClaudeNetworkEdge.ps1` ([details](#one-review-before-any-write)).
+
+The sections below explain each step, the unattended form and every choice.
+
 ### Administrator choices, prices and consequences
 
 `Get-ClaudeNetworkPlan.ps1` reads the selected deployment, current prices and
@@ -432,31 +475,50 @@ Pass `-DiscoverySubscriptionId` for DNS or shared services in other
 subscriptions. Failed or incomplete discovery is not treated as an empty
 subscription. Cached inventories expire after 30 minutes.
 
-Interactive deployment gives numbered choices and explains the consequences:
+Interactive planning gives numbered choices and explains the consequences
+(step 4 of [the procedure](#the-procedure-in-order)):
 
 ```powershell
-.\scripts\New-ClaudeNetworkEdge.ps1 -WhatIf
+.\scripts\Get-ClaudeNetworkPlan.ps1 -SubscriptionId $subscriptionId `
+    -ApimId $apimId -ApiId $apiId -LookbackDays 7 `
+    -DeploymentParameters @{ EdgeResourceGroup = $edgeResourceGroup; Name = $edgeName }
 ```
 
 Run from a connected administrative host for private certificate discovery.
-For non-interactive runs, supply the selected IDs and names:
+`New-ClaudeNetworkEdge.ps1` refuses to run without `-ReviewPath` (except
+`-DiscoverOnly`), so everything it deploys comes from the review. A review
+takes two inputs:
+
+- **Decisions** (`-ChoicesPath`, a JSON object keyed by decision): `region`,
+  `topology`, `edge`, `workspace`, `gateway-access`, `foundry-access`,
+  `logs-access`, `turnstile-access`, `projection-access`, `network`, `subnets`,
+  `dns`, `firewall`, `certificate`, `waf-mode` and `rule-set`, plus `vnet`,
+  `public-ip` and `vault` when you reuse a resource. The topology, region,
+  workspace, gateway access, WAF mode and rule set in the review always come
+  from these decisions. The certificate decision `evaluation-ca` selects the
+  test chain instead of a vault certificate.
+- **Names, IDs and sizes** (`-DeploymentParameters`), for example:
 
 ```powershell
-.\scripts\New-ClaudeNetworkEdge.ps1 `
-    -SubscriptionId $subscriptionId -ApimId $apimId -ApiId $apiId `
-    -NetworkProfile hybrid -BackendAccess private `
-    -EdgeResourceGroup $edgeResourceGroup -Name $edgeName `
-    -Location $region -WorkspaceId $workspaceId `
-    -VnetId new -AddressPrefix $approvedCidr -IpamConfirmed `
-    -PublicIpId new -KeyVaultId $vaultId -CertificateName $certificateName `
-    -ListenerHostName $hostname -ManagedRuleSet Microsoft_DefaultRuleSet/2.1 `
-    -WafMode Detection -StatePath .\.network-state\edge.json `
-    -ConfirmApimChange -NonInteractive -WhatIf
+$selectedParameters = @{
+    EdgeResourceGroup = $edgeResourceGroup; Name = $edgeName
+    VnetId = 'new'; AddressPrefix = $approvedCidr; IpamConfirmed = $true
+    PublicIpId = 'new'; KeyVaultId = $vaultId; CertificateName = $certificateName
+    ListenerHostName = $hostname; StatePath = '.\.network-state\edge.json'
+}
 ```
 
-Remove `-WhatIf` only after reviewing the plan. Choose `-TestCertificate`
-**instead of** `-KeyVaultId` and `-CertificateName` for the evaluation path.
-Use `-EnableNetworkIsolation` only after reviewing its subscription-level
+For an unattended run, the simplest valid choices file is one recorded from
+an interactive review of the same deployment:
+
+```powershell
+$interactive = Get-Content .\.network-state\review.json -Raw | ConvertFrom-Json
+$choices = [ordered]@{}
+foreach ($d in $interactive.Plan.Decisions) { $choices[$d.Key] = $d.Selected.id }
+$choices | ConvertTo-Json | Set-Content .\.network-state\choices.json
+```
+
+Use `EnableNetworkIsolation = $true` only after reviewing its subscription-level
 effect on newly provisioned application gateways. Existing gateways keep the
 capabilities with which they were provisioned.
 

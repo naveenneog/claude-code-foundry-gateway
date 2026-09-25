@@ -84,6 +84,12 @@ firewall routing, DNS Private Resolver and corporate egress allow-lists as teste
 Premium v2 injection and multi-region; and P49, converting Turnstile, PostgreSQL, the projection
 and the jobs.
 
+Documentation review after the merge: the guide's deployment examples predated the review step,
+so two of them (`New-ClaudeNetworkEdge.ps1 -WhatIf`, and the long parameter form) would have been
+refused for lack of `-ReviewPath`. The guide now opens its deployment section with the procedure
+in order (discover, price, impact, choose, preview, apply, verify, remove) and says which inputs
+are decisions and which are names and IDs.
+
 ## P58 architecture generation, 2026-09-25
 
 Merged from `architecture` at `345a302`. Every diagram now comes from a text source under
