@@ -41,6 +41,36 @@ against stale runs is being added with the modes, and a single queue-driven writ
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
 
+## FinOps tools in one guide, 2026-09-25
+
+Asked by the owner, who had no single place that compared the FinOps tools, how each person signs
+in, the end-to-end flow for each, and what each costs. [FINOPS-TOOLS.md](FINOPS-TOOLS.md) puts them
+side by side:
+
+- saved queries and workbooks, the scripts, Terminal FinOps (Direct and Turnstile), the AUM
+  service, Turnstile, chargeback reports and Grafana;
+- a matrix of who signs in to what, and eight sign-in methods: Azure CLI interactive and device
+  code, consent-free API tokens, Turnstile's web sign-in and one-use code, break-glass, managed
+  identities, developers;
+- six end-to-end flows with their commands;
+- a bill of materials from live list prices on 2026-09-25.
+
+Measured for it, read-only:
+
+| Measured | Result |
+|---|---|
+| Gateway | Basic v2, $150.00/month |
+| Connected Turnstile, Central US | $158.84/month at rest, $0.52 of usage in 30 days |
+| Turnstile shapes, East US 2 | $55.47/month lean, $150.54/month dedicated and private |
+| Terminal FinOps in Direct mode | Month status came back with role `owner` through `azure-rbac` |
+| Month's estimated cost | Unknown: 10 usage rows had no price. `ClaudeCost` priced 534 `claude-sonnet-5` requests at $1.59 |
+
+**Found while writing it.** `Set-ClaudeBusinessUnit.ps1`, `Set-ClaudeBudget.ps1` and
+`Set-ClaudeTier.ps1` do not check which tool owns governance. Terminal Direct mode and the AUM
+service do, and refuse. While Turnstile owns a gateway, a script edit lasts only until the apply
+job's next run. The guide says so. The scripts should refuse the same way; that is queued behind
+the script-choices sweep, which edits the same files.
+
 ## Scripts ask for what they were not given, 2026-09-25
 
 Asked by the owner after `Publish-ClaudeWorkbook.ps1` stopped with "3 workspaces in

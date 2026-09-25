@@ -60,6 +60,11 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   and verified. On Windows the account broker kept serving the old token; MSAL's
   `set_access_token_to_renew`, behind a helper that fails closed, renews it without deleting any
   cache or adding any grant.
+- **Every FinOps tool in one guide.** `docs/FINOPS-TOOLS.md` compares the saved queries and
+  workbooks, the scripts, Terminal FinOps, the AUM service, Turnstile, chargeback reports and
+  Grafana. It covers who signs in to what and with which method, six end-to-end flows with their
+  commands, and a bill of materials from live list prices, with the command that recalculates
+  each line.
 - **Where a Premium v2 injected gateway's private IP is, measured.** ARM returns it in
   `properties.privateIPAddresses` only at api-versions `2024-05-01`, `2023-09-01-preview` and
   `2023-05-01-preview`, and Resource Graph shows it; `az apim show` (`2022-08-01`) and every
