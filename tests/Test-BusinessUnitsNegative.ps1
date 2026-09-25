@@ -11,9 +11,12 @@
 # behind. Both were observed - a concurrent -IncludeAzure run turned the gate
 # red while every mutation here reported caught.
 
+param([string]$Shard = '', [switch]$ListMutations)
+
 $root = Split-Path $PSScriptRoot -Parent
 $sandbox = Join-Path ([IO.Path]::GetTempPath()) "bu-negative-$PID-$(Get-Random)"
 
+# BEGIN MUTATION MANIFEST
 $mutations = @(
     @{ Name  = 'membership lookup removed from the policy'
        File  = 'infra/policy.xml'
@@ -583,10 +586,10 @@ $mutations = @(
        To    = 'That is a known issue' }
 
     @{ Suite = 'Test-Scale.ps1'
-       Name  = 'the README implies the projection is the default and load-tested'
+       Name  = 'the README implies the projection is the default'
        File  = 'README.md'
-       From  = '**It is not the default, and it is not yet'
-       To    = '**It is the default, and it is' }
+       From  = '**It is not the default.**'
+       To    = '**It is the default.**' }
 
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'private networking stops being priced'
@@ -1421,7 +1424,7 @@ $mutations = @(
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'an empty resource list is read as a missing role'
        File  = 'docs/FOUNDRY-DIRECT.md'
-       From  = 'wrong tenant, not that you lack a role'
+       From  = 'empty list does not prove the tenant is wrong'
        To    = 'you lack a role on it' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
@@ -1667,7 +1670,7 @@ $mutations = @(
     @{ Suite = 'Test-Scale.ps1'
        Name  = 'the budget page drops the measured cache gap'
        File  = 'docs/DECISIONS.md'
-       From  = '41.5'
+       From  = '38.7%'
        To    = '1.1' }
 
     @{ Suite = 'Test-Scale.ps1'
@@ -2214,7 +2217,7 @@ $mutations = @(
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the Cloud PC case stops being named'
        File  = 'docs/FOUNDRY-DIRECT.md'
-       From  = 'On a Cloud PC, a Dev Box or any Azure VM this is the default'
+       From  = 'On a Cloud PC, a Dev Box or an Azure VM with a managed identity'
        To    = 'This is rare' }
 
     @{ Suite = 'Test-AdminSurface.ps1'
@@ -2919,6 +2922,16 @@ $mutations = @(
        To    = '| Developer sign-in | see the script |' }
 )
 
+# END MUTATION MANIFEST
+. (Join-Path $PSScriptRoot 'Select-MutationShard.ps1')
+$mutationIndices = @(Get-MutationShardIndices -Count $mutations.Count -Shard $Shard)
+if ($ListMutations) {
+    $inventory = @(foreach ($i in $mutationIndices) { [pscustomobject]@{ Index = $i; Name = $mutations[$i].Name } })
+    ConvertTo-Json -InputObject $inventory
+    exit 0
+}
+if ($Shard) { Write-Host "Shard ${Shard}: $($mutationIndices.Count) of $($mutations.Count) mutations." }
+
 $missed = @()
 $caught = 0
 
@@ -2989,7 +3002,8 @@ try {
     }
     Write-Host '  [BASE]   the unmutated copy passes' -ForegroundColor DarkGray
 
-    foreach ($m in $mutations) {
+    foreach ($index in $mutationIndices) {
+        $m = $mutations[$index]
         $path = Join-Path $sandbox $m.File
         $original = [IO.File]::ReadAllText($path)
         $runner = if ($m.Suite) { Join-Path $sandbox "tests/$($m.Suite)" } else { $suite }
@@ -3024,7 +3038,7 @@ finally {
 }
 
 Write-Host ''
-Write-Host "$caught of $($mutations.Count) mutations caught."
+Write-Host "$caught of $($mutationIndices.Count) mutations caught."
 
 if ($missed.Count) {
     Write-Host ''
@@ -3038,4 +3052,3 @@ Write-Host 'Every mutation was caught.' -ForegroundColor Green
 # last thing it ran was a suite that was supposed to go red. Falling off the
 # end here would report that as this script's own failure.
 exit 0
-

@@ -1,0 +1,21 @@
+{
+  "catalog": [
+    { "Id": "engineering", "Group": "Contoso Engineering", "TokensPerMonth": 1000000, "Parent": "" },
+    { "Id": "platform", "Group": "Contoso Platform", "TokensPerMonth": 500000, "Parent": "engineering" },
+    { "Id": "finance", "Group": "Contoso Finance", "TokensPerMonth": 500000, "Parent": "" },
+    { "Id": "research", "Group": "Contoso Research", "TokensPerMonth": 500000, "Parent": "" }
+  ],
+  "scopes": [
+    { "Level": "Workspace", "Unit": "", "Team": "", "Requests": 10, "InputTokens": 1000, "OutputTokens": 200, "CacheReadTokens": 8000, "EstimatedCostUsd": 0.0056, "People": 4, "UnpricedRows": 0 },
+    { "Level": "Unit", "Unit": "engineering", "Team": "", "Requests": 5, "InputTokens": 500, "OutputTokens": 100, "CacheReadTokens": 4000, "EstimatedCostUsd": 0.0028, "People": 2, "UnpricedRows": 0 },
+    { "Level": "Team", "Unit": "engineering", "Team": "platform", "Requests": 3, "InputTokens": 300, "OutputTokens": 60, "CacheReadTokens": 2500, "EstimatedCostUsd": 0.0017, "People": 1, "UnpricedRows": 0 },
+    { "Level": "Unit", "Unit": "finance", "Team": "", "Requests": 4, "InputTokens": 400, "OutputTokens": 80, "CacheReadTokens": 3000, "EstimatedCostUsd": 0.0022, "People": 1, "UnpricedRows": 0 },
+    { "Level": "Unit", "Unit": "unassigned", "Team": "", "Requests": 1, "InputTokens": 100, "OutputTokens": 20, "CacheReadTokens": 1000, "EstimatedCostUsd": 0.0006, "People": 1, "UnpricedRows": 0 }
+  ],
+  "people": [
+    { "Unit": "engineering", "PersonKey": "alice", "Person": "alice@contoso.com", "Team": "platform", "Tier": "standard", "Requests": 3, "InputTokens": 300, "OutputTokens": 60, "CacheReadTokens": 2500, "EstimatedCostUsd": 0.0017, "TopModel": "claude-sonnet-5", "Clients": "sdk-cli; cache (no surface)" },
+    { "Unit": "engineering", "PersonKey": "bob", "Person": "=HYPERLINK(\"https://contoso.com\") <Bob>", "Team": "", "Tier": "premium", "Requests": 2, "InputTokens": 200, "OutputTokens": 40, "CacheReadTokens": 1500, "EstimatedCostUsd": 0.0011, "TopModel": "claude-sonnet-5", "Clients": "desktop; cache (no surface)" },
+    { "Unit": "finance", "PersonKey": "carol", "Person": "carol@contoso.com", "Team": "", "Tier": "standard", "Requests": 4, "InputTokens": 400, "OutputTokens": 80, "CacheReadTokens": 3000, "EstimatedCostUsd": 0.0022, "TopModel": "claude-sonnet-5", "Clients": "sdk-cli; cache (no surface)" },
+    { "Unit": "unassigned", "PersonKey": "unknown", "Person": "Unattributed", "Team": "", "Tier": "", "Requests": 1, "InputTokens": 100, "OutputTokens": 20, "CacheReadTokens": 1000, "EstimatedCostUsd": 0.0006, "TopModel": "claude-sonnet-5", "Clients": "unknown; cache (no surface)" }
+  ]
+}

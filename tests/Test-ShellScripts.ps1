@@ -117,15 +117,20 @@ if (Test-Path $gw) {
 $ws = Join-Path $scriptsDir 'setup-claude-workstation.sh'
 if (Test-Path $ws) {
     $p = '/' + (($ws).Replace('\','/') -replace '^([A-Za-z]):','$1')
+    $scratch = Join-Path ([IO.Path]::GetTempPath()) ('shell-probe-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $scratch -Force | Out-Null
+    $scratchBash = '/' + ($scratch.Replace('\','/') -replace '^([A-Za-z]):','$1')
     $probe = @'
-tmp=$(mktemp -d); shim="$tmp/bin"; mkdir -p "$shim"
+tmp='SCRATCH'; shim="$tmp/bin"; mkdir -p "$shim"
 printf '#!/bin/sh\nif [ "$1" = "-s" ]; then echo Linux; else /usr/bin/uname "$@"; fi\n' > "$shim/uname"
 chmod +x "$shim/uname"
 PATH="$shim:$PATH" HOME="$tmp/home" LANG=en_US.UTF-8 \
   timeout 25 bash 'SCRIPT' --skip-install --skip-desktop --skip-vscode </dev/null 2>&1 | head -20
 rm -rf "$tmp"
 '@ -replace 'SCRIPT', $p
-    $out = & $bash -c $probe 2>&1 | Out-String
+    $probe = $probe.Replace('SCRATCH', $scratchBash.Replace("'", "'\''"))
+    $out = try { & $bash -c $probe 2>&1 | Out-String }
+    finally { Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue }
     Assert-Contains 'setup-claude-workstation.sh shows the banner' $out 'github.com/naveenneog'
 }
 

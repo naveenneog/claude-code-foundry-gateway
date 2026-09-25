@@ -1,6 +1,6 @@
 # Status
 
-**Active packet:** P46 — managers scoped to their units and teams (done, fork `c0c345a`), and budget modes in the gateway (done, merged from `budget-modes` at `3ee0bd3`); the manager-only live sign-in is next, in P53 ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets:** P52 AUM and P54 the enterprise network. P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P46 acceptance criteria — managers scoped, and budget modes
 
@@ -11,8 +11,8 @@
 - [x] An owner records a unit's or team's manager group and budget mode on the Gateway governance page (`manager_group_id`, `enforcement`, `allowance_percent`)
 - [x] The gateway enforces strict, allowance and notify per unit and team: `bu-modes` holds only the exceptions (missing means strict); allowance admits up to its percentage above the budget; notify skips only that scope's limiter, and the parent, organization and tier limits still apply. Invalid mode metadata stops the whole apply before any write
 - [x] An apply run rechecks Turnstile's catalog, per-budget and tier revisions immediately before writing, reconciles again from newer state up to three times, then defers with no writes and no membership refresh. This narrows the out-of-order race; P48's single writer closes it
-- [ ] A live sign-in with a manager-only account: moved to P53, which uses the CLI account's own group memberships (it owns both the admin group and the manager test groups) and restores them
-- [ ] `node .ironclad/gate.mjs --stage packet` exits 0 on the merge
+- [x] A live sign-in with a manager-only account: done 2026-09-25 01:21-01:26Z in P53. With the account's admin group membership and its direct `Turnstile.Admin` assignment both removed, a fresh token carried exactly `Turnstile.Manager` and the manager group; Turnstile answered `member`, scoped to one unit and its three departments, refused three admin routes with 403, and the replayed code with 401. Everything was restored admin-group first and verified against the snapshot
+- [x] `node .ironclad/gate.mjs --stage packet` exits 0 on the merge: `690015d`, 2026-09-24 17:16-17:46Z, Test-All 1,797.2 s of the 1,800 s budget then in force (see "The suite's time budget" below)
 
 | Measured | Result |
 |---|---|
@@ -23,6 +23,8 @@
 | Modes on the reference gateway, 2026-09-24 14:26-14:28Z | Strict at a budget of 1 refused with 403 naming the team. Allowance 10%: served at an estimated 104.0% of the budget with an `estimated-over-budget` notice, refused once usage exceeded the 110% effective quota. Notify at a budget of 1: three requests served with `usage-reported`, and their 48 tokens joined the ledger through `BudgetRequestId`. The original registry and `bu-modes` (`,,`) restored exactly; a policy-only deploy left every named value byte-identical |
 | Modes tests | 206 governance and 146 team assertions; 108 of 108 Turnstile mutations caught; the policy's own expression bodies compiled and executed for 1, 10 and 100%, zero, rounding and the Int64 limit |
 | The guard against live data, 15:35Z | Real catalog, budget and tier reads through the guard against a gateway held in memory: verified before writing, 0 newer snapshots, 0 writes |
+| Rolled out live, 17:51-18:02Z | Main's merged policy (`690015d`) deployed to the reference gateway: all 28 named values byte-identical before and after, and a request through the gateway returned 200 with every budget header. Both Turnstile jobs repinned to `690015d`; their first run succeeded. The only named value that run changed was `turnstile-integration`'s `connectedAt`, re-stamped by the connect step; tiers match Turnstile (`tpm-standard` 20,000, `tpm-premium` 80,000) |
+| A mode set in Turnstile's UI, 21:12-21:20Z | Notify on one team: `bu-modes` read `,<team>=notify,` on the gateway 113.4 s after the save (apply job succeeded at 151.8 s). Strict: exactly `,,` after 113.2 s. The originally unset attribute was restored too; the catalog and every non-secret named value then equalled the snapshot (P53) |
 
 The notices are advisory. `llm-token-limit`'s remaining quota is an estimate, so an allowance
 notice cannot promise the exact request that crosses the budget, and notify has no monthly counter
@@ -38,6 +40,98 @@ this time, because manager attributes do not reach the gateway, but budget modes
 against stale runs is being added with the modes, and a single queue-driven writer (P48) is the
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
+
+## P58 architecture generation, 2026-09-25
+
+Merged from `architecture` at `345a302`. Every diagram now comes from a text source under
+`docs/architecture/` (ten today: system, request path, governance apply, delegated management,
+projection freshness, terminal FinOps, Azure resource inventory, chargeback reports, budget modes
+and the AUM service), rendered by one command, `node guide/render-architecture.mjs`, with a
+manifest that records each source's hash. `docs/ARCHITECTURE.md` is rewritten around them, and the
+request-flow picture no longer claims "no database": it states what each profile adds.
+
+`AGENTS.md` now requires an architecture task in every feature packet: a packet that changes a
+component, data flow, identity, schedule or network path updates its source, re-renders, and
+updates the article, or records that nothing architectural changed. `tests/Test-Architecture.ps1`
+fails on drift: a source edited without re-rendering, an image without a source or a reference, a
+label naming a script, route or named value that no longer exists, or an Azure resource type in
+`infra/*.bicep` that appears in no diagram. 36 assertions with isolated mutations; 28 s.
+
+Pending: the AUM rename and the enterprise network topologies (their packets hand the diagram
+specifications over), and the portal pictures declared in `guide/captures/architecture.json`.
+
+## P57 documentation review, 2026-09-24
+
+Merged at `0d0ac7c`, its last green commit. Eight reader journeys were walked with the guides
+alone: developer, administrator standing it up and running it, FinOps, delegated manager or viewer,
+security, network, capacity planner and on-call operator.
+
+| | |
+|---|---|
+| **Fixed** | 70 findings across README, DEVELOPER and 22 guides; 23 proposals for files other packets own are in the review's report |
+| **New guides** | Operations, Budgets, FinOps, Reference and Data governance, each a task guide with value sources, discovery commands and portal paths |
+| **README** | From 710 to 278 lines, with every original rendered anchor and image kept; a documentation map routes each reader |
+| **No live names** | Where guides named the reference deployment's resources, they now use placeholders plus the command that discovers the reader's own value (ADR-0003's labels only; its decision text is unchanged) |
+| **Guard** | `tests/Test-DocReferences.ps1` checks links, anchors, script names and parameters in 33 guides, with ten mutations; it adds 7.1 s to the suite |
+| **Gate** | PASS on `0d0ac7c`: 40 checks, 14 min 6 s |
+
+Not yet accepted: the portal walkthroughs. The capture profile's session asks for a fresh sign-in
+on resource and Entra blades (tenant Conditional Access), so 16 portal pictures are declared as
+capture specs on the review's branch (`da3d77b`), for one batch after the owner signs in again.
+That commit is not green until the pictures exist.
+
+## P50 chargeback reports, 2026-09-24
+
+Merged from `chargeback-reports` at `854ea37`. [ADR-0020](adr/0020-chargeback-reports.md);
+`docs/CHARGEBACK-REPORTS.md`.
+
+| | |
+|---|---|
+| **Generate** | `scripts/New-ClaudeChargebackReport.ps1 -Month`: per unit, a CSV of its people and an HTML summary (requests, input, output, cache-read and cache-write tokens, estimated cost, budget against use), an index and a manifest. Unit totals plus an explicit Unassigned line must equal the month's total, or the run fails |
+| **Recipients** | `scripts/Set-ClaudeChargebackRecipients.ps1`, per unit and for the admin team, limited to allowed domains, changed with no redeploy |
+| **Deliver** | A scheduled Container Apps job archives each run in Storage reachable only through a private endpoint, and emails each unit its own report through Azure Communication Services |
+| **Live** | 2026-09-24: current and previous month generated from the reference gateway's ledger and reconciled with the saved function; both emails reached the owner's inbox (17:42:49Z, 18:10:36Z), with only the owner's address configured |
+| **Tests** | 276 assertions on each PowerShell host, 12 mutations caught; 100,000 people generated offline |
+| **Cost** | $29.70 a month standing (a private endpoint, a private DNS zone, and the Container Apps environment's load balancer and public IP), plus storage and $0.00025 per email; list price, derived |
+| **Gate** | PASS on `854ea37`, Test-All 956.2 s |
+
+An Azure-managed sender domain sends at most 10 messages an hour per subscription and cannot be
+raised: broad delivery needs a verified custom domain. Team-level recipients wait for team-only
+reports. It is left running on the reference deployment;
+`Register-ClaudeChargebackSchedule.ps1 -Remove -PurgeArchive` removes it.
+
+## P55 the AUM service, 2026-09-24
+
+Merged from `aum-service` at `aa697fc`. [ADR-0023](adr/0023-aum-service.md); `docs/AUM-SERVICE.md`.
+An optional Azure Functions API that gives AUM viewers, scoped managers and budget requests
+without Turnstile. A gateway has one governance authority: the service refuses to write to a
+gateway Turnstile governs, so the reference gateway stays Turnstile's.
+
+| | |
+|---|---|
+| **Identity** | Its own Entra app, created by its owner, with `AUM.Admin`, `AUM.Viewer` and `AUM.Manager`, and the Azure CLI pre-authorized, so tokens need no consent |
+| **Writes** | Named values written by the Function's managed identity with read-back and conditional revisions (`If-Match`); byte-for-byte parity with the PowerShell serializers, proven on shared fixtures on both hosts |
+| **P47, for this service** | Budget requests, approve, reject, escalate; boosts whose expiry a timer reverts |
+| **Live** | On a test gateway: admin reads and reversible writes; the real one-minute timer restored the registry byte-identically; anonymous calls refused with 401 |
+| **Tests** | 84 Python tests and 5 mutations, 57 PowerShell assertions |
+| **Gate** | PASS on `aa697fc`, Test-All 785.1 s |
+
+Open: the manager-only journey (after P53's), the AUM client's end-to-end journey on the dedicated
+test gateway, and the portal pictures (after the owner signs in again).
+
+## P53 Turnstile, tested and captured live, 2026-09-24 (phase 1)
+
+Merged at `146fd12`.
+
+| | |
+|---|---|
+| **Pictures** | All 22 recaptured live from the reference deployment and 4 added, each with a dated, redacted provenance record and a pixel hash that the screenshot check enforces |
+| **Sign-in** | The owner through the consent-free Azure CLI code in 8.0 s; the one-use code, replayed, returned 401 |
+| **A change in the UI** | Standard tier 20,000 to 20,001 on the page reached the gateway in 105.3 s; restored through the page in 118.6 s |
+| **A mode in the UI** | See P46 above: notify reached `bu-modes` in 113.4 s, strict returned it to `,,` in 113.2 s |
+| **Capture tooling** | Capture scripts discover their targets instead of defaulting to live names; `Test-NoDeploymentValues.ps1` also scans `.mjs` files |
+| **Manager-only (phase 2)** | The first attempt restored everything exactly but proved nothing: the account also holds a direct `Turnstile.Admin` assignment, so leaving the admin group still left Admin, which outranks Manager. The retry, 2026-09-25 01:21-01:26Z, removed both, and passed: a fresh token carried exactly `Turnstile.Manager` and the manager group (checked before anything counted), `/auth/me` answered `member` scoped to one unit and its three departments, three admin routes returned 403 and the replayed code 401. Four pictures captured. Restored admin group first, then the same direct assignment re-created; all 14 memberships, 22 direct assignments and 24 non-secret named values matched the snapshot, and a fresh token carried Admin again |
+| **Fresh tokens on Windows** | The Windows account broker (WAM) kept returning the cached token with the old roles: other scope spellings and MSAL's `force_refresh` alone did not renew it. MSAL's `set_access_token_to_renew`, used by a helper that fails closed, did, with no cache deleted and no grant added (**U21**) |
 
 ## P51 terminal FinOps, first release, 2026-09-24
 
@@ -61,6 +155,40 @@ without the venv recorded SKIP, and `Test-RunnerIntegrity` expected every regist
 run. The invariant it now asserts is the one the false pass broke: every registered check has a
 result in the summary, PASS, FAIL or an explicit SKIP; the checks not skipped all run; and the
 final lines count the skips. Open: **U20** (scale, and the two sources' totals differ by design).
+
+## The suite's time budget, 2026-09-24
+
+`Test-All` passed on `690015d` in 1,797.2 s, 2.8 s inside the gate's 1,800 s command budget, and a
+budget-modes gate on its own branch had already failed on time with no failing check. The suite
+runs its checks one after another and grew with every packet (1,477.4 s on `d1f1756`, 1,721.8 s on
+`c7f0a29`), while several agents' gates share the machine. The budget is now 3,600 s
+([ADR-0024](adr/0024-test-suite-time-budget.md)), `Test-All` prints and saves each check's
+duration, and P56 makes the suite parallel so the budget can return to 1,800 s. Nothing it checks
+was removed or weakened. **Done the same day:** P56 brought `Test-All` to 790-927 s on a busy
+machine and ADR-0025 returned the budget to 1,800 s (below).
+
+## P56 parallel test suite, 2026-09-24
+
+Merged from `parallel-suite` at `15a8a97`. `Test-All` starts each check as its own `pwsh`
+process, four at a time (the machine has 16 logical CPUs), and runs alone the checks that share
+Azure CLI state or scan the whole tree. A per-check deadline of 600 s stops a hung check without
+stalling the gate. The two slow mutation harnesses run as shards: four for business units, two
+for Turnstile, with every one of the 476 and 108 mutations kept, in its original order, which
+`tests/Test-MutationShards.ps1` proves. [ADR-0025](adr/0025-parallel-test-suite.md).
+
+| Run | Wall time | Result |
+|---|---:|---|
+| Serial, `49c53bf` (gate receipt) | 1,829 s | 34 PASS |
+| Parallel without shards | 1,302.8 s | not enough; shards added |
+| Parallel with shards, three busy runs | 927.2, 830.6, 790.0 s | 39 PASS each, FinOps run, not skipped |
+| The agent's final gate on `15a8a97` | 809.9 s | 39 PASS, 0 FAIL, 0 SKIP |
+
+It costs more CPU (about 2,450 CPU-seconds against 1,841 serially), because each check now has its
+own process. Found by building it, and fixed test-first: the resolver check's wrapper parsed zero
+passes from Node's Unicode summary under a headless code page 437, so it now asks Node for ASCII TAP
+output; a missing script behind a prerequisite SKIP was reported as skipped instead of failing; a
+timed-out check lost the output it had printed; and a check started late could have outlived the
+gate's budget, which set the 600 s default deadline.
 
 ## A gate that passed on 9 of 32 checks, 2026-09-24
 
@@ -1097,17 +1225,41 @@ node .ironclad/gate.mjs --stage packet                  # definition of done
 
 ## Next
 
-P14 — the plugin marketplace — is the only packet left, and U6 rewrote its acceptance criterion.
-Claude Code has no plugin signing scheme, so "signed accepted, unsigned refused" cannot be tested.
-What can be tested is immutable approved content: a plugin pinned to a commit sha or archive
-hash, a modified one refused on hash mismatch, marketplaces outside `strictKnownMarketplaces`
-rejected, and `isDesktopExtensionSignatureRequired` enforcing publisher signing for `.mcpb`
-bundles only. `docs/UNKNOWNS.md` U6 has the keys and the blast radius.
+In flight on 2026-09-24, each on its own branch and merged when its gate passes:
 
-Three unknowns remain open. **U2** blocks putting a currency figure on spend. **U8** blocks the
-four productivity fields P10 returns as null. **U3** — whether Claude in Chrome applies under a
-third-party provider — is unexamined and affects only a parity-matrix row.
+- **P52 AUM (Azure Usage Management).** The terminal console renamed, redesigned as a
+  dashboard, and independent of Turnstile (the gateway directly as a first-class backend, and the
+  AUM service), with live redacted screens; then the end-to-end journeys driven from AUM on each
+  backend: groups, unit and team, budgets, modes, and enforcement proven with real requests.
+- **P54 the enterprise network.** The owner's hub-and-spoke design (Application Gateway WAF_v2
+  in front of the gateway, a private Foundry, egress through NAT Gateway or Azure Firewall), with
+  streaming, timeouts, request size and WAF false positives on code measured live, and every
+  choice shown with its cost and implications before it is made. It delivers and extends P49.
+- **P58 architecture generation.** A diagram for each feature from text sources, and a test that
+  fails when a feature changes the architecture without its diagram.
+- **P53 phase 2 and P55's journey.** The manager-only journeys (**U21**), and AUM driving the AUM
+  service on its dedicated test gateway.
 
-One thing outside the packet queue and worth doing: seven principals hold `Cognitive Services
-User` directly on the Foundry account, which bypasses every budget in this repository.
-`SETUP.md` section 4.2 has the audit commands.
+Waiting on the owner:
+
+- **One portal sign-in**, for one batch capture of every packet's portal pictures: run
+  `node guide/auth.mjs` with `AZURE_TENANT` set, then the lead runs all `guide/captures/*.json`
+  specs in one window with the original profile.
+- **Cost decisions on running test resources**: the Premium v2 test gateway (about $2,800 a month
+  at list price), the dedicated AUM test gateway (Basic v2, about $150 a month), and the chargeback
+  reports deployment ($29.70 a month standing).
+
+Waiting on a tenant administrator: **U17** (Graph `GroupMember.Read.All`, so the apply job can
+refresh membership itself) and **U19** (consent for Turnstile's web sign-in button). Neither
+blocks use today: an admin's own delegated refresh and the consent-free Azure CLI sign-in work.
+
+Planned: P47's endpoints in Turnstile, so AUM is complete on that backend too; P48, budgets and
+overrides in the projection with one queue-driven writer; P14, the plugin marketplace, whose
+acceptance U6 rewrote to immutable approved content rather than signing; and P19's installer
+default (`cos-default`, `cos-upgrade`).
+
+Thirteen unknowns are open: U2, U3, U8, U9, U10, U11, U13, U16, U17, U18, U19, U20 and U21.
+
+Outside the packet queue: an earlier audit found seven principals holding `Cognitive Services
+User` directly on the Foundry account, which bypasses every budget here. Re-run the audit in
+`SETUP.md` section 4.2.

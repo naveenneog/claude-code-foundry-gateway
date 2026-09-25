@@ -1,0 +1,8 @@
+[
+  {"name": "null", "raw": null, "canonical": ",,"},
+  {"name": "empty", "raw": "", "canonical": ",,"},
+  {"name": "whitespace", "raw": "   ", "canonical": ",,"},
+  {"name": "sentinels", "raw": ",,", "canonical": ",,"},
+  {"name": "extra-edges", "raw": ",,finance=notify,payroll=allowance:10,,", "canonical": ",finance=notify,payroll=allowance:10,"},
+  {"name": "explicit-strict", "raw": ",finance=strict,payroll=notify,", "canonical": ",payroll=notify,"}
+]

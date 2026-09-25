@@ -1,14 +1,17 @@
 # Claude Code — developer setup
 
-You have been granted access to Claude (Sonnet 5 and Opus 5) running in our own
-Microsoft Foundry resource, reached through a gateway.
+Use Claude through your organisation's gateway to its own Microsoft Foundry
+deployment. Your platform team supplies the permitted deployment names; Sonnet
+5 and Opus 5 are the setup script's defaults, not a guarantee for every tenant.
 
 **There is no API key.** You authenticate as yourself with Microsoft Entra ID,
 and your usage is metered against your own budget. You need no Azure role on
 anything — the gateway holds that. Being in the entitlement group is all it
-takes, and you already are.
+takes. Ask the platform team to confirm it has published your membership.
 
-Nothing on this page needs administrator rights. If you are the person *setting
+The normal configuration uses your user profile. Installing missing software
+may require your organisation's software portal or local administrator approval;
+do not bypass a managed-device restriction. If you are the person *setting
 the gateway up*, you want [docs/SETUP.md](docs/SETUP.md) instead.
 
 **In this article**
@@ -27,28 +30,46 @@ the gateway up*, you want [docs/SETUP.md](docs/SETUP.md) instead.
 | **Azure CLI** | the setup installs it if it is missing |
 | **Entitlement** | membership of the group your platform team put you in. Nothing else — no Azure role, no API key |
 | **PowerShell 5.1 or 7** | on Windows. macOS and Linux use the shell script |
+| **Complete setup bundle** | the `scripts` folder and its helpers, not just one downloaded `.ps1` |
+| **macOS/Linux `jq`** | install it before using `--config`: the shell script reads the config before its dependency-install phase |
+| **Network access** | your gateway and Entra sign-in; see [Network](docs/NETWORK.md), including streaming/proxy requirements |
 
 ---
 
 ## One command
 
 Your platform team sent you `claude-gateway.json`. It holds the gateway URL,
-tenant and tier limits, so you do not have to type any of them. Put it next to
-the script:
+tenant and tier limits, so you do not have to type any of them. Ask for the
+complete `scripts` folder, including the credential helpers, or download this
+repository. Open a terminal in the folder that contains `scripts`, and put
+`claude-gateway.json` there. All commands on this page use that directory:
 
 ```powershell
 # Windows
-.\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json
+.\scripts\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json
 ```
 
 ```bash
 # macOS and Linux
-./setup-claude-workstation.sh --config ./claude-gateway.json
+./scripts/setup-claude-workstation.sh --config ./claude-gateway.json
 ```
+
+**Manual/client UI instead:** use the [appendix](#appendix--configuring-it-by-hand).
+There is no Azure portal action that configures a workstation. On managed
+machines, install the approved clients from your software portal first and use
+`-SkipInstall` / `--skip-install`.
+
+**Deployment names differ?** The low-level setup does not read a `models` list
+from this config. On Windows pass `-Models` explicitly to the setup command; on
+macOS/Linux use the appendix to set aliases and Desktop's model list. Do not
+assume a generated config alone changes the default model names.
 
 It checks what you already have, installs anything missing, configures **all
 three clients** — Claude Code CLI, the VS Code extension, and Claude Desktop
 including Cowork — then makes a real call through the gateway to prove it works.
+Read warnings as well as the exit code: Desktop configuration is skipped if the
+app is absent. The shell script configures an installed Linux Desktop package
+but does not install one. Verify each client you intend to use.
 
 ![The setup script running: prerequisites checked, all three clients configured, and a verified call returning HTTP 200 with the tier and remaining budget](docs/images/run-workstation-setup.png)
 
@@ -57,7 +78,7 @@ including Cowork — then makes a real call through the gateway to prove it work
 > directly:
 >
 > ```powershell
-> .\Setup-ClaudeWorkstation.ps1 -GatewayUrl https://<apim>.azure-api.net/claude -TenantId <tenant-id>
+> .\scripts\Setup-ClaudeWorkstation.ps1 -GatewayUrl https://<apim>.azure-api.net/claude -TenantId <tenant-id>
 > ```
 >
 > Neither is a secret. Your access comes from group membership, not from these.
@@ -66,11 +87,14 @@ Then restart the clients — all three read their configuration at startup:
 
 | Client | Restart |
 |---|---|
-| Claude Code CLI | nothing to do |
+| Claude Code CLI | exit any running session, then start a new one |
 | VS Code | reload the window |
 | Claude Desktop | quit completely, **including the tray icon** |
 
 Re-run the script any time; it reconciles rather than duplicating.
+If your handover specifies `authMode`, use
+`scripts/Onboard-ClaudeDeveloper.ps1` as described below; the low-level setup
+does not itself honour every handover mode.
 
 | Windows | macOS / Linux | Effect |
 |---|---|---|
@@ -92,6 +116,12 @@ rather than the symptom — run the checks on their own:
 ```powershell
 .\scripts\Onboard-ClaudeDeveloper.ps1 -ConfigPath .\claude-gateway.json -PreflightOnly
 ```
+
+First sign in to the tenant in your file: `az login --tenant <tenant-id>`.
+Add `--allow-no-subscriptions` if Azure reports no subscriptions; developers
+do not need a subscription role. The preflight checks an existing sign-in.
+**Manual:** check `az account show` locally and the gateway connection in each
+client; [Network](docs/NETWORK.md) provides manual streaming checks.
 
 ![The preflight running four checks — tooling, identity, network and access — and reporting that nothing was written](docs/guide/onboard-preflight.png)
 
@@ -152,7 +182,7 @@ not run on this machine — it writes the developer setting that reveals it.
 
 **Your budget is on every response:**
 
-```
+```text
 x-ratelimit-remaining-tokens: 19980
 x-quota-remaining-today: 499980
 ```
@@ -163,8 +193,10 @@ returns `403` until the period rolls over; ask the platform team if you need the
 premium tier.
 
 Your usage is recorded against your name so your organisation can allocate its
-cost. Nothing is anonymous — but nothing is inspected either. Only token counts
-are recorded, never your prompts.
+cost. The default gateway telemetry records identities, models and usage, not
+prompt or reply bodies. Your organisation may separately enable client content
+capture to its own collector. Ask for its privacy/retention notice; local
+conversation history and connected tools can also contain your prompts.
 
 ---
 
@@ -173,9 +205,11 @@ are recorded, never your prompts.
 | Symptom | Cause → Fix |
 |---|---|
 | `401` / "Entra ID token required" | Signed into the wrong tenant. Re-run the setup script — it pins the right one |
-| `403` "Not entitled to Claude Code" | Not in the group, or membership not synced yet. Ping the platform team |
-| `429` | Per-minute budget hit. Resets within a minute; Claude Code retries automatically |
-| `DeploymentNotFound` | A model alias points at something we do not host. Use only `claude-sonnet-5` / `claude-opus-5` |
+| `403` "Not entitled to Claude Code" | Not in the group, or membership not synced yet. Contact the platform team |
+| `403` naming a personal, organisation, unit or team budget | The named budget is exhausted. Ask its owner; changing your tier does not bypass an organisation or unit ceiling |
+| `429` | Honour `Retry-After`. It may be a request/token limit, projection miss admission or Foundry capacity; the platform team can distinguish them |
+| `503` naming entitlement or an expired projection | A platform sync/resolver issue, not a request for a new API key. Send the time and redacted error to the platform team |
+| `DeploymentNotFound` / `model_not_allowed` | Ask for the actual deployed and permitted model names. Do not add a catalogue of models to settings |
 | Extension prompts for Anthropic sign-in | Settings not picked up — reload the VS Code window |
 | Desktop asks for an Anthropic password | You picked Google or email. Sign out, quit completely, reopen, choose **Or sign in with Gateway** |
 | Desktop works but your usage never appears in your team's report | Same cause — you are signed into Anthropic, not the gateway. Check **Settings → Connection** names your gateway URL |
@@ -185,6 +219,9 @@ are recorded, never your prompts.
 | Panel fails but the CLI works | The extension host is running an older build. **Developer: Reload Window** in each open window |
 
 Anything else → [docs/DEBUGGING.md](docs/DEBUGGING.md), or your platform team.
+Include client/version, UTC time, gateway host, status and redacted error.
+Never send a token, config with credentials, prompt content or full debug logs
+to a public issue.
 
 ---
 
@@ -200,6 +237,9 @@ Claude Code reads four places, lowest to highest:
 | 2 | `.claude/settings.json` in the project folder |
 | 3 | `.claude/settings.local.json` in the project folder |
 | 4 | command-line arguments |
+
+Enterprise managed policy can constrain all of these. `/status` shows the
+managed source; ask the platform owner rather than trying to override it.
 
 A **correct** user file is simply ignored while a project one sets the same
 values, and nothing tells you that is happening — the error names a model you
@@ -236,13 +276,16 @@ on, and the gateway configuration has nowhere to live without it. The setup
 script writes it for you; there is nothing to switch on by hand.
 
 **Do I have to re-run the setup when my token expires?**
-No. The credential helper refreshes it silently. You only re-run setup if the
-gateway URL changes or you move to a different machine.
+Normally no. The helper gets a fresh token from your Azure CLI sign-in.
+If that session is revoked, expires or needs a new Conditional Access/MFA
+challenge, run `az login --tenant <tenant-id>` again. Setup is for configuration
+changes, not a substitute for sign-in.
 
 **What does my platform team see?**
-Token counts, the model, which client you used, and your name. Not your prompts
-and not the replies. Usage is recorded against your name, and its cost is
-allocated to the department or team your platform team has assigned you to.
+By default: token counts, the model, which client you used, and your name.
+Prompt/reply capture is a separate organisation-controlled client setting.
+Usage cost is allocated to the department or team your platform team has
+assigned you to. Ask what optional capture and retention policies apply.
 
 **I get 403 and I am definitely in the group.**
 Group membership is not available to the gateway the instant it changes — a sync
@@ -264,7 +307,7 @@ Only needed if you cannot run the script, or you are checking what it did.
 otherwise, and the gateway rejects the token:
 
 ```powershell
-az login --tenant <your-tenant-id>
+az login --tenant <your-tenant-id> --allow-no-subscriptions
 az account show --query "{tenant:tenantId, user:user.name}" -o table
 ```
 
@@ -276,6 +319,11 @@ npm install -g @anthropic-ai/claude-code
 code --install-extension anthropic.claude-code
 ```
 
+**Client UI:** your approved software portal for the CLI/Azure CLI/Desktop;
+VS Code > Extensions > search `anthropic.claude-code` > Install for the
+extension. Use supported client versions from those distribution channels.
+The remaining file edits use a local editor, not the Azure portal.
+
 **3. Write Claude Code's settings file.** It lives in your home directory, so
 the path is the same on every platform:
 
@@ -285,7 +333,9 @@ the path is the same on every platform:
 | macOS | `~/.claude/settings.json` |
 | Linux | `~/.claude/settings.json` |
 
-Take the gateway URL from your `claude-gateway.json`:
+Take the gateway URL from your `claude-gateway.json`. Back up the existing file
+and merge these keys; do not discard unrelated settings. Replace model names
+with the deployments your platform team permits:
 
 ```json
 {
@@ -306,8 +356,8 @@ Two traps the script handles for you:
 - Do **not** also set `ANTHROPIC_FOUNDRY_RESOURCE`. It is mutually exclusive
   with the base URL, and the session dies with
   `baseURL and resource are mutually exclusive`
-- Point the **haiku** alias at Sonnet. Most tenants have no Haiku deployment,
-  and the failure otherwise surfaces mid-task as `DeploymentNotFound`
+- Point the **haiku** alias at an allowed deployment. If no Haiku deployment is
+  available, an allowed Sonnet deployment avoids a mid-task `DeploymentNotFound`
 
 **4. VS Code usually needs nothing more.** The extension reads the same
 `~/.claude/settings.json`, and its own setting description says to prefer it
@@ -368,11 +418,24 @@ Start-Sleep 2
 @(Get-Process -Name 'Claude' -ErrorAction SilentlyContinue).Count    # must be 0
 ```
 
-To start from nothing, delete the library and let these steps recreate it:
+Back up the profile before editing it. Do not delete the profile library as a
+routine troubleshooting step:
 
 ```powershell
-Remove-Item "$env:LOCALAPPDATA\Claude-3p\configLibrary" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$env:APPDATA\Claude\developer_settings.json" -Force -ErrorAction SilentlyContinue
+$backup = Join-Path .\backups ('desktop-profile-' + (Get-Date -Format yyyyMMdd-HHmmss))
+New-Item -ItemType Directory -Path $backup -Force | Out-Null
+Copy-Item "$env:LOCALAPPDATA\Claude-3p\configLibrary" $backup -Recurse -ErrorAction SilentlyContinue
+Copy-Item "$env:APPDATA\Claude\developer_settings.json" $backup -ErrorAction SilentlyContinue
+```
+
+If the profile library is corrupt, first inspect that backup and confirm it is
+readable. An optional **profile reset** removes saved connection profiles (not a
+conversation-history backup); do this only after completely quitting Desktop:
+
+```powershell
+if ((Read-Host 'Type RESET to remove saved Desktop connection profiles') -ceq 'RESET') {
+    Remove-Item "$env:LOCALAPPDATA\Claude-3p\configLibrary" -Recurse -Force
+}
 ```
 
 Developer settings, or there is no **Settings → Connection** to look at:
@@ -395,7 +458,15 @@ token, so deleting them breaks Desktop at the next refresh rather than
 immediately, which reads as an intermittent fault. Point the profile at the
 **`.cmd`**; it is a shim that runs the `.ps1` beside it.
 
-Prove the helper works before Desktop depends on it. `CLAUDE_FOUNDRY_TENANT_ID`matters for guests and anyone in more than one directory — without it a bare
+When configuring by hand, copy both files to that persistent directory first:
+
+```powershell
+New-Item -ItemType Directory "$env:LOCALAPPDATA\ClaudeFoundry" -Force | Out-Null
+Copy-Item .\scripts\get-foundry-token.ps1, .\scripts\get-foundry-token.cmd "$env:LOCALAPPDATA\ClaudeFoundry"
+```
+
+Prove the helper works before Desktop depends on it. `CLAUDE_FOUNDRY_TENANT_ID`
+matters for guests and anyone in more than one directory — without it a bare
 `az login` lands in the home tenant and the token is refused downstream:
 
 ```powershell
@@ -441,7 +512,32 @@ that bite:
 - If Desktop asks for an Anthropic password you have taken the wrong sign-in.
   Quit completely, reopen, and choose **Or sign in with Gateway**.
 
+### Configure Desktop manually on macOS
+
+1. Quit Desktop from its menu-bar icon. Back up its existing profile files.
+2. Copy `scripts/get-foundry-token.sh` to `~/.claude-foundry/` and make it
+   executable (`chmod +x`). Keep it there for later token refreshes.
+3. In `~/Library/Application Support/Claude/developer_settings.json`, merge
+   `"allowDevTools": true` using a text editor.
+4. In `~/Library/Application Support/Claude-3p/configLibrary/`, use the same
+   `_meta.json`/profile-ID pairing and profile keys as the Windows example above.
+   Replace `inferenceCredentialHelper` with the absolute path to the `.sh`
+   helper, not a Windows `.cmd`, and use your gateway and deployment names.
+   `uuidgen` supplies a new profile ID if none exists.
+5. Sign in with `az login --tenant <tenant-id> --allow-no-subscriptions`, then
+   reopen Desktop, choose **Or sign in with Gateway**, and verify
+   Settings > Connection and a short prompt.
+
+No Azure portal step is required. For tenant pinning on a GUI-launched Mac,
+do not assume shell exports reach Desktop: ask the platform team to distribute
+the helper environment or an approved wrapper that sets the tenant before
+invoking the helper.
+
 ### Letting Desktop do the sign-in itself
+
+**Platform-admin alternative, not the normal developer path.** The following
+registration/consent steps require Entra application permissions. A developer
+without them should use the existing Azure CLI helper above.
 
 Everything above hands the sign-in to the Azure CLI. Desktop can instead run
 its own browser sign-in, under **Settings → Connection → Configure third-party
@@ -483,6 +579,13 @@ az ad app permission add --id <app-id> `
 az ad app permission admin-consent --id <app-id>
 ```
 
+**Portal (platform owner):** Entra ID > App registrations > New registration >
+single tenant; Authentication > Mobile and desktop applications > add the
+loopback redirect and enable public-client flows. API permissions > Microsoft
+Cognitive Services > Delegated permissions > `user_impersonation`. An authorised
+tenant administrator grants consent if required. The two GUIDs above are
+Microsoft's published application/scope identifiers, not customer tenant IDs.
+
 ### Signing in without a browser
 
 `az login` opens a browser, which a jump box, VDI session or SSH connection
@@ -490,7 +593,7 @@ does not have. Both the setup script and the credential helper can print a code
 to use on another machine instead:
 
 ```powershell
-.\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json -Auth device
+.\scripts\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json -Auth device
 
 # and for the helper, which signs in again when its cached token expires
 [Environment]::SetEnvironmentVariable('CLAUDE_FOUNDRY_AUTH','device','User')

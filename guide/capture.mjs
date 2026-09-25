@@ -13,16 +13,26 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { annotate, resolveTargets } from './lib/annotate.mjs';
+import { discoverTargets } from './lib/azure-targets.mjs';
+import { Redactor, capturePixels } from './lib/turnstile-live.mjs';
 
 const PROFILE = path.resolve('.pw-profile');
-const OUT = path.resolve('docs/guide');
+const OUT = path.resolve(process.env.GUIDE_OUTPUT ?? 'docs/guide');
 const ONLY = process.argv.slice(2).filter((a) => !a.startsWith('-'));
 
-const RESOURCE = process.env.FOUNDRY_RESOURCE ?? 'ai-contosohub530569751908';
-const RG = process.env.GATEWAY_RG ?? 'rg-contosohub';
-const APIM = process.env.APIM_NAME ?? 'apim-claude-gw-fzgql9';
-const SUB = process.env.AZURE_SUB ?? '';
-const TENANT = process.env.AZURE_TENANT ?? '';
+const needsAzure = !ONLY.length || ONLY.some((id) => !['a1-repo', 'b1-marketplace'].includes(id));
+const target = needsAzure ? await discoverTargets({
+  subscription: process.env.AZURE_SUB, resourceGroup: process.env.GATEWAY_RG,
+  apimName: process.env.APIM_NAME, foundry: process.env.FOUNDRY_RESOURCE,
+  appInsights: process.env.APP_INSIGHTS_NAME, required: ['apim', 'foundry', 'appInsights'],
+}) : null;
+const RG = target?.resourceGroup ?? '';
+const APIM = target?.apim?.name ?? '';
+const SUB = target?.subscriptionId ?? '';
+const TENANT = target?.tenantId ?? '';
+if (needsAzure && !process.env.REDACTIONS_FILE) throw new Error('Set REDACTIONS_FILE before capturing private portal resources');
+const redactor = new Redactor(process.env.REDACTIONS_FILE
+  ? JSON.parse(fs.readFileSync(process.env.REDACTIONS_FILE, 'utf8').replace(/^\uFEFF/, '')) : []);
 
 // Object id of the standard tier group, for the "add a member" capture.
 // Find it with: az ad group show --group claude-code-standard --query id -o tsv
@@ -30,8 +40,8 @@ const STD_GROUP_ID = process.env.STANDARD_GROUP_ID ?? '';
 
 const portal = (p) => `https://portal.azure.com/#@${TENANT}/resource${p}`;
 const apimId = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.ApiManagement/service/${APIM}`;
-const aiId = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Insights/components/appi-claude-gateway`;
-const foundryId = `/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.CognitiveServices/accounts/${RESOURCE}`;
+const aiId = target?.appInsights?.id ?? '';
+const foundryId = target?.foundry?.id ?? '';
 // Printed by Publish-ClaudeWorkbook.ps1 when it publishes the chargeback
 // workbook. It is a generated guid rather than a name, so it cannot be derived.
 const WORKBOOK_ID = process.env.CHARGEBACK_WORKBOOK_ID ?? '';
@@ -221,7 +231,11 @@ async function isSignedIn(page) {
   return page.url().includes('portal.azure.com') && !page.url().includes('login.microsoftonline');
 }
 
-const ctx = await chromium.launchPersistentContext(PROFILE, {
+const wanted = STEPS.filter((s) => !ONLY.length || ONLY.includes(s.id));
+const needAuth = wanted.some((s) => s.needsAuth);
+const publicBrowser = needAuth ? null : await chromium.launch({ headless: true });
+const ctx = publicBrowser ? await publicBrowser.newContext({ viewport: { width: 1600, height: 1000 } })
+  : await chromium.launchPersistentContext(PROFILE, {
   channel: 'msedge',
   headless: false,
   viewport: { width: 1600, height: 1000 },
@@ -231,13 +245,12 @@ const ctx = await chromium.launchPersistentContext(PROFILE, {
 const page = ctx.pages()[0] ?? (await ctx.newPage());
 fs.mkdirSync(OUT, { recursive: true });
 
-const wanted = STEPS.filter((s) => !ONLY.length || ONLY.includes(s.id));
-const needAuth = wanted.some((s) => s.needsAuth);
 const authed = needAuth ? await isSignedIn(page) : false;
 
 if (needAuth) {
-  console.log(authed ? 'portal session: active' : 'portal session: NONE — run `node guide/auth.mjs` first');
+  console.log(authed ? 'portal session: active' : 'portal sign-in required: stopped; report to the lead, do not sign in during capture');
   console.log('');
+  if (!authed) { await ctx.close(); process.exit(1); }
 }
 
 const done = [];
@@ -267,6 +280,11 @@ for (const step of wanted) {
 
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    if (step.needsAuth && /login\.microsoftonline\.com|login\.live\.com/.test(page.url())) {
+      console.log('  AUTH sign-in required; stopping portal capture without attempting sign-in');
+      skipped.push(step.id);
+      break;
+    }
     await page.waitForTimeout(step.settle ?? 8000);
 
     // A workbook resource id opens the ARM overview blade, not the rendered
@@ -304,33 +322,21 @@ for (const step of wanted) {
     // which is all the earlier captures needed. A workbook puts real people in
     // the middle of a table, and d2 shipped a live UPN the first time this ran.
     //
-    // Same rule as redact-entra.mjs so the two agree: first two characters,
-    // bullets, last two characters of the local part, domain left intact. That
-    // keeps the tenant visibly real - an accelerator whose evidence is all
-    // Contoso placeholders asks the reader to take it on trust - while removing
-    // enough to identify or contact anyone. Done in the DOM rather than with
-    // pixel boxes because here the text is still addressable, so nothing
-    // depends on a coordinate that a layout change would quietly move off.
+    // Whole identities become Contoso placeholders. Tenant domains are not retained.
     if (step.maskIdentity !== false) {
-      await page.evaluate(() => {
-        const maskLocal = (s) =>
-          s.length <= 4 ? s[0] + '\u2022'.repeat(Math.max(1, s.length - 1))
-                        : s.slice(0, 2) + '\u2022'.repeat(s.length - 4) + s.slice(-2);
-        const re = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+      await page.evaluate((rules) => {
+        const replace = (value) => {
+          for (const [source, flags, to] of rules) value = value.replace(new RegExp(source, flags), to);
+          return value.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+            '00000000-0000-0000-0000-000000000000');
+        };
         const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-        const hits = [];
-        while (walk.nextNode()) if (re.test(walk.currentNode.nodeValue)) hits.push(walk.currentNode);
-        for (const n of hits) {
-          n.nodeValue = n.nodeValue.replace(re, (m) => {
-            const at = m.lastIndexOf('@');
-            return maskLocal(m.slice(0, at)) + m.slice(at);
-          });
-        }
-        return hits.length;
-      }).catch(() => {});
+        while (walk.nextNode()) walk.currentNode.nodeValue = replace(walk.currentNode.nodeValue);
+      }, redactor.rules());
+      if (redactor.leaks(await page.locator('body').innerText()).length) throw new Error('A real identifier survived; refusing the screenshot');
     }
 
-    const buf = await page.screenshot({ type: 'png' });
+    const buf = await capturePixels(page, `${step.id}.png`, redactor);
 
     await annotate(buf, path.join(OUT, `${step.id}.png`), {
       banner: step.banner,
@@ -349,3 +355,5 @@ console.log(`captured ${done.length}: ${done.join(', ') || '(none)'}`);
 if (skipped.length) console.log(`skipped  ${skipped.length}: ${skipped.join(', ')}`);
 
 await ctx.close();
+if (publicBrowser) await publicBrowser.close();
+if (skipped.length) process.exitCode = 1;

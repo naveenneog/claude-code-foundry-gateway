@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "id": "aum-service",
+  "kind": "flow",
+  "title": "Optional AUM service: one administrative authority",
+  "subtitle": "Merged P55 · independent of Turnstile and outside inference. The service enforces manager scope and write safety; API Management still enforces requests. Client integration is a separate contract.",
+  "width": 1280,
+  "height": 1284,
+  "outputs": ["docs/images/architecture/aum-service.png"],
+  "sources": ["infra/aum-service.bicep", "scripts/New-ClaudeAumEntraApp.ps1", "service/aum/function_app.py", "service/aum/openapi.yaml", "service/aum/aum_service/api.py", "service/aum/aum_service/auth.py", "service/aum/aum_service/service.py", "service/aum/aum_service/storage.py", "service/aum/aum_service/transactions.py", "service/aum/aum_service/workflows.py", "service/aum/aum_service/notifications.py", "service/aum/aum_service/queries.py"],
+  "identifiers": {
+    "access": { "label": "AUM.Access", "source": "service/aum/aum_service/auth.py", "match": "\"AUM.Access\" not in scope.split()" },
+    "roles": { "label": "AUM.Admin > AUM.Viewer > AUM.Manager", "source": "scripts/New-ClaudeAumEntraApp.ps1", "match": "foreach ($name in @('Admin','Viewer','Manager'))" },
+    "groups": { "label": "ApplicationGroup", "source": "scripts/New-ClaudeAumEntraApp.ps1", "match": "groupMembershipClaims='ApplicationGroup'" },
+    "verifier": { "label": "TokenVerifier", "source": "service/aum/aum_service/auth.py", "match": "class TokenVerifier:" },
+    "api": { "label": "Api.handle", "source": "service/aum/aum_service/api.py", "match": "def handle(self, method, path, params, raw_body, headers):" },
+    "service": { "label": "AumService", "source": "service/aum/aum_service/service.py", "match": "class AumService:" },
+    "scope": { "label": "manager_scope", "source": "service/aum/aum_service/service.py", "match": "\"manager_scope\": scope.profile()" },
+    "integration": { "label": "turnstile-integration", "source": "service/aum/aum_service/service.py", "match": "config.values.get(\"turnstile-integration\", \"\")" },
+    "apply": { "label": "apply_values", "source": "service/aum/aum_service/transactions.py", "match": "def apply_values(arm, snapshot, changes, check_lease):" },
+    "store": { "label": "AzureStore", "source": "service/aum/aum_service/storage.py", "match": "class AzureStore:" },
+    "table": { "label": "AumState", "source": "infra/aum-service.bicep", "match": "name: 'AumState'" },
+    "lease": { "label": "aum-control / gateway-writer", "source": "service/aum/aum_service/storage.py", "match": "\"aum-control\", \"gateway-writer\"" },
+    "expire": { "label": "expire_boosts", "source": "service/aum/function_app.py", "match": "def expire_boosts(" },
+    "warnings": { "label": "warning_thresholds", "source": "service/aum/function_app.py", "match": "def warning_thresholds(" },
+    "override": { "label": "admin_override", "source": "service/aum/aum_service/workflows.py", "match": "body.get(\"admin_override\", False)" },
+    "routing": { "label": "outboundVnetRouting.allTraffic", "source": "infra/aum-service.bicep", "match": "allTraffic: storagePrivate" }
+  },
+  "groups": [
+    { "x": 0, "y": 0, "w": 410, "h": 318, "tone": "teal", "title": "Customer Entra identity boundary" },
+    { "x": 452, "y": 0, "w": 828, "h": 318, "tone": "blue", "title": "Python Functions Flex Consumption · Entra bearer API" },
+    { "x": 0, "y": 364, "w": 1280, "h": 518, "tone": "purple", "title": "Administrative write boundary · service managed identity" }
+  ],
+  "nodes": [
+    { "id": "caller", "x": 16, "y": 62, "w": 378, "h": 232, "tone": "teal", "title": "1 · Assigned people only", "lines": [
+      "Azure CLI pre-authorized for [[access]]",
+      "[[roles]]",
+      "[[groups]] claims",
+      "No Graph application grant, client secret or developer console access."
+    ] },
+    { "id": "api", "x": 470, "y": 62, "w": 792, "h": 232, "tone": "blue", "compact": true, "title": "2 · Validate and resolve scope on the server", "lines": [
+      "[[api]] uses [[verifier]]: signature, pinned issuer/tenant, audience, expiry, person oid, delegated scope and role.",
+      "[[service]] resolves [[scope]] from stored manager mappings and current gateway configuration.",
+      "Null scope is unrestricted; an object, including empty lists, is scoped. Overage grants no group scope.",
+      "Function authLevel anonymous disables function-key reliance; it does not make the API unauthenticated."
+    ] },
+    { "id": "authority", "x": 16, "y": 426, "w": 378, "h": 228, "tone": "purple", "title": "3 · Refuse a second writer", "lines": [
+      "[[integration]] is checked.",
+      "If Turnstile owns governance or budgets, AUM service refuses gateway writes.",
+      "Choose one authority; do not disable this guard to connect another UI."
+    ] },
+    { "id": "write", "x": 454, "y": 426, "w": 378, "h": 228, "tone": "purple", "compact": true, "title": "4 · Audit, lease, write, verify", "lines": [
+      "[[apply]]",
+      "Durable audit intent before mutation",
+      "Renewed gateway-wide lease, fresh revisions and ARM ETags",
+      "Read-back; reverse compensation on failure. Never overwrite a later independent write."
+    ] },
+    { "id": "storage", "x": 892, "y": 426, "w": 372, "h": 228, "tone": "teal", "compact": true, "title": "5 · Keyless service storage", "lines": [
+      "[[store]]",
+      "[[table]]: manager maps, requests, boosts, warnings and audit",
+      "[[lease]]: writer lease",
+      "Blob Data Owner and Table Data Contributor on its own storage; no shared keys."
+    ] },
+    { "id": "gateway", "x": 16, "y": 704, "w": 600, "h": 154, "tone": "blue", "compact": true, "title": "6 · Existing APIM named-value contract", "lines": [
+      "Narrow named-value role; no gateway policy or network changes",
+      "Canonical serializers, 4,096-character limit, no truncation",
+      "Allocation is independent of budget mode; daily overrides reserve 31 days against a monthly parent."
+    ] },
+    { "id": "workflow", "x": 662, "y": 704, "w": 602, "h": 154, "tone": "purple", "compact": true, "title": "7 · Requests and expiring boosts", "lines": [
+      "Approval/rejection/escalation recheck scope and headroom.",
+      "Self-approval is denied. Explicit admin-only [[override]] needs a reason and audit flag, never bypasses headroom.",
+      "Unknown write outcomes require inspection, not automatic retry."
+    ] },
+    { "id": "timer", "x": 0, "y": 928, "w": 398, "h": 248, "tone": "purple", "title": "Timers, not always-on loops", "lines": [
+      "[[expire]]: every minute",
+      "Compare-and-restore expired boosts; retry overdue records later.",
+      "[[warnings]]: every 15 minutes",
+      "Idempotent warning records; email delivery is not implemented here."
+    ] },
+    { "id": "query", "x": 442, "y": 928, "w": 396, "h": 248, "tone": "blue", "title": "Bounded Log Analytics reads", "lines": [
+      "Log Analytics Reader on the selected workspace",
+      "Existing saved usage functions; server-side scope filters and keyset paging",
+      "Projection mode uses observed unambiguous request stamps, not the obsolete membership map."
+    ] },
+    { "id": "network", "x": 882, "y": 928, "w": 398, "h": 248, "tone": "teal", "compact": true, "title": "Explicit deployment choices", "lines": [
+      "Public Entra API or private endpoint",
+      "Private-storage choice: VNet integration + Blob/Table endpoints and DNS",
+      "[[routing]] for private storage",
+      "Zero/one warm instance, storage redundancy and telemetry are priced choices."
+    ] },
+    { "id": "boundary", "x": 0, "y": 1216, "w": 1280, "h": 68, "tone": "amber", "compact": true, "title": "Not a model gateway, not PostgreSQL, not a promise of 500,000 per-person overrides.", "lines": [] }
+  ],
+  "edges": [
+    { "from": "caller", "to": "api", "kind": "identity", "points": [[394, 174], [470, 174]] },
+    { "from": "api", "to": "authority", "kind": "control", "points": [[700, 294], [700, 340], [6, 340], [6, 534], [16, 534]] },
+    { "from": "authority", "to": "write", "kind": "control", "points": [[394, 534], [454, 534]] },
+    { "from": "write", "to": "storage", "kind": "data", "points": [[832, 534], [892, 534]] },
+    { "from": "write", "to": "gateway", "kind": "control", "points": [[552, 654], [552, 704]] },
+    { "from": "storage", "to": "workflow", "kind": "data", "points": [[1080, 654], [1080, 704]] },
+    { "from": "workflow", "to": "timer", "kind": "control", "points": [[800, 858], [800, 904], [198, 904], [198, 928]] }
+  ],
+  "notice": "This diagram describes the merged service contract, not an additional live manager or multi-writer test by the architecture packet. Inference stays at APIM/Foundry; application workflows and their audit history stay in the service's own storage."
+}
