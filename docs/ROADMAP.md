@@ -303,6 +303,11 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       governance), README from 710 to 278 lines, live names replaced by discovery commands, and
       `tests/Test-DocReferences.ps1` guarding links, anchors, scripts and parameters. Open: the
       portal walkthrough pictures, declared as capture specs for one batch after a fresh sign-in
+- [x] P58 architecture after every feature — ten diagrams from text sources under
+      `docs/architecture/`, rendered by one command with a hash manifest; `docs/ARCHITECTURE.md`
+      rewritten around them; an `AGENTS.md` rule that every feature packet updates its diagram;
+      and `tests/Test-Architecture.ps1` failing on drift, stale labels, or an Azure resource type
+      in no diagram. Open: the AUM and enterprise network diagrams from their packets
 - [x] P51 terminal FinOps, first release — `claude-finops`, nine terminal views and scriptable
       commands over one engine, backed by Turnstile, the gateway directly, or example data. Budget
       changes are previewed, rechecked against the server and never retried. Managers see only

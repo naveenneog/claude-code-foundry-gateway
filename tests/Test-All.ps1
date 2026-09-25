@@ -166,6 +166,7 @@ try {
     Invoke-Check 'Mutation shards preserve every case'     'Test-MutationShards.ps1'
     Invoke-Check 'Format strings parse and run'            'Test-FormatStrings.ps1'
     Invoke-Check 'Screenshots and the docs that show them' 'Test-Screenshots.ps1'
+    Invoke-Check 'Architecture sources, images and code agree' 'Test-Architecture.ps1'
     Invoke-Check 'Documentation links and commands'        'Test-DocReferences.ps1'
     Invoke-Check 'Portal capture specs and batch safety'   'Test-PortalCaptureSpecs.ps1'
     Invoke-Check 'Resolver - the entitlement read path'   'Test-Resolver.ps1'

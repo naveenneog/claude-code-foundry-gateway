@@ -41,6 +41,25 @@ against stale runs is being added with the modes, and a single queue-driven writ
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
 
+## P58 architecture generation, 2026-09-25
+
+Merged from `architecture` at `345a302`. Every diagram now comes from a text source under
+`docs/architecture/` (ten today: system, request path, governance apply, delegated management,
+projection freshness, terminal FinOps, Azure resource inventory, chargeback reports, budget modes
+and the AUM service), rendered by one command, `node guide/render-architecture.mjs`, with a
+manifest that records each source's hash. `docs/ARCHITECTURE.md` is rewritten around them, and the
+request-flow picture no longer claims "no database": it states what each profile adds.
+
+`AGENTS.md` now requires an architecture task in every feature packet: a packet that changes a
+component, data flow, identity, schedule or network path updates its source, re-renders, and
+updates the article, or records that nothing architectural changed. `tests/Test-Architecture.ps1`
+fails on drift: a source edited without re-rendering, an image without a source or a reference, a
+label naming a script, route or named value that no longer exists, or an Azure resource type in
+`infra/*.bicep` that appears in no diagram. 36 assertions with isolated mutations; 28 s.
+
+Pending: the AUM rename and the enterprise network topologies (their packets hand the diagram
+specifications over), and the portal pictures declared in `guide/captures/architecture.json`.
+
 ## P57 documentation review, 2026-09-24
 
 Merged at `0d0ac7c`, its last green commit. Eight reader journeys were walked with the guides

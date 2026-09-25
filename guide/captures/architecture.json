@@ -1,0 +1,220 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "id": "architecture-gateway-overview",
+      "output": "docs/images/architecture-live/gateway-overview.png",
+      "target": { "discover": "gateway", "selectionKey": "architecture-gateway" },
+      "blade": "/overview",
+      "waitFor": { "text": "Gateway URL" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-gateway-identity",
+      "output": "docs/images/architecture-live/gateway-identity.png",
+      "target": { "discover": "gateway", "selectionKey": "architecture-gateway" },
+      "blade": "/overview",
+      "waitFor": { "text": "Gateway URL" },
+      "clicks": [
+        { "text": "Security", "exact": true, "waitFor": { "text": "Managed identities", "exact": true } },
+        { "text": "Managed identities", "exact": true, "waitFor": { "text": "Object (principal) ID" } }
+      ],
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-gateway-named-values",
+      "output": "docs/images/architecture-live/gateway-named-values.png",
+      "target": { "discover": "gateway", "selectionKey": "architecture-gateway" },
+      "blade": "/overview",
+      "waitFor": { "text": "Gateway URL" },
+      "clicks": [
+        { "text": "APIs", "exact": true, "waitFor": { "text": "Named values", "exact": true } },
+        { "text": "Named values", "exact": true, "waitFor": { "text": "allow-standard" } }
+      ],
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE", "hideSelectors": ["input[readonly]"] }
+    },
+    {
+      "id": "architecture-gateway-apis",
+      "output": "docs/images/architecture-live/gateway-apis.png",
+      "target": { "discover": "gateway", "selectionKey": "architecture-gateway" },
+      "blade": "/overview",
+      "waitFor": { "text": "Gateway URL" },
+      "clicks": [
+        { "text": "APIs", "exact": true, "settle": 1000 },
+        { "selector": "text=\"APIs\" >> nth=-1", "waitFor": { "text": "Add API", "exact": true } }
+      ],
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-foundry-overview",
+      "output": "docs/images/architecture-live/foundry-overview.png",
+      "target": { "discover": "foundry", "selectionKey": "architecture-foundry" },
+      "blade": "/overview",
+      "waitFor": { "text": "API Kind" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-foundry-access",
+      "output": "docs/images/architecture-live/foundry-access.png",
+      "target": { "discover": "foundry", "selectionKey": "architecture-foundry" },
+      "blade": "/users",
+      "waitFor": { "text": "Role assignments", "exact": true },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-telemetry-workspace",
+      "output": "docs/images/architecture-live/telemetry-workspace.png",
+      "target": { "discover": "workspace", "selectionKey": "architecture-workspace" },
+      "blade": "/overview",
+      "waitFor": { "text": "Workspace ID" },
+      "settle": 2000,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-telemetry-tables",
+      "output": "docs/images/architecture-live/telemetry-tables.png",
+      "target": { "discover": "workspace", "selectionKey": "architecture-workspace" },
+      "blade": "/tables",
+      "waitFor": { "text": "ApiManagementGatewayLlmLog" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-resolver-authentication",
+      "output": "docs/images/architecture-live/resolver-authentication.png",
+      "target": { "discover": "resource", "resourceType": "Microsoft.Web/sites", "nameFilterEnv": "ARCHITECTURE_RESOLVER_FILTER", "selectionKey": "architecture-resolver" },
+      "blade": "/overview",
+      "waitFor": { "text": "Essentials" },
+      "clicks": [
+        { "text": "Settings", "exact": true, "waitFor": { "text": "Authentication", "exact": true } },
+        { "text": "Authentication", "exact": true, "waitFor": { "text": "Identity provider" } }
+      ],
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-resolver-networking",
+      "output": "docs/images/architecture-live/resolver-networking.png",
+      "target": { "discover": "resource", "resourceType": "Microsoft.Web/sites", "nameFilterEnv": "ARCHITECTURE_RESOLVER_FILTER", "selectionKey": "architecture-resolver" },
+      "blade": "/overview",
+      "waitFor": { "text": "Essentials" },
+      "clicks": [
+        { "text": "Settings", "exact": true, "waitFor": { "text": "Networking", "exact": true } },
+        { "text": "Networking", "exact": true, "waitFor": { "text": "Inbound traffic configuration" } }
+      ],
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-projection-networking",
+      "output": "docs/images/architecture-live/projection-networking.png",
+      "target": { "discover": "resource", "resourceType": "Microsoft.DocumentDB/databaseAccounts", "nameFilterEnv": "ARCHITECTURE_COSMOS_FILTER", "selectionKey": "architecture-projection" },
+      "blade": "/overview",
+      "waitFor": { "text": "Essentials" },
+      "clicks": [
+        { "text": "Settings", "exact": true, "waitFor": { "text": "Networking", "exact": true } },
+        { "text": "Networking", "exact": true, "waitFor": { "text": "Public network access" } }
+      ],
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-governance-apply-job",
+      "output": "docs/images/architecture-live/governance-apply-job.png",
+      "target": { "discover": "resource", "resourceType": "Microsoft.App/jobs", "nameFilterEnv": "ARCHITECTURE_APPLY_JOB_FILTER", "selectionKey": "architecture-apply-job" },
+      "blade": "/overview",
+      "waitFor": { "text": "Trigger Type" },
+      "clicks": [
+        { "text": "Monitoring", "exact": true, "waitFor": { "text": "Execution history", "exact": true } },
+        { "text": "Execution history", "exact": true, "waitFor": { "text": "Recent executions" } }
+      ],
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-turnstile-app-roles",
+      "output": "docs/images/architecture-live/turnstile-app-roles.png",
+      "target": { "discover": "entra-app", "nameFilterEnv": "ARCHITECTURE_TURNSTILE_APP_FILTER", "selectionKey": "architecture-turnstile-app" },
+      "entraBlade": { "kind": "app-registration", "name": "AppRoles" },
+      "waitFor": { "text": "Turnstile.Admin" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-reports-generator-job",
+      "output": "docs/images/architecture-live/reports-generator-job.png",
+      "target": { "discover": "resource", "resourceType": "Microsoft.App/jobs", "nameFilterEnv": "ARCHITECTURE_REPORT_GENERATOR_FILTER", "selectionKey": "architecture-report-generator" },
+      "blade": "/overview",
+      "waitFor": { "text": "Cron expression" },
+      "clicks": [
+        { "text": "Monitoring", "exact": true, "waitFor": { "text": "Execution history", "exact": true } },
+        { "text": "Execution history", "exact": true, "waitFor": { "text": "Recent executions" } }
+      ],
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-reports-dispatcher-job",
+      "output": "docs/images/architecture-live/reports-dispatcher-job.png",
+      "target": { "discover": "resource", "resourceType": "Microsoft.App/jobs", "nameFilterEnv": "ARCHITECTURE_REPORT_DISPATCHER_FILTER", "selectionKey": "architecture-report-dispatcher" },
+      "blade": "/overview",
+      "waitFor": { "text": "Trigger Type" },
+      "clicks": [
+        { "text": "Monitoring", "exact": true, "waitFor": { "text": "Execution history", "exact": true } },
+        { "text": "Execution history", "exact": true, "waitFor": { "text": "Recent executions" } }
+      ],
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-reports-admin-job",
+      "output": "docs/images/architecture-live/reports-admin-job.png",
+      "target": { "discover": "resource", "resourceType": "Microsoft.App/jobs", "nameFilterEnv": "ARCHITECTURE_REPORT_ADMIN_FILTER", "selectionKey": "architecture-report-admin" },
+      "blade": "/overview",
+      "waitFor": { "text": "Trigger Type" },
+      "clicks": [
+        { "text": "Monitoring", "exact": true, "waitFor": { "text": "Execution history", "exact": true } },
+        { "text": "Execution history", "exact": true, "waitFor": { "text": "Recent executions" } }
+      ],
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-reports-networking",
+      "output": "docs/images/architecture-live/reports-networking.png",
+      "target": { "discover": "resource", "resourceType": "Microsoft.Storage/storageAccounts", "tags": { "claude-chargeback-owner": "P50" }, "selectionKey": "architecture-report-storage" },
+      "blade": "/overview",
+      "waitFor": { "text": "Essentials" },
+      "clicks": [
+        { "text": "Security + networking", "exact": true, "waitFor": { "text": "Networking", "exact": true } },
+        { "text": "Networking", "exact": true, "waitFor": { "text": "Public network access" } }
+      ],
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-reports-email",
+      "output": "docs/images/architecture-live/reports-email.png",
+      "target": { "discover": "resource", "resourceType": "Microsoft.Communication/communicationServices", "tags": { "claude-chargeback-owner": "P50" }, "selectionKey": "architecture-report-email" },
+      "blade": "/overview",
+      "waitFor": { "text": "Endpoint" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "architecture-turnstile-database",
+      "output": "docs/images/architecture-live/turnstile-database.png",
+      "target": { "discover": "resource", "resourceType": "Microsoft.DBforPostgreSQL/flexibleServers", "nameFilterEnv": "ARCHITECTURE_TURNSTILE_DATABASE_FILTER", "selectionKey": "architecture-turnstile-database" },
+      "blade": "/overview",
+      "waitFor": { "text": "Server name" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    }
+  ]
+}

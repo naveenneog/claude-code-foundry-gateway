@@ -1,0 +1,285 @@
+{
+  "version": 1,
+  "diagrams": [
+    {
+      "id": "system-overview",
+      "source": "docs/architecture/01-system.json",
+      "inputs": {
+        "analytics/chargeback-cost.kql": "8d8a66a8980348851f37889579bf019666b229105bb4e64caae02c474de080b1",
+        "analytics/chargeback-ledger.kql": "65b0b2942ed548bfb1bd2a192de6854aa86464c441401d9e5ba1a605c2ba692b",
+        "docs/architecture/01-system.json": "6ed17d4394fc3de2e6e040626ef125b229ff2d49f26bbca9ec43cc249d5b05d0",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/foundry-role.bicep": "96a1602ea171dfcd975bb5b7e0f18a1b32f1e9e6d74e306298836b518db72d50",
+        "infra/main.bicep": "7dd06134ac7199f42a9e4894b33f7ef028064d355d750c1af689bdce01a8597b",
+        "infra/policy.xml": "0fc8ce021143a12ff729efa04fecc8e910c5e1e4e0086954fa6e4cc769b08874",
+        "infra/projection-network.bicep": "129f88bebc796ea1c0b5369c4e4f63afaf318f539f4f660d735be5b946946af1",
+        "infra/projection.bicep": "dae83ef1bfe60675e49e50ddf7c795c15d9868ea9a9c72e924a4593a208a8a91",
+        "infra/resolver.bicep": "d90c34a0d2b77bfaf0a7589f093ef9e32de1356d4f2cafb1a6180f6966c01f6f",
+        "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "resolver/src/index.mjs": "b6b755fbbc56ef62e7b535a4bde2756111c2b5fc9913c16a893b45cb6dce33a3",
+        "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
+        "scripts/ClaudeTurnstileGovernance.ps1": "ec6eb0fbcfabbe9c13eab90c2f652fb89350110d9a8d97a10e8a1e4fe21c18f5",
+        "scripts/Connect-ClaudeTurnstile.ps1": "a698919454b1fcf0715346bd26b0af0d9782c357fade14c4f4b2c7ee90535a19",
+        "scripts/Export-ClaudeTurnstileUsage.ps1": "8976d8891fce6c355d6645be743655a75828541b201254b009c4f12089764b43",
+        "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "eb7f4cd920c4c4b1caca61baf24c63a221078cb0fa23382027a002e2e329707b",
+        "scripts/Publish-ClaudeQueries.ps1": "950aa4b399ef72be4d35335d26462e435f365900d6a5cc1415d2e0c53003d667",
+        "scripts/Setup-ClaudeWorkstation.ps1": "52eb88794e60be9b3d5001090d582956e192b50efc7ec03d5eb8c373c41d2167",
+        "scripts/Sync-ClaudeAccess.ps1": "e460190d4c8453059295b1937aad28a1523df42c412db65c69c4d9792b2754f6",
+        "scripts/Sync-ClaudeProjection.ps1": "ddbd769cb42acd5290db364633441ca5f73af9de980d1ef3d596c299e37ffe8e",
+        "scripts/get-foundry-token.ps1": "253049bb1d9c2066e9d1dcfeea4f1033d6f81569c222163a2db3777d46875ba4",
+        "sync/src/apply-projection.mjs": "7ffef6a6c7c1dd6fcc35db219968ce2cab132daa1dc4131f2a200c6d54d344af"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/system-overview.png",
+          "sha256": "2874037c7a39dd22ac67a76442b1a22639ea9914633a3b2932d53854054657b8"
+        },
+        {
+          "path": "docs/images/architecture.png",
+          "sha256": "2874037c7a39dd22ac67a76442b1a22639ea9914633a3b2932d53854054657b8"
+        }
+      ]
+    },
+    {
+      "id": "request-path",
+      "source": "docs/architecture/02-request.json",
+      "inputs": {
+        "analytics/chargeback-ledger.kql": "65b0b2942ed548bfb1bd2a192de6854aa86464c441401d9e5ba1a605c2ba692b",
+        "docs/architecture/02-request.json": "32b899dc11efab1bfafda4b4666bb7340c3a55a3ed9b4645900636227591f287",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/main.bicep": "7dd06134ac7199f42a9e4894b33f7ef028064d355d750c1af689bdce01a8597b",
+        "infra/policy.xml": "0fc8ce021143a12ff729efa04fecc8e910c5e1e4e0086954fa6e4cc769b08874",
+        "infra/projection.bicep": "dae83ef1bfe60675e49e50ddf7c795c15d9868ea9a9c72e924a4593a208a8a91",
+        "infra/resolver.bicep": "d90c34a0d2b77bfaf0a7589f093ef9e32de1356d4f2cafb1a6180f6966c01f6f",
+        "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "resolver/src/entitlement.mjs": "8d5596f280e2dfa63ca73a729fb175ee202c3caebc9ef346a72da755fa5234ce",
+        "scripts/Publish-ClaudeQueries.ps1": "950aa4b399ef72be4d35335d26462e435f365900d6a5cc1415d2e0c53003d667",
+        "scripts/get-foundry-token.ps1": "253049bb1d9c2066e9d1dcfeea4f1033d6f81569c222163a2db3777d46875ba4"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/request-path.png",
+          "sha256": "86bf6732289625cc62eb34a1f13317ca1649411b3e9244966f1936c56fd20f19"
+        },
+        {
+          "path": "docs/images/request-flow.png",
+          "sha256": "86bf6732289625cc62eb34a1f13317ca1649411b3e9244966f1936c56fd20f19"
+        }
+      ]
+    },
+    {
+      "id": "governance-apply",
+      "source": "docs/architecture/03-governance.json",
+      "inputs": {
+        "docs/architecture/03-governance.json": "02970234e05cc6655499e375e83e2e783236d82dd877b906bd1e7c58b8661237",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "scripts/ApimNamedValue.ps1": "4e12f047b61c586f215a66f73535708488c917b69e2163e6fa6f19253b77fe08",
+        "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
+        "scripts/Connect-ClaudeTurnstile.ps1": "a698919454b1fcf0715346bd26b0af0d9782c357fade14c4f4b2c7ee90535a19",
+        "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "eb7f4cd920c4c4b1caca61baf24c63a221078cb0fa23382027a002e2e329707b",
+        "scripts/Invoke-ClaudeTurnstileSchedule.ps1": "bd51af7bd733a2f7a8bda78fdca70fa60411ec831ef74ffbed7bda08861c4978",
+        "scripts/Sync-ClaudeAccess.ps1": "e460190d4c8453059295b1937aad28a1523df42c412db65c69c4d9792b2754f6",
+        "scripts/Sync-ClaudeProjection.ps1": "ddbd769cb42acd5290db364633441ca5f73af9de980d1ef3d596c299e37ffe8e",
+        "scripts/Sync-ClaudeTurnstileGovernance.ps1": "7f90c4d5f90d33c8082135fa5ece2a06a93b069b32f8441d580dd335ddd7b69e"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/governance-apply.png",
+          "sha256": "efc90568caacb1e11436681a625c2d1779f5c3447059775f00e471df5663f9c3"
+        }
+      ]
+    },
+    {
+      "id": "delegated-management",
+      "source": "docs/architecture/04-delegated-management.json",
+      "inputs": {
+        "docs/architecture/04-delegated-management.json": "0e13933e18a326b08f8d88db72fb693e65d884a5f0f0f333023a21de265a70e9",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "scripts/New-ClaudeTurnstileEntraApp.ps1": "0262606c6f2b747ae4dff7534c15d113099ff6fae06b40580eb62daffaf1db1d",
+        "scripts/Open-ClaudeTurnstile.ps1": "194a62ab3ed16a228f20f10d77c76dd31987890e587481c5c51a14ad96c7a393"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/delegated-management.png",
+          "sha256": "833316077de1e9fae3f8ca4658dfc4bedadb547f0b472ef0bf76fd86312f3ee1"
+        }
+      ]
+    },
+    {
+      "id": "projection-freshness",
+      "source": "docs/architecture/05-projection.json",
+      "inputs": {
+        "docs/architecture/05-projection.json": "150a1ba5debe6e7c5034c0fd32796a62357c5558855ad7498e96f79c02d4c56f",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/policy.xml": "0fc8ce021143a12ff729efa04fecc8e910c5e1e4e0086954fa6e4cc769b08874",
+        "infra/projection-network.bicep": "129f88bebc796ea1c0b5369c4e4f63afaf318f539f4f660d735be5b946946af1",
+        "infra/projection.bicep": "dae83ef1bfe60675e49e50ddf7c795c15d9868ea9a9c72e924a4593a208a8a91",
+        "infra/resolver.bicep": "d90c34a0d2b77bfaf0a7589f093ef9e32de1356d4f2cafb1a6180f6966c01f6f",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "resolver/src/entitlement.mjs": "8d5596f280e2dfa63ca73a729fb175ee202c3caebc9ef346a72da755fa5234ce",
+        "resolver/src/index.mjs": "b6b755fbbc56ef62e7b535a4bde2756111c2b5fc9913c16a893b45cb6dce33a3",
+        "resolver/src/lookup.mjs": "d04392c5eb24a8a084d72f1e5dc72a61fd385992039118aba510c266c3027c3b",
+        "scripts/Sync-ClaudeProjection.ps1": "ddbd769cb42acd5290db364633441ca5f73af9de980d1ef3d596c299e37ffe8e",
+        "sync/src/apply-projection.mjs": "7ffef6a6c7c1dd6fcc35db219968ce2cab132daa1dc4131f2a200c6d54d344af",
+        "sync/src/graph.mjs": "9a0b140879799dff181af18eb442718d5bbf38e2f45738a63bb377d9a7b36e69",
+        "sync/src/plan.mjs": "0308f40be47a72fe08e0748784399309bcfac8be6dbaa0bb8bb4a010bccfb15a"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/projection-freshness.png",
+          "sha256": "0cd45c346b000397ebda4795a5036c84567c10da57074258b1b79bd7d6d6dfc1"
+        }
+      ]
+    },
+    {
+      "id": "terminal-finops",
+      "source": "docs/architecture/06-finops.json",
+      "inputs": {
+        "analytics/chargeback-ledger.kql": "65b0b2942ed548bfb1bd2a192de6854aa86464c441401d9e5ba1a605c2ba692b",
+        "cli/finops/pyproject.toml": "692e2352b8859d1e71ebd1cb5af319df29abea1de73f2f1fd5e947d8ce073165",
+        "cli/finops/src/claude_finops/cli.py": "df9184c655841fd4daa658aff9e6d2f5b0427250e2d29411084cead3f16cf6ca",
+        "cli/finops/src/claude_finops/direct.py": "b6f63377f2ac839936e210b1e19a8577c6addbd01865756a128f91f8cd3d5076",
+        "cli/finops/src/claude_finops/engine.py": "1e5ad9d934367e46411752f72c06e53e54f18ad0eda9ed4d09aad4c84342f080",
+        "cli/finops/src/claude_finops/fake.py": "ad70af940650b1621bb95c66d5b7caabea9cc8dc8dfd48de111bdde9a87868f5",
+        "cli/finops/src/claude_finops/scope.py": "9e17c5590ba07b3ad72f384cd544f68a5eee5ef5cee39fb02e188419231b1e19",
+        "cli/finops/src/claude_finops/tui.py": "8d68ec5b3e3a5eedea3e27d03c858356347dfaa6e3b42f753c6618c0f9732c0f",
+        "cli/finops/src/claude_finops/turnstile.py": "20ac813e313ace9f693b8eab50efc51b53a9b9505896161b8bae2a8dde53cf45",
+        "docs/architecture/06-finops.json": "a695f9c8a88416cbb3743f30af4877dcddc7f212a4455befa8db736c81f5b77b",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "scripts/ApimNamedValue.ps1": "4e12f047b61c586f215a66f73535708488c917b69e2163e6fa6f19253b77fe08",
+        "scripts/Invoke-ClaudeFinOps.ps1": "33e003342bf91dd4fb03c242fb4a112f40f155c9182f4c193fdd9683bbe6d4cf",
+        "scripts/New-ClaudeTurnstileEntraApp.ps1": "0262606c6f2b747ae4dff7534c15d113099ff6fae06b40580eb62daffaf1db1d",
+        "scripts/Set-ClaudeTier.ps1": "6cee327ee047365894c21e2237ec37b9d35bda5885298098ff4d80a77132f092"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/terminal-finops.png",
+          "sha256": "37a819482fbbcf87a92f5381e796bb640d5dd16ecaa353a9c1601d37490352a4"
+        }
+      ]
+    },
+    {
+      "id": "azure-resource-inventory",
+      "source": "docs/architecture/07-resources.json",
+      "inputs": {
+        "docs/architecture/07-resources.json": "e8303bfee513fa9d9e6a61945ada86c24f85cc3ce80ca80e204b93deb3293118",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/aum-service.bicep": "727fc2001ea7fe3412038dbca429f0915c98bba935cf38abc01e6d8b7c5d4067",
+        "infra/chargeback-dns.bicep": "00f796c7ff57e7e81a7e7c41391cb083e1cace89933f8fc1b8018c02a210bcbf",
+        "infra/chargeback-reports.bicep": "8a3f09f34cbb332496d41f116ab450c7fa8f3892d788a489ffbb2d9334e7659d",
+        "infra/foundry-role.bicep": "96a1602ea171dfcd975bb5b7e0f18a1b32f1e9e6d74e306298836b518db72d50",
+        "infra/main.bicep": "7dd06134ac7199f42a9e4894b33f7ef028064d355d750c1af689bdce01a8597b",
+        "infra/projection-network.bicep": "129f88bebc796ea1c0b5369c4e4f63afaf318f539f4f660d735be5b946946af1",
+        "infra/projection.bicep": "dae83ef1bfe60675e49e50ddf7c795c15d9868ea9a9c72e924a4593a208a8a91",
+        "infra/resolver.bicep": "d90c34a0d2b77bfaf0a7589f093ef9e32de1356d4f2cafb1a6180f6966c01f6f",
+        "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/azure-resource-inventory.png",
+          "sha256": "3739527fe5add728ca262379428c54947e31f666de84fdb4a15701acd522ed11"
+        }
+      ]
+    },
+    {
+      "id": "chargeback-reports",
+      "source": "docs/architecture/08-chargeback-reports.json",
+      "inputs": {
+        "analytics/chargeback-cost.kql": "8d8a66a8980348851f37889579bf019666b229105bb4e64caae02c474de080b1",
+        "analytics/chargeback-ledger.kql": "65b0b2942ed548bfb1bd2a192de6854aa86464c441401d9e5ba1a605c2ba692b",
+        "docs/architecture/08-chargeback-reports.json": "6081e4f195e619c67b888221f5e88894c923aeb8306107fe4b97f99bedb1d358",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/chargeback-reports.bicep": "8a3f09f34cbb332496d41f116ab450c7fa8f3892d788a489ffbb2d9334e7659d",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "scripts/ClaudeChargebackAdministration.ps1": "146ca717a8b311119a4ae381ccabf4113a7e7e3f4062d9121ff4c823c8327499",
+        "scripts/ClaudeChargebackEmail.ps1": "da8678777a36a1988c67ece872d38a873383c41fe9104b0f9e4e85d87b25b2ca",
+        "scripts/ClaudeChargebackOutbox.ps1": "95997c31730c099bbedbd17b79c07a03e4ebd075d377a76fc436da753fb27f25",
+        "scripts/ClaudeChargebackQuery.ps1": "2dc713c7bd244848e206e09860b791a4a2c713639dd1516e4003fd56559d75a5",
+        "scripts/ClaudeChargebackStorage.ps1": "71d217a035d81f98c67170c006d4f6dfe0ffb42335981805132ff756d858bd4f",
+        "scripts/Invoke-ClaudeChargebackSchedule.ps1": "5dbdf4149255ec84dedb8d333d5e8e2acfda74eea7eb67f030300e1285bb7d42",
+        "scripts/Publish-ClaudeQueries.ps1": "950aa4b399ef72be4d35335d26462e435f365900d6a5cc1415d2e0c53003d667"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/chargeback-reports.png",
+          "sha256": "efc59eccca79898587d53b6fbc4d52b4a08bd1bb4cae6af7c02042df58362e1f"
+        }
+      ]
+    },
+    {
+      "id": "budget-modes",
+      "source": "docs/architecture/09-budget-modes.json",
+      "inputs": {
+        "docs/architecture/09-budget-modes.json": "930c68cb36cc05a0d0a6ed0b4713c802f5a1f959e6ae5fed9ea6c64a24d1cea6",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/main.bicep": "7dd06134ac7199f42a9e4894b33f7ef028064d355d750c1af689bdce01a8597b",
+        "infra/policy.xml": "0fc8ce021143a12ff729efa04fecc8e910c5e1e4e0086954fa6e4cc769b08874",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "scripts/ClaudeBudgetModes.ps1": "d27db15c9e257e2e923355978896737bb07cd2227135fa29625b003655f70946",
+        "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
+        "scripts/ClaudeTurnstileGovernance.ps1": "ec6eb0fbcfabbe9c13eab90c2f652fb89350110d9a8d97a10e8a1e4fe21c18f5",
+        "scripts/Set-ClaudeBusinessUnit.ps1": "9467a8b59a4166625cbba17c3fb434361be2499f97fdb9f5b30ca44118d7cbdd"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/budget-modes.png",
+          "sha256": "7a5825ed5817421c98170e6cb3d1af04f5a6800288a11ae9358e2f03a095dcb8"
+        }
+      ]
+    },
+    {
+      "id": "aum-service",
+      "source": "docs/architecture/10-aum-service.json",
+      "inputs": {
+        "docs/architecture/10-aum-service.json": "a9f5b3bce3412f6b605764a4b34864def038fa103fa9cf2729c13386d6870662",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/aum-service.bicep": "727fc2001ea7fe3412038dbca429f0915c98bba935cf38abc01e6d8b7c5d4067",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "scripts/New-ClaudeAumEntraApp.ps1": "489aa5051af325ca4d96e5b9123d29577195f08318976898a8a592aeea2a05fe",
+        "service/aum/aum_service/api.py": "8e37c33e339d8eed072b7f5c7a90ccf2617e57e9d15e8eb7fba7614431319dda",
+        "service/aum/aum_service/auth.py": "5b5b2beff81afd3d5aa7d7be47f5ee416f7bf2ef4ae2340e1c75a39634872249",
+        "service/aum/aum_service/notifications.py": "d4091b3797e03238504aa993eb67423e6b5e58d4fd8a08b076364f8c235eaf0d",
+        "service/aum/aum_service/queries.py": "588b4c0771e545a56d098285baeba3029450dd68f1b3d7360fa2d3db7b706548",
+        "service/aum/aum_service/service.py": "52fd82c478aeb6c3c883ff248013799206b9fb960a3b1d2151445aa52acfb1ad",
+        "service/aum/aum_service/storage.py": "1d7f5bb8aa828f8406b746161d18126951940ee78c6dfc4fe6889d243e6d6418",
+        "service/aum/aum_service/transactions.py": "606c7698df08f8e7de9e10605ef39eea0c50235590878ed0d4f1926781c138c0",
+        "service/aum/aum_service/workflows.py": "afe22a6e5bda94c73898d9b13eb500627349483195a0645405355a851d325128",
+        "service/aum/function_app.py": "a3f2e8a593b2c1e3cd88bb3898dbeb478fc56959dc1160654255b9c25a3b64f1",
+        "service/aum/openapi.yaml": "b1ed35132c32b0c511515c481e4c266f6d85ca5d739908694ceda342acf38fb6"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/aum-service.png",
+          "sha256": "b9c4599c9645bdc94b3ce272abc672963c6e9a8dd041ee7d0a06a6ad228da811"
+        }
+      ]
+    }
+  ]
+}

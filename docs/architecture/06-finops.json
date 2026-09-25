@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "id": "terminal-finops",
+  "kind": "flow",
+  "title": "AUM (Azure Usage Management)",
+  "subtitle": "Terminal FinOps console, command aum. Textual and Typer share one engine and three backends. This is an administrative client, not another gateway in the inference path.",
+  "width": 1280,
+  "height": 1154,
+  "outputs": ["docs/images/architecture/terminal-finops.png"],
+  "sources": ["scripts/New-ClaudeTurnstileEntraApp.ps1", "scripts/Set-ClaudeTier.ps1", "scripts/ApimNamedValue.ps1", "analytics/chargeback-ledger.kql", "cli/finops/pyproject.toml", "cli/finops/src/claude_finops/cli.py", "cli/finops/src/claude_finops/direct.py", "cli/finops/src/claude_finops/scope.py"],
+  "namingEvidence": {
+    "repository": "naveenneog/claude-code-foundry-gateway",
+    "revision": "a1f0836d14e41dc4c19e986bf033edf739fd0325",
+    "path": "cli/finops/pyproject.toml",
+    "status": "AUM command naming is staged on branch aum; the terminal implementation merged at c7f0a29.",
+    "excerpt": "[project.scripts]\naum = \"claude_finops.cli:main\"\nclaude-finops = \"claude_finops.cli:legacy_main\""
+  },
+  "identifiers": {
+    "app": { "label": "FinOpsApp", "source": "cli/finops/src/claude_finops/tui.py", "match": "class FinOpsApp(App):" },
+    "engine": { "label": "Engine", "source": "cli/finops/src/claude_finops/engine.py", "match": "class Engine:" },
+    "turnstile": { "label": "TurnstileBackend", "source": "cli/finops/src/claude_finops/turnstile.py", "match": "class TurnstileBackend(Backend):" },
+    "direct": { "label": "DirectBackend", "source": "cli/finops/src/claude_finops/direct.py", "match": "class DirectBackend(Backend):" },
+    "fake": { "label": "FakeBackend", "source": "cli/finops/src/claude_finops/fake.py", "match": "class FakeBackend(Backend):" },
+    "bridge": { "label": "Invoke-ClaudeFinOps.ps1", "source": "scripts/Invoke-ClaudeFinOps.ps1", "kind": "file" },
+    "scope": { "label": "Turnstile.Manage", "source": "scripts/New-ClaudeTurnstileEntraApp.ps1", "match": "[string]$ScopeValue = 'Turnstile.Manage'" },
+    "ledger": { "label": "chargeback-ledger.kql", "source": "analytics/chargeback-ledger.kql", "kind": "file" }
+  },
+  "groups": [
+    { "x": 0, "y": 0, "w": 1280, "h": 498, "tone": "slate", "title": "Operator's terminal · local process, not an authorization boundary" },
+    { "x": 0, "y": 858, "w": 396, "h": 294, "tone": "purple", "title": "Customer Turnstile services" },
+    { "x": 442, "y": 858, "w": 396, "h": 294, "tone": "blue", "title": "Customer Azure services" },
+    { "x": 884, "y": 858, "w": 396, "h": 294, "tone": "slate", "title": "Offline test boundary" }
+  ],
+  "nodes": [
+    { "id": "ui", "x": 16, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Textual terminal UI", "lines": ["[[app]]: tabs, search, preview and explicit apply", "Keyboard-first; 80 x 24 and larger terminals"] },
+    { "id": "commands", "x": 692, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Command aum · Typer", "lines": ["Scriptable nouns and verbs over the same operations", "claude-finops is retained as a deprecated alias by the naming packet."] },
+    { "id": "engine", "x": 248, "y": 272, "w": 784, "h": 202, "tone": "blue", "title": "One [[engine]]", "lines": [
+      "Current month, caller identity and scope; shared validation and budget arithmetic",
+      "Preview first. Explicit apply; confirm destructive changes.",
+      "Saved, pending, failed and verified are different states.",
+      "Local checks explain failures; the backend service still authorizes every request."
+    ] },
+    { "id": "turnstile", "x": 0, "y": 558, "w": 396, "h": 242, "tone": "purple", "title": "Turnstile HTTP backend", "lines": [
+      "[[turnstile]]",
+      "HTTPS + Azure CLI token for [[scope]]",
+      "Catalog, tiers, budgets, usage, people, requests and apply status",
+      "GET may refresh once; writes never retry."
+    ] },
+    { "id": "direct", "x": 442, "y": 558, "w": 396, "h": 242, "tone": "blue", "title": "Direct Azure backend", "lines": [
+      "[[direct]]",
+      "Azure CLI sign-in; ARM and Log Analytics",
+      "PowerShell bridge: [[bridge]]",
+      "Reuses gateway scripts and [[ledger]]; reads changes back."
+    ] },
+    { "id": "fake", "x": 884, "y": 558, "w": 396, "h": 242, "tone": "slate", "title": "Fake backend", "lines": [
+      "[[fake]]",
+      "Deterministic Contoso fixture data",
+      "Tests and terminal snapshots",
+      "Explicit selection only; never a fallback when a real service fails."
+    ] },
+    { "id": "server", "x": 16, "y": 920, "w": 364, "h": 206, "tone": "purple", "title": "Server-side roles and scope", "lines": [
+      "Turnstile API checks app roles and manager scope.",
+      "PostgreSQL holds console state.",
+      "The gateway's apply job later publishes governance to APIM."
+    ] },
+    { "id": "azure", "x": 458, "y": 920, "w": 364, "h": 206, "tone": "blue", "title": "Azure RBAC is authoritative", "lines": [
+      "ARM reads / writes permitted gateway named values.",
+      "Log Analytics answers usage queries.",
+      "Direct mode does not inherit a Turnstile manager's delegated scope."
+    ] },
+    { "id": "fixtures", "x": 900, "y": 920, "w": 364, "h": 206, "tone": "slate", "title": "No tenant or model calls", "lines": [
+      "No Azure credentials required.",
+      "Fixture writes stay in memory.",
+      "Tests exercise the same engine and both user-facing workflows."
+    ] }
+  ],
+  "edges": [
+    { "from": "ui", "to": "engine", "kind": "control", "points": [[400, 204], [400, 272]] },
+    { "from": "commands", "to": "engine", "kind": "control", "points": [[880, 204], [880, 272]] },
+    { "from": "engine", "to": "turnstile", "kind": "data", "points": [[370, 474], [370, 526], [198, 526], [198, 558]] },
+    { "from": "engine", "to": "direct", "kind": "data", "points": [[640, 474], [640, 558]] },
+    { "from": "engine", "to": "fake", "kind": "data", "points": [[910, 474], [910, 526], [1082, 526], [1082, 558]] },
+    { "from": "turnstile", "to": "server", "kind": "identity", "points": [[198, 800], [198, 830], [388, 830], [388, 1000], [380, 1000]] },
+    { "from": "direct", "to": "azure", "kind": "identity", "points": [[640, 800], [640, 830], [830, 830], [830, 1000], [822, 1000]] },
+    { "from": "fake", "to": "fixtures", "kind": "data", "points": [[1082, 800], [1082, 830], [1272, 830], [1272, 1000], [1264, 1000]] }
+  ],
+  "notice": "This sheet shows the terminal's three implemented backends. The separately deployed P55 AUM service has its own API/capability contract; do not infer a completed client adapter from its existence. A Turnstile person budget is not an APIM daily quota. Saved values do not prove enforcement; cost is estimated."
+}

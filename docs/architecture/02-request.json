@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "id": "request-path",
+  "kind": "flow",
+  "title": "One request, six governed hops",
+  "subtitle": "Claude Code, the VS Code extension and Claude Desktop share the gateway policy. The numbered hops explain the flow; telemetry arrives asynchronously after the request.",
+  "width": 1280,
+  "height": 1116,
+  "outputs": ["docs/images/architecture/request-path.png", "docs/images/request-flow.png"],
+  "sources": ["infra/main.bicep", "infra/policy.xml", "infra/resolver.bicep", "infra/projection.bicep", "infra/turnstile-schedule.bicep", "resolver/src/entitlement.mjs"],
+  "identifiers": {
+    "helper": { "label": "get-foundry-token.ps1", "source": "scripts/get-foundry-token.ps1", "kind": "file" },
+    "source": { "label": "entitlement-source", "source": "infra/policy.xml", "match": "{{entitlement-source}}" },
+    "bu-members": { "label": "bu-members", "source": "infra/policy.xml", "match": "{{bu-members}}" },
+    "bu-registry": { "label": "bu-registry", "source": "infra/policy.xml", "match": "{{bu-registry}}" },
+    "parents": { "label": "bu-parents", "source": "infra/policy.xml", "match": "{{bu-parents}}" },
+    "modes": { "label": "bu-modes", "source": "infra/policy.xml", "match": "{{bu-modes}}" },
+    "org": { "label": "quota-org", "source": "infra/policy.xml", "match": "{{quota-org}}" },
+    "standard": { "label": "quota-standard", "source": "infra/policy.xml", "match": "{{quota-standard}}" },
+    "premium": { "label": "quota-premium", "source": "infra/policy.xml", "match": "{{quota-premium}}" },
+    "override": { "label": "quota-overrides", "source": "infra/policy.xml", "match": "{{quota-overrides}}" },
+    "llm-log": { "label": "ApiManagementGatewayLlmLog", "source": "analytics/chargeback-ledger.kql", "match": "\nApiManagementGatewayLlmLog\n" },
+    "traces": { "label": "AppTraces", "source": "analytics/chargeback-ledger.kql", "match": "    AppTraces\n" },
+    "chargeback": { "label": "ClaudeChargeback()", "source": "scripts/Publish-ClaudeQueries.ps1", "match": "Alias   = 'ClaudeChargeback'" },
+    "request-id": { "label": "RequestId", "source": "infra/policy.xml", "match": "<metadata name=\"RequestId\"" },
+    "correlation-id": { "label": "CorrelationId", "source": "analytics/chargeback-ledger.kql", "match": "rid = tostring(CorrelationId)" },
+    "retry": { "label": "Retry-After", "source": "infra/policy.xml", "match": "<set-header name=\"Retry-After\"" },
+    "calls": { "label": "calls-per-minute", "source": "infra/policy.xml", "match": "{{calls-per-minute}}" },
+    "tpm-standard": { "label": "tpm-standard", "source": "infra/policy.xml", "match": "{{tpm-standard}}" },
+    "tpm-premium": { "label": "tpm-premium", "source": "infra/policy.xml", "match": "{{tpm-premium}}" }
+  },
+  "groups": [
+    { "x": 0, "y": 354, "w": 1280, "h": 230, "tone": "blue", "title": "Four budget layers, in policy order · up to four quotas for a team member" }
+  ],
+  "nodes": [
+    { "id": "signin", "x": 0, "y": 0, "w": 195, "h": 320, "tone": "teal", "compact": true, "eyebrow": "01 · caller", "title": "Sign in", "lines": [
+      "Azure CLI sign-in for people",
+      "Desktop: [[helper]]",
+      "Managed identity for automation",
+      "Entra token; signed oid"
+    ] },
+    { "id": "admit", "x": 217, "y": 0, "w": 195, "h": 320, "tone": "blue", "compact": true, "eyebrow": "02 · gateway", "title": "Admit", "lines": [
+      "Validate token and model",
+      "[[source]] selects lists or projection.",
+      "Tier, assigned unit or team; four budget layers",
+      "Rate ceilings also apply."
+    ] },
+    { "id": "serve", "x": 434, "y": 0, "w": 195, "h": 320, "tone": "teal", "compact": true, "eyebrow": "03 · model", "title": "Serve", "lines": [
+      "Customer's own Foundry Claude deployment",
+      "Gateway managed identity replaces caller token.",
+      "Stream returned to the client"
+    ] },
+    { "id": "meter", "x": 651, "y": 0, "w": 195, "h": 320, "tone": "blue", "compact": true, "eyebrow": "04 · resource log", "title": "Meter", "lines": [
+      "[[llm-log]]",
+      "Prompt + completion, model, correlation and streaming fields",
+      "No per-request cache breakdown"
+    ] },
+    { "id": "attribute", "x": 868, "y": 0, "w": 195, "h": 320, "tone": "purple", "compact": true, "eyebrow": "05 · trace", "title": "Attribute", "lines": [
+      "[[traces]]",
+      "User, tier, assigned unit / team and client",
+      "[[request-id]] joins the log's [[correlation-id]]."
+    ] },
+    { "id": "observe", "x": 1085, "y": 0, "w": 195, "h": 320, "tone": "slate", "compact": true, "eyebrow": "06 · readers", "title": "Observe", "lines": [
+      "Log Analytics",
+      "[[chargeback]]",
+      "Workbook and saved functions",
+      "Optional Grafana, Turnstile or AUM"
+    ] },
+    { "id": "org", "x": 16, "y": 408, "w": 290, "h": 154, "tone": "blue", "compact": true, "title": "1 · Organisation / month", "lines": ["[[org]]", "One shared counter on this gateway"] },
+    { "id": "team", "x": 336, "y": 408, "w": 290, "h": 154, "tone": "blue", "compact": true, "title": "2 · Assigned team / month", "lines": ["Budget in [[bu-registry]]", "[[bu-members]] or projection selects the team or direct unit."] },
+    { "id": "unit", "x": 656, "y": 408, "w": 290, "h": 154, "tone": "blue", "compact": true, "title": "3 · Parent unit / month", "lines": ["[[parents]] + [[bu-registry]]", "A direct unit member is charged once, not twice."] },
+    { "id": "person", "x": 976, "y": 408, "w": 288, "h": 154, "tone": "blue", "compact": true, "title": "4 · Person / day", "lines": ["[[standard]] / [[premium]]", "[[override]] replaces the tier's daily value."] },
+    { "id": "within", "x": 0, "y": 626, "w": 404, "h": 158, "tone": "teal", "compact": true, "title": "Projection miss · admitted", "lines": ["Within 100 concurrent and 200 misses/s: call the resolver, then admit only a valid entitlement.", "No record: ordinary 403, not an outage."] },
+    { "id": "busy", "x": 438, "y": 626, "w": 404, "h": 158, "tone": "amber", "compact": true, "title": "Admission exceeded · 429", "lines": ["Refuse before the resolver.", "[[retry]]: 1", "Retryable overload; access has not changed."] },
+    { "id": "expired", "x": 876, "y": 626, "w": 404, "h": 158, "tone": "amber", "compact": true, "title": "Expired record / fault · 503", "lines": ["No unexpired answer: fail closed.", "[[retry]]: 5", "Do not fall back to old membership lists."] },
+    { "id": "profiles", "x": 0, "y": 824, "w": 1280, "h": 292, "tone": "slate", "title": "What each deployment profile adds", "lines": [
+      "Default: API Management + Application Insights + Log Analytics; workbook and saved functions are definitions.",
+      "Projection: Cosmos DB + resolver Function + host storage + private networking; a separately run directory writer.",
+      "Turnstile: App Service + PostgreSQL + Event Hubs, supporting Functions / Storage / Key Vault, and Container Apps jobs.",
+      "AUM (Azure Usage Management): terminal FinOps console, command aum; local admin APIs, not an inference service. Rate controls remain [[tpm-standard]], [[tpm-premium]], [[calls]].",
+      "P50 reports: separate Consumption jobs, selected VNet/private Blob archive and configuration, and paced ACS Email; no Turnstile dependency.",
+      "P55 AUM service: optional Python Functions + Blob/Table state, scoped administrative APIs and timers; a separate authority, never an inference proxy."
+    ] }
+  ],
+  "edges": [
+    { "from": "signin", "to": "admit", "kind": "data", "points": [[195, 150], [217, 150]] },
+    { "from": "admit", "to": "serve", "kind": "data", "points": [[412, 150], [434, 150]] },
+    { "from": "serve", "to": "meter", "kind": "data", "points": [[629, 150], [651, 150]] },
+    { "from": "meter", "to": "attribute", "kind": "data", "points": [[846, 150], [868, 150]] },
+    { "from": "attribute", "to": "observe", "kind": "data", "points": [[1063, 150], [1085, 150]] }
+  ],
+  "notice": "Unit/team modes in [[modes]] can extend or skip that scope's limiter, not the other controls. Budgets remain approximate: the quota scalar omits cache; the recorded sample attributed 38.7% of cost weight to cache reads. Streaming and concurrency add uncertainty; no invoice ceiling or exact crossing is promised."
+}

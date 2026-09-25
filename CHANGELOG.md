@@ -54,6 +54,11 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   pre-authorized on Turnstile's API: the token is exchanged for a code that works once, within a
   minute. For tenants whose web sign-in has no consent yet (**U19**).
   [ADR-0016](docs/adr/0016-delegated-management.md).
+- **Architecture that cannot drift from the code.** Ten diagrams generated from text sources under
+  `docs/architecture/` by `node guide/render-architecture.mjs`, a rewritten `docs/ARCHITECTURE.md`,
+  and an `AGENTS.md` rule that every feature packet updates its diagram. `tests/Test-Architecture.ps1`
+  fails when a source changes without re-rendering, a label names something that no longer
+  exists, or an Azure resource type in `infra/*.bicep` appears in no diagram.
 - **Chargeback reports, generated and emailed per business unit.** `New-ClaudeChargebackReport.ps1
   -Month` writes each unit's CSV of its people and an HTML summary, reconciled to the month through
   an explicit Unassigned line, or fails. `Set-ClaudeChargebackRecipients.ps1` sets each unit's and

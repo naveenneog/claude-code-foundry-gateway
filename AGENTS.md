@@ -74,3 +74,12 @@ node .ironclad/gate.mjs --stage release     # + coverage floor, dependency audit
 
 Declared in `.ironclad/charter.json` under `architecture.boundaries` and enforced on every commit.
 An undeclared boundary is a preference, and preferences erode — if a rule matters, declare it there.
+
+### Architecture after every feature
+
+Every feature packet includes an architecture generation task. If it adds or changes a component,
+data flow, identity, schedule or network path, update its diagram source under `docs/architecture/`,
+run `node guide/render-architecture.mjs`, inspect the images, and update `docs/ARCHITECTURE.md`.
+Commit sources, images and the generated manifest together. `tests/Test-Architecture.ps1` runs in
+Test-All and rejects drift; the concept article explains how to add one new spec without changing
+the generator. A feature with no architectural change records that conclusion in its packet review.
