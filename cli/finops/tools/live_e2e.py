@@ -39,7 +39,7 @@ async def screenshot(engine, config, journal, stage, result):
         folder = ROOT / "docs" / "images" / "aum"
         name = f"{config.backend}-e2e-{stage}-{journal.folder.name[-8:]}.svg"
         entry = dict(file=name, source="live", backend=engine.backend.name, captured_at=utc(), redaction=True,
-                     commit=subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+                     commit=journal.data["source_commit"],
                      size=[110, 36], phase="after", tab="e2e", flow=stage)
         problems = validate_capture(app.export_screenshot(), entry)
         if problems:
@@ -67,6 +67,7 @@ async def journey(args):
     suffix = uuid4().hex[:8]
     unit, team = "aum-e2e-unit-" + suffix, "aum-e2e-team-" + suffix
     journal = Journal(ROOT / ".aum-evidence" / ("e2e-" + args.backend + "-" + suffix), args.backend, config)
+    journal.data["source_commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     arm, graph = GatewayState(config), EntraGroups()
     snapshot, original_catalog, created, mutated = None, None, [], False
     try:

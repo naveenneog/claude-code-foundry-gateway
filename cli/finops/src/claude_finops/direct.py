@@ -45,6 +45,13 @@ class DirectBackend(Backend):
                                      *(["-Subscription", self.config.subscription] if self.config.subscription else [])],
                                     capture_output=True, text=True, encoding="utf-8", timeout=300)
             if result.returncode:
+                try:
+                    detail = json.loads(result.stdout).get("error")
+                except ValueError:
+                    detail = None
+                if detail:
+                    from .redaction import mask_identifiers
+                    raise FinOpsError("Gateway script: " + mask_identifiers(detail), 7 if "manual recovery" in detail else 6)
                 if "manual recovery required" in result.stderr:
                     raise FinOpsError("Gateway change failed and rollback was incomplete or conflicted. Inspect named values; manual recovery is required. Do not repeat the save.", 7)
                 if "previous values restored and verified" in result.stderr:

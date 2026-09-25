@@ -13,13 +13,18 @@ param(
     [string]$Subscription
 )
 $ErrorActionPreference = 'Stop'
+trap {
+    @{ error=$_.Exception.Message; error_type=$_.Exception.GetType().Name } | ConvertTo-Json -Compress
+    exit 1
+}
 if ($Subscription) {
     $parsedSubscription = [guid]::Empty
     if (-not [guid]::TryParse($Subscription, [ref]$parsedSubscription)) { throw 'Subscription must be an object id.' }
     $aumDirectAzureExecutable = @(Get-Command az -CommandType Application -ErrorAction Stop)[0].Source
     $aumDirectSubscription = $Subscription
     function az {
-        & $aumDirectAzureExecutable @args --subscription $aumDirectSubscription
+        if ($args[0] -eq 'ad') { & $aumDirectAzureExecutable @args }
+        else { & $aumDirectAzureExecutable @args --subscription $aumDirectSubscription }
         $global:LASTEXITCODE = $LASTEXITCODE
     }
 }

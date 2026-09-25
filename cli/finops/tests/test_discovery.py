@@ -141,3 +141,25 @@ if ($selected -is [array] -or $selected -ne 'az-one') { exit 1 }
 """
     result = subprocess.run(["pwsh", "-NoProfile", "-Command", script], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_direct_wrapper_does_not_add_subscription_to_graph_ad_commands():
+    from pathlib import Path
+    import subprocess
+    bridge = Path(__file__).resolve().parents[3] / "scripts" / "Invoke-ClaudeFinOps.ps1"
+    script = r"""
+$ErrorActionPreference='Stop'
+$tokens=$null;$errors=$null
+$ast=[System.Management.Automation.Language.Parser]::ParseFile('_BRIDGE_',[ref]$tokens,[ref]$errors)
+$function=$ast.Find({param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'az'},$true)
+Invoke-Expression $function.Extent.Text
+function Fake-Az { $script:captured=@($args);$global:LASTEXITCODE=0 }
+$aumDirectAzureExecutable='Fake-Az'
+$aumDirectSubscription='00000000-0000-0000-0000-000000000001'
+az ad group show --group test
+if($script:captured -contains '--subscription'){throw 'Graph az ad commands do not accept subscription.'}
+az apim nv list
+if($script:captured -notcontains '--subscription'){throw 'ARM calls must keep the explicit subscription.'}
+"""
+    result = subprocess.run(["pwsh", "-NoProfile", "-Command", script.replace("_BRIDGE_", str(bridge))], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr

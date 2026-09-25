@@ -9,7 +9,8 @@ def group_call(engine, operation, *args, **kwargs):
     require_owner(engine.read("whoami"))
     if engine.backend.name == "Example" and not hasattr(engine, "group_factory"):
         raise FinOpsError("Example group operations need an explicit fake Graph client; no live Graph fallback is allowed.", 5)
-    client = getattr(engine, "group_factory", EntraGroups)()
+    factory = getattr(engine, "group_factory", None)
+    client = factory() if factory else EntraGroups(config=getattr(engine.backend, "config", None))
     try:
         return getattr(client, operation)(*args, **kwargs)
     finally:

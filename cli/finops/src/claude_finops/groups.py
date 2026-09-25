@@ -30,9 +30,10 @@ def encode_cursor(query, url):
 
 
 class EntraGroups:
-    def __init__(self, token_provider=None, transport=None):
+    def __init__(self, token_provider=None, transport=None, config=None):
+        selected = ("--tenant", config.tenant_id) if config and config.tenant_id else ()
         self.provider = token_provider or (lambda: az("account", "get-access-token", "--resource", GRAPH,
-                                                     "--query", "accessToken", "-o", "tsv"))
+                                                     "--query", "accessToken", "-o", "tsv", *selected))
         self.client = httpx.Client(base_url=GRAPH, timeout=60, follow_redirects=False, transport=transport)
         self.token = None
 

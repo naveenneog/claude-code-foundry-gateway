@@ -19,7 +19,7 @@ class FeatureEngine:
         config = getattr(self.backend, "config", None)
         subscription = getattr(config, "subscription", "")
         selected = ("--subscription", subscription) if subscription else ()
-        group_id = az("ad", "group", "show", "--group", group, "--query", "id", "-o", "tsv", *selected)
+        group_id = az("ad", "group", "show", "--group", group, "--query", "id", "-o", "tsv")
         try:
             group_id = str(UUID(group_id))
         except ValueError:
