@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "id": "turnstile-app-overview",
+      "output": "docs/guide/turnstile-entra-1-overview.png",
+      "target": { "discover": "entra-app", "nameFilterEnv": "TURNSTILE_APP_DISPLAY_FILTER", "selectionKey": "turnstile-app" },
+      "entraBlade": { "kind": "app-registration", "name": "Overview" },
+      "waitFor": { "text": "Application (client) ID" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "turnstile-expose-api",
+      "output": "docs/guide/turnstile-entra-2-expose-api.png",
+      "target": { "discover": "entra-app", "nameFilterEnv": "TURNSTILE_APP_DISPLAY_FILTER", "selectionKey": "turnstile-app" },
+      "entraBlade": { "kind": "app-registration", "name": "ProtectAnAPI" },
+      "waitFor": { "text": "Turnstile.Manage" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "turnstile-app-roles",
+      "output": "docs/guide/turnstile-entra-3-app-roles.png",
+      "target": { "discover": "entra-app", "nameFilterEnv": "TURNSTILE_APP_DISPLAY_FILTER", "selectionKey": "turnstile-app" },
+      "entraBlade": { "kind": "app-registration", "name": "AppRoles" },
+      "waitFor": { "text": "Turnstile.Admin" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "turnstile-enterprise-properties",
+      "output": "docs/guide/turnstile-t08-entra-config.png",
+      "target": { "discover": "entra-app", "nameFilterEnv": "TURNSTILE_APP_DISPLAY_FILTER", "selectionKey": "turnstile-app" },
+      "entraBlade": { "kind": "enterprise-application", "name": "Properties" },
+      "waitFor": { "text": "Assignment required" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "turnstile-enterprise-assignments",
+      "output": "docs/guide/turnstile-t09-entra-mutation.png",
+      "target": { "discover": "entra-app", "nameFilterEnv": "TURNSTILE_APP_DISPLAY_FILTER", "selectionKey": "turnstile-app" },
+      "entraBlade": { "kind": "enterprise-application", "name": "Users" },
+      "waitFor": { "text": "Turnstile administrator" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    }
+  ]
+}

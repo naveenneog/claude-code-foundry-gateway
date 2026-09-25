@@ -28,6 +28,9 @@
     ./scripts/Get-ClaudeTelemetry.ps1
 
 .EXAMPLE
+    (./scripts/Get-ClaudeTelemetry.ps1).Workspace   # the Log Analytics workspace behind it
+
+.EXAMPLE
     $appId = ./scripts/Get-ClaudeTelemetry.ps1 -Quiet
 #>
 [CmdletBinding()]
@@ -36,16 +39,20 @@ param(
     [string]$ApimName,
     [string]$ApiId = 'claude-foundry',
     [string]$AppInsightsName,
-    [switch]$Quiet
+    [switch]$Quiet,
+    # $null asks only in a console; $false never asks (for callers that must not block).
+    [object]$Interactive = $null
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 
 $sub = az account show --query id -o tsv 2>$null
 if (-not $sub) { throw 'Not signed in. Run: az login' }
+if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup -Interactive $Interactive }
 if (-not $ApimName) {
-    $ApimName = az apim list -g $ResourceGroup --query "[0].name" -o tsv 2>$null
-    if (-not $ApimName) { throw "No API Management instance in $ResourceGroup. Pass -ApimName." }
+    # The first instance in the group is a guess once there are two; ask instead.
+    $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup -ScriptRoot $PSScriptRoot -Interactive $Interactive
 }
 
 $token = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv 2>$null
@@ -93,10 +100,17 @@ if ($Quiet) { $component.properties.AppId; exit 0 }
 
 # metrics must be on, or llm-emit-token-metric emits nothing and every usage
 # report is silently empty.
+#
+# Workspace is the Log Analytics workspace this component writes to. It holds the
+# ledger, and it is the workspace Publish-ClaudeQueries.ps1 and
+# Publish-ClaudeWorkbook.ps1 mean by -WorkspaceName.
+$linkedWorkspace = [string]$component.properties.WorkspaceResourceId
 [pscustomobject]@{
-    Gateway         = $ApimName
-    AppInsights     = $componentName
-    AppId           = $component.properties.AppId
-    DiagnosticScope = $scope
-    MetricsEnabled  = [bool]$metrics
+    Gateway             = $ApimName
+    AppInsights         = $componentName
+    AppId               = $component.properties.AppId
+    DiagnosticScope     = $scope
+    MetricsEnabled      = [bool]$metrics
+    Workspace           = $(if ($linkedWorkspace) { ($linkedWorkspace -split '/')[-1] } else { $null })
+    WorkspaceResourceId = $(if ($linkedWorkspace) { $linkedWorkspace } else { $null })
 }

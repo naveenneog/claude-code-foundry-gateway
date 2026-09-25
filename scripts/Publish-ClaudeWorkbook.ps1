@@ -19,6 +19,12 @@
 .PARAMETER Name
     Display name in the portal. Defaults to "Claude gateway".
 
+.PARAMETER WorkspaceName
+    The Log Analytics workspace that holds the gateway's telemetry. Omit it to be shown the
+    workspace linked to the gateway's Application Insights, beside the other workspaces in
+    the resource group, and asked to choose. ./scripts/Get-ClaudeTelemetry.ps1 prints it as
+    Workspace.
+
 .PARAMETER List
     Show the Claude workbooks already published, and exit.
 
@@ -43,7 +49,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 if (-not $WorkbookFile) { $WorkbookFile = Join-Path $root 'infra/workbook.json' }
+if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
 
 function Get-Token {
     $t = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv 2>$null
@@ -88,16 +96,15 @@ if ($List) {
     exit 0
 }
 
+$chosenWorkspaceId = $null
 if (-not $WorkspaceName) {
-    $found = az monitor log-analytics workspace list -g $ResourceGroup --query "[].name" -o tsv 2>$null
-    $names = @($found -split "`n" | Where-Object { $_ })
-    if ($names.Count -eq 1) { $WorkspaceName = $names[0].Trim() }
-    elseif ($names.Count -eq 0) { throw "No Log Analytics workspace in '$ResourceGroup'. Pass -WorkspaceName." }
-    else {
-        throw ("$($names.Count) workspaces in '$ResourceGroup': " + ($names -join ', ') +
-               ". Pass -WorkspaceName to say which holds the gateway's telemetry - a workbook " +
-               "pointed at the wrong one renders empty and reads as no usage.")
-    }
+    # Recommends the workspace linked to the gateway's Application Insights, where its
+    # telemetry lands; asks in a console, and without one refuses rather than guess among
+    # several in the group.
+    $chosenWorkspaceId = Select-ClaudeWorkspace -ResourceGroup $ResourceGroup -ScriptRoot $PSScriptRoot -AmbiguousMessage (
+        "Pass -WorkspaceName to say which holds the gateway's telemetry - a workbook " +
+        "pointed at the wrong one renders empty and reads as no usage.")
+    $WorkspaceName = ($chosenWorkspaceId -split '/')[-1]
 }
 
 $workspaceId = "$rgScope/providers/Microsoft.OperationalInsights/workspaces/$WorkspaceName"
@@ -109,6 +116,11 @@ $workspaceId = "$rgScope/providers/Microsoft.OperationalInsights/workspaces/$Wor
 # workspace resources are selected" on every tile, which reads as a broken
 # dashboard rather than a malformed id.
 $workspaceArmId = "$armPath/providers/Microsoft.OperationalInsights/workspaces/$WorkspaceName"
+if ($chosenWorkspaceId) {
+    # Chosen from what the gateway points at, which can be in another resource group.
+    $workspaceArmId = $chosenWorkspaceId
+    $workspaceId = "https://management.azure.com$chosenWorkspaceId"
+}
 
 # Deterministic id from the display name, so re-running updates the workbook in
 # place rather than leaving a second copy beside the first.

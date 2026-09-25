@@ -14,10 +14,9 @@ function Assert($label, $condition, $detail = '') {
     else { Write-Host "  [FAIL] $label$(if ($detail) { " - $detail" })" -ForegroundColor Red; $script:fail++ }
 }
 
-# The reference deployment's names. Only the transcript capture tool may hold them: it
-# captures from that deployment on purpose, and its redaction table maps each to an example.
+# The reference deployment's names belong only in this detector, never runtime defaults.
 $reference = @('rg-contosohub', 'apim-claude-gw-fzgql9', 'ai-contosohub530569751908', 'log-claude-gw-fzgql9', 'appi-claude-gw-fzgql9')
-$allowed = @('scripts/Capture-Transcripts.ps1', 'tests/Test-NoDeploymentValues.ps1')
+$allowed = @('tests/Test-NoDeploymentValues.ps1')
 
 function Find-Reference([string[]]$Paths) {
     foreach ($f in $Paths) {
@@ -31,6 +30,7 @@ function Find-Reference([string[]]$Paths) {
 Write-Host 'No deployment in the code' -ForegroundColor Cyan
 
 $code = @(Get-ChildItem (Join-Path $root 'scripts'), (Join-Path $root 'tests') -Recurse -File -Include *.ps1) +
+    @(Get-ChildItem (Join-Path $root 'guide'), (Join-Path $root 'scripts') -Recurse -File -Filter *.mjs) +
     @(Get-ChildItem $root -File -Filter *.ps1) | ForEach-Object { $_.FullName }
 $found = @(Find-Reference $code)
 Assert 'no script or test names the reference deployment' (-not $found.Count) ($found -join '; ')
@@ -45,6 +45,16 @@ try {
     Assert 'and a planted name would be found'               ($control.Count -eq 1)
 }
 finally { Remove-Item $plant -ErrorAction SilentlyContinue }
+
+$mjsPlant = Join-Path ([IO.Path]::GetTempPath()) "nodeploy-$PID.mjs"
+try {
+    [IO.File]::WriteAllText($mjsPlant, "const defaultGateway = 'apim-claude-gw-fzgql9';")
+    $saved = $root; $root = [IO.Path]::GetTempPath().TrimEnd('\', '/')
+    $control = @(Find-Reference @($mjsPlant))
+    $root = $saved
+    Assert 'a planted .mjs deployment literal is caught' ($control.Count -eq 1)
+}
+finally { Remove-Item $mjsPlant -ErrorAction SilentlyContinue }
 
 Write-Host ''
 Write-Host 'Where the gateway is found' -ForegroundColor Cyan

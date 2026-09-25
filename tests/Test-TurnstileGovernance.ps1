@@ -372,7 +372,7 @@ function Get-ApimNamedValue { param($ResourceGroup, $ApimName, $Id) $script:gw[$
 function Set-ApimNamedValue { param($ResourceGroup, $ApimName, $Id, $Value) $script:writes++; if (-not $script:dropWrites) { $script:gw[$Id] = $Value } }
 function Test-ClaudeGraphGroupAccess { $script:graphState }
 function Test-ClaudeEntraGroup { param($Group) $directory[$Group.ToLowerInvariant()] }
-$stub = Join-Path $root "onboarding\turnstile-apply-$PID-$(Get-Random)"
+$stub = Join-Path ([IO.Path]::GetTempPath()) ('turnstile-apply-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $stub -Force | Out-Null
 Set-Content -Path (Join-Path $stub 'Sync-ClaudeAccess.ps1') -Value 'param($ApimName, $ResourceGroup, $StandardGroup, $PremiumGroup) Set-Content -Path (Join-Path $PSScriptRoot "refreshed.txt") -Value "$StandardGroup|$PremiumGroup"'
 $refreshed = Join-Path $stub 'refreshed.txt'

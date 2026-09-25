@@ -13,16 +13,16 @@ the operator pick a name, and reusing an existing API Management instance can pr
 different prefix from the original deployment.
 
 The result is that one resource group can hold several Application Insights workspaces that all
-look like the right one. The reference deployment has three: `appi-claude-gateway`,
-`appi-claudegw933092` and `appi-claude-gw-fzgql9`.
+look like the right one. The reference deployment has three: `<original-app-insights>`,
+`<second-app-insights>` and `<current-app-insights>`.
 
 `scripts/Get-ClaudeAnalytics.ps1` and `tests/Test-Analytics.ps1` shipped in P10 with
-`appi-claude-gateway` as a default, taken from `scripts/Show-Governance.ps1`.
+`<original-app-insights>` as a default, taken from `scripts/Show-Governance.ps1`.
 
 ## What went wrong
 
-On 2026-08-31 the gateway stopped writing metrics to `appi-claude-gateway` and started writing
-them to `appi-claude-gw-fzgql9`. The API-level diagnostic points at a logger named `appinsights`,
+On 2026-08-31 the gateway stopped writing metrics to `<original-app-insights>` and started writing
+them to `<current-app-insights>`. The API-level diagnostic points at a logger named `appinsights`,
 which resolves to the latter; the service-level diagnostic points at a different logger, which
 resolves to the former.
 

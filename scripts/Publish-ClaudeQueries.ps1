@@ -25,6 +25,16 @@
 .PARAMETER Remove
     Remove the published functions instead of publishing them.
 
+.PARAMETER WorkspaceName
+    The Log Analytics workspace that holds the gateway's telemetry. Omit it to be shown the
+    workspace linked to the gateway's Application Insights, beside the other workspaces in
+    the resource group, and asked to choose. ./scripts/Get-ClaudeTelemetry.ps1 prints it as
+    Workspace.
+
+.PARAMETER ApimName
+    The gateway, whose business unit membership ClaudeCost bakes in. Omit it to be asked
+    when the resource group holds more than one API Management instance.
+
 .EXAMPLE
     ./scripts/Publish-ClaudeQueries.ps1 -List
     ./scripts/Publish-ClaudeQueries.ps1
@@ -43,6 +53,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
+if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
 
 # Each query declares how its window becomes a parameter. The rewrite is
 # per-query rather than a generic rule because the two files do not agree:
@@ -130,15 +142,17 @@ function New-PriceBlock {
 function New-MembershipBlock {
     param([string]$Apim)
 
+    $why = ''
     if (-not $Apim) {
-        $Apim = az apim list -g $ResourceGroup --query "[0].name" -o tsv 2>$null
-        if ($Apim) { $Apim = $Apim.Trim() }
+        # The first instance in the group is a guess once there are two; ask instead.
+        try { $Apim = Select-ClaudeGateway -ResourceGroup $ResourceGroup -ScriptRoot $PSScriptRoot }
+        catch { $why = ' ' + $_.Exception.Message; $Apim = $null }
     }
     if (-not $Apim) {
-        throw ("No API Management instance found in $ResourceGroup, so business unit membership could not be read. " +
+        throw ("No API Management instance was chosen in $ResourceGroup, so business unit membership could not be read. " +
                "ClaudeCost attributes spend to the unit a developer belongs to today; without the mapping it would " +
                "fall back to whatever was stamped at request time and disagree with Get-ClaudeBusinessUnit.ps1. " +
-               "Pass -ApimName.")
+               "Pass -ApimName." + $why)
     }
 
     $members = az apim nv show -g $ResourceGroup --service-name $Apim --named-value-id 'bu-members' --query value -o tsv 2>$null
@@ -175,26 +189,26 @@ function Get-Token {
 
 if (-not $SubscriptionId) { $SubscriptionId = az account show --query id -o tsv }
 
+$workspaceArmId = $null
 if (-not $WorkspaceName) {
-    # One workspace in the group is unambiguous. More than one is not, and
-    # guessing which holds the gateway's telemetry is how a report ends up
-    # querying an empty workspace and reporting zero usage.
-    $found = az monitor log-analytics workspace list -g $ResourceGroup --query "[].name" -o tsv 2>$null
-    $names = @($found -split "`n" | Where-Object { $_ })
-    if ($names.Count -eq 1) { $WorkspaceName = $names[0].Trim() }
-    elseif ($names.Count -eq 0) { throw "No Log Analytics workspace in '$ResourceGroup'. Pass -WorkspaceName." }
-    else {
-        throw ("$($names.Count) workspaces in '$ResourceGroup': " + ($names -join ', ') +
-               ". Pass -WorkspaceName to say which holds the gateway's telemetry.")
-    }
+    # Recommends the workspace linked to the gateway's Application Insights, where the
+    # ledger lands; asks in a console. Without one it refuses rather than guess among
+    # several workspaces in the group, which is how a report ends up querying an empty
+    # workspace and reporting zero usage.
+    $workspaceArmId = Select-ClaudeWorkspace -ResourceGroup $ResourceGroup -ApimName $ApimName -ScriptRoot $PSScriptRoot `
+        -AmbiguousMessage "Pass -WorkspaceName to say which holds the gateway's telemetry."
+    $WorkspaceName = ($workspaceArmId -split '/')[-1]
+}
+if (-not $workspaceArmId) {
+    $workspaceArmId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup" +
+                      "/providers/Microsoft.OperationalInsights/workspaces/$WorkspaceName"
 }
 
-$base = "https://management.azure.com/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup" +
-        "/providers/Microsoft.OperationalInsights/workspaces/$WorkspaceName/savedSearches"
+$base = "https://management.azure.com$workspaceArmId/savedSearches"
 $headers = @{ Authorization = "Bearer $(Get-Token)"; 'Content-Type' = 'application/json' }
 
 Write-Host ''
-Write-Host ("Workspace {0} ({1})" -f $WorkspaceName, $ResourceGroup) -ForegroundColor Cyan
+Write-Host ("Workspace {0} ({1})" -f $WorkspaceName, ($workspaceArmId -split '/')[4]) -ForegroundColor Cyan
 
 if ($List) {
     $existing = Invoke-RestMethod -Uri "$base`?api-version=2020-08-01" -Headers $headers -Method Get

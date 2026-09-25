@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "id": "budget-modes",
+  "kind": "flow",
+  "title": "Budget modes change one scope, not the whole cascade",
+  "subtitle": "Merged P46 · strict is the default. An owner can add allowance or notify for a unit or team. Allocation, entitlement, the organisation ceiling and personal controls remain separate.",
+  "width": 1280,
+  "height": 1260,
+  "outputs": ["docs/images/architecture/budget-modes.png"],
+  "sources": ["infra/policy.xml", "infra/main.bicep", "scripts/ClaudeBudgetModes.ps1", "scripts/ClaudeTurnstileApply.ps1", "scripts/ClaudeTurnstileGovernance.ps1", "scripts/Set-ClaudeBusinessUnit.ps1"],
+  "identifiers": {
+    "enforcement": { "label": "enforcement", "source": "scripts/ClaudeTurnstileApply.ps1", "match": "$entity.attributes.enforcement" },
+    "percent": { "label": "allowance_percent", "source": "scripts/ClaudeTurnstileApply.ps1", "match": "$entity.attributes.allowance_percent" },
+    "converter": { "label": "ConvertTo-ClaudeBudgetMode", "source": "scripts/ClaudeBudgetModes.ps1", "match": "function ConvertTo-ClaudeBudgetMode {" },
+    "registry": { "label": "bu-registry", "source": "infra/policy.xml", "match": "{{bu-registry}}" },
+    "modes": { "label": "bu-modes", "source": "infra/policy.xml", "match": "{{bu-modes}}" },
+    "parents": { "label": "bu-parents", "source": "infra/policy.xml", "match": "{{bu-parents}}" },
+    "mode": { "label": "buMode", "source": "infra/policy.xml", "match": "<set-variable name=\"buMode\"" },
+    "parent-mode": { "label": "parentMode", "source": "infra/policy.xml", "match": "<set-variable name=\"parentMode\"" },
+    "limit": { "label": "llm-token-limit", "source": "infra/policy.xml", "match": "<llm-token-limit" },
+    "org": { "label": "quota-org", "source": "infra/policy.xml", "match": "{{quota-org}}" },
+    "notice": { "label": "x-claude-budget-notice", "source": "infra/policy.xml", "match": "<set-header name=\"x-claude-budget-notice\"" },
+    "trace": { "label": "claude-budget", "source": "infra/policy.xml", "match": "<trace source=\"claude-budget\"" },
+    "join": { "label": "BudgetRequestId", "source": "infra/policy.xml", "match": "<metadata name=\"BudgetRequestId\"" },
+    "legacy-join": { "label": "RequestId", "source": "infra/policy.xml", "match": "<metadata name=\"RequestId\"" },
+    "remaining": { "label": "buRemaining", "source": "infra/policy.xml", "match": "remaining-quota-tokens-variable-name=\"buRemaining\"" },
+    "parent-remaining": { "label": "parentRemaining", "source": "infra/policy.xml", "match": "remaining-quota-tokens-variable-name=\"parentRemaining\"" }
+  },
+  "groups": [
+    { "x": 0, "y": 0, "w": 1280, "h": 286, "tone": "purple", "title": "Governance plane · owner-authored configuration" },
+    { "x": 0, "y": 326, "w": 1280, "h": 720, "tone": "blue", "title": "Request policy · evaluate assigned scope and parent independently" }
+  ],
+  "nodes": [
+    { "id": "author", "x": 16, "y": 62, "w": 384, "h": 200, "tone": "purple", "title": "1 · Choose scope behavior", "lines": [
+      "Catalog [[enforcement]]",
+      "[[percent]]: integer 1-100, only with allowance",
+      "Admin choice; managers cannot change modes."
+    ] },
+    { "id": "validate", "x": 450, "y": 62, "w": 382, "h": 200, "tone": "purple", "title": "2 · Validate before any write", "lines": [
+      "[[converter]]",
+      "Invalid mode metadata defers the complete apply.",
+      "Freshness guard rereads source revisions; changed source is replanned."
+    ] },
+    { "id": "store", "x": 882, "y": 62, "w": 382, "h": 200, "tone": "purple", "title": "3 · Publish separate settings", "lines": [
+      "Base budget B stays in [[registry]].",
+      "Only exceptions belong in [[modes]].",
+      "Missing mode means strict; [[parents]] still defines the parent."
+    ] },
+    { "id": "resolve", "x": 16, "y": 388, "w": 1248, "h": 108, "tone": "blue", "compact": true, "title": "4 · Resolve [[mode]] and [[parent-mode]]", "lines": [
+      "Each scope reads its own base budget and mode. An absent or malformed gateway entry falls back to strict.",
+      "A base budget of zero still means no monthly scope limiter is configured."
+    ] },
+    { "id": "strict", "x": 16, "y": 556, "w": 384, "h": 258, "tone": "blue", "title": "Strict · default", "lines": [
+      "Monthly limit = B",
+      "[[limit]] uses the existing scope counter key.",
+      "Quota exhaustion returns 403 naming the budget.",
+      "This remains an approximate token cap, not an invoice guarantee."
+    ] },
+    { "id": "allowance", "x": 450, "y": 556, "w": 382, "h": 258, "tone": "teal", "title": "Allowance · bounded extra tokens", "lines": [
+      "Monthly limit = B + floor(B x percent / 100), capped at the integer maximum.",
+      "Same counter key; no new allowance counter.",
+      "Estimated remainder can produce an advisory above the base budget.",
+      "Extended quota exhaustion still refuses."
+    ] },
+    { "id": "notify", "x": 882, "y": 556, "w": 382, "h": 258, "tone": "amber", "title": "Notify · skip this limiter", "lines": [
+      "No monthly limiter or monthly remainder counter at this scope.",
+      "A nonzero notify budget adds an advisory on successful responses, even before 100%.",
+      "Never manufacture an unlimited quota.",
+      "Parent and other controls still apply."
+    ] },
+    { "id": "cascade", "x": 16, "y": 864, "w": 600, "h": 158, "tone": "blue", "compact": true, "title": "5 · Keep the other boundaries", "lines": [
+      "[[org]], the other unit/team scope, tier TPM, personal daily quota and request rate remain independent.",
+      "Allocation headroom and manager authorization do not change."
+    ] },
+    { "id": "response", "x": 660, "y": 864, "w": 604, "h": 158, "tone": "amber", "compact": true, "title": "6 · Advisory response, not exact crossing", "lines": [
+      "[[notice]]",
+      "Allowance uses [[remaining]] / [[parent-remaining]] estimates. Notify reports usage without claiming the budget was crossed.",
+      "A Claude client may not display this header."
+    ] },
+    { "id": "telemetry", "x": 0, "y": 1090, "w": 1280, "h": 170, "tone": "slate", "title": "7 · Keep usage reporting separate from enforcement", "lines": [
+      "Non-strict modes emit [[trace]] with both scopes' modes and base budgets.",
+      "[[join]] joins usage without duplicating the existing identity trace keyed by [[legacy-join]].",
+      "Changing back from notify does not reconstruct tokens skipped by that scope's counter. Use the ledger for reporting."
+    ] }
+  ],
+  "edges": [
+    { "from": "author", "to": "validate", "kind": "control", "points": [[400, 158], [450, 158]] },
+    { "from": "validate", "to": "store", "kind": "control", "points": [[832, 158], [882, 158]] },
+    { "from": "store", "to": "resolve", "kind": "control", "points": [[1070, 262], [1274, 262], [1274, 442], [1264, 442]] },
+    { "from": "resolve", "to": "strict", "kind": "data", "points": [[208, 496], [208, 556]] },
+    { "from": "resolve", "to": "allowance", "kind": "data", "points": [[640, 496], [640, 556]] },
+    { "from": "resolve", "to": "notify", "kind": "data", "points": [[1072, 496], [1072, 556]] },
+    { "from": "strict", "to": "cascade", "kind": "data", "points": [[208, 814], [208, 864]] },
+    { "from": "allowance", "to": "response", "kind": "data", "points": [[640, 814], [640, 838], [950, 838], [950, 864]] },
+    { "from": "notify", "to": "response", "kind": "data", "points": [[1072, 814], [1072, 864]] },
+    { "from": "response", "to": "telemetry", "kind": "data", "points": [[950, 1022], [950, 1090]] }
+  ],
+  "notice": "Soft counters, streaming estimates and omitted cache tokens still apply. Notify is not an exact over-budget detector. The pre-write revision check mitigates stale runs, but separate reads and writes are not atomic or a serialized queue."
+}

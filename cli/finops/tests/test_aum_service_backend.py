@@ -270,6 +270,7 @@ def test_service_boost_expiry_is_refused_during_preview_not_only_apply():
 
 
 async def test_service_people_do_not_require_catalog_rows_for_observed_search():
+    import asyncio
     from claude_finops.tui import FinOpsApp
     backend, calls = service(lambda request: httpx.Response(200, json=dict(organizations=[], departments=[],
         revision="revision-1")) if request.url.path == "/api/v1/catalog" else None)
@@ -277,9 +278,13 @@ async def test_service_people_do_not_require_catalog_rows_for_observed_search():
     async with app.run_test(size=(100, 32)) as pilot:
         await pilot.pause(.2)
         await app.workers.wait_for_complete()
+        await pilot.wait_for_scheduled_animations()
         app.action_tab("people")
-        await pilot.pause(.2)
-        await app.workers.wait_for_complete()
+        async with asyncio.timeout(5):
+            while "people" not in app.data:
+                await pilot.pause()
+                await app.workers.wait_for_complete()
+                await pilot.wait_for_scheduled_animations()
         assert app.data["people"]["items"][0]["scope_id"] == OID
         query = next(call.url.params for call in calls if call.url.path == "/api/v1/people")
         assert "department_id" not in query and "organization_id" not in query

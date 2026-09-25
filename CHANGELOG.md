@@ -54,6 +54,70 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   pre-authorized on Turnstile's API: the token is exchanged for a code that works once, within a
   minute. For tenants whose web sign-in has no consent yet (**U19**).
   [ADR-0016](docs/adr/0016-delegated-management.md).
+- **A manager sees only their unit, proven live.** With admin access removed for a few minutes, a
+  fresh token carried exactly `Turnstile.Manager`; Turnstile scoped the session to one unit and
+  its three teams and refused the admin pages, then every membership and assignment was restored
+  and verified. On Windows the account broker kept serving the old token; MSAL's
+  `set_access_token_to_renew`, behind a helper that fails closed, renews it without deleting any
+  cache or adding any grant.
+- **Every FinOps tool in one guide.** `docs/FINOPS-TOOLS.md` compares the saved queries and
+  workbooks, the scripts, Terminal FinOps, the AUM service, Turnstile, chargeback reports and
+  Grafana. It covers who signs in to what and with which method, six end-to-end flows with their
+  commands, and a bill of materials from live list prices, with the command that recalculates
+  each line.
+- **Where a Premium v2 injected gateway's private IP is, measured.** ARM returns it in
+  `properties.privateIPAddresses` only at api-versions `2024-05-01`, `2023-09-01-preview` and
+  `2023-05-01-preview`, and Resource Graph shows it; `az apim show` (`2022-08-01`) and every
+  newer preview return `null`. Azure publishes no DNS for the gateway name.
+  `docs/NETWORK-ENTERPRISE.md` gives the command, the portal path (JSON View at `2024-05-01`) and
+  the per-host private DNS zone that made it answer by name from a peered VNet.
+- **An enterprise network edge, chosen and priced by the administrator.**
+  `scripts/New-ClaudeNetworkEdge.ps1` puts a regional Application Gateway WAF_v2 in front of the
+  gateway as its only ingress, with internal, internet or hybrid listeners, and Foundry, Key Vault
+  and a verifier behind private endpoints. It discovers the options, prices each from the retail
+  price list with its implications, and writes nothing until one frozen review, which names the
+  identities that may lose access, is confirmed; removal has its own review. Measured live:
+  complete SSE for code prompts in Prevention mode with 71 scoped WAF exclusions, Claude Code
+  through the edge with TLS verified, a 600-second backend timeout, and forged client-address
+  headers kept out of the ledger. `docs/NETWORK-ENTERPRISE.md`,
+  [ADR-0022](docs/adr/0022-enterprise-network-edge.md).
+- **Architecture that cannot drift from the code.** Ten diagrams generated from text sources under
+  `docs/architecture/` by `node guide/render-architecture.mjs`, a rewritten `docs/ARCHITECTURE.md`,
+  and an `AGENTS.md` rule that every feature packet updates its diagram. `tests/Test-Architecture.ps1`
+  fails when a source changes without re-rendering, a label names something that no longer
+  exists, or an Azure resource type in `infra/*.bicep` appears in no diagram.
+- **Chargeback reports, generated and emailed per business unit.** `New-ClaudeChargebackReport.ps1
+  -Month` writes each unit's CSV of its people and an HTML summary, reconciled to the month through
+  an explicit Unassigned line, or fails. `Set-ClaudeChargebackRecipients.ps1` sets each unit's and
+  the admin team's recipients, limited to allowed domains. `Register-ClaudeChargebackSchedule.ps1`
+  deploys a private scheduled job that archives every run and emails each unit only its own report
+  through Azure Communication Services. Both months' reports reached the owner's inbox live on
+  2026-09-24. About $29.70 a month standing, list price. `docs/CHARGEBACK-REPORTS.md`,
+  [ADR-0020](docs/adr/0020-chargeback-reports.md).
+- **The AUM service: viewers, managers and budget requests without Turnstile.** An optional Azure
+  Functions API with its own Entra app roles and consent-free Azure CLI tokens. Managers are scoped
+  by their manager groups; budgets are written to the gateway's named values by its managed
+  identity with conditional revisions, in exactly the PowerShell serializers' format; budget
+  requests, decisions and boosts with an expiry are audited. It refuses to write to a gateway
+  another authority governs. `Deploy-ClaudeAumService.ps1` and `Select-ClaudeFinOpsTooling.ps1`
+  show each choice's cost and implications first. `docs/AUM-SERVICE.md`,
+  [ADR-0023](docs/adr/0023-aum-service.md).
+- **Turnstile's pictures are live, and say so.** All 22 were recaptured from the reference
+  deployment through the consent-free sign-in and 4 added, each with a dated, redacted provenance
+  record and a pixel hash the screenshot check enforces. A tier change and a budget mode made in the
+  UI were read on the gateway, then restored. Capture scripts discover their targets instead of
+  defaulting to live resource names, and the deployment-values check now scans `.mjs` files.
+- **Budget modes per business unit and team: strict, allowance or notify.** Strict is the default
+  and unchanged. Allowance admits up to a percentage (1 to 100) above the budget; notify skips only
+  that scope's limiter, while the parent, organization and tier limits still apply.
+  `Set-ClaudeBusinessUnit.ps1 -Mode -AllowancePercent` sets it, and so does the Gateway governance
+  page in Turnstile; the new named value `bu-modes` holds only the exceptions and survives a
+  redeploy. Notices are advisory, because the remaining quota API Management reports is an
+  estimate: `estimated-over-budget` for allowance, `usage-reported` for notify. Each budget trace
+  joins the ledger on `BudgetRequestId`. Live-tested on the reference gateway and restored exactly.
+  An apply run now rechecks Turnstile's revisions immediately before writing and reconciles again
+  from newer state, so an earlier save can no longer overwrite a later one in the common case; the
+  single writer in P48 closes it. [ADR-0019](docs/adr/0019-budget-enforcement-modes.md).
 - **A terminal FinOps console, `claude-finops`.** Nine views in the terminal and the same actions as
   commands for scripts, over Turnstile's API, the gateway directly, or example data. Budget
   changes are previewed, rechecked against the server, never retried, and removal needs typed
@@ -567,6 +631,42 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Changed
 
+- **Scripts ask for a value they were not given, and say where it comes from.**
+  `scripts/ClaudeChoice.ps1` offers the options discovered in Azure, numbered, with the one the
+  deployment points at recommended and the command and portal path to look it up; without a
+  console it uses a certain recommendation and otherwise stops naming the candidates. The
+  publishers (`Publish-ClaudeQueries.ps1`, `Publish-ClaudeWorkbook.ps1`, `Publish-ClaudeGrafana.ps1`)
+  now find the workspace behind the gateway's Application Insights instead of refusing when a
+  resource group holds several, and `Get-ClaudeTelemetry.ps1` prints that `Workspace` and no
+  longer takes the first API Management instance in a group.
+- **The chargeback ledger records the caller's address.** `analytics/chargeback-ledger.kql` has a
+  `client_ip` column, from a new `ClientIp` field in the gateway's identity trace: behind the P54
+  edge it is the edge's socket peer, otherwise the address APIM saw. It is personal data; review
+  who can read the ledger and how long it is kept. Every response also carries
+  `x-claude-gateway-request-id`, the id the ledger joins on.
+- **The documentation is organised by what a reader is trying to do.** README is a 278-line
+  landing page with a documentation map, down from 710 lines, and five task guides were added:
+  Operations, Budgets, FinOps, Reference and Data governance. Guides say where each value comes
+  from and give the command that discovers it, with the portal path beside the script. Seventy
+  findings from walking eight reader journeys were fixed. `tests/Test-DocReferences.ps1` fails
+  on a broken link or anchor, or on a script or parameter a guide names that does not exist.
+
+- **The test suite runs in parallel, and the gate's budget is 30 minutes again.** `Test-All`
+  starts each check as its own `pwsh` process, four at a time, with an exclusive lane for checks
+  that share Azure CLI state or scan the whole tree, logs in registration order, and a 600 s
+  deadline per check. The business-unit and Turnstile mutation harnesses run as four and two
+  shards, and `tests/Test-MutationShards.ps1` proves the shards cover all 476 and 108 mutations
+  exactly. Measured on a busy machine: 790 to 927 s, against 1,829 s serially.
+  [ADR-0025](docs/adr/0025-parallel-test-suite.md).
+
+- **The gate gives the test suite 60 minutes, and the suite reports where its time goes.**
+  `tests/Test-All.ps1` took 1,797.2 s on `690015d` against a 1,800 s command budget, and a
+  budget-modes gate had already failed on time with no failing check. `commandTimeoutMs` is now
+  3,600,000 ([ADR-0024](docs/adr/0024-test-suite-time-budget.md)); `Test-All` prints each check's
+  seconds and the five slowest, and writes them to `test-all-timings-<utc>-<pid>.json` in the temp
+  folder, because the gate discards the suite's output when it passes. P56 makes the suite
+  parallel so the budget can return to 30 minutes.
+
 - Money moved from `[double]` to `[decimal]` in `ClaudeBusinessUnit.ps1`,
   `Set-ClaudeBusinessUnit.ps1` and `Get-ClaudeBusinessUnit.ps1`, and token spend
   is accumulated as `[long]` rather than `0.0`.
@@ -577,6 +677,19 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   converts to 1,388,888,888 tokens and back to exactly $5000.00.
 
 ### Fixed
+
+- **A root unit in allowance or notify mode got HTTP 500.** The gateway's budget trace sent an
+  empty `ParentUnit` (a unit has no parent) or `Notice` (no advisory yet), and APIM rejects empty
+  trace metadata: "The value field is required". Absent values are now `none`, and a test
+  compiles and runs the policy's actual expressions. Found live by the AUM service's enforcement
+  journey; the reference gateway, all strict, could not reach it.
+- **The resolver check could fail with every test passing, and three runner gaps.** Under a
+  headless console on code page 437, Node's Unicode summary line did not match the wrapper's
+  pattern, so it counted zero passes; `tests/Test-Resolver.ps1` now asks for ASCII TAP output and
+  reads its exact pass and fail counters. A registered script that was missing behind a
+  prerequisite SKIP was reported as skipped, not failed; a check stopped at its deadline lost the
+  output it had printed; and a check started late could have outlived the gate's budget. Each was
+  reproduced by a failing test first.
 
 - **`Test-All.ps1` reported success for checks that never ran.** A terminating error inside a
   check travels up to the nearest `try`, and every check ran inside one `try`/`finally` with no

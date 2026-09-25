@@ -44,6 +44,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'ClaudeChoice.ps1')
 
 function Get-Token {
     $t = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv 2>$null
@@ -113,23 +114,31 @@ if ($List) {
 }
 
 if (-not $GrafanaName) {
-    throw ("Pass -GrafanaName, or -List to see what exists. This does not create a Grafana instance: " +
+    $refusal = ("This does not create a Grafana instance: " +
            "that is a standing charge and belongs wherever your other shared infrastructure is provisioned. " +
            "If you do not already run Grafana, ./scripts/Publish-ClaudeWorkbook.ps1 covers the same ground " +
            "for nothing.")
+    # Listed through Resource Manager, so choosing needs no CLI extension.
+    $instances = @(az resource list --resource-type Microsoft.Dashboard/grafana --query "[].{name:name,group:resourceGroup}" -o json 2>$null | ConvertFrom-Json)
+    $options = foreach ($i in $instances) { New-ClaudeChoiceOption -Value $i.name -Label ('{0} ({1})' -f $i.name, $i.group) }
+    $GrafanaName = Select-ClaudeChoice -Parameter GrafanaName -Question 'Which Azure Managed Grafana instance should show the Claude dashboard?' `
+        -Options @($options) -WhereToFind @('./scripts/Publish-ClaudeGrafana.ps1 -List', 'Azure portal: Azure Managed Grafana') `
+        -NoneMessage ("No Azure Managed Grafana instance in this subscription. Pass -GrafanaName, or -List to see what exists. " + $refusal) `
+        -AmbiguousMessage ("Pass -GrafanaName, or -List to see what exists. " + $refusal)
 }
 
 $grafText = Invoke-Grafana -Arguments @('grafana', 'show', '-n', $GrafanaName, '--query', '{id:id, endpoint:properties.endpoint, rg:resourceGroup}', '-o', 'json')
 if (-not $grafText.Trim()) { throw "No Azure Managed Grafana instance '$GrafanaName' visible in this subscription." }
 $g = $grafText | ConvertFrom-Json
 
+if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
+$workspaceId = $null
 if (-not $WorkspaceName) {
-    $ws = @((az monitor log-analytics workspace list -g $ResourceGroup --query "[].name" -o tsv 2>$null) -split "`n" | Where-Object { $_ })
-    if ($ws.Count -eq 1) { $WorkspaceName = $ws[0].Trim() }
-    elseif ($ws.Count -eq 0) { throw "No Log Analytics workspace in '$ResourceGroup'. Pass -WorkspaceName." }
-    else { throw ("$($ws.Count) workspaces in '$ResourceGroup': " + ($ws -join ', ') + ". Pass -WorkspaceName - a dashboard bound to the wrong one renders empty and reads as no usage.") }
+    $workspaceId = Select-ClaudeWorkspace -ResourceGroup $ResourceGroup -ScriptRoot $PSScriptRoot `
+        -AmbiguousMessage 'Pass -WorkspaceName - a dashboard bound to the wrong one renders empty and reads as no usage.'
+    $WorkspaceName = ($workspaceId -split '/')[-1]
 }
-$workspaceId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.OperationalInsights/workspaces/$WorkspaceName"
+if (-not $workspaceId) { $workspaceId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.OperationalInsights/workspaces/$WorkspaceName" }
 
 # Same refusal as the workbook: a dashboard whose every panel opens on a
 # resolver error reads as broken rather than as a missing step.

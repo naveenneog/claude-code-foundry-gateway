@@ -1,8 +1,7 @@
-# Mutate an isolated project-local copy. Never change the developer's worktree
-# under a running test, and never use the shared system temporary directory.
+# Mutate a unique copy under the check's private scratch directory, never source.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-$sandbox = Join-Path $root "backups\projection-negative-$PID"
+$sandbox = Join-Path ([IO.Path]::GetTempPath()) ('projection-negative-' + [guid]::NewGuid().ToString('N'))
 $rules = 'rules'
 $node = 'node'
 $mutations = @(

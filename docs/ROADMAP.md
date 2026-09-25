@@ -264,24 +264,65 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       owner; admins sign in as Owner, viewers and managers read-only, developers never; a browser
       sign-in through the Azure CLI that needs no consent. Run live: the link opened a session in
       13.4 s, and the same link again returned 401. [ADR-0016](adr/0016-delegated-management.md)
-- [ ] P46 delegated management, phase 2 — acceptance: a manager sees and manages only the units
-      and teams whose manager group is in their token (done in the fork, `c0c345a`); allocation
-      within their own headroom (done); per unit or team, the admin's enforcement mode: strict,
-      allowance or notify, enforced by the gateway (in progress)
+- [x] P46 delegated management, phase 2 — a manager sees and manages only the units and teams
+      whose manager group is in their token (fork `c0c345a`), proven live with a manager-only
+      token on 2026-09-25 (P53); allocation within their own headroom; per unit or team, the
+      admin's enforcement mode, strict, allowance or notify, enforced by the gateway, live-tested
+      and restored ([ADR-0019](adr/0019-budget-enforcement-modes.md)), with a guard that rechecks
+      Turnstile's revisions before an apply writes
 - [ ] P47 delegated management, phase 3 — acceptance: budget requests that go to the manager one
-      level up, boosts with an expiry, escalation, notifications at the warning threshold
+      level up, boosts with an expiry, escalation, notifications at the warning threshold.
+      Delivered **for the AUM service** (P55): requests, approve, reject, escalate, and boosts
+      whose expiry a timer reverts, proven live. Open: the same endpoints in Turnstile, and
+      delivering the warning notifications by email
 - [ ] P48 delegated management at 500,000 — acceptance: overrides and unit and team budgets in the
       projection, one queue-driven writer instead of a job run per save, usage sent hourly per
       person and model, access packages for joining a team
 - [ ] P49 network profiles — acceptance: one parameter chooses private (private endpoints for
       every component) or public (Entra-only access, no private endpoints or DNS zones), for the
-      gateway, the projection and Turnstile, each priced by the bill-of-materials scripts
-- [ ] P50 chargeback reports — acceptance: one command writes each business unit's monthly
-      report (people, requests, every token kind, estimated cost, budget against use) that
-      reconciles to the month's total through an explicit unassigned line; recipients per unit and
-      for the admin team are changed by script with no redeploy and limited to allowed domains; a
-      scheduled job with a managed identity archives each run privately and emails each unit its
-      own report. In progress
+      gateway, the projection and Turnstile, each priced by the bill-of-materials scripts.
+      Delivered **for the gateway's ingress** by P54. Open: the projection, Turnstile, PostgreSQL
+      and the scheduled jobs
+- [x] P50 chargeback reports — one command writes each business unit's monthly report (people,
+      requests, every token kind, estimated cost, budget against use), reconciled to the month's
+      total through an explicit unassigned line; recipients per unit and for the admin team are
+      set by script, limited to allowed domains; a private scheduled job archives each run and
+      emails each unit its own report. Live on 2026-09-24: both months' reports reached the
+      owner's inbox. [ADR-0020](adr/0020-chargeback-reports.md), `docs/CHARGEBACK-REPORTS.md`.
+      Follow-ups: a verified custom sender domain for broad delivery (an Azure-managed domain
+      sends 10 an hour), team-level recipients, `aum report`, recipients from the Turnstile catalog
+- [x] P53 Turnstile, tested and captured live — every Turnstile picture recaptured live with a
+      provenance record; the consent-free sign-in, a tier change and a budget mode made in the UI
+      and read on the gateway, then restored; and the live manager-only journey (2026-09-25),
+      scoped to one unit, with admin routes refused and everything restored. Open: viewer-only
+      evidence
+- [x] P54 the enterprise network — a regional Application Gateway WAF_v2 as the gateway's only
+      ingress (internal, internet or hybrid listeners) with private origins; every choice
+      discovered, priced from the retail price list and stated with its implications, then one
+      frozen review, including the identities that may lose access, confirmed before any write.
+      Streaming, timeouts, body size, WAF on code and client-address trust measured live; the
+      evaluation removed. [ADR-0022](adr/0022-enterprise-network-edge.md),
+      `docs/NETWORK-ENTERPRISE.md`. Open: 24 portal pictures, which need an approved redeployment;
+      Front Door, hub routing and corporate egress as tested automation; callers' existing private
+      routes (**U22**)
+- [x] P55 the AUM service — an optional authority independent of Turnstile: its own Entra app
+      roles with consent-free tokens, scoped managers, audited conditional named-value writes,
+      and P47's requests and boosts; discovery-first deployment with cost and implications, and a
+      FinOps tooling selector. [ADR-0023](adr/0023-aum-service.md), `docs/AUM-SERVICE.md`.
+      Real Claude enforcement in all three modes and a Manager-only proof ran live through the
+      service on an isolated gateway (2026-09-25), then everything was restored and retired.
+      Open: the AUM client (P52) driving the service end to end, and its portal pictures
+- [x] P57 documentation review — eight reader journeys walked with the guides alone; 70
+      findings fixed, five task guides added (Operations, Budgets, FinOps, Reference, Data
+      governance), README from 710 to 278 lines, live names replaced by discovery commands, and
+      `tests/Test-DocReferences.ps1` guarding links, anchors, scripts and parameters. Open: the
+      portal walkthrough pictures, declared as capture specs for one batch after a fresh sign-in
+- [x] P58 architecture after every feature — ten diagrams from text sources under
+      `docs/architecture/`, rendered by one command with a hash manifest; `docs/ARCHITECTURE.md`
+      rewritten around them; an `AGENTS.md` rule that every feature packet updates its diagram;
+      and `tests/Test-Architecture.ps1` failing on drift, stale labels, or an Azure resource type
+      in no diagram. Open: the AUM diagram from its packet; the enterprise network's three
+      topologies arrived with P54
 - [x] P51 terminal FinOps, first release — `claude-finops`, nine terminal views and scriptable
       commands over one engine, backed by Turnstile, the gateway directly, or example data. Budget
       changes are previewed, rechecked against the server and never retried. Managers see only
@@ -291,6 +332,14 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       Follow-ups: saved views, comparison charts and in-terminal profiles; a request cursor (the
       API stops at 200); conditional catalog and tier writes; P47's requests and boosts; a live
       scoped-manager journey (**U20**)
+- [x] P56 a parallel test suite — `tests/Test-All.ps1` runs checks in separate `pwsh` processes,
+      at most four at a time, with an exclusive lane for checks that share Azure CLI state or scan
+      the whole tree, logs printed in registration order, one result slot per registration, a
+      per-check deadline (600 s by default) and the same completion guard and SKIP counting. The
+      business-unit and Turnstile mutation harnesses run as four and two shards, and a new check
+      proves the shards cover exactly the 476 and 108 mutations, in order. Three busy full runs:
+      927.2, 830.6 and 790.0 s, against 1,829 s serially; the gate's command budget is back to
+      1,800 s. [ADR-0025](adr/0025-parallel-test-suite.md)
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so
