@@ -97,9 +97,10 @@ Write-Host ("  [note] {0} of {1} declared capture(s) committed; taken locally: {
 # Identities must not survive into a committed screenshot. The capture masks
 # them in the DOM before the pixels exist; this asserts the masking is still
 # wired in, because a capture with a real address in it cannot be un-shipped.
-$capMask = $capture -match 'NodeFilter\.SHOW_TEXT' -and $capture -match 'maskLocal'
+$capMask = $capture -match 'NodeFilter\.SHOW_TEXT' -and $capture -match 'Redactor'
 Assert 'captures mask identities before screenshotting' $capMask
-Assert 'and keep the domain, as redact-entra.mjs does' ($capture -match "m\.lastIndexOf\('@'\)")
+Assert 'and refuse identifiers instead of retaining real tenant domains' (
+    $capture -match 'redactor\.leaks' -and $capture -notmatch "m\.lastIndexOf\('@'\)")
 # Masking emails is not the whole job - an Entra members blade shows display
 # names and object ids beside them, and a metrics overview shows an
 # instrumentation key. Those blades are not committed at all, and the guide has
@@ -107,6 +108,15 @@ Assert 'and keep the domain, as redact-entra.mjs does' ($capture -match "m\.last
 $guideDoc = Get-Content (Join-Path $root 'guide/README.md') -Raw
 Assert 'the guide says which blades are not committed' (
     $guideDoc -match '(?s)not committed|against your own tenant')
+
+Write-Host ''
+Write-Host 'Turnstile live capture provenance and mutations' -ForegroundColor Cyan
+Push-Location $root
+try {
+    & node --test tests/turnstile-captures.test.mjs
+    Assert 'every Turnstile capture has verified live provenance' ($LASTEXITCODE -eq 0)
+}
+finally { Pop-Location }
 
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }

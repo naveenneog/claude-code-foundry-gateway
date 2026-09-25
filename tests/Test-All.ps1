@@ -166,6 +166,9 @@ try {
     Invoke-Check 'Mutation shards preserve every case'     'Test-MutationShards.ps1'
     Invoke-Check 'Format strings parse and run'            'Test-FormatStrings.ps1'
     Invoke-Check 'Screenshots and the docs that show them' 'Test-Screenshots.ps1'
+    Invoke-Check 'Architecture sources, images and code agree' 'Test-Architecture.ps1'
+    Invoke-Check 'Documentation links and commands'        'Test-DocReferences.ps1'
+    Invoke-Check 'Portal capture specs and batch safety'   'Test-PortalCaptureSpecs.ps1'
     Invoke-Check 'Resolver - the entitlement read path'   'Test-Resolver.ps1'
     Invoke-Check 'Named value writes fail loudly'          'Test-NamedValueWrites.ps1' @{ SkipLive = $true }
     Invoke-Check 'Release log hygiene'                     'Test-ReleaseLog.ps1'
@@ -179,17 +182,37 @@ try {
     Invoke-Check 'Capability scoping per tier'             'Test-CapabilityScoping.ps1' @{ SkipLive = $true }
     Invoke-Check 'Compliance retrieval and deletion'       'Test-Compliance.ps1' @{ SkipLive = $true }
     Invoke-Check 'Chargeback ledger'                       'Test-Ledger.ps1' @{ SkipLive = $true }
+    Invoke-Check 'Chargeback report generation'            'Test-ChargebackReports.ps1'
+    Invoke-Check 'Chargeback recipients and attachments'   'Test-ChargebackDelivery.ps1'
+    Invoke-Check 'Chargeback durable email outbox'         'Test-ChargebackOutbox.ps1'
+    Invoke-Check 'Chargeback queue preserves attachments'  'Test-ChargebackQueue.ps1'
+    Invoke-Check 'Chargeback configuration and archive'    'Test-ChargebackStorage.ps1'
+    Invoke-Check 'Chargeback private administration'       'Test-ChargebackAdministration.ps1'
+    Invoke-Check 'Chargeback selectable discovery'         'Test-ChargebackDiscovery.ps1'
+    Invoke-Check 'Chargeback portal redaction'             'Test-ChargebackCapture.ps1'
+    Invoke-Check 'Chargeback scheduled jobs'               'Test-ChargebackSchedule.ps1'
+    Invoke-Check 'Chargeback mutations detect breakage'    'Test-ChargebackNegative.ps1'
     Invoke-Check 'Business unit chargeback'                'Test-BusinessUnits.ps1'
     Invoke-Check 'Teams and the budget cascade'            'Test-Teams.ps1'
     Invoke-Check 'Model discovery and deployment'          'Test-ModelDeployment.ps1'
     Invoke-Check 'Client attribution and the workbook'     'Test-Observability.ps1'
-    Invoke-Check 'Business unit checks detect breakage [0/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '0/4' }
+    # Shard 0 also carries the mutation that runs the PS 5.1 wizard (Test-On-PS51.ps1), about
+    # 100 s alone and up to 300 s on a loaded machine; measured 520 s against the others' ~220 s.
+    Invoke-Check 'Business unit checks detect breakage [0/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '0/4' } -TimeoutSeconds 900
     Invoke-Check 'Business unit checks detect breakage [1/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '1/4' }
     Invoke-Check 'Business unit checks detect breakage [2/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '2/4' }
     Invoke-Check 'Business unit checks detect breakage [3/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '3/4' }
     Invoke-Check 'Admin surface - SKU, groups, tiers'      'Test-AdminSurface.ps1'
     Invoke-Check 'Scale ceilings and the load envelope'    'Test-Scale.ps1'
     Invoke-Check 'Secure projection and the migration'     'Test-SecureProjection.ps1' -SerialLane
+    Invoke-Check 'Enterprise network edge contract'         'Test-NetworkEdge.ps1' -SerialLane
+    Invoke-Check 'Network ARM transport and ownership'       'Test-NetworkTransport.ps1'
+    Invoke-Check 'Network access impact and uncertainty'     'Test-NetworkImpact.ps1'
+    Invoke-Check 'Network decisions and cost deltas'         'Test-NetworkDecisions.ps1'
+    Invoke-Check 'Network explicit change approval'          'Test-NetworkApproval.ps1'
+    Invoke-Check 'Network review checks detect breakage'     'Test-NetworkReviewNegative.ps1'
+    Invoke-Check 'Network prices are discovered, not guessed' 'Test-NetworkCost.ps1'
+    Invoke-Check 'Network edge checks detect breakage'       'Test-NetworkEdgeNegative.ps1'
     Invoke-Check 'Projection checks detect breakage'        'Test-ProjectionNegative.ps1'
     Invoke-Check 'Adding models, and plugin governance'    'Test-ModelsAndPlugins.ps1'
     Invoke-Check 'Backup and restore'                      'Test-Backup.ps1'

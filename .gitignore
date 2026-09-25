@@ -19,6 +19,7 @@ finops-reports/
 # These authenticate as you; never commit them.
 .pw-profile/
 guide/.auth.json
+.network-state/
 
 # Generated onboarding artifacts contain your gateway URL and tenant id.
 # Not secret, but environment-specific - regenerate rather than commit.
@@ -57,3 +58,7 @@ claude-code-backups/
 # ships instead, and scripts/ClaudeBusinessUnit.ps1 falls back to built-in list
 # rates when no file is present.
 config/price-book.json
+
+# Personal usage reports and private live evidence. Only Contoso fixtures ship.
+/chargeback-reports/
+.chargeback-*/

@@ -393,7 +393,16 @@ Write-Host 'Scale - reachable from the README' -ForegroundColor Cyan
 $readmeTop = (Get-Content (Join-Path $root 'README.md') -Raw)
 Assert 'the README states the current ceiling'   ($readmeTop -match 'How many developers this holds today')
 Assert 'and gives the measured number'           ($readmeTop -match 'roughly 93 developers')
-Assert 'and says the larger design is not the default yet' ($readmeTop -match 'It is not the default, and it is not yet\s*\r?\n?>?\s*load-tested at 500,000\*\*')
+# P19 measured 500,000 storage records on 2026-09-24. Keep the deployment
+# caveat, but do not require the superseded "not yet load-tested" sentence.
+Assert 'and says the larger design is not the default yet' ($readmeTop -match '\*\*It is not the default\.\*\*')
+Assert 'and distinguishes the storage test from active developers' (
+    $readmeTop -match '500,000 records were loaded and read' -and
+    $readmeTop -match 'not 500,000 concurrent developers')
+Assert 'and reports current warm-instance cost' ($readmeTop -match '\$91\.56/month at rest')
+Assert 'and includes lease renewal rather than read costs alone' (
+    $readmeTop -match '\$538/month' -and $readmeTop -match '365 million writes/month')
+Assert 'and links the dated measurement' ($readmeTop -match 'docs/STATUS\.md#where-p19-stands-2026-09-24')
 Assert 'and points at how to check your own'     ($readmeTop -match 'Measure-ClaudeCeiling\.ps1')
 
 # Documentation that nothing links to is documentation nobody reads. Six pages
@@ -533,7 +542,9 @@ Assert 'each option says what the default does' ($dec -match '(?i)Default today:
 # Numbers are computed elsewhere; the page must not become a second source.
 Assert 'the window costs point at the script'  ($dec -match 'Measure-ClaudeProjectionCost\.ps1')
 Assert 'and are labelled as computed'          ($dec -match '(?i)not quoted')
-Assert 'the budget entry states the cache gap' ($dec -match '41\.5')
+# Use the retained U12 measurement, not a transient workbook ratio that has no
+# corresponding record in STATUS/SCALE/UNKNOWNS.
+Assert 'the budget entry states the cache gap' ($dec -match '38\.7%' -and $dec -match 'UNKNOWNS\.md')
 Assert 'and what to say instead'               ($dec -match '(?i)attribute the cost.{0,40}cap it')
 
 $scale2 = Get-Content (Join-Path $root 'docs/SCALE.md') -Raw

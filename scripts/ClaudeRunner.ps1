@@ -34,9 +34,12 @@ function Invoke-RunnerCommand {
         [Parameter(Mandatory)][string]$ResourceGroup,
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][string]$Command,
-        [string]$Container = 'runner'
+        [string]$Container = 'runner',
+        [string]$SubscriptionId
     )
-    $out = az container exec -g $ResourceGroup -n $Name --container-name $Container --exec-command $Command 2>&1 | Out-String
+    $arguments = @('container','exec','-g',$ResourceGroup,'-n',$Name,'--container-name',$Container,'--exec-command',$Command)
+    if ($SubscriptionId) { $arguments += @('--subscription',$SubscriptionId) }
+    $out = & az @arguments 2>&1 | Out-String
     return $out.Trim()
 }
 
@@ -46,7 +49,8 @@ function Send-RunnerFile {
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$Destination,
-        [int]$ChunkSize = 4900
+        [int]$ChunkSize = 4900,
+        [string]$SubscriptionId
     )
     if ($Destination -match '\s') { throw "Destination '$Destination' contains a space; exec cannot pass it." }
     $bytes = [IO.File]::ReadAllBytes((Resolve-Path $Path))
@@ -62,10 +66,10 @@ function Send-RunnerFile {
     # under that once the surrounding program is counted.
     $overhead = ("node -e require('fs').appendFileSync('$tmp','')").Length
     $ChunkSize = [Math]::Min($ChunkSize, 4990 - $overhead)
-    $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -Command "node -e require('fs').mkdirSync('$dir',{recursive:true});require('fs').writeFileSync('$tmp','')"
+    $null = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -SubscriptionId $SubscriptionId -Command "node -e require('fs').mkdirSync('$dir',{recursive:true});require('fs').writeFileSync('$tmp','')"
     for ($i = 0; $i -lt $b64.Length; $i += $ChunkSize) {
         $part = $b64.Substring($i, [Math]::Min($ChunkSize, $b64.Length - $i))
-        $said = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -Command "node -e require('fs').appendFileSync('$tmp','$part')"
+        $said = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -SubscriptionId $SubscriptionId -Command "node -e require('fs').appendFileSync('$tmp','$part')"
         # An exec that fails prints its error and nothing else; ignoring it is
         # how a copy silently arrives empty.
         if ($said -match 'ERROR|InvalidCommandLength|terminated with non-zero') { throw "Chunk at $i failed: $($said.Substring(0, [Math]::Min(200, $said.Length)))" }
@@ -73,7 +77,7 @@ function Send-RunnerFile {
     # No declaration keyword: `const f` needs a space, which exec would split on,
     # and `const$f` is a single identifier. node -e is sloppy mode, so a bare
     # assignment is enough.
-    $remote = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -Command ("node -e f=require('fs');f.writeFileSync('$Destination',Buffer.from(f.readFileSync('$tmp','utf8'),'base64url'));f.unlinkSync('$tmp');" +
+    $remote = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $Name -SubscriptionId $SubscriptionId -Command ("node -e f=require('fs');f.writeFileSync('$Destination',Buffer.from(f.readFileSync('$tmp','utf8'),'base64url'));f.unlinkSync('$tmp');" +
         "console.log(require('crypto').createHash('sha256').update(f.readFileSync('$Destination')).digest('hex'))")
     $local = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($bytes)).Replace('-', '').ToLower()
     $remoteHash = ($remote -split "`n" | Select-Object -Last 1).Trim()

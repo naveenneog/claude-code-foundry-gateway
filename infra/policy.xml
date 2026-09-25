@@ -676,6 +676,7 @@
             <metadata name="Tier" value="@((string)context.Variables["tier"])" />
             <metadata name="BusinessUnit" value="@((string)context.Variables["businessUnit"])" />
             <metadata name="Model" value="@((string)context.Variables["modelName"])" />
+            <metadata name="ClientIp" value="@(context.Variables.GetValueOrDefault<string>("claude-edge-client-ip", context.Request.IpAddress))" />
             <!-- Which client made the call. Captured raw and truncated rather
                  than classified here: a classifier in policy needs a redeploy
                  every time a client changes its agent string, where the same
@@ -711,6 +712,9 @@
 
         <set-header name="x-governed-by" exists-action="override">
             <value>apim-claude-gateway</value>
+        </set-header>
+        <set-header name="x-claude-gateway-request-id" exists-action="override">
+            <value>@(context.RequestId.ToString())</value>
         </set-header>
         <set-header name="x-claude-tier" exists-action="override">
             <value>@((string)context.Variables["tier"])</value>

@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "id": "delegated-management",
+  "kind": "flow",
+  "title": "Entra decides who. The catalog decides a manager's scope.",
+  "subtitle": "Admin > Viewer > Manager. A manager-only session is scoped by the manager groups in its token, not by a unit id supplied by the browser. Developers without a console role are refused.",
+  "width": 1280,
+  "height": 994,
+  "outputs": ["docs/images/architecture/delegated-management.png"],
+  "sources": ["scripts/New-ClaudeTurnstileEntraApp.ps1", "scripts/Open-ClaudeTurnstile.ps1"],
+  "upstream": {
+    "scope": {
+      "repository": "naveenneog/turnstile",
+      "revision": "c0c345a6009eaada755850ee15f76ddc85bad74f",
+      "path": "backend/http/manager_scope.py",
+      "excerpt": "def resolve_manager_scope(\n    groups: tuple[str, ...] | None, repository: QueryRepository\n) -> ManagerScope | None:\n    if groups is None:\n        return None\n    rows = repository.enterprise_entities()\n    catalog = catalog_response(rows)\n    held = set(groups)\n\n    def managed(entity: Any) -> bool:\n        group = entity.attributes.get(\"manager_group_id\")\n        return isinstance(group, str) and group.lower() in held"
+    },
+    "auth": {
+      "repository": "naveenneog/turnstile",
+      "revision": "c0c345a6009eaada755850ee15f76ddc85bad74f",
+      "path": "backend/http/authentication.py",
+      "excerpt": "LOGIN_CODE_SECONDS = 60\n\"/api/v1/auth/cli\"\n\"/api/v1/auth/code\"\nif not caller.delegated:\n    raise HTTPException(status_code=403, detail=\"A workload identity cannot sign in to the console.\")\nuser = store.consume_login_code(hash_session_token(body.code))"
+    }
+  },
+  "identifiers": {
+    "admin": { "label": "Turnstile.Admin", "source": "scripts/New-ClaudeTurnstileEntraApp.ps1", "match": "[string]$RoleValue = 'Turnstile.Admin'" },
+    "viewer": { "label": "Turnstile.Viewer", "source": "scripts/New-ClaudeTurnstileEntraApp.ps1", "match": "[string]$ViewerRoleValue = 'Turnstile.Viewer'" },
+    "manager": { "label": "Turnstile.Manager", "source": "scripts/New-ClaudeTurnstileEntraApp.ps1", "match": "[string]$ManagerRoleValue = 'Turnstile.Manager'" },
+    "groups": { "label": "groupMembershipClaims", "source": "scripts/New-ClaudeTurnstileEntraApp.ps1", "match": "$patch.groupMembershipClaims = 'ApplicationGroup'" },
+    "application": { "label": "ApplicationGroup", "source": "scripts/New-ClaudeTurnstileEntraApp.ps1", "match": "$patch.groupMembershipClaims = 'ApplicationGroup'" },
+    "open": { "label": "Open-ClaudeTurnstile.ps1", "source": "scripts/Open-ClaudeTurnstile.ps1", "kind": "file" },
+    "scope": { "label": "Turnstile.Manage", "source": "scripts/New-ClaudeTurnstileEntraApp.ps1", "match": "[string]$ScopeValue = 'Turnstile.Manage'" },
+    "exchange": { "label": "POST /api/v1/auth/cli", "source": "scripts/Open-ClaudeTurnstile.ps1", "match": "Invoke-RestMethod -Method Post -Uri \"$url/api/v1/auth/cli\"" },
+    "login-code": { "label": "?login_code=", "source": "scripts/Open-ClaudeTurnstile.ps1", "match": "$link = \"$url/?login_code=" },
+    "redeem": { "label": "POST /api/v1/auth/code", "upstream": "auth", "match": "\"/api/v1/auth/code\"" },
+    "ttl": { "label": "LOGIN_CODE_SECONDS = 60", "upstream": "auth", "match": "LOGIN_CODE_SECONDS = 60" },
+    "manager-group": { "label": "manager_group_id", "upstream": "scope", "match": "entity.attributes.get(\"manager_group_id\")" },
+    "resolve": { "label": "resolve_manager_scope", "upstream": "scope", "match": "def resolve_manager_scope(" }
+  },
+  "groups": [
+    { "x": 0, "y": 0, "w": 394, "h": 544, "tone": "teal", "title": "Customer Entra application + catalog" },
+    { "x": 430, "y": 0, "w": 850, "h": 544, "tone": "purple", "title": "Consent-free browser sign-in · a person's token only" }
+  ],
+  "nodes": [
+    { "id": "app", "x": 16, "y": 62, "w": 362, "h": 250, "tone": "teal", "title": "Assigned application groups", "lines": [
+      "[[groups]] = [[application]]",
+      "Only assigned application groups are emitted.",
+      "Delegated scope: [[scope]]",
+      "No role: refuse before account creation."
+    ] },
+    { "id": "catalog", "x": 16, "y": 332, "w": 362, "h": 192, "tone": "teal", "title": "Resolve scope on each request", "lines": [
+      "Unit / team: [[manager-group]]",
+      "[[resolve]] checks token groups.",
+      "No Graph call or directory grant."
+    ] },
+    { "id": "cli", "x": 446, "y": 62, "w": 360, "h": 214, "tone": "purple", "title": "1 · Azure CLI token", "lines": [
+      "az login in the customer tenant",
+      "[[open]]",
+      "The pre-authorized CLI requests Turnstile's API scope.",
+      "Token stays out of the URL and files."
+    ] },
+    { "id": "exchange", "x": 866, "y": 62, "w": 398, "h": 214, "tone": "purple", "title": "2 · Exchange for a short code", "lines": [
+      "[[exchange]]",
+      "Verify tenant, roles and delegated caller.",
+      "[[ttl]]",
+      "Store a hash; the code can be redeemed once."
+    ] },
+    { "id": "redeem", "x": 446, "y": 332, "w": 818, "h": 192, "tone": "purple", "title": "3 · Open the console and redeem", "lines": [
+      "The link carries [[login-code]]; the console calls [[redeem]].",
+      "Consume the code and issue an HttpOnly session cookie; remove the code from the address.",
+      "Expired or replayed code: 401. A workload token cannot open a person's browser session.",
+      "The session keeps the groups captured at sign-in; sign in again after membership changes."
+    ] },
+    { "id": "admin", "x": 0, "y": 604, "w": 396, "h": 302, "tone": "blue", "eyebrow": "First precedence", "title": "[[admin]]", "lines": [
+      "Owner; full console administration",
+      "Controls unit budgets, catalog, tiers, enforcement modes and Apply now.",
+      "An Admin role takes precedence even if Manager is also present."
+    ] },
+    { "id": "viewer", "x": 442, "y": 604, "w": 396, "h": 302, "tone": "slate", "eyebrow": "Second precedence", "title": "[[viewer]]", "lines": [
+      "Member; reads all scopes",
+      "No owner-governed writes",
+      "Viewer + Manager is an unrestricted reader, not a scoped manager.",
+      "Reporting workloads may hold Viewer."
+    ] },
+    { "id": "manager", "x": 884, "y": 604, "w": 396, "h": 302, "tone": "teal", "eyebrow": "Manager-only token", "title": "[[manager]]", "lines": [
+      "Member; scoped units, teams and people",
+      "Unit manager: its teams' budgets and people.",
+      "Team manager: its people's budgets; parent is context only.",
+      "Missing or overage groups grant no managed scope."
+    ] },
+    { "id": "guard", "x": 0, "y": 942, "w": 1280, "h": 52, "tone": "amber", "compact": true, "title": "Scope is enforced on API routes and object ids; hiding controls in the browser is not the boundary.", "lines": [] }
+  ],
+  "edges": [
+    { "from": "app", "to": "catalog", "kind": "identity", "points": [[196, 312], [196, 332]] },
+    { "from": "cli", "to": "exchange", "kind": "identity", "points": [[806, 170], [866, 170]] },
+    { "from": "exchange", "to": "redeem", "kind": "identity", "points": [[1060, 276], [1060, 332]] },
+    { "from": "catalog", "to": "redeem", "kind": "control", "points": [[378, 426], [446, 426]] },
+    { "from": "redeem", "to": "viewer", "kind": "identity", "points": [[700, 524], [700, 604]] },
+    { "from": "redeem", "to": "manager", "kind": "identity", "points": [[1082, 524], [1082, 604]] },
+    { "from": "redeem", "to": "admin", "kind": "identity", "points": [[510, 524], [510, 566], [198, 566], [198, 604]] }
+  ],
+  "notice": "The standard Microsoft sign-in button still needs the tenant's one-time consent. This CLI handoff avoids that web-consent dependency; it does not bypass Entra assignment, tenant validation or server-side authorization. Fork evidence is pinned to c0c345a."
+}

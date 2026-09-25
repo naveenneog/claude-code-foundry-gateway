@@ -54,6 +54,48 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   pre-authorized on Turnstile's API: the token is exchanged for a code that works once, within a
   minute. For tenants whose web sign-in has no consent yet (**U19**).
   [ADR-0016](docs/adr/0016-delegated-management.md).
+- **A manager sees only their unit, proven live.** With admin access removed for a few minutes, a
+  fresh token carried exactly `Turnstile.Manager`; Turnstile scoped the session to one unit and
+  its three teams and refused the admin pages, then every membership and assignment was restored
+  and verified. On Windows the account broker kept serving the old token; MSAL's
+  `set_access_token_to_renew`, behind a helper that fails closed, renews it without deleting any
+  cache or adding any grant.
+- **An enterprise network edge, chosen and priced by the administrator.**
+  `scripts/New-ClaudeNetworkEdge.ps1` puts a regional Application Gateway WAF_v2 in front of the
+  gateway as its only ingress, with internal, internet or hybrid listeners, and Foundry, Key Vault
+  and a verifier behind private endpoints. It discovers the options, prices each from the retail
+  price list with its implications, and writes nothing until one frozen review, which names the
+  identities that may lose access, is confirmed; removal has its own review. Measured live:
+  complete SSE for code prompts in Prevention mode with 71 scoped WAF exclusions, Claude Code
+  through the edge with TLS verified, a 600-second backend timeout, and forged client-address
+  headers kept out of the ledger. `docs/NETWORK-ENTERPRISE.md`,
+  [ADR-0022](docs/adr/0022-enterprise-network-edge.md).
+- **Architecture that cannot drift from the code.** Ten diagrams generated from text sources under
+  `docs/architecture/` by `node guide/render-architecture.mjs`, a rewritten `docs/ARCHITECTURE.md`,
+  and an `AGENTS.md` rule that every feature packet updates its diagram. `tests/Test-Architecture.ps1`
+  fails when a source changes without re-rendering, a label names something that no longer
+  exists, or an Azure resource type in `infra/*.bicep` appears in no diagram.
+- **Chargeback reports, generated and emailed per business unit.** `New-ClaudeChargebackReport.ps1
+  -Month` writes each unit's CSV of its people and an HTML summary, reconciled to the month through
+  an explicit Unassigned line, or fails. `Set-ClaudeChargebackRecipients.ps1` sets each unit's and
+  the admin team's recipients, limited to allowed domains. `Register-ClaudeChargebackSchedule.ps1`
+  deploys a private scheduled job that archives every run and emails each unit only its own report
+  through Azure Communication Services. Both months' reports reached the owner's inbox live on
+  2026-09-24. About $29.70 a month standing, list price. `docs/CHARGEBACK-REPORTS.md`,
+  [ADR-0020](docs/adr/0020-chargeback-reports.md).
+- **The AUM service: viewers, managers and budget requests without Turnstile.** An optional Azure
+  Functions API with its own Entra app roles and consent-free Azure CLI tokens. Managers are scoped
+  by their manager groups; budgets are written to the gateway's named values by its managed
+  identity with conditional revisions, in exactly the PowerShell serializers' format; budget
+  requests, decisions and boosts with an expiry are audited. It refuses to write to a gateway
+  another authority governs. `Deploy-ClaudeAumService.ps1` and `Select-ClaudeFinOpsTooling.ps1`
+  show each choice's cost and implications first. `docs/AUM-SERVICE.md`,
+  [ADR-0023](docs/adr/0023-aum-service.md).
+- **Turnstile's pictures are live, and say so.** All 22 were recaptured from the reference
+  deployment through the consent-free sign-in and 4 added, each with a dated, redacted provenance
+  record and a pixel hash the screenshot check enforces. A tier change and a budget mode made in the
+  UI were read on the gateway, then restored. Capture scripts discover their targets instead of
+  defaulting to live resource names, and the deployment-values check now scans `.mjs` files.
 - **Budget modes per business unit and team: strict, allowance or notify.** Strict is the default
   and unchanged. Allowance admits up to a percentage (1 to 100) above the budget; notify skips only
   that scope's limiter, while the parent, organization and tier limits still apply.
@@ -577,6 +619,18 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   string parses and runs.
 
 ### Changed
+
+- **The chargeback ledger records the caller's address.** `analytics/chargeback-ledger.kql` has a
+  `client_ip` column, from a new `ClientIp` field in the gateway's identity trace: behind the P54
+  edge it is the edge's socket peer, otherwise the address APIM saw. It is personal data; review
+  who can read the ledger and how long it is kept. Every response also carries
+  `x-claude-gateway-request-id`, the id the ledger joins on.
+- **The documentation is organised by what a reader is trying to do.** README is a 278-line
+  landing page with a documentation map, down from 710 lines, and five task guides were added:
+  Operations, Budgets, FinOps, Reference and Data governance. Guides say where each value comes
+  from and give the command that discovers it, with the portal path beside the script. Seventy
+  findings from walking eight reader journeys were fixed. `tests/Test-DocReferences.ps1` fails
+  on a broken link or anchor, or on a script or parameter a guide names that does not exist.
 
 - **The test suite runs in parallel, and the gate's budget is 30 minutes again.** `Test-All`
   starts each check as its own `pwsh` process, four at a time, with an exclusive lane for checks

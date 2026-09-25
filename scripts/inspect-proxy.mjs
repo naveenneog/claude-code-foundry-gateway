@@ -13,9 +13,36 @@
  * Tokens are never printed; only non-sensitive JWT claims are decoded.
  */
 import http from 'node:http';
+import { discoverTargets, choose } from '../guide/lib/azure-targets.mjs';
+import { az } from '../guide/lib/turnstile-live.mjs';
 
-const PORT = 8787;
-const UPSTREAM = 'https://ai-contosohub530569751908.services.ai.azure.com/anthropic';
+const args = process.argv.slice(2);
+const option = (name) => { const index = args.indexOf(name); return index < 0 ? undefined : args[index + 1]; };
+const PORT = Number(option('--port') ?? process.env.INSPECT_PORT ?? 8787);
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('Port must be 1–65535');
+let UPSTREAM = option('--upstream') ?? process.env.INSPECT_UPSTREAM;
+if (!UPSTREAM) {
+  const targets = await discoverTargets({
+    subscription: option('--subscription'), resourceGroup: option('--resource-group'),
+    foundry: option('--foundry'), required: ['foundry'],
+    nonInteractive: args.includes('--non-interactive') || !process.stdin.isTTY,
+  });
+  const resource = JSON.parse(az(['resource', 'show', '--ids', targets.foundry.id, '-o', 'json']));
+  const endpoints = Object.entries(resource.properties.endpoints ?? {})
+    .filter(([, value]) => typeof value === 'string' && value.startsWith('https://'))
+    .map(([name, value]) => ({ name, id: value }));
+  if (!endpoints.length && resource.properties.endpoint) endpoints.push({ name: 'Resource endpoint', id: resource.properties.endpoint });
+  const endpoint = await choose('upstream endpoint', endpoints, option('--endpoint'), undefined,
+    args.includes('--non-interactive') || !process.stdin.isTTY);
+  UPSTREAM = new URL(option('--upstream-path') ?? '/anthropic', endpoint.id).href.replace(/\/$/, '');
+}
+const target = new URL(UPSTREAM);
+if (target.protocol !== 'https:' || target.username || target.password || target.search || target.hash)
+  throw new Error('Upstream must be an HTTPS service URL without credentials, query or fragment');
+if (args.includes('--describe')) {
+  console.log(JSON.stringify({ listen: `http://127.0.0.1:${PORT}`, upstream: UPSTREAM }));
+  process.exit(0);
+}
 
 const decodeClaims = (jwt) => {
   try {
@@ -93,7 +120,7 @@ const server = http.createServer(async (req, res) => {
   res.end();
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '127.0.0.1', () => {
   console.log(`inspector proxy listening on http://localhost:${PORT}`);
   console.log(`forwarding to ${UPSTREAM}`);
 });

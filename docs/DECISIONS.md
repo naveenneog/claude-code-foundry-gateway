@@ -1,7 +1,12 @@
 # Decisions
 
-Nine choices an operator makes. Seven have a sensible default and can wait. Two
-are expensive to change later, and both cost nothing today.
+Nine choices an operator makes. Settle the address and availability requirements
+before onboarding. Neither a default nor a cost illustration is a production
+capacity guarantee. See [Architecture](ARCHITECTURE.md) for the component map.
+
+**Prerequisites:** platform, finance and network owners agree the required
+revocation window, hosting option, peak traffic and budget authority. Confirm
+roles and target resources in [Setup](SETUP.md).
 
 Nothing here is a recommendation about your organisation — each entry says what
 the default does, what the alternatives cost, and what happens if you leave it.
@@ -24,9 +29,12 @@ DNS change nobody notices.
 
 **Cost of choosing it now:** a certificate and a DNS record.
 
-**Cost of choosing it later:** at 200 developers, an afternoon of everybody's
-time. At 200,000, nobody attempts it — which means whatever you pick on the
-first day is permanent.
+**Cost of choosing it later:** reissue client configuration unless the old
+address remains available. That is fleet work, not a measured fixed duration.
+
+**Portal:** APIM > Custom domains > Gateway; install the approved certificate,
+create the DNS record through its owner, and verify TLS before distributing the
+custom URL. The wizard's `custom` choice does not configure DNS or certificates.
 
 See [ADR-0013](adr/0013-gateway-outlives-instance.md).
 
@@ -46,8 +54,15 @@ decides which family you start in.
 | Premium v2 | **yes** | no |
 | Premium (classic) | **yes** | **yes** |
 
-**If the answer is yes**, start on Premium classic. If it is no, or you are not
-sure, the custom domain above is what keeps the option open at reasonable cost.
+**If the answer is yes, this repository does not supply a verified multi-region
+governed solution.** Classic Premium has multi-region, but its policies do not
+parse Anthropic tokens as required here. Do not select it as a drop-in fix.
+Design and test regional failover and quota semantics separately; a custom
+domain preserves address flexibility, not counters or a global budget.
+
+**Portal verification:** APIM > Overview > Pricing tier and Availability zones.
+The pricing-tier name alone is not evidence of a regional failover design.
+See [Scale](SCALE.md#two-things-to-get-right-on-the-first-day) and U9.
 
 ---
 
@@ -55,24 +70,27 @@ sure, the custom domain above is what keeps the option open at reasonable cost.
 
 ### 3. If you remove someone, how long may they keep working?
 
-**Default today:** one hour — `entitlement-cache-seconds`, currently 3600.
+**Default today:** the named-value install changes only when a sync publishes.
+It has no lease-based revocation bound if sync stops. On the optional projection,
+`entitlement-cache-seconds` defaults to 3600, but cache is clipped to an absolute
+lease of at most 7,200 seconds from directory scan start.
 
-Access is not withdrawn the instant you remove somebody. The gateway holds the
-answer for a while rather than asking on every request, and that interval is
-this number.
+Under healthy sync, removal takes effect after reconciliation plus the smaller
+of cache duration and remaining lease. A stopped projection sync eventually
+causes `503`, not indefinitely stale access. Existing streams are not interrupted.
 
-| Window | Cost at 500,000 developers |
-|---|---|
-| 15 minutes | about $16 a month |
-| 1 hour | about $4 a month |
-| 4 hours | about $1 a month |
+Read-path cost is computed by `./scripts/Measure-ClaudeProjectionCost.ps1
+-Developers 500000 -DailyActive 50000 -AlwaysReadyInstances 2`, not quoted as a
+complete operating bill. Current at-rest cost is $91.56/month; hourly lease
+renewal at this size adds about 365 million writes/month, approximately
+$538/month at the measured create charge (derived). See the
+[2026-09-24 P19 record](STATUS.md#where-p19-stands-2026-09-24).
 
-Computed by `./scripts/Measure-ClaudeProjectionCost.ps1`, not quoted.
-
-This does **not** hold up any engineering — it is a named value with a working
-default, and changing it is one command. It holds up being able to state your
-revocation guarantee to a security reviewer, which is usually the thing that is
-actually being asked for.
+**Portal:** APIM > Named values > `entitlement-cache-seconds`; the sync owner
+sets the scan schedule and lease. Cosmos > Data Explorer, from an authorised
+private-network client, can inspect `lastVerifiedAt` and `expiresAt`.
+Do not lengthen a cache setting to hide an expired projection. Verify removal
+with a real request and the [projection checks](SECURE-PROJECTION.md#verify).
 
 ---
 
@@ -91,6 +109,9 @@ address, nothing to reconfigure. Anything beyond Standard v2 means a new
 instance, which is why decision 1 exists.
 
 **Move before a wider rollout**, not after.
+**Portal:** APIM > Pricing tier can show available in-place changes. Review the
+current supported upgrade path before approving it; [Scale](SCALE.md) separates
+the tier decision from the storage and traffic limits.
 
 ---
 
@@ -111,12 +132,21 @@ more than this.
 
 ### 6. Is a team budget a report, or a hard stop?
 
-**Default today:** a report.
+**Default today:** a unit with no entry in `bu-modes` is **strict**. The shipped
+policy also supports **allowance** (base plus an integer percentage) and
+**notify** (no blocking limiter at that unit/team scope). Parent, organisation
+and personal controls still apply independently.
 
-Budgets are set in dollars and enforced by counting tokens, and the counter
-**cannot see cached tokens**. On the reference gateway, cache was 98% of
-estimated spend, which made real spend **41.5 times** the portion the budget
-counts.
+The installer's legacy `report` / `stop` prompt does not select these per-unit
+modes. Its `report` answer is not proof of notify behavior; the installer
+preserves the existing map. Configure the desired mode explicitly through
+[Business units](BUSINESS-UNITS.md#budget-modes) or the configured Turnstile
+authority, then verify the applied named value and response behavior.
+
+Enforcing budgets are set in dollars and enforced by counting tokens, and the counter
+**cannot see cached tokens**. The retained U12 sample attributes **38.7%** of
+cost weight to cache reads ([UNKNOWNS.md](UNKNOWNS.md)); it is evidence of a gap,
+not a ratio to apply to every deployment.
 
 So a $2,000 limit permits far more than $2,000 of real spend. Two honest ways to
 handle that:
@@ -124,11 +154,16 @@ handle that:
 - treat the dollar figure as **reporting**, and use the per-developer daily
   limit as the thing that actually stops a runaway; or
 - divide the token figure by **your own** measured ratio — read it from the
-  chargeback workbook rather than reusing 41.5, which is one gateway's caching
-  profile and not a constant.
+  chargeback workbook, including its missing-category and metric-limit caveats.
 
 Say "we can attribute the cost" rather than "we can cap it". Today the first is
 true and the second is not.
+**Portal:** inspect the configured authority in [Turnstile](TURNSTILE.md), or
+APIM > Named values > `bu-registry` and `bu-modes`. Verify the next request and
+the reported budget, not just the label on an installer prompt. Notify's notice
+is advisory on each applicable response, not proof the budget was crossed.
+Switching back from notify does not backfill the skipped monthly counter;
+use the ledger for reporting ([ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ### 7. Can everyone use the most expensive model?
 
@@ -143,6 +178,10 @@ defeat.
 ./scripts/Set-ClaudeTier.ps1 -Tier standard -Models claude-sonnet-5
 ```
 
+**Portal:** APIM > Named values > `models-standard` > Value
+`,claude-sonnet-5,` > Save. Verify the deployment exists and test as that tier;
+an empty list allows all deployed models. [Models](MODELS.md) covers the lifecycle.
+
 ### 8. Can somebody with no team assigned still use it?
 
 **Default today:** yes — `bu-unassigned` is `allow`. Their usage is served and
@@ -151,6 +190,8 @@ recorded, and charged to nobody.
 Switch it to `deny` once every developer has a team, not before, or you will
 refuse people who have done nothing wrong. `./scripts/Get-ClaudeBusinessUnit.ps1`
 reports how many are still unassigned.
+**Portal:** APIM > Named values > `bu-unassigned` > Edit. Confirm no unintended
+unassigned developers in the workbook before switching to `deny`.
 
 ---
 
@@ -162,10 +203,17 @@ This decides how much of the scaling work is worth doing.
 
 | Planning for | What you need |
 |---|---|
-| Up to about 90 | Nothing. It works today |
+| Up to about 90 | The default named-value path, subject to actual identifier lengths and measured headroom |
 | A few hundred | The entitlement store, and Standard v2 to run it |
-| Thousands | The above, plus a look at request volume — Standard v2 includes 50,000,000 requests a month, about 4,500 developers at 500 requests each a day |
-| 200,000 | All of the above, plus decisions 1 and 2 settled first, because neither can be retrofitted |
+| Thousands | The above, plus measured request/token rate, streaming concurrency and Foundry quota; included monthly requests are not an RPS guarantee |
+| 500,000 | Storage was tested at this record count, not a complete production deployment. Scheduled Graph scans, traffic and failover still need verification |
 
 `./scripts/Measure-ClaudeCeiling.ps1` reports where your own gateway is against
 the first of those.
+**Portal:** APIM > Named values shows list lengths; [Scale](SCALE.md) explains
+how to calculate headroom and the measurements a capacity claim requires.
+
+## Next steps
+
+[Setup](SETUP.md) for deployment, [FinOps](FINOPS.md) for financial close, and
+[Private projection](SECURE-PROJECTION.md) for the optional store.
