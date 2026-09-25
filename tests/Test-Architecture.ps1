@@ -165,7 +165,9 @@ try {
 
     Invoke-Mutation 'merged AUM engine labels are checked against local code' 'cli/finops/src/claude_finops/engine.py' {
         param($p)
-        $text = [IO.File]::ReadAllText($p).Replace('class Engine:', 'class RenamedEngine:')
+        $before = [IO.File]::ReadAllText($p)
+        $text = [regex]::Replace($before, '(?m)^class Engine(?=\(|:)', 'class RenamedEngine')
+        if ($text -ceq $before) { throw 'Engine rename mutation did not reach a class declaration.' }
         [IO.File]::WriteAllText($p, $text, $script:utf8)
     } 'IDENTIFIER_MISSING'
 

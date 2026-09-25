@@ -169,8 +169,8 @@ refuse. Details: [Budgets](BUDGETS.md) and [Business units](BUSINESS-UNITS.md).
      "repository": "<path-to-this-clone>", "workspace": "<workspace-id>" }
    ```
 
-3. `claude-finops whoami` shows the identity and `method: azure-rbac`; `claude-finops status` shows
-   the month. Run `claude-finops` with no command for the terminal app.
+3. `aum whoami` shows the identity and `method: azure-rbac`; `aum status` shows
+   the month. Run `aum` with no command for the terminal app. `claude-finops` remains a deprecated alias.
 4. Changes preview first and are written only with `--apply`, through the same PowerShell
    serializers as flow 2, and read back.
 
@@ -180,9 +180,9 @@ unit's budget and headroom. Estimated cost showed **unknown** because 10 usage r
 price. Cost is known only when every model used is in the price book
 ([Claude tokens](#claude-tokens-the-largest-line)).
 
-![Budget hierarchy, remaining usage and allocation headroom in an 80-column terminal](images/finops/budgets-80x24.svg)
+![Live redacted gateway budgets and allocation headroom in an 80-column terminal](images/aum/direct-budgets-80x24-after.svg)
 
-Details: [Terminal FinOps](CLI-FINOPS.md#connect-directly-to-the-gateway).
+Details: [AUM Direct gateway access](AUM.md#direct-gateway-access).
 
 ### Flow 4: Turnstile, and the terminal on it
 
