@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "id": "network-hybrid",
+  "kind": "flow",
+  "title": "C. Split DNS, two WAF listeners, one governed origin",
+  "subtitle": "Corporate and internet clients use the same approved hostname, certificate and APIM policy. Private and public test paths were exercised; corporate hub transit and production high availability remain reference designs.",
+  "width": 1280,
+  "height": 1692,
+  "outputs": ["docs/images/architecture/network-hybrid.png"],
+  "sources": ["infra/network-edge.bicep", "infra/network-edge-waf.bicep", "infra/network-edge-vnet.bicep", "infra/network-edge-private-name.bicep", "infra/network-private-dns.bicep", "scripts/ClaudeNetworkPolicy.ps1", "docs/NETWORK-ENTERPRISE.md"],
+  "identifiers": {
+    "certificate-identity": { "label": "Microsoft.ManagedIdentity/userAssignedIdentities", "source": "scripts/New-ClaudeNetworkEdge.ps1", "match": "providers/Microsoft.ManagedIdentity/userAssignedIdentities/$Name" },
+    "edge": { "kind": "resource", "label": "Microsoft.Network/applicationGateways", "source": "infra/network-edge.bicep", "match": "resource gateway 'Microsoft.Network/applicationGateways@" },
+    "waf": { "kind": "resource", "label": "Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies", "source": "infra/network-edge-waf.bicep", "match": "resource policy 'Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies@" },
+    "nsg": { "kind": "resource", "label": "Microsoft.Network/networkSecurityGroups", "source": "infra/network-edge-vnet.bicep", "match": "resource edgeNsg 'Microsoft.Network/networkSecurityGroups@" },
+    "dns-a": { "kind": "resource", "label": "Microsoft.Network/privateDnsZones/A", "source": "infra/network-edge-private-name.bicep", "match": "resource address 'Microsoft.Network/privateDnsZones/A@" }
+  },
+  "groups": [
+    { "x": 0, "y": 0, "w": 1280, "h": 322, "tone": "teal", "title": "Two client network boundaries - same hostname, signed identity and trust requirements" },
+    { "x": 0, "y": 378, "w": 1280, "h": 430, "tone": "blue", "title": "Regional WAF and private origins - neither ingress path bypasses APIM or its budgets" },
+    { "x": 0, "y": 850, "w": 1280, "h": 380, "tone": "purple", "title": "Split DNS and private service dependencies - verify both paths after every change" },
+    { "x": 0, "y": 1272, "w": 1280, "h": 420, "tone": "slate", "title": "Optional enterprise controls - priced and reviewed separately; no implicit governance exceptions" }
+  ],
+  "nodes": [
+    { "id": "client", "x": 16, "y": 60, "w": 400, "h": 238, "tone": "teal", "compact": true, "title": "Internet developer", "lines": [
+      "Public DNS -> selected WAF public IP.",
+      "HTTPS/443, developer Entra bearer token; trusted certificate.",
+      "One client endpoint; no direct Foundry credential. Corporate egress restrictions require their own reviewed rule."
+    ] },
+    { "id": "entra", "x": 456, "y": 60, "w": 370, "h": 238, "tone": "teal", "compact": true, "title": "Microsoft Entra ID", "lines": [
+      "Both client networks need public HTTPS/443 sign-in and token refresh.",
+      "Delegated OAuth; existing MFA/Conditional Access policy.",
+      "Corporate source IP is not a substitute for a signed person identity."
+    ] },
+    { "id": "corporate", "x": 866, "y": 60, "w": 398, "h": 238, "tone": "teal", "compact": true, "title": "Corporate or routed spoke client", "lines": [
+      "Private DNS -> WAF private frontend.",
+      "HTTPS/443, same hostname, certificate and developer token.",
+      "VPN/ExpressRoute and peering are reference dependencies. The private test used a separate Azure verifier."
+    ] },
+    { "id": "edge", "x": 16, "y": 440, "w": 400, "h": 336, "tone": "blue", "compact": true, "title": "One WAF, dual HTTPS listeners", "lines": [
+      "[[edge]]", "[[waf]]",
+      "Public and private frontends, dedicated edge subnet.",
+      "Both routes apply the same global/Messages WAF controls and trusted client-IP rewrite.",
+      "TLS re-encryption, SSE buffering off; no direct APIM shortcut for private clients."
+    ] },
+    { "id": "apim", "x": 456, "y": 440, "w": 370, "h": 336, "tone": "blue", "compact": true, "title": "One Standard v2 origin", "lines": [
+      "Microsoft.ApiManagement/service",
+      "Inbound private endpoint; public access disabled.",
+      "HTTPS/443 from the selected edge; unchanged person bearer. Source filter, JWT, entitlement and budgets.",
+      "Separate outbound integration in Microsoft.Web/serverFarms subnet.",
+      "HTTPS/443 to Foundry under APIM managed identity."
+    ] },
+    { "id": "foundry", "x": 866, "y": 440, "w": 398, "h": 336, "tone": "blue", "compact": true, "title": "One private Foundry account", "lines": [
+      "Microsoft.CognitiveServices/accounts",
+      "Microsoft.Network/privateEndpoints, account subresource.",
+      "Public network access disabled; APIM MI has scoped inference access.",
+      "Response returns on the caller's chosen WAF path.",
+      "A direct Foundry exception bypasses entitlement, budgets and the gateway ledger; none is enabled here."
+    ] },
+    { "id": "subnets", "x": 16, "y": 912, "w": 400, "h": 294, "tone": "purple", "compact": true, "title": "Separate, discovered subnets", "lines": [
+      "Microsoft.Network/virtualNetworks", "[[nsg]]",
+      "Dedicated edge; exclusive APIM integration; separate private endpoints.",
+      "Separate delegated verifier subnet for evaluation, removed afterwards.",
+      "Review existing route tables, peerings and IPAM. A VNet's name does not prove hub transit."
+    ] },
+    { "id": "vault", "x": 456, "y": 912, "w": 370, "h": 294, "tone": "purple", "compact": true, "title": "Same TLS identity on both paths", "lines": [
+      "Microsoft.KeyVault/vaults",
+      "[[certificate-identity]]",
+      "Edge MI: HTTPS/443 via vault PE; scoped role and versionless certificate reference.",
+      "Private operators need a routed workstation. Subscription Owner is not a network tunnel."
+    ] },
+    { "id": "dns", "x": 866, "y": 912, "w": 398, "h": 294, "tone": "purple", "compact": true, "title": "Split-name resolution", "lines": [
+      "[[dns-a]]",
+      "Exact listener-name private zone and VNet link; public DNS retains the public WAF address.",
+      "Service private zones resolve APIM, Foundry and vault. DNS UDP/TCP 53.",
+      "Do not shadow an entire shared public namespace. Resolver endpoints have their own exclusive subnets."
+    ] },
+    { "id": "logs", "x": 16, "y": 1334, "w": 400, "h": 334, "tone": "slate", "compact": true, "title": "Compare both paths", "lines": [
+      "Microsoft.OperationalInsights/workspaces and Microsoft.Insights/components",
+      "Azure-managed diagnostics and authorized HTTPS/443 queries.",
+      "Check actual TLS, completed SSE and authenticated origin bypass denial from both networks.",
+      "Historical identity is not a reachability guarantee. Masked or missing IPs require explicit unknown-impact acknowledgement."
+    ] },
+    { "id": "optional", "x": 456, "y": 1334, "w": 370, "h": 334, "tone": "slate", "compact": true, "title": "Optional estate, explicit choices", "lines": [
+      "Resolver Function -> Cosmos DB: HTTPS/443 with reader MI.",
+      "Turnstile App Service -> PostgreSQL: TLS/5432, separate integration and private data path.",
+      "Container Apps jobs -> ARM/logs: HTTPS/443 with scoped workload MI.",
+      "Each has its own network review. No tenant-admin Graph grant is implied by the gateway profile."
+    ] },
+    { "id": "alternatives", "x": 866, "y": 1334, "w": 398, "h": 334, "tone": "amber", "compact": true, "title": "Not automatic failover or HA", "lines": [
+      "A second APIM instance needs policy, entitlement and DNS synchronization; quota counters are per instance.",
+      "Firewall, DNS resolver, Bastion, AKS and injected agents remain reference-only additions.",
+      "Front Door has public ingress, not this dual private/public listener design.",
+      "Premium v2 zone redundancy is a creation-time platform choice, not a selectable unit-to-zone drawing."
+    ] }
+  ],
+  "edges": [
+    { "from": "client", "to": "entra", "kind": "identity", "points": [[416, 156], [456, 156]] },
+    { "from": "corporate", "to": "entra", "kind": "identity", "points": [[866, 156], [826, 156]] },
+    { "from": "client", "to": "edge", "kind": "data", "points": [[196, 298], [196, 440]], "label": "Public HTTPS/443", "labelAt": [196, 348] },
+    { "from": "corporate", "to": "edge", "kind": "data", "points": [[1085, 298], [1085, 330], [236, 330], [236, 440]], "label": "Private HTTPS/443", "labelAt": [770, 330] },
+    { "from": "edge", "to": "apim", "kind": "data", "points": [[416, 605], [456, 605]] },
+    { "from": "apim", "to": "foundry", "kind": "data", "points": [[826, 605], [866, 605]] },
+    { "from": "edge", "to": "vault", "kind": "identity", "points": [[216, 776], [216, 832], [640, 832], [640, 912]], "label": "HTTPS/443 - certificate identity", "labelAt": [440, 832] },
+    { "from": "apim", "to": "dns", "kind": "control", "points": [[660, 776], [660, 816], [1070, 816], [1070, 912]] },
+    { "from": "apim", "to": "logs", "kind": "control", "points": [[600, 776], [600, 824], [430, 824], [430, 1440], [416, 1440]] }
+  ],
+  "notice": "Live: public client and private Azure verifier resolved the intended frontends and completed TLS/SSE; private direct APIM returned 403. The later private-only cutover refused internet TLS. No production HA, corporate VPN, failover or optional-estate migration is claimed."
+}

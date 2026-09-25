@@ -36,6 +36,7 @@ let identity =
         tier  = tostring(Properties.Tier),
         business_unit = tostring(Properties.BusinessUnit),
         client_raw = tostring(Properties.Client),
+        client_ip = tostring(Properties.ClientIp),
         requested_model = tostring(Properties.Model)
     | summarize
         actor = take_any(actor),
@@ -43,6 +44,7 @@ let identity =
         tier = take_any(tier),
         business_unit = take_any(business_unit),
         client_raw = take_any(client_raw),
+        client_ip = take_any(client_ip),
         requested_model = take_any(requested_model)
         by rid;
 //
@@ -102,6 +104,7 @@ ApiManagementGatewayLlmLog
     business_unit = coalesce(business_unit, "unassigned"),
     client_surface,
     client_raw,
+    client_ip,
     model = coalesce(model, requested_model),
     deployment,
     streamed,

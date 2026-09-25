@@ -14,6 +14,11 @@ It then points the gateway at the resolver
 without changing anyone's access, ready for the
 [migration runbook](SCALE.md#the-move-itself-step-by-step).
 
+For private gateway ingress, Application Gateway WAF, corporate DNS/routing
+and the placement of the other services, see the
+[enterprise network design](NETWORK-ENTERPRISE.md). A private resolver alone
+does not restrict the gateway's public ingress.
+
 The original steps, results and errors were measured on 2026-09-23 against an
 API Management Premium v2 gateway in Canada Central. P19 freshness and admission
 changes, and the 500,000-record measurement, are dated 2026-09-24 below. The Cosmos DB account was

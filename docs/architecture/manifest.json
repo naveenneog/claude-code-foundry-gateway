@@ -6,14 +6,14 @@
       "source": "docs/architecture/01-system.json",
       "inputs": {
         "analytics/chargeback-cost.kql": "8d8a66a8980348851f37889579bf019666b229105bb4e64caae02c474de080b1",
-        "analytics/chargeback-ledger.kql": "65b0b2942ed548bfb1bd2a192de6854aa86464c441401d9e5ba1a605c2ba692b",
+        "analytics/chargeback-ledger.kql": "a0fd52247f785cf56ab35e1ca1d5dba977d04c585610c80c8f390d6cd0b7b528",
         "docs/architecture/01-system.json": "6ed17d4394fc3de2e6e040626ef125b229ff2d49f26bbca9ec43cc249d5b05d0",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/foundry-role.bicep": "96a1602ea171dfcd975bb5b7e0f18a1b32f1e9e6d74e306298836b518db72d50",
         "infra/main.bicep": "7dd06134ac7199f42a9e4894b33f7ef028064d355d750c1af689bdce01a8597b",
-        "infra/policy.xml": "0fc8ce021143a12ff729efa04fecc8e910c5e1e4e0086954fa6e4cc769b08874",
+        "infra/policy.xml": "7a36f975f205633673a8353b5682d88cced0339fdd39dbe36d41494b4d2395dc",
         "infra/projection-network.bicep": "129f88bebc796ea1c0b5369c4e4f63afaf318f539f4f660d735be5b946946af1",
         "infra/projection.bicep": "dae83ef1bfe60675e49e50ddf7c795c15d9868ea9a9c72e924a4593a208a8a91",
         "infra/resolver.bicep": "d90c34a0d2b77bfaf0a7589f093ef9e32de1356d4f2cafb1a6180f6966c01f6f",
@@ -47,13 +47,13 @@
       "id": "request-path",
       "source": "docs/architecture/02-request.json",
       "inputs": {
-        "analytics/chargeback-ledger.kql": "65b0b2942ed548bfb1bd2a192de6854aa86464c441401d9e5ba1a605c2ba692b",
+        "analytics/chargeback-ledger.kql": "a0fd52247f785cf56ab35e1ca1d5dba977d04c585610c80c8f390d6cd0b7b528",
         "docs/architecture/02-request.json": "32b899dc11efab1bfafda4b4666bb7340c3a55a3ed9b4645900636227591f287",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/main.bicep": "7dd06134ac7199f42a9e4894b33f7ef028064d355d750c1af689bdce01a8597b",
-        "infra/policy.xml": "0fc8ce021143a12ff729efa04fecc8e910c5e1e4e0086954fa6e4cc769b08874",
+        "infra/policy.xml": "7a36f975f205633673a8353b5682d88cced0339fdd39dbe36d41494b4d2395dc",
         "infra/projection.bicep": "dae83ef1bfe60675e49e50ddf7c795c15d9868ea9a9c72e924a4593a208a8a91",
         "infra/resolver.bicep": "d90c34a0d2b77bfaf0a7589f093ef9e32de1356d4f2cafb1a6180f6966c01f6f",
         "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
@@ -126,7 +126,7 @@
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
-        "infra/policy.xml": "0fc8ce021143a12ff729efa04fecc8e910c5e1e4e0086954fa6e4cc769b08874",
+        "infra/policy.xml": "7a36f975f205633673a8353b5682d88cced0339fdd39dbe36d41494b4d2395dc",
         "infra/projection-network.bicep": "129f88bebc796ea1c0b5369c4e4f63afaf318f539f4f660d735be5b946946af1",
         "infra/projection.bicep": "dae83ef1bfe60675e49e50ddf7c795c15d9868ea9a9c72e924a4593a208a8a91",
         "infra/resolver.bicep": "d90c34a0d2b77bfaf0a7589f093ef9e32de1356d4f2cafb1a6180f6966c01f6f",
@@ -150,7 +150,7 @@
       "id": "terminal-finops",
       "source": "docs/architecture/06-finops.json",
       "inputs": {
-        "analytics/chargeback-ledger.kql": "65b0b2942ed548bfb1bd2a192de6854aa86464c441401d9e5ba1a605c2ba692b",
+        "analytics/chargeback-ledger.kql": "a0fd52247f785cf56ab35e1ca1d5dba977d04c585610c80c8f390d6cd0b7b528",
         "cli/finops/pyproject.toml": "692e2352b8859d1e71ebd1cb5af319df29abea1de73f2f1fd5e947d8ce073165",
         "cli/finops/src/claude_finops/cli.py": "df9184c655841fd4daa658aff9e6d2f5b0427250e2d29411084cead3f16cf6ca",
         "cli/finops/src/claude_finops/direct.py": "b6f63377f2ac839936e210b1e19a8577c6addbd01865756a128f91f8cd3d5076",
@@ -207,7 +207,7 @@
       "source": "docs/architecture/08-chargeback-reports.json",
       "inputs": {
         "analytics/chargeback-cost.kql": "8d8a66a8980348851f37889579bf019666b229105bb4e64caae02c474de080b1",
-        "analytics/chargeback-ledger.kql": "65b0b2942ed548bfb1bd2a192de6854aa86464c441401d9e5ba1a605c2ba692b",
+        "analytics/chargeback-ledger.kql": "a0fd52247f785cf56ab35e1ca1d5dba977d04c585610c80c8f390d6cd0b7b528",
         "docs/architecture/08-chargeback-reports.json": "6081e4f195e619c67b888221f5e88894c923aeb8306107fe4b97f99bedb1d358",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
@@ -238,7 +238,7 @@
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/main.bicep": "7dd06134ac7199f42a9e4894b33f7ef028064d355d750c1af689bdce01a8597b",
-        "infra/policy.xml": "0fc8ce021143a12ff729efa04fecc8e910c5e1e4e0086954fa6e4cc769b08874",
+        "infra/policy.xml": "7a36f975f205633673a8353b5682d88cced0339fdd39dbe36d41494b4d2395dc",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeBudgetModes.ps1": "d27db15c9e257e2e923355978896737bb07cd2227135fa29625b003655f70946",
         "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
@@ -278,6 +278,82 @@
         {
           "path": "docs/images/architecture/aum-service.png",
           "sha256": "b9c4599c9645bdc94b3ce272abc672963c6e9a8dd041ee7d0a06a6ad228da811"
+        }
+      ]
+    },
+    {
+      "id": "network-private",
+      "source": "docs/architecture/11-network-private.json",
+      "inputs": {
+        "docs/NETWORK-ENTERPRISE.md": "bcaf978eb784d2e140d91a4334962e945becbf1077f69e042861e4f4e489b126",
+        "docs/architecture/11-network-private.json": "0a7649f7c1029dd7da0b0e63d17479086d3515c7359a36d3705dd5c272f0afaf",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/network-edge-private-name.bicep": "4809c2c46592be8c8b420b6db745ba28f17808a2827b2e337a077d4932981562",
+        "infra/network-edge-runner.bicep": "f93a00f7ae3a1de2b238858fecbd3bda9f5a703114ecb3614c0374d2cd1111ca",
+        "infra/network-edge-vnet.bicep": "70cc3da8d0fc885b7dd91068d69ba7caf1902c8e5bfa3547f61a7967f5280a03",
+        "infra/network-edge-waf.bicep": "0c54c823a065e72954dc1866bf825547e764e0e5fd29482352421a1329ffe4d8",
+        "infra/network-edge.bicep": "f0f3f3a49baf28e5c8659ecff78e99aad09052c7aba95ed6e27311aa552f600c",
+        "infra/network-private-endpoint.bicep": "0065fc6c625d45d5bd004d539707d80045b86bb1a718cbb63932d35a676c29bf",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "scripts/ClaudeNetworkPolicy.ps1": "31540eaf2772d49e569c961538caa8c44beccdf9577f8a38133b981577bdfed0",
+        "scripts/New-ClaudeNetworkEdge.ps1": "661e99fe3a712bc9c1609ebf41262d037c1a6e12d55988afe9ed1005ef255a8e"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/network-private.png",
+          "sha256": "e48fb19e7e2bb6e4766208395b7976a50243f731f4a541ac19f7ae255274b8b6"
+        }
+      ]
+    },
+    {
+      "id": "network-public",
+      "source": "docs/architecture/12-network-public.json",
+      "inputs": {
+        "docs/NETWORK-ENTERPRISE.md": "bcaf978eb784d2e140d91a4334962e945becbf1077f69e042861e4f4e489b126",
+        "docs/architecture/12-network-public.json": "71187267e6c49b7dd686e266396b45b8e2f503d8fb7ae28b93dd1b3bd8cbc76d",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/network-edge-vnet.bicep": "70cc3da8d0fc885b7dd91068d69ba7caf1902c8e5bfa3547f61a7967f5280a03",
+        "infra/network-edge-waf.bicep": "0c54c823a065e72954dc1866bf825547e764e0e5fd29482352421a1329ffe4d8",
+        "infra/network-edge.bicep": "f0f3f3a49baf28e5c8659ecff78e99aad09052c7aba95ed6e27311aa552f600c",
+        "infra/network-private-dns.bicep": "82999c5e3833870fea5e2dbc622e0517690506c2422a96975a6083eb72142bfa",
+        "infra/network-private-endpoint.bicep": "0065fc6c625d45d5bd004d539707d80045b86bb1a718cbb63932d35a676c29bf",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "scripts/ClaudeNetworkPolicy.ps1": "31540eaf2772d49e569c961538caa8c44beccdf9577f8a38133b981577bdfed0",
+        "scripts/New-ClaudeNetworkEdge.ps1": "661e99fe3a712bc9c1609ebf41262d037c1a6e12d55988afe9ed1005ef255a8e"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/network-public.png",
+          "sha256": "97eb21d8daa96c111f2de6e4b34541116ab91550db8b2628c154b7f2fe840c6b"
+        }
+      ]
+    },
+    {
+      "id": "network-hybrid",
+      "source": "docs/architecture/13-network-hybrid.json",
+      "inputs": {
+        "docs/NETWORK-ENTERPRISE.md": "bcaf978eb784d2e140d91a4334962e945becbf1077f69e042861e4f4e489b126",
+        "docs/architecture/13-network-hybrid.json": "7540f67ef2881f2a329edbcbd38d1e5ec76602277636c7cda1d45d24067226ab",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/network-edge-private-name.bicep": "4809c2c46592be8c8b420b6db745ba28f17808a2827b2e337a077d4932981562",
+        "infra/network-edge-vnet.bicep": "70cc3da8d0fc885b7dd91068d69ba7caf1902c8e5bfa3547f61a7967f5280a03",
+        "infra/network-edge-waf.bicep": "0c54c823a065e72954dc1866bf825547e764e0e5fd29482352421a1329ffe4d8",
+        "infra/network-edge.bicep": "f0f3f3a49baf28e5c8659ecff78e99aad09052c7aba95ed6e27311aa552f600c",
+        "infra/network-private-dns.bicep": "82999c5e3833870fea5e2dbc622e0517690506c2422a96975a6083eb72142bfa",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "scripts/ClaudeNetworkPolicy.ps1": "31540eaf2772d49e569c961538caa8c44beccdf9577f8a38133b981577bdfed0",
+        "scripts/New-ClaudeNetworkEdge.ps1": "661e99fe3a712bc9c1609ebf41262d037c1a6e12d55988afe9ed1005ef255a8e"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/network-hybrid.png",
+          "sha256": "1b67544bfb5dc1fcc1af34ca59abd4bae5edee32ad23589cd5b4fa707a4f29d4"
         }
       ]
     }

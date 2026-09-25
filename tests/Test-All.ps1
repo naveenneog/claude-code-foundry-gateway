@@ -203,6 +203,14 @@ try {
     Invoke-Check 'Admin surface - SKU, groups, tiers'      'Test-AdminSurface.ps1'
     Invoke-Check 'Scale ceilings and the load envelope'    'Test-Scale.ps1'
     Invoke-Check 'Secure projection and the migration'     'Test-SecureProjection.ps1' -SerialLane
+    Invoke-Check 'Enterprise network edge contract'         'Test-NetworkEdge.ps1' -SerialLane
+    Invoke-Check 'Network ARM transport and ownership'       'Test-NetworkTransport.ps1'
+    Invoke-Check 'Network access impact and uncertainty'     'Test-NetworkImpact.ps1'
+    Invoke-Check 'Network decisions and cost deltas'         'Test-NetworkDecisions.ps1'
+    Invoke-Check 'Network explicit change approval'          'Test-NetworkApproval.ps1'
+    Invoke-Check 'Network review checks detect breakage'     'Test-NetworkReviewNegative.ps1'
+    Invoke-Check 'Network prices are discovered, not guessed' 'Test-NetworkCost.ps1'
+    Invoke-Check 'Network edge checks detect breakage'       'Test-NetworkEdgeNegative.ps1'
     Invoke-Check 'Projection checks detect breakage'        'Test-ProjectionNegative.ps1'
     Invoke-Check 'Adding models, and plugin governance'    'Test-ModelsAndPlugins.ps1'
     Invoke-Check 'Backup and restore'                      'Test-Backup.ps1'

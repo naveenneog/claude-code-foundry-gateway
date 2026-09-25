@@ -3,6 +3,10 @@
 What to allow on a firewall or proxy so that Claude Code, the VS Code extension
 and Claude Desktop work against Microsoft Foundry.
 
+For the Azure-side design, private origins, WAF, hub routing and the live edge
+tests, see [Enterprise network design](NETWORK-ENTERPRISE.md). This article
+remains the client egress allowlist.
+
 This is the observed CLI/extension inference path plus Desktop endpoints
 derived from its installed package; **Desktop runtime was not captured**.
 The method and limits are in [§5](#5-how-this-was-measured).

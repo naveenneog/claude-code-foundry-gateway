@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "id": "network-private",
+  "kind": "flow",
+  "title": "A. Internal-only inference through a private regional WAF",
+  "subtitle": "The private listener, origin and Foundry path were tested from an isolated Azure verifier. Corporate VPN, ExpressRoute, firewall and hub transit are reference dependencies, not a live corporate-network claim.",
+  "width": 1280,
+  "height": 1692,
+  "outputs": ["docs/images/architecture/network-private.png"],
+  "sources": ["infra/network-edge.bicep", "infra/network-edge-waf.bicep", "infra/network-edge-vnet.bicep", "infra/network-edge-private-name.bicep", "infra/network-private-endpoint.bicep", "infra/network-edge-runner.bicep", "scripts/ClaudeNetworkPolicy.ps1", "docs/NETWORK-ENTERPRISE.md"],
+  "identifiers": {
+    "certificate-identity": { "label": "Microsoft.ManagedIdentity/userAssignedIdentities", "source": "scripts/New-ClaudeNetworkEdge.ps1", "match": "providers/Microsoft.ManagedIdentity/userAssignedIdentities/$Name" },
+    "edge": { "kind": "resource", "label": "Microsoft.Network/applicationGateways", "source": "infra/network-edge.bicep", "match": "resource gateway 'Microsoft.Network/applicationGateways@" },
+    "waf": { "kind": "resource", "label": "Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies", "source": "infra/network-edge-waf.bicep", "match": "resource policy 'Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies@" },
+    "nsg": { "kind": "resource", "label": "Microsoft.Network/networkSecurityGroups", "source": "infra/network-edge-vnet.bicep", "match": "resource edgeNsg 'Microsoft.Network/networkSecurityGroups@" },
+    "dns-a": { "kind": "resource", "label": "Microsoft.Network/privateDnsZones/A", "source": "infra/network-edge-private-name.bicep", "match": "resource address 'Microsoft.Network/privateDnsZones/A@" }
+  },
+  "groups": [
+    { "x": 0, "y": 0, "w": 1280, "h": 322, "tone": "teal", "title": "Client and directory boundaries - corporate reachability must be supplied" },
+    { "x": 0, "y": 378, "w": 1280, "h": 430, "tone": "blue", "title": "Customer Azure subscription - private inference path; one APIM governance boundary" },
+    { "x": 0, "y": 850, "w": 1280, "h": 380, "tone": "purple", "title": "Separate subnet and service boundaries - address space and resource IDs come from discovery" },
+    { "x": 0, "y": 1272, "w": 1280, "h": 420, "tone": "slate", "title": "Monitoring and optional estate - independent deployment decisions, not silently converted" }
+  ],
+  "nodes": [
+    { "id": "client", "x": 16, "y": 60, "w": 400, "h": 238, "tone": "teal", "compact": true, "title": "Corporate developer", "lines": [
+      "Claude Code, VS Code extension or Desktop",
+      "HTTPS/443 to the private listener, with the person's Entra bearer token.",
+      "A real VPN/ExpressRoute route and private DNS are prerequisites. Internet-only clients lose this path."
+    ] },
+    { "id": "entra", "x": 456, "y": 60, "w": 370, "h": 238, "tone": "teal", "compact": true, "title": "Microsoft Entra ID", "lines": [
+      "Public HTTPS/443 sign-in and refresh; delegated OAuth.",
+      "Existing tenant policy supplies MFA/Conditional Access.",
+      "A directory service, not an ARM resource inside the VNet. No new tenant-admin consent."
+    ] },
+    { "id": "route", "x": 866, "y": 60, "w": 398, "h": 238, "tone": "amber", "compact": true, "title": "Corporate hub - reference only", "lines": [
+      "Microsoft.Network/virtualNetworkGateways",
+      "VPN or ExpressRoute, peering and return routes; discover existing ownership.",
+      "HTTPS/443 continues to the spoke's private WAF. No corporate tunnel was deployed or tested in P54."
+    ] },
+    { "id": "edge", "x": 16, "y": 440, "w": 400, "h": 336, "tone": "blue", "compact": true, "title": "Private WAF v2 listener", "lines": [
+      "[[edge]]", "[[waf]]",
+      "Dedicated edge subnet; HTTPS/443 only.",
+      "Separate global and Messages policies; body inspection and enforcement stay on.",
+      "TLS to APIM; bearer unchanged. Socket-derived client-IP headers replace caller values."
+    ] },
+    { "id": "apim", "x": 456, "y": 440, "w": 370, "h": 336, "tone": "blue", "compact": true, "title": "APIM Standard v2", "lines": [
+      "Microsoft.ApiManagement/service",
+      "Inbound Microsoft.Network/privateEndpoints; public access disabled.",
+      "Source filter before JWT, entitlement and budgets; direct private bypass is rejected.",
+      "Separate outbound integration subnet, delegated to Microsoft.Web/serverFarms.",
+      "HTTPS/443 to Foundry with APIM managed identity, not the developer token."
+    ] },
+    { "id": "foundry", "x": 866, "y": 440, "w": 398, "h": 336, "tone": "blue", "compact": true, "title": "Customer Foundry deployment", "lines": [
+      "Microsoft.CognitiveServices/accounts",
+      "Private endpoint on the account subresource; public access disabled.",
+      "HTTPS/443; APIM identity has the scoped inference role.",
+      "Claude response streams back over the same TLS path; WAF response buffering is off.",
+      "An inbound endpoint does not itself isolate Foundry Agent Service egress."
+    ] },
+    { "id": "subnets", "x": 16, "y": 912, "w": 400, "h": 294, "tone": "purple", "compact": true, "title": "VNet and exclusive subnets", "lines": [
+      "Microsoft.Network/virtualNetworks", "[[nsg]]",
+      "Edge: dedicated /24 recommended; modern gateway delegation when enabled.",
+      "APIM integration: /27 minimum, /24 recommended. Endpoints: separate, non-delegated.",
+      "Verifier: separate Container Instances delegation; temporary test workload."
+    ] },
+    { "id": "vault", "x": 456, "y": 912, "w": 370, "h": 294, "tone": "purple", "compact": true, "title": "Certificate, not a developer key", "lines": [
+      "Microsoft.KeyVault/vaults",
+      "[[certificate-identity]]",
+      "Edge MI: HTTPS/443 via vault PE; Secrets User and a versionless certificate reference.",
+      "Private administration. Evaluation returns a public CA only; production uses an approved issuer."
+    ] },
+    { "id": "dns", "x": 866, "y": 912, "w": 398, "h": 294, "tone": "purple", "compact": true, "title": "Private DNS is not a subnet", "lines": [
+      "Microsoft.Network/privateDnsZones", "[[dns-a]]",
+      "Exact listener name points to private frontend. Service zones link to reachable VNets.",
+      "Resolver forwarding: DNS UDP/TCP 53. Resolver inbound/outbound endpoints need separate exclusive subnets.",
+      "A shared zone in another subscription is retained, never guessed or overwritten."
+    ] },
+    { "id": "logs", "x": 16, "y": 1334, "w": 400, "h": 334, "tone": "slate", "compact": true, "title": "Telemetry and access impact", "lines": [
+      "Microsoft.OperationalInsights/workspaces and Microsoft.Insights/components",
+      "Azure-managed diagnostics; not an invented VNet hop. SDK/query traffic uses HTTPS/443.",
+      "Trusted client IP and gateway request ID enter the ledger; scrub prompt/header match data.",
+      "AMPLS is a separate, reference-only choice. Masked historical IPs cannot prove client reachability."
+    ] },
+    { "id": "optional", "x": 456, "y": 1334, "w": 370, "h": 334, "tone": "slate", "compact": true, "title": "Optional workloads, own subnets", "lines": [
+      "Resolver: Microsoft.Web/sites -> Microsoft.DocumentDB/databaseAccounts; HTTPS/443, reader MI.",
+      "Turnstile: App Service -> Microsoft.DBforPostgreSQL/flexibleServers; TLS/5432, server-side identity/credential.",
+      "Microsoft.App/jobs in a separate managed environment; HTTPS/443 to ARM/logs with scoped MI.",
+      "Their private conversion is not automated by the regional edge review."
+    ] },
+    { "id": "hub", "x": 866, "y": 1334, "w": 398, "h": 334, "tone": "amber", "compact": true, "title": "Explicit reference alternatives", "lines": [
+      "Microsoft.Network/azureFirewalls: destination policy plus approved UDR/return routing.",
+      "NAT supplies SNAT, not an allowlist or inspection.",
+      "Premium v2 injection needs a new instance and Microsoft.Web/hostingEnvironments subnet.",
+      "Direct app-spoke APIM access skips WAF and is deliberately rejected by this edge-only policy."
+    ] }
+  ],
+  "edges": [
+    { "from": "client", "to": "entra", "kind": "identity", "points": [[416, 156], [456, 156]] },
+    { "from": "client", "to": "route", "kind": "data", "points": [[216, 298], [216, 330], [1065, 330], [1065, 298]] },
+    { "from": "route", "to": "edge", "kind": "data", "points": [[1085, 298], [1085, 354], [216, 354], [216, 440]] },
+    { "from": "edge", "to": "apim", "kind": "data", "points": [[416, 605], [456, 605]] },
+    { "from": "apim", "to": "foundry", "kind": "data", "points": [[826, 605], [866, 605]] },
+    { "from": "edge", "to": "vault", "kind": "identity", "points": [[216, 776], [216, 832], [640, 832], [640, 912]], "label": "HTTPS/443 - certificate identity", "labelAt": [440, 832] },
+    { "from": "apim", "to": "dns", "kind": "control", "points": [[660, 776], [660, 816], [1070, 816], [1070, 912]] },
+    { "from": "apim", "to": "logs", "kind": "control", "points": [[600, 776], [600, 824], [430, 824], [430, 1440], [416, 1440]] }
+  ],
+  "notice": "Live boundary: private verifier -> private WAF -> private APIM -> private Foundry; internet TLS and direct APIM bypass were refused. Corporate hub, HA, Premium injection and optional-estate paths remain reference-only. All evaluation resources were removed."
+}
