@@ -21,6 +21,18 @@ are replaced by example ones: the units are `sales` (teams `sales-emea`, `sales-
 
 ## Live evidence and sign-in without additional grants
 
+### One authenticated portal batch
+
+Packet owners now declare portal needs in `guide/captures/*.json`; the common runner
+loads every spec plus its built-in steps. See the
+[batch capture contract](../guide/captures/README.md) and
+[Turnstile Entra example](../guide/captures/turnstile.json).
+Use `--list` without Azure access, or `--dry-run` to resolve selected targets without
+opening a browser. The lead runs the live batch against the single original profile
+immediately after the owner's sign-in. The runner takes a per-profile lock, never types
+credentials, and stops at the first authentication surface with a remaining-step report.
+Discovery and rendering are distinct: a resolved URL is not a successful screenshot.
+
 For numbered Azure portal/application-GUI steps and equivalent commands, see
 [Turnstile manual operations](manual/turnstile.md). The copied portal profile now supplies
 live application Overview, Expose an API, App roles and enterprise Properties screenshots.
