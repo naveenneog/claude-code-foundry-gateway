@@ -105,10 +105,16 @@ Turnstile assignments were untouched.
 The second footprint's discovered Basic v2 rate was $0.20548/hour
 ($4.93152/day), plus about $0.512877/day for private service networking and
 additional consumption/storage: approximately **$5.44/day**, not a sub-$5/month
-public-storage profile. It is temporary and scheduled for removal after proof;
-the free app registration is retained.
+public-storage profile. Its resource group was verified absent at
+**2026-09-25 05:33:00Z**, with zero remaining grants for both retired identities
+and both empty foundation groups deleted. Before removal, 132 audit records and
+the warning fact were exported; there were no active boosts. At 05:36:31Z,
+the account's 14 memberships and 22 direct assignment tuples still matched.
+No paid P55 test resources remain; the free app registration is retained.
 
 Portal capture obtained two resource images in the first pilot, then stopped at
 Entra sign-in. The twelve versioned `guide/captures/p55.json` capture targets
 remain lead-owned and pending. Neither these API cards nor the bounded-query
 tests prove portal completion, native-client support, or 500,000-person latency.
+Entra targets remain; Function/Storage captures need another explicitly priced
+deployment, not stale screenshots of the retired service.
