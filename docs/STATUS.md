@@ -41,6 +41,22 @@ against stale runs is being added with the modes, and a single queue-driven writ
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
 
+## Premium v2 injection: where the private IP is, 2026-09-25
+
+Asked by the owner, whose own injected Premium v2 gateway showed no private IP, so its URL could
+not be reached or given a DNS record. Tested live on a new instance, `virtualNetworkType:
+Internal`, in a /24 `Microsoft.Web/hostingEnvironments` subnet in Canada Central (729 s to
+create; deleted and purged afterwards, under $4 at list price). The VIP, `10.232.4.4`, is in
+ARM `properties.privateIPAddresses` only at api-versions `2024-05-01`, `2023-09-01-preview` and
+`2023-05-01-preview`, and in Azure Resource Graph. It is `null` at `2022-08-01`, which
+`az apim show` requests, and at every newer preview through `2025-09-01-preview`. While the
+instance is `Activating` the property shows a transient `100.96.x.x` address. The injection subnet
+shows only an IP configuration of a load balancer in a Microsoft-managed subscription. Azure
+publishes no DNS for the gateway name, publicly or in the VNet. A per-host private zone
+(`<name>.azure-api.net`, apex A record) linked to a peered VNet made it answer 200 by name; before
+that, the same request pinned to the IP answered 200 with a valid certificate. Steps are in
+[NETWORK-ENTERPRISE.md](NETWORK-ENTERPRISE.md#find-a-premium-v2-injected-gateways-private-ip).
+
 ## P54 the enterprise network, 2026-09-25
 
 Merged from `enterprise-network` at `50dd6d4`, gated on that commit: 816.8 s, 61 checks passed and

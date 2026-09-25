@@ -60,6 +60,12 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   and verified. On Windows the account broker kept serving the old token; MSAL's
   `set_access_token_to_renew`, behind a helper that fails closed, renews it without deleting any
   cache or adding any grant.
+- **Where a Premium v2 injected gateway's private IP is, measured.** ARM returns it in
+  `properties.privateIPAddresses` only at api-versions `2024-05-01`, `2023-09-01-preview` and
+  `2023-05-01-preview`, and Resource Graph shows it; `az apim show` (`2022-08-01`) and every
+  newer preview return `null`. Azure publishes no DNS for the gateway name.
+  `docs/NETWORK-ENTERPRISE.md` gives the command, the portal path (JSON View at `2024-05-01`) and
+  the per-host private DNS zone that made it answer by name from a peered VNet.
 - **An enterprise network edge, chosen and priced by the administrator.**
   `scripts/New-ClaudeNetworkEdge.ps1` puts a regional Application Gateway WAF_v2 in front of the
   gateway as its only ingress, with internal, internet or hybrid listeners, and Foundry, Key Vault

@@ -209,7 +209,7 @@ a route crosses a firewall; evaluate privacy, latency and certificate trust.
 | Service | Zone or record |
 |---|---|
 | APIM private endpoint | `privatelink.azure-api.net` |
-| Premium v2 injected gateway | An A record for its gateway hostname to the discovered private VIP; injection does not manufacture your DNS record |
+| Premium v2 injected gateway | An A record for its gateway hostname to the discovered private VIP; injection does not manufacture your DNS record ([find the VIP](#find-a-premium-v2-injected-gateways-private-ip)) |
 | Foundry account | Discover its `privateLinkResources.requiredZoneNames`; measured account advertises `privatelink.cognitiveservices.azure.com`, `privatelink.openai.azure.com`, `privatelink.services.ai.azure.com` |
 | Key Vault | `privatelink.vaultcore.azure.net` |
 | App Service / resolver | `privatelink.azurewebsites.net`, including the SCM record when required |
@@ -239,6 +239,68 @@ boundary. Read [AMPLS configuration and access modes][ampls], add all required
 resources, then test ingestion and query before disabling public access.
 Azure resource diagnostic settings do not all use the same path as an SDK
 sending Application Insights telemetry.
+
+### Find a Premium v2 injected gateway's private IP
+
+Measured on 2026-09-25 with a new Premium v2 instance injected (`virtualNetworkType:
+Internal`) into a /24 `Microsoft.Web/hostingEnvironments` subnet in Canada Central, and on
+2026-09-24 in the same subnet. Creation took 729 s. Both times the gateway's private VIP was
+the subnet's first usable address, `10.232.4.4`, but Azure assigns it dynamically, so read
+it after creation. Azure publishes no DNS for it: `<name>.azure-api.net` returned NXDOMAIN
+from public DNS and from the VNet's Azure-provided DNS until a record was added.
+
+| Where you look | Shows the private VIP? |
+|---|---|
+| ARM `properties.privateIPAddresses` at api-version `2024-05-01`, `2023-09-01-preview` or `2023-05-01-preview` | **Yes** |
+| The same property at `2021-08-01`, `2022-08-01`, `2024-06-01-preview`, `2024-10-01-preview`, `2025-03-01-preview` or `2025-09-01-preview` | No, `null` |
+| `az apim show` (the Azure CLI requests `2022-08-01`) | No, `privateIpAddresses` is `null` |
+| Azure Resource Graph, `resources` table | **Yes** |
+| While `provisioningState` is `Activating` | A transient `100.96.x.x` address that is not in your VNet; wait for `Succeeded` |
+| The injection subnet | One `ipConfigurations` entry that points at an internal load balancer in a Microsoft-managed subscription, and an `AppServiceHostingEnvironmentLink`. No load balancer or NIC appears in your subscription |
+
+Read it with the Azure CLI, pinning the API version:
+
+```powershell
+az rest --method get --query properties.privateIPAddresses -o tsv `
+  --url "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.ApiManagement/service/${apimName}?api-version=2024-05-01"
+```
+
+In the portal, open the API Management instance > **Overview** > **JSON View**, choose API
+version **2024-05-01** and read `properties.privateIPAddresses`. **Resource Graph Explorer**
+returns the same value:
+
+```kusto
+resources
+| where type =~ 'microsoft.apimanagement/service' and name == '<apim-name>'
+| project name, privateIPAddresses = properties.privateIPAddresses
+```
+
+Then create the record. Use a private zone named exactly after the gateway hostname, with
+an apex record. A zone named `azure-api.net` would hide every other `*.azure-api.net` name,
+including other gateways, from the VNets it is linked to.
+
+```powershell
+$zone = "$apimName.azure-api.net"
+az network private-dns zone create -g $resourceGroup -n $zone
+az network private-dns record-set a add-record -g $resourceGroup -z $zone -n '@' -a $privateIp
+az network private-dns link vnet create -g $resourceGroup -z $zone -n "link-$vnetName" -v $vnetId -e false
+```
+
+In the portal: **Private DNS zones** > **Create**, name `<apim-name>.azure-api.net`. In the
+zone, **Recordsets** > **Add**: name `@`, type **A**, the private IP. Then **Virtual network
+links** > **Add** for every VNet whose clients call the gateway, peered ones included, with
+auto-registration off. For on-premises clients, forward that hostname to a DNS Private
+Resolver inbound endpoint, or add the A record to corporate DNS. A custom hostname needs its
+own record pointing at the same IP.
+
+Verified from a VM in a peered VNet in another region: before the record the name did not
+resolve, yet the same request pinned to the IP (`curl --resolve <name>.azure-api.net:443:10.232.4.4`,
+which is what a hosts-file entry does) returned 200 with a valid certificate. After the zone
+and link, `https://<name>.azure-api.net/status-0123456789abcdef` returned 200 by name.
+Injection cannot be added to an existing instance, and an injected instance cannot be
+switched to outbound integration (`ChangingVnetTypeNotSupportedForPremiumV2`). Azure also
+allows one Premium v2 activation per subscription every 60 minutes
+(`ServiceSkuActivationThrottled`).
 
 ## Prerequisites
 
