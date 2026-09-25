@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { selectCaptureSteps } from './lib/capture-steps.mjs';
 
 const args = process.argv.slice(2);
 const option = name => { const index = args.indexOf(name); return index < 0 ? null : args[index + 1]; };
@@ -50,7 +51,7 @@ if (groupId) {
   }
 }
 const selected = option('--only');
-const selectedNames = selected?.split(',');
+const selectedSteps = selectCaptureSteps(steps, selected);
 const context = await chromium.launchPersistentContext(profile, {
   channel: 'msedge', headless: !args.includes('--headed'),
   viewport: { width: 1600, height: 1000 }, args: ['--no-first-run', '--no-default-browser-check'],
@@ -80,7 +81,7 @@ async function visibleText(page, fields = false) {
 
 try {
   const page = context.pages()[0] ?? await context.newPage();
-  for (const step of steps.filter(step => !selectedNames || selectedNames.includes(step.file))) {
+  for (const step of selectedSteps) {
     await page.goto(step.url ?? portal(step.id), { waitUntil: 'domcontentloaded', timeout: 90000 });
     await page.waitForTimeout(12000);
     let body = await visibleText(page);
@@ -300,4 +301,4 @@ const previous = fs.existsSync(path.join(folder, 'manifest.json'))
 const manifest = { schema: 1, source: 'live', auth_blocked: authBlocked,
   images: previous.filter(old => !images.some(image => image.file === old.file)).concat(images) };
 fs.writeFileSync(path.join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
-if (authBlocked || images.length !== steps.filter(step => !selected || step.file === selected).length) process.exitCode = 1;
+if (authBlocked || images.length !== selectedSteps.length) process.exitCode = 1;
