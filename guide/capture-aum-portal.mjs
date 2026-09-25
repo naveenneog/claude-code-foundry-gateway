@@ -129,6 +129,16 @@ try {
           await page.waitForTimeout(1500);
           continue;
         }
+        if (step.file === 'turnstile-overview' && /Step \d of \d/.test(content)) {
+          for (const frame of await visibleFrames(page)) {
+            for (const label of ['Next', 'Done', 'Got it', 'Finish']) {
+              const button = frame.getByRole('button', { name: label, exact: true }).first();
+              if (await button.isVisible().catch(() => false)) { await button.click(); break; }
+            }
+          }
+          await page.waitForTimeout(1000);
+          continue;
+        }
         if (step.file === 'workspace-logs') {
           for (const frame of await visibleFrames(page)) {
             const text = await frame.locator('body').innerText({ timeout: 1000 }).catch(() => '');
@@ -178,6 +188,9 @@ try {
         await page.waitForTimeout(1000);
       }
       if (!ready) throw new Error('Resource frame not ready');
+      if (step.file === 'turnstile-overview' && /Step \d of \d|Welcome to the App Service preview/.test(await visibleText(page))) {
+        throw new Error('App Service onboarding overlay still obscures the blade');
+      }
       await page.waitForTimeout(2500);
       if (step.file === 'workspace-logs') {
         const query = 'ClaudeCost(startofmonth(now()), now())\n'

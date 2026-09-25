@@ -63,9 +63,16 @@ def context(config_path):
             replacements[app["name"]] = "contoso-usage-api"
             if app.get("serverFarmId"):
                 replacements[app["serverFarmId"].rsplit("/", 1)[-1]] = "contoso-app-plan"
+            if app.get("appServicePlanId"):
+                replacements[app["appServicePlanId"].rsplit("/", 1)[-1]] = "contoso-app-plan"
             for value in (app.get("tags") or {}).values():
                 if isinstance(value, str) and "/microsoft.insights/components/" in value.lower():
                     replacements[value.rsplit("/", 1)[-1]] = "contoso-service-insights"
+            for component in json.loads(az("resource", "list", "-g", app["resourceGroup"],
+                                           "--resource-type", "Microsoft.Insights/components",
+                                           "--subscription", subscription, "-o", "json")):
+                if component.get("name"):
+                    replacements[component["name"]] = "contoso-service-insights"
     except FinOpsError:
         pass
     return dict(targets=found["portal"], replacements=replacements)
