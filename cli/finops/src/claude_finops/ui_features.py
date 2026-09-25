@@ -56,8 +56,22 @@ class FeatureUI:
         self.feature_cursor = None
         self.feature_cursor_stack = []
         self.ranking_dimension = "organization"
+        self.usage_basis = "priced"
         self.people_cursor = None
         self.people_cursor_stack = []
+
+    def action_request_time_usage(self):
+        if self.engine.backend.name == "Direct":
+            self.usage_basis = "ledger"
+            self.dimension = "department"
+            self.query_one("#dimension", Select).value = "department"
+            self.action_tab("usage")
+            self.action_refresh()
+
+    def action_priced_usage(self):
+        self.usage_basis = "priced"
+        self.action_tab("usage")
+        self.action_refresh()
 
     def compose_feature(self, tab):
         if tab == "ask":
@@ -178,6 +192,7 @@ class FeatureUI:
     def clear_query_context(self):
         self.reset_paging()
         self.scope_filters = {}
+        self.usage_basis = "priced"
         self.request_filters = {}
         self.filters = {}
         self.request_before = self.people_query = self.team = ""

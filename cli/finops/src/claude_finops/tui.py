@@ -342,7 +342,8 @@ class FinOpsApp(FeatureUI, App):
         if tab == "governance":
             return await asyncio.to_thread(self.engine.governance)
         if tab == "usage":
-            return await asyncio.to_thread(read, "distribution", dimension=self.dimension, limit=100, **(self.scope_filters | self.request_filters))
+            basis = {"basis": self.usage_basis} if self.engine.backend.name == "Direct" else {}
+            return await asyncio.to_thread(read, "distribution", dimension=self.dimension, limit=100, **basis, **(self.scope_filters | self.request_filters))
         if tab == "trends":
             if self.compare_period:
                 return await asyncio.to_thread(self.engine.compare_trends, self.compare_period,

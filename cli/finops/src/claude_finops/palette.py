@@ -31,6 +31,9 @@ class FinOpsCommands(Provider):
         ]
         if self.app.active == "people" and not self.app.redactor.enabled:
             commands.append(("Open team membership in Entra", self.app.action_membership, "Directory rights are enforced by Entra"))
+        if self.app.engine.backend.name == "Direct":
+            commands += [("Usage: request-time attribution", self.app.action_request_time_usage, "Stamped team at request time; no invented cost"),
+                         ("Usage: current priced membership", self.app.action_priced_usage, "Published workspace price/membership function")]
         if self.app.active == "requests" and not self.app.redactor.enabled:
             commands += [("Copy request id", self.app.action_copy_request, "Terminal clipboard"),
                          ("Open request in ledger", self.app.action_open_ledger, "Discovered Log Analytics resource")]

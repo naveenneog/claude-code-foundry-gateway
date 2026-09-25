@@ -250,11 +250,16 @@ def anomalies_list(ctx: typer.Context, limit: Annotated[int, typer.Option(min=1,
 @groups["usage"].command("show")
 def usage_show(ctx: typer.Context, dimension: str = "organization", split_by: str | None = None,
                unit: str | None = None, team: str | None = None, person: str | None = None,
-               model: str | None = None, surface: str | None = None, tier: str | None = None):
+               model: str | None = None, surface: str | None = None, tier: str | None = None,
+               basis: str | None = None):
     """Pivot organization, department, user, model, runtime or tier; optionally split a row."""
-    emit(ctx, lambda e: e.read("distribution", dimension=dimension, split_by=split_by, limit=100,
+    def read(engine):
+        if basis and (engine.backend.name != "Direct" or basis not in {"ledger", "priced"}):
+            raise FinOpsError("Explicit basis is Direct-only: ledger or priced.")
+        return engine.read("distribution", dimension=dimension, split_by=split_by, limit=100,
                                organization_id=unit, department_id=team, user_id=person,
-                               model_id=model, runtime=surface, tier=tier))
+                               model_id=model, runtime=surface, tier=tier, **({"basis": basis} if basis else {}))
+    emit(ctx, read)
 
 
 @groups["trends"].command("show")

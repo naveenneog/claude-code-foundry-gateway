@@ -172,6 +172,15 @@ class DirectBackend(Backend):
             ledger += "\n| where business_unit in (" + ",".join(self._quote(key) for key in leaves) + ")"
         if resource == "people":
             return direct_analytics.people(self, ledger, params)
+        if resource == "distribution" and params.get("basis") == "ledger":
+            dimension = params.get("dimension", "department")
+            if dimension not in DIMENSIONS or dimension == "organization":
+                raise FinOpsError("Request-time usage supports team, person, model, surface or tier. Parent-unit history is not stamped in this ledger.")
+            column = DIMENSIONS[dimension]
+            rows = self.query(ledger + f"\n| summarize total_tokens=sum(total_tokens), total_requests=count() by id={column}"
+                              "\n| order by total_tokens desc | take 100")
+            return dict(items=[dict(row, name=row["id"], cache_read_tokens=None, estimated_cost=None) for row in rows],
+                        dimension=dimension, note="Request-time attribution from the selected gateway ledger; current membership is not substituted. Cache/cost unknown.")
         if resource == "trends" and params.get("interval") == "hour":
             return direct_analytics.hourly(self, ledger, params)
         if resource in {"requests", "request"}:

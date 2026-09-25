@@ -112,3 +112,12 @@ def test_direct_request_ledger_binds_the_discovered_gateway_in_shared_workspaces
     backend.read("requests", month="2026-09", limit=50)
     assert '| where _ResourceId =~ "/subscriptions/' in queries[0]
     assert "/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso" in queries[0]
+
+
+def test_request_time_usage_does_not_reassign_a_test_request_with_stale_cost_membership():
+    backend, queries = direct(), []
+    backend.query = lambda query: queries.append(query) or [{"id": "aum-e2e-team-example", "total_tokens": 30, "total_requests": 1}]
+    result = backend.read("distribution", month="2026-09", dimension="department", basis="ledger")
+    assert "ApiManagementGatewayLlmLog" in queries[0] and "ClaudeCost(" not in queries[0]
+    assert result["items"][0]["estimated_cost"] is None
+    assert "request-time" in result["note"].lower()
