@@ -12,6 +12,8 @@ class FinOpsCommands(Provider):
         commands = [(f"Open {label if key == 'advanced' else label[2:]}", partial(self.app.action_tab, key), "Switch view")
                     for key, label in TABS + EXTRA_TABS if key in self.app.allowed_tabs]
         commands += [
+            ("Find or create Entra security group", self.app.action_group_lookup, "Owned by this sign-in; no consent grants"),
+            ("Probe gateway budget enforcement", self.app.action_gateway_probe, "One tiny real model request after Preview/Apply"),
             ("Find scope, person, model or request", self.app.action_lookup, "Bounded server search"),
             ("Filter the current view", self.app.action_filter, "Visible rows only; Esc clears"),
             ("Change month", self.app.action_month, "YYYY-MM"),
@@ -47,6 +49,8 @@ class FinOpsCommands(Provider):
             ]
             if not self.app.engine.backend.immediate_writes:
                 commands.append(("Apply governance now", self.app.action_apply, "Retry the configured gateway job"))
+            if self.app.engine.backend.name == "Direct":
+                commands.append(("Refresh selected group membership", self.app.action_refresh_membership, "Delegated Graph; preserves unrelated mappings"))
             if enabled(self.app.feature_caps, "bulk_budget", "write"):
                 commands.append(("Import person budgets from CSV", self.app.action_bulk, "Preview full parent allocation"))
             if enabled(self.app.feature_caps, "budget_modes", "write"):

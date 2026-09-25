@@ -587,7 +587,8 @@ class FinOpsApp(FeatureUI, App):
 
     def action_add(self):
         if self.editable:
-            self.push_screen(ChangeScreen(self.engine, "catalog"))
+            from .group_screens import GroupPicker
+            self.push_screen(GroupPicker())
 
     def action_apply(self):
         if self.editable and not self.engine.backend.immediate_writes:

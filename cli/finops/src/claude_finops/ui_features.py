@@ -21,6 +21,24 @@ EXTRA_TABS = [("approvals", "9 Approvals"), ("ask", "a Ask"), ("advanced", "Adva
 
 
 class FeatureUI:
+    def action_gateway_probe(self):
+        if not self.editable:
+            return
+        from .gateway_probe import tiny_request
+        self.push_screen(ActionForm("Send a tiny governed request", [
+            ("model", "Deployed Claude model", "claude-sonnet-5", None)],
+            lambda values, apply: tiny_request(self.config, values["model"], apply=apply)))
+
+    def action_group_lookup(self):
+        if self.editable:
+            from .group_screens import GroupPicker
+            self.push_screen(GroupPicker())
+
+    def action_refresh_membership(self):
+        if self.editable and self.engine.backend.name == "Direct":
+            from .group_screens import refresh_membership_form
+            refresh_membership_form(self)
+
     def initialize_features(self, first_run=None):
         self.scope_filters = {}
         self.compare_period = ""

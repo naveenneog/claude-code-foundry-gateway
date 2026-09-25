@@ -292,6 +292,8 @@ from .commands_v4 import register
 register(app, groups, emit)
 from .commands_local import register as register_local
 register_local(app, groups, emit)
+from .commands_groups import register as register_groups
+register_groups(app, groups, emit)
 
 
 def legacy_main():

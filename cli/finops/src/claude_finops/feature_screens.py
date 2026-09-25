@@ -104,6 +104,9 @@ class ActionForm(ModalScreen):
                     self.app.exit()
                 return
             state = "Saved." if self.mutation else "Opened."
+            if result.get("status_code"):
+                state = json.dumps(self.app.present({key: result.get(key) for key in
+                    ("status_code", "headers", "usage", "error", "seconds")}), ensure_ascii=True, indent=2)
             if result.get("requested_at") and not self.app.engine.backend.immediate_writes:
                 self.query_one("#action-status", Static).update("Saved; following apply status...")
                 outcome = await asyncio.to_thread(self.app.engine.wait_for_apply, result["requested_at"])

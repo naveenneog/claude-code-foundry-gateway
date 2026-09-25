@@ -48,6 +48,12 @@ function Invoke-VerifiedChange($Expected, [scriptblock]$Operation) {
 }
 
 switch ([string]$request.action) {
+    'membership' {
+        $arguments=@{ResourceGroup=$ResourceGroup;ApimName=$ApimName;ScopeIds=@($request.parameters.scope_ids)}
+        if($request.parameters.apply){$arguments.Apply=$true}
+        if($request.parameters.allow_reassignment){$arguments.AllowReassignment=$true}
+        $result=& (Join-Path $PSScriptRoot 'Sync-AumMembership.ps1') @arguments | ConvertFrom-Json
+    }
     'read' {
         $tiers = foreach ($tier in @('standard', 'premium')) {
             [ordered]@{
