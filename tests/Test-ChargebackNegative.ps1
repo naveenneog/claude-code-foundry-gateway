@@ -18,13 +18,21 @@ $cases=@(
 )
 $caught=0
 try {
+    $baseline=Join-Path $scratch 'baseline'
+    New-Item -ItemType Directory (Join-Path $baseline 'scripts') -Force | Out-Null
+    Get-ChildItem (Join-Path $root 'scripts') -Filter '*ClaudeChargeback*.ps1' | Copy-Item -Destination (Join-Path $baseline 'scripts')
+    Copy-Item (Join-Path $root 'scripts\ClaudeBusinessUnit.ps1') (Join-Path $baseline 'scripts')
+    Copy-Item (Join-Path $root 'scripts\ClaudeBudgetModes.ps1') (Join-Path $baseline 'scripts')
+    New-Item -ItemType Directory (Join-Path $baseline 'infra') | Out-Null
+    Get-ChildItem (Join-Path $root 'infra') -Filter 'chargeback*.bicep' | Copy-Item -Destination (Join-Path $baseline 'infra')
+    foreach($suite in @($cases.Test | Sort-Object -Unique)) {
+        $output=& pwsh -NoProfile -NonInteractive -File (Join-Path $PSScriptRoot $suite) -SourceRoot $baseline 2>&1
+        if($LASTEXITCODE -ne 0){throw "BASELINE FAILED: $suite. No mutations counted. $($output -join ' ')"}
+        Write-Host "BASELINE PASS: $suite"
+    }
     foreach($case in $cases) {
         $copy=Join-Path $scratch ([guid]::NewGuid().ToString('N'))
-        New-Item -ItemType Directory (Join-Path $copy 'scripts') -Force | Out-Null
-        Get-ChildItem (Join-Path $root 'scripts') -Filter '*ClaudeChargeback*.ps1' | Copy-Item -Destination (Join-Path $copy 'scripts')
-        Copy-Item (Join-Path $root 'scripts\ClaudeBusinessUnit.ps1') (Join-Path $copy 'scripts')
-        New-Item -ItemType Directory (Join-Path $copy 'infra') | Out-Null
-        Get-ChildItem (Join-Path $root 'infra') -Filter 'chargeback*.bicep' | Copy-Item -Destination (Join-Path $copy 'infra')
+        Copy-Item $baseline $copy -Recurse -Force
         $directory=if($case.Directory) {$case.Directory} else {'scripts'}
         $path=Join-Path $copy "$directory\$($case.File)"
         $original=[IO.File]::ReadAllText($path)
