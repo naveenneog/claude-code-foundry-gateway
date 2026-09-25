@@ -180,7 +180,7 @@ def people_find(ctx: typer.Context, query: Annotated[str, typer.Argument()] = ""
                 limit: Annotated[int, typer.Option(min=1, max=200)] = 50, cursor: str | None = None):
     """Search one team's people on the server. Never downloads the directory."""
     def operation(engine):
-        if not team:
+        if not team and not engine.has_feature("people_cursor"):
             raise FinOpsError("Choose --team <team-id>. Run governance show to find a team.")
         if len(query) > 200:
             raise FinOpsError("Search text must not exceed 200 characters.")

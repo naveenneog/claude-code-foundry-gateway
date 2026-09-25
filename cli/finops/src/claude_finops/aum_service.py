@@ -36,6 +36,8 @@ class AumServiceBackend(HttpBackend):
         return result
 
     def people_filter(self, scope_id):
+        if not scope_id or scope_id == "__authorized__":
+            return {}
         catalog = self._catalog or self.read("catalog")
         return {"organization_id" if scope_id in {row["id"] for row in catalog["organizations"]}
                 else "department_id": scope_id}
@@ -125,10 +127,10 @@ class AumServiceBackend(HttpBackend):
                 budget = limits.get(row["id"], {})
                 identity = self._identity or self.read("whoami")
                 items.append(dict(scope_type="user", scope_id=row["id"], scope_name=row["name"],
-                    parent_scope_id=row["parent_id"], unit=row.get("organization_id"),
+                    parent_scope_id=row.get("parent_id"), unit=row.get("organization_id"),
                     token_limit=budget.get("token_limit"), used_tokens=None, remaining_tokens=None,
                     status="unknown", budget_period="day",
-                    writable=can_budget_write(identity, "user", row["id"], row["parent_id"]),
+                    writable=bool(row.get("parent_id")) and can_budget_write(identity, "user", row["id"], row["parent_id"]),
                     warning_threshold_percent=budget.get("warning_threshold_percent", 80)))
             return dict(models.page(records, items), offset=0, limit=params.get("limit", 50), total=None,
                         note="Server-scoped observed people; daily overrides. Usage, last-seen and effective tier defaults are not included in this API.")

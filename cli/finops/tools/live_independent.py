@@ -38,6 +38,8 @@ async def journey(args):
     ]
     if team:
         commands += [("people", ["people", "find", "--team", team["id"], "--limit", "50"])]
+    elif args.backend == "aum-service":
+        commands += [("people", ["people", "find", "--limit", "50"])]
     if args.backend == "direct":
         commands += [("hourly", ["trends", "show", "--interval", "hour"]),
                      ("anomalies", ["anomalies", "list"]),

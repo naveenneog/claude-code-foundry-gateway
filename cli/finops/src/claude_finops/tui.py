@@ -323,7 +323,7 @@ class FinOpsApp(FeatureUI, App):
             select = self.query_one("#people-team", Select)
             departments = catalog.get("departments", [])
             if self.config.backend == "aum-service":
-                departments = departments + [dict(row, name=row["name"] + " (unit, including teams)")
+                departments = [dict(id="__authorized__", name="All authorized observed people")] + departments + [dict(row, name=row["name"] + " (unit, including teams)")
                     for row in catalog.get("organizations", []) if not row.get("scope_context")]
             labels = self.present(departments)
             select.set_options([(label["name"], row["id"]) for row, label in zip(departments, labels)])

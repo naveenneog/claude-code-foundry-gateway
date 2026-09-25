@@ -265,3 +265,19 @@ def test_service_boost_expiry_is_refused_during_preview_not_only_apply():
     with pytest.raises(FinOpsError, match="31 days"):
         Engine(backend).boost(OID, "sales-emea", "100", "2099-01-01", "Reviewed", window="daily")
     assert all(call.method == "GET" for call in calls)
+
+
+async def test_service_people_do_not_require_catalog_rows_for_observed_search():
+    from claude_finops.tui import FinOpsApp
+    backend, calls = service(lambda request: httpx.Response(200, json=dict(organizations=[], departments=[],
+        revision="revision-1")) if request.url.path == "/api/v1/catalog" else None)
+    app = FinOpsApp(Engine(backend, "2026-09"), CONFIG, first_run=False)
+    async with app.run_test(size=(100, 32)) as pilot:
+        await pilot.pause(.2)
+        await app.workers.wait_for_complete()
+        app.action_tab("people")
+        await pilot.pause(.2)
+        await app.workers.wait_for_complete()
+        assert app.data["people"]["items"][0]["scope_id"] == OID
+        query = next(call.url.params for call in calls if call.url.path == "/api/v1/people")
+        assert "department_id" not in query and "organization_id" not in query

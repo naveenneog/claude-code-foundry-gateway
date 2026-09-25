@@ -29,7 +29,7 @@ class FeatureEngine:
         return "https://portal.azure.com/#" + prefix + "view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Members/groupId/" + group_id
 
     def person_detail(self, person, team):
-        people = self.read("people", **self.backend.people_filter(identifier(team)), query=identifier(person), offset=0, limit=50)
+        people = self.read("people", **self.backend.people_filter(identifier(team) if team else ""), query=identifier(person), offset=0, limit=50)
         row = next((item for item in people["items"] if item["scope_id"] == person), None)
         if row is None:
             raise FinOpsError("Person not found in this team.", 5)
