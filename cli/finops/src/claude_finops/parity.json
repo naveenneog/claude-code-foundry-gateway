@@ -4,7 +4,7 @@
   "pages": {
     "Executive Overview": {
       "tab": "overview", "status": "implemented",
-      "features": ["month_budget_usage", "burn_forecast", "ranking_dimensions", "exact_panel_detail"],
+      "features": ["month_budget_usage", "burn_forecast", "ranking_dimensions", "exact_panel_detail", "scoped_row_drilldown"],
       "tests": ["test_dashboard.py", "test_revision4_tui.py"]
     },
     "Budget Management": {
@@ -82,7 +82,10 @@
   "integrations": {
     "P50_report_generator": {
       "client": "report generate",
-      "activation": "scripts/New-ClaudeChargebackReport.ps1 exists after the P50 merge",
+      "status": "implemented",
+      "generator": "scripts/New-ClaudeChargebackReport.ps1 imported unchanged from merged P50",
+      "tests": ["test_report_integration.py", "Test-ChargebackReports.ps1"],
+      "live": "2026-09-25: local CSV/HTML and reconciliation manifest generated; no delivery requested",
       "existing_export": "report chargeback remains a complete authorized-scope CSV export"
     }
   }

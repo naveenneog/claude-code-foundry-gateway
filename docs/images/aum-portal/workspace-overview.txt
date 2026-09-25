@@ -1,0 +1,148 @@
+Skip to main content
+Microsoft Azure (Preview)
+Report a bug
+Copilot
+admin@contoso.com
+CONTOSO DIRECTORY
+Home
+contoso-logs
+What metric dimensions are supported for this resource
+Show performance trends for this resource
+Check service health for this resource
+Log Analytics workspace
+Overview
+Activity log
+Access control (IAM)
+Tags
+Diagnose and solve problems
+Logs
+Resource visualizer
+Settings
+Tables
+Rules
+Usage and estimated costs
+Network isolation
+Identity
+Linked storage accounts
+Properties
+Locks
+Classic
+Monitoring
+Automation
+Help
+Selected
+Add or remove favorites by pressing Ctrl+Shift+F
+Microsoft Azure portal is loading.
+Microsoft Azure portal is ready.
+Content is loading.
+Content is ready.
+Content is ready.
+
+
+Delete
+Essentials
+View Cost
+JSON View
+Resource group (move)
+:
+contoso-resource-group
+Status
+:
+Succeeded
+Location (move)
+:
+East US 2
+Subscription (move)
+:
+Contoso subscription
+Subscription ID
+:
+[redacted-id]
+Workspace name
+:
+contoso-logs
+Workspace ID
+:
+[redacted-id]
+Pricing tier
+:
+Pay-as-you-go
+Access control mode
+:
+Use resource or workspace permissions
+Operational issues
+:
+OK
+Tags (edit)
+:
+Add tags
+Observability Agent
+Show error summary
+Analyze latency overview
+Show dependency health
+Monitor
+Recommendations
+Tutorials
+Data ingestion
+Data ingestion by table (last 31 days)
+Chart
+Bar chart with 6 data series.
+Data ingestion by table over the last 31 days
+The chart has 1 X axis displaying categories.
+The chart has 1 Y axis displaying MB. Data ranges from 0 to 1.739787.
+MB
+AppMetrics
+AppRequests
+AppDependencies
+AppTraces
+AppExceptions
+All others
+Aug 31
+Sep 1
+Sep 2
+Sep 3
+Sep 4
+Sep 15
+Sep 16
+Sep 17
+Sep 18
+Sep 21
+Sep 22
+Sep 23
+Sep 24
+0
+1
+2
+End of interactive chart.
+Data ingested by table (last 31 days)
+Table name
+Data ingested
+AppMetrics
+3.5 MB
+AppRequests
+1.5 MB
+AppDependencies
+1 MB
+AppTraces
+631.6 KB
+AppExceptions
+240.2 KB
+ContainerAppSystemLogs
+180.4 KB
+ApiManagementGatewayLlmLog
+153 KB
+ContainerAppConsoleLogs
+88 KB
+Alerts
+Total fired alerts
+0
+Critical
+0
+Error
+0
+Warning
+0
+Informational
+0
+Verbose
+0

@@ -30,12 +30,336 @@
       "phase": "before"
     },
     {
+      "file": "direct-configure-110x60-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-24T19:52:08.792291Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "size": [
+        110,
+        60
+      ],
+      "tab": "configure",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-flow-exact-detail-100x30-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T21:27:36.095707Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "size": [
+        100,
+        30
+      ],
+      "tab": "exact-detail",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-flow-help-100x30-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T21:27:36.912496Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "size": [
+        100,
+        30
+      ],
+      "tab": "help",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-flow-commands-100x30-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T21:27:37.749697Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "size": [
+        100,
+        30
+      ],
+      "tab": "commands",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-flow-lookup-100x30-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T21:27:39.366622Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "size": [
+        100,
+        30
+      ],
+      "tab": "lookup",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-flow-filter-100x30-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T21:27:40.982901Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "size": [
+        100,
+        30
+      ],
+      "tab": "filter",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-flow-month-100x30-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T21:27:41.533584Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "size": [
+        100,
+        30
+      ],
+      "tab": "month",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-flow-model-pivot-100x30-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T21:27:43.368503Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "size": [
+        100,
+        30
+      ],
+      "tab": "model-pivot",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-flow-hourly-trends-100x30-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T21:27:45.108861Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "size": [
+        100,
+        30
+      ],
+      "tab": "hourly-trends",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-flow-request-page-two-100x30-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T21:27:47.633589Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "size": [
+        100,
+        30
+      ],
+      "tab": "request-page-two",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-flow-request-detail-100x30-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T21:27:48.321708Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "size": [
+        100,
+        30
+      ],
+      "tab": "request-detail",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-flow-high-contrast-100x30-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T21:27:49.708936Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "size": [
+        100,
+        30
+      ],
+      "tab": "high-contrast",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-flow-monochrome-ascii-100x30-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T21:27:50.213728Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "size": [
+        100,
+        30
+      ],
+      "tab": "monochrome-ascii",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-flow-export-100x30-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-24T21:27:52.100794Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "size": [
+        100,
+        30
+      ],
+      "tab": "export",
+      "phase": "after"
+    },
+    {
+      "file": "turnstile-flow-r4-filters-100x32-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T00:54:47.157674Z",
+      "redaction": true,
+      "commit": "afb35e9d37fab58e0fd59ccfa5e01d76c65f8b0b",
+      "size": [
+        100,
+        32
+      ],
+      "tab": "overview",
+      "phase": "after",
+      "flow": "filters",
+      "preview_only": true
+    },
+    {
+      "file": "turnstile-flow-r4-saved-view-100x32-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T00:54:49.118195Z",
+      "redaction": true,
+      "commit": "afb35e9d37fab58e0fd59ccfa5e01d76c65f8b0b",
+      "size": [
+        100,
+        32
+      ],
+      "tab": "overview",
+      "phase": "after",
+      "flow": "saved-view",
+      "preview_only": true
+    },
+    {
+      "file": "turnstile-flow-r4-profile-switch-100x32-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T00:54:51.199128Z",
+      "redaction": true,
+      "commit": "afb35e9d37fab58e0fd59ccfa5e01d76c65f8b0b",
+      "size": [
+        100,
+        32
+      ],
+      "tab": "overview",
+      "phase": "after",
+      "flow": "profile-switch",
+      "preview_only": true
+    },
+    {
+      "file": "turnstile-flow-r4-signout-preview-100x32-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T00:54:52.977310Z",
+      "redaction": true,
+      "commit": "afb35e9d37fab58e0fd59ccfa5e01d76c65f8b0b",
+      "size": [
+        100,
+        32
+      ],
+      "tab": "overview",
+      "phase": "after",
+      "flow": "signout-preview",
+      "preview_only": true
+    },
+    {
+      "file": "turnstile-flow-r4-first-run-tour-100x32-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T00:54:54.558144Z",
+      "redaction": true,
+      "commit": "afb35e9d37fab58e0fd59ccfa5e01d76c65f8b0b",
+      "size": [
+        100,
+        32
+      ],
+      "tab": "overview",
+      "phase": "after",
+      "flow": "first-run-tour",
+      "preview_only": true
+    },
+    {
+      "file": "turnstile-flow-r4-comparison-100x32-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T00:54:57.052416Z",
+      "redaction": true,
+      "commit": "afb35e9d37fab58e0fd59ccfa5e01d76c65f8b0b",
+      "size": [
+        100,
+        32
+      ],
+      "tab": "trends",
+      "phase": "after",
+      "flow": "comparison",
+      "preview_only": true
+    },
+    {
+      "file": "turnstile-flow-r4-assistant-history-100x32-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T00:54:58.728046Z",
+      "redaction": true,
+      "commit": "afb35e9d37fab58e0fd59ccfa5e01d76c65f8b0b",
+      "size": [
+        100,
+        32
+      ],
+      "tab": "ask",
+      "phase": "after",
+      "flow": "assistant-history",
+      "preview_only": true
+    },
+    {
+      "file": "turnstile-flow-r4-assistant-pins-100x32-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T00:54:59.540446Z",
+      "redaction": true,
+      "commit": "afb35e9d37fab58e0fd59ccfa5e01d76c65f8b0b",
+      "size": [
+        100,
+        32
+      ],
+      "tab": "ask",
+      "phase": "after",
+      "flow": "assistant-pins",
+      "preview_only": true
+    },
+    {
       "file": "turnstile-overview-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:40:40.494713Z",
+      "captured_at": "2026-09-25T01:04:28.675108Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         80,
         24
@@ -47,9 +371,9 @@
       "file": "turnstile-budgets-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:40:41.664540Z",
+      "captured_at": "2026-09-25T01:04:30.267029Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         80,
         24
@@ -61,9 +385,9 @@
       "file": "turnstile-people-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:40:43.179711Z",
+      "captured_at": "2026-09-25T01:04:31.981168Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         80,
         24
@@ -75,9 +399,9 @@
       "file": "turnstile-governance-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:40:45.230572Z",
+      "captured_at": "2026-09-25T01:04:34.539097Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         80,
         24
@@ -89,9 +413,9 @@
       "file": "turnstile-usage-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:40:46.319925Z",
+      "captured_at": "2026-09-25T01:04:36.050371Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         80,
         24
@@ -103,9 +427,9 @@
       "file": "turnstile-trends-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:40:47.432947Z",
+      "captured_at": "2026-09-25T01:04:37.553345Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         80,
         24
@@ -117,9 +441,9 @@
       "file": "turnstile-requests-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:40:49.074191Z",
+      "captured_at": "2026-09-25T01:04:39.620958Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         80,
         24
@@ -131,9 +455,9 @@
       "file": "turnstile-anomalies-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:40:50.187748Z",
+      "captured_at": "2026-09-25T01:04:41.012386Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         80,
         24
@@ -145,9 +469,9 @@
       "file": "turnstile-settings-80x24-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:40:51.130036Z",
+      "captured_at": "2026-09-25T01:04:42.365772Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         80,
         24
@@ -156,12 +480,26 @@
       "phase": "after"
     },
     {
+      "file": "turnstile-ask-80x24-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T01:04:43.759416Z",
+      "redaction": true,
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "ask",
+      "phase": "after"
+    },
+    {
       "file": "turnstile-overview-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:40:54.166450Z",
+      "captured_at": "2026-09-25T01:04:48.637549Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         160,
         48
@@ -173,9 +511,9 @@
       "file": "turnstile-budgets-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:40:55.555653Z",
+      "captured_at": "2026-09-25T01:04:50.454111Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         160,
         48
@@ -187,9 +525,9 @@
       "file": "turnstile-people-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:40:57.057420Z",
+      "captured_at": "2026-09-25T01:04:52.188152Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         160,
         48
@@ -201,9 +539,9 @@
       "file": "turnstile-governance-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:40:58.797592Z",
+      "captured_at": "2026-09-25T01:04:54.360615Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         160,
         48
@@ -215,9 +553,9 @@
       "file": "turnstile-usage-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:40:59.980426Z",
+      "captured_at": "2026-09-25T01:04:55.921010Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         160,
         48
@@ -229,9 +567,9 @@
       "file": "turnstile-trends-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:41:01.120481Z",
+      "captured_at": "2026-09-25T01:04:57.376911Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         160,
         48
@@ -243,9 +581,9 @@
       "file": "turnstile-requests-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:41:02.697150Z",
+      "captured_at": "2026-09-25T01:04:59.369693Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         160,
         48
@@ -257,9 +595,9 @@
       "file": "turnstile-anomalies-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:41:03.887569Z",
+      "captured_at": "2026-09-25T01:05:00.812847Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         160,
         48
@@ -271,9 +609,9 @@
       "file": "turnstile-settings-160x48-after.svg",
       "source": "live",
       "backend": "Turnstile",
-      "captured_at": "2026-09-24T18:41:04.890466Z",
+      "captured_at": "2026-09-25T01:05:02.179299Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         160,
         48
@@ -282,12 +620,26 @@
       "phase": "after"
     },
     {
+      "file": "turnstile-ask-160x48-after.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T01:05:03.554108Z",
+      "redaction": true,
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "ask",
+      "phase": "after"
+    },
+    {
       "file": "direct-overview-80x24-after.svg",
       "source": "live",
       "backend": "Direct",
-      "captured_at": "2026-09-24T18:41:35.114067Z",
+      "captured_at": "2026-09-25T01:05:41.134626Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         80,
         24
@@ -299,14 +651,30 @@
       "file": "direct-overview-160x48-after.svg",
       "source": "live",
       "backend": "Direct",
-      "captured_at": "2026-09-24T18:42:05.856253Z",
+      "captured_at": "2026-09-25T01:06:17.484783Z",
       "redaction": true,
-      "commit": "07c139460981b97d597cdb8b52a3cecadb01bc12",
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
       "size": [
         160,
         48
       ],
       "tab": "overview",
+      "phase": "after"
+    },
+    {
+      "file": "direct-flow-r4-report-110x36-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T01:11:43.962990+00:00",
+      "redaction": true,
+      "commit": "6d290579c96e89881dd2ad7a92ae1c6387aeae9d",
+      "size": [
+        110,
+        36
+      ],
+      "flow": "reconciled-local-report",
+      "artifact_generated_at": "2026-09-25T01:05:10.5006938Z",
+      "tab": "report",
       "phase": "after"
     }
   ]

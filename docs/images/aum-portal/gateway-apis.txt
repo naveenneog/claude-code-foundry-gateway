@@ -1,0 +1,125 @@
+Skip to main content
+Microsoft Azure (Preview)
+Report a bug
+Copilot
+admin@contoso.com
+CONTOSO DIRECTORY
+Home
+contoso-gateway
+contoso-gateway | APIs
+API Management service
+Overview
+Activity log
+Access control (IAM)
+Tags
+Diagnose and solve problems
+Resource visualizer
+Events
+AI Gateway
+APIs
+Workspaces
+APIs
+APIs (preview)
+Products
+Subscriptions
+Named values
+Backends
+Policy fragments
+API Tags
+Schemas
+Credential manager
+API Center
+Power Platform
+Developer portal
+Monitoring
+Deployment + infrastructure
+Security
+Settings
+Automation
+Help
+Selected
+Add or remove favorites by pressing Ctrl+Shift+F
+Developer portal
+Send us your feedback
+Microsoft Azure portal is loading.
+Microsoft Azure portal is ready.
+Content is loading.
+Content is loading.
+
+
+Group by tag
+ Add API
+All APIs
+
+Number of APIs found - 1
+
+Claude on Foundry (governed)
+Create an AI API
+Unified model API
+
+Create a Chat Completions API that translates requests to LLM providers
+
+A2A Agent
+
+Create an API for an agent compatible with the A2A protocol
+
+Language Model API
+
+Create an API for an OpenAI API-compatible model
+
+Microsoft Foundry
+
+Connect API Management services to Microsoft Foundry
+
+Create from Azure resource
+App Service
+
+API hosted on App Service
+
+Function App
+
+Serverless, event driven experience on App Service
+
+Container App
+
+Serverless containers for microservices
+
+Logic App
+
+Scalable hybrid integrations and workflows
+
+Application Insights OpenTelemetry
+
+Authenticate and route OTLP to Azure Monitor
+
+Create from definition
+OpenAPI
+
+Standard, language-agnostic interface to REST APIs
+
+WADL
+
+Standard XML representation of your RESTful API
+
+WSDL
+
+Standard XML representation of your SOAP API
+
+OData
+
+Standard XML representation of your OData API
+
+Define a new API
+HTTP
+
+Manually define an HTTP API
+
+WebSocket
+
+Streaming, full-duplex communication with a WebSocket server
+
+GraphQL
+
+Access the full capabilities of your data from a single endpoint
+
+on

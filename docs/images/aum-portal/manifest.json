@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "source": "live",
+  "auth_blocked": true,
+  "images": [
+    {
+      "file": "gateway-overview.png",
+      "text_file": "gateway-overview.txt",
+      "source": "live",
+      "backend": "Azure portal",
+      "captured_at": "2026-09-24T19:50:04.876Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "title": "Choose the existing API Management gateway",
+      "sha256": "fc3b2db35cfd0eab0f728658a626643d6fd1376db5f39193db399e9d819f4aa8",
+      "source_tree_dirty": true
+    },
+    {
+      "file": "insights-overview.png",
+      "text_file": "insights-overview.txt",
+      "source": "live",
+      "backend": "Azure portal",
+      "captured_at": "2026-09-24T19:53:45.06Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "title": "Find the linked Log Analytics workspace",
+      "sha256": "937afff910710d3e8c12d0975d7a26a5baa1bc0c3e7df23ef5d76f1f93f0a4fb",
+      "additional_redaction": "Opaque privacy mask over value/connection fields; no usage facts changed.",
+      "redaction_reviewed_at": "2026-09-25T00:54:38.440Z",
+      "source_tree_dirty": true
+    },
+    {
+      "file": "gateway-named-values.png",
+      "text_file": "gateway-named-values.txt",
+      "source": "live",
+      "backend": "Azure portal",
+      "captured_at": "2026-09-24T20:02:53.179Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "title": "Read the connection, authority and limits",
+      "sha256": "42fde895c782dfdf7ade017deb30bf497b6f1b52821d16a55690eb391778cc78",
+      "additional_redaction": "Opaque privacy mask over value/connection fields; no usage facts changed.",
+      "redaction_reviewed_at": "2026-09-25T00:54:38.357Z",
+      "source_tree_dirty": true
+    },
+    {
+      "file": "workspace-overview.png",
+      "text_file": "workspace-overview.txt",
+      "source": "live",
+      "backend": "Azure portal",
+      "captured_at": "2026-09-24T20:29:48.556Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "title": "Read the discovered workspace identity",
+      "sha256": "f1f87b39be51c8f62a549dae2266a1dbba1ad481aedcdb989c1eb978224f78e8",
+      "source_tree_dirty": true
+    },
+    {
+      "file": "gateway-apis.png",
+      "text_file": "gateway-apis.txt",
+      "source": "live",
+      "backend": "Azure portal",
+      "captured_at": "2026-09-24T20:44:33.845Z",
+      "redaction": true,
+      "commit": "691bb28ad961d3e5aa165ade7add6d9ec9280780",
+      "title": "Find the Claude API and its diagnostics",
+      "sha256": "e322ec2913f0a53410cb4736b9e730d83d36420471f51462d9127996ba8276b4",
+      "source_tree_dirty": true
+    }
+  ],
+  "blocked_reason": "Copied portal session required sign-in. Capture stopped. App Service blade and completed KQL-result evidence require authorized recapture.",
+  "stopped_at_utc": "2026-09-24T21:05:48.3652720Z",
+  "rejected": [
+    {
+      "file": "turnstile-overview.png",
+      "reason": "Welcome dialog obscured the blade; not successful GUI-flow evidence."
+    }
+  ]
+}
