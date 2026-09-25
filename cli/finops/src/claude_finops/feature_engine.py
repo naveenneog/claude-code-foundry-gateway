@@ -35,8 +35,8 @@ class FeatureEngine:
             raise FinOpsError("Person not found in this team.", 5)
         requests = self.read("requests", user_id=person, limit=1)["items"]
         latest = next((item for item in requests if item.get("user_id") == person), {})
-        return dict(row, tier=latest.get("project_name"), unit=latest.get("organization_name"),
-                    team=latest.get("department_name"), last_seen_in_window=latest.get("timestamp"),
+        return dict(row, tier=latest.get("project_name") or row.get("tier"), unit=latest.get("organization_name") or row.get("unit"),
+                    team=latest.get("department_name") or row.get("parent_scope_id"), last_seen_in_window=latest.get("timestamp") or row.get("last_seen"),
                     basis="Latest request in the selected month; no all-time last-seen value is guessed.")
 
     def capabilities(self, refresh=False):

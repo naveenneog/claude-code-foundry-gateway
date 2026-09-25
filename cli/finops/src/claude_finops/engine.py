@@ -74,23 +74,29 @@ class Engine(FeatureEngine):
         row = next((item for item in rows if item["scope_type"] == kind and item["scope_id"] == key), None)
         if row is None:
             raise FinOpsError("Scope not found in this month and role. Refresh Budgets or search the person's team.", 5)
+        if row.get("writable") is False:
+            raise FinOpsError("This observed identity or scope is not writable. Check its object id and selected authority.", 4)
+        daily = row.get("budget_period") == "day"
         proposed = None if remove else parse_tokens(amount)
         if proposed is not None:
-            validate_budget(rows, row, proposed)
-            if kind == "user" and people.get("department_available_tokens") is not None:
+            if not daily:
+                validate_budget(rows, row, proposed)
+            if kind == "user" and not daily and people.get("department_available_tokens") is not None:
                 left = people["department_available_tokens"] + (row.get("token_limit") or 0) - proposed
                 if left < 0:
                     raise FinOpsError(f"Parent headroom is short by {-left:,} tokens. Ask its Owner for allocation.")
         threshold = warning if warning is not None else row.get("warning_threshold_percent", 80)
         if not isinstance(threshold, int) or not 1 <= threshold <= 100:
             raise FinOpsError("Warning threshold must be between 1 and 100 percent.")
-        destructive = remove or (proposed is not None and proposed < row["used_tokens"])
+        destructive = remove or row.get("used_tokens") is None or (proposed is not None and proposed < row["used_tokens"])
         plan = dict(preview=not apply, action="remove" if remove else "set", scope_type=kind, scope_id=key,
                     period=self.month, before=row.get("token_limit"), after=proposed,
                     used_tokens=row["used_tokens"], warning_threshold_percent=threshold,
-                    parent_headroom=None if remove else allocation_left(rows, row, proposed),
+                    budget_period="day" if daily else "month",
+                    parent_headroom=None if remove or daily else allocation_left(rows, row, proposed),
                     confirmation_required=destructive,
-                    effect="Person budgets are Turnstile-only; not gateway quotas." if kind == "user"
+                    effect="Gateway daily person override; monthly unit limits still apply independently. Daily limits are not monthly allocations." if daily else
+                    "Person budgets are Turnstile-only; not gateway quotas." if kind == "user"
                     else "Gateway apply normally takes about two minutes. A save is not proof of enforcement.")
         if apply:
             if destructive and confirm != key:

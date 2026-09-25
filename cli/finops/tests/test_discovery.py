@@ -99,7 +99,7 @@ def test_bridge_selects_one_azure_executable_when_both_launchers_exist():
     import re
     import subprocess
     bridge = Path(__file__).resolve().parents[3] / "scripts" / "Invoke-ClaudeFinOps.ps1"
-    expression = re.search(r"\$script:AzureCliExecutable = (.+)", bridge.read_text(encoding="utf-8-sig"))[1]
+    expression = re.search(r"\$aumDirectAzureExecutable = (.+)", bridge.read_text(encoding="utf-8-sig"))[1]
     script = """
 function Get-Command {
     param($Name, $CommandType, $ErrorAction)

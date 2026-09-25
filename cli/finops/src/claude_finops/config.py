@@ -48,7 +48,7 @@ def parse_integration(value: str) -> dict:
 
 @dataclass
 class Config:
-    backend: str = "turnstile"
+    backend: str = "direct"
     url: str = ""
     scope: str = ""
     subscription: str = ""
@@ -62,15 +62,15 @@ class Config:
     ascii: bool = False
 
     def validate(self):
-        if self.backend not in {"turnstile", "direct", "fake"}:
-            raise FinOpsError("Backend must be turnstile, direct or fake.")
+        if self.backend not in {"turnstile", "aum-service", "direct", "fake"}:
+            raise FinOpsError("Backend must be direct, aum-service, turnstile or fake.")
         if self.url:
             parsed = urlsplit(self.url)
             if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
                     or parsed.query or parsed.fragment or parsed.path not in {"", "/"}):
-                raise FinOpsError("Turnstile URL must be an HTTPS origin without credentials, path or query.")
+                raise FinOpsError("Service URL must be an HTTPS origin without credentials, path or query.")
         if self.scope and not re.fullmatch(r"api://[A-Za-z0-9.-]+/[A-Za-z0-9._/-]+", self.scope):
-            raise FinOpsError("Scope must be api://<client-id>/Turnstile.Manage.")
+            raise FinOpsError("Scope must be api://<client-id>/<delegated-scope>, for example AUM.Access.")
         for value in (self.resource_group, self.apim_name):
             if value and not re.fullmatch(r"[A-Za-z0-9._()-]+", value):
                 raise FinOpsError("Use a simple Azure resource group and APIM name.")
@@ -102,6 +102,8 @@ def load_config(path: Path | None = None, **overrides) -> Config:
         except (OSError, ValueError):
             raise FinOpsError("Invalid config. Use documented address fields only; never store a token.") from None
     values.update({k: v for k, v in overrides.items() if v is not None})
+    if "backend" not in values:
+        values["backend"] = "turnstile" if values.get("url") or values.get("scope") else "direct"
     config = Config(**values).validate()
     if config.backend == "turnstile" and (not config.url or not config.scope):
         if not config.resource_group or not config.apim_name:

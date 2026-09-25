@@ -122,3 +122,42 @@ does not duplicate report accounting or storage logic. The parity manifest recor
 implementation tests and named server dependencies separately from live acceptance.
 Live portal evidence is not complete while the capture profile requires sign-in:
 that fact remains a failing publication check, not an exception or silent skip.
+
+## P52 amendment: independent AUM and optional service authority, 2026-09-25
+
+The owner explicitly requires AUM to operate without Turnstile. Direct is the
+default when no HTTP profile is configured; a saved Turnstile profile remains an
+explicit supported choice. Direct uses Azure RBAC and never claims unit-level
+authorization. Scoped managers/viewers require either the separate optional AUM
+service or Turnstile; one capability model normalizes their different contracts.
+
+Direct people are observed ledger identities, not a downloaded directory. Search,
+grouping and paging occur in KQL. Hourly request/token trends come from the request
+ledger; daily cost is not distributed into fabricated hourly prices. Direct anomaly
+findings are statistical candidates computed by Azure Monitor KQL, with method,
+pricing exclusions and ingestion limits displayed.
+
+Gateway person overrides are daily, while unit/team budgets are monthly. Keep
+these periods explicit; never compare or sum daily limits as monthly allocations.
+Reuse `Set-ClaudeBudget.ps1` and a shared strict override serializer, rejecting
+malformed maps instead of silently dropping another person's entry.
+
+Multi-value Direct writes use optimistic preflight, the existing writers, complete
+read-back and reverse compensation. Restore exact prior values (or prior absence)
+after later failure, but never overwrite a third-party value that differs from both
+the observed before and expected after. Failed/unverifiable compensation requires
+manual recovery; this is not represented as an atomic distributed transaction.
+
+DOCUMENTED: Microsoft Learn `series_decompose_anomalies()` supports Azure Monitor,
+numeric make-series input, a configurable residual threshold, integer seasonal
+period and `linefit` trend. The Direct implementation uses threshold 3, weekly
+seasonality and at least 14 active priced days; unknown prices are not zeroed.
+Source verified 2026-09-25:
+https://learn.microsoft.com/kusto/query/series-decompose-anomalies-function
+
+DOCUMENTED: P55's published AUM service OpenAPI 1.0.3 uses `/api/v1/me`,
+boolean role-aware capabilities, current gateway budgets with one revision,
+`If-Match` plus an audit reason for mutations, and daily person limits. Normalize
+those semantics explicitly rather than sending Turnstile paths or monthly person
+allocations to that service. Missing routes must remain visibly unavailable, not
+empty successful datasets or calls to a hidden Turnstile dependency.

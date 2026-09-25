@@ -143,7 +143,7 @@ class ChangeScreen(ModalScreen):
             yield Label(title, id="form-title", markup=False)
             with VerticalScroll(id="fields"):
                 if self.kind == "budget" and not self.remove:
-                    yield Label("Monthly tokens (1.5M or exact integer)")
+                    yield Label(("Daily" if self.row.get("budget_period") == "day" else "Monthly") + " tokens (1.5M or exact integer)")
                     yield Input(str(self.row.get("token_limit") or ""), id="amount")
                     yield Static("", id="headroom", markup=False)
                     yield Label("Warning threshold (%)")

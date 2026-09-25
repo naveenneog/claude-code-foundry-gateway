@@ -12,6 +12,7 @@ from .config import az
 from .errors import FinOpsError, http_error
 from .rules import identifier, month_window, query_window
 from .capabilities import current_capabilities
+from . import direct_analytics
 
 DIMENSIONS = {"organization": "business_unit", "department": "business_unit", "user": "actor",
               "model": "model", "runtime": "client_surface", "tier": "tier"}
@@ -27,7 +28,7 @@ class DirectBackend(Backend):
         if not self.bridge.exists():
             raise FinOpsError("Direct mode needs the gateway repository. Set repository in config.")
         if not config.resource_group or not config.apim_name:
-            raise FinOpsError("Direct mode needs resource_group and apim_name in config.")
+            raise FinOpsError("Run aum configure to discover the Direct gateway and workspace, or set resource_group and apim_name.")
 
     def _bridge(self, action, body=None, **params):
         folder = self.root / ".finops-evidence"
@@ -40,6 +41,10 @@ class DirectBackend(Backend):
                                      *(["-Subscription", self.config.subscription] if self.config.subscription else [])],
                                     capture_output=True, text=True, encoding="utf-8", timeout=300)
             if result.returncode:
+                if "manual recovery required" in result.stderr:
+                    raise FinOpsError("Gateway change failed and rollback was incomplete or conflicted. Inspect named values; manual recovery is required. Do not repeat the save.", 7)
+                if "previous values restored and verified" in result.stderr:
+                    raise FinOpsError("Gateway change failed; previous values were restored and read-back verified. Refresh before retrying.", 6)
                 raise FinOpsError("Gateway script refused the change. Check Azure roles, governance authority, parent budget and Entra groups; refresh before retrying.", 6)
             return json.loads(result.stdout)
         except (OSError, subprocess.TimeoutExpired, ValueError):
@@ -86,6 +91,7 @@ class DirectBackend(Backend):
         if resource == "capabilities":
             result = current_capabilities(params.get("identity") or self.read("whoami"))
             result["features"]["bulk_budget"] = {"enabled": False, "actions": []}
+            result["features"]["person_daily_budget"] = {"enabled": True, "actions": ["read", "write"]}
             return result
         if resource == "whoami":
             account = json.loads(self._az("account", "show", "-o", "json"))
@@ -104,9 +110,10 @@ class DirectBackend(Backend):
                     can_write = False
             return dict(email=account.get("user", {}).get("name", "Azure caller"), role="owner" if can_write else "member",
                         method="azure-rbac", tenant=account.get("tenantId"),
-                        scope="Gateway administrator mode; Azure RBAC checks every operation")
+                        scope="Admin-only Direct through Azure RBAC, not unit-scoped authorization. "
+                              "For scoped managers/viewers choose the optional AUM service or Turnstile.")
         if resource == "apply":
-            return dict(configured=False, direct=True, note="Direct writes verify named values, not a Turnstile job.", executions=[])
+            return dict(configured=False, direct=True, note="Direct writes verify named values and compensate on failure; no server apply job.", executions=[])
         if resource in {"catalog", "tiers", "budgets"}:
             state = self._bridge("read")
             if resource == "catalog":
@@ -133,23 +140,23 @@ class DirectBackend(Backend):
                         quota_org=state["quota_org"])
         ledger = self._ledger(params.get("month", datetime.now(timezone.utc).strftime("%Y-%m")),
                               params.get("from"), params.get("to"))
-        for key, column in (("department_id", "business_unit"), ("organization_id", "business_unit"),
-                            ("model_id", "model"), ("user_id", "actor"), ("runtime", "client_surface"), ("tier", "tier")):
+        for key, column in (("department_id", "business_unit"), ("model_id", "model"),
+                            ("runtime", "client_surface"), ("tier", "tier")):
             if params.get(key):
                 ledger += f"\n| where {column} == {self._quote(params[key])}"
+        if params.get("user_id"):
+            value = self._quote(params["user_id"])
+            ledger += f"\n| where user_id == {value} or actor == {value}"
+        needs_ledger = resource in {"people", "requests", "request"} or (resource == "trends" and params.get("interval") == "hour")
+        if params.get("organization_id") and needs_ledger:
+            parents = self._bridge("read").get("parents", {})
+            unit = params["organization_id"]
+            leaves = [unit] + [key for key, parent in parents.items() if parent == unit]
+            ledger += "\n| where business_unit in (" + ",".join(self._quote(key) for key in leaves) + ")"
         if resource == "people":
-            if not params.get("department_id"):
-                raise FinOpsError("Choose a team for server-side people search.")
-            query = str(params.get("query", ""))[:200]
-            offset, limit = max(0, int(params.get("offset", 0))), min(200, max(1, int(params.get("limit", 50))))
-            rows = self.query(ledger + f"\n| where actor contains {self._quote(query)}"
-                              "\n| summarize used_tokens=sum(total_tokens), last_seen=max(timestamp) by actor"
-                              f"\n| sort by actor asc | serialize row=row_number() | where row > {offset} | take {limit}")
-            return dict(items=[dict(scope_type="user", scope_id=r["actor"], scope_name=r["actor"],
-                                    parent_scope_id=params["department_id"], used_tokens=r["used_tokens"],
-                                    token_limit=None, remaining_tokens=None, status="unallocated", last_seen=r["last_seen"])
-                               for r in rows], offset=offset, limit=limit, total=None,
-                        note="Observed people only; monthly person budgets require Turnstile.")
+            return direct_analytics.people(self, ledger, params)
+        if resource == "trends" and params.get("interval") == "hour":
+            return direct_analytics.hourly(self, ledger, params)
         if resource in {"requests", "request"}:
             if resource == "request":
                 ledger += "\n| where request_id == " + self._quote(identifier(params["request_id"]))
@@ -196,21 +203,17 @@ class DirectBackend(Backend):
             if interval not in {"day", "hour", "week"}:
                 raise FinOpsError("Interval must be hour, day or week.")
             step = {"hour": "1h", "day": "1d", "week": "7d"}[interval]
-            if interval == "hour":
-                raise FinOpsError("Direct cost facts are daily. Choose day/week, or Turnstile for hourly trends.")
             rows = self.query(cost + f"\n| summarize {totals} by bucket_start=bin(day,{step})" + unknown +
                               "\n| order by bucket_start asc")
             return dict(points=[dict(bucket_start=row.pop("bucket_start"), label="All", totals=row) for row in rows], note=caveat)
         if resource == "anomalies":
-            return dict(items=[], note="Direct mode has no Turnstile anomaly-rule engine. Use Azure Monitor alerts; this is not an all-clear.")
-        raise FinOpsError("This view requires Turnstile.")
+            return direct_analytics.anomalies(self, cost, params)
+        raise FinOpsError("This view requires an optional AUM service or Turnstile capability.")
 
     def write(self, resource, body=None, **params):
         if resource.startswith("budget"):
             if params.get("month") != datetime.now(timezone.utc).strftime("%Y-%m"):
                 raise FinOpsError("Direct mode changes only the current month. Use Turnstile for historical budgets.")
-            if params.get("scope_type") == "user":
-                raise FinOpsError("Monthly person budgets require Turnstile. Daily overrides use Set-ClaudeBudget.ps1.")
         if resource == "apply":
             raise FinOpsError("Direct writes use the repository scripts immediately; there is no separate apply job.")
         return self._bridge(resource, body, **params)

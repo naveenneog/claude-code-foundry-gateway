@@ -16,25 +16,36 @@ $ErrorActionPreference = 'Stop'
 if ($Subscription) {
     $parsedSubscription = [guid]::Empty
     if (-not [guid]::TryParse($Subscription, [ref]$parsedSubscription)) { throw 'Subscription must be an object id.' }
-    $script:AzureCliExecutable = @(Get-Command az -CommandType Application -ErrorAction Stop)[0].Source
+    $aumDirectAzureExecutable = @(Get-Command az -CommandType Application -ErrorAction Stop)[0].Source
+    $aumDirectSubscription = $Subscription
     function az {
-        & $script:AzureCliExecutable @args --subscription $Subscription
+        & $aumDirectAzureExecutable @args --subscription $aumDirectSubscription
+        $global:LASTEXITCODE = $LASTEXITCODE
     }
 }
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeTurnstileGovernance.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeBudgetOverride.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeAumDirectWrites.ps1')
 $request = Get-Content -LiteralPath $InputFile -Raw | ConvertFrom-Json
-$values = @(az apim nv list -g $ResourceGroup --service-name $ApimName -o json | ConvertFrom-Json)
-if ($LASTEXITCODE -ne 0) { throw 'Cannot read gateway named values. Check Azure RBAC.' }
-$nv = @{}
-foreach ($value in $values) {
-    if (-not $value.secret) { $nv[[string]$value.name] = [string]$value.value }
-}
+$nv = Get-AumNamedValueMap -ResourceGroup $ResourceGroup -ApimName $ApimName
 $registry = @(ConvertFrom-ClaudeBuRegistry $nv['bu-registry'])
 $parents = ConvertFrom-ClaudeBuParents $nv['bu-parents']
 $modes = ConvertFrom-ClaudeBuModes $nv['bu-modes']
 $result = $null
+
+function Invoke-VerifiedChange($Expected, [scriptblock]$Operation) {
+    foreach ($key in $Expected.Keys) { Test-ApimNamedValueLength -Id $key -Value ([string]$Expected[$key]) }
+    Invoke-AumVerifiedWrite -Before $nv -After $Expected -Operation $Operation `
+        -Read { Get-AumNamedValueMap -ResourceGroup $ResourceGroup -ApimName $ApimName } `
+        -Write { param($key,$value) Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $key -Value $value } `
+        -Remove {
+            param($key)
+            az apim nv delete -g $ResourceGroup --service-name $ApimName --named-value-id $key --yes -o none
+            if ($LASTEXITCODE -ne 0) { throw 'Could not remove the value created by this operation.' }
+        }
+}
 
 switch ([string]$request.action) {
     'read' {
@@ -51,12 +62,37 @@ switch ([string]$request.action) {
             catalog = $catalog; tiers = @($tiers)
             registry = @($registry); parents = $parents
             quota_org = [long]$nv['quota-org']
+            overrides = $(if ($nv.ContainsKey('quota-overrides')) { ConvertFrom-ClaudeBudgetOverrides $nv['quota-overrides'] } else { @{} })
+            person_budgets_supported = $nv.ContainsKey('quota-overrides')
             authority = $(if ($nv['turnstile-integration'] -match 'governanceAuthority=Turnstile') { 'Turnstile' } else { 'Gateway' })
         }
     }
     { $_ -in 'budget', 'budget_remove' } {
         if ($nv['turnstile-integration'] -match '(governanceAuthority|budgetAuthority)=Turnstile') {
             throw 'Turnstile owns these budgets. Use the Turnstile backend to prevent an overwrite.'
+        }
+        if ($request.parameters.scope_type -eq 'user') {
+            $personId = [guid]::Empty
+            if (-not [guid]::TryParse([string]$request.parameters.scope_id, [ref]$personId)) {
+                throw 'Use the person object id observed in the ledger; AUM does not scan the directory.'
+            }
+            if (-not $nv.ContainsKey('quota-overrides')) { throw 'This gateway does not expose daily person overrides.' }
+            $personMap = ConvertFrom-ClaudeBudgetOverrides $nv['quota-overrides']
+            $personArgs = @{ User=[string]$personId; ResourceGroup=$ResourceGroup; ApimName=$ApimName }
+            if ($request.action -eq 'budget_remove') {
+                $personMap.Remove([string]$personId)
+                $personArgs.Clear = $true
+            }
+            else {
+                $personMap[[string]$personId] = [long]$request.body.token_limit
+                $personArgs.Tokens = [long]$request.body.token_limit
+            }
+            $expected = @{ 'quota-overrides'=(ConvertTo-ClaudeBudgetOverrides $personMap) }
+            $result = Invoke-VerifiedChange $expected {
+                & (Join-Path $PSScriptRoot 'Set-ClaudeBudget.ps1') @personArgs 6>$null | Out-Null
+            }
+            $result.budget_period = 'day'
+            break
         }
         $id = [string]$request.parameters.scope_id
         Test-ClaudeBuId $id
@@ -81,25 +117,27 @@ switch ([string]$request.action) {
             if ($unit.TokensPerMonth -gt 0 -and $allocated -gt $unit.TokensPerMonth) { throw 'Children exceed the parent budget.' }
         }
         $raw = ConvertTo-ClaudeBuRegistry $registry
-        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry' -Value $raw | Out-Null
-        $actual = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry'
-        if ($actual -ne $raw) { throw 'Registry read-back did not match. Refresh before retrying.' }
-        $result = @{ verified = $true; effect = 'Named value read-back verified; gateway cache may still be stale.' }
+        $result = Invoke-VerifiedChange @{ 'bu-registry'=$raw } {
+            Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry' -Value $raw | Out-Null
+        }
+        $result.effect = 'Named value read-back verified; gateway cache may still be stale.'
     }
     'tiers' {
         if ($nv['turnstile-integration'] -match 'governanceAuthority=Turnstile') { throw 'Turnstile owns tiers. Use its backend.' }
+        $expected = [ordered]@{}
         foreach ($tier in @($request.body.tiers)) {
-            & (Join-Path $PSScriptRoot 'Set-ClaudeTier.ps1') -Tier $tier.id -TokensPerMinute $tier.tokens_per_minute `
-                -DailyQuota $tier.tokens_per_day -Models ($tier.models -join ',') -ResourceGroup $ResourceGroup -ApimName $ApimName 6>$null | Out-Null
-            foreach ($check in @(
-                @{ Id = "tpm-$($tier.id)"; Expected = [string]$tier.tokens_per_minute },
-                @{ Id = "quota-$($tier.id)"; Expected = [string]$tier.tokens_per_day }
-            )) {
-                $actual = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $check.Id
-                if ($actual -ne $check.Expected) { throw 'Tier read-back did not match. Refresh before retrying.' }
+            if ($tier.id -notin @('standard','premium')) { throw 'Unknown gateway tier.' }
+            $expected["tpm-$($tier.id)"] = [string]$tier.tokens_per_minute
+            $expected["quota-$($tier.id)"] = [string]$tier.tokens_per_day
+            $expected["models-$($tier.id)"] = $(if (@($tier.models).Count) { ',' + ($tier.models -join ',') + ',' } else { ',,' })
+        }
+        $result = Invoke-VerifiedChange $expected {
+            foreach ($tier in @($request.body.tiers)) {
+                & (Join-Path $PSScriptRoot 'Set-ClaudeTier.ps1') -Tier $tier.id -TokensPerMinute $tier.tokens_per_minute `
+                    -DailyQuota $tier.tokens_per_day -Models ($tier.models -join ',') -ResourceGroup $ResourceGroup -ApimName $ApimName 6>$null | Out-Null
             }
         }
-        $result = @{ verified = $true; effect = 'Tier script completed. Read tier show to verify limits.' }
+        $result.effect = 'All requested tier values read back exactly.'
     }
     'mode' {
         if ($nv['turnstile-integration'] -match 'governanceAuthority=Turnstile') { throw 'Turnstile owns modes. Use its backend.' }
@@ -110,11 +148,21 @@ switch ([string]$request.action) {
             ApimName = $ApimName
         }
         if ($null -ne $request.body.allowance_percent) { $modeArgs.AllowancePercent = [int]$request.body.allowance_percent }
-        & (Join-Path $PSScriptRoot 'Set-ClaudeBusinessUnit.ps1') @modeArgs 6>$null | Out-Null
-        $checked = ConvertFrom-ClaudeBuModes (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-modes')
-        $attributes = Get-ClaudeBudgetModeAttributes -Id $modeArgs.Id -Modes $checked
-        if ($attributes.enforcement -ne $request.body.mode) { throw 'Mode read-back did not match.' }
-        $result = @{ verified = $true; attributes = $attributes }
+        $target = @($registry | Where-Object Id -eq $modeArgs.Id)
+        if ($target.Count -ne 1) { throw 'Scope not found.' }
+        $expectedMode = ConvertTo-ClaudeBudgetMode $request.body.mode $request.body.allowance_percent
+        $modes.Remove($modeArgs.Id)
+        if ($expectedMode -ne 'strict') { $modes[$modeArgs.Id] = $expectedMode }
+        $reordered = @($registry | Where-Object Id -ne $modeArgs.Id) + $target
+        $expected = [ordered]@{
+            'bu-registry'=(ConvertTo-ClaudeBuRegistry $reordered)
+            'bu-modes'=(ConvertTo-ClaudeBuModes $modes)
+        }
+        if ($nv.ContainsKey('bu-parents')) { $expected['bu-parents'] = ConvertTo-ClaudeBuParents $parents }
+        $result = Invoke-VerifiedChange $expected {
+            & (Join-Path $PSScriptRoot 'Set-ClaudeBusinessUnit.ps1') @modeArgs 6>$null | Out-Null
+        }
+        $result.attributes = Get-ClaudeBudgetModeAttributes -Id $modeArgs.Id -Modes $modes
     }
     'catalog' {
         if ($nv['turnstile-integration'] -match 'governanceAuthority=Turnstile') { throw 'Turnstile owns the catalog. Use its backend.' }
@@ -153,17 +201,21 @@ switch ([string]$request.action) {
         $parentRaw = ConvertTo-ClaudeBuParents $nextParents
         Test-ApimNamedValueLength -Id 'bu-registry' -Value $nextRaw
         Test-ApimNamedValueLength -Id 'bu-parents' -Value $parentRaw
-        if ($nextRaw -ne $nv['bu-registry']) {
-            Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry' -Value $nextRaw | Out-Null
+        $expected = [ordered]@{ 'bu-registry'=$nextRaw; 'bu-parents'=$parentRaw }
+        if ($nv.ContainsKey('bu-modes')) {
+            foreach ($modeId in @($modes.Keys)) {
+                if ($modeId -notin @($nextRegistry.Id)) { $modes.Remove($modeId) }
+            }
+            $expected['bu-modes'] = ConvertTo-ClaudeBuModes $modes
         }
-        if ($parentRaw -ne $nv['bu-parents']) {
-            Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents' -Value $parentRaw | Out-Null
+        $result = Invoke-VerifiedChange $expected {
+            foreach ($key in $expected.Keys) {
+                if ($expected[$key] -cne $nv[$key]) {
+                    Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $key -Value $expected[$key] | Out-Null
+                }
+            }
         }
-        if ((Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-registry') -ne $nextRaw -or
-            (Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'bu-parents') -ne $parentRaw) {
-            throw 'Catalog read-back did not match. Inspect the current state before retrying.'
-        }
-        $result = @{ verified = $true; effect = 'Registry written using shared serializers. New scopes have no budget; set one explicitly. Display names are Entra group names.' }
+        $result.effect = 'Registry and related values read back. New scopes have no budget until explicitly assigned.'
     }
     default { throw 'Unsupported bridge action.' }
 }
