@@ -135,3 +135,25 @@ async def test_redacted_queries_do_not_leak_through_input_or_filter_echo():
         app.query_one("#quick-filter", Input).value = "private@example.org"
         await pilot.pause(.25)
         assert "private@example.org" not in app.export_screenshot()
+
+
+async def test_compact_rankings_keep_a_team_and_drill_into_server_filter():
+    from textual.widgets import DataTable
+    app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"))
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause(.25)
+        await app.workers.wait_for_complete()
+        await pilot.pause(.25)
+        panel = app.query_one("#dash-rank", DashboardPanel)
+        assert "T " in str(panel.render())
+        assert "units" in str(panel.border_title)
+        panel.focus()
+        await pilot.press("enter")
+        await pilot.pause()
+        table = app.screen.query_one("#dashboard-rows", DataTable)
+        assert table.row_count > 0
+        await pilot.press("enter")
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        assert app.active == "usage", (app.scope_filters, len(app.screen_stack), type(app.screen).__name__)
+        assert app.scope_filters.get("organization_id")

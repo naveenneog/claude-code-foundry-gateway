@@ -112,3 +112,22 @@ async def test_budget_tree_drills_to_people_and_back():
         await pilot.press("escape")
         await settle(app, pilot)
         assert app.active == "budgets"
+
+
+async def test_approval_paging_and_queue_change_reset_cursor():
+    backend = FakeBackend(features={"approvals": True})
+    engine = Engine(backend, "2026-09")
+    for index in range(55):
+        engine.request_budget("team", "sales-emea", "9M", f"Capacity {index}", apply=True)
+    app = FinOpsApp(engine, Config(backend="fake"))
+    async with app.run_test(size=(100, 32)) as pilot:
+        await settle(app, pilot)
+        await pilot.press("9")
+        await settle(app, pilot)
+        assert len(app.records["approvals"]) == 50
+        await pilot.press("n")
+        await settle(app, pilot)
+        assert len(app.records["approvals"]) == 5
+        app.query_one("#approval-view", Select).value = "history"
+        await settle(app, pilot)
+        assert app.feature_cursor is None and not app.feature_cursor_stack

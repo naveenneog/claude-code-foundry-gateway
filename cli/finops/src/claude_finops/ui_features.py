@@ -34,6 +34,8 @@ class FeatureUI:
         self.advanced_model = None
         self.request_cursor = None
         self.cursor_stack = []
+        self.feature_cursor = None
+        self.feature_cursor_stack = []
         self.ranking_dimension = "organization"
 
     def compose_feature(self, tab):
@@ -107,6 +109,8 @@ class FeatureUI:
         self.request_page = self.people_offset = 0
         self.request_cursor = None
         self.cursor_stack = []
+        self.feature_cursor = None
+        self.feature_cursor_stack = []
 
     def clear_query_context(self):
         self.reset_paging()
@@ -345,7 +349,7 @@ class FeatureUI:
         if tab == "approvals":
             resource = "notifications" if self.approvals_view == "notifications" else "approval_requests"
             params = {} if resource == "notifications" else {"view": self.approvals_view}
-            return await asyncio.to_thread(self.engine.read, resource, limit=50, **params)
+            return await asyncio.to_thread(self.engine.read, resource, limit=50, cursor=self.feature_cursor, **params)
         if self.advanced_view == "models":
             response = await asyncio.to_thread(self.engine.read, "registry")
             return dict(response, items=response.get("models", []), note="Read-only model registry. Enter shows exact configuration; credentials are omitted.")
@@ -371,10 +375,25 @@ class FeatureUI:
     def feature_select(self, event):
         if event.select.id == "approval-view":
             self.approvals_view = str(event.value)
+            self.feature_cursor = None
+            self.feature_cursor_stack = []
         elif event.select.id == "advanced-view":
             self.advanced_view = str(event.value)
         else:
             return
+        self.action_refresh()
+
+    def page_feature(self, previous=False):
+        if previous:
+            if not self.feature_cursor_stack:
+                return
+            self.feature_cursor = self.feature_cursor_stack.pop()
+        else:
+            cursor = self.data.get(self.active, {}).get("page", {}).get("next_cursor")
+            if not cursor:
+                return
+            self.feature_cursor_stack.append(self.feature_cursor)
+            self.feature_cursor = cursor
         self.action_refresh()
 
     def action_advanced(self, view):

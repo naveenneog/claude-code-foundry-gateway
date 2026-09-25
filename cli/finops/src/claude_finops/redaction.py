@@ -10,13 +10,17 @@ URL = re.compile(r"https?://[^\s\"'<>]+", re.I)
 PERSON_KEYS = {"email", "user_name", "user_id", "actor", "updated_by", "changed_by", "created_by"}
 PRIVATE_TEXT = {"description", "reason", "error_message", "ingest_error", "message", "content", "question", "original_question"}
 PRIVATE_FIELDS = {"tenant", "tenant_id", "app_id", "client_id", "subscription_id", "workspace",
-                  "repository", "resource_group", "apim_name", "entra_group", "external_ref"}
+                  "repository", "resource_group", "apim_name", "entra_group", "external_ref", "path"}
 ENUM_FIELDS = {"role", "method", "status", "scope_type", "severity", "kind", "enforcement",
                "action", "dimension", "source", "usage_source", "runtime"}
 
 
 def digest(value):
     return sha256(str(value).casefold().encode("utf-8")).hexdigest()[:8]
+
+
+def field_key(key):
+    return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", key).lower()
 
 
 def mask_identifiers(text):
@@ -51,6 +55,7 @@ class Redactor:
         return label
 
     def _learn(self, value, key=""):
+        key = field_key(key)
         if isinstance(value, dict):
             if key == "enforcement_modes":
                 for scope_id in value:
@@ -88,6 +93,7 @@ class Redactor:
         return self._render(value)
 
     def _render(self, value, key=""):
+        key = field_key(key)
         if isinstance(value, dict):
             if key == "enforcement_modes":
                 return {self.text(k): v for k, v in value.items()}

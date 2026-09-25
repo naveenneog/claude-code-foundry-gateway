@@ -92,3 +92,12 @@ def test_identity_strings_cannot_rewrite_schema_keys_or_status_enums():
 def test_dynamic_identifier_keys_remain_private():
     source = {"attributes": {"11111111-2222-3333-4444-555555555555": "example"}}
     assert not privacy_problems(json.dumps(Redactor(True).present(source)))
+def test_powershell_report_fields_keep_schema_but_mask_identity_and_paths():
+    from claude_finops.redaction import Redactor
+    result = Redactor(True).present({"Path": "C:\\Users\\PrivatePerson\\reports",
+        "DisplayName": "Private Person", "WorkspaceResourceId": "/subscriptions/private/resourceGroups/private",
+        "RequestCount": 123, "Status": "Complete"})
+    assert result["Path"].startswith("contoso-")
+    assert result["DisplayName"].startswith("contoso-")
+    assert result["WorkspaceResourceId"].startswith("contoso-")
+    assert result["RequestCount"] == 123 and result["Status"] == "Complete"

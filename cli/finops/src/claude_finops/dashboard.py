@@ -65,9 +65,13 @@ class DashboardPanel(Static, can_focus=True):
         self.detail = {}
 
     def on_key(self, event):
-        if event.key == "enter":
+        if event.key in {"enter", "d"}:
             from .screens import DetailScreen
-            self.app.push_screen(DetailScreen(str(self.border_title) + " | exact source values", self.detail))
+            if event.key == "enter" and self.id in {"dash-rank", "dash-risks", "dash-anomalies"}:
+                from .dashboard_drill import DashboardRows
+                self.app.push_screen(DashboardRows(self))
+            else:
+                self.app.push_screen(DetailScreen(str(self.border_title) + " | exact source values", self.detail))
             event.stop()
 
 
@@ -153,16 +157,20 @@ class Dashboard(Vertical):
         dimension = data.get("ranking", {}).get("dimension", "organization")
         kind = {"organization": "U", "department": "T", "user": "P", "model": "M", "runtime": "S",
                 "tier": "Q", "project": "Q"}.get(dimension, "U")
-        panel.border_title = f"Top {dimension} / teams"
-        items = [(kind, row) for row in data.get("ranking", {}).get("items", [])]
-        items += [("T", row) for row in data.get("teams", {}).get("items", [])]
+        label = {"organization": "units", "department": "teams", "user": "people", "runtime": "surfaces",
+                 "model": "models", "tier": "tiers", "project": "tiers"}.get(dimension, dimension)
+        panel.border_title = f"Top {label}" + (" / teams" if dimension != "department" else "")
+        ranked = [(kind, row) for row in data.get("ranking", {}).get("items", [])]
+        teams = [("T", row) for row in data.get("teams", {}).get("items", [])] if dimension != "department" else []
         if query:
-            items = [(kind, row) for kind, row in items if query.casefold() in str(row).casefold()]
+            ranked = [(kind, row) for kind, row in ranked if query.casefold() in str(row).casefold()]
+            teams = [(kind, row) for kind, row in teams if query.casefold() in str(row).casefold()]
+        items = ranked + teams
         maximum = max((row.get("total_tokens", 0) for _, row in items), default=1) or 1
         lines = []
         available = max(2, panel.size.height - 2)
-        units = items[:max(1, available // 2)]
-        teams = [item for item in items if item not in units][:max(1, available - len(units))]
+        units = ranked[:max(1, available // 2)] if teams else ranked[:available]
+        teams = teams[:max(1, available - len(units))]
         for kind, row in units + teams:
             amount = row.get("total_tokens", 0)
             bar = ("#" if ascii_only else "━") * max(1, round(amount / maximum * 8))

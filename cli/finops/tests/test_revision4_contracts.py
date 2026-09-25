@@ -173,3 +173,17 @@ def test_future_mutation_returns_gateway_apply_tracking_anchor():
     backend.write = lambda *_, **__: {"id": "request-1", "apply": {"requested_at": "2026-09-24T12:00:00Z"}}
     result = Engine(backend, "2026-09").request_budget("team", "sales-emea", "9M", "Capacity", apply=True)
     assert result["requested_at"] == "2026-09-24T12:00:00Z"
+
+
+def test_approval_history_is_paged_and_final_decisions_cannot_repeat():
+    backend = FakeBackend(features={"approvals": True})
+    engine = Engine(backend, "2026-09")
+    for index in range(55):
+        engine.request_budget("team", "sales-emea", "9M", f"Capacity {index}", apply=True)
+    page = engine.read("approval_requests", view="mine", limit=50)
+    assert len(page["items"]) == 50 and page["page"]["next_cursor"]
+    last = engine.read("approval_requests", view="mine", limit=50, cursor=page["page"]["next_cursor"])
+    assert len(last["items"]) == 5 and not last["page"]["next_cursor"]
+    engine.decide_request(page["items"][0]["id"], "reject", "No capacity", apply=True)
+    with pytest.raises(FinOpsError, match="not permitted"):
+        engine.decide_request(page["items"][0]["id"], "reject", "Repeat", apply=True)

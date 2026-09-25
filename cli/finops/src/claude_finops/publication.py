@@ -107,4 +107,8 @@ def validate_portal_manifest(folder):
     for image in folder.glob("*.png"):
         if image.name not in seen:
             problems.append("portal image has no manifest: " + image.name)
+    required = {"gateway-overview.png", "gateway-named-values.png", "gateway-apis.png",
+                "insights-overview.png", "workspace-overview.png", "workspace-logs.png",
+                "turnstile-overview.png"}
+    problems += ["required portal flow missing: " + name for name in sorted(required - seen)]
     return problems

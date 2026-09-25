@@ -204,7 +204,7 @@ class FinOpsApp(FeatureUI, App):
         if action == "apply":
             return self.editable and self.active == "governance" and self.engine.backend.name != "Direct"
         if action in {"next_page", "previous_page"}:
-            return self.active in {"people", "requests"}
+            return self.active in {"people", "requests", "approvals"}
         if action in {"copy_request", "open_ledger"}:
             return self.active == "requests" and not self.redactor.enabled
         return True
@@ -577,6 +577,8 @@ class FinOpsApp(FeatureUI, App):
             self.push_screen(ChangeScreen(self.engine, "apply"))
 
     def action_next_page(self):
+        if self.active == "approvals":
+            return self.page_feature()
         if self.active == "people":
             data = self.data.get("people", {})
             if len(data.get("items", [])) < 50:
@@ -597,6 +599,8 @@ class FinOpsApp(FeatureUI, App):
         self.action_refresh()
 
     def action_previous_page(self):
+        if self.active == "approvals":
+            return self.page_feature(previous=True)
         if self.active == "people":
             self.people_offset = max(0, self.people_offset - 50)
         elif self.active == "requests":

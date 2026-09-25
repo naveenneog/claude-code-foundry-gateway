@@ -7,6 +7,14 @@ STAMP = "2026-09-24T12:00:00Z"
 
 
 class FakeFeatures:
+    @staticmethod
+    def _page(rows, params):
+        offset = int(params.get("cursor") or 0)
+        limit = params.get("limit", 50)
+        more = offset + limit < len(rows)
+        return dict(items=deepcopy(rows[offset:offset + limit]),
+                    page=dict(next_cursor=str(offset + limit) if more else None, has_more=more))
+
     def feature_capabilities(self, identity):
         document = current_capabilities(identity)
         actions = {
@@ -36,7 +44,13 @@ class FakeFeatures:
             rows = self.feature_store["requests"]
             if params.get("id"):
                 rows = [row for row in rows if row["id"] == params["id"]]
-            return {"items": deepcopy(rows), "page": {"next_cursor": None, "has_more": False}}
+            if params.get("view") == "mine":
+                rows = [row for row in rows if row["requester_id"] == self.actor_id]
+            elif params.get("view") == "waiting":
+                rows = [row for row in rows if row["state"] == "pending" and row["requester_id"] != self.actor_id]
+            elif params.get("view") == "history":
+                rows = [row for row in rows if row["state"] != "pending"]
+            return self._page(rows, params)
         if resource == "approval_request":
             row = next((r for r in self.feature_store["requests"] if r["id"] == params["id"]), None)
             if not row:
@@ -48,12 +62,12 @@ class FakeFeatures:
                                    department_id=row["parent_scope_id"]) for row in self.people
                               if query in (row["scope_id"] + row["scope_name"]).lower()][:params.get("limit", 50)]}
         if resource == "boosts":
-            return {"items": deepcopy(self.feature_store["boosts"]), "page": {"next_cursor": None}}
+            return self._page(self.feature_store["boosts"], params)
         if resource == "notifications":
             notices = self.feature_store.setdefault("notifications", [dict(
                 id="notice-1", title="Budget warning", body="Review Sales EMEA",
                 severity="warning", created_at=STAMP, read_at=None)])
-            return {"items": deepcopy(notices), "page": {"next_cursor": None}}
+            return self._page(notices, params)
         if resource == "assistant_settings":
             return dict(model_available=True, effective_model_name="Example assistant", available_models=[], auto_title=False)
         if resource in {"conversations", "pinned_charts"}:
@@ -83,6 +97,7 @@ class FakeFeatures:
             row["state"] = "escalated" if resource == "approval_escalate" else (
                 "approved" if body["decision"] == "approve" else "rejected")
             row["revision"] = str(int(row["revision"]) + 1)
+            row["allowed_actions"] = []
             return deepcopy(row)
         if resource == "boost_create":
             row = dict(body, id=f"boost-{len(self.feature_store['boosts']) + 1}", state="active")
