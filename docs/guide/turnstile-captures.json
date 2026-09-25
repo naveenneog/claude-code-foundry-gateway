@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "provenance": "Records marked accel_dirty were captured on 2026-09-25 from uncommitted capture code on top of their accel_commit (280a16e). That code was committed in 1da331b. Records captured before 13:51Z predate its distinctive-value and people redaction and were reviewed image by image. The runner now refuses to capture from uncommitted capture code, so later records name the exact commit and carry the hash of the step they ran (spec_sha256).",
   "captures": [
     {
       "image": "turnstile-01-signin.png",
@@ -241,7 +242,8 @@
         "leak_check_passed": true,
         "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "27f45a100c65a5b49b9b1bb922009a3a00092c062758675e9de1b4dd3f60002f"
+      "sha256": "27f45a100c65a5b49b9b1bb922009a3a00092c062758675e9de1b4dd3f60002f",
+      "accel_dirty": true
     },
     {
       "image": "turnstile-entra-2-expose-api.png",
@@ -258,7 +260,8 @@
         "leak_check_passed": true,
         "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "bf77bb8bd32a52073be7d9a6b8a3d0cf3f6f0c9ce77fbbca110b2bebec146597"
+      "sha256": "bf77bb8bd32a52073be7d9a6b8a3d0cf3f6f0c9ce77fbbca110b2bebec146597",
+      "accel_dirty": true
     },
     {
       "image": "turnstile-entra-3-app-roles.png",
@@ -275,7 +278,8 @@
         "leak_check_passed": true,
         "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "a07b350ea777dec7a84fcffa4fe6c29516769ead1fe81c2ddeb99987b4fe6464"
+      "sha256": "a07b350ea777dec7a84fcffa4fe6c29516769ead1fe81c2ddeb99987b4fe6464",
+      "accel_dirty": true
     },
     {
       "image": "turnstile-manager-budgets.png",
@@ -539,7 +543,8 @@
         "leak_check_passed": true,
         "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "74b76235a7e26dac94db2de837380df0d128277c54cac7aa96baeb04607111a5"
+      "sha256": "74b76235a7e26dac94db2de837380df0d128277c54cac7aa96baeb04607111a5",
+      "accel_dirty": true
     },
     {
       "image": "turnstile-t09-entra-mutation.png",

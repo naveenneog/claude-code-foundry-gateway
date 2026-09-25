@@ -23,6 +23,15 @@ export function peopleRedactionPairs(people, { required = false } = {}) {
   return names.map((name, index) => [name, `Contoso user ${index + 1}`]);
 }
 
+// The manifest names the commit that took each picture, so the capture code itself (the runner
+// and its libraries) must be committed. Spec files may change between runs; each record
+// carries the hash of the step it ran instead. Input: `git status --porcelain` output.
+export function uncommittedCaptureCode(status) {
+  return String(status).split(/\r?\n/).filter(Boolean)
+    .map((line) => line.slice(3).trim().replace(/^"|"$/g, ''))
+    .filter((file) => /^guide\/(?:[^/]+|lib\/.+)\.mjs$/.test(file) && !file.endsWith('.test.mjs'));
+}
+
 export function portalUrl(step, target) {
   const guid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
   const requireGuid = (value, name) => {
