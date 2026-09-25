@@ -12,6 +12,8 @@ class Backend(ABC):
     person_budget_period = "month"
     budget_warning_threshold = True
     unit_direct_departments = True
+    native_user_budget_records = False
+    maximum_boost_days = None
 
     @abstractmethod
     def read(self, resource: str, **params: Any) -> dict:

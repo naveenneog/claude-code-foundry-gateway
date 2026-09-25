@@ -6,7 +6,7 @@ from urllib.parse import quote
 from .capabilities import enabled, require
 from .errors import FinOpsError
 from .http_backend import HttpBackend
-from .rules import identifier, month_window
+from .rules import identifier, month_window, can_budget_write
 from . import service_models as models
 
 
@@ -17,6 +17,8 @@ class AumServiceBackend(HttpBackend):
     requires_reason = True
     person_budget_period = "day"
     unit_direct_departments = False
+    native_user_budget_records = True
+    maximum_boost_days = 31
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -121,10 +123,13 @@ class AumServiceBackend(HttpBackend):
             items = []
             for row in records["items"]:
                 budget = limits.get(row["id"], {})
+                identity = self._identity or self.read("whoami")
                 items.append(dict(scope_type="user", scope_id=row["id"], scope_name=row["name"],
                     parent_scope_id=row["parent_id"], unit=row.get("organization_id"),
                     token_limit=budget.get("token_limit"), used_tokens=None, remaining_tokens=None,
-                    status="unknown", budget_period="day", warning_threshold_percent=budget.get("warning_threshold_percent", 80)))
+                    status="unknown", budget_period="day",
+                    writable=can_budget_write(identity, "user", row["id"], row["parent_id"]),
+                    warning_threshold_percent=budget.get("warning_threshold_percent", 80)))
             return dict(models.page(records, items), offset=0, limit=params.get("limit", 50), total=None,
                         note="Server-scoped observed people; daily overrides. Usage, last-seen and effective tier defaults are not included in this API.")
         if resource == "requests":

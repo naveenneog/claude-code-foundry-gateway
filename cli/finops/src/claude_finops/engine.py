@@ -86,17 +86,25 @@ class Engine(FeatureEngine):
         if warning is not None and not self.backend.budget_warning_threshold:
             raise FinOpsError("Direct has no stored warning threshold. Use the AUM service or omit --warning.")
         kind, key = scope_type(kind), identifier(key)
-        require_budget_write(self.read("whoami"), kind, key, department_id)
+        identity = self.read("whoami")
+        native_user = kind == "user" and self.backend.native_user_budget_records
+        if native_user:
+            self.require_feature("native_writes", "budget")
+        else:
+            require_budget_write(identity, kind, key, department_id)
         rows = self.read("budgets")["items"]
         if kind == "user":
-            if not department_id:
+            existing = next((row for row in rows if row["scope_type"] == "user" and row["scope_id"] == key), None)
+            if not department_id and not (native_user and existing):
                 raise FinOpsError("Choose a team with --team before editing a person's budget.")
-            people = self.read("people", **self.backend.people_filter(department_id), query=key, limit=50, offset=0)
-            rows += people["items"]
+            people = {}
+            if department_id:
+                people = self.read("people", **self.backend.people_filter(department_id), query=key, limit=50, offset=0)
+                rows = [row for row in rows if not (row["scope_type"] == "user" and row["scope_id"] == key)] + people["items"]
         row = next((item for item in rows if item["scope_type"] == kind and item["scope_id"] == key), None)
         if row is None:
             raise FinOpsError("Scope not found in this month and role. Refresh Budgets or search the person's team.", 5)
-        if row.get("writable") is False:
+        if row.get("writable") is False or (native_user and row.get("writable") is not True):
             raise FinOpsError("This observed identity or scope is not writable. Check its object id and selected authority.", 4)
         daily = row.get("budget_period") == "day"
         proposed = None if remove else parse_tokens(amount)

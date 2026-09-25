@@ -246,3 +246,22 @@ def test_service_request_cache_retains_only_the_current_page():
     backend.read("requests", month="2026-09", limit=50)
     backend.read("requests", month="2026-09", limit=50, cursor="next")
     assert set(backend._requests) == {"next"}
+
+
+@pytest.mark.parametrize("access", ["admin", "manager"])
+def test_existing_native_person_budget_uses_server_writable_record_without_directory_lookup(access):
+    scope = dict(organizations=[], departments=[dict(id="sales-emea", parent_id="sales")],
+                 writable_department_ids=[]) if access == "manager" else None
+    backend, calls = service(access=access, scope=scope)
+    engine = Engine(backend, "2026-09")
+    engine.change_reason = "Reviewed daily override"
+    result = engine.budget_change("person", OID, "900")
+    assert result["budget_period"] == "day" and result["before"] == 1000
+    assert not any(call.url.path == "/api/v1/people" for call in calls)
+
+
+def test_service_boost_expiry_is_refused_during_preview_not_only_apply():
+    backend, calls = service()
+    with pytest.raises(FinOpsError, match="31 days"):
+        Engine(backend).boost(OID, "sales-emea", "100", "2099-01-01", "Reviewed", window="daily")
+    assert all(call.method == "GET" for call in calls)

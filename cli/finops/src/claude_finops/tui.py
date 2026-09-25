@@ -202,6 +202,8 @@ class FinOpsApp(FeatureUI, App):
                 row = self.selected()
                 if row.get("writable") is False:
                     return False
+                if self.engine.backend.native_user_budget_records and row.get("scope_type") == "user":
+                    return row.get("writable") is True
                 return can_budget_write(self.identity, row.get("scope_type"), row.get("scope_id"),
                                         row.get("parent_scope_id"))
             return self.editable and self.active == "governance"

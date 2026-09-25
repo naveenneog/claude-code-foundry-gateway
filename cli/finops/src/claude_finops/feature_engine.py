@@ -1,5 +1,5 @@
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 
 from . import capabilities as cap
@@ -161,6 +161,9 @@ class FeatureEngine:
         if self.backend.person_budget_period == "day" and window != "daily":
             raise FinOpsError("This backend's person boosts are daily. Use --window daily.")
         expires = self._future_expiry(until)
+        if self.backend.maximum_boost_days and datetime.fromisoformat(expires.replace("Z", "+00:00")) > (
+                datetime.now(timezone.utc) + timedelta(days=self.backend.maximum_boost_days)):
+            raise FinOpsError(f"This backend limits boost expiry to {self.backend.maximum_boost_days} days.")
         tokens = parse_tokens(amount)
         people = self.read("people", **self.backend.people_filter(identifier(team)), query=identifier(person), offset=0, limit=50)
         row = next((r for r in people["items"] if r["scope_id"] == person), None)
