@@ -267,7 +267,37 @@ before opening a session, compares the token with the pre-transition Owner token
 checks issue timestamps with the observed provider backdating allowance. Owner recovery
 separately verifies Graph, memberships, catalog, named values, successful apply and the
 new Owner session. No nonce scope, app-manifest change or extra grant is created by this
-capture script. Execution remains held until the AUM client-journey window closes.
+capture script.
+
+**Measured 2026-09-25:** after the lead explicitly reordered the exclusive windows, the
+direct-assignment retry passed at 01:21:42–01:25:51Z. Manager claims, exact server scope,
+three protected-route 403s and single-use-code replay 401 were verified. Admin group was
+restored first, then the direct assignment; all 14 account memberships and 22 direct-role
+tuples matched, as did the authored catalog and all 24 non-secret named values. The apply
+succeeded and a newly issued Admin token produced Owner/null scope. The raw catalog differs
+only in its server-generated `updated_at`. The window closed at 01:26:22Z.
+See [the four live Manager captures](../TURNSTILE.md#live-manager-only-proof).
+
+### Windows broker token renewal
+
+The first direct-assignment attempt was safely restored because a previously unused scope
+spelling still returned cached wider-role claims. Installed MSAL Python's `force_refresh`
+bypassed its own cache but did not renew the Windows broker token. The successful retry
+added **`--renew-broker-token`** to the authorized capture command.
+
+`guide/renew-entra-token.py`, invoked internally through Azure CLI's own Python, uses the
+installed runtime's `set_access_token_to_renew` operation after bypassing the MSAL cache.
+This mirrors `RuntimeBroker.AcquireTokenSilentAsync`'s `AccessTokenToRenew` path in
+[Microsoft's MSAL.NET source](https://github.com/AzureAD/microsoft-authentication-library-for-dotnet/blob/main/src/client/Microsoft.Identity.Client.Broker/RuntimeBroker.cs)
+(reviewed 2026-09-25). It was verified against the live Owner and Manager transitions,
+not inferred from a changed scope string.
+
+The hooks are process-local and restored immediately. No SDK file or CLI configuration
+is edited, no cache is deleted, and no nonce scope, pre-authorization or consent is added.
+Tokens remain in the internal process pipe; do not run the Python helper to display one.
+An unavailable runtime method, failed silent acquisition, unchanged token or stale
+issue time fails closed with no cached fallback. Ordinary captures retain normal CLI
+acquisition unless the explicit renewal flag is present.
 
 ## 6. Capture/render tools and the local inspector
 

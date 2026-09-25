@@ -281,6 +281,70 @@
       "sha256": "83845d5ec07a4faeca483c674da6398aa15bbbf3da0a36b69f30ae4ca5d93fad"
     },
     {
+      "image": "turnstile-manager-budgets.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T01:23:38.043Z",
+      "accel_commit": "efce4df999c980463cc944647cbee2538db3436d",
+      "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
+      "tool": "Playwright 1.62.1",
+      "route": "/?page=budgets",
+      "identity_kind": "manager_cli_code",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true,
+        "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
+      },
+      "sha256": "fd2147ae58af24aae92648dd6b3dc907656e742cf8811dab88338bb21dd86b0a"
+    },
+    {
+      "image": "turnstile-manager-governance.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T01:23:42.843Z",
+      "accel_commit": "efce4df999c980463cc944647cbee2538db3436d",
+      "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
+      "tool": "Playwright 1.62.1",
+      "route": "/?page=gateway-governance",
+      "identity_kind": "manager_cli_code",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true,
+        "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
+      },
+      "sha256": "0a33ecccc6cd2cd62a789cc600eec3396a96a8cc5318f5b60ac04462558d0b36"
+    },
+    {
+      "image": "turnstile-manager-refused.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T01:23:44.263Z",
+      "accel_commit": "efce4df999c980463cc944647cbee2538db3436d",
+      "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
+      "tool": "Playwright 1.62.1",
+      "command": "Browser session GET /api/v1/auth/me; GET /api/v1/model-management; GET /api/v1/observability/overview; GET /api/v1/application-access/applications",
+      "identity_kind": "manager_cli_code",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true,
+        "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
+      },
+      "sha256": "d2a53a50741d3f718a58e4559e9d8b256f5244368f997fc6ab82ad80bb518dec"
+    },
+    {
+      "image": "turnstile-manager-usage.png",
+      "live": true,
+      "captured_at_utc": "2026-09-25T01:23:40.533Z",
+      "accel_commit": "efce4df999c980463cc944647cbee2538db3436d",
+      "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
+      "tool": "Playwright 1.62.1",
+      "route": "/?page=finops-overview",
+      "identity_kind": "manager_cli_code",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true,
+        "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
+      },
+      "sha256": "e00b068bd60db3599f05614cf8039fda234b99b23b0af20275b91433abc255c9"
+    },
+    {
       "image": "turnstile-mode-notify-apply.png",
       "live": true,
       "captured_at_utc": "2026-09-24T21:15:31.798Z",
