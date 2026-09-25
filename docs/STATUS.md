@@ -206,6 +206,28 @@ gateway Turnstile governs, so the reference gateway stays Turnstile's.
 Open: the manager-only journey (after P53's), the AUM client's end-to-end journey on the dedicated
 test gateway, and the portal pictures (after the owner signs in again).
 
+**Follow-up, merged 2026-09-25 from `9ee7304`** (gate PASS, 864 s, 61 checks passed and the missing
+FinOps environment skipped). Tested live on an isolated Basic v2 gateway through the service's API
+with Azure CLI tokens, then retired with its resource group:
+
+| Journey | Result |
+|---|---|
+| Real Claude enforcement, 02:30-02:33Z | 200 for a standard entitlement; strict refused with 403 at its limit; allowance 100% served above nominal with an advisory notice and refused at its effective limit (163 nominal, 326 effective tokens); notify served above nominal with `usage-reported` |
+| Attribution | 17 requests, 221 prompt and 68 completion tokens in the ledger, $0.001122 at list price, no unpriced rows |
+| Manager-only authority, 03:42-03:45Z | A fresh team-manager token wrote and restored a person budget; a unit manager wrote a team budget; 4 protected operations returned 403. Admin, 14 memberships, 22 direct assignments and every named value restored exactly |
+
+**Found by testing live.** A root unit, or a scope with no notice, in allowance or notify mode made
+APIM answer 500 ("The value field is required"): the budget trace sent an empty `ParentUnit` or
+`Notice`, and APIM trace metadata cannot be empty. Absent values are now `none`, and a test runs
+the policy's actual expressions. P46's live probes had used a team with a parent and a notice, so
+they never met it. The reference gateway had every unit strict and could not reach it until the
+fixed policy was deployed. Also: Kusto keyset cursors needed `strcmp`, `If-Match` has to be quoted,
+and a private endpoint needed its provider-specific delete.
+
+Still open: the AUM client (P52) driving the service end to end. The journeys above are HTTP
+receipts, not the terminal app. Also still open: twelve portal pictures, which now need a fresh,
+priced deployment because the test one is gone.
+
 ## P53 Turnstile, tested and captured live, 2026-09-24 (phase 1)
 
 Merged at `146fd12`.
