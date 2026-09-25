@@ -131,20 +131,26 @@ class AumServiceBackend(HttpBackend):
             result = self._get("requests", self._window(params))
             rows = [dict(row, user_name=row.get("actor"), model_name=row.get("model"),
                          runtime=row.get("client_surface"), estimated_cost=None) for row in result["items"]]
-            self._requests.update({row["request_id"]: row for row in rows})
+            self._requests = {row["request_id"]: row for row in rows}
             return dict(models.page(result, rows), note="Server-scoped, stable cursor; per-request cache/cost remain unknown.")
         if resource == "request":
-            key = params["request_id"]
+            key = identifier(params["request_id"])
             query = dict(month=params["month"], limit=200)
             cached = self._requests.get(key)
             if cached and cached.get("timestamp"):
                 stamp = datetime.fromisoformat(cached["timestamp"].replace("Z", "+00:00")).replace(microsecond=0)
                 query.update({"from": stamp.isoformat(), "to": (stamp + timedelta(seconds=1)).isoformat()})
-            fresh = self.read("requests", **query)["items"]
-            result = next((row for row in fresh if row["request_id"] == key), None)
-            if result is None:
-                raise FinOpsError("Request is outside the current page. Select it from paged Requests; this service has no indexed detail endpoint.", 5)
-            return result
+            seen = set()
+            while True:
+                fresh = self.read("requests", **query)
+                result = next((row for row in fresh["items"] if row["request_id"] == key), None)
+                if result is not None:
+                    return result
+                cursor = fresh["page"]["next_cursor"]
+                if not cached or not cursor or cursor in seen:
+                    raise FinOpsError("Request is outside the current page. Select it from paged Requests; this service has no indexed detail endpoint.", 5)
+                seen.add(cursor)
+                query["cursor"] = cursor
         if resource in {"approval_requests", "approval_request"}:
             return self._approval_read(resource, params)
         if resource in {"boosts", "notifications", "audit"}:

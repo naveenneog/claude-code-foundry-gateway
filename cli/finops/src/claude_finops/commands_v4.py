@@ -24,6 +24,12 @@ def register(app, groups, emit):
     def mode_show(ctx: typer.Context):
         emit(ctx, lambda e: e.read("catalog"))
 
+    @groups["governance"].command("audit")
+    def governance_audit(ctx: typer.Context, cursor: str | None = None,
+                         limit: int = typer.Option(50, min=1, max=200)):
+        """Read the AUM service's server-authorized audit page."""
+        emit(ctx, lambda e: e.read("audit", limit=limit, cursor=cursor))
+
     @mode.command("set")
     def mode_set(ctx: typer.Context, kind: str, key: str, value: str, allowance: int | None = None, apply: bool = False):
         emit(ctx, lambda e: e.mode_change(kind, key, value, allowance, apply=apply and not ctx.obj["what_if"]), mutation=True)

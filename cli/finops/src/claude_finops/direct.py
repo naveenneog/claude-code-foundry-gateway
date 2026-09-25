@@ -81,6 +81,11 @@ class DirectBackend(Backend):
     def _ledger(self, month, start=None, end=None):
         start, end = query_window(month, start, end)
         source = (self.root / "analytics" / "chargeback-ledger.kql").read_text(encoding="utf-8-sig")
+        if self.config.subscription:
+            resource = (f"/subscriptions/{self.config.subscription}/resourceGroups/{self.config.resource_group}"
+                        f"/providers/Microsoft.ApiManagement/service/{self.config.apim_name}")
+            source = source.replace("\nApiManagementGatewayLlmLog\n",
+                                    "\nApiManagementGatewayLlmLog\n| where _ResourceId =~ " + self._quote(resource) + "\n")
         return source.replace("let _from = ago(1d);", f"let _from = datetime({start});").replace(
             "let _to = now();", f"let _to = datetime({end});")
 
@@ -105,6 +110,8 @@ class DirectBackend(Backend):
             return result
         if resource == "whoami":
             account = json.loads(self._az("account", "show", "-o", "json"))
+            if not self.config.subscription and account.get("id"):
+                self.config.subscription = account["id"]
             can_write = False
             if account.get("id"):
                 resource_id = (f"/subscriptions/{account['id']}/resourceGroups/{self.config.resource_group}"
@@ -197,10 +204,11 @@ class DirectBackend(Backend):
         totals = ("total_tokens=sum(prompt_tokens + completion_tokens), total_requests=sum(requests), "
                   "cache_read_tokens=sum(cache_read_tokens), estimated_cost=sum(usd), unknown_prices=countif(not(priced_ok))")
         unknown = "\n| extend estimated_cost=iff(unknown_prices > 0, real(null), estimated_cost)"
-        caveat = "Published ClaudeCost: list-price lower bound; cache writes unknown; current membership. Not an invoice."
+        caveat = "Published workspace ClaudeCost: list-price lower bound, current published membership, cache writes unknown. "
+        caveat += "In shared workspaces this is not automatically one gateway's cost; validate the published function source. Not an invoice."
         if resource == "overview":
             rows = self.query(cost + "\n| summarize " + totals + unknown)
-            return dict(totals=rows[0] if rows else {}, note=caveat)
+            return dict(totals=rows[0] if rows else {}, note=caveat, accounting_scope="published-workspace-function")
         if resource == "distribution":
             dimension = params.get("dimension", "organization")
             if dimension not in DIMENSIONS:

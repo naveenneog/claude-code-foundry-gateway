@@ -80,6 +80,8 @@ class FeatureEngine:
             row["attributes"]["allowance_percent"] = allowance
         plan = dict(preview=not apply, action="Set budget mode", scope_type=kind, scope_id=key,
                     before=before, after=row["attributes"], effect="Configured mode; follow gateway apply before claiming effect.")
+        if self.backend.immediate_writes:
+            plan["effect"] = "Named-value verification; no separate apply job. Gateway propagation can lag."
         if apply:
             if not self.backend.immediate_writes:
                 plan["requested_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

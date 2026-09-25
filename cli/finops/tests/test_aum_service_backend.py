@@ -116,6 +116,7 @@ def test_service_engine_forwards_reason_and_uses_synchronous_receipt():
     engine.change_reason = "Approved capacity"
     result = engine.budget_change("team", "sales-emea", "4M", apply=True, confirm="sales-emea")
     assert "requested_at" not in result
+    assert "no separate" in result["effect"].lower()
     assert json.loads(calls[-1].content)["reason"] == "Approved capacity"
     with pytest.raises(FinOpsError, match="no separate"):
         engine.apply(apply=True)
@@ -218,3 +219,30 @@ def test_service_managed_unit_export_includes_direct_members_without_double_coun
     usage = [call for call in calls if call.url.path == "/api/v1/usage"]
     assert len(usage) == 1 and usage[0].url.params.get("organization_id") == "sales"
     assert len(result["items"]) == 1 and result["items"][0]["id"] == "sales"
+
+
+def test_selected_request_detail_follows_timestamp_ties_after_reauthorization():
+    selected = dict(request_id="selected", timestamp="2026-09-24T00:00:00Z", total_tokens=30)
+    seeded = False
+    def respond(request):
+        if request.url.path != "/api/v1/requests":
+            return None
+        if not seeded or request.url.params.get("cursor") == "ties-next":
+            return httpx.Response(200, json=dict(items=[selected], next_cursor=None))
+        return httpx.Response(200, json=dict(items=[dict(selected, request_id="earlier")], next_cursor="ties-next"))
+    backend, calls = service(respond)
+    backend.read("requests", month="2026-09", limit=50)
+    seeded = True
+    assert backend.read("request", month="2026-09", request_id="selected")["request_id"] == "selected"
+    assert calls[-1].url.params["cursor"] == "ties-next"
+
+
+def test_service_request_cache_retains_only_the_current_page():
+    def respond(request):
+        if request.url.path == "/api/v1/requests":
+            key = request.url.params.get("cursor", "first")
+            return httpx.Response(200, json=dict(items=[dict(request_id=key, total_tokens=1)], next_cursor="next"))
+    backend, _ = service(respond)
+    backend.read("requests", month="2026-09", limit=50)
+    backend.read("requests", month="2026-09", limit=50, cursor="next")
+    assert set(backend._requests) == {"next"}

@@ -122,6 +122,8 @@ class Engine(FeatureEngine):
                     else "Gateway apply normally takes about two minutes. A save is not proof of enforcement.")
         if not self.backend.budget_warning_threshold:
             plan.pop("warning_threshold_percent")
+        if self.backend.immediate_writes and not daily:
+            plan["effect"] = "Verified control-plane write; no separate apply job. Gateway propagation can lag."
         if apply:
             if destructive and confirm != key:
                 raise FinOpsError(f"Destructive change requires confirmation: --confirm {key}")
@@ -242,6 +244,8 @@ class Engine(FeatureEngine):
         metadata = self.mutation_metadata()
         plan = dict(preview=not apply, action=f"Replace {resource}", before=before, after=body,
                     effect="Whole collection is saved; refresh before preview to avoid overwriting concurrent edits.")
+        if self.backend.immediate_writes:
+            plan["effect"] = "Verified native writer; no separate apply job. Refresh after a conflict or compensation error."
         if apply:
             if not self.backend.immediate_writes:
                 plan["requested_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")

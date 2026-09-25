@@ -103,3 +103,12 @@ def test_direct_cost_filter_accepts_the_observed_person_object_id():
     backend.query = lambda query: queries.append(query) or [{}]
     backend.read("overview", month="2026-09", user_id="00000000-0000-0000-0000-000000000001")
     assert 'user_id == "00000000-0000-0000-0000-000000000001"' in queries[0]
+
+
+def test_direct_request_ledger_binds_the_discovered_gateway_in_shared_workspaces():
+    backend, queries = direct(), []
+    backend.config.subscription = "00000000-0000-0000-0000-000000000001"
+    backend.query = lambda query: queries.append(query) or []
+    backend.read("requests", month="2026-09", limit=50)
+    assert '| where _ResourceId =~ "/subscriptions/' in queries[0]
+    assert "/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso" in queries[0]

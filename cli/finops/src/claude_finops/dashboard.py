@@ -100,6 +100,9 @@ class Dashboard(Vertical):
         budgets = data.get("budgets", {}).get("items", [])
         used, limit, scopes = budget_totals(budgets)
         kpis = self.query_one("#dash-kpis", DashboardPanel)
+        kpis.border_title = ("Workspace usage | selected gateway budgets"
+                             if data.get("overview", {}).get("accounting_scope") == "published-workspace-function"
+                             else "Budget and month-to-date usage")
         kpis.detail = raw
         quality = ""
         if self.size.width >= 120:
