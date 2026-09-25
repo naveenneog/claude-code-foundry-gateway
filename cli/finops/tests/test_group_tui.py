@@ -62,3 +62,27 @@ async def test_group_creation_form_previews_owner_implications_before_apply():
         await pilot.pause()
         await app.workers.wait_for_complete()
         assert writes == ["aum-e2e-unit-example"]
+
+
+async def test_group_discovery_is_not_blocked_by_separate_gateway_write_authority():
+    engine = Engine(FakeBackend(), "2026-09")
+    engine.group_factory = FakeGraph
+    app = FinOpsApp(engine, Config(backend="fake"))
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        app.editable = False
+        app.action_group_lookup()
+        await pilot.pause()
+        assert app.screen.query_one("#group-search", Input)
+
+
+async def test_viewer_palette_hides_group_creation_and_billable_probe():
+    from claude_finops.palette import FinOpsCommands
+    app = FinOpsApp(Engine(FakeBackend(role="member"), "2026-09"), Config(backend="fake"))
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        commands = [name for name, *_ in FinOpsCommands(app.screen).commands()]
+        assert "Find or create Entra security group" not in commands
+        assert "Probe gateway budget enforcement" not in commands

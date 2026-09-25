@@ -127,7 +127,9 @@ async def journey(args):
                 # The first strict admitted request gives an observed token lower bound.
                 spent = sum((event.get("usage") or {}).get("input_tokens", 0) + (event.get("usage") or {}).get("output_tokens", 0)
                             for event in probes if event.get("status_code") == 200)
-                base = max(20, int(spent / 1.05))
+                base = max(1, spent - 1)
+                if base + base // 10 <= spent:
+                    raise RuntimeError("Observed strict charge is too small for a measurable integer 10% allowance band.")
                 change = journal.call("allowance-nominal-budget", lambda: engine.budget_change("team", team, str(base), apply=True, confirm=team))
                 if change.get("requested_at"):
                     journal.call("apply-allowance-budget", lambda: engine.wait_for_apply(change["requested_at"], timeout=480, interval=8))

@@ -12,8 +12,6 @@ class FinOpsCommands(Provider):
         commands = [(f"Open {label if key == 'advanced' else label[2:]}", partial(self.app.action_tab, key), "Switch view")
                     for key, label in TABS + EXTRA_TABS if key in self.app.allowed_tabs]
         commands += [
-            ("Find or create Entra security group", self.app.action_group_lookup, "Owned by this sign-in; no consent grants"),
-            ("Probe gateway budget enforcement", self.app.action_gateway_probe, "One tiny real model request after Preview/Apply"),
             ("Find scope, person, model or request", self.app.action_lookup, "Bounded server search"),
             ("Filter the current view", self.app.action_filter, "Visible rows only; Esc clears"),
             ("Change month", self.app.action_month, "YYYY-MM"),
@@ -43,6 +41,11 @@ class FinOpsCommands(Provider):
                 commands.append((f"Overview ranking: {dimension}", partial(self.app.action_overview_rank, dimension), "Scoped server ranking"))
         if self.app.check_action("export", ()):
             commands.append(("Export complete chargeback CSV", self.app.action_export, "All managed scopes, not the top 100"))
+        if self.app.identity.get("role") == "owner" and not self.app.redactor.enabled:
+            commands += [
+                ("Find or create Entra security group", self.app.action_group_lookup, "Owned by this sign-in; no consent grants"),
+                ("Probe gateway budget enforcement", self.app.action_gateway_probe, "One tiny real model request after Preview/Apply"),
+            ]
         if self.app.editable:
             commands += [
                 ("Edit selected budget or governance row", self.app.action_edit, "Preview, then apply"),
@@ -52,6 +55,8 @@ class FinOpsCommands(Provider):
             ]
             if not self.app.engine.backend.immediate_writes:
                 commands.append(("Apply governance now", self.app.action_apply, "Retry the configured gateway job"))
+            if self.app.engine.backend.name == "Turnstile":
+                commands.append(("Publish Turnstile as signed-in admin", self.app.action_publish_as_admin, "Explicit delegated Graph and Azure RBAC; no new consent"))
             if self.app.engine.backend.name == "Direct":
                 commands.append(("Refresh selected group membership", self.app.action_refresh_membership, "Delegated Graph; preserves unrelated mappings"))
             if enabled(self.app.feature_caps, "bulk_budget", "write"):

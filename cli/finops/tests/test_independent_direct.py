@@ -121,3 +121,22 @@ def test_request_time_usage_does_not_reassign_a_test_request_with_stale_cost_mem
     assert "ApiManagementGatewayLlmLog" in queries[0] and "ClaudeCost(" not in queries[0]
     assert result["items"][0]["estimated_cost"] is None
     assert "request-time" in result["note"].lower()
+
+
+def test_mode_edit_refreshes_native_authority_after_external_selection():
+    from claude_finops.fake import FakeBackend
+    from claude_finops.engine import Engine
+    backend = FakeBackend()
+    backend.native_modes = True
+    original = backend.read
+    allowed = False
+    def read(resource, **params):
+        result = original(resource, **params)
+        if resource == "capabilities":
+            result["features"]["budget_modes"] = dict(enabled=True, actions=["read", "write"] if allowed else ["read"])
+        return result
+    backend.read = read
+    engine = Engine(backend, "2026-09")
+    assert not engine.has_feature("budget_modes", "write")
+    allowed = True
+    assert engine.mode_change("team", "sales-emea", "strict")["preview"]

@@ -21,8 +21,14 @@ EXTRA_TABS = [("approvals", "9 Approvals"), ("ask", "a Ask"), ("advanced", "Adva
 
 
 class FeatureUI:
+    def action_publish_as_admin(self):
+        if self.editable and self.engine.backend.name == "Turnstile":
+            from .group_actions import publish_as_signed_in_admin
+            self.push_screen(ActionForm("Delegated admin publication", [],
+                lambda values, apply: publish_as_signed_in_admin(self.engine, self.config, apply=apply)))
+
     def action_gateway_probe(self):
-        if not self.editable:
+        if self.identity.get("role") != "owner" or self.redactor.enabled:
             return
         from .gateway_probe import tiny_request
         self.push_screen(ActionForm("Send a tiny governed request", [
@@ -30,7 +36,7 @@ class FeatureUI:
             lambda values, apply: tiny_request(self.config, values["model"], apply=apply)))
 
     def action_group_lookup(self):
-        if self.editable:
+        if self.identity.get("role") == "owner" and not self.redactor.enabled:
             from .group_screens import GroupPicker
             self.push_screen(GroupPicker())
 
@@ -93,7 +99,7 @@ class FeatureUI:
                 yield Button("Open", id="advanced-load")
 
     async def refresh_features(self):
-        self.feature_caps = await asyncio.to_thread(self.engine.capabilities, refresh=self.config.backend == "aum-service")
+        self.feature_caps = await asyncio.to_thread(self.engine.capabilities, refresh=self.config.backend in {"direct", "aum-service"})
         supported = self.feature_caps.get("features", {}).get("supported_views")
         if supported:
             self.allowed_tabs &= set(supported["actions"]) | {key for key, _ in EXTRA_TABS}

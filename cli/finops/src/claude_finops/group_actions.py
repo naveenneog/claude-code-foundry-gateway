@@ -25,3 +25,16 @@ def membership_refresh(engine, scopes, *, apply=False, allow_reassignment=False)
     if not scopes:
         raise FinOpsError("Choose at least one existing scope to refresh.")
     return engine.backend._bridge("membership", scope_ids=scopes, apply=apply, allow_reassignment=allow_reassignment)
+
+
+def publish_as_signed_in_admin(engine, config, *, apply=False):
+    require_owner(engine.read("whoami"))
+    if engine.backend.name != "Turnstile":
+        raise FinOpsError("Delegated publication reads the selected Turnstile authority. Choose the Turnstile backend.", 5)
+    plan = dict(preview=not apply, action="Publish Turnstile governance as signed-in Azure administrator",
+                effect="Uses the repository writer with this person's existing Graph/ARM rights; no managed-identity permission grant. "
+                       "Distinct from the server apply job. Can refresh membership and tiers; preview and retain originals.")
+    if apply:
+        from .direct import DirectBackend
+        plan["result"] = DirectBackend(config)._bridge("delegated_publish")
+    return plan

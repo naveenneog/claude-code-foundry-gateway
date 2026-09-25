@@ -35,3 +35,9 @@ def register(app, groups, emit):
     def refresh(ctx: typer.Context, scope: list[str] = typer.Option(...), apply: bool = False, allow_reassignment: bool = False):
         emit(ctx, lambda e: membership_refresh(e, scope, apply=apply and not ctx.obj["what_if"],
                                               allow_reassignment=allow_reassignment))
+
+    @groups["governance"].command("publish-as-admin")
+    def publish(ctx: typer.Context, apply: bool = False):
+        """Explicit delegated Graph/ARM publication; not the background service's identity."""
+        from .group_actions import publish_as_signed_in_admin
+        emit(ctx, lambda e: publish_as_signed_in_admin(e, ctx.obj["config"], apply=apply and not ctx.obj["what_if"]))

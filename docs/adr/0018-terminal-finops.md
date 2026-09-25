@@ -161,3 +161,30 @@ boolean role-aware capabilities, current gateway budgets with one revision,
 those semantics explicitly rather than sending Turnstile paths or monthly person
 allocations to that service. Missing routes must remain visibly unavailable, not
 empty successful datasets or calls to a hidden Turnstile dependency.
+
+## Culminating owner-approved live acceptance, 2026-09-25
+
+The owner now authorizes temporary test-only security groups, membership of the
+signed-in test person, test unit/team budgets and mode changes, real tiny model
+requests, and exact cleanup in `finally`. This supersedes the earlier read-only
+live boundary for this explicit acceptance journey only. No consent, app-role,
+directory-role or Standard-tier limit change is authorized by the client.
+
+AUM adds delegated group discovery and verified owner creation. Graph's
+eventual consistency means a successful create can precede an owners read and
+a successful delete can remain briefly readable: retry verification reads,
+never repeat the write automatically. Persist each returned created-group id
+immediately so `finally` can remove it even if later verification fails.
+
+Selected-scope membership refresh preserves unrelated assignments and tier
+entitlement, uses the repository's Graph reader and sentinel serializer, and
+requires explicit reassignment approval. Request-time usage is separate from
+published current-membership cost, because the latter may intentionally
+reattribute a historical request after a membership change.
+
+An exclusive live window is requested from the other mutation agents before
+governance changes. The retired P53 agent cannot receive new messages; active
+P55/modes agents are notified and running apply jobs are checked. Temporary
+Direct authority selection is recorded and restored exactly; other production
+governance defaults are never silently changed. No test is complete if cleanup
+or runtime enforcement cannot be proved.

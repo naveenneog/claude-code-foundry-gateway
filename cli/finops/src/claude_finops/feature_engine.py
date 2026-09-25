@@ -56,6 +56,7 @@ class FeatureEngine:
         metadata = self.mutation_metadata()
         require_owner(self.read("whoami"))
         if self.backend.native_modes:
+            self.capabilities(refresh=True)
             self.require_feature("budget_modes", "write")
         kind = scope_type(kind)
         if kind not in {"organization", "department"} or mode not in {"strict", "allowance", "notify"}:

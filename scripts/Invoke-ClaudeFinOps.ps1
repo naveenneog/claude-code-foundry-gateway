@@ -53,6 +53,13 @@ function Invoke-VerifiedChange($Expected, [scriptblock]$Operation) {
 }
 
 switch ([string]$request.action) {
+    'delegated_publish' {
+        if ($nv['turnstile-integration'] -notmatch 'governanceAuthority=Turnstile') {
+            throw 'Delegated publication requires an explicitly configured Turnstile authority.'
+        }
+        $result=& (Join-Path $PSScriptRoot 'Sync-ClaudeTurnstileGovernance.ps1') `
+            -Direction FromTurnstile -Apply -ResourceGroup $ResourceGroup -ApimName $ApimName 6>$null
+    }
     'membership' {
         $arguments=@{ResourceGroup=$ResourceGroup;ApimName=$ApimName;ScopeIds=@($request.parameters.scope_ids)}
         if($request.parameters.apply){$arguments.Apply=$true}
