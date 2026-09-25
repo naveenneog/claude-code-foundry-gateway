@@ -3,7 +3,7 @@ Microsoft Azure (Preview)
 Report a bug
 Copilot
 admin@contoso.com
-MICROSOFT NON-PRODUCTION (SERVICE.CONTOSO.COM)
+CONTOSO DIRECTORY
 Home
 contoso-insights
 Configure alerts based on specific conditions or thresholds in your application performance data.
@@ -65,9 +65,9 @@ Ctrl+C to copy
 Copy to clipboard the value for Instrumentation key [redacted-id]
 Connection string
 :
-InstrumentationKey=[redacted-id];IngestionEndpoint=https://service.contoso.com
+InstrumentationKey=[redacted-id];IngestionEndpoint=https://service.contoso.com/;LiveEndpoint=https://service.contoso.com/;ApplicationId=[redacted-id]
 Ctrl+C to copy
-Copy to clipboard the value for Connection string InstrumentationKey=[redacted-id];IngestionEndpoint=https://service.contoso.com
+Copy to clipboard the value for Connection string InstrumentationKey=[redacted-id];IngestionEndpoint=https://service.contoso.com/;LiveEndpoint=https://service.contoso.com/;ApplicationId=[redacted-id]
 Logs workspace
 :
 contoso-logs
@@ -92,47 +92,44 @@ Show data for last:
 7 days
 30 days
 Failed requests
-12:30 AM
-12:45 AM
-1 AM
-1:15 AM
+2 PM
+2:15 PM
+2:30 PM
+2:45 PM
 UTC+05:30
 0
 0.5
 1
 Failed requests (Count), contoso-insights
-2
+1
 Server response time
-12:30 AM
-12:45 AM
-1 AM
-1:15 AM
+2 PM
+2:15 PM
+2:30 PM
+2:45 PM
 UTC+05:30
 0ms
-200ms
-400ms
-600ms
-800ms
+500ms
+1sec
+1.5sec
 Server response time (Avg), contoso-insights
-756.47ms
+903.16ms
 Server requests
-12:30 AM
-12:45 AM
-1 AM
-1:15 AM
+2 PM
+2:15 PM
+2:30 PM
+2:45 PM
 UTC+05:30
 0
 0.5
 1
-1.5
-2
 Server requests (Count), contoso-insights
 4
 Availability
-12:30 AM
-12:45 AM
-1 AM
-1:15 AM
+2 PM
+2:15 PM
+2:30 PM
+2:45 PM
 UTC+05:30
 0%
 20%
@@ -153,7 +150,7 @@ East US 2
 Contoso subscription
 [redacted-id]
 [redacted-id]
-InstrumentationKey=[redacted-id];IngestionEndpoint=https://service.contoso.com
+InstrumentationKey=[redacted-id];IngestionEndpoint=https://service.contoso.com/;LiveEndpoint=https://service.contoso.com/;ApplicationId=[redacted-id]
 contoso-logs
 Turn on OTLP support
 1800000

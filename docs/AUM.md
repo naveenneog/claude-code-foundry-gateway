@@ -37,6 +37,208 @@ existing Turnstile ownership setting rather than silently bypassing it.
 > Settings states this explicitly. An AUM service user with an app role does not
 > need the service managed identity's Azure permissions.
 
+## Create owned groups and register governed scopes from AUM
+
+This flow uses the signed-in administrator's existing delegated Graph access.
+AUM does not grant consent, assign directory roles or create an application
+credential. New groups are ordinary, non-mail-enabled security groups. Their
+verified owner is the signed-in person; group ownership does not itself grant a
+Turnstile/AUM service app role.
+
+1. In **Governance**, open `:` and choose **Add unit or team**.
+2. Enter an Entra group-name prefix. The picker searches Graph server-side;
+   **Next page** follows its bounded continuation. Select an existing assigned
+   security group, or choose **Create new**.
+3. For a new group, enter a name and description, review the signed-in owner and
+   membership-refresh implications, and type the entire name before **Apply**.
+   Search again to select the newly created group.
+4. In the scope form, choose **Unit** or **Team**, supply a stable scope id and
+   display label, and select the parent unit for a team. Preview, then Apply.
+5. Set the unit/team monthly token budgets and choose the enforcement mode.
+   Direct verifies named values immediately; Turnstile follows the apply job;
+   the AUM service requires a reason and current revision.
+6. Group membership is not effective at the gateway merely because Graph saved
+   it. Use **Refresh selected group membership** in Direct, or the selected
+   server authority's membership publication path. Preview any reassignment.
+
+Equivalent AUM commands:
+
+```powershell
+aum group find aum-e2e- --limit 50 --backend direct
+aum group create aum-e2e-unit-example --description "Temporary acceptance group" --what-if
+aum group create aum-e2e-unit-example --description "Temporary acceptance group" `
+  --apply --confirm aum-e2e-unit-example
+aum group member <owned-group-object-id> --apply
+aum catalog set unit <unit-id> --name "Example test unit" --group <selected-group-object-id> --apply
+aum catalog set team <team-id> --name "Example test team" --group <selected-group-object-id> --parent <unit-id> --apply
+aum budget set unit <unit-id> 100k --apply
+aum budget set team <team-id> 1k --apply
+aum mode set team <team-id> strict --apply
+aum mode set team <team-id> allowance --allowance 10 --apply
+aum mode set team <team-id> notify --apply
+aum governance refresh-membership --scope <unit-id> --scope <team-id> --what-if
+aum governance refresh-membership --scope <unit-id> --scope <team-id> --apply --allow-reassignment
+```
+
+`group member` defaults to the signed-in person when `--member-id` is omitted.
+It modifies only a group that person owns, verifies the result and never changes
+unrelated memberships. `--remove` removes the member reference, not the directory
+user. The example amounts are not deployment defaults.
+
+Selected-scope refresh reuses the repository's delegated Graph group reader,
+depth ordering and `bu-members` serializer. Teams win over their parent units.
+Unrelated mappings and tier entitlement remain intact. Existing assignments that
+move require explicit `--allow-reassignment`. A lookup error is not treated as an
+empty group. Projection-backed gateways must use their projection pipeline.
+Direct refresh refuses when Turnstile owns publication.
+
+### Manual Azure portal and Azure CLI path
+
+1. Open **Microsoft Entra ID > Groups > All groups**. Search the same prefix;
+   inspect **Group type**, **Membership type** and **Owners** before selecting.
+2. To create one, select **New group**, set **Group type** to **Security**,
+   enter **Group name** and **Group description**, and choose **Assigned**
+   membership. Under **Owners**, select the signed-in person. Select **Create**.
+3. Reopen the group, choose **Owners**, and verify the owner. In **Members**,
+   choose **Add members** and add only the intended test account.
+4. Register the group in the correct governance authority as described in the
+   manual governance steps later in this guide; do not override another authority.
+5. After cleanup, remove only the temporary member, remove the test scopes,
+   select **Delete** on each test group and verify it no longer appears.
+
+Native Azure CLI equivalents:
+
+```powershell
+$prefix = Read-Host 'Test-only group prefix'
+az ad group list --filter "startswith(displayName, '$prefix')" `
+  --query '[].{id:id,name:displayName}' -o table
+$owner = az ad signed-in-user show --query id -o tsv
+$name = Read-Host 'Unique test-only security group name'
+$newGroup = az ad group create --display-name $name --mail-nickname $name `
+  --description 'Temporary AUM acceptance group' -o json | ConvertFrom-Json
+az ad group owner list --group $newGroup.id --query '[].id' -o json
+# If the signed-in account was not automatically made owner, add it with existing rights:
+az ad group owner add --group $newGroup.id --owner-object-id $owner
+az ad group member add --group $newGroup.id --member-id $owner
+az ad group member check --group $newGroup.id --member-id $owner -o json
+# Cleanup only the group created in this run:
+az ad group member remove --group $newGroup.id --member-id $owner
+az ad group delete --group $newGroup.id
+```
+
+The Graph service may automatically own a delegated non-admin creation; an
+administrator's security-group creation can require explicitly adding its owner.
+AUM verifies this rather than assuming the directory behavior. If ownership
+verification fails, it attempts to remove only the newly created group and reports
+any incomplete cleanup. A transport failure is never automatically retried.
+
+## Verify budget enforcement with a tiny real request
+
+`aum requests probe --what-if` explains the operation without obtaining a token
+or sending a request. `--apply` sends one real request through the discovered
+gateway, with a Cognitive Services token, `anthropic-version: 2023-06-01` and
+`max_tokens: 1`. It reports status, quota/notice headers, usage and elapsed time.
+This costs model tokens and creates ledger records; it is not a connectivity-only ping.
+
+```powershell
+aum requests probe --what-if
+aum requests probe --apply --json
+```
+
+In the terminal, choose **Probe gateway budget enforcement** in `:`, Preview,
+then Apply. To perform the same action manually, open the gateway's **APIs >
+Claude API > Test** pane only if it supports the required bearer request without
+revealing a credential. Otherwise use the direct HTTPS request below from an
+authenticated shell; the Azure portal is not a replacement for the data-plane
+request or evidence of its response headers.
+
+```powershell
+$gatewayUrl = az apim show --subscription $sub -g $rg -n $apim --query gatewayUrl -o tsv
+$access = az account get-access-token --resource https://cognitiveservices.azure.com `
+  --subscription $sub --query accessToken -o tsv
+try {
+  $body = @{ model='claude-sonnet-5'; max_tokens=1; messages=@(@{role='user';content='Reply OK.'}) } |
+    ConvertTo-Json -Depth 5
+  $response = Invoke-WebRequest -Method Post -Uri "$gatewayUrl/claude/v1/messages" `
+    -Headers @{Authorization="Bearer $access";'anthropic-version'='2023-06-01'} `
+    -ContentType application/json -Body $body -SkipHttpErrorCheck
+  $response.StatusCode
+  $response.Headers['x-bu-quota-remaining']
+  $response.Headers['x-claude-budget-notice']
+} finally { $access=$null }
+```
+
+Never print the bearer token. Strict should refuse an exhausted test scope,
+allowance may report `estimated-over-budget`, and notify reports `usage-reported`
+without a scope limiter. These are delayed token counters, not precise spend
+guarantees. A mode save is not proof of effect until the actual gateway response
+confirms it. Allow for membership/policy propagation and ledger ingestion.
+
+The reference gateway reports an exhausted strict unit as **HTTP 403** with
+`error.type=rate_limit_error`, `error.budget=business unit`, and the specific
+unit/team in its message. Do not confuse that data-plane quota response with
+an AUM/Turnstile API 403 scope denial. An acceptance probe must verify the body
+and target scope, not assume every limiter uses HTTP 429.
+
+### If the Turnstile apply identity cannot read a new group
+
+The background job may complete while deliberately leaving a group it cannot
+verify unapplied. A completed execution is not enough: check the actual registry
+and subsequent gateway response. With existing Azure-administrator and delegated
+Graph rights, AUM offers an explicit alternative:
+
+```powershell
+aum governance publish-as-admin --backend turnstile --what-if
+aum governance publish-as-admin --backend turnstile --apply
+aum governance refresh-membership --backend turnstile --scope <unit-id> `
+  --scope <team-id> --apply --allow-reassignment
+```
+
+The terminal command is **Publish Turnstile as signed-in admin**. This runs the
+repository's mode-aware `Sync-ClaudeTurnstileGovernance.ps1` as the signed-in
+administrator. It is **not** the background job's identity and is labelled that
+way in receipts. It does not grant Graph permissions to the workload identity.
+Subsequent background budget/mode changes can use already-verified group references.
+
+The manual CLI equivalent is:
+
+```powershell
+.\scripts\Sync-ClaudeTurnstileGovernance.ps1 -Direction FromTurnstile -Apply `
+  -ResourceGroup $rg -ApimName $apim
+```
+
+In the portal, inspect **Container Apps Jobs > the discovered apply job >
+Execution history** and its logs, then **API Management > Named values**.
+The portal has no button that lends a signed-in person's delegated Graph token
+to a managed-identity job. Use the explicit administrator path above instead
+of asking for new consent or treating an unverified group as valid.
+
+### Refresh a bounded usage window without waiting for the hourly schedule
+
+1. In `:`, choose **Refresh recent Turnstile usage**. Enter an explicit UTC
+   start/end window of no more than two hours and Preview.
+2. Verify the discovered existing exporter job and the **usage-only** implication.
+   Apply starts one execution using its already-authorized managed identity.
+3. Inspect the execution result and then the request ids in AUM. The job definition,
+   cron schedule and governance are not changed.
+
+```powershell
+aum usage refresh <UTC-start> <UTC-end> --backend turnstile --what-if
+aum usage refresh <UTC-start> <UTC-end> --backend turnstile --apply --json
+```
+
+Manual portal path: **Container Apps Jobs > discovered exporter > Execution
+history** verifies the run and result. **Run now** runs the normal configured
+window. The Azure portal does not support a one-execution configuration override;
+the equivalent CLI is `az containerapp job start --yaml <reviewed-template>`.
+For a reviewed execution-only template, retain the existing image, identity,
+resources and bootstrap, and invoke only `Export-ClaudeTurnstileUsage.ps1`
+with `-From`, `-To` and `-NoCacheEvents`, never the governance scheduler.
+See [Azure's documented execution override](https://learn.microsoft.com/azure/container-apps/jobs#start-a-job-execution-on-demand).
+
+Do not change job secrets or grants. Do not repeat a start after an uncertain
+transport result until execution history proves no execution was created.
+
 ```text
  _____ _____ _____ 
 |  _  |  |  |     |
@@ -222,6 +424,13 @@ scalable people **search** does not imply 500,000 individual override records fi
 Direct governance verifies control-plane state. Gateway propagation can lag,
 so read-back is not claimed as a measured runtime counter result. No separate
 Turnstile apply job is required.
+
+For request-time acceptance evidence, choose **Usage: request-time attribution**
+in `:` or run `aum usage show --basis ledger --dimension department`. This
+reads the team stamped on each request rather than substituting a possibly older
+published cost-function membership map. Cost/cache remain unknown on this basis.
+**Usage: current priced membership** returns to the existing priced workspace
+view; the two bases answer different questions and are labelled separately.
 
 ### Direct anomaly method and accounting scope
 
@@ -842,9 +1051,12 @@ ClaudeCost(startofmonth(now()), now())
 
 The mode and Run controls are documented in
 [Microsoft Learn's Log Analytics guide](https://learn.microsoft.com/azure/azure-monitor/logs/log-analytics-simple-mode#switch-modes).
-The copied portal session required sign-in before this packet finished the KQL
-editor/result capture. Capture stopped; no sign-in was attempted. No loading,
-welcome or agent screen is presented as a successful query result.
+An earlier copied session expired and capture stopped without attempting sign-in.
+For the culminating run, a fresh copy of the owner's supplied profile worked.
+The current image includes a verified successful query response and real results;
+blank editors, welcome screens and onboarding overlays are rejected.
+
+![Live KQL editor and actual query results, with redacted resource and scope names.](images/aum-portal/workspace-logs.png)
 
 Equivalent Azure CLI: write the KQL into `query.kql`, then send the JSON body
 through a file so shell pipes never become Azure CLI arguments:
@@ -875,9 +1087,7 @@ and the underlying Direct queries, were run live.
    existing consent-free Azure CLI sign-in path described in [Turnstile](TURNSTILE.md).
    AUM itself uses that already-authorized CLI token, not a new grant.
 
-App Service capture is incomplete: a welcome dialog obscured the blade, so that
-image was rejected rather than published as evidence. An approved, signed-in
-session is required to recapture it.
+![Live App Service Overview after its onboarding overlay was closed.](images/aum-portal/turnstile-overview.png)
 
 The Azure portal does not contain native fields for Turnstile's business-unit,
 team or person budgets. **View app** opens the actual management GUI; a portal
@@ -1021,9 +1231,11 @@ az ad group member add --group $targetGroup --member-id $personObjectId
 az ad group member remove --group $group --member-id $personObjectId
 ```
 
-These directory writes were not performed for this packet. The running account's
-gateway/Turnstile Owner role does not imply directory membership-management rights.
-AUM opens the discovered group blade rather than inventing or requesting grants.
+The culminating acceptance performed directory writes only on clearly test-only
+groups created and owned by the signed-in person, then deleted them. It did not
+remove that person from unrelated groups. The final membership set matched the
+starting set. Gateway/Turnstile Owner alone does not imply directory rights;
+AUM verifies group ownership and never requests broader grants.
 
 ### 8. Ask, pin and inspect optional model-gateway views
 
@@ -1077,10 +1289,104 @@ it is not a claim that a model invocation or pin write was performed.
    workflow endpoints with a different explicit contract. Neither authority
    should be bypassed by manually editing its storage records.
 
-The live portal captures above are partial. Authentication stopped the capture
-journey before KQL result evidence; no expired profile is reused and no sign-in
-is attempted. The automated completeness check deliberately remains red until
-the missing live portal evidence can be obtained through an approved session.
+The current portal manifest covers all required gateway, workspace, verified
+KQL-result and unobscured App Service pages, plus the created group's Overview,
+Owners and Members. It records UTC times, source commits and image hashes.
+
+## Measured end-to-end acceptance: create, enforce, restore
+
+On **2026-09-25**, AUM completed the owner-approved journey through Direct and
+Turnstile. Each used uniquely named `aum-e2e-*` security groups, verified the
+signed-in owner, temporarily added only that person, registered a unit and team,
+set monthly budgets, refreshed membership and sent tiny real Claude requests.
+No new permission or consent was granted. Standard TPM was not changed.
+
+| Step | Direct live evidence | Turnstile live evidence | Manual verification |
+|---|---|---|---|
+| Find/create group | [Group picker](images/aum/direct-group-form-lookup-110x36.svg), [owner preview](images/aum/direct-group-form-create-preview-110x36.svg), [created unit group](images/aum/direct-e2e-group-created-unit-ba354220.svg), [created team group](images/aum/direct-e2e-group-created-team-ba354220.svg) | [Unit group](images/aum/turnstile-e2e-group-created-unit-1f706bd1.svg), [team group](images/aum/turnstile-e2e-group-created-team-1f706bd1.svg) | Entra **Groups > Overview**, **Owners**, **Members** |
+| Register hierarchy | [Scope form](images/aum/direct-group-form-scope-registration-110x36.svg), [unit](images/aum/direct-e2e-registered-unit-ba354220.svg), [team](images/aum/direct-e2e-registered-team-ba354220.svg) | [Unit](images/aum/turnstile-e2e-registered-unit-1f706bd1.svg), [team](images/aum/turnstile-e2e-registered-team-1f706bd1.svg), [explicit delegated bootstrap](images/aum/turnstile-e2e-delegated-bootstrap-team-1f706bd1.svg) | APIM **Named values > bu-registry / bu-parents**; server catalog and apply receipt |
+| Set budgets | [Unit](images/aum/direct-e2e-budget-unit-ba354220.svg), [team](images/aum/direct-e2e-budget-team-ba354220.svg) | [Unit](images/aum/turnstile-e2e-budget-unit-1f706bd1.svg), [team](images/aum/turnstile-e2e-budget-team-1f706bd1.svg) | Reread original scope and current limit; distinguish parent allocation from usage |
+| Refresh membership | [Delegated refresh](images/aum/direct-e2e-membership-refreshed-ba354220.svg) | [Authority-matched delegated refresh](images/aum/turnstile-e2e-membership-refreshed-1f706bd1.svg) | Entra member exists; APIM **bu-members** maps the object id to the test team |
+| Strict refusal | [Actual HTTP 403](images/aum/direct-e2e-enforcement-strict-ba354220.svg) | [Actual HTTP 403](images/aum/turnstile-e2e-enforcement-strict-1f706bd1.svg) | `rate_limit_error`, business-unit budget and exact target scope; not generic access denial |
+| Allowance 10% | [HTTP 200 + notice](images/aum/direct-e2e-enforcement-allowance-ba354220.svg) | [HTTP 200 + notice](images/aum/turnstile-e2e-enforcement-allowance-1f706bd1.svg) | `x-claude-budget-notice` contains `mode=allowance:10;status=estimated-over-budget` |
+| Notify | [HTTP 200 + notice](images/aum/direct-e2e-enforcement-notify-ba354220.svg) | [HTTP 200 + notice](images/aum/turnstile-e2e-enforcement-notify-1f706bd1.svg) | Notice contains `mode=notify;status=usage-reported`; no team remaining-counter header is invented |
+| Usage/request attribution | [Usage](images/aum/direct-e2e-post-cleanup-usage-ba354220.svg), [Requests](images/aum/direct-e2e-post-cleanup-requests-ba354220.svg) | [Usage](images/aum/turnstile-e2e-post-cleanup-usage-1f706bd1.svg), [Requests](images/aum/turnstile-e2e-post-cleanup-requests-1f706bd1.svg), [usage refresh](images/aum/turnstile-e2e-usage-refreshed-1f706bd1.svg) | Three accepted requests / 96 prompt+completion tokens remain attributed after cleanup |
+| Cleanup | [Exact original values](images/aum/direct-e2e-cleanup-ba354220.svg) | [Exact values + original memberships](images/aum/turnstile-e2e-cleanup-1f706bd1.svg) | Test groups absent; original catalog, direct membership set and named-value bytes restored |
+
+The live portal ownership/membership proof contains only the verified test identity:
+
+![Live test security group Overview.](images/aum-portal/group-overview.png)
+
+![Live signed-in owner of the AUM-created test group.](images/aum-portal/group-owners.png)
+
+![Live temporary test membership, removed during cleanup.](images/aum-portal/group-members.png)
+
+### Timings and what they prove
+
+| Backend | Strict mode save → confirmed refusal | Allowance save → confirmed notice | Notify save → confirmed notice |
+|---|---:|---:|---:|
+| Direct | 26.498 s | 9.401 s | 7.994 s |
+| Turnstile | 130.632 s | 156.900 s | 157.099 s |
+
+These are measured upper bounds from save completion to the confirming response,
+including the probe itself; they are not exact internal propagation latencies.
+The strict test first admitted a 32-token request, then refused the next one at
+the tiny limit. This confirms the documented delayed-counter behavior, not a
+zero-overshoot hard ceiling.
+
+Direct first observed two accepted rows 321.264 seconds after the first accepted
+request; a later post-cleanup read confirmed all three / 96 tokens. Turnstile
+waited for all accepted requests in the gateway ledger, then ran a **usage-only**
+existing exporter execution for the bounded window. That execution took
+160.156 seconds and left its job definition unchanged. All three ingested rows
+were then visible; the first-observation upper bound was 794.006 seconds.
+
+The background Turnstile job initially could not verify the new groups. AUM
+measured that the execution completed but the registry lacked the test unit,
+then explicitly used the signed-in-administrator publication path. Subsequent
+budget/mode changes traversed **catalog/budget save → background apply job →
+gateway**. The bootstrap is not mislabelled as success by the managed identity.
+
+The AUM service's earlier read-only deployment was no longer deployed at the
+culminating window: its endpoint was unreachable and its resource group returned
+`ResourceGroupNotFound`. Its current contract/client tests remain, but no native
+service group/budget mutation journey is claimed without an active target.
+
+### Cleanup and operational pitfalls
+
+The runner restores in `finally` even when a step fails. It preserves exact
+`bu-registry`, `bu-members`, `bu-modes`, `bu-parents`, integration authority,
+allowlists, TPM/daily-tier limits and model allowlists. The final Turnstile run
+also compared the complete original direct-membership set: **14 memberships**,
+unchanged after deleting both test groups.
+
+An independent final read at **2026-09-25T09:45:44Z** verified all 13 named-value
+strings, the original catalog (equivalent absent/default-strict representation),
+the original membership set, zero remaining `aum-e2e-*` groups/catalog entries,
+and zero active apply jobs:
+[final restored live state](images/aum/turnstile-e2e-final-state-equal-restored.svg).
+
+Earlier failed attempts exposed real issues, fixed and regression-tested:
+
+- Graph create returned an id before `/owners` replicated it; deletion could
+  remain readable briefly. Only verification reads are retried, not mutations.
+- `az ad` rejects `--subscription`; ARM calls keep it, directory calls do not.
+- A cached Direct capability still reflected the old authority after the explicit
+  temporary switch. Native mode edits now refresh capability/authority state.
+- The gateway's quota refusal is 403, not an assumed 429.
+- A scheduled synchronization overlapped an early Direct attempt and copied test
+  entities to Turnstile. They were removed and the original catalog verified.
+  The runner now snapshots linked authority state and refuses a Direct window
+  that can overlap the next scheduled governance pass.
+- Cleanup removes child budgets before parents and follows the server's
+  coalesced apply timestamp, then drains jobs before restoring exact gateway bytes.
+- An immediate exporter override initially included unsupported template fields.
+  The corrected execution-only payload was verified live; it changes no schedule,
+  job definition, grants or governance.
+
+Historical usage and audit facts from real test requests are retained, not deleted
+to make the test disappear. Operational configuration, memberships and groups
+are what the cleanup restores.
 
 ### 10. Configure AUM Direct without any Turnstile service
 
@@ -1153,8 +1459,8 @@ For statistical findings, the exact server query is composed in
 [`direct_analytics.py::anomalies`](../cli/finops/src/claude_finops/direct_analytics.py).
 Use that KQL in the same **Logs** editor, with your selected dates and preserved
 pricing-exclusion/14-day guards. Its method and limits are described above.
-The completed portal query-result screenshot remains blocked by capture-session
-expiry; live command/KQL results are separate evidence, not a substitute for it.
+The live query-result screenshot above is separate from the terminal/KQL API
+proof; neither is substituted for the other.
 
 ### 12. Inspect the independent AUM service and call its native API
 
@@ -1213,5 +1519,6 @@ The service's timer owns expiry restoration.
 There is no native Azure portal form for these application workflows. The AUM
 terminal is their GUI; Azure CLI REST is the manual API path. The Function App
 portal verifies deployment and identity metadata, not application authorization
-by editing its storage. New live portal screenshots are unavailable after the
-documented capture-session sign-in stop; no such screenshot is fabricated.
+by editing its storage. At the culminating run the earlier native-service
+deployment had been removed (`ResourceGroupNotFound`); no service deployment
+or live mutation evidence is fabricated from the earlier read-only screenshots.

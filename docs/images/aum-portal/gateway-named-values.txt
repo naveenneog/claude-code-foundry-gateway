@@ -297,6 +297,8 @@ Load more
 Microsoft Azure portal is loading.
 Microsoft Azure portal is ready.
 Content is loading.
+Content is ready.
+Content is ready.
 Content is loading.
 Content is ready.
 Content is ready.
@@ -307,10 +309,10 @@ Loaded 20 rows. More rows can be loaded.
 
 ,[redacted-id],[redacted-id],[redacted-id],
 ,[redacted-id],[redacted-id],[redacted-id],[redacted-id],[redacted-id],
-,[redacted-id]=ites-1,[redacted-id]=ites-1,[redacted-id]=ites-2,[redacted-id]=ites-2,[redacted-id]=gbb,
+,[redacted-id]=contoso-scope-119cd0a8,[redacted-id]=contoso-scope-119cd0a8,[redacted-id]=contoso-scope-6e8b5765,[redacted-id]=contoso-scope-6e8b5765,[redacted-id]=contoso-scope-d26e4b2a,
 ,,
-,ites-1=mcaps,ites-2=mcaps,
-,mcaps=claude-bu-mcaps:5555555555,gbb=claude-bu-gbb:1388888888,ites-1=claude-team-ites-1:1666666666,ites-2=claude-team-ites-2:2222222222,
+,contoso-scope-119cd0a8=contoso-scope-57b7ae26,contoso-scope-6e8b5765=contoso-scope-57b7ae26,
+,contoso-scope-57b7ae26=contoso-group-57b7ae26:5555555555,contoso-scope-d26e4b2a=contoso-group-d26e4b2a:1388888888,contoso-scope-119cd0a8=contoso-group-119cd0a8:1666666666,contoso-scope-6e8b5765=contoso-group-6e8b5765:2222222222,
 allow
 120
 3600

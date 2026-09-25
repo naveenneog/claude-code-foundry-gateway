@@ -44,6 +44,8 @@ Send us your feedback
 Microsoft Azure portal is loading.
 Microsoft Azure portal is ready.
 Content is loading.
+Content is ready.
+Content is ready.
 Content is loading.
 
 

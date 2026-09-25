@@ -3,7 +3,7 @@ Microsoft Azure (Preview)
 Report a bug
 Copilot
 admin@contoso.com
-MICROSOFT NON-PRODUCTION (SERVICE.CONTOSO.COM)
+CONTOSO DIRECTORY
 Home
 contoso-gateway
 API Management service
@@ -108,6 +108,7 @@ Delegation
 Disabled
 Identities
 Identities
+Username and password
 APIs
 Total APIs
 1
@@ -120,7 +121,7 @@ Subscriptions
 1
 Users
 Users
-undefined
+1
 Developer portal
 URL
 Administrative interface

@@ -1152,6 +1152,1050 @@
       ],
       "tab": "trends",
       "phase": "after"
+    },
+    {
+      "file": "direct-e2e-cleanup-986b979e.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:03:40.944199Z",
+      "redaction": true,
+      "commit": "84fb31ebc687846610f698bd4bfcbaa66779da22",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "cleanup"
+    },
+    {
+      "file": "direct-e2e-group-created-unit-a76b701e.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:08:41.114977Z",
+      "redaction": true,
+      "commit": "6a7ca4580c29b10c8b1d28200e611ff1a5ba0994",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "group-created-unit",
+      "capture_head_commit": "6a7ca4580c29b10c8b1d28200e611ff1a5ba0994",
+      "provenance_note": "Failed-attempt process was launched from this source; HEAD advanced while its already-loaded application ran."
+    },
+    {
+      "file": "direct-e2e-group-created-team-a76b701e.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:09:27.494246Z",
+      "redaction": true,
+      "commit": "6a7ca4580c29b10c8b1d28200e611ff1a5ba0994",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "group-created-team",
+      "capture_head_commit": "6a7ca4580c29b10c8b1d28200e611ff1a5ba0994",
+      "provenance_note": "Failed-attempt process was launched from this source; HEAD advanced while its already-loaded application ran."
+    },
+    {
+      "file": "direct-e2e-cleanup-a76b701e.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:11:53.717875Z",
+      "redaction": true,
+      "commit": "6a7ca4580c29b10c8b1d28200e611ff1a5ba0994",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "cleanup",
+      "capture_head_commit": "8398879e75acde33a8c5c4194512b3b1f41b3b7d",
+      "provenance_note": "Failed-attempt process was launched from this source; HEAD advanced while its already-loaded application ran."
+    },
+    {
+      "file": "direct-e2e-group-created-unit-ee6bf550.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:17:32.490088Z",
+      "redaction": true,
+      "commit": "64d743e48df8062645f0bdef6e443886d1cd317a",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "group-created-unit"
+    },
+    {
+      "file": "direct-e2e-group-created-team-ee6bf550.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:18:10.049718Z",
+      "redaction": true,
+      "commit": "64d743e48df8062645f0bdef6e443886d1cd317a",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "group-created-team"
+    },
+    {
+      "file": "direct-e2e-registered-unit-ee6bf550.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:19:42.331510Z",
+      "redaction": true,
+      "commit": "64d743e48df8062645f0bdef6e443886d1cd317a",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "registered-unit"
+    },
+    {
+      "file": "direct-e2e-registered-team-ee6bf550.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:22:03.629652Z",
+      "redaction": true,
+      "commit": "64d743e48df8062645f0bdef6e443886d1cd317a",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "registered-team"
+    },
+    {
+      "file": "direct-e2e-budget-unit-ee6bf550.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:22:52.237352Z",
+      "redaction": true,
+      "commit": "64d743e48df8062645f0bdef6e443886d1cd317a",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "budget-unit"
+    },
+    {
+      "file": "direct-e2e-budget-team-ee6bf550.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:24:06.861145Z",
+      "redaction": true,
+      "commit": "64d743e48df8062645f0bdef6e443886d1cd317a",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "budget-team"
+    },
+    {
+      "file": "direct-e2e-membership-refreshed-ee6bf550.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:25:31.765806Z",
+      "redaction": true,
+      "commit": "64d743e48df8062645f0bdef6e443886d1cd317a",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "membership-refreshed"
+    },
+    {
+      "file": "direct-e2e-cleanup-ee6bf550.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:26:46.907754Z",
+      "redaction": true,
+      "commit": "64d743e48df8062645f0bdef6e443886d1cd317a",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "cleanup"
+    },
+    {
+      "file": "direct-e2e-group-created-unit-790eb667.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:39:05.860913Z",
+      "redaction": true,
+      "commit": "8f1a652eeba18971bb657cddf3edea4cf5c90dd6",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "group-created-unit"
+    },
+    {
+      "file": "direct-e2e-group-created-team-790eb667.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:39:38.264478Z",
+      "redaction": true,
+      "commit": "8f1a652eeba18971bb657cddf3edea4cf5c90dd6",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "group-created-team"
+    },
+    {
+      "file": "direct-e2e-registered-unit-790eb667.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:41:10.223519Z",
+      "redaction": true,
+      "commit": "8f1a652eeba18971bb657cddf3edea4cf5c90dd6",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "registered-unit"
+    },
+    {
+      "file": "direct-e2e-registered-team-790eb667.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:43:25.888682Z",
+      "redaction": true,
+      "commit": "8f1a652eeba18971bb657cddf3edea4cf5c90dd6",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "registered-team"
+    },
+    {
+      "file": "direct-e2e-budget-unit-790eb667.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:44:42.578621Z",
+      "redaction": true,
+      "commit": "8f1a652eeba18971bb657cddf3edea4cf5c90dd6",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "budget-unit"
+    },
+    {
+      "file": "direct-group-form-lookup-110x36.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:44:42.759848+00:00",
+      "redaction": true,
+      "commit": "05c360aa70e8bc763176c284714d4cbe5c31a69d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "group-form",
+      "flow": "lookup",
+      "preview_only": true
+    },
+    {
+      "file": "direct-group-form-create-preview-110x36.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:44:49.954550+00:00",
+      "redaction": true,
+      "commit": "05c360aa70e8bc763176c284714d4cbe5c31a69d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "group-form",
+      "flow": "create-preview",
+      "preview_only": true
+    },
+    {
+      "file": "direct-group-form-scope-registration-110x36.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:44:50.671995+00:00",
+      "redaction": true,
+      "commit": "05c360aa70e8bc763176c284714d4cbe5c31a69d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "group-form",
+      "flow": "scope-registration",
+      "preview_only": true
+    },
+    {
+      "file": "direct-e2e-budget-team-790eb667.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:45:59.965733Z",
+      "redaction": true,
+      "commit": "8f1a652eeba18971bb657cddf3edea4cf5c90dd6",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "budget-team"
+    },
+    {
+      "file": "direct-e2e-membership-refreshed-790eb667.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:47:21.567907Z",
+      "redaction": true,
+      "commit": "8f1a652eeba18971bb657cddf3edea4cf5c90dd6",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "membership-refreshed"
+    },
+    {
+      "file": "direct-e2e-cleanup-790eb667.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:53:03.729950Z",
+      "redaction": true,
+      "commit": "8f1a652eeba18971bb657cddf3edea4cf5c90dd6",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "cleanup"
+    },
+    {
+      "file": "direct-e2e-group-created-unit-ba354220.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:57:10.876100Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "group-created-unit"
+    },
+    {
+      "file": "direct-e2e-group-created-team-ba354220.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:57:47.231787Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "group-created-team"
+    },
+    {
+      "file": "direct-e2e-registered-unit-ba354220.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T06:59:46.564875Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "registered-unit"
+    },
+    {
+      "file": "direct-e2e-registered-team-ba354220.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T07:01:35.678055Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "registered-team"
+    },
+    {
+      "file": "direct-e2e-budget-unit-ba354220.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T07:03:00.363948Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "budget-unit"
+    },
+    {
+      "file": "direct-e2e-budget-team-ba354220.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T07:03:48.622806Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "budget-team"
+    },
+    {
+      "file": "direct-e2e-membership-refreshed-ba354220.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T07:05:18.490395Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "membership-refreshed"
+    },
+    {
+      "file": "direct-e2e-enforcement-strict-ba354220.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T07:06:34.030221Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "enforcement-strict"
+    },
+    {
+      "file": "direct-e2e-enforcement-allowance-ba354220.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T07:09:26.290203Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "enforcement-allowance"
+    },
+    {
+      "file": "direct-e2e-enforcement-notify-ba354220.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T07:11:01.669229Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "enforcement-notify"
+    },
+    {
+      "file": "direct-e2e-usage-attribution-ba354220.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T07:11:32.126363Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "usage-attribution"
+    },
+    {
+      "file": "direct-e2e-request-attribution-ba354220.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T07:11:52.492926Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "request-attribution"
+    },
+    {
+      "file": "direct-e2e-cleanup-ba354220.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T07:13:30.578628Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "cleanup"
+    },
+    {
+      "file": "turnstile-e2e-group-created-unit-bb2148ae.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T07:15:51.102818Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "group-created-unit"
+    },
+    {
+      "file": "turnstile-e2e-group-created-team-bb2148ae.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T07:16:06.494318Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "group-created-team"
+    },
+    {
+      "file": "turnstile-e2e-delegated-bootstrap-unit-bb2148ae.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T07:20:55.402343Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "delegated-bootstrap-unit"
+    },
+    {
+      "file": "turnstile-e2e-registered-unit-bb2148ae.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T07:20:56.975501Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "registered-unit"
+    },
+    {
+      "file": "turnstile-e2e-delegated-bootstrap-team-bb2148ae.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T07:25:22.788220Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "delegated-bootstrap-team"
+    },
+    {
+      "file": "turnstile-e2e-registered-team-bb2148ae.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T07:25:24.872786Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "registered-team"
+    },
+    {
+      "file": "turnstile-e2e-budget-unit-bb2148ae.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T07:27:59.569781Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "budget-unit"
+    },
+    {
+      "file": "turnstile-e2e-budget-team-bb2148ae.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T07:30:25.898449Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "budget-team"
+    },
+    {
+      "file": "turnstile-e2e-membership-refreshed-bb2148ae.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T07:31:30.977519Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "membership-refreshed"
+    },
+    {
+      "file": "turnstile-e2e-enforcement-strict-bb2148ae.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T07:33:53.288257Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "enforcement-strict"
+    },
+    {
+      "file": "turnstile-e2e-enforcement-allowance-bb2148ae.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T07:38:56.606058Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "enforcement-allowance"
+    },
+    {
+      "file": "turnstile-e2e-enforcement-notify-bb2148ae.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T07:41:27.495273Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "enforcement-notify"
+    },
+    {
+      "file": "turnstile-e2e-cleanup-bb2148ae.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T08:00:43.371100Z",
+      "redaction": true,
+      "commit": "a9b6858b2a5d7cc3dcba0bc45fd2ce9d43593b08",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "cleanup"
+    },
+    {
+      "file": "turnstile-e2e-group-created-unit-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T08:36:50.847942Z",
+      "redaction": true,
+      "commit": "53a3f31aded373cf012e421a08b0ccd3e218709d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "group-created-unit"
+    },
+    {
+      "file": "turnstile-e2e-group-created-team-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T08:37:06.003286Z",
+      "redaction": true,
+      "commit": "53a3f31aded373cf012e421a08b0ccd3e218709d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "group-created-team"
+    },
+    {
+      "file": "turnstile-e2e-delegated-bootstrap-unit-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T08:42:04.112455Z",
+      "redaction": true,
+      "commit": "53a3f31aded373cf012e421a08b0ccd3e218709d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "delegated-bootstrap-unit"
+    },
+    {
+      "file": "turnstile-e2e-registered-unit-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T08:42:06.345177Z",
+      "redaction": true,
+      "commit": "53a3f31aded373cf012e421a08b0ccd3e218709d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "registered-unit"
+    },
+    {
+      "file": "turnstile-e2e-delegated-bootstrap-team-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T08:46:43.014137Z",
+      "redaction": true,
+      "commit": "53a3f31aded373cf012e421a08b0ccd3e218709d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "delegated-bootstrap-team"
+    },
+    {
+      "file": "turnstile-e2e-registered-team-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T08:46:44.907212Z",
+      "redaction": true,
+      "commit": "53a3f31aded373cf012e421a08b0ccd3e218709d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "registered-team"
+    },
+    {
+      "file": "turnstile-e2e-budget-unit-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T08:49:18.826809Z",
+      "redaction": true,
+      "commit": "53a3f31aded373cf012e421a08b0ccd3e218709d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "budget-unit"
+    },
+    {
+      "file": "turnstile-e2e-budget-team-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T08:51:42.172690Z",
+      "redaction": true,
+      "commit": "53a3f31aded373cf012e421a08b0ccd3e218709d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "budget-team"
+    },
+    {
+      "file": "turnstile-e2e-membership-refreshed-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T08:52:52.484343Z",
+      "redaction": true,
+      "commit": "53a3f31aded373cf012e421a08b0ccd3e218709d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "membership-refreshed"
+    },
+    {
+      "file": "turnstile-e2e-enforcement-strict-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T08:55:07.327219Z",
+      "redaction": true,
+      "commit": "53a3f31aded373cf012e421a08b0ccd3e218709d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "enforcement-strict"
+    },
+    {
+      "file": "turnstile-e2e-enforcement-allowance-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T09:00:11.216600Z",
+      "redaction": true,
+      "commit": "53a3f31aded373cf012e421a08b0ccd3e218709d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "enforcement-allowance"
+    },
+    {
+      "file": "turnstile-e2e-enforcement-notify-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T09:02:52.200275Z",
+      "redaction": true,
+      "commit": "53a3f31aded373cf012e421a08b0ccd3e218709d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "enforcement-notify"
+    },
+    {
+      "file": "turnstile-e2e-usage-refreshed-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T09:08:00.251119Z",
+      "redaction": true,
+      "commit": "53a3f31aded373cf012e421a08b0ccd3e218709d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "usage-refreshed"
+    },
+    {
+      "file": "turnstile-e2e-request-attribution-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T09:08:02.533662Z",
+      "redaction": true,
+      "commit": "53a3f31aded373cf012e421a08b0ccd3e218709d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "request-attribution"
+    },
+    {
+      "file": "turnstile-e2e-cleanup-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T09:11:14.981803Z",
+      "redaction": true,
+      "commit": "53a3f31aded373cf012e421a08b0ccd3e218709d",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "cleanup"
+    },
+    {
+      "file": "turnstile-e2e-post-cleanup-usage-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T09:41:12.660227+00:00",
+      "redaction": true,
+      "commit": "d91841f392851fc637f02520e7a9a82a5f58b1a3",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "usage",
+      "flow": "post-cleanup-test-attribution"
+    },
+    {
+      "file": "turnstile-e2e-post-cleanup-requests-1f706bd1.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T09:41:13.721195+00:00",
+      "redaction": true,
+      "commit": "d91841f392851fc637f02520e7a9a82a5f58b1a3",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "requests",
+      "flow": "post-cleanup-test-attribution"
+    },
+    {
+      "file": "direct-e2e-post-cleanup-usage-ba354220.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T09:42:25.336581+00:00",
+      "redaction": true,
+      "commit": "d91841f392851fc637f02520e7a9a82a5f58b1a3",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "usage",
+      "flow": "post-cleanup-test-attribution"
+    },
+    {
+      "file": "direct-e2e-post-cleanup-requests-ba354220.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-25T09:42:41.083480+00:00",
+      "redaction": true,
+      "commit": "d91841f392851fc637f02520e7a9a82a5f58b1a3",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "requests",
+      "flow": "post-cleanup-test-attribution"
+    },
+    {
+      "file": "turnstile-e2e-final-state-equal-restored.svg",
+      "source": "live",
+      "backend": "Turnstile",
+      "captured_at": "2026-09-25T09:46:41.594623Z",
+      "redaction": true,
+      "commit": "d91841f392851fc637f02520e7a9a82a5f58b1a3",
+      "size": [
+        110,
+        36
+      ],
+      "phase": "after",
+      "tab": "e2e",
+      "flow": "final-state-equal"
     }
   ]
 }
