@@ -33,6 +33,10 @@ foreach ($id in @($record.roleAssignmentIds)) {
     if ($match.Count) { Invoke-ClaudeAumAz @('role','assignment','delete','--ids',$id,'--subscription',$record.subscriptionId,'-o','json') | Out-Null }
 }
 foreach ($r in @($selected | Sort-Object { if ($_.type -eq 'Microsoft.Network/privateEndpoints') { 0 } elseif ($_.type -eq 'Microsoft.Web/sites') { 1 } elseif ($_.type -eq 'Microsoft.Network/virtualNetworks') { 3 } else { 2 } })) {
+    if ($r.type -eq 'Microsoft.Network/privateEndpoints') {
+        Invoke-ClaudeAumAz @('network','private-endpoint','delete','--ids',$r.id,'-o','json') | Out-Null
+        continue
+    }
     if ($r.type -eq 'Microsoft.Network/privateDnsZones') {
         $links = @(Invoke-ClaudeAumAz @('network','private-dns','link','vnet','list','--resource-group',$record.resourceGroup,
             '--zone-name',$r.name,'--subscription',$record.subscriptionId,'-o','json'))

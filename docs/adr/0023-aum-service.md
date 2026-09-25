@@ -154,3 +154,7 @@ conflict; they never truncate, widen scope, or silently stop enforcing.
   cleanup fails. Regenerating a query is not snapshot restoration across days.
   Offline tests execute the actual restoration request against an original-date
   fixture. The live receipt separately verified authored-field equality.
+- **Measured cleanup:** generic `az resource delete` failed without deleting a
+  recorded private endpoint. The network-specific `az network private-endpoint
+  delete --ids` succeeded for that same endpoint. Use the scoped provider
+  operation before DNS deletion, covered by the cleanup regression.
