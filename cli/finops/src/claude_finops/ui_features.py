@@ -438,12 +438,7 @@ class FeatureUI:
                     (row["id"], f"{row['display_name']} (input {row.get('input_cost_per_million')}/M, output {row.get('output_cost_per_million')}/M)")
                     for row in settings.get("available_models", [])]
                 def operation(values, apply):
-                    self.engine.require_feature("assistant", "configure")
-                    body = dict(model_id=values["model"] or None, auto_title=values["title"] == "yes")
-                    result = dict(preview=not apply, action="Configure assistant", before=settings, after=body)
-                    if apply:
-                        result["result"] = self.engine.backend.write("assistant_settings", body)
-                    return result
+                    return self.engine.configure_assistant(values["model"], values["title"] == "yes", apply=apply)
                 self.push_screen(ActionForm("Assistant model and cost", [
                     ("model", "Model", settings.get("model_id") or "", choices),
                     ("title", "Auto-title conversations", "yes" if settings.get("auto_title") else "no",
@@ -460,10 +455,11 @@ class FeatureUI:
             ("month", "Month YYYY-MM", self.engine.month, None),
             ("unit", "Unit id (blank means all authorized units)", "", None),
             ("output", "Local output folder", "finops-reports", None),
+            ("mtd", "Period", "no", [("no", "Completed month"), ("yes", "Current month to date")]),
             ("formats", "Formats", "CSV,HTML", [("CSV,HTML", "CSV and HTML"), ("CSV", "CSV"), ("HTML", "HTML")])],
             lambda values, apply: report_plan(self.engine, self.config, month=values["month"],
                 units=[values["unit"]] if values["unit"] else [], output=values["output"],
-                formats=values["formats"], apply=apply)))
+                formats=values["formats"], month_to_date=values["mtd"] == "yes", apply=apply)))
 
     def action_notifications(self):
         async def load():

@@ -30,10 +30,12 @@ async def capture():
             async with app.run_test(size=size) as pilot:
                 await pilot.pause()
                 await app.workers.wait_for_complete()
+                await pilot.wait_for_scheduled_animations()
                 for tab, _ in tabs:
                     app.query_one(TabbedContent).active = tab
                     await pilot.pause()
                     await app.workers.wait_for_complete()
+                    await pilot.wait_for_scheduled_animations()
                     await pilot.pause(0.25)
                     grids[tab] = [strip.text for strip in app.screen._compositor.render_strips()]
                     app.save_screenshot(f"{tab}-{size[0]}x{size[1]}.svg", path=str(images))

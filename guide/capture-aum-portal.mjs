@@ -38,12 +38,33 @@ const context = await chromium.launchPersistentContext(profile, {
 });
 const images = [];
 let authBlocked = false;
+
+async function visibleFrames(page) {
+  const frames = [];
+  for (const frame of page.frames()) {
+    try {
+      if (frame === page.mainFrame() || await (await frame.frameElement()).isVisible()) frames.push(frame);
+    } catch { /* A portal extension can replace its frame during navigation. */ }
+  }
+  return frames;
+}
+
+async function visibleText(page, fields = false) {
+  const texts = [];
+  for (const frame of await visibleFrames(page)) {
+    texts.push(await frame.locator('body').innerText({ timeout: 1000 }).catch(() => ''));
+    if (fields) texts.push(await frame.locator('input:not([type="password"]),textarea').evaluateAll(
+      inputs => inputs.map(input => input.value).join('\n')).catch(() => ''));
+  }
+  return texts.join('\n');
+}
+
 try {
   const page = context.pages()[0] ?? await context.newPage();
   for (const step of steps.filter(step => !selected || step.file === selected)) {
-    await page.goto(portal(step.id, step.suffix), { waitUntil: 'domcontentloaded', timeout: 90000 });
+    await page.goto(portal(step.id), { waitUntil: 'domcontentloaded', timeout: 90000 });
     await page.waitForTimeout(12000);
-    let body = await page.locator('body').innerText().catch(() => '');
+    let body = await visibleText(page);
     if (/login\.microsoftonline\.com|login\.live\.com|login\.windows\.net/i.test(page.url()) ||
         /Pick an account|Enter password|Sign in to your account/i.test(body) ||
         await page.locator('input[name="loginfmt"],input[name="passwd"]').count()) {
@@ -51,24 +72,107 @@ try {
       console.log('STOP: copied portal profile requires sign-in. No sign-in attempted.');
       break;
     }
+    if (step.file === 'gateway-named-values' || step.file === 'gateway-apis') {
+      const apis = page.getByText('APIs', { exact: true });
+      const target = step.file === 'gateway-named-values'
+        ? page.getByText('Named values', { exact: true }).first()
+        : page.locator('[data-telemetryname="Menu-apim-apis"]');
+      if (!await target.isVisible().catch(() => false)) {
+        await apis.first().click({ timeout: 30000 });
+        await page.waitForTimeout(1500);
+      }
+      await target.click({ timeout: 30000 });
+    }
+    if (step.file === 'workspace-logs') {
+      const logs = page.getByText('Logs', { exact: true });
+      if (!await logs.first().isVisible().catch(() => false)) {
+        const general = page.getByText('General', { exact: true });
+        if (await general.count()) await general.first().click();
+      }
+      await logs.first().click({ timeout: 30000 });
+    }
     const required = step.file === 'gateway-named-values' ? ['bu-registry']
-      : step.file === 'gateway-apis' ? ['Add API', 'Add a new API', 'All APIs']
+      : step.file === 'gateway-apis' ? [targets.api_display_name ?? 'claude-foundry']
       : step.file === 'workspace-logs' ? ['New query', 'Run', 'Queries hub']
-      : ['Essentials', 'Subscription ID', 'Subscription ID:'];
+      : step.file === 'turnstile-overview' ? ['Essentials', 'Default domain', 'Operating System']
+      : ['Essentials', 'Subscription ID', 'Subscription ID:', 'Workspace ID'];
     try {
-      await page.waitForFunction(markers => markers.some(marker => document.body.innerText.includes(marker)),
-        required, { timeout: 90000 });
+      const deadline = Date.now() + 90000;
+      let ready = false;
+      while (Date.now() < deadline) {
+        const content = await visibleText(page);
+        if (step.file === 'workspace-logs') {
+          for (const frame of await visibleFrames(page)) {
+            const text = await frame.locator('body').innerText({ timeout: 1000 }).catch(() => '');
+            if (!/New\s+Query/i.test(text)) continue;
+            for (const toggle of await frame.getByRole('switch').all()) {
+              const checked = await toggle.evaluate(element => element.checked === true || element.getAttribute('aria-checked') === 'true');
+              if (checked) {
+                await toggle.evaluate(element => element.click());
+                await page.waitForTimeout(1000);
+              }
+            }
+            const useQuery = frame.getByText('Use Query', { exact: true }).first();
+            if (await useQuery.isVisible().catch(() => false)) await useQuery.click();
+            const simple = frame.getByText('Simple mode', { exact: true }).first();
+            if (await simple.isVisible().catch(() => false)) {
+              await simple.click();
+              const kql = frame.getByText('KQL mode', { exact: true }).first();
+              if (await kql.isVisible().catch(() => false)) await kql.click();
+            }
+            if (await frame.locator('.monaco-editor').first().isVisible().catch(() => false) &&
+                /\bRun\b/.test(text)) ready = true;
+          }
+          if (ready) break;
+        }
+        if (step.file === 'workspace-logs' && content.includes('Welcome to Log Analytics')) {
+          for (const frame of await visibleFrames(page)) {
+            const text = await frame.locator('body').innerText({ timeout: 1000 }).catch(() => '');
+            if (!text.includes('Welcome to Log Analytics')) continue;
+            const close = frame.locator('[aria-label*="close" i],[title*="close" i]').first();
+            if (await close.isVisible().catch(() => false)) {
+              await close.click();
+            } else {
+              await frame.getByText('Welcome to Log Analytics', { exact: true }).click();
+              await page.keyboard.press('Escape');
+            }
+          }
+          await page.waitForTimeout(1000);
+          continue;
+        }
+        if (step.file !== 'workspace-logs' &&
+            required.some(marker => content.toLowerCase().includes(marker.toLowerCase()))) { ready = true; break; }
+        if (/Pick an account|Enter password|Sign in to your account|Sign in again/i.test(content)) {
+          authBlocked = true;
+          break;
+        }
+        await page.waitForTimeout(1000);
+      }
+      if (!ready) throw new Error('Resource frame not ready');
       await page.waitForTimeout(2500);
     } catch {
+      if (authBlocked) {
+        console.log('STOP: a visible portal frame requires sign-in. No sign-in attempted.');
+        break;
+      }
       if (/login\.microsoftonline\.com|login\.live\.com|login\.windows\.net/i.test(page.url())) {
         authBlocked = true;
         console.log('STOP: portal session expired while loading. No sign-in attempted.');
         break;
       }
       console.log(`NOT READY ${step.file}: resource data did not render; no screenshot saved.`);
+      let diagnostic = await visibleText(page);
+      for (const [value, substitute] of Object.entries(replacements).sort((a, b) => b[0].length - a[0].length)) {
+        if (value) diagnostic = diagnostic.split(value).join(substitute);
+      }
+      diagnostic = diagnostic.replace(/[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, 'admin@contoso.com')
+        .replace(/\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/gi, '[redacted-id]')
+        .replace(/https?:\/\/[^\s]+/g, 'https://service.contoso.com');
+      fs.mkdirSync(path.resolve('.aum-evidence'), { recursive: true });
+      fs.writeFileSync(path.resolve('.aum-evidence', `portal-not-ready-${step.file}.txt`), diagnostic);
       continue;
     }
-    body = await page.locator('body').innerText().catch(() => '');
+    body = await visibleText(page);
     if (/Pick an account|Enter password|Sign in to your account|Sign in again/i.test(body)) {
       authBlocked = true;
       console.log('STOP: portal requires sign-in. No sign-in attempted.');
@@ -78,7 +182,7 @@ try {
       console.log(`REFUSED ${step.file}: portal did not expose this resource.`);
       continue;
     }
-    await page.evaluate(({ replacements }) => {
+    for (const frame of await visibleFrames(page)) await frame.evaluate(({ replacements, main }) => {
       const replace = text => {
         for (const [value, substitute] of Object.entries(replacements).sort((a, b) => b[0].length - a[0].length)) {
           if (value && value !== substitute) text = text.split(value).join(substitute);
@@ -86,23 +190,27 @@ try {
         return text
           .replace(/[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, 'admin@contoso.com')
           .replace(/\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/gi, '[redacted-id]')
+          .replace(/\b[0-9a-f]{32}\b/gi, '[redacted-id]')
+          .replace(/https?:\/\/[A-Za-z0-9._-]+(?::\d+)?/gi, 'https://service.contoso.com')
           .replace(/\b[A-Za-z0-9.-]+\.(?:azurewebsites\.net|azure-api\.net|onmicrosoft\.com)\b/gi, 'service.contoso.com');
       };
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       let node;
       while ((node = walker.nextNode())) {
         if (['SCRIPT', 'STYLE'].includes(node.parentElement?.tagName)) continue;
-        node.nodeValue = replace(node.nodeValue ?? '');
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const box = range.getBoundingClientRect();
+        node.nodeValue = main && box.top < 60 && box.left > window.innerWidth - 350
+          ? ((node.nodeValue ?? '').includes('@') ? 'admin@contoso.com' : 'Contoso directory')
+          : replace(node.nodeValue ?? '');
       }
       for (const input of document.querySelectorAll('input:not([type="password"]),textarea')) {
         input.value = replace(input.value ?? '');
       }
       for (const image of document.querySelectorAll('.ms-Persona-image,img[src*="/photo"]')) image.style.visibility = 'hidden';
-    }, { replacements });
-    const text = await page.locator('body').innerText();
-    const fieldText = await page.locator('input:not([type="password"]),textarea').evaluateAll(
-      inputs => inputs.map(input => input.value).join('\n'));
-    const visible = text + '\n' + fieldText;
+    }, { replacements, main: frame === page.mainFrame() });
+    const visible = await visibleText(page, true);
     const unsafe = /\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/i.test(visible) ||
       /\b[A-Za-z0-9.-]+\.(?:azurewebsites\.net|azure-api\.net)\b/i.test(visible) ||
       [...visible.matchAll(/[A-Za-z0-9._+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g)].some(match => match[1] !== 'contoso.com');
@@ -110,7 +218,7 @@ try {
     fs.mkdirSync(folder, { recursive: true });
     const filename = `${step.file}.png`;
     const pixels = await page.screenshot();
-    const after = await page.locator('body').innerText();
+    const after = await visibleText(page, true);
     if (/\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/i.test(after) ||
         /\b[A-Za-z0-9.-]+\.(?:azurewebsites\.net|azure-api\.net)\b/i.test(after) ||
         [...after.matchAll(/[A-Za-z0-9._+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g)].some(match => match[1] !== 'contoso.com')) {

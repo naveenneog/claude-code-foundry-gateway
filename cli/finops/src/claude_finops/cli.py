@@ -134,6 +134,12 @@ def whoami(ctx: typer.Context):
 
 
 @app.command()
+def lookup(ctx: typer.Context, query: str, team: str | None = None):
+    """Find units, teams, models and request ids; select a team for bounded people lookup."""
+    emit(ctx, lambda e: dict(items=e.lookup(query, team)))
+
+
+@app.command()
 def status(ctx: typer.Context, unit: str | None = None):
     """Show month usage, budgets and gateway apply status."""
     def operation(engine):
@@ -232,21 +238,31 @@ def requests_show(ctx: typer.Context, request_id: str):
 
 
 @groups["anomalies"].command("list")
-def anomalies_list(ctx: typer.Context, limit: Annotated[int, typer.Option(min=1, max=200)] = 50):
-    emit(ctx, lambda e: e.read("anomalies", limit=limit))
+def anomalies_list(ctx: typer.Context, limit: Annotated[int, typer.Option(min=1, max=200)] = 50,
+                   unit: str | None = None, team: str | None = None, person: str | None = None,
+                   model: str | None = None, surface: str | None = None, tier: str | None = None):
+    emit(ctx, lambda e: e.read("anomalies", limit=limit, organization_id=unit, department_id=team,
+                               user_id=person, model_id=model, runtime=surface, tier=tier))
 
 
 @groups["usage"].command("show")
-def usage_show(ctx: typer.Context, dimension: str = "organization", split_by: str | None = None):
-    """Pivot organization, department, user, model or runtime; optionally split a row."""
-    emit(ctx, lambda e: e.read("distribution", dimension=dimension, split_by=split_by, limit=100))
+def usage_show(ctx: typer.Context, dimension: str = "organization", split_by: str | None = None,
+               unit: str | None = None, team: str | None = None, person: str | None = None,
+               model: str | None = None, surface: str | None = None, tier: str | None = None):
+    """Pivot organization, department, user, model, runtime or tier; optionally split a row."""
+    emit(ctx, lambda e: e.read("distribution", dimension=dimension, split_by=split_by, limit=100,
+                               organization_id=unit, department_id=team, user_id=person,
+                               model_id=model, runtime=surface, tier=tier))
 
 
 @groups["trends"].command("show")
 def trends_show(ctx: typer.Context, interval: str = "day", group_by: str = "none",
-                compare: str | None = None, start: str | None = None, end: str | None = None):
-    emit(ctx, lambda e: e.compare_trends(compare, interval=interval, group_by=group_by) if compare else
-         e.read("trends", interval=interval, group_by=group_by, **{"from": start, "to": end}))
+                compare: str | None = None, start: str | None = None, end: str | None = None,
+                unit: str | None = None, team: str | None = None, person: str | None = None,
+                model: str | None = None, surface: str | None = None, tier: str | None = None):
+    filters = dict(organization_id=unit, department_id=team, user_id=person, model_id=model, runtime=surface, tier=tier)
+    emit(ctx, lambda e: e.compare_trends(compare, interval=interval, group_by=group_by, **filters) if compare else
+         e.read("trends", interval=interval, group_by=group_by, **filters, **{"from": start, "to": end}))
 
 
 @groups["report"].command("chargeback")

@@ -10,7 +10,7 @@ from .rules import identifier, month_window, require_owner
 
 
 def report_plan(engine, config, *, month=None, units=None, output="finops-reports",
-                formats="CSV,HTML", send=False, apply=False):
+                formats="CSV,HTML", month_to_date=False, send=False, apply=False):
     require_owner(engine.read("whoami"))
     period = month or engine.month
     month_window(period)
@@ -22,7 +22,7 @@ def report_plan(engine, config, *, month=None, units=None, output="finops-report
     script = root / "scripts" / "New-ClaudeChargebackReport.ps1"
     plan = dict(preview=not apply, action="Generate reconciled P50 chargeback report",
                 available=script.exists(), month=period, units=units, output=output,
-                formats=wanted, send=send,
+                formats=wanted, month_to_date=month_to_date, send=send,
                 note="Uses the repository generator and its reconciliation guard. Sending is explicit and defaults off.")
     if not apply:
         if not script.exists():
@@ -34,6 +34,8 @@ def report_plan(engine, config, *, month=None, units=None, output="finops-report
     folder.mkdir(exist_ok=True)
     request = folder / f"report-{uuid4().hex}.json"
     params = dict(Month=period, OutputPath=str(Path(output).resolve()), Format=wanted, NonInteractive=True)
+    if month_to_date:
+        params["MonthToDate"] = True
     if units:
         params["BusinessUnit"] = units
     if send:

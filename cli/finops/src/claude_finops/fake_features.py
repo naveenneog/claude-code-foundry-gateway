@@ -50,8 +50,10 @@ class FakeFeatures:
         if resource == "boosts":
             return {"items": deepcopy(self.feature_store["boosts"]), "page": {"next_cursor": None}}
         if resource == "notifications":
-            return {"items": [dict(id="notice-1", title="Budget warning", body="Review Sales EMEA",
-                                   severity="warning", created_at=STAMP, read_at=None)], "page": {"next_cursor": None}}
+            notices = self.feature_store.setdefault("notifications", [dict(
+                id="notice-1", title="Budget warning", body="Review Sales EMEA",
+                severity="warning", created_at=STAMP, read_at=None)])
+            return {"items": deepcopy(notices), "page": {"next_cursor": None}}
         if resource == "assistant_settings":
             return dict(model_available=True, effective_model_name="Example assistant", available_models=[], auto_title=False)
         if resource in {"conversations", "pinned_charts"}:
@@ -90,7 +92,14 @@ class FakeFeatures:
             row = next(r for r in self.feature_store["boosts"] if r["id"] == params["id"])
             row["state"] = "revoked"
             return deepcopy(row)
-        if resource in {"notification_read", "disposition"}:
+        if resource == "notification_read":
+            self.read_feature("notifications", {})
+            row = next((r for r in self.feature_store["notifications"] if r["id"] == params["id"]), None)
+            if not row:
+                raise FinOpsError("Notification not found.", 5)
+            row["read_at"] = STAMP
+            return deepcopy(row)
+        if resource == "disposition":
             return dict(id=params["id"], **(body or {}), changed_at=STAMP)
         if resource == "assistant_ask":
             chart = dict(id="tokens-chart", kind="bar", title="Token usage", time_range_label="2026-09",

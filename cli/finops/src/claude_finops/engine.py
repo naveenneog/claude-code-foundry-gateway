@@ -216,7 +216,11 @@ class Engine(FeatureEngine):
         if not text:
             return []
         if self.has_feature("global_search"):
-            return self.read("global_search", query=text, limit=50)["items"]
+            tabs = {"unit": "budgets", "team": "budgets", "person": "people",
+                    "model": "usage", "request": "requests"}
+            return [dict(row, tab=tabs[row["kind"]])
+                    for row in self.read("global_search", query=text, limit=50)["items"]
+                    if row.get("kind") in tabs]
         catalog = self.read("catalog")
         catalog = managed_catalog(self._identity, catalog, context=False)
         result = []

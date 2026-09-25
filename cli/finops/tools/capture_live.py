@@ -16,6 +16,7 @@ from claude_finops.engine import Engine
 from claude_finops.publication import validate_capture, validate_manifest
 from claude_finops.tui import FinOpsApp
 from claude_finops.views import TABS
+from claude_finops.ui_features import EXTRA_TABS
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -30,15 +31,17 @@ async def capture(args):
     folder.mkdir(parents=True, exist_ok=True)
     manifest_file = folder / "manifest.json"
     manifest = json.loads(manifest_file.read_text(encoding="utf-8")) if manifest_file.exists() else {"schema": 1, "images": []}
-    tabs = args.tabs.split(",") if args.tabs else [key for key, _ in TABS]
+    tabs = args.tabs.split(",") if args.tabs else None
     measurements = []
     try:
         for size in ((80, 24), (160, 48)):
-            app = FinOpsApp(Engine(backend, args.month), config, redact=True)
+            app = FinOpsApp(Engine(backend, args.month), config, redact=True, first_run=False)
             async with app.run_test(size=size) as pilot:
                 await pilot.pause(.25)
                 await app.workers.wait_for_complete()
-                for tab in tabs:
+                await pilot.wait_for_scheduled_animations()
+                available = tabs or [key for key, _ in TABS + EXTRA_TABS if key in app.allowed_tabs]
+                for tab in available:
                     started = time.monotonic()
                     if tab == "people":
                         overview = app.data.get("overview", {})
@@ -47,12 +50,16 @@ async def capture(args):
                                           if row["id"] in allowed), None)
                         if preferred:
                             app.team = preferred
-                    shortcut = next(label[0] for key, label in TABS if key == tab)
-                    await pilot.press(shortcut)
+                    if tab == "advanced":
+                        app.action_tab(tab)
+                    else:
+                        shortcut = next(label[0] for key, label in TABS + EXTRA_TABS if key == tab)
+                        await pilot.press(shortcut)
                     if tab == "overview":
                         app.action_refresh()
                     await pilot.pause(.25)
                     await app.workers.wait_for_complete()
+                    await pilot.wait_for_scheduled_animations()
                     await pilot.pause(.5)
                     if tab not in app.data:
                         state = app.redactor.text(str(app.query_one(f"#note-{tab}").render()))

@@ -22,6 +22,7 @@ from .screens import ChangeScreen, DetailScreen, ExportScreen, LookupScreen, Mon
 from .views import DIMENSIONS, TABS, view_rows
 from .ui_features import FeatureUI, EXTRA_TABS
 from .capabilities import enabled
+from .feature_screens import FilterChips
 
 
 class FinOpsApp(FeatureUI, App):
@@ -89,7 +90,7 @@ class FinOpsApp(FeatureUI, App):
     def compose(self) -> ComposeResult:
         yield Static(COMPACT, id="brand", markup=False)
         yield Static("Signing in through Azure CLI...", id="identity", markup=False)
-        yield Static("", id="filter-chips", markup=False)
+        yield FilterChips("", id="filter-chips", markup=False)
         yield Input(placeholder="Filter visible rows (Esc clears; / searches the server)", id="quick-filter",
                     password=self.redactor.enabled)
         with TabbedContent(initial="overview", id="main-tabs"):

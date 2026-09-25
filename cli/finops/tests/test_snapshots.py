@@ -21,10 +21,12 @@ async def test_all_main_screen_snapshots(size):
     async with app.run_test(size=size) as pilot:
         await pilot.pause()
         await app.workers.wait_for_complete()
+        await pilot.wait_for_scheduled_animations()
         for tab, _ in TABS:
             app.query_one(TabbedContent).active = tab
             await pilot.pause()
             await app.workers.wait_for_complete()
+            await pilot.wait_for_scheduled_animations()
             await pilot.pause(0.25)
             rendered = [strip.text for strip in app.screen._compositor.render_strips()]
             assert rendered == baseline[tab], f"{tab} changed at {size}; inspect SVG before recording."
@@ -41,10 +43,12 @@ async def test_optional_capability_screen_snapshots(size):
     async with app.run_test(size=size) as pilot:
         await pilot.pause()
         await app.workers.wait_for_complete()
+        await pilot.wait_for_scheduled_animations()
         for tab, _ in EXTRA_TABS:
             app.query_one(TabbedContent).active = tab
             await pilot.pause()
             await app.workers.wait_for_complete()
+            await pilot.wait_for_scheduled_animations()
             await pilot.pause(.25)
             rendered = [strip.text for strip in app.screen._compositor.render_strips()]
             assert rendered == baseline[tab], f"{tab} changed at {size}; inspect the SVG before updating."

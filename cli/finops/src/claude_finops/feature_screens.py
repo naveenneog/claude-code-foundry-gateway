@@ -10,6 +10,16 @@ from textual.widgets import Button, Input, Label, Select, Static
 from .errors import FinOpsError
 
 
+class FilterChips(Static, can_focus=True):
+    BINDINGS = [("enter", "edit", "Edit filters")]
+
+    def on_click(self):
+        self.action_edit()
+
+    def action_edit(self):
+        self.app.action_scope_filters()
+
+
 class ActionForm(ModalScreen):
     BINDINGS = [("escape", "cancel", "Cancel")]
 

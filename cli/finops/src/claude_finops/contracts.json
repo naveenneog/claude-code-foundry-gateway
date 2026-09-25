@@ -61,7 +61,7 @@
   },
   "common": {
     "lists": "items plus page.next_cursor and page.has_more; all server-filtered",
-    "mutations": "Idempotency-Key UUID header; return the saved record and optional apply object",
+    "mutations": "Idempotency-Key UUID header; return the saved record. If a gateway job starts, include apply: {requested_at: UTC ISO8601}; clients then poll GET /api/v1/gateway-apply until the corresponding start/completion time or an actionable timeout.",
     "errors": {"401": "sign-in required", "403": "not in scope", "409": "allocation or transition conflict", "412": "stale revision", "422": "invalid fields"},
     "security": "Advertisement is role-aware but never replaces server authorization. No credentials or bearer tokens in responses."
   }

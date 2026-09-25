@@ -11,6 +11,7 @@ Screen {
 }
 #identity { height: 1; padding: 0 1; background: $surface; }
 #filter-chips { height: 1; padding: 0 1; color: $foreground; background: $surface; }
+#filter-chips:focus { text-style: bold reverse; }
 .wide-overview #brand { height: 5; }
 #quick-filter { display: none; height: 3; }
 Input > .input--placeholder { color: $foreground; }

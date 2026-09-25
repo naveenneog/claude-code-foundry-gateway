@@ -67,3 +67,12 @@ async def test_viewer_palette_never_offers_model_configuration():
         await settle(app, pilot)
         names = [name for name, *_ in FinOpsCommands(app.screen).commands()]
         assert "Configure assistant model and cost" not in names
+
+
+async def test_filter_chips_open_editor_by_mouse():
+    from claude_finops.feature_screens import FiltersScreen
+    app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"))
+    async with app.run_test(size=(80, 24)) as pilot:
+        await settle(app, pilot)
+        await pilot.click("#filter-chips")
+        assert isinstance(app.screen, FiltersScreen)

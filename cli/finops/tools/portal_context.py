@@ -8,6 +8,9 @@ from urllib.parse import urlsplit
 from claude_finops.config import az, load_config, parse_integration
 from claude_finops.discovery import discover
 from claude_finops.errors import FinOpsError
+from claude_finops.direct import DirectBackend
+from claude_finops.config import Config
+from claude_finops.redaction import digest
 
 
 def context(config_path):
@@ -19,6 +22,13 @@ def context(config_path):
     subscription = values["subscription"]
     account = json.loads(az("account", "show", "--subscription", subscription, "-o", "json"))
     replacements = {}
+    try:
+        display_name = az("apim", "api", "show", "-g", values["resource_group"], "--service-name",
+                          values["apim_name"], "--api-id", "claude-foundry", "--query", "displayName",
+                          "-o", "tsv", "--subscription", subscription)
+        found["portal"]["api_display_name"] = display_name
+    except FinOpsError:
+        pass
     for field, replacement in (("name", "Contoso subscription"), ("tenantDisplayName", "Contoso directory"),
                                 ("tenantDefaultDomain", "contoso.com")):
         if account.get(field):
@@ -30,6 +40,11 @@ def context(config_path):
         if resource_id:
             replacements[resource_id.rsplit("/", 1)[-1]] = replacement
             replacements[resource_id.split("/")[4]] = "contoso-resource-group"
+    catalog = DirectBackend(Config(**values)).read("catalog")
+    for field in ("organizations", "departments"):
+        for entity in catalog[field]:
+            replacements[entity["name"]] = "contoso-group-" + digest(entity["id"])
+            replacements[entity["id"]] = "contoso-scope-" + digest(entity["id"])
     try:
         own = json.loads(az("ad", "signed-in-user", "show", "-o", "json", "--subscription", subscription))
         if own.get("displayName"):
@@ -45,6 +60,11 @@ def context(config_path):
         if app:
             found["portal"]["turnstile_resource_id"] = app["id"]
             replacements[app["name"]] = "contoso-usage-api"
+            if app.get("serverFarmId"):
+                replacements[app["serverFarmId"].rsplit("/", 1)[-1]] = "contoso-app-plan"
+            for value in (app.get("tags") or {}).values():
+                if isinstance(value, str) and "/microsoft.insights/components/" in value.lower():
+                    replacements[value.rsplit("/", 1)[-1]] = "contoso-service-insights"
     except FinOpsError:
         pass
     return dict(targets=found["portal"], replacements=replacements)

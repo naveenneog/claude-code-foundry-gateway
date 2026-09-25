@@ -99,6 +99,9 @@ class FeatureEngine:
         if apply:
             plan["result"] = self.backend.write(resource, body, month=self.month,
                                                 idempotency_key=str(uuid4()), **params)
+            job = plan["result"].get("apply")
+            if isinstance(job, dict) and job.get("requested_at"):
+                plan["requested_at"] = job["requested_at"]
         return plan
 
     @staticmethod
@@ -108,6 +111,8 @@ class FeatureEngine:
         return reason.strip()
 
     def request_budget(self, kind, key, amount, reason, *, expires_at=None, apply=False):
+        if expires_at:
+            expires_at = self._future_expiry(expires_at)
         body = dict(scope_type=scope_type(kind), scope_id=identifier(key), period=self.month,
                     token_limit=parse_tokens(amount), reason=self._reason(reason), expires_at=expires_at)
         return self._feature_change("approval_create", body, apply=apply)
@@ -130,17 +135,22 @@ class FeatureEngine:
             body["decision"] = decision
         return self._feature_change(resource, body, id=key, action=decision, apply=apply)
 
-    def boost(self, person, team, amount, until, reason, *, window="monthly", apply=False):
-        self.require_feature("boosts", "create")
-        if window not in {"daily", "monthly"}:
-            raise FinOpsError("Boost window must be daily or monthly.")
+    @staticmethod
+    def _future_expiry(until):
         try:
             expires = datetime.fromisoformat(until.replace("Z", "+00:00"))
             expires = expires.replace(tzinfo=timezone.utc) if expires.tzinfo is None else expires.astimezone(timezone.utc)
         except ValueError:
             raise FinOpsError("Use a UTC ISO expiry or YYYY-MM-DD.") from None
         if expires <= datetime.now(timezone.utc):
-            raise FinOpsError("Boost expiry must be in the future.")
+            raise FinOpsError("The expiry must be in the future.")
+        return expires.isoformat().replace("+00:00", "Z")
+
+    def boost(self, person, team, amount, until, reason, *, window="monthly", apply=False):
+        self.require_feature("boosts", "create")
+        if window not in {"daily", "monthly"}:
+            raise FinOpsError("Boost window must be daily or monthly.")
+        expires = self._future_expiry(until)
         tokens = parse_tokens(amount)
         people = self.read("people", department_id=identifier(team), query=identifier(person), offset=0, limit=50)
         row = next((r for r in people["items"] if r["scope_id"] == person), None)
@@ -150,7 +160,7 @@ class FeatureEngine:
         if headroom is not None and tokens > headroom:
             raise FinOpsError("Boost exceeds parent headroom. Request the difference from the parent approver.", 6)
         body = dict(scope_type="user", scope_id=person, department_id=team, window=window,
-                    extra_tokens=tokens, expires_at=expires.isoformat().replace("+00:00", "Z"), reason=self._reason(reason))
+                    extra_tokens=tokens, expires_at=expires, reason=self._reason(reason))
         return self._feature_change("boost_create", body, apply=apply)
 
     def revoke_boost(self, key, *, apply=False):
@@ -171,6 +181,18 @@ class FeatureEngine:
             raise FinOpsError("Ask a question of 1 to 4,000 characters.")
         return self.backend.write("assistant_ask", dict(question=question.strip(), history=(history or [])[-20:],
                                   conversation_id=conversation_id, timezone="UTC", locale="en"))
+
+    def configure_assistant(self, model_id=None, auto_title=False, *, apply=False):
+        self.require_feature("assistant", "configure")
+        require_owner(self.read("whoami"))
+        settings = self.read("assistant_settings")
+        if model_id and model_id not in {row["id"] for row in settings.get("available_models", [])}:
+            raise FinOpsError("Select a model advertised by assistant settings; refresh before choosing.", 5)
+        body = dict(model_id=model_id or None, auto_title=bool(auto_title))
+        plan = dict(preview=not apply, action="Configure assistant", before=settings, after=body)
+        if apply:
+            plan["result"] = self.backend.write("assistant_settings", body)
+        return plan
 
     def pin_chart(self, reply, chart_id, title, *, apply=False):
         chart = next((chart for chart in reply.get("charts", []) if chart["id"] == chart_id), None)

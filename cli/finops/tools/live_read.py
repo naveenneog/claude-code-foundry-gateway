@@ -38,7 +38,7 @@ async def probe(args):
                                          seconds=round(time.monotonic() - started, 3)))
     config = Config(url=args.url, scope=args.scope)
     backend = TurnstileBackend(config)
-    app = FinOpsApp(Engine(backend, args.month), config, redact=True)
+    app = FinOpsApp(Engine(backend, args.month), config, redact=True, first_run=False)
     evidence["display_redaction"] = True
     try:
         async with app.run_test(size=(80, 24)) as pilot:

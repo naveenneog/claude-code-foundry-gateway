@@ -48,11 +48,11 @@ def register(app, groups, emit):
     def request_budget(ctx: typer.Context, kind: str, key: str, amount: str, reason: str,
                        until: str | None = None, apply: bool = False):
         emit(ctx, lambda e: e.request_budget(kind, key, amount, reason, expires_at=until,
-                                             apply=apply and not ctx.obj["what_if"]))
+                                             apply=apply and not ctx.obj["what_if"]), mutation=True)
 
     for decision in ("approve", "reject", "escalate"):
         def command(ctx: typer.Context, request_id: str, reason: str, apply: bool = False, _decision=decision):
-            emit(ctx, lambda e: e.decide_request(request_id, _decision, reason, apply=apply and not ctx.obj["what_if"]))
+            emit(ctx, lambda e: e.decide_request(request_id, _decision, reason, apply=apply and not ctx.obj["what_if"]), mutation=True)
         # Default capture parameters must not become CLI options.
         import inspect
         command.__signature__ = inspect.signature(command).replace(
@@ -67,11 +67,11 @@ def register(app, groups, emit):
     def boost_set(ctx: typer.Context, person: str, team: str, amount: str, until: str, reason: str,
                   window: str = "monthly", apply: bool = False):
         emit(ctx, lambda e: e.boost(person, team, amount, until, reason, window=window,
-                                    apply=apply and not ctx.obj["what_if"]))
+                                    apply=apply and not ctx.obj["what_if"]), mutation=True)
 
     @boosts.command("revoke")
     def boost_revoke(ctx: typer.Context, boost_id: str, apply: bool = False):
-        emit(ctx, lambda e: e.revoke_boost(boost_id, apply=apply and not ctx.obj["what_if"]))
+        emit(ctx, lambda e: e.revoke_boost(boost_id, apply=apply and not ctx.obj["what_if"]), mutation=True)
 
     @notices.command("list")
     def notification_list(ctx: typer.Context, cursor: str | None = None):
@@ -103,6 +103,14 @@ def register(app, groups, emit):
     @ask.command("pins")
     def ask_pins(ctx: typer.Context):
         emit(ctx, lambda e: e.read("pinned_charts"))
+
+    @ask.command("settings")
+    def ask_settings(ctx: typer.Context):
+        emit(ctx, lambda e: e.read("assistant_settings"))
+
+    @ask.command("configure")
+    def ask_configure(ctx: typer.Context, model: str | None = None, auto_title: bool = False, apply: bool = False):
+        emit(ctx, lambda e: e.configure_assistant(model, auto_title, apply=apply and not ctx.obj["what_if"]))
 
     @ask.command("pin")
     def ask_pin(ctx: typer.Context, conversation: str, chart: str, title: str, apply: bool = False):
@@ -138,7 +146,7 @@ def register(app, groups, emit):
     @groups["report"].command("generate")
     def generate_report(ctx: typer.Context, unit: list[str] = typer.Option(None),
                         output: str = "finops-reports", formats: str = "CSV,HTML",
-                        send: bool = False, apply: bool = False):
+                        month_to_date: bool = False, send: bool = False, apply: bool = False):
         from .reporting import report_plan
         emit(ctx, lambda e: report_plan(e, ctx.obj["config"], units=unit, output=output, formats=formats,
-                                        send=send, apply=apply and not ctx.obj["what_if"]))
+                                        month_to_date=month_to_date, send=send, apply=apply and not ctx.obj["what_if"]))
