@@ -1,6 +1,6 @@
 # Status
 
-**Active packet:** P46 — managers scoped to their units and teams (done, fork `c0c345a`), and budget modes in the gateway (done, merged from `budget-modes` at `3ee0bd3`); the manager-only live sign-in is next, in P53 ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets:** P52 AUM and P54 the enterprise network. P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P46 acceptance criteria — managers scoped, and budget modes
 
@@ -11,7 +11,7 @@
 - [x] An owner records a unit's or team's manager group and budget mode on the Gateway governance page (`manager_group_id`, `enforcement`, `allowance_percent`)
 - [x] The gateway enforces strict, allowance and notify per unit and team: `bu-modes` holds only the exceptions (missing means strict); allowance admits up to its percentage above the budget; notify skips only that scope's limiter, and the parent, organization and tier limits still apply. Invalid mode metadata stops the whole apply before any write
 - [x] An apply run rechecks Turnstile's catalog, per-budget and tier revisions immediately before writing, reconciles again from newer state up to three times, then defers with no writes and no membership refresh. This narrows the out-of-order race; P48's single writer closes it
-- [ ] A live sign-in with a manager-only account: moved to P53, which uses the CLI account's own group memberships (it owns both the admin group and the manager test groups) and restores them
+- [x] A live sign-in with a manager-only account: done 2026-09-25 01:21-01:26Z in P53. With the account's admin group membership and its direct `Turnstile.Admin` assignment both removed, a fresh token carried exactly `Turnstile.Manager` and the manager group; Turnstile answered `member`, scoped to one unit and its three departments, refused three admin routes with 403, and the replayed code with 401. Everything was restored admin-group first and verified against the snapshot
 - [x] `node .ironclad/gate.mjs --stage packet` exits 0 on the merge: `690015d`, 2026-09-24 17:16-17:46Z, Test-All 1,797.2 s of the 1,800 s budget then in force (see "The suite's time budget" below)
 
 | Measured | Result |
@@ -130,7 +130,8 @@ Merged at `146fd12`.
 | **A change in the UI** | Standard tier 20,000 to 20,001 on the page reached the gateway in 105.3 s; restored through the page in 118.6 s |
 | **A mode in the UI** | See P46 above: notify reached `bu-modes` in 113.4 s, strict returned it to `,,` in 113.2 s |
 | **Capture tooling** | Capture scripts discover their targets instead of defaulting to live names; `Test-NoDeploymentValues.ps1` also scans `.mjs` files |
-| **Manager-only (phase 2)** | The first attempt restored everything exactly but proved nothing: the account also holds a direct `Turnstile.Admin` assignment, so leaving the admin group still left Admin, which outranks Manager. A retry that includes the direct assignment is authorized (**U21**) |
+| **Manager-only (phase 2)** | The first attempt restored everything exactly but proved nothing: the account also holds a direct `Turnstile.Admin` assignment, so leaving the admin group still left Admin, which outranks Manager. The retry, 2026-09-25 01:21-01:26Z, removed both, and passed: a fresh token carried exactly `Turnstile.Manager` and the manager group (checked before anything counted), `/auth/me` answered `member` scoped to one unit and its three departments, three admin routes returned 403 and the replayed code 401. Four pictures captured. Restored admin group first, then the same direct assignment re-created; all 14 memberships, 22 direct assignments and 24 non-secret named values matched the snapshot, and a fresh token carried Admin again |
+| **Fresh tokens on Windows** | The Windows account broker (WAM) kept returning the cached token with the old roles: other scope spellings and MSAL's `force_refresh` alone did not renew it. MSAL's `set_access_token_to_renew`, used by a helper that fails closed, did, with no cache deleted and no grant added (**U21**) |
 
 ## P51 terminal FinOps, first release, 2026-09-24
 

@@ -54,6 +54,12 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   pre-authorized on Turnstile's API: the token is exchanged for a code that works once, within a
   minute. For tenants whose web sign-in has no consent yet (**U19**).
   [ADR-0016](docs/adr/0016-delegated-management.md).
+- **A manager sees only their unit, proven live.** With admin access removed for a few minutes, a
+  fresh token carried exactly `Turnstile.Manager`; Turnstile scoped the session to one unit and
+  its three teams and refused the admin pages, then every membership and assignment was restored
+  and verified. On Windows the account broker kept serving the old token; MSAL's
+  `set_access_token_to_renew`, behind a helper that fails closed, renews it without deleting any
+  cache or adding any grant.
 - **Architecture that cannot drift from the code.** Ten diagrams generated from text sources under
   `docs/architecture/` by `node guide/render-architecture.mjs`, a rewritten `docs/ARCHITECTURE.md`,
   and an `AGENTS.md` rule that every feature packet updates its diagram. `tests/Test-Architecture.ps1`

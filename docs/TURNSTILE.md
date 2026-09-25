@@ -14,7 +14,7 @@ It uses a fork, [naveenneog/turnstile](https://github.com/naveenneog/turnstile),
 `claude-gateway`, which adds Microsoft Entra admin-only sign-in, an enterprise catalog API and a
 deployer that runs on Windows. See [The fork](#the-fork).
 
-Every command, result and figure on this page was measured on 2026-09-23 and 2026-09-24 against
+Every command, result and figure on this page was measured on 2026-09-23 through 2026-09-25 against
 the reference gateway and a Turnstile deployment in Central US. People, tenant and unit names in the pictures
 are replaced by example ones: the units are `sales` (teams `sales-emea`, `sales-apac`) and
 `engineering`.
@@ -46,7 +46,7 @@ people and units look like examples. The [capture manifest](guide/turnstile-capt
 records each image's UTC capture time, actual route or command, identity kind, fork and
 accelerator revisions, redaction check and image SHA-256.
 
-These captures use the signed-in operator's existing `Turnstile.Admin` assignment and the
+The Owner captures use the signed-in operator's existing `Turnstile.Admin` assignment and the
 pre-authorized Azure CLI. They do not request admin consent, a new directory role or a new
 user. An operator who cannot obtain further grants can use:
 
@@ -76,15 +76,16 @@ server's profile response, not a fabricated Settings panel.*
   evidence. The separately authorized Phase 2 group-only attempt found a direct User
   Admin assignment that survived group removal; it stopped rather than presenting an
   Admin+Manager token as Manager-only. Memberships, catalog and named values were restored.
-  A changed plan needs separate authorization; it must not interrupt another operator's saves.
+  A separately authorized direct-assignment retry then proved Manager-only access on
+  2026-09-25, with complete restoration and fresh Owner proof; see [Live Manager-only proof](#live-manager-only-proof).
 - The Entra overview, exposed API, app-role and enterprise Properties images are now
   **live Azure portal captures** from the copied, already-authenticated profile. The
   manifest distinguishes `owner_portal` from CLI command output. Users and groups remains
   a read-only preflight capture, not a portal picture or a membership mutation.
 - The older screenshots of exhausting a real team's budget and revoking the admin
-  assignment are superseded by safe live health/preflight captures. Those destructive
-  historical experiments were **not replayed** for this recapture. Their earlier measured
-  results remain historical results in the tables below.
+  assignment remain replaced by safe live health/preflight captures. Real-budget exhaustion
+  was **not replayed**. The later authorized Manager transition has its own dated evidence
+  below; it is not represented by those older filenames.
 - The reversible Owner journey changes only the Standard tier's tokens per minute by
   **+1**, saves through the UI, reads the resulting named value with `az`, then restores
   through the UI and verifies the original value. It never lowers a real team's budget
@@ -99,6 +100,9 @@ Private evidence stays in the ignored `.finops-evidence/p53` directory. The defa
 `node guide/capture-turnstile-manager.mjs --dry-run` checks current ownership, membership
 and existing assignments **without changing any of them**. Execution requires both
 `--execute --lead-go`, only after the lead authorizes it; recovery runs in `finally`.
+Direct Admin removal additionally requires `--include-direct-admin`. On the tested Windows
+broker setup, `--renew-broker-token` explicitly renews tokens rather than trusting cached
+scope aliases; see the [manual procedure](manual/turnstile.md#5-phase-2-membership-transition--only-after-explicit-go).
 `tests/Test-Screenshots.ps1` rejects missing, undated, non-live or changed-pixel evidence
 and runs mutations proving those failures are detected.
 
@@ -807,8 +811,50 @@ everything.
 Measured on 2026-09-24 in the fork: 203 manager-scope tests, and a browser run of the built
 console against test-signed manager tokens (30 API requests, none outside the allow-list).
 Live, the owner's sign-in stayed unrestricted, and a catalog change and its restore were each
-applied to the gateway. A live sign-in with a manager-only account is an acceptance step for the
-owner, because the account running the checks holds `Turnstile.Admin`, which takes precedence.
+applied to the gateway. The separately authorized Manager-only live proof followed on
+2026-09-25.
+
+#### Live Manager-only proof
+
+Measured **2026-09-25, 01:21:42–01:25:51Z** on the reference deployment, after snapshotting
+the existing direct Admin assignment, memberships, catalog and non-secret named values.
+The operator temporarily joined the unit-manager test group, left the Admin group and
+removed the independently assigned direct `Turnstile.Admin` role. The fresh token passed
+guards requiring **only `Turnstile.Manager`**, the intended manager group and no Admin group.
+The one-use CLI code then produced a server profile with `role=member`, `method=entra`,
+one managed unit and its three departments (two teams plus direct members); replay was 401.
+
+![Live scoped Manager budget page with one managed unit and its departments](guide/turnstile-manager-budgets.png)
+
+*Captured live on 2026-09-25; names replaced. “Example Owner” is the anonymized display name,
+not the session's role. The server profile below proves the scoped Member identity.*
+
+![Live Manager usage page and restricted navigation](guide/turnstile-manager-usage.png)
+
+*Captured live on 2026-09-25; measured charts are unchanged by redaction.*
+
+![Live Manager governance page without owner editing controls](guide/turnstile-manager-governance.png)
+
+*Captured live on 2026-09-25. The earlier catalog save's apply was still running here;
+the final restoration apply was verified separately after it succeeded.*
+
+![The actual Manager profile and three protected API refusals](guide/turnstile-manager-refused.png)
+
+*Actual session responses rendered as a redacted transcript, not a fabricated error page:
+model management, the legacy organization-wide overview and application access returned 403.*
+
+Restoration re-added the Admin group **first**, recreated the same direct
+principal/resource/app-role assignment, removed the test membership and restored the authored
+catalog byte-for-byte. Graph readback matched all **14 memberships** and **22 direct-role
+assignment tuples**; the assignment id may change when recreated. All **24 non-secret named
+values** matched. The restoration apply succeeded at **01:25:33Z**, followed by a newly issued
+Admin token and `/auth/me` reporting Owner with unrestricted scope. Only the server-owned
+catalog `updated_at` changed; the raw response is therefore not byte-identical.
+
+No budgets, tiers, application permissions, consent or role definitions were changed.
+This proves a live **unit manager** read journey and protected-route refusals, not a
+team-only account, Viewer session or live budget-write journey. An earlier retry safely
+restored after encountering cached tokens; changing scope spelling alone was not sufficient.
 
 ### Sign in before the tenant grants consent
 

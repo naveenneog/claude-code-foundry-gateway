@@ -264,12 +264,12 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       owner; admins sign in as Owner, viewers and managers read-only, developers never; a browser
       sign-in through the Azure CLI that needs no consent. Run live: the link opened a session in
       13.4 s, and the same link again returned 401. [ADR-0016](adr/0016-delegated-management.md)
-- [ ] P46 delegated management, phase 2 — acceptance: a manager sees and manages only the units
-      and teams whose manager group is in their token (done in the fork, `c0c345a`); allocation
-      within their own headroom (done); per unit or team, the admin's enforcement mode: strict,
-      allowance or notify, enforced by the gateway (done, live-tested and restored 2026-09-24,
-      [ADR-0019](adr/0019-budget-enforcement-modes.md)), with a guard that rechecks Turnstile's
-      revisions before an apply writes. Open: the manager-only live sign-in (P53)
+- [x] P46 delegated management, phase 2 — a manager sees and manages only the units and teams
+      whose manager group is in their token (fork `c0c345a`), proven live with a manager-only
+      token on 2026-09-25 (P53); allocation within their own headroom; per unit or team, the
+      admin's enforcement mode, strict, allowance or notify, enforced by the gateway, live-tested
+      and restored ([ADR-0019](adr/0019-budget-enforcement-modes.md)), with a guard that rechecks
+      Turnstile's revisions before an apply writes
 - [ ] P47 delegated management, phase 3 — acceptance: budget requests that go to the manager one
       level up, boosts with an expiry, escalation, notifications at the warning threshold.
       Delivered **for the AUM service** (P55): requests, approve, reject, escalate, and boosts
@@ -289,10 +289,11 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       owner's inbox. [ADR-0020](adr/0020-chargeback-reports.md), `docs/CHARGEBACK-REPORTS.md`.
       Follow-ups: a verified custom sender domain for broad delivery (an Azure-managed domain
       sends 10 an hour), team-level recipients, `aum report`, recipients from the Turnstile catalog
-- [ ] P53 Turnstile, tested and captured live — phase 1 done: every Turnstile picture recaptured
-      live with a provenance record, the consent-free sign-in, a tier change and a budget mode
-      made in the UI and read on the gateway, then restored. Open: phase 2, the manager-only
-      journey (**U21**), and viewer-only evidence
+- [x] P53 Turnstile, tested and captured live — every Turnstile picture recaptured live with a
+      provenance record; the consent-free sign-in, a tier change and a budget mode made in the UI
+      and read on the gateway, then restored; and the live manager-only journey (2026-09-25),
+      scoped to one unit, with admin routes refused and everything restored. Open: viewer-only
+      evidence
 - [x] P55 the AUM service — an optional authority independent of Turnstile: its own Entra app
       roles with consent-free tokens, scoped managers, audited conditional named-value writes,
       and P47's requests and boosts; discovery-first deployment with cost and implications, and a
