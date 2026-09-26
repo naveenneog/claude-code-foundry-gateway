@@ -655,7 +655,8 @@ if (-not $EntitlementStore) {
     else {
         $EntitlementStore = Select-ClaudeChoice -Parameter EntitlementStore -Question 'Entitlement store' -Options $storeOptions `
             -WhereToFind @('docs/SCALE.md: named-value ceiling', 'docs/SECURE-PROJECTION.md: projection deployment') `
-            -AmbiguousMessage 'Choose named-value or projection explicitly for unattended runs.'
+            -AmbiguousMessage 'Choose named-value or projection explicitly for unattended runs.' `
+            -Interactive $true
     }
 }
 if ($Yes -and $EntitlementStore -eq 'projection' -and -not $DeployProjection) {

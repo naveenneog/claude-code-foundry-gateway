@@ -15,6 +15,7 @@ $secure = Get-Content (Join-Path $root 'tests\Test-SecureProjection.ps1') -Raw
 
 Assert 'installer has an entitlement store parameter' ($installer -match '\[ValidateSet\(''named-value'',''projection''\)\]\s*\[string\]\$EntitlementStore')
 Assert 'installer asks for the entitlement store as a choice' ($installer -match 'Select-ClaudeChoice' -and $installer -match 'Entitlement store')
+Assert 'installer chooser works under redirected wizard tests' ($installer -match 'Select-ClaudeChoice[\s\S]+-Interactive \$true')
 Assert 'named values state the measured ceiling' ($installer -match '93 developer' -and $installer -match '110')
 Assert 'projection choice is costed at the operator count' ($installer -match 'Measure-ClaudeProjectionCost\.ps1' -and $installer -match '-Developers \$devCount')
 Assert 'BasicV2 projection selects the public resolver shape' ($installer -match "'BasicV2'\s*\{\s*'public'")
