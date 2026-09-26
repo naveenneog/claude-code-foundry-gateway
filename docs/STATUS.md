@@ -1,6 +1,6 @@
 # Status
 
-**Active packets:** P52 AUM, P59 exact dollar budgets at the gateway, P60 Claude Desktop sign-in chosen by the admin, and P61 the Cosmos entitlement store on every v2 tier, including Basic v2 ([below](#portal-pictures-recaptured-live-and-the-test-environments-removed-2026-09-25)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets:** P60 Claude Desktop sign-in chosen by the admin, P61 the Cosmos entitlement store on every v2 tier, including Basic v2 ([below](#portal-pictures-recaptured-live-and-the-test-environments-removed-2026-09-25)), P62 dollar budgets in AUM, and P64 adding and removing developers from AUM by email ([ROADMAP](ROADMAP.md)). P59, dollar budgets at the gateway, merged on 2026-09-26 ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)). P52, AUM, merged on 2026-09-26 ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P46 acceptance criteria — managers scoped, and budget modes
 
@@ -40,6 +40,75 @@ this time, because manager attributes do not reach the gateway, but budget modes
 against stale runs is being added with the modes, and a single queue-driven writer (P48) is the
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
+
+## P59 dollar budgets at the gateway, merged 2026-09-26
+
+A budget can now be set in dollars and enforced from priced categories instead of one blended
+token figure. Definitions are decimal strings with a pinned price-book date, stored in two named
+values (`usd-budgets`, `usd-budget-state`) beside the token guards. A reconciler prices each
+scope's observed input, output, cache-read, 5-minute and 1-hour cache-write tokens with Decimal,
+refuses unpriced models rather than counting them as $0, and publishes expiring scoped stops:
+strict stops at the amount, allowance above its percentage, notify never blocks and adds
+`x-claude-usd-budget-notice`. The gateway's refusal is a distinct 403 `usd_budget_exceeded`
+naming the scope, amounts, observed spend and reconciliation time; enforced state older than 15
+minutes gives 503 `usd_budget_state_stale`. It runs on demand (`Sync-ClaudeUsdBudgets.ps1`) or
+on the AUM service's five-minute timer, and the AUM service has the dollar routes
+([client contract](aum-usd-budgets-client-contract.md)). [ADR-0026](adr/0026-usd-budget-reconciliation.md),
+[BUDGETS.md](BUDGETS.md).
+
+**Measured live on 2026-09-25** on an isolated Basic v2 gateway: a $0.02 unit budget; 65 input,
+264 output, 12,492 cache-read and 12,492 five-minute cache-write tokens priced at $0.0364984;
+the next request returned 403 `usd_budget_exceeded` 175.9 s after the crossing request
+completed (146.3 s of it waiting for the categories to arrive in the logs); raised to $0.50 and
+reconciled, the next request returned 200. The estate was removed, its gateway purged and its
+role grants deleted.
+
+What it is not: a hard invoice cap. Enforcement trails usage by log ingestion (Azure documents
+resource logs as usually available within 3 to 10 minutes, [data ingestion time](https://learn.microsoft.com/azure/azure-monitor/logs/data-ingestion-time))
+plus the reconcile interval, and streaming responses do not expose cache-creation detail without
+buffering the stream (**U13**, narrowed). Dollar writes go through the shared authority guard
+(`-Write UsdBudgets`), so they refuse while Turnstile owns budgets or governance. The AUM terminal
+client cannot manage dollar budgets yet: P62. Branch `usd-budgets` at `a046aae`, its own gate
+PASS with 66 of 66 checks and no skips, merged as `254b27d`; the in-flight merge the previous agent
+left was finished with 512 of 512 business-unit mutations caught.
+
+## P52 AUM (Azure Usage Management), merged 2026-09-26
+
+`claude-finops` is now `aum`; the old command still starts it. One engine behind a terminal
+dashboard and scriptable commands, backed by Turnstile, the gateway directly, the AUM service or
+example data, so it does not depend on Turnstile. Guide: [AUM.md](AUM.md); the earlier guide
+stays at [CLI-FINOPS.md](CLI-FINOPS.md); decisions in [ADR-0018](adr/0018-terminal-finops.md).
+
+It adds an executive overview, budgets by unit, team and person, gateway governance (groups,
+tiers, modes), usage breakdown and trends, a request trace, anomalies, reports through P50's
+generator, and settings. Entra groups can be found, created, given members and deleted, each
+previewed first; `governance refresh-membership` rebuilds `bu-members` with the repository's
+serializer; `requests probe` and a bounded usage-only `usage refresh` are preview-first. Clients
+for approvals, boosts, notifications, conditional catalog and tier writes, anomaly dispositions,
+request paging past 200 and global search are built and stay hidden until a server advertises
+them in `/api/v1/finops/capabilities`.
+
+**Measured live on 2026-09-25**, with the owner's existing rights, through Direct and through
+Turnstile: two test Entra groups created, the owner added, a unit and a team registered,
+budgets and the strict, allowance and notify modes set, and three tiny real Claude requests per
+mode. Strict refused with 403 naming the team; allowance (10%) and notify served 200 with
+`x-claude-budget-notice`. From save to the confirming response, as upper bounds including the
+probe: Direct 8.0-26.5 s, Turnstile 130.6-157.1 s (its apply job). The attributed requests
+appeared in Direct within 321 s, and in Turnstile after a bounded usage-only export. Then
+everything was restored: 13 named values byte-identical to the originals, the 14 direct
+memberships equal, both groups deleted, no test catalog entries, rechecked after the gate.
+
+Tests: 297 Python tests pass, and the existing 108 mode and freshness mutations are all caught;
+150 live, redacted terminal captures and 10 portal pictures, each with a manifest record.
+
+Not done, and why: a mutation journey through the AUM service (P55's deployment was removed
+after its own live journeys: `ResourceGroupNotFound`); exact limiter-counter continuity across a
+mode change (the parent's remaining count read 99,968 in every mode, so it is not claimed); and
+full-directory scale (**U20**). Council, from the branch: Architect, Coder, UX and Security PASS;
+QA blocked on the README's missing `docs/AUM.md` link and the service journey. The branch's last
+gate (`de793ae`: 57 PASS, 5 FAIL, 1 SKIP) failed only on that link, in Test-Scale and the four
+mutation shards that refuse its red baseline. The integration adds the link (the README is the
+lead's) and gives the worktree the service venv the SKIP lacked.
 
 ## The scripts refuse what Turnstile would overwrite, merged 2026-09-25
 

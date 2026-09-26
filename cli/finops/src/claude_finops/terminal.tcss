@@ -2,23 +2,49 @@ Screen {
     background: $background;
     color: $foreground;
 }
-#identity {
-    height: 2;
+#brand {
+    height: 1;
     padding: 0 1;
     background: $panel;
     color: $foreground;
+    text-style: bold;
 }
+#identity { height: 1; padding: 0 1; background: $surface; }
+#filter-chips { height: 1; padding: 0 1; color: $foreground; background: $surface; }
+#filter-chips:focus { text-style: bold reverse; }
+.wide-overview #brand { height: 5; }
+#quick-filter { display: none; height: 3; }
+Input > .input--placeholder { color: $foreground; }
 TabbedContent { height: 1fr; }
 TabPane { padding: 0 1; }
 DataTable { height: 1fr; }
+.titled-table { border: solid $secondary; border-title-color: $foreground; }
+.titled-table:focus { border: solid $accent; }
+.all-metrics { display: none; }
+.ascii .titled-table { border: ascii $secondary; }
+#note-overview { height: 1; }
+#dashboard { height: 1fr; }
+.dashboard-panel { border: solid $secondary; border-title-color: $foreground; padding: 0 1; color: $foreground; overflow: hidden; }
+.dashboard-panel:focus { border: solid $accent; background: $surface; }
+.ascii .dashboard-panel { border: ascii $secondary; }
+#dash-kpis { height: 4; }
+#dash-main { height: 1fr; }
+#dash-left { width: 2fr; }
+#dash-right { width: 1fr; min-width: 25; }
+#dash-trend, #dash-rank, #dash-risks, #dash-anomalies { height: 1fr; min-height: 4; }
 .context { height: 2; color: $foreground; }
 .toolbar { height: 3; }
 .toolbar Select { width: 25; }
 .toolbar Input { width: 1fr; }
 .toolbar Button { min-width: 8; width: 10; }
 .toolbar-note { width: 1fr; padding: 1 1; }
-#status { height: 1; padding: 0 1; color: $foreground; background: $surface; }
-Footer { height: 1; }
+#status { height: 2; padding: 0 1; color: $foreground; background: $surface; }
+#ask-answer { height: 1fr; }
+#table-ask { display: none; }
+#action-status { height: 5; overflow-y: auto; }
+.toolbar #settings-profile { width: 24; }
+.toolbar #settings-signout, .toolbar #settings-tour { width: 14; }
+#key-hints { height: 1; background: $panel; color: $foreground; padding: 0 1; }
 ModalScreen { align: center middle; background: $background 80%; }
 #detail-dialog, #lookup-dialog, #change-dialog, #month-dialog {
     width: 76;
@@ -39,6 +65,7 @@ ModalScreen { align: center middle; background: $background 80%; }
 #headroom { height: 2; }
 .buttons { height: 3; align: right middle; }
 .buttons Button { margin-left: 1; min-width: 12; }
+.request-difference { display: none; }
 #month-error { height: 2; color: $foreground; }
 .ascii #detail-dialog, .ascii #lookup-dialog, .ascii #change-dialog, .ascii #month-dialog {
     border: ascii $accent;

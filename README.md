@@ -144,6 +144,12 @@ Platform deployment needs a Foundry account eligible to deploy Claude, an APIM
 [Setup](docs/SETUP.md#1-prerequisites). Developers need the platform team's
 configuration and entitlement, not those administrator roles.
 
+**USD budgets:** dollar inputs now retain their approved amount and dated tariff,
+with an optional reconciler publishing gateway stops. This includes observed
+cache categories, not a hard invoice or complete streaming-cost guarantee.
+See [dollar budgets](docs/BUDGETS.md#dollar-budgets-what-is-enforced) and the
+[AUM client API contract](docs/aum-usd-budgets-client-contract.md).
+
 > ### ⚠️ The SKU matters more than anything else here
 > Anthropic token parsing requires Basic v2, Standard v2 or Premium v2.
 > Classic tiers can accept the policy but meter zero tokens. Private resolver
@@ -237,7 +243,7 @@ there; [Operations](docs/OPERATIONS.md) maps tasks to commands and portal paths.
 | [FinOps tools](docs/FINOPS-TOOLS.md) | Every FinOps tool side by side: sign-in for each person, end-to-end flows and the priced bill of materials |
 | [FinOps](docs/FINOPS.md) / [Monitoring](docs/MONITORING.md) | Monthly close, ledger, workbooks, alerts and gaps |
 | [Chargeback reports](docs/CHARGEBACK-REPORTS.md) | Generate monthly business-unit reports, configure recipients and schedule private ACS email delivery |
-| [AUM (Azure Usage Management)](docs/CLI-FINOPS.md) | Terminal FinOps console, reports and preview-before-apply commands |
+| [AUM - Azure Usage Management](docs/AUM.md) ([legacy guide](docs/CLI-FINOPS.md)) | `aum`: live usage, budgets and governance in a keyboard-first dashboard and scriptable commands, with safe previews and redacted live screenshots |
 | [AUM service](docs/AUM-SERVICE.md) | Optional authority independent of Turnstile: viewers, scoped managers, budget requests and boosts |
 | [Turnstile](docs/TURNSTILE.md) | Optional console, roles, governance authority and apply jobs |
 | [Models](docs/MODELS.md) / [Plugins](docs/PLUGINS.md) | Model lifecycle and client capability policy |

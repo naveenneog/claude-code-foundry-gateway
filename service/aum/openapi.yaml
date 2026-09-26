@@ -1,14 +1,15 @@
 openapi: 3.0.3
 info:
   title: AUM service
-  version: 1.0.3
+  version: 1.1.0
   description: |
     Optional Azure Usage Management authority; no Turnstile dependency.
     All paths require a delegated Entra v2 bearer token for this app with
     AUM.Access and AUM.Admin, AUM.Viewer or AUM.Manager. Precedence is
     Admin > Viewer > Manager. Missing/overage groups grant no managed scope.
-    Budgets are gateway tokens, not dollars. Units/teams are monthly; people
-    are daily. Costs are estimates, never an invoice guarantee.
+    Existing budgets are gateway tokens. Additive usd-budgets persist decimal
+    dollars and a dated tariff; delayed observed-category enforcement is not
+    an invoice or complete streaming-cost guarantee.
     Every mutation requires a reason and is audited. Budget/configuration
     mutations require If-Match with the revision from a fresh GET /budgets.
 servers:
@@ -16,6 +17,92 @@ servers:
 security:
   - bearer: []
 paths:
+  /api/v1/usd-budgets:
+    get:
+      operationId: usdBudgets
+      responses:
+        '200':
+          description: Scoped USD definitions, currency USD, price_book_date, revision and writable items. Money is decimal text.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schema_version: {type: integer, enum: [1]}
+                  currency: {type: string, enum: [USD]}
+                  revision: {type: string}
+                  price_book_date: {type: string, nullable: true}
+                  items: {type: array, items: {$ref: '#/components/schemas/UsdBudget'}}
+  /api/v1/usd-budgets/{scope_type}/{scope_id}:
+    parameters:
+      - {$ref: '#/components/parameters/ScopeType'}
+      - {$ref: '#/components/parameters/ScopeId'}
+    put:
+      operationId: setUsdBudget
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/UsdBudgetWrite'}}}
+      responses:
+        '200': {description: Audited selected-scope result and new revision. Await reconciliation before claiming enforcement.}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Other authority, stale revision, missing installation/book, capacity or insufficient USD headroom.}
+    delete:
+      operationId: clearUsdBudget
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/Reason'}}}
+      responses:
+        '200': {description: Selected USD control cleared; token controls remain.}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/usd-price-book:
+    get:
+      operationId: usdPriceBook
+      responses:
+        '200': {description: The stored price_book and configuration revision; null book until initialized.}
+    put:
+      operationId: setUsdPriceBook
+      parameters: [{$ref: '#/components/parameters/IfMatch'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason, price_book]
+              properties:
+                reason: {type: string, minLength: 1, maxLength: 500}
+                price_book: {$ref: '#/components/schemas/UsdPriceBook'}
+      responses:
+        '200': {description: Admin-only dated tariff initialized or idempotently retained.}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Active budgets pin their tariff; explicit clearing is required before replacement.}
+  /api/v1/usd-budget-status:
+    get:
+      operationId: usdBudgetStatus
+      responses:
+        '200':
+          description: |
+            Scope-filtered expanded decisions, enabled/fresh flags, 300-second
+            interval, 900-second state lifetime, reconciled_at/valid_until,
+            source_revision/policy_revision and items keyed by scope_type:scope_id.
+            Each item has nominal/effective budget_usd, nullable spent_usd,
+            UTC period_start/period_end, status allow/notice/stop/unpriced,
+            enforcement, exact/cache_read_known/cache_write_known and unpriced_models.
+            Exact describes observed category arithmetic, never complete ingestion or invoice accuracy.
+  /api/v1/usd-budget-reconcile:
+    post:
+      operationId: reconcileUsdBudgets
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, additionalProperties: false}}}
+      responses:
+        '200': {description: Admin-only on-demand result from the same leased/audited engine as the five-minute timer.}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {description: Another authority/writer or configuration change; no stale snapshot is applied.}
+        '503': {description: Telemetry or Azure unavailable; previous snapshot is retained until expiry.}
   /api/v1/me:
     get:
       operationId: me
@@ -376,6 +463,45 @@ components:
       description: Audited outcome; includes audit_id, revision and result. Do not retry a write automatically.
       content: {application/json: {schema: {type: object}}}
   schemas:
+    UsdAmount:
+      type: string
+      pattern: '^[0-9]{1,12}(\.[0-9]{1,9})?$'
+      description: Exact nonnegative USD decimal text; zero is a zero-dollar limit, not unlimited.
+    UsdBudget:
+      type: object
+      properties:
+        scope_type: {type: string, enum: [organization, department, user]}
+        scope_id: {type: string}
+        amount_usd: {$ref: '#/components/schemas/UsdAmount'}
+        period: {type: string, enum: [day, month]}
+        price_book_date: {type: string, format: date}
+        writable: {type: boolean}
+    UsdBudgetWrite:
+      type: object
+      additionalProperties: false
+      required: [amount_usd, period, price_book_date, reason]
+      properties:
+        amount_usd: {$ref: '#/components/schemas/UsdAmount'}
+        period: {type: string, enum: [day, month], description: Units and teams must use month.}
+        price_book_date: {type: string, format: date}
+        reason: {type: string, minLength: 1, maxLength: 500}
+    UsdPriceBook:
+      type: object
+      required: [date, models]
+      properties:
+        date: {type: string, format: date}
+        source: {type: string}
+        models:
+          type: object
+          additionalProperties:
+            type: object
+            required: [inputPerM, outputPerM]
+            properties:
+              inputPerM: {$ref: '#/components/schemas/UsdAmount'}
+              outputPerM: {$ref: '#/components/schemas/UsdAmount'}
+              cacheReadPerM: {$ref: '#/components/schemas/UsdAmount'}
+              cacheWrite5mPerM: {$ref: '#/components/schemas/UsdAmount'}
+              cacheWrite1hPerM: {$ref: '#/components/schemas/UsdAmount'}
     Error:
       type: object
       required: [error]

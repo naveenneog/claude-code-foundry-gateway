@@ -12,19 +12,20 @@ Releases are tagged in git. `docs/ROADMAP.md` holds the forward plan and
 Business-unit chargeback. Budgets are set and reported in dollars, but three
 limits apply to every figure here and are repeated in each command's output.
 
-The counter is blind to cached tokens: `llm-token-limit` "currently counts
+The token counter is blind to cached tokens: `llm-token-limit` "currently counts
 prompt and completion tokens only", and on thirty days of live usage cache reads
 were 6.8M tokens against 320K prompt and 152K completion — 38.7% of real cost
-weight at Claude's published rates. Budgets therefore bound less spend than they
-appear to, always in the direction of under-counting.
+weight at Claude's published rates. Token budgets therefore bound less spend than
+they appear to, always in the direction of under-counting.
 
 Dollar figures are list price and do not reconcile to an Azure invoice, because
 Azure bills Claude as one aggregated Claude Consumption Unit meter and
 private-offer discounts apply before that conversion. **U2**.
 
-A budget is enforced as one blended token figure converted at write time,
-assuming a 20% output mix. That is what P21's acceptance criterion calls
-insufficient, so P21 stays open. Categorised enforcement is **U13**.
+A token budget is still enforced as one blended token figure converted at write
+time, assuming a 20% output mix. Dollar budgets (P59, below) are enforced from
+priced categories, including cache reads and writes, after each reconciliation;
+exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
@@ -35,8 +36,23 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   `scripts/Deploy-ClaudeProjection.ps1` deploys private Cosmos, projection networking and
   the resolver, populates from Entra, compares against the named-value decisions and flips
   only after a clean comparison. `Measure-ClaudeProjectionCost.ps1 -P61Scenarios` prints
-  the 100/500 developer cost rows.
-- **Governance authored in Turnstile, applied to the gateway on save.** With
+  the 100/500 developer cost rows.- **Dollar budgets enforced from priced token categories (P59).** A unit, team or person budget
+  can be set in dollars with a pinned price book; a reconciler prices observed input, output,
+  cache-read and both cache-write tokens with Decimal, refuses unpriced models rather than
+  treating them as free, and writes compact reconciler state back to the gateway. Strict stops at
+  nominal spend, allowance stops only above effective spend, notify never blocks its own scope,
+  and stale state fails closed for enforcing modes. `Sync-ClaudeUsdBudgets.ps1` runs it on demand;
+  the optional AUM timer can run it every five minutes. The gateway emits known nonstream usage
+  categories only, and the docs state the remaining streaming/cache limits. Live proof used an
+  isolated Basic v2 gateway, then removed the temporary Foundry role, custom role, workspaces,
+  group and purged APIM. [ADR-0026](docs/adr/0026-usd-budget-reconciliation.md).
+- **AUM as a production FinOps terminal and service client.** `Invoke-ClaudeFinOps.ps1` can open
+  `aum`, a Python Textual console for Turnstile or Direct Azure with capability-aware navigation,
+  saved preferences, dashboards, delegated management, budget editing, request drilldowns, reports,
+  redacted portal evidence and optional AUM service endpoints. Direct Azure live E2E created its own
+  owned test groups, budgets and all three modes enforced on real requests (strict 403, allowance
+  and notify 200 with a notice), then 13 named values restored byte for byte. Clients for server
+  features that do not exist yet stay hidden until a server advertises them. `docs/AUM.md`.- **Governance authored in Turnstile, applied to the gateway on save.** With
   `Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Turnstile`, business units, teams, their Entra
   groups, budgets and tier limits are edited on Turnstile's pages, and each save starts the
   gateway's apply job, a manually triggered Container Apps job beside the hourly one. Measured: a
@@ -1310,3 +1326,4 @@ Initial release.
 [1.2.0]: https://github.com/naveenneog/claude-code-foundry-gateway/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/naveenneog/claude-code-foundry-gateway/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/naveenneog/claude-code-foundry-gateway/releases/tag/v1.0.0
+

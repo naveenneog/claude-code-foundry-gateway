@@ -107,7 +107,7 @@ try {
     Assert 'a passing full offline registration passes' ($r.Exit -eq 0) "exit $($r.Exit): $($r.Output.Substring(0, [math]::Min(350, $r.Output.Length)))"
     Assert 'every registered check is summarized once in registration order' (Has-CompleteSummary $r $registered)
     Assert 'every non-skipped check runs in its own process' ($r.Ran.Count -eq $expectedRan -and @($r.Ran.Pid | Sort-Object -Unique).Count -eq $expectedRan) "$($r.Ran.Count) of $expectedRan"
-    $expectedSkips = @('AUM service - authority, API and mutations', 'Terminal FinOps - commands, rules and pilot')
+    $expectedSkips = @('AUM service - authority, API and mutations', 'AUM - commands, dashboard and pilot')
     Assert 'both optional Python environments are explicit counted SKIPs' (
         $skipped.Count -eq $expectedSkips.Count -and
         ($skipped.Name -join '|') -ceq ($expectedSkips -join '|') -and

@@ -3,9 +3,9 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "claude-finops"
-version = "0.1.0"
-description = "Keyboard-first FinOps for Claude on Microsoft Foundry"
+name = "azure-usage-management"
+version = "0.2.0"
+description = "AUM - Azure Usage Management, keyboard-first governance and usage"
 requires-python = ">=3.12"
 dependencies = ["httpx>=0.28,<1", "textual>=1,<7", "typer>=0.15,<1"]
 
@@ -13,7 +13,8 @@ dependencies = ["httpx>=0.28,<1", "textual>=1,<7", "typer>=0.15,<1"]
 test = ["pytest>=8,<10", "pytest-asyncio>=0.25,<2"]
 
 [project.scripts]
-claude-finops = "claude_finops.cli:main"
+aum = "claude_finops.cli:main"
+claude-finops = "claude_finops.cli:legacy_main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -24,4 +25,3 @@ claude_finops = ["*.tcss", "*.json"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-

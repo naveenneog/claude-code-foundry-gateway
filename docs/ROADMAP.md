@@ -203,15 +203,17 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       cannot rewrite history; UTC periods; an append-only ledger where corrections are new rows; and
       "soft cap" stated to mean approximate blocking rather than warn-only. The implementation was
       moved from `[double]` to `[decimal]` to match. **U2** still blocks actual-cost chargeback
-- [ ] P21 dollar budgets per business unit — acceptance: spend computed from categorised usage, not
+- [x] P21 dollar budgets per business unit — acceptance: spend computed from categorised usage, not
       a single token total. Output is five times input and a cache read is a tenth of it, so one
       counter cannot represent money.
-      **Partly shipped, and the gap is the acceptance criterion.** The admin surface takes dollars
-      and `Get-ClaudeBusinessUnit` reports categorised spend from the ledger, but enforcement
-      converts dollars to one blended token figure at write time and runs a single
-      `llm-token-limit`. Measured on thirty days of live usage, that counter is blind to 38.7% of
-      real cost weight because it counts prompt and completion only. Closing this needs categorised
-      enforcement, which APIM cannot express today — see **U13**
+      **Delivered by P59 (merged 2026-09-26).** Dollar definitions with a pinned price book; a
+      Decimal reconciler that prices input, output, cache-read and both cache-write categories and
+      refuses unpriced models; scoped gateway stops in the strict, allowance and notify modes, a
+      distinct 403 and a 503 on stale state; measured live on an isolated Basic v2 gateway.
+      [ADR-0026](adr/0026-usd-budget-reconciliation.md), `docs/BUDGETS.md`. Enforcement trails usage
+      by log ingestion and the reconcile interval; it is not a hard invoice cap. Open: streaming
+      cache-creation detail without buffering the stream (**U13**), invoice parity (**U2**), dollar
+      budgets in the AUM terminal (P62)
 - [x] P22 business-unit soft cap — a unit that exhausts its budget is refused with a fourth, distinct
       `403` naming the unit, others are unaffected, and an unpriced unit is skipped rather than
       walled off
@@ -334,6 +336,15 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       Follow-ups: saved views, comparison charts and in-terminal profiles; a request cursor (the
       API stops at 200); conditional catalog and tier writes; P47's requests and boosts; a live
       scoped-manager journey (**U20**)
+- [x] P52 AUM (Azure Usage Management) — `claude-finops` renamed `aum` (the old command still
+      works): one engine behind a dashboard and scriptable commands, backed by Turnstile, the
+      gateway directly, the AUM service or example data, so it does not need Turnstile. Owned
+      Entra groups, budgets and all three modes enforced on real requests, then a byte-exact
+      restore, measured live through Direct and Turnstile on 2026-09-25. `docs/AUM.md`,
+      [ADR-0018](adr/0018-terminal-finops.md). Open: a mutation journey through a deployed AUM
+      service; the server endpoints for approvals, boosts, notifications, conditional writes,
+      anomaly dispositions, request paging and global search (clients built and hidden until
+      advertised); full-directory scale (**U20**)
 - [x] P56 a parallel test suite — `tests/Test-All.ps1` runs checks in separate `pwsh` processes,
       at most four at a time, with an exclusive lane for checks that share Azure CLI state or scan
       the whole tree, logs printed in registration order, one result slot per registration, a
@@ -357,6 +368,24 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       the cost at 100 and 500 developers stated; one command deploys, populates from Entra,
       compares against the lists and flips only after a clean comparison; proven live on an
       isolated Basic v2 gateway and removed
+- [ ] P62 dollar budgets in AUM — acceptance: AUM lists, sets, raises and clears dollar budgets
+      and shows reconciled spend with its completeness flags, through the AUM service's contract
+      (`docs/aum-usd-budgets-client-contract.md`) and the Direct backend's shared USD writer,
+      refused while Turnstile owns budgets; proven live through AUM on an isolated gateway (a stop,
+      then a raise that lifts it)
+- [ ] P63 split the five files over the size budget — the gate's `quality.filesize` warning:
+      `tests/Test-BusinessUnitsNegative.ps1` (3,208 lines, budget 800),
+      `tests/Test-AdminSurface.ps1` (1,348), `Install-ClaudeGateway.ps1` (1,254, budget 700),
+      `scripts/Test-FoundryDirect.ps1` (942) and `scripts/Setup-ClaudeFoundryDirect.ps1` (866);
+      split by responsibility, with every assertion and mutation kept
+- [ ] P64 add and remove developers from AUM by email — acceptance: AUM searches the whole Entra
+      directory while an administrator types an email, UPN or name (guests included), adds a
+      person to a discovered tier group and optionally a unit or team group, removes them from
+      every tier and unit group, publishes to the gateway, and uses only the administrator's own
+      rights; `Set-ClaudeDeveloper.ps1` discovers the tier groups instead of fixed names; proven
+      live on an isolated gateway (200 after adding, refused after removal). Turnstile does not
+      change Entra membership: that needs a Microsoft Graph permission only a tenant
+      administrator can grant (**U17**, **U19**)
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so

@@ -1,0 +1,65 @@
+Skip to main content
+Microsoft Azure (Preview)
+Report a bug
+Copilot
+admin@contoso.com
+CONTOSO DIRECTORY
+Home
+Contoso test security group
+Group
+Overview
+Diagnose and solve problems
+Manage
+Activity
+Help
+Selected
+Add or remove favorites by pressing Ctrl+Shift+F
+Microsoft Azure portal is loading.
+Microsoft Azure portal is ready.
+Content is loading.
+Content is ready.
+Content is ready.
+
+
+Delete
+
+Got feedback?
+Overview
+Basic information
+
+A
+
+Contoso test security group
+
+AUM temporary E2E acceptance group; delete after test
+Membership type
+Assigned
+Source
+Cloud
+Type
+Security
+Object ID
+contoso-group-11e7503c
+
+Created on
+9/25/2026, 2:06 PM
+Total direct members
+1
+User(s)
+1
+Group(s)
+0
+Device(s)
+0
+Other(s)
+0
+Feed
+Group memberships
+0
+View group memberships
+Owners
+1
+View group owners
+Total members
+1
+View group members

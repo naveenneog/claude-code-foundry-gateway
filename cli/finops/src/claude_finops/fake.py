@@ -5,6 +5,9 @@ from datetime import datetime, timezone
 
 from .backend import Backend
 from .errors import FinOpsError
+from .fake_features import FakeFeatures
+from .feature_routes import READ_ROUTES as FEATURE_READS, WRITE_ROUTES as FEATURE_WRITES
+from .rules import can_budget_write
 
 STAMP = "2026-09-24T12:00:00Z"
 
@@ -19,11 +22,14 @@ def budget(kind, key, name, parent, limit, used):
                 updated_at=STAMP, updated_by="admin@contoso.com")
 
 
-class FakeBackend(Backend):
+class FakeBackend(FakeFeatures, Backend):
     name = "Example"
 
-    def __init__(self, role="owner"):
+    def __init__(self, role="owner", features=None):
         self.role = role
+        self.actor_id = "contoso-admin"
+        self.features = features or {}
+        self.feature_store = {"requests": [], "boosts": [], "pinned_charts": [], "conversations": []}
         self.reads = []
         self.writes = []
         self.rows = [
@@ -51,8 +57,12 @@ class FakeBackend(Backend):
 
     def read(self, resource, **params):
         self.reads.append((resource, deepcopy(params)))
+        if resource == "capabilities":
+            return self.feature_capabilities(params.get("identity") or self.read("whoami"))
+        if resource in FEATURE_READS:
+            return self.read_feature(resource, params)
         if resource == "whoami":
-            return dict(id="contoso-admin", email="admin@contoso.com", name="Contoso administrator",
+            return dict(id=self.actor_id, email="admin@contoso.com", name="Contoso administrator",
                         role=self.role, method="entra", managed_units=[] if self.role == "owner" else ["sales"])
         if resource == "budgets":
             return deepcopy(dict(period=params.get("month", "2026-09"), generated_at=STAMP, items=self.rows,
@@ -101,6 +111,17 @@ class FakeBackend(Backend):
                 if not result:
                     raise FinOpsError("Request not found. Check its identifier.", 5)
                 return result
+            for field in ("user_id", "model_id", "organization_id", "department_id", "runtime"):
+                if params.get(field):
+                    rows = [row for row in rows if row.get(field) == params[field]]
+            if self.features.get("request_cursor"):
+                cursor = params.get("cursor") or "0"
+                if not str(cursor).isdigit():
+                    raise FinOpsError("Invalid cursor.", 2)
+                offset, limit = int(cursor), params.get("limit", 50)
+                end = offset + limit
+                return dict(items=rows[offset:end], page={"next_cursor": str(end) if end < len(rows) else None,
+                                                         "has_more": end < len(rows)})
             return dict(items=rows[:params.get("limit", 50)], page={"next_cursor": None})
         if resource == "anomalies":
             return dict(items=[dict(id="contoso-finding-1", severity="warning", title="Token burn above baseline",
@@ -110,8 +131,13 @@ class FakeBackend(Backend):
         raise FinOpsError(f"Unknown example view: {resource}")
 
     def write(self, resource, body=None, **params):
+        if resource in FEATURE_WRITES:
+            return self.write_feature(resource, body, params)
         if self.role != "owner":
-            raise FinOpsError("Read-only role.", 4)
+            row = next((r for r in self.rows + self.people if r.get("scope_id") == params.get("scope_id")), {})
+            if not resource.startswith("budget") or not can_budget_write(
+                    self.read("whoami"), params.get("scope_type"), params.get("scope_id"), row.get("parent_scope_id")):
+                raise FinOpsError("Read-only role.", 4)
         self.writes.append((resource, deepcopy(params), deepcopy(body)))
         self.requested_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         if resource.startswith("budget"):
