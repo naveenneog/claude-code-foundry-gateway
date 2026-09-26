@@ -320,6 +320,15 @@ allows one Premium v2 activation per subscription every 60 minutes
   creates a two-day private CA and server certificate, imports the server PFX
   through Private Link with its managed identity, then deletes the working
   private keys. Only public trust material returns to the workstation.
+- A capture-only evaluation can deploy the installer's `infra/main.bicep`
+  directly into a new resource group when the full wizard would create Entra
+  groups outside the approved scope. What-if cannot compute a role-assignment
+  name that depends on a managed identity created in the same deployment; it
+  [short-circuits that resource][what-if]. The 2026-09-25 evaluation previewed
+  with `grantFoundryRole=false`, then granted **Cognitive Services User** on
+  the evaluation Foundry account once the gateway identity existed. APIM
+  backend health reads the backend's status endpoint only; it does not show a
+  model deployment, entitlement, budgets or streaming inference.
 - Approved IPAM space, DNS ownership and a change window for restricting an
   existing APIM. Do not select a production gateway for an experiment.
 
@@ -615,14 +624,11 @@ manual configuration below and the same verification contract.
 The following fields are the manual equivalent of the supplied modules, not
 instructions to paste unknown deployment IDs into a template.
 
-> **Portal evidence coverage:** the three images in this article are live
-> captures with deployment values redacted. The dedicated capture session
-> expired on 2026-09-24 at 18:47 UTC and capture stopped. They do not prove
-> every final edge/WAF blade. The terminal impact receipt above is separate
-> evidence, not a portal screenshot. Final portal captures are pending the
-> lead's central batch and an explicitly selected evaluation redeployment:
-> the original evaluation resources were removed. Do not capture the reference
-> gateway as a substitute or retry authentication from an expired profile.
+> **Portal evidence coverage:** [Portal pictures, captured live](#portal-pictures-captured-live)
+> has 24 pictures of the final edge, WAF, gateway, DNS, vault and Foundry blades, captured on
+> 2026-09-25 from a short-lived isolated estate that was removed afterwards. The three earlier
+> images in this article come from the 2026-09-24 evaluation. The terminal impact receipt above
+> is separate evidence, not a portal screenshot.
 
 | Step | Exact portal navigation and fields | CLI/module equivalent |
 |---|---|---|
@@ -660,6 +666,15 @@ Foundry account, built with the procedure above and removed afterwards. Each pic
 in `docs/guide/portal-captures.json`; names are replaced with Contoso values. The WAF policy ran
 in Detection, the documented first rollout step, so these pictures are not Prevention evidence.
 No model was deployed: backend health is real, inference through this estate was not repeated.
+
+The subscription reported `EnableApplicationGatewayNetworkIsolation` as `Unregistered`, and
+only resource-group writes were approved, so the estate used a public regional listener with
+private origins. A [private or hybrid listener][private-appgw] needs that feature registered
+first. The private vault's Certificates blade was reached through a loopback PAC file
+(`PORTAL_PROXY_PAC_URL`) that sent only the vault's hostname through a relay in the estate's
+private verifier container. TLS stayed end to end, the vault stayed private, and the capture
+owner held [Key Vault Reader][kv-roles] (metadata only, no secret or key material) on that one
+vault. The assignment was removed with the estate.
 
 | Spec id | Manual blade to verify | Picture |
 |---|---|---|
@@ -1033,3 +1048,5 @@ evaluation.
 [scrubbing]: https://learn.microsoft.com/azure/web-application-firewall/ag/waf-sensitive-data-protection
 [frontdoor]: https://learn.microsoft.com/azure/frontdoor/standard-premium/how-to-enable-private-link-apim
 [ip-masking]: https://learn.microsoft.com/azure/azure-monitor/app/ip-collection
+[what-if]: https://learn.microsoft.com/azure/azure-resource-manager/bicep/deploy-what-if#short-circuiting
+[kv-roles]: https://learn.microsoft.com/azure/key-vault/general/rbac-guide#azure-built-in-roles-for-key-vault-data-plane-operations

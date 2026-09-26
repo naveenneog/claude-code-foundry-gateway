@@ -678,6 +678,13 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Fixed
 
+- **The first reviewed network edge deployment refused a VNet that did not exist yet.**
+  `New-ClaudeNetworkEdge.ps1` read the owned VNet before creating it; the lookup returned
+  nothing, and the extra-subnet guard counted that empty result as an unknown subnet, so a fresh
+  install stopped with "The owned VNet has additional subnets". The guard now runs only when the
+  VNet exists. Found by P54's isolated live estate on 2026-09-25; the regression test runs the
+  script's own deployment block offline for an absent VNet, the owned four-subnet layout, and an
+  extra subnet (still refused, with no deployment) on PowerShell 7 and 5.1.
 - **Four gaps a review found in the new capture redaction.** A tenant-name pair could turn a
   colleague's address into one on the placeholder domain, which the address rule then kept:
   addresses are now replaced before any pair. A real value that started inside a replacement and

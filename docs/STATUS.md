@@ -84,11 +84,13 @@ Found by doing it, and fixed test-first:
 Neither leak reached a commit: both were in uncommitted batch output, found on review, and
 every resource image was recaptured afterwards (63 steps, 13:51-14:14Z). Entra blades asked for
 step-up approval every few pages, so the resource and Entra steps now run as separate batches.
-Three Entra pictures were recaptured under the new rules; the owner's sign-in lapsed before the
-other nine. Seven of those were taken at 13:20-13:26Z under the earlier rules and are kept after
-a review of each (app registrations and properties: identifiers zeroed, no person shown). AUM's
-Users and groups picture showed the owner's initials beside his pseudonym and was dropped; it
-and Turnstile's assignments page wait for the next step-up.
+Six of the twelve Entra pictures were taken under the new rules: three at 14:24Z, and AUM's
+Expose an API, Manifest and Properties at 18:05Z from committed capture code (`310c6f8`). Four
+Turnstile registration pictures were taken at 13:24-13:26Z under the earlier rules and are kept
+after a review of each
+(identifiers zeroed, no person shown); Turnstile's assignments page is its older committed
+version. AUM's Users and groups picture showed the owner's initials beside his pseudonym and was
+dropped; it waits for the next step-up.
 
 Still pending, and why: 7 AUM Function and storage pictures target a service deployment that was
 removed after its live journeys; the documents keep them as inline pending paths. The 24 P54
@@ -99,7 +101,10 @@ into the network (`PORTAL_PROXY_PAC_URL`). Eleven steps first failed or captured
 deep links that no longer render, and click waits that matched the landing page (a non-exact
 `Port` matches **Report a bug**); each was fixed in the spec and every picture reviewed. The
 vault's Role assignments tab was deliberately not captured, because it lists inherited
-assignments that name other people.
+assignments that name other people. The estate was removed after the batch: its resource group
+read 404 at 18:19Z, and its gateway, Foundry account and vault were purged, with every recorded
+resource reading 404 by 18:26Z. Building it found one bug, fixed test-first in `ae267ea`: the
+first reviewed edge deployment refused a VNet that did not exist yet ([CHANGELOG](../CHANGELOG.md)).
 
 **Test environments removed.** The SKU tests (the Basic v2 test gateway, and the second test
 resource group with its Foundry account, deleted and purged at 10:06-10:19Z). The Premium v2
