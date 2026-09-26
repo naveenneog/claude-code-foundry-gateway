@@ -3,6 +3,34 @@
 This page is the short operator path for the first rollout. It links to the
 deep guides for details and does not replace them.
 
+## Recommended path - guided flow
+
+Run the guided flow from the repository root. It discovers the signed-in tenant,
+subscriptions, existing gateways, Foundry accounts, deployments and workspaces,
+asks every available module's questions once, prints one combined review and
+fingerprint, then applies only after the first eight fingerprint characters are
+typed or passed with `-ApprovedPlanFingerprint`.
+
+```powershell
+.\Start-ClaudeGateway.ps1 -Action Setup
+.\Start-ClaudeGateway.ps1 -Action Status
+.\Start-ClaudeGateway.ps1 -Action Guide
+```
+
+For an unattended apply, first review without writing:
+
+```powershell
+.\Start-ClaudeGateway.ps1 -Action Setup -PlanOnly
+.\Start-ClaudeGateway.ps1 -Action Setup -ApprovedPlanFingerprint <fingerprint>
+```
+
+The flow writes `onboarding/claude-gateway.json`, appends history after each
+completed step, resumes from the first incomplete step after a failure, and
+writes a tenant-specific `onboarding/HOW-TO-USE.md` guide that is git-ignored.
+If a module built on another branch is not present yet, it is listed as skipped
+instead of failing. The manual tracks below remain the fallback and deep
+reference. See [Guided flow](GUIDED-FLOW.md).
+
 | Person | Owns | Typical time | Added standing cost |
 |---|---|---:|---:|
 | Administrator | Gateway deployment, Entra groups, budgets, optional network edge and optional FinOps tool | 60-120 minutes for the first gateway, longer when network review or tenant approval is needed | API Management v2 starts around $150/month at list price; Log Analytics and Foundry usage are usage-based |

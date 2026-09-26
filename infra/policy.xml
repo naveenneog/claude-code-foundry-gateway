@@ -28,7 +28,7 @@
              explicit gateway API audience (access_token). That extra audience
              is accepted only when the installer recorded it. -->
         <choose>
-            <when condition="@(!string.IsNullOrWhiteSpace(&quot;{{external-idp-extra-audience}}&quot;))">
+            <when condition="@(!string.IsNullOrWhiteSpace(&quot;{{external-idp-extra-audience}}&quot;) &amp;&amp; &quot;{{external-idp-extra-audience}}&quot; != &quot;urn:disabled:claude-extra-audience&quot;)">
                 <validate-azure-ad-token
                     tenant-id="{{tenant-id}}"
                     output-token-variable-name="jwt"
