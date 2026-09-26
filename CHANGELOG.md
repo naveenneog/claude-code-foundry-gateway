@@ -32,6 +32,9 @@ exact streaming cache-creation detail remains **U13**.
 - Guided-flow FinOps modules for tool selection, USD/token budgets, monitoring workbooks
   and chargeback reports, including a scheduled USD reconciler job definition for
   deployments without the AUM service.
+- `Register-ClaudeUsdReconciler.ps1` and `infra/usd-reconciler-job.bicep` deploy
+  that no-AUM-service USD reconciler as a five-minute Container Apps scheduled job
+  with a pinned image/commit and least-privilege managed identity.
 - **Guided diagnostics (P66).** `scripts/Debug-ClaudeSetup.ps1` and
   `scripts/Debug-ClaudeWorkstation.ps1` run read-only administrator and developer
   checks with PASS/WARN/FAIL/SKIP evidence, exact fixes and redacted support

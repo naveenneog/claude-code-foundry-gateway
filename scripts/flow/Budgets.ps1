@@ -169,8 +169,12 @@ function Get-ClaudeFlowStepPlan {
                 $job = New-BudgetsFlowUsdReconcilerJobDefinition -GatewayResourceId $gatewayId -WorkspaceResourceId $workspaceId -RepositoryUrl $repo -RepositoryRef $commit
                 $data.reconcilerJob = $job
             }
+            $data.reconcilerCommand = [pscustomobject]@{
+                file = 'scripts\Register-ClaudeUsdReconciler.ps1'
+                arguments = @('-RepositoryRef', $commit, '-Cron', '*/5 * * * *')
+            }
             $costs.Add((New-ClaudeFlowCost -Item 'USD reconciler Container Apps job' -Source 'Azure Container Apps Consumption active seconds, managed identity; list price depends on region and run duration.' -UnknownReason 'Usage-based job execution and existing environment/network choices.'))
-            $implications.Add('The job uses managed identity with named-value write only on the gateway and Log Analytics Reader on the workspace.')
+            $implications.Add('Register-ClaudeUsdReconciler.ps1 deploys infra/usd-reconciler-job.bicep. The job uses managed identity with named-value write only on the gateway and Log Analytics Reader on the workspace.')
         } else {
             $costs.Add((New-ClaudeFlowCost -Item 'USD reconciliation' -Source 'No scheduler selected.' -UnknownReason 'Dollar enforcement cannot stay fresh without a timer or job.'))
         }

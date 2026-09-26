@@ -381,16 +381,18 @@
       "source": "docs/architecture/14-usd-budgets.json",
       "inputs": {
         "analytics/chargeback-ledger.kql": "3924ba7e4edb21d761b16254452c0509a2a9d27558033d7a980c5e201e22b2f5",
-        "docs/architecture/14-usd-budgets.json": "da188920693b518c59600b29fd837dca5e51c14128a1e6b48da1100915cd3369",
+        "docs/architecture/14-usd-budgets.json": "575fb8fb71cef9fee99088d91d0345d8154dad0c29717e1ad38fd6ea1a981ea8",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/main.bicep": "9f892ce1a44e7402e96148ec153a16bbd6de85ea41a8d573332fa629d7db7478",
         "infra/policy.xml": "4f25cc4bf62833c4e3cb88a5bbf070ee1de2e23248f4788a81b42a60d9e5c2bf",
+        "infra/usd-reconciler-job.bicep": "f5f7eb5f466444f05a4c5190bd7f4e007695c1d21cf73ec13e1f48f156df4612",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeUsdBudgets.ps1": "7435987f2cd90b8456e0f85e231c5d82d46f640c950e4d5966e5feae8f1d400d",
+        "scripts/Register-ClaudeUsdReconciler.ps1": "7fa0be77e7b84d4e195b3efe680b78982da5eab25958514ed3894b932493bd60",
         "scripts/Sync-ClaudeUsdBudgets.ps1": "f0d5c3d6d0fb2da6b06b75c38cfecad9773bdadb97803027645910696a1d3d5c",
-        "scripts/flow/Budgets.ps1": "3003e3a784d6990181bf25cc62e57949b4cfb57d0bf4c89aeaa124e0a93b5ba6",
+        "scripts/flow/Budgets.ps1": "5d935cc280e62870ffcbf7167fd78225f52271117c916c8736cd00a2b4c5864f",
         "service/aum/aum_service/usd_budgets.py": "fd87a036f01dd0fbc465e126c4db1e4e5cae281dedd35f69f31a1c0fe26e4a9e",
         "service/aum/aum_service/usd_reconcile.py": "bb2e075eea03dd65fd78473324f32b87cee0fadd508cfd233458f1befa7cbfd4",
         "service/aum/aum_service/usd_service.py": "f515fff6864ae8da0398d8c6c31e5f4446ac93ad1c1e11d95654fb3d367a4067",
@@ -399,7 +401,7 @@
       "outputs": [
         {
           "path": "docs/images/architecture/usd-budgets.png",
-          "sha256": "2c5b96416627a220b87f8122baf329b6550f798f50e9d06bac435d2fecee2ebd"
+          "sha256": "d5e7876c16dbc7b5b6c6937183f7442ff7677973ba5069b2e05b79ab1d48c508"
         }
       ]
     }

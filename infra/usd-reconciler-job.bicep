@@ -1,0 +1,204 @@
+@description('Deploys a five-minute USD budget reconciler job for gateways that do not use the AUM service.')
+param location string = resourceGroup().location
+
+@description('Existing gateway API Management resource ID.')
+param gatewayResourceId string
+
+@description('Existing Log Analytics workspace ARM resource ID.')
+param workspaceResourceId string
+
+@description('Log Analytics workspace customer ID used by the reconciler query API.')
+param workspaceCustomerId string
+
+@description('Public Git repository holding this accelerator.')
+param repositoryUrl string
+
+@description('Full commit ID to run; branches and tags are refused by the caller.')
+param repositoryRef string
+
+@description('Five-minute UTC cron for the scheduled reconciler.')
+param cronExpression string = '*/5 * * * *'
+
+@description('Container image. It provides Azure CLI and Python.')
+param image string = 'mcr.microsoft.com/azure-cli:2.90.0'
+
+@description('PowerShell version added at start for repository scripts if needed.')
+param powershellVersion string = '7.6.6'
+
+@description('Optional existing Container Apps environment. Empty creates a dedicated Consumption environment.')
+param existingEnvironmentId string = ''
+
+@description('Tags applied to owned resources.')
+param tags object = {}
+
+var suffix = take(uniqueString(resourceGroup().id, gatewayResourceId, workspaceResourceId, repositoryRef), 10)
+var gatewayName = last(split(gatewayResourceId, '/'))
+var workspaceName = last(split(workspaceResourceId, '/'))
+
+resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'id-usd-reconcile-${suffix}'
+  location: location
+  tags: tags
+}
+
+resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = if (empty(existingEnvironmentId)) {
+  name: 'cae-usd-reconcile-${suffix}'
+  location: location
+  tags: tags
+  properties: {
+    appLogsConfiguration: {
+      destination: 'azure-monitor'
+    }
+    workloadProfiles: [
+      {
+        name: 'Consumption'
+        workloadProfileType: 'Consumption'
+      }
+    ]
+  }
+}
+
+resource logs 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = if (empty(existingEnvironmentId)) {
+  name: 'usd-reconciler-console'
+  scope: environment
+  properties: {
+    workspaceId: workspaceResourceId
+    logs: [
+      {
+        categoryGroup: 'allLogs'
+        enabled: true
+      }
+    ]
+  }
+}
+
+resource gateway 'Microsoft.ApiManagement/service@2024-05-01' existing = {
+  name: gatewayName
+}
+
+resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
+  name: workspaceName
+}
+
+resource workspaceReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(workspaceResourceId, identity.id, 'usd-reconcile-workspace-reader')
+  scope: workspace
+  properties: {
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '73c42c96-874c-492b-b04d-ab87d138a893')
+  }
+}
+
+resource writerRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
+  name: guid(gatewayResourceId, 'usd-reconciler-writer')
+  properties: {
+    roleName: 'Claude USD reconciler writer ${suffix}'
+    type: 'CustomRole'
+    description: 'Reads and writes only APIM named values for the scheduled USD budget reconciler.'
+    assignableScopes: [
+      resourceGroup().id
+    ]
+    permissions: [
+      {
+        actions: [
+          'Microsoft.ApiManagement/service/read'
+          'Microsoft.ApiManagement/service/namedValues/read'
+          'Microsoft.ApiManagement/service/namedValues/write'
+          'Microsoft.ApiManagement/service/operationresults/read'
+        ]
+        notActions: []
+        dataActions: []
+        notDataActions: []
+      }
+    ]
+  }
+}
+
+resource gatewayWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(gateway.id, identity.id, 'usd-reconcile-named-values')
+  scope: gateway
+  properties: {
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: writerRole.id
+  }
+}
+
+var bootstrap = '''
+set -euo pipefail
+echo "usd reconciler: start $(date -u +%Y-%m-%dT%H:%M:%SZ), commit ${REPO_REF}"
+tdnf install -y git tar gzip libstdc++ >/dev/null 2>&1 || true
+mkdir -p /work /opt/pwsh
+cd /work
+curl -fsSL "https://github.com/PowerShell/PowerShell/releases/download/v${PWSH_VERSION}/powershell-${PWSH_VERSION}-linux-x64.tar.gz" -o pwsh.tgz
+tar -xzf pwsh.tgz -C /opt/pwsh && chmod +x /opt/pwsh/pwsh && rm pwsh.tgz
+git init -q && git fetch -q --depth 1 "${REPO_URL}" "${REPO_REF}" && git checkout -q FETCH_HEAD
+python -m pip install -q -r service/aum/requirements.txt
+az login --identity --client-id "${AZURE_CLIENT_ID}" --allow-no-subscriptions --output none
+PYTHONPATH=service/aum python -m aum_service.usd_command --gateway-id "${GATEWAY_ID}" --workspace-id "${WORKSPACE_ID}" --managed-identity
+'''
+
+resource job 'Microsoft.App/jobs@2024-03-01' = {
+  name: 'job-usd-reconcile-${suffix}'
+  location: location
+  tags: tags
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${identity.id}': {}
+    }
+  }
+  properties: {
+    environmentId: empty(existingEnvironmentId) ? environment.id : existingEnvironmentId
+    workloadProfileName: 'Consumption'
+    configuration: {
+      replicaTimeout: 1800
+      replicaRetryLimit: 0
+      triggerType: 'Schedule'
+      scheduleTriggerConfig: {
+        cronExpression: cronExpression
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
+    }
+    template: {
+      containers: [
+        {
+          name: 'usd-reconciler'
+          image: image
+          command: [
+            '/bin/bash'
+            '-c'
+            replace(bootstrap, '\r', '')
+          ]
+          resources: {
+            cpu: json('0.5')
+            memory: '1Gi'
+          }
+          env: [
+            { name: 'AZURE_CLIENT_ID', value: identity.properties.clientId }
+            { name: 'REPO_URL', value: repositoryUrl }
+            { name: 'REPO_REF', value: repositoryRef }
+            { name: 'PWSH_VERSION', value: powershellVersion }
+            { name: 'GATEWAY_ID', value: gatewayResourceId }
+            { name: 'WORKSPACE_ID', value: workspaceCustomerId }
+            { name: 'DOTNET_SYSTEM_GLOBALIZATION_INVARIANT', value: '1' }
+          ]
+        }
+      ]
+    }
+  }
+  dependsOn: [
+    gatewayWriter
+    workspaceReader
+  ]
+}
+
+output jobName string = job.name
+output environmentName string = empty(existingEnvironmentId) ? environment.name : last(split(existingEnvironmentId, '/'))
+output identityId string = identity.id
+output principalId string = identity.properties.principalId
+output clientId string = identity.properties.clientId
+output gatewayRoleDefinitionId string = writerRole.id
+output cronExpression string = cronExpression

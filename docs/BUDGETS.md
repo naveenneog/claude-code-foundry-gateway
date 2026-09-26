@@ -110,6 +110,50 @@ on the recorded workspace. It is still a delayed observed-cost stop: ingestion, 
 five-minute schedule, execution and APIM propagation all add overshoot, and it is not
 an invoice cap.
 
+### Scheduled reconciler without the AUM service
+
+Use this when FinOps is Direct AUM or scripts-only and you still want USD stops to
+stay fresh without a person running `Sync-ClaudeUsdBudgets.ps1`.
+
+```powershell
+.\scripts\Register-ClaudeUsdReconciler.ps1 `
+  -ResourceGroup $rg -ApimName $apim `
+  -RepositoryRef <full-commit-id-already-on-origin>
+```
+
+The script deploys `infra/usd-reconciler-job.bicep` beside the gateway. The template
+creates or reuses a Container Apps environment, a user-assigned managed identity, and
+one scheduled job with cron `*/5 * * * *` in UTC. The job starts from the tag-pinned
+`mcr.microsoft.com/azure-cli:2.90.0` image, fetches the public repository at the
+pinned commit, installs the AUM-service Python requirements, signs in with its
+managed identity, and runs the same Python engine as `Sync-ClaudeUsdBudgets.ps1`:
+`python -m aum_service.usd_command --managed-identity`.
+
+Permissions are deliberately narrow:
+
+- the custom **Claude USD reconciler writer** role is assigned on the selected gateway
+  resource and contains only APIM read, named-value read/write, and operation-result read;
+- **Log Analytics Reader** is assigned on the workspace that holds the gateway ledger;
+- no secrets, storage keys, connection strings or bearer tokens are passed in command
+  arguments.
+
+Portal verification path:
+
+1. Open **Container Apps jobs > job-usd-reconcile-* > Overview** and verify the
+   schedule is `*/5 * * * *`.
+2. Open **Identity** and verify the user-assigned identity.
+3. Open the identity's **Azure role assignments** and verify the gateway-scoped
+   custom role and workspace `Log Analytics Reader`.
+4. Open **Execution history**. A normal scheduled execution should show
+   **Succeeded**. Its logs are in the Container Apps environment's diagnostic
+   destination.
+5. In API Management > **Named values**, read `usd-budget-state`. A fresh
+   reconciliation updates `reconciled_at` and `valid_until`.
+
+This adds up to five minutes of schedule wait to the enforcement envelope, on top
+of Log Analytics ingestion, job execution and APIM named-value propagation. It is
+still an observed-cost stop, not a hard invoice cap.
+
 ### Refusals, modes and recovery
 
 - **Strict:** 403 `usd_budget_exceeded` at or above the nominal amount.
