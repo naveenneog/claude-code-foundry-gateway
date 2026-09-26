@@ -678,6 +678,11 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Changed
 
+- **AUM shows the owner's ASCII art on every tab.** The four-line art was in the code byte for byte
+  but appeared only at 120x38 or larger and only on Overview, so common terminals never showed it.
+  It is now the header on every tab at AUM's documented minimum of 80x24 or larger, with the
+  product name and the signed-in identity beside it; smaller terminals, `--plain`,
+  `--screen-reader`, `--json` and piped output keep the compact heading or none.
 - **Scripts ask for a value they were not given, and say where it comes from.**
   `scripts/ClaudeChoice.ps1` offers the options discovered in Azure, numbered, with the one the
   deployment points at recommended and the command and portal path to look it up; without a
@@ -725,6 +730,15 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **The Intune detection script in the MDM guide failed under Windows PowerShell 5.1.** It hashed
+  the policy with `SHA256.HashData` and `Convert.ToHexString`, which 5.1 does not have, so a
+  remediation would always report drift. It uses `ComputeHash` now, and `Test-DocReferences.ps1`
+  runs the block under `powershell.exe`.
+- **A half-resolved merge could commit conflict markers unnoticed.** A branch committed
+  `<<<<<<< HEAD` into this file and its gate passed; `Test-ReleaseLog.ps1` now refuses conflict
+  markers in the changelog and in every tracked text file.
+- **Removing a developer could switch off the empty-list guard for both tiers.** Caught in review
+  before merge (P64); the removal now allows an empty list only for a tier it is proven to empty.
 - **The first reviewed network edge deployment refused a VNet that did not exist yet.**
   `New-ClaudeNetworkEdge.ps1` read the owned VNet before creating it; the lookup returned
   nothing, and the extra-subnet guard counted that empty result as an unknown subnet, so a fresh

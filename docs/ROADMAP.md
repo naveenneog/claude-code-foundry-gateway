@@ -353,14 +353,18 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       proves the shards cover exactly the 476 and 108 mutations, in order. Three busy full runs:
       927.2, 830.6 and 790.0 s, against 1,829 s serially; the gate's command budget is back to
       1,800 s. [ADR-0025](adr/0025-parallel-test-suite.md)
-- [ ] P60 Claude Desktop sign-in, chosen by the admin — acceptance: the installer offers Desktop's
+- [x] P60 Claude Desktop sign-in, chosen by the admin — acceptance: the installer offers Desktop's
       credential kinds that work with this gateway (the Azure CLI credential helper, today's only
       option; Desktop's own sign-in through an Entra app registration, in the system browser or
       the Entra broker), each with what it needs (app registration, consent, Conditional Access,
       the audience the gateway must accept) and implies; the choice is recorded in
       `claude-gateway.json` and the developer scripts and MDM payloads write exactly the matching
       Desktop keys; a helper-script install is unchanged; the token path is proven live on an
-      isolated gateway
+      isolated gateway. **Merged 2026-09-26**: `desktopSignIn`, one validator/renderer for the
+      scripts and MDM, the gateway audience only through `external-idp-extra-audience`, and
+      `New-ClaudeDesktopEntraApp.ps1`; live: helper token 200, wrong audience 401.
+      [ADR-0027](adr/0027-claude-desktop-sign-in-choice.md). Open: Desktop's own sign-in end to
+      end, which needs tenant consent (**U23**); the app-registration portal pictures
 - [ ] P61 the Cosmos entitlement store as an installer choice, including Basic v2 — acceptance:
       for 100-500 developers, which named values cannot hold (about 93), the installer offers the
       projection by SKU: private on Standard v2 and Premium v2; on Basic v2 through a resolver with
@@ -378,14 +382,25 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       `tests/Test-AdminSurface.ps1` (1,348), `Install-ClaudeGateway.ps1` (1,254, budget 700),
       `scripts/Test-FoundryDirect.ps1` (942) and `scripts/Setup-ClaudeFoundryDirect.ps1` (866);
       split by responsibility, with every assertion and mutation kept
-- [ ] P64 add and remove developers from AUM by email — acceptance: AUM searches the whole Entra
+- [x] P64 add and remove developers from AUM by email — acceptance: AUM searches the whole Entra
       directory while an administrator types an email, UPN or name (guests included), adds a
       person to a discovered tier group and optionally a unit or team group, removes them from
       every tier and unit group, publishes to the gateway, and uses only the administrator's own
       rights; `Set-ClaudeDeveloper.ps1` discovers the tier groups instead of fixed names; proven
       live on an isolated gateway (200 after adding, refused after removal). Turnstile does not
       change Entra membership: that needs a Microsoft Graph permission only a tenant
-      administrator can grant (**U17**, **U19**)
+      administrator can grant (**U17**, **U19**). **Merged 2026-09-26**: live 200 after add, 403
+      after remove. [ADR-0029](adr/0029-aum-developer-membership.md). Open: full-email `$search`
+      behaviour (**U24**), publication on a projection-backed gateway (**U25**)
+- [x] P65 fleet deployment with Intune, Jamf or Group Policy — acceptance: step-by-step device
+      delivery of Claude Code, the VS Code extension and Claude Desktop (software, managed
+      settings including the Desktop sign-in choice, optional CA/proxy), per-tier profiles from
+      `New-ClaudeCodePolicy.ps1`, Intune on Windows and macOS with the portal path for each step,
+      Jamf Pro and Group Policy alternatives, device verification and troubleshooting.
+      **Merged 2026-09-26**: `docs/MDM.md`; the generated profile drove a real request through
+      the gateway; the Intune detection script runs under Windows PowerShell 5.1. Open: Intune
+      admin center pictures, which need an Intune administrator role this tenant does not grant
+      the owner
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so
