@@ -264,8 +264,8 @@
     {
       "image": "turnstile-entra-3-app-roles.png",
       "live": true,
-      "captured_at_utc": "2026-09-25T13:26:17.085Z",
-      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "captured_at_utc": "2026-09-26T17:37:18.359Z",
+      "accel_commit": "7e73bc06b067634a166dc745a01cf419eee56da4",
       "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
       "tool": "Playwright 1.62.1",
       "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/AppRoles/appId/00000000-0000-0000-0000-000000000000",
@@ -276,8 +276,7 @@
         "leak_check_passed": true,
         "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "a07b350ea777dec7a84fcffa4fe6c29516769ead1fe81c2ddeb99987b4fe6464",
-      "accel_dirty": true
+      "sha256": "a8e540180375f7a86d6c0b46eb5b697b5461289e0386b393ac2c0c51a023ff01"
     },
     {
       "image": "turnstile-manager-budgets.png",
@@ -529,8 +528,8 @@
     {
       "image": "turnstile-t08-entra-config.png",
       "live": true,
-      "captured_at_utc": "2026-09-25T13:26:33.159Z",
-      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "captured_at_utc": "2026-09-26T17:37:34.073Z",
+      "accel_commit": "7e73bc06b067634a166dc745a01cf419eee56da4",
       "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
       "tool": "Playwright 1.62.1",
       "route": "https://portal.azure.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Properties/objectId/00000000-0000-0000-0000-000000000000/appId/00000000-0000-0000-0000-000000000000",
@@ -541,24 +540,24 @@
         "leak_check_passed": true,
         "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "74b76235a7e26dac94db2de837380df0d128277c54cac7aa96baeb04607111a5",
-      "accel_dirty": true
+      "sha256": "74b76235a7e26dac94db2de837380df0d128277c54cac7aa96baeb04607111a5"
     },
     {
       "image": "turnstile-t09-entra-mutation.png",
       "live": true,
-      "captured_at_utc": "2026-09-24T17:19:30.300Z",
-      "accel_commit": "c7f0a29504bfa26ce98e2368e04915fc3af1e0d5",
+      "captured_at_utc": "2026-09-26T17:37:46.645Z",
+      "accel_commit": "7e73bc06b067634a166dc745a01cf419eee56da4",
       "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
       "tool": "Playwright 1.62.1",
-      "command": "node guide/capture-turnstile-manager.mjs --dry-run",
-      "identity_kind": "owner_cli",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Users/objectId/00000000-0000-0000-0000-000000000000/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "authenticated_portal_profile",
+      "surface": "turnstile-enterprise-assignments",
       "redaction": {
         "applied": true,
         "leak_check_passed": true,
-        "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; avatars hidden"
+        "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "6d902cc8d5528bf9365350852a79724f0e49731d18c91da357201274b743a07c"
+      "sha256": "857c8187aa7d50a4bfe97b84a5afb7132b2edbe3282ed3a0cd9d49b8b9f092f6"
     }
   ]
 }

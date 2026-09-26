@@ -297,8 +297,12 @@ after a review of each
 version. AUM's Users and groups picture showed the owner's initials beside his pseudonym and was
 dropped. **2026-09-26, 16:50Z:** with the owner's sign-in, AUM's Users and groups (the owner shown
 as Contoso Admin, initials hidden) and Turnstile's app Overview and Expose an API were recaptured
-from committed code (`c6517f0`); the next Entra blade asked for a fresh sign-in, so Turnstile's App
-roles, enterprise Properties and Assignments keep their reviewed earlier versions.
+from committed code (`c6517f0`). **17:37Z:** the capture profile was refreshed from the owner's Edge
+Work profile after he opened the remaining blades there, and Turnstile's App roles, enterprise
+Properties and Users and groups were recaptured from `7e73bc0` without a further sign-in prompt. All
+twelve Entra pictures are now taken under the current redaction rules; nine come from committed
+capture code, and three (14:24Z on 2026-09-25) from capture code that was committed unchanged in
+`1da331b` and are marked `accel_dirty`.
 
 Still pending, and why: 7 AUM Function and storage pictures target a service deployment that was
 removed after its live journeys; the documents keep them as inline pending paths. The 24 P54

@@ -787,14 +787,14 @@ Three layers, each measured.
 **Entra refuses the token.** With the admin group's assignment removed, Entra refused a token 5 s
 later with `AADSTS50105`, and issued one again 22 s after the assignment was restored:
 
-![The enterprise application's Properties blade, captured live in Azure portal](guide/turnstile-t08-entra-config.png)
+![The enterprise application's Properties blade: enabled for sign-in, Assignment required Yes, visible to users, identifiers zeroed](guide/turnstile-t08-entra-config.png)
 
-*Captured live from the reference deployment on 2026-09-24; names replaced.*
+*Captured live from the reference deployment; names replaced.*
 
-![Live Phase 2 preflight: current ownership and assignments, with no membership changes](guide/turnstile-t09-entra-mutation.png)
+![The enterprise application's Users and groups: the owner (Contoso Admin), the admin group and a user-assigned managed identity from the gateway's resource group hold Turnstile Admin; two test manager groups hold Turnstile manager](guide/turnstile-t09-entra-mutation.png)
 
-*Captured live from the reference deployment on 2026-09-24; names replaced. This is the
-dry run, not a fresh revocation experiment or a manager access proof.*
+*Captured live from the reference deployment on 2026-09-26; names replaced and the owner's initials
+hidden. It shows the current assignments; it is not a revocation experiment or a manager access proof.*
 
 **Turnstile checks the tenant and the role.** It accepts an Entra access token only when both
 `ENTRA_ADMIN_ROLE` and `ENTRA_TENANT_IDS` are set, only from a pinned tenant, and only with the
