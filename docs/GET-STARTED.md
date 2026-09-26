@@ -55,19 +55,36 @@ az login
 
 The installer discovers real Foundry accounts with Claude deployments, offers
 existing v2 API Management instances, asks for tier budgets, Entra group names,
-developer sign-in mode and gateway address choice, and prints the cost and
-implication of choices before writing.
+developer sign-in mode, `desktopSignIn` and gateway address choice, and prints
+the cost and implication of choices before writing. `helper-script` is the
+Desktop default and needs no new app registration. `external-idp-browser` and
+`external-idp-broker` need a Desktop public-client Entra app, tenant consent
+review, and a gateway audience recorded in `external-idp-extra-audience`; review
+that app first:
+
+```powershell
+.\scripts\New-ClaudeDesktopEntraApp.ps1 -DisplayName 'Claude Desktop gateway' -WhatIf
+.\scripts\New-ClaudeDesktopEntraApp.ps1 -DisplayName 'Claude Desktop gateway' -Broker -WhatIf
+```
 
 **Azure portal/manual path:** README > **Deploy to Azure** deploys the template,
 then Entra ID > Groups creates tier groups, APIM > Named values publishes
 membership and budgets, and the wizard is still needed to write the developer
-handover file. The full manual path is [Setup option C](SETUP.md#option-c--portal).
+handover file. For external-idp Desktop sign-in, use Microsoft Entra admin
+center > App registrations > New registration > Mobile and desktop applications;
+add `http://127.0.0.1/callback`, and add broker redirect URIs only for the
+broker flow. The full manual path is [Setup option C](SETUP.md#option-c--portal).
 
 **Success:** the script writes `onboarding/claude-gateway.json` and reports a
-verified deployment. **Screenshot:** no approved live capture in the allowed
-manifests shows the installer transcript; the existing installer images are not
-used here as approved live portal evidence. **If it fails:** use
-[Setup deploy](SETUP.md#3-deploy) and [Troubleshooting: deployment](TROUBLESHOOTING.md#deployment).
+verified deployment. The handover file includes the selected Desktop sign-in
+shape; with external-idp, the gateway named value accepts only the recorded
+Desktop audience. **Screenshot:** no approved live capture in the allowed
+manifests shows the installer transcript or P60 Desktop app blades. **If it
+fails:** use [Setup deploy](SETUP.md#3-deploy),
+[Desktop sign-in](../DEVELOPER.md#letting-desktop-do-the-sign-in-itself),
+[ADR-0027](adr/0027-claude-desktop-sign-in-choice.md) and
+[Troubleshooting: deployment](TROUBLESHOOTING.md#deployment). U23 tracks tenant
+consent behavior for external-idp.
 
 ### 3. Verify the gateway resource, tier and address
 
@@ -112,21 +129,30 @@ gateway identity the required access.
 **Command**
 
 ```powershell
+.\scripts\Set-ClaudeDeveloper.ps1 -User alice@contoso.com -Tier standard -Sync
+.\.venv-finops\Scripts\aum.exe developer find alice --limit 50
+.\.venv-finops\Scripts\aum.exe developer add alice@contoso.com --tier standard --unit platform --what-if
+.\.venv-finops\Scripts\aum.exe developer remove alice@contoso.com --what-if
 .\scripts\Sync-ClaudeAccess.ps1 -ApimName $apim -ResourceGroup $rg
 ```
 
 **Azure portal/manual path:** Microsoft Entra admin center > Groups > create or
 reuse assigned security groups for tiers, units and teams; APIM > Named values >
 `allow-standard`, `allow-premium` and `bu-members` shows what the gateway reads.
+AUM uses the signed-in administrator's delegated Graph rights to add or remove
+developers by email/UPN and then publishes the gateway. Turnstile remains a web
+FinOps authority and observer; it does not change Entra group membership.
 
 **Success:** the sync reports the resolved members and APIM named values contain
-the expected object IDs with premium precedence.
+the expected object IDs with premium precedence. AUM preview lists the exact tier
+and unit/team group writes before apply.
 
 ![Live API Management Named values list showing allow-standard, allow-premium, business-unit maps, model lists and quota values, with values redacted.](images/architecture-live/gateway-named-values.png)
 
 **If it fails:** use [Onboarding](ONBOARDING.md), especially
-[adding by hand](ONBOARDING.md#1a-add-a-developer-by-hand), and
-[Business units](BUSINESS-UNITS.md).
+[adding by hand](ONBOARDING.md#1a-add-a-developer-by-hand),
+[AUM developer add/remove](AUM.md#add-and-remove-developers),
+[ADR-0029](adr/0029-aum-developer-membership.md) and [Business units](BUSINESS-UNITS.md).
 
 ### 6. Set tiers, business units and budget modes
 
@@ -205,26 +231,34 @@ rollback. Apply only after the owner-approved `APPLY <fingerprint>` prompt.
 
 **If it fails:** use [Network troubleshooting](NETWORK-ENTERPRISE.md#troubleshoot).
 
-### 9. Choose optional FinOps tooling
+### 9. Prepare fleet deployment for managed devices
 
 **Command**
 
 ```powershell
-.\scripts\Select-ClaudeFinOpsTooling.ps1 -Region eastus2
+.\scripts\New-ClaudeCodePolicy.ps1 -ConfigPath .\onboarding\claude-gateway.json `
+  -Tier standard -OutputPath .\policy-claude-code-standard
+.\scripts\New-ClaudeCodePolicy.ps1 -ConfigPath .\onboarding\claude-gateway.json `
+  -Tier premium -OutputPath .\policy-claude-code-premium
 ```
 
-**Azure portal/manual path:** choose none, scripts/workbooks, AUM Direct, AUM
-service or Turnstile. Turnstile is a web console; AUM is terminal/commands and
-may use Direct, Turnstile or the optional AUM service. They are independent
-choices; neither is required for the gateway to enforce budgets.
+**Azure portal/manual path:** use [Fleet deployment with Intune, Jamf or Group
+Policy](MDM.md). Intune paths are Devices > Manage devices > Configuration for
+profiles and Apps > Windows/macOS for client packages. Jamf and Group Policy use
+the generated macOS profiles, registry payloads and scripts from the policy
+output folders.
 
-**Success:** the selected authority is explicit and only one write authority is
-configured for gateway governance.
+**Success:** each tier has generated Claude Code and Claude Desktop managed
+settings, including the P60 Desktop sign-in choice from `desktopSignIn`.
+Assignment is to the intended user or device groups; the user still completes
+their own Entra sign-in.
 
-![Live Turnstile Budget Management page showing organization and department budget allocation, used tokens, remaining tokens and status badges.](images/architecture-live/console-budgets.png)
+**Screenshot:** no approved live Intune, Jamf or Group Policy capture exists in
+the allowed manifests; `docs/MDM.md` states Intune screenshots were not captured
+because this account has no Intune administrator role.
 
-**If it fails:** use [FinOps tools](FINOPS-TOOLS.md),
-[Turnstile](TURNSTILE.md), [AUM](AUM.md) and [AUM service](AUM-SERVICE.md).
+**If it fails:** use [MDM troubleshooting](MDM.md#8-troubleshooting) and
+[Desktop sign-in](../DEVELOPER.md#letting-desktop-do-the-sign-in-itself).
 
 ### 10. Verify with a real request
 
@@ -263,7 +297,9 @@ az account show --query "{tenant:tenantId,user:user.name}" -o table
 
 **Portal/manual path:** there is no Azure portal workstation setup. The platform
 team supplies `claude-gateway.json`, the complete `scripts` folder and your
-approved client distribution path.
+approved client distribution path. On a managed device, Intune, Jamf or Group
+Policy may already have installed the clients and managed settings from
+[MDM](MDM.md); still complete the tenant sign-in required by the handover.
 
 **Success:** the CLI is signed in to the tenant in the handover file.
 **Screenshot:** no approved live client or workstation screenshot exists in the
@@ -315,11 +351,13 @@ VS Code, and configure Desktop separately as shown in the
 portal does not configure local clients.
 
 **Success:** the script configures the VS Code extension, the Claude Code CLI
-and Claude Desktop, then proves a gateway call when the client is installed.
+and Claude Desktop, then proves a gateway call when the client is installed. On
+managed devices it reconciles the same settings rather than duplicating them.
 **Screenshot:** no approved live workstation transcript exists in the allowed
 manifests. **If it fails:** run
 `.\scripts\Onboard-ClaudeDeveloper.ps1 -ConfigPath .\claude-gateway.json -PreflightOnly`
-and use [Developer troubleshooting](../DEVELOPER.md#if-something-is-wrong).
+and use [Developer troubleshooting](../DEVELOPER.md#if-something-is-wrong) or
+[MDM troubleshooting](MDM.md#8-troubleshooting) for fleet-delivered settings.
 
 ### 5. Verify VS Code
 
@@ -364,15 +402,22 @@ Get-Process -Name 'Claude' -ErrorAction SilentlyContinue
 
 Quit Desktop completely, including the tray icon, then reopen it.
 
-**Manual path:** Claude Desktop sign-in screen > **Or sign in with Gateway**.
-Do not use Google or email for the governed Azure path. Then Settings >
+**Manual path:** for `desktopSignIn.kind: helper-script` (the default), Claude
+Desktop sign-in screen > **Or sign in with Gateway** and the helper obtains the
+Entra token from Azure CLI. For `external-idp-browser`, Desktop opens an Entra
+browser sign-in using the public-client app recorded by the administrator. For
+`external-idp-broker`, Desktop uses the Entra broker on supported managed
+devices. Do not use Google or email for the governed Azure path. Then Settings >
 Connection should name the gateway URL.
 
-**Success:** Desktop signs in through the gateway and Settings > Connection
-names the gateway. **Screenshot:** no approved live Desktop screenshot exists in
-the allowed manifests. **If it fails:** use
-[Developer Desktop guidance](../DEVELOPER.md#using-it) and
-[Troubleshooting: Claude Desktop](TROUBLESHOOTING.md#claude-desktop).
+**Success:** Desktop signs in through the selected admin-approved method and
+Settings > Connection names the gateway. External-idp failures that show
+`AADSTS65001` or **Need admin approval** mean tenant consent is missing, not that
+the developer needs a model key. **Screenshot:** no approved live Desktop
+screenshot exists in the allowed manifests. **If it fails:** use
+[Developer Desktop guidance](../DEVELOPER.md#using-it),
+[Desktop sign-in choices](../DEVELOPER.md#letting-desktop-do-the-sign-in-itself)
+and [Troubleshooting: Claude Desktop](TROUBLESHOOTING.md#claude-desktop).
 
 ### 8. Send one verified request and hand over evidence
 
@@ -407,7 +452,12 @@ AUM as another client. The choices are independent.
 
 **Success:** the governance and budget write authority is recorded, and no tool
 is expected to overwrite another. **Screenshot:** no approved selector transcript
-exists in the allowed manifests. **If it fails:** use
+exists in the allowed manifests; the live Turnstile budget screenshot below
+shows a selected web-console budget surface after tooling exists.
+
+![Live Turnstile Budget Management page showing organization and department budget allocation, used tokens, remaining tokens and status badges.](images/architecture-live/console-budgets.png)
+
+**If it fails:** use
 [FinOps tools: which one to choose](FINOPS-TOOLS.md#which-one-to-choose).
 
 ### 2. Publish the reporting definitions and workbook
