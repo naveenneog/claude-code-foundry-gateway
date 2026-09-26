@@ -1258,7 +1258,7 @@ az deployment group create `
         quotaPremium=$QuotaPremium `
         quotaOrg=$QuotaOrg `
         callsPerMinute=$CallsPerMinute `
-        desktopExtraAudience=$desktopGatewayAudience `
+        desktopExtraAudience=$(if ($desktopGatewayAudience) { $desktopGatewayAudience } else { '00000000-0000-0000-0000-000000000000' }) `
         entitlementSource=$(if ($entSrc) { $entSrc } else { 'named-value' }) `
         entitlementResolverUrl=$(if ($entUrl) { $entUrl } else { 'https://resolver-not-deployed.invalid' }) `
         entitlementResolverAudience=$(if ($entAud) { $entAud } else { 'https://resolver-not-deployed.invalid' }) `

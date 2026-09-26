@@ -45,6 +45,8 @@ if (-not (Test-Path $helper)) {
 
 Assert 'it exposes Set-ApimNamedValue' ([bool](Get-Command Set-ApimNamedValue -ErrorAction SilentlyContinue))
 Assert 'it publishes the documented limit' ((Get-Variable -Name ApimNamedValueMaxLength -Scope Global -ErrorAction SilentlyContinue) -or $ApimNamedValueMaxLength -eq 4096) "expected 4096"
+$helperText = Get-Content $helper -Raw
+Assert 'empty external audience uses the disabled GUID sentinel through ARM' ($helperText -match "\`$Value -eq ''" -and $helperText -match '00000000-0000-0000-0000-000000000000' -and $helperText -match 'Invoke-RestMethod')
 
 Write-Host ''
 Write-Host 'P17 named value writes - the size guard' -ForegroundColor Cyan

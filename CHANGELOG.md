@@ -29,6 +29,13 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Guided lifecycle update and change modules (P66).** `scripts/Update-ClaudeGateway.ps1`
+  plans and applies ordered migrations for older decision records, current policy hash drift,
+  policy-referenced named values and optional job commit pins, with a named-value snapshot before
+  any write and `release`/`history` recorded afterward. New flow step modules cover API Management
+  tier changes, named values ↔ projection entitlement moves, enterprise network review execution
+  and Desktop sign-in changes. `docs/UPDATE-AND-CHANGE.md` gives the step-by-step and manual
+  equivalents.
 - **One-command AUM client install.** `scripts/Install-ClaudeAum.ps1` reads the Python version the
   package requires, lists the interpreters that meet it and asks which one, creates or reuses
   `.venv-finops`, installs `cli/finops`, checks `aum --version` and the Azure CLI sign-in, and

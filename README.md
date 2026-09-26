@@ -36,6 +36,7 @@ Start with [Setup](docs/SETUP.md) for deployment or
 |---|---|
 | Use the CLI, VS Code or Desktop on Windows/macOS | [Developer setup](DEVELOPER.md) — prerequisites, setup, verification and fixes |
 | Stand up a gateway | [Setup](docs/SETUP.md) — required roles, installer and portal deployment |
+| Update an older gateway or change tier, entitlement, network or Desktop sign-in | [Update and change](docs/UPDATE-AND-CHANGE.md) — fingerprinted plans, snapshots and rollback |
 | Operate people, tiers, teams, budgets or models | [Operations](docs/OPERATIONS.md) — task router and portal paths |
 | Own monthly chargeback or the FinOps process | [FinOps](docs/FINOPS.md) — close a month, investigate gaps and set allocations |
 | Use a terminal FinOps console or automate reports | [AUM (Azure Usage Management)](docs/CLI-FINOPS.md) — terminal views and scriptable commands |
