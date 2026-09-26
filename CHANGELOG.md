@@ -45,6 +45,16 @@ exact streaming cache-creation detail remains **U13**.
   Measured live on 2026-09-26 on an isolated gateway: the helper token returned 200 and a
   wrong audience 401; a Desktop-audience token stopped at `AADSTS65001 consent_required`,
   because this tenant grants no consent (**U23**).
+- **AUM adds and removes developers by email (P64).** `aum developer find|add|remove` searches the
+  Entra directory with the signed-in administrator's delegated Graph token,
+  resolves exact email/UPN/object-id targets including guests, previews tier and
+  unit/team group changes, writes membership once, verifies propagation and
+  publishes the gateway. `Set-ClaudeDeveloper.ps1` now discovers recorded tier
+  group names instead of silently defaulting to fixed strings.
+  Removal allows an empty tier list only for a tier it is proven to empty, so a failed read
+  of another tier is still refused. Measured live on 2026-09-26 on an isolated gateway: a
+  request returned 200 after `aum developer add` and 403 after `aum developer remove`.
+  [ADR-0029](docs/adr/0029-aum-developer-membership.md).
 - **Dollar budgets enforced from priced token categories (P59).** A unit, team or person budget
   can be set in dollars with a pinned price book; a reconciler prices observed input, output,
   cache-read and both cache-write tokens with Decimal, refuses unpriced models rather than
@@ -55,6 +65,7 @@ exact streaming cache-creation detail remains **U13**.
   2026-09-25: $0.0364984 of priced spend crossed a $0.02 budget and the next request was refused
   175.9 s after the crossing one; a raise to $0.50 restored 200. Enforcement trails ingestion;
   it is not a hard invoice cap. [ADR-0026](docs/adr/0026-usd-budget-reconciliation.md).
+
 - **AUM (Azure Usage Management), the terminal FinOps client renamed from `claude-finops`.**
   `aum` (the old command still works) adds an executive overview, budgets by unit, team and
   person, gateway governance, usage breakdown and trends, a request trace, anomalies, reports
