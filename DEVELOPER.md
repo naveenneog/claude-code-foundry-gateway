@@ -535,56 +535,65 @@ invoking the helper.
 
 ### Letting Desktop do the sign-in itself
 
-**Platform-admin alternative, not the normal developer path.** The following
-registration/consent steps require Entra application permissions. A developer
-without them should use the existing Azure CLI helper above.
+The platform team may record `desktopSignIn.kind: external-idp` in
+`claude-gateway.json`. Then `Setup-ClaudeWorkstation.ps1` and
+`setup-claude-workstation.sh` write Desktop keys for Desktop's own Entra sign-in
+instead of the helper-script keys. Claude Code and VS Code still use Azure CLI
+Foundry mode.
 
-Everything above hands the sign-in to the Azure CLI. Desktop can instead run
-its own browser sign-in, under **Settings → Connection → Configure third-party
-inference**. It needs an app registration, which the helper route does not, so
-take this one only if you would rather Desktop owned the credential.
+| Choice | Desktop keys | Gateway audience | Consent and Conditional Access |
+|---|---|---|---|
+| Helper script, the default | `inferenceCredentialKind: helper-script` plus `inferenceCredentialHelper` | The existing Azure CLI audiences, `https://cognitiveservices.azure.com` and `https://ai.azure.com` | No app registration or new consent. Conditional Access is whatever applies to Azure CLI sign-in. |
+| External IdP, browser | `inferenceCredentialKind: external-idp`, `inferenceIdpAuthFlow: browser`, `inferenceIdpOidc` | In `id_token` mode, `aud` is the Desktop public-client app id. In `access_token` mode, `aud` is the supplied gateway API audience. | Needs a public-client app registration. If tenant user consent is blocked, Entra returns `AADSTS65001` or "Need admin approval" until an authorized admin grants consent. |
+| External IdP, broker | Same IdP block with `inferenceIdpAuthFlow: broker` | Same audience rule as browser mode | Uses the Microsoft Entra broker for managed-device or token-protection Conditional Access. Requires broker redirect URIs and is not a Linux sign-in flow. |
 
-| Field | Value |
-|---|---|
-| Client ID | your app registration |
-| Issuer URL | `https://login.microsoftonline.com/<tenant-guid>/v2.0` |
-| Authorization URL | leave blank — discovered from the issuer |
-| Token URL | leave blank — discovered from the issuer |
-| Bearer token | **Access token** |
-| Scopes | `https://cognitiveservices.azure.com/.default offline_access` |
-| Redirect port | (ephemeral) |
-| Redirect host | `127.0.0.1` |
-
-Two fields decide whether this works at all:
-
-- **Clear the default Scopes.** `openid profile email offline_access` yields a
-  Microsoft Graph audience, and the gateway's `validate-azure-ad-token` accepts
-  only `https://cognitiveservices.azure.com` or `https://ai.azure.com`. The
-  sign-in succeeds and every call then returns 401.
-- **Access token**, not ID token. An ID token's audience is your client id, so
-  the gateway refuses it for the same reason.
-
-The authorization code flow needs a redirect URI, so unlike the helper route
-this does need a registration:
+Create or discover the Desktop public-client registration with:
 
 ```powershell
-az ad app create --display-name "Claude Desktop - Gateway" `
-  --is-fallback-public-client true `
-  --public-client-redirect-uris "http://localhost"
+.\scripts\New-ClaudeDesktopEntraApp.ps1 -DisplayName 'Claude Desktop gateway'
 
-# 7d312290-... Microsoft Cognitive Services, 5f1e8914-... user_impersonation
-az ad app permission add --id <app-id> `
-  --api 7d312290-28c8-473c-a0ed-8e53749b6d6d `
-  --api-permissions 5f1e8914-a52b-429f-9324-91b92b81adaf=Scope
-az ad app permission admin-consent --id <app-id>
+# Add broker redirect URIs too:
+.\scripts\New-ClaudeDesktopEntraApp.ps1 -DisplayName 'Claude Desktop gateway' -Broker
 ```
 
-**Portal (platform owner):** Entra ID > App registrations > New registration >
-single tenant; Authentication > Mobile and desktop applications > add the
-loopback redirect and enable public-client flows. API permissions > Microsoft
-Cognitive Services > Delegated permissions > `user_impersonation`. An authorised
-tenant administrator grants consent if required. The two GUIDs above are
-Microsoft's published application/scope identifiers, not customer tenant IDs.
+The browser redirect URI is exactly `http://127.0.0.1/callback` under the
+**Mobile and desktop applications** platform. Broker mode also needs
+`ms-appx-web://Microsoft.AAD.BrokerPlugin/<client-id>` and
+`msauth.com.anthropic.claudefordesktop://auth`. The script supports `-WhatIf`
+and does not grant tenant-wide admin consent.
+
+For `id_token` mode the recorded Desktop audience is the public-client
+application id:
+
+```json
+{
+  "desktopSignIn": {
+    "kind": "external-idp",
+    "flow": "browser",
+    "bearerTokenType": "id_token",
+    "issuer": "https://login.microsoftonline.com/<tenant-id>/v2.0",
+    "clientId": "<desktop-public-client-id>"
+  }
+}
+```
+
+For `access_token` mode the platform team also records the gateway API `scopes`
+and `audience`. That mode is for tenants that model the gateway as an OAuth
+resource server; the delegated permission may require admin consent. Desktop
+requests `offline_access` for silent refresh unless the configuration disables
+that behavior.
+
+The gateway accepts the Desktop audience only when the installer has written the
+`desktop-extra-audience` named value. A wrong audience or a token from another
+tenant is still refused with 401.
+
+Portal capture steps for the lead are `p60-desktop-app-overview`,
+`p60-desktop-app-authentication`, `p60-desktop-app-api-permissions` and
+`p60-gateway-desktop-audience`; their pending outputs are
+`docs/guide/p60-desktop-app-overview.png`,
+`docs/guide/p60-desktop-app-authentication.png`,
+`docs/guide/p60-desktop-app-api-permissions.png` and
+`docs/guide/p60-gateway-desktop-audience.png`.
 
 ### Signing in without a browser
 

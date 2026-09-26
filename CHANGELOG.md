@@ -28,6 +28,15 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- **Claude Desktop sign-in chosen by the administrator.** `Install-ClaudeGateway.ps1`
+  records `desktopSignIn` in `claude-gateway.json`: the unchanged helper-script default,
+  or Desktop external-idp sign-in through an Entra public-client app in browser or broker
+  flow. `scripts/ClaudeDesktopSignIn.ps1` validates the record and renders the exact
+  Desktop keys for both workstation setup scripts and the MDM payload generator. The
+  gateway accepts a Desktop audience only through the new `desktop-extra-audience` named
+  value; empty keeps the previous Azure CLI/helper audiences. `New-ClaudeDesktopEntraApp.ps1`
+  creates or discovers the public-client registration and redirect URIs without granting
+  tenant-wide consent. [ADR-0026](docs/adr/0026-claude-desktop-sign-in-choice.md).
 - **Governance authored in Turnstile, applied to the gateway on save.** With
   `Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Turnstile`, business units, teams, their Entra
   groups, budgets and tier limits are edited on Turnstile's pages, and each save starts the

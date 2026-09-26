@@ -22,6 +22,7 @@ own those Azure/Entra steps; developers only consume the bundle.
   "standardGroup": "claude-code-standard",
   "premiumGroup":  "claude-code-premium",
   "authMode":      "interactive",
+  "desktopSignIn": { "kind": "helper-script" },
   "tiers": {
     "standard": { "tokensPerMinute": 20000, "tokensPerDay": 500000 },
     "premium":  { "tokensPerMinute": 80000, "tokensPerDay": 5000000 }
@@ -32,10 +33,13 @@ own those Azure/Entra steps; developers only consume the bundle.
 ```
 
 This is an example of the PowerShell wizard's shape, not values to deploy.
-`authMode` is read by the onboarding wrapper; legacy files without `mode` are
-inferred. Current low-level workstation setup has model defaults independent of
-this file: supply/verify your actual deployment names as described in
-[Developer setup](../DEVELOPER.md#one-command).
+`authMode` is read by the onboarding wrapper. `desktopSignIn` is read by the
+Desktop setup path: `helper-script` writes the credential helper keys; an
+`external-idp` record writes `inferenceIdpOidc` and `inferenceIdpAuthFlow`
+instead. Legacy files without `mode` or `desktopSignIn` are inferred as gateway
+mode and helper-script. Current low-level workstation setup has model defaults
+independent of this file: supply/verify your actual deployment names as
+described in [Developer setup](../DEVELOPER.md#one-command).
 
 `New-OnboardingEmail.ps1` then adds one HTML, text and `.eml` file per developer
 you onboard.
@@ -43,7 +47,9 @@ you onboard.
 ## What it is for
 
 `claude-gateway.json` is the handover artifact. Distribute it beside the complete
-`scripts` folder, not a lone setup file: Desktop needs the credential helpers.
+`scripts` folder, not a lone setup file. Desktop needs the credential helpers
+when `desktopSignIn.kind` is `helper-script`; external-idp profiles still need
+the shared setup code that validates and writes the recorded keys.
 From the directory containing both, a developer runs:
 
 ```powershell

@@ -119,10 +119,15 @@ param(
     # publisher. Off by default in the product.
     [switch]$RequireSignedExtensions,
 
+    [string]$DesktopCredentialHelper = '/usr/local/bin/get-foundry-token.sh',
+    [string]$DesktopCredentialHelperWindows = 'C:\Program Files\ClaudeFoundry\get-foundry-token.cmd',
+
     [string]$OutputPath = './policy-claude-code'
 )
 
 $ErrorActionPreference = 'Stop'
+$desktopSignInHelper = Join-Path $PSScriptRoot 'ClaudeDesktopSignIn.ps1'
+if (Test-Path $desktopSignInHelper) { . $desktopSignInHelper }
 
 $banner = Join-Path $PSScriptRoot 'Show-Banner.ps1'
 if (Test-Path $banner) { . $banner; Show-ClaudeBanner -Subtitle 'Claude Code managed settings' }
@@ -146,6 +151,7 @@ if ($ConfigPath) {
         if ($o) { $OpusModel = $o }
         if ($s) { $SonnetModel = $s }
     }
+    else { $cfg = [pscustomobject]@{} }
 }
 
 if (-not $GatewayUrl) {
@@ -184,10 +190,13 @@ $settings = [ordered]@{
 
 # Claude Desktop reads its own keys. They are emitted here so one run produces
 # one tier's complete profile rather than two half-profiles that can drift.
-$desktop = [ordered]@{
-    chatTabEnabled                = $true
-    coworkTabEnabled              = ($DesktopTabs -eq 'default')
-    isClaudeCodeForDesktopEnabled = ($DesktopTabs -ne 'chat-only')
+$desktopSignIn = Get-ClaudeDesktopSignIn -Config $cfg
+$desktop = New-ClaudeDesktopSettings -GatewayUrl $GatewayUrl -Models $AvailableModels `
+    -HelperPath $DesktopCredentialHelper -DesktopSignIn $desktopSignIn -NoCowork:($DesktopTabs -ne 'default')
+$desktop['chatTabEnabled'] = $true
+$desktop['isClaudeCodeForDesktopEnabled'] = ($DesktopTabs -ne 'chat-only')
+if ($desktopSignIn.kind -eq 'helper-script') {
+    $desktop['inferenceCredentialHelperWindows'] = $DesktopCredentialHelperWindows
 }
 
 if ($Hardening -ne 'none') {

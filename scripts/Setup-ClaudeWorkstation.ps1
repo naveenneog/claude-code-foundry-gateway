@@ -61,6 +61,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$desktopSignInHelper = Join-Path $PSScriptRoot 'ClaudeDesktopSignIn.ps1'
+if (Test-Path $desktopSignInHelper) { . $desktopSignInHelper }
 
 function Write-Head($t) {
     Write-Host ''
@@ -86,6 +88,7 @@ else { Write-Head 'Claude on Microsoft Foundry - workstation setup' }
 # ----------------------------------------------------------------- 0. config
 
 Write-Step 'Configuration'
+$cfg = $null
 if ($ConfigPath) {
     try {
         $raw = if ($ConfigPath -match '^https?://') {
@@ -128,6 +131,12 @@ if (-not $GatewayUrl) {
 $GatewayUrl = $GatewayUrl.TrimEnd('/')
 Write-Ok "gateway: $GatewayUrl"
 if ($TenantId) { Write-Note "tenant : $TenantId" }
+$desktopSignIn = if (Get-Command Get-ClaudeDesktopSignIn -ErrorAction SilentlyContinue) {
+    Get-ClaudeDesktopSignIn -Config $(if ($cfg) { $cfg } else { [pscustomobject]@{} })
+} else {
+    [pscustomobject]@{ kind = 'helper-script' }
+}
+Write-Note "Desktop sign-in: $(if ($desktopSignIn.kind -eq 'external-idp') { "$($desktopSignIn.kind) $($desktopSignIn.flow) $($desktopSignIn.bearerTokenType)" } else { $desktopSignIn.kind })"
 
 # Check the environment before touching anything. The gateway URL is known by
 # now, so reachability can be probed too.
@@ -333,28 +342,32 @@ if (-not $SkipDesktop) {
     }
 
     if ($desktopInstalled) {
-        # Credential helper. Uses the Azure CLI's own pre-consented client, so
-        # this needs no app registration and no admin consent.
-        New-Item -ItemType Directory -Force -Path $HelperDir | Out-Null
         $helperPs1 = Join-Path $HelperDir 'get-foundry-token.ps1'
         $helperCmd = Join-Path $HelperDir 'get-foundry-token.cmd'
 
-        $srcPs1 = Join-Path $PSScriptRoot 'get-foundry-token.ps1'
-        $srcCmd = Join-Path $PSScriptRoot 'get-foundry-token.cmd'
-        if ((Test-Path $srcPs1) -and (Test-Path $srcCmd)) {
-            Copy-Item $srcPs1 $helperPs1 -Force
-            Copy-Item $srcCmd $helperCmd -Force
-            Write-Ok "credential helper -> $HelperDir"
-        }
-        else {
-            Write-Warn2 'get-foundry-token.ps1 and .cmd are not next to this script.'
-            Write-Note 'They are copied, not generated, so Claude Desktop cannot be'
-            Write-Note 'configured without them. The CLI and VS Code are unaffected.'
-            Write-Note 'Fetch the whole scripts folder rather than this file alone.'
-            $problems += 'helper'
-        }
+        if ($desktopSignIn.kind -eq 'helper-script') {
+            # Credential helper. Uses the Azure CLI's own pre-consented client,
+            # so this needs no app registration and no admin consent.
+            New-Item -ItemType Directory -Force -Path $HelperDir | Out-Null
 
-        if (Test-Path $helperCmd) {
+            $srcPs1 = Join-Path $PSScriptRoot 'get-foundry-token.ps1'
+            $srcCmd = Join-Path $PSScriptRoot 'get-foundry-token.cmd'
+            if ((Test-Path $srcPs1) -and (Test-Path $srcCmd)) {
+                Copy-Item $srcPs1 $helperPs1 -Force
+                Copy-Item $srcCmd $helperCmd -Force
+                Write-Ok "credential helper -> $HelperDir"
+            }
+            else {
+                Write-Warn2 'get-foundry-token.ps1 and .cmd are not next to this script.'
+                Write-Note 'They are copied, not generated, so Claude Desktop cannot be'
+                Write-Note 'configured without them. The CLI and VS Code are unaffected.'
+                Write-Note 'Fetch the whole scripts folder rather than this file alone.'
+                $problems += 'helper'
+            }
+        }
+        else { Write-Ok 'Desktop will use its own Entra sign-in; no helper script is written.' }
+
+        if (($desktopSignIn.kind -ne 'helper-script') -or (Test-Path $helperCmd)) {
             # Developer settings reveal Settings -> Connection and create the
             # profile library this writes into.
             $devSettings = Join-Path $env:APPDATA 'Claude\developer_settings.json'
@@ -394,21 +407,7 @@ if (-not $SkipDesktop) {
             $profilePath = Join-Path $lib "$($meta.appliedId).json"
             if (Test-Path $profilePath) { Copy-Item $profilePath "$profilePath.bak" -Force }
 
-            $profile = [ordered]@{
-                inferenceProvider                             = 'gateway'
-                inferenceGatewayBaseUrl                       = $GatewayUrl
-                inferenceGatewayAuthScheme                    = 'bearer'
-                inferenceCredentialKind                       = 'helper-script'
-                inferenceCredentialHelper                     = $helperCmd
-                inferenceCredentialHelperTimeoutSec           = 60
-                inferenceCredentialHelperTtlSec               = 1800
-                inferenceCredentialHelperSilentRefreshEnabled = $true
-                inferenceModels                               = @($Models | ForEach-Object { @{ name = $_ } })
-                chatTabEnabled                                = $true
-                isClaudeCodeForDesktopEnabled                 = $true
-                inferenceModelPricingEnabled                  = $true
-            }
-            if (-not $NoCowork) { $profile['coworkTabEnabled'] = $true }
+            $profile = New-ClaudeDesktopSettings -GatewayUrl $GatewayUrl -Models $Models -HelperPath $helperCmd -DesktopSignIn $desktopSignIn -NoCowork:$NoCowork
 
             $profile | ConvertTo-Json -Depth 6 | Set-Content $profilePath -Encoding UTF8
             Write-Ok "profile written$(if (-not $NoCowork) { ' (Cowork enabled)' })"
