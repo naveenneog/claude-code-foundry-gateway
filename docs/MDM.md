@@ -130,6 +130,25 @@ area. The deterministic Windows delivery choices are therefore:
 | Win32 app script installer | **Apps** > **All apps** > **Create** > **Windows app (Win32)** | Packages the policy as a required app with install and uninstall commands. Detection rules check the registry value or file hash. Microsoft documents silent installation, detection rules and app device status. |
 | Custom ADMX + Settings catalog | **Devices** > **Manage devices** > **Configuration** > **Import ADMX**, then **Settings catalog** | Schema-managed registry policy if the organization authors and imports a Claude Code ADMX. Values still need the same JSON payload. |
 
+Platform script settings (**Script settings** page). Intune runs these scripts
+in a 32-bit or 64-bit PowerShell host through the Intune management extension.
+Windows PowerShell 5.1 is the host present on every Windows 10 and 11 client;
+PowerShell 7 is not installed by default, so the bodies below use only Windows
+PowerShell 5.1 syntax:
+
+| Setting | Value | Reason |
+|---|---|---|
+| **Run this script using the logged on credentials** | **No** | The default, Yes, runs in the user's context; writing `HKLM` needs the system context. |
+| **Enforce script signature check** | Organization policy; **No** unless the script is signed by a trusted publisher | The default, Yes, refuses an unsigned script. |
+| **Run script in 64-bit PowerShell host** | **Yes** | The default, No, runs a 32-bit host; the 64-bit host writes the 64-bit registry view that the 64-bit client reads. |
+
+Source: [Add PowerShell scripts to Windows devices](https://learn.microsoft.com/en-us/intune/device-management/tools/run-powershell-scripts-windows)
+(fetched 2026-09-26), which also documents a 200 KB script limit, a 30-minute
+timeout and three retries on failure. [Remediations](https://learn.microsoft.com/en-us/intune/device-management/tools/deploy-remediations)
+documents UTF-8 scripts (without a byte-order mark when the signature check is
+on), a 2,048-character output limit, and the Bypass execution policy when the
+signature check is off.
+
 Example platform script body:
 
 ```powershell
@@ -155,16 +174,26 @@ if (Test-Path $key) {
 }
 ```
 
-Example detection script:
+Example detection script. `$expected` is the SHA-256 of the exact `Settings`
+string the install script writes; running the same hashing lines on that string
+on the administrator's workstation produces it. `[Convert]::ToHexString` and
+`SHA256.HashData` do not exist in Windows PowerShell 5.1 (measured 2026-09-26:
+"does not contain a method named 'HashData'"), so the script uses
+`ComputeHash`, which returns the same value in 5.1 and 7:
 
 ```powershell
-$expected = '<sha256 of claude-code.managed-settings.json>'
+$expected = '<sha256 of the exact Settings string>'
 $value = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\ClaudeCode' -Name Settings -ErrorAction SilentlyContinue).Settings
 if (-not $value) { exit 1 }
-$actual = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($value))).ToLowerInvariant()
+$sha = [System.Security.Cryptography.SHA256]::Create()
+try { $bytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($value)) } finally { $sha.Dispose() }
+$actual = -join ($bytes | ForEach-Object { $_.ToString('x2') })
 if ($actual -eq $expected) { exit 0 }
 exit 1
 ```
+
+A remediation package has the same three script settings; detection runs first
+and remediation only when detection exits `1`.
 
 ### 3.2 Claude Desktop policy
 

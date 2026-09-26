@@ -284,6 +284,37 @@ Assert 'the MDM guide records validation limits and restore proof' (
     $mdm -match 'Intune administrator role was not available' -and
     $mdm -match 'remove the HKCU policy')
 
+# Intune runs platform and remediation scripts in a Windows PowerShell host, so the
+# guide's detection script must run under 5.1, not only under PowerShell 7. The
+# block is executed with its registry read replaced by a known value.
+$detection = [regex]::Match($mdm, '(?s)```powershell\r?\n(\$expected = [^\r\n]*\r?\n.*?)```')
+Assert 'the MDM guide has a detection script' $detection.Success
+$windowsPowerShell = Get-Command powershell.exe -ErrorAction SilentlyContinue
+if ($detection.Success -and $windowsPowerShell) {
+    $sample = '{"env":{"CLAUDE_CODE_USE_FOUNDRY":"1"}}'
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $sampleHash = -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($sample)) | ForEach-Object { $_.ToString('x2') }) } finally { $sha.Dispose() }
+    $body = $detection.Groups[1].Value -replace '(?m)^\$value = .*$', ('$value = ''' + $sample + '''')
+    $matching = $body -replace '(?m)^\$expected = .*$', ('$expected = ''' + $sampleHash + '''')
+    $drifted = $body -replace '(?m)^\$expected = .*$', ('$expected = ''' + ('0' * 64) + '''')
+    $scriptDir = Join-Path ([IO.Path]::GetTempPath()) ('mdm-detect-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $scriptDir -Force | Out-Null
+    try {
+        $codes = foreach ($pair in @(@('matching', $matching), @('drifted', $drifted))) {
+            $file = Join-Path $scriptDir ($pair[0] + '.ps1')
+            [IO.File]::WriteAllText($file, $pair[1], (New-Object Text.UTF8Encoding($false)))
+            & $windowsPowerShell.Source -NoProfile -ExecutionPolicy Bypass -File $file *> $null
+            $LASTEXITCODE
+        }
+        Assert 'the detection script exits 0 for the expected value under Windows PowerShell 5.1' ($codes[0] -eq 0) "exit $($codes[0])"
+        Assert 'the detection script exits 1 for a drifted value under Windows PowerShell 5.1' ($codes[1] -eq 1) "exit $($codes[1])"
+    }
+    finally { Remove-Item -LiteralPath $scriptDir -Recurse -Force -ErrorAction SilentlyContinue }
+}
+elseif ($detection.Success) {
+    Write-Host '  [SKIP] Windows PowerShell 5.1 is not on this machine; the detection script was not executed' -ForegroundColor DarkGray
+}
+
 # Test-All supplies a private TEMP per process. Standalone callers may set TEMP
 # as well; never create fixtures beside source files while other checks read it.
 $scratchRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
