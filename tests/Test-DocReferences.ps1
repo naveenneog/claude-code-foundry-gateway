@@ -256,6 +256,34 @@ foreach ($b in $broken) {
 }
 Assert 'every user-facing reference resolves' ($broken.Count -eq 0) "$($broken.Count) broken reference(s)"
 
+$readme = Get-Content (Join-Path $Root 'README.md') -Raw
+$mdmPath = Join-Path $Root 'docs\MDM.md'
+$mdm = if (Test-Path -LiteralPath $mdmPath) { Get-Content $mdmPath -Raw } else { '' }
+Assert 'the README documentation map links the MDM guide' (
+    $readme -match '\[Fleet deployment with Intune, Jamf or Group Policy\]\(docs/MDM\.md\)')
+Assert 'the MDM guide is present' (Test-Path -LiteralPath $mdmPath -PathType Leaf)
+Assert 'the MDM guide cross-links migration instead of duplicating it' (
+    $mdm -match '\[Migration section 2\]\(MIGRATION\.md#2-mass-deployment-through-mdm\)')
+Assert 'the MDM guide documents generated delivery artifacts' (
+    $mdm -match 'claude-code\.intune-omauri\.csv' -and
+    $mdm -match 'claude-code\.mobileconfig' -and
+    $mdm -match 'claude-desktop\.managed-settings\.json')
+Assert 'the MDM guide documents Intune Windows delivery and monitoring' (
+    $mdm -match 'HKLM\\SOFTWARE\\Policies\\ClaudeCode' -and
+    $mdm -match 'Custom OMA-URI' -and
+    $mdm -match 'Devices > Manage devices > Configuration' -and
+    $mdm -match 'Device install status')
+Assert 'the MDM guide documents macOS, Jamf and Group Policy paths' (
+    $mdm -match 'com\.anthropic\.claudecode' -and
+    $mdm -match 'com\.anthropic\.claudefordesktop' -and
+    $mdm -match 'Jamf Pro' -and
+    $mdm -match 'Group Policy')
+Assert 'the MDM guide records validation limits and restore proof' (
+    $mdm -match 'HKCU\\SOFTWARE\\Policies\\ClaudeCode' -and
+    $mdm -match 'CLAUDE_CONFIG_DIR' -and
+    $mdm -match 'Intune administrator role was not available' -and
+    $mdm -match 'remove the HKCU policy')
+
 # Test-All supplies a private TEMP per process. Standalone callers may set TEMP
 # as well; never create fixtures beside source files while other checks read it.
 $scratchRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())

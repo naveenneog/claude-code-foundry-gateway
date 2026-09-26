@@ -29,6 +29,11 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **MDM deployment guide (P65).** `docs/MDM.md` now gives Intune, Jamf and
+  Group Policy fleet rollout steps for Claude Code, the VS Code extension and
+  Claude Desktop, with live workstation validation notes and Intune capture
+  steps for a tenant with the required role.
+
 - **Dollar budgets enforced from priced token categories (P59).** A unit, team or person budget
   can be set in dollars with a pinned price book; a reconciler prices observed input, output,
   cache-read and both cache-write tokens with Decimal, refuses unpriced models rather than
