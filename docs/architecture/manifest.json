@@ -177,7 +177,7 @@
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ApimNamedValue.ps1": "b136ec4171b978411877346d9e9b9dd916326b747d0e38d4fb938a2b71987bce",
         "scripts/ClaudeAumDirectWrites.ps1": "e9a53602c29420aa89c1809bbbd09e8fa68dce16637d2e21e61bf22d7c54300f",
-        "scripts/Invoke-ClaudeFinOps.ps1": "f35485891c1166162cf9e261948fb6ecc20d14b5a6b5fd52efc707f26ca5c155",
+        "scripts/Invoke-ClaudeFinOps.ps1": "27bdf0a6a0cfa23e40bac3b2333c8252795f9d506a9d01053ea1796502606896",
         "scripts/New-ClaudeAumEntraApp.ps1": "489aa5051af325ca4d96e5b9123d29577195f08318976898a8a592aeea2a05fe",
         "scripts/New-ClaudeTurnstileEntraApp.ps1": "0262606c6f2b747ae4dff7534c15d113099ff6fae06b40580eb62daffaf1db1d",
         "scripts/Set-ClaudeBudget.ps1": "6959bf18332942c6b3d7df65fb589c9affb4efb37f1b779d011289c31417d76c",
