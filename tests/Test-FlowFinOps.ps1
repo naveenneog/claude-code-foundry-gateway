@@ -31,10 +31,10 @@ $turnstilePlan = Get-ClaudeFlowStepPlan -Record $record -Discovery @{ Region = '
 Assert 'Turnstile+AUM plan does not deploy the AUM service' (-not (($turnstilePlan.Data.commands | ForEach-Object { $_.file }) -contains 'scripts\Deploy-ClaudeAumService.ps1'))
 
 . (Join-Path $root 'scripts\flow\Budgets.ps1')
-$price = Get-ClaudeFlowBudgetPriceBook -Models @('claude-sonnet-5','unknown-model') -Path (Join-Path $root 'config\price-book.example.json')
+$price = Get-BudgetsFlowPriceBook -Models @('claude-sonnet-5','unknown-model') -Path (Join-Path $root 'config\price-book.example.json')
 Assert 'price book keeps known models and refuses unknown models' (-not $price.complete -and $price.unknownModels[0] -eq 'unknown-model' -and $price.models.PSObject.Properties.Name -contains 'claude-sonnet-5')
-Assert 'invalid unpinned reconciler job is refused' ((Throws { New-ClaudeUsdReconcilerJobDefinition -GatewayResourceId '/g' -WorkspaceResourceId '/w' -RepositoryUrl 'origin' -RepositoryRef 'main' }) -match 'full commit')
-$job = New-ClaudeUsdReconcilerJobDefinition -GatewayResourceId '/subscriptions/s/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim' -WorkspaceResourceId '/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/log' -RepositoryUrl 'https://github.com/contoso/repo' -RepositoryRef ('a' * 40)
+Assert 'invalid unpinned reconciler job is refused' ((Throws { New-BudgetsFlowUsdReconcilerJobDefinition -GatewayResourceId '/g' -WorkspaceResourceId '/w' -RepositoryUrl 'origin' -RepositoryRef 'main' }) -match 'full commit')
+$job = New-BudgetsFlowUsdReconcilerJobDefinition -GatewayResourceId '/subscriptions/s/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim' -WorkspaceResourceId '/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/log' -RepositoryUrl 'https://github.com/contoso/repo' -RepositoryRef ('a' * 40)
 Assert 'reconciler job is five-minute and pinned' ($job.schedule -eq '*/5 * * * *' -and $job.image -match ':2\.90\.0$' -and $job.repositoryRef -eq ('a' * 40))
 Assert 'reconciler identity is least-privilege scoped' (@($job.identity.grants | Where-Object { $_.scope -match 'ApiManagement' -and ($_.actions -contains 'Microsoft.ApiManagement/service/namedValues/write') }).Count -eq 1 -and @($job.identity.grants | Where-Object { $_.role -eq 'Log Analytics Reader' }).Count -eq 1)
 $budgetRecord = [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{ budgets = [pscustomobject]@{ currency = 'usd'; reconcile = 'job'; repositoryRef = ('b' * 40); gatewayResourceId = '/subscriptions/s/resourceGroups/rg/providers/Microsoft.ApiManagement/service/apim'; workspaceResourceId = '/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/log'; models = @('unknown-model') } } }
@@ -43,7 +43,7 @@ Assert 'USD plan blocks enforcement when a deployed model is unpriced' (-not $bl
 Assert 'apply refuses an unpriced USD plan' ((Throws { Invoke-ClaudeFlowStep -Record $budgetRecord -Plan $blocked }) -match 'no documented price')
 
 . (Join-Path $root 'scripts\flow\Monitoring.ps1')
-$workbooks = @(Get-ClaudeFlowWorkbookDefinitions)
+$workbooks = @(Get-MonitoringFlowWorkbookDefinitions)
 $shipped = @(Get-ChildItem (Join-Path $root 'infra') -Filter 'workbook*.json' -File)
 Assert 'workbook discovery covers every shipped workbook' ($workbooks.Count -eq $shipped.Count -and -not @(Compare-Object ($workbooks.RelativePath | Sort-Object) ($shipped.FullName | ForEach-Object { $_.Substring($root.Length + 1) } | Sort-Object)).Count)
 $monitorPlan = Get-ClaudeFlowStepPlan -Record ([pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{} }) -Discovery @{}

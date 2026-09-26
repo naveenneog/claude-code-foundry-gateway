@@ -13,18 +13,18 @@ function Get-ClaudeFlowStepInfo {
         Title = 'Token or dollar budgets'
         DecisionKey = 'budgets'
         DependsOn = @('Foundation', 'FinOps')
-        Actions = @('Setup', 'Change', 'Update')
+        Actions = @('Setup', 'Change')
     }
 }
 
-function Get-FlowBudgetDecision {
+function Get-BudgetsFlowDecision {
     param($Record)
     $existing = Get-ClaudeDecision -Record $Record -Key 'budgets'
     if ($null -eq $existing) { return [pscustomobject]@{} }
     return $existing
 }
 
-function Get-FlowValue {
+function Get-BudgetsFlowValue {
     param($Object, [string]$Name)
     if ($null -eq $Object) { return $null }
     if ($Object -is [System.Collections.IDictionary] -and $Object.ContainsKey($Name)) { return $Object[$Name] }
@@ -32,7 +32,7 @@ function Get-FlowValue {
     return $null
 }
 
-function Get-ClaudeFlowShippedPriceBook {
+function Get-BudgetsFlowShippedPriceBook {
     param([string]$Path)
     if (-not $Path) {
         $Path = Join-Path $script:FlowRoot 'config\price-book.json'
@@ -52,9 +52,9 @@ function Get-ClaudeFlowShippedPriceBook {
     }
 }
 
-function Get-ClaudeFlowBudgetPriceBook {
+function Get-BudgetsFlowPriceBook {
     param([string[]]$Models, [string]$Path)
-    $book = Get-ClaudeFlowShippedPriceBook -Path $Path
+    $book = Get-BudgetsFlowShippedPriceBook -Path $Path
     $items = [ordered]@{}
     $unknown = [System.Collections.Generic.List[string]]::new()
     foreach ($model in @($Models | Where-Object { $_ } | Sort-Object -Unique)) {
@@ -72,7 +72,7 @@ function Get-ClaudeFlowBudgetPriceBook {
     }
 }
 
-function New-ClaudeUsdReconcilerJobDefinition {
+function New-BudgetsFlowUsdReconcilerJobDefinition {
     param(
         [string]$GatewayResourceId,
         [string]$WorkspaceResourceId,
@@ -105,25 +105,27 @@ function New-ClaudeUsdReconcilerJobDefinition {
 
 function Get-ClaudeFlowStepQuestions {
     param($Record, $Discovery)
-    $decision = Get-FlowBudgetDecision $Record
+    $decision = Get-BudgetsFlowDecision $Record
     if ($decision.currency) { return @() }
     @(
         [pscustomobject]@{
-            key = 'budgets.currency'
-            question = 'Which budget basis should the guided flow configure?'
-            options = @(
+            Key = 'budgets.currency'
+            Question = 'Which budget basis should the guided flow configure?'
+            Options = @(
                 (New-ClaudeChoiceOption -Value 'tokens' -Label 'Token budgets' -Detail '$0 added; realtime approximate APIM token quotas; cache tokens are not counted.' -Recommended -Reason 'Existing gateway behavior with no scheduled reconciliation.')
                 (New-ClaudeChoiceOption -Value 'usd' -Label 'Dollar budgets' -Detail 'Uses dated list-price tariffs and delayed observed-category reconciliation; unknown model prices block enforcement.')
             )
-            recommended = 'tokens'
-            reason = 'Token budgets require no additional job or AUM service timer.'
+            WhereToFind = @('docs/BUDGETS.md#dollar-budgets-what-is-enforced', 'docs/adr/0026-usd-budget-reconciliation.md')
+            AcceptRecommendedWithoutConsole = $true
+            Recommended = 'tokens'
+            Reason = 'Token budgets require no additional job or AUM service timer.'
         }
     )
 }
 
 function Get-ClaudeFlowStepPlan {
     param($Record, $Discovery)
-    $decision = Get-FlowBudgetDecision $Record
+    $decision = Get-BudgetsFlowDecision $Record
     $currency = if ($decision.currency) { [string]$decision.currency } else { 'tokens' }
     $finops = Get-ClaudeDecision -Record $Record -Key 'finops'
     $reconcile = if ($decision.reconcile) { [string]$decision.reconcile } elseif ($currency -eq 'usd' -and $finops.tool -eq 'AumService') { 'aum-service' } elseif ($currency -eq 'usd') { 'job' } else { 'none' }
@@ -137,11 +139,11 @@ function Get-ClaudeFlowStepPlan {
         $implications.Add('Token budgets are approximate and prompt/completion only; they are not invoice caps.')
     } elseif ($currency -eq 'usd') {
         $models = @()
-        $discoveredModels = Get-FlowValue $Discovery 'Models'
+        $discoveredModels = Get-BudgetsFlowValue $Discovery 'Models'
         if ($discoveredModels) { $models = @($discoveredModels) }
         elseif ($decision.models) { $models = @($decision.models) }
         else { $models = @('claude-sonnet-5','claude-opus-5') }
-        $priceBook = Get-ClaudeFlowBudgetPriceBook -Models $models -Path ([string]$decision.priceBookPath)
+        $priceBook = Get-BudgetsFlowPriceBook -Models $models -Path ([string]$decision.priceBookPath)
         $data.priceBook = $priceBook
         $actions.Add((New-ClaudeFlowAction -Verb Write -Target 'usd-budgets' -Detail 'Persist dollar amounts and dated tariff without deleting token guards.'))
         $actions.Add((New-ClaudeFlowAction -Verb Run -Target 'USD reconciliation' -Detail "Mode: $reconcile."))
@@ -164,7 +166,7 @@ function Get-ClaudeFlowStepPlan {
             $gatewayId = if ($decision.gatewayResourceId) { [string]$decision.gatewayResourceId } else { '/subscriptions/<subscription-id>/resourceGroups/<gateway-rg>/providers/Microsoft.ApiManagement/service/<gateway>' }
             $workspaceId = if ($decision.workspaceResourceId) { [string]$decision.workspaceResourceId } else { '/subscriptions/<subscription-id>/resourceGroups/<workspace-rg>/providers/Microsoft.OperationalInsights/workspaces/<workspace>' }
             if ($commit -match '^[0-9a-f]{40}$') {
-                $job = New-ClaudeUsdReconcilerJobDefinition -GatewayResourceId $gatewayId -WorkspaceResourceId $workspaceId -RepositoryUrl $repo -RepositoryRef $commit
+                $job = New-BudgetsFlowUsdReconcilerJobDefinition -GatewayResourceId $gatewayId -WorkspaceResourceId $workspaceId -RepositoryUrl $repo -RepositoryRef $commit
                 $data.reconcilerJob = $job
             }
             $costs.Add((New-ClaudeFlowCost -Item 'USD reconciler Container Apps job' -Source 'Azure Container Apps Consumption active seconds, managed identity; list price depends on region and run duration.' -UnknownReason 'Usage-based job execution and existing environment/network choices.'))
@@ -198,7 +200,7 @@ function Invoke-ClaudeFlowStep {
 
 function Test-ClaudeFlowStep {
     param($Record)
-    $decision = Get-FlowBudgetDecision $Record
+    $decision = Get-BudgetsFlowDecision $Record
     $checks = [System.Collections.Generic.List[object]]::new()
     $checks.Add([pscustomobject]@{ Name = 'budget decision recorded'; Passed = [bool]$decision.currency; Evidence = $(if ($decision.currency) { $decision.currency } else { 'No budgets.currency in decision record.' }); Fix = 'Run the Budgets step.' })
     if ($decision.currency -eq 'usd') {

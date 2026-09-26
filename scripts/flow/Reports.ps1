@@ -13,11 +13,11 @@ function Get-ClaudeFlowStepInfo {
         Title = 'Chargeback reports'
         DecisionKey = 'reports'
         DependsOn = @('Monitoring', 'Budgets')
-        Actions = @('Setup', 'Update', 'Change')
+        Actions = @('Setup', 'Change')
     }
 }
 
-function Get-FlowReportsDecision {
+function Get-ReportsFlowDecision {
     param($Record)
     $existing = Get-ClaudeDecision -Record $Record -Key 'reports'
     if ($null -eq $existing) { return [pscustomobject]@{} }
@@ -26,25 +26,27 @@ function Get-FlowReportsDecision {
 
 function Get-ClaudeFlowStepQuestions {
     param($Record, $Discovery)
-    $decision = Get-FlowReportsDecision $Record
+    $decision = Get-ReportsFlowDecision $Record
     if ($decision.enabled) { return @() }
     @(
         [pscustomobject]@{
-            key = 'reports.enabled'
-            question = 'Configure chargeback report generation and delivery?'
-            options = @(
+            Key = 'reports.enabled'
+            Question = 'Configure chargeback report generation and delivery?'
+            Options = @(
                 (New-ClaudeChoiceOption -Value 'true' -Label 'Configure reports' -Detail 'Deploy/report through existing P50 scripts; ACS, private storage and Container Apps jobs are priced.' -Recommended -Reason 'The owner requested report generation at the end of setup.')
                 (New-ClaudeChoiceOption -Value 'false' -Label 'Skip reports' -Detail 'No report schedule or sample report will be generated.')
             )
-            recommended = 'true'
-            reason = 'The guided flow should leave the administrator with a real report.'
+            WhereToFind = @('docs/CHARGEBACK-REPORTS.md')
+            AcceptRecommendedWithoutConsole = $true
+            Recommended = 'true'
+            Reason = 'The guided flow should leave the administrator with a real report.'
         }
     )
 }
 
 function Get-ClaudeFlowStepPlan {
     param($Record, $Discovery)
-    $decision = Get-FlowReportsDecision $Record
+    $decision = Get-ReportsFlowDecision $Record
     $enabled = if ($decision.PSObject.Properties.Name -contains 'enabled') { [bool]$decision.enabled } else { $true }
     $actions = [System.Collections.Generic.List[object]]::new()
     if ($enabled) {
@@ -84,7 +86,7 @@ function Invoke-ClaudeFlowStep {
 
 function Test-ClaudeFlowStep {
     param($Record)
-    $decision = Get-FlowReportsDecision $Record
+    $decision = Get-ReportsFlowDecision $Record
     $checks = @(
         [pscustomobject]@{ Name = 'report decision recorded'; Passed = ($decision.PSObject.Properties.Name -contains 'enabled'); Evidence = $(if ($decision.PSObject.Properties.Name -contains 'enabled') { [string]$decision.enabled } else { 'No reports.enabled decision.' }); Fix = 'Run the Reports step.' }
         [pscustomobject]@{ Name = 'allowed recipient domains'; Passed = (@($decision.allowedDomains).Count -gt 0 -or -not [bool]$decision.enabled); Evidence = ((@($decision.allowedDomains)) -join ', '); Fix = 'Record at least one allowed recipient domain before enabling email delivery.' }

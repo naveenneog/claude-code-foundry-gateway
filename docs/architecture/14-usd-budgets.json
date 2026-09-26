@@ -14,7 +14,7 @@
     "api": {"label": "UsdBudgets", "source": "service/aum/aum_service/usd_service.py", "match": "class UsdBudgets:"},
     "timer": {"label": "reconcile_usd_budgets", "source": "service/aum/function_app.py", "match": "def reconcile_usd_budgets("},
     "direct": {"label": "Sync-ClaudeUsdBudgets.ps1", "source": "scripts/Sync-ClaudeUsdBudgets.ps1", "match": "aum_service.usd_command"},
-    "job": {"label": "New-ClaudeUsdReconcilerJobDefinition", "source": "scripts/flow/Budgets.ps1", "match": "function New-ClaudeUsdReconcilerJobDefinition"},
+    "job": {"label": "New-BudgetsFlowUsdReconcilerJobDefinition", "source": "scripts/flow/Budgets.ps1", "match": "function New-BudgetsFlowUsdReconcilerJobDefinition"},
     "price": {"label": "price_row", "source": "service/aum/aum_service/usd_budgets.py", "match": "def price_row("},
     "authority": {"label": "check_authority", "source": "service/aum/aum_service/usd_budgets.py", "match": "def check_authority("},
     "usage": {"label": "UsageJson", "source": "infra/policy.xml", "match": "name=\"UsageJson\""},

@@ -15,18 +15,18 @@ function Get-ClaudeFlowStepInfo {
         Title = 'FinOps tooling'
         DecisionKey = 'finops'
         DependsOn = @('Foundation')
-        Actions = @('Setup', 'Change', 'Update')
+        Actions = @('Setup', 'Change')
     }
 }
 
-function Get-FlowFinOpsDecision {
+function Get-FinOpsFlowDecision {
     param($Record)
     $existing = Get-ClaudeDecision -Record $Record -Key 'finops'
     if ($null -eq $existing) { return [pscustomobject]@{} }
     return $existing
 }
 
-function Get-FlowDiscoveryValue {
+function Get-FinOpsFlowDiscoveryValue {
     param($Discovery, [string]$Name)
     if ($null -eq $Discovery) { return $null }
     if ($Discovery -is [System.Collections.IDictionary] -and $Discovery.ContainsKey($Name)) { return $Discovery[$Name] }
@@ -34,11 +34,11 @@ function Get-FlowDiscoveryValue {
     return $null
 }
 
-function Get-FlowFinOpsChoices {
+function Get-FinOpsFlowChoices {
     param($Discovery)
-    $region = [string](Get-FlowDiscoveryValue $Discovery 'Region')
-    $prices = Get-FlowDiscoveryValue $Discovery 'AumPrices'
-    $turnstile = Get-FlowDiscoveryValue $Discovery 'TurnstilePrices'
+    $region = [string](Get-FinOpsFlowDiscoveryValue $Discovery 'Region')
+    $prices = Get-FinOpsFlowDiscoveryValue $Discovery 'AumPrices'
+    $turnstile = Get-FinOpsFlowDiscoveryValue $Discovery 'TurnstilePrices'
     if ($region -and $null -eq $prices) { $prices = Get-ClaudeAumPrices -Region $region }
     if ($region -and $null -eq $turnstile -and $null -ne $prices) { $turnstile = Get-ClaudeFinOpsComparisonPrice -Region $region -AumPrices $prices }
     return @(Get-ClaudeFinOpsChoices -Prices $prices -TurnstilePrices $turnstile)
@@ -46,9 +46,9 @@ function Get-FlowFinOpsChoices {
 
 function Get-ClaudeFlowStepQuestions {
     param($Record, $Discovery)
-    $decision = Get-FlowFinOpsDecision $Record
+    $decision = Get-FinOpsFlowDecision $Record
     if ($decision.tool) { return @() }
-    $choices = @(Get-FlowFinOpsChoices -Discovery $Discovery)
+    $choices = @(Get-FinOpsFlowChoices -Discovery $Discovery)
     $options = foreach ($choice in $choices) {
         $recommended = $choice.Id -eq 'Direct'
         New-ClaudeChoiceOption -Value $choice.Id -Label $choice.Label `
@@ -56,25 +56,27 @@ function Get-ClaudeFlowStepQuestions {
             -Recommended:$recommended -Reason $(if ($recommended) { 'No server and no extra Azure infrastructure; administrators can add a scoped authority later.' } else { '' })
     }
     return @([pscustomobject]@{
-        key = 'finops.tool'
-        question = 'Which FinOps tool should this gateway use?'
-        options = @($options)
-        recommended = 'Direct'
-        reason = 'AUM Direct gives the guided flow a terminal and automation surface with no standing service cost.'
+        Key = 'finops.tool'
+        Question = 'Which FinOps tool should this gateway use?'
+        Options = @($options)
+        WhereToFind = @('docs/FINOPS-TOOLS.md', 'scripts/Select-ClaudeFinOpsTooling.ps1 -Region <region>')
+        AcceptRecommendedWithoutConsole = $true
+        Recommended = 'Direct'
+        Reason = 'AUM Direct gives the guided flow a terminal and automation surface with no standing service cost.'
     })
 }
 
-function New-FlowCommand {
+function New-FinOpsFlowCommand {
     param([string]$File, [string[]]$Arguments = @(), [string]$Tool = 'powershell')
     [pscustomobject]@{ tool = $Tool; file = $File; arguments = @($Arguments) }
 }
 
 function Get-ClaudeFlowStepPlan {
     param($Record, $Discovery)
-    $decision = Get-FlowFinOpsDecision $Record
+    $decision = Get-FinOpsFlowDecision $Record
     $tool = if ($decision.tool) { [string]$decision.tool } else { 'Direct' }
-    $region = [string](Get-FlowDiscoveryValue $Discovery 'Region')
-    $choices = @(Get-FlowFinOpsChoices -Discovery $Discovery)
+    $region = [string](Get-FinOpsFlowDiscoveryValue $Discovery 'Region')
+    $choices = @(Get-FinOpsFlowChoices -Discovery $Discovery)
     $choice = @($choices | Where-Object Id -eq $tool)[0]
     if (-not $choice) { throw "Unknown FinOps tool '$tool'." }
     $cost = $null
@@ -98,30 +100,30 @@ function Get-ClaudeFlowStepPlan {
             $actions.Add((New-ClaudeFlowAction -Verb Create -Target 'AUM local environment' -Detail 'Install-ClaudeAum.ps1 installs the terminal client.'))
             $actions.Add((New-ClaudeFlowAction -Verb Write -Target 'AUM profile' -Detail 'aum configure --backend direct --no-prompt --save.'))
             $requires.Add('Azure CLI sign-in with gateway and workspace permissions')
-            $commands.Add((New-FlowCommand -File 'scripts\Install-ClaudeAum.ps1'))
-            $commands.Add((New-FlowCommand -Tool 'aum' -File 'aum' -Arguments @('configure','--backend','direct','--no-prompt','--save')))
+            $commands.Add((New-FinOpsFlowCommand -File 'scripts\Install-ClaudeAum.ps1'))
+            $commands.Add((New-FinOpsFlowCommand -Tool 'aum' -File 'aum' -Arguments @('configure','--backend','direct','--no-prompt','--save')))
         }
         'AumService' {
             $actions.Add((New-ClaudeFlowAction -Verb Create -Target 'AUM Entra application' -Detail 'New-ClaudeAumEntraApp.ps1 creates app roles and the consent-free API scope.'))
             $actions.Add((New-ClaudeFlowAction -Verb Deploy -Target 'AUM service' -Detail 'Deploy-ClaudeAumService.ps1 deploys Functions, Storage and selected options.'))
             $requires.Add('App registration ownership and Azure resource deployment rights')
-            $commands.Add((New-FlowCommand -File 'scripts\New-ClaudeAumEntraApp.ps1'))
-            $commands.Add((New-FlowCommand -File 'scripts\Deploy-ClaudeAumService.ps1' -Arguments @('-Accept','-Confirm:$false')))
+            $commands.Add((New-FinOpsFlowCommand -File 'scripts\New-ClaudeAumEntraApp.ps1'))
+            $commands.Add((New-FinOpsFlowCommand -File 'scripts\Deploy-ClaudeAumService.ps1' -Arguments @('-Accept','-Confirm:$false')))
         }
         'Turnstile' {
             $actions.Add((New-ClaudeFlowAction -Verb Write -Target 'Turnstile connection' -Detail 'Connect-ClaudeTurnstile.ps1 records an existing Turnstile and its authorities.'))
             $implications.Add('Deploying Turnstile itself remains the Turnstile guide; this step connects an existing deployment and states its price.')
             $requires.Add('Existing Turnstile URL/scope or resource group, and authority decision')
-            $commands.Add((New-FlowCommand -File 'scripts\Connect-ClaudeTurnstile.ps1'))
+            $commands.Add((New-FinOpsFlowCommand -File 'scripts\Connect-ClaudeTurnstile.ps1'))
         }
         'TurnstileAum' {
             $actions.Add((New-ClaudeFlowAction -Verb Write -Target 'Turnstile connection' -Detail 'Connect-ClaudeTurnstile.ps1 connects the gateway to Turnstile.'))
             $actions.Add((New-ClaudeFlowAction -Verb Write -Target 'AUM profile' -Detail 'AUM uses Turnstile as the server authority.'))
             $implications.Add('AUM is another Turnstile client; it is not a second writer.')
             $requires.Add('Existing Turnstile plus AUM client installation')
-            $commands.Add((New-FlowCommand -File 'scripts\Connect-ClaudeTurnstile.ps1'))
-            $commands.Add((New-FlowCommand -File 'scripts\Install-ClaudeAum.ps1' -Arguments @('-NoConfigure')))
-            $commands.Add((New-FlowCommand -Tool 'aum' -File 'aum' -Arguments @('configure','--backend','turnstile','--no-prompt','--save')))
+            $commands.Add((New-FinOpsFlowCommand -File 'scripts\Connect-ClaudeTurnstile.ps1'))
+            $commands.Add((New-FinOpsFlowCommand -File 'scripts\Install-ClaudeAum.ps1' -Arguments @('-NoConfigure')))
+            $commands.Add((New-FinOpsFlowCommand -Tool 'aum' -File 'aum' -Arguments @('configure','--backend','turnstile','--no-prompt','--save')))
         }
     }
     New-ClaudeFlowPlan -Step 'FinOps' -Summary "Choose and configure $($choice.Label)." `
@@ -130,7 +132,7 @@ function Get-ClaudeFlowStepPlan {
         -Data @{ tool = $tool; region = $region; commands = @($commands); choice = $choice }
 }
 
-function Invoke-FlowCommand {
+function Invoke-FinOpsFlowCommand {
     param($Command)
     if ($Command.tool -eq 'aum') {
         & $Command.file @($Command.arguments)
@@ -144,13 +146,13 @@ function Invoke-FlowCommand {
 
 function Invoke-ClaudeFlowStep {
     param($Record, $Plan)
-    foreach ($command in @($Plan.Data.commands)) { Invoke-FlowCommand $command }
+    foreach ($command in @($Plan.Data.commands)) { Invoke-FinOpsFlowCommand $command }
     return @{ finops = [pscustomobject]@{ tool = $Plan.Data.tool; configuredUtc = [DateTime]::UtcNow.ToString('o') } }
 }
 
 function Test-ClaudeFlowStep {
     param($Record)
-    $decision = Get-FlowFinOpsDecision $Record
+    $decision = Get-FinOpsFlowDecision $Record
     $tool = [string]$decision.tool
     $checks = [System.Collections.Generic.List[object]]::new()
     $checks.Add([pscustomobject]@{ Name = 'decision recorded'; Passed = [bool]$tool; Evidence = $(if ($tool) { $tool } else { 'No finops.tool in decision record.' }); Fix = 'Run the FinOps step from Start-ClaudeGateway.ps1.' })

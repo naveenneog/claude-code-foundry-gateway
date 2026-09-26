@@ -13,11 +13,11 @@ function Get-ClaudeFlowStepInfo {
         Title = 'Monitoring workbooks and saved queries'
         DecisionKey = 'monitoring'
         DependsOn = @('Foundation')
-        Actions = @('Setup', 'Update', 'Change')
+        Actions = @('Setup', 'Change')
     }
 }
 
-function Get-ClaudeFlowWorkbookDefinitions {
+function Get-MonitoringFlowWorkbookDefinitions {
     param([string]$Root = $script:FlowRoot)
     @(Get-ChildItem -LiteralPath (Join-Path $Root 'infra') -Filter 'workbook*.json' -File |
         Sort-Object Name |
@@ -27,7 +27,7 @@ function Get-ClaudeFlowWorkbookDefinitions {
         })
 }
 
-function Get-ClaudeFlowQueryDefinitions {
+function Get-MonitoringFlowQueryDefinitions {
     param([string]$Root = $script:FlowRoot)
     @(Get-ChildItem -LiteralPath (Join-Path $Root 'analytics') -Filter '*.kql' -File |
         Sort-Object Name |
@@ -39,14 +39,16 @@ function Get-ClaudeFlowStepQuestions {
     $existing = Get-ClaudeDecision -Record $Record -Key 'monitoring'
     if ($existing.enabled) { return @() }
     @([pscustomobject]@{
-        key = 'monitoring.enabled'
-        question = 'Deploy saved KQL functions and every shipped workbook to the gateway workspace?'
-        options = @(
+        Key = 'monitoring.enabled'
+        Question = 'Deploy saved KQL functions and every shipped workbook to the gateway workspace?'
+        Options = @(
             (New-ClaudeChoiceOption -Value 'true' -Label 'Deploy monitoring collection' -Detail '$0 standing cost; workspace query charges depend on table plan.' -Recommended -Reason 'The guided flow should leave administrators with the full portal collection.')
             (New-ClaudeChoiceOption -Value 'false' -Label 'Skip monitoring deployment' -Detail 'No workbook or function will be published by the flow.')
         )
-        recommended = 'true'
-        reason = 'The owner asked for workbook collection deployment as part of the product flow.'
+        WhereToFind = @('docs/MONITORING.md#7-dashboard')
+        AcceptRecommendedWithoutConsole = $true
+        Recommended = 'true'
+        Reason = 'The owner asked for workbook collection deployment as part of the product flow.'
     })
 }
 
@@ -54,8 +56,8 @@ function Get-ClaudeFlowStepPlan {
     param($Record, $Discovery)
     $decision = Get-ClaudeDecision -Record $Record -Key 'monitoring'
     $enabled = if ($null -ne $decision -and $decision.PSObject.Properties.Name -contains 'enabled') { [bool]$decision.enabled } else { $true }
-    $workbooks = @(Get-ClaudeFlowWorkbookDefinitions)
-    $queries = @(Get-ClaudeFlowQueryDefinitions)
+    $workbooks = @(Get-MonitoringFlowWorkbookDefinitions)
+    $queries = @(Get-MonitoringFlowQueryDefinitions)
     $actions = [System.Collections.Generic.List[object]]::new()
     if ($enabled) {
         $actions.Add((New-ClaudeFlowAction -Verb Deploy -Target 'Saved KQL functions' -Detail (($queries.RelativePath) -join ', ')))
@@ -85,8 +87,8 @@ function Invoke-ClaudeFlowStep {
 
 function Test-ClaudeFlowStep {
     param($Record)
-    $workbooks = @(Get-ClaudeFlowWorkbookDefinitions)
-    $queries = @(Get-ClaudeFlowQueryDefinitions)
+    $workbooks = @(Get-MonitoringFlowWorkbookDefinitions)
+    $queries = @(Get-MonitoringFlowQueryDefinitions)
     $checks = @(
         [pscustomobject]@{ Name = 'workbook definitions discovered'; Passed = ($workbooks.Count -gt 0); Evidence = (($workbooks.RelativePath) -join ', '); Fix = 'Add workbook JSON under infra/ or fix repository layout.' }
         [pscustomobject]@{ Name = 'query definitions discovered'; Passed = ($queries.Count -gt 0); Evidence = (($queries.RelativePath) -join ', '); Fix = 'Add KQL under analytics/ or fix repository layout.' }
