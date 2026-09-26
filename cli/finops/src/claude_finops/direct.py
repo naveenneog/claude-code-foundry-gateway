@@ -114,6 +114,10 @@ class DirectBackend(Backend):
             result["features"]["native_writes"] = {"enabled": writer, "actions": ["budget", "catalog", "tiers"] if writer else []}
             result["features"]["budget_modes"] = {"enabled": True, "actions": ["read"] + (["write"] if writer and state.get("modes_supported") else [])}
             result["features"]["person_daily_budget"] = {"enabled": True, "actions": ["read"] + (["write"] if writer and state.get("person_budgets_supported") else [])}
+            usd_actions = ["read"] if state.get("usd_supported") else []
+            if writer and state.get("usd_supported"):
+                usd_actions += ["write", "reconcile", "price_book_write"]
+            result["features"]["usd_budgets"] = {"enabled": bool(usd_actions), "actions": usd_actions}
             return result
         if resource == "whoami":
             account = json.loads(self._az("account", "show", "-o", "json"))
@@ -138,6 +142,8 @@ class DirectBackend(Backend):
                               "For scoped managers/viewers choose the optional AUM service or Turnstile.")
         if resource == "apply":
             return dict(configured=False, direct=True, note="Direct writes verify named values and compensate on failure; no server apply job.", executions=[])
+        if resource in {"usd_budgets", "usd_status", "usd_price_book"}:
+            return self._bridge(resource)
         if resource in {"catalog", "tiers", "budgets"}:
             state = self._bridge("read")
             if resource == "catalog":
@@ -253,4 +259,9 @@ class DirectBackend(Backend):
                 raise FinOpsError("Direct mode changes only the current month. Use Turnstile for historical budgets.")
         if resource == "apply":
             raise FinOpsError("Direct writes use the repository scripts immediately; there is no separate apply job.")
+        if resource in {"usd_budget", "usd_budget_remove", "usd_reconcile", "usd_price_book"}:
+            if resource == "usd_reconcile":
+                params.setdefault("workspace_id", self.config.workspace)
+                params.setdefault("subscription_id", self.config.subscription)
+            return self._bridge(resource, body, **params)
         return self._bridge(resource, body, **params)

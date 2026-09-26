@@ -432,6 +432,84 @@ published cost-function membership map. Cost/cache remain unknown on this basis.
 **Usage: current priced membership** returns to the existing priced workspace
 view; the two bases answer different questions and are labelled separately.
 
+### Dollar budgets in AUM
+
+Dollar budgets are separate from token budgets. They use the gateway's P59 USD
+definition and reconciled-state named values, price every observed category with
+the pinned tariff, and enforce through the gateway after reconciliation. AUM does
+not convert a token budget to dollars and does not use the token-budget commands
+as a fallback.
+
+```powershell
+aum usd list --backend direct --json
+aum usd set unit <unit-id> 0.02 --period month --backend direct --what-if
+aum usd set team <team-id> 0 --period month --backend direct --apply
+aum usd set person <entra-object-id> 1.250000001 --period day --backend direct --apply
+aum usd clear team <team-id> --backend direct --apply --confirm <team-id>
+aum usd status --backend direct --json
+aum usd reconcile --backend direct --what-if
+aum usd reconcile --backend direct --apply
+aum usd price-book show --backend direct --json
+aum usd price-book set .\approved-price-book.json --backend direct --apply
+```
+
+Amounts are decimal strings: nonnegative, below one trillion, with at most nine
+fractional digits. `0` is a real zero-dollar stop. Unit and team budgets are
+monthly. Person budgets may be daily or monthly when the connected service
+supports the selected period. A successful write says **Saved; awaiting
+reconciliation**. It is not reported as enforced until `aum usd reconcile
+--apply`, or the AUM service timer, writes a fresh state.
+
+`aum usd status` reports the reconciled UTC window, nominal and effective budget,
+observed spend, enforcement mode, `allow`/`notice`/`stop`/`unpriced` status,
+cache completeness, exactness and unpriced model names. Null spend is unpriced
+or unknown, never zero. The Budgets tab shows these dollar columns next to token
+budget, usage and mode. The dollar edit form is preview-first; clearing a dollar
+budget requires typing the exact scope id.
+
+Direct mode reuses the gateway's existing USD implementation:
+
+- `scripts\ClaudeUsdBudgets.ps1` for validation, encoding, named-value capacity
+  checks and the shared `UsdBudgets` authority guard.
+- `scripts\Sync-ClaudeUsdBudgets.ps1` for on-demand reconciliation. It calls the
+  same Python engine used by the optional AUM service timer.
+- `scripts\Invoke-ClaudeFinOps.ps1` only bridges AUM requests into those shared
+  scripts; it does not implement a second price book or serializer.
+
+The AUM service backend uses the service contract in
+[AUM client contract: USD budgets](aum-usd-budgets-client-contract.md). It
+requires advertised capability flags, sends `If-Match` for writes, and keeps
+manager scope on the server. A manager never sees reconcile or price-book actions
+unless the service advertises them. A 409 conflict requires a fresh read and a
+new preview.
+
+The Turnstile backend currently has no real USD budget source. AUM hides or
+refuses dollar writes and reconciliation through Turnstile with an authority
+message. It does not write token budgets as a substitute for dollars.
+
+Manual Azure equivalents:
+
+```powershell
+# Inspect the stored definitions and state.
+az apim nv show -g $rg --service-name $apim --named-value-id usd-budgets `
+  --query value -o tsv
+az apim nv show -g $rg --service-name $apim --named-value-id usd-budget-state `
+  --query value -o tsv
+
+# Set or clear a USD budget through the shared writer.
+.\scripts\ClaudeUsdBudgets.ps1
+.\scripts\Set-ClaudeBusinessUnit.ps1 -Id <unit-id> -MonthlyBudgetUsd 0.02 `
+  -ResourceGroup $rg -ApimName $apim
+
+# Reconcile observed spend into gateway stops.
+.\scripts\Sync-ClaudeUsdBudgets.ps1 -ResourceGroup $rg -ApimName $apim `
+  -WorkspaceId <workspace-customer-id>
+```
+
+The named values are base64-encoded ASCII JSON so policy literals remain safe.
+Edit them by script or AUM, not by hand. If Turnstile owns budgets or governance,
+the shared authority guard refuses Direct dollar writes and reconciliation.
+
 ### Direct anomaly method and accounting scope
 
 `aum anomalies list --backend direct` runs

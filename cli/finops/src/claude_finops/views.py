@@ -53,6 +53,9 @@ def view_rows(tab, data, *, ascii_only=False, utc=False):
             columns = ["Scope", "Used/day", "Limit/day", "Remaining/day", "Status"]
         if tab == "budgets":
             columns.insert(4, "Unallocated")
+            columns.insert(5, "USD budget")
+            columns.insert(6, "USD spend")
+            columns.insert(7, "USD status")
             columns.append("Mode")
         items = data.get("items", [])
         if tab == "budgets":
@@ -73,11 +76,27 @@ def view_rows(tab, data, *, ascii_only=False, utc=False):
                 free = (item["token_limit"] - sum(r.get("token_limit") or 0 for r in children)
                         if item.get("token_limit") is not None and item["scope_type"] == "organization" else None)
                 cells.insert(4, human(free) if item["scope_type"] == "organization" else "see People")
+                cells.insert(5, ("$" + item["usd_budget"]) if item.get("usd_budget") is not None else "not set")
+                cells.insert(6, "unpriced" if item.get("usd_spent") is None and item.get("usd_status") == "unpriced"
+                             else ("$" + item["usd_spent"]) if item.get("usd_spent") is not None else "unknown")
+                quality = []
+                if item.get("usd_exact") is False:
+                    quality.append("incomplete")
+                if item.get("usd_cache_read_known") is False:
+                    quality.append("cache read unknown")
+                if item.get("usd_cache_write_known") is False:
+                    quality.append("cache write unknown")
+                if item.get("usd_unpriced_models"):
+                    quality.append("unpriced " + ",".join(map(str, item["usd_unpriced_models"])))
+                cells.insert(7, str(item.get("usd_status") or "unknown") + ((" (" + "; ".join(quality) + ")") if quality else ""))
                 cells.append(data.get("enforcement_modes", {}).get(item["scope_id"], "STRICT"))
             rows.append(tuple(cells))
             records.append(item)
         if tab == "budgets":
-            note = note or "Organization > unit > team. Remaining = budget minus usage; edit shows allocation."
+            usd = data.get("usd", {}).get("status", {})
+            reconciled = usd.get("reconciled_at") or "not reconciled"
+            note = note or "Token and dollar budgets are independent. USD spend is delayed observed-category spend; null is unpriced, never zero."
+            note += f" Reconciled: {reconciled}."
         else:
             total = data.get("total")
             note = note or f"Server search | {data.get('offset', 0) + 1}-{data.get('offset', 0) + len(items)} of {total if total is not None else 'unknown'} | Parent free: {human(data.get('department_available_tokens'))}"

@@ -28,6 +28,15 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- **AUM manages gateway USD budgets.** `aum usd list|set|clear|status|reconcile`
+  and `aum usd price-book show|set` manage the P59 dollar-budget contract with
+  decimal strings, preview-first writes, typed confirmation for clears and the
+  **Saved; awaiting reconciliation** state. Direct reuses
+  `ClaudeUsdBudgets.ps1`, `Sync-ClaudeUsdBudgets.ps1` and the shared
+  `UsdBudgets` authority guard; the AUM service backend uses advertised
+  capability flags and `If-Match`; Turnstile USD writes are hidden/refused until
+  it exposes a real USD source. `docs/AUM.md`, `docs/BUDGETS.md`,
+  [ADR-0018](docs/adr/0018-terminal-finops.md).
 - **AUM (Azure Usage Management), the terminal FinOps client renamed from `claude-finops`.**
   `aum` (the old command still works) adds an executive overview, budgets by unit, team and
   person, gateway governance, usage breakdown and trends, a request trace, anomalies, reports

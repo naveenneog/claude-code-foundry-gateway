@@ -60,6 +60,8 @@ class TurnstileBackend(HttpBackend):
             if "{id}" in path:
                 path = path.format(id=quote(identifier(params.pop("id")), safe=""))
             return redact_credentials(self._request("GET", path, {k: v for k, v in params.items() if v is not None}))
+        if resource in {"usd_budgets", "usd_status", "usd_price_book"}:
+            raise FinOpsError("Turnstile does not expose a real USD budget source yet. Use Direct or the AUM service.")
         if resource not in READ_ROUTES:
             raise FinOpsError("Unsupported view. Update AUM and the Turnstile fork.")
         path = READ_ROUTES[resource]
@@ -84,6 +86,8 @@ class TurnstileBackend(HttpBackend):
         return self._request("GET", path, query)
 
     def write(self, resource, body=None, **params):
+        if resource in {"usd_budget", "usd_budget_remove", "usd_reconcile", "usd_price_book"}:
+            raise FinOpsError("Turnstile does not expose a USD budget writer; gateway USD authority remains Direct/AUM service unless Turnstile advertises a real source.", 5)
         if resource in FEATURE_WRITES:
             method, path = FEATURE_WRITES[resource]
             if "{id}" in path:

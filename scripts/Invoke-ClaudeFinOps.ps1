@@ -33,6 +33,7 @@ if ($Subscription) {
 . (Join-Path $PSScriptRoot 'ClaudeTurnstileGovernance.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeBudgetOverride.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeAumDirectWrites.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeUsdBudgets.ps1')
 $request = Get-Content -LiteralPath $InputFile -Raw | ConvertFrom-Json
 $nv = Get-AumNamedValueMap -ResourceGroup $ResourceGroup -ApimName $ApimName
 $registry = @(ConvertFrom-ClaudeBuRegistry $nv['bu-registry'])
@@ -49,6 +50,10 @@ function Invoke-VerifiedChange($Expected, [scriptblock]$Operation) {
             param($key)
             az apim nv delete -g $ResourceGroup --service-name $ApimName --named-value-id $key --yes -o none
             if ($LASTEXITCODE -ne 0) { throw 'Could not remove the value created by this operation.' }
+        }
+        function Get-AumSha256Hex([string]$Value) {
+            $bytes = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($Value))
+            return -join ($bytes | ForEach-Object { $_.ToString('x2') })
         }
 }
 
@@ -85,7 +90,126 @@ switch ([string]$request.action) {
             person_budgets_supported = $nv.ContainsKey('quota-overrides')
             modes_supported = $nv.ContainsKey('bu-modes')
             authority = $(if ($nv['turnstile-integration'] -match '(?:^|;)(?:governanceAuthority|budgetAuthority)=Turnstile(?:;|$)') { 'Turnstile' } else { 'Gateway' })
+            usd_supported = $nv.ContainsKey('usd-budgets') -and $nv.ContainsKey('usd-budget-state')
         }
+    }
+    'usd_budgets' {
+        $doc = ConvertFrom-ClaudeUsdValue $nv['usd-budgets']
+        $items = @()
+        if ($doc.items) {
+            foreach ($entry in $doc.items.PSObject.Properties) {
+                $parts = $entry.Name.Split(':', 2)
+                $items += [ordered]@{
+                    scope_type = $parts[0]; scope_id = $parts[1]
+                    amount_usd = [string]$entry.Value.amount_usd
+                    period = [string]$entry.Value.period
+                    price_book_date = [string]$entry.Value.price_book_date
+                    writable = ($nv['turnstile-integration'] -notmatch '(?:^|;)(?:governanceAuthority|budgetAuthority)=Turnstile(?:;|$)')
+                }
+            }
+        }
+        $result = [ordered]@{
+            schema_version = 1; currency = 'USD'
+            revision = Get-AumSha256Hex $nv['usd-budgets']
+            price_book_date = [string]$doc.price_book.date
+            items = @($items)
+        }
+    }
+    'usd_status' {
+        $state = ConvertFrom-ClaudeUsdValue $nv['usd-budget-state']
+        if (-not $state.PSObject.Properties.Count) {
+            $result = [ordered]@{ enabled = $false; fresh = $false; items = [pscustomobject]@{}; reconcile_interval_seconds = 300; state_max_age_seconds = 900 }
+        }
+        else {
+            if ($state.encoding -eq 'compact-v1') {
+                $expanded = [ordered]@{}
+                foreach ($name in $state.PSObject.Properties.Name) {
+                    if ($name -notin @('encoding', 'periods', 'price_book_date', 'items')) { $expanded[$name] = $state.$name }
+                }
+                $expanded['items'] = [ordered]@{}
+                foreach ($entry in $state.items.PSObject.Properties) {
+                    $parts = $entry.Name.Split(':', 2)
+                    $data = @($entry.Value)
+                    $periodBounds = @($state.periods.PSObject.Properties[$data[0]].Value)
+                    $flags = [int]$data[6]
+                    $expanded['items'][$entry.Name] = [ordered]@{
+                        scope_type = $parts[0]; scope_id = $parts[1]; period = [string]$data[0]
+                        period_start = [string]$periodBounds[0]; period_end = [string]$periodBounds[1]
+                        price_book_date = [string]$state.price_book_date
+                        budget_usd = [string]$data[1]; effective_budget_usd = [string]$data[2]
+                        spent_usd = $data[3]; status = [string]$data[4]; enforcement = [string]$data[5]
+                        exact = (($flags -band 1) -ne 0)
+                        cache_read_known = (($flags -band 2) -ne 0)
+                        cache_write_known = (($flags -band 4) -ne 0)
+                        unpriced_models = @($data[7])
+                    }
+                }
+                $state = [pscustomobject]$expanded
+            }
+            $result = $state
+            $result | Add-Member -NotePropertyName reconcile_interval_seconds -NotePropertyValue 300 -Force
+            $result | Add-Member -NotePropertyName state_max_age_seconds -NotePropertyValue 900 -Force
+            $result | Add-Member -NotePropertyName enabled -NotePropertyValue $true -Force
+            $result | Add-Member -NotePropertyName fresh -NotePropertyValue $true -Force
+        }
+    }
+    'usd_price_book' {
+        if ($request.body -and $request.body.price_book) {
+            Assert-ClaudeUsdAuthority -ResourceGroup $ResourceGroup -ApimName $ApimName
+            $doc = ConvertFrom-ClaudeUsdValue $nv['usd-budgets']
+            if ($doc.items -and $doc.items.PSObject.Properties.Count -and ($doc.price_book | ConvertTo-Json -Depth 30 -Compress) -cne ($request.body.price_book | ConvertTo-Json -Depth 30 -Compress)) {
+                throw 'Active USD budgets pin their tariff; clear them before replacing the price book.'
+            }
+            $next = [pscustomobject]@{ schema_version = 1; price_book = $request.body.price_book; items = $(if ($doc.items) { $doc.items } else { [pscustomobject]@{} }) }
+            $encoded = ConvertTo-ClaudeUsdValue $next
+            $result = Invoke-VerifiedChange @{ 'usd-budgets'=$encoded } {
+                Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'usd-budgets' -Value $encoded | Out-Null
+            }
+            $result.price_book = $request.body.price_book
+        }
+        else {
+            $doc = ConvertFrom-ClaudeUsdValue $nv['usd-budgets']
+            $result = [ordered]@{
+                revision = Get-AumSha256Hex $nv['usd-budgets']
+                price_book = $doc.price_book
+            }
+        }
+    }
+    { $_ -in 'usd_budget', 'usd_budget_remove' } {
+        if (-not $nv.ContainsKey('usd-budgets') -or -not $nv.ContainsKey('usd-budget-state')) {
+            throw 'Install the current gateway template/policy before setting USD budgets.'
+        }
+        $args = @{
+            ResourceGroup = $ResourceGroup
+            ApimName = $ApimName
+            ScopeType = [string]$request.parameters.scope_type
+            ScopeId = [string]$request.parameters.scope_id
+            AmountUsd = $(if ($request.action -eq 'usd_budget_remove') { [decimal]0 } else { [decimal]::Parse([string]$request.body.amount_usd, [Globalization.CultureInfo]::InvariantCulture) })
+            Period = $(if ($request.body.period) { [string]$request.body.period } else { 'month' })
+        }
+        if ($request.action -eq 'usd_budget_remove') { $args.Clear = $true }
+        Set-ClaudeUsdBudget @args | Out-Null
+        $doc = ConvertFrom-ClaudeUsdValue (Get-AumNamedValueMap -ResourceGroup $ResourceGroup -ApimName $ApimName)['usd-budgets']
+        $key = "$($request.parameters.scope_type):$($request.parameters.scope_id)"
+        $result = [ordered]@{
+            audit_id = 'direct-control-plane'
+            revision = Get-AumSha256Hex (ConvertTo-ClaudeUsdValue $doc)
+            result = $(if ($request.action -eq 'usd_budget_remove') { [ordered]@{ cleared = $true } }
+                else { [ordered]@{ scope_type = [string]$request.parameters.scope_type; scope_id = [string]$request.parameters.scope_id
+                    amount_usd = [string]$doc.items.PSObject.Properties[$key].Value.amount_usd
+                    period = [string]$doc.items.PSObject.Properties[$key].Value.period
+                    price_book_date = [string]$doc.items.PSObject.Properties[$key].Value.price_book_date } })
+        }
+    }
+    'usd_reconcile' {
+        if (-not $request.parameters.workspace_id) { throw 'USD reconciliation needs the Log Analytics workspace id in Direct config.' }
+        $arguments = @{
+            ResourceGroup = $ResourceGroup
+            ApimName = $ApimName
+            WorkspaceId = [string]$request.parameters.workspace_id
+        }
+        if ($request.parameters.subscription_id) { $arguments.SubscriptionId = [string]$request.parameters.subscription_id }
+        $result = & (Join-Path $PSScriptRoot 'Sync-ClaudeUsdBudgets.ps1') @arguments | ConvertFrom-Json
     }
     { $_ -in 'budget', 'budget_remove' } {
         if ($nv['turnstile-integration'] -match '(governanceAuthority|budgetAuthority)=Turnstile') {

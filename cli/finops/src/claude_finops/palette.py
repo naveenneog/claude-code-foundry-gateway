@@ -64,6 +64,10 @@ class FinOpsCommands(Provider):
                 commands.append(("Import person budgets from CSV", self.app.action_bulk, "Preview full parent allocation"))
             if enabled(self.app.feature_caps, "budget_modes", "write"):
                 commands.append(("Set budget enforcement mode", self.app.action_mode, "Strict, allowance or notify"))
+            if enabled(self.app.feature_caps, "usd_budgets", "write"):
+                commands.append(("Edit selected USD budget", self.app.action_usd_edit, "Preview, then save; reconciliation is separate"))
+            if enabled(self.app.feature_caps, "usd_budgets", "reconcile"):
+                commands.append(("Reconcile USD budgets now", self.app.action_usd_reconcile, "Runs the advertised gateway reconciler"))
         elif self.app.check_action("edit", ()):
             commands.append(("Edit selected delegated budget", self.app.action_edit, "Within the server's writable scope"))
         caps = self.app.feature_caps

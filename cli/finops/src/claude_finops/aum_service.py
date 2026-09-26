@@ -99,6 +99,12 @@ class AumServiceBackend(HttpBackend):
             self._budgets = rows
             return dict(items=rows, revision=result["revision"], period=params.get("month"),
                 note="Current gateway limits: units/teams monthly, people daily. This service response has no per-budget usage/risk totals.")
+        if resource == "usd_budgets":
+            return self._get("usd-budgets")
+        if resource == "usd_status":
+            return self._get("usd-budget-status")
+        if resource == "usd_price_book":
+            return self._get("usd-price-book")
         if resource == "apply":
             return dict(configured=False, direct=True, executions=[],
                 note="AUM service writes and verifies gateway state synchronously. Audit/revision is the receipt; no Turnstile apply job.")

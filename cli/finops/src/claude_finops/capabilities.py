@@ -10,6 +10,7 @@ FUTURE_ENDPOINTS = {
     "conditional_writes": "ETag / If-Match on catalog and tiers",
     "anomaly_dispositions": "/api/v1/observability/anomalies/{id}/disposition",
     "global_search": "/api/v1/search",
+    "usd_budgets": "/api/v1/usd-budgets and /api/v1/usd-budget-status",
 }
 READ_FEATURES = {
     "approval_requests": "approvals", "approval_request": "approvals", "global_search": "global_search",
@@ -20,6 +21,7 @@ READ_FEATURES = {
     "release": "advanced", "release_diff": "advanced", "applications": "advanced",
     "application": "advanced",
     "audit": "audit_read",
+    "usd_budgets": "usd_budgets", "usd_status": "usd_budgets", "usd_price_book": "usd_budgets",
 }
 WRITE_FEATURES = {
     "approval_create": ("approvals", "request"), "approval_decide": ("approvals", "approve"),
@@ -29,6 +31,8 @@ WRITE_FEATURES = {
     "pin_chart": ("assistant", "pin"), "assistant_settings": ("assistant", "configure"),
     "conversation_rename": ("assistant", "manage"), "conversation_delete": ("assistant", "manage"),
     "pin_remove": ("assistant", "pin"), "bulk_budget": ("bulk_budget", "write"),
+    "usd_budget": ("usd_budgets", "write"), "usd_budget_remove": ("usd_budgets", "write"),
+    "usd_reconcile": ("usd_budgets", "reconcile"), "usd_price_book": ("usd_budgets", "price_book_write"),
 }
 
 

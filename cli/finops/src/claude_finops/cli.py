@@ -1,6 +1,7 @@
 """Scriptable face; root options also work after a noun or verb."""
 
 from pathlib import Path
+import json
 import os
 import sys
 from typing import Annotated
@@ -52,7 +53,7 @@ class EverywhereGroup(TyperGroup):
 app = typer.Typer(cls=EverywhereGroup, invoke_without_command=True, no_args_is_help=False, rich_markup_mode=None,
                   help="AUM - Azure Usage Management. No command opens the terminal app. Changes preview until --apply.")
 groups = {}
-for noun in ("budget", "people", "governance", "tier", "requests", "anomalies", "report", "usage", "trends", "catalog"):
+for noun in ("budget", "usd", "people", "governance", "tier", "requests", "anomalies", "report", "usage", "trends", "catalog"):
     groups[noun] = typer.Typer(help=f"{noun.capitalize()} views and actions.", rich_markup_mode=None)
     app.add_typer(groups[noun], name=noun)
 
@@ -172,6 +173,64 @@ def budget_remove(ctx: typer.Context, kind: str, name: str, apply: bool = False,
                   confirm: str | None = None, team: str | None = None):
     emit(ctx, lambda e: e.budget_change(kind, name, remove=True, apply=apply and not ctx.obj["what_if"],
                                        confirm=confirm, department_id=team), mutation=True)
+
+
+@groups["usd"].command("list")
+def usd_list(ctx: typer.Context):
+    """List authored USD budgets. Unsupported backends fail closed."""
+    emit(ctx, lambda e: e.read("usd_budgets"))
+
+
+@groups["usd"].command("status")
+def usd_status(ctx: typer.Context):
+    """Show reconciled USD spend, completeness and stop state."""
+    emit(ctx, lambda e: e.usd_status())
+
+
+@groups["usd"].command("set")
+def usd_set(ctx: typer.Context, kind: str, name: str, amount: str,
+            period: Annotated[str, typer.Option(help="month for units/teams; day or month for people")] = "month",
+            apply: bool = False, confirm: str | None = None):
+    """Set a dollar budget. Preview by default; zero is a real stop."""
+    emit(ctx, lambda e: e.usd_budget_change(kind, name, amount, period=period,
+                                            apply=apply and not ctx.obj["what_if"], confirm=confirm),
+         mutation=True)
+
+
+@groups["usd"].command("clear")
+def usd_clear(ctx: typer.Context, kind: str, name: str, apply: bool = False,
+              confirm: str | None = None):
+    """Clear a dollar budget after typed confirmation."""
+    emit(ctx, lambda e: e.usd_budget_change(kind, name, remove=True,
+                                            apply=apply and not ctx.obj["what_if"], confirm=confirm),
+         mutation=True)
+
+
+@groups["usd"].command("reconcile")
+def usd_reconcile(ctx: typer.Context, apply: bool = False):
+    """Run the gateway USD reconciler on demand. Preview by default."""
+    emit(ctx, lambda e: e.usd_reconcile(apply=apply and not ctx.obj["what_if"]), mutation=True)
+
+
+price_book = typer.Typer(help="USD price-book administration.", rich_markup_mode=None)
+groups["usd"].add_typer(price_book, name="price-book")
+
+
+@price_book.command("show")
+def usd_price_book_show(ctx: typer.Context):
+    emit(ctx, lambda e: e.read("usd_price_book"))
+
+
+@price_book.command("set")
+def usd_price_book_set(ctx: typer.Context, file: Path, apply: bool = False):
+    """Replace the price book from a JSON file. Active budgets pin their tariff."""
+    def operation(engine):
+        try:
+            book = json.loads(file.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise FinOpsError("Read a JSON price-book file before applying.") from error
+        return engine.usd_price_book_change(book, apply=apply and not ctx.obj["what_if"])
+    emit(ctx, operation, mutation=True)
 
 
 @groups["people"].command("find")
