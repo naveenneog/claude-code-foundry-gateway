@@ -246,9 +246,11 @@ transport result until execution history proves no execution was created.
 |__|__|_____|_|_|_|
 ```
 
-The ASCII banner appears on a large Overview and terminal `aum --version`.
-An 80x24 terminal uses the compact **AUM · Azure Usage Management** heading
-(an ASCII hyphen when `--ascii` is selected).
+Terminal `aum --version` prints the ASCII banner on a TTY. In the full-screen
+terminal, the four-line ASCII banner appears on every tab at
+80x24 or larger, with the product name and signed-in identity folded into the
+header. Smaller terminals use the compact **AUM · Azure Usage Management**
+heading (an ASCII hyphen when `--ascii` is selected).
 Piped output, `--json`, `--plain` and `--screen-reader` never print the banner
 or launch a full-screen application.
 
@@ -547,7 +549,8 @@ pricing/coverage exclusions mean this is not a health or security verdict.
 The images below are captured from **live backends with display redaction on**.
 Their [manifest](images/aum/manifest.json) records backend, UTC capture time,
 source commit, dimensions and redaction state. Example renders are kept beside
-the snapshot tests, not presented as live documentation.
+the snapshot tests, not presented as live documentation. Current captures show
+the compact ASCII-art header on every tab at 80x24 and 160x48.
 
 ### Overview
 
