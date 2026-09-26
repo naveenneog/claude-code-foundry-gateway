@@ -22,6 +22,19 @@ def month_window(month: str) -> tuple[str, str]:
     return f"{start}T00:00:00Z", f"{end}T00:00:00Z"
 
 
+def query_window(month, start=None, end=None):
+    default_start, default_end = month_window(month)
+    start, end = start or default_start, end or default_end
+    try:
+        first = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        last = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        if first.tzinfo is None or last.tzinfo is None or last <= first:
+            raise ValueError()
+    except (ValueError, TypeError):
+        raise FinOpsError("Use an increasing ISO time range with UTC offsets, for example 2026-09-01T00:00:00Z.") from None
+    return start, end
+
+
 def parse_tokens(text: str | int) -> int:
     value = str(text).strip().replace(",", "")
     match = re.fullmatch(r"(\d+(?:\.\d+)?)([kKmMbB]?)", value)
@@ -45,6 +58,25 @@ def require_owner(identity: dict) -> None:
         raise FinOpsError("Read-only role. Ask an Owner to make this change; manager writes are not enabled.", 4)
 
 
+def can_budget_write(identity, kind, key, department=None):
+    if can_edit(identity):
+        return True
+    scope = identity.get("manager_scope")
+    if identity.get("role") != "member" or not isinstance(scope, dict):
+        return False
+    if kind == "department":
+        return key in scope.get("writable_department_ids", [])
+    if kind == "user":
+        return department in {row.get("id") for key in ("organizations", "departments")
+                              for row in scope.get(key, []) if isinstance(row, dict)}
+    return False
+
+
+def require_budget_write(identity, kind, key, department=None):
+    if not can_budget_write(identity, kind, key, department):
+        raise FinOpsError("Read-only for this scope. Ask its Owner or parent-scope manager to make this change.", 4)
+
+
 def scope_type(value: str) -> str:
     if value not in SCOPE_TYPES:
         raise FinOpsError("Scope must be unit, team or person.")
@@ -58,6 +90,8 @@ def identifier(value: str) -> str:
 
 
 def allocation_left(rows: list[dict], row: dict, proposed: int) -> int | None:
+    if row.get("budget_period") == "day":
+        return None
     parent_type = {"department": "organization", "user": "department"}.get(row["scope_type"])
     parent = next((item for item in rows if item["scope_type"] == parent_type
                    and item["scope_id"] == row.get("parent_scope_id")), None)
@@ -75,7 +109,8 @@ def validate_budget(rows: list[dict], row: dict, amount: int) -> None:
         raise FinOpsError(f"Parent headroom is short by {-left:,} tokens. Ask its Owner to raise the allocation.")
     child_type = {"organization": "department", "department": "user"}.get(row["scope_type"])
     allocated = sum(item.get("token_limit") or 0 for item in rows
-                    if item.get("parent_scope_id") == row["scope_id"] and item["scope_type"] == child_type)
+                    if item.get("parent_scope_id") == row["scope_id"] and item["scope_type"] == child_type
+                    and item.get("budget_period", "month") == row.get("budget_period", "month"))
     if amount < allocated:
         raise FinOpsError(f"{allocated:,} tokens are allocated to children. Lower those allocations first.")
 

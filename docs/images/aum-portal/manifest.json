@@ -1,0 +1,122 @@
+{
+  "schema": 1,
+  "source": "live",
+  "auth_blocked": false,
+  "images": [
+    {
+      "file": "group-overview.png",
+      "text_file": "group-overview.txt",
+      "source": "live",
+      "backend": "Azure portal",
+      "captured_at": "2026-09-25T09:01:42.297Z",
+      "redaction": true,
+      "commit": "f8e9e30f1450f9690a91af72aea521b6e56ed787",
+      "title": "Verify the security group created by AUM",
+      "sha256": "8bfcbebd4b515287875ce71cc65ee244cff7882fb267167660a0459d7f28cd0e"
+    },
+    {
+      "file": "group-owners.png",
+      "text_file": "group-owners.txt",
+      "source": "live",
+      "backend": "Azure portal",
+      "captured_at": "2026-09-25T09:01:57.542Z",
+      "redaction": true,
+      "commit": "f8e9e30f1450f9690a91af72aea521b6e56ed787",
+      "title": "Verify the signed-in administrator owns the test group",
+      "sha256": "6ac5d5bd31ee8ed5490d7c7e4d4cf16b3eb86e01e745a2b150acdf73e2f478cf",
+      "additional_redaction": "Owner avatar initials masked after visual review; no factual fields changed."
+    },
+    {
+      "file": "group-members.png",
+      "text_file": "group-members.txt",
+      "source": "live",
+      "backend": "Azure portal",
+      "captured_at": "2026-09-25T09:02:12.830Z",
+      "redaction": true,
+      "commit": "f8e9e30f1450f9690a91af72aea521b6e56ed787",
+      "title": "Verify the temporary test member",
+      "sha256": "2b48baeb4b1148e700ebb4d20a4b8e3e777bee400d0758e5db6c71c35e4ff8ff",
+      "additional_redaction": "Owner avatar initials masked after visual review; no factual fields changed."
+    },
+    {
+      "file": "gateway-overview.png",
+      "text_file": "gateway-overview.txt",
+      "source": "live",
+      "backend": "Azure portal",
+      "captured_at": "2026-09-25T09:24:50.191Z",
+      "redaction": true,
+      "commit": "248f7b3578c9b830f07d2102293d12ad644d796a",
+      "title": "Choose the existing API Management gateway",
+      "sha256": "44c3d02a6912041b60d84c7222ce88b66bd18427ed4be657a82a8e4a26fe0dda"
+    },
+    {
+      "file": "gateway-named-values.png",
+      "text_file": "gateway-named-values.txt",
+      "source": "live",
+      "backend": "Azure portal",
+      "captured_at": "2026-09-25T09:25:09.290Z",
+      "redaction": true,
+      "commit": "248f7b3578c9b830f07d2102293d12ad644d796a",
+      "title": "Read the connection, authority and limits",
+      "sha256": "5d484d8209f32f5ee29f475b4f15ae62b7c0b901d7f2a3358bfec445b659f4d5"
+    },
+    {
+      "file": "gateway-apis.png",
+      "text_file": "gateway-apis.txt",
+      "source": "live",
+      "backend": "Azure portal",
+      "captured_at": "2026-09-25T09:25:28.787Z",
+      "redaction": true,
+      "commit": "248f7b3578c9b830f07d2102293d12ad644d796a",
+      "title": "Find the Claude API and its diagnostics",
+      "sha256": "e322ec2913f0a53410cb4736b9e730d83d36420471f51462d9127996ba8276b4"
+    },
+    {
+      "file": "insights-overview.png",
+      "text_file": "insights-overview.txt",
+      "source": "live",
+      "backend": "Azure portal",
+      "captured_at": "2026-09-25T09:25:43.736Z",
+      "redaction": true,
+      "commit": "248f7b3578c9b830f07d2102293d12ad644d796a",
+      "title": "Find the linked Log Analytics workspace",
+      "sha256": "5a995e9ad43c1e465f0c71bca951eedf36e1091933e71ab24349f39c34eb670f"
+    },
+    {
+      "file": "workspace-overview.png",
+      "text_file": "workspace-overview.txt",
+      "source": "live",
+      "backend": "Azure portal",
+      "captured_at": "2026-09-25T09:25:59.008Z",
+      "redaction": true,
+      "commit": "248f7b3578c9b830f07d2102293d12ad644d796a",
+      "title": "Read the discovered workspace identity",
+      "sha256": "6f62ba43ed4e56a718114aa26aed7f5956d0c993a5be3a6bfa0e106ef5a33643"
+    },
+    {
+      "file": "workspace-logs.png",
+      "text_file": "workspace-logs.txt",
+      "source": "live",
+      "backend": "Azure portal",
+      "captured_at": "2026-09-25T09:26:25.564Z",
+      "redaction": true,
+      "commit": "248f7b3578c9b830f07d2102293d12ad644d796a",
+      "title": "Open the live query editor",
+      "query_verified": true,
+      "query_rows": 2,
+      "query_range": "Portal-selected range",
+      "sha256": "e8184a2ad3cf6201b5ed3357d1d0dbb17dd5cd658e36f92282b6d69b7fc3e246"
+    },
+    {
+      "file": "turnstile-overview.png",
+      "text_file": "turnstile-overview.txt",
+      "source": "live",
+      "backend": "Azure portal",
+      "captured_at": "2026-09-25T09:37:02.969Z",
+      "redaction": true,
+      "commit": "85efb2db3c265596195016770bc32ba865e2686e",
+      "title": "Open the connected usage service",
+      "sha256": "2890762622736ce6e4382f8b2735e792fc6085a2da3176a82e32d36194f2f72e"
+    }
+  ]
+}

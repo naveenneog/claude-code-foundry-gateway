@@ -11,6 +11,7 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .finops-evidence/
+.aum-evidence/
 finops-reports/
 *.log
 .DS_Store

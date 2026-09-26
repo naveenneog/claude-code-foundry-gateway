@@ -1,0 +1,143 @@
+Skip to main content
+Microsoft Azure (Preview)
+Report a bug
+Copilot
+admin@contoso.com
+CONTOSO DIRECTORY
+Home
+contoso-gateway
+API Management service
+Overview
+Activity log
+Access control (IAM)
+Tags
+Diagnose and solve problems
+Resource visualizer
+Events
+AI Gateway
+APIs
+Developer portal
+Monitoring
+Deployment + infrastructure
+Security
+Settings
+Automation
+Help
+Selected
+Add or remove favorites by pressing Ctrl+Shift+F
+Developer portal
+Delete
+Open in mobile
+Essentials
+View Cost
+JSON View
+Press [Ctrl - C] to copy
+Resource group
+(move)
+:
+contoso-resource-group
+Ctrl+C to copy
+Copy to clipboard the value for Resource group contoso-resource-group
+Status
+:
+Online
+Ctrl+C to copy
+Copy to clipboard the value for Status Online
+Location
+:
+East US 2
+Ctrl+C to copy
+Copy to clipboard the value for Location East US 2
+Subscription
+(move)
+:
+Contoso subscription
+Ctrl+C to copy
+Copy to clipboard the value for Subscription Contoso subscription
+Subscription ID
+:
+[redacted-id]
+Ctrl+C to copy
+Copy to clipboard the value for Subscription ID [redacted-id]
+Developer portal URL
+:
+---
+Gateway URL
+:
+https://service.contoso.com
+Ctrl+C to copy
+Copy to clipboard the value for Gateway URL https://service.contoso.com
+Tier
+:
+Basic v2
+Ctrl+C to copy
+Copy to clipboard the value for Tier Basic v2
+Tags
+(edit)
+:
+Add tags
+Properties
+Get started
+Learn more
+Monitor
+Recommendations (0)
+Required
+Pricing tier
+Pricing tier
+Basic v2
+SLA
+Yes
+Scale
+1 unit
+External cache
+External cache
+None
+Custom domains
+Gateway URL
+https://service.contoso.com
+View all
+Microsoft Defender for Cloud
+Enabled
+No
+Security alerts
+-
+Recommendations
+-
+Delegation
+Delegation
+Disabled
+Identities
+Identities
+Username and password
+APIs
+Total APIs
+1
+Current APIs
+1
+Revisions
+0
+Subscriptions
+Subscriptions
+1
+Users
+Users
+1
+Developer portal
+URL
+Administrative interface
+Open
+Last published
+Microsoft Azure portal is loading.
+Microsoft Azure portal is ready.
+Content is loading.
+Content is ready.
+Content is ready.
+
+
+contoso-resource-group
+Online
+East US 2
+Contoso subscription
+[redacted-id]
+https://service.contoso.com
+Basic v2
