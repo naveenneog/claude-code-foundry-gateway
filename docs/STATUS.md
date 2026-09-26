@@ -41,6 +41,18 @@ against stale runs is being added with the modes, and a single queue-driven writ
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
 
+## Final integration, 2026-09-26
+
+Main at `c25d246` holds every packet started for the owner on 2026-09-25 and 2026-09-26. Its
+integration gate passed with 67 of 67 checks on the second run (13:26-13:40Z). The first run
+(13:06-13:20Z) failed in one check only, "AUM - commands, dashboard and pilot"; the same tree then
+passed directly (320 tests) and in three concurrent runs. That intermittent failure has now appeared
+three times under the full suite and its test is not identified; the PS 5.1 wizard check shows the
+same pattern (**U26**). A live request through the
+reference gateway returned 200 with the tier and budget headers at 12:59Z; the reference gateway was
+not changed. Every isolated test estate built today was removed, and the three soft-deleted test API
+Management instances left from 2026-09-25 and 2026-09-26 were purged.
+
 ## P62 dollar budgets in AUM, merged 2026-09-26
 
 Asked by the owner: "One more thing to be ensured to be managed in the AUM is setting budget in dollar
