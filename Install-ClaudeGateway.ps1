@@ -1019,7 +1019,13 @@ $quotaOvr = ''
 $buReg = ''
 $buMem = ''
 $buPar = ''
+$usdBudgets = ''
+$usdBudgetState = ''
 if ($ExistingApim -or (Invoke-AzOptional { az apim show -g $ResourceGroup -n $apimName --query name -o tsv })) {
+    . (Join-Path $PSScriptRoot 'scripts\ClaudeUsdBudgets.ps1')
+    $usdSavedValues = Get-ClaudeUsdNamedValues -ResourceGroup $ResourceGroup -ApimName $apimName
+    $usdBudgets = $usdSavedValues['usd-budgets']
+    $usdBudgetState = $usdSavedValues['usd-budget-state']
     $allowStd = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id allow-standard --query value -o tsv 2>$null
     $allowPrm = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id allow-premium  --query value -o tsv 2>$null
     $quotaOvr = az apim nv show -g $ResourceGroup --service-name $apimName --named-value-id quota-overrides --query value -o tsv 2>$null
@@ -1164,6 +1170,8 @@ az deployment group create `
         buMembersExisting=$buMem `
         buParentsExisting=$buPar `
         buModesExisting=$buModes `
+        usdBudgetsExisting=$usdBudgets `
+        usdBudgetStateExisting=$usdBudgetState `
         modelsStandard=$modelsStd `
         modelsPremium=$modelsPrm `
         tpmStandard=$TpmStandard `

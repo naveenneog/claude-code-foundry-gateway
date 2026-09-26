@@ -1,4 +1,4 @@
-# ADR-0026: Claude Desktop sign-in is an administrator choice
+# ADR-0027: Claude Desktop sign-in is an administrator choice
 
 ## Status
 

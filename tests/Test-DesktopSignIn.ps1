@@ -12,7 +12,7 @@ $policy = Join-Path $root 'infra/policy.xml'
 $bicep = Join-Path $root 'infra/main.bicep'
 $policyGen = Join-Path $root 'scripts/New-ClaudeCodePolicy.ps1'
 $appScript = Join-Path $root 'scripts/New-ClaudeDesktopEntraApp.ps1'
-$adr = Join-Path $root 'docs/adr/0026-claude-desktop-sign-in-choice.md'
+$adr = Join-Path $root 'docs/adr/0027-claude-desktop-sign-in-choice.md'
 $developer = Join-Path $root 'DEVELOPER.md'
 
 $fail = 0

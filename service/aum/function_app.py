@@ -5,6 +5,7 @@ import azure.functions as func
 
 from aum_service.bootstrap import application
 from aum_service.notifications import record_warnings
+from aum_service.usd_reconcile import reconcile
 
 
 app = func.FunctionApp()
@@ -25,6 +26,11 @@ def http_api(req: func.HttpRequest) -> func.HttpResponse:
 @app.timer_trigger(schedule="0 * * * * *", arg_name="timer", run_on_startup=False, use_monitor=True)
 def expire_boosts(timer: func.TimerRequest) -> None:
     application().workflows.expire()
+
+
+@app.timer_trigger(schedule="0 */5 * * * *", arg_name="timer", run_on_startup=False, use_monitor=True)
+def reconcile_usd_budgets(timer: func.TimerRequest) -> None:
+    reconcile(application().service)
 
 
 @app.timer_trigger(schedule="0 */15 * * * *", arg_name="timer", run_on_startup=False, use_monitor=True)

@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "id": "usd-budgets",
+  "kind": "flow",
+  "title": "USD budgets: dated category prices, delayed gateway stops",
+  "subtitle": "P21/P59 - no inference proxy. Exact decimal arithmetic on observed categories; streaming cache writes and invoice reconciliation remain explicit gaps.",
+  "width": 1280,
+  "height": 986,
+  "outputs": ["docs/images/architecture/usd-budgets.png"],
+  "sources": ["infra/policy.xml", "infra/main.bicep", "scripts/ClaudeUsdBudgets.ps1", "scripts/Sync-ClaudeUsdBudgets.ps1", "service/aum/aum_service/usd_budgets.py", "service/aum/aum_service/usd_reconcile.py", "service/aum/aum_service/usd_service.py", "service/aum/function_app.py", "analytics/chargeback-ledger.kql"],
+  "identifiers": {
+    "budgets": {"label": "usd-budgets", "source": "infra/main.bicep", "match": "key: 'usd-budgets'"},
+    "state": {"label": "usd-budget-state", "source": "infra/main.bicep", "match": "key: 'usd-budget-state'"},
+    "api": {"label": "UsdBudgets", "source": "service/aum/aum_service/usd_service.py", "match": "class UsdBudgets:"},
+    "timer": {"label": "reconcile_usd_budgets", "source": "service/aum/function_app.py", "match": "def reconcile_usd_budgets("},
+    "direct": {"label": "Sync-ClaudeUsdBudgets.ps1", "source": "scripts/Sync-ClaudeUsdBudgets.ps1", "match": "aum_service.usd_command"},
+    "price": {"label": "price_row", "source": "service/aum/aum_service/usd_budgets.py", "match": "def price_row("},
+    "authority": {"label": "check_authority", "source": "service/aum/aum_service/usd_budgets.py", "match": "def check_authority("},
+    "usage": {"label": "UsageJson", "source": "infra/policy.xml", "match": "name=\"UsageJson\""},
+    "stop": {"label": "usd_budget_exceeded", "source": "infra/policy.xml", "match": "\"usd_budget_exceeded\""},
+    "stale": {"label": "usd_budget_state_stale", "source": "infra/policy.xml", "match": "\"usd_budget_state_stale\""},
+    "stream": {"label": "buffer-response=false", "source": "infra/policy.xml", "match": "buffer-response=\"false\""}
+  },
+  "groups": [
+    {"x": 0, "y": 0, "w": 1280, "h": 276, "tone": "purple", "title": "Administrative plane - one governance authority"},
+    {"x": 0, "y": 326, "w": 1280, "h": 276, "tone": "blue", "title": "Asynchronous observation and reconciliation"},
+    {"x": 0, "y": 652, "w": 1280, "h": 242, "tone": "teal", "title": "Inference remains APIM to Foundry"}
+  ],
+  "nodes": [
+    {"id": "author", "x": 18, "y": 56, "w": 385, "h": 200, "tone": "purple", "title": "1 - Author dollars", "lines": [
+      "Existing budget scripts or [[api]]",
+      "Scoped managers; owner-only unit edits",
+      "Dollars and UTC day/month, not only a blended token conversion"
+    ]},
+    {"id": "book", "x": 446, "y": 56, "w": 385, "h": 200, "tone": "purple", "title": "2 - Persist the tariff", "lines": [
+      "[[budgets]]: base64 ASCII JSON",
+      "Dated price book plus decimal-string budgets",
+      "4,096 characters; capacity overflow refuses the write"
+    ]},
+    {"id": "owner", "x": 874, "y": 56, "w": 385, "h": 200, "tone": "purple", "title": "3 - Refuse another writer", "lines": [
+      "[[authority]] reads Turnstile ownership",
+      "Service: storage lease and durable audit",
+      "Fresh configuration, conditional ARM writes and read-back"
+    ]},
+    {"id": "ledger", "x": 18, "y": 382, "w": 385, "h": 200, "tone": "blue", "title": "4 - Observe categories", "lines": [
+      "ClaudeChargeback plus cached-token metrics",
+      "[[usage]]: JSON counts only, no prompts",
+      "Nonstream TTL split known; streaming writes remain unknown"
+    ]},
+    {"id": "reconcile", "x": 446, "y": 382, "w": 385, "h": 200, "tone": "blue", "title": "5 - Reconcile off the request path", "lines": [
+      "[[timer]]: every five minutes",
+      "[[direct]]: on demand",
+      "[[price]]: Decimal, separate categories; an unpriced model is never zero"
+    ]},
+    {"id": "snapshot", "x": 874, "y": 382, "w": 385, "h": 200, "tone": "blue", "title": "6 - Publish a bounded-age decision", "lines": [
+      "[[state]]: scope spend and UTC windows",
+      "Configuration fingerprint; 15-minute expiry",
+      "Raise budget or roll UTC period, then reconcile to lift a stop"
+    ]},
+    {"id": "gateway", "x": 18, "y": 708, "w": 600, "h": 166, "tone": "teal", "compact": true, "title": "7 - Gateway admission", "lines": [
+      "Keep the original token and request limiters.",
+      "[[stop]]: distinct 403 with scope, dollars and reconciliation time.",
+      "Strict, allowance and notify; stale state gets 503 ([[stale]])."
+    ]},
+    {"id": "backend", "x": 660, "y": 708, "w": 600, "h": 166, "tone": "teal", "compact": true, "title": "8 - Serve with the gateway identity", "lines": [
+      "No reconciler hop or provider key in the client.",
+      "[[stream]]; never read an SSE response body.",
+      "Delay includes ingestion, schedule, execution and gateway propagation."
+    ]},
+    {"id": "limit", "x": 0, "y": 936, "w": 1280, "h": 50, "tone": "amber", "compact": true, "title": "A known subtotal below budget is not proof that complete streaming spend is below budget. U2 and exact-streaming U13 remain open.", "lines": []}
+  ],
+  "edges": [
+    {"from": "author", "to": "book", "kind": "control", "points": [[403, 154], [446, 154]]},
+    {"from": "book", "to": "owner", "kind": "control", "points": [[831, 154], [874, 154]]},
+    {"from": "ledger", "to": "reconcile", "kind": "data", "points": [[403, 480], [446, 480]]},
+    {"from": "reconcile", "to": "snapshot", "kind": "control", "points": [[831, 480], [874, 480]]},
+    {"from": "snapshot", "to": "gateway", "kind": "control", "points": [[1060, 582], [1060, 628], [314, 628], [314, 708]]},
+    {"from": "gateway", "to": "backend", "kind": "data", "points": [[618, 786], [660, 786]]}
+  ],
+  "notice": "No guaranteed dollar overshoot bound: ingestion is not an SLA, concurrent requests may already be running, and a complete streaming cache-creation meter is unavailable. Missing prices fail closed; incomplete categories are disclosed."
+}
