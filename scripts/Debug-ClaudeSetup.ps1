@@ -6,6 +6,7 @@
 param(
     [string]$ResourceGroup,
     [string]$ApimName,
+    [Alias('RecordPath')]
     [string]$DecisionRecord = (Join-Path (Split-Path $PSScriptRoot -Parent) 'onboarding\claude-gateway.json'),
     [string]$GatewayUrl,
     [string]$FoundryAccount,

@@ -103,7 +103,7 @@ exit /b 0'
     $env:CLAUDE_DIAGNOSE_SKIP_HEALTH = '1'
     $oldEap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    $setupText = & $script:hostExe -NoProfile -File (Join-Path $root 'scripts\Debug-ClaudeSetup.ps1') -ResourceGroup rg-test -ApimName apim-test -DecisionRecord $record -NoRequest -SupportBundle $bundle *>&1 | Out-String
+    $setupText = & $script:hostExe -NoProfile -File (Join-Path $root 'scripts\Debug-ClaudeSetup.ps1') -ResourceGroup rg-test -ApimName apim-test -RecordPath $record -NoRequest -SupportBundle $bundle *>&1 | Out-String
     $ErrorActionPreference = $oldEap
     $setupCode = $LASTEXITCODE
     Assert 'admin diagnostics emit PASS/WARN/FAIL/SKIP checks' ($setupText -match '\b(PASS|WARN|FAIL|SKIP)\b' -and $setupText -match 'Evidence:' -and $setupText -match 'Fix:')
@@ -123,7 +123,7 @@ exit /b 0'
         $env:CLAUDE_DIAGNOSE_SKIP_HEALTH = '1'
         $oldEap = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
-        $workText = & $script:hostExe -NoProfile -File (Join-Path $root 'scripts\Debug-ClaudeWorkstation.ps1') -GatewayUrl https://apim-test.azure-api.net/claude -TenantId 11111111-1111-1111-1111-111111111111 -NoRequest -SupportBundle $workBundle *>&1 | Out-String
+        $workText = & $script:hostExe -NoProfile -File (Join-Path $root 'scripts\Debug-ClaudeWorkstation.ps1') -RecordPath $record -NoRequest -SupportBundle $workBundle *>&1 | Out-String
         $ErrorActionPreference = $oldEap
         $workCode = $LASTEXITCODE
     } finally {
@@ -134,6 +134,7 @@ exit /b 0'
         Remove-Item Env:\CLAUDE_DIAGNOSE_FORCE_NO_REQUEST -ErrorAction SilentlyContinue
     }
     Assert 'workstation diagnostics emit managed-setting precedence' ($workText -match 'Managed settings precedence' -and $workText -match 'HKLM.*wins')
+    Assert 'workstation diagnostics accept RecordPath' ($workText -match 'Decision record' -and $workText -match 'Loaded workstation target')
     Assert 'workstation diagnostics detect configuration conflicts' ($workText -match 'Configuration conflicts')
     Assert 'workstation diagnostics support bundle is written' (Test-Path $workBundle)
     Assert 'workstation diagnostics can exit non-zero when a check fails or warns' ($workCode -ne 0)

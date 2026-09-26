@@ -4,6 +4,7 @@
 #>
 [CmdletBinding()]
 param(
+    [string]$RecordPath,
     [string]$GatewayUrl,
     [string]$TenantId,
     [switch]$NoRequest,
@@ -19,6 +20,22 @@ if ($env:CLAUDE_DIAGNOSE_FORCE_NO_REQUEST) { $NoRequest = $true }
 Write-Host ''
 Write-Host 'Claude workstation diagnostics' -ForegroundColor Cyan
 Write-Host ''
+
+$record = $null
+if ($RecordPath) {
+    try {
+        if (Test-Path -LiteralPath $RecordPath -PathType Leaf) {
+            $record = Get-Content -LiteralPath $RecordPath -Raw | ConvertFrom-Json
+            if (-not $GatewayUrl) { $GatewayUrl = [string](Get-ClaudeDiagnoseProperty $record 'gatewayUrl') }
+            if (-not $TenantId) { $TenantId = [string](Get-ClaudeDiagnoseProperty $record 'tenantId') }
+            Add-ClaudeDiagnoseCheck 'Decision record' 'PASS' "Loaded workstation target from $RecordPath" 'No fix needed.' 'Repository > onboarding > claude-gateway.json'
+        } else {
+            Add-ClaudeDiagnoseCheck 'Decision record' 'WARN' "No decision record at $RecordPath" 'Pass -GatewayUrl and -TenantId, or run Start-ClaudeGateway.ps1 -Action Setup.' 'Repository > onboarding'
+        }
+    } catch {
+        Add-ClaudeDiagnoseCheck 'Decision record' 'FAIL' $_.Exception.Message 'Repair or restore the decision record JSON.' 'Repository > onboarding'
+    }
+}
 
 $azCmd = Get-Command az -ErrorAction SilentlyContinue
 $cognitiveToken = ''
