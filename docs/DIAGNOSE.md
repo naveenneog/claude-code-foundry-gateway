@@ -36,13 +36,13 @@ gateway request.
 | Managed identity and Foundry role | The APIM managed identity has a Foundry data-plane role such as `Cognitive Services User`. | `az role assignment create --assignee <principal-id> --role "Cognitive Services User" --scope <foundry-resource-id>`. Portal: Foundry account > Access control (IAM). |
 | Deployed policy | The live Claude API policy contains the repository governance controls from `infra/policy.xml`. | `./scripts/Set-GatewayPolicy.ps1 -ResourceGroup <rg> -ApimName <apim>`. Portal: APIM > APIs > Claude API > Design. |
 | Named values and ceilings | Named values exist, are under 4,096 characters, and list counts are compared with the 110 tier-list and 93 business-unit ceilings. | `./scripts/Measure-ClaudeCeiling.ps1 -ResourceGroup <rg> -ApimName <apim>`. Portal: APIM > Named values. |
-| Entitlement source | The script reports named values or projection. Projection runs also need resolver health and authentication checks. | `./scripts/Deploy-ClaudeProjection.ps1 -CompareOnly ...`. Portal: resolver App Service > Authentication. |
+| Entitlement source | The script reports named values or projection. Projection runs also need resolver health and authentication checks. | `./scripts/Deploy-ClaudeProjection.ps1 -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> -WhatIf`. Portal: resolver App Service > Authentication. |
 | Tier groups | The health path checks whether tier decisions can resolve. | `./scripts/Compare-ClaudeEntitlement.ps1 -ResourceGroup <rg> -ApimName <apim>`. Portal: Entra admin center > Groups. |
 | Business units and budgets | Reuses `Test-ClaudeHealth.ps1` for unassigned users and org ceiling versus unit budgets. | `./scripts/Test-ClaudeHealth.ps1 -ResourceGroup <rg> -ApimName <apim> -Detailed`. |
 | FinOps tool | Reports Turnstile/AUM evidence available from named values and endpoints. | `Select-ClaudeFinOpsTooling.ps1`, `Connect-ClaudeTurnstile.ps1`, `Install-ClaudeAum.ps1`. |
-| Dollar budgets | Reports whether a price book and fresh reconciled state can be proven. | `./scripts/Sync-ClaudeUsdBudgets.ps1 -ResourceGroup <rg> -ApimName <apim> -WhatIf`. |
+| Dollar budgets | Reports whether a price book and fresh reconciled state can be proven. | `./scripts/Sync-ClaudeUsdBudgets.ps1 -ResourceGroup <rg> -ApimName <apim>`. |
 | Workbooks | Confirms or points to workbook deployment. | `./scripts/Publish-ClaudeWorkbook.ps1 -ResourceGroup <rg>`. Portal: Monitor > Workbooks. |
-| Chargeback jobs | Looks for report job evidence and last run metadata when available. | `./scripts/Invoke-ClaudeChargebackSchedule.ps1 -ResourceGroup <rg> -WhatIf`. |
+| Chargeback jobs | Looks for report job evidence and last run metadata when available. | `./scripts/Invoke-ClaudeChargebackSchedule.ps1 -ResourceGroup <rg> -ApimName <apim>`. |
 | Foundry bypass principals | Reuses `Test-ClaudeHealth.ps1` / `Get-ClaudeBypass.ps1` to identify principals that can bypass the gateway. | Remove unintended direct Foundry data-plane role assignments. Portal: Foundry account > Access control (IAM). |
 
 ## Workstation checks
