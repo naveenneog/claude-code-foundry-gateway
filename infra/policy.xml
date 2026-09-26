@@ -22,18 +22,38 @@
     <inbound>
         <base />
 
-        <!-- 1. Authenticate the caller. Claude Code requests a token for the
-             Cognitive Services data plane, so that is the audience we accept. -->
-        <validate-azure-ad-token
-            tenant-id="{{tenant-id}}"
-            output-token-variable-name="jwt"
-            failed-validation-httpcode="401"
-            failed-validation-error-message="A Microsoft Entra ID token is required. Run 'az login'.">
-            <audiences>
-                <audience>https://cognitiveservices.azure.com</audience>
-                <audience>https://ai.azure.com</audience>
-            </audiences>
-        </validate-azure-ad-token>
+        <!-- 1. Authenticate the caller. The standard helper path requests a
+             token for the Cognitive Services data plane. An external IdP can
+             instead send a token for a public-client app (id_token) or an
+             explicit gateway API audience (access_token). That extra audience
+             is accepted only when the installer recorded it. -->
+        <choose>
+            <when condition="@(!string.IsNullOrWhiteSpace(&quot;{{external-idp-extra-audience}}&quot;))">
+                <validate-azure-ad-token
+                    tenant-id="{{tenant-id}}"
+                    output-token-variable-name="jwt"
+                    failed-validation-httpcode="401"
+                    failed-validation-error-message="A Microsoft Entra ID token is required. Run 'az login'.">
+                    <audiences>
+                        <audience>https://cognitiveservices.azure.com</audience>
+                        <audience>https://ai.azure.com</audience>
+                        <audience>{{external-idp-extra-audience}}</audience>
+                    </audiences>
+                </validate-azure-ad-token>
+            </when>
+            <otherwise>
+                <validate-azure-ad-token
+                    tenant-id="{{tenant-id}}"
+                    output-token-variable-name="jwt"
+                    failed-validation-httpcode="401"
+                    failed-validation-error-message="A Microsoft Entra ID token is required. Run 'az login'.">
+                    <audiences>
+                        <audience>https://cognitiveservices.azure.com</audience>
+                        <audience>https://ai.azure.com</audience>
+                    </audiences>
+                </validate-azure-ad-token>
+            </otherwise>
+        </choose>
 
         <!-- 2. Identity from the validated token. -->
         <set-variable name="userId" value="@(((Jwt)context.Variables["jwt"]).Claims.GetValueOrDefault("oid", "unknown"))" />

@@ -874,20 +874,6 @@
       "phase": "after"
     },
     {
-      "file": "direct-overview-80x24-after.svg",
-      "source": "live",
-      "backend": "Direct",
-      "captured_at": "2026-09-25T05:13:55.210627Z",
-      "redaction": true,
-      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
-      "size": [
-        80,
-        24
-      ],
-      "tab": "overview",
-      "phase": "after"
-    },
-    {
       "file": "direct-people-80x24-after.svg",
       "source": "live",
       "backend": "Direct",
@@ -983,20 +969,6 @@
         24
       ],
       "tab": "settings",
-      "phase": "after"
-    },
-    {
-      "file": "direct-overview-160x48-after.svg",
-      "source": "live",
-      "backend": "Direct",
-      "captured_at": "2026-09-25T05:15:47.894969Z",
-      "redaction": true,
-      "commit": "33e030e0bab1d8a1a25a3b688249af3a55a3a912",
-      "size": [
-        160,
-        48
-      ],
-      "tab": "overview",
       "phase": "after"
     },
     {
@@ -2170,12 +2142,26 @@
       "flow": "final-state-equal"
     },
     {
+      "file": "direct-overview-80x24-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-26T03:11:41.322049Z",
+      "redaction": true,
+      "commit": "e8990a61cdccf905c4596db3c18ffc8d6fa4cc75",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "overview",
+      "phase": "after"
+    },
+    {
       "file": "direct-budgets-80x24-after.svg",
       "source": "live",
       "backend": "Direct",
-      "captured_at": "2026-09-26T07:17:05.155749Z",
+      "captured_at": "2026-09-26T03:12:05.365874Z",
       "redaction": true,
-      "commit": "057056871b0628a87d00eabd7ecb93cbfaa25948",
+      "commit": "e8990a61cdccf905c4596db3c18ffc8d6fa4cc75",
       "size": [
         80,
         24
@@ -2184,12 +2170,26 @@
       "phase": "after"
     },
     {
+      "file": "direct-overview-160x48-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-26T03:12:59.932723Z",
+      "redaction": true,
+      "commit": "e8990a61cdccf905c4596db3c18ffc8d6fa4cc75",
+      "size": [
+        160,
+        48
+      ],
+      "tab": "overview",
+      "phase": "after"
+    },
+    {
       "file": "direct-budgets-160x48-after.svg",
       "source": "live",
       "backend": "Direct",
-      "captured_at": "2026-09-26T07:17:38.733691Z",
+      "captured_at": "2026-09-26T03:13:22.263399Z",
       "redaction": true,
-      "commit": "057056871b0628a87d00eabd7ecb93cbfaa25948",
+      "commit": "e8990a61cdccf905c4596db3c18ffc8d6fa4cc75",
       "size": [
         160,
         48

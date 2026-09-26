@@ -7,7 +7,7 @@
   "width": 1280,
   "height": 1916,
   "outputs": ["docs/images/architecture/system-overview.png", "docs/images/architecture.png"],
-  "sources": ["infra/main.bicep", "infra/foundry-role.bicep", "infra/projection.bicep", "infra/projection-network.bicep", "infra/resolver.bicep", "infra/turnstile-schedule.bicep", "scripts/Setup-ClaudeWorkstation.ps1", "scripts/Connect-ClaudeTurnstile.ps1"],
+  "sources": ["infra/main.bicep", "infra/foundry-role.bicep", "infra/projection.bicep", "infra/projection-network.bicep", "infra/resolver.bicep", "infra/turnstile-schedule.bicep", "scripts/Setup-ClaudeWorkstation.ps1", "scripts/ClaudeDesktopSignIn.ps1", "scripts/Connect-ClaudeTurnstile.ps1"],
   "identifiers": {
     "policy": { "label": "infra/policy.xml", "source": "infra/policy.xml", "match": "<policies>" },
     "validate": { "label": "validate-azure-ad-token", "source": "infra/policy.xml", "match": "<validate-azure-ad-token" },
@@ -15,7 +15,7 @@
     "rate": { "label": "rate-limit-by-key", "source": "infra/policy.xml", "match": "<rate-limit-by-key" },
     "metric": { "label": "llm-emit-token-metric", "source": "infra/policy.xml", "match": "<llm-emit-token-metric" },
     "mi": { "label": "authentication-managed-identity", "source": "infra/policy.xml", "match": "<authentication-managed-identity" },
-    "helper": { "label": "get-foundry-token.ps1", "source": "scripts/get-foundry-token.ps1", "kind": "file" },
+    "desktop-signin": { "label": "desktopSignIn", "source": "scripts/ClaudeDesktopSignIn.ps1", "match": "desktopSignIn" },
     "allow-standard": { "label": "allow-standard", "source": "infra/policy.xml", "match": "{{allow-standard}}" },
     "allow-premium": { "label": "allow-premium", "source": "infra/policy.xml", "match": "{{allow-premium}}" },
     "sync": { "label": "Sync-ClaudeAccess.ps1", "source": "scripts/Sync-ClaudeAccess.ps1", "kind": "file" },
@@ -41,13 +41,13 @@
     { "x": 890, "y": 0, "w": 390, "h": 506, "tone": "teal", "title": "Customer identity and model" },
     { "x": 0, "y": 544, "w": 1280, "h": 276, "tone": "blue", "title": "Telemetry · customer Log Analytics workspace" },
     { "x": 0, "y": 852, "w": 618, "h": 526, "tone": "purple", "title": "Optional Turnstile governance" },
-    { "x": 650, "y": 852, "w": 630, "h": 526, "tone": "teal", "title": "Optional projection · private VNet profile" },
+    { "x": 650, "y": 852, "w": 630, "h": 526, "tone": "teal", "title": "Optional projection · private Cosmos; SKU-specific resolver" },
     { "x": 0, "y": 1410, "w": 1280, "h": 302, "tone": "blue", "title": "Optional P50 chargeback reports · merged · independent of Turnstile" }
   ],
   "nodes": [
     { "id": "code", "x": 16, "y": 60, "w": 278, "h": 90, "tone": "slate", "compact": true, "title": "Claude Code", "lines": ["Azure CLI sign-in"] },
     { "id": "vscode", "x": 16, "y": 166, "w": 278, "h": 90, "tone": "slate", "compact": true, "title": "Claude VS Code extension", "lines": ["Azure CLI sign-in; Foundry mode"] },
-    { "id": "desktop", "x": 16, "y": 272, "w": 278, "h": 102, "tone": "slate", "compact": true, "title": "Claude Desktop", "lines": ["[[helper]]", "Reuses Azure CLI sign-in"] },
+    { "id": "desktop", "x": 16, "y": 272, "w": 278, "h": 102, "tone": "slate", "compact": true, "title": "Claude Desktop", "lines": ["[[desktop-signin]] choice", "helper or IdP"] },
     { "id": "terminal", "x": 16, "y": 390, "w": 278, "h": 104, "tone": "purple", "compact": true, "title": "AUM · command aum", "lines": ["Azure Usage Management", "Terminal FinOps console"] },
     { "id": "apim", "x": 356, "y": 60, "w": 488, "h": 426, "tone": "blue", "title": "API Management v2", "eyebrow": "Request policy", "lines": [
       "[[policy]]",
@@ -118,14 +118,14 @@
     ] },
     { "id": "network", "x": 666, "y": 1146, "w": 280, "h": 202, "tone": "teal", "compact": true, "title": "Network and host services", "lines": [
       "VNet integration + private endpoints and DNS links",
-      "Private Function host storage: blob, queue and table",
-      "Private resolver: Standard v2 or Premium v2 gateway"
+      "Private Function storage",
+      "Resolver inbound: private, or Basic public+Entra"
     ] },
     { "id": "resolver", "x": 984, "y": 1146, "w": 280, "h": 202, "tone": "teal", "compact": true, "title": "Resolver Function", "lines": [
       "[[resolver-route]]",
       "Accepts gateway identity only",
       "Own identity: container Data Reader",
-      "Miss admission and lease checks protect this path."
+      "Inbound by SKU"
     ] },
     { "id": "reports", "x": 16, "y": 1470, "w": 382, "h": 222, "tone": "blue", "compact": true, "title": "Monthly generator", "lines": [
       "Reads the workspace's saved functions and gateway budget catalog.",

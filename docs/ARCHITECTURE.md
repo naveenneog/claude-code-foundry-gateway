@@ -28,7 +28,7 @@ Source: [01-system.json](architecture/01-system.json).
 | Profile | Adds to the deployment | Identity and operational boundary |
 |---|---|---|
 | **Default: named values** | API Management v2, Application Insights and Log Analytics. Foundry already exists. Workbooks and saved KQL functions are published separately as definitions. | Entra groups are synchronized to gateway named values. No resolver, Cosmos database or Turnstile service is required. |
-| **Projection** | Cosmos DB, a resolver Function, Function host/deployment storage, private endpoints and DNS. A writer runs separately to reconcile the directory. | The writer and resolver have different identities and container-scoped data roles. The private-inbound path requires Standard v2 or Premium v2 outbound VNet integration. |
+| **Projection** | Cosmos DB, a resolver Function, Function host/deployment storage, private endpoints and DNS. A writer runs separately to reconcile the directory. | The writer and resolver have different identities and container-scoped data roles. Cosmos stays private. Standard v2 and Premium v2 use a private resolver; Basic v2 uses a public resolver endpoint restricted by Microsoft Entra to the gateway managed identity. |
 | **Turnstile** | A separate fork deployment: App Service, PostgreSQL, Event Hubs and supporting Functions, Storage, Key Vault and networking. This repository adds the manual apply and hourly export Container Apps jobs. | Entra app roles control console access. The console starts one apply job; the job, not the console, writes gateway named values. |
 | **AUM (Azure Usage Management)** | A local Python terminal FinOps console, command `aum`; no new inference service or mandatory Azure resource. The terminal release is merged; the naming packet is staged on branch `aum`. | It uses Turnstile's HTTP API or Direct Azure with the operator's Azure CLI sign-in. A fake backend is for tests, never an outage fallback. |
 | **Monthly chargeback reports (P50)** | A separate Consumption environment, generator/dispatcher/admin jobs, discovered existing or explicit new VNet, private Blob storage and Azure Communication Services Email. | The reporting identity reads telemetry/configuration and writes reports. A separate administration identity writes configuration only. No Turnstile dependency. |
@@ -50,13 +50,18 @@ Source: [02-request.json](architecture/02-request.json). The README's
 `images/request-flow.png` is a byte-identical compatibility copy.
 
 1. **Sign in.** Claude Code and the VS Code extension use Foundry mode with Azure
-   credentials from the developer's Azure CLI sign-in. The default Desktop setup installs
-   [`get-foundry-token.ps1`](../scripts/get-foundry-token.ps1), through a platform shim, as
-   its credential helper. It reuses Azure CLI sign-in and writes only the token to stdout.
-   Azure automation can use its own managed identity; that identity must also be entitled.
+   credentials from the developer's Azure CLI sign-in. Desktop follows the
+   admin-recorded `desktopSignIn` choice in `claude-gateway.json`: the default
+   installs [`get-foundry-token.ps1`](../scripts/get-foundry-token.ps1), through
+   a platform shim, as its credential helper and reuses Azure CLI sign-in;
+   external-idp browser or broker sign-in uses the recorded Entra public-client
+   app and the gateway's optional `external-idp-extra-audience`. Azure automation can
+   use its own managed identity; that identity must also be entitled.
 2. **Admit.** [`infra/policy.xml`](../infra/policy.xml) validates the tenant, signature,
-   audience and expiry, then uses the signed `oid`. The accepted audiences are
-   `https://cognitiveservices.azure.com` and `https://ai.azure.com`.
+   audience and expiry, then uses the signed `oid`. The default accepted
+   audiences are `https://cognitiveservices.azure.com` and `https://ai.azure.com`;
+   an additional Desktop audience is accepted only when `external-idp-extra-audience`
+   is non-empty.
    `entitlement-source` selects `named-value` or `projection`. Entitlement, tier and the
    requested model are checked before Foundry is called.
 3. **Serve.** `authentication-managed-identity` obtains the gateway's Foundry token.
@@ -460,8 +465,11 @@ automatic fallback:
 - **Turnstile HTTP:** Azure CLI token, role/scope checks at the server, bounded API reads
   and explicit writes. A failed GET can refresh its token once; writes are not retried.
 - **Direct Azure:** ARM, Log Analytics and `Invoke-ClaudeFinOps.ps1`, reusing the
-  repository's gateway scripts and chargeback query. Azure RBAC is authoritative; this
-  is not an alternate implementation of Turnstile's delegated manager scope.
+  repository's gateway scripts and chargeback query. AUM developer add/remove uses the
+  signed-in administrator's delegated Graph token to update Entra group membership,
+  then publishes the gateway allow lists through the selected authority path. Azure
+  RBAC and Graph remain authoritative; this is not an alternate implementation of
+  Turnstile's delegated manager scope.
 - **Fake:** deterministic Contoso fixtures for tests and terminal snapshots; no tenant,
   model or credential calls.
 

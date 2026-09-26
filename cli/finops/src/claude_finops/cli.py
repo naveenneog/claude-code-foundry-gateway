@@ -53,7 +53,7 @@ class EverywhereGroup(TyperGroup):
 app = typer.Typer(cls=EverywhereGroup, invoke_without_command=True, no_args_is_help=False, rich_markup_mode=None,
                   help="AUM - Azure Usage Management. No command opens the terminal app. Changes preview until --apply.")
 groups = {}
-for noun in ("budget", "usd", "people", "governance", "tier", "requests", "anomalies", "report", "usage", "trends", "catalog"):
+for noun in ("budget", "usd", "people", "developer", "governance", "tier", "requests", "anomalies", "report", "usage", "trends", "catalog"):
     groups[noun] = typer.Typer(help=f"{noun.capitalize()} views and actions.", rich_markup_mode=None)
     app.add_typer(groups[noun], name=noun)
 
@@ -245,6 +245,32 @@ def people_find(ctx: typer.Context, query: Annotated[str, typer.Argument()] = ""
             raise FinOpsError("Search text must not exceed 200 characters.")
         return engine.read("people", **engine.backend.people_filter(team), query=query, offset=offset, limit=limit, cursor=cursor)
     emit(ctx, operation)
+
+
+@groups["developer"].command("find")
+def developer_find(ctx: typer.Context, query: str, cursor: str | None = None,
+                   limit: Annotated[int, typer.Option(min=1, max=100)] = 50):
+    """Search the Entra directory for a developer by email, UPN or display name."""
+    from .developer_actions import developer_find as find
+    emit(ctx, lambda e: find(e, ctx.obj["config"], query, limit=limit, cursor=cursor))
+
+
+@groups["developer"].command("add")
+def developer_add(ctx: typer.Context, user: str, tier: Annotated[str, typer.Option()] = "",
+                  unit: Annotated[str, typer.Option(help="Gateway unit or team id.")] = "",
+                  apply: bool = False):
+    """Add a developer to one discovered tier group and optional unit/team group."""
+    from .developer_actions import developer_change
+    emit(ctx, lambda e: developer_change(e, ctx.obj["config"], user, tier=tier, unit=unit or None,
+                                        apply=apply and not ctx.obj["what_if"]), mutation=True)
+
+
+@groups["developer"].command("remove")
+def developer_remove(ctx: typer.Context, user: str, apply: bool = False, confirm: str = ""):
+    """Remove direct tier and catalog unit/team memberships; type resolved UPN to apply."""
+    from .developer_actions import developer_change
+    emit(ctx, lambda e: developer_change(e, ctx.obj["config"], user, remove=True,
+                                        apply=apply and not ctx.obj["what_if"], confirm=confirm), mutation=True)
 
 
 @groups["governance"].command("show")

@@ -90,6 +90,79 @@ depth ordering and `bu-members` serializer. Teams win over their parent units.
 Unrelated mappings and tier entitlement remain intact. Existing assignments that
 move require explicit `--allow-reassignment`. A lookup error is not treated as an
 empty group. Projection-backed gateways must use their projection pipeline.
+
+## Add and remove developers
+
+Developer entitlement is ordinary Entra group membership followed by gateway
+publication. AUM uses the signed-in administrator's delegated Microsoft Graph
+token from Azure CLI. It does not request tenant consent, add an app permission
+or grant a directory role.
+
+```powershell
+aum developer find amara --limit 50
+aum developer add amara@contoso.com --tier standard --unit sales-emea --what-if
+aum developer add amara@contoso.com --tier premium --unit sales-emea --apply
+aum developer remove amara@contoso.com --what-if
+aum developer remove amara@contoso.com --apply --confirm amara@contoso.com
+```
+
+`developer find` searches the whole Entra directory by display name, mail and
+UPN, including guest accounts by their invited address (`mail`/`otherMails`) and
+their `#EXT#` UPN stem. Results are bounded and paged. Microsoft Graph directory
+search uses the documented advanced-query shape: `ConsistencyLevel: eventual`
+with `$count=true` for advanced filters, and `$search` support varies by entity
+([Graph search](https://learn.microsoft.com/graph/search-query-parameter),
+[advanced queries](https://learn.microsoft.com/graph/aad-advanced-queries),
+retrieved 2026-09-26). The terminal People command **Add developer** uses the
+same bounded search and refreshes as the operator types; redacted capture mode
+hides the action.
+
+Add and remove resolve exactly one account before any write. Resolution tries
+object id, `mail`, `userPrincipalName`, `otherMails`, then the guest `#EXT#`
+UPN stem. Ambiguous matches stop and require an object id. Preview lists the
+exact group changes: add the selected discovered tier group, remove the other
+tier group, and optionally add a catalog unit/team group. Remove lists direct
+removal from both tier groups and every catalog unit/team group, then requires
+typing the resolved UPN.
+
+Apply writes Microsoft Graph `$ref` membership once per group, verifies each
+change with bounded propagation reads, and then publishes to the gateway. Direct
+runs the existing membership refresh and tier allow-list sync. Turnstile-backed
+gateways use the existing delegated **publish as signed-in admin** path; the
+Turnstile web app still does not own Entra membership. Projection-backed
+gateways must use the projection publication pipeline after the group write.
+
+Permissions are the administrator's existing rights. Microsoft Graph documents
+group owners, Directory Writers, Groups Administrator, Identity Governance
+Administrator and User Administrator as supported delegated roles for ordinary
+group member updates; role-assignable groups require Privileged Role
+Administrator
+([Graph add members](https://learn.microsoft.com/graph/api/group-post-members),
+retrieved 2026-09-26). AUM lets Graph decide and reports HTTP 403 with these
+requirements.
+
+Already-issued Entra access tokens remain valid until they expire; Microsoft
+documents access-token lifetime as time-limited rather than live membership
+state ([access tokens](https://learn.microsoft.com/entra/identity-platform/access-tokens),
+retrieved 2026-09-26). Gateway publication refreshes the allow lists used for
+new requests.
+
+Manual Azure portal path:
+
+1. Open **Microsoft Entra ID > Groups > All groups**.
+2. Open the recorded tier, unit or team group.
+3. Choose **Members > Add members** or select the member and **Remove**.
+4. Publish with `Sync-ClaudeAccess.ps1` or the selected authority's publication
+   path, then verify a real gateway request.
+
+CLI equivalent:
+
+```powershell
+$user = az ad user show --id amara@contoso.com --query id -o tsv
+$standard = az ad group show --group <standard-tier-group> --query id -o tsv
+az ad group member add --group $standard --member-id $user
+.\scripts\Sync-ClaudeAccess.ps1 -ResourceGroup <rg> -ApimName <apim>
+```
 Direct refresh refuses when Turnstile owns publication.
 
 ### Manual Azure portal and Azure CLI path
@@ -246,9 +319,11 @@ transport result until execution history proves no execution was created.
 |__|__|_____|_|_|_|
 ```
 
-The ASCII banner appears on a large Overview and terminal `aum --version`.
-An 80x24 terminal uses the compact **AUM · Azure Usage Management** heading
-(an ASCII hyphen when `--ascii` is selected).
+Terminal `aum --version` prints the ASCII banner on a TTY. In the full-screen
+terminal, the four-line ASCII banner appears on every tab at
+80x24 or larger, with the product name and signed-in identity folded into the
+header. Smaller terminals use the compact **AUM · Azure Usage Management**
+heading (an ASCII hyphen when `--ascii` is selected).
 Piped output, `--json`, `--plain` and `--screen-reader` never print the banner
 or launch a full-screen application.
 
@@ -625,7 +700,8 @@ pricing/coverage exclusions mean this is not a health or security verdict.
 The images below are captured from **live backends with display redaction on**.
 Their [manifest](images/aum/manifest.json) records backend, UTC capture time,
 source commit, dimensions and redaction state. Example renders are kept beside
-the snapshot tests, not presented as live documentation.
+the snapshot tests, not presented as live documentation. The recaptured Direct
+Overview and Budgets images show the compact ASCII-art header at 80x24 and 160x48.
 
 ### Overview
 
@@ -869,6 +945,9 @@ Use token suffixes `k`, `M`, `B`; USD strings are rejected.
 | Remove | `aum budget remove team sales-emea --apply --confirm sales-emea` |
 | Person budget | `aum budget set person dev@contoso.com 200k --team sales-emea --apply` |
 | People search | `aum people find dev --team sales-emea --offset 0 --limit 50` |
+| Directory developer search | `aum developer find amara --limit 50` |
+| Add developer | `aum developer add amara@contoso.com --tier standard --unit sales-emea --apply` |
+| Remove developer | `aum developer remove amara@contoso.com --apply --confirm amara@contoso.com` |
 | Governance | `aum governance show --json` |
 | Native service audit | `aum governance audit --backend aum-service --limit 50` |
 | Apply preview | `aum governance apply --what-if` |

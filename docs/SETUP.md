@@ -133,8 +133,20 @@ only a default — override it at the prompt.
 
 This is included-request arithmetic, **not supported developer capacity**.
 The shipped named-value membership map fills at roughly 93 developers with
-six-character unit IDs; see [Scale](SCALE.md). Private projection deployment is
-separate and needs Standard v2 or Premium v2.
+six-character unit IDs; see [Scale](SCALE.md). The installer therefore asks
+for an **entitlement store** as a separate choice:
+
+| Store | When it fits | Network shape |
+|---|---|---|
+| Named values | Small deployments below the measured ceiling | No extra components. |
+| Cosmos projection | Around 100 developers and above, or whenever the operator chooses it | Standard v2 and Premium v2 use a private resolver. Basic v2 uses a public resolver endpoint restricted by Microsoft Entra to the gateway managed identity, while Cosmos remains private. |
+
+The projection deployer is `scripts/Deploy-ClaudeProjection.ps1`. It deploys
+private Cosmos and the resolver, populates from Entra, compares the projection
+against the named-value lists, and flips only after a clean comparison. The
+Basic v2 resolver endpoint is public because Basic v2 has no outbound VNet
+integration; APIM outbound IPs are not treated as the primary control.
+Authentication is.
 
 ### Tooling
 
@@ -377,6 +389,7 @@ where it costs money, with the figure at your stated developer count:
 | Team budget | `report` / `stop` | This legacy prompt changes guidance, not a unit's stored mode. The installer preserves `bu-modes`; a missing entry means strict. Configure strict, allowance or notify per unit through [Business units](BUSINESS-UNITS.md#budget-modes) or Turnstile. An enforcing token quota triggers later than the dollar figure suggests because it excludes cache. |
 | Unassigned developers | `allow` / `deny` | `deny` on day one refuses people who have done nothing wrong. Start on `allow` and switch when `Get-ClaudeBusinessUnit.ps1` reports zero unassigned. |
 | Developer sign-in | `interactive` / `device` / `helper` | How developers authenticate. Written into `claude-gateway.json` and applied by the onboarding script on each machine. |
+| Claude Desktop sign-in | `helper-script` / `external-idp-browser` / `external-idp-broker` | How Desktop obtains the bearer token it sends to the gateway. Helper-script is unchanged and needs no app registration. External IdP modes need a Desktop public-client Entra app, consent review and a gateway audience recorded in `external-idp-extra-audience`. |
 | Developer address | `azure` / `custom` | The only one that is expensive to change afterwards — the instance name is part of the address, so replacing the gateway later means reconfiguring every machine. |
 
 > [!IMPORTANT]
@@ -391,6 +404,16 @@ where it costs money, with the figure at your stated developer count:
 > `Onboard-ClaudeDeveloper.ps1`, which is safe to run repeatedly.
 > Device-code sign-in still needs Conditional Access to allow that flow; review
 > [Authentication](AUTHENTICATION.md#conditional-access) before choosing it.
+
+> [!NOTE]
+> **Desktop sign-in is separate.** `helper-script` keeps today's Desktop
+> behavior: `get-foundry-token` reuses Azure CLI sign-in and the gateway accepts
+> only the Foundry data-plane audiences. `external-idp-browser` and
+> `external-idp-broker` write `inferenceCredentialKind: external-idp` with
+> `inferenceIdpOidc`; the gateway accepts the recorded Desktop app audience
+> only when that choice is in `claude-gateway.json`. Use
+> `scripts/New-ClaudeDesktopEntraApp.ps1 -WhatIf` to review the Entra app
+> registration before creating it.
 
 **4. The summary, before anything is created.** Reusing is called out
 explicitly, along with what will and will not be touched.

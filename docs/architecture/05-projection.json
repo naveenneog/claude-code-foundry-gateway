@@ -32,7 +32,7 @@
     { "x": 0, "y": 0, "w": 394, "h": 510, "tone": "slate", "title": "Directory observation · outside or inside VNet" },
     { "x": 430, "y": 0, "w": 850, "h": 510, "tone": "teal", "title": "Private VNet · separate writer identity" },
     { "x": 0, "y": 548, "w": 394, "h": 758, "tone": "blue", "title": "API Management · caller already validated" },
-    { "x": 430, "y": 548, "w": 850, "h": 758, "tone": "teal", "title": "Private resolver · separate read-only identity" }
+    { "x": 430, "y": 548, "w": 850, "h": 758, "tone": "teal", "title": "Resolver · read-only identity; inbound depends on SKU" }
   ],
   "nodes": [
     { "id": "scan", "x": 16, "y": 68, "w": 362, "h": 420, "tone": "slate", "title": "1 · Finish the whole scan", "lines": [
@@ -73,7 +73,7 @@
     { "id": "function", "x": 446, "y": 614, "w": 374, "h": 304, "tone": "teal", "title": "6 · Authenticated Function", "lines": [
       "GET [[route]]",
       "[[auth]] allows the gateway identity, correct tenant and audience only.",
-      "Private endpoint for [[inbound]] = private",
+      "[[inbound]] = private, except Basic v2 public+Entra.",
       "Two warm 2-GB instances; 100 HTTP requests each.",
       "No result cache after a read."
     ] },

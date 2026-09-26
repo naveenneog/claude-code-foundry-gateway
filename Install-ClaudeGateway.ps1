@@ -40,6 +40,13 @@ param(
     [ValidateSet('BasicV2', 'StandardV2', 'PremiumV2')]
     [string]$Sku,
 
+    [ValidateSet('named-value','projection')]
+    [string]$EntitlementStore,
+    [ValidateSet('private','public')]
+    [string]$ResolverInboundAccess,
+    [switch]$DeployProjection,
+    [switch]$FlipProjectionAfterCleanCompare,
+
     [int]$TpmStandard,
     [int]$QuotaStandard,
     [int]$TpmPremium,
@@ -54,6 +61,20 @@ param(
     # Onboard-ClaudeDeveloper.ps1; it configures nothing on this machine.
     [ValidateSet('interactive', 'device', 'helper')]
     [string]$AuthMode,
+
+    # How Claude Desktop itself obtains the bearer token it sends to the
+    # gateway. helper-script is the shipped default. external-idp uses a public
+    # Entra app registration for Desktop and requires the gateway to accept that
+    # token audience.
+    [ValidateSet('helper-script', 'external-idp-browser', 'external-idp-broker')]
+    [string]$DesktopSignInKind,
+    [ValidateSet('id_token', 'access_token')]
+    [string]$DesktopBearerTokenType = 'id_token',
+    [string]$DesktopEntraClientId,
+    [string]$DesktopEntraIssuer,
+    [string]$DesktopEntraScopes,
+    [string]$DesktopEntraAudience,
+    [string]$DesktopEntraResource,
 
     # The organisation details Anthropic requires on a Claude deployment. Only
     # used when the subscription has no Claude deployment to copy them from.
@@ -70,6 +91,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
+$desktopSignInHelper = Join-Path $root 'scripts/ClaudeDesktopSignIn.ps1'
+if (Test-Path $desktopSignInHelper) { . $desktopSignInHelper }
 
 # An az call for something that may not exist yet. az reports that on stderr,
 # and Windows PowerShell 5.1 turns stderr into a NativeCommandError even under
@@ -157,6 +180,7 @@ Write-Host ' Nothing is created until you confirm the summary.' -ForegroundColor
 # Fail here, with a remedy, rather than part-way through a deployment.
 . (Join-Path $root 'scripts/Test-Prerequisites.ps1')
 . (Join-Path $root 'scripts/ClaudeModelDeployment.ps1')
+. (Join-Path $root 'scripts/ClaudeChoice.ps1')
 if (-not (Test-ClaudePrerequisites -Mode Admin)) { return }
 
 Write-Step 'Azure sign-in'
@@ -625,6 +649,76 @@ Write-Head 'Choices'
 
 $devCount = if ($script:DeveloperEstimate) { $script:DeveloperEstimate } else { 50 }
 
+# Entitlement store. Named values are still the simplest path below about 93
+# developers (the business-unit membership value binds before the tier lists,
+# whose measured ceiling is about 110 object ids). Above that, raising the APIM
+# SKU does not move the 4,096-character named-value limit; the projection in
+# docs/adr/0011-projection-platform.md is the configuration change that moves
+# identity data out of policy configuration and into Cosmos.
+if (-not $EntitlementStore) {
+    $storeOptions = @(
+        New-ClaudeChoiceOption -Value 'named-value' -Label 'Named values' `
+            -Detail 'No extra Azure components. Holds about 93 developers in bu-members and about 110 per tier list; raising the SKU does not move it.' `
+            -Recommended:($devCount -le 93) -Reason 'fits the declared developer count'
+        New-ClaudeChoiceOption -Value 'projection' -Label 'Cosmos projection' `
+            -Detail 'Private Cosmos entitlement store plus Function resolver. Required around 100-500 developers; one deployer can populate, compare and flip after a clean comparison.' `
+            -Recommended:($devCount -gt 93) -Reason 'named values cannot hold the declared developer count'
+    )
+    if ($Yes) {
+        $EntitlementStore = if ($devCount -gt 93) { 'projection' } else { 'named-value' }
+        Write-Host ("  -EntitlementStore {0}: selected from the declared developer count under -Yes" -f $EntitlementStore) -ForegroundColor DarkGray
+    }
+    else {
+        $EntitlementStore = Select-ClaudeChoice -Parameter EntitlementStore -Question 'Entitlement store' -Options $storeOptions `
+            -WhereToFind @('docs/SCALE.md: named-value ceiling', 'docs/SECURE-PROJECTION.md: projection deployment') `
+            -AmbiguousMessage 'Choose named-value or projection explicitly for unattended runs.' `
+            -Interactive $true
+    }
+}
+if ($Yes -and $EntitlementStore -eq 'projection' -and -not $DeployProjection) {
+    throw 'Cannot choose projection unattended with -Yes unless -DeployProjection is also passed; projection requires a compare-gated deployer run.'
+}
+if ($FlipProjectionAfterCleanCompare -and -not $DeployProjection) {
+    throw '-FlipProjectionAfterCleanCompare requires -DeployProjection.'
+}
+
+$ResolverInboundAccess = if ($ResolverInboundAccess) { $ResolverInboundAccess }
+elseif ($EntitlementStore -eq 'projection') {
+    switch ($Sku) {
+        'BasicV2' { 'public' }
+        'StandardV2' { 'private' }
+        'PremiumV2' { 'private' }
+        default { 'private' }
+    }
+}
+else { 'private' }
+
+if ($EntitlementStore -eq 'projection') {
+    if ($Sku -eq 'BasicV2' -and $ResolverInboundAccess -ne 'public') {
+        throw 'BasicV2 cannot use a private resolver because Basic v2 has no outbound VNet integration. Use -ResolverInboundAccess public or choose StandardV2/PremiumV2.'
+    }
+    if ($Sku -in @('StandardV2','PremiumV2') -and $ResolverInboundAccess -ne 'private') {
+        Write-Warn2 "$Sku can reach a private resolver; public resolver was requested explicitly."
+    }
+    Write-Host ''
+    if ($ResolverInboundAccess -eq 'public') {
+        Write-Host '  Projection resolver: public, Entra-authenticated resolver.' -ForegroundColor Yellow
+        Write-Host '    Basic v2 cannot reach private backends. The resolver allows only the gateway managed identity token, pins tenant and audience, and keeps Cosmos private.' -ForegroundColor DarkGray
+        Write-Host '    APIM v2 outbound IP addresses are not a stable security boundary, so IP restrictions are optional defense-in-depth, not the primary control.' -ForegroundColor DarkGray
+    }
+    else {
+        Write-Host '  Projection resolver: private endpoint.' -ForegroundColor Green
+        Write-Host '    Standard v2 and Premium v2 reach it through outbound VNet integration; Cosmos remains private.' -ForegroundColor DarkGray
+    }
+    try {
+        $cost100 = & (Join-Path $PSScriptRoot 'scripts/Measure-ClaudeProjectionCost.ps1') -Developers 100 -AsJson 2>$null 6>$null | Out-String | ConvertFrom-Json
+        $cost500 = & (Join-Path $PSScriptRoot 'scripts/Measure-ClaudeProjectionCost.ps1') -Developers 500 -AsJson 2>$null 6>$null | Out-String | ConvertFrom-Json
+        Write-Host ("    Cost: about `${0:n2}/month at 100 developers and `${1:n2}/month at 500 developers, excluding APIM." -f [decimal]$cost100.monthly_usd.total, [decimal]$cost500.monthly_usd.total) -ForegroundColor DarkGray
+    } catch {
+        Write-Host '    Cost: run scripts/Measure-ClaudeProjectionCost.ps1 -P61Scenarios for 100 and 500 developer rows.' -ForegroundColor DarkGray
+    }
+}
+
 # Revocation window. The gateway holds an entitlement answer rather than asking
 # on every request, so someone removed from the directory keeps working for up
 # to this long. Shorter is safer and costs more, because cost follows cache
@@ -777,6 +871,85 @@ $AuthMode = if ($AuthMode) { $AuthMode } else {
             if ($x -in @('interactive','device','helper')) { return $true }
             Write-Warn2 'Must be interactive, device or helper.'
             return $false
+        }
+
+        Write-Host ''
+        Write-Host '  How will Claude Desktop sign in to the gateway?' -ForegroundColor White
+        Write-Host ''
+        Write-Host '    helper-script          Default. Desktop runs get-foundry-token, which uses' -ForegroundColor DarkGray
+        Write-Host '                           the developer Azure CLI sign-in. No app registration,' -ForegroundColor DarkGray
+        Write-Host '                           no new consent, and the gateway audience stays as the' -ForegroundColor DarkGray
+        Write-Host '                           Foundry data-plane audiences.' -ForegroundColor DarkGray
+        Write-Host '    external-idp-browser   Desktop opens the system browser against a public' -ForegroundColor DarkGray
+        Write-Host '                           Entra app registration. Conditional Access applies' -ForegroundColor DarkGray
+        Write-Host '                           as browser sign-in. The gateway must accept the' -ForegroundColor DarkGray
+        Write-Host '                           Desktop app audience for id_token mode, or the API' -ForegroundColor DarkGray
+        Write-Host '                           audience for access_token mode.' -ForegroundColor DarkGray
+        Write-Host '    external-idp-broker    Desktop uses the Microsoft Entra broker. This is for' -ForegroundColor DarkGray
+        Write-Host '                           managed-device or token-protection Conditional Access.' -ForegroundColor DarkGray
+        Write-Host '                           It needs the broker redirect URIs on the public-client' -ForegroundColor DarkGray
+        Write-Host '                           app and is not supported on Linux.' -ForegroundColor DarkGray
+        Write-Host ''
+        Write-Host '    The helper-script path is unchanged for existing installs.' -ForegroundColor DarkGray
+
+        $DesktopSignInKind = if ($DesktopSignInKind) { $DesktopSignInKind } else {
+            Read-Default -Prompt 'Claude Desktop sign-in (helper-script/external-idp-browser/external-idp-broker)' -Default 'helper-script' `
+                -Help 'Pick an external-idp option only after registering the Desktop public-client app.' -Validate {
+                    param($x)
+                    if ($x -in @('helper-script', 'external-idp-browser', 'external-idp-broker')) { return $true }
+                    Write-Warn2 'Must be helper-script, external-idp-browser or external-idp-broker.'
+                    return $false
+                }
+        }
+
+        $desktopSignInRecord = [ordered]@{ kind = 'helper-script' }
+        $desktopGatewayAudience = ''
+        if ($DesktopSignInKind -ne 'helper-script') {
+            $defaultIssuer = "https://login.microsoftonline.com/$($acct.tenantId)/v2.0"
+            $DesktopEntraIssuer = if ($DesktopEntraIssuer) { $DesktopEntraIssuer } else { $defaultIssuer }
+            $DesktopEntraClientId = if ($DesktopEntraClientId) { $DesktopEntraClientId } else {
+                Read-Default -Prompt 'Desktop Entra application (client) ID' -Default '' `
+                    -Help 'Create it with scripts/New-ClaudeDesktopEntraApp.ps1, or pass -DesktopEntraClientId for unattended runs.' -Validate {
+                        param($x)
+                        if (Test-ClaudeGuid $x) { return $true }
+                        Write-Warn2 'Must be an application client-id GUID.'
+                        return $false
+                    }
+            }
+            if ($DesktopBearerTokenType -eq 'access_token') {
+                $DesktopEntraScopes = if ($DesktopEntraScopes) { $DesktopEntraScopes } else {
+                    Read-Default -Prompt 'Gateway delegated scope' -Default '' `
+                        -Help 'Example: api://<gateway-app-id>/user_impersonation. It may require tenant admin consent.' -Validate {
+                            param($x)
+                            if (-not [string]::IsNullOrWhiteSpace($x)) { return $true }
+                            Write-Warn2 'Scopes are required for access_token mode.'
+                            return $false
+                        }
+                }
+                $DesktopEntraAudience = if ($DesktopEntraAudience) { $DesktopEntraAudience } else {
+                    Read-Default -Prompt 'Gateway token audience' -Default '' `
+                        -Help 'Usually the gateway API app ID URI, used by APIM to validate aud.' -Validate {
+                            param($x)
+                            if (-not [string]::IsNullOrWhiteSpace($x)) { return $true }
+                            Write-Warn2 'Audience is required for access_token mode.'
+                            return $false
+                        }
+                }
+            }
+            $desktopSignInRecord = [ordered]@{
+                kind = 'external-idp'
+                flow = $(if ($DesktopSignInKind -eq 'external-idp-broker') { 'broker' } else { 'browser' })
+                bearerTokenType = $DesktopBearerTokenType
+                clientId = $DesktopEntraClientId
+                issuer = $DesktopEntraIssuer.TrimEnd('/')
+            }
+            if ($DesktopEntraScopes) { $desktopSignInRecord['scopes'] = $DesktopEntraScopes }
+            if ($DesktopEntraAudience) { $desktopSignInRecord['audience'] = $DesktopEntraAudience }
+            if ($DesktopEntraResource) { $desktopSignInRecord['resource'] = $DesktopEntraResource }
+
+            $desktopChoiceForValidation = Get-ClaudeDesktopSignIn -Config ([pscustomobject]@{ desktopSignIn = [pscustomobject]$desktopSignInRecord })
+            $desktopGatewayAudience = Get-ClaudeDesktopGatewayAudience -DesktopSignIn $desktopChoiceForValidation
+            Write-Note "Desktop gateway audience: $desktopGatewayAudience"
         }
 }
 
@@ -1085,6 +1258,7 @@ az deployment group create `
         quotaPremium=$QuotaPremium `
         quotaOrg=$QuotaOrg `
         callsPerMinute=$CallsPerMinute `
+        desktopExtraAudience=$desktopGatewayAudience `
         entitlementSource=$(if ($entSrc) { $entSrc } else { 'named-value' }) `
         entitlementResolverUrl=$(if ($entUrl) { $entUrl } else { 'https://resolver-not-deployed.invalid' }) `
         entitlementResolverAudience=$(if ($entAud) { $entAud } else { 'https://resolver-not-deployed.invalid' }) `
@@ -1118,6 +1292,24 @@ foreach ($g in @($StandardGroup, $PremiumGroup)) {
 Write-Step 'Sync entitlement'
 & (Join-Path $root 'scripts/Sync-ClaudeAccess.ps1') -ApimName $apimName -ResourceGroup $ResourceGroup `
     -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup
+
+if ($EntitlementStore -eq 'projection' -and $DeployProjection) {
+    Write-Step 'Projection deployment'
+    $projectionArgs = @(
+        '-ResourceGroup', $ResourceGroup,
+        '-ApimName', $apimName,
+        '-NamePrefix', $NamePrefix,
+        '-Location', $Location,
+        '-Sku', $Sku,
+        '-ResolverInboundAccess', $ResolverInboundAccess,
+        '-StandardGroup', $StandardGroup,
+        '-PremiumGroup', $PremiumGroup
+    )
+    if ($FlipProjectionAfterCleanCompare) { $projectionArgs += '-FlipAfterCleanCompare' }
+    if ($WhatIfPreference) { $projectionArgs += '-WhatIf' }
+    & (Join-Path $root 'scripts/Deploy-ClaudeProjection.ps1') @projectionArgs
+    if ($LASTEXITCODE -ne 0) { throw 'Projection deployment failed. The gateway was not flipped.' }
+}
 
 # ------------------------------------------------------- 7b. business units
 #
@@ -1193,6 +1385,10 @@ $config = [ordered]@{
     # workstations authenticate differently is a fleet with two support paths.
     # Changeable later by reissuing this file; it configures nothing itself.
     authMode      = $AuthMode
+    entitlementStore = $EntitlementStore
+    resolverInboundAccess = $ResolverInboundAccess
+    projectionDeployer = './scripts/Deploy-ClaudeProjection.ps1'
+    desktopSignIn = $desktopSignInRecord
     tiers = @{
         standard = @{ tokensPerMinute = $TpmStandard; tokensPerDay = $QuotaStandard }
         premium  = @{ tokensPerMinute = $TpmPremium;  tokensPerDay = $QuotaPremium }

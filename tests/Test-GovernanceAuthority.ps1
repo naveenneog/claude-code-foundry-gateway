@@ -264,7 +264,7 @@ foreach ($integration in '', $local, $full, $budgetOnly, $full.Replace('false', 
         Assert 'personal daily overrides stay gateway-owned' (-not $m -and $gateway.Writes.Count -eq 1 -and $gateway.Writes[0] -eq 'quota-overrides' -and $gateway.Values['quota-overrides'].Contains("$otherId=2000")) $m
     }
     Reset-Gateway $integration
-    $m = Invoke-Set 'Set-ClaudeDeveloper' @{ User = $personId; Tier = 'standard'; BusinessUnit = 'sales' }
+    $m = Invoke-Set 'Set-ClaudeDeveloper' @{ User = $personId; Tier = 'standard'; BusinessUnit = 'sales'; StandardGroup = 'claude-code-standard'; PremiumGroup = 'claude-code-premium' }
     Assert 'Entra membership edits remain allowed, not competing named-value writes' (-not $m -and $gateway.GroupWrites.Count -gt 0 -and $gateway.Writes.Count -eq 0) $m
 }
 

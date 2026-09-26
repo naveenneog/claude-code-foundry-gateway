@@ -85,6 +85,35 @@ Assert 'sections use the Keep a Changelog set' ($unknown.Count -eq 0) ($unknown 
 $empty = @($blocks.Keys | Where-Object { -not @($blocks[$_] | Where-Object { $_.Trim() }).Count })
 Assert 'no release is empty' ($empty.Count -eq 0) ($empty -join ', ')
 
+# A scripted edit once inserted one new entry after every "### Added" heading in
+# the file, joined to the next entry on the same line ("rows.- **MDM ..."), and
+# the structure checks above still passed. An entry heading appears once, and a
+# line never carries the start of a second entry.
+$entryHeads = @($lines | Where-Object { $_ -match '^- \*\*[^*]+\*\*' } | ForEach-Object { ([regex]::Match($_, '^- \*\*[^*]+\*\*')).Value })
+$repeated = @($entryHeads | Group-Object | Where-Object { $_.Count -gt 1 } | ForEach-Object { "$($_.Count)x $($_.Name)" })
+Assert 'no entry heading appears twice' ($repeated.Count -eq 0) ($repeated -join ' | ')
+$runTogether = @($lines | Select-String -Pattern '[.!?)`*]- (\*\*|`|[A-Z])')
+Assert 'no line runs two entries together' ($runTogether.Count -eq 0) (($runTogether | ForEach-Object { "line $($_.LineNumber)" }) -join ', ')
+
+# A merge that was half resolved once committed "<<<<<<< HEAD" and "=======" into
+# this file, and every check still passed. Conflict markers are refused in the
+# changelog and in every tracked text file. A bare "=======" is not checked:
+# Markdown uses it to underline a heading.
+$markerPattern = '^(<<<<<<<|>>>>>>>)( |$)'
+$changelogMarkers = @($lines | Select-String -Pattern $markerPattern)
+Assert 'the changelog carries no merge conflict marker' ($changelogMarkers.Count -eq 0) (
+    ($changelogMarkers | ForEach-Object { "line $($_.LineNumber)" }) -join ', ')
+$textFiles = @(git -C $root ls-files 2>$null | Where-Object { $_ -match '\.(md|ps1|psm1|py|mjs|js|ts|json|bicep|xml|yml|yaml|toml|txt|sh|tcss|kql)$' })
+$marked = @()
+foreach ($rel in $textFiles) {
+    $full = Join-Path $root $rel
+    if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { continue }
+    $hit = Select-String -LiteralPath $full -Pattern $markerPattern -List
+    if ($hit) { $marked += "${rel}:$($hit.LineNumber)" }
+}
+Assert 'no tracked text file carries a merge conflict marker' ($textFiles.Count -gt 0 -and $marked.Count -eq 0) (
+    $(if ($textFiles.Count) { $marked -join ', ' } else { 'git ls-files returned nothing' }))
+
 Write-Host ''
 Write-Host 'Release log - links and tags' -ForegroundColor Cyan
 

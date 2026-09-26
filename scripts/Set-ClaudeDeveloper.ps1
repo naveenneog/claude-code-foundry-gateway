@@ -47,8 +47,8 @@ param(
     [string]$BusinessUnit,
     [switch]$Remove,
     [switch]$Sync,
-    [string]$StandardGroup = 'claude-code-standard',
-    [string]$PremiumGroup = 'claude-code-premium',
+    [string]$StandardGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') StandardGroup 3>$null),
+    [string]$PremiumGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') PremiumGroup 3>$null),
     [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$ApimName
 )
@@ -60,6 +60,40 @@ if (-not $Remove -and -not $Tier) { throw "Say which tier: -Tier standard or -Ti
 if ($Remove -or $BusinessUnit -or $Sync) {
     if (-not $ResourceGroup) { $ResourceGroup = Select-ClaudeResourceGroup }
     if (-not $ApimName) { $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceGroup }
+}
+
+function Select-ClaudeDeveloperTierGroup {
+    param(
+        [Parameter(Mandatory = $true)][string]$Tier
+    )
+    $rows = @()
+    try {
+        $rows = @(az ad group list --filter "startswith(displayName,'claude')" -o json 2>$null | ConvertFrom-Json)
+    }
+    catch { $rows = @() }
+    $options = foreach ($row in @($rows | Where-Object { $_.securityEnabled -and $_.displayName -match $Tier } | Select-Object -First 25)) {
+        New-ClaudeChoiceOption -Value ([string]$row.displayName) -Label ([string]$row.displayName) `
+            -Detail ("object id: {0}" -f $row.id) -Recommended:($row.displayName -eq "claude-code-$Tier") `
+            -Reason 'matches the historical gateway tier-group naming convention'
+    }
+    Select-ClaudeChoice -Parameter ("{0}Group" -f ((Get-Culture).TextInfo.ToTitleCase($Tier))) `
+        -Question "Which Entra group is the $Tier Claude tier?" `
+        -Options @($options) `
+        -WhereToFind @(
+            'Install-ClaudeGateway.ps1 records standardGroup and premiumGroup in onboarding/claude-gateway.json'
+            'Azure portal: Microsoft Entra ID > Groups > the recorded tier group > Overview'
+            'Pass -StandardGroup and -PremiumGroup for automation'
+        ) `
+        -NoneMessage "No recorded or discoverable $Tier tier group was found."
+}
+
+if (-not $StandardGroup -or -not $PremiumGroup) {
+    if (-not $StandardGroup) {
+        $StandardGroup = Select-ClaudeDeveloperTierGroup -Tier standard
+    }
+    if (-not $PremiumGroup) {
+        $PremiumGroup = Select-ClaudeDeveloperTierGroup -Tier premium
+    }
 }
 
 function Get-GraphToken {

@@ -161,10 +161,24 @@ class FinOpsApp(FeatureUI, App):
     def update_brand(self):
         if not self.query("#brand") or not self.query("#main-tabs"):
             return
-        large = self.size.width >= 120 and self.size.height >= 38 and self.active == "overview"
-        self.set_class(large, "wide-overview")
-        heading = PRODUCT if large or self.config.ascii else COMPACT
-        self.query_one("#brand", Static).update((BANNER + "\n" if large else "") + heading)
+        show_art = self.size.width >= 80 and self.size.height >= 24
+        self.set_class(show_art, "banner-header")
+        heading = PRODUCT if self.config.ascii else COMPACT
+        if not show_art:
+            self.query_one("#brand", Static).update(heading)
+            return
+        identity = str(self.query_one("#identity", Static).render()).strip()
+        lines = BANNER.splitlines()
+        right_width = max(8, self.size.width - len(lines[1]) - 4)
+        if len(identity) > right_width:
+            identity = identity[:right_width - 3] + "..."
+        header = [
+            f"{lines[0]}  {PRODUCT}",
+            f"{lines[1]}  {identity}" if identity else lines[1],
+            lines[2],
+            lines[3],
+        ]
+        self.query_one("#brand", Static).update("\n".join(header))
 
     def on_resize(self):
         self.update_brand()
@@ -280,6 +294,7 @@ class FinOpsApp(FeatureUI, App):
             if scope:
                 identity += " | " + scope
             self.query_one("#identity", Static).update(safe_text(identity))
+            self.update_brand()
             mode = "[redacted/read-only] " if self.redactor.enabled else ""
             self.query_one("#status", Static).update(mode + "<Enter> details <Tab> panel </> lookup <r> refresh")
             if tab == "overview":
@@ -602,6 +617,11 @@ class FinOpsApp(FeatureUI, App):
         if self.editable:
             from .group_screens import GroupPicker
             self.push_screen(GroupPicker())
+
+    def action_add_developer(self):
+        if self.identity.get("role") == "owner" and not self.redactor.enabled:
+            from .developer_screens import DeveloperPicker
+            self.push_screen(DeveloperPicker())
 
     def action_apply(self):
         if self.editable and not self.engine.backend.immediate_writes:
