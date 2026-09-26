@@ -549,8 +549,8 @@ pricing/coverage exclusions mean this is not a health or security verdict.
 The images below are captured from **live backends with display redaction on**.
 Their [manifest](images/aum/manifest.json) records backend, UTC capture time,
 source commit, dimensions and redaction state. Example renders are kept beside
-the snapshot tests, not presented as live documentation. Current captures show
-the compact ASCII-art header on every tab at 80x24 and 160x48.
+the snapshot tests, not presented as live documentation. The recaptured Direct
+Overview and Budgets images show the compact ASCII-art header at 80x24 and 160x48.
 
 ### Overview
 
