@@ -11,7 +11,9 @@ param(
     [switch]$PlanOnly,
     [string]$ApprovedPlanFingerprint,
     [string]$FlowModulePath,
-    [hashtable]$NonInteractiveAnswers
+    [hashtable]$NonInteractiveAnswers,
+    [string]$AnswersPath,
+    [switch]$SupportBundle
 )
 
 $ErrorActionPreference = 'Stop'
@@ -82,6 +84,26 @@ function Write-FlowDecisionRecord {
     finally { if ($hadPath) { Set-FlowRecordProperty $Record '__recordPath' $oldPath } }
 }
 
+function Remove-FlowRecordProperty {
+    param($Object, [string]$Name)
+    if ($Object.PSObject.Properties.Name -contains $Name) { $Object.PSObject.Properties.Remove($Name) }
+}
+
+function Read-FlowAnswers {
+    param([string]$Path, [hashtable]$InlineAnswers)
+    $answers = @{}
+    if ($Path) {
+        $resolved = Resolve-FlowPath $Path
+        if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) { throw "AnswersPath not found: $resolved" }
+        $raw = Get-Content -LiteralPath $resolved -Raw | ConvertFrom-Json
+        foreach ($p in $raw.PSObject.Properties) { $answers[$p.Name] = $p.Value }
+    }
+    if ($InlineAnswers) {
+        foreach ($key in $InlineAnswers.Keys) { $answers[$key] = $InlineAnswers[$key] }
+    }
+    return $answers
+}
+
 function Get-FlowPrincipal {
     try {
         $acct = az account show -o json 2>$null | ConvertFrom-Json
@@ -141,16 +163,39 @@ function Assert-RecordMatchesLive {
     }
 }
 
+function Set-CurrentOptionRecommended {
+    param([object[]]$Options, $Current)
+    if ($null -eq $Current -or "$Current" -eq '') { return @($Options) }
+    $matched = $false
+    foreach ($option in @($Options)) {
+        if ([string]$option.Value -eq [string]$Current) {
+            $option.Recommended = $true
+            $option.Reason = $(if ($option.Reason) { "current value; $($option.Reason)" } else { 'current value' })
+            $matched = $true
+        } else {
+            $option.Recommended = $false
+        }
+    }
+    if (-not $matched) {
+        return @((New-ClaudeChoiceOption -Value ([string]$Current) -Label ("Current: {0}" -f $Current) -Detail 'Recorded current value' -Recommended -Reason 'current value') + @($Options))
+    }
+    return @($Options)
+}
+
 function Invoke-Questions {
-    param($Steps, $Record, $Discovery)
+    param($Steps, $Record, $Discovery, [string]$CurrentAction)
     foreach ($step in $Steps) {
         $questions = @(& $step.Questions -Record $Record -Discovery $Discovery)
         foreach ($q in $questions) {
             if (-not $q.Key) { throw "Step '$($step.Info.Name)' returned a question without a key." }
             $existing = Get-FlowDecisionPath -Record $Record -Path ('decisions.' + $q.Key)
-            if ($null -ne $existing -and "$existing" -ne '') { continue }
-            if ($NonInteractiveAnswers -and $NonInteractiveAnswers.ContainsKey($q.Key)) {
-                $choice = $NonInteractiveAnswers[$q.Key]
+            if ($CurrentAction -ne 'Change' -and $null -ne $existing -and "$existing" -ne '') { continue }
+            if ($CurrentAction -eq 'Change' -and $null -ne $existing -and "$existing" -ne '') {
+                $q.Options = @(Set-CurrentOptionRecommended -Options @($q.Options) -Current $existing)
+                Set-FlowRecordProperty $q 'AcceptRecommendedWithoutConsole' $true
+            }
+            if ($script:FlowAnswers -and $script:FlowAnswers.ContainsKey($q.Key)) {
+                $choice = $script:FlowAnswers[$q.Key]
             }
             else {
                 $select = @{
@@ -170,20 +215,39 @@ function Invoke-Questions {
 }
 
 function Test-StepCompleted {
-    param($Record, $Step, [string]$CurrentAction)
+    param($Record, $Step, [string]$CurrentAction, [string]$RunId)
     if (-not ($Record.PSObject.Properties.Name -contains 'history') -or $null -eq $Record.history) { return $false }
     $decision = if ($Step.Info.DecisionKey) { $Step.Info.DecisionKey } else { $Step.Info.Name }
-    return @($Record.history | Where-Object { $_.action -eq $CurrentAction -and $_.decision -eq $decision }).Count -gt 0
+    return @($Record.history | Where-Object { $_.action -eq $CurrentAction -and $_.decision -eq $decision -and $_.runId -eq $RunId }).Count -gt 0
+}
+
+function Start-FlowRun {
+    param($Record, [string]$Path, [string]$CurrentAction, [string]$CurrentChange, [string]$Fingerprint)
+    $existing = $null
+    if ($Record.PSObject.Properties.Name -contains 'activeRun') { $existing = $Record.activeRun }
+    if ($existing -and $existing.action -eq $CurrentAction -and [string]$existing.change -eq [string]$CurrentChange -and $existing.fingerprint -eq $Fingerprint -and $existing.id) {
+        return [string]$existing.id
+    }
+    $run = [pscustomobject][ordered]@{
+        id = [guid]::NewGuid().ToString('N')
+        action = $CurrentAction
+        change = $CurrentChange
+        fingerprint = $Fingerprint
+        startedUtc = [DateTime]::UtcNow.ToString('o')
+    }
+    Set-FlowRecordProperty $Record 'activeRun' $run
+    Write-FlowDecisionRecord -Record $Record -Path $Path
+    return [string]$run.id
 }
 
 function Invoke-ApplySteps {
-    param($Steps, $Plans, $Record, [string]$Path, [string]$CurrentAction)
+    param($Steps, $Plans, $Record, [string]$Path, [string]$CurrentAction, [string]$RunId)
     $principal = Get-FlowPrincipal
     $release = Get-ClaudeFlowReleaseInfo -Repo $root
     for ($i = 0; $i -lt $Steps.Count; $i++) {
         $step = $Steps[$i]
         $plan = $Plans[$i]
-        if (Test-StepCompleted -Record $Record -Step $step -CurrentAction $CurrentAction) {
+        if (Test-StepCompleted -Record $Record -Step $step -CurrentAction $CurrentAction -RunId $RunId) {
             Write-Host "Skipping completed step: $($step.Info.Name)" -ForegroundColor DarkGray
             continue
         }
@@ -198,6 +262,8 @@ function Invoke-ApplySteps {
             $afterDecision = Get-ClaudeDecision -Record $Record -Key $step.Info.DecisionKey
         } else { $afterDecision = $changes[$step.Info.DecisionKey] }
         Add-ClaudeDecisionHistory -Record $Record -Action $CurrentAction -Decision $(if ($step.Info.DecisionKey) { $step.Info.DecisionKey } else { $step.Info.Name }) -From $before -To $afterDecision -Principal $principal -Commit $release.commit
+        $last = @($Record.history)[@($Record.history).Count - 1]
+        Set-FlowRecordProperty $last 'runId' $RunId
         Set-ClaudeDecisionRelease -Record $Record -Version $release.version -Commit $release.commit
         Write-FlowDecisionRecord -Record $Record -Path $Path
     }
@@ -256,19 +322,27 @@ if (-not $Action) {
 }
 
 $RecordPath = Resolve-FlowPath $RecordPath
+$script:FlowAnswers = Read-FlowAnswers -Path $AnswersPath -InlineAnswers $NonInteractiveAnswers
 $record = Read-ClaudeDecisionRecord -Path $RecordPath
 if (-not $record) { $record = New-EmptyDecisionRecord }
 Set-FlowRecordProperty $record '__recordPath' $RecordPath
 
 if ($Action -eq 'Update') {
-    $update = Join-Path $root 'Update-ClaudeGateway.ps1'
+    $update = Join-Path $root 'scripts\Update-ClaudeGateway.ps1'
+    if (-not (Test-Path -LiteralPath $update)) { $update = Join-Path $root 'Update-ClaudeGateway.ps1' }
     if (Test-Path -LiteralPath $update) { & $update -RecordPath $RecordPath -WhatIf:$WhatIfPreference; return }
     Write-Host 'Update-ClaudeGateway.ps1 is not present on this branch; Update is skipped.' -ForegroundColor Yellow
     return
 }
 if ($Action -eq 'Diagnose') {
     $scripts = @('scripts\Debug-ClaudeSetup.ps1', 'scripts\Debug-ClaudeWorkstation.ps1') | ForEach-Object { Join-Path $root $_ } | Where-Object { Test-Path -LiteralPath $_ }
-    if ($scripts.Count) { foreach ($s in $scripts) { & $s -RecordPath $RecordPath } }
+    if ($scripts.Count) {
+        foreach ($s in $scripts) {
+            $args = @{ RecordPath = $RecordPath }
+            if ($SupportBundle) { $args.SupportBundle = $true }
+            & $s @args
+        }
+    }
     else { Write-Host 'Diagnose scripts are not present on this branch; Diagnose is skipped.' -ForegroundColor Yellow }
     return
 }
@@ -287,7 +361,7 @@ if ($Change) {
     if (-not $steps.Count) { throw "No present guided flow step owns change '$Change'." }
 }
 
-Invoke-Questions -Steps $steps -Record $record -Discovery $discovery
+Invoke-Questions -Steps $steps -Record $record -Discovery $discovery -CurrentAction $Action
 $plans = foreach ($step in $steps) { & $step.Plan -Record $record -Discovery $discovery }
 $review = Format-ClaudeFlowReview -Plans $plans
 $fingerprint = Get-ClaudeFlowFingerprint -Plans $plans
@@ -310,6 +384,9 @@ if ($ApprovedPlanFingerprint) {
 }
 
 if ($PSCmdlet.ShouldProcess($RecordPath, "Apply guided flow action $Action")) {
-    Invoke-ApplySteps -Steps $steps -Plans @($plans) -Record $record -Path $RecordPath -CurrentAction $Action
+    $runId = Start-FlowRun -Record $record -Path $RecordPath -CurrentAction $Action -CurrentChange $Change -Fingerprint $fingerprint
+    Invoke-ApplySteps -Steps $steps -Plans @($plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $runId
     Invoke-VerifySteps -Steps $steps -Record $record
+    Remove-FlowRecordProperty $record 'activeRun'
+    Write-FlowDecisionRecord -Record $record -Path $RecordPath
 }

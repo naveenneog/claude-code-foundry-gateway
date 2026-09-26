@@ -48,16 +48,39 @@ Apply without an interactive prompt:
 .\Start-ClaudeGateway.ps1 -Action Setup -ApprovedPlanFingerprint <fingerprint>
 ```
 
+For scripted runs, put the answers in a JSON object whose keys are the question
+keys, then pass `-AnswersPath`. Explicit `-NonInteractiveAnswers` values, when
+used from another PowerShell script, override the file.
+
+```json
+{
+  "foundation.sku": "BasicV2",
+  "foundation.entitlementStore": "named-value",
+  "foundation.authMode": "interactive",
+  "foundation.desktopSignInKind": "helper-script",
+  "deviceProfiles.conversationStorage": "local"
+}
+```
+
+```powershell
+.\Start-ClaudeGateway.ps1 -Action Setup -PlanOnly -AnswersPath .\answers.json
+.\Start-ClaudeGateway.ps1 -Action Setup -AnswersPath .\answers.json `
+  -ApprovedPlanFingerprint <fingerprint>
+```
+
 The supplied value must match the printed fingerprint, or at least its first
 eight characters. `-WhatIf` prints the same review and writes nothing.
 
 ## Resume after failure
 
-After each step applies, the orchestrator writes the decision record and appends
-one history entry with UTC time, action, decision key, principal and commit. A
-rerun skips completed steps for the same action and starts at the first
-incomplete step. If a step throws before returning its changes, no success-shaped
-history is written for that step.
+When an apply starts, the orchestrator writes `activeRun` with the run id,
+action, selected change, fingerprint and UTC start time. After each step applies,
+it writes the decision record and appends one history entry with that `runId`,
+UTC time, action, decision key, principal and commit. A rerun resumes only when
+the record still has an `activeRun` for the same action/change/fingerprint, and
+then skips only history entries with that `runId`. A different fingerprint starts
+a new run, and a successful verification clears `activeRun`. If a step throws
+before returning its changes, no success-shaped history is written for that step.
 
 ## Update
 
@@ -77,7 +100,9 @@ and exits successfully; use the manual update guidance in [Operations](OPERATION
 
 `-Change` narrows planning to the present module that owns the decision key.
 Future lifecycle modules own tier, entitlement, network and Desktop sign-in
-changes. The review still shows cost and caller impact before applying.
+changes. Change re-asks that module's questions even when the record already
+has a value; the current value is shown as the default/recommended option. The
+review still shows cost and caller impact before applying.
 
 ## Diagnose
 
@@ -86,7 +111,8 @@ changes. The review still shows cost and caller impact before applying.
 ```
 
 When the setup or workstation debug scripts from the diagnose branch are
-present, the flow delegates to them. Until the diagnose branch is merged, use
+present, the flow delegates to them with `-RecordPath`; `-SupportBundle` is
+passed through when requested. Until the diagnose branch is merged, use
 [Debugging](DEBUGGING.md) and [Troubleshooting](TROUBLESHOOTING.md).
 
 ## Status and drift
