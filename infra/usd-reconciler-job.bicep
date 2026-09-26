@@ -22,9 +22,6 @@ param cronExpression string = '*/5 * * * *'
 @description('Container image. It provides Azure CLI and Python.')
 param image string = 'mcr.microsoft.com/azure-cli:2.90.0'
 
-@description('PowerShell version added at start for repository scripts if needed.')
-param powershellVersion string = '7.6.6'
-
 @description('Optional existing Container Apps environment. Empty creates a dedicated Consumption environment.')
 param existingEnvironmentId string = ''
 
@@ -129,10 +126,8 @@ var bootstrap = '''
 set -euo pipefail
 echo "usd reconciler: start $(date -u +%Y-%m-%dT%H:%M:%SZ), commit ${REPO_REF}"
 tdnf install -y git tar gzip libstdc++ python3 python3-pip >/dev/null 2>&1 || true
-mkdir -p /work /opt/pwsh
+mkdir -p /work
 cd /work
-curl -fsSL "https://github.com/PowerShell/PowerShell/releases/download/v${PWSH_VERSION}/powershell-${PWSH_VERSION}-linux-x64.tar.gz" -o pwsh.tgz
-tar -xzf pwsh.tgz -C /opt/pwsh && chmod +x /opt/pwsh/pwsh && rm pwsh.tgz
 git init -q && git fetch -q --depth 1 "${REPO_URL}" "${REPO_REF}" && git checkout -q FETCH_HEAD
 python3 -m pip install -q -r service/aum/requirements.txt
 az login --identity --client-id "${AZURE_CLIENT_ID}" --allow-no-subscriptions --output none
@@ -180,7 +175,6 @@ resource job 'Microsoft.App/jobs@2024-03-01' = {
             { name: 'AZURE_CLIENT_ID', value: identity.properties.clientId }
             { name: 'REPO_URL', value: repositoryUrl }
             { name: 'REPO_REF', value: repositoryRef }
-            { name: 'PWSH_VERSION', value: powershellVersion }
             { name: 'GATEWAY_ID', value: gatewayResourceId }
             { name: 'WORKSPACE_ID', value: workspaceCustomerId }
             { name: 'DOTNET_SYSTEM_GLOBALIZATION_INVARIANT', value: '1' }
