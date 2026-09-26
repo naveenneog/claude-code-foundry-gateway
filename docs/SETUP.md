@@ -377,6 +377,7 @@ where it costs money, with the figure at your stated developer count:
 | Team budget | `report` / `stop` | This legacy prompt changes guidance, not a unit's stored mode. The installer preserves `bu-modes`; a missing entry means strict. Configure strict, allowance or notify per unit through [Business units](BUSINESS-UNITS.md#budget-modes) or Turnstile. An enforcing token quota triggers later than the dollar figure suggests because it excludes cache. |
 | Unassigned developers | `allow` / `deny` | `deny` on day one refuses people who have done nothing wrong. Start on `allow` and switch when `Get-ClaudeBusinessUnit.ps1` reports zero unassigned. |
 | Developer sign-in | `interactive` / `device` / `helper` | How developers authenticate. Written into `claude-gateway.json` and applied by the onboarding script on each machine. |
+| Claude Desktop sign-in | `helper-script` / `external-idp-browser` / `external-idp-broker` | How Desktop obtains the bearer token it sends to the gateway. Helper-script is unchanged and needs no app registration. External IdP modes need a Desktop public-client Entra app, consent review and a gateway audience recorded in `external-idp-extra-audience`. |
 | Developer address | `azure` / `custom` | The only one that is expensive to change afterwards — the instance name is part of the address, so replacing the gateway later means reconfiguring every machine. |
 
 > [!IMPORTANT]
@@ -391,6 +392,16 @@ where it costs money, with the figure at your stated developer count:
 > `Onboard-ClaudeDeveloper.ps1`, which is safe to run repeatedly.
 > Device-code sign-in still needs Conditional Access to allow that flow; review
 > [Authentication](AUTHENTICATION.md#conditional-access) before choosing it.
+
+> [!NOTE]
+> **Desktop sign-in is separate.** `helper-script` keeps today's Desktop
+> behavior: `get-foundry-token` reuses Azure CLI sign-in and the gateway accepts
+> only the Foundry data-plane audiences. `external-idp-browser` and
+> `external-idp-broker` write `inferenceCredentialKind: external-idp` with
+> `inferenceIdpOidc`; the gateway accepts the recorded Desktop app audience
+> only when that choice is in `claude-gateway.json`. Use
+> `scripts/New-ClaudeDesktopEntraApp.ps1 -WhatIf` to review the Entra app
+> registration before creating it.
 
 **4. The summary, before anything is created.** Reusing is called out
 explicitly, along with what will and will not be touched.
@@ -664,3 +675,4 @@ RBAC-only audit does not prove an old API key cannot bypass the gateway.
 | Watch usage and cost | [Monitoring guide](MONITORING.md) |
 | Something is broken | [Debug guide](DEBUGGING.md) |
 | Justify this to a stakeholder | [Foundry vs direct Anthropic](COMPARISON.md) |
+

@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "id": "p60-desktop-app-overview",
+      "output": "docs/guide/p60-desktop-app-overview.png",
+      "target": {
+        "discover": "entra-app",
+        "nameFilterEnv": "P60_DESKTOP_APP_DISPLAY_FILTER",
+        "selectionKey": "p60-desktop-app"
+      },
+      "entraBlade": { "kind": "app-registration", "name": "Overview" },
+      "waitFor": { "text": "Application (client) ID" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "p60-desktop-app-authentication",
+      "output": "docs/guide/p60-desktop-app-authentication.png",
+      "target": {
+        "discover": "entra-app",
+        "nameFilterEnv": "P60_DESKTOP_APP_DISPLAY_FILTER",
+        "selectionKey": "p60-desktop-app"
+      },
+      "entraBlade": { "kind": "app-registration", "name": "Authentication" },
+      "waitFor": { "text": "Mobile and desktop applications" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "p60-desktop-app-api-permissions",
+      "output": "docs/guide/p60-desktop-app-api-permissions.png",
+      "target": {
+        "discover": "entra-app",
+        "nameFilterEnv": "P60_DESKTOP_APP_DISPLAY_FILTER",
+        "selectionKey": "p60-desktop-app"
+      },
+      "entraBlade": { "kind": "app-registration", "name": "ApiPermissions" },
+      "waitFor": { "text": "Configured permissions" },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "p60-gateway-desktop-audience",
+      "output": "docs/guide/p60-gateway-desktop-audience.png",
+      "target": { "discover": "gateway", "selectionKey": "p60-gateway" },
+      "blade": "/overview",
+      "clicks": [
+        {
+          "text": "Named values",
+          "exact": true,
+          "waitFor": { "text": "external-idp-extra-audience", "exact": true },
+          "settle": 1500
+        }
+      ],
+      "waitFor": { "text": "API Management service", "exact": true },
+      "settle": 1500,
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    }
+  ]
+}
+

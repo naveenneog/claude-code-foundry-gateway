@@ -33,7 +33,18 @@ exact streaming cache-creation detail remains **U13**.
   Group Policy fleet rollout steps for Claude Code, the VS Code extension and
   Claude Desktop, with live workstation validation notes and Intune capture
   steps for a tenant with the required role.
-
+- **Claude Desktop sign-in chosen by the administrator (P60).** `Install-ClaudeGateway.ps1`
+  records `desktopSignIn` in `claude-gateway.json`: the unchanged helper-script default,
+  or Desktop external-idp sign-in through an Entra public-client app in browser or broker
+  flow. `scripts/ClaudeDesktopSignIn.ps1` validates the record and renders the exact
+  Desktop keys for both workstation setup scripts and the MDM payload generator. The
+  gateway accepts a Desktop audience only through the new `external-idp-extra-audience` named
+  value; empty keeps the previous Azure CLI/helper audiences. `New-ClaudeDesktopEntraApp.ps1`
+  creates or discovers the public-client registration and redirect URIs without granting
+  tenant-wide consent. [ADR-0027](docs/adr/0027-claude-desktop-sign-in-choice.md).
+  Measured live on 2026-09-26 on an isolated gateway: the helper token returned 200 and a
+  wrong audience 401; a Desktop-audience token stopped at `AADSTS65001 consent_required`,
+  because this tenant grants no consent (**U23**).
 - **Dollar budgets enforced from priced token categories (P59).** A unit, team or person budget
   can be set in dollars with a pinned price book; a reconciler prices observed input, output,
   cache-read and both cache-write tokens with Decimal, refuses unpriced models rather than
@@ -1327,3 +1338,4 @@ Initial release.
 [1.2.0]: https://github.com/naveenneog/claude-code-foundry-gateway/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/naveenneog/claude-code-foundry-gateway/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/naveenneog/claude-code-foundry-gateway/releases/tag/v1.0.0
+

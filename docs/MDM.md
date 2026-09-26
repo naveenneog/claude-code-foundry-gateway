@@ -96,11 +96,13 @@ The generator outputs one tier's payloads:
 | `claude-desktop.managed-settings.json` | Desktop Linux JSON and a readable source for Windows/macOS managed Desktop keys. |
 | `claude-desktop.reg` | Windows Desktop policy values under `HKLM\SOFTWARE\Policies\Claude`. |
 
-P60 adds the admin's `desktopSignIn` choice to
-`onboarding/claude-gateway.json`. After P60 is on `main`, the same generator run
-emits either helper-script Desktop keys or `external-idp` keys
-(`inferenceCredentialKind`, `inferenceIdpOidc`, `inferenceIdpAuthFlow`) that
-match that recorded choice. This packet does not copy P60 code by hand.
+The administrator's Claude Desktop sign-in choice (`desktopSignIn`, P60) is
+recorded in `onboarding/claude-gateway.json`. The same generator run emits either
+helper-script Desktop keys or `external-idp` keys (`inferenceCredentialKind`,
+`inferenceIdpOidc`, `inferenceIdpAuthFlow`) that match that recorded choice, in
+`claude-desktop.managed-settings.json` and `claude-desktop.reg`.
+[ADR-0027](adr/0027-claude-desktop-sign-in-choice.md) records what each choice
+needs: an Entra public-client app, consent, and the audience the gateway accepts.
 
 ## 3. Intune on Windows
 
@@ -251,8 +253,10 @@ alternative is `/Library/Application Support/ClaudeCode/managed-settings.json`.
 
 Desktop uses the `com.anthropic.claudefordesktop` managed preferences domain.
 The generated Windows `.reg` and JSON show the keys; macOS delivery uses a
-Desktop `.mobileconfig` exported from the Desktop in-app configuration window
-or from the P60-enabled generator once it lands on `main`.
+Desktop `.mobileconfig` exported from the Desktop in-app configuration window,
+with the keys and values listed in the generated
+`claude-desktop.managed-settings.json`. The generator does not write a Desktop
+`.mobileconfig`.
 
 Claude Desktop MDM rollout order:
 
