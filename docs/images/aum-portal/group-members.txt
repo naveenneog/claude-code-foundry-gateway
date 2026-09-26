@@ -1,0 +1,73 @@
+Skip to main content
+Microsoft Azure (Preview)
+Report a bug
+Copilot
+admin@contoso.com
+CONTOSO DIRECTORY
+Home
+Contoso test security group
+Contoso test security group | Members
+Group
+Overview
+Diagnose and solve problems
+Manage
+Properties
+Members
+Owners
+Roles and administrators
+Administrative units
+Group memberships
+Applications
+Licenses
+Azure role assignments
+Activity
+Help
+Selected
+Add or remove favorites by pressing Ctrl+Shift+F
+Microsoft Azure portal is loading.
+Microsoft Azure portal is ready.
+Content is loading.
+Content is ready.
+Content is ready.
+
+
+Add members
+
+Bulk operations
+
+
+Refresh
+
+Manage view
+
+
+Remove
+
+Got feedback?
+Direct members
+All members
+
+
+Add filter
+Group members finished loading
+1 group member found
+1 group member found
+
+
+Name
+
+Type
+Email
+User type
+Object Id
+Device Id
+
+
+
+NG
+
+Contoso administrator
+User
+admin@contoso.com
+Member
+[redacted-id]

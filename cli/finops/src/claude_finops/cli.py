@@ -1,6 +1,8 @@
 """Scriptable face; root options also work after a noun or verb."""
 
 from pathlib import Path
+import os
+import sys
 from typing import Annotated
 
 import typer
@@ -11,14 +13,21 @@ from .config import load_config
 from .engine import Engine
 from .errors import FinOpsError
 from .output import chargeback_csv, display
+from .brand import BANNER, PRODUCT, show_banner
+from . import __version__
+from .redaction import Redactor
+
+
+def terminal_output():
+    return sys.stdout.isatty()
 
 
 class EverywhereGroup(TyperGroup):
     def parse_args(self, ctx, args):
         ctx.meta["finops_help"] = "--help" in args
-        flags = {"--json", "--plain", "--what-if", "--no-color", "--ascii"}
+        flags = {"--json", "--plain", "--what-if", "--no-color", "--ascii", "--version", "--screen-reader", "--redact"}
         options = {"--backend", "--month", "--config", "--url", "--scope", "--theme",
-                   "--resource-group", "--apim-name"}
+                   "--resource-group", "--apim-name", "--subscription", "--reason"}
         prefix, rest = [], []
         index = 0
         while index < len(args):
@@ -41,7 +50,7 @@ class EverywhereGroup(TyperGroup):
 
 
 app = typer.Typer(cls=EverywhereGroup, invoke_without_command=True, no_args_is_help=False, rich_markup_mode=None,
-                  help="Claude gateway FinOps. No command opens the terminal app. Changes preview until --apply.")
+                  help="AUM - Azure Usage Management. No command opens the terminal app. Changes preview until --apply.")
 groups = {}
 for noun in ("budget", "people", "governance", "tier", "requests", "anomalies", "report", "usage", "trends", "catalog"):
     groups[noun] = typer.Typer(help=f"{noun.capitalize()} views and actions.", rich_markup_mode=None)
@@ -53,22 +62,25 @@ def emit(ctx, operation, *, mutation=False):
     try:
         result = operation(state["engine"])
         if mutation and not result.get("preview", True) and result.get("requested_at"):
-            if result.get("scope_type") != "user" and state["engine"].backend.name != "Direct":
+            if result.get("scope_type") != "user" and not state["engine"].backend.immediate_writes:
                 result["apply_status"] = state["engine"].wait_for_apply(result["requested_at"])
-        display(result, as_json=state["json"], plain=state["plain"], no_color=state["no_color"])
+        display(state["redactor"].present(result), as_json=state["json"], plain=state["plain"], no_color=state["no_color"])
         return result
     except FinOpsError as error:
-        display(dict(error=str(error), exit_code=error.code), as_json=state["json"], plain=state["plain"], no_color=True)
+        display(state["redactor"].present(dict(error=str(error), exit_code=error.code)),
+                as_json=state["json"], plain=state["plain"], no_color=True)
         raise typer.Exit(error.code) from None
 
 
 @app.callback()
 def root(ctx: typer.Context,
-         backend: Annotated[str | None, typer.Option(help="turnstile, direct or fake")] = None,
+         backend: Annotated[str | None, typer.Option(help="direct, aum-service, turnstile or fake")] = None,
          month: str | None = None,
          config: Path | None = None,
          url: str | None = None,
          scope: str | None = None,
+         subscription: str | None = None,
+         reason: Annotated[str | None, typer.Option(help="Audit reason for native AUM service budget/configuration changes.")] = None,
          resource_group: str | None = None,
          apim_name: str | None = None,
          theme: str | None = None,
@@ -76,30 +88,57 @@ def root(ctx: typer.Context,
          plain: bool = False,
          what_if: Annotated[bool, typer.Option("--what-if", help="Always preview; never write.")] = False,
          no_color: bool = False,
+         version: Annotated[bool, typer.Option("--version", help="Show AUM version without connecting.")] = False,
+         screen_reader: Annotated[bool, typer.Option("--screen-reader", help="Use linear output without banner or screen UI.")] = False,
+         redact: Annotated[bool, typer.Option("--redact", help="Display Contoso pseudonyms; never alters API requests.")] = False,
          ascii_only: Annotated[bool, typer.Option("--ascii")] = False):
     if ctx.meta.get("finops_help"):
         return
+    plain = plain or screen_reader
+    if version:
+        if show_banner(tty=terminal_output(), as_json=as_json, plain=plain, screen_reader=screen_reader):
+            typer.echo(BANNER)
+        if as_json:
+            display(dict(product=PRODUCT, version=__version__), as_json=True)
+        else:
+            typer.echo(f"{PRODUCT} {__version__}")
+        raise typer.Exit()
+    redact = redact or os.environ.get("AUM_REDACT", "").lower() in {"1", "true", "yes"}
+    if ctx.invoked_subcommand == "configure":
+        ctx.obj = dict(configure=dict(backend=backend, subscription=subscription, resource_group=resource_group,
+                                     apim_name=apim_name, path=config), tty=terminal_output(),
+                       json=as_json, plain=plain, what_if=what_if, no_color=no_color, redactor=Redactor(redact))
+        return
     try:
         settings = load_config(config, backend=backend, url=url, scope=scope, resource_group=resource_group,
-                               apim_name=apim_name, theme=theme, ascii=True if ascii_only else None)
+                               apim_name=apim_name, subscription=subscription, theme=theme, ascii=True if ascii_only else None)
         engine = Engine(connect(settings), month)
+        engine.change_reason = reason or ""
     except FinOpsError as error:
         display(dict(error=str(error), exit_code=error.code), as_json=as_json, plain=plain, no_color=True)
         raise typer.Exit(error.code) from None
-    ctx.obj = dict(engine=engine, config=settings, json=as_json, plain=plain, what_if=what_if, no_color=no_color)
+    ctx.obj = dict(engine=engine, config=settings, json=as_json, plain=plain, what_if=what_if, no_color=no_color,
+                   redactor=Redactor(redact))
     ctx.call_on_close(engine.backend.close)
     if ctx.invoked_subcommand is None:
-        if plain or as_json:
+        if plain or as_json or not terminal_output():
+            ctx.obj["plain"] = plain or not terminal_output()
             emit(ctx, lambda e: dict(identity=e.read("whoami"), **e.status()))
         else:
             from .tui import FinOpsApp
-            FinOpsApp(engine, settings, no_color=no_color, preview_only=what_if).run()
+            FinOpsApp(engine, settings, no_color=no_color, preview_only=what_if, redact=redact).run()
 
 
 @app.command()
 def whoami(ctx: typer.Context):
     """Show authenticated identity, role and any server-provided management scope."""
     emit(ctx, lambda e: e.read("whoami"))
+
+
+@app.command()
+def lookup(ctx: typer.Context, query: str, team: str | None = None):
+    """Find units, teams, models and request ids; select a team for bounded people lookup."""
+    emit(ctx, lambda e: dict(items=e.lookup(query, team)))
 
 
 @app.command()
@@ -138,14 +177,14 @@ def budget_remove(ctx: typer.Context, kind: str, name: str, apply: bool = False,
 @groups["people"].command("find")
 def people_find(ctx: typer.Context, query: Annotated[str, typer.Argument()] = "", team: Annotated[str, typer.Option()] = "",
                 offset: Annotated[int, typer.Option(min=0)] = 0,
-                limit: Annotated[int, typer.Option(min=1, max=200)] = 50):
+                limit: Annotated[int, typer.Option(min=1, max=200)] = 50, cursor: str | None = None):
     """Search one team's people on the server. Never downloads the directory."""
     def operation(engine):
-        if not team:
+        if not team and not engine.has_feature("people_cursor"):
             raise FinOpsError("Choose --team <team-id>. Run governance show to find a team.")
         if len(query) > 200:
             raise FinOpsError("Search text must not exceed 200 characters.")
-        return engine.read("people", department_id=team, query=query, offset=offset, limit=limit)
+        return engine.read("people", **engine.backend.people_filter(team), query=query, offset=offset, limit=limit, cursor=cursor)
     emit(ctx, operation)
 
 
@@ -189,10 +228,10 @@ def catalog_remove(ctx: typer.Context, kind: str, key: str, apply: bool = False,
 @groups["requests"].command("list")
 def requests_list(ctx: typer.Context, limit: Annotated[int, typer.Option(min=1, max=200)] = 50,
                   before: str | None = None, unit: str | None = None, team: str | None = None,
-                  model: str | None = None, person: str | None = None):
+                  model: str | None = None, person: str | None = None, cursor: str | None = None):
     """List a bounded request window; --before selects older requests."""
     emit(ctx, lambda e: e.read("requests", limit=limit, before=before, organization_id=unit,
-                               department_id=team, model_id=model, user_id=person))
+                               department_id=team, model_id=model, user_id=person, cursor=cursor))
 
 
 @groups["requests"].command("show")
@@ -201,19 +240,36 @@ def requests_show(ctx: typer.Context, request_id: str):
 
 
 @groups["anomalies"].command("list")
-def anomalies_list(ctx: typer.Context, limit: Annotated[int, typer.Option(min=1, max=200)] = 50):
-    emit(ctx, lambda e: e.read("anomalies", limit=limit))
+def anomalies_list(ctx: typer.Context, limit: Annotated[int, typer.Option(min=1, max=200)] = 50,
+                   unit: str | None = None, team: str | None = None, person: str | None = None,
+                   model: str | None = None, surface: str | None = None, tier: str | None = None):
+    emit(ctx, lambda e: e.read("anomalies", limit=limit, organization_id=unit, department_id=team,
+                               user_id=person, model_id=model, runtime=surface, tier=tier))
 
 
 @groups["usage"].command("show")
-def usage_show(ctx: typer.Context, dimension: str = "organization", split_by: str | None = None):
-    """Pivot organization, department, user, model or runtime; optionally split a row."""
-    emit(ctx, lambda e: e.read("distribution", dimension=dimension, split_by=split_by, limit=100))
+def usage_show(ctx: typer.Context, dimension: str = "organization", split_by: str | None = None,
+               unit: str | None = None, team: str | None = None, person: str | None = None,
+               model: str | None = None, surface: str | None = None, tier: str | None = None,
+               basis: str | None = None):
+    """Pivot organization, department, user, model, runtime or tier; optionally split a row."""
+    def read(engine):
+        if basis and (engine.backend.name != "Direct" or basis not in {"ledger", "priced"}):
+            raise FinOpsError("Explicit basis is Direct-only: ledger or priced.")
+        return engine.read("distribution", dimension=dimension, split_by=split_by, limit=100,
+                               organization_id=unit, department_id=team, user_id=person,
+                               model_id=model, runtime=surface, tier=tier, **({"basis": basis} if basis else {}))
+    emit(ctx, read)
 
 
 @groups["trends"].command("show")
-def trends_show(ctx: typer.Context, interval: str = "day", group_by: str = "none"):
-    emit(ctx, lambda e: e.read("trends", interval=interval, group_by=group_by))
+def trends_show(ctx: typer.Context, interval: str = "day", group_by: str = "none",
+                compare: str | None = None, start: str | None = None, end: str | None = None,
+                unit: str | None = None, team: str | None = None, person: str | None = None,
+                model: str | None = None, surface: str | None = None, tier: str | None = None):
+    filters = dict(organization_id=unit, department_id=team, user_id=person, model_id=model, runtime=surface, tier=tier)
+    emit(ctx, lambda e: e.compare_trends(compare, interval=interval, group_by=group_by, **filters) if compare else
+         e.read("trends", interval=interval, group_by=group_by, **filters, **{"from": start, "to": end}))
 
 
 @groups["report"].command("chargeback")
@@ -223,7 +279,7 @@ def report_chargeback(ctx: typer.Context, csv: Annotated[bool, typer.Option("--c
     if csv and not ctx.obj["json"]:
         try:
             rows = ctx.obj["engine"].chargeback(dimension)["items"]
-            typer.echo(chargeback_csv(rows, ctx.obj["engine"].month), nl=False)
+            typer.echo(chargeback_csv(ctx.obj["redactor"].present(rows), ctx.obj["engine"].month), nl=False)
         except FinOpsError as error:
             typer.echo(str(error), err=True)
             raise typer.Exit(error.code) from None
@@ -233,6 +289,21 @@ def report_chargeback(ctx: typer.Context, csv: Annotated[bool, typer.Option("--c
 
 def main():
     app()
+
+
+from .configure import configure
+app.command()(configure)
+from .commands_v4 import register
+register(app, groups, emit)
+from .commands_local import register as register_local
+register_local(app, groups, emit)
+from .commands_groups import register as register_groups
+register_groups(app, groups, emit)
+
+
+def legacy_main():
+    typer.echo("Deprecated: claude-finops is now aum (AUM - Azure Usage Management); this alias remains for one release.", err=True)
+    main()
 
 
 if __name__ == "__main__":

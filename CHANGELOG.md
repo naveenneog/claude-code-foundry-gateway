@@ -28,6 +28,15 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- **AUM (Azure Usage Management), the terminal FinOps client renamed from `claude-finops`.**
+  `aum` (the old command still works) adds an executive overview, budgets by unit, team and
+  person, gateway governance, usage breakdown and trends, a request trace, anomalies, reports
+  through P50's generator, and Entra group find, create, member and delete, each previewed before
+  any write. It runs against Turnstile, the gateway directly, the AUM service or example data, so
+  it does not depend on Turnstile. Measured live on 2026-09-25 through Direct and Turnstile:
+  owned test groups, budgets and all three modes enforced on real requests (strict 403, allowance
+  and notify 200 with a notice), then 13 named values restored byte for byte. Clients for server
+  features that do not exist yet stay hidden until a server advertises them. `docs/AUM.md`.
 - **Governance authored in Turnstile, applied to the gateway on save.** With
   `Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Turnstile`, business units, teams, their Entra
   groups, budgets and tier limits are edited on Turnstile's pages, and each save starts the

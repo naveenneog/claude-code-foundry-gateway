@@ -160,12 +160,8 @@ if ($null -eq $raw) {
 
 # Read the whole map before changing anything, so entries for other people are
 # carried through unchanged rather than dropped.
-$map = [ordered]@{}
-foreach ($pair in (Split-Sentinel $raw)) {
-    $bits = $pair -split '=', 2
-    if ($bits.Count -eq 2 -and $bits[1] -match '^\d+$') { $map[$bits[0]] = [long]$bits[1] }
-    else { Write-Warning "Ignoring malformed override entry '$pair'." }
-}
+. (Join-Path $PSScriptRoot 'ClaudeBudgetOverride.ps1')
+$map = ConvertFrom-ClaudeBudgetOverrides $raw
 
 if ($List) {
     if (-not $map.Count) { Write-Host 'No per-user overrides. Everyone is on their tier default.' -ForegroundColor DarkGray; exit 0 }
@@ -221,7 +217,7 @@ else {
     $map[$oid] = $Tokens
 }
 
-$value = if ($map.Count) { ',' + (($map.Keys | ForEach-Object { "$_=$($map[$_])" }) -join ',') + ',' } else { ',,' }
+$value = ConvertTo-ClaudeBudgetOverrides $map
 
 # The write is only safe because the map was read first. Assert that the entries
 # belonging to other people survived, rather than trusting the string building.

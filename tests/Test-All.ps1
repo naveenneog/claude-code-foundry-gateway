@@ -238,9 +238,9 @@ try {
     $finopsPython = Join-Path $root '.venv-finops\Scripts\python.exe'
     $finopsUnixPython = Join-Path $root '.venv-finops\bin\python'
     $finopsSkip = if (-not ((Test-Path $finopsPython) -or (Test-Path $finopsUnixPython))) {
-        'FinOps: Python or the worktree .venv-finops is missing. See docs/CLI-FINOPS.md to install.'
+        'AUM: Python or the worktree .venv-finops is missing. See docs/AUM.md to install.'
     } else { '' }
-    Invoke-Check 'Terminal FinOps - commands, rules and pilot' 'Test-FinOps.ps1' -SkipReason $finopsSkip
+    Invoke-Check 'AUM - commands, dashboard and pilot' 'Test-FinOps.ps1' -SkipReason $finopsSkip
 
     if ($IncludeAzure) {
         Invoke-Check 'Foundry discovery is selective'      'Test-Discovery.ps1' -Azure
