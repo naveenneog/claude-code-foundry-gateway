@@ -155,6 +155,7 @@ exit /b 0'
     $info = Get-ClaudeFlowStepInfo
     $plan = Get-ClaudeFlowStepPlan -Record ([pscustomobject]@{ resourceGroup='rg-test'; apimName='apim-test'; gatewayUrl='https://apim-test.azure-api.net/claude' }) -Discovery $null
     Assert 'Diagnose step advertises the fixed interface' ($info.Name -eq 'Diagnose' -and $info.Actions -contains 'Diagnose')
+    Assert 'Guide action does not run diagnostics' ($info.Actions -notcontains 'Guide')
     Assert 'Diagnose plan is read-only and contains only Check actions' ((@($plan.Actions) | Where-Object Verb -ne 'Check').Count -eq 0)
     $env:CLAUDE_DIAGNOSE_SKIP_HEALTH = '1'
     $result = Invoke-ClaudeFlowStep -Record ([pscustomobject]@{ resourceGroup='rg-test'; apimName='apim-test'; gatewayUrl='https://apim-test.azure-api.net/claude' }) -Plan $plan -NoRequest

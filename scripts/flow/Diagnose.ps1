@@ -13,7 +13,7 @@ function Get-ClaudeFlowStepInfo {
         Title = 'Diagnose gateway and workstation setup'
         DecisionKey = 'diagnostics'
         DependsOn = @()
-        Actions = @('Diagnose','Status','Guide')
+        Actions = @('Diagnose','Status')
     }
 }
 
