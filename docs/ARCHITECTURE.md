@@ -133,7 +133,7 @@ provider's nonstream cache TTL split into the existing identity trace.
 ![Dated dollar budgets are authored through scripts or scoped AUM APIs, reconciled from categorized telemetry outside inference, and enforced by expiring gateway decisions. Streaming incompleteness remains explicit.](images/architecture/usd-budgets.png)
 
 Source: [14-usd-budgets.json](architecture/14-usd-budgets.json);
-[ADR-0027](adr/0026-usd-budget-reconciliation.md).
+[ADR-0026](adr/0026-usd-budget-reconciliation.md).
 
 `usd-budgets` persists dollar strings and the price-book date, separately from
 the existing approximate token guard. The shared reconciler reads integer category
@@ -662,4 +662,3 @@ Review behavior against the implementation whenever a feature changes a componen
 flow, identity, schedule or network path. PNGs are repeatable with the same locked
 Playwright/browser and installed fonts; cross-platform font rasterization can differ
 without changing the architecture.
-

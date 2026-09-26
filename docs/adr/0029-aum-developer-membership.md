@@ -1,4 +1,4 @@
-# ADR-0027: AUM developer membership uses delegated Graph and gateway publication
+# ADR-0029: AUM developer membership uses delegated Graph and gateway publication
 
 - **Status:** Accepted
 - **Date:** 2026-09-26
@@ -80,5 +80,3 @@ to fixed group names.
 - Microsoft identity platform access token lifetime:
   <https://learn.microsoft.com/entra/identity-platform/access-tokens>, retrieved
   2026-09-26.
-
-
