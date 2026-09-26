@@ -35,7 +35,7 @@ if (Test-Path $deployerPath) {
     Assert 'deployer validates SKU and inbound shape' ($deployer -match "\[ValidateSet\('BasicV2','StandardV2','PremiumV2'\)\]" -and $deployer -match "(?s)BasicV2.*public")
     Assert 'deployer deploys the private Cosmos projection' ($deployer -match 'projection\.bicep' -and $deployer -match "networkAccess='private-only'")
     Assert 'deployer deploys the resolver with selected inbound access' ($deployer -match 'resolver\.bicep' -and $deployer -match 'inboundAccess=')
-    Assert 'deployer passes resolver identity allow lists as JSON arrays' ($deployer -match 'allowedCallerAppIds="\[`"\$gatewayAppId`"\]"' -and $deployer -match 'allowedCallerObjectIds="\[`"\$gatewayObjectId`"\]"')
+    Assert 'deployer passes resolver identity allow lists through a parameter file' ($deployer -match 'allowedCallerAppIds = @\{ value = @\(\$gatewayAppId\) \}' -and $deployer -match 'allowedCallerObjectIds = @\{ value = @\(\$gatewayObjectId\) \}' -and $deployer -match '--parameters "@\$resolverParamFile"')
     Assert 'deployer publishes resolver code' ($deployer -match 'functionapp deployment source config-zip' -and $deployer -match 'resolver\.zip')
     Assert 'deployer uses an in-network runner for private Cosmos writes' ($deployer -match 'runnerEnabled=true' -and $deployer -match 'Send-RunnerFile' -and $deployer -match 'Invoke-RunnerCommand')
     Assert 'deployer grants the runner data contributor on one container' ($deployer -match 'cosmosdb sql role assignment create' -and $deployer -match '00000000-0000-0000-0000-000000000002' -and $deployer -match '/dbs/claude/colls/entitlement')

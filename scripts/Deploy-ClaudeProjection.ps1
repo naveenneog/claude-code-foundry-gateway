@@ -126,16 +126,33 @@ $network = Get-DeploymentOutput $networkName
 Step 'Deploy resolver'
 $resolverName = "projection-resolver-$NamePrefix"
 if ($PSCmdlet.ShouldProcess($resolverName, "deploy resolver.bicep inboundAccess=$ResolverInboundAccess")) {
+    $resolverParamFile = Join-Path ([IO.Path]::GetTempPath()) "claude-resolver-params-$NamePrefix-$PID.json"
+    $resolverParams = @{
+        '$schema' = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
+        contentVersion = '1.0.0.0'
+        parameters = @{
+            namePrefix = @{ value = $NamePrefix }
+            location = @{ value = $Location }
+            cosmosAccountName = @{ value = $cosmosAccount }
+            integrationSubnetId = @{ value = $network.resolverSubnetId }
+            privateEndpointSubnetId = @{ value = $network.endpointsSubnetId }
+            sitesDnsZoneId = @{ value = $network.sitesDnsZoneId }
+            blobDnsZoneId = @{ value = $network.blobDnsZoneId }
+            queueDnsZoneId = @{ value = $network.queueDnsZoneId }
+            tableDnsZoneId = @{ value = $network.tableDnsZoneId }
+            resolverAppId = @{ value = $ResolverAppId }
+            allowedCallerAppIds = @{ value = @($gatewayAppId) }
+            allowedCallerObjectIds = @{ value = @($gatewayObjectId) }
+            inboundAccess = @{ value = $ResolverInboundAccess }
+        }
+    }
+    [IO.File]::WriteAllText($resolverParamFile, ($resolverParams | ConvertTo-Json -Depth 8), (New-Object System.Text.UTF8Encoding($false)))
     Invoke-WithRetry -Name 'resolver deployment' -Action {
         az deployment group create -g $ResourceGroup -n $resolverName --template-file (Join-Path $root 'infra/resolver.bicep') `
-            --parameters namePrefix=$NamePrefix location=$Location cosmosAccountName=$cosmosAccount `
-                integrationSubnetId=$($network.resolverSubnetId) privateEndpointSubnetId=$($network.endpointsSubnetId) `
-                sitesDnsZoneId=$($network.sitesDnsZoneId) blobDnsZoneId=$($network.blobDnsZoneId) `
-                queueDnsZoneId=$($network.queueDnsZoneId) tableDnsZoneId=$($network.tableDnsZoneId) `
-                resolverAppId=$ResolverAppId allowedCallerAppIds="[`"$gatewayAppId`"]" `
-                allowedCallerObjectIds="[`"$gatewayObjectId`"]" inboundAccess=$ResolverInboundAccess -o none
+            --parameters "@$resolverParamFile" -o none
         if ($LASTEXITCODE -ne 0) { throw 'resolver deployment failed' }
     }
+    Remove-Item -LiteralPath $resolverParamFile -Force -ErrorAction SilentlyContinue
 }
 $resolver = Get-DeploymentOutput $resolverName
 $resolverUrl = [string]$resolver.resolverUrl
