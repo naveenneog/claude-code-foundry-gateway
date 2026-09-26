@@ -128,15 +128,15 @@ resource gatewayWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 var bootstrap = '''
 set -euo pipefail
 echo "usd reconciler: start $(date -u +%Y-%m-%dT%H:%M:%SZ), commit ${REPO_REF}"
-tdnf install -y git tar gzip libstdc++ >/dev/null 2>&1 || true
+tdnf install -y git tar gzip libstdc++ python3 python3-pip >/dev/null 2>&1 || true
 mkdir -p /work /opt/pwsh
 cd /work
 curl -fsSL "https://github.com/PowerShell/PowerShell/releases/download/v${PWSH_VERSION}/powershell-${PWSH_VERSION}-linux-x64.tar.gz" -o pwsh.tgz
 tar -xzf pwsh.tgz -C /opt/pwsh && chmod +x /opt/pwsh/pwsh && rm pwsh.tgz
 git init -q && git fetch -q --depth 1 "${REPO_URL}" "${REPO_REF}" && git checkout -q FETCH_HEAD
-python -m pip install -q -r service/aum/requirements.txt
+python3 -m pip install -q -r service/aum/requirements.txt
 az login --identity --client-id "${AZURE_CLIENT_ID}" --allow-no-subscriptions --output none
-PYTHONPATH=service/aum python -m aum_service.usd_command --gateway-id "${GATEWAY_ID}" --workspace-id "${WORKSPACE_ID}" --managed-identity
+PYTHONPATH=service/aum python3 -m aum_service.usd_command --gateway-id "${GATEWAY_ID}" --workspace-id "${WORKSPACE_ID}" --managed-identity
 '''
 
 resource job 'Microsoft.App/jobs@2024-03-01' = {
