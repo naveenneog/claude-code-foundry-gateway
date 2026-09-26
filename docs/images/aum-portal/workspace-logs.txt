@@ -1,0 +1,80 @@
+Skip to main content
+Microsoft Azure (Preview)
+Report a bug
+Copilot
+admin@contoso.com
+CONTOSO DIRECTORY
+Home
+contoso-logs
+contoso-logs | Logs
+Log Analytics workspace
+Overview
+Activity log
+Access control (IAM)
+Tags
+Diagnose and solve problems
+Logs
+Resource visualizer
+Settings
+Classic
+Monitoring
+Automation
+Help
+Selected
+Add or remove favorites by pressing Ctrl+Shift+F
+Content is loading.
+Content is ready.
+Content is ready.
+
+
+New Query 1
+*
+Observability agent
+Save
+Share
+Queries hub
+Agent
+New
+Run
+Time range :
+Set in query
+Show :
+1000 results
+KQL mode
+1
+2
+3
+ClaudeCost(startofmonth(now()), now())
+| summarize tokens=sum(prompt_tokens + completion_tokens), requests=sum(requests), cache_read_tokens=sum(cache_read_tokens), estimated_usd=sum(usd),
+unpriced=countif(not(priced_ok)) by business_unit
+| extend estimated_usd=iff(unpriced > 0, real(null), estimated_usd)
+Results
+Chart
+business_unit
+tokens
+requests
+cache_read_tokens
+estimated_usd
+unpriced
+contoso-scope-119cd0a8
+180973
+613
+5214068
+1
+unassigned
+185
+298
+0
+9
+Columns
+3s 675ms
+Display time (UTC+00:00)
+Query details
+1 - 2 of 2
+
+Running your query...
+on
+
+
+on
+on

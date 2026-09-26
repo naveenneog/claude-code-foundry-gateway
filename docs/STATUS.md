@@ -1,6 +1,6 @@
 # Status
 
-**Active packets:** P52 AUM, P59 exact dollar budgets at the gateway, P60 Claude Desktop sign-in chosen by the admin, and P61 the Cosmos entitlement store on every v2 tier, including Basic v2 ([below](#portal-pictures-recaptured-live-and-the-test-environments-removed-2026-09-25)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets:** P59 exact dollar budgets at the gateway, P60 Claude Desktop sign-in chosen by the admin, and P61 the Cosmos entitlement store on every v2 tier, including Basic v2 ([below](#portal-pictures-recaptured-live-and-the-test-environments-removed-2026-09-25)). P52, AUM, merged on 2026-09-26 ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P46 acceptance criteria — managers scoped, and budget modes
 
@@ -40,6 +40,44 @@ this time, because manager attributes do not reach the gateway, but budget modes
 against stale runs is being added with the modes, and a single queue-driven writer (P48) is the
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
+
+## P52 AUM (Azure Usage Management), merged 2026-09-26
+
+`claude-finops` is now `aum`; the old command still starts it. One engine behind a terminal
+dashboard and scriptable commands, backed by Turnstile, the gateway directly, the AUM service or
+example data, so it does not depend on Turnstile. Guide: [AUM.md](AUM.md); the earlier guide
+stays at [CLI-FINOPS.md](CLI-FINOPS.md); decisions in [ADR-0018](adr/0018-terminal-finops.md).
+
+It adds an executive overview, budgets by unit, team and person, gateway governance (groups,
+tiers, modes), usage breakdown and trends, a request trace, anomalies, reports through P50's
+generator, and settings. Entra groups can be found, created, given members and deleted, each
+previewed first; `governance refresh-membership` rebuilds `bu-members` with the repository's
+serializer; `requests probe` and a bounded usage-only `usage refresh` are preview-first. Clients
+for approvals, boosts, notifications, conditional catalog and tier writes, anomaly dispositions,
+request paging past 200 and global search are built and stay hidden until a server advertises
+them in `/api/v1/finops/capabilities`.
+
+**Measured live on 2026-09-25**, with the owner's existing rights, through Direct and through
+Turnstile: two test Entra groups created, the owner added, a unit and a team registered,
+budgets and the strict, allowance and notify modes set, and three tiny real Claude requests per
+mode. Strict refused with 403 naming the team; allowance (10%) and notify served 200 with
+`x-claude-budget-notice`. From save to the confirming response, as upper bounds including the
+probe: Direct 8.0-26.5 s, Turnstile 130.6-157.1 s (its apply job). The attributed requests
+appeared in Direct within 321 s, and in Turnstile after a bounded usage-only export. Then
+everything was restored: 13 named values byte-identical to the originals, the 14 direct
+memberships equal, both groups deleted, no test catalog entries, rechecked after the gate.
+
+Tests: 297 Python tests pass, and the existing 108 mode and freshness mutations are all caught;
+150 live, redacted terminal captures and 10 portal pictures, each with a manifest record.
+
+Not done, and why: a mutation journey through the AUM service (P55's deployment was removed
+after its own live journeys: `ResourceGroupNotFound`); exact limiter-counter continuity across a
+mode change (the parent's remaining count read 99,968 in every mode, so it is not claimed); and
+full-directory scale (**U20**). Council, from the branch: Architect, Coder, UX and Security PASS;
+QA blocked on the README's missing `docs/AUM.md` link and the service journey. The branch's last
+gate (`de793ae`: 57 PASS, 5 FAIL, 1 SKIP) failed only on that link, in Test-Scale and the four
+mutation shards that refuse its red baseline. The integration adds the link (the README is the
+lead's) and gives the worktree the service venv the SKIP lacked.
 
 ## The scripts refuse what Turnstile would overwrite, merged 2026-09-25
 

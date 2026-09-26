@@ -1,0 +1,153 @@
+Skip to main content
+Microsoft Azure (Preview)
+Report a bug
+Copilot
+admin@contoso.com
+CONTOSO DIRECTORY
+
+
+
+All apps
+contoso-usage-api
+Web App (Linux)
+Production slot
+Overview
+Activity log
+Access control (IAM)
+Diagnose and solve problems
+DEVELOPMENT
+Environment variables
+Configuration
+Deployments
+Files
+WebJobs
+API settings
+AI
+INFRASTRUCTURE
+Scale
+Networking
+Domains & Certificates
+MONITORING
+Logs
+Metrics and Alerts
+ACCESS
+Authentication
+Identity
+SUPPORT
+Resource health
+New support request
+More
+Overview
+Try the preview experience
+Give feedback
+View app
+Restart app
+Stop app
+Clone app
+Delete app
+Show data for the last :
+1 hour
+JSON view
+Essentials
+View details
+Status
+Running
+Runtime status
+Healthy
+Location
+Central US
+Subscription
+Contoso subscription
+Application Insights
+contoso-service-insights
+Subscription ID
+[redacted-id]
+Domains
+service.contoso.com
+Instance count (Manual scale)
+02:06 PM
+02:22 PM
+02:38 PM
+03:06 PM
+0
+1
+2
+3
+4
+Health check status
+Configure
+Diagnose
+02:05 PM
+02:25 PM
+02:45 PM
+03:05 PM
+0
+25
+50
+75
+100
+Scale
+Manage
+App Service plan
+contoso-app-plan
+Pricing tier
+Basic B1
+Instances
+1
+Scale method
+Manual
+Networking
+Manage
+Public network access
+Enabled
+VNet Integration
+Configured
+Private endpoints
+None
+Get started
+2 of 4 steps complete
+Explore the new experience
+Add staging slot (upgrade pricing tier)
+Set up source control
+Connect Application Insights or Log Analytics
+Add a custom domain
+Set up health check
+Resource group
+rg-turnstile-claudegw
+Status
+Running
+Location
+Central US
+Application Insights
+contoso-service-insights
+Subscription
+Contoso subscription
+Subscription ID
+[redacted-id]
+Tags (edit)
+SecurityControl: Ignore
+Domains
+service.contoso.com
+(1 domains)
+App Service Plan
+contoso-app-plan
+OS
+Linux
+Runtime
+PYTHON|3.11
+Health Check
+Enabled
+(Edit)
+View cost
+|
+JSON view
+|
+Export template
+Essentials
+Log stream
+>_
+SSH
+Updates
+1
+1
+on

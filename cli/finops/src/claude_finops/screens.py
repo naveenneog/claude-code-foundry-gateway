@@ -24,7 +24,7 @@ class DetailScreen(ModalScreen):
     def compose(self):
         with Vertical(id="detail-dialog"):
             yield Label(self.heading, markup=False)
-            yield TextArea(json.dumps(self.data, indent=2, ensure_ascii=True, default=str), read_only=True, id="detail-text")
+            yield TextArea(json.dumps(self.app.present(self.data), indent=2, ensure_ascii=True, default=str), read_only=True, id="detail-text")
             yield Button("Back (Esc)", id="close-detail")
 
     @on(Button.Pressed, "#close-detail")
@@ -54,6 +54,12 @@ class MonthScreen(ModalScreen):
             self.query_one("#month-error", Static).update(str(error))
             return
         self.app.engine.month = value
+        self.app.reset_paging()
+        self.app.scope_filters.pop("from", None)
+        self.app.scope_filters.pop("to", None)
+        self.app.request_before = ""
+        self.app.query_one("#request-before", Input).value = ""
+        self.app.update_filter_chips()
         self.dismiss()
         self.app.action_refresh()
 
@@ -68,21 +74,42 @@ class LookupScreen(ModalScreen):
     def compose(self):
         with Vertical(id="lookup-dialog"):
             yield Label("Find units, teams, models; people in the selected team", markup=False)
-            yield Input(placeholder="Search; request:<id> for a request. Enter to search.", id="lookup-query")
+            yield Select([], prompt="Choose a team for people (global search when advertised)", id="lookup-team")
+            yield Input(placeholder="Search; request:<id> for a request. Enter to search.", id="lookup-query",
+                        password=self.app.redactor.enabled)
             yield Static("People are searched on the server, never loaded in full.", id="lookup-status", markup=False)
             yield DataTable(id="lookup-results", cursor_type="row", zebra_stripes=True)
+
+    @work(exclusive=True, group="lookup-catalog")
+    async def on_mount(self):
+        self.query_one("#lookup-query", Input).focus()
+        try:
+            catalog = await asyncio.to_thread(self.app.engine.read, "catalog")
+            rows = catalog.get("departments", [])
+            shown = self.app.present(rows)
+            selector = self.query_one("#lookup-team", Select)
+            selector.set_options([(label["name"], row["id"]) for row, label in zip(rows, shown)])
+            if self.app.team in {row["id"] for row in rows}:
+                selector.value = self.app.team
+        except FinOpsError as error:
+            self.query_one("#lookup-status", Static).update(str(error))
+
+    @on(Select.Changed, "#lookup-team")
+    def choose_team(self, event):
+        if event.value is not Select.BLANK:
+            self.app.team = str(event.value)
 
     @on(Input.Submitted, "#lookup-query")
     @work(exclusive=True)
     async def search(self):
-        query = self.query_one(Input).value
+        query = self.query_one("#lookup-query", Input).value
         self.query_one("#lookup-status", Static).update("Searching...")
         try:
             self.results = await asyncio.to_thread(self.app.engine.lookup, query, self.app.team)
             table = self.query_one(DataTable)
             table.clear(columns=True)
             table.add_columns("Kind", "Identifier", "Name")
-            for row in self.results:
+            for row in self.app.present(self.results):
                 table.add_row(row["kind"], row["id"], row["name"])
             self.query_one("#lookup-status", Static).update(f"{len(self.results)} matches. Tab then Enter opens; Esc cancels.")
         except FinOpsError as error:
@@ -116,11 +143,12 @@ class ChangeScreen(ModalScreen):
             yield Label(title, id="form-title", markup=False)
             with VerticalScroll(id="fields"):
                 if self.kind == "budget" and not self.remove:
-                    yield Label("Monthly tokens (1.5M or exact integer)")
+                    yield Label(("Daily" if self.row.get("budget_period") == "day" else "Monthly") + " tokens (1.5M or exact integer)")
                     yield Input(str(self.row.get("token_limit") or ""), id="amount")
                     yield Static("", id="headroom", markup=False)
-                    yield Label("Warning threshold (%)")
-                    yield Input(str(self.row.get("warning_threshold_percent", 80)), id="warning")
+                    if self.engine.backend.budget_warning_threshold:
+                        yield Label("Warning threshold (%)")
+                        yield Input(str(self.row.get("warning_threshold_percent", 80)), id="warning")
                 elif self.kind == "tier" and not self.remove:
                     for key, label in (("tokens_per_minute", "Tokens per minute"), ("tokens_per_day", "Tokens per day")):
                         yield Label(label)
@@ -135,17 +163,24 @@ class ChangeScreen(ModalScreen):
                     yield Input((self.row.get("external_ref") or "").removeprefix("entra-group:"),
                                 placeholder="Entra member group", id="scope-group")
                     yield Input(self.row.get("parent_id") or "", placeholder="Parent unit (teams only)", id="scope-parent")
-                    yield Input(str(self.row.get("attributes", {}).get("manager_group_id", "")),
-                                placeholder="Manager group's Entra object id; server decides scope", id="scope-manager")
+                    if self.engine.backend.name != "Direct":
+                        yield Input(str(self.row.get("attributes", {}).get("manager_group_id", "")),
+                                    placeholder="Manager group's Entra object id; server decides scope", id="scope-manager")
                 yield Input(placeholder="For removal / below-usage changes, type the identifier", id="confirm")
+                if self.engine.backend.requires_reason:
+                    yield Label("Audit reason (1-500 characters)")
+                    yield Input(self.engine.change_reason, id="audit-reason")
             yield Static("Review fields, Preview, then Apply. Nothing is written yet.", id="form-status", markup=False)
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel-change")
                 yield Button("Preview", id="preview", variant="default")
                 yield Button("Apply", id="apply-change", variant="primary", disabled=True)
+                yield Button("Request difference", id="request-difference", classes="request-difference")
 
     def value(self, key, fallback=""):
         result = self.query(f"#{key}")
+        if self.engine.backend.requires_reason and self.query("#audit-reason"):
+            self.engine.change_reason = self.query_one("#audit-reason", Input).value
         return result.first(Input).value if result else fallback
 
     @on(Input.Changed)
@@ -159,7 +194,8 @@ class ChangeScreen(ModalScreen):
             try:
                 amount = parse_tokens(self.value("amount"))
                 left = allocation_left(self.rows, self.row, amount)
-                text = f"Parent unallocated after change: {human(left)} tokens."
+                text = ("Daily person limit; monthly unit/team limits still apply independently."
+                        if self.row.get("budget_period") == "day" else f"Parent unallocated after change: {human(left)} tokens.")
             except FinOpsError as error:
                 text = str(error)
             self.query_one("#headroom", Static).update(text)
@@ -168,7 +204,7 @@ class ChangeScreen(ModalScreen):
         confirm = self.value("confirm")
         if self.kind == "budget":
             try:
-                warning = int(self.value("warning", "80"))
+                warning = int(self.value("warning", "80")) if self.engine.backend.budget_warning_threshold else None
             except ValueError:
                 raise FinOpsError("Warning threshold must be a whole percent.") from None
             return partial(self.engine.budget_change, self.row["scope_type"], self.row["scope_id"],
@@ -203,6 +239,15 @@ class ChangeScreen(ModalScreen):
         except FinOpsError as error:
             self.query_one("#form-status", Static).update(str(error))
             self.query_one("#apply-change", Button).disabled = True
+            if "headroom" in str(error).lower() and self.app.engine.has_feature("approvals", "request"):
+                self.query_one("#request-difference", Button).display = True
+
+    @on(Button.Pressed, "#request-difference")
+    def request_difference(self):
+        amount = self.value("amount")
+        row = self.row
+        self.dismiss()
+        self.app.action_request_budget(amount=amount, row=row)
 
     @on(Button.Pressed, "#apply-change")
     @work(exclusive=True, group="change")
@@ -258,7 +303,7 @@ class ExportScreen(ModalScreen):
     def compose(self):
         with Vertical(id="month-dialog"):
             yield Label("Export complete chargeback (managed scopes only)")
-            yield Input(f"chargeback-{self.app.engine.month}.csv", id="export-name")
+            yield Input(f"chargeback-{self.app.engine.month}.csv", id="export-name", password=self.app.redactor.enabled)
             yield Static("Saved under finops-reports in the current folder. Existing files are never overwritten.",
                          id="export-status", markup=False)
             with Horizontal(classes="buttons"):
@@ -280,8 +325,9 @@ class ExportScreen(ModalScreen):
             folder = Path.cwd() / "finops-reports"
             folder.mkdir(exist_ok=True)
             with (folder / name).open("x", encoding="utf-8", newline="") as output:
-                output.write(chargeback_csv(result["items"], self.app.engine.month))
-            self.query_one("#export-status", Static).update(f"Exported {len(result['items'])} scopes to finops-reports\\{name}.")
+                output.write(chargeback_csv(self.app.present(result["items"]), self.app.engine.month))
+            self.query_one("#export-status", Static).update(
+                self.app.redactor.text(f"Exported {len(result['items'])} scopes to finops-reports\\{name}."))
         except (OSError, FinOpsError) as error:
             message = str(error) if isinstance(error, FinOpsError) else "Cannot create that file. Choose a new name and a writable current folder."
             self.query_one("#export-status", Static).update(message)

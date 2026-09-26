@@ -1,4 +1,4 @@
-# Product
+# AUM - Azure Usage Management
 
 ## Register
 
@@ -9,6 +9,10 @@ product
 Gateway administrators and FinOps readers working in Windows Terminal or Cloud Shell need
 to see expenditure, find one team or person, and change a budget without switching tools.
 The owner requires one command per task and equivalent interactive workflows.
+
+The Overview is a monitoring dashboard: a compact KPI strip, focusable trend and
+ranking panels, budget risks and anomalies. AUM adopts terminal-native density,
+explicit key hints and at-a-glance gauges rather than web-style metric cards.
 
 ## Positioning
 

@@ -1,3 +1,3 @@
-"""Claude gateway FinOps: one engine, two terminal faces."""
+"""AUM - Azure Usage Management: one engine, two terminal faces."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
