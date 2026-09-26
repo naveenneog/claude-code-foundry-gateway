@@ -38,6 +38,7 @@ Start with [Setup](docs/SETUP.md) for deployment or
 | Stand up a gateway | [Setup](docs/SETUP.md) — required roles, installer and portal deployment |
 | Operate people, tiers, teams, budgets or models | [Operations](docs/OPERATIONS.md) — task router and portal paths |
 | Own monthly chargeback or the FinOps process | [FinOps](docs/FINOPS.md) — close a month, investigate gaps and set allocations |
+| Diagnose an admin deployment or developer workstation | [Diagnostics](docs/DIAGNOSE.md) — read-only checks, exact fixes and redacted support bundles |
 | Use a terminal FinOps console or automate reports | [AUM (Azure Usage Management)](docs/CLI-FINOPS.md) — terminal views and scriptable commands |
 | Deploy clients and managed settings with MDM | [Fleet deployment with Intune, Jamf or Group Policy](docs/MDM.md) — profiles, apps, assignments, verification and rollback |
 | Manage a business unit or view its usage | [Turnstile: viewers and managers](docs/TURNSTILE.md#viewers-and-managers) — assigned roles and sign-in without web consent |
