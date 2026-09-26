@@ -15,6 +15,8 @@ numbers. Azure CLI sign-in follows Microsoft's
 [Azure CLI authentication guidance](https://learn.microsoft.com/cli/azure/authenticate-azure-cli-interactively);
 gateway token ceilings use Azure API Management's
 [`llm-token-limit` policy](https://learn.microsoft.com/azure/api-management/llm-token-limit-policy).
+USD budgets are a separate delayed reconciliation over categorized telemetry,
+not a hard invoice cap.
 Claude client behavior is configured through the repository's developer setup
 and the Anthropic Claude Code/Claude Desktop clients.
 
@@ -137,17 +139,23 @@ the expected object IDs with premium precedence.
   -Id platform -Group "claude-code-standard" -MonthlyBudgetUsd 5000
 .\scripts\Set-ClaudeBusinessUnit.ps1 -ResourceGroup $rg -ApimName $apim `
   -Id platform -Mode Allowance -AllowancePercent 10
+.\scripts\Sync-ClaudeUsdBudgets.ps1 -ResourceGroup $rg -ApimName $apim
 ```
 
 **Azure portal/manual path:** APIM > Named values > `tpm-*`, `quota-*`,
-`quota-org`, `bu-registry`, `bu-members`, `bu-parents` and `bu-modes`. Preserve
-sentinel commas and unrelated entries when editing by hand. If Turnstile owns
-governance, use Turnstile > Gateway governance instead of APIM named values.
+`quota-org`, `bu-registry`, `bu-members`, `bu-parents`, `bu-modes`,
+`usd-budgets` and `usd-budget-state`. Preserve sentinel commas and unrelated
+entries when editing by hand. If Turnstile owns governance or budgets, use
+Turnstile instead of APIM named values for the owned surface.
 
-**Success:** the list commands read back the tier, unit and mode. A mode save is
-not proof of enforcement until a real request returns the expected response or
-notice. **Screenshot:** use the Named values live capture in step 5 for this
-blade. **If it fails:** use [Budgets](BUDGETS.md),
+**Success:** the list commands read back the tier, unit and mode. A dollar input
+also persists its USD amount and tariff date; the token conversion remains the
+real-time guard until `Sync-ClaudeUsdBudgets.ps1` or the AUM service reconciler
+publishes a fresh `usd-budget-state`. A mode or budget save is not proof of
+enforcement until a real request returns the expected response or notice.
+**Screenshot:** use the Named values live capture in step 5 for this blade.
+**If it fails:** use [Budgets](BUDGETS.md),
+[USD budgets](BUDGETS.md#dollar-budgets-what-is-enforced),
 [Business-unit budget modes](BUSINESS-UNITS.md#budget-modes) and
 [Turnstile authority](TURNSTILE.md#one-enforcer).
 
@@ -449,17 +457,25 @@ Administrator step 7. **If it fails:** use [FinOps caveats](FINOPS.md#3-review-c
   -Id '<unit-id>' -Mode Allowance -AllowancePercent 10
 .\scripts\Set-ClaudeBusinessUnit.ps1 -ResourceGroup $rg -ApimName $apim `
   -Id '<unit-id>' -Mode Notify
+.\scripts\Set-ClaudeBusinessUnit.ps1 -ResourceGroup $rg -ApimName $apim `
+  -Id '<unit-id>' -MonthlyBudgetUsd 500
+.\scripts\Sync-ClaudeUsdBudgets.ps1 -ResourceGroup $rg -ApimName $apim
 ```
 
-**Azure portal/manual path:** APIM > Named values > `bu-modes`, or Turnstile >
-Gateway governance when Turnstile owns governance. Preserve the complete map
-when editing APIM by hand.
+**Azure portal/manual path:** APIM > Named values > `bu-modes`, `usd-budgets`
+and `usd-budget-state`, or Turnstile > Gateway governance/Budgets when Turnstile
+owns governance or budget writes. Preserve the complete map when editing APIM by
+hand.
 
 **Success:** a real request shows a strict refusal, an allowance notice or a
-notify notice as applicable. **Screenshot:** use the Named values capture in
-Administrator step 5 for gateway-owned mode storage, or the Turnstile capture in
-Administrator step 9 for Turnstile-owned budgets. **If it fails:** use
-[Budgets: modes](BUDGETS.md#business-unit-and-team-enforcement-modes).
+notify notice as applicable. For USD, strict refusal is
+`usd_budget_exceeded`, unpriced usage is `usd_budget_unpriced`, and stale
+reconciled state is `usd_budget_state_stale`. **Screenshot:** use the Named
+values capture in Administrator step 5 for gateway-owned mode and USD state
+storage, or the Turnstile capture in Administrator step 9 for Turnstile-owned
+budgets. **If it fails:** use
+[Budgets: modes](BUDGETS.md#business-unit-and-team-enforcement-modes) and
+[USD budgets](BUDGETS.md#dollar-budgets-what-is-enforced).
 
 ### 5. Use Turnstile when a web console is chosen
 
@@ -518,7 +534,9 @@ Budget Management when AUM uses Turnstile. Managers are scoped only when the
 selected backend enforces scope.
 
 **Success:** budgets show used, budget, remaining, unallocated and status
-columns.
+columns. The merged AUM command accepts token suffixes such as `k`, `M` and
+`B`; USD strings are rejected in this terminal surface until the P62 AUM dollar
+budget work lands.
 
 ![Live AUM terminal budgets view using a Turnstile backend, redacted, showing organization and team budget hierarchy with remaining and unallocated columns.](images/architecture-live/terminal-budgets.png)
 
