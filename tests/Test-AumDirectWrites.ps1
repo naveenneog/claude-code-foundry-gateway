@@ -72,4 +72,5 @@ foreach ($invalid in @(",bad=1,",",$id=0,",",$id=1,$id=2,",",$id=922337203685477
 }
 $bridge = Get-Content (Join-Path $PSScriptRoot '..\scripts\Invoke-ClaudeFinOps.ps1') -Raw
 Assert ($bridge -match '(?s)function Get-AumSha256Hex.*switch \(\[string\]\$request.action\)') 'Direct USD bridge hash helper must be script-scoped before USD actions.'
+Assert ($bridge -match 'Set-ClaudeUsdBudget @args 6>\$null \| Out-Null') 'Direct USD set must suppress shared-writer host output so stdout stays JSON.'
 Write-Host "$script:checks AUM Direct write and override assertions passed."

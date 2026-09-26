@@ -189,7 +189,7 @@ switch ([string]$request.action) {
             Period = $(if ($request.body.period) { [string]$request.body.period } else { 'month' })
         }
         if ($request.action -eq 'usd_budget_remove') { $args.Clear = $true }
-        Set-ClaudeUsdBudget @args | Out-Null
+        Set-ClaudeUsdBudget @args 6>$null | Out-Null
         $doc = ConvertFrom-ClaudeUsdValue (Get-AumNamedValueMap -ResourceGroup $ResourceGroup -ApimName $ApimName)['usd-budgets']
         $key = "$($request.parameters.scope_type):$($request.parameters.scope_id)"
         $result = [ordered]@{
