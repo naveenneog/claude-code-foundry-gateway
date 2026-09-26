@@ -3,40 +3,6 @@
   "provenance": "Records marked accel_dirty were captured on 2026-09-25 from uncommitted capture code on top of their accel_commit (280a16e). That code was committed in 1da331b. Records captured before 13:51Z predate its distinctive-value and people redaction and were reviewed image by image. The runner now refuses to capture from uncommitted capture code, so later records name the exact commit and carry the hash of the step they ran (spec_sha256).",
   "captures": [
     {
-      "id": "turnstile-app-overview",
-      "output": "docs/guide/turnstile-entra-1-overview.png",
-      "live": true,
-      "captured_at_utc": "2026-09-25T13:24:15.032Z",
-      "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/Overview/appId/00000000-0000-0000-0000-000000000000",
-      "identity_kind": "authenticated_portal_profile",
-      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
-      "tool": "Playwright 1.62.1 / Chromium CDP",
-      "spec_file": "turnstile.json",
-      "redaction": {
-        "applied": true,
-        "leak_check_passed": true
-      },
-      "sha256": "27f45a100c65a5b49b9b1bb922009a3a00092c062758675e9de1b4dd3f60002f",
-      "accel_dirty": true
-    },
-    {
-      "id": "turnstile-expose-api",
-      "output": "docs/guide/turnstile-entra-2-expose-api.png",
-      "live": true,
-      "captured_at_utc": "2026-09-25T13:24:26.620Z",
-      "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/ProtectAnAPI/appId/00000000-0000-0000-0000-000000000000",
-      "identity_kind": "authenticated_portal_profile",
-      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
-      "tool": "Playwright 1.62.1 / Chromium CDP",
-      "spec_file": "turnstile.json",
-      "redaction": {
-        "applied": true,
-        "leak_check_passed": true
-      },
-      "sha256": "bf77bb8bd32a52073be7d9a6b8a3d0cf3f6f0c9ce77fbbca110b2bebec146597",
-      "accel_dirty": true
-    },
-    {
       "id": "turnstile-app-roles",
       "output": "docs/guide/turnstile-entra-3-app-roles.png",
       "live": true,
@@ -1767,6 +1733,60 @@
         "leak_check_passed": true
       },
       "sha256": "1f4c2fd4c5e9423530d01dce9c2519bac9226db7031f3b4e4aab9fbfd4902923"
+    },
+    {
+      "id": "p55-aum-assigned-roles",
+      "output": "docs/guide/p55-aum-assigned-roles.png",
+      "live": true,
+      "captured_at_utc": "2026-09-26T16:50:20.276Z",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_IAM/ManagedAppMenuBlade/~/Users/objectId/00000000-0000-0000-0000-000000000000/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "c6517f0ee9b533a3b60547600d260edd2880b567",
+      "accel_dirty": false,
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p55.json",
+      "spec_sha256": "1148df88fb225bb66222319378960dc051ba6b27f6dd1e3b16437cf3490d542d",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "1fbdda97966d0a85c80d0fa6a2a60404fb9eb6837c5a79b63402f2a2db466d1f"
+    },
+    {
+      "id": "turnstile-app-overview",
+      "output": "docs/guide/turnstile-entra-1-overview.png",
+      "live": true,
+      "captured_at_utc": "2026-09-26T16:50:33.830Z",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/Overview/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "c6517f0ee9b533a3b60547600d260edd2880b567",
+      "accel_dirty": false,
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "turnstile.json",
+      "spec_sha256": "98467cd8e55d948075f91518f732fa868af3b7487e31fd3eefcd0a94953b8447",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "a3fac41ba61e64b85e2f86ce1337b1be1b176579ed9c74410fb32156bd935def"
+    },
+    {
+      "id": "turnstile-expose-api",
+      "output": "docs/guide/turnstile-entra-2-expose-api.png",
+      "live": true,
+      "captured_at_utc": "2026-09-26T16:50:44.806Z",
+      "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/ProtectAnAPI/appId/00000000-0000-0000-0000-000000000000",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "c6517f0ee9b533a3b60547600d260edd2880b567",
+      "accel_dirty": false,
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "turnstile.json",
+      "spec_sha256": "7ecb09a4bd2c23c3fceb93b0d34423010eb28dc391e9115ad94f9668e2af8529",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "bf77bb8bd32a52073be7d9a6b8a3d0cf3f6f0c9ce77fbbca110b2bebec146597"
     }
   ]
 }

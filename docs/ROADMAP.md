@@ -317,9 +317,9 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       FinOps tooling selector. [ADR-0023](adr/0023-aum-service.md), `docs/AUM-SERVICE.md`.
       Real Claude enforcement in all three modes and a Manager-only proof ran live through the
       service on an isolated gateway (2026-09-25), then everything was restored and retired.
-      Open: the AUM client (P52) driving the service end to end, the Users and groups picture (the
-      next Entra step-up) and the Function and storage pictures (a deployed service); the four
-      registration pictures were captured live on 2026-09-25
+      Open: the AUM client (P52) driving the service end to end, and the Function and storage
+      pictures (a deployed service); the four registration pictures were captured live on
+      2026-09-25 and the Users and groups picture on 2026-09-26
 - [x] P57 documentation review — eight reader journeys walked with the guides alone; 70
       findings fixed, five task guides added (Operations, Budgets, FinOps, Reference, Data
       governance), README from 710 to 278 lines, live names replaced by discovery commands, and

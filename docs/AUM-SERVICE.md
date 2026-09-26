@@ -286,8 +286,9 @@ Captured live by the lead's batch on 2026-09-25 (records in `docs/guide/portal-c
 
 ![Live AUM enterprise application Properties: enabled for sign-in, Assignment required Yes, visible to users](guide/p55-aum-assignment-required.png)
 
-Still pending. The Users and groups page needs the owner's Entra step-up at the next batch.
-The Function and storage pages need a deployed AUM service: the pilot deployment was removed
+![Live AUM enterprise application Users and groups: one assignment, the owner shown as Contoso Admin with the AUM Admin role](guide/p55-aum-assigned-roles.png)
+
+Still pending. The Function and storage pages need a deployed AUM service: the pilot deployment was removed
 after its live journeys, and a new one is a priced, lead-approved deployment. These inline
 paths are deliberately pending, not broken images or passing evidence. Resource discovery
 uses the logical `component=aum-service` tag; Entra discovery uses the operator's
@@ -295,14 +296,6 @@ uses the logical `component=aum-service` tag; Entra discovery uses the operator'
 
 | Pending batch capture (spec id) | Exact portal verification | Image |
 |---|---|---|
-| `p55-aum-assigned-roles` | Enterprise applications > AUM > Users and groups: correct user/group roles | `docs/guide/p55-aum-assigned-roles.png` |
-| `p55-aum-function-overview` | Function App > Overview: Running, selected region, Python runtime | `docs/guide/p55-aum-function-overview.png` |
-| `p55-aum-function-identity` | Settings > Identity > System assigned: Status On | `docs/guide/p55-aum-function-identity.png` |
-| `p55-aum-function-triggers` | Functions: http_api, expire_boosts, warning_thresholds | `docs/guide/p55-aum-function-triggers.png` |
-| `p55-aum-scale-choice` | Scale and concurrency: administrator-selected always-ready count and 512-MiB instance size | `docs/guide/p55-aum-scale-choice.png` |
-| `p55-aum-private-routing` | Networking > VNet integration: service subnet, all outbound traffic routed | `docs/guide/p55-aum-private-routing.png` |
-| `p55-aum-storage-keyless` | Storage > Configuration: shared-key and anonymous blob access Disabled | `docs/guide/p55-aum-storage-keyless.png` |
-| `p55-aum-storage-private` | Storage > Networking: Public network access Disabled; private endpoint connections Approved | `docs/guide/p55-aum-storage-private.png` |
 | `p55-aum-function-overview` | Function App > Overview: Running, selected region, Python runtime | `docs/guide/p55-aum-function-overview.png` |
 | `p55-aum-function-identity` | Settings > Identity > System assigned: Status On | `docs/guide/p55-aum-function-identity.png` |
 | `p55-aum-function-triggers` | Functions: http_api, expire_boosts, warning_thresholds | `docs/guide/p55-aum-function-triggers.png` |
@@ -693,7 +686,8 @@ separate the September 24 pilot from the September 25 dedicated Basic v2 proof:
   four protected-operation 403s. All 14 memberships and 22 direct assignment
   tuples matched the snapshot; Admin access and all configuration were restored.
 - These are **direct HTTP/CLI-token receipts, not native AUM-client or portal
-  screenshots**. Twelve owner-batch portal captures remain pending.
+  screenshots**. The five Entra pictures above are captured live; the seven Function and
+  storage pictures remain pending until a service is deployed again.
 
 ## Next steps
 

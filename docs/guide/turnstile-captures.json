@@ -230,8 +230,8 @@
     {
       "image": "turnstile-entra-1-overview.png",
       "live": true,
-      "captured_at_utc": "2026-09-25T13:24:15.113Z",
-      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "captured_at_utc": "2026-09-26T16:50:33.893Z",
+      "accel_commit": "c6517f0ee9b533a3b60547600d260edd2880b567",
       "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
       "tool": "Playwright 1.62.1",
       "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/Overview/appId/00000000-0000-0000-0000-000000000000",
@@ -242,14 +242,13 @@
         "leak_check_passed": true,
         "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "27f45a100c65a5b49b9b1bb922009a3a00092c062758675e9de1b4dd3f60002f",
-      "accel_dirty": true
+      "sha256": "a3fac41ba61e64b85e2f86ce1337b1be1b176579ed9c74410fb32156bd935def"
     },
     {
       "image": "turnstile-entra-2-expose-api.png",
       "live": true,
-      "captured_at_utc": "2026-09-25T13:24:26.681Z",
-      "accel_commit": "280a16ebebea65da59cecc59683834538a1487ed",
+      "captured_at_utc": "2026-09-26T16:50:44.866Z",
+      "accel_commit": "c6517f0ee9b533a3b60547600d260edd2880b567",
       "fork_commit": "c0c345a6009eaada755850ee15f76ddc85bad74f",
       "tool": "Playwright 1.62.1",
       "route": "https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationMenuBlade/~/ProtectAnAPI/appId/00000000-0000-0000-0000-000000000000",
@@ -260,8 +259,7 @@
         "leak_check_passed": true,
         "rules": "runtime identity/catalog/resource replacements; private emails and UUIDs; token/link rejection; photo avatars hidden"
       },
-      "sha256": "bf77bb8bd32a52073be7d9a6b8a3d0cf3f6f0c9ce77fbbca110b2bebec146597",
-      "accel_dirty": true
+      "sha256": "bf77bb8bd32a52073be7d9a6b8a3d0cf3f6f0c9ce77fbbca110b2bebec146597"
     },
     {
       "image": "turnstile-entra-3-app-roles.png",
