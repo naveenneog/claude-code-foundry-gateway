@@ -49,6 +49,10 @@
             try { return context.Request.Body.As<JObject>(preserveContent: true)["model"]?.ToString() ?? "unknown"; }
             catch { return "unknown"; }
         }" />
+        <set-variable name="usdRequestStream" value="@{
+            try { return (bool?)context.Request.Body.As&lt;JObject&gt;(preserveContent: true)["stream"] ?? false; }
+            catch { return true; }
+        }" />
 
         <!-- 2b. Where entitlement comes from.
              
@@ -506,6 +510,103 @@
             </when>
         </choose>
 
+        <!-- Observed-category dollars are reconciled outside inference. ADR-0026.
+             Base64 keeps JSON quotes out of policy string substitution. -->
+        <set-variable name="usdDecision" value="@{
+            try {
+                var spec = JObject.Parse(System.Text.Encoding.UTF8.GetString(Convert.FromBase64String("{{usd-budgets}}")));
+                if (!spec.HasValues) { return "{}"; }
+                if ((int?)spec["schema_version"] != 1 || !(spec["items"] is JObject)) { throw new Exception("schema"); }
+                var budgets = (JObject)spec["items"];
+                var unit = (string)context.Variables["businessUnit"];
+                var parent = (string)context.Variables["parentUnit"];
+                var leafKey = (string.IsNullOrEmpty(parent) ? "organization:" : "department:") + unit;
+                var keys = new string[] {
+                    "user:" + (string)context.Variables["userId"],
+                    leafKey,
+                    "organization:" + parent
+                };
+                var notices = new JArray();
+                var enforced = new System.Collections.Generic.List&lt;string&gt;();
+                foreach (var key in keys) {
+                    if (budgets[key] == null) { continue; }
+                    var mode = key.StartsWith("user:") ? "strict"
+                        : (string)context.Variables[key == leafKey ? "buMode" : "parentMode"];
+                    if (mode == "notify") {
+                        notices.Add(new JObject(new JProperty("scope", key), new JProperty("status", "usage-reported"),
+                            new JProperty("budget_usd", budgets[key]["amount_usd"]),
+                            new JProperty("spent_usd", null), new JProperty("exact", false)));
+                    } else { enforced.Add(key); }
+                }
+                if (enforced.Count == 0) {
+                    return new JObject(new JProperty("notices", notices)).ToString(Newtonsoft.Json.Formatting.None);
+                }
+                var state = JObject.Parse(System.Text.Encoding.UTF8.GetString(Convert.FromBase64String("{{usd-budget-state}}")));
+                var material = string.Join("\n", new string[] { "{{usd-budgets}}", "{{bu-modes}}", "{{bu-parents}}", "{{bu-members}}", "{{entitlement-source}}" });
+                var hash = BitConverter.ToString(System.Security.Cryptography.SHA256.Create().ComputeHash(System.Text.Encoding.UTF8.GetBytes(material))).Replace("-", "").ToLowerInvariant();
+                var now = DateTime.UtcNow;
+                var asof = ((DateTimeOffset)state["reconciled_at"]).UtcDateTime;
+                var until = ((DateTimeOffset)state["valid_until"]).UtcDateTime;
+                if ((int?)state["schema_version"] != 1 || (string)state["policy_revision"] != hash ||
+                    state["source_revision"] == null || now >= until || asof > now.AddSeconds(60) ||
+                    until > asof.AddSeconds(900) || !(state["items"] is JObject)) { throw new Exception("stale"); }
+                foreach (var key in enforced) {
+                    var entry = state["items"][key];
+                    var item = entry as JObject;
+                    if (entry is JArray) {
+                        var data = (JArray)entry;
+                        if ((string)state["encoding"] != "compact-v1" || data.Count != 8) { throw new Exception("encoding"); }
+                        var window = state["periods"][(string)data[0]] as JArray;
+                        var flags = (int)data[6];
+                        if (window == null || window.Count != 2 || flags < 0 || flags > 7) { throw new Exception("compact"); }
+                        var split = key.Split(':');
+                        item = new JObject(new JProperty("scope_type", split[0]), new JProperty("scope_id", split[1]),
+                            new JProperty("period", data[0]), new JProperty("period_start", window[0]), new JProperty("period_end", window[1]),
+                            new JProperty("price_book_date", state["price_book_date"]),
+                            new JProperty("budget_usd", data[1]), new JProperty("effective_budget_usd", data[2]),
+                            new JProperty("spent_usd", data[3]), new JProperty("status", data[4]), new JProperty("enforcement", data[5]),
+                            new JProperty("exact", (flags &amp; 1) != 0), new JProperty("cache_read_known", (flags &amp; 2) != 0),
+                            new JProperty("cache_write_known", (flags &amp; 4) != 0), new JProperty("unpriced_models", data[7]));
+                    }
+                    if (item == null) { throw new Exception("missing"); }
+                    var start = ((DateTimeOffset)item["period_start"]).UtcDateTime;
+                    var end = ((DateTimeOffset)item["period_end"]).UtcDateTime;
+                    if (now < start || now >= end) { throw new Exception("window"); }
+                    var status = (string)item["status"];
+                    if (status == "stop" || status == "unpriced") {
+                        var error = (JObject)item.DeepClone();
+                        error["code"] = status == "stop" ? "usd_budget_exceeded" : "usd_budget_unpriced";
+                        error["type"] = "rate_limit_error";
+                        error["reconciled_at"] = state["reconciled_at"].DeepClone();
+                        error["http_status"] = 403;
+                        error["message"] = status == "stop"
+                            ? "The observed USD budget for this scope is spent. Ask its owner to raise it, then reconcile."
+                            : "Usage cannot be completely priced for this scope. Ask the gateway owner to correct the dated price book.";
+                        return error.ToString(Newtonsoft.Json.Formatting.None);
+                    }
+                    if (status == "notice") {
+                        notices.Add(new JObject(new JProperty("scope", key), new JProperty("status", "observed-usage"),
+                            new JProperty("spent_usd", item["spent_usd"]), new JProperty("budget_usd", item["budget_usd"]),
+                            new JProperty("exact", item["exact"]), new JProperty("reconciled_at", state["reconciled_at"])));
+                    } else if (status != "allow") { throw new Exception("decision"); }
+                }
+                return new JObject(new JProperty("notices", notices)).ToString(Newtonsoft.Json.Formatting.None);
+            } catch {
+                return new JObject(new JProperty("http_status", 503), new JProperty("type", "api_error"),
+                    new JProperty("code", "usd_budget_state_stale"),
+                    new JProperty("message", "USD budget state is missing, expired or does not match configuration. Reconcile budgets; token access has not been removed.")).ToString(Newtonsoft.Json.Formatting.None);
+            }
+        }" />
+        <choose>
+            <when condition="@(JObject.Parse((string)context.Variables["usdDecision"])["http_status"] != null)">
+                <return-response>
+                    <set-status code="@((int)JObject.Parse((string)context.Variables["usdDecision"])["http_status"])" reason="USD budget control" />
+                    <set-header name="Content-Type" exists-action="override"><value>application/json</value></set-header>
+                    <set-body>@(new JObject(new JProperty("type", "error"), new JProperty("error", JObject.Parse((string)context.Variables["usdDecision"]))).ToString())</set-body>
+                </return-response>
+            </when>
+        </choose>
+
         <!-- 7. Per-minute rate, by tier. This stays a branch because
              tokens-per-minute is one of the attributes the llm-token-limit
              reference does not allow an expression for. Exceeding it returns
@@ -610,11 +711,36 @@
 
     <backend>
         <!-- Agent turns are long, so allow generous time. -->
-        <forward-request timeout="600" buffer-request-body="false" />
+        <forward-request timeout="600" buffer-request-body="false" buffer-response="false" />
     </backend>
 
     <outbound>
         <base />
+        <set-variable name="usdUsageJson" value="unknown" />
+        <choose>
+            <when condition="@(!(bool)context.Variables["usdRequestStream"] &amp;&amp; context.Response.StatusCode == 200 &amp;&amp; context.Request.Url.Path.EndsWith("/messages") &amp;&amp; context.Response.Headers.GetValueOrDefault("Content-Type", "").Contains("application/json"))">
+                <set-variable name="usdUsageJson" value="@{
+                    try {
+                        var body = context.Response.Body.As&lt;JObject&gt;(preserveContent: true);
+                        var usage = body["usage"] as JObject;
+                        if (usage == null) { return "unknown"; }
+                        var counts = new JObject();
+                        foreach (var name in new string[] { "input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "cache_creation", "inference_geo" }) {
+                            if (usage[name] != null) { counts[name] = usage[name].DeepClone(); }
+                        }
+                        var text = counts.ToString(Newtonsoft.Json.Formatting.None);
+                        return text.Length <= 1024 ? text : "unknown";
+                    } catch { return "unknown"; }
+                }" />
+            </when>
+        </choose>
+        <choose>
+            <when condition="@(JObject.Parse((string)context.Variables["usdDecision"])["notices"] is JArray &amp;&amp; ((JArray)JObject.Parse((string)context.Variables["usdDecision"])["notices"]).Count > 0)">
+                <set-header name="x-claude-usd-budget-notice" exists-action="override">
+                    <value>@(JObject.Parse((string)context.Variables["usdDecision"])["notices"].ToString(Newtonsoft.Json.Formatting.None))</value>
+                </set-header>
+            </when>
+        </choose>
 
         <!-- Remaining quota is an estimate, not a monthly ledger (ADR-0019).
              Notify has no limiter and therefore no remaining counter. Its
@@ -660,14 +786,9 @@
              sampling - every invocation is logged, which is what a billing
              record needs.
 
-             The response body is deliberately NOT read here. Its usage block
-             carries the cache breakdown the log lacks, but reading it in
-             outbound buffers the response, which would end streaming for Claude
-             Code. Measured 2026-09-15: streaming is where the quota scalar is
-             already wrong, reporting 11 tokens for a 41-token completion, so
-             breaking streaming to recover a cache field is the wrong trade.
-             Cache per request stays unknown for streamed calls and is reported
-             as unknown rather than zero. -->
+             UsageJson is counts only, collected above for nonstream JSON.
+             Streaming bodies are never read. Their per-request cache remains
+             unknown rather than zero; this is not complete streaming billing. -->
         <trace source="claude-chargeback" severity="information">
             <message>@("chargeback " + (string)context.Variables["userUpn"])</message>
             <metadata name="RequestId" value="@(context.RequestId.ToString())" />
@@ -676,6 +797,7 @@
             <metadata name="Tier" value="@((string)context.Variables["tier"])" />
             <metadata name="BusinessUnit" value="@((string)context.Variables["businessUnit"])" />
             <metadata name="Model" value="@((string)context.Variables["modelName"])" />
+            <metadata name="UsageJson" value="@((string)context.Variables["usdUsageJson"])" />
             <metadata name="ClientIp" value="@(context.Variables.GetValueOrDefault<string>("claude-edge-client-ip", context.Request.IpAddress))" />
             <!-- Which client made the call. Captured raw and truncated rather
                  than classified here: a classifier in policy needs a redeploy

@@ -27,6 +27,7 @@ function Reset-Gateway([string]$Integration = '', [string]$ReadError = '') {
             'tpm-premium' = '200'; 'quota-premium' = '2000'; 'models-premium' = ',,'
             'allow-standard' = ",$personId,"; 'allow-premium' = ',,'
             'quota-overrides' = ",$personId=1000,$otherId=2000,"
+            'usd-budgets' = 'e30='; 'usd-budget-state' = 'e30='
         }
     }
 }
@@ -36,6 +37,11 @@ function az {
     if ($line -like 'account show*') { return '00000000-0000-0000-0000-000000000000' }
     if ($line -like 'account get-access-token*') { return 'fixture-token' }
     if ($line -like 'ad group show*') { return $groupId }
+    if ($line -like 'apim nv list*') {
+        return ConvertTo-Json -InputObject @($gateway.Values.Keys | ForEach-Object {
+            [pscustomobject]@{ name = $_; value = $gateway.Values[$_]; secret = $false }
+        })
+    }
     if ($line -like 'apim nv show*') {
         $id = [string]$args[[array]::IndexOf($args, '--named-value-id') + 1]
         $gateway.Reads.Add($id)
@@ -86,6 +92,18 @@ function Invoke-RestMethod {
         return
     }
     throw "Unexpected HTTP call: $Method $Uri"
+}
+function Invoke-WebRequest {
+    param($Uri, $Method = 'Get', $Headers, $Body, $ContentType, [switch]$UseBasicParsing)
+    if ($Uri -notmatch '/namedValues/usd-budgets\?') { throw "Unexpected USD HTTP call: $Method $Uri" }
+    if ($Method -eq 'Put') {
+        $text = if ($Body -is [byte[]]) { [Text.Encoding]::UTF8.GetString($Body) } else { [string]$Body }
+        $gateway.Values['usd-budgets'] = ($text | ConvertFrom-Json).properties.value
+        $gateway.Writes.Add('usd-budgets')
+    }
+    elseif ($Method -ne 'Get') { throw "Unexpected USD method: $Method" }
+    return [pscustomobject]@{ Headers = @{ ETag = '"fixture-1"' }
+        Content = (@{ properties = @{ displayName = 'usd-budgets'; value = $gateway.Values['usd-budgets']; secret = $false } } | ConvertTo-Json -Depth 5) }
 }
 function Invoke-Set([string]$Name, [hashtable]$Parameters) {
     try {
@@ -239,7 +257,6 @@ Assert 'removing an absent unit remains a no-op' (-not $m -and $gateway.Writes.C
 foreach ($integration in '', $local, $full, $budgetOnly, $full.Replace('false', 'true'), $budgetOnly.Replace('false', 'true')) {
     foreach ($parameters in @(
         @{ User = $personId; Tokens = 3000 },
-        @{ User = $personId; DailyUsd = 1 },
         @{ User = $personId; Clear = $true }
     )) {
         Reset-Gateway $integration
@@ -250,6 +267,37 @@ foreach ($integration in '', $local, $full, $budgetOnly, $full.Replace('false', 
     $m = Invoke-Set 'Set-ClaudeDeveloper' @{ User = $personId; Tier = 'standard'; BusinessUnit = 'sales' }
     Assert 'Entra membership edits remain allowed, not competing named-value writes' (-not $m -and $gateway.GroupWrites.Count -gt 0 -and $gateway.Writes.Count -eq 0) $m
 }
+
+Write-Host 'Authority - new USD allocations use the shared financial guard' -ForegroundColor Cyan
+foreach ($integration in '', $local) {
+    Reset-Gateway $integration
+    $m = Invoke-Set 'Set-ClaudeBudget' @{ User = $personId; DailyUsd = 1 }
+    Assert 'gateway-owned dollar input persists both the token guard and dollars' (-not $m -and
+        $gateway.Writes.Count -eq 2 -and $gateway.Writes -contains 'quota-overrides' -and
+        $gateway.Writes -contains 'usd-budgets' -and $gateway.Values['quota-overrides'].Contains("$otherId=2000")) $m
+}
+foreach ($integration in $full, $budgetOnly, $full.Replace('false', 'true'), $budgetOnly.Replace('false', 'true')) {
+    Reset-Gateway $integration
+    $m = Invoke-Set 'Set-ClaudeBudget' @{ User = $personId; DailyUsd = 1 }
+    Assert-Refusal 'personal USD allocation' $m 'Budgets'
+    Assert 'personal USD refusal names dollars rather than a monthly token allocation' ($m -match 'USD') $m
+}
+Reset-Gateway $local
+$m = Invoke-Set 'Set-ClaudeBudget' @{ User = $personId; DailyUsd = 1 }
+Assert 'USD clear fixture is written before probing ownership' (-not $m -and $gateway.Writes -contains 'usd-budgets') $m
+$gateway.Writes.Clear()
+$beforeDollars = $gateway.Values['usd-budgets']
+$beforeTokens = $gateway.Values['quota-overrides']
+$gateway.Integration = $budgetOnly
+$m = Invoke-Set 'Set-ClaudeBudget' @{ User = $personId; Clear = $true }
+Assert-Refusal 'clearing an existing personal USD control' $m 'Budgets'
+Assert 'refused USD clear preserves both independent limits' ($gateway.Values['usd-budgets'] -eq $beforeDollars -and
+    $gateway.Values['quota-overrides'] -eq $beforeTokens)
+Reset-Gateway $local
+$gateway.Values.Remove('usd-budgets')
+$gateway.Values.Remove('usd-budget-state')
+$m = Invoke-Set 'Set-ClaudeBudget' @{ User = $personId; DailyUsd = 1 }
+Assert 'legacy gateway cannot silently degrade a dollar write into tokens only' ($m -match 'Install the current gateway' -and $gateway.Writes.Count -eq 0) $m
 
 Write-Host ''
 if ($fail) { Write-Host "$fail authority assertion(s) failed." -ForegroundColor Red; exit 1 }

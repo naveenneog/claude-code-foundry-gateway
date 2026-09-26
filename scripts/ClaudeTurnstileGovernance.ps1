@@ -235,15 +235,16 @@ function Assert-ClaudeGatewayOwnsGovernance {
         Refuses script writes that the connected Turnstile apply would overwrite.
     .DESCRIPTION
         BusinessUnits includes teams, group mappings and budget modes. Budgets
-        means their monthly allocations, not quota-overrides: neither apply path
-        writes personal daily overrides or Entra membership. Call only for writes.
+        means their monthly token allocations, not quota-overrides: neither apply
+        path writes token-only personal daily overrides or Entra membership.
+        UsdBudgets covers dollar definitions and reconciled dollar stops. Call only for writes.
         Absent or explicitly disconnected integrations leave the gateway in charge;
         failed reads and invalid nonempty connection values never grant authority.
     #>
     param(
         [Parameter(Mandatory = $true)][string]$ResourceGroup,
         [Parameter(Mandatory = $true)][string]$ApimName,
-        [Parameter(Mandatory = $true)][ValidateSet('BusinessUnits', 'Budgets', 'Tiers')][string[]]$Write
+        [Parameter(Mandatory = $true)][ValidateSet('BusinessUnits', 'Budgets', 'UsdBudgets', 'Tiers')][string[]]$Write
     )
     try {
         $raw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $script:TurnstileIntegrationNamedValue -FailOnError
@@ -267,17 +268,18 @@ function Assert-ClaudeGatewayOwnsGovernance {
             "Repair the connection; to deliberately return ownership to the gateway, run $switchAuthority")
     }
     $owned = @($Write | Select-Object -Unique | Where-Object {
-        $governanceAuthority -eq 'Turnstile' -or ($_ -eq 'Budgets' -and $budgetAuthority -eq 'Turnstile')
+        $governanceAuthority -eq 'Turnstile' -or ($_ -in 'Budgets', 'UsdBudgets' -and $budgetAuthority -eq 'Turnstile')
     })
     if (-not $owned.Count) { return }
     $labels = @{
         BusinessUnits = 'business units, teams, group mappings and budget modes'
         Budgets = 'business-unit and team monthly budgets'
+        UsdBudgets = 'USD budget definitions and reconciled dollar stops'
         Tiers = 'tiers (minute rates, daily quotas and model lists)'
     }
     $pages = @()
     if (@($owned | Where-Object { $_ -ne 'Budgets' }).Count) { $pages += 'Gateway governance' }
-    if ($owned -contains 'Budgets') { $pages += 'Budgets' }
+    if ($owned -contains 'Budgets' -or $owned -contains 'UsdBudgets') { $pages += 'Budgets' }
     $url = ([string]$integration['url']).TrimEnd('/')
     $where = 'Turnstile portal' + $(if ($url) { " ($url)" } else { '' }) + ' > ' + ($pages -join ' / ')
     throw ("Turnstile owns $(($owned | ForEach-Object { $labels[$_] }) -join '; '). Nothing was written: its next apply would overwrite this change. " +

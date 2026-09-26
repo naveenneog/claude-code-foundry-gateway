@@ -240,7 +240,7 @@ Do not change job secrets or grants. Do not repeat a start after an uncertain
 transport result until execution history proves no execution was created.
 
 ```text
- _____ _____ _____ 
+ _____ _____ _____
 |  _  |  |  |     |
 |     |  |  | | | |
 |__|__|_____|_|_|_|
