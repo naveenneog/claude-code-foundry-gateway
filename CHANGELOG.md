@@ -29,6 +29,11 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **One-command AUM client install.** `scripts/Install-ClaudeAum.ps1` reads the Python version the
+  package requires, lists the interpreters that meet it and asks which one, creates or reuses
+  `.venv-finops`, installs `cli/finops`, checks `aum --version` and the Azure CLI sign-in, and
+  runs `aum configure`. `-WhatIf` writes nothing. `tests/Test-InstallAum.ps1` covers the choice
+  rules and `-WhatIf` on every run, and a real install with `AUM_INSTALL_E2E=1`.
 - **AUM manages gateway USD budgets (P62).** `aum usd list|set|clear|status|reconcile`
   and `aum usd price-book show|set` manage the P59 dollar-budget contract with
   decimal strings, preview-first writes, typed confirmation for clears and the

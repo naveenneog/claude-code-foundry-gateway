@@ -242,6 +242,7 @@ try {
         'AUM: Python or the worktree .venv-finops is missing. See docs/AUM.md to install.'
     } else { '' }
     Invoke-Check 'AUM - commands, dashboard and pilot' 'Test-FinOps.ps1' -SkipReason $finopsSkip
+    Invoke-Check 'AUM install script'                        'Test-InstallAum.ps1'
 
     if ($IncludeAzure) {
         Invoke-Check 'Foundry discovery is selective'      'Test-Discovery.ps1' -Azure

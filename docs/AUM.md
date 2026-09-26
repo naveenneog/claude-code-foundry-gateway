@@ -354,7 +354,17 @@ requiring access to the administrator's subscription.
 
 ## Install and sign in
 
-From the repository root:
+One command, from the repository root:
+
+```powershell
+./scripts/Install-ClaudeAum.ps1
+```
+
+It reads the Python version the package requires from `cli/finops/pyproject.toml`, lists the
+interpreters on the machine that meet it (`py -0p`, then PATH) and asks which one, creates or
+reuses `.venv-finops`, installs `cli/finops`, checks `aum --version` and the Azure CLI sign-in,
+and runs `aum configure`. `-WhatIf` prints the plan only; `-NoConfigure` stops after the check;
+`-WithTests` adds the test extras. The same steps by hand:
 
 ```powershell
 python -m venv .venv-finops
