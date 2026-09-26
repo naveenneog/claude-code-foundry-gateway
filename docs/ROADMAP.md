@@ -377,8 +377,8 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       compares against the lists and flips only after a clean comparison; proven live on an
       isolated Basic v2 gateway and removed. **Merged 2026-09-26**: `Deploy-ClaudeProjection.ps1`;
       live: unauthenticated resolver call 401, count-tokens 200 after the flip, 500 synthetic
-      records. [ADR-0028](adr/0028-basic-v2-projection-resolver.md). Open: **U25**, **U18**, the five
-      portal pictures (`guide/captures/p61.json`)
+      records; the five portal pictures captured live. [ADR-0028](adr/0028-basic-v2-projection-resolver.md).
+      Open: **U25**, **U18**
 - [ ] P62 dollar budgets in AUM — acceptance: AUM lists, sets, raises and clears dollar budgets
       and shows reconciled spend with its completeness flags, through the AUM service's contract
       (`docs/aum-usd-budgets-client-contract.md`) and the Direct backend's shared USD writer,

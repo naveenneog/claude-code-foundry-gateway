@@ -1677,6 +1677,96 @@
         "leak_check_passed": true
       },
       "sha256": "846787846cb47c6d2c43f4295a82650ac5843292a7d5d783166e7419da70cdc7"
+    },
+    {
+      "id": "p61-basic-gateway-overview",
+      "output": "docs/guide/p61-basic-gateway-overview.png",
+      "live": true,
+      "captured_at_utc": "2026-09-26T12:47:51.840Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-basic-demo/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "0100f55646cba0a59e191621c6bfbd732ba177c9",
+      "accel_dirty": false,
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p61.json",
+      "spec_sha256": "0205133a28d1f9243f697bf6dd03212da4c8a47562d8911bfee6578628b012f3",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "5e02e0d683e5a613a8df08a3edb27f377f8220289bbef34a0d55dd21b368fc10"
+    },
+    {
+      "id": "p61-basic-resolver-networking",
+      "output": "docs/guide/p61-basic-resolver-networking.png",
+      "live": true,
+      "captured_at_utc": "2026-09-26T12:49:39.012Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Web/sites/func-resolver-demo/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "0100f55646cba0a59e191621c6bfbd732ba177c9",
+      "accel_dirty": false,
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p61.json",
+      "spec_sha256": "d4d662218b5e49b36df89899932e38f64a090f08ac62f5ce402729c3b97af928",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "7912634d42c6a2c5a841f41df69b1ec1351af78977d609b03fda6bb36c2e1ddd"
+    },
+    {
+      "id": "p61-basic-cosmos-networking",
+      "output": "docs/guide/p61-basic-cosmos-networking.png",
+      "live": true,
+      "captured_at_utc": "2026-09-26T12:49:47.678Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-entitlements-demo/networking",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "0100f55646cba0a59e191621c6bfbd732ba177c9",
+      "accel_dirty": false,
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p61.json",
+      "spec_sha256": "13ede22990111c432032fe2d0314a684190bf58285373e01ed3cf308058ed0b1",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "e6aa7a2797c8e9f6e99de65906c9ca6e3473f830d15f2b89c710812028f90695"
+    },
+    {
+      "id": "p61-basic-resolver-authentication",
+      "output": "docs/guide/p61-basic-resolver-authentication.png",
+      "live": true,
+      "captured_at_utc": "2026-09-26T12:50:51.241Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.Web/sites/func-resolver-demo/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "0100f55646cba0a59e191621c6bfbd732ba177c9",
+      "accel_dirty": false,
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p61.json",
+      "spec_sha256": "c8356ce7ef3f82b1a5cd02f4401d266a2a0bac5f664c6a493fc05959fb267412",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "f059cebeb41d0b2e66dc1bcbff4128c922f1f2cf1b44ee1daafdcb0239c83d97"
+    },
+    {
+      "id": "p61-basic-named-values-flipped",
+      "output": "docs/guide/p61-basic-named-values-flipped.png",
+      "live": true,
+      "captured_at_utc": "2026-09-26T12:52:05.470Z",
+      "route": "https://portal.azure.com/#@00000000-0000-0000-0000-000000000000/resource/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-basic-demo/overview",
+      "identity_kind": "authenticated_portal_profile",
+      "accel_commit": "0100f55646cba0a59e191621c6bfbd732ba177c9",
+      "accel_dirty": false,
+      "tool": "Playwright 1.62.1 / Chromium CDP",
+      "spec_file": "p61.json",
+      "spec_sha256": "7ba4bc64d9fad67c69042a81555faeef952aefc432506eb565f6e8d39ba86029",
+      "redaction": {
+        "applied": true,
+        "leak_check_passed": true
+      },
+      "sha256": "1f4c2fd4c5e9423530d01dce9c2519bac9226db7031f3b4e4aab9fbfd4902923"
     }
   ]
 }

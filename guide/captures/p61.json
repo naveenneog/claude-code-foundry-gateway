@@ -4,10 +4,18 @@
     {
       "id": "p61-basic-gateway-overview",
       "output": "docs/guide/p61-basic-gateway-overview.png",
-      "target": { "discover": "gateway", "selectionKey": "p61-basic-gateway" },
+      "target": {
+        "discover": "gateway",
+        "selectionKey": "p61-basic-gateway"
+      },
       "blade": "/overview",
-      "waitFor": { "text": "Pricing tier" },
-      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+      "waitFor": {
+        "text": "Gateway URL"
+      },
+      "redaction": {
+        "mapEnv": "PORTAL_REDACTIONS_FILE"
+      },
+      "settle": 4000
     },
     {
       "id": "p61-basic-resolver-authentication",
@@ -18,9 +26,31 @@
         "nameFilterEnv": "P61_RESOLVER_NAME_FILTER",
         "selectionKey": "p61-resolver"
       },
-      "blade": "/authsettingsV2",
-      "waitFor": { "text": "Require authentication" },
-      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+      "blade": "/overview",
+      "waitFor": {
+        "text": "Essentials"
+      },
+      "redaction": {
+        "mapEnv": "PORTAL_REDACTIONS_FILE"
+      },
+      "clicks": [
+        {
+          "text": "Settings",
+          "exact": true,
+          "waitFor": {
+            "text": "Authentication",
+            "exact": true
+          }
+        },
+        {
+          "text": "Authentication",
+          "exact": true,
+          "waitFor": {
+            "text": "Identity provider"
+          }
+        }
+      ],
+      "settle": 1500
     },
     {
       "id": "p61-basic-resolver-networking",
@@ -31,9 +61,31 @@
         "nameFilterEnv": "P61_RESOLVER_NAME_FILTER",
         "selectionKey": "p61-resolver"
       },
-      "blade": "/networking",
-      "waitFor": { "text": "Inbound Traffic" },
-      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+      "blade": "/overview",
+      "waitFor": {
+        "text": "Essentials"
+      },
+      "redaction": {
+        "mapEnv": "PORTAL_REDACTIONS_FILE"
+      },
+      "clicks": [
+        {
+          "text": "Settings",
+          "exact": true,
+          "waitFor": {
+            "text": "Networking",
+            "exact": true
+          }
+        },
+        {
+          "text": "Networking",
+          "exact": true,
+          "waitFor": {
+            "text": "Inbound traffic configuration"
+          }
+        }
+      ],
+      "settle": 1500
     },
     {
       "id": "p61-basic-cosmos-networking",
@@ -45,19 +97,53 @@
         "selectionKey": "p61-cosmos"
       },
       "blade": "/networking",
-      "waitFor": { "text": "Public network access" },
-      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+      "waitFor": {
+        "text": "Public network access"
+      },
+      "redaction": {
+        "mapEnv": "PORTAL_REDACTIONS_FILE"
+      }
     },
     {
       "id": "p61-basic-named-values-flipped",
       "output": "docs/guide/p61-basic-named-values-flipped.png",
-      "target": { "discover": "gateway", "selectionKey": "p61-basic-gateway" },
+      "target": {
+        "discover": "gateway",
+        "selectionKey": "p61-basic-gateway"
+      },
       "blade": "/overview",
+      "waitFor": {
+        "text": "Gateway URL"
+      },
+      "redaction": {
+        "mapEnv": "PORTAL_REDACTIONS_FILE",
+        "hideSelectors": []
+      },
       "clicks": [
-        { "selector": "a.fxc-menu-item >> text=\"Named values\"", "waitFor": { "text": "entitlement-source" } }
+        {
+          "text": "APIs",
+          "exact": true,
+          "waitFor": {
+            "text": "Named values",
+            "exact": true
+          }
+        },
+        {
+          "text": "Named values",
+          "exact": true,
+          "waitFor": {
+            "text": "entitlement-source"
+          }
+        },
+        {
+          "text": "entitlement-source",
+          "exact": true,
+          "waitFor": {
+            "text": "Display name"
+          }
+        }
       ],
-      "waitFor": { "text": "Named values" },
-      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+      "settle": 1500
     }
   ]
 }

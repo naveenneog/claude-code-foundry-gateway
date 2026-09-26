@@ -61,16 +61,17 @@ resolver returned 401 and a wrong-identity token was refused; after a clean comp
 happened and a real count-tokens request returned 200 (first request 9.9 s, then about 0.8 s warm);
 500 synthetic records were written from inside the VNet and counted. Live runs found and fixed two
 deployer defects (resolver parameters passed as GUIDs, then inline JSON mangled by Azure CLI; now a
-parameter file). Torn down; about $0.40. Portal pictures are not captured: a short-lived capture
-estate was rebuilt for them (about $0.85 for three hours), but it was removed while the lead's batch
-ran, and the two pictures taken were rejected on review (one showed a loading blade, the other a
-Cosmos account mid-update); the five capture steps stay in `guide/captures/p61.json`, and the
-private-resolver pictures in [ARCHITECTURE.md](ARCHITECTURE.md) remain the nearest live evidence.
+parameter file). Torn down; about $0.40. The five portal pictures were captured live on 2026-09-26
+from a short-lived capture estate ([SECURE-PROJECTION.md](SECURE-PROJECTION.md)): the Basic v2
+gateway, the resolver's App Service authentication (401 for unauthenticated requests) and public
+inbound with VNet-integrated outbound, Cosmos with public access disabled, and `entitlement-source`
+set to `projection`. The first two capture estates were removed before the batch finished (the
+ready file's times carried no zone and were read as local time), and two early pictures were
+rejected on review; the third estate was captured and then removed.
 The lead's merge found the branch's CHANGELOG entry pasted after every "### Added"
 heading in the file; it was repaired and `Test-ReleaseLog.ps1` now refuses repeated or run-together
 entries. Branch gate PASS, 67 of 67. Open: a live add-then-remove through a projection-backed gateway
-(**U25**), bursts of different identities and coalescing across instances (**U18**), the five portal
-pictures.
+(**U25**), bursts of different identities and coalescing across instances (**U18**).
 
 ## P64 add and remove developers from AUM by email, merged 2026-09-26
 

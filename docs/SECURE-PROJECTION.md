@@ -98,15 +98,23 @@ Without `-FlipAfterCleanCompare` it stops after the clean comparison and leaves
 `entitlement-source` unchanged. `-WhatIf` prints the planned operations without
 writing resources.
 
-Portal capture specs for the lead are in `guide/captures/p61.json`; they are not
-run by this packet. Pending IDs: `p61-basic-gateway-overview`,
-`p61-basic-resolver-authentication`, `p61-basic-resolver-networking`,
-`p61-basic-cosmos-networking`, `p61-basic-named-values-flipped`. Planned outputs:
-`docs/guide/p61-basic-gateway-overview.png`,
-`docs/guide/p61-basic-resolver-authentication.png`,
-`docs/guide/p61-basic-resolver-networking.png`,
-`docs/guide/p61-basic-cosmos-networking.png`,
-`docs/guide/p61-basic-named-values-flipped.png`.
+#### Basic v2 pictures, captured live
+
+The lead's batch captured these on 2026-09-26 from a short-lived Basic v2 capture estate built
+with the command above (synthetic entitlement records only), then removed. Each picture has a
+record in `docs/guide/portal-captures.json`; names are replaced with demo values.
+
+| Spec id | Manual blade to verify | Picture |
+|---|---|---|
+| `p61-basic-gateway-overview` | API Management > Overview; tier and gateway URL | ![Basic v2 API Management overview: Online, East US 2, Tier Basic v2, 1 unit](guide/p61-basic-gateway-overview.png) |
+| `p61-basic-resolver-authentication` | Function app > Settings > Authentication | ![Resolver authentication: App Service authentication Enabled, Require authentication, unauthenticated requests return HTTP 401, Microsoft identity provider with the resolver app registration](guide/p61-basic-resolver-authentication.png) |
+| `p61-basic-resolver-networking` | Function app > Settings > Networking | ![Resolver networking: public inbound enabled with no access restrictions (Entra authentication is the boundary on Basic v2), outbound virtual network integration into the resolver subnet](guide/p61-basic-resolver-networking.png) |
+| `p61-basic-cosmos-networking` | Azure Cosmos DB account > Settings > Networking > Public access | ![Cosmos DB networking: Public network access Disabled](guide/p61-basic-cosmos-networking.png) |
+| `p61-basic-named-values-flipped` | API Management > APIs > Named values > `entitlement-source` | ![The entitlement-source named value, type Plain, value projection after the clean comparison](guide/p61-basic-named-values-flipped.png) |
+
+The resolver's inbound picture shows the documented Basic v2 risk: the endpoint is public, and
+access depends on App Service authentication with the gateway's managed identity as the only
+allowed caller ([ADR-0028](adr/0028-basic-v2-projection-resolver.md)).
 
 ### Collect the inputs
 
