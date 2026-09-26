@@ -95,12 +95,14 @@ The generator outputs one tier's payloads:
 | `claude-code.README.txt` | Generated operator notes for that tier. |
 | `claude-desktop.managed-settings.json` | Desktop Linux JSON and a readable source for Windows/macOS managed Desktop keys. |
 | `claude-desktop.reg` | Windows Desktop policy values under `HKLM\SOFTWARE\Policies\Claude`. |
+| `claude-desktop.mobileconfig` | macOS Desktop configuration profile for the `com.anthropic.claudefordesktop` managed preferences domain. Every Desktop value is written as a plist `<string>`; booleans are `"true"` / `"false"` strings and arrays or objects such as `inferenceModels` and `inferenceIdpOidc` are JSON documents encoded as one string, which Anthropic documents as portable for `.mobileconfig`. |
 
 The administrator's Claude Desktop sign-in choice (`desktopSignIn`, P60) is
 recorded in `onboarding/claude-gateway.json`. The same generator run emits either
 helper-script Desktop keys or `external-idp` keys (`inferenceCredentialKind`,
 `inferenceIdpOidc`, `inferenceIdpAuthFlow`) that match that recorded choice, in
-`claude-desktop.managed-settings.json` and `claude-desktop.reg`.
+`claude-desktop.managed-settings.json`, `claude-desktop.reg` and
+`claude-desktop.mobileconfig`.
 [ADR-0027](adr/0027-claude-desktop-sign-in-choice.md) records what each choice
 needs: an Entra public-client app, consent, and the audience the gateway accepts.
 
@@ -252,15 +254,17 @@ alternative is `/Library/Application Support/ClaudeCode/managed-settings.json`.
 ### 4.2 Claude Desktop profile
 
 Desktop uses the `com.anthropic.claudefordesktop` managed preferences domain.
-The generated Windows `.reg` and JSON show the keys; macOS delivery uses a
-Desktop `.mobileconfig` exported from the Desktop in-app configuration window,
-with the keys and values listed in the generated
-`claude-desktop.managed-settings.json`. The generator does not write a Desktop
-`.mobileconfig`.
+Deploy `claude-desktop.mobileconfig` from the same generated tier directory as
+the Claude Code profile. It carries the same keys as
+`claude-desktop.managed-settings.json` and `claude-desktop.reg`, including the
+P60 sign-in choice. Anthropic's configuration reference says every OS
+preference-store value is written as a string, including booleans and arrays;
+array and object keys are one JSON document encoded as a string, and that
+portable encoding works in `.mobileconfig`.
 
 Claude Desktop MDM rollout order:
 
-1. Configuration profile assigned.
+1. `claude-desktop.mobileconfig` configuration profile assigned.
 2. Required firewall/proxy/certificate profile assigned.
 3. Claude Desktop app assigned.
 4. First launch shows the third-party gateway path instead of a claude.ai
@@ -352,7 +356,7 @@ Validation ran on 2026-09-26 UTC against the read-only reference gateway
 
 | Check | Result |
 |---|---|
-| Profile generation | `New-ClaudeCodePolicy.ps1` generated `claude-code.managed-settings.json`, `claude-code.intune-omauri.csv`, `claude-code.mobileconfig`, `claude-code.reg`, `claude-desktop.managed-settings.json` and `claude-desktop.reg` outside the repository. |
+| Profile generation | `New-ClaudeCodePolicy.ps1` generated `claude-code.managed-settings.json`, `claude-code.intune-omauri.csv`, `claude-code.mobileconfig`, `claude-code.reg`, `claude-desktop.managed-settings.json`, `claude-desktop.reg` and `claude-desktop.mobileconfig` outside the repository. |
 | HKCU policy pilot | Blocked by workstation ACL before any policy write: `HKCU\SOFTWARE\Policies` is owned by SYSTEM and grants this user read-only access. No HKLM, Program Files or ACL change was attempted. |
 | Restore proof | Before state: `HKCU\SOFTWARE\Policies\ClaudeCode` absent. After state: `HKCU\SOFTWARE\Policies\ClaudeCode` absent. Restore comparison: true. |
 | Generated settings request | The generated policy `env` was applied to the process with an empty `CLAUDE_CONFIG_DIR`. `claude doctor` reported Microsoft Foundry mode. `claude -p "Respond with exactly P65-OK." --output-format json` returned `result: "P65-OK"`, `provider: "foundry"`, `terminal_reason: "completed"`, `is_error: false`. |

@@ -45,6 +45,9 @@ exact streaming cache-creation detail remains **U13**.
   Group Policy fleet rollout steps for Claude Code, the VS Code extension and
   Claude Desktop, with live workstation validation notes and Intune capture
   steps for a tenant with the required role.
+- **Desktop macOS MDM profile (P65 follow-up).** `New-ClaudeCodePolicy.ps1`
+  now emits `claude-desktop.mobileconfig` for
+  `com.anthropic.claudefordesktop`, including the recorded P60 sign-in keys.
 - **Claude Desktop sign-in chosen by the administrator (P60).** `Install-ClaudeGateway.ps1`
   records `desktopSignIn` in `claude-gateway.json`: the unchanged helper-script default,
   or Desktop external-idp sign-in through an Entra public-client app in browser or broker

@@ -746,8 +746,8 @@ $mutations = @(
     @{ Suite = 'Test-ModelsAndPlugins.ps1'
        Name  = 'a one-entry marketplace list collapses to an object'
        File  = 'scripts/New-ClaudeCodePolicy.ps1'
-       From  = 'ConvertTo-Json -InputObject $v -Depth 8 -Compress'
-       To    = '($v | ConvertTo-Json -Depth 8 -Compress)' }
+       From  = 'ConvertTo-Json -InputObject $Value -Depth 8 -Compress'
+       To    = '($Value | ConvertTo-Json -Depth 8 -Compress)' }
 
     @{ Suite = 'Test-ModelsAndPlugins.ps1'
        Name  = 'the desktop profile stops being written'
