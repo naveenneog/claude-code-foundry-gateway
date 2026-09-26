@@ -132,8 +132,8 @@ if ($PSCmdlet.ShouldProcess($resolverName, "deploy resolver.bicep inboundAccess=
                 integrationSubnetId=$($network.resolverSubnetId) privateEndpointSubnetId=$($network.endpointsSubnetId) `
                 sitesDnsZoneId=$($network.sitesDnsZoneId) blobDnsZoneId=$($network.blobDnsZoneId) `
                 queueDnsZoneId=$($network.queueDnsZoneId) tableDnsZoneId=$($network.tableDnsZoneId) `
-                resolverAppId=$ResolverAppId allowedCallerAppIds="[$gatewayAppId]" `
-                allowedCallerObjectIds="[$gatewayObjectId]" inboundAccess=$ResolverInboundAccess -o none
+                resolverAppId=$ResolverAppId allowedCallerAppIds="[`"$gatewayAppId`"]" `
+                allowedCallerObjectIds="[`"$gatewayObjectId`"]" inboundAccess=$ResolverInboundAccess -o none
         if ($LASTEXITCODE -ne 0) { throw 'resolver deployment failed' }
     }
 }
