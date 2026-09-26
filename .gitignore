@@ -63,3 +63,4 @@ config/price-book.json
 # Personal usage reports and private live evidence. Only Contoso fixtures ship.
 /chargeback-reports/
 .chargeback-*/
+onboarding/HOW-TO-USE.md
