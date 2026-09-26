@@ -5,9 +5,10 @@
       "id": "system-overview",
       "source": "docs/architecture/01-system.json",
       "inputs": {
+        "Start-ClaudeGateway.ps1": "d215478264aac4ce54ea5581f4db2aee27a689cb682652a5555596d01c928d02",
         "analytics/chargeback-cost.kql": "8d8a66a8980348851f37889579bf019666b229105bb4e64caae02c474de080b1",
         "analytics/chargeback-ledger.kql": "3924ba7e4edb21d761b16254452c0509a2a9d27558033d7a980c5e201e22b2f5",
-        "docs/architecture/01-system.json": "87477aed4b69ec2dfc547167a1b12b003db304d5dcc22d9780d4d7d1dad6442f",
+        "docs/architecture/01-system.json": "dfb279d7bec41abefa25f18d44dfef14c47435d4d45467577f02cc4ca6d8b4f3",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -30,16 +31,20 @@
         "scripts/Setup-ClaudeWorkstation.ps1": "8b12e81796b8d43d2ec03ae116244170e8777c63b5517015e0503c6b9c673244",
         "scripts/Sync-ClaudeAccess.ps1": "0a3e0167bda6573cc61a888cac76a846a72ceb3799d8a2d39a358002a3196ce2",
         "scripts/Sync-ClaudeProjection.ps1": "ddbd769cb42acd5290db364633441ca5f73af9de980d1ef3d596c299e37ffe8e",
+        "scripts/flow/DeviceProfiles.ps1": "1d2854b24c442983e0960a6cde793d97328e87d5cf0d6d4c947f2d0adad6f3de",
+        "scripts/flow/Foundation.ps1": "43cab7d6d701ec40fe397d5844114dfdbbf2fa6d73ff82a9835aa9125150a0f6",
+        "scripts/flow/Guide.ps1": "73bb63882ee1726fd8528e5e3045ecf6fd57a89dfa82a32f6e190cd2494461db",
+        "scripts/flow/Verify.ps1": "f346e3d8a7c0b7068c5a65b582287eed0321e4cd47aadc85b6818529fb1eae77",
         "sync/src/apply-projection.mjs": "7ffef6a6c7c1dd6fcc35db219968ce2cab132daa1dc4131f2a200c6d54d344af"
       },
       "outputs": [
         {
           "path": "docs/images/architecture/system-overview.png",
-          "sha256": "f2154cc6fdf795deacd864fa94122b6f0c17f15474655ecd53f1d800fe254620"
+          "sha256": "c98e44335d1d0aaaf2fddbbd4c2df88dbc74fdc5d477bd814f9e8c05c35b6a8a"
         },
         {
           "path": "docs/images/architecture.png",
-          "sha256": "f2154cc6fdf795deacd864fa94122b6f0c17f15474655ecd53f1d800fe254620"
+          "sha256": "c98e44335d1d0aaaf2fddbbd4c2df88dbc74fdc5d477bd814f9e8c05c35b6a8a"
         }
       ]
     },

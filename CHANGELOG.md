@@ -29,6 +29,12 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Guided flow core (P66).** `Start-ClaudeGateway.ps1` now orchestrates setup,
+  change, guide and status from one decision record and one reviewed plan
+  fingerprint, with absent parallel-branch modules skipped rather than failed.
+  `scripts/flow/Discovery.ps1`, `Foundation.ps1`, `DeviceProfiles.ps1`,
+  `Verify.ps1` and `Guide.ps1` provide the owned step modules, and
+  `docs/GUIDED-FLOW.md` documents the product path and manual equivalents.
 - **One-command AUM client install.** `scripts/Install-ClaudeAum.ps1` reads the Python version the
   package requires, lists the interpreters that meet it and asks which one, creates or reuses
   `.venv-finops`, installs `cli/finops`, checks `aum --version` and the Azure CLI sign-in, and

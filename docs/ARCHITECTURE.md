@@ -42,6 +42,13 @@ that statement does **not** describe the optional profiles. Use
 [`Get-ClaudeTurnstileBom.ps1`](../scripts/Get-ClaudeTurnstileBom.ps1) for the resources actually
 deployed, rather than treating an architecture picture as a resource count or price quote.
 
+`Start-ClaudeGateway.ps1` is the guided orchestration path over these same
+components. It discovers live resources, asks the step modules' questions once,
+prints one combined review and fingerprint, applies steps in dependency order,
+writes the decision record after each completed step, verifies, and generates
+`onboarding/HOW-TO-USE.md`. It does not replace API Management, Foundry,
+Turnstile, AUM or the reporting jobs; it coordinates their setup and handover.
+
 ## Request path
 
 ![Six request hops: sign in, admit, serve, meter, attribute and observe. Four budget layers and projection admission, absence and expiry outcomes are shown, followed by the components each optional profile adds.](images/architecture/request-path.png)
