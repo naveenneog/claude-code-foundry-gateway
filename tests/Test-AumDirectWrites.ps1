@@ -70,4 +70,6 @@ foreach ($invalid in @(",bad=1,",",$id=0,",",$id=1,$id=2,",",$id=922337203685477
     try { ConvertFrom-ClaudeBudgetOverrides $invalid | Out-Null } catch { $refused=$true }
     Assert $refused 'Malformed/duplicate overrides must be refused, never silently dropped.'
 }
+$bridge = Get-Content (Join-Path $PSScriptRoot '..\scripts\Invoke-ClaudeFinOps.ps1') -Raw
+Assert ($bridge -match '(?s)function Get-AumSha256Hex.*switch \(\[string\]\$request.action\)') 'Direct USD bridge hash helper must be script-scoped before USD actions.'
 Write-Host "$script:checks AUM Direct write and override assertions passed."

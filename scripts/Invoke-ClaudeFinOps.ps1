@@ -51,10 +51,11 @@ function Invoke-VerifiedChange($Expected, [scriptblock]$Operation) {
             az apim nv delete -g $ResourceGroup --service-name $ApimName --named-value-id $key --yes -o none
             if ($LASTEXITCODE -ne 0) { throw 'Could not remove the value created by this operation.' }
         }
-        function Get-AumSha256Hex([string]$Value) {
-            $bytes = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($Value))
-            return -join ($bytes | ForEach-Object { $_.ToString('x2') })
-        }
+}
+
+function Get-AumSha256Hex([string]$Value) {
+    $bytes = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($Value))
+    return -join ($bytes | ForEach-Object { $_.ToString('x2') })
 }
 
 switch ([string]$request.action) {
