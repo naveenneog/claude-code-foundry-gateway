@@ -585,5 +585,5 @@ not make Cosmos public.
 - [SCALE.md](SCALE.md): the migration runbook and what 500,000 developers need
 - [ADR-0005](adr/0005-identity-projection.md): why a projection, and its failure rules
 - [ADR-0011](adr/0011-projection-platform.md): why Cosmos DB serverless and Flex Consumption
-- [ADR-0026](adr/0026-basic-v2-projection-resolver.md): Basic v2 public resolver and mitigations
+- [ADR-0028](adr/0028-basic-v2-projection-resolver.md): Basic v2 public resolver and mitigations
 - [NETWORK.md](NETWORK.md): what the developer clients themselves need to reach

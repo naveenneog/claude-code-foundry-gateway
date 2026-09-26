@@ -1,4 +1,4 @@
-# ADR-0026: Basic v2 uses a public Entra-authenticated resolver for the private projection
+# ADR-0028: Basic v2 uses a public Entra-authenticated resolver for the private projection
 
 - **Status:** Accepted
 - **Date:** 2026-09-26
