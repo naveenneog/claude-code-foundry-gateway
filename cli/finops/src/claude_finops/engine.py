@@ -1,5 +1,6 @@
 from copy import deepcopy
 from datetime import datetime, timezone
+from decimal import Decimal
 import time
 
 from .errors import FinOpsError
@@ -8,6 +9,7 @@ from .rules import (allocation_left, apply_state, identifier, month_window, pars
 from .scope import managed_catalog, profile, require_read
 from .feature_engine import FeatureEngine
 from .capabilities import READ_FEATURES
+from .usd import parse_usd, usd_key, usd_row, can_usd_write
 
 
 class Engine(FeatureEngine):
@@ -49,8 +51,15 @@ class Engine(FeatureEngine):
         return managed_catalog(self._identity, result) if resource == "catalog" else result
 
     def status(self):
+        budgets = self.read("budgets")
+        if self.has_feature("usd_budgets"):
+            try:
+                from .usd import merge_usd_into_budgets
+                budgets = merge_usd_into_budgets(budgets, self.read("usd_budgets"), self.read("usd_status"))
+            except FinOpsError:
+                pass
         return dict(month=self.month, backend=self.backend.name, overview=self.read("overview"),
-                    budgets=self.read("budgets"), apply=self.read("apply"))
+                    budgets=budgets, apply=self.read("apply"))
 
     def governance(self):
         return dict(catalog=self.read("catalog"), tiers=self.read("tiers"), apply=self.read("apply"))
@@ -142,6 +151,69 @@ class Engine(FeatureEngine):
                 body.pop("warning_threshold_percent")
             plan["result"] = self.backend.write("budget_remove" if remove else "budget", body,
                                                 scope_type=kind, scope_id=key, month=self.month, **metadata)
+        return plan
+
+    def usd_budget_change(self, kind, key, amount=None, *, period="month", remove=False,
+                          apply=False, confirm=None):
+        self.require_feature("usd_budgets", "write")
+        metadata = self.mutation_metadata()
+        kind, key = usd_key(kind, key)
+        identity = self.read("whoami")
+        definitions = self.read("usd_budgets")
+        rows = self.read("budgets")["items"]
+        budget_row = next((row for row in rows if row["scope_type"] == kind and row["scope_id"] == key), None)
+        definition = usd_row(definitions, kind, key)
+        if budget_row is None and definition is None:
+            raise FinOpsError("Scope not found for this sign-in. Refresh Budgets or choose an authorized scope.", 5)
+        if not can_usd_write(identity, kind, key, budget_row or definition or {}):
+            raise FinOpsError("Read-only for this USD scope. Ask its Owner or parent-scope manager to make this change.", 4)
+        if kind != "user" and period != "month":
+            raise FinOpsError("Unit and team USD budgets are monthly.")
+        if period not in {"day", "month"}:
+            raise FinOpsError("USD period must be day or month.")
+        after = None if remove else parse_usd(amount)
+        before = definition.get("amount_usd") if definition else None
+        destructive = remove or after == "0" or (before is not None and after is not None and Decimal(after) < Decimal(before))
+        plan = dict(preview=not apply, action="clear" if remove else "set", scope_type=kind, scope_id=key,
+                    before=before, after=after, period=period, price_book_date=definitions.get("price_book_date"),
+                    confirmation_required=bool(remove), effect="Saved; awaiting reconciliation.",
+                    reconciliation="Run aum usd reconcile --apply or wait for the AUM service timer.")
+        if apply:
+            if remove and confirm != key:
+                raise FinOpsError(f"Clear requires typed confirmation: --confirm {key}")
+            if destructive and remove is False and confirm not in {None, "", key}:
+                raise FinOpsError(f"Unexpected confirmation value; omit it or use --confirm {key}.")
+            price_book_date = definitions.get("price_book_date")
+            if not price_book_date:
+                raise FinOpsError("Initialize the USD price book before setting dollar budgets.")
+            body = {"amount_usd": after, "period": period,
+                    "price_book_date": price_book_date, **metadata}
+            plan["result"] = self.backend.write("usd_budget_remove" if remove else "usd_budget",
+                                                None if remove else body, scope_type=kind, scope_id=key,
+                                                month=self.month, **metadata)
+        return plan
+
+    def usd_status(self):
+        self.require_feature("usd_budgets")
+        return self.read("usd_status")
+
+    def usd_reconcile(self, *, apply=False):
+        self.require_feature("usd_budgets", "reconcile")
+        plan = dict(preview=not apply, action="Reconcile USD budgets",
+                    effect="Uses the gateway USD reconciler. Saved state can take time to propagate.")
+        if apply:
+            plan["result"] = self.backend.write("usd_reconcile", {}, month=self.month)
+        return plan
+
+    def usd_price_book_change(self, price_book, *, apply=False):
+        self.require_feature("usd_budgets", "price_book_write")
+        metadata = self.mutation_metadata()
+        plan = dict(preview=not apply, action="Replace USD price book",
+                    before=self.read("usd_price_book").get("price_book"), after=price_book,
+                    effect="Active USD budgets pin their tariff; the server refuses silent repricing.")
+        if apply:
+            plan["result"] = self.backend.write("usd_price_book", {"price_book": price_book, **metadata},
+                                                month=self.month, **metadata)
         return plan
 
     def apply(self, *, apply=False):

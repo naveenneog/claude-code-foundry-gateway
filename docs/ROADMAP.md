@@ -379,11 +379,13 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       live: unauthenticated resolver call 401, count-tokens 200 after the flip, 500 synthetic
       records; the five portal pictures captured live. [ADR-0028](adr/0028-basic-v2-projection-resolver.md).
       Open: **U25**, **U18**
-- [ ] P62 dollar budgets in AUM — acceptance: AUM lists, sets, raises and clears dollar budgets
+- [x] P62 dollar budgets in AUM — acceptance: AUM lists, sets, raises and clears dollar budgets
       and shows reconciled spend with its completeness flags, through the AUM service's contract
       (`docs/aum-usd-budgets-client-contract.md`) and the Direct backend's shared USD writer,
       refused while Turnstile owns budgets; proven live through AUM on an isolated gateway (a stop,
-      then a raise that lifts it)
+      then a raise that lifts it). **Merged 2026-09-26**: `aum usd`; live: 403
+      `usd_budget_exceeded` 73.8 s after the crossing request, 200 after the raise. Open: **U13**,
+      a live AUM-service deployment of the dollar routes
 - [ ] P63 split the five files over the size budget — the gate's `quality.filesize` warning:
       `tests/Test-BusinessUnitsNegative.ps1` (3,208 lines, budget 800),
       `tests/Test-AdminSurface.ps1` (1,348), `Install-ClaudeGateway.ps1` (1,254, budget 700),

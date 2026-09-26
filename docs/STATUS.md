@@ -1,6 +1,6 @@
 # Status
 
-**Active packets:** P62 dollar budgets in AUM ([ROADMAP](ROADMAP.md)). Merged on 2026-09-26: P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets:** none; every packet started for the owner on 2026-09-25 and 2026-09-26 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P46 acceptance criteria — managers scoped, and budget modes
 
@@ -40,6 +40,33 @@ this time, because manager attributes do not reach the gateway, but budget modes
 against stale runs is being added with the modes, and a single queue-driven writer (P48) is the
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
+
+## P62 dollar budgets in AUM, merged 2026-09-26
+
+Asked by the owner: "One more thing to be ensured to be managed in the AUM is setting budget in dollar
+value which considers exact token cost budget and cache cost with enforcement applied at gateway."
+P59 had built the gateway side and the AUM service routes but no terminal client. `aum usd
+list|set|clear|status|reconcile` and `aum usd price-book show|set` now manage dollar budgets with
+decimal strings (zero is a real stop), preview first, typed confirmation for a clear, and **Saved;
+awaiting reconciliation** after a write; the Budgets tab shows each scope's dollar budget, priced
+spend with its completeness flags (`exact`, cache known, unpriced models), status and reconciled
+time. The Direct backend reuses P59's writer, reconciler and authority guard; the AUM service backend
+follows its capability flags and `If-Match`; with Turnstile as the authority, dollar writes are
+hidden and refused rather than falling back to token writes. [AUM.md](AUM.md), [BUDGETS.md](BUDGETS.md),
+[ADR-0018](adr/0018-terminal-finops.md), [client contract](aum-usd-budgets-client-contract.md).
+
+Measured live on 2026-09-26 on an isolated Basic v2 gateway, through AUM's Direct backend: a $0.00005
+unit budget set with `aum usd set`; a warm-up, a cache-creating prompt (5,724 five-minute cache-write
+tokens), a cache-reading prompt (5,724 cache-read tokens) and a tiny request, all 200; `aum usd
+reconcile` then `aum usd status` showed $0.000068 spent and status `stop` (the first snapshot had
+priced the rows ingested by then; the cache rows arrived later, and the client showed the flags rather
+than inventing their cost); the next request returned 403 `usd_budget_exceeded` 73.8 s after the
+crossing request; raised to $0.001 with AUM and reconciled, the next request returned 200. Torn down;
+the final run cost about $0.32 and all attempts under $3. Live runs found three bridge defects, each
+fixed with a test. The dollar Budgets pictures are kept as their own live evidence
+(`direct-usd-budgets-*`), and the banner's Budgets pictures stay unchanged. Branch gate PASS, 67 of 67.
+Open: exact streaming cache-creation detail (**U13**), and a live AUM-service deployment of the
+dollar routes.
 
 ## P61 the Cosmos entitlement store on every v2 tier, merged 2026-09-26
 

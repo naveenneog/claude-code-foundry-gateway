@@ -29,6 +29,18 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **AUM manages gateway USD budgets (P62).** `aum usd list|set|clear|status|reconcile`
+  and `aum usd price-book show|set` manage the P59 dollar-budget contract with
+  decimal strings, preview-first writes, typed confirmation for clears and the
+  **Saved; awaiting reconciliation** state. Direct reuses
+  `ClaudeUsdBudgets.ps1`, `Sync-ClaudeUsdBudgets.ps1` and the shared
+  `UsdBudgets` authority guard; the AUM service backend uses advertised
+  capability flags and `If-Match`; Turnstile USD writes are hidden/refused until
+  it exposes a real USD source. Measured live on 2026-09-26 on an isolated Basic v2
+  gateway through AUM: a $0.00005 unit budget, $0.000068 of priced spend after
+  reconciliation, the next request refused with 403 `usd_budget_exceeded` 73.8 s after
+  the crossing request, and 200 again after `aum usd set` raised it to $0.001.
+  `docs/AUM.md`, `docs/BUDGETS.md`, [ADR-0018](docs/adr/0018-terminal-finops.md).
 - **The Cosmos entitlement store offered by SKU, including Basic v2 (P61).** The installer asks
   for `named-value` or `projection`, states the named-value ceiling (about 93 developers in
   `bu-members`) at the operator's developer count, and chooses the resolver's inbound path by SKU:

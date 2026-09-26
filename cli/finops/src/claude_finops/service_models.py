@@ -19,6 +19,15 @@ def capabilities(document):
         views += ["overview", "people", "trends", "requests"]
     if yes("budgets_read"):
         views.append("budgets")
+    usd_actions = []
+    if yes("usd_budgets_read"):
+        usd_actions.append("read")
+    if yes("usd_budget_write"):
+        usd_actions.append("write")
+    if yes("usd_budget_reconcile"):
+        usd_actions.append("reconcile")
+    if yes("usd_price_book_write"):
+        usd_actions.append("price_book_write")
     return dict(schema_version=1, advertised=True, backend="aum-service", features={
         "native_writes": feature(bool(writes), writes),
         "supported_views": feature(True, views),
@@ -37,6 +46,7 @@ def capabilities(document):
         "conditional_writes": feature(bool(writes), ["write"]),
         "request_expiry": feature(False, []),
         "assistant": feature(False, []), "advanced": feature(False, []),
+        "usd_budgets": feature(bool(usd_actions), usd_actions),
     }, limits=document.get("limits", {}))
 
 

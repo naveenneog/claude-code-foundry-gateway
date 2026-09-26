@@ -577,16 +577,22 @@ metrics.
 
 ```powershell
 .\.venv-finops\Scripts\aum.exe budget list
+.\.venv-finops\Scripts\aum.exe usd list
+.\.venv-finops\Scripts\aum.exe usd set unit <unit-id> 250.00 --period month --what-if
+.\.venv-finops\Scripts\aum.exe usd status
 ```
 
-**Azure portal/manual path:** APIM > Named values for Direct, or Turnstile >
-Budget Management when AUM uses Turnstile. Managers are scoped only when the
-selected backend enforces scope.
+**Azure portal/manual path:** APIM > Named values for Direct (`usd-budgets` and
+`usd-budget-state` hold the dollar definitions and the reconciled state), or
+Turnstile > Budget Management when AUM uses Turnstile. Managers are scoped only
+when the selected backend enforces scope.
 
-**Success:** budgets show used, budget, remaining, unallocated and status
-columns. The merged AUM command accepts token suffixes such as `k`, `M` and
-`B`; USD strings are rejected in this terminal surface until the P62 AUM dollar
-budget work lands.
+**Success:** token budgets show used, budget, remaining, unallocated and status
+columns. `aum budget` takes token amounts with `k`, `M` and `B` suffixes; dollar
+budgets are managed with `aum usd`, which takes decimal dollar strings, shows
+**Saved; awaiting reconciliation** after a write, and reports priced spend with
+its completeness flags after `aum usd reconcile`. Dollar writes are refused while
+Turnstile owns budgets ([AUM dollar budgets](AUM.md), [BUDGETS.md](BUDGETS.md)).
 
 ![Live AUM terminal budgets view using a Turnstile backend, redacted, showing organization and team budget hierarchy with remaining and unallocated columns.](images/architecture-live/terminal-budgets.png)
 

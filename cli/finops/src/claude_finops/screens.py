@@ -149,6 +149,12 @@ class ChangeScreen(ModalScreen):
                     if self.engine.backend.budget_warning_threshold:
                         yield Label("Warning threshold (%)")
                         yield Input(str(self.row.get("warning_threshold_percent", 80)), id="warning")
+                elif self.kind == "usd_budget" and not self.remove:
+                    yield Label("Dollar budget (decimal string; zero is a real stop)")
+                    yield Input(str(self.row.get("usd_budget") or ""), id="amount")
+                    yield Label("Period (month for units/teams; day or month for people)")
+                    yield Input(str(self.row.get("budget_period") or "month"), id="period")
+                    yield Static("Saved dollar budgets show as awaiting reconciliation until the USD reconciler runs.", id="headroom", markup=False)
                 elif self.kind == "tier" and not self.remove:
                     for key, label in (("tokens_per_minute", "Tokens per minute"), ("tokens_per_day", "Tokens per day")):
                         yield Label(label)
@@ -210,6 +216,10 @@ class ChangeScreen(ModalScreen):
             return partial(self.engine.budget_change, self.row["scope_type"], self.row["scope_id"],
                            self.value("amount"), remove=self.remove, apply=apply, confirm=confirm, warning=warning,
                            department_id=self.row.get("parent_scope_id"))
+        if self.kind == "usd_budget":
+            return partial(self.engine.usd_budget_change, self.row["scope_type"], self.row["scope_id"],
+                           self.value("amount"), period=self.value("period", "month"),
+                           remove=self.remove, apply=apply, confirm=confirm)
         if self.kind == "tier":
             return partial(self.engine.tier_change, self.row["id"], self.value("tokens-per-minute"),
                            self.value("tokens-per-day"), self.value("models"), apply=apply)
@@ -220,6 +230,8 @@ class ChangeScreen(ModalScreen):
                            group=self.value("scope-group"), parent=self.value("scope-parent") or None,
                            manager_group=self.value("scope-manager") or None,
                            remove=self.remove, confirm=confirm, apply=apply)
+        if self.kind == "usd_reconcile":
+            return partial(self.engine.usd_reconcile, apply=apply)
         return partial(self.engine.apply, apply=apply)
 
     @on(Button.Pressed, "#preview")
@@ -231,6 +243,9 @@ class ChangeScreen(ModalScreen):
             if self.kind == "budget":
                 plan = self.preview_plan
                 summary = f"{human(plan['before'])} -> {human(plan['after'])}; parent free {human(plan['parent_headroom'])}."
+            elif self.kind == "usd_budget":
+                plan = self.preview_plan
+                summary = f"${plan['before'] or 'not set'} -> ${plan['after'] or 'cleared'}; {plan['effect']}"
             else:
                 summary = self.preview_plan["action"]
             mode = " What-if: writes are disabled." if self.app.preview_only else " Preview ready. Apply commits; Esc cancels."

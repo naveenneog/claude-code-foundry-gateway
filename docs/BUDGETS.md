@@ -74,9 +74,24 @@ or invoice reconciliation. Null/unpriced is never $0.
    comes from its authorized owner, never from a remaining-quota estimate.
 
 The service's additive USD endpoints, scoped permissions and exact fields are
-in the [client contract](aum-usd-budgets-client-contract.md). The terminal
-client is a separate integration: do not assume an existing token-budget
-screen, request or boost now edits USD.
+in the [client contract](aum-usd-budgets-client-contract.md). AUM implements
+that contract through `aum usd`; token-budget screens, requests and boosts
+remain token workflows and do not silently edit USD.
+
+```powershell
+aum usd list --backend direct
+aum usd set unit finance 25 --period month --backend direct --what-if
+aum usd set team payroll 0.02 --period month --backend direct --apply
+aum usd status --backend direct --json
+aum usd reconcile --backend direct --apply
+```
+
+The AUM service backend exposes the same commands only when its capabilities
+advertise USD read/write/reconcile or price-book administration. The Turnstile
+backend hides or refuses USD actions until Turnstile provides a real USD source.
+The P62 isolated AUM proof captured the dollar Budgets view with a live USD
+stop: [80x24](images/aum/direct-usd-budgets-80x24-after.svg) and
+[160x48](images/aum/direct-usd-budgets-160x48-after.svg).
 
 ### Refusals, modes and recovery
 

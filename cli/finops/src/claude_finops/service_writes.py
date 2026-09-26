@@ -15,7 +15,7 @@ def write(backend, resource, body, params):
     capabilities = backend._features or backend.read("capabilities")
     body = deepcopy(body or {})
     reason = params.get("reason") or body.get("reason")
-    if not isinstance(reason, str) or not 1 <= len(reason.strip()) <= 500:
+    if resource != "usd_reconcile" and (not isinstance(reason, str) or not 1 <= len(reason.strip()) <= 500):
         raise FinOpsError("AUM service changes require an audit reason of 1–500 characters. Pass --reason or fill the form.")
     method, revision = "PUT", True
     escape = lambda key: quote(identifier(key), safe="")
@@ -24,6 +24,17 @@ def write(backend, resource, body, params):
         path = f"budgets/{params['scope_type']}/{escape(params['scope_id'])}"
         if resource == "budget_remove":
             method, body = "DELETE", {}
+    elif resource in {"usd_budget", "usd_budget_remove"}:
+        require(capabilities, "usd_budgets", "write")
+        path = f"usd-budgets/{params['scope_type']}/{escape(params['scope_id'])}"
+        if resource == "usd_budget_remove":
+            method, body = "DELETE", {}
+    elif resource == "usd_reconcile":
+        require(capabilities, "usd_budgets", "reconcile")
+        method, path, revision, body = "POST", "usd-budget-reconcile", False, {}
+    elif resource == "usd_price_book":
+        require(capabilities, "usd_budgets", "price_book_write")
+        path = "usd-price-book"
     elif resource == "mode":
         require(capabilities, "native_writes", "mode")
         path = "modes/" + escape(params["scope_id"])
@@ -74,7 +85,8 @@ def write(backend, resource, body, params):
                     expires_at=body["expires_at"])
     else:
         raise FinOpsError("This mutation is not offered by the AUM service contract.", 5)
-    body["reason"] = reason.strip()
+    if resource != "usd_reconcile":
+        body["reason"] = reason.strip()
     headers = {}
     if revision:
         if not backend._revision:

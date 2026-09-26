@@ -590,6 +590,18 @@ class FinOpsApp(FeatureUI, App):
         kind = "budget" if self.active in {"budgets", "people"} else ("tier" if row.get("kind") == "tier" else "catalog")
         self.push_screen(ChangeScreen(self.engine, kind, row, self.data.get("budgets", {}).get("items", [])))
 
+    def action_usd_edit(self):
+        if self.redactor.enabled or not enabled(self.feature_caps, "usd_budgets", "write"):
+            return
+        row = self.selected()
+        if not row or self.active not in {"budgets", "people"}:
+            return
+        self.push_screen(ChangeScreen(self.engine, "usd_budget", row, self.data.get("budgets", {}).get("items", [])))
+
+    def action_usd_reconcile(self):
+        if enabled(self.feature_caps, "usd_budgets", "reconcile"):
+            self.push_screen(ChangeScreen(self.engine, "usd_reconcile"))
+
     def action_remove(self):
         if not self.check_action("edit", ()):
             self.action_tab("budgets")

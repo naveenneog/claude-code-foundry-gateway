@@ -188,3 +188,38 @@ P55/modes agents are notified and running apply jobs are checked. Temporary
 Direct authority selection is recorded and restored exactly; other production
 governance defaults are never silently changed. No test is complete if cleanup
 or runtime enforcement cannot be proved.
+
+## P62 amendment: AUM dollar budgets
+
+P59 added the gateway-side USD budget definition, price book, reconciled state
+and AUM service HTTP contract. P62 makes AUM a client for that contract without
+turning token budgets into dollars. Token commands remain token commands. Dollar
+commands are under `aum usd`, use decimal strings with up to nine fractional
+digits, and preserve zero as a real stop.
+
+The Direct backend reuses the gateway USD PowerShell and Python path:
+`ClaudeUsdBudgets.ps1`, `Sync-ClaudeUsdBudgets.ps1`, the shared APIM named-value
+writer and `Assert-ClaudeGatewayOwnsGovernance -Write UsdBudgets`. It does not
+price tokens or serialize USD state in the client. A save returns **Saved;
+awaiting reconciliation** because the gateway stop changes only after the
+reconciler writes fresh `usd-budget-state` and APIM applies it. The client never
+retries a write after an uncertain result.
+
+The AUM service backend consumes only the advertised routes and flags:
+`usd_budgets_read`, `usd_budget_write`, `usd_budget_reconcile` and
+`usd_price_book_write`. It sends `If-Match` from the fresh service revision for
+definition and price-book writes. Managers see only server-filtered rows and no
+reconcile or price-book action unless the service advertises those actions for
+their identity. Unsupported actions are hidden or refused; no code path falls
+back to token writes.
+
+Turnstile remains a separate optional authority. Until it advertises a real USD
+source and writer, AUM does not invent one from Turnstile's token-budget API.
+Dollar writes and reconciliation through a Turnstile backend are refused with an
+authority message. Reads are available only from Direct or the AUM service.
+
+The Budgets terminal view may show token and dollar controls side by side:
+authored USD budget, effective budget, observed spend, completeness flags,
+unpriced models, status, window and reconciliation time. Null spend is displayed
+as unpriced/unknown, never as zero. The edit flow remains preview-first. Clearing
+a USD budget requires typed confirmation of the scope id.
