@@ -8,11 +8,12 @@ class FinOpsError(Exception):
 
 def http_error(status: int) -> FinOpsError:
     messages = {
-        401: ("Sign-in expired. Run az login in the Turnstile tenant, then retry.", 3),
+        401: ("Sign-in expired. Run az login in the selected backend's tenant, then retry.", 3),
         403: ("Not in your scope / not permitted for this sign-in. Choose a managed unit or team, or ask an administrator to confirm your role and assignments.", 4),
         404: ("Not found. Check the identifier, month and assigned scope.", 5),
-        405: ("This server lacks this API. Deploy the claude-gateway Turnstile fork.", 5),
+        405: ("This server lacks this API. Check the selected backend's advertised capabilities and compatible API version.", 5),
         409: ("Conflict. Refresh the parent budget and allocation; preview the change again.", 6),
+        412: ("State changed since preview. Refresh the collection and preview again; nothing was overwritten.", 6),
         422: ("Server rejected the fields. Refresh and check limits, groups and parent allocation.", 2),
         429: ("Service throttled. Wait and retry; no write was automatically repeated.", 7),
     }

@@ -216,8 +216,7 @@ configured for gateway governance.
 ![Live Turnstile Budget Management page showing organization and department budget allocation, used tokens, remaining tokens and status badges.](images/architecture-live/console-budgets.png)
 
 **If it fails:** use [FinOps tools](FINOPS-TOOLS.md),
-[Turnstile](TURNSTILE.md), [AUM service](AUM-SERVICE.md) and the AUM guide when
-`docs/AUM.md` lands in this branch.
+[Turnstile](TURNSTILE.md), [AUM](AUM.md) and [AUM service](AUM-SERVICE.md).
 
 ### 10. Verify with a real request
 
@@ -504,8 +503,7 @@ metrics.
 
 ![Live AUM terminal overview using a Turnstile backend, redacted, showing monthly usage, token totals, estimated cost and latency metrics.](images/architecture-live/terminal-overview.png)
 
-**If it fails:** use the AUM guide from the P52 branch until `docs/AUM.md` lands
-in this branch; the stable related guide is [AUM service](AUM-SERVICE.md).
+**If it fails:** use [AUM](AUM.md) and [AUM service](AUM-SERVICE.md).
 
 ### 7. Inspect AUM budgets
 

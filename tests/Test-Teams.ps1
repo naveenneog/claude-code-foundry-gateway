@@ -153,7 +153,9 @@ foreach ($scope in 'bu', 'parent') {
     Assert "$scope allowance notice requires an estimate beyond base" ($policy -match "remaining < limit - budget")
 }
 Assert 'both notify limits are skipped' (([regex]::Matches($policy, '(bu|parent)Limit"\] != "0"')).Count -eq 2)
-Assert 'notices are response headers without buffering' ($policy -match 'name="x-claude-budget-notice"' -and $policy -notmatch 'context.Response.Body.As')
+$usdReader = [regex]::Match($policy, '(?s)<when condition="@\(!\(bool\)context.Variables\["usdRequestStream"\].*?</when>').Value
+$withoutJsonReader = $policy.Replace($usdReader, '')
+Assert 'notices never buffer a streaming response' ($policy -match 'name="x-claude-budget-notice"' -and $policy -match 'buffer-response="false"' -and $withoutJsonReader -notmatch 'context.Response.Body.As')
 Assert 'budget trace joins the usage ledger' ($policy -match 'source="claude-budget"' -and $policy -match 'name="BaseTokens"' -and $policy -match 'name="ParentBaseTokens"' -and $policy -match 'name="ParentMode"')
 $budgetTrace = [regex]::Match($policy, '(?s)<trace source="claude-budget".*?</trace>').Value
 Assert 'budget trace cannot duplicate existing identity joins' ($budgetTrace -match 'name="BudgetRequestId"' -and $budgetTrace -notmatch 'name="RequestId"')

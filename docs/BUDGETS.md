@@ -1,9 +1,149 @@
-# Configure token budgets and model access
+# Configure token and USD budgets, and model access
 
 For gateway administrators. This is the operating reference formerly in
 [README: Tuning budgets](../README.md#tuning-budgets). For business-unit dollar
 budgets, start with [Business units](BUSINESS-UNITS.md); for monthly reporting,
 use [FinOps](FINOPS.md). A token allowance is not an invoice cap.
+
+## Dollar budgets: what is enforced
+
+The dollar-input scripts now preserve the approved **USD amount and price-book
+date**, as well as their existing approximate token quota. An optional reconciler
+prices observed input, output, cache reads and known 5-minute/1-hour cache writes
+separately with Decimal, then publishes a gateway decision.
+
+| Control | Exact about | Delay / limitation |
+|---|---|---|
+| Existing token limiter | Its configured token allowance | Distributed estimates; does not count cache; retained as the realtime guard |
+| Reconciled USD stop | Decimal arithmetic on the observed categories at the pinned tariff | Ledger ingestion + up to 5 minutes between timer runs + execution + APIM propagation |
+| Nonstream JSON usage | All five categories when the provider reports their counts/TTL split | Delayed until the trace and LLM log join |
+| Streaming usage | Known prompt/output and available cached-token metric subtotal | Cache creation/TTL remains unknown; custom metrics can lose high-cardinality series; not a complete exact streaming ceiling |
+| Azure invoice | Not claimed | U2 remains open; CCU billing, negotiated rates, geography and tariffs absent from the book can differ |
+
+A known subtotal reaching a budget is sufficient to stop. A subtotal below it
+does **not** prove that full streaming spend is below budget. `exact: true`
+means complete categorized arithmetic for observed rows, not complete ingestion
+or invoice reconciliation. Null/unpriced is never $0.
+
+### Enable and operate it
+
+1. Upgrade the gateway template/policy first; the installer preserves both
+   `usd-budgets` and `usd-budget-state`. New installations leave them disabled.
+   The updated policy reads only nonstream JSON usage, never an SSE body.
+2. Publish the current ledger to the gateway's selected workspace:
+
+   ```powershell
+   .\scripts\Publish-ClaudeQueries.ps1 -ResourceGroup $rg -ApimName $apim `
+       -WorkspaceName '<gateway-linked-workspace>' -Query ClaudeChargeback
+   ```
+
+3. Deploy/update the optional [AUM service](AUM-SERVICE.md). Its existing
+   managed identity, storage lease and audit run `reconcile_usd_budgets` every
+   five minutes. It needs no Foundry data-plane permission: only gateway named
+   values and workspace reads, with its existing storage data roles.
+   This reuses the service's timer/job pattern rather than deploying a second
+   always-on process. Without that service, arrange an approved managed-identity
+   scheduler for the on-demand command; no separate Direct scheduler is
+   provisioned automatically by the budget setter.
+4. Approve the budget and select the tariff. On first use the scripts read
+   `config/price-book.json`, or the shipped example if absent, and print the
+   source. `-PriceBookPath` chooses a different file. Existing dollar budgets
+   keep their stored tariff; changing local prices does not silently reprice them.
+
+   ```powershell
+   .\scripts\Set-ClaudeBusinessUnit.ps1 -Id finance -MonthlyBudgetUsd 25 `
+       -ResourceGroup $rg -ApimName $apim
+   .\scripts\Set-ClaudeBudget.ps1 -User '<approved-person-object-id>' -DailyUsd 2 `
+       -ResourceGroup $rg -ApimName $apim
+   ```
+
+5. Reconcile now, or wait for the timer. Direct invocation uses Azure CLI
+   sign-in and ETags; the service adds its lease/audit. Both refuse Turnstile
+   authority before doing governance writes.
+
+   ```powershell
+   python -m venv .venv-aum-service
+   .\.venv-aum-service\Scripts\python -m pip install -r service\aum\requirements.txt
+   .\scripts\Sync-ClaudeUsdBudgets.ps1 -ResourceGroup $rg -ApimName $apim `
+       -WorkspaceId '<workspace-customer-id>'
+   ```
+
+   Omit an unknown gateway/workspace to use `ClaudeChoice.ps1`; it shows the
+   source of each candidate, not an assumed first match. Workspace ID is on
+   the linked Log Analytics workspace's Overview page. The budget amount
+   comes from its authorized owner, never from a remaining-quota estimate.
+
+The service's additive USD endpoints, scoped permissions and exact fields are
+in the [client contract](aum-usd-budgets-client-contract.md). The terminal
+client is a separate integration: do not assume an existing token-budget
+screen, request or boost now edits USD.
+
+### Refusals, modes and recovery
+
+- **Strict:** 403 `usd_budget_exceeded` at or above the nominal amount.
+- **Allowance:** stop only above nominal plus the configured allowance; the
+  parent and other controls still apply.
+- **Notify:** this scope never blocks for USD, including when its snapshot
+  is missing/expired; `x-claude-usd-budget-notice` is advisory. Other enforced
+  scopes and the existing token guards can still refuse.
+- **Unpriced:** enforced scopes return 403 `usd_budget_unpriced`, with the
+  unpriced models/attribution problem. Repair the tariff/telemetry, then reconcile.
+- **Stale:** missing, expired or mismatched state returns 503
+  `usd_budget_state_stale` for enforced scopes. Snapshots expire after 15 minutes.
+  A telemetry outage preserves the last decision until expiry; it never refreshes
+  an old allow as if usage were zero.
+
+The USD 403 names scope, nominal/effective budget, observed spend and
+`reconciled_at` in UTC. Raise the approved dollar budget and reconcile to lift
+it; UTC month/day rollover similarly needs a new snapshot. A definition save
+can temporarily produce 503 while awaiting reconciliation. It does not reset
+spent tokens, and an independent token ceiling may still refuse.
+
+`-Clear` on a person removes both overrides; token-only edits retain a USD
+control rather than silently deleting it. Removing a business unit clears its
+USD entry. Clear affected USD allocations explicitly through the API before
+reparenting a unit/team or removing a parent with budgeted teams.
+
+Both named values retain the 4,096-character bound. State uses a compact
+internal representation, with a lossless expanded API response; a fixture of
+20 unit decisions fits. Capacity depends on identifiers, prices and errors,
+not a promised fixed number of people. Overflow refuses the whole update;
+projection-backed USD storage is not implemented by this packet.
+
+### Measured delay and arithmetic, isolated Basic v2
+
+On 2026-09-25, a $0.02 test unit accumulated:
+
+```text
+65 input         * $2/M   = $0.0001300
+264 output       * $10/M  = $0.0026400
+12,492 cache read * $0.2/M = $0.0024984
+12,492 5m write   * $2.5/M = $0.0312300
+0 1h write       * $4/M   = $0.0000000
+                              ---------
+Observed total                 $0.0364984
+```
+
+The crossing response completed at 12:37:16.802Z. Both cache requests were
+visible with complete category fields at 12:39:43.112Z; the next call after
+reconciliation returned the distinct 403 at 12:40:12.717Z: **175.9 seconds**
+from crossing completion. Raising the budget to $0.50 and reconciling served
+200 at 12:52:31.208Z. This was an on-demand run, not a measured timer SLA.
+
+For a periodic job, the operational envelope is
+`ingestion latency + [0,300s] schedule wait + execution + propagation`, plus
+already-running requests. The measured two-request ingestion/visibility
+lag was 146.3 seconds from crossing completion; adding a full timer interval
+to this on-demand sample gives about **475.9 seconds**, not a guaranteed maximum.
+Microsoft documents resource logs as *usually* 3-10 minutes
+([source](https://learn.microsoft.com/azure/azure-monitor/logs/data-ingestion-time)).
+Without a guaranteed maximum latency and spend rate there is no finite hard
+dollar overshoot guarantee. A reservation system would be a different design.
+
+The proof used only an isolated gateway and separate research/proof telemetry;
+no reference-gateway policy, named value or authority was changed.
+[ADR-0026](adr/0026-usd-budget-reconciliation.md) explains why response-weighted
+APIM counters do not solve complete streaming accounting.
 
 ## Prerequisites
 
@@ -17,6 +157,8 @@ use [FinOps](FINOPS.md). A token allowance is not an invoice cap.
 - Check who owns governance first. The unit and tier scripts refuse writes
   owned by Turnstile and name its URL and page; a raw portal or Azure CLI edit
   can still be overwritten by its next apply.
+  New USD writes and reconciliation also refuse a second budget authority;
+  token-only personal overrides remain gateway-owned.
   See [Manage everything in Turnstile](TURNSTILE.md#manage-everything-in-turnstile).
 
 ### Find the values for the commands

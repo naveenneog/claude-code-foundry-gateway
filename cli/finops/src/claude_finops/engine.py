@@ -4,24 +4,47 @@ import time
 
 from .errors import FinOpsError
 from .rules import (allocation_left, apply_state, identifier, month_window, parse_tokens,
-                    require_owner, scope_type, validate_budget)
+                    require_owner, require_budget_write, scope_type, validate_budget)
 from .scope import managed_catalog, profile, require_read
+from .feature_engine import FeatureEngine
+from .capabilities import READ_FEATURES
 
 
-class Engine:
+class Engine(FeatureEngine):
     def __init__(self, backend, month=None):
         self.backend = backend
         self.month = month or datetime.now(timezone.utc).strftime("%Y-%m")
         self._identity = None
+        self._capabilities = None
+        self.change_reason = ""
         month_window(self.month)
+
+    def mutation_metadata(self):
+        if not self.backend.requires_reason:
+            return {}
+        reason = self.change_reason
+        if not isinstance(reason, str) or not 1 <= len(reason.strip()) <= 500:
+            raise FinOpsError("AUM service requires an audit reason. Pass --reason (1-500 characters) or fill the form.")
+        return {"reason": reason.strip()}
 
     def read(self, resource, **params):
         if resource == "whoami":
+            previous = self._identity
             self._identity = self.backend.read(resource, month=self.month, **params)
+            identity_keys = ("id", "email", "role", "manager_scope")
+            if previous and tuple(previous.get(k) for k in identity_keys) != tuple(self._identity.get(k) for k in identity_keys):
+                self._capabilities = None
             return self._identity
         if self._identity is None:
             self.read("whoami")
-        require_read(self._identity, resource, params)
+        if resource in READ_FEATURES:
+            self.require_feature(READ_FEATURES[resource])
+        else:
+            require_read(self._identity, resource, params)
+        if resource == "requests" and params.get("cursor"):
+            self.require_feature("request_cursor")
+        if resource == "people" and params.get("cursor"):
+            self.require_feature("people_cursor")
         result = self.backend.read(resource, month=self.month, **params)
         return managed_catalog(self._identity, result) if resource == "catalog" else result
 
@@ -37,6 +60,14 @@ class Engine:
             raise FinOpsError("Complete chargeback supports organization or department. Use usage show for top-100 model/person rankings.")
         catalog = self.read("catalog")
         scoped = profile(self._identity)
+        if scoped is not None and not self.backend.unit_direct_departments:
+            units = {row["id"] for row in scoped["organizations"]}
+            targets = [("organization", row) for row in catalog["organizations"] if row["id"] in units]
+            targets += [("department", row) for row in catalog["departments"] if row.get("parent_id") not in units]
+            rows = [dict(id=row["id"], name=row["name"], scope_type=kind,
+                         **self.read("overview", **{f"{kind}_id": row["id"]})["totals"]) for kind, row in targets]
+            return dict(period=self.month, dimension="managed-scope", items=rows,
+                        note="Actually managed units (including direct members) plus independent teams; no context-parent query or double counting. Estimated cost, not an invoice.")
         if scoped is not None:
             # Parent catalog rows may be context only. Department queries never widen a manager's scope.
             dimension = "department"
@@ -51,46 +82,72 @@ class Engine:
 
     def budget_change(self, kind, key, amount=None, *, remove=False, apply=False,
                       confirm=None, warning=None, department_id=None):
-        require_owner(self.read("whoami"))
+        metadata = self.mutation_metadata()
+        if warning is not None and not self.backend.budget_warning_threshold:
+            raise FinOpsError("Direct has no stored warning threshold. Use the AUM service or omit --warning.")
         kind, key = scope_type(kind), identifier(key)
+        identity = self.read("whoami")
+        native_user = kind == "user" and self.backend.native_user_budget_records
+        if native_user:
+            self.require_feature("native_writes", "budget")
+        else:
+            require_budget_write(identity, kind, key, department_id)
         rows = self.read("budgets")["items"]
         if kind == "user":
-            if not department_id:
+            existing = next((row for row in rows if row["scope_type"] == "user" and row["scope_id"] == key), None)
+            if not department_id and not (native_user and existing):
                 raise FinOpsError("Choose a team with --team before editing a person's budget.")
-            people = self.read("people", department_id=department_id, query=key, limit=50, offset=0)
-            rows += people["items"]
+            people = {}
+            if department_id:
+                people = self.read("people", **self.backend.people_filter(department_id), query=key, limit=50, offset=0)
+                rows = [row for row in rows if not (row["scope_type"] == "user" and row["scope_id"] == key)] + people["items"]
         row = next((item for item in rows if item["scope_type"] == kind and item["scope_id"] == key), None)
         if row is None:
             raise FinOpsError("Scope not found in this month and role. Refresh Budgets or search the person's team.", 5)
+        if row.get("writable") is False or (native_user and row.get("writable") is not True):
+            raise FinOpsError("This observed identity or scope is not writable. Check its object id and selected authority.", 4)
+        daily = row.get("budget_period") == "day"
         proposed = None if remove else parse_tokens(amount)
         if proposed is not None:
-            validate_budget(rows, row, proposed)
-            if kind == "user" and people.get("department_available_tokens") is not None:
+            if not daily:
+                validate_budget(rows, row, proposed)
+            if kind == "user" and not daily and people.get("department_available_tokens") is not None:
                 left = people["department_available_tokens"] + (row.get("token_limit") or 0) - proposed
                 if left < 0:
                     raise FinOpsError(f"Parent headroom is short by {-left:,} tokens. Ask its Owner for allocation.")
         threshold = warning if warning is not None else row.get("warning_threshold_percent", 80)
         if not isinstance(threshold, int) or not 1 <= threshold <= 100:
             raise FinOpsError("Warning threshold must be between 1 and 100 percent.")
-        destructive = remove or (proposed is not None and proposed < row["used_tokens"])
+        destructive = remove or row.get("used_tokens") is None or (proposed is not None and proposed < row["used_tokens"])
         plan = dict(preview=not apply, action="remove" if remove else "set", scope_type=kind, scope_id=key,
                     period=self.month, before=row.get("token_limit"), after=proposed,
                     used_tokens=row["used_tokens"], warning_threshold_percent=threshold,
-                    parent_headroom=None if remove else allocation_left(rows, row, proposed),
+                    budget_period="day" if daily else "month",
+                    parent_headroom=None if remove or daily else allocation_left(rows, row, proposed),
                     confirmation_required=destructive,
-                    effect="Person budgets are Turnstile-only; not gateway quotas." if kind == "user"
+                    effect="Gateway daily person override; monthly unit limits still apply independently. Daily limits are not monthly allocations." if daily else
+                    "Person budgets are Turnstile-only; not gateway quotas." if kind == "user"
                     else "Gateway apply normally takes about two minutes. A save is not proof of enforcement.")
+        if not self.backend.budget_warning_threshold:
+            plan.pop("warning_threshold_percent")
+        if self.backend.immediate_writes and not daily:
+            plan["effect"] = "Verified control-plane write; no separate apply job. Gateway propagation can lag."
         if apply:
             if destructive and confirm != key:
                 raise FinOpsError(f"Destructive change requires confirmation: --confirm {key}")
-            plan["requested_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            if not self.backend.immediate_writes:
+                plan["requested_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             body = None if remove else dict(token_limit=proposed, warning_threshold_percent=threshold)
+            if body and not self.backend.budget_warning_threshold:
+                body.pop("warning_threshold_percent")
             plan["result"] = self.backend.write("budget_remove" if remove else "budget", body,
-                                                scope_type=kind, scope_id=key, month=self.month)
+                                                scope_type=kind, scope_id=key, month=self.month, **metadata)
         return plan
 
     def apply(self, *, apply=False):
         require_owner(self.read("whoami"))
+        if self.backend.immediate_writes:
+            raise FinOpsError("This backend has no separate apply job. Changes return their own verified receipt.", 5)
         result = dict(preview=not apply, action="Apply current governance", effect="Usually about two minutes.")
         if apply:
             result["requested_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -192,17 +249,27 @@ class Engine:
         return self._replace("catalog", body, current, apply)
 
     def _replace(self, resource, body, before, apply):
+        metadata = self.mutation_metadata()
         plan = dict(preview=not apply, action=f"Replace {resource}", before=before, after=body,
                     effect="Whole collection is saved; refresh before preview to avoid overwriting concurrent edits.")
+        if self.backend.immediate_writes:
+            plan["effect"] = "Verified native writer; no separate apply job. Refresh after a conflict or compensation error."
         if apply:
-            plan["requested_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-            plan["result"] = self.backend.write(resource, body)
+            if not self.backend.immediate_writes:
+                plan["requested_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            plan["result"] = self.backend.write(resource, body, **metadata)
         return plan
 
     def lookup(self, text, department_id=None):
         text = text.strip()[:200]
         if not text:
             return []
+        if self.has_feature("global_search"):
+            tabs = {"unit": "budgets", "team": "budgets", "person": "people",
+                    "model": "usage", "request": "requests"}
+            return [dict(row, tab=tabs[row["kind"]])
+                    for row in self.read("global_search", query=text, limit=50)["items"]
+                    if row.get("kind") in tabs]
         catalog = self.read("catalog")
         catalog = managed_catalog(self._identity, catalog, context=False)
         result = []
@@ -213,10 +280,15 @@ class Engine:
         for collection, kind in (("organizations", "unit"), ("departments", "team")):
             result += [dict(kind=kind, id=row["id"], name=row["name"], tab="budgets")
                        for row in catalog[collection] if matches(row["id"] + " " + row["name"])]
+        observed = self.read("distribution", dimension="model", limit=50)["items"]
+        result += [dict(kind="model", id=model["id"], name=model["name"], tab="usage")
+                   for model in observed if matches(model["name"])]
+        names = {model["name"] for model in observed}
         for tier in self.read("tiers")["items"]:
-            result += [dict(kind="model", id=model, name=model, tab="usage") for model in tier["models"] if matches(model)]
+            result += [dict(kind="configured-model", id=model, name=model, tab="governance")
+                       for model in tier["models"] if model not in names and matches(model)]
         if department_id:
-            people = self.read("people", department_id=department_id, query=text, offset=0, limit=20)
+            people = self.read("people", **self.backend.people_filter(department_id), query=text, offset=0, limit=20)
             result += [dict(kind="person", id=row["scope_id"], name=row["scope_name"], tab="people")
                        for row in people["items"]]
         if text.startswith(("request:", "contoso-request-")) or (len(text) == 36 and text.count("-") == 4):

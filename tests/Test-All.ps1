@@ -197,6 +197,8 @@ try {
     Invoke-Check 'Model discovery and deployment'          'Test-ModelDeployment.ps1'
     Invoke-Check 'Client attribution and the workbook'     'Test-Observability.ps1'
     Invoke-Check 'Scripts ask for what they were not given' 'Test-ClaudeChoice.ps1'
+    Invoke-Check 'USD budget scripts and gateway contracts' 'Test-UsdBudgets.ps1'
+    Invoke-Check 'USD policy expression behavior' 'Test-UsdPolicy.ps1'
     # Shard 0 also carries the mutation that runs the PS 5.1 wizard (Test-On-PS51.ps1), about
     # 100 s alone and up to 300 s on a loaded machine; measured 520 s against the others' ~220 s.
     Invoke-Check 'Business unit checks detect breakage [0/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '0/4' } -TimeoutSeconds 900
@@ -236,9 +238,9 @@ try {
     $finopsPython = Join-Path $root '.venv-finops\Scripts\python.exe'
     $finopsUnixPython = Join-Path $root '.venv-finops\bin\python'
     $finopsSkip = if (-not ((Test-Path $finopsPython) -or (Test-Path $finopsUnixPython))) {
-        'FinOps: Python or the worktree .venv-finops is missing. See docs/CLI-FINOPS.md to install.'
+        'AUM: Python or the worktree .venv-finops is missing. See docs/AUM.md to install.'
     } else { '' }
-    Invoke-Check 'Terminal FinOps - commands, rules and pilot' 'Test-FinOps.ps1' -SkipReason $finopsSkip
+    Invoke-Check 'AUM - commands, dashboard and pilot' 'Test-FinOps.ps1' -SkipReason $finopsSkip
 
     if ($IncludeAzure) {
         Invoke-Check 'Foundry discovery is selective'      'Test-Discovery.ps1' -Azure

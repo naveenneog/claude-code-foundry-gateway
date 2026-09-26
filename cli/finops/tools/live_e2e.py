@@ -1,0 +1,296 @@
+"""Owner-approved, finally-restored group/budget/mode acceptance on an explicit live target."""
+
+import argparse
+import asyncio
+from copy import deepcopy
+from datetime import datetime, timezone, timedelta
+import json
+from pathlib import Path
+import re
+import subprocess
+import time
+from uuid import uuid4
+
+from claude_finops.backend import connect
+from claude_finops.config import load_config
+from claude_finops.engine import Engine
+from claude_finops.errors import FinOpsError
+from claude_finops.gateway_probe import tiny_request
+from claude_finops.group_actions import group_call, membership_refresh, publish_as_signed_in_admin
+from claude_finops.groups import EntraGroups
+from claude_finops.publication import capture_lock, validate_capture
+from claude_finops.screens import DetailScreen
+from claude_finops.tui import FinOpsApp
+from claude_finops.usage_refresh import refresh_usage
+
+from e2e_support import GatewayState, Journal, utc, enforcement_matches, linked_turnstile, require_quiet_direct_window
+from e2e_cleanup import restore_turnstile
+
+ROOT = Path(__file__).resolve().parents[3]
+RESTORE_NAMES = ["bu-members", "bu-modes", "bu-parents", "bu-registry", "turnstile-integration",
+                 "allow-standard", "allow-premium", "tpm-standard", "tpm-premium",
+                 "quota-standard", "quota-premium", "models-standard", "models-premium"]
+
+
+async def screenshot(engine, config, journal, stage, result):
+    app = FinOpsApp(engine, config, redact=True, first_run=False)
+    async with app.run_test(size=(110, 36)) as pilot:
+        await pilot.pause(.2)
+        await app.workers.wait_for_complete()
+        app.push_screen(DetailScreen("LIVE AUM E2E | " + stage, result))
+        await pilot.pause(.3)
+        await pilot.wait_for_scheduled_animations()
+        folder = ROOT / "docs" / "images" / "aum"
+        name = f"{config.backend}-e2e-{stage}-{journal.folder.name[-8:]}.svg"
+        entry = dict(file=name, source="live", backend=engine.backend.name, captured_at=utc(), redaction=True,
+                     commit=journal.data["source_commit"],
+                     size=[110, 36], phase="after", tab="e2e", flow=stage)
+        problems = validate_capture(app.export_screenshot(), entry)
+        if problems:
+            raise RuntimeError("E2E screenshot refused: " + "; ".join(problems))
+        with capture_lock(ROOT / ".aum-evidence"):
+            app.save_screenshot(name, path=str(folder))
+            path = folder / "manifest.json"
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            manifest["images"] = [row for row in manifest["images"] if row["file"] != name] + [entry]
+            path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        journal.record("screenshot", {"file": name, "flow": stage})
+
+
+def configured_catalog(catalog):
+    return dict(organizations=[{k: v for k, v in row.items() if k != "parent_id"} for row in catalog["organizations"]],
+                departments=deepcopy(catalog["departments"]), default_department_id=catalog.get("default_department_id"))
+
+
+async def journey(args):
+    if not args.apply or args.confirm != "restore all test changes":
+        raise RuntimeError('Explicit --apply --confirm "restore all test changes" is required.')
+    config = load_config(Path(args.config), backend=args.backend)
+    backend = connect(config)
+    engine = Engine(backend, datetime.now(timezone.utc).strftime("%Y-%m"))
+    suffix = uuid4().hex[:8]
+    unit, team = "aum-e2e-unit-" + suffix, "aum-e2e-team-" + suffix
+    journal = Journal(ROOT / ".aum-evidence" / ("e2e-" + args.backend + "-" + suffix), args.backend, config)
+    journal.data["source_commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    arm, graph = GatewayState(config), EntraGroups()
+    snapshot, original_catalog, created, mutated = None, None, [], False
+    original_memberships = None
+    related = related_catalog = None
+    original_budgets = related_budgets = None
+    try:
+        snapshot = journal.call("snapshot", lambda: arm.snapshot())
+        # Raw restoration state is local-only and contains no access token.
+        (journal.folder / "restore-state.json").write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+        me = graph.me()["id"]
+        original_memberships = graph.memberships()
+        (journal.folder / "original-memberships.json").write_text(json.dumps(original_memberships), encoding="utf-8")
+        journal.redactor.present({"user_id": me})
+        original_catalog = engine.read("catalog")
+        original_budgets = engine.read("budgets").get("items", [])
+        (journal.folder / "original-catalog.json").write_text(json.dumps(original_catalog), encoding="utf-8")
+        (journal.folder / "original-budgets.json").write_text(json.dumps(original_budgets), encoding="utf-8")
+        if {unit, team} & {row["id"] for key in ("organizations", "departments") for row in original_catalog[key]}:
+            raise RuntimeError("Generated test scope id already exists; no mutation is permitted.")
+        if args.backend == "direct":
+            related = linked_turnstile(config, snapshot)
+            if related:
+                from claude_finops.config import az
+                jobs = json.loads(az("containerapp", "job", "list", "-g", config.resource_group,
+                                     "--subscription", config.subscription, "-o", "json"))
+                require_quiet_direct_window(jobs, config, datetime.now(timezone.utc))
+                related_catalog = related.read("catalog")
+                related_budgets = related.read("budgets").get("items", [])
+                (journal.folder / "original-linked-turnstile-catalog.json").write_text(json.dumps(related_catalog), encoding="utf-8")
+                (journal.folder / "original-linked-turnstile-budgets.json").write_text(json.dumps(related_budgets), encoding="utf-8")
+        if backend.name == "Turnstile":
+            state = engine.read("apply")
+            if any(row.get("status", "").lower() in {"running", "processing", "pending"} for row in state.get("executions", [])[:1]):
+                raise RuntimeError("Another Turnstile apply is active. No acceptance mutation started.")
+        for name in (unit, team):
+            preview = journal.call("group-preview-" + ("unit" if name == unit else "team"),
+                                   lambda name=name: group_call(engine, "create", name, "AUM temporary E2E acceptance group; delete after test"))
+            def retain_created(row, name=name):
+                created.append((row["id"], name))
+                (journal.folder / "created-groups.json").write_text(json.dumps(created), encoding="utf-8")
+            result = journal.call("group-create-" + ("unit" if name == unit else "team"),
+                lambda name=name: group_call(engine, "create", name, "AUM temporary E2E acceptance group; delete after test",
+                                             apply=True, confirm=name, on_created=retain_created))
+            await screenshot(engine, config, journal, "group-created-" + ("unit" if name == unit else "team"), result)
+        for group, name in created:
+            journal.call("member-add-" + ("unit" if name == unit else "team"),
+                         lambda group=group: group_call(engine, "member", group, me, apply=True))
+        if args.backend == "direct":
+            old = snapshot.get("turnstile-integration", {}).get("value", "")
+            changed = re.sub(r"(governanceAuthority|budgetAuthority)=Turnstile", r"\1=Gateway", old)
+            if changed != old:
+                mutated = True
+                journal.call("temporary-direct-authority", lambda: arm.put("turnstile-integration", changed) or
+                             {"changed": True, "restore_in_finally": True})
+        elif args.backend == "aum-service":
+            engine.change_reason = "Owner-approved temporary AUM E2E; restore all test state"
+        mutated = True
+        for kind, key, group, parent in (("unit", unit, created[0][0], None), ("team", team, created[1][0], unit)):
+            result = journal.call("register-" + kind, lambda kind=kind, key=key, group=group, parent=parent:
+                engine.catalog_change(kind, key, name=key, group=group, parent=parent, apply=True))
+            if result.get("requested_at"):
+                journal.call("apply-register-" + kind, lambda result=result: engine.wait_for_apply(result["requested_at"], timeout=480, interval=8))
+                current = arm.snapshot()
+                if f",{key}=" not in current["bu-registry"]["value"]:
+                    journal.record("job-did-not-register-" + kind, {
+                        "state": "Apply job completed but test group is not in the registry; new group validation may be unavailable to its identity.",
+                        "fallback": "Explicit signed-in-administrator publication using the repository writer; no new permissions."})
+                    delegated = journal.call("delegated-bootstrap-" + kind,
+                                             lambda: publish_as_signed_in_admin(engine, config, apply=True))
+                    await screenshot(engine, config, journal, "delegated-bootstrap-" + kind, delegated)
+            await screenshot(engine, config, journal, "registered-" + kind, result)
+        for kind, key, amount in (("unit", unit, "100000"), ("team", team, "1")):
+            result = journal.call("budget-" + kind, lambda kind=kind, key=key, amount=amount:
+                engine.budget_change(kind, key, amount, apply=True, confirm=key))
+            if result.get("requested_at"):
+                journal.call("apply-budget-" + kind, lambda result=result: engine.wait_for_apply(result["requested_at"], timeout=480, interval=8))
+            await screenshot(engine, config, journal, "budget-" + kind, result)
+        if args.backend in {"direct", "turnstile"}:
+            result = journal.call("membership-refresh", lambda: membership_refresh(engine, [unit, team], apply=True, allow_reassignment=True))
+            await screenshot(engine, config, journal, "membership-refreshed", result)
+        mapping = arm.snapshot()["bu-members"]["value"]
+        if f",{me}={team}," not in mapping:
+            raise RuntimeError("Gateway did not map the signed-in member to the test team. Enforcement was not probed against the wrong scope.")
+        for mode in ("strict", "allowance", "notify"):
+            if mode == "allowance":
+                # The first strict admitted request gives an observed token lower bound.
+                spent = sum((event.get("usage") or {}).get("input_tokens", 0) + (event.get("usage") or {}).get("output_tokens", 0)
+                            for event in probes if event.get("status_code") == 200)
+                base = max(1, spent - 1)
+                if base + base // 10 <= spent:
+                    raise RuntimeError("Observed strict charge is too small for a measurable integer 10% allowance band.")
+                change = journal.call("allowance-nominal-budget", lambda: engine.budget_change("team", team, str(base), apply=True, confirm=team))
+                if change.get("requested_at"):
+                    journal.call("apply-allowance-budget", lambda: engine.wait_for_apply(change["requested_at"], timeout=480, interval=8))
+            change = journal.call("mode-" + mode, lambda mode=mode: engine.mode_change("team", team, mode,
+                                 10 if mode == "allowance" else None, apply=True))
+            if change.get("requested_at"):
+                journal.call("apply-mode-" + mode, lambda: engine.wait_for_apply(change["requested_at"], timeout=480, interval=8))
+            probes = [] if mode == "strict" else probes
+            deadline = time.monotonic() + args.propagation_timeout
+            success = False
+            while time.monotonic() < deadline:
+                probe = journal.call("probe-" + mode, lambda: tiny_request(config, apply=True))
+                probes.append(probe)
+                success = enforcement_matches(probe, mode, team)
+                if success:
+                    await screenshot(engine, config, journal, "enforcement-" + mode, probe)
+                    break
+                await asyncio.sleep(12)
+            if not success:
+                raise RuntimeError("No measured gateway enforcement confirmation for " + mode + " before timeout.")
+        if args.backend == "turnstile":
+            from claude_finops.direct import DirectBackend
+            observer = DirectBackend(config)
+            deadline = time.monotonic() + args.ingestion_timeout
+            expected = len([row for row in probes if row.get("status_code") == 200])
+            while time.monotonic() < deadline:
+                observed = observer.read("requests", month=engine.month, department_id=team, limit=50)
+                if len({row["request_id"] for row in observed["items"]}) >= expected:
+                    journal.record("gateway-ledger-ready", {"requests": len(observed["items"]), "before_turnstile_export": True})
+                    break
+                await asyncio.sleep(20)
+            else:
+                raise RuntimeError("Gateway ledger did not contain all accepted probes before export.")
+            first = next(row["at"] for row in probes if row.get("status_code") == 200)
+            start = (datetime.fromisoformat(first.replace("Z", "+00:00")) - timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            end = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            exported = journal.call("explicit-usage-refresh", lambda: refresh_usage(engine, config, start, end, apply=True))
+            await screenshot(engine, config, journal, "usage-refreshed", exported)
+        started = time.monotonic()
+        expected = len([row for row in probes if row.get("status_code") == 200])
+        while time.monotonic() - started < args.ingestion_timeout:
+            rows = await asyncio.to_thread(engine.read, "requests", department_id=team, limit=50)
+            if len({row["request_id"] for row in rows.get("items", [])}) >= expected:
+                first = next((row["at"] for row in probes if row.get("status_code") == 200), None)
+                observed = datetime.now(timezone.utc)
+                upper = (observed - datetime.fromisoformat(first.replace("Z", "+00:00"))).total_seconds() if first else None
+                journal.record("attribution", dict(rows=len(rows["items"]), ingestion_wait_seconds=time.monotonic() - started,
+                    first_request_at=first, first_observed_at=observed.isoformat(), observed_delay_upper_bound_seconds=upper,
+                    basis="First observation after mode checks; ingestion may have completed earlier."))
+                if args.backend == "direct":
+                    usage = await asyncio.to_thread(engine.read, "distribution", dimension="department", basis="ledger", department_id=team)
+                    journal.record("request-time-usage", usage)
+                    await screenshot(engine, config, journal, "usage-attribution", usage)
+                await screenshot(engine, config, journal, "request-attribution", rows)
+                break
+            await asyncio.sleep(20)
+        else:
+            raise RuntimeError("Test request attribution did not arrive before ingestion timeout.")
+        journal.data["completed"] = True
+    except Exception as error:
+        journal.record("journey-error", {"error": journal.redactor.text(str(error)), "type": type(error).__name__})
+    finally:
+        cleanup = {"errors": [], "groups_deleted": []}
+        if mutated and snapshot:
+            try:
+                if backend.name == "Turnstile" and original_catalog:
+                    failures = restore_turnstile(engine, configured_catalog(original_catalog), unit, team, original_budgets)
+                    cleanup["errors"] += [journal.redactor.text(error) for error in failures]
+                if related and related_catalog:
+                    failures = restore_turnstile(related, configured_catalog(related_catalog), unit, team, related_budgets)
+                    cleanup["errors"] += [journal.redactor.text(error) for error in failures]
+                cleanup["gateway"] = arm.restore(snapshot, RESTORE_NAMES)
+            except Exception as error:
+                cleanup["errors"].append(journal.redactor.text(str(error)))
+                # Even if server restore failed, always attempt the byte-exact gateway restore.
+                try:
+                    cleanup["gateway"] = arm.restore(snapshot, RESTORE_NAMES)
+                except Exception as again:
+                    cleanup["errors"].append(journal.redactor.text(str(again)))
+        elif snapshot:
+            cleanup["gateway"] = {"verified": arm.snapshot() == snapshot, "mutation_started": False}
+        for group, name in reversed(created):
+            try:
+                if graph.request("GET", f"/v1.0/groups/{group}", allow_missing=True) is None:
+                    cleanup["groups_deleted"].append(name)
+                    continue
+                group_call(engine, "member", group, remove=True, apply=True)
+                group_call(engine, "delete", group, name, apply=True, confirm=name)
+                cleanup["groups_deleted"].append(name)
+            except Exception as error:
+                cleanup["errors"].append(journal.redactor.text(str(error)))
+        if original_memberships is not None:
+            try:
+                for attempt in range(31):
+                    membership = graph.memberships()
+                    if membership == original_memberships:
+                        cleanup["original_membership_set_restored"] = True
+                        cleanup["membership_count"] = len(membership)
+                        break
+                    if attempt == 30:
+                        raise RuntimeError("Original direct group membership set did not match after cleanup.")
+                    time.sleep(2)
+            except Exception as error:
+                cleanup["errors"].append(journal.redactor.text(str(error)))
+        journal.data["cleanup"] = cleanup
+        journal.data["finished_at"] = utc()
+        journal.flush()
+        try:
+            await screenshot(engine, config, journal, "cleanup", cleanup)
+        except Exception as error:
+            journal.record("cleanup-screenshot-error", {"error": str(error)})
+        graph.close()
+        if related:
+            related.backend.close()
+        backend.close()
+        arm.close()
+    print(json.dumps(dict(journal=str(journal.folder), completed=journal.data["completed"],
+                          cleanup_errors=journal.data["cleanup"]["errors"]), indent=2))
+    if journal.data["cleanup"]["errors"] or not journal.data["completed"]:
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--backend", choices=["direct", "turnstile", "aum-service"], required=True)
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--confirm", default="")
+    parser.add_argument("--propagation-timeout", type=int, default=240)
+    parser.add_argument("--ingestion-timeout", type=int, default=600)
+    asyncio.run(journey(parser.parse_args()))

@@ -1,0 +1,163 @@
+Skip to main content
+Microsoft Azure (Preview)
+Report a bug
+Copilot
+admin@contoso.com
+CONTOSO DIRECTORY
+Home
+contoso-insights
+Configure alerts based on specific conditions or thresholds in your application performance data.
+Application Insights
+Overview
+Activity log
+Access control (IAM)
+Tags
+Diagnose and solve problems
+Resource visualizer
+Investigate
+Monitoring
+Usage
+Configure
+Settings
+Automation
+Help
+Selected
+Add or remove favorites by pressing Ctrl+Shift+F
+Application Dashboard
+Getting started
+Search
+Logs
+Monitor resource group
+Feedback
+Favorites
+Rename
+Delete
+Essentials
+View Cost
+JSON View
+Press [Ctrl - C] to copy
+Resource group
+(move)
+:
+contoso-resource-group
+Ctrl+C to copy
+Copy to clipboard the value for Resource group contoso-resource-group
+Location
+:
+East US 2
+Ctrl+C to copy
+Copy to clipboard the value for Location East US 2
+Subscription
+(move)
+:
+Contoso subscription
+Ctrl+C to copy
+Copy to clipboard the value for Subscription Contoso subscription
+Subscription ID
+:
+[redacted-id]
+Ctrl+C to copy
+Copy to clipboard the value for Subscription ID [redacted-id]
+Instrumentation key
+:
+[redacted-id]
+Ctrl+C to copy
+Copy to clipboard the value for Instrumentation key [redacted-id]
+Connection string
+:
+InstrumentationKey=[redacted-id];IngestionEndpoint=https://service.contoso.com/;LiveEndpoint=https://service.contoso.com/;ApplicationId=[redacted-id]
+Ctrl+C to copy
+Copy to clipboard the value for Connection string InstrumentationKey=[redacted-id];IngestionEndpoint=https://service.contoso.com/;LiveEndpoint=https://service.contoso.com/;ApplicationId=[redacted-id]
+Logs workspace
+:
+contoso-logs
+Ctrl+C to copy
+Copy to clipboard the value for Logs workspace contoso-logs
+OTLP connection info
+:
+Turn on OTLP support
+Ctrl+C to copy
+Copy to clipboard the value for OTLP connection info Turn on OTLP support
+Tags
+(edit)
+:
+Add tags
+Show data for last:
+30 minutes
+1 hour
+6 hours
+12 hours
+1 day
+3 days
+7 days
+30 days
+Failed requests
+2 PM
+2:15 PM
+2:30 PM
+2:45 PM
+UTC+05:30
+0
+0.5
+1
+Failed requests (Count), contoso-insights
+1
+Server response time
+2 PM
+2:15 PM
+2:30 PM
+2:45 PM
+UTC+05:30
+0ms
+500ms
+1sec
+1.5sec
+Server response time (Avg), contoso-insights
+903.16ms
+Server requests
+2 PM
+2:15 PM
+2:30 PM
+2:45 PM
+UTC+05:30
+0
+0.5
+1
+Server requests (Count), contoso-insights
+4
+Availability
+2 PM
+2:15 PM
+2:30 PM
+2:45 PM
+UTC+05:30
+0%
+20%
+40%
+60%
+80%
+100%
+Availability (Avg), contoso-insights
+--
+Microsoft Azure portal is loading.
+Microsoft Azure portal is ready.
+Content is loading.
+Content is ready.
+
+
+contoso-resource-group
+East US 2
+Contoso subscription
+[redacted-id]
+[redacted-id]
+InstrumentationKey=[redacted-id];IngestionEndpoint=https://service.contoso.com/;LiveEndpoint=https://service.contoso.com/;ApplicationId=[redacted-id]
+contoso-logs
+Turn on OTLP support
+1800000
+3600000
+21600000
+43200000
+86400000
+259200000
+604800000
+2592000000
