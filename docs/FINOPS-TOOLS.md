@@ -144,13 +144,32 @@ Details: [Monitoring: dashboard](MONITORING.md#7-dashboard) and [FinOps reportin
    ./scripts/Set-ClaudeTier.ps1 -Tier premium -TokensPerMinute 80000
    ```
 
-3. Every write is read back. A request above the limit is refused with 403, or in allowance and
-   notify modes served with a notice ([budget modes](BUDGETS.md#business-unit-and-team-enforcement-modes)).
+3. Read the values back, then verify a request. Above the limit it is refused with 403, or in
+   allowance and notify modes served with a notice
+   ([budget modes](BUDGETS.md#business-unit-and-team-enforcement-modes)).
 
-The scripts themselves do not check which tool owns governance. While Turnstile owns it, its
-apply job writes Turnstile's catalog over whatever they changed on its next run, so change
-budgets in Turnstile instead. The terminal's Direct mode and the AUM service do check, and
-refuse. Details: [Budgets](BUDGETS.md) and [Business units](BUSINESS-UNITS.md).
+`Set-ClaudeBusinessUnit.ps1` and `Set-ClaudeTier.ps1` refuse writes that Turnstile's next apply
+would overwrite. The refusal names the connected Turnstile URL and its **Gateway governance**
+or **Budgets** page. With only `budgetAuthority=Turnstile`, `-MonthlyBudgetUsd` is refused, but
+group, parent, mode, removal and tier edits remain available. `-List` stays read-only; a failed
+authority read stops a mutation rather than assuming the gateway owns it.
+
+Personal daily overrides (`Set-ClaudeBudget.ps1`) and Entra membership
+(`Set-ClaudeDeveloper.ps1`) stay gateway/directory-owned: neither Turnstile apply path replaces
+them, even with `personBudgets` enabled. That option mirrors tier ceilings **to** Turnstile,
+not person limits back to the gateway.
+
+There is no force bypass. To deliberately return both governance and monthly budgets to scripts,
+record that choice on the same gateway:
+
+```powershell
+./scripts/Connect-ClaudeTurnstile.ps1 -ResourceGroup '<gateway-resource-group>' -ApimName '<gateway-name>' `
+    -GovernanceAuthority Gateway -BudgetAuthority Gateway
+```
+
+Both switches matter: changing governance alone preserves the recorded budget authority.
+Details: [Budgets](BUDGETS.md), [Business units](BUSINESS-UNITS.md) and
+[moving authority back](TURNSTILE.md#move-governance-back-to-the-gateway).
 
 ### Flow 3: Terminal FinOps, Direct
 
@@ -373,8 +392,9 @@ Read with the commands above on 2026-09-25:
   new value. `llm-token-limit`'s remaining count is an estimate across gateway instances, so the
   exact request that crosses a limit is not guaranteed
   ([the budget is a delayed kill switch](SCALE.md#the-budget-is-a-delayed-kill-switch-not-a-hard-cap)).
-- The PowerShell `Set-*` scripts do not yet refuse while Turnstile owns governance; see
-  [flow 2](#flow-2-budgets-from-scripts).
+- The PowerShell writers refuse the values Turnstile owns, not every admin operation. Lists,
+  personal daily overrides and Entra membership remain available. Use the explicit authority
+  switch, not a competing portal or raw named-value edit ([flow 2](#flow-2-budgets-from-scripts)).
 - Still open: Turnstile's budget requests and boosts (P47 is delivered for the AUM service
   only), P48's single queue-driven writer at 500,000 people, the viewer-only evidence, and the
   portal pictures, which need one owner sign-in.

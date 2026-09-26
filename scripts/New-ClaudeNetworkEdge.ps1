@@ -408,7 +408,7 @@ if ($EnableNetworkIsolation -and $inventory.NetworkIsolation -ne 'Registered') {
 if ($newVnet) {
     $existingNetwork=Invoke-ClaudeNetworkArm "https://management.azure.com${VnetId}?api-version=2024-05-01" -AllowNotFound
     Assert-ClaudeNetworkOwnership $existingNetwork $owner
-    if (@($existingNetwork.properties.subnets | Where-Object { $_.name -notin @('edge','apim-integration','private-endpoints','verification') }).Count) { throw 'The owned VNet has additional subnets. Refusing to replace their configuration; use the existing-VNet path after review.' }
+    if ($existingNetwork -and @($existingNetwork.properties.subnets | Where-Object { $_.name -notin @('edge','apim-integration','private-endpoints','verification') }).Count) { throw 'The owned VNet has additional subnets. Refusing to replace their configuration; use the existing-VNet path after review.' }
     $endpointNsgId=[string](@($existingNetwork.properties.subnets | Where-Object name -eq 'private-endpoints')[0].properties.networkSecurityGroup.id)
     $runnerNsgId=[string](@($existingNetwork.properties.subnets | Where-Object name -eq 'verification')[0].properties.networkSecurityGroup.id)
     foreach ($nsg in @("$Name-edge","$Name-apim")) {

@@ -68,7 +68,11 @@ Built-in capture catalogue:
   (Sign in, Save, Delete, Create, Grant, etc.) are refused. There is no credential typing.
   A click whose `waitFor` is already on screen is skipped: the portal remembers menu groups
   open, and clicking an open group closes it. The top-level `waitFor` is checked **before**
-  the clicks, so it must be on the landing blade, not on the page the clicks reach.
+  the clicks, so it must be on the landing blade, not on the page the clicks reach. For the
+  same reason a click's `waitFor` must appear only on the page the click opens: a non-exact
+  `Port` also matches **Report a bug** in the portal header, and `Listener` matches the menu
+  item **Listeners**, so the click is skipped and the landing page is captured. Prefer an exact
+  column header of the target blade (`Cookie based affinity`, `Rules associated`).
 - Prefer `/overview` plus menu clicks to deep links. `/namedValues`, `/identity`, `/apis`,
   `/networking` and `/deployments` stopped rendering their content in the current portal.
   Proven patterns: a gateway menu item under the APIs group is
@@ -103,6 +107,16 @@ node guide/capture-portal.mjs --profile $profilePath --only turnstile-app-overvi
 real portal URLs **without opening a browser**. Use `--subscription`, `--resource-group`,
 `--select key=value` and `--non-interactive` for automation. Real choices belong in runtime
 parameters/environment, not in spec files.
+
+A blade whose data plane is private (a private Key Vault's **Certificates** list) loads only
+when the browser reaches that host through a route inside the network. Set
+`PORTAL_PROXY_PAC_URL` to a PAC file served on this machine (`http://127.0.0.1:<port>/<name>.pac`)
+that sends only that host through such a route; any other value is refused. The runner never
+disables TLS checks or adds other browser switches.
+
+The runner refuses to start while its own code (`guide/*.mjs`, `guide/lib/**`) differs from
+the commit, because every record names the commit that took it; spec files may differ, and each
+record carries the hash of the step it ran (`spec_sha256`).
 
 ARM discovery passes the selected subscription explicitly. Entra discovery uses the current
 Azure CLI tenant and refuses a selected subscription in another tenant; it never changes the

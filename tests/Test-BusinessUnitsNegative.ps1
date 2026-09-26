@@ -3041,6 +3041,36 @@ $mutations = @(
        File  = 'scripts/Setup-ClaudeFoundryDirect.ps1'
        From  = 'Select-ClaudeModel @choice'
        To    = 'return $hits[0].name' }
+
+    @{ Suite = 'Test-GovernanceAuthority.ps1'
+       Name  = 'business-unit authority guard removed'
+       File  = 'scripts/Set-ClaudeBusinessUnit.ps1'
+       From  = 'Assert-ClaudeGatewayOwnsGovernance -ResourceGroup $ResourceGroup -ApimName $ApimName -Write $writes'
+       To    = '$null = $writes' }
+
+    @{ Suite = 'Test-GovernanceAuthority.ps1'
+       Name  = 'tier authority guard removed'
+       File  = 'scripts/Set-ClaudeTier.ps1'
+       From  = 'Assert-ClaudeGatewayOwnsGovernance -ResourceGroup $ResourceGroup -ApimName $ApimName -Write Tiers'
+       To    = '$null = $Tier' }
+
+    @{ Suite = 'Test-GovernanceAuthority.ps1'
+       Name  = 'budget-only authority ignored'
+       File  = 'scripts/ClaudeTurnstileGovernance.ps1'
+       From  = "$" + "budgetAuthority -eq 'Turnstile'"
+       To    = '$false' }
+
+    @{ Suite = 'Test-GovernanceAuthority.ps1'
+       Name  = 'business-unit monthly budget intent dropped'
+       File  = 'scripts/Set-ClaudeBusinessUnit.ps1'
+       From  = "if (`$PSBoundParameters.ContainsKey('MonthlyBudgetUsd')) { `$writes += 'Budgets' }"
+       To    = "if (`$false) { `$writes += 'Budgets' }" }
+
+    @{ Suite = 'Test-GovernanceAuthority.ps1'
+       Name  = 'authority read silently accepts failure'
+       File  = 'scripts/ClaudeTurnstileGovernance.ps1'
+       From  = '-Id $script:TurnstileIntegrationNamedValue -FailOnError'
+       To    = '-Id $script:TurnstileIntegrationNamedValue' }
 )
 
 # END MUTATION MANIFEST
@@ -3112,10 +3142,11 @@ try {
     $scaleSuite = Join-Path $sandbox 'tests/Test-Scale.ps1'
     $mpSuite = Join-Path $sandbox 'tests/Test-ModelsAndPlugins.ps1'
     $choiceSuite = Join-Path $sandbox 'tests/Test-ClaudeChoice.ps1'
+    $authoritySuite = Join-Path $sandbox 'tests/Test-GovernanceAuthority.ps1'
 
     # The copy must pass before any mutation, or a "caught" result below could
     # just mean the sandbox is broken.
-    foreach ($s in $suite, $teamSuite, $modelSuite, $obsSuite, $backupSuite, $adminSuite, $scaleSuite, $mpSuite, $choiceSuite) {
+    foreach ($s in $suite, $teamSuite, $modelSuite, $obsSuite, $backupSuite, $adminSuite, $scaleSuite, $mpSuite, $choiceSuite, $authoritySuite) {
         & $s *>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  [SETUP] the unmutated copy of $(Split-Path $s -Leaf) already fails - the sandbox is wrong, not the code" -ForegroundColor Red

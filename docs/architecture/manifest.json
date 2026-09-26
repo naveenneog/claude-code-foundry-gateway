@@ -21,7 +21,7 @@
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "resolver/src/index.mjs": "b6b755fbbc56ef62e7b535a4bde2756111c2b5fc9913c16a893b45cb6dce33a3",
         "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
-        "scripts/ClaudeTurnstileGovernance.ps1": "ec6eb0fbcfabbe9c13eab90c2f652fb89350110d9a8d97a10e8a1e4fe21c18f5",
+        "scripts/ClaudeTurnstileGovernance.ps1": "c5fddfe63db174dd4cae45486ea0ad273ca36add91b417104fb3af46b1816163",
         "scripts/Connect-ClaudeTurnstile.ps1": "cc4e2c094aaab8ce75856a3ba770d844bd32333d4f8b42f53f91cabdd1129201",
         "scripts/Export-ClaudeTurnstileUsage.ps1": "d68e00c953f4bb47492b39862b263377d33ccdf39f15c0e26bb2fbfa783efdb6",
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
@@ -83,7 +83,7 @@
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "scripts/ApimNamedValue.ps1": "4e12f047b61c586f215a66f73535708488c917b69e2163e6fa6f19253b77fe08",
+        "scripts/ApimNamedValue.ps1": "b136ec4171b978411877346d9e9b9dd916326b747d0e38d4fb938a2b71987bce",
         "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
         "scripts/Connect-ClaudeTurnstile.ps1": "cc4e2c094aaab8ce75856a3ba770d844bd32333d4f8b42f53f91cabdd1129201",
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
@@ -175,13 +175,13 @@
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "scripts/ApimNamedValue.ps1": "4e12f047b61c586f215a66f73535708488c917b69e2163e6fa6f19253b77fe08",
+        "scripts/ApimNamedValue.ps1": "b136ec4171b978411877346d9e9b9dd916326b747d0e38d4fb938a2b71987bce",
         "scripts/ClaudeAumDirectWrites.ps1": "e9a53602c29420aa89c1809bbbd09e8fa68dce16637d2e21e61bf22d7c54300f",
         "scripts/Invoke-ClaudeFinOps.ps1": "7c362ea1d7693bb700e8f5422ba6d2b1321fb5fa3d0814f3ab124f47a2255eb2",
         "scripts/New-ClaudeAumEntraApp.ps1": "489aa5051af325ca4d96e5b9123d29577195f08318976898a8a592aeea2a05fe",
         "scripts/New-ClaudeTurnstileEntraApp.ps1": "0262606c6f2b747ae4dff7534c15d113099ff6fae06b40580eb62daffaf1db1d",
-        "scripts/Set-ClaudeBudget.ps1": "b74f1497dfc623ce02863ddd8f5acdf3a99641acafccc12d238d452e3755900f",
-        "scripts/Set-ClaudeTier.ps1": "0d66166dce920be8100d8953a71d195c9553dad8c9e9cbcddedfbb2796af94df",
+        "scripts/Set-ClaudeBudget.ps1": "b9d8165cecf2ea963787e151166443208982ab42987d03ed636baaa8be2b45db",
+        "scripts/Set-ClaudeTier.ps1": "90d1a5eb9f9a6ec072b55187f5940a0d19d1942321a52772fe0fa627efe9da0c",
         "scripts/Sync-AumMembership.ps1": "123c7e9b2157603ce47af4002137e42e9611eb31284db691037b79f37cb596d3"
       },
       "outputs": [
@@ -257,8 +257,8 @@
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeBudgetModes.ps1": "d27db15c9e257e2e923355978896737bb07cd2227135fa29625b003655f70946",
         "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
-        "scripts/ClaudeTurnstileGovernance.ps1": "ec6eb0fbcfabbe9c13eab90c2f652fb89350110d9a8d97a10e8a1e4fe21c18f5",
-        "scripts/Set-ClaudeBusinessUnit.ps1": "f056d17c64df388e7a39959edcd889a163126129cf161f684ad2f1015f609c3a"
+        "scripts/ClaudeTurnstileGovernance.ps1": "c5fddfe63db174dd4cae45486ea0ad273ca36add91b417104fb3af46b1816163",
+        "scripts/Set-ClaudeBusinessUnit.ps1": "37e0b69b77ffaca9a217f72ad99cb038b04f34c7be4135904825dd3a515a3f1c"
       },
       "outputs": [
         {
@@ -300,7 +300,7 @@
       "id": "network-private",
       "source": "docs/architecture/11-network-private.json",
       "inputs": {
-        "docs/NETWORK-ENTERPRISE.md": "e98ec640d2bb65b2eec7a271c0b4446e4c3a596ef846419a4210d9de6fd161ae",
+        "docs/NETWORK-ENTERPRISE.md": "4a01b10e555d04096ba51deaebadaa8b829826f7377dd2e27446eaca442e8467",
         "docs/architecture/11-network-private.json": "0a7649f7c1029dd7da0b0e63d17479086d3515c7359a36d3705dd5c272f0afaf",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
@@ -313,7 +313,7 @@
         "infra/network-private-endpoint.bicep": "0065fc6c625d45d5bd004d539707d80045b86bb1a718cbb63932d35a676c29bf",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeNetworkPolicy.ps1": "31540eaf2772d49e569c961538caa8c44beccdf9577f8a38133b981577bdfed0",
-        "scripts/New-ClaudeNetworkEdge.ps1": "661e99fe3a712bc9c1609ebf41262d037c1a6e12d55988afe9ed1005ef255a8e"
+        "scripts/New-ClaudeNetworkEdge.ps1": "027d361e9bdc27daf69e4e824f81ea3d7f7dee67fee6bbabc0be74a4736f3704"
       },
       "outputs": [
         {
@@ -326,7 +326,7 @@
       "id": "network-public",
       "source": "docs/architecture/12-network-public.json",
       "inputs": {
-        "docs/NETWORK-ENTERPRISE.md": "e98ec640d2bb65b2eec7a271c0b4446e4c3a596ef846419a4210d9de6fd161ae",
+        "docs/NETWORK-ENTERPRISE.md": "4a01b10e555d04096ba51deaebadaa8b829826f7377dd2e27446eaca442e8467",
         "docs/architecture/12-network-public.json": "71187267e6c49b7dd686e266396b45b8e2f503d8fb7ae28b93dd1b3bd8cbc76d",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
@@ -338,7 +338,7 @@
         "infra/network-private-endpoint.bicep": "0065fc6c625d45d5bd004d539707d80045b86bb1a718cbb63932d35a676c29bf",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeNetworkPolicy.ps1": "31540eaf2772d49e569c961538caa8c44beccdf9577f8a38133b981577bdfed0",
-        "scripts/New-ClaudeNetworkEdge.ps1": "661e99fe3a712bc9c1609ebf41262d037c1a6e12d55988afe9ed1005ef255a8e"
+        "scripts/New-ClaudeNetworkEdge.ps1": "027d361e9bdc27daf69e4e824f81ea3d7f7dee67fee6bbabc0be74a4736f3704"
       },
       "outputs": [
         {
@@ -351,7 +351,7 @@
       "id": "network-hybrid",
       "source": "docs/architecture/13-network-hybrid.json",
       "inputs": {
-        "docs/NETWORK-ENTERPRISE.md": "e98ec640d2bb65b2eec7a271c0b4446e4c3a596ef846419a4210d9de6fd161ae",
+        "docs/NETWORK-ENTERPRISE.md": "4a01b10e555d04096ba51deaebadaa8b829826f7377dd2e27446eaca442e8467",
         "docs/architecture/13-network-hybrid.json": "7540f67ef2881f2a329edbcbd38d1e5ec76602277636c7cda1d45d24067226ab",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
@@ -363,7 +363,7 @@
         "infra/network-private-dns.bicep": "82999c5e3833870fea5e2dbc622e0517690506c2422a96975a6083eb72142bfa",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeNetworkPolicy.ps1": "31540eaf2772d49e569c961538caa8c44beccdf9577f8a38133b981577bdfed0",
-        "scripts/New-ClaudeNetworkEdge.ps1": "661e99fe3a712bc9c1609ebf41262d037c1a6e12d55988afe9ed1005ef255a8e"
+        "scripts/New-ClaudeNetworkEdge.ps1": "027d361e9bdc27daf69e4e824f81ea3d7f7dee67fee6bbabc0be74a4736f3704"
       },
       "outputs": [
         {

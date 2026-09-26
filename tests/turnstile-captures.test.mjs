@@ -96,6 +96,18 @@ test('a replacement that happens to contain another private value is not itself 
   assert.deepEqual(redact.leaks(safe), []);
   assert.ok(redact.leaks('private-project resolver-private-projection').includes('known identifier'));
 });
+test('a real value that starts inside a replacement and runs past it is still a leak', () => {
+  const redact = new Redactor([['contoso-project', 'contoso-app'], ['privatesuffix', 'contoso-projection'],
+    ['projection-east-01', 'contoso-east']]);
+  assert.equal(redact.redact('privatesuffix-east-01'), 'contoso-projection-east-01');
+  assert.ok(redact.leaks('contoso-projection-east-01').includes('known identifier'));
+});
+test('a tenant-name pair cannot turn a colleague\'s email into an allowed placeholder address', () => {
+  const redact = new Redactor([['Fabrikam', 'Contoso'], ['Jane Doe', 'Contoso user 1']]);
+  const safe = redact.redact('Jane Doe User jane.doe@fabrikam.com guest_fabrikam.com#EXT#@fabrikam.onmicrosoft.com');
+  assert.equal(safe, 'Contoso user 1 User developer@contoso.com developer_contoso.com#EXT#@contoso.onmicrosoft.com');
+  assert.deepEqual(redact.leaks(safe), []);
+});
 test('a surviving unknown email or token refuses a capture rather than claiming redaction', () => {
   const redact = new Redactor();
   assert.ok(redact.leaks('another@private.example.org').includes('email'));

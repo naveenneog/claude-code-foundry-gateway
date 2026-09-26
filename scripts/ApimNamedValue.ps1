@@ -80,13 +80,40 @@ function Get-ApimNamedValue {
         Paired with Set-ApimNamedValue so a caller that has to merge - an
         entitlement list, a business unit registry - reads through the same
         place it writes.
+
+    .PARAMETER FailOnError
+        Distinguish a missing named value from a failed read. Use when absence
+        grants permission to write: only APIM's NamedValue not found response
+        returns null on failure; authorization, connectivity and target errors throw.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][string]$ResourceGroup,
         [Parameter(Mandatory = $true)][string]$ApimName,
-        [Parameter(Mandatory = $true)][string]$Id
+        [Parameter(Mandatory = $true)][string]$Id,
+        [switch]$FailOnError
     )
+    if ($FailOnError) {
+        $previousPreference = $ErrorActionPreference
+        try {
+            # PS 5.1 turns native stderr into ErrorRecords. Collect it before
+            # interpreting the exit code, rather than terminating on a real 404.
+            $ErrorActionPreference = 'Continue'
+            $global:LASTEXITCODE = 0
+            $output = @(az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id $Id --query value -o tsv --only-show-errors 2>&1)
+            $code = $LASTEXITCODE
+        }
+        finally { $ErrorActionPreference = $previousPreference }
+        if ($code -ne 0) {
+            $detail = $output | Out-String
+            # Measured: az exits 3 with (ResourceNotFound) NamedValue not found.
+            # A missing resource group or APIM instance is not a missing value.
+            if ($detail -match '(?is)\(ResourceNotFound\)\s+NamedValue not found\b') { return $null }
+            throw "Could not read named value '$Id' on '$ApimName' (az exit $code). Check Azure sign-in, named-value read permission and connectivity."
+        }
+        if (-not $output.Count) { return $null }
+        return ($output -join "`n")
+    }
     $v = az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id $Id --query value -o tsv 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $v) { return $null }
     return $v

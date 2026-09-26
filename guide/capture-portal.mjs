@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { loadSteps, selectSteps, documentedOutputs, documentationProblems, isBlockedAction } from './lib/portal-specs.mjs';
-import { AuthenticationSurface, authenticationReason, parseArguments, peopleRedactionPairs, resolvePlan, runBatch } from './lib/portal-batch.mjs';
+import { AuthenticationSurface, authenticationReason, parseArguments, peopleRedactionPairs, proxyPacArguments, resolvePlan, runBatch, uncommittedCaptureCode } from './lib/portal-batch.mjs';
 import { lockProfile } from './lib/portal-profile.mjs';
 
 const root = process.cwd();
@@ -35,6 +35,9 @@ if (options.list) {
       process.exit(1);
     }
     if (!options.profile) throw new Error('Pass --profile with the single owner-authenticated profile; it is never opened implicitly');
+    const uncommitted = uncommittedCaptureCode(execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }));
+    if (uncommitted.length)
+      throw new Error(`Commit the capture code before a batch: each record names the commit that took it, and these files differ from it:\n  ${uncommitted.join('\n  ')}`);
     // Validate every private map and version field before consuming the authenticated window.
     const maps = new Map();
     for (const { step } of resolution.resolved) {
@@ -58,7 +61,7 @@ if (options.list) {
     try {
       context = await chromium.launchPersistentContext(path.resolve(options.profile), {
         channel: 'msedge', headless: !options.headed, viewport: { width: 1600, height: 1000 },
-        args: ['--no-first-run'],
+        args: ['--no-first-run', ...proxyPacArguments(process.env.PORTAL_PROXY_PAC_URL)],
       });
       const page = context.pages()[0] ?? await context.newPage();
       async function ensureAuthenticated() {
@@ -168,7 +171,8 @@ if (options.list) {
           const captured = {
             id: step.id, output: step.output, live: true, captured_at_utc: new Date().toISOString(),
             route: redactor.redact(url), identity_kind: 'authenticated_portal_profile',
-            accel_commit: commit, tool, spec_file: step.specFile,
+            accel_commit: commit, accel_dirty: false, tool, spec_file: step.specFile,
+            spec_sha256: createHash('sha256').update(JSON.stringify(Object.fromEntries(Object.entries(step).filter(([key]) => key !== 'specFile')))).digest('hex'),
             redaction: { applied: true, leak_check_passed: true },
             sha256: createHash('sha256').update(pixels).digest('hex'),
           };

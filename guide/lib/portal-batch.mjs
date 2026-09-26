@@ -23,6 +23,26 @@ export function peopleRedactionPairs(people, { required = false } = {}) {
   return names.map((name, index) => [name, `Contoso user ${index + 1}`]);
 }
 
+// The manifest names the commit that took each picture, so the capture code itself (the runner
+// and its libraries) must be committed. Spec files may change between runs; each record
+// carries the hash of the step it ran instead. Input: `git status --porcelain` output.
+export function uncommittedCaptureCode(status) {
+  return String(status).split(/\r?\n/).filter(Boolean)
+    .map((line) => line.slice(3).trim().replace(/^"|"$/g, ''))
+    .filter((file) => /^guide\/(?:[^/]+|lib\/.+)\.mjs$/.test(file) && !file.endsWith('.test.mjs'));
+}
+
+// A blade whose data plane is private (a Key Vault's Certificates list) loads only when the
+// browser reaches that one host through a route inside the network. The route is a PAC file
+// served on this machine; nothing else is accepted, so it cannot redirect other traffic or
+// smuggle further browser switches.
+export function proxyPacArguments(value) {
+  if (!value) return [];
+  if (!/^http:\/\/127\.0\.0\.1:\d{2,5}\/[A-Za-z0-9._-]+\.pac$/.test(value))
+    throw new Error('PORTAL_PROXY_PAC_URL must be a loopback PAC URL such as http://127.0.0.1:<port>/proxy.pac');
+  return [`--proxy-pac-url=${value}`];
+}
+
 export function portalUrl(step, target) {
   const guid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
   const requireGuid = (value, name) => {

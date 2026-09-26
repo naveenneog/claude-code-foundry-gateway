@@ -678,6 +678,22 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Fixed
 
+- **The first reviewed network edge deployment refused a VNet that did not exist yet.**
+  `New-ClaudeNetworkEdge.ps1` read the owned VNet before creating it; the lookup returned
+  nothing, and the extra-subnet guard counted that empty result as an unknown subnet, so a fresh
+  install stopped with "The owned VNet has additional subnets". The guard now runs only when the
+  VNet exists. Found by P54's isolated live estate on 2026-09-25; the regression test runs the
+  script's own deployment block offline for an absent VNet, the owned four-subnet layout, and an
+  extra subnet (still refused, with no deployment) on PowerShell 7 and 5.1.
+- **Four gaps a review found in the new capture redaction.** A tenant-name pair could turn a
+  colleague's address into one on the placeholder domain, which the address rule then kept:
+  addresses are now replaced before any pair. A real value that started inside a replacement and
+  ran past it was hidden by the shadowing rule: only a match wholly inside a replacement is now
+  ignored. An application's assigned principals were read from Graph's first page only: every
+  page is read, and a list that never ends is refused. And every record named a commit that did
+  not contain the code that took it: the runner now refuses to capture from uncommitted capture
+  code and records each step's hash; the existing records are marked `accel_dirty` with a
+  provenance note.
 - **A deployment suffix inside a longer name escaped redaction, and people on directory pages
   were not redacted at all.** The capture redactor matched private values only at word
   boundaries, so a mapped suffix inside a name built from it (a report storage account shown as
@@ -699,6 +715,15 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   The Azure portal has no deployments blade for a Foundry resource, so that picture is a live CLI
   read instead. `docs/guide/portal-captures.json` records every capture, and the tests now fail if
   a published image differs from its record.
+- **Scripts refuse governance writes that Turnstile would overwrite.**
+  `Set-ClaudeBusinessUnit.ps1` and `Set-ClaudeTier.ps1` check the recorded authority
+  before writing, name the Turnstile page to use, and explain the explicit
+  `Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Gateway -BudgetAuthority Gateway`
+  switch. Budget-only authority blocks monthly unit/team budget edits, not structure,
+  modes or tiers. Failed authority reads stop writes; a genuinely absent or explicitly
+  disconnected integration leaves the gateway in charge. Lists, personal daily
+  overrides and Entra membership edits remain available. The same tests on PowerShell
+  5.1 exposed and fixed singleton registry rendering when removing one of two units.
 - **A root unit in allowance or notify mode got HTTP 500.** The gateway's budget trace sent an
   empty `ParentUnit` (a unit has no parent) or `Notice` (no advisory yet), and APIM rejects empty
   trace metadata: "The value field is required". Absent values are now `none`, and a test

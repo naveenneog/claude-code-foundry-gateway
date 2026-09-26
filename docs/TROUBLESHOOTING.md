@@ -18,6 +18,7 @@ After a fix, repeat the original request and inspect its body and headers.
 | Deployment succeeds but `llm-token-limit` never throttles | You are on a classic tier. Anthropic token parsing requires **Basic v2 / Standard v2 / Premium v2**. |
 | `Authorization_RequestDenied` granting Graph permissions | Granting the gateway identity `GroupMember.Read.All` needs tenant admin consent. Use the default sync approach instead. |
 | Cannot create the Entra groups | Many tenants restrict group creation. Create them by hand and re-run with `-SkipGroups`. |
+| Deleting a resource group rolls back with `ResourceGroupDeletionBlocked`, naming a Flex Consumption plan (`Microsoft.Web/serverFarms`, FC1) whose delete fails `NotFound` | The Functions resolver's plan outlived its app: ARM still lists it, the Web provider no longer knows it, and every group delete rolls back on it. Measured on 2026-09-25: five deletes over more than 90 minutes each rolled back. Re-create the plan under the same name (`az rest --method PUT` on its resource ID with `sku` FC1 / FlexConsumption, `kind` functionapp, the original location), delete it, then delete the group; the group was gone 24 seconds later. Capacity 0 carries no cost while it exists. |
 
 ## Environment
 

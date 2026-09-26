@@ -11,6 +11,19 @@ export function discoveryArguments(args, account, current) {
   return [...args, '--subscription', account.id, '-o', 'json'];
 }
 
+// Microsoft Graph returns a page at a time; a list read from one page would leave the people on
+// later pages unredacted. `get` returns the parsed page for a URL.
+export function graphPages(get, url, { maxPages = 50 } = {}) {
+  const items = [];
+  for (let page = 0, next = url; next; page++) {
+    if (page === maxPages) throw new Error(`Directory list has more than ${maxPages} pages; refusing a partial read`);
+    const body = get(next);
+    items.push(...(body.value ?? []));
+    next = body['@odata.nextLink'];
+  }
+  return items;
+}
+
 export async function createResolver(options) {
   const unattended = options.nonInteractive || !process.stdin.isTTY;
   const current = JSON.parse(az(['account', 'show', '-o', 'json']));
@@ -60,9 +73,13 @@ export async function createResolver(options) {
       let people;
       if (principal?.id) {
         try {
-          people = JSON.parse(az(['rest', '--method', 'GET', '--url',
-            `https://graph.microsoft.com/v1.0/servicePrincipals/${principal.id}/appRoleAssignedTo?$select=principalDisplayName,principalType`, '-o', 'json']))
-            .value.filter((item) => item.principalType !== 'Group').map((item) => ({ displayName: item.principalDisplayName }));
+          // Invoke-RestMethod rather than az rest: a next-page link carries '&', which the
+          // az.cmd wrapper would hand to cmd.exe as a command separator.
+          const graphGet = (url) => JSON.parse(ps('$t = az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv; '
+            + 'Invoke-RestMethod -Uri $env:PORTAL_GRAPH_URL -Headers @{ Authorization = "Bearer $t" } | ConvertTo-Json -Depth 20 -Compress',
+          { PORTAL_GRAPH_URL: url }));
+          people = graphPages(graphGet, `https://graph.microsoft.com/v1.0/servicePrincipals/${principal.id}/appRoleAssignedTo?$top=999`)
+            .filter((item) => item.principalType !== 'Group').map((item) => ({ displayName: item.principalDisplayName }));
         } catch { /* A page that needs them refuses to capture without them. */ }
       }
       return { ...selected, servicePrincipalId: principal?.id, people, tenantId: account.tenantId, subscriptionName: account.name };

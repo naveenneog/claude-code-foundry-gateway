@@ -70,14 +70,16 @@ export class Redactor {
 
   rules() {
     return [
-      ...this.pairs.map(([real, fake]) => [valuePattern(real), 'gi', fake]),
+      // Addresses first: a tenant-name pair (Fabrikam -> Contoso) must not turn a colleague's
+      // address into one on the placeholder domain, which the address rule then keeps.
       ['[A-Za-z0-9._%+-]+#EXT#@[A-Za-z0-9.-]+', 'gi', 'developer_contoso.com#EXT#@contoso.onmicrosoft.com'],
       ['[A-Za-z0-9._%+-]+@(?!(?:contoso|example)\\.(?:com|onmicrosoft\\.com)\\b)[A-Za-z0-9.-]+\\.[A-Za-z]{2,}', 'gi', 'developer@contoso.com'],
+      ['\\b(?!contoso\\.)[a-z0-9-]+\\.onmicrosoft\\.com\\b', 'gi', 'contoso.onmicrosoft.com'],
+      ...this.pairs.map(([real, fake]) => [valuePattern(real), 'gi', fake]),
       ['(?<=login_code=)[A-Za-z0-9_-]+', 'g', '[single-use-code-removed]'],
       ['C:\\\\Users\\\\[^\\\\\\s]+', 'gi', 'C:\\Users\\example'],
       ['\\b[a-z0-9-]+\\.(?:azurewebsites\\.net|azure-api\\.net|servicebus\\.windows\\.net|services\\.ai\\.azure\\.com|cognitiveservices\\.azure\\.com|vault\\.azure\\.net)\\b', 'gi', 'service.contoso.example'],
       ['(?<=/resourceGroups/)[^/\\s"]+', 'gi', 'rg-contoso'],
-      ['\\b(?!contoso\\.)[a-z0-9-]+\\.onmicrosoft\\.com\\b', 'gi', 'contoso.onmicrosoft.com'],
     ];
   }
 
@@ -90,8 +92,18 @@ export class Redactor {
 
   leaks(text) {
     const problems = [];
-    const visible = this.shadowing.reduce((value, fake) => value.split(fake).join(' '), String(text));
-    for (const [real] of this.pairs) if (new RegExp(valuePattern(real), 'i').test(visible)) problems.push('known identifier');
+    const source = String(text);
+    // Where the shadowing replacements sit in this text. A real value counts as a leak unless
+    // the whole match lies inside one of them; one that starts inside and runs past is real.
+    const spans = [];
+    for (const fake of this.shadowing)
+      for (let at = source.indexOf(fake); at !== -1; at = source.indexOf(fake, at + 1)) spans.push([at, at + fake.length]);
+    for (const [real] of this.pairs) {
+      for (const match of source.matchAll(new RegExp(valuePattern(real), 'gi'))) {
+        const end = match.index + match[0].length;
+        if (!spans.some(([from, to]) => from <= match.index && end <= to)) { problems.push('known identifier'); break; }
+      }
+    }
     if ([...text.matchAll(guid)].some(([g]) => g.toLowerCase() !== publicGuid && !g.startsWith('00000000-0000-0000-0000-'))) problems.push('object id');
     if (/[A-Za-z0-9._%+-]+@(?!(?:contoso|example)\.(?:com|onmicrosoft\.com)\b)[A-Za-z0-9.-]+\.[A-Za-z]{2,}/i.test(text)) problems.push('email');
     if (/eyJ[\w-]{12,}\.[\w-]+\.[\w-]+|login_code=[A-Za-z0-9_-]{20,}/.test(text)) problems.push('credential');

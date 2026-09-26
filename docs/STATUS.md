@@ -1,6 +1,6 @@
 # Status
 
-**Active packets:** P52 AUM and P55's end-to-end journey. P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets:** P52 AUM, P59 exact dollar budgets at the gateway, P60 Claude Desktop sign-in chosen by the admin, and P61 the Cosmos entitlement store on every v2 tier, including Basic v2 ([below](#portal-pictures-recaptured-live-and-the-test-environments-removed-2026-09-25)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P46 acceptance criteria — managers scoped, and budget modes
 
@@ -41,6 +41,23 @@ against stale runs is being added with the modes, and a single queue-driven writ
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
 
+## The scripts refuse what Turnstile would overwrite, merged 2026-09-25
+
+The FinOps guide's open gap: while Turnstile owned governance, `Set-ClaudeBusinessUnit.ps1` and
+`Set-ClaudeTier.ps1` wrote named values that Turnstile's next apply replaced. They now refuse,
+before any write, exactly what the apply owns, name the Turnstile page to use instead, and show
+the explicit switch (`Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Gateway -BudgetAuthority
+Gateway`); there is no force option. Read from the apply's code: full governance owns the unit
+registry, parents and modes and both tiers' limits and models; budget-only authority owns the
+monthly amounts of existing units and teams. Neither owns personal daily overrides
+(`Set-ClaudeBudget.ps1`) or Entra membership (`Set-ClaudeDeveloper.ps1`), so those stay
+available; `personBudgets` is an outbound monthly mirror, not an inbound owner. A failed read of
+the integration value stops the write; an absent or disconnected one leaves the gateway in
+charge. 114 assertions on PowerShell 7 and 5.1, five mutations caught, and both guarded scripts
+refused live against the Turnstile-governed reference gateway with zero write attempts. Branch
+`authority-guard` at `a002617` (its own gate PASS, 62 checks), merged into main. Not closed by it:
+P48's single writer and races around an authority switch.
+
 ## Portal pictures recaptured live, and the test environments removed, 2026-09-25
 
 Asked by the owner: every portal picture live, from his own sign-in, not from another
@@ -67,24 +84,53 @@ Found by doing it, and fixed test-first:
 Neither leak reached a commit: both were in uncommitted batch output, found on review, and
 every resource image was recaptured afterwards (63 steps, 13:51-14:14Z). Entra blades asked for
 step-up approval every few pages, so the resource and Entra steps now run as separate batches.
-Three Entra pictures were recaptured under the new rules; the owner's sign-in lapsed before the
-other nine. Seven of those were taken at 13:20-13:26Z under the earlier rules and are kept after
-a review of each (app registrations and properties: identifiers zeroed, no person shown). AUM's
-Users and groups picture showed the owner's initials beside his pseudonym and was dropped; it
-and Turnstile's assignments page wait for the next step-up.
+Six of the twelve Entra pictures were taken under the new rules: three at 14:24Z, and AUM's
+Expose an API, Manifest and Properties at 18:05Z from committed capture code (`310c6f8`). Four
+Turnstile registration pictures were taken at 13:24-13:26Z under the earlier rules and are kept
+after a review of each
+(identifiers zeroed, no person shown); Turnstile's assignments page is its older committed
+version. AUM's Users and groups picture showed the owner's initials beside his pseudonym and was
+dropped; it waits for the next step-up.
 
-Still pending, and why: the 24 P54 edge pictures and 7 AUM Function and storage pictures
-target test deployments that were torn down after their terminal evidence was recorded.
-They need those deployments again; the documents keep them as inline pending paths.
+Still pending, and why: 7 AUM Function and storage pictures target a service deployment that was
+removed after its live journeys; the documents keep them as inline pending paths. The 24 P54
+edge pictures were captured later the same day from a short-lived isolated copy of the
+evaluation estate (Standard v2 gateway, WAF_v2 edge, private Foundry and vault; list price about
+$1.55 an hour), with the private vault's Certificates list reached through a loopback PAC route
+into the network (`PORTAL_PROXY_PAC_URL`). Eleven steps first failed or captured the wrong page:
+deep links that no longer render, and click waits that matched the landing page (a non-exact
+`Port` matches **Report a bug**); each was fixed in the spec and every picture reviewed. The
+vault's Role assignments tab was deliberately not captured, because it lists inherited
+assignments that name other people. The estate was removed after the batch: its resource group
+read 404 at 18:19Z, and its gateway, Foundry account and vault were purged, with every recorded
+resource reading 404 by 18:26Z. Building it found one bug, fixed test-first in `ae267ea`: the
+first reviewed edge deployment refused a VNet that did not exist yet ([CHANGELOG](../CHANGELOG.md)).
 
 **Test environments removed.** The SKU tests (the Basic v2 test gateway, and the second test
 resource group with its Foundry account, deleted and purged at 10:06-10:19Z). The Premium v2
 environment's resource group (the Premium v2 gateway, the projection's Cosmos account, the
-resolver, their private endpoints and DNS zones) after its pictures were recaptured: deletion
-started 14:28Z; its gateway and Foundry account are purged once it completes. The Standard v2 SKU-test gateway,
+resolver, their private endpoints and DNS zones), after its pictures were recaptured: gone at
+16:10Z, its gateway and Foundry account purged, all three ARM reads 404 at 16:17Z. Found by doing
+it: five group deletes rolled back on the resolver's Flex Consumption plan, which ARM listed and
+the Web provider called NotFound; re-creating it under the same name and deleting it cleared it
+([Troubleshooting](TROUBLESHOOTING.md#deployment)). The Standard v2 SKU-test gateway,
 about $700 a month, is kept: Turnstile's model-gateway integration points at it (its
 `APIM_SERVICE_NAME` setting, and roles on Turnstile's Event Hubs and ledger table), and
 deleting it would break those features. It is the owner's decision.
+
+**Review of the recapture, fixed in `fbc0307`** (gate PASS, 63 checks, on the second run: the first
+failed Terminal FinOps once under six agents' concurrent load and it passed unchanged on the
+rerun). A code review found four gaps, each fixed test-first: a tenant-name pair could put a
+colleague's address on the placeholder domain; a real value running past a replacement was
+hidden; an application's assignments were read from Graph's first page only; and the records
+named a commit that did not contain the code that took them. The runner now refuses to capture
+from uncommitted capture code, and today's records are marked `accel_dirty` with a provenance note.
+
+**Next, started 2026-09-25 on the owner's request.** P60: the admin chooses how Claude Desktop
+signs in (today it always uses the Azure CLI credential helper) and the developer scripts write the
+matching Desktop configuration. P61: the Cosmos entitlement store as an installer choice, including
+on Basic v2 through an Entra-authenticated public resolver, for 100-500 developers, which named
+values cannot hold (about 93).
 
 ## FinOps tools in one guide, 2026-09-25
 

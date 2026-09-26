@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { specProblems, loadSteps, selectSteps, documentedOutputs, documentationProblems } from '../guide/lib/portal-specs.mjs';
-import { AuthenticationSurface, authenticationReason, parseArguments, peopleRedactionPairs, portalUrl, resolvePlan, runBatch } from '../guide/lib/portal-batch.mjs';
+import { AuthenticationSurface, authenticationReason, parseArguments, peopleRedactionPairs, portalUrl, proxyPacArguments, resolvePlan, runBatch, uncommittedCaptureCode } from '../guide/lib/portal-batch.mjs';
 import { lockProfile } from '../guide/lib/portal-profile.mjs';
 import * as discovery from '../guide/lib/portal-discovery.mjs';
 
@@ -96,9 +96,14 @@ test('the batch manifest records only live, redacted captures of declared output
   assert.equal(manifest.version, 1);
   assert.ok(manifest.captures.length > 0);
   assert.equal(new Set(manifest.captures.map((record) => record.output)).size, manifest.captures.length, 'duplicate output record');
+  // A picture from uncommitted capture code cannot name the code that took it; such records
+  // are marked, and the manifest must say what they were taken with.
+  if (manifest.captures.some((record) => record.accel_dirty === true)) assert.ok(manifest.provenance?.length > 40, 'dirty records need a provenance note');
   for (const record of manifest.captures) {
     assert.ok(outputs.has(record.output), `${record.output} is not a declared spec output`);
     assert.equal(record.live, true, record.output);
+    assert.equal(typeof record.accel_dirty, 'boolean', `${record.output} does not say whether its capture code was committed`);
+    if (!record.accel_dirty) assert.match(record.spec_sha256 ?? '', /^[a-f0-9]{64}$/, `${record.output} has no recorded step`);
     assert.match(record.captured_at_utc, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/, record.output);
     assert.deepEqual(record.redaction, { applied: true, leak_check_passed: true }, record.output);
     for (const [guid] of record.route.matchAll(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi))
@@ -208,6 +213,31 @@ test('people a directory page lists are pseudonymised, and a page listing people
   // A people page with no discovered principals cannot be proven redacted.
   assert.throws(() => peopleRedactionPairs(undefined, { required: true }), /discover the principals/);
   assert.throws(() => peopleRedactionPairs([], { required: true }), /discover the principals/);
+});
+
+test('a directory read follows every page, and one that never ends is refused rather than truncated', () => {
+  const pages = {
+    'https://graph.example/first': { value: [{ n: 1 }, { n: 2 }], '@odata.nextLink': 'https://graph.example/second' },
+    'https://graph.example/second': { value: [{ n: 3 }] },
+  };
+  assert.deepEqual(discovery.graphPages((url) => pages[url], 'https://graph.example/first').map((item) => item.n), [1, 2, 3]);
+  const endless = (url) => ({ value: [{ url }], '@odata.nextLink': `${url}x` });
+  assert.throws(() => discovery.graphPages(endless, 'https://graph.example/a', { maxPages: 3 }), /more than 3 pages/);
+});
+
+test('a batch refuses to record pictures taken by uncommitted capture code', () => {
+  assert.deepEqual(uncommittedCaptureCode(''), []);
+  assert.deepEqual(uncommittedCaptureCode(' M guide/lib/turnstile-live.mjs\n M guide/captures/p50.json\n'), ['guide/lib/turnstile-live.mjs']);
+  assert.deepEqual(uncommittedCaptureCode('M  guide/capture-portal.mjs\n'), ['guide/capture-portal.mjs']);
+});
+
+test('a proxy route for a private blade is accepted only as a loopback PAC file', () => {
+  assert.deepEqual(proxyPacArguments(undefined), []);
+  assert.deepEqual(proxyPacArguments(''), []);
+  assert.deepEqual(proxyPacArguments('http://127.0.0.1:56060/proxy.pac'), ['--proxy-pac-url=http://127.0.0.1:56060/proxy.pac']);
+  for (const value of ['http://proxy.example.org/proxy.pac', 'https://127.0.0.1:56060/proxy.pac', 'http://127.0.0.1.example.org/p.pac',
+    'http://127.0.0.1:56060/proxy.pac --disable-web-security', 'file:///C:/proxy.pac'])
+    assert.throws(() => proxyPacArguments(value), /loopback PAC/, value);
 });
 
 test('the profile lock refuses a second browser and releases only once, using in-memory IO', () => {

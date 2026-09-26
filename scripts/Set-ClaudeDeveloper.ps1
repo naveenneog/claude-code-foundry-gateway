@@ -17,6 +17,11 @@
     Set-ClaudeTier.ps1, personal budgets are Set-ClaudeBudget.ps1, and chargeback
     is the business unit - see ADR-0008 for why those are separate axes.
 
+    This remains available when Turnstile owns governance. Its apply reads
+    membership from Entra; it never edits the groups' members, so it does not
+    undo these changes. Use the tier group names configured for the gateway.
+    Turnstile owns group-to-unit/tier mappings, not the Entra membership itself.
+
 .PARAMETER User
     UPN, email or object id. Guests are found by the address they were invited
     with as well as by their directory UPN.
