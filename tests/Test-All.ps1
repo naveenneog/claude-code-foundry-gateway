@@ -175,6 +175,7 @@ try {
     Invoke-Check 'Azure CLI arguments vs cmd.exe'          'Test-AzArguments.ps1' -SerialLane
     Invoke-Check 'Shell scripts - syntax and banner'       'Test-ShellScripts.ps1' -SerialLane
     Invoke-Check 'Preflight on both PowerShell hosts'      'Test-PreflightBothHosts.ps1' -SerialLane
+    Invoke-Check 'Guided diagnostics and support bundles'  'Test-Diagnose.ps1' -SerialLane
     Invoke-Check 'Wizard reaches summary on PS 5.1'        'Test-On-PS51.ps1' -SerialLane
     Invoke-Check 'Analytics query contract'                'Test-Analytics.ps1' @{ SkipLive = $true }
     Invoke-Check 'Org spend ceiling'                       'Test-OrgCeiling.ps1' @{ SkipLive = $true }

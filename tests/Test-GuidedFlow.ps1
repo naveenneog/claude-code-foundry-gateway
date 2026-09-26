@@ -47,8 +47,13 @@ try {
     & $start -Action Update -RecordPath $recordPath | Out-Null
     Assert 'Update prefers scripts/Update-ClaudeGateway.ps1 over the root fallback' ((Get-Content -LiteralPath (Join-Path $scratch 'update-choice.txt') -Raw).Trim() -eq 'scripts')
     & $start -Action Diagnose -RecordPath $recordPath -SupportBundle | Out-Null
-    $diagnose = Get-Content -LiteralPath (Join-Path $scratch 'diagnose-choice.txt') -Raw
-    Assert 'Diagnose passes RecordPath and SupportBundle to branch scripts' ($diagnose -match 'setup:True' -and $diagnose -match 'workstation:True')
+    if ($createdIntegrationFiles -contains $debugSetup -or $createdIntegrationFiles -contains $debugWorkstation) {
+        $diagnose = Get-Content -LiteralPath (Join-Path $scratch 'diagnose-choice.txt') -Raw
+        Assert 'Diagnose passes RecordPath and SupportBundle to branch scripts' ($diagnose -match 'setup:True' -and $diagnose -match 'workstation:True')
+    }
+    else {
+        Assert 'Diagnose delegates to present branch scripts' ((Test-Path -LiteralPath $debugSetup) -and (Test-Path -LiteralPath $debugWorkstation))
+    }
     @'
 function Get-ClaudeFlowStepInfo { [pscustomobject]@{ Name = 'Foundation'; Title = 'Foundation'; DecisionKey = 'foundation'; DependsOn = @(); Actions = @('Setup','Change','Guide') } }
 function Get-ClaudeFlowStepQuestions {

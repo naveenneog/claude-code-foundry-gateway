@@ -35,6 +35,11 @@ exact streaming cache-creation detail remains **U13**.
   `scripts/flow/Discovery.ps1`, `Foundation.ps1`, `DeviceProfiles.ps1`,
   `Verify.ps1` and `Guide.ps1` provide the owned step modules, and
   `docs/GUIDED-FLOW.md` documents the product path and manual equivalents.
+- **Guided diagnostics (P66).** `scripts/Debug-ClaudeSetup.ps1` and
+  `scripts/Debug-ClaudeWorkstation.ps1` run read-only administrator and developer
+  checks with PASS/WARN/FAIL/SKIP evidence, exact fixes and redacted support
+  bundles; `scripts/debug-claude-workstation.sh` covers macOS/Linux and
+  `scripts/flow/Diagnose.ps1` exposes the ADR-0030 guided-flow step.
 - **One-command AUM client install.** `scripts/Install-ClaudeAum.ps1` reads the Python version the
   package requires, lists the interpreters that meet it and asks which one, creates or reuses
   `.venv-finops`, installs `cli/finops`, checks `aum --version` and the Azure CLI sign-in, and
