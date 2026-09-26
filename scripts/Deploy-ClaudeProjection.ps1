@@ -36,6 +36,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeRunner.ps1')
 
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Note($m) { Write-Host "    $m" -ForegroundColor DarkGray }
@@ -116,7 +117,7 @@ $networkName = "projection-network-$NamePrefix"
 if ($PSCmdlet.ShouldProcess($networkName, 'deploy private endpoints and DNS')) {
     Invoke-WithRetry -Name 'projection network deployment' -Action {
         az deployment group create -g $ResourceGroup -n $networkName --template-file (Join-Path $root 'infra/projection-network.bicep') `
-            --parameters namePrefix=$NamePrefix location=$Location cosmosAccountName=$cosmosAccount runnerEnabled=false -o none
+            --parameters namePrefix=$NamePrefix location=$Location cosmosAccountName=$cosmosAccount runnerEnabled=true -o none
         if ($LASTEXITCODE -ne 0) { throw 'projection network deployment failed' }
     }
 }
@@ -141,10 +142,33 @@ $resolverUrl = [string]$resolver.resolverUrl
 $resolverAudience = [string]$resolver.resolverAudience
 if (-not $resolverUrl -or -not $resolverAudience) { throw 'Resolver deployment did not return resolverUrl and resolverAudience outputs.' }
 
+Step 'Publish resolver code'
+if ($PSCmdlet.ShouldProcess($resolver.siteName, 'package and publish resolver code')) {
+    $stage = Join-Path ([IO.Path]::GetTempPath()) "claude-resolver-$NamePrefix-$PID"
+    New-Item -ItemType Directory -Force -Path $stage | Out-Null
+    try {
+        Copy-Item (Join-Path $root 'resolver/host.json'), (Join-Path $root 'resolver/package.json') $stage
+        Copy-Item (Join-Path $root 'resolver/src') $stage -Recurse
+        Push-Location $stage
+        npm install --omit=dev --no-audit --fund=false
+        if ($LASTEXITCODE -ne 0) { throw 'resolver dependency installation failed' }
+        tar -a -c -f resolver.zip host.json package.json src node_modules
+        if ($LASTEXITCODE -ne 0) { throw 'resolver ZIP creation failed' }
+        az functionapp deployment source config-zip -g $ResourceGroup -n $($resolver.siteName) --src resolver.zip -o none
+        if ($LASTEXITCODE -ne 0) { throw 'resolver publish failed' }
+        Pop-Location
+    }
+    finally {
+        try { Pop-Location } catch { }
+        Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 $work = Join-Path ([IO.Path]::GetTempPath()) "claude-projection-$NamePrefix-$PID"
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 $snapshot = Join-Path $work 'snapshot.json'
 $gateway = Join-Path $work 'gateway-decisions.json'
+$syncArchive = Join-Path $work 'sync.tar.gz'
 
 try {
     Step 'Populate projection from Entra'
@@ -152,8 +176,20 @@ try {
         & (Join-Path $PSScriptRoot 'Sync-ClaudeProjection.ps1') -Account $cosmosAccount -ApimName $ApimName -ResourceGroup $ResourceGroup `
             -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -ExportPath $snapshot
         if ($LASTEXITCODE -ne 0) { throw 'projection snapshot export failed' }
-        node (Join-Path $root 'sync/src/apply-projection.mjs') --cosmos "https://$cosmosAccount.documents.azure.com:443/" --tenant $($apim.identity.tenantId) --snapshot $snapshot
-        if ($LASTEXITCODE -ne 0) { throw 'projection apply failed' }
+        if (-not $network.runnerName -or -not $network.runnerPrincipalId) { throw 'Projection network did not return an in-VNet runner.' }
+        az cosmosdb sql role assignment create --account-name $cosmosAccount --resource-group $ResourceGroup `
+            --scope /dbs/claude/colls/entitlement --principal-id $($network.runnerPrincipalId) `
+            --role-definition-id 00000000-0000-0000-0000-000000000002 -o none 2>$null
+        tar -c -z -f $syncArchive -C (Join-Path $root 'sync') package.json src
+        if ($LASTEXITCODE -ne 0) { throw 'sync package creation failed' }
+        Send-RunnerFile -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Path $syncArchive -Destination /work/sync-source.tar.gz | Out-Null
+        Send-RunnerFile -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Path $snapshot -Destination /work/snapshot.json | Out-Null
+        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node -e require('fs').mkdirSync('/work/sync',{recursive:true})" | Out-Null
+        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command 'tar -x -z -f /work/sync-source.tar.gz -C /work/sync' | Out-Null
+        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command 'npm --prefix /work/sync install --omit=dev --no-audit --fund=false' | Out-Null
+        $applyRaw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $($apim.identity.tenantId) --snapshot /work/snapshot.json"
+        $apply = ($applyRaw -split "`n" | Select-Object -Last 1) | ConvertFrom-Json
+        if (-not $apply.ok) { throw "projection apply failed: $applyRaw" }
     }
 
     Step 'Compare before flip'
@@ -161,10 +197,10 @@ try {
         & (Join-Path $PSScriptRoot 'Compare-ClaudeEntitlement.ps1') -ResourceGroup $ResourceGroup -ApimName $ApimName `
             -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -ExportGatewayPath $gateway
         if ($LASTEXITCODE -ne 0) { throw 'named-value lists drift from Entra; refusing projection comparison and flip.' }
-        $compareRaw = node (Join-Path $root 'sync/src/apply-projection.mjs') --cosmos "https://$cosmosAccount.documents.azure.com:443/" --tenant $($apim.identity.tenantId) --compare $gateway
-        $compareCode = $LASTEXITCODE
-        $compare = $compareRaw | Out-String | ConvertFrom-Json
-        if ($compareCode -ne 0 -or -not $compare.ok) {
+        Send-RunnerFile -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Path $gateway -Destination /work/gateway-decisions.json | Out-Null
+        $compareRaw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $($apim.identity.tenantId) --compare /work/gateway-decisions.json"
+        $compare = ($compareRaw -split "`n" | Select-Object -Last 1) | ConvertFrom-Json
+        if (-not $compare.ok) {
             throw "Refusing to flip because projection drift remains: $($compare.differences) difference(s)."
         }
         Ok "clean comparison: $($compare.compared) identities"
