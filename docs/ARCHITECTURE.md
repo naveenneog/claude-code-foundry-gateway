@@ -33,6 +33,7 @@ Source: [01-system.json](architecture/01-system.json).
 | **AUM (Azure Usage Management)** | A local Python terminal FinOps console, command `aum`; no new inference service or mandatory Azure resource. The terminal release is merged; the naming packet is staged on branch `aum`. | It uses Turnstile's HTTP API or Direct Azure with the operator's Azure CLI sign-in. A fake backend is for tests, never an outage fallback. |
 | **Monthly chargeback reports (P50)** | A separate Consumption environment, generator/dispatcher/admin jobs, discovered existing or explicit new VNet, private Blob storage and Azure Communication Services Email. | The reporting identity reads telemetry/configuration and writes reports. A separate administration identity writes configuration only. No Turnstile dependency. |
 | **AUM service (P55)** | Optional Python Functions, keyless Blob/Table state, scoped administrative API and timers. Network, redundancy, warm capacity and telemetry are explicit priced choices. | An independent administrative authority; it refuses gateway writes while Turnstile owns them. It does not proxy inference or make an unimplemented client adapter complete. |
+| **USD budget reconciliation (P21/P59)** | Two preserved named values, a five-minute timer in the optional AUM service, and an on-demand script. | Dated decimal tariffs and observed-category spend become gateway stops. The timer uses the service identity/lease/audit; Direct uses Azure CLI and ETags. Neither writes while Turnstile owns governance. |
 
 Projection and Turnstile are independent options. Turning on one does not imply the other.
 The default deployment has no additional application database, processor or queue, but
@@ -104,7 +105,7 @@ scope's monthly limiter in notify mode; it does not disable the other layers. Se
 | Rate ceiling or projection miss admission exceeded | 429 | Retryable throttling. Projection admission returns `Retry-After: 1` before calling the resolver. |
 | Expired/invalid projection freshness or resolver fault, with no valid cached answer | 503, normally `Retry-After: 5` | Fail closed. Do not fall back to the old named-value lists. |
 
-Budgets are **approximate token controls**, not hard currency limits. High concurrency and
+The original budgets are **approximate token controls**, not hard currency limits. High concurrency and
 streaming affect estimates, and the quota scalar excludes cache tokens. The recorded
 30-day sample attributed 38.7% of cost weight to cache reads; that is evidence for the
 gap, not a universal multiplier. Counters are not globally aggregated across gateways.
@@ -122,11 +123,33 @@ Group removal becomes effective only after synchronization and, on the projectio
 the relevant cache window. It is not instantaneous token revocation. See
 [authentication types](AUTHENTICATION.md) and [client onboarding](ONBOARDING.md).
 
-The policy uses `forward-request timeout="600"` and `buffer-request-body="false"`.
-It does not parse the outbound response body for cache categories, because that would
-interfere with streaming. `buffer-response` is not explicitly set in this revision;
-recheck observed SSE behavior on the chosen tier rather than assuming the deployment
-sets it to false.
+The policy uses `forward-request timeout="600"`, `buffer-request-body="false"` and
+`buffer-response="false"`. It parses usage counts only for successful nonstream JSON
+Messages responses. It never reads an SSE response body. `UsageJson` carries the
+provider's nonstream cache TTL split into the existing identity trace.
+
+### Dated USD budgets and delayed enforcement
+
+![Dated dollar budgets are authored through scripts or scoped AUM APIs, reconciled from categorized telemetry outside inference, and enforced by expiring gateway decisions. Streaming incompleteness remains explicit.](images/architecture/usd-budgets.png)
+
+Source: [14-usd-budgets.json](architecture/14-usd-budgets.json);
+[ADR-0027](adr/0026-usd-budget-reconciliation.md).
+
+`usd-budgets` persists dollar strings and the price-book date, separately from
+the existing approximate token guard. The shared reconciler reads integer category
+counts, prices them with Decimal, and publishes `usd-budget-state`. A matched scope's
+missing, stale or configuration-mismatched state fails closed. Strict stops at the
+nominal limit; allowance stops above its effective limit; notify only adds a header.
+Unpriced models are reported and refused for enforced scopes, never counted as zero.
+
+The AUM service timer runs every five minutes under its existing identity, lease and
+audit. `Sync-ClaudeUsdBudgets.ps1` invokes the same engine on demand with Azure CLI
+sign-in. State expires after 15 minutes. Ingestion, execution and APIM propagation add
+delay; no hard currency overshoot guarantee is made. Nonstream counts can be complete,
+including both cache-write TTLs. Streaming cache reads depend on capped custom metrics
+and cache writes remain unknown. A known subtotal under budget is not complete spend.
+See [BUDGETS.md](BUDGETS.md) and the
+[AUM client contract](aum-usd-budgets-client-contract.md).
 
 ## Telemetry and chargeback
 
@@ -639,3 +662,4 @@ Review behavior against the implementation whenever a feature changes a componen
 flow, identity, schedule or network path. PNGs are repeatable with the same locked
 Playwright/browser and installed fonts; cross-platform font rasterization can differ
 without changing the architecture.
+

@@ -37,6 +37,7 @@ let identity =
         business_unit = tostring(Properties.BusinessUnit),
         client_raw = tostring(Properties.Client),
         client_ip = tostring(Properties.ClientIp),
+        usage_json = parse_json(tostring(Properties.UsageJson)),
         requested_model = tostring(Properties.Model)
     | summarize
         actor = take_any(actor),
@@ -45,16 +46,16 @@ let identity =
         business_unit = take_any(business_unit),
         client_raw = take_any(client_raw),
         client_ip = take_any(client_ip),
+        usage_json = take_any(usage_json),
         requested_model = take_any(requested_model)
         by rid;
 //
 // Tokens, one row per request.
 //
-// Cache is absent from this table. The categories exist in the Anthropic
-// response body, but reading that body in an outbound policy buffers the
-// response and ends streaming, so they are not collected per request. They are
-// reported as unknown rather than zero, because zero is a claim and unknown is
-// the truth.
+// Nonstream Messages responses now carry counts-only UsageJson in the identity
+// trace. Streaming bodies are never read; their per-request cache stays unknown.
+// The five-minute/one-hour split is known only when the provider supplied it,
+// or explicitly reported zero cache creation. See ADR-0026.
 //
 // Cache *read* volume is available elsewhere, and per-user: the gateway's own
 // llm-emit-token-metric emits "Prompt Cached Tokens" carrying a UserId
@@ -66,6 +67,8 @@ ApiManagementGatewayLlmLog
 | where TimeGenerated between (_from .. _to)
 | project
     timestamp = TimeGenerated,
+    ingested_at = ingestion_time(),
+    gateway_id = tolower(_ResourceId),
     rid = tostring(CorrelationId),
     message_id = tostring(RequestId),
     model = tostring(ModelName),
@@ -76,15 +79,24 @@ ApiManagementGatewayLlmLog
     streamed = tobool(IsStreamCompletion)
 | join kind=leftouter identity on rid
 | extend
-    // Null, not zero. See above.
-    cache_read_tokens = real(null),
-    cache_write_5m_tokens = real(null),
-    cache_write_1h_tokens = real(null),
-    // Where the numbers on this row came from, so a report can say so. Today
-    // every row is sourced from the log; when a non-streamed request has its
-    // body parsed for cache categories this becomes "body" for those rows.
-    usage_source = "log",
-    cache_tokens_known = false
+    body_known = not(streamed) and isnotnull(usage_json.input_tokens) and isnotnull(usage_json.output_tokens)
+| extend
+    prompt_tokens = iff(body_known, toreal(usage_json.input_tokens), prompt_tokens),
+    completion_tokens = iff(body_known, toreal(usage_json.output_tokens), completion_tokens),
+    cache_read_tokens = iff(body_known, toreal(usage_json.cache_read_input_tokens), real(null)),
+    cache_write_5m_tokens = iff(body_known,
+        iff(tolong(usage_json.cache_creation_input_tokens) == 0, 0.0,
+            toreal(usage_json.cache_creation.ephemeral_5m_input_tokens)), real(null)),
+    cache_write_1h_tokens = iff(body_known,
+        iff(tolong(usage_json.cache_creation_input_tokens) == 0, 0.0,
+            toreal(usage_json.cache_creation.ephemeral_1h_input_tokens)), real(null)),
+    inference_geo = iff(body_known, tostring(usage_json.inference_geo), "unknown"),
+    usage_source = iff(body_known, "body", "log")
+| extend
+    cache_read_known = isnotnull(cache_read_tokens),
+    cache_write_known = isnotnull(cache_write_5m_tokens) and isnotnull(cache_write_1h_tokens)
+        and cache_write_5m_tokens + cache_write_1h_tokens == toreal(usage_json.cache_creation_input_tokens)
+| extend cache_tokens_known = cache_read_known and cache_write_known
 // Which client made the call. The surface is parsed out of the agent string
 // rather than matched against a list, because the list was wrong when it was
 // guessed: measured 2026-09-16, Claude Code 2.1.241 sends
@@ -98,6 +110,8 @@ ApiManagementGatewayLlmLog
     "other")
 | project
     timestamp,
+    ingested_at,
+    gateway_id,
     actor = coalesce(actor, "unattributed"),
     user_id,
     tier,
@@ -114,6 +128,9 @@ ApiManagementGatewayLlmLog
     cache_read_tokens,
     cache_write_5m_tokens,
     cache_write_1h_tokens,
+    cache_read_known,
+    cache_write_known,
+    inference_geo,
     cache_tokens_known,
     usage_source,
     message_id,

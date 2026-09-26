@@ -13,6 +13,7 @@ CONFIG_NAMES = frozenset({
     "bu-registry", "bu-parents", "bu-members", "bu-modes", "quota-overrides", "quota-org",
     "quota-standard", "quota-premium", "tpm-standard", "tpm-premium",
     "models-standard", "models-premium", "entitlement-source", "turnstile-integration",
+    "usd-budgets", "usd-budget-state",
 })
 
 
@@ -135,7 +136,8 @@ class Config:
             raise Conflict("Mode points to an unknown unit", "invalid_configuration")
 
     def revision(self, mappings=None):
-        encoded = json.dumps([self.values, mappings or {}], sort_keys=True,
+        authored = {k: v for k, v in self.values.items() if k != "usd-budget-state"}
+        encoded = json.dumps([authored, mappings or {}], sort_keys=True,
                              separators=(",", ":")).encode()
         return hashlib.sha256(encoded).hexdigest()
 

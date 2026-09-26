@@ -54,10 +54,11 @@ class AumService:
     def capabilities(self, identity):
         _, config, _, scope = self.context(identity)
         other_authority = re.search(r"(?:^|;)(?:governanceAuthority|budgetAuthority)=Turnstile(?:;|$)",
-                                    config.values.get("turnstile-integration", ""))
+                                    config.values.get("turnstile-integration", ""), re.I)
         writer = identity.access in {"admin", "manager"} and not other_authority
         admin_writer = identity.is_admin and not other_authority
         assigned = scope is None or bool(scope.organization_ids or scope.department_ids)
+        usd_installed = "usd-budgets" in config.values and "usd-budget-state" in config.values
         return {"schema_version": 1, "backend": "aum-service", "capabilities": {
             "usage_read": True, "budgets_read": True, "budget_write": writer and assigned,
             "manager_budget_write": writer and identity.access == "manager" and assigned,
@@ -66,6 +67,9 @@ class AumService:
             "approvals": bool(writer and assigned), "boosts": bool(writer and assigned),
             "approval_admin_override": bool(admin_writer),
             "notifications": True, "audit_read": identity.is_admin, "email_delivery": False,
+            "usd_budgets_read": True, "usd_budget_write": bool(writer and assigned and usd_installed),
+            "usd_budget_reconcile": bool(admin_writer and usd_installed),
+            "usd_price_book_write": bool(admin_writer and usd_installed),
         }, "limits": {"page_size": 200, "named_value_characters": 4096, "analytics_window_days": 93}}
 
     def catalog(self, identity):
@@ -106,7 +110,7 @@ class AumService:
         identity.require_writer()
         snapshot, config, mappings, scope = self.context(identity)
         integration = config.values.get("turnstile-integration", "")
-        if re.search(r"(?:^|;)(?:governanceAuthority|budgetAuthority)=Turnstile(?:;|$)", integration):
+        if re.search(r"(?:^|;)(?:governanceAuthority|budgetAuthority)=Turnstile(?:;|$)", integration, re.I):
             raise Conflict("Turnstile owns gateway writes; choose one authority before enabling AUM writes",
                            "other_authority")
         if require_revision and (not expected or expected.strip('"') != config.revision(mappings)):

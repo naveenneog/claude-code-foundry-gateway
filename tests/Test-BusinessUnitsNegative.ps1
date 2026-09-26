@@ -2946,6 +2946,62 @@ $mutations = @(
        From  = '$chosenWorkspaceId = Select-ClaudeWorkspace -ResourceGroup'
        To    = '$chosenWorkspaceId = $null # -ResourceGroup' }
 
+    @{ Suite = 'Test-UsdBudgets.ps1'
+       Name  = 'USD budgets lose their decimal source amount'
+       File  = 'scripts/ClaudeUsdBudgets.ps1'
+       From  = "amount_usd = `$AmountUsd.ToString('0.#########', [Globalization.CultureInfo]::InvariantCulture)"
+       To    = "amount_usd = '0'" }
+    @{ Suite = 'Test-UsdBudgets.ps1'
+       Name  = 'USD writer validates but never persists the dollar edit'
+       File  = 'scripts/Set-ClaudeBusinessUnit.ps1'
+       From  = 'if ($usdArgs) { Set-ClaudeUsdBudget @usdArgs }'
+       To    = 'if ($false) { Set-ClaudeUsdBudget @usdArgs }' }
+    @{ Suite = 'Test-UsdBudgets.ps1'
+       Name  = 'USD configuration no longer enforces named value capacity'
+       File  = 'scripts/ClaudeUsdBudgets.ps1'
+       From  = '$value.Length -gt 4096'
+       To    = '$value.Length -gt 99999' }
+    @{ Suite = 'Test-UsdBudgets.ps1'
+       Name  = 'USD writer skips the shared authority predicate'
+       File  = 'scripts/ClaudeUsdBudgets.ps1'
+       From  = 'Assert-ClaudeGatewayOwnsGovernance -ResourceGroup $ResourceGroup -ApimName $ApimName -Write UsdBudgets'
+       To    = '$null = $ResourceGroup' }
+    @{ Suite = 'Test-UsdBudgets.ps1'
+       Name  = 'USD response collection reads streaming bodies'
+       File  = 'infra/policy.xml'
+       From  = '!(bool)context.Variables["usdRequestStream"]'
+       To    = 'true' }
+    @{ Suite = 'Test-UsdBudgets.ps1'
+       Name  = 'USD expiry uses an unsupported APIM UTC member'
+       File  = 'infra/policy.xml'
+       From  = '(DateTimeOffset)state'
+       To    = '(DateTime)state' }
+    @{ Suite = 'Test-UsdBudgets.ps1'
+       Name  = 'USD refusal becomes indistinguishable from token quota'
+       File  = 'infra/policy.xml'
+       From  = 'usd_budget_exceeded'
+       To    = 'quota_exceeded' }
+    @{ Suite = 'Test-UsdPolicy.ps1'
+       Name  = 'USD expired state remains usable'
+       File  = 'infra/policy.xml'
+       From  = 'now >= until'
+       To    = 'false' }
+    @{ Suite = 'Test-UsdPolicy.ps1'
+       Name  = 'USD notify requires a reconciled state'
+       File  = 'infra/policy.xml'
+       From  = 'if (mode == "notify") {'
+       To    = 'if (false) {' }
+    @{ Suite = 'Test-UsdPolicy.ps1'
+       Name  = 'USD stop drops the UTC timestamp designator'
+       File  = 'infra/policy.xml'
+       From  = 'error["reconciled_at"] = state["reconciled_at"].DeepClone();'
+       To    = 'error["reconciled_at"] = (string)state["reconciled_at"];' }
+    @{ Suite = 'Test-UsdBudgets.ps1'
+       Name  = 'installer resets dollars after a failed configuration read'
+       File  = 'Install-ClaudeGateway.ps1'
+       From  = '$usdSavedValues = Get-ClaudeUsdNamedValues -ResourceGroup'
+       To    = '$usdSavedValues = @{} # -ResourceGroup' }
+
     @{ Suite = 'Test-ClaudeChoice.ps1'
        Name  = 'the Foundry chooser loses the gateway backend recommendation'
        File  = 'scripts/ClaudeChoice.ps1'
@@ -3142,11 +3198,13 @@ try {
     $scaleSuite = Join-Path $sandbox 'tests/Test-Scale.ps1'
     $mpSuite = Join-Path $sandbox 'tests/Test-ModelsAndPlugins.ps1'
     $choiceSuite = Join-Path $sandbox 'tests/Test-ClaudeChoice.ps1'
+    $usdSuite = Join-Path $sandbox 'tests/Test-UsdBudgets.ps1'
+    $usdPolicySuite = Join-Path $sandbox 'tests/Test-UsdPolicy.ps1'
     $authoritySuite = Join-Path $sandbox 'tests/Test-GovernanceAuthority.ps1'
 
     # The copy must pass before any mutation, or a "caught" result below could
     # just mean the sandbox is broken.
-    foreach ($s in $suite, $teamSuite, $modelSuite, $obsSuite, $backupSuite, $adminSuite, $scaleSuite, $mpSuite, $choiceSuite, $authoritySuite) {
+    foreach ($s in $suite, $teamSuite, $modelSuite, $obsSuite, $backupSuite, $adminSuite, $scaleSuite, $mpSuite, $choiceSuite, $authoritySuite, $usdSuite, $usdPolicySuite) {
         & $s *>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  [SETUP] the unmutated copy of $(Split-Path $s -Leaf) already fails - the sandbox is wrong, not the code" -ForegroundColor Red

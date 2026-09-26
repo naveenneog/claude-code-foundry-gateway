@@ -6,6 +6,8 @@ from uuid import uuid4
 from .errors import AccessDenied, ServiceError, invalid
 from .queries import QueryBuilder, page_size
 from .workflows import Workflows
+from .usd_service import UsdBudgets
+from .usd_reconcile import reconcile
 
 
 class Api:
@@ -13,6 +15,7 @@ class Api:
         self.service, self.verifier = service, verifier
         self.reads = QueryBuilder(service)
         self.workflows = Workflows(service)
+        self.usd = UsdBudgets(service)
 
     def handle(self, method, path, params, raw_body, headers):
         request_id = str(uuid4())
@@ -65,7 +68,9 @@ class Api:
                 raise invalid("GET requests cannot have a body")
             simple = {"me": self.service.me, "auth/me": self.service.me,
                       "capabilities": self.service.capabilities,
-                      "budgets": self.service.budgets, "catalog": self.service.catalog}
+                      "budgets": self.service.budgets, "catalog": self.service.catalog,
+                      "usd-budgets": self.usd.read, "usd-budget-status": self.usd.status,
+                      "usd-price-book": self.usd.book}
             if route in simple:
                 if params:
                     raise invalid("This route does not accept query parameters")
@@ -80,6 +85,18 @@ class Api:
         else:
             if params:
                 raise invalid("Mutation routes do not accept query parameters")
+            if route == "usd-budget-reconcile" and method == "POST":
+                identity.require_admin()
+                self.fields(body, [])
+                return reconcile(self.service), 200
+            if route == "usd-price-book" and method == "PUT":
+                self.fields(body, ["reason", "price_book"], ["reason", "price_book"])
+                return self.usd.set_book(identity, body, revision), 200
+            usd = re.fullmatch(r"usd-budgets/(organization|department|user)/([^/]+)", route)
+            if usd and method in {"PUT", "DELETE"}:
+                fields = ["reason", "amount_usd", "period", "price_book_date"] if method == "PUT" else ["reason"]
+                self.fields(body, fields, fields)
+                return self.usd.set_budget(identity, *usd.groups(), body, revision, clear=method == "DELETE"), 200
             budget = re.fullmatch(r"budgets/(organization|department|user)/([^/]+)", route)
             if budget and method in {"PUT", "DELETE"}:
                 self.fields(body, ["reason", "token_limit", "warning_threshold_percent"] if method == "PUT" else ["reason"],
