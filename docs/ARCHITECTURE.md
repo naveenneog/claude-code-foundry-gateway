@@ -664,4 +664,3 @@ Review behavior against the implementation whenever a feature changes a componen
 flow, identity, schedule or network path. PNGs are repeatable with the same locked
 Playwright/browser and installed fonts; cross-platform font rasterization can differ
 without changing the architecture.
-

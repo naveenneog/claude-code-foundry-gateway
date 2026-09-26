@@ -675,4 +675,3 @@ RBAC-only audit does not prove an old API key cannot bypass the gateway.
 | Watch usage and cost | [Monitoring guide](MONITORING.md) |
 | Something is broken | [Debug guide](DEBUGGING.md) |
 | Justify this to a stakeholder | [Foundry vs direct Anthropic](COMPARISON.md) |
-

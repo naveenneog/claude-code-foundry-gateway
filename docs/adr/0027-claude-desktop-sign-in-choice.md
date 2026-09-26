@@ -110,4 +110,3 @@ public client.
 - Microsoft Learn, "Azure API Management policy reference -
   validate-azure-ad-token", retrieved 2026-09-26:
   <https://learn.microsoft.com/en-us/azure/api-management/validate-azure-ad-token-policy>
-
