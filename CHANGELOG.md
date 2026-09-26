@@ -28,6 +28,14 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- **Cosmos entitlement store offered by SKU, including Basic v2.** The installer now asks
+  for `named-value` or `projection`, states the named-value ceiling at the operator's
+  developer count and chooses the resolver inbound path by SKU: private for Standard v2
+  and Premium v2, public plus Microsoft Entra authentication for Basic v2. New
+  `scripts/Deploy-ClaudeProjection.ps1` deploys private Cosmos, projection networking and
+  the resolver, populates from Entra, compares against the named-value decisions and flips
+  only after a clean comparison. `Measure-ClaudeProjectionCost.ps1 -P61Scenarios` prints
+  the 100/500 developer cost rows.
 - **Governance authored in Turnstile, applied to the gateway on save.** With
   `Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Turnstile`, business units, teams, their Entra
   groups, budgets and tier limits are edited on Turnstile's pages, and each save starts the

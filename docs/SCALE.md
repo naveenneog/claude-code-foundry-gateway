@@ -51,6 +51,28 @@ truncate, so entitlement does not silently lose its tail — but the sync has to
 notice the failure, which is why `ApimNamedValue.ps1` checks the size before
 writing and throws rather than discarding the exit code.
 
+### What to use at 100-500 developers
+
+At 100-500 developers the named-value path is already past or close to the
+business-unit membership ceiling. The installer offers the **Cosmos projection**
+as the entitlement store. `scripts/Deploy-ClaudeProjection.ps1` deploys it,
+populates it from Entra, compares it against the named-value decisions and flips
+only after a clean comparison.
+
+The SKU changes the resolver inbound path, not the Cosmos rule:
+
+| Gateway SKU | Resolver path | Cosmos path |
+|---|---|---|
+| Basic v2 | Public Function endpoint, authenticated by Microsoft Entra and allowed only for the gateway managed identity | Private endpoint and private DNS |
+| Standard v2 | Private resolver endpoint reached through outbound VNet integration | Private endpoint and private DNS |
+| Premium v2 | Private resolver endpoint reached through Premium v2 networking | Private endpoint and private DNS |
+
+`scripts/Measure-ClaudeProjectionCost.ps1 -P61Scenarios` prices the 100 and 500
+developer shapes. On 2026-09-26 in East US 2, excluding the APIM gateway cost,
+it reported $57.48/month for Basic v2 with a public resolver and $65.28/month
+for the private Standard v2/Premium v2 resolver shapes. The difference is the
+resolver private endpoint and DNS zone; most of either bill is at rest.
+
 ### Why not put the tier in the token
 
 The obvious alternative is to stop looking entitlement up at all: put the tier in
