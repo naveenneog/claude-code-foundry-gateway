@@ -13,11 +13,13 @@ function Get-ClaudeFlowStepInfo {
 function Get-ClaudeFlowStepQuestions {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
     @([pscustomobject]@{
-        key = 'network.reviewPath'
-        question = 'Path to the priced New-ClaudeNetworkEdge review envelope.'
-        options = @()
-        recommended = ''
-        reason = 'The network executor already owns discovery, pricing, access impact and fingerprint approval.'
+        Key = 'network.reviewPath'
+        Question = 'Path to the priced New-ClaudeNetworkEdge review envelope.'
+        Options = @()
+        WhereToFind = @('Run scripts/New-ClaudeNetworkEdge.ps1 discovery/review workflow first.')
+        AcceptRecommendedWithoutConsole = $false
+        Recommended = ''
+        Reason = 'The network executor already owns discovery, pricing, access impact and fingerprint approval.'
     })
 }
 

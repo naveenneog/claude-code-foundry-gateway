@@ -14,11 +14,13 @@ function Get-ClaudeFlowStepInfo {
 function Get-ClaudeFlowStepQuestions {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
     @([pscustomobject]@{
-        key = 'desktopSignIn'
-        question = 'Choose helper-script, external-idp browser, or external-idp broker for Claude Desktop.'
-        options = @('helper-script','external-idp-browser','external-idp-broker')
-        recommended = 'helper-script'
-        reason = 'Helper script needs no tenant-wide consent; external-idp requires the Desktop app audience to be accepted by the gateway.'
+        Key = 'desktopSignIn'
+        Question = 'Choose helper-script, external-idp browser, or external-idp broker for Claude Desktop.'
+        Options = @('helper-script','external-idp-browser','external-idp-broker')
+        WhereToFind = @('onboarding/claude-gateway.json desktopSignIn', 'docs/DEVELOPER.md Desktop sign-in')
+        AcceptRecommendedWithoutConsole = $true
+        Recommended = 'helper-script'
+        Reason = 'Helper script needs no tenant-wide consent; external-idp requires the Desktop app audience to be accepted by the gateway.'
     })
 }
 
@@ -26,7 +28,15 @@ function Get-ClaudeFlowStepPlan {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
     $target = Get-ClaudeFlowRecordTarget -Record $Record -Discovery $Discovery
     $current = Get-ClaudeDecision -Record $Record -Key desktopSignIn
-    $desired = if ($Discovery -and $Discovery.desiredDesktopSignIn) { $Discovery.desiredDesktopSignIn } elseif ($current -and $current.target) { $current.target } else { $null }
+    $desired = if ($Discovery -and $Discovery.desiredDesktopSignIn) { $Discovery.desiredDesktopSignIn } elseif ($current -is [string]) { [string]$current } elseif ($current -and $current.target) { $current.target } else { $null }
+    if ($desired -is [string]) {
+        $desired = switch ($desired) {
+            'helper-script' { [pscustomobject]@{ kind = 'helper-script' } }
+            'external-idp-browser' { throw 'Desktop external-idp-browser needs clientId and issuer in decisions.desktopSignIn; run New-ClaudeDesktopEntraApp.ps1 first.' }
+            'external-idp-broker' { throw 'Desktop external-idp-broker needs clientId and issuer in decisions.desktopSignIn; run New-ClaudeDesktopEntraApp.ps1 first.' }
+            default { throw "Unknown Desktop sign-in choice '$desired'." }
+        }
+    }
     if (-not $desired) { return New-ClaudeFlowPlan -Step DesktopSignIn -Summary 'No Desktop sign-in change selected.' }
     $config = [pscustomobject]@{ desktopSignIn = $desired }
     $validated = Get-ClaudeDesktopSignIn -Config $config

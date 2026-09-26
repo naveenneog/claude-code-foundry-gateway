@@ -10,7 +10,7 @@ function Get-ClaudeFlowStepInfo {
     [pscustomobject]@{ Name = 'Entitlement'; Title = 'Entitlement store'; DecisionKey = 'entitlementStore'; DependsOn = @('Foundation'); Actions = @('Change') }
 }
 
-function Get-ClaudeEntitlementSource {
+function Get-ClaudeFlowEntitlementSource {
     param($Record, $Discovery)
     $nv = Get-ClaudeFlowNamedValueMap -Discovery $Discovery
     if ($nv.ContainsKey('entitlement-source')) { return $nv['entitlement-source'] }
@@ -22,25 +22,27 @@ function Get-ClaudeEntitlementSource {
 function Get-ClaudeFlowStepQuestions {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
     $target = Get-ClaudeFlowRecordTarget -Record $Record -Discovery $Discovery
-    $current = Get-ClaudeEntitlementSource -Record $Record -Discovery $Discovery
+    $current = Get-ClaudeFlowEntitlementSource -Record $Record -Discovery $Discovery
     @([pscustomobject]@{
-        key = 'entitlementStore'
-        question = 'Move entitlement storage?'
-        options = @(
+        Key = 'entitlementStore'
+        Question = 'Move entitlement storage?'
+        Options = @(
             [pscustomobject]@{ Key = 'projection'; Label = 'Cosmos projection'; Detail = "Use Deploy-ClaudeProjection.ps1. $($target.Sku): Basic v2 uses a public Entra-authenticated resolver; Standard/Premium v2 use a private resolver." },
             [pscustomobject]@{ Key = 'named-value'; Label = 'APIM named values'; Detail = 'Restore allow-standard and allow-premium lists from the backup/record; limited to roughly 100 developers.' }
         )
-        recommended = $(if ($current -eq 'named-value') { 'projection' } else { 'named-value' })
-        reason = 'Projection is the scale path; named values are the rollback path while lists still fit.'
+        WhereToFind = @('API Management > Named values > entitlement-source', 'docs/SECURE-PROJECTION.md')
+        AcceptRecommendedWithoutConsole = $false
+        Recommended = $(if ($current -eq 'named-value') { 'projection' } else { 'named-value' })
+        Reason = 'Projection is the scale path; named values are the rollback path while lists still fit.'
     })
 }
 
 function Get-ClaudeFlowStepPlan {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
     $target = Get-ClaudeFlowRecordTarget -Record $Record -Discovery $Discovery
-    $current = Get-ClaudeEntitlementSource -Record $Record -Discovery $Discovery
+    $current = Get-ClaudeFlowEntitlementSource -Record $Record -Discovery $Discovery
     $decision = Get-ClaudeDecision -Record $Record -Key entitlementStore
-    $desired = if ($decision -and $decision.target) { [string]$decision.target } elseif ($Discovery -and $Discovery.desiredEntitlementStore) { [string]$Discovery.desiredEntitlementStore } else { '' }
+    $desired = if ($decision -is [string]) { [string]$decision } elseif ($decision -and $decision.target) { [string]$decision.target } elseif ($Discovery -and $Discovery.desiredEntitlementStore) { [string]$Discovery.desiredEntitlementStore } else { '' }
     if (-not $desired -or $desired -eq $current) { return New-ClaudeFlowPlan -Step Entitlement -Summary "Entitlement already uses $current." }
     $actions = @()
     $implications = @()

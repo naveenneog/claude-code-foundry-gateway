@@ -16,7 +16,7 @@ function Get-ClaudeFlowStepInfo {
     }
 }
 
-function Get-ClaudeTierResearch {
+function Get-ClaudeFlowTierResearch {
     @(
         'Microsoft Learn, Upgrade and scale an Azure API Management instance, fetched 2026-09-26: https://learn.microsoft.com/en-us/azure/api-management/upgrade-and-scale',
         'Microsoft Learn, Azure API Management v2 tiers overview, fetched 2026-09-26: https://learn.microsoft.com/en-us/azure/api-management/v2-service-tiers-overview',
@@ -25,7 +25,7 @@ function Get-ClaudeTierResearch {
     )
 }
 
-function Get-ClaudeTierChangeOptions {
+function Get-ClaudeFlowTierChangeOptions {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
     $target = Get-ClaudeFlowRecordTarget -Record $Record -Discovery $Discovery
     $current = if ($target.Sku) { $target.Sku } else { 'BasicV2' }
@@ -60,13 +60,15 @@ function Get-ClaudeTierChangeOptions {
 
 function Get-ClaudeFlowStepQuestions {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
-    $options = @(Get-ClaudeTierChangeOptions -Record $Record -Discovery $Discovery)
+    $options = @(Get-ClaudeFlowTierChangeOptions -Record $Record -Discovery $Discovery)
     @([pscustomobject]@{
-        key = 'sku'
-        question = 'Choose the API Management v2 tier change.'
-        options = $options
-        recommended = @($options | Where-Object InPlace | Select-Object -First 1).Key
-        reason = 'Only documented in-place changes are recommended automatically; Premium v2 moves need an explicit guided replacement.'
+        Key = 'sku'
+        Question = 'Choose the API Management v2 tier change.'
+        Options = $options
+        WhereToFind = @('Azure portal > API Management > Pricing tier', 'az apim show -g <rg> -n <apim> --query sku')
+        AcceptRecommendedWithoutConsole = $false
+        Recommended = @($options | Where-Object InPlace | Select-Object -First 1).Key
+        Reason = 'Only documented in-place changes are recommended automatically; Premium v2 moves need an explicit guided replacement.'
     })
 }
 
@@ -74,9 +76,9 @@ function Get-ClaudeFlowStepPlan {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
     $target = Get-ClaudeFlowRecordTarget -Record $Record -Discovery $Discovery
     $decision = Get-ClaudeDecision -Record $Record -Key sku
-    $desired = if ($decision -and $decision.target) { [string]$decision.target } elseif ($Discovery -and $Discovery.desiredSku) { [string]$Discovery.desiredSku } else { '' }
+    $desired = if ($decision -is [string]) { [string]$decision } elseif ($decision -and $decision.target) { [string]$decision.target } elseif ($Discovery -and $Discovery.desiredSku) { [string]$Discovery.desiredSku } else { '' }
     if (-not $desired -or $desired -eq $target.Sku) { return New-ClaudeFlowPlan -Step Tier -Summary 'No tier change selected.' }
-    $option = @(Get-ClaudeTierChangeOptions -Record $Record -Discovery $Discovery | Where-Object { $_.Key -eq $desired })[0]
+    $option = @(Get-ClaudeFlowTierChangeOptions -Record $Record -Discovery $Discovery | Where-Object { $_.Key -eq $desired })[0]
     if (-not $option) { throw "Desired SKU '$desired' is not a supported v2 choice." }
     $actions = @()
     $rollback = ''
@@ -88,7 +90,7 @@ function Get-ClaudeFlowStepPlan {
         $actions += New-ClaudeFlowAction -Verb Migrate -Target "apim/$($target.ApimName)" -Detail "$($target.Sku) -> $desired by creating a new instance, restoring backup, then cutover"
         $rollback = 'Keep the old gateway serving until the new gateway passes verification; switch DNS/client base URL back if the move fails.'
     }
-    $implications = @($option.Detail) + @($option.Implications) + @(Get-ClaudeTierResearch)
+    $implications = @($option.Detail) + @($option.Implications) + @(Get-ClaudeFlowTierResearch)
     New-ClaudeFlowPlan -Step Tier `
         -Summary "Change API Management tier from $($target.Sku) to $desired." `
         -Actions $actions `

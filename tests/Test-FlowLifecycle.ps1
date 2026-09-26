@@ -91,9 +91,11 @@ function Get-ClaudeFlowApimMonthlyCost {
 }
 $tierRecord = [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{ sku = [pscustomobject]@{ target = 'StandardV2' } } }
 $tierDiscovery = [pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2' }
-$tierOptions = @(Get-ClaudeTierChangeOptions -Record $tierRecord -Discovery $tierDiscovery)
+$tierOptions = @(Get-ClaudeFlowTierChangeOptions -Record $tierRecord -Discovery $tierDiscovery)
 Assert 'tier options offer Basic v2 to Standard v2 in-place' (@($tierOptions | Where-Object { $_.Key -eq 'StandardV2' -and $_.InPlace }).Count -eq 1)
 Assert 'tier options do not offer Premium v2 injection as in-place' (@($tierOptions | Where-Object { $_.Key -eq 'PremiumV2' -and (-not $_.InPlace) }).Count -eq 1)
+$tierQuestions = @(Get-ClaudeFlowStepQuestions -Record $tierRecord -Discovery $tierDiscovery)
+Assert 'tier question uses orchestrator property names' ($tierQuestions[0].Key -eq 'sku' -and $tierQuestions[0].Question -and $tierQuestions[0].WhereToFind -and $tierQuestions[0].PSObject.Properties.Name -contains 'AcceptRecommendedWithoutConsole')
 $tierPlan = Get-ClaudeFlowStepPlan -Record $tierRecord -Discovery $tierDiscovery
 Assert 'tier plan includes live retail cost and Microsoft Learn research citations' ($tierPlan.Costs[0].MonthlyUsd -eq 700 -and (($tierPlan.Implications -join "`n") -match 'learn.microsoft.com/en-us/azure/api-management'))
 Assert 'tier apply snapshots before in-place write' ((Get-Content (Join-Path $root 'scripts\flow\Tier.ps1') -Raw) -match 'Assert-ClaudeFlowSnapshotBeforeWrite')
@@ -105,11 +107,15 @@ $entDiscovery = [pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'api
 $entPlan = Get-ClaudeFlowStepPlan -Record $entRecord -Discovery $entDiscovery
 Assert 'entitlement plan states Basic v2 public Entra resolver rule' (($entPlan.Implications -join "`n") -match 'Basic v2 uses a public resolver endpoint')
 Assert 'entitlement flip is refused without clean comparison before backup/write' ((Get-Thrown { Invoke-ClaudeFlowStep -Record $entRecord -Plan $entPlan }) -match 'clean projection comparison')
+$entQuestions = @(Get-ClaudeFlowStepQuestions -Record $entRecord -Discovery $entDiscovery)
+Assert 'entitlement question uses orchestrator property names' ($entQuestions[0].Key -eq 'entitlementStore' -and $entQuestions[0].Question -and $entQuestions[0].WhereToFind)
 
 . (Join-Path $root 'scripts\flow\Network.ps1')
 $netRecord = [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{ network = [pscustomobject]@{ reviewPath = 'review.json' } } }
 $netPlan = Get-ClaudeFlowStepPlan -Record $netRecord -Discovery $tierDiscovery
 Assert 'network flow keeps its own fingerprint approval requirement' (($netPlan.Implications -join "`n") -match 'not a substitute' -and (Get-Thrown { Invoke-ClaudeFlowStep -Record $netRecord -Plan $netPlan }) -match 'reviewed plan fingerprint')
+$netQuestions = @(Get-ClaudeFlowStepQuestions -Record $netRecord -Discovery $tierDiscovery)
+Assert 'network question uses orchestrator property names' ($netQuestions[0].Key -eq 'network.reviewPath' -and $netQuestions[0].WhereToFind)
 
 . (Join-Path $root 'scripts\flow\DesktopSignIn.ps1')
 $desktopRecord = [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{} }
@@ -127,11 +133,15 @@ $desktopDiscovery = [pscustomobject]@{
 $desktopPlan = Get-ClaudeFlowStepPlan -Record $desktopRecord -Discovery $desktopDiscovery
 Assert 'desktop sign-in change writes the extra audience and flags device profile regeneration' (($desktopPlan.Actions | ForEach-Object Target) -contains 'named value external-idp-extra-audience' -and (($desktopPlan.Actions | ForEach-Object Detail) -join ' ') -match 'regenerated')
 Assert 'desktop sign-in apply snapshots before audience write' ((Get-Content (Join-Path $root 'scripts\flow\DesktopSignIn.ps1') -Raw) -match 'Assert-ClaudeFlowSnapshotBeforeWrite')
+$desktopQuestions = @(Get-ClaudeFlowStepQuestions -Record $desktopRecord -Discovery $desktopDiscovery)
+Assert 'desktop question uses orchestrator property names' ($desktopQuestions[0].Key -eq 'desktopSignIn' -and $desktopQuestions[0].AcceptRecommendedWithoutConsole)
 
 Write-Host ''
 Write-Host 'P66 lifecycle - plans write nothing' -ForegroundColor Cyan
 $updateScript = Get-Content (Join-Path $root 'scripts\Update-ClaudeGateway.ps1') -Raw
+$rootUpdateScript = Get-Content (Join-Path $root 'Update-ClaudeGateway.ps1') -Raw
 Assert 'standalone update has plan-only default' ($updateScript -match 'Plan only\. Nothing has been changed' -and $updateScript -match 'Add -Apply')
+Assert 'root update shim delegates to scripts updater for orchestrator compatibility' ($rootUpdateScript -match 'scripts\\Update-ClaudeGateway\.ps1' -and $rootUpdateScript -match 'RecordPath')
 Assert 'standalone update fingerprints before apply' ($updateScript -match 'Get-ClaudeFlowFingerprint' -and $updateScript -match 'ApprovedPlanFingerprint')
 Assert 'standalone update uses a stable default snapshot path so the approval fingerprint can be reused' ($updateScript -match 'before-update-\$\(\$target\.ApimName\)\.json' -and $updateScript -notmatch 'before-update-\$\(\$target\.ApimName\)-\$stamp')
 Assert 'standalone update writes release and record only after applying' ($updateScript.IndexOf('Set-ClaudeDecisionRelease') -gt $updateScript.IndexOf('foreach ($file in $migrationFiles)'))
