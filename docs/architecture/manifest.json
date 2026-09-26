@@ -7,7 +7,7 @@
       "inputs": {
         "analytics/chargeback-cost.kql": "8d8a66a8980348851f37889579bf019666b229105bb4e64caae02c474de080b1",
         "analytics/chargeback-ledger.kql": "3924ba7e4edb21d761b16254452c0509a2a9d27558033d7a980c5e201e22b2f5",
-        "docs/architecture/01-system.json": "5280eeb573f05fc21ee7c68dbef0952f8195414b6f2df4bb4f32bb3ee908d4cf",
+        "docs/architecture/01-system.json": "87477aed4b69ec2dfc547167a1b12b003db304d5dcc22d9780d4d7d1dad6442f",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -35,11 +35,11 @@
       "outputs": [
         {
           "path": "docs/images/architecture/system-overview.png",
-          "sha256": "2745876fccb0ecad07b85de10a4004fa82963033f445d5482c589e3330ffee22"
+          "sha256": "f2154cc6fdf795deacd864fa94122b6f0c17f15474655ecd53f1d800fe254620"
         },
         {
           "path": "docs/images/architecture.png",
-          "sha256": "2745876fccb0ecad07b85de10a4004fa82963033f445d5482c589e3330ffee22"
+          "sha256": "f2154cc6fdf795deacd864fa94122b6f0c17f15474655ecd53f1d800fe254620"
         }
       ]
     },
@@ -122,7 +122,7 @@
       "id": "projection-freshness",
       "source": "docs/architecture/05-projection.json",
       "inputs": {
-        "docs/architecture/05-projection.json": "150a1ba5debe6e7c5034c0fd32796a62357c5558855ad7498e96f79c02d4c56f",
+        "docs/architecture/05-projection.json": "9a5cea56276e3b0e1f212a13c5157e619d8a00f6b469660424dc607825161d89",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -142,7 +142,7 @@
       "outputs": [
         {
           "path": "docs/images/architecture/projection-freshness.png",
-          "sha256": "0cd45c346b000397ebda4795a5036c84567c10da57074258b1b79bd7d6d6dfc1"
+          "sha256": "d3af4e246fe65969b515108624ea0a61209156f22d9e6e746ac8947e556de13b"
         }
       ]
     },

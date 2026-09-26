@@ -120,6 +120,12 @@ param(
     # organisation makes once, usually without a number in front of it.
     [switch]$CompareRedundancy,
 
+    # P61 asks for the installer decision at the scale where named values stop
+    # fitting: 100-500 developers, including BasicV2 with a public resolver and
+    # private Cosmos. This prints those rows from the same model rather than
+    # copying numbers into installer text.
+    [switch]$P61Scenarios,
+
     # Provisioned throughput to price the redundant options at. 400 RU/s is the
     # minimum Cosmos sells and already far more than this projection uses -
     # measured below at well under 1 RU/s average - so the redundant options are
@@ -128,6 +134,39 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ($P61Scenarios) {
+    $rows = @()
+    foreach ($developerCount in 100,500) {
+        foreach ($shape in @(
+            @{ Name = 'BasicV2 public resolver'; Inbound = 'public'; Endpoints = 4; Zones = 4; Implication = 'Cosmos and resolver storage stay private; resolver inbound is public and restricted by Entra to the gateway managed identity.' },
+            @{ Name = 'StandardV2 private resolver'; Inbound = 'private'; Endpoints = 5; Zones = 5; Implication = 'Gateway reaches the resolver private endpoint through outbound VNet integration.' },
+            @{ Name = 'PremiumV2 private resolver'; Inbound = 'private'; Endpoints = 5; Zones = 5; Implication = 'Gateway reaches the resolver private endpoint through Premium v2 networking.' }
+        )) {
+            $json = & $PSCommandPath -Developers $developerCount -Region $Region -PrivateEndpoints $shape.Endpoints -PrivateDnsZones $shape.Zones -AsJson 2>$null | Out-String | ConvertFrom-Json
+            $rows += [pscustomobject]@{
+                Developers = $developerCount
+                Scenario = $shape.Name
+                ResolverInbound = $shape.Inbound
+                MonthlyUsd = [decimal]$json.monthly_usd.total
+                AtRestUsd = [decimal]$json.monthly_usd.at_rest
+                Implications = $shape.Implication
+            }
+        }
+    }
+    if ($AsJson) { $rows | ConvertTo-Json -Depth 4; exit 0 }
+    Write-Host ''
+    Write-Host 'P61 entitlement projection scenarios' -ForegroundColor Cyan
+    Write-Host '  BasicV2 public resolver is the Basic v2 shape because Basic v2 has no outbound VNet integration.' -ForegroundColor DarkGray
+    Write-Host '  APIM v2 outbound IPs are not used as the primary control; Entra authentication is.' -ForegroundColor DarkGray
+    Write-Host ''
+    foreach ($row in $rows) {
+        Write-Host ("  {0,3} developers  {1,-28} `${2,7:n2}/month  at rest `${3,7:n2}" -f $row.Developers, $row.Scenario, $row.MonthlyUsd, $row.AtRestUsd)
+        Write-Host ("       {0}" -f $row.Implications) -ForegroundColor DarkGray
+    }
+    Write-Host ''
+    exit 0
+}
 
 # Derive the active population when it was not given, and refuse a figure that
 # cannot be true. More active developers than developers is always a mistake,
@@ -311,4 +350,3 @@ if ($CompareRedundancy) {
 }
 
 exit 0
-
