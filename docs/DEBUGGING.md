@@ -23,9 +23,12 @@ and never include bearer tokens in a public report.
 
 ---
 
-## Step 0 — Run the health check
+## Step 0 — Run the diagnostics
 
-Before reading any of this, run the whole bisection in one command:
+For P66 guided-flow diagnostics, start with [Diagnostics](DIAGNOSE.md). It runs
+the administrator and workstation checks, prints the exact fix and can produce a
+redacted support bundle. If the failing layer is still unclear, run the older
+request-path bisection below:
 
 ```powershell
 ./scripts/Debug-ClaudeCode.ps1 `
