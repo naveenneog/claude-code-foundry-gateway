@@ -154,7 +154,7 @@ function ConvertTo-ClaudeBuRegistry {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true, Position = 0)][AllowEmptyCollection()][AllowNull()]$BusinessUnits)
 
-    $items = @($BusinessUnits) | Where-Object { $_ }
+    $items = @($BusinessUnits | Where-Object { $_ })
     if (-not $items.Count) { return ',,' }
 
     $parts = foreach ($b in $items) {

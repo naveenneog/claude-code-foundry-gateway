@@ -27,11 +27,14 @@ Assert 'clear removes only the selected dollar budget' ($null -eq $doc.items.'de
 Assert 'negative dollars refuse' ((Get-Thrown { New-ClaudeUsdBudgetValue -Value 'e30=' -ScopeType organization -ScopeId finance -AmountUsd -1 -Period month -PriceBook $book }) -match 'nonnegative')
 Assert 'malformed state is not an empty budget map' ((Get-Thrown { ConvertFrom-ClaudeUsdValue 'broken!' }) -match 'USD')
 Assert 'capacity is enforced before writing' ((Get-Thrown { ConvertTo-ClaudeUsdValue @{ big = ('x' * 5000) } }) -match '4,096|4096')
-$script:Authority = 'version=1;budgetAuthority=Turnstile'
-function Get-ClaudeUsdNamedValues { param($ResourceGroup, $ApimName) return @{ 'turnstile-integration' = $script:Authority } }
+$script:Authority = 'url=https://turnstile.example.com;budgetAuthority=Turnstile'
+function Get-ApimNamedValue { param($ResourceGroup, $ApimName, $Id, [switch]$FailOnError) return $script:Authority }
 Assert 'Turnstile budget ownership prevents writes' ((Get-Thrown { Assert-ClaudeUsdAuthority -ResourceGroup rg-test -ApimName apim-test }) -match 'Turnstile')
-$script:Authority = 'governanceAuthority=Turnstile'
+$script:Authority = 'url=https://turnstile.example.com;governanceAuthority=Turnstile'
 Assert 'Turnstile governance ownership prevents writes' ((Get-Thrown { Assert-ClaudeUsdAuthority -ResourceGroup rg-test -ApimName apim-test }) -match 'Turnstile')
+$library = Get-Content (Join-Path $root 'scripts\ClaudeUsdBudgets.ps1') -Raw
+Assert 'USD delegates ownership to the shared guard, not another regex' ($library -match 'Assert-ClaudeGatewayOwnsGovernance -ResourceGroup \$ResourceGroup -ApimName \$ApimName -Write UsdBudgets' -and
+    $library -notmatch '\(\?:governanceAuthority\|budgetAuthority\)=Turnstile')
 
 $fake = [pscustomobject]@{ Writes = 0; DelayReadback = 1; BeforeWrite = ''; Values = @{
     'bu-registry' = ',finance=Contoso Finance:1000000,'
@@ -108,7 +111,7 @@ foreach ($key in 'usd-budgets', 'usd-budget-state') {
 Assert 'installer refuses an unreadable USD snapshot instead of resetting controls' ($installer -match '\$usdSavedValues = Get-ClaudeUsdNamedValues -ResourceGroup')
 foreach ($script in 'Set-ClaudeBusinessUnit.ps1', 'Set-ClaudeBudget.ps1') {
     $source = Get-Content (Join-Path $root "scripts\$script") -Raw
-    Assert "$script stores dollars and checks authority" ($source -match 'Set-ClaudeUsdBudget' -and $source -match 'Assert-ClaudeUsdAuthority')
+    Assert "$script stores dollars through the guarded shared USD writer" ($source -match 'Set-ClaudeUsdBudget')
 }
 Write-Host ''
 if ($fail) { Write-Host "$fail USD assertion(s) failed." -ForegroundColor Red; exit 1 }

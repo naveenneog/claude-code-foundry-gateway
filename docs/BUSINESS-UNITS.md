@@ -21,6 +21,30 @@ Membership comes from the group, so moving a developer between business units is
 done in Entra and picked up by the sync. There is no separate roster to keep in
 step.
 
+## Choose where changes are authored
+
+`Set-ClaudeBusinessUnit.ps1` reads the gateway's `turnstile-integration` before
+mutating it. If Turnstile owns governance, creates, updates and removals are
+refused before any write: use the connected Turnstile's **Gateway governance**
+or **Budgets** page, named in the error. An unreadable or invalid connection
+also stops a mutation. An absent or explicitly disconnected integration leaves
+the gateway in charge. `-List` continues to work without an authority check.
+
+With only budget authority in Turnstile, `-MonthlyBudgetUsd` is refused,
+including when creating a scope or combining it with a group edit. Changes to
+existing groups, parents and modes, and scope removals, remain allowed: the
+budget-only apply updates amounts on existing scopes, not their structure.
+Entra membership edits through `Set-ClaudeDeveloper.ps1` remain allowed under
+either authority, because Turnstile reads membership rather than rewriting it.
+
+No force switch bypasses this. An administrator who deliberately wants the
+scripts to own governance again runs
+`Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Gateway -BudgetAuthority Gateway`
+on the same gateway ([steps](TURNSTILE.md#move-governance-back-to-the-gateway)).
+Both switches are needed to return both authorities; Connect otherwise preserves
+the existing budget authority. Raw portal or Azure CLI writes are not guarded
+and can still be overwritten.
+
 ## Budget modes
 
 The platform admin chooses an enforcement mode for each unit or team. A missing
@@ -49,7 +73,8 @@ When governance is authored in the gateway:
 Omit `-Mode` to keep the current mode when changing a group or budget.
 `-AllowancePercent` requires `-Mode Allowance`. `-List` shows the stored mode.
 When governance is authored in Turnstile, use its administrator controls instead:
-the next apply would overwrite a gateway-authored change.
+the script refuses the change before the next apply could overwrite it.
+With only budget authority in Turnstile, modes remain gateway-owned.
 
 The new named value `bu-modes` keeps exceptions separately from `bu-registry`.
 For example, `,sales=allowance:10,sales-emea=notify,`; `,,` means all budgets are

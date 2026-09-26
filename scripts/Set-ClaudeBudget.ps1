@@ -20,6 +20,12 @@
     once emptied by a write that assumed an incomplete read, revoking everyone,
     and this is the same failure mode with the same shape.
 
+    Personal daily overrides remain gateway-owned even when Turnstile owns
+    governance or monthly unit/team budgets: its apply never writes
+    quota-overrides. The connection's personBudgets option only mirrors tier
+    daily quotas as monthly allocations TO Turnstile; it does not pull person
+    budgets back. This script therefore remains available under either authority.
+
 .PARAMETER User
     The developer, by UPN or object id.
 
@@ -172,7 +178,6 @@ if ($List) {
 
 # Resolve to an object id. A UPN is what an administrator has to hand; the
 # policy keys on oid.
-Assert-ClaudeUsdAuthority -ResourceGroup $ResourceGroup -ApimName $ApimName
 $oid = $User.Trim()
 if ($oid -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') {
     $resolved = az ad user show --id $oid --query id -o tsv 2>$null

@@ -206,6 +206,7 @@ try {
     Invoke-Check 'Business unit checks detect breakage [2/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '2/4' }
     Invoke-Check 'Business unit checks detect breakage [3/4]' 'Test-BusinessUnitsNegative.ps1' @{ Shard = '3/4' }
     Invoke-Check 'Admin surface - SKU, groups, tiers'      'Test-AdminSurface.ps1'
+    Invoke-Check 'Set scripts respect governance authority' 'Test-GovernanceAuthority.ps1'
     Invoke-Check 'Scale ceilings and the load envelope'    'Test-Scale.ps1'
     Invoke-Check 'Secure projection and the migration'     'Test-SecureProjection.ps1' -SerialLane
     Invoke-Check 'Enterprise network edge contract'         'Test-NetworkEdge.ps1' -SerialLane

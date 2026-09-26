@@ -1,4 +1,10 @@
 # Dated dollars live beside the approximate token quota, not inside it.
+if (-not (Get-Command Get-ApimNamedValue -ErrorAction SilentlyContinue)) {
+    . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
+}
+if (-not (Get-Command Assert-ClaudeGatewayOwnsGovernance -ErrorAction SilentlyContinue)) {
+    . (Join-Path $PSScriptRoot 'ClaudeTurnstileGovernance.ps1')
+}
 function ConvertFrom-ClaudeUsdValue {
     param([AllowNull()][string]$Value)
     if (-not $Value) { return [pscustomobject]@{} }
@@ -80,10 +86,7 @@ function Get-ClaudeUsdNamedValues {
 
 function Assert-ClaudeUsdAuthority {
     param([string]$ResourceGroup, [string]$ApimName)
-    $values = Get-ClaudeUsdNamedValues -ResourceGroup $ResourceGroup -ApimName $ApimName
-    if ([string]$values['turnstile-integration'] -match '(?:^|;)(?:governanceAuthority|budgetAuthority)=Turnstile(?:;|$)') {
-        throw 'Turnstile owns governance. Change budgets through that authority; no gateway values were written.'
-    }
+    Assert-ClaudeGatewayOwnsGovernance -ResourceGroup $ResourceGroup -ApimName $ApimName -Write UsdBudgets
 }
 
 function Get-ClaudeUsdPriceBook {
@@ -107,12 +110,17 @@ function Set-ClaudeUsdBudget {
         [ValidateSet('day', 'month')][string]$Period = 'month',
         [string]$PriceBookPath, [switch]$Clear, [switch]$ValidateOnly
     )
-    Assert-ClaudeUsdAuthority -ResourceGroup $ResourceGroup -ApimName $ApimName
     $all = Get-ClaudeUsdNamedValues -ResourceGroup $ResourceGroup -ApimName $ApimName
     if (-not $all.ContainsKey('usd-budgets') -or -not $all.ContainsKey('usd-budget-state')) {
         if ($Clear) { return }
         throw 'Install the current gateway template/policy before setting USD budgets. No dollar control is installed.'
     }
+    if ($Clear) {
+        $existing = ConvertFrom-ClaudeUsdValue $all['usd-budgets']
+        $key = "$ScopeType`:$ScopeId"
+        if (-not $existing.schema_version -or -not $existing.items -or -not $existing.items.PSObject.Properties[$key]) { return }
+    }
+    Assert-ClaudeUsdAuthority -ResourceGroup $ResourceGroup -ApimName $ApimName
     $book = if ($Clear) { $null } else { Get-ClaudeUsdPriceBook -Path $PriceBookPath }
     $next = New-ClaudeUsdBudgetValue -Value $all['usd-budgets'] -ScopeType $ScopeType -ScopeId $ScopeId `
         -AmountUsd $AmountUsd -Period $Period -PriceBook $book -Clear:$Clear

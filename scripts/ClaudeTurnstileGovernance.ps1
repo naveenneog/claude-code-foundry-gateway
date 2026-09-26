@@ -229,6 +229,63 @@ function Resolve-ClaudeTurnstileSetting {
     throw "No ${Name}: pass -$Parameter, or connect the gateway to Turnstile with ./scripts/Connect-ClaudeTurnstile.ps1."
 }
 
+function Assert-ClaudeGatewayOwnsGovernance {
+    <#
+    .SYNOPSIS
+        Refuses script writes that the connected Turnstile apply would overwrite.
+    .DESCRIPTION
+        BusinessUnits includes teams, group mappings and budget modes. Budgets
+        means their monthly token allocations, not quota-overrides: neither apply
+        path writes token-only personal daily overrides or Entra membership.
+        UsdBudgets covers dollar definitions and reconciled dollar stops. Call only for writes.
+        Absent or explicitly disconnected integrations leave the gateway in charge;
+        failed reads and invalid nonempty connection values never grant authority.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$ResourceGroup,
+        [Parameter(Mandatory = $true)][string]$ApimName,
+        [Parameter(Mandatory = $true)][ValidateSet('BusinessUnits', 'Budgets', 'UsdBudgets', 'Tiers')][string[]]$Write
+    )
+    try {
+        $raw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $script:TurnstileIntegrationNamedValue -FailOnError
+    }
+    catch {
+        throw ("Cannot verify governance authority: 'turnstile-integration' could not be read on '$ApimName'. " +
+            'Nothing was written. Check az login, Azure RBAC named-value read access and connectivity, then retry.')
+    }
+    if ([string]::IsNullOrWhiteSpace($raw)) { return }
+    $switchAuthority = "./scripts/Connect-ClaudeTurnstile.ps1 -ResourceGroup '$ResourceGroup' -ApimName '$ApimName' -GovernanceAuthority Gateway -BudgetAuthority Gateway"
+    try {
+        $integration = ConvertFrom-ClaudeTurnstileIntegrationValue $raw
+        if (-not $integration) { throw 'Invalid connection.' }
+        $governanceAuthority = Resolve-ClaudeTurnstileSetting $null $integration 'governanceAuthority' 'GovernanceAuthority' 'Gateway'
+        $budgetAuthority = Resolve-ClaudeTurnstileSetting $null $integration 'budgetAuthority' 'BudgetAuthority' 'Gateway'
+        if ($governanceAuthority -notin 'Gateway', 'Turnstile' -or $budgetAuthority -notin 'Gateway', 'Turnstile') { throw 'Invalid authority.' }
+    }
+    catch {
+        throw ("Cannot determine governance authority from the invalid 'turnstile-integration' value on '$ApimName'. Nothing was written. " +
+            "Inspect Azure portal > API Management > $ApimName > APIs > Named values > turnstile-integration. " +
+            "Repair the connection; to deliberately return ownership to the gateway, run $switchAuthority")
+    }
+    $owned = @($Write | Select-Object -Unique | Where-Object {
+        $governanceAuthority -eq 'Turnstile' -or ($_ -in 'Budgets', 'UsdBudgets' -and $budgetAuthority -eq 'Turnstile')
+    })
+    if (-not $owned.Count) { return }
+    $labels = @{
+        BusinessUnits = 'business units, teams, group mappings and budget modes'
+        Budgets = 'business-unit and team monthly budgets'
+        UsdBudgets = 'USD budget definitions and reconciled dollar stops'
+        Tiers = 'tiers (minute rates, daily quotas and model lists)'
+    }
+    $pages = @()
+    if (@($owned | Where-Object { $_ -ne 'Budgets' }).Count) { $pages += 'Gateway governance' }
+    if ($owned -contains 'Budgets' -or $owned -contains 'UsdBudgets') { $pages += 'Budgets' }
+    $url = ([string]$integration['url']).TrimEnd('/')
+    $where = 'Turnstile portal' + $(if ($url) { " ($url)" } else { '' }) + ' > ' + ($pages -join ' / ')
+    throw ("Turnstile owns $(($owned | ForEach-Object { $labels[$_] }) -join '; '). Nothing was written: its next apply would overwrite this change. " +
+        "Change it in $where instead. To deliberately return governance and monthly budgets to gateway scripts, run $switchAuthority")
+}
+
 function Get-ClaudeGatewayWorkspaceId {
     <#
     .SYNOPSIS

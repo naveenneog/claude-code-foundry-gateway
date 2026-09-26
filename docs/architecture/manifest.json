@@ -21,7 +21,7 @@
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "resolver/src/index.mjs": "b6b755fbbc56ef62e7b535a4bde2756111c2b5fc9913c16a893b45cb6dce33a3",
         "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
-        "scripts/ClaudeTurnstileGovernance.ps1": "ec6eb0fbcfabbe9c13eab90c2f652fb89350110d9a8d97a10e8a1e4fe21c18f5",
+        "scripts/ClaudeTurnstileGovernance.ps1": "9548de6c23c34827d58c90b44465706cb8bd5179b5ea2e7fc764dbce0e1c8f19",
         "scripts/Connect-ClaudeTurnstile.ps1": "cc4e2c094aaab8ce75856a3ba770d844bd32333d4f8b42f53f91cabdd1129201",
         "scripts/Export-ClaudeTurnstileUsage.ps1": "d68e00c953f4bb47492b39862b263377d33ccdf39f15c0e26bb2fbfa783efdb6",
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
@@ -83,7 +83,7 @@
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "scripts/ApimNamedValue.ps1": "4e12f047b61c586f215a66f73535708488c917b69e2163e6fa6f19253b77fe08",
+        "scripts/ApimNamedValue.ps1": "b136ec4171b978411877346d9e9b9dd916326b747d0e38d4fb938a2b71987bce",
         "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
         "scripts/Connect-ClaudeTurnstile.ps1": "cc4e2c094aaab8ce75856a3ba770d844bd32333d4f8b42f53f91cabdd1129201",
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
@@ -164,10 +164,10 @@
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "scripts/ApimNamedValue.ps1": "4e12f047b61c586f215a66f73535708488c917b69e2163e6fa6f19253b77fe08",
+        "scripts/ApimNamedValue.ps1": "b136ec4171b978411877346d9e9b9dd916326b747d0e38d4fb938a2b71987bce",
         "scripts/Invoke-ClaudeFinOps.ps1": "33e003342bf91dd4fb03c242fb4a112f40f155c9182f4c193fdd9683bbe6d4cf",
         "scripts/New-ClaudeTurnstileEntraApp.ps1": "0262606c6f2b747ae4dff7534c15d113099ff6fae06b40580eb62daffaf1db1d",
-        "scripts/Set-ClaudeTier.ps1": "0d66166dce920be8100d8953a71d195c9553dad8c9e9cbcddedfbb2796af94df"
+        "scripts/Set-ClaudeTier.ps1": "90d1a5eb9f9a6ec072b55187f5940a0d19d1942321a52772fe0fa627efe9da0c"
       },
       "outputs": [
         {
@@ -242,8 +242,8 @@
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
         "scripts/ClaudeBudgetModes.ps1": "d27db15c9e257e2e923355978896737bb07cd2227135fa29625b003655f70946",
         "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
-        "scripts/ClaudeTurnstileGovernance.ps1": "ec6eb0fbcfabbe9c13eab90c2f652fb89350110d9a8d97a10e8a1e4fe21c18f5",
-        "scripts/Set-ClaudeBusinessUnit.ps1": "8a534ff09cf9a60521807f4bf5f574f7a33ae270a7296cbf9dddb36a70a38964"
+        "scripts/ClaudeTurnstileGovernance.ps1": "9548de6c23c34827d58c90b44465706cb8bd5179b5ea2e7fc764dbce0e1c8f19",
+        "scripts/Set-ClaudeBusinessUnit.ps1": "c6f2cc8a385365a5b709ec4c58b109dc3de06a84bace5934d51ed0f309098f49"
       },
       "outputs": [
         {
@@ -369,7 +369,7 @@
         "infra/main.bicep": "de11890a556e3f3ada06d14316f660fb9d1d3d7728c6ba7220b14712506d1b3b",
         "infra/policy.xml": "dc731d8848394bedc456cebbb31c20677f43b39d1b148aac5fec73914d431f19",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "scripts/ClaudeUsdBudgets.ps1": "00e0b8da12b3239fbe0d4077248c0ef647c4dcc7136e4f32b98d070c257e62be",
+        "scripts/ClaudeUsdBudgets.ps1": "7435987f2cd90b8456e0f85e231c5d82d46f640c950e4d5966e5feae8f1d400d",
         "scripts/Sync-ClaudeUsdBudgets.ps1": "f0d5c3d6d0fb2da6b06b75c38cfecad9773bdadb97803027645910696a1d3d5c",
         "service/aum/aum_service/usd_budgets.py": "fd87a036f01dd0fbc465e126c4db1e4e5cae281dedd35f69f31a1c0fe26e4a9e",
         "service/aum/aum_service/usd_reconcile.py": "bb2e075eea03dd65fd78473324f32b87cee0fadd508cfd233458f1befa7cbfd4",

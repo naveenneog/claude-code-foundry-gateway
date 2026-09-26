@@ -708,6 +708,15 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   The Azure portal has no deployments blade for a Foundry resource, so that picture is a live CLI
   read instead. `docs/guide/portal-captures.json` records every capture, and the tests now fail if
   a published image differs from its record.
+- **Scripts refuse governance writes that Turnstile would overwrite.**
+  `Set-ClaudeBusinessUnit.ps1` and `Set-ClaudeTier.ps1` check the recorded authority
+  before writing, name the Turnstile page to use, and explain the explicit
+  `Connect-ClaudeTurnstile.ps1 -GovernanceAuthority Gateway -BudgetAuthority Gateway`
+  switch. Budget-only authority blocks monthly unit/team budget edits, not structure,
+  modes or tiers. Failed authority reads stop writes; a genuinely absent or explicitly
+  disconnected integration leaves the gateway in charge. Lists, personal daily
+  overrides and Entra membership edits remain available. The same tests on PowerShell
+  5.1 exposed and fixed singleton registry rendering when removing one of two units.
 - **A root unit in allowance or notify mode got HTTP 500.** The gateway's budget trace sent an
   empty `ParentUnit` (a unit has no parent) or `Notice` (no advisory yet), and APIM rejects empty
   trace metadata: "The value field is required". Absent values are now `none`, and a test
