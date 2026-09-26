@@ -61,6 +61,10 @@ class EntraGroups:
             except (ValueError, KeyError, TypeError):
                 detail = "Graph did not return a structured error."
             detail = mask_identifiers(detail.replace(self.token, "[token omitted]"))
+            if result.status_code == 403:
+                detail += (" Required rights: group owner or a Microsoft Entra role that can update group members "
+                           "(Groups Administrator, User Administrator, Directory Writers, Identity Governance Administrator, "
+                           "or Privileged Role Administrator for role-assignable groups). AUM does not request consent or grant roles.")
             raise FinOpsError(f"Graph HTTP {result.status_code}: {detail}", 4 if result.status_code == 403 else 7)
         return result.json() if result.content else {"deleted": True}
 

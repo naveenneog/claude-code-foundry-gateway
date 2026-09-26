@@ -29,6 +29,18 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **The Cosmos entitlement store offered by SKU, including Basic v2 (P61).** The installer asks
+  for `named-value` or `projection`, states the named-value ceiling (about 93 developers in
+  `bu-members`) at the operator's developer count, and chooses the resolver's inbound path by SKU:
+  private for Standard v2 and Premium v2, public with Microsoft Entra authentication pinned to the
+  gateway's managed identity for Basic v2, which has no outbound VNet integration; Cosmos stays
+  private either way. `scripts/Deploy-ClaudeProjection.ps1` deploys the private Cosmos account,
+  its network and the resolver, populates from Entra, compares against the named-value decisions
+  and flips `entitlement-source` only after a clean comparison;
+  `Measure-ClaudeProjectionCost.ps1 -P61Scenarios` prints the 100- and 500-developer cost rows.
+  Measured live on 2026-09-26 on an isolated Basic v2 gateway: an unauthenticated call to the
+  public resolver returned 401, a real count-tokens request through the gateway returned 200 after
+  the flip, and 500 synthetic records were written and counted. [ADR-0028](docs/adr/0028-basic-v2-projection-resolver.md).
 - **MDM deployment guide (P65).** `docs/MDM.md` now gives Intune, Jamf and
   Group Policy fleet rollout steps for Claude Code, the VS Code extension and
   Claude Desktop, with live workstation validation notes and Intune capture
@@ -48,6 +60,16 @@ exact streaming cache-creation detail remains **U13**.
   Measured live on 2026-09-26 on an isolated gateway: the helper token returned 200 and a
   wrong audience 401; a Desktop-audience token stopped at `AADSTS65001 consent_required`,
   because this tenant grants no consent (**U23**).
+- **AUM adds and removes developers by email (P64).** `aum developer find|add|remove` searches the
+  Entra directory with the signed-in administrator's delegated Graph token,
+  resolves exact email/UPN/object-id targets including guests, previews tier and
+  unit/team group changes, writes membership once, verifies propagation and
+  publishes the gateway. `Set-ClaudeDeveloper.ps1` now discovers recorded tier
+  group names instead of silently defaulting to fixed strings.
+  Removal allows an empty tier list only for a tier it is proven to empty, so a failed read
+  of another tier is still refused. Measured live on 2026-09-26 on an isolated gateway: a
+  request returned 200 after `aum developer add` and 403 after `aum developer remove`.
+  [ADR-0029](docs/adr/0029-aum-developer-membership.md).
 - **Dollar budgets enforced from priced token categories (P59).** A unit, team or person budget
   can be set in dollars with a pinned price book; a reconciler prices observed input, output,
   cache-read and both cache-write tokens with Decimal, refuses unpriced models rather than
@@ -58,6 +80,7 @@ exact streaming cache-creation detail remains **U13**.
   2026-09-25: $0.0364984 of priced spend crossed a $0.02 budget and the next request was refused
   175.9 s after the crossing one; a raise to $0.50 restored 200. Enforcement trails ingestion;
   it is not a hard invoice cap. [ADR-0026](docs/adr/0026-usd-budget-reconciliation.md).
+
 - **AUM (Azure Usage Management), the terminal FinOps client renamed from `claude-finops`.**
   `aum` (the old command still works) adds an executive overview, budgets by unit, team and
   person, gateway governance, usage breakdown and trends, a request trace, anomalies, reports
@@ -670,6 +693,11 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Changed
 
+- **AUM shows the owner's ASCII art on every tab.** The four-line art was in the code byte for byte
+  but appeared only at 120x38 or larger and only on Overview, so common terminals never showed it.
+  It is now the header on every tab at AUM's documented minimum of 80x24 or larger, with the
+  product name and the signed-in identity beside it; smaller terminals, `--plain`,
+  `--screen-reader`, `--json` and piped output keep the compact heading or none.
 - **Scripts ask for a value they were not given, and say where it comes from.**
   `scripts/ClaudeChoice.ps1` offers the options discovered in Azure, numbered, with the one the
   deployment points at recommended and the command and portal path to look it up; without a
@@ -717,6 +745,15 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **The Intune detection script in the MDM guide failed under Windows PowerShell 5.1.** It hashed
+  the policy with `SHA256.HashData` and `Convert.ToHexString`, which 5.1 does not have, so a
+  remediation would always report drift. It uses `ComputeHash` now, and `Test-DocReferences.ps1`
+  runs the block under `powershell.exe`.
+- **A half-resolved merge could commit conflict markers unnoticed.** A branch committed
+  `<<<<<<< HEAD` into this file and its gate passed; `Test-ReleaseLog.ps1` now refuses conflict
+  markers in the changelog and in every tracked text file.
+- **Removing a developer could switch off the empty-list guard for both tiers.** Caught in review
+  before merge (P64); the removal now allows an empty list only for a tier it is proven to empty.
 - **The first reviewed network edge deployment refused a VNet that did not exist yet.**
   `New-ClaudeNetworkEdge.ps1` read the owned VNet before creating it; the lookup returned
   nothing, and the extra-subnet guard counted that empty result as an unknown subnet, so a fresh

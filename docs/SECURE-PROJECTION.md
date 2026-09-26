@@ -6,11 +6,14 @@ hundred developers entitlement has to move to the **projection**: one Cosmos DB
 record per developer, read through a small resolver Function when the gateway's
 cache misses.
 
-This article deploys private endpoints for Cosmos DB, the resolver and resolver
-storage. APIM ingress remains public and authenticated; resolver telemetry uses
-public ingestion with Entra authentication. Making the Foundry account private
-is a separate step below, not an effect of the projection templates.
-It then points the gateway at the resolver
+This article deploys private endpoints for Cosmos DB and resolver storage. On
+Standard v2 and Premium v2, it also makes the resolver inbound path private. On
+Basic v2, the resolver inbound path is public because Basic v2 has no outbound
+VNet integration; the resolver is still Microsoft Entra-authenticated and allows
+only the gateway managed identity. APIM ingress remains public and authenticated;
+resolver telemetry uses public ingestion with Entra authentication. Making the
+Foundry account private is a separate step below, not an effect of the
+projection templates. It then points the gateway at the resolver
 without changing anyone's access, ready for the
 [migration runbook](SCALE.md#the-move-itself-step-by-step).
 
@@ -30,10 +33,10 @@ See [Architecture](ARCHITECTURE.md) for the full gateway; this is the optional
 entitlement read/write path, not the inference or reporting topology.
 
 ```text
-Developer ──Entra token──▶ API Management (public gateway, outbound VNet integration)
+Developer ──Entra token──▶ API Management (public gateway)
                               │  managed identity token, audience api://<resolver-app>
                               ▼
-                        Resolver (Flex Consumption)   ◀── private endpoint only
+                        Resolver (Flex Consumption)   ◀── private endpoint, or public+Entra on Basic v2
                               │  managed identity, read only, one container
                               ▼
                         Cosmos DB (serverless)        ◀── private endpoint only
@@ -48,7 +51,7 @@ network owner. This is outbound integration, not a private client ingress.
 | Component | Authenticates with | Reachable from | Key authentication |
 |---|---|---|---|
 | Cosmos DB account | Entra only | Private endpoint | Off (`disableLocalAuth`) |
-| Resolver Function | Built-in authentication: the gateway's identity only | Private endpoint | Basic publishing off, FTP off |
+| Resolver Function | Built-in authentication: the gateway's identity only | Private endpoint on Standard/Premium v2; public endpoint on Basic v2 | Basic publishing off, FTP off |
 | Resolver storage | Entra only | Private endpoints (blob, queue, table) | Off (`allowSharedKeyAccess: false`) |
 | Application Insights | Entra only | Public ingestion, identity required | Off (`DisableLocalAuth`) |
 | Foundry account | The gateway's identity | Private endpoint | Unchanged by this article |
@@ -61,7 +64,7 @@ resolver therefore cannot change who is entitled.
 
 | Requirement | Detail |
 |---|---|
-| Gateway tier | **Standard v2 or Premium v2** for this private runbook. **Basic v2** cannot reach a private resolver; `inboundAccess=public` is a separate, explicitly approved profile, not a private deployment. |
+| Gateway tier | **Standard v2 or Premium v2** for the private resolver profile. **Basic v2** uses `inboundAccess=public` with App Service Authentication and exact gateway managed-identity allow lists; Cosmos remains private. |
 | Roles | Owner, or Contributor plus User Access Administrator, on deployment resources; network join/write rights on the supplied VNet/subnets/DNS; application registration/assignment rights in Entra ID. Azure subscription Owner is not a directory role. |
 | Resource provider | `Microsoft.App` registered: `az provider show -n Microsoft.App --query registrationState` |
 | Region capacity | Check Cosmos DB account creation in your region **before** planning around it. Measured: Canada Central and Canada East both refused with `ServiceUnavailable ... high demand ... To request region access for your subscription, please follow this link https://aka.ms/cosmosdbquota`. A private endpoint can point at an account in another region, so a Cosmos DB account elsewhere still stays private in your VNet. |
@@ -75,6 +78,35 @@ resolver therefore cannot change who is entitled.
 | Private endpoints | Reserve capacity for five projection endpoints plus any Foundry endpoint | None | Cosmos, resolver and resolver storage ×3; Foundry is separate |
 | Resolver integration | /27 minimum (/26 used) | `Microsoft.App/environments` | Flex Consumption's own delegation, not `Microsoft.Web/serverFarms`. No private endpoints in it, and no underscore in its name. [Learn: subnet sizing and requirements](https://learn.microsoft.com/azure/azure-functions/flex-consumption-how-to#subnet-sizing-and-requirements) |
 | Runner (optional) | /27 | `Microsoft.ContainerInstance/containerGroups` | The container that writes and tests the projection from inside the network. |
+
+### One-command deployment
+
+Use the guarded deployer when the installer has selected `projection`:
+
+```powershell
+./scripts/Deploy-ClaudeProjection.ps1 `
+  -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> `
+  -Location eastus2 -Sku BasicV2 -ResolverInboundAccess public `
+  -FlipAfterCleanCompare
+```
+
+For Standard v2 and Premium v2, omit `-ResolverInboundAccess` and the script
+chooses `private`. The command deploys private Cosmos, projection networking and
+the resolver, exports named-value decisions, populates from Entra, compares the
+projection against those decisions and flips only after a clean comparison.
+Without `-FlipAfterCleanCompare` it stops after the clean comparison and leaves
+`entitlement-source` unchanged. `-WhatIf` prints the planned operations without
+writing resources.
+
+Portal capture specs for the lead are in `guide/captures/p61.json`; they are not
+run by this packet. Pending IDs: `p61-basic-gateway-overview`,
+`p61-basic-resolver-authentication`, `p61-basic-resolver-networking`,
+`p61-basic-cosmos-networking`, `p61-basic-named-values-flipped`. Planned outputs:
+`docs/guide/p61-basic-gateway-overview.png`,
+`docs/guide/p61-basic-resolver-authentication.png`,
+`docs/guide/p61-basic-resolver-networking.png`,
+`docs/guide/p61-basic-cosmos-networking.png`,
+`docs/guide/p61-basic-named-values-flipped.png`.
 
 ### Collect the inputs
 
@@ -534,9 +566,24 @@ At 500,000 members and hourly reconciliation, the write count is about
 $0.25/million RU; that is an **illustration**, not a measured upsert or scheduled
 sync bill. Include Graph, the runner, retries and telemetry in an operating quote.
 
+For P61's 100-500 developer installer choice, run
+`./scripts/Measure-ClaudeProjectionCost.ps1 -P61Scenarios`. On 2026-09-26 in
+East US 2 it reported:
+
+| Developers | Shape | Monthly list cost, excluding APIM | At rest |
+|---:|---|---:|---:|
+| 100 | Basic v2 public resolver, private Cosmos | $57.48 | $57.48 |
+| 100 | Standard/Premium v2 private resolver, private Cosmos | $65.28 | $65.28 |
+| 500 | Basic v2 public resolver, private Cosmos | $57.48 | $57.48 |
+| 500 | Standard/Premium v2 private resolver, private Cosmos | $65.28 | $65.28 |
+
+The Basic v2 row removes the resolver private endpoint and its DNS zone. It does
+not make Cosmos public.
+
 ## Related
 
 - [SCALE.md](SCALE.md): the migration runbook and what 500,000 developers need
 - [ADR-0005](adr/0005-identity-projection.md): why a projection, and its failure rules
 - [ADR-0011](adr/0011-projection-platform.md): why Cosmos DB serverless and Flex Consumption
+- [ADR-0028](adr/0028-basic-v2-projection-resolver.md): Basic v2 public resolver and mitigations
 - [NETWORK.md](NETWORK.md): what the developer clients themselves need to reach

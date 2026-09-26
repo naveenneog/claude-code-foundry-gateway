@@ -133,8 +133,20 @@ only a default — override it at the prompt.
 
 This is included-request arithmetic, **not supported developer capacity**.
 The shipped named-value membership map fills at roughly 93 developers with
-six-character unit IDs; see [Scale](SCALE.md). Private projection deployment is
-separate and needs Standard v2 or Premium v2.
+six-character unit IDs; see [Scale](SCALE.md). The installer therefore asks
+for an **entitlement store** as a separate choice:
+
+| Store | When it fits | Network shape |
+|---|---|---|
+| Named values | Small deployments below the measured ceiling | No extra components. |
+| Cosmos projection | Around 100 developers and above, or whenever the operator chooses it | Standard v2 and Premium v2 use a private resolver. Basic v2 uses a public resolver endpoint restricted by Microsoft Entra to the gateway managed identity, while Cosmos remains private. |
+
+The projection deployer is `scripts/Deploy-ClaudeProjection.ps1`. It deploys
+private Cosmos and the resolver, populates from Entra, compares the projection
+against the named-value lists, and flips only after a clean comparison. The
+Basic v2 resolver endpoint is public because Basic v2 has no outbound VNet
+integration; APIM outbound IPs are not treated as the primary control.
+Authentication is.
 
 ### Tooling
 

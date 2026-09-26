@@ -992,8 +992,13 @@ and output.
 **Does Turnstile see prompts or responses?** No. The export sends counts, identities, models,
 status, latency and cost.
 
-**Can Turnstile add a person to a unit?** No. Membership is the Entra group's; add the person
-there and run `Sync-ClaudeAccess.ps1` ([BUSINESS-UNITS.md](BUSINESS-UNITS.md)).
+**Can Turnstile add a person to a unit?** No. Membership is the Entra group's.
+Use AUM `developer add|remove`, `Set-ClaudeDeveloper.ps1`, or the Entra portal
+with the administrator's own group-management rights, then publish to the
+gateway. Turnstile shows the person after their first gateway request is
+exported; it does not read or write Entra membership without a tenant-admin
+Graph grant to a workload identity ([BUSINESS-UNITS.md](BUSINESS-UNITS.md),
+[AUM](AUM.md#add-and-remove-developers)).
 
 **What happens if Turnstile is down?** Nothing for developers. The scheduled run fails and the
 next one, whose window overlaps, sends what was missed.

@@ -237,6 +237,7 @@ there; [Operations](docs/OPERATIONS.md) maps tasks to commands and portal paths.
 
 | Guide | Purpose |
 |---|---|
+| [Get started](docs/GET-STARTED.md) | Simplified step-by-step tracks for administrators, developers and FinOps owners, with live approved screenshots or explicit no-screenshot notes |
 | [Developer](DEVELOPER.md) | CLI, VS Code and Desktop setup and verification |
 | [Setup](docs/SETUP.md) | Prerequisites, roles, deployment and bypass closure |
 | [Operations](docs/OPERATIONS.md) / [Onboarding](docs/ONBOARDING.md) | Daily administration, people, backup and retirement |

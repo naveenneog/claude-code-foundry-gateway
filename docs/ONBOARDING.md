@@ -74,6 +74,8 @@ works until the next sync and then silently stops.
 ./scripts/Set-ClaudeDeveloper.ps1 -User amara@contoso.com -Tier standard -Sync
 ./scripts/Set-ClaudeDeveloper.ps1 -User amara@contoso.com -Tier premium -BusinessUnit sales -Sync
 ./scripts/Set-ClaudeDeveloper.ps1 -User amara@contoso.com -Remove -Sync
+aum developer add amara@contoso.com --tier standard --unit sales --apply
+aum developer remove amara@contoso.com --apply --confirm amara@contoso.com
 ```
 
 `-Sync` publishes to the gateway as well. Without it the change is in the
@@ -97,6 +99,8 @@ Guests work by the address you invited them with. A guest's UPN is not their
 email — in this tenant `amara@contoso.com` is stored as
 `amara_contoso.com#EXT#@contoso.onmicrosoft.com` — and the script tries the
 object id, the mail attribute and the UPN in turn.
+AUM uses the same exact-resolution order and also searches `otherMails` for
+guest invited addresses.
 
 The sections below cover the same job done by hand, and the portal walkthrough.
 **Portal:** Entra ID > Groups > the relevant tier/team/unit > Members. Add or

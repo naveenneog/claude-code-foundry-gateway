@@ -28,7 +28,7 @@ Source: [01-system.json](architecture/01-system.json).
 | Profile | Adds to the deployment | Identity and operational boundary |
 |---|---|---|
 | **Default: named values** | API Management v2, Application Insights and Log Analytics. Foundry already exists. Workbooks and saved KQL functions are published separately as definitions. | Entra groups are synchronized to gateway named values. No resolver, Cosmos database or Turnstile service is required. |
-| **Projection** | Cosmos DB, a resolver Function, Function host/deployment storage, private endpoints and DNS. A writer runs separately to reconcile the directory. | The writer and resolver have different identities and container-scoped data roles. The private-inbound path requires Standard v2 or Premium v2 outbound VNet integration. |
+| **Projection** | Cosmos DB, a resolver Function, Function host/deployment storage, private endpoints and DNS. A writer runs separately to reconcile the directory. | The writer and resolver have different identities and container-scoped data roles. Cosmos stays private. Standard v2 and Premium v2 use a private resolver; Basic v2 uses a public resolver endpoint restricted by Microsoft Entra to the gateway managed identity. |
 | **Turnstile** | A separate fork deployment: App Service, PostgreSQL, Event Hubs and supporting Functions, Storage, Key Vault and networking. This repository adds the manual apply and hourly export Container Apps jobs. | Entra app roles control console access. The console starts one apply job; the job, not the console, writes gateway named values. |
 | **AUM (Azure Usage Management)** | A local Python terminal FinOps console, command `aum`; no new inference service or mandatory Azure resource. The terminal release is merged; the naming packet is staged on branch `aum`. | It uses Turnstile's HTTP API or Direct Azure with the operator's Azure CLI sign-in. A fake backend is for tests, never an outage fallback. |
 | **Monthly chargeback reports (P50)** | A separate Consumption environment, generator/dispatcher/admin jobs, discovered existing or explicit new VNet, private Blob storage and Azure Communication Services Email. | The reporting identity reads telemetry/configuration and writes reports. A separate administration identity writes configuration only. No Turnstile dependency. |
@@ -465,8 +465,11 @@ automatic fallback:
 - **Turnstile HTTP:** Azure CLI token, role/scope checks at the server, bounded API reads
   and explicit writes. A failed GET can refresh its token once; writes are not retried.
 - **Direct Azure:** ARM, Log Analytics and `Invoke-ClaudeFinOps.ps1`, reusing the
-  repository's gateway scripts and chargeback query. Azure RBAC is authoritative; this
-  is not an alternate implementation of Turnstile's delegated manager scope.
+  repository's gateway scripts and chargeback query. AUM developer add/remove uses the
+  signed-in administrator's delegated Graph token to update Entra group membership,
+  then publishes the gateway allow lists through the selected authority path. Azure
+  RBAC and Graph remain authoritative; this is not an alternate implementation of
+  Turnstile's delegated manager scope.
 - **Fake:** deterministic Contoso fixtures for tests and terminal snapshots; no tenant,
   model or credential calls.
 

@@ -36,6 +36,8 @@ param(
     [string[]]$AdditionalStandardOids = @(),
     [string[]]$AdditionalPremiumOids = @(),
     [switch]$AllowEmpty,
+    [switch]$AllowEmptyStandard,
+    [switch]$AllowEmptyPremium,
     [switch]$WhatIf
 )
 
@@ -107,7 +109,8 @@ foreach ($t in $tiers) {
     # thing to want, but it is also exactly what a failed lookup used to
     # produce silently - so it now has to be deliberate. Refuse if the tier is
     # resolving to empty while APIM still holds entries for it.
-    if (-not $effective.Count -and -not $AllowEmpty -and -not $WhatIf) {
+    $allowEmptyTier = $AllowEmpty -or ($t.Name -eq 'standard' -and $AllowEmptyStandard) -or ($t.Name -eq 'premium' -and $AllowEmptyPremium)
+    if (-not $effective.Count -and -not $allowEmptyTier -and -not $WhatIf) {
         $current = az apim nv show -g $ResourceGroup --service-name $ApimName `
             --named-value-id $t.NamedValue --query value -o tsv 2>$null
         if ($current -and $current.Trim().Trim(',')) {
