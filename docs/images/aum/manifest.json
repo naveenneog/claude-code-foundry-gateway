@@ -2156,20 +2156,6 @@
       "phase": "after"
     },
     {
-      "file": "direct-budgets-80x24-after.svg",
-      "source": "live",
-      "backend": "Direct",
-      "captured_at": "2026-09-26T03:12:05.365874Z",
-      "redaction": true,
-      "commit": "e8990a61cdccf905c4596db3c18ffc8d6fa4cc75",
-      "size": [
-        80,
-        24
-      ],
-      "tab": "budgets",
-      "phase": "after"
-    },
-    {
       "file": "direct-overview-160x48-after.svg",
       "source": "live",
       "backend": "Direct",
@@ -2184,12 +2170,26 @@
       "phase": "after"
     },
     {
+      "file": "direct-budgets-80x24-after.svg",
+      "source": "live",
+      "backend": "Direct",
+      "captured_at": "2026-09-26T11:19:06.765956Z",
+      "redaction": true,
+      "commit": "60e274d66bf1556937a6b69075ca8214d9c01cfe",
+      "size": [
+        80,
+        24
+      ],
+      "tab": "budgets",
+      "phase": "after"
+    },
+    {
       "file": "direct-budgets-160x48-after.svg",
       "source": "live",
       "backend": "Direct",
-      "captured_at": "2026-09-26T03:13:22.263399Z",
+      "captured_at": "2026-09-26T11:19:46.750440Z",
       "redaction": true,
-      "commit": "e8990a61cdccf905c4596db3c18ffc8d6fa4cc75",
+      "commit": "60e274d66bf1556937a6b69075ca8214d9c01cfe",
       "size": [
         160,
         48
