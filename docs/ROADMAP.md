@@ -334,6 +334,15 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       Follow-ups: saved views, comparison charts and in-terminal profiles; a request cursor (the
       API stops at 200); conditional catalog and tier writes; P47's requests and boosts; a live
       scoped-manager journey (**U20**)
+- [x] P52 AUM (Azure Usage Management) — `claude-finops` renamed `aum` (the old command still
+      works): one engine behind a dashboard and scriptable commands, backed by Turnstile, the
+      gateway directly, the AUM service or example data, so it does not need Turnstile. Owned
+      Entra groups, budgets and all three modes enforced on real requests, then a byte-exact
+      restore, measured live through Direct and Turnstile on 2026-09-25. `docs/AUM.md`,
+      [ADR-0018](adr/0018-terminal-finops.md). Open: a mutation journey through a deployed AUM
+      service; the server endpoints for approvals, boosts, notifications, conditional writes,
+      anomaly dispositions, request paging and global search (clients built and hidden until
+      advertised); full-directory scale (**U20**)
 - [x] P56 a parallel test suite — `tests/Test-All.ps1` runs checks in separate `pwsh` processes,
       at most four at a time, with an exclusive lane for checks that share Azure CLI state or scan
       the whole tree, logs printed in registration order, one result slot per registration, a
