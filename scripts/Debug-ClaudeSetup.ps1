@@ -17,12 +17,14 @@ param(
 
 $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'ClaudeDiagnoseCommon.ps1')
+if ($env:CLAUDE_DIAGNOSE_FORCE_NO_REQUEST) { $NoRequest = $true }
 
 Write-Host ''
 Write-Host 'Claude gateway setup diagnostics' -ForegroundColor Cyan
 Write-Host ''
 
 $record = $null
+$gatewayRequestPassed = $false
 if (Test-Path -LiteralPath $DecisionRecord -PathType Leaf) {
     try {
         $record = Get-Content -LiteralPath $DecisionRecord -Raw | ConvertFrom-Json
@@ -38,7 +40,10 @@ if (Test-Path -LiteralPath $DecisionRecord -PathType Leaf) {
 }
 
 $apim = $null
-if ($ResourceGroup -and $ApimName) {
+if ($env:CLAUDE_DIAGNOSE_SKIP_HEALTH) {
+    Add-ClaudeDiagnoseCheck 'Business units and budgets consistency' 'SKIP' 'CLAUDE_DIAGNOSE_SKIP_HEALTH was set for an offline diagnostics test.' './scripts/Test-ClaudeHealth.ps1 -ResourceGroup <rg> -ApimName <apim> -Detailed' 'Azure portal > API Management services > <gateway> > Named values'
+}
+elseif ($ResourceGroup -and $ApimName) {
     $az = Get-ClaudeDiagnoseAz @('apim','show','-g',$ResourceGroup,'-n',$ApimName,'-o','json')
     $apim = ConvertFrom-ClaudeDiagnoseJson $az.Output
     if ($apim) {
@@ -77,6 +82,7 @@ if ($GatewayUrl) {
                 try {
                     $r = Invoke-WebRequest -Method Post -Uri ($GatewayUrl.TrimEnd('/') + '/v1/messages') -Headers @{ Authorization = 'Bearer ' + $tok.accessToken; 'anthropic-version'='2023-06-01'; 'Content-Type'='application/json' } -Body $body -TimeoutSec 90
                     Add-ClaudeDiagnoseCheck 'Gateway real request' 'PASS' "HTTP $($r.StatusCode); tier=$($r.Headers['x-claude-tier'] -join '')" 'No fix needed.' 'Azure portal > API Management services > <gateway> > APIs > Claude API > Test'
+                    $gatewayRequestPassed = $true
                 } catch {
                     $code = $null; try { $code = $_.Exception.Response.StatusCode.value__ } catch {}
                     Add-ClaudeDiagnoseCheck 'Gateway real request' 'FAIL' "HTTP $code; $($_.Exception.Message)" 'Check entitlement, budgets, policy named values and Foundry RBAC; rerun Test-ClaudeHealth.ps1.' 'Azure portal > API Management services > <gateway> > APIs > Claude API > Test'
@@ -92,10 +98,12 @@ if ($GatewayUrl) {
 
 $principalId = [string](Get-ClaudeDiagnoseProperty $apim 'identity.principalId')
 if ($principalId) {
-    $roles = Get-ClaudeDiagnoseAz @('role','assignment','list','--assignee',$principalId,'-o','json')
+    $roles = Get-ClaudeDiagnoseAz @('role','assignment','list','--all','--assignee',$principalId,'-o','json')
     $roleJson = ConvertFrom-ClaudeDiagnoseJson $roles.Output
     if (@($roleJson | Where-Object { $_.roleDefinitionName -match 'Cognitive Services|Azure AI' }).Count) {
         Add-ClaudeDiagnoseCheck 'Gateway managed identity and Foundry role' 'PASS' "Managed identity has a Foundry data-plane role." 'No fix needed.' 'Azure portal > Foundry account > Access control (IAM)'
+    } elseif ($gatewayRequestPassed) {
+        Add-ClaudeDiagnoseCheck 'Gateway managed identity and Foundry role' 'WARN' 'Role assignment was not enumerable with this principal, but a real gateway request returned 200.' "Confirm the assignment in the portal or run: az role assignment list --all --assignee $principalId -o table" 'Azure portal > Foundry account > Access control (IAM)'
     } else {
         Add-ClaudeDiagnoseCheck 'Gateway managed identity and Foundry role' 'FAIL' "Principal exists but no Cognitive Services User-style assignment was found." "az role assignment create --assignee $principalId --role 'Cognitive Services User' --scope <foundry-resource-id>" 'Azure portal > Foundry account > Access control (IAM) > Add role assignment'
     }
@@ -154,8 +162,21 @@ $healthJson = $null
 if ($ResourceGroup -and $ApimName) {
     $healthPath = Join-Path $PSScriptRoot 'Test-ClaudeHealth.ps1'
     if (Test-Path $healthPath) {
-        $health = Invoke-ClaudeDiagnoseCommand -FilePath $healthPath -ArgumentList @('-ResourceGroup',$ResourceGroup,'-ApimName',$ApimName,'-AsJson')
-        $healthJson = ConvertFrom-ClaudeDiagnoseJson $health.Output
+        $healthJson = $null
+        try {
+            $job = Start-Job -ScriptBlock {
+                param($Path, $Rg, $Name)
+                & $Path -ResourceGroup $Rg -ApimName $Name -AsJson *>&1 | Out-String
+            } -ArgumentList $healthPath, $ResourceGroup, $ApimName
+            if (Wait-Job $job -Timeout 90) {
+                $healthOutput = Receive-Job $job | Out-String
+                $jsonStart = $healthOutput.IndexOf('{')
+                if ($jsonStart -ge 0) { $healthJson = ConvertFrom-ClaudeDiagnoseJson $healthOutput.Substring($jsonStart) }
+            } else {
+                Stop-Job $job -ErrorAction SilentlyContinue
+            }
+            Remove-Job $job -Force -ErrorAction SilentlyContinue
+        } catch { $healthJson = $null }
         if ($healthJson -and $healthJson.checks) {
             foreach ($name in @('Business units','Organisation ceiling','Foundry bypass closed','Models are priced')) {
                 $h = $healthJson.checks | Where-Object { $_.check -eq $name } | Select-Object -First 1
@@ -165,7 +186,7 @@ if ($ResourceGroup -and $ApimName) {
                 }
             }
         } else {
-            Add-ClaudeDiagnoseCheck 'Business units and budgets consistency' 'WARN' 'Test-ClaudeHealth.ps1 did not return JSON.' './scripts/Test-ClaudeHealth.ps1 -ResourceGroup <rg> -ApimName <apim> -Detailed' 'Azure portal > API Management services > <gateway> > Named values'
+            Add-ClaudeDiagnoseCheck 'Business units and budgets consistency' 'WARN' 'Test-ClaudeHealth.ps1 did not return JSON within 90 seconds.' './scripts/Test-ClaudeHealth.ps1 -ResourceGroup <rg> -ApimName <apim> -Detailed' 'Azure portal > API Management services > <gateway> > Named values'
         }
     }
 }

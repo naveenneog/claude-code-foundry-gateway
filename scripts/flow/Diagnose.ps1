@@ -40,21 +40,29 @@ function Invoke-ClaudeFlowStep {
     $results = @()
     $setup = Join-Path $root 'scripts\Debug-ClaudeSetup.ps1'
     $workstation = Join-Path $root 'scripts\Debug-ClaudeWorkstation.ps1'
+    $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue)
+    $hostExe = if ($pwsh) { $pwsh.Source } else { (Get-Command powershell.exe -ErrorAction Stop).Source }
     if (Test-Path $setup) {
-        $scriptParams = @{}
-        if ($Record.resourceGroup) { $scriptParams.ResourceGroup = [string]$Record.resourceGroup }
-        if ($Record.apimName) { $scriptParams.ApimName = [string]$Record.apimName }
-        if ($Record.gatewayUrl) { $scriptParams.GatewayUrl = [string]$Record.gatewayUrl }
-        if ($NoRequest) { $scriptParams.NoRequest = $true }
-        $text = & $setup @scriptParams *>&1 | Out-String
+        $scriptArgs = @('-NoProfile','-File',$setup)
+        if ($Record.resourceGroup) { $scriptArgs += @('-ResourceGroup', [string]$Record.resourceGroup) }
+        if ($Record.apimName) { $scriptArgs += @('-ApimName', [string]$Record.apimName) }
+        if ($Record.gatewayUrl) { $scriptArgs += @('-GatewayUrl', [string]$Record.gatewayUrl) }
+        if ($NoRequest) { $scriptArgs += '-NoRequest' }
+        $oldEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try { $text = & $hostExe @scriptArgs *>&1 | Out-String }
+        finally { $ErrorActionPreference = $oldEap }
         $results += [pscustomobject]@{ Scope='setup'; ExitCode=$LASTEXITCODE; Output=$text }
     }
     if (Test-Path $workstation) {
-        $scriptParams = @{}
-        if ($Record.gatewayUrl) { $scriptParams.GatewayUrl = [string]$Record.gatewayUrl }
-        if ($Record.tenantId) { $scriptParams.TenantId = [string]$Record.tenantId }
-        if ($NoRequest) { $scriptParams.NoRequest = $true }
-        $text = & $workstation @scriptParams *>&1 | Out-String
+        $scriptArgs = @('-NoProfile','-File',$workstation)
+        if ($Record.gatewayUrl) { $scriptArgs += @('-GatewayUrl', [string]$Record.gatewayUrl) }
+        if ($Record.tenantId) { $scriptArgs += @('-TenantId', [string]$Record.tenantId) }
+        if ($NoRequest) { $scriptArgs += '-NoRequest' }
+        $oldEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try { $text = & $hostExe @scriptArgs *>&1 | Out-String }
+        finally { $ErrorActionPreference = $oldEap }
         $results += [pscustomobject]@{ Scope='workstation'; ExitCode=$LASTEXITCODE; Output=$text }
     }
     @{ DecisionChanges = @{}; Results = @($results) }

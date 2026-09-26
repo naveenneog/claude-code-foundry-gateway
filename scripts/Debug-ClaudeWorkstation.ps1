@@ -14,12 +14,14 @@ param(
 
 $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'ClaudeDiagnoseCommon.ps1')
+if ($env:CLAUDE_DIAGNOSE_FORCE_NO_REQUEST) { $NoRequest = $true }
 
 Write-Host ''
 Write-Host 'Claude workstation diagnostics' -ForegroundColor Cyan
 Write-Host ''
 
 $azCmd = Get-Command az -ErrorAction SilentlyContinue
+$cognitiveToken = ''
 if ($azCmd) {
     Add-ClaudeDiagnoseCheck 'Azure CLI installed' 'PASS' $azCmd.Source 'Install or update with winget install Microsoft.AzureCLI.' 'https://learn.microsoft.com/cli/azure/install-azure-cli'
     $acctRaw = Get-ClaudeDiagnoseAz @('account','show','-o','json')
@@ -29,7 +31,10 @@ if ($azCmd) {
         Add-ClaudeDiagnoseCheck 'Azure sign-in and tenant' $tenantStatus "Signed in as $($acct.user.name); tenant $($acct.tenantId)" "az login --tenant $TenantId --allow-no-subscriptions" 'Microsoft Entra admin center > Overview'
         $tokRaw = Get-ClaudeDiagnoseAz @('account','get-access-token','--resource','https://cognitiveservices.azure.com','-o','json')
         $tok = ConvertFrom-ClaudeDiagnoseJson $tokRaw.Output
-        if ($tok.accessToken) { Add-ClaudeDiagnoseCheck 'Cognitive Services token' 'PASS' 'Token obtained for https://cognitiveservices.azure.com; value not printed.' 'No fix needed.' 'Microsoft Entra admin center > Sign-in logs' }
+        if ($tok.accessToken) {
+            $cognitiveToken = [string]$tok.accessToken
+            Add-ClaudeDiagnoseCheck 'Cognitive Services token' 'PASS' 'Token obtained for https://cognitiveservices.azure.com; value not printed.' 'No fix needed.' 'Microsoft Entra admin center > Sign-in logs'
+        }
         else { Add-ClaudeDiagnoseCheck 'Cognitive Services token' 'FAIL' 'Azure CLI did not return a token.' "az login --tenant $TenantId --allow-no-subscriptions" 'Microsoft Entra admin center > Sign-in logs' }
     } else {
         Add-ClaudeDiagnoseCheck 'Azure sign-in and tenant' 'FAIL' 'az account show returned no account.' "az login --tenant $TenantId --allow-no-subscriptions" 'Microsoft Entra admin center > Overview'
@@ -126,8 +131,17 @@ if ($GatewayUrl) {
         Add-ClaudeDiagnoseCheck 'Network path to gateway' $(if ($dns.Count) { 'PASS' } else { 'FAIL' }) "DNS=$($dns -join ', '); proxy=$proxy; NODE_EXTRA_CA_CERTS=$ca" 'Fix DNS/proxy/custom CA; see docs/NETWORK.md.' 'Network team > proxy/PAC/TLS inspection; Azure portal > API Management > Custom domains'
         if ($NoRequest) {
             Add-ClaudeDiagnoseCheck 'Gateway real request' 'SKIP' '-NoRequest was supplied.' 'Rerun without -NoRequest to send one small request through the gateway.' 'Azure portal > API Management services > <gateway> > APIs > Claude API > Test'
+        } elseif ($cognitiveToken) {
+            $body = @{ model = 'claude-sonnet-5'; max_tokens = 8; messages = @(@{ role='user'; content='say OK' }) } | ConvertTo-Json -Depth 6
+            try {
+                $r = Invoke-WebRequest -Method Post -Uri ($GatewayUrl.TrimEnd('/') + '/v1/messages') -Headers @{ Authorization = 'Bearer ' + $cognitiveToken; 'anthropic-version'='2023-06-01'; 'Content-Type'='application/json' } -Body $body -TimeoutSec 90
+                Add-ClaudeDiagnoseCheck 'Gateway real request' 'PASS' "HTTP $($r.StatusCode); tier=$($r.Headers['x-claude-tier'] -join '')" 'No fix needed.' 'Azure portal > API Management services > <gateway> > APIs > Claude API > Test'
+            } catch {
+                $code = $null; try { $code = $_.Exception.Response.StatusCode.value__ } catch {}
+                Add-ClaudeDiagnoseCheck 'Gateway real request' 'FAIL' "HTTP $code; $($_.Exception.Message)" "./scripts/Debug-ClaudeCode.ps1 -GatewayBaseUrl $GatewayUrl" 'Azure portal > API Management services > <gateway> > APIs > Claude API > Test'
+            }
         } else {
-            Add-ClaudeDiagnoseCheck 'Gateway real request' 'WARN' 'Real request path is delegated to Debug-ClaudeCode.ps1 in this build.' "./scripts/Debug-ClaudeCode.ps1 -GatewayBaseUrl $GatewayUrl" 'Azure portal > API Management services > <gateway> > APIs > Claude API > Test'
+            Add-ClaudeDiagnoseCheck 'Gateway real request' 'SKIP' 'No Cognitive Services token was available for the request.' "az login --tenant $TenantId --allow-no-subscriptions" 'Microsoft Entra admin center > Sign-in logs'
         }
     } else {
         Add-ClaudeDiagnoseCheck 'Network path to gateway' 'FAIL' "Invalid gateway URL: $GatewayUrl" 'Use https://<apim>.azure-api.net/claude.' 'Azure portal > API Management services > <gateway> > Overview'

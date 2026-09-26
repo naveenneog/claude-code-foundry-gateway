@@ -21,9 +21,15 @@ function Invoke-DiagScript([string]$Script, [string[]]$Args, [string]$StubDir, [
 
 Write-Host ''
 Write-Host 'P66 diagnostics' -ForegroundColor Cyan
+$script:hostExe = if ($PSVersionTable.PSVersion.Major -lt 6) {
+    Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+} else {
+    (Get-Command pwsh -ErrorAction Stop).Source
+}
 
 $scratch = Join-Path ([IO.Path]::GetTempPath()) ('diagnose-tests-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $scratch -Force | Out-Null
+$originalPath = $env:PATH
 try {
     $stubs = Join-Path $scratch 'bin'
     $homeDir = Join-Path $scratch 'home'
@@ -71,6 +77,8 @@ exit /b 0'
 if "%1"=="--version" (echo 1.94.0& exit /b 0)
 if "%1"=="--list-extensions" (echo anthropic.claude-code& exit /b 0)
 exit /b 0'
+    $env:PATH = $stubs + [IO.Path]::PathSeparator + $env:PATH
+    $env:CLAUDE_DIAGNOSE_FORCE_NO_REQUEST = '1'
 
     $settings = @{ env = @{ CLAUDE_CODE_USE_FOUNDRY = '1'; ANTHROPIC_FOUNDRY_BASE_URL = 'https://apim-test.azure-api.net/claude'; ANTHROPIC_AUTH_TOKEN = 'sk-ant-api03-secret-token-like-value' } } | ConvertTo-Json -Depth 5
     Set-Content -Path (Join-Path $homeDir '.claude\settings.json') -Value $settings -Encoding UTF8
@@ -92,7 +100,11 @@ exit /b 0'
     } | ConvertTo-Json -Depth 8) -Encoding UTF8
 
     $bundle = Join-Path $scratch 'setup-bundle.zip'
-    $setupText = & pwsh -NoProfile -File (Join-Path $root 'scripts\Debug-ClaudeSetup.ps1') -ResourceGroup rg-test -ApimName apim-test -DecisionRecord $record -NoRequest -SupportBundle $bundle *>&1 | Out-String
+    $env:CLAUDE_DIAGNOSE_SKIP_HEALTH = '1'
+    $oldEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $setupText = & $script:hostExe -NoProfile -File (Join-Path $root 'scripts\Debug-ClaudeSetup.ps1') -ResourceGroup rg-test -ApimName apim-test -DecisionRecord $record -NoRequest -SupportBundle $bundle *>&1 | Out-String
+    $ErrorActionPreference = $oldEap
     $setupCode = $LASTEXITCODE
     Assert 'admin diagnostics emit PASS/WARN/FAIL/SKIP checks' ($setupText -match '\b(PASS|WARN|FAIL|SKIP)\b' -and $setupText -match 'Evidence:' -and $setupText -match 'Fix:')
     Assert 'admin diagnostics run read-only with -NoRequest skip' ($setupText -match 'Gateway real request' -and $setupText -match 'SKIP')
@@ -108,12 +120,18 @@ exit /b 0'
         $env:LOCALAPPDATA = Join-Path $homeDir 'AppData\Local'
         $env:CLAUDE_DIAGNOSE_WINDOWS_POLICY_ROOT = $policyRoot
         $env:ANTHROPIC_FOUNDRY_RESOURCE = 'https://conflicting-resource.example'
-        $workText = & pwsh -NoProfile -File (Join-Path $root 'scripts\Debug-ClaudeWorkstation.ps1') -GatewayUrl https://apim-test.azure-api.net/claude -TenantId 11111111-1111-1111-1111-111111111111 -NoRequest -SupportBundle $workBundle *>&1 | Out-String
+        $env:CLAUDE_DIAGNOSE_SKIP_HEALTH = '1'
+        $oldEap = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        $workText = & $script:hostExe -NoProfile -File (Join-Path $root 'scripts\Debug-ClaudeWorkstation.ps1') -GatewayUrl https://apim-test.azure-api.net/claude -TenantId 11111111-1111-1111-1111-111111111111 -NoRequest -SupportBundle $workBundle *>&1 | Out-String
+        $ErrorActionPreference = $oldEap
         $workCode = $LASTEXITCODE
     } finally {
         $env:PATH = $oldPath; $env:USERPROFILE = $oldProfile; $env:APPDATA = $oldAppData; $env:LOCALAPPDATA = $oldLocal
         Remove-Item Env:\CLAUDE_DIAGNOSE_WINDOWS_POLICY_ROOT -ErrorAction SilentlyContinue
         Remove-Item Env:\ANTHROPIC_FOUNDRY_RESOURCE -ErrorAction SilentlyContinue
+        Remove-Item Env:\CLAUDE_DIAGNOSE_SKIP_HEALTH -ErrorAction SilentlyContinue
+        Remove-Item Env:\CLAUDE_DIAGNOSE_FORCE_NO_REQUEST -ErrorAction SilentlyContinue
     }
     Assert 'workstation diagnostics emit managed-setting precedence' ($workText -match 'Managed settings precedence' -and $workText -match 'HKLM.*wins')
     Assert 'workstation diagnostics detect configuration conflicts' ($workText -match 'Configuration conflicts')
@@ -137,7 +155,9 @@ exit /b 0'
     $plan = Get-ClaudeFlowStepPlan -Record ([pscustomobject]@{ resourceGroup='rg-test'; apimName='apim-test'; gatewayUrl='https://apim-test.azure-api.net/claude' }) -Discovery $null
     Assert 'Diagnose step advertises the fixed interface' ($info.Name -eq 'Diagnose' -and $info.Actions -contains 'Diagnose')
     Assert 'Diagnose plan is read-only and contains only Check actions' ((@($plan.Actions) | Where-Object Verb -ne 'Check').Count -eq 0)
+    $env:CLAUDE_DIAGNOSE_SKIP_HEALTH = '1'
     $result = Invoke-ClaudeFlowStep -Record ([pscustomobject]@{ resourceGroup='rg-test'; apimName='apim-test'; gatewayUrl='https://apim-test.azure-api.net/claude' }) -Plan $plan -NoRequest
+    Remove-Item Env:\CLAUDE_DIAGNOSE_SKIP_HEALTH -ErrorAction SilentlyContinue
     Assert 'Diagnose apply returns results but no decision changes' ($result.DecisionChanges.Count -eq 0 -and $result.Results.Count -gt 0)
 
     $bash = $null
@@ -158,7 +178,11 @@ exit /b 0'
         Assert 'bash workstation diagnostics parses' $true 'bash not present on this host'
     }
 }
-finally { Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue }
+finally {
+    $env:PATH = $originalPath
+    Remove-Item Env:\CLAUDE_DIAGNOSE_SKIP_HEALTH -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue
+}
 
 Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }

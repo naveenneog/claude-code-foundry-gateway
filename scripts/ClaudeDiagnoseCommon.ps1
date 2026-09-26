@@ -32,7 +32,7 @@ function Add-ClaudeDiagnoseCheck {
     )
     $check = New-ClaudeDiagnoseCheck -Name $Name -Status $Status -Evidence $Evidence -Fix $Fix -PortalPath $PortalPath
     $script:ClaudeDiagnoseResults += $check
-    return $check
+    return
 }
 
 function ConvertFrom-ClaudeDiagnoseJson {
