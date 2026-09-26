@@ -24,6 +24,9 @@ Assert 'Basic public shape names the Entra-only risk' ($installer -match 'public
 Assert 'installer persists projection settings into claude-gateway.json' ($installer -match 'entitlementStore\s*=' -and $installer -match 'resolverInboundAccess\s*=' -and $installer -match 'projectionDeployer\s*=')
 Assert 'installer invokes the one-command deployer for projection' ($installer -match 'Deploy-ClaudeProjection\.ps1' -and $installer -match '-FlipAfterCleanCompare')
 Assert 'non-interactive projection refuses ambiguity' ($installer -match 'Projection requires .* -Yes' -or $installer -match 'Cannot choose projection unattended')
+Assert '-Yes chooses the deterministic entitlement store default' ($installer -match 'selected from the declared developer count under -Yes')
+Assert 'unattended projection always requires the deployer' ($installer.Contains('$Yes -and $EntitlementStore -eq ''projection'' -and -not $DeployProjection'))
+Assert 'flip cannot be requested without the deployer' ($installer.Contains('$FlipProjectionAfterCleanCompare -and -not $DeployProjection'))
 
 Write-Host ''
 Write-Host 'Projection deployer - compare-gated flip' -ForegroundColor Cyan

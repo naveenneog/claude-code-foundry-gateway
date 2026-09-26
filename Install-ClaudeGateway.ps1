@@ -648,12 +648,21 @@ if (-not $EntitlementStore) {
             -Detail 'Private Cosmos entitlement store plus Function resolver. Required around 100-500 developers; one deployer can populate, compare and flip after a clean comparison.' `
             -Recommended:($devCount -gt 93) -Reason 'named values cannot hold the declared developer count'
     )
-    $EntitlementStore = Select-ClaudeChoice -Parameter EntitlementStore -Question 'Entitlement store' -Options $storeOptions `
-        -WhereToFind @('docs/SCALE.md: named-value ceiling', 'docs/SECURE-PROJECTION.md: projection deployment') `
-        -AmbiguousMessage 'Choose named-value or projection explicitly for unattended runs.'
+    if ($Yes) {
+        $EntitlementStore = if ($devCount -gt 93) { 'projection' } else { 'named-value' }
+        Write-Host ("  -EntitlementStore {0}: selected from the declared developer count under -Yes" -f $EntitlementStore) -ForegroundColor DarkGray
+    }
+    else {
+        $EntitlementStore = Select-ClaudeChoice -Parameter EntitlementStore -Question 'Entitlement store' -Options $storeOptions `
+            -WhereToFind @('docs/SCALE.md: named-value ceiling', 'docs/SECURE-PROJECTION.md: projection deployment') `
+            -AmbiguousMessage 'Choose named-value or projection explicitly for unattended runs.'
+    }
 }
-elseif ($Yes -and $EntitlementStore -eq 'projection' -and -not $DeployProjection -and -not $FlipProjectionAfterCleanCompare) {
+if ($Yes -and $EntitlementStore -eq 'projection' -and -not $DeployProjection) {
     throw 'Cannot choose projection unattended with -Yes unless -DeployProjection is also passed; projection requires a compare-gated deployer run.'
+}
+if ($FlipProjectionAfterCleanCompare -and -not $DeployProjection) {
+    throw '-FlipProjectionAfterCleanCompare requires -DeployProjection.'
 }
 
 $ResolverInboundAccess = if ($ResolverInboundAccess) { $ResolverInboundAccess }
