@@ -76,6 +76,50 @@ Assert-Throws 'an empty rule list cannot quietly exempt a whole rule group' { As
 $wrong=@{matchVariable='RequestArgValues';selectorMatchOperator='EqualsAny';selector='*';exclusionManagedRuleSets=$scoped.exclusionManagedRuleSets}
 Assert-Throws 'an all-arguments exclusion is refused' { Assert-ClaudeNetworkWafExclusions -Exclusions @($wrong) -RuleSet $ruleCatalog } 'specific'
 
+& {
+    $tokens = $null; $errors = $null
+    $source = Get-Content (Join-Path $RepositoryRoot 'scripts\New-ClaudeNetworkEdge.ps1') -Raw
+    $ast = [Management.Automation.Language.Parser]::ParseInput($source, [ref]$tokens, [ref]$errors)
+    $blocks = @($ast.FindAll({
+        param($node)
+        $node -is [Management.Automation.Language.IfStatementAst] -and
+            $node.Clauses[0].Item1.Extent.Text -eq '$newVnet' -and
+            $node.Extent.Text.Contains("Deploy 'vnet'")
+    }, $true))
+    Assert 'the new-VNet deployment boundary can be exercised offline' ($blocks.Count -eq 1)
+    if ($blocks.Count -ne 1) { return }
+    $createNetwork = [scriptblock]::Create($blocks[0].Extent.Text)
+    $newVnet = $true
+    $Name = 'contoso-edge'; $owner = 'contoso-owner'; $Location = 'regiona'
+    $rgId = '/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/rg-contoso-evaluation'
+    $VnetId = "$rgId/providers/Microsoft.Network/virtualNetworks/$Name"
+    $AddressPrefix = '10.12.0.0/22'; $edgePrefix = '10.12.0.0/24'
+    $apimPrefix = '10.12.1.0/24'; $pePrefix = '10.12.2.0/26'; $runnerPrefix = '10.12.2.64/27'
+    $isolation = $false; $EdgeRouteTableId = ''; $ApimRouteTableId = ''; $DdosProtectionPlanId = ''
+    function Invoke-ClaudeNetworkArm {
+        param([string]$Url, [switch]$AllowNotFound)
+        if ($Url -like '*Microsoft.Network/virtualNetworks/*') { return $fixture }
+        return $null
+    }
+    function Track {}
+    function Deploy { $script:networkDeployCalls++; return $null }
+    $fixture = $null; $script:networkDeployCalls = 0
+    $creationError = $null
+    try { & $createNetwork } catch { $creationError = $_.Exception.Message }
+    Assert ("a nonexistent VNet reaches creation rather than the extra-subnet guard: $creationError") (-not $creationError -and $script:networkDeployCalls -eq 1)
+    $fixture = [pscustomobject]@{
+        tags = @{ 'claude-network-owner' = $owner }
+        properties = [pscustomobject]@{ subnets = @('edge','apim-integration','private-endpoints','verification' | ForEach-Object { [pscustomobject]@{ name = $_; properties = [pscustomobject]@{} } }) }
+    }
+    $script:networkDeployCalls = 0
+    & $createNetwork
+    Assert 'the existing owned subnet layout remains deployable' ($script:networkDeployCalls -eq 1)
+    $fixture.properties.subnets += [pscustomobject]@{ name = 'other-workload'; properties = [pscustomobject]@{} }
+    $script:networkDeployCalls = 0
+    Assert-Throws 'an existing additional subnet still blocks replacement' { & $createNetwork } 'additional subnets'
+    Assert 'a refused subnet replacement performs no deployment' ($script:networkDeployCalls -eq 0)
+}
+
 $script:azCalls = @()
 function Invoke-ClaudeNetworkAz {
     param([string[]]$Arguments)

@@ -302,9 +302,9 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       frozen review, including the identities that may lose access, confirmed before any write.
       Streaming, timeouts, body size, WAF on code and client-address trust measured live; the
       evaluation removed. [ADR-0022](adr/0022-enterprise-network-edge.md),
-      `docs/NETWORK-ENTERPRISE.md`. Open: 24 portal pictures, for which a short-lived isolated
-      redeployment was approved and started on 2026-09-25; Front Door, hub routing and corporate
-      egress as tested automation; callers' existing private routes (**U22**)
+      `docs/NETWORK-ENTERPRISE.md`. Its 24 portal pictures were captured live on 2026-09-25 from
+      a short-lived isolated copy of the evaluation estate, then removed. Open: Front Door, hub
+      routing and corporate egress as tested automation; callers' existing private routes (**U22**)
 - [x] P55 the AUM service — an optional authority independent of Turnstile: its own Entra app
       roles with consent-free tokens, scoped managers, audited conditional named-value writes,
       and P47's requests and boosts; discovery-first deployment with cost and implications, and a
