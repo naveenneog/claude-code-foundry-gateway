@@ -93,6 +93,23 @@ The P62 isolated AUM proof captured the dollar Budgets view with a live USD
 stop: [80x24](images/aum/direct-usd-budgets-80x24-after.svg) and
 [160x48](images/aum/direct-usd-budgets-160x48-after.svg).
 
+### Guided-flow budget step
+
+`scripts/flow/Budgets.ps1` is the guided setup wrapper for this page. Its plan is
+read-only: it asks for `tokens` or `usd`, uses the same shipped price book
+(`config/price-book.json`, falling back to `config/price-book.example.json`) and
+refuses to treat an unpriced deployed Claude model as zero. The review cites the
+Microsoft Learn CCU billing page and the Azure Retail Prices API documentation, and
+keeps unknown model prices as a blocking unknown for enforcement.
+
+For USD budgets the step chooses the AUM service's five-minute timer when the FinOps
+choice is `AumService`. Without that service, it plans a managed-identity Container
+Apps job that runs `Sync-ClaudeUsdBudgets.ps1` every five minutes from a pinned commit.
+The job has only the gateway named-value read/write actions and Log Analytics Reader
+on the recorded workspace. It is still a delayed observed-cost stop: ingestion, the
+five-minute schedule, execution and APIM propagation all add overshoot, and it is not
+an invoice cap.
+
 ### Refusals, modes and recovery
 
 - **Strict:** 403 `usd_budget_exceeded` at or above the nominal amount.

@@ -59,6 +59,14 @@ creates nothing until you confirm:
 ./scripts/Select-ClaudeFinOpsTooling.ps1 -Region eastus2
 ```
 
+The guided setup uses the same option model in `scripts/flow/FinOps.ps1`. It records
+`finops.tool` as `None`, `Direct`, `AumService`, `Turnstile` or `TurnstileAum`, shows
+the selector's prices and sign-in implications in the combined review, and applies the
+choice without prompting. Direct installs AUM and writes a non-interactive Direct
+profile. AUM service creates the owned app and deploys the service. Turnstile connects
+an existing Turnstile deployment; deploying Turnstile remains this guide's separate
+procedure and the review links back to it rather than hiding that cost.
+
 For a new gateway, `Install-ClaudeGateway.ps1 -ChooseFinOps` opens the same selector after the
 install. [AUM service: choose a FinOps tool](AUM-SERVICE.md#choose-a-finops-tool) has the full
 comparison.
