@@ -28,6 +28,7 @@ set -uo pipefail
 GATEWAY_URL=""
 TENANT_ID=""
 CONFIG=""
+CONFIG_RAW=""
 SKIP_INSTALL=0
 SKIP_DESKTOP=0
 SKIP_VSCODE=0
@@ -119,6 +120,7 @@ if [ -n "$CONFIG" ]; then
       raw="$(cat "$CONFIG" 2>/dev/null || true)"
     fi
     if [ -n "$raw" ]; then
+      CONFIG_RAW="$raw"
       [ -z "$GATEWAY_URL" ] && GATEWAY_URL="$(printf '%s' "$raw" | jq -r '.gatewayUrl // empty')"
       [ -z "$TENANT_ID" ]   && TENANT_ID="$(printf '%s' "$raw" | jq -r '.tenantId // empty')"
       ok_ "loaded from $CONFIG"
@@ -154,6 +156,37 @@ fi
 GATEWAY_URL="${GATEWAY_URL%/}"
 ok_ "gateway: $GATEWAY_URL"
 [ -n "$TENANT_ID" ] && note_ "tenant : $TENANT_ID"
+
+DESKTOP_SIGNIN_KIND="helper-script"
+DESKTOP_SIGNIN_FLOW=""
+DESKTOP_SIGNIN_TOKEN_TYPE=""
+DESKTOP_SIGNIN_CLIENT_ID=""
+DESKTOP_SIGNIN_ISSUER=""
+DESKTOP_SIGNIN_SCOPES=""
+DESKTOP_SIGNIN_AUDIENCE=""
+DESKTOP_SIGNIN_RESOURCE=""
+if [ -n "$CONFIG_RAW" ] && command -v jq >/dev/null 2>&1; then
+  DESKTOP_SIGNIN_KIND="$(printf '%s' "$CONFIG_RAW" | jq -r '.desktopSignIn.kind // "helper-script"')"
+  if [ "$DESKTOP_SIGNIN_KIND" = "external-idp" ]; then
+    DESKTOP_SIGNIN_FLOW="$(printf '%s' "$CONFIG_RAW" | jq -r '.desktopSignIn.flow // empty')"
+    DESKTOP_SIGNIN_TOKEN_TYPE="$(printf '%s' "$CONFIG_RAW" | jq -r '.desktopSignIn.bearerTokenType // "id_token"')"
+    DESKTOP_SIGNIN_CLIENT_ID="$(printf '%s' "$CONFIG_RAW" | jq -r '.desktopSignIn.clientId // empty')"
+    DESKTOP_SIGNIN_ISSUER="$(printf '%s' "$CONFIG_RAW" | jq -r '.desktopSignIn.issuer // empty')"
+    DESKTOP_SIGNIN_SCOPES="$(printf '%s' "$CONFIG_RAW" | jq -r '.desktopSignIn.scopes // empty')"
+    DESKTOP_SIGNIN_AUDIENCE="$(printf '%s' "$CONFIG_RAW" | jq -r '.desktopSignIn.audience // empty')"
+    DESKTOP_SIGNIN_RESOURCE="$(printf '%s' "$CONFIG_RAW" | jq -r '.desktopSignIn.resource // empty')"
+    case "$DESKTOP_SIGNIN_FLOW" in browser|broker) ;; *) bad_ "desktopSignIn.flow must be browser or broker"; exit 1 ;; esac
+    case "$DESKTOP_SIGNIN_TOKEN_TYPE" in id_token|access_token) ;; *) bad_ "desktopSignIn.bearerTokenType must be id_token or access_token"; exit 1 ;; esac
+    if ! printf '%s' "$DESKTOP_SIGNIN_CLIENT_ID" | grep -Eq '^[0-9a-fA-F-]{36}$'; then bad_ "desktopSignIn.clientId must be a GUID"; exit 1; fi
+    if ! printf '%s' "$DESKTOP_SIGNIN_ISSUER" | grep -Eq '^https://login\.microsoftonline\.com/[^/]+/v2\.0/?$'; then bad_ "desktopSignIn.issuer must be the tenant-pinned Entra v2 issuer"; exit 1; fi
+    if [ "$DESKTOP_SIGNIN_TOKEN_TYPE" = "access_token" ] && { [ -z "$DESKTOP_SIGNIN_SCOPES" ] || [ -z "$DESKTOP_SIGNIN_AUDIENCE" ]; }; then
+      bad_ "desktopSignIn.scopes and desktopSignIn.audience are required for access_token mode"; exit 1
+    fi
+  elif [ "$DESKTOP_SIGNIN_KIND" != "helper-script" ]; then
+    bad_ "desktopSignIn.kind must be helper-script or external-idp"; exit 1
+  fi
+fi
+note_ "Desktop sign-in: $DESKTOP_SIGNIN_KIND${DESKTOP_SIGNIN_FLOW:+ $DESKTOP_SIGNIN_FLOW}${DESKTOP_SIGNIN_TOKEN_TYPE:+ $DESKTOP_SIGNIN_TOKEN_TYPE}"
 
 # Check the environment before touching anything. The gateway URL is known by
 # now, so reachability can be probed too. Warnings only: this script installs
@@ -389,15 +422,16 @@ if [ "$SKIP_DESKTOP" = "0" ]; then
   fi
 
   if [ "$desktop_present" = "1" ] && have_ jq; then
-    # Credential helper. Uses the Azure CLI's own pre-consented client, so this
-    # needs no app registration and no admin consent.
-    mkdir -p "$HELPER_DIR"
     HELPER="$HELPER_DIR/get-foundry-token.sh"
-    src_helper="$(dirname "$0")/get-foundry-token.sh"
-    if [ -f "$src_helper" ]; then
-      cp "$src_helper" "$HELPER"
-    else
-      cat > "$HELPER" <<'HELPEOF'
+    if [ "$DESKTOP_SIGNIN_KIND" = "helper-script" ]; then
+      # Credential helper. Uses the Azure CLI's own pre-consented client, so
+      # this needs no app registration and no admin consent.
+      mkdir -p "$HELPER_DIR"
+      src_helper="$(dirname "$0")/get-foundry-token.sh"
+      if [ -f "$src_helper" ]; then
+        cp "$src_helper" "$HELPER"
+      else
+        cat > "$HELPER" <<'HELPEOF'
 #!/usr/bin/env bash
 # Prints an Entra bearer token for the Cognitive Services data plane on stdout,
 # and nothing else. Claude Desktop reads stdout as the token, so any stray
@@ -424,9 +458,12 @@ case "$token" in
   *)    echo "[claude-helper] could not acquire a token" >&2; exit 1 ;;
 esac
 HELPEOF
+      fi
+      chmod +x "$HELPER"
+      ok_ "credential helper -> $HELPER"
+    else
+      ok_ "Desktop will use its own Entra sign-in; no helper script is written."
     fi
-    chmod +x "$HELPER"
-    ok_ "credential helper -> $HELPER"
 
     # Developer settings reveal Settings -> Connection and create the profile
     # library this writes into.
@@ -455,25 +492,56 @@ HELPEOF
     models_json="$(printf '%s\n' "${MODELS[@]}" | jq -R '{name: .}' | jq -s .)"
     cowork_val="true"; [ "$NO_COWORK" = "1" ] && cowork_val="false"
 
-    jq -n \
-      --arg url "$GATEWAY_URL" \
-      --arg helper "$HELPER" \
-      --argjson models "$models_json" \
-      --argjson cowork "$cowork_val" '{
-        inferenceProvider: "gateway",
-        inferenceGatewayBaseUrl: $url,
-        inferenceGatewayAuthScheme: "bearer",
-        inferenceCredentialKind: "helper-script",
-        inferenceCredentialHelper: $helper,
-        inferenceCredentialHelperTimeoutSec: 60,
-        inferenceCredentialHelperTtlSec: 1800,
-        inferenceCredentialHelperSilentRefreshEnabled: true,
-        inferenceModels: $models,
-        chatTabEnabled: true,
-        isClaudeCodeForDesktopEnabled: true,
-        inferenceModelPricingEnabled: true,
-        coworkTabEnabled: $cowork
-      }' > "$PROFILE"
+    if [ "$DESKTOP_SIGNIN_KIND" = "helper-script" ]; then
+      jq -n \
+        --arg url "$GATEWAY_URL" \
+        --arg helper "$HELPER" \
+        --argjson models "$models_json" \
+        --argjson cowork "$cowork_val" '{
+          inferenceProvider: "gateway",
+          inferenceGatewayBaseUrl: $url,
+          inferenceGatewayAuthScheme: "bearer",
+          inferenceCredentialKind: "helper-script",
+          inferenceCredentialHelper: $helper,
+          inferenceCredentialHelperTimeoutSec: 60,
+          inferenceCredentialHelperTtlSec: 1800,
+          inferenceCredentialHelperSilentRefreshEnabled: true,
+          inferenceModels: $models,
+          chatTabEnabled: true,
+          isClaudeCodeForDesktopEnabled: true,
+          inferenceModelPricingEnabled: true,
+          coworkTabEnabled: $cowork
+        }' > "$PROFILE"
+    else
+      jq -n \
+        --arg url "$GATEWAY_URL" \
+        --arg flow "$DESKTOP_SIGNIN_FLOW" \
+        --arg issuer "$DESKTOP_SIGNIN_ISSUER" \
+        --arg clientId "$DESKTOP_SIGNIN_CLIENT_ID" \
+        --arg tokenType "$DESKTOP_SIGNIN_TOKEN_TYPE" \
+        --arg scopes "$DESKTOP_SIGNIN_SCOPES" \
+        --arg resource "$DESKTOP_SIGNIN_RESOURCE" \
+        --argjson models "$models_json" \
+        --argjson cowork "$cowork_val" '{
+          inferenceProvider: "gateway",
+          inferenceGatewayBaseUrl: $url,
+          inferenceGatewayAuthScheme: "bearer",
+          inferenceCredentialKind: "external-idp",
+          inferenceIdpAuthFlow: $flow,
+          inferenceIdpOidc: ({
+            issuer: $issuer,
+            clientId: $clientId,
+            bearerTokenType: $tokenType
+          }
+          + (if $scopes != "" then {scopes: $scopes} else {} end)
+          + (if $resource != "" then {resource: $resource} else {} end)),
+          inferenceModels: $models,
+          chatTabEnabled: true,
+          isClaudeCodeForDesktopEnabled: true,
+          inferenceModelPricingEnabled: true,
+          coworkTabEnabled: $cowork
+        }' > "$PROFILE"
+    fi
 
     if [ "$NO_COWORK" = "1" ]; then ok_ "profile written"; else ok_ "profile written (Cowork enabled)"; fi
     note_ "Quit Claude Desktop completely, then reopen."

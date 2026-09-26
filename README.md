@@ -39,6 +39,7 @@ Start with [Setup](docs/SETUP.md) for deployment or
 | Operate people, tiers, teams, budgets or models | [Operations](docs/OPERATIONS.md) — task router and portal paths |
 | Own monthly chargeback or the FinOps process | [FinOps](docs/FINOPS.md) — close a month, investigate gaps and set allocations |
 | Use a terminal FinOps console or automate reports | [AUM (Azure Usage Management)](docs/CLI-FINOPS.md) — terminal views and scriptable commands |
+| Deploy clients and managed settings with MDM | [Fleet deployment with Intune, Jamf or Group Policy](docs/MDM.md) — profiles, apps, assignments, verification and rollback |
 | Manage a business unit or view its usage | [Turnstile: viewers and managers](docs/TURNSTILE.md#viewers-and-managers) — assigned roles and sign-in without web consent |
 | Review security, identities or revocation | [Authentication](docs/AUTHENTICATION.md), then [Network](docs/NETWORK.md) |
 | Configure firewalls, private endpoints or VNet access | [Network](docs/NETWORK.md), then [Private projection](docs/SECURE-PROJECTION.md) |
@@ -236,6 +237,7 @@ there; [Operations](docs/OPERATIONS.md) maps tasks to commands and portal paths.
 
 | Guide | Purpose |
 |---|---|
+| [Get started](docs/GET-STARTED.md) | Simplified step-by-step tracks for administrators, developers and FinOps owners, with live approved screenshots or explicit no-screenshot notes |
 | [Developer](DEVELOPER.md) | CLI, VS Code and Desktop setup and verification |
 | [Setup](docs/SETUP.md) | Prerequisites, roles, deployment and bypass closure |
 | [Operations](docs/OPERATIONS.md) / [Onboarding](docs/ONBOARDING.md) | Daily administration, people, backup and retirement |

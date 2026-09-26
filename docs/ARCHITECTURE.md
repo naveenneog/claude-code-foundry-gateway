@@ -50,13 +50,18 @@ Source: [02-request.json](architecture/02-request.json). The README's
 `images/request-flow.png` is a byte-identical compatibility copy.
 
 1. **Sign in.** Claude Code and the VS Code extension use Foundry mode with Azure
-   credentials from the developer's Azure CLI sign-in. The default Desktop setup installs
-   [`get-foundry-token.ps1`](../scripts/get-foundry-token.ps1), through a platform shim, as
-   its credential helper. It reuses Azure CLI sign-in and writes only the token to stdout.
-   Azure automation can use its own managed identity; that identity must also be entitled.
+   credentials from the developer's Azure CLI sign-in. Desktop follows the
+   admin-recorded `desktopSignIn` choice in `claude-gateway.json`: the default
+   installs [`get-foundry-token.ps1`](../scripts/get-foundry-token.ps1), through
+   a platform shim, as its credential helper and reuses Azure CLI sign-in;
+   external-idp browser or broker sign-in uses the recorded Entra public-client
+   app and the gateway's optional `external-idp-extra-audience`. Azure automation can
+   use its own managed identity; that identity must also be entitled.
 2. **Admit.** [`infra/policy.xml`](../infra/policy.xml) validates the tenant, signature,
-   audience and expiry, then uses the signed `oid`. The accepted audiences are
-   `https://cognitiveservices.azure.com` and `https://ai.azure.com`.
+   audience and expiry, then uses the signed `oid`. The default accepted
+   audiences are `https://cognitiveservices.azure.com` and `https://ai.azure.com`;
+   an additional Desktop audience is accepted only when `external-idp-extra-audience`
+   is non-empty.
    `entitlement-source` selects `named-value` or `projection`. Entitlement, tier and the
    requested model are checked before Foundry is called.
 3. **Serve.** `authentication-managed-identity` obtains the gateway's Foundry token.
@@ -460,8 +465,11 @@ automatic fallback:
 - **Turnstile HTTP:** Azure CLI token, role/scope checks at the server, bounded API reads
   and explicit writes. A failed GET can refresh its token once; writes are not retried.
 - **Direct Azure:** ARM, Log Analytics and `Invoke-ClaudeFinOps.ps1`, reusing the
-  repository's gateway scripts and chargeback query. Azure RBAC is authoritative; this
-  is not an alternate implementation of Turnstile's delegated manager scope.
+  repository's gateway scripts and chargeback query. AUM developer add/remove uses the
+  signed-in administrator's delegated Graph token to update Entra group membership,
+  then publishes the gateway allow lists through the selected authority path. Azure
+  RBAC and Graph remain authoritative; this is not an alternate implementation of
+  Turnstile's delegated manager scope.
 - **Fake:** deterministic Contoso fixtures for tests and terminal snapshots; no tenant,
   model or credential calls.
 

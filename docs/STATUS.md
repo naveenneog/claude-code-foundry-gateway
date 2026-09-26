@@ -1,6 +1,6 @@
 # Status
 
-**Active packets:** P60 Claude Desktop sign-in chosen by the admin, P61 the Cosmos entitlement store on every v2 tier, including Basic v2 ([below](#portal-pictures-recaptured-live-and-the-test-environments-removed-2026-09-25)), P62 dollar budgets in AUM, and P64 adding and removing developers from AUM by email ([ROADMAP](ROADMAP.md)). P59, dollar budgets at the gateway, merged on 2026-09-26 ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)). P52, AUM, merged on 2026-09-26 ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets:** P61 the Cosmos entitlement store on every v2 tier, including Basic v2 ([below](#portal-pictures-recaptured-live-and-the-test-environments-removed-2026-09-25)), and P62 dollar budgets in AUM ([ROADMAP](ROADMAP.md)). Merged on 2026-09-26: P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P46 acceptance criteria — managers scoped, and budget modes
 
@@ -40,6 +40,71 @@ this time, because manager attributes do not reach the gateway, but budget modes
 against stale runs is being added with the modes, and a single queue-driven writer (P48) is the
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
+
+## P64 add and remove developers from AUM by email, merged 2026-09-26
+
+Asked by the owner: "Is add and remove developer available with AUM and turnstile, with
+discovering developers in the org by just typing email id". It was not: only
+`Set-ClaudeDeveloper.ps1` took an email. `aum developer find` now searches the whole Entra directory
+while an administrator types an email, UPN or name, guests included, using the administrator's own
+delegated Graph token from Azure CLI; `aum developer add` and `remove` resolve exactly one account
+with the script's rules, preview the tier and unit/team group changes, write each membership once
+and verify it, and publish to the gateway (Direct: the selected-scope refresh and the tier
+allow-list sync; Turnstile authority: the delegated publish path). The People screen has the same
+flow. Permission is Graph's decision: a 403 names the rights needed (group owner, or a role such as
+Groups Administrator, [add member](https://learn.microsoft.com/graph/api/group-post-members)). An
+already-issued Entra token stays valid until it expires; the allow-list refresh refuses new requests.
+`Set-ClaudeDeveloper.ps1` now reads the tier group names the installer recorded. Turnstile does not
+change Entra membership (**U17**, **U19**). [ADR-0029](adr/0029-aum-developer-membership.md),
+[AUM.md](AUM.md).
+
+Measured live on 2026-09-26 on an isolated Basic v2 gateway with test-only tier groups: a request
+returned 200 after `aum developer add` and 403 after `aum developer remove`; groups, gateway and the
+temporary role were removed, about $0.06. The lead's review blocked the first delivery, because every
+removal published with `-AllowEmpty` and so switched off the empty-list guard for both tiers; the fix
+allows an empty list only for a tier a successful pre-check proves the removal empties, with four new
+tests. The branch had also committed a half-resolved conflict marker into the changelog, which the
+gate did not notice; `Test-ReleaseLog.ps1` now refuses conflict markers in any tracked text file.
+Open: **U24** (full-email `$search`), **U25** (publication on a projection-backed gateway).
+
+## P60 Claude Desktop sign-in chosen by the admin, merged 2026-09-26
+
+The installer asks how Claude Desktop signs in and records it as `desktopSignIn` in
+`claude-gateway.json`: `helper-script`, the default and the previous behaviour (Desktop runs the
+Azure CLI credential helper), or Desktop's own sign-in through an Entra public-client app,
+`external-idp-browser` or `external-idp-broker`. One validator and renderer
+(`scripts/ClaudeDesktopSignIn.ps1`) feeds both workstation setup scripts and `New-ClaudeCodePolicy.ps1`,
+so a developer machine and an MDM payload write the same keys ([Anthropic configuration
+reference](https://claude.com/docs/third-party/claude-desktop/configuration)). With an `id_token` the
+audience is the Desktop app's client id, so the gateway accepts it only when the
+`external-idp-extra-audience` named value is set; empty keeps the previous two audiences, and the
+tenant stays pinned. `New-ClaudeDesktopEntraApp.ps1` creates or finds the public-client registration
+with the browser or broker redirect URIs and grants no consent.
+[ADR-0027](adr/0027-claude-desktop-sign-in-choice.md), [DEVELOPER.md](../DEVELOPER.md).
+
+Measured live on 2026-09-26 on an isolated Basic v2 gateway: an Azure CLI token returned 200 (tier
+`standard`), an ARM token 401; a token for the proof Desktop app stopped at `AADSTS65001
+consent_required`, because this tenant grants no consent, so Desktop's own sign-in is not proven end
+to end here (**U23**). Proof gateway, app registration and role removed; under $0.07. Branch gate PASS,
+67 of 67. The app-registration portal pictures wait for a registration and the owner's Entra step-up.
+
+## P65 fleet deployment with Intune, Jamf or Group Policy, merged 2026-09-26
+
+Asked by the owner: "Also create a intune or similar MDM guidance". [MDM.md](MDM.md) lists what
+each device needs and why, how to generate per-tier profiles with `New-ClaudeCodePolicy.ps1`, Intune
+on Windows (custom OMA-URI and what it needs, platform scripts and remediations with their script
+settings, Win32 and Store apps, user or device group assignment, monitoring, removal) and on macOS
+(`.mobileconfig`, PKG/DMG), Jamf Pro and Group Policy, device verification and troubleshooting, each
+step with a Microsoft Learn or Anthropic reference. It cross-links
+[Migration section 2](MIGRATION.md#2-mass-deployment-through-mdm) rather than repeating it.
+
+Tested: the generated standard profile, from read-only discovery of the reference gateway, drove one
+real `claude -p` request through the gateway from an empty configuration directory (result `P65-OK`,
+provider `foundry`). The pilot at `HKCU\SOFTWARE\Policies\ClaudeCode` was refused by this
+workstation's ACL; nothing was written. The lead's review found that the guide's detection script
+used `SHA256.HashData`, which Windows PowerShell 5.1 lacks, so Intune would always report drift; it
+now uses `ComputeHash`, and `Test-DocReferences.ps1` runs that block under `powershell.exe`. Intune
+admin center pictures are not captured: the owner holds no Intune role here; the guide lists them.
 
 ## P59 dollar budgets at the gateway, merged 2026-09-26
 

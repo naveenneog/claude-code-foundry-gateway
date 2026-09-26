@@ -69,3 +69,10 @@ def test_subcommand_help_does_not_need_connection(monkeypatch, force_color):
     result = runner.invoke(app, ["budget", "set", "--help"])
     assert result.exit_code == 0, result.output
     assert "--apply" in result.output
+
+
+def test_developer_commands_are_registered_without_connection(monkeypatch):
+    monkeypatch.setenv("FORCE_COLOR", "0")
+    result = runner.invoke(app, ["developer", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "find" in result.output and "add" in result.output and "remove" in result.output

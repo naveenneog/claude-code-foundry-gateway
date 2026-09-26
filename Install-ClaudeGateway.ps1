@@ -62,6 +62,20 @@ param(
     [ValidateSet('interactive', 'device', 'helper')]
     [string]$AuthMode,
 
+    # How Claude Desktop itself obtains the bearer token it sends to the
+    # gateway. helper-script is the shipped default. external-idp uses a public
+    # Entra app registration for Desktop and requires the gateway to accept that
+    # token audience.
+    [ValidateSet('helper-script', 'external-idp-browser', 'external-idp-broker')]
+    [string]$DesktopSignInKind,
+    [ValidateSet('id_token', 'access_token')]
+    [string]$DesktopBearerTokenType = 'id_token',
+    [string]$DesktopEntraClientId,
+    [string]$DesktopEntraIssuer,
+    [string]$DesktopEntraScopes,
+    [string]$DesktopEntraAudience,
+    [string]$DesktopEntraResource,
+
     # The organisation details Anthropic requires on a Claude deployment. Only
     # used when the subscription has no Claude deployment to copy them from.
     [string]$ModelOrganizationName,
@@ -77,6 +91,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
+$desktopSignInHelper = Join-Path $root 'scripts/ClaudeDesktopSignIn.ps1'
+if (Test-Path $desktopSignInHelper) { . $desktopSignInHelper }
 
 # An az call for something that may not exist yet. az reports that on stderr,
 # and Windows PowerShell 5.1 turns stderr into a NativeCommandError even under
@@ -856,6 +872,85 @@ $AuthMode = if ($AuthMode) { $AuthMode } else {
             Write-Warn2 'Must be interactive, device or helper.'
             return $false
         }
+
+        Write-Host ''
+        Write-Host '  How will Claude Desktop sign in to the gateway?' -ForegroundColor White
+        Write-Host ''
+        Write-Host '    helper-script          Default. Desktop runs get-foundry-token, which uses' -ForegroundColor DarkGray
+        Write-Host '                           the developer Azure CLI sign-in. No app registration,' -ForegroundColor DarkGray
+        Write-Host '                           no new consent, and the gateway audience stays as the' -ForegroundColor DarkGray
+        Write-Host '                           Foundry data-plane audiences.' -ForegroundColor DarkGray
+        Write-Host '    external-idp-browser   Desktop opens the system browser against a public' -ForegroundColor DarkGray
+        Write-Host '                           Entra app registration. Conditional Access applies' -ForegroundColor DarkGray
+        Write-Host '                           as browser sign-in. The gateway must accept the' -ForegroundColor DarkGray
+        Write-Host '                           Desktop app audience for id_token mode, or the API' -ForegroundColor DarkGray
+        Write-Host '                           audience for access_token mode.' -ForegroundColor DarkGray
+        Write-Host '    external-idp-broker    Desktop uses the Microsoft Entra broker. This is for' -ForegroundColor DarkGray
+        Write-Host '                           managed-device or token-protection Conditional Access.' -ForegroundColor DarkGray
+        Write-Host '                           It needs the broker redirect URIs on the public-client' -ForegroundColor DarkGray
+        Write-Host '                           app and is not supported on Linux.' -ForegroundColor DarkGray
+        Write-Host ''
+        Write-Host '    The helper-script path is unchanged for existing installs.' -ForegroundColor DarkGray
+
+        $DesktopSignInKind = if ($DesktopSignInKind) { $DesktopSignInKind } else {
+            Read-Default -Prompt 'Claude Desktop sign-in (helper-script/external-idp-browser/external-idp-broker)' -Default 'helper-script' `
+                -Help 'Pick an external-idp option only after registering the Desktop public-client app.' -Validate {
+                    param($x)
+                    if ($x -in @('helper-script', 'external-idp-browser', 'external-idp-broker')) { return $true }
+                    Write-Warn2 'Must be helper-script, external-idp-browser or external-idp-broker.'
+                    return $false
+                }
+        }
+
+        $desktopSignInRecord = [ordered]@{ kind = 'helper-script' }
+        $desktopGatewayAudience = ''
+        if ($DesktopSignInKind -ne 'helper-script') {
+            $defaultIssuer = "https://login.microsoftonline.com/$($acct.tenantId)/v2.0"
+            $DesktopEntraIssuer = if ($DesktopEntraIssuer) { $DesktopEntraIssuer } else { $defaultIssuer }
+            $DesktopEntraClientId = if ($DesktopEntraClientId) { $DesktopEntraClientId } else {
+                Read-Default -Prompt 'Desktop Entra application (client) ID' -Default '' `
+                    -Help 'Create it with scripts/New-ClaudeDesktopEntraApp.ps1, or pass -DesktopEntraClientId for unattended runs.' -Validate {
+                        param($x)
+                        if (Test-ClaudeGuid $x) { return $true }
+                        Write-Warn2 'Must be an application client-id GUID.'
+                        return $false
+                    }
+            }
+            if ($DesktopBearerTokenType -eq 'access_token') {
+                $DesktopEntraScopes = if ($DesktopEntraScopes) { $DesktopEntraScopes } else {
+                    Read-Default -Prompt 'Gateway delegated scope' -Default '' `
+                        -Help 'Example: api://<gateway-app-id>/user_impersonation. It may require tenant admin consent.' -Validate {
+                            param($x)
+                            if (-not [string]::IsNullOrWhiteSpace($x)) { return $true }
+                            Write-Warn2 'Scopes are required for access_token mode.'
+                            return $false
+                        }
+                }
+                $DesktopEntraAudience = if ($DesktopEntraAudience) { $DesktopEntraAudience } else {
+                    Read-Default -Prompt 'Gateway token audience' -Default '' `
+                        -Help 'Usually the gateway API app ID URI, used by APIM to validate aud.' -Validate {
+                            param($x)
+                            if (-not [string]::IsNullOrWhiteSpace($x)) { return $true }
+                            Write-Warn2 'Audience is required for access_token mode.'
+                            return $false
+                        }
+                }
+            }
+            $desktopSignInRecord = [ordered]@{
+                kind = 'external-idp'
+                flow = $(if ($DesktopSignInKind -eq 'external-idp-broker') { 'broker' } else { 'browser' })
+                bearerTokenType = $DesktopBearerTokenType
+                clientId = $DesktopEntraClientId
+                issuer = $DesktopEntraIssuer.TrimEnd('/')
+            }
+            if ($DesktopEntraScopes) { $desktopSignInRecord['scopes'] = $DesktopEntraScopes }
+            if ($DesktopEntraAudience) { $desktopSignInRecord['audience'] = $DesktopEntraAudience }
+            if ($DesktopEntraResource) { $desktopSignInRecord['resource'] = $DesktopEntraResource }
+
+            $desktopChoiceForValidation = Get-ClaudeDesktopSignIn -Config ([pscustomobject]@{ desktopSignIn = [pscustomobject]$desktopSignInRecord })
+            $desktopGatewayAudience = Get-ClaudeDesktopGatewayAudience -DesktopSignIn $desktopChoiceForValidation
+            Write-Note "Desktop gateway audience: $desktopGatewayAudience"
+        }
 }
 
 # ---------------------------------------------------------------- 3. limits
@@ -1163,6 +1258,7 @@ az deployment group create `
         quotaPremium=$QuotaPremium `
         quotaOrg=$QuotaOrg `
         callsPerMinute=$CallsPerMinute `
+        desktopExtraAudience=$desktopGatewayAudience `
         entitlementSource=$(if ($entSrc) { $entSrc } else { 'named-value' }) `
         entitlementResolverUrl=$(if ($entUrl) { $entUrl } else { 'https://resolver-not-deployed.invalid' }) `
         entitlementResolverAudience=$(if ($entAud) { $entAud } else { 'https://resolver-not-deployed.invalid' }) `
@@ -1292,6 +1388,7 @@ $config = [ordered]@{
     entitlementStore = $EntitlementStore
     resolverInboundAccess = $ResolverInboundAccess
     projectionDeployer = './scripts/Deploy-ClaudeProjection.ps1'
+    desktopSignIn = $desktopSignInRecord
     tiers = @{
         standard = @{ tokensPerMinute = $TpmStandard; tokensPerDay = $QuotaStandard }
         premium  = @{ tokensPerMinute = $TpmPremium;  tokensPerDay = $QuotaPremium }

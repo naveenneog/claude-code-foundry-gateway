@@ -134,6 +134,8 @@ $dv = Get-Content $dev -Raw
 Assert 'it edits the Entra group'      ($dv -match 'groups/\$groupId/members')
 Assert 'and says why, not the gateway' ($dv -match 'rebuilds' -and $dv -match 'silently stops')
 Assert 'it can add to a tier'          ($dv -match '\$Tier')
+Assert 'tier groups come from the recorded gateway config' ($dv -match 'Get-ClaudeGatewayTarget\.ps1''\) StandardGroup' -and $dv -match 'Get-ClaudeGatewayTarget\.ps1''\) PremiumGroup')
+Assert 'missing tier groups use the shared chooser' ($dv -match 'Select-ClaudeDeveloperTierGroup' -and $dv -match 'Select-ClaudeChoice')
 Assert 'and to a business unit'        ($dv -match '\$BusinessUnit')
 Assert 'and remove'                    ($dv -match '\$Remove')
 # Leaving someone on a budget they can no longer spend reads as a broken team

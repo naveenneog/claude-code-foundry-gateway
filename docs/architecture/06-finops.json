@@ -7,7 +7,7 @@
   "width": 1280,
   "height": 1300,
   "outputs": ["docs/images/architecture/terminal-finops.png"],
-  "sources": ["scripts/New-ClaudeTurnstileEntraApp.ps1", "scripts/New-ClaudeAumEntraApp.ps1", "scripts/Set-ClaudeTier.ps1", "scripts/Set-ClaudeBudget.ps1", "scripts/ClaudeAumDirectWrites.ps1", "scripts/Sync-AumMembership.ps1", "scripts/ApimNamedValue.ps1", "analytics/chargeback-ledger.kql", "cli/finops/pyproject.toml", "cli/finops/src/claude_finops/cli.py", "cli/finops/src/claude_finops/config.py", "cli/finops/src/claude_finops/ui_features.py", "cli/finops/src/claude_finops/direct.py", "cli/finops/src/claude_finops/direct_analytics.py", "cli/finops/src/claude_finops/scope.py", "cli/finops/src/claude_finops/service_models.py", "cli/finops/src/claude_finops/service_writes.py", "cli/finops/src/claude_finops/groups.py", "cli/finops/src/claude_finops/group_actions.py", "cli/finops/src/claude_finops/gateway_probe.py", "cli/finops/src/claude_finops/commands_groups.py"],
+  "sources": ["scripts/New-ClaudeTurnstileEntraApp.ps1", "scripts/New-ClaudeAumEntraApp.ps1", "scripts/Set-ClaudeTier.ps1", "scripts/Set-ClaudeBudget.ps1", "scripts/Set-ClaudeDeveloper.ps1", "scripts/ClaudeAumDirectWrites.ps1", "scripts/Sync-AumMembership.ps1", "scripts/Sync-ClaudeAccess.ps1", "scripts/ApimNamedValue.ps1", "analytics/chargeback-ledger.kql", "cli/finops/pyproject.toml", "cli/finops/src/claude_finops/cli.py", "cli/finops/src/claude_finops/config.py", "cli/finops/src/claude_finops/ui_features.py", "cli/finops/src/claude_finops/direct.py", "cli/finops/src/claude_finops/direct_analytics.py", "cli/finops/src/claude_finops/scope.py", "cli/finops/src/claude_finops/service_models.py", "cli/finops/src/claude_finops/service_writes.py", "cli/finops/src/claude_finops/groups.py", "cli/finops/src/claude_finops/group_actions.py", "cli/finops/src/claude_finops/developers.py", "cli/finops/src/claude_finops/developer_actions.py", "cli/finops/src/claude_finops/gateway_probe.py", "cli/finops/src/claude_finops/commands_groups.py"],
   "namingEvidence": {
     "repository": "naveenneog/claude-code-foundry-gateway",
     "revision": "8b79830462701fcaef71e7422ca77add4abdd8f1",
@@ -48,6 +48,8 @@
       "[[direct]]",
       "Azure RBAC administrator",
       "ARM, Graph and KQL",
+      "Developer add/remove",
+      "updates Entra groups",
       "Existing writers via",
       "[[bridge]]",
       "No FinOps server required"
@@ -112,5 +114,5 @@
     { "from": "turnstile", "to": "server", "kind": "identity", "points": [[803, 836], [803, 946]] },
     { "from": "fake", "to": "fixtures", "kind": "data", "points": [[1129, 836], [1129, 946]] }
   ],
-  "notice": "Choose one write authority. Direct and AUM service person limits are daily; Turnstile person budgets are monthly console records. Published workspace cost and gateway request attribution are distinct bases. Read-back is not an exact runtime counter or invoice guarantee."
+  "notice": "Choose one write authority for budgets/governance. Entra developer membership is still owned by Entra groups and can be changed by AUM or scripts with the signed-in admin's rights. Direct and AUM service person limits are daily; Turnstile person budgets are monthly console records. Published workspace cost and gateway request attribution are distinct bases. Read-back is not an exact runtime counter or invoice guarantee."
 }
