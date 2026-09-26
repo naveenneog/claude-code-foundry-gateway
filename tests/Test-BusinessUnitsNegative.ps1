@@ -3144,7 +3144,7 @@ $caught = 0
 
 try {
     New-Item -ItemType Directory -Path $sandbox -Force | Out-Null
-    foreach ($d in 'infra', 'scripts', 'tests', 'analytics', 'sync', 'resolver') {
+    foreach ($d in 'infra', 'scripts', 'tests', 'analytics', 'sync', 'resolver', 'cli') {
         if (Test-Path (Join-Path $root $d)) {
             Copy-Item (Join-Path $root $d) $sandbox -Recurse -Force
         }
