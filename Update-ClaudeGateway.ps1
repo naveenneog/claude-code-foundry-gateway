@@ -24,3 +24,4 @@ if ($ApprovedPlanFingerprint) { $args.ApprovedPlanFingerprint = $ApprovedPlanFin
 if ($SnapshotPath) { $args.SnapshotPath = $SnapshotPath }
 
 & (Join-Path $PSScriptRoot 'scripts\Update-ClaudeGateway.ps1') @args -WhatIf:$WhatIfPreference
+

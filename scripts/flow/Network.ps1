@@ -4,7 +4,7 @@
 #>
 
 . (Join-Path $PSScriptRoot 'FlowContract.ps1')
-. (Join-Path $PSScriptRoot 'LifecycleCommon.ps1')
+. (Join-Path $PSScriptRoot 'lib\LifecycleCommon.ps1')
 
 function Get-ClaudeFlowStepInfo {
     [pscustomobject]@{ Name = 'Network'; Title = 'Enterprise network edge'; DecisionKey = 'network'; DependsOn = @('Foundation'); Actions = @('Change') }
@@ -25,7 +25,7 @@ function Get-ClaudeFlowStepQuestions {
 
 function Get-ClaudeFlowStepPlan {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
-    $target = Get-ClaudeFlowRecordTarget -Record $Record -Discovery $Discovery
+    $target = Get-ClaudeFlowLifecycleRecordTarget -Record $Record -Discovery $Discovery
     $decision = Get-ClaudeDecision -Record $Record -Key network
     $reviewPath = if ($decision -and $decision.reviewPath) { [string]$decision.reviewPath } elseif ($Discovery -and $Discovery.networkReviewPath) { [string]$Discovery.networkReviewPath } else { '' }
     if (-not $reviewPath) { return New-ClaudeFlowPlan -Step Network -Summary 'No network review selected.' }
@@ -44,7 +44,7 @@ function Invoke-ClaudeFlowStep {
     param([Parameter(Mandatory = $true)]$Record, [Parameter(Mandatory = $true)]$Plan)
     if (Test-ClaudeFlowPlanIsNoop $Plan) { return @{} }
     if (-not $Plan.Data.ApprovedNetworkFingerprint) { throw 'Network change requires the reviewed plan fingerprint from New-ClaudeNetworkEdge.ps1.' }
-    & (Join-Path (Get-ClaudeFlowRepoRoot) 'scripts\New-ClaudeNetworkEdge.ps1') -ReviewPath $Plan.Data.ReviewPath -ApprovedPlanFingerprint $Plan.Data.ApprovedNetworkFingerprint -NonInteractive
+    & (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts\New-ClaudeNetworkEdge.ps1') -ReviewPath $Plan.Data.ReviewPath -ApprovedPlanFingerprint $Plan.Data.ApprovedNetworkFingerprint -NonInteractive
     if ($LASTEXITCODE -ne 0) { throw 'New-ClaudeNetworkEdge.ps1 failed.' }
     Add-ClaudeDecisionHistory -Record $Record -Action Change -Decision network -From $null -To $Plan.Data.ReviewPath -Commit (Get-ClaudeFlowReleaseInfo).commit
     @{ network = @{ reviewPath = $Plan.Data.ReviewPath } }
@@ -54,3 +54,4 @@ function Test-ClaudeFlowStep {
     param([Parameter(Mandatory = $true)]$Record)
     [pscustomobject]@{ Step = 'Network'; Passed = $true; Checks = @(@{ Name = 'review fingerprint required'; Passed = $true; Evidence = 'Invoke refuses when ApprovedNetworkFingerprint is empty.'; Fix = '' }) }
 }
+

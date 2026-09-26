@@ -4,7 +4,7 @@
 #>
 
 . (Join-Path $PSScriptRoot 'FlowContract.ps1')
-. (Join-Path $PSScriptRoot 'LifecycleCommon.ps1')
+. (Join-Path $PSScriptRoot 'lib\LifecycleCommon.ps1')
 
 function Get-ClaudeFlowStepInfo {
     [pscustomobject]@{ Name = 'Entitlement'; Title = 'Entitlement store'; DecisionKey = 'entitlementStore'; DependsOn = @('Foundation'); Actions = @('Change') }
@@ -12,7 +12,7 @@ function Get-ClaudeFlowStepInfo {
 
 function Get-ClaudeFlowEntitlementSource {
     param($Record, $Discovery)
-    $nv = Get-ClaudeFlowNamedValueMap -Discovery $Discovery
+    $nv = Get-ClaudeFlowLifecycleNamedValueMap -Discovery $Discovery
     if ($nv.ContainsKey('entitlement-source')) { return $nv['entitlement-source'] }
     $d = Get-ClaudeDecision -Record $Record -Key entitlementStore
     if ($d -and $d.source) { return [string]$d.source }
@@ -21,7 +21,7 @@ function Get-ClaudeFlowEntitlementSource {
 
 function Get-ClaudeFlowStepQuestions {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
-    $target = Get-ClaudeFlowRecordTarget -Record $Record -Discovery $Discovery
+    $target = Get-ClaudeFlowLifecycleRecordTarget -Record $Record -Discovery $Discovery
     $current = Get-ClaudeFlowEntitlementSource -Record $Record -Discovery $Discovery
     @([pscustomobject]@{
         Key = 'entitlementStore'
@@ -39,7 +39,7 @@ function Get-ClaudeFlowStepQuestions {
 
 function Get-ClaudeFlowStepPlan {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
-    $target = Get-ClaudeFlowRecordTarget -Record $Record -Discovery $Discovery
+    $target = Get-ClaudeFlowLifecycleRecordTarget -Record $Record -Discovery $Discovery
     $current = Get-ClaudeFlowEntitlementSource -Record $Record -Discovery $Discovery
     $decision = Get-ClaudeDecision -Record $Record -Key entitlementStore
     $desired = if ($decision -is [string]) { [string]$decision } elseif ($decision -and $decision.target) { [string]$decision.target } elseif ($Discovery -and $Discovery.desiredEntitlementStore) { [string]$Discovery.desiredEntitlementStore } else { '' }
@@ -76,14 +76,14 @@ function Invoke-ClaudeFlowStep {
     if ($Plan.Data.Desired -eq 'projection' -and -not $Plan.Data.CleanComparison) {
         throw 'Refusing entitlement flip: a clean projection comparison is required before any flip.'
     }
-    Assert-ClaudeFlowSnapshotBeforeWrite -Plan $Plan
+    Assert-ClaudeFlowLifecycleSnapshotBeforeWrite -Plan $Plan
     $target = $Plan.Data.Target
     if ($Plan.Data.Desired -eq 'projection') {
-        & (Join-Path (Get-ClaudeFlowRepoRoot) 'scripts\Deploy-ClaudeProjection.ps1') -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -NamePrefix $target.ApimName -Sku $target.Sku -FlipAfterCleanCompare
+        & (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts\Deploy-ClaudeProjection.ps1') -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -NamePrefix $target.ApimName -Sku $target.Sku -FlipAfterCleanCompare
         if ($LASTEXITCODE -ne 0) { throw 'Deploy-ClaudeProjection.ps1 failed.' }
     }
     else {
-        . (Join-Path (Get-ClaudeFlowRepoRoot) 'scripts\ApimNamedValue.ps1')
+        . (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts\ApimNamedValue.ps1')
         Set-ApimNamedValue -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Id 'entitlement-source' -Value 'named-value'
     }
     Add-ClaudeDecisionHistory -Record $Record -Action Change -Decision entitlementStore -From $Plan.Data.Current -To $Plan.Data.Desired -Commit (Get-ClaudeFlowReleaseInfo).commit
@@ -94,3 +94,4 @@ function Test-ClaudeFlowStep {
     param([Parameter(Mandatory = $true)]$Record)
     [pscustomobject]@{ Step = 'Entitlement'; Passed = $true; Checks = @(@{ Name = 'compare-gated'; Passed = $true; Evidence = 'Invoke refuses projection flip unless CleanComparison is true.'; Fix = '' }) }
 }
+

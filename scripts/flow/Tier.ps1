@@ -4,7 +4,7 @@
 #>
 
 . (Join-Path $PSScriptRoot 'FlowContract.ps1')
-. (Join-Path $PSScriptRoot 'LifecycleCommon.ps1')
+. (Join-Path $PSScriptRoot 'lib\LifecycleCommon.ps1')
 
 function Get-ClaudeFlowStepInfo {
     [pscustomobject]@{
@@ -27,7 +27,7 @@ function Get-ClaudeFlowTierResearch {
 
 function Get-ClaudeFlowTierChangeOptions {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
-    $target = Get-ClaudeFlowRecordTarget -Record $Record -Discovery $Discovery
+    $target = Get-ClaudeFlowLifecycleRecordTarget -Record $Record -Discovery $Discovery
     $current = if ($target.Sku) { $target.Sku } else { 'BasicV2' }
     $region = if ($target.Location) { ($target.Location -replace '\s+', '').ToLowerInvariant() } else { 'eastus2' }
     $all = @('BasicV2','StandardV2','PremiumV2')
@@ -43,7 +43,7 @@ function Get-ClaudeFlowTierChangeOptions {
         else {
             'Not offered as an in-place change by the documented lifecycle path.'
         }
-        $cost = Get-ClaudeFlowApimMonthlyCost -Sku $sku -Region $region
+        $cost = Get-ClaudeFlowLifecycleApimMonthlyCost -Sku $sku -Region $region
         $options += [pscustomobject]@{
             Key = $sku
             Label = $sku
@@ -74,7 +74,7 @@ function Get-ClaudeFlowStepQuestions {
 
 function Get-ClaudeFlowStepPlan {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
-    $target = Get-ClaudeFlowRecordTarget -Record $Record -Discovery $Discovery
+    $target = Get-ClaudeFlowLifecycleRecordTarget -Record $Record -Discovery $Discovery
     $decision = Get-ClaudeDecision -Record $Record -Key sku
     $desired = if ($decision -is [string]) { [string]$decision } elseif ($decision -and $decision.target) { [string]$decision.target } elseif ($Discovery -and $Discovery.desiredSku) { [string]$Discovery.desiredSku } else { '' }
     if (-not $desired -or $desired -eq $target.Sku) { return New-ClaudeFlowPlan -Step Tier -Summary 'No tier change selected.' }
@@ -105,7 +105,7 @@ function Get-ClaudeFlowStepPlan {
 function Invoke-ClaudeFlowStep {
     param([Parameter(Mandatory = $true)]$Record, [Parameter(Mandatory = $true)]$Plan)
     if (Test-ClaudeFlowPlanIsNoop $Plan) { return @{} }
-    Assert-ClaudeFlowSnapshotBeforeWrite -Plan $Plan
+    Assert-ClaudeFlowLifecycleSnapshotBeforeWrite -Plan $Plan
     $target = $Plan.Data.Target
     if ($Plan.Data.InPlace) {
         $subscription = if ($target.SubscriptionId) { $target.SubscriptionId } else { az account show --query id -o tsv }
@@ -136,3 +136,4 @@ function Test-ClaudeFlowStep {
         Checks = @(@{ Name = 'offline contract'; Passed = $true; Evidence = 'Tier plans are derived from discovery and Microsoft Learn citations.'; Fix = '' })
     }
 }
+

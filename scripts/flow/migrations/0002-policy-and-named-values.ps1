@@ -24,16 +24,16 @@ function Test-ClaudePolicyHasLifecycleMarkers {
 
 function Get-ClaudeFlowMigrationPlan {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
-    $root = Get-ClaudeFlowRepoRoot
+    $root = Get-ClaudeFlowLifecycleRepoRoot
     $policyPath = Join-Path $root 'infra\policy.xml'
     $desiredPolicy = [IO.File]::ReadAllText($policyPath)
-    $desiredHash = Get-ClaudeFlowStringHash -Text $desiredPolicy
+    $desiredHash = Get-ClaudeFlowLifecycleStringHash -Text $desiredPolicy
     $livePolicy = if ($Discovery -and $Discovery.PSObject.Properties.Name -contains 'policy') { [string]$Discovery.policy } else { '' }
-    $liveHash = if ($livePolicy) { Get-ClaudeFlowStringHash -Text $livePolicy } elseif ($Discovery -and $Discovery.policyHash) { [string]$Discovery.policyHash } else { '' }
+    $liveHash = if ($livePolicy) { Get-ClaudeFlowLifecycleStringHash -Text $livePolicy } elseif ($Discovery -and $Discovery.policyHash) { [string]$Discovery.policyHash } else { '' }
     $policyCurrent = ($liveHash -eq $desiredHash) -or (Test-ClaudePolicyHasLifecycleMarkers -Policy $livePolicy)
-    $refs = @(Get-ClaudePolicyNamedValueReferences -PolicyPath $policyPath)
-    $templateDefaults = Get-ClaudeTemplateNamedValueDefaults
-    $liveNamed = Get-ClaudeFlowNamedValueMap -Discovery $Discovery
+    $refs = @(Get-ClaudeFlowLifecyclePolicyNamedValueReferences -PolicyPath $policyPath)
+    $templateDefaults = Get-ClaudeFlowLifecycleTemplateNamedValueDefaults
+    $liveNamed = Get-ClaudeFlowLifecycleNamedValueMap -Discovery $Discovery
     $missing = @($refs | Where-Object { -not $liveNamed.ContainsKey($_) })
     $normalizeDisabledAudience = $liveNamed.ContainsKey('external-idp-extra-audience') -and
         [string]::IsNullOrWhiteSpace([string]$liveNamed['external-idp-extra-audience'])
@@ -69,7 +69,7 @@ function Get-ClaudeFlowMigrationPlan {
             MissingNamedValues = $missing
             NormalizeDisabledAudience = $normalizeDisabledAudience
             UnknownDefaults = $unknownDefaults
-            Target = Get-ClaudeFlowRecordTarget -Record $Record -Discovery $Discovery
+            Target = Get-ClaudeFlowLifecycleRecordTarget -Record $Record -Discovery $Discovery
         }
 }
 
@@ -79,11 +79,11 @@ function Invoke-ClaudeFlowMigration {
     if (@($Plan.Data.UnknownDefaults).Count) {
         throw 'Policy references named values with no safe template default: ' + (@($Plan.Data.UnknownDefaults) -join ', ')
     }
-    Assert-ClaudeFlowSnapshotBeforeWrite -Plan $Plan
-    $root = Get-ClaudeFlowRepoRoot
+    Assert-ClaudeFlowLifecycleSnapshotBeforeWrite -Plan $Plan
+    $root = Get-ClaudeFlowLifecycleRepoRoot
     . (Join-Path $root 'scripts\ApimNamedValue.ps1')
     $target = $Plan.Data.Target
-    $defaults = Get-ClaudeTemplateNamedValueDefaults
+    $defaults = Get-ClaudeFlowLifecycleTemplateNamedValueDefaults
     foreach ($name in @($Plan.Data.MissingNamedValues)) {
         Set-ApimNamedValue -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Id $name -Value ([string]$defaults[$name].Value)
     }
@@ -103,13 +103,13 @@ function Invoke-ClaudeFlowMigration {
 
 function Test-ClaudeFlowMigration {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
-    $root = Get-ClaudeFlowRepoRoot
-    $desiredHash = Get-ClaudeFlowStringHash -Text ([IO.File]::ReadAllText((Join-Path $root 'infra\policy.xml')))
+    $root = Get-ClaudeFlowLifecycleRepoRoot
+    $desiredHash = Get-ClaudeFlowLifecycleStringHash -Text ([IO.File]::ReadAllText((Join-Path $root 'infra\policy.xml')))
     $livePolicy = if ($Discovery -and $Discovery.policy) { [string]$Discovery.policy } else { '' }
-    $liveHash = if ($livePolicy) { Get-ClaudeFlowStringHash -Text $livePolicy } elseif ($Discovery -and $Discovery.policyHash) { [string]$Discovery.policyHash } else { '' }
+    $liveHash = if ($livePolicy) { Get-ClaudeFlowLifecycleStringHash -Text $livePolicy } elseif ($Discovery -and $Discovery.policyHash) { [string]$Discovery.policyHash } else { '' }
     $hashOk = ($liveHash -eq $desiredHash) -or (Test-ClaudePolicyHasLifecycleMarkers -Policy $livePolicy)
-    $liveNamed = Get-ClaudeFlowNamedValueMap -Discovery $Discovery
-    $missing = @(Get-ClaudePolicyNamedValueReferences | Where-Object { -not $liveNamed.ContainsKey($_) })
+    $liveNamed = Get-ClaudeFlowLifecycleNamedValueMap -Discovery $Discovery
+    $missing = @(Get-ClaudeFlowLifecyclePolicyNamedValueReferences | Where-Object { -not $liveNamed.ContainsKey($_) })
     [pscustomobject]@{
         Step = '0002-policy-and-named-values'
         Passed = ($hashOk -and $missing.Count -eq 0)
@@ -119,3 +119,4 @@ function Test-ClaudeFlowMigration {
         )
     }
 }
+

@@ -29,13 +29,13 @@ function Get-ClaudeFlowMigrationPlan {
         -Requires @('Job operator permission on discovered jobs') `
         -Reversible $true `
         -Rollback 'Repin the job to its previous commit or redeploy it from its owning script.' `
-        -Data @{ JobsBehind = $behind; TargetCommit = $release.commit; Target = Get-ClaudeFlowRecordTarget -Record $Record -Discovery $Discovery }
+        -Data @{ JobsBehind = $behind; TargetCommit = $release.commit; Target = Get-ClaudeFlowLifecycleRecordTarget -Record $Record -Discovery $Discovery }
 }
 
 function Invoke-ClaudeFlowMigration {
     param([Parameter(Mandatory = $true)]$Record, [Parameter(Mandatory = $true)]$Plan)
     if (Test-ClaudeFlowPlanIsNoop $Plan) { return @{} }
-    Assert-ClaudeFlowSnapshotBeforeWrite -Plan $Plan
+    Assert-ClaudeFlowLifecycleSnapshotBeforeWrite -Plan $Plan
     foreach ($job in @($Plan.Data.JobsBehind)) {
         if ($job.updateCommand) {
             Invoke-Expression ([string]$job.updateCommand)
@@ -59,3 +59,4 @@ function Test-ClaudeFlowMigration {
         Checks = @(@{ Name = 'job commit pins'; Passed = ($behind.Count -eq 0); Evidence = "behind=$($behind.Count)"; Fix = 'Apply job-pin migration or rerun the owning deploy script.' })
     }
 }
+

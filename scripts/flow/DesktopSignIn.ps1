@@ -4,8 +4,8 @@
 #>
 
 . (Join-Path $PSScriptRoot 'FlowContract.ps1')
-. (Join-Path $PSScriptRoot 'LifecycleCommon.ps1')
-. (Join-Path (Join-Path (Get-ClaudeFlowRepoRoot) 'scripts') 'ClaudeDesktopSignIn.ps1')
+. (Join-Path $PSScriptRoot 'lib\LifecycleCommon.ps1')
+. (Join-Path (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts') 'ClaudeDesktopSignIn.ps1')
 
 function Get-ClaudeFlowStepInfo {
     [pscustomobject]@{ Name = 'DesktopSignIn'; Title = 'Claude Desktop sign-in'; DecisionKey = 'desktopSignIn'; DependsOn = @('Foundation'); Actions = @('Change') }
@@ -26,7 +26,7 @@ function Get-ClaudeFlowStepQuestions {
 
 function Get-ClaudeFlowStepPlan {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
-    $target = Get-ClaudeFlowRecordTarget -Record $Record -Discovery $Discovery
+    $target = Get-ClaudeFlowLifecycleRecordTarget -Record $Record -Discovery $Discovery
     $current = Get-ClaudeDecision -Record $Record -Key desktopSignIn
     $desired = if ($Discovery -and $Discovery.desiredDesktopSignIn) { $Discovery.desiredDesktopSignIn } elseif ($current -is [string]) { [string]$current } elseif ($current -and $current.target) { $current.target } else { $null }
     if ($desired -is [string]) {
@@ -41,7 +41,7 @@ function Get-ClaudeFlowStepPlan {
     $config = [pscustomobject]@{ desktopSignIn = $desired }
     $validated = Get-ClaudeDesktopSignIn -Config $config
     $audience = Get-ClaudeDesktopGatewayAudience -DesktopSignIn $validated
-    $beforeAudience = (Get-ClaudeFlowNamedValueMap -Discovery $Discovery)['external-idp-extra-audience']
+    $beforeAudience = (Get-ClaudeFlowLifecycleNamedValueMap -Discovery $Discovery)['external-idp-extra-audience']
     if ($beforeAudience -eq $audience -and $current -and $current.kind -eq $validated.kind) {
         return New-ClaudeFlowPlan -Step DesktopSignIn -Summary 'Desktop sign-in choice and gateway audience already match.'
     }
@@ -62,8 +62,8 @@ function Get-ClaudeFlowStepPlan {
 function Invoke-ClaudeFlowStep {
     param([Parameter(Mandatory = $true)]$Record, [Parameter(Mandatory = $true)]$Plan)
     if (Test-ClaudeFlowPlanIsNoop $Plan) { return @{} }
-    Assert-ClaudeFlowSnapshotBeforeWrite -Plan $Plan
-    . (Join-Path (Get-ClaudeFlowRepoRoot) 'scripts\ApimNamedValue.ps1')
+    Assert-ClaudeFlowLifecycleSnapshotBeforeWrite -Plan $Plan
+    . (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts\ApimNamedValue.ps1')
     $target = $Plan.Data.Target
     Set-ApimNamedValue -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Id 'external-idp-extra-audience' -Value ([string]$Plan.Data.Audience)
     Set-ClaudeDecision -Record $Record -Key desktopSignIn -Value $Plan.Data.Desired
@@ -76,3 +76,4 @@ function Test-ClaudeFlowStep {
     param([Parameter(Mandatory = $true)]$Record)
     [pscustomobject]@{ Step = 'DesktopSignIn'; Passed = $true; Checks = @(@{ Name = 'device profiles flagged'; Passed = $true; Evidence = 'Invoke writes deviceProfiles.regenerate=true.'; Fix = '' }) }
 }
+

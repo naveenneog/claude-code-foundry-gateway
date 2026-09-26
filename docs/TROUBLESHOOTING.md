@@ -4,7 +4,8 @@ Every entry here is a failure that was actually hit while building and verifying
 accelerator, not a hypothetical.
 
 Use this page when you know the symptom. If you cannot identify the failing
-layer, follow [Debugging](DEBUGGING.md); for roles/resource names, use
+layer, run [Diagnostics](DIAGNOSE.md) first, then follow
+[Debugging](DEBUGGING.md); for roles/resource names, use
 [Operations](OPERATIONS.md#1-select-the-gateway-and-workspace).
 After a fix, repeat the original request and inspect its body and headers.
 

@@ -9,7 +9,7 @@ function Assert($label, $condition, $detail = '') {
 function Get-Thrown([scriptblock]$Block) { try { & $Block; return '' } catch { return $_.Exception.Message } }
 
 . (Join-Path $root 'scripts\flow\FlowContract.ps1')
-. (Join-Path $root 'scripts\flow\LifecycleCommon.ps1')
+. (Join-Path $root 'scripts\flow\lib\LifecycleCommon.ps1')
 
 Write-Host ''
 Write-Host 'P66 lifecycle - migration detection' -ForegroundColor Cyan
@@ -23,7 +23,7 @@ $record = [pscustomobject]@{
 }
 $policyPath = Join-Path $root 'infra\policy.xml'
 $currentPolicy = [IO.File]::ReadAllText($policyPath)
-$refs = @(Get-ClaudePolicyNamedValueReferences -PolicyPath $policyPath)
+$refs = @(Get-ClaudeFlowLifecyclePolicyNamedValueReferences -PolicyPath $policyPath)
 $nv = @{}
 foreach ($r in $refs) { $nv[$r] = 'x' }
 $nv.Remove('usd-budgets')
@@ -46,9 +46,9 @@ $policyPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $oldDiscove
 Assert 'old policy hash is detected' (@($policyPlan.Actions | Where-Object Target -match 'policy').Count -eq 1)
 Assert 'missing named values are derived from policy references' (($policyPlan.Data.MissingNamedValues -contains 'usd-budgets') -and ($policyPlan.Data.MissingNamedValues -contains 'external-idp-extra-audience'))
 $migration2Source = Get-Content (Join-Path $root 'scripts\flow\migrations\0002-policy-and-named-values.ps1') -Raw
-Assert 'derived named values include later-release values without hardcoding the detector list' ($migration2Source -match 'Get-ClaudePolicyNamedValueReferences' -and $migration2Source -match '\$missing = @\(\$refs \| Where-Object')
+Assert 'derived named values include later-release values without hardcoding the detector list' ($migration2Source -match 'Get-ClaudeFlowLifecyclePolicyNamedValueReferences' -and $migration2Source -match '\$missing = @\(\$refs \| Where-Object')
 Assert 'rollback plan names Restore-ClaudeGateway' ($policyPlan.Rollback -match 'Restore-ClaudeGateway')
-Assert 'policy migration requires a snapshot before writes' ((Get-Content (Join-Path $root 'scripts\flow\migrations\0002-policy-and-named-values.ps1') -Raw) -match 'Assert-ClaudeFlowSnapshotBeforeWrite')
+Assert 'policy migration requires a snapshot before writes' ((Get-Content (Join-Path $root 'scripts\flow\migrations\0002-policy-and-named-values.ps1') -Raw) -match 'Assert-ClaudeFlowLifecycleSnapshotBeforeWrite')
 
 $allNv = @{}
 foreach ($r in $refs) { $allNv[$r] = 'x' }
@@ -85,7 +85,7 @@ Write-Host ''
 Write-Host 'P66 lifecycle - change modules' -ForegroundColor Cyan
 
 . (Join-Path $root 'scripts\flow\Tier.ps1')
-function Get-ClaudeFlowApimMonthlyCost {
+function Get-ClaudeFlowLifecycleApimMonthlyCost {
     param([string]$Sku, [string]$Region, [int]$Units = 1)
     New-ClaudeFlowCost -Item "API Management $Sku" -MonthlyUsd ([decimal]($(if ($Sku -eq 'BasicV2') { 150 } elseif ($Sku -eq 'StandardV2') { 700 } else { 2800 }))) -Source 'test retail price'
 }
@@ -98,7 +98,7 @@ $tierQuestions = @(Get-ClaudeFlowStepQuestions -Record $tierRecord -Discovery $t
 Assert 'tier question uses orchestrator property names' ($tierQuestions[0].Key -eq 'sku' -and $tierQuestions[0].Question -and $tierQuestions[0].WhereToFind -and $tierQuestions[0].PSObject.Properties.Name -contains 'AcceptRecommendedWithoutConsole')
 $tierPlan = Get-ClaudeFlowStepPlan -Record $tierRecord -Discovery $tierDiscovery
 Assert 'tier plan includes live retail cost and Microsoft Learn research citations' ($tierPlan.Costs[0].MonthlyUsd -eq 700 -and (($tierPlan.Implications -join "`n") -match 'learn.microsoft.com/en-us/azure/api-management'))
-Assert 'tier apply snapshots before in-place write' ((Get-Content (Join-Path $root 'scripts\flow\Tier.ps1') -Raw) -match 'Assert-ClaudeFlowSnapshotBeforeWrite')
+Assert 'tier apply snapshots before in-place write' ((Get-Content (Join-Path $root 'scripts\flow\Tier.ps1') -Raw) -match 'Assert-ClaudeFlowLifecycleSnapshotBeforeWrite')
 Assert 'tier apply uses a v2-capable ARM API version' ((Get-Content (Join-Path $root 'scripts\flow\Tier.ps1') -Raw) -match 'api-version=2024-05-01' -and (Get-Content (Join-Path $root 'scripts\flow\Tier.ps1') -Raw) -match 'Invoke-RestMethod -Method Patch')
 
 . (Join-Path $root 'scripts\flow\Entitlement.ps1')
@@ -132,7 +132,7 @@ $desktopDiscovery = [pscustomobject]@{
 }
 $desktopPlan = Get-ClaudeFlowStepPlan -Record $desktopRecord -Discovery $desktopDiscovery
 Assert 'desktop sign-in change writes the extra audience and flags device profile regeneration' (($desktopPlan.Actions | ForEach-Object Target) -contains 'named value external-idp-extra-audience' -and (($desktopPlan.Actions | ForEach-Object Detail) -join ' ') -match 'regenerated')
-Assert 'desktop sign-in apply snapshots before audience write' ((Get-Content (Join-Path $root 'scripts\flow\DesktopSignIn.ps1') -Raw) -match 'Assert-ClaudeFlowSnapshotBeforeWrite')
+Assert 'desktop sign-in apply snapshots before audience write' ((Get-Content (Join-Path $root 'scripts\flow\DesktopSignIn.ps1') -Raw) -match 'Assert-ClaudeFlowLifecycleSnapshotBeforeWrite')
 $desktopQuestions = @(Get-ClaudeFlowStepQuestions -Record $desktopRecord -Discovery $desktopDiscovery)
 Assert 'desktop question uses orchestrator property names' ($desktopQuestions[0].Key -eq 'desktopSignIn' -and $desktopQuestions[0].AcceptRecommendedWithoutConsole)
 
