@@ -542,6 +542,12 @@ or unknown, never zero. The Budgets tab shows these dollar columns next to token
 budget, usage and mode. The dollar edit form is preview-first; clearing a dollar
 budget requires typing the exact scope id.
 
+Live P62 dollar-budget evidence from the isolated, deleted proof estate:
+[80x24](images/aum/direct-usd-budgets-80x24-after.svg) ·
+[160x48](images/aum/direct-usd-budgets-160x48-after.svg). The general Direct
+Budgets captures later in this guide stay on the reference gateway and show the
+merged banner/header baseline.
+
 Direct mode reuses the gateway's existing USD implementation:
 
 - `scripts\ClaudeUsdBudgets.ps1` for validation, encoding, named-value capacity

@@ -89,6 +89,9 @@ aum usd reconcile --backend direct --apply
 The AUM service backend exposes the same commands only when its capabilities
 advertise USD read/write/reconcile or price-book administration. The Turnstile
 backend hides or refuses USD actions until Turnstile provides a real USD source.
+The P62 isolated AUM proof captured the dollar Budgets view with a live USD
+stop: [80x24](images/aum/direct-usd-budgets-80x24-after.svg) and
+[160x48](images/aum/direct-usd-budgets-160x48-after.svg).
 
 ### Refusals, modes and recovery
 
