@@ -29,6 +29,18 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **The Cosmos entitlement store offered by SKU, including Basic v2 (P61).** The installer asks
+  for `named-value` or `projection`, states the named-value ceiling (about 93 developers in
+  `bu-members`) at the operator's developer count, and chooses the resolver's inbound path by SKU:
+  private for Standard v2 and Premium v2, public with Microsoft Entra authentication pinned to the
+  gateway's managed identity for Basic v2, which has no outbound VNet integration; Cosmos stays
+  private either way. `scripts/Deploy-ClaudeProjection.ps1` deploys the private Cosmos account,
+  its network and the resolver, populates from Entra, compares against the named-value decisions
+  and flips `entitlement-source` only after a clean comparison;
+  `Measure-ClaudeProjectionCost.ps1 -P61Scenarios` prints the 100- and 500-developer cost rows.
+  Measured live on 2026-09-26 on an isolated Basic v2 gateway: an unauthenticated call to the
+  public resolver returned 401, a real count-tokens request through the gateway returned 200 after
+  the flip, and 500 synthetic records were written and counted. [ADR-0028](docs/adr/0028-basic-v2-projection-resolver.md).
 - **MDM deployment guide (P65).** `docs/MDM.md` now gives Intune, Jamf and
   Group Policy fleet rollout steps for Claude Code, the VS Code extension and
   Claude Desktop, with live workstation validation notes and Intune capture

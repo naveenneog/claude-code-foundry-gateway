@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "id": "p61-basic-gateway-overview",
+      "output": "docs/guide/p61-basic-gateway-overview.png",
+      "target": { "discover": "gateway", "selectionKey": "p61-basic-gateway" },
+      "blade": "/overview",
+      "waitFor": { "text": "Pricing tier" },
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "p61-basic-resolver-authentication",
+      "output": "docs/guide/p61-basic-resolver-authentication.png",
+      "target": {
+        "discover": "resource",
+        "resourceType": "Microsoft.Web/sites",
+        "nameFilterEnv": "P61_RESOLVER_NAME_FILTER",
+        "selectionKey": "p61-resolver"
+      },
+      "blade": "/authsettingsV2",
+      "waitFor": { "text": "Require authentication" },
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "p61-basic-resolver-networking",
+      "output": "docs/guide/p61-basic-resolver-networking.png",
+      "target": {
+        "discover": "resource",
+        "resourceType": "Microsoft.Web/sites",
+        "nameFilterEnv": "P61_RESOLVER_NAME_FILTER",
+        "selectionKey": "p61-resolver"
+      },
+      "blade": "/networking",
+      "waitFor": { "text": "Inbound Traffic" },
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "p61-basic-cosmos-networking",
+      "output": "docs/guide/p61-basic-cosmos-networking.png",
+      "target": {
+        "discover": "resource",
+        "resourceType": "Microsoft.DocumentDB/databaseAccounts",
+        "nameFilterEnv": "P61_COSMOS_NAME_FILTER",
+        "selectionKey": "p61-cosmos"
+      },
+      "blade": "/networking",
+      "waitFor": { "text": "Public network access" },
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    },
+    {
+      "id": "p61-basic-named-values-flipped",
+      "output": "docs/guide/p61-basic-named-values-flipped.png",
+      "target": { "discover": "gateway", "selectionKey": "p61-basic-gateway" },
+      "blade": "/overview",
+      "clicks": [
+        { "selector": "a.fxc-menu-item >> text=\"Named values\"", "waitFor": { "text": "entitlement-source" } }
+      ],
+      "waitFor": { "text": "Named values" },
+      "redaction": { "mapEnv": "PORTAL_REDACTIONS_FILE" }
+    }
+  ]
+}

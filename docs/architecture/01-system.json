@@ -41,7 +41,7 @@
     { "x": 890, "y": 0, "w": 390, "h": 506, "tone": "teal", "title": "Customer identity and model" },
     { "x": 0, "y": 544, "w": 1280, "h": 276, "tone": "blue", "title": "Telemetry · customer Log Analytics workspace" },
     { "x": 0, "y": 852, "w": 618, "h": 526, "tone": "purple", "title": "Optional Turnstile governance" },
-    { "x": 650, "y": 852, "w": 630, "h": 526, "tone": "teal", "title": "Optional projection · private VNet profile" },
+    { "x": 650, "y": 852, "w": 630, "h": 526, "tone": "teal", "title": "Optional projection · private Cosmos; SKU-specific resolver" },
     { "x": 0, "y": 1410, "w": 1280, "h": 302, "tone": "blue", "title": "Optional P50 chargeback reports · merged · independent of Turnstile" }
   ],
   "nodes": [
@@ -118,14 +118,14 @@
     ] },
     { "id": "network", "x": 666, "y": 1146, "w": 280, "h": 202, "tone": "teal", "compact": true, "title": "Network and host services", "lines": [
       "VNet integration + private endpoints and DNS links",
-      "Private Function host storage: blob, queue and table",
-      "Private resolver: Standard v2 or Premium v2 gateway"
+      "Private Function storage",
+      "Resolver inbound: private, or Basic public+Entra"
     ] },
     { "id": "resolver", "x": 984, "y": 1146, "w": 280, "h": 202, "tone": "teal", "compact": true, "title": "Resolver Function", "lines": [
       "[[resolver-route]]",
       "Accepts gateway identity only",
       "Own identity: container Data Reader",
-      "Miss admission and lease checks protect this path."
+      "Inbound by SKU"
     ] },
     { "id": "reports", "x": 16, "y": 1470, "w": 382, "h": 222, "tone": "blue", "compact": true, "title": "Monthly generator", "lines": [
       "Reads the workspace's saved functions and gateway budget catalog.",

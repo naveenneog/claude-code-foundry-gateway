@@ -1,0 +1,241 @@
+<#
+.SYNOPSIS
+    Deploys, populates and compare-gates the entitlement projection.
+
+.DESCRIPTION
+    One idempotent command for P61. It deploys a private Cosmos projection,
+    creates the private network endpoints that the resolver needs to reach it,
+    deploys the resolver with SKU-valid inbound access, exports the gateway's
+    current named-value decisions, populates the projection from Entra, compares
+    the resolver records against those decisions, and flips only the projection
+    named values after a clean comparison and an explicit switch.
+
+    BasicV2 must use a public resolver endpoint because Basic v2 has no
+    outbound VNet integration. The public endpoint is not anonymous: App Service
+    Authentication requires a token for the resolver audience, from the tenant,
+    issued to the gateway managed identity. Cosmos stays private in every shape.
+#>
+[CmdletBinding(SupportsShouldProcess)]
+param(
+    [Parameter(Mandatory = $true)][string]$ResourceGroup,
+    [Parameter(Mandatory = $true)][string]$ApimName,
+    [Parameter(Mandatory = $true)][string]$NamePrefix,
+    [string]$Location,
+    [ValidateSet('BasicV2','StandardV2','PremiumV2')]
+    [string]$Sku = 'BasicV2',
+    [ValidateSet('private','public')]
+    [string]$ResolverInboundAccess,
+    [string]$ResolverAppId,
+    [string]$StandardGroup = 'claude-code-standard',
+    [string]$PremiumGroup = 'claude-code-premium',
+    [switch]$FlipAfterCleanCompare,
+    [ValidateRange(1,10)][int]$RetryCount = 3,
+    [ValidateRange(5,120)][int]$RetryDelaySeconds = 15
+)
+
+$ErrorActionPreference = 'Stop'
+$root = Split-Path $PSScriptRoot -Parent
+. (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeRunner.ps1')
+
+function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
+function Note($m) { Write-Host "    $m" -ForegroundColor DarkGray }
+function Ok($m) { Write-Host "    [OK]   $m" -ForegroundColor Green }
+
+function Invoke-WithRetry {
+    param([Parameter(Mandatory)][scriptblock]$Action, [string]$Name)
+    for ($i = 1; $i -le $RetryCount; $i++) {
+        try { return & $Action }
+        catch {
+            if ($i -ge $RetryCount) { throw }
+            Write-Warning "$Name failed on attempt $i/${RetryCount}: $($_.Exception.Message)"
+            Start-Sleep -Seconds $RetryDelaySeconds
+        }
+    }
+}
+
+function Get-DeploymentOutput {
+    param([Parameter(Mandatory)][string]$DeploymentName)
+    $raw = az deployment group show -g $ResourceGroup -n $DeploymentName --query properties.outputs -o json 2>$null
+    if (-not $raw) { return @{} }
+    $obj = $raw | ConvertFrom-Json
+    $out = @{}
+    foreach ($p in $obj.PSObject.Properties) { $out[$p.Name] = $p.Value.value }
+    return $out
+}
+
+if (-not $Location) { $Location = az group show -n $ResourceGroup --query location -o tsv }
+if (-not $ResolverInboundAccess) {
+    $ResolverInboundAccess = switch ($Sku) {
+        'BasicV2' { 'public' }
+        'StandardV2' { 'private' }
+        'PremiumV2' { 'private' }
+    }
+}
+if ($Sku -eq 'BasicV2' -and $ResolverInboundAccess -ne 'public') {
+    throw 'BasicV2 requires ResolverInboundAccess public; it cannot reach a private resolver.'
+}
+if ($Sku -in @('StandardV2','PremiumV2') -and $ResolverInboundAccess -ne 'private') {
+    Write-Warning "$Sku can use a private resolver; public was explicitly requested."
+}
+
+Step 'Gateway identity'
+$apim = az apim show -g $ResourceGroup -n $ApimName -o json | ConvertFrom-Json
+if (-not $apim.identity.principalId) { throw "$ApimName has no system-assigned managed identity." }
+$gatewayObjectId = [string]$apim.identity.principalId
+$gatewayAppId = az ad sp show --id $gatewayObjectId --query appId -o tsv 2>$null
+if (-not $gatewayAppId) { throw "Could not resolve the managed identity application id for $ApimName." }
+Ok "gateway managed identity resolved"
+
+if (-not $ResolverAppId) {
+    $display = "claude-projection-resolver-$NamePrefix"
+    Note "using or creating resolver app registration $display"
+    $existing = az ad app list --display-name $display --query "[0].appId" -o tsv 2>$null
+    if ($existing) { $ResolverAppId = $existing.Trim() }
+    elseif ($PSCmdlet.ShouldProcess($display, 'create resolver app registration')) {
+        $made = az ad app create --display-name $display --sign-in-audience AzureADMyOrg -o json | ConvertFrom-Json
+        $ResolverAppId = [string]$made.appId
+        az ad app update --id $ResolverAppId --identifier-uris "api://$ResolverAppId" -o none
+    }
+}
+if (-not $ResolverAppId) { throw 'ResolverAppId is required when running with -WhatIf before the app registration exists.' }
+
+Step 'Deploy private Cosmos projection'
+$projectionName = "projection-$NamePrefix"
+if ($PSCmdlet.ShouldProcess($projectionName, 'deploy projection.bicep with networkAccess=private-only')) {
+    Invoke-WithRetry -Name 'projection deployment' -Action {
+        az deployment group create -g $ResourceGroup -n $projectionName --template-file (Join-Path $root 'infra/projection.bicep') `
+            --parameters namePrefix=$NamePrefix location=$Location networkAccess='private-only' -o none
+        if ($LASTEXITCODE -ne 0) { throw 'projection deployment failed' }
+    }
+}
+$projection = Get-DeploymentOutput $projectionName
+$cosmosAccount = if ($projection.accountName) { $projection.accountName } else { "cosmos-$NamePrefix" }
+
+Step 'Deploy projection network'
+$networkName = "projection-network-$NamePrefix"
+if ($PSCmdlet.ShouldProcess($networkName, 'deploy private endpoints and DNS')) {
+    Invoke-WithRetry -Name 'projection network deployment' -Action {
+        az deployment group create -g $ResourceGroup -n $networkName --template-file (Join-Path $root 'infra/projection-network.bicep') `
+            --parameters namePrefix=$NamePrefix location=$Location cosmosAccountName=$cosmosAccount runnerEnabled=true -o none
+        if ($LASTEXITCODE -ne 0) { throw 'projection network deployment failed' }
+    }
+}
+$network = Get-DeploymentOutput $networkName
+
+Step 'Deploy resolver'
+$resolverName = "projection-resolver-$NamePrefix"
+if ($PSCmdlet.ShouldProcess($resolverName, "deploy resolver.bicep inboundAccess=$ResolverInboundAccess")) {
+    $resolverParamFile = Join-Path ([IO.Path]::GetTempPath()) "claude-resolver-params-$NamePrefix-$PID.json"
+    $resolverParams = @{
+        '$schema' = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
+        contentVersion = '1.0.0.0'
+        parameters = @{
+            namePrefix = @{ value = $NamePrefix }
+            location = @{ value = $Location }
+            cosmosAccountName = @{ value = $cosmosAccount }
+            integrationSubnetId = @{ value = $network.resolverSubnetId }
+            privateEndpointSubnetId = @{ value = $network.endpointsSubnetId }
+            sitesDnsZoneId = @{ value = $network.sitesDnsZoneId }
+            blobDnsZoneId = @{ value = $network.blobDnsZoneId }
+            queueDnsZoneId = @{ value = $network.queueDnsZoneId }
+            tableDnsZoneId = @{ value = $network.tableDnsZoneId }
+            resolverAppId = @{ value = $ResolverAppId }
+            allowedCallerAppIds = @{ value = @($gatewayAppId) }
+            allowedCallerObjectIds = @{ value = @($gatewayObjectId) }
+            inboundAccess = @{ value = $ResolverInboundAccess }
+        }
+    }
+    [IO.File]::WriteAllText($resolverParamFile, ($resolverParams | ConvertTo-Json -Depth 8), (New-Object System.Text.UTF8Encoding($false)))
+    Invoke-WithRetry -Name 'resolver deployment' -Action {
+        az deployment group create -g $ResourceGroup -n $resolverName --template-file (Join-Path $root 'infra/resolver.bicep') `
+            --parameters "@$resolverParamFile" -o none
+        if ($LASTEXITCODE -ne 0) { throw 'resolver deployment failed' }
+    }
+    Remove-Item -LiteralPath $resolverParamFile -Force -ErrorAction SilentlyContinue
+}
+$resolver = Get-DeploymentOutput $resolverName
+$resolverUrl = [string]$resolver.resolverUrl
+$resolverAudience = [string]$resolver.resolverAudience
+if (-not $resolverUrl -or -not $resolverAudience) { throw 'Resolver deployment did not return resolverUrl and resolverAudience outputs.' }
+
+Step 'Publish resolver code'
+if ($PSCmdlet.ShouldProcess($resolver.siteName, 'package and publish resolver code')) {
+    $stage = Join-Path ([IO.Path]::GetTempPath()) "claude-resolver-$NamePrefix-$PID"
+    New-Item -ItemType Directory -Force -Path $stage | Out-Null
+    try {
+        Copy-Item (Join-Path $root 'resolver/host.json'), (Join-Path $root 'resolver/package.json') $stage
+        Copy-Item (Join-Path $root 'resolver/src') $stage -Recurse
+        Push-Location $stage
+        npm install --omit=dev --no-audit --fund=false
+        if ($LASTEXITCODE -ne 0) { throw 'resolver dependency installation failed' }
+        tar -a -c -f resolver.zip host.json package.json src node_modules
+        if ($LASTEXITCODE -ne 0) { throw 'resolver ZIP creation failed' }
+        az functionapp deployment source config-zip -g $ResourceGroup -n $($resolver.siteName) --src resolver.zip -o none
+        if ($LASTEXITCODE -ne 0) { throw 'resolver publish failed' }
+        Pop-Location
+    }
+    finally {
+        try { Pop-Location } catch { }
+        Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$work = Join-Path ([IO.Path]::GetTempPath()) "claude-projection-$NamePrefix-$PID"
+New-Item -ItemType Directory -Force -Path $work | Out-Null
+$snapshot = Join-Path $work 'snapshot.json'
+$gateway = Join-Path $work 'gateway-decisions.json'
+$syncArchive = Join-Path $work 'sync.tar.gz'
+
+try {
+    Step 'Populate projection from Entra'
+    if ($PSCmdlet.ShouldProcess($cosmosAccount, 'export Entra membership and apply projection')) {
+        & (Join-Path $PSScriptRoot 'Sync-ClaudeProjection.ps1') -Account $cosmosAccount -ApimName $ApimName -ResourceGroup $ResourceGroup `
+            -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -ExportPath $snapshot
+        if ($LASTEXITCODE -ne 0) { throw 'projection snapshot export failed' }
+        if (-not $network.runnerName -or -not $network.runnerPrincipalId) { throw 'Projection network did not return an in-VNet runner.' }
+        az cosmosdb sql role assignment create --account-name $cosmosAccount --resource-group $ResourceGroup `
+            --scope /dbs/claude/colls/entitlement --principal-id $($network.runnerPrincipalId) `
+            --role-definition-id 00000000-0000-0000-0000-000000000002 -o none 2>$null
+        tar -c -z -f $syncArchive -C (Join-Path $root 'sync') package.json src
+        if ($LASTEXITCODE -ne 0) { throw 'sync package creation failed' }
+        Send-RunnerFile -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Path $syncArchive -Destination /work/sync-source.tar.gz | Out-Null
+        Send-RunnerFile -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Path $snapshot -Destination /work/snapshot.json | Out-Null
+        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node -e require('fs').mkdirSync('/work/sync',{recursive:true})" | Out-Null
+        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command 'tar -x -z -f /work/sync-source.tar.gz -C /work/sync' | Out-Null
+        Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command 'npm --prefix /work/sync install --omit=dev --no-audit --fund=false' | Out-Null
+        $applyRaw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $($apim.identity.tenantId) --snapshot /work/snapshot.json"
+        $apply = ($applyRaw -split "`n" | Select-Object -Last 1) | ConvertFrom-Json
+        if (-not $apply.ok) { throw "projection apply failed: $applyRaw" }
+    }
+
+    Step 'Compare before flip'
+    if ($PSCmdlet.ShouldProcess($ApimName, 'export gateway decisions and compare projection')) {
+        & (Join-Path $PSScriptRoot 'Compare-ClaudeEntitlement.ps1') -ResourceGroup $ResourceGroup -ApimName $ApimName `
+            -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -ExportGatewayPath $gateway
+        if ($LASTEXITCODE -ne 0) { throw 'named-value lists drift from Entra; refusing projection comparison and flip.' }
+        Send-RunnerFile -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Path $gateway -Destination /work/gateway-decisions.json | Out-Null
+        $compareRaw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $($apim.identity.tenantId) --compare /work/gateway-decisions.json"
+        $compare = ($compareRaw -split "`n" | Select-Object -Last 1) | ConvertFrom-Json
+        if (-not $compare.ok) {
+            throw "Refusing to flip because projection drift remains: $($compare.differences) difference(s)."
+        }
+        Ok "clean comparison: $($compare.compared) identities"
+    }
+
+    if (-not $FlipAfterCleanCompare) {
+        Note 'Clean comparison complete. Re-run with -FlipAfterCleanCompare to switch entitlement-source.'
+        return
+    }
+
+    Step 'Flip gateway'
+    if ($PSCmdlet.ShouldProcess($ApimName, 'flip only projection named values')) {
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -Value $resolverUrl
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -Value $resolverAudience
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -Value 'projection'
+    }
+    Ok 'gateway now reads entitlement from the projection'
+}
+finally {
+    Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+}

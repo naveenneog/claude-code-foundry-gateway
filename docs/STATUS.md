@@ -1,6 +1,6 @@
 # Status
 
-**Active packets:** P61 the Cosmos entitlement store on every v2 tier, including Basic v2 ([below](#portal-pictures-recaptured-live-and-the-test-environments-removed-2026-09-25)), and P62 dollar budgets in AUM ([ROADMAP](ROADMAP.md)). Merged on 2026-09-26: P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets:** P62 dollar budgets in AUM ([ROADMAP](ROADMAP.md)). Merged on 2026-09-26: P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P46 acceptance criteria — managers scoped, and budget modes
 
@@ -40,6 +40,32 @@ this time, because manager attributes do not reach the gateway, but budget modes
 against stale runs is being added with the modes, and a single queue-driven writer (P48) is the
 full fix. Routes that FastAPI composes into an aggregate router needed the manager check on
 their own routers, not only on the aggregate.
+
+## P61 the Cosmos entitlement store on every v2 tier, merged 2026-09-26
+
+Asked by the owner: "Even for Basic APIM Tier admin can choose to go with comos backend for scale
+between 100-500." Named values hold about 93 developers in `bu-members` and about 110 per tier list
+([SCALE.md](SCALE.md)). The installer now asks for `named-value` or `projection`, states that
+ceiling against the operator's developer count, and chooses the resolver's inbound path by SKU:
+private on Standard v2 and Premium v2; on Basic v2, which has no outbound VNet integration
+([v2 tiers](https://learn.microsoft.com/azure/api-management/v2-service-tiers-overview)), a public
+resolver that requires Microsoft Entra authentication pinned to the gateway's managed identity
+([App Service authentication](https://learn.microsoft.com/azure/app-service/overview-authentication-authorization)),
+with Cosmos private behind the resolver's VNet integration. `Deploy-ClaudeProjection.ps1` deploys,
+populates from Entra, compares against the named-value decisions and flips `entitlement-source`
+only after a clean comparison. APIM v2 outbound addresses are not used as the security boundary.
+[ADR-0028](adr/0028-basic-v2-projection-resolver.md), [SECURE-PROJECTION.md](SECURE-PROJECTION.md).
+
+Measured live on 2026-09-26 on an isolated Basic v2 gateway: an unauthenticated call to the public
+resolver returned 401 and a wrong-identity token was refused; after a clean comparison the flip
+happened and a real count-tokens request returned 200 (first request 9.9 s, then about 0.8 s warm);
+500 synthetic records were written from inside the VNet and counted. Live runs found and fixed two
+deployer defects (resolver parameters passed as GUIDs, then inline JSON mangled by Azure CLI; now a
+parameter file). Torn down; about $0.40. Portal pictures are being captured from a short-lived
+capture estate. The lead's merge found the branch's CHANGELOG entry pasted after every "### Added"
+heading in the file; it was repaired and `Test-ReleaseLog.ps1` now refuses repeated or run-together
+entries. Branch gate PASS, 67 of 67. Open: a live add-then-remove through a projection-backed gateway
+(**U25**), bursts of different identities and coalescing across instances (**U18**).
 
 ## P64 add and remove developers from AUM by email, merged 2026-09-26
 

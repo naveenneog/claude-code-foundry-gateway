@@ -34,6 +34,8 @@ Assert 'tokens must be for the resolver itself'  ($rb -match "'api://\$\{resolve
 Assert 'inbound can be private'                  ($rb -match "publicNetworkAccess: isPrivate \? 'Disabled' : 'Enabled'")
 Assert 'through its own private endpoint'        ($rb -match "groupIds: \[\s*'sites'\s*\]")
 Assert 'outbound goes through the VNet'          ($rb -match 'virtualNetworkSubnetId: integrationSubnetId')
+Assert 'public resolver is still Entra authenticated' ($rb -match 'public\s+reachable from the internet; the token check is the only control' -and $rb -match 'requireAuthentication: true')
+Assert 'Cosmos remains private for the Basic public resolver' ((Get-Content (Join-Path $root 'infra/projection.bicep') -Raw) -match "param networkAccess string = 'private-only'")
 
 Write-Host ''
 Write-Host 'Secure projection - no key anywhere' -ForegroundColor Cyan

@@ -180,7 +180,11 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       admission and coalescing, and a private-only enterprise default are built and measured, and
       500,000 records were loaded and read ([ADR-0017](adr/0017-projection-freshness-and-admission.md)).
       Still open: `cos-default`, `cos-upgrade`, a scheduled Graph scan (**U17**), coalescing across
-      instances, and sizing per deployment
+      instances, and sizing per deployment. 2026-09-26, P61: the installer offers the projection
+      by SKU and developer count, and `Deploy-ClaudeProjection.ps1` is the one-command
+      deploy-beside, populate, compare and flip for an existing operator (`cos-upgrade`); the
+      default for new deployments stays named values below the ceiling (`cos-default` as a choice,
+      not a flip)
 - [x] P19b shadow migration — the sequence is settled in
       [ADR-0009](adr/0009-shadow-migration.md): five phases, authorization unchanged until the
       canary at phase 4, counter keys and period boundaries preserved throughout, and a rollback
@@ -365,13 +369,15 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       `New-ClaudeDesktopEntraApp.ps1`; live: helper token 200, wrong audience 401.
       [ADR-0027](adr/0027-claude-desktop-sign-in-choice.md). Open: Desktop's own sign-in end to
       end, which needs tenant consent (**U23**); the app-registration portal pictures
-- [ ] P61 the Cosmos entitlement store as an installer choice, including Basic v2 — acceptance:
+- [x] P61 the Cosmos entitlement store as an installer choice, including Basic v2 — acceptance:
       for 100-500 developers, which named values cannot hold (about 93), the installer offers the
       projection by SKU: private on Standard v2 and Premium v2; on Basic v2 through a resolver with
       a public, Entra-authenticated endpoint in front of a private Cosmos account, with the risk and
       the cost at 100 and 500 developers stated; one command deploys, populates from Entra,
       compares against the lists and flips only after a clean comparison; proven live on an
-      isolated Basic v2 gateway and removed
+      isolated Basic v2 gateway and removed. **Merged 2026-09-26**: `Deploy-ClaudeProjection.ps1`;
+      live: unauthenticated resolver call 401, count-tokens 200 after the flip, 500 synthetic
+      records. [ADR-0028](adr/0028-basic-v2-projection-resolver.md). Open: **U25**, **U18**
 - [ ] P62 dollar budgets in AUM — acceptance: AUM lists, sets, raises and clears dollar budgets
       and shows reconciled spend with its completeness flags, through the AUM service's contract
       (`docs/aum-usd-budgets-client-contract.md`) and the Direct backend's shared USD writer,
