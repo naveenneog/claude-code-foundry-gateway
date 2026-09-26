@@ -49,7 +49,7 @@
         {
           "text": "Named values",
           "exact": true,
-          "waitFor": { "text": "desktop-extra-audience", "exact": true },
+          "waitFor": { "text": "external-idp-extra-audience", "exact": true },
           "settle": 1500
         }
       ],
@@ -59,3 +59,4 @@
     }
   ]
 }
+

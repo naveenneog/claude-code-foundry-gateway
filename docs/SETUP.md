@@ -377,7 +377,7 @@ where it costs money, with the figure at your stated developer count:
 | Team budget | `report` / `stop` | This legacy prompt changes guidance, not a unit's stored mode. The installer preserves `bu-modes`; a missing entry means strict. Configure strict, allowance or notify per unit through [Business units](BUSINESS-UNITS.md#budget-modes) or Turnstile. An enforcing token quota triggers later than the dollar figure suggests because it excludes cache. |
 | Unassigned developers | `allow` / `deny` | `deny` on day one refuses people who have done nothing wrong. Start on `allow` and switch when `Get-ClaudeBusinessUnit.ps1` reports zero unassigned. |
 | Developer sign-in | `interactive` / `device` / `helper` | How developers authenticate. Written into `claude-gateway.json` and applied by the onboarding script on each machine. |
-| Claude Desktop sign-in | `helper-script` / `external-idp-browser` / `external-idp-broker` | How Desktop obtains the bearer token it sends to the gateway. Helper-script is unchanged and needs no app registration. External IdP modes need a Desktop public-client Entra app, consent review and a gateway audience recorded in `desktop-extra-audience`. |
+| Claude Desktop sign-in | `helper-script` / `external-idp-browser` / `external-idp-broker` | How Desktop obtains the bearer token it sends to the gateway. Helper-script is unchanged and needs no app registration. External IdP modes need a Desktop public-client Entra app, consent review and a gateway audience recorded in `external-idp-extra-audience`. |
 | Developer address | `azure` / `custom` | The only one that is expensive to change afterwards — the instance name is part of the address, so replacing the gateway later means reconfiguring every machine. |
 
 > [!IMPORTANT]
@@ -675,3 +675,4 @@ RBAC-only audit does not prove an old API key cannot bypass the gateway.
 | Watch usage and cost | [Monitoring guide](MONITORING.md) |
 | Something is broken | [Debug guide](DEBUGGING.md) |
 | Justify this to a stakeholder | [Foundry vs direct Anthropic](COMPARISON.md) |
+

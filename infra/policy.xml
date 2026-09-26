@@ -22,14 +22,13 @@
     <inbound>
         <base />
 
-        <!-- 1. Authenticate the caller. Claude Code and the helper-script
-             Desktop path request tokens for the Cognitive Services data plane.
-             Claude Desktop external-idp can instead send a token for the
-             Desktop public-client app (id_token) or an explicit gateway API
-             audience (access_token). That extra audience is accepted only when
-             the installer recorded it in desktop-extra-audience. -->
+        <!-- 1. Authenticate the caller. The standard helper path requests a
+             token for the Cognitive Services data plane. An external IdP can
+             instead send a token for a public-client app (id_token) or an
+             explicit gateway API audience (access_token). That extra audience
+             is accepted only when the installer recorded it. -->
         <choose>
-            <when condition="@(!string.IsNullOrWhiteSpace(&quot;{{desktop-extra-audience}}&quot;))">
+            <when condition="@(!string.IsNullOrWhiteSpace(&quot;{{external-idp-extra-audience}}&quot;))">
                 <validate-azure-ad-token
                     tenant-id="{{tenant-id}}"
                     output-token-variable-name="jwt"
@@ -38,7 +37,7 @@
                     <audiences>
                         <audience>https://cognitiveservices.azure.com</audience>
                         <audience>https://ai.azure.com</audience>
-                        <audience>{{desktop-extra-audience}}</audience>
+                        <audience>{{external-idp-extra-audience}}</audience>
                     </audiences>
                 </validate-azure-ad-token>
             </when>

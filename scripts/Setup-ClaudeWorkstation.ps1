@@ -367,7 +367,13 @@ if (-not $SkipDesktop) {
         }
         else { Write-Ok 'Desktop will use its own Entra sign-in; no helper script is written.' }
 
-        if (($desktopSignIn.kind -ne 'helper-script') -or (Test-Path $helperCmd)) {
+        $canWriteDesktopProfile = $false
+        if ($desktopSignIn.kind -eq 'helper-script') {
+            if (Test-Path $helperCmd) { $canWriteDesktopProfile = $true }
+        }
+        else { $canWriteDesktopProfile = $true }
+
+        if ($canWriteDesktopProfile) {
             # Developer settings reveal Settings -> Connection and create the
             # profile library this writes into.
             $devSettings = Join-Path $env:APPDATA 'Claude\developer_settings.json'

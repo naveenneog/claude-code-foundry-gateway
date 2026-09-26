@@ -58,7 +58,7 @@ For Desktop-owned sign-in, the recorded shape is:
 `access_token`. `access_token` also requires `scopes` and `audience`; `resource`
 is optional and is written only when supplied.
 
-API Management receives a named value, `desktop-extra-audience`. It is empty by
+API Management receives a named value, `external-idp-extra-audience`. It is empty by
 default. When Desktop external-idp is chosen, the installer sets it to the
 Desktop app client id for `id_token`, or to the explicit gateway API audience
 for `access_token`. The policy has two validation branches: empty keeps the old
@@ -110,3 +110,4 @@ public client.
 - Microsoft Learn, "Azure API Management policy reference -
   validate-azure-ad-token", retrieved 2026-09-26:
   <https://learn.microsoft.com/en-us/azure/api-management/validate-azure-ad-token-policy>
+

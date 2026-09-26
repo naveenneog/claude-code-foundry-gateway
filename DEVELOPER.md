@@ -583,8 +583,17 @@ resource server; the delegated permission may require admin consent. Desktop
 requests `offline_access` for silent refresh unless the configuration disables
 that behavior.
 
+If an admin tests the in-app configuration window by hand, do not leave its
+default scopes in place for this gateway. `openid profile email offline_access`
+is an identity-token setup; in older access-token experiments it produced a
+Microsoft Graph audience and the gateway returned 401. The older manual
+access-token shape was `https://cognitiveservices.azure.com/.default offline_access`,
+and the field choice was **Access token**, not ID token. That
+path needs a redirect URI, so unlike the helper route it also needs an app
+registration and consent review.
+
 The gateway accepts the Desktop audience only when the installer has written the
-`desktop-extra-audience` named value. A wrong audience or a token from another
+`external-idp-extra-audience` named value. A wrong audience or a token from another
 tenant is still refused with 401.
 
 Portal capture steps for the lead are `p60-desktop-app-overview`,

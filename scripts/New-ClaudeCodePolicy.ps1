@@ -128,6 +128,51 @@ param(
 $ErrorActionPreference = 'Stop'
 $desktopSignInHelper = Join-Path $PSScriptRoot 'ClaudeDesktopSignIn.ps1'
 if (Test-Path $desktopSignInHelper) { . $desktopSignInHelper }
+if (-not (Get-Command Get-ClaudeDesktopSignIn -ErrorAction SilentlyContinue)) {
+    function Get-ClaudeDesktopSignIn {
+        param([Parameter(Mandatory)]$Config)
+        $raw = $Config.desktopSignIn
+        if (-not $raw -or -not $raw.kind -or $raw.kind -eq 'helper-script') {
+            return [pscustomobject]@{ kind = 'helper-script' }
+        }
+        if ($raw.kind -ne 'external-idp') { throw "Invalid desktopSignIn.kind '$($raw.kind)'." }
+        if ($raw.flow -notin @('browser', 'broker')) { throw "Invalid desktopSignIn.flow '$($raw.flow)'." }
+        $tokenType = if ($raw.bearerTokenType) { [string]$raw.bearerTokenType } else { 'id_token' }
+        if ($tokenType -notin @('id_token', 'access_token')) { throw "Invalid desktopSignIn.bearerTokenType '$tokenType'." }
+        if (-not $raw.clientId -or -not $raw.issuer) { throw 'desktopSignIn.clientId and issuer are required.' }
+        [pscustomobject]@{
+            kind = 'external-idp'; flow = [string]$raw.flow; bearerTokenType = $tokenType
+            clientId = [string]$raw.clientId; issuer = ([string]$raw.issuer).TrimEnd('/')
+            scopes = if ($raw.scopes) { [string]$raw.scopes } else { $null }
+            audience = if ($raw.audience) { [string]$raw.audience } else { [string]$raw.clientId }
+            resource = if ($raw.resource) { [string]$raw.resource } else { $null }
+        }
+    }
+    function New-ClaudeDesktopSettings {
+        param([string]$GatewayUrl, [string[]]$Models, [string]$HelperPath, $DesktopSignIn, [switch]$NoCowork)
+        $settings = [ordered]@{
+            inferenceProvider = 'gateway'; inferenceGatewayBaseUrl = $GatewayUrl
+            inferenceGatewayAuthScheme = 'bearer'; inferenceCredentialKind = $DesktopSignIn.kind
+            inferenceModels = @($Models | ForEach-Object { [ordered]@{ name = $_ } })
+            chatTabEnabled = $true; isClaudeCodeForDesktopEnabled = $true
+            inferenceModelPricingEnabled = $true
+        }
+        if (-not $NoCowork) { $settings['coworkTabEnabled'] = $true }
+        if ($DesktopSignIn.kind -eq 'helper-script') {
+            $settings['inferenceCredentialHelper'] = $HelperPath
+            $settings['inferenceCredentialHelperTimeoutSec'] = 60
+            $settings['inferenceCredentialHelperTtlSec'] = 1800
+            $settings['inferenceCredentialHelperSilentRefreshEnabled'] = $true
+            return $settings
+        }
+        $oidc = [ordered]@{ issuer = $DesktopSignIn.issuer; clientId = $DesktopSignIn.clientId; bearerTokenType = $DesktopSignIn.bearerTokenType }
+        if ($DesktopSignIn.scopes) { $oidc['scopes'] = $DesktopSignIn.scopes }
+        if ($DesktopSignIn.resource) { $oidc['resource'] = $DesktopSignIn.resource }
+        $settings['inferenceIdpAuthFlow'] = $DesktopSignIn.flow
+        $settings['inferenceIdpOidc'] = $oidc
+        return $settings
+    }
+}
 
 $banner = Join-Path $PSScriptRoot 'Show-Banner.ps1'
 if (Test-Path $banner) { . $banner; Show-ClaudeBanner -Subtitle 'Claude Code managed settings' }
@@ -151,8 +196,8 @@ if ($ConfigPath) {
         if ($o) { $OpusModel = $o }
         if ($s) { $SonnetModel = $s }
     }
-    else { $cfg = [pscustomobject]@{} }
 }
+else { $cfg = [pscustomobject]@{} }
 
 if (-not $GatewayUrl) {
     throw ("Pass -GatewayUrl, or -ConfigPath pointing at onboarding/claude-gateway.json. Where to find it: " +

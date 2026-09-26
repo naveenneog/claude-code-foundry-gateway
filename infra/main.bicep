@@ -140,7 +140,7 @@ param entitlementResolverUrl string = 'https://resolver-not-deployed.invalid'
 @description('Entra audience the gateway asks for a managed identity token against, when calling the resolver. Separate from the URL on purpose: the two often differ, and conflating them produces a token the resolver rejects.')
 param entitlementResolverAudience string = 'https://resolver-not-deployed.invalid'
 
-@description('Optional extra Entra audience accepted from Claude Desktop external-idp sign-in. Empty keeps the shipped Azure CLI/helper-script audiences only.')
+@description('Optional extra Entra audience accepted from external-idp sign-in. Empty keeps the shipped Azure CLI/helper-script audiences only.')
 param desktopExtraAudience string = ''
 
 @description('How long the gateway may serve an identity the directory has already changed, in seconds. This is the staleness bound, and it also sets the resolver cost, because cost follows cache misses rather than requests.')
@@ -373,7 +373,7 @@ var namedValues = [
   { key: 'calls-per-minute', value: string(callsPerMinute) }
   { key: 'allow-standard', value: allowStandardValue }
   { key: 'allow-premium', value: allowPremiumValue }
-  { key: 'desktop-extra-audience', value: desktopExtraAudience }
+  { key: 'external-idp-extra-audience', value: desktopExtraAudience }
   // Where the gateway reads entitlement from. 'named-value' is the list path
   // this has always used; 'projection' is the resolver path from ADR-0011.
   //

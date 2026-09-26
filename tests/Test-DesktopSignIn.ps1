@@ -89,9 +89,9 @@ $main = if (Test-Path $bicep) { Get-Content $bicep -Raw } else { '' }
 Assert 'installer offers Desktop sign-in kinds' ($install -match 'DesktopSignInKind' -and $install -match 'external-idp-browser' -and $install -match 'external-idp-broker')
 Assert 'installer records desktopSignIn in claude-gateway.json' ($install -match 'desktopSignIn\s+=')
 Assert 'installer records the gateway audience named value' ($install -match 'desktopExternalAudience|desktopGatewayAudience')
-Assert 'gateway has a named value for the optional Desktop audience' ($main -match "key:\s*'desktop-extra-audience'")
-Assert 'policy has the default no-extra-audience branch' ($pol -match 'desktop-extra-audience' -and $pol -match 'https://cognitiveservices.azure.com')
-Assert 'policy accepts the Desktop audience only when configured' ($pol -match '\{\{desktop-extra-audience\}\}' -and $pol -match '<choose>')
+Assert 'gateway has a named value for the optional Desktop audience' ($main -match "key:\s*'external-idp-extra-audience'")
+Assert 'policy has the default no-extra-audience branch' ($pol -match 'external-idp-extra-audience' -and $pol -match 'https://cognitiveservices.azure.com')
+Assert 'policy accepts the Desktop audience only when configured' ($pol -match '\{\{external-idp-extra-audience\}\}' -and $pol -match '<choose>')
 Assert 'policy still pins the tenant' ($pol -match 'tenant-id="\{\{tenant-id\}\}"')
 
 Write-Host ''

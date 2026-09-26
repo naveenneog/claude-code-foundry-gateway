@@ -33,7 +33,7 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
   or Desktop external-idp sign-in through an Entra public-client app in browser or broker
   flow. `scripts/ClaudeDesktopSignIn.ps1` validates the record and renders the exact
   Desktop keys for both workstation setup scripts and the MDM payload generator. The
-  gateway accepts a Desktop audience only through the new `desktop-extra-audience` named
+  gateway accepts a Desktop audience only through the new `external-idp-extra-audience` named
   value; empty keeps the previous Azure CLI/helper audiences. `New-ClaudeDesktopEntraApp.ps1`
   creates or discovers the public-client registration and redirect URIs without granting
   tenant-wide consent. [ADR-0026](docs/adr/0026-claude-desktop-sign-in-choice.md).
@@ -1320,3 +1320,4 @@ Initial release.
 [1.2.0]: https://github.com/naveenneog/claude-code-foundry-gateway/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/naveenneog/claude-code-foundry-gateway/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/naveenneog/claude-code-foundry-gateway/releases/tag/v1.0.0
+
