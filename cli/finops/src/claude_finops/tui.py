@@ -591,6 +591,11 @@ class FinOpsApp(FeatureUI, App):
             from .group_screens import GroupPicker
             self.push_screen(GroupPicker())
 
+    def action_add_developer(self):
+        if self.identity.get("role") == "owner" and not self.redactor.enabled:
+            from .developer_screens import DeveloperPicker
+            self.push_screen(DeveloperPicker())
+
     def action_apply(self):
         if self.editable and not self.engine.backend.immediate_writes:
             self.push_screen(ChangeScreen(self.engine, "apply"))

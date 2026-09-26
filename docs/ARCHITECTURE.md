@@ -437,8 +437,11 @@ automatic fallback:
 - **Turnstile HTTP:** Azure CLI token, role/scope checks at the server, bounded API reads
   and explicit writes. A failed GET can refresh its token once; writes are not retried.
 - **Direct Azure:** ARM, Log Analytics and `Invoke-ClaudeFinOps.ps1`, reusing the
-  repository's gateway scripts and chargeback query. Azure RBAC is authoritative; this
-  is not an alternate implementation of Turnstile's delegated manager scope.
+  repository's gateway scripts and chargeback query. AUM developer add/remove uses the
+  signed-in administrator's delegated Graph token to update Entra group membership,
+  then publishes the gateway allow lists through the selected authority path. Azure
+  RBAC and Graph remain authoritative; this is not an alternate implementation of
+  Turnstile's delegated manager scope.
 - **Fake:** deterministic Contoso fixtures for tests and terminal snapshots; no tenant,
   model or credential calls.
 

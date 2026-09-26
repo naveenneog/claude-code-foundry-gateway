@@ -53,6 +53,14 @@ function Invoke-VerifiedChange($Expected, [scriptblock]$Operation) {
 }
 
 switch ([string]$request.action) {
+    'developer_publish' {
+        $arguments = @{ ResourceGroup=$ResourceGroup; ApimName=$ApimName }
+        if ($request.parameters.standard_group) { $arguments.StandardGroup = [string]$request.parameters.standard_group }
+        if ($request.parameters.premium_group) { $arguments.PremiumGroup = [string]$request.parameters.premium_group }
+        if ($request.parameters.allow_empty) { $arguments.AllowEmpty = $true }
+        & (Join-Path $PSScriptRoot 'Sync-ClaudeAccess.ps1') @arguments 6>$null | Out-Null
+        $result = [ordered]@{ synced=$true; apim=$ApimName; resource_group=$ResourceGroup }
+    }
     'delegated_publish' {
         if ($nv['turnstile-integration'] -notmatch 'governanceAuthority=Turnstile') {
             throw 'Delegated publication requires an explicitly configured Turnstile authority.'
@@ -68,18 +76,30 @@ switch ([string]$request.action) {
         $result=& (Join-Path $PSScriptRoot 'Sync-AumMembership.ps1') @arguments | ConvertFrom-Json
     }
     'read' {
+        $standardGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') StandardGroup 3>$null)
+        $premiumGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') PremiumGroup 3>$null)
         $tiers = foreach ($tier in @('standard', 'premium')) {
             [ordered]@{
-                id = $tier; name = $tier; entra_group = ''
+                id = $tier; name = $tier; entra_group = $(if ($tier -eq 'standard') { $standardGroup } else { $premiumGroup })
                 tokens_per_minute = [long]$nv["tpm-$tier"]
                 tokens_per_day = [long]$nv["quota-$tier"]
                 models = @($nv["models-$tier"].Trim(',') -split ',' | Where-Object { $_ })
             }
         }
-        $catalog = ConvertTo-ClaudeTurnstileCatalog -Registry $registry -Parents $parents -Modes $modes
+        $catalog = if (@($registry).Count) {
+            ConvertTo-ClaudeTurnstileCatalog -Registry $registry -Parents $parents -Modes $modes
+        }
+        else {
+            [ordered]@{ organizations=@(); departments=@(); default_department_id=$null }
+        }
         $result = [ordered]@{
             catalog = $catalog; tiers = @($tiers)
             registry = @($registry); parents = $parents
+            entitlements = @{
+                standard = @($nv['allow-standard'].Trim(',') -split ',' | Where-Object { $_ })
+                premium = @($nv['allow-premium'].Trim(',') -split ',' | Where-Object { $_ })
+            }
+            memberships = ConvertFrom-ClaudeBuMembers $nv['bu-members']
             quota_org = [long]$nv['quota-org']
             overrides = $(if ($nv.ContainsKey('quota-overrides')) { ConvertFrom-ClaudeBudgetOverrides $nv['quota-overrides'] } else { @{} })
             person_budgets_supported = $nv.ContainsKey('quota-overrides')

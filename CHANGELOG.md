@@ -28,6 +28,12 @@ insufficient, so P21 stays open. Categorised enforcement is **U13**.
 
 ### Added
 
+- **AUM developer add/remove.** `aum developer find|add|remove` searches the
+  Entra directory with the signed-in administrator's delegated Graph token,
+  resolves exact email/UPN/object-id targets including guests, previews tier and
+  unit/team group changes, writes membership once, verifies propagation and
+  publishes the gateway. `Set-ClaudeDeveloper.ps1` now discovers recorded tier
+  group names instead of silently defaulting to fixed strings.
 - **AUM (Azure Usage Management), the terminal FinOps client renamed from `claude-finops`.**
   `aum` (the old command still works) adds an executive overview, budgets by unit, team and
   person, gateway governance, usage breakdown and trends, a request trace, anomalies, reports
