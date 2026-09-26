@@ -128,3 +128,107 @@ def test_group_403_reports_required_rights_without_owner_precheck():
 
     with pytest.raises(FinOpsError, match="Graph HTTP 403"):
         graph(respond).apply_membership(USER, PREMIUM, True)
+
+
+class FakeDeveloperBackend:
+    name = "Direct"
+    immediate_writes = True
+
+    def __init__(self):
+        self.calls = []
+
+    def _bridge(self, action, body=None, **params):
+        self.calls.append((action, params))
+        if action == "read":
+            return {
+                "tiers": [
+                    {"id": "standard", "entra_group": "standard-group"},
+                    {"id": "premium", "entra_group": "premium-group"},
+                ],
+                "catalog": {"organizations": [], "departments": []},
+                "entitlements": {"standard": [], "premium": []},
+                "memberships": {},
+            }
+        return {"published": True, **params}
+
+
+class FakeDeveloperEngine:
+    def __init__(self, client):
+        self.backend = FakeDeveloperBackend()
+        self.developer_factory = lambda: client
+
+    def read(self, resource, **_):
+        assert resource == "whoami"
+        return {"role": "owner"}
+
+
+class FakeDeveloperClient:
+    def __init__(self, *, direct=None, group_members=None, fail_group_read=False):
+        self.direct = set(direct or [])
+        self.group_members = {key: set(value) for key, value in (group_members or {}).items()}
+        self.fail_group_read = fail_group_read
+        self.writes = []
+
+    def close(self):
+        pass
+
+    def resolve_exact(self, target, state=None):
+        return {"id": USER, "display_name": "Dev", "user_principal_name": "dev@contoso.com",
+                "mail": "dev@contoso.com", "user_type": "Member", "current_tier": "", "current_unit": ""}
+
+    def group_id(self, value):
+        return {"standard-group": STANDARD, "premium-group": PREMIUM}[value]
+
+    def direct_memberships(self, user_id):
+        return set(self.direct)
+
+    def group_user_member_ids(self, group_id):
+        if self.fail_group_read:
+            raise FinOpsError("Graph read failed before mutation.", 7)
+        return set(self.group_members.get(group_id, set()))
+
+    def apply_membership(self, user_id, group_id, want):
+        self.writes.append((user_id, group_id, want))
+        if want:
+            self.direct.add(group_id)
+            self.group_members.setdefault(group_id, set()).add(user_id)
+        else:
+            self.direct.discard(group_id)
+            self.group_members.setdefault(group_id, set()).discard(user_id)
+        return True
+
+
+def remove_with(client):
+    from claude_finops.developer_actions import developer_change
+    engine = FakeDeveloperEngine(client)
+    result = developer_change(engine, object(), "dev@contoso.com", remove=True, apply=True, confirm="dev@contoso.com")
+    publish = engine.backend.calls[-1][1]
+    return result, publish, client
+
+
+def test_removal_of_one_of_several_tier_members_publishes_without_allow_empty():
+    _, publish, _ = remove_with(FakeDeveloperClient(direct={STANDARD}, group_members={STANDARD: {USER, "other-user"}}))
+    assert "allow_empty_standard" not in publish
+    assert "allow_empty_premium" not in publish
+    assert "allow_empty" not in publish
+
+
+def test_removal_of_last_member_of_changed_tier_publishes_scoped_allow_empty():
+    _, publish, _ = remove_with(FakeDeveloperClient(direct={STANDARD}, group_members={STANDARD: {USER}, PREMIUM: set()}))
+    assert publish["allow_empty_standard"] is True
+    assert "allow_empty_premium" not in publish
+    assert "allow_empty" not in publish
+
+
+def test_unrelated_empty_tier_read_does_not_disable_sync_guard():
+    _, publish, client = remove_with(FakeDeveloperClient(direct={STANDARD}, group_members={STANDARD: {USER, "other-user"}, PREMIUM: set()}))
+    assert client.writes == [(USER, STANDARD, False), (USER, PREMIUM, False)]
+    assert "allow_empty_premium" not in publish
+
+
+def test_graph_group_member_precheck_failure_aborts_before_any_write():
+    client = FakeDeveloperClient(direct={STANDARD}, group_members={STANDARD: {USER}}, fail_group_read=True)
+    from claude_finops.developer_actions import developer_change
+    with pytest.raises(FinOpsError, match="Graph read failed"):
+        developer_change(FakeDeveloperEngine(client), object(), "dev@contoso.com", remove=True, apply=True, confirm="dev@contoso.com")
+    assert client.writes == []

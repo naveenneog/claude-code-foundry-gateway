@@ -57,7 +57,8 @@ switch ([string]$request.action) {
         $arguments = @{ ResourceGroup=$ResourceGroup; ApimName=$ApimName }
         if ($request.parameters.standard_group) { $arguments.StandardGroup = [string]$request.parameters.standard_group }
         if ($request.parameters.premium_group) { $arguments.PremiumGroup = [string]$request.parameters.premium_group }
-        if ($request.parameters.allow_empty) { $arguments.AllowEmpty = $true }
+        if ($request.parameters.allow_empty_standard) { $arguments.AllowEmptyStandard = $true }
+        if ($request.parameters.allow_empty_premium) { $arguments.AllowEmptyPremium = $true }
         & (Join-Path $PSScriptRoot 'Sync-ClaudeAccess.ps1') @arguments 6>$null | Out-Null
         $result = [ordered]@{ synced=$true; apim=$ApimName; resource_group=$ResourceGroup }
     }

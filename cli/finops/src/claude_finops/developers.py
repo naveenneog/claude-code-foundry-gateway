@@ -147,6 +147,16 @@ class EntraDevelopers(EntraGroups):
             url = page.get("@odata.nextLink")
         return result
 
+    def group_user_member_ids(self, group_id):
+        result = set()
+        url = (f"/v1.0/groups/{object_id(group_id)}/transitiveMembers/microsoft.graph.user"
+               "?$select=id&$top=999&$count=true")
+        while url:
+            page = self.request("GET", url)
+            result.update(row["id"] for row in page.get("value", []))
+            url = page.get("@odata.nextLink")
+        return result
+
     def wait_membership(self, user_id, group_id, present):
         for attempt in range(31):
             current = self.direct_memberships(user_id)

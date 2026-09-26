@@ -90,10 +90,24 @@ def developer_change(engine, config, target, *, tier=None, unit=None, remove=Fal
             return plan
         if remove and confirm != person["user_principal_name"]:
             raise FinOpsError("Type the resolved UPN with --confirm before removing a developer.", 2)
+        allow_empty_candidates = {}
+        if remove:
+            direct_before = client.direct_memberships(person["id"])
+            for name in ("standard", "premium"):
+                group_id = group_ids[name]
+                if group_id not in direct_before:
+                    continue
+                members = client.group_user_member_ids(group_id)
+                if members == {person["id"]}:
+                    allow_empty_candidates[name] = group_id
         changed = []
         for change in changes:
             if client.apply_membership(person["id"], change["group_id"], change["present"]):
                 changed.append(change)
+        allow_empty = {}
+        for name, group_id in allow_empty_candidates.items():
+            if not client.group_user_member_ids(group_id):
+                allow_empty[f"allow_empty_{name}"] = True
         plan["changed"] = changed
         bridge = _authority_bridge(engine, config)
         if engine.backend.name == "Turnstile":
@@ -101,7 +115,7 @@ def developer_change(engine, config, target, *, tier=None, unit=None, remove=Fal
             plan["publication_path"] = "Turnstile delegated publish-as-admin"
         else:
             plan["publication"] = bridge._bridge("developer_publish", standard_group=tiers["standard"],
-                                                 premium_group=tiers["premium"], allow_empty=remove)
+                                                 premium_group=tiers["premium"], **allow_empty)
             plan["publication_path"] = "Direct selected-scope membership refresh and tier allow-list sync"
         plan["preview"] = False
         plan["gateway_ready"] = "The developer can call the gateway after APIM named-value publication and gateway cache propagation."
