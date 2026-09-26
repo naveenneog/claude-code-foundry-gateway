@@ -136,4 +136,3 @@ function Test-ClaudeFlowStep {
         Checks = @(@{ Name = 'offline contract'; Passed = $true; Evidence = 'Tier plans are derived from discovery and Microsoft Learn citations.'; Fix = '' })
     }
 }
-

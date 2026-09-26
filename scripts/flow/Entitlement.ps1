@@ -94,4 +94,3 @@ function Test-ClaudeFlowStep {
     param([Parameter(Mandatory = $true)]$Record)
     [pscustomobject]@{ Step = 'Entitlement'; Passed = $true; Checks = @(@{ Name = 'compare-gated'; Passed = $true; Evidence = 'Invoke refuses projection flip unless CleanComparison is true.'; Fix = '' }) }
 }
-

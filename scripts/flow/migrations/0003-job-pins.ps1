@@ -59,4 +59,3 @@ function Test-ClaudeFlowMigration {
         Checks = @(@{ Name = 'job commit pins'; Passed = ($behind.Count -eq 0); Evidence = "behind=$($behind.Count)"; Fix = 'Apply job-pin migration or rerun the owning deploy script.' })
     }
 }
-

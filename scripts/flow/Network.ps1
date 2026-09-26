@@ -54,4 +54,3 @@ function Test-ClaudeFlowStep {
     param([Parameter(Mandatory = $true)]$Record)
     [pscustomobject]@{ Step = 'Network'; Passed = $true; Checks = @(@{ Name = 'review fingerprint required'; Passed = $true; Evidence = 'Invoke refuses when ApprovedNetworkFingerprint is empty.'; Fix = '' }) }
 }
-

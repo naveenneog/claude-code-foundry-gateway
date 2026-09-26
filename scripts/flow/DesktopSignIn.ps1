@@ -76,4 +76,3 @@ function Test-ClaudeFlowStep {
     param([Parameter(Mandatory = $true)]$Record)
     [pscustomobject]@{ Step = 'DesktopSignIn'; Passed = $true; Checks = @(@{ Name = 'device profiles flagged'; Passed = $true; Evidence = 'Invoke writes deviceProfiles.regenerate=true.'; Fix = '' }) }
 }
-
