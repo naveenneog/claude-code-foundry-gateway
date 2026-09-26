@@ -169,7 +169,7 @@
         "cli/finops/src/claude_finops/scope.py": "9e17c5590ba07b3ad72f384cd544f68a5eee5ef5cee39fb02e188419231b1e19",
         "cli/finops/src/claude_finops/service_models.py": "2dd444686b324096a62b3bdb3279cb3e0876d1d34885e451f3f9ce89f5e878af",
         "cli/finops/src/claude_finops/service_writes.py": "5f6b9f858ef0a86ebf1484da7733f188216f181dd94583381ffd25b4a932cf7c",
-        "cli/finops/src/claude_finops/tui.py": "65114f3d54d78c818729d363e89da3813639401706d547fdd6ff58f98c39b828",
+        "cli/finops/src/claude_finops/tui.py": "f1317a7471ecc46897beae96cf51cc4aef50446e54224325395757368507893b",
         "cli/finops/src/claude_finops/turnstile.py": "ea7e5afc1ae0ed36099dced298443d50b1f040de206c888a26da0ef17635ff51",
         "cli/finops/src/claude_finops/ui_features.py": "cae19867a1dd78c40fdce6667233a22654994d06020444ec33433c17af8bb9b0",
         "docs/architecture/06-finops.json": "4d6984f1bfa043fbd03d33b581c67331fa980173cb1d5f7dccde6e31fd2ea81a",

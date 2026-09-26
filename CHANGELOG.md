@@ -12,28 +12,42 @@ Releases are tagged in git. `docs/ROADMAP.md` holds the forward plan and
 Business-unit chargeback. Budgets are set and reported in dollars, but three
 limits apply to every figure here and are repeated in each command's output.
 
-The counter is blind to cached tokens: `llm-token-limit` "currently counts
+The token counter is blind to cached tokens: `llm-token-limit` "currently counts
 prompt and completion tokens only", and on thirty days of live usage cache reads
 were 6.8M tokens against 320K prompt and 152K completion — 38.7% of real cost
-weight at Claude's published rates. Budgets therefore bound less spend than they
-appear to, always in the direction of under-counting.
+weight at Claude's published rates. Token budgets therefore bound less spend than
+they appear to, always in the direction of under-counting.
 
 Dollar figures are list price and do not reconcile to an Azure invoice, because
 Azure bills Claude as one aggregated Claude Consumption Unit meter and
 private-offer discounts apply before that conversion. **U2**.
 
-A budget is enforced as one blended token figure converted at write time,
-assuming a 20% output mix. That is what P21's acceptance criterion calls
-insufficient, so P21 stays open. Categorised enforcement is **U13**.
+A token budget is still enforced as one blended token figure converted at write
+time, assuming a 20% output mix. Dollar budgets (P59, below) are enforced from
+priced categories, including cache reads and writes, after each reconciliation;
+exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+<<<<<<< HEAD
 - **AUM developer add/remove.** `aum developer find|add|remove` searches the
   Entra directory with the signed-in administrator's delegated Graph token,
   resolves exact email/UPN/object-id targets including guests, previews tier and
   unit/team group changes, writes membership once, verifies propagation and
   publishes the gateway. `Set-ClaudeDeveloper.ps1` now discovers recorded tier
   group names instead of silently defaulting to fixed strings.
+=======
+- **Dollar budgets enforced from priced token categories (P59).** A unit, team or person budget
+  can be set in dollars with a pinned price book; a reconciler prices observed input, output,
+  cache-read and both cache-write tokens with Decimal, refuses unpriced models rather than
+  counting them as $0, and publishes expiring gateway stops in the strict, allowance and notify
+  modes. The refusal is a distinct 403 `usd_budget_exceeded`; enforced state older than 15
+  minutes gives 503 `usd_budget_state_stale`. It runs on demand (`Sync-ClaudeUsdBudgets.ps1`) or
+  on the AUM service's five-minute timer, which also serves the dollar routes. Measured live on
+  2026-09-25: $0.0364984 of priced spend crossed a $0.02 budget and the next request was refused
+  175.9 s after the crossing one; a raise to $0.50 restored 200. Enforcement trails ingestion;
+  it is not a hard invoice cap. [ADR-0026](docs/adr/0026-usd-budget-reconciliation.md).
+
 - **AUM (Azure Usage Management), the terminal FinOps client renamed from `claude-finops`.**
   `aum` (the old command still works) adds an executive overview, budgets by unit, team and
   person, gateway governance, usage breakdown and trends, a request trace, anomalies, reports
@@ -1317,3 +1331,4 @@ Initial release.
 [1.2.0]: https://github.com/naveenneog/claude-code-foundry-gateway/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/naveenneog/claude-code-foundry-gateway/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/naveenneog/claude-code-foundry-gateway/releases/tag/v1.0.0
+
