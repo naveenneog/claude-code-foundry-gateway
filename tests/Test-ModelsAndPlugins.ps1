@@ -127,13 +127,14 @@ Assert 'signed extensions can be required'    ($p -match "isDesktopExtensionSign
 # commented out, because the commented line still contains it.
 Assert 'the desktop profile is written' ($p -match '(?m)^Save "\$desktopBase\.managed-settings\.json"')
 Assert 'and a registry form with it'    ($p -match '(?m)^Save "\$desktopBase\.reg"')
+Assert 'and a macOS profile with it'    ($p -match '(?m)^Save "\$desktopBase\.mobileconfig"')
 Assert 'the registry file is UTF-16'    ($p -match 'Save "\$desktopBase\.reg" \$desktopReg ''Unicode''')
 
 # Desktop reads no subkeys, and every value is a string.
-Assert 'desktop values are written as strings' ($p -match "if \(\`$v -is \[bool\]\) \{ if \(\`$v\) \{ 'true' \} else \{ 'false' \} \}")
+Assert 'desktop values are written as strings' ($p -match 'ConvertTo-ClaudeDesktopManagedString')
 # Piping a one-element array to ConvertTo-Json unwraps it, and
 # allowedPluginMarketplaces is object[] - one marketplace would become an object.
-Assert 'arrays survive as arrays' ($p -match 'ConvertTo-Json -InputObject \$v -Depth 8 -Compress')
+Assert 'arrays survive as arrays' ($p -match 'ConvertTo-Json -InputObject \$Value -Depth 8 -Compress')
 
 Write-Host ''
 Write-Host 'Documentation' -ForegroundColor Cyan

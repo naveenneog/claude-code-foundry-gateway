@@ -18,6 +18,8 @@
       .reg                      HKLM\SOFTWARE\Policies\ClaudeCode
       .intune-omauri.csv        Intune custom OMA-URI rows
       .mobileconfig             macOS/Jamf, com.anthropic.claudecode
+      claude-desktop.mobileconfig
+                                 macOS/Jamf, com.anthropic.claudefordesktop
       .apply.ps1                apply locally, for piloting before a fleet push
       README.txt                what to do with each
 
@@ -390,8 +392,57 @@ Save "$base.managed-settings.json" $json
 $desktopBase = Join-Path $OutputPath 'claude-desktop'
 Save "$desktopBase.managed-settings.json" ($desktop | ConvertTo-Json -Depth 8)
 
+function ConvertTo-ClaudeDesktopManagedString {
+    param([Parameter(Mandatory)]$Value)
+    if (Get-Command ConvertTo-ClaudeDesktopRegistryString -ErrorAction SilentlyContinue) {
+        return (ConvertTo-ClaudeDesktopRegistryString -Value $Value)
+    }
+    if ($Value -is [bool]) { if ($Value) { return 'true' } else { return 'false' } }
+    if ($Value -is [string]) { return $Value }
+    if ($Value -is [int] -or $Value -is [long]) { return [string]$Value }
+    return (ConvertTo-Json -InputObject $Value -Depth 8 -Compress)
+}
+
+function ConvertTo-PlistText {
+    param([string]$Value)
+    if ($null -eq $Value) { return '' }
+    return [System.Security.SecurityElement]::Escape($Value)
+}
+
+$desktopPlistEntries = ($desktop.Keys | ForEach-Object {
+    $key = ConvertTo-PlistText $_
+    $value = ConvertTo-PlistText (ConvertTo-ClaudeDesktopManagedString -Value $desktop[$_])
+    "            <key>$key</key>`n            <string>$value</string>"
+}) -join "`n"
+
+$desktopMobileconfig = @"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadDisplayName</key><string>Claude Desktop - Microsoft Foundry gateway</string>
+  <key>PayloadIdentifier</key><string>com.anthropic.claudefordesktop.foundry</string>
+  <key>PayloadType</key><string>Configuration</string>
+  <key>PayloadUUID</key><string>$([guid]::NewGuid())</string>
+  <key>PayloadVersion</key><integer>1</integer>
+  <key>PayloadScope</key><string>System</string>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadType</key><string>com.anthropic.claudefordesktop</string>
+      <key>PayloadIdentifier</key><string>com.anthropic.claudefordesktop.foundry.settings</string>
+      <key>PayloadUUID</key><string>$([guid]::NewGuid())</string>
+      <key>PayloadVersion</key><integer>1</integer>
+      <key>PayloadDisplayName</key><string>Managed settings</string>
+$desktopPlistEntries
+    </dict>
+  </array>
+</dict>
+</plist>
+"@
+Save "$desktopBase.mobileconfig" $desktopMobileconfig
+
 $desktopRegLines = foreach ($k in $desktop.Keys) {
-    $v = $desktop[$k]
     # Every value is written as a string, including booleans, per the
     # configuration reference. Arrays and objects become a JSON string.
     #
@@ -399,9 +450,7 @@ $desktopRegLines = foreach ($k in $desktop.Keys) {
     # ConvertTo-Json unwraps it, and allowedPluginMarketplaces is object[].
     # A single allowed marketplace would have been written as an object and
     # read as the wrong type.
-    $s = if ($v -is [bool]) { if ($v) { 'true' } else { 'false' } }
-         elseif ($v -is [string]) { $v }
-         else { ConvertTo-Json -InputObject $v -Depth 8 -Compress }
+    $s = ConvertTo-ClaudeDesktopManagedString -Value $desktop[$k]
     '"{0}"="{1}"' -f $k, ($s -replace '\\', '\\\\' -replace '"', '\"')
 }
 $desktopReg = @"
@@ -583,6 +632,10 @@ Deploy claude-code.mobileconfig. It targets the com.anthropic.claudecode
 managed preferences domain. Or place the JSON at
 
     /Library/Application Support/ClaudeCode/managed-settings.json
+
+Deploy claude-desktop.mobileconfig for Claude Desktop. It targets the
+com.anthropic.claudefordesktop managed preferences domain and carries the same
+sign-in choice as claude-desktop.reg and claude-desktop.managed-settings.json.
 
 Linux and WSL
 -------------

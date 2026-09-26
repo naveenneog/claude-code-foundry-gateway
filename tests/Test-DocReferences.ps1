@@ -267,6 +267,7 @@ Assert 'the MDM guide cross-links migration instead of duplicating it' (
 Assert 'the MDM guide documents generated delivery artifacts' (
     $mdm -match 'claude-code\.intune-omauri\.csv' -and
     $mdm -match 'claude-code\.mobileconfig' -and
+    $mdm -match 'claude-desktop\.mobileconfig' -and
     $mdm -match 'claude-desktop\.managed-settings\.json')
 Assert 'the MDM guide documents Intune Windows delivery and monitoring' (
     $mdm -match 'HKLM\\SOFTWARE\\Policies\\ClaudeCode' -and

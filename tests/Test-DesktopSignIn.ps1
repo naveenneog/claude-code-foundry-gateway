@@ -21,6 +21,32 @@ function Assert($label, $condition, $detail = '') {
     else { Write-Host "  [FAIL] $label$(if ($detail) { " - $detail" })" -ForegroundColor Red; $script:fail++ }
 }
 
+function Get-PlistDictValueMap($Dict) {
+    $map = @{}
+    $nodes = @($Dict.ChildNodes | Where-Object { $_.NodeType -eq 'Element' })
+    for ($i = 0; $i -lt $nodes.Count - 1; $i++) {
+        if ($nodes[$i].Name -ne 'key') { continue }
+        $key = $nodes[$i].InnerText
+        $valueNode = $nodes[$i + 1]
+        $map[$key] = [pscustomobject]@{ Type = $valueNode.Name; Value = $valueNode.InnerText; Node = $valueNode }
+        $i++
+    }
+    $map
+}
+
+function Get-MobileconfigPayload($Path, $PayloadType) {
+    [xml]$xml = Get-Content $Path -Raw
+    $uuids = @()
+    foreach ($dict in $xml.SelectNodes('//dict')) {
+        $values = Get-PlistDictValueMap $dict
+        if ($values.ContainsKey('PayloadUUID')) { $uuids += $values['PayloadUUID'].Value }
+        if ($values.ContainsKey('PayloadType') -and $values['PayloadType'].Value -eq $PayloadType) {
+            return [pscustomobject]@{ Xml = $xml; Uuids = $uuids; Values = $values }
+        }
+    }
+    return [pscustomobject]@{ Xml = $xml; Uuids = $uuids; Values = @{} }
+}
+
 Write-Host ''
 Write-Host 'P60 contract - recorded choice' -ForegroundColor Cyan
 
@@ -107,6 +133,84 @@ Assert 'shell workstation reads desktopSignIn' ($sh -match 'desktopSignIn')
 Assert 'shell workstation writes external-idp when recorded' ($sh -match 'inferenceIdpOidc' -and $sh -match 'inferenceIdpAuthFlow')
 Assert 'MDM generator reads the recorded choice' ($gen -match 'Get-ClaudeDesktopSignIn')
 Assert 'MDM generator writes the same Desktop connection keys' ($gen -match 'New-ClaudeDesktopSettings')
+
+$scratch = Join-Path ([IO.Path]::GetTempPath()) "desktop-mdm-$PID-$(Get-Random)"
+New-Item -ItemType Directory -Force -Path $scratch | Out-Null
+try {
+    $helperConfig = Join-Path $scratch 'helper.json'
+    $browserConfig = Join-Path $scratch 'browser.json'
+    @'
+{
+  "gatewayUrl": "https://gateway.contoso.example/claude",
+  "models": ["claude-sonnet-5"],
+  "desktopSignIn": { "kind": "helper-script" }
+}
+'@ | Set-Content $helperConfig -Encoding utf8
+    @'
+{
+  "gatewayUrl": "https://gateway.contoso.example/claude",
+  "models": ["claude-sonnet-5"],
+  "desktopSignIn": {
+    "kind": "external-idp",
+    "flow": "broker",
+    "bearerTokenType": "access_token",
+    "clientId": "11111111-1111-1111-1111-111111111111",
+    "issuer": "https://login.microsoftonline.com/22222222-2222-2222-2222-222222222222/v2.0",
+    "scopes": "api://gateway-claude/user_impersonation",
+    "audience": "api://gateway-claude"
+  }
+}
+'@ | Set-Content $browserConfig -Encoding utf8
+
+    $helperOut = Join-Path $scratch 'helper'
+    $browserOut = Join-Path $scratch 'browser'
+    & $policyGen -ConfigPath $helperConfig -OutputPath $helperOut *> $null
+    & $policyGen -ConfigPath $browserConfig -OutputPath $browserOut *> $null
+
+    $helperMobile = Join-Path $helperOut 'claude-desktop.mobileconfig'
+    $browserMobile = Join-Path $browserOut 'claude-desktop.mobileconfig'
+    Assert 'MDM generator writes a Desktop mobileconfig' (Test-Path $helperMobile)
+    Assert 'external-idp output writes a Desktop mobileconfig' (Test-Path $browserMobile)
+
+    if ((Test-Path $helperMobile) -and (Test-Path $browserMobile) -and (Test-Path $desktop)) {
+        . $desktop
+        foreach ($case in @(
+            @{ Name = 'helper'; Path = $helperMobile; Json = Join-Path $helperOut 'claude-desktop.managed-settings.json' },
+            @{ Name = 'external-idp'; Path = $browserMobile; Json = Join-Path $browserOut 'claude-desktop.managed-settings.json' }
+        )) {
+            $parsed = Get-MobileconfigPayload -Path $case.Path -PayloadType 'com.anthropic.claudefordesktop'
+            Assert "$($case.Name) Desktop mobileconfig parses as XML" ($null -ne $parsed.Xml)
+            Assert "$($case.Name) Desktop mobileconfig has unique PayloadUUIDs" (
+                $parsed.Uuids.Count -ge 2 -and (@($parsed.Uuids | Select-Object -Unique).Count -eq $parsed.Uuids.Count))
+            Assert "$($case.Name) Desktop mobileconfig payload domain is correct" (
+                $parsed.Values.ContainsKey('PayloadType') -and $parsed.Values['PayloadType'].Value -eq 'com.anthropic.claudefordesktop')
+
+            $settingsJson = Get-Content $case.Json -Raw | ConvertFrom-Json -AsHashtable
+            foreach ($key in $settingsJson.Keys) {
+                Assert "$($case.Name) Desktop mobileconfig includes $key" ($parsed.Values.ContainsKey($key))
+                if ($parsed.Values.ContainsKey($key)) {
+                    Assert "$($case.Name) Desktop mobileconfig writes $key as documented string" ($parsed.Values[$key].Type -eq 'string')
+                    $expected = ConvertTo-ClaudeDesktopRegistryString -Value $settingsJson[$key]
+                    Assert "$($case.Name) Desktop mobileconfig value matches $key" ($parsed.Values[$key].Value -eq $expected)
+                }
+            }
+        }
+
+        $helperPayload = (Get-MobileconfigPayload -Path $helperMobile -PayloadType 'com.anthropic.claudefordesktop').Values
+        Assert 'helper Desktop mobileconfig includes helper credential kind' ($helperPayload['inferenceCredentialKind'].Value -eq 'helper-script')
+        Assert 'helper Desktop mobileconfig includes helper path' ($helperPayload.ContainsKey('inferenceCredentialHelper'))
+        Assert 'helper Desktop mobileconfig excludes external IdP keys' (-not $helperPayload.ContainsKey('inferenceIdpOidc') -and -not $helperPayload.ContainsKey('inferenceIdpAuthFlow'))
+
+        $externalPayload = (Get-MobileconfigPayload -Path $browserMobile -PayloadType 'com.anthropic.claudefordesktop').Values
+        Assert 'external-idp Desktop mobileconfig includes external credential kind' ($externalPayload['inferenceCredentialKind'].Value -eq 'external-idp')
+        Assert 'external-idp Desktop mobileconfig includes IdP flow' ($externalPayload['inferenceIdpAuthFlow'].Value -eq 'broker')
+        Assert 'external-idp Desktop mobileconfig includes IdP object' ($externalPayload['inferenceIdpOidc'].Value -match '"bearerTokenType":"access_token"')
+        Assert 'external-idp Desktop mobileconfig excludes helper path' (-not $externalPayload.ContainsKey('inferenceCredentialHelper'))
+    }
+}
+finally {
+    Remove-Item -Recurse -Force $scratch -ErrorAction SilentlyContinue
+}
 
 Write-Host ''
 Write-Host 'P60 app registration and documentation' -ForegroundColor Cyan
