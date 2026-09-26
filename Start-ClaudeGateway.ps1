@@ -104,6 +104,14 @@ function Read-FlowAnswers {
     return $answers
 }
 
+function Set-FlowAnswersOnRecord {
+    param($Record, [hashtable]$Answers)
+    if (-not $Answers) { return }
+    foreach ($key in $Answers.Keys) {
+        if ([string]$key -match '\.') { Set-FlowDecisionPath -Record $Record -Path ([string]$key) -Value $Answers[$key] }
+    }
+}
+
 function Get-FlowPrincipal {
     try {
         $acct = az account show -o json 2>$null | ConvertFrom-Json
@@ -326,6 +334,7 @@ $script:FlowAnswers = Read-FlowAnswers -Path $AnswersPath -InlineAnswers $NonInt
 $record = Read-ClaudeDecisionRecord -Path $RecordPath
 if (-not $record) { $record = New-EmptyDecisionRecord }
 Set-FlowRecordProperty $record '__recordPath' $RecordPath
+Set-FlowAnswersOnRecord -Record $record -Answers $script:FlowAnswers
 
 if ($Action -eq 'Update') {
     $update = Join-Path $root 'scripts\Update-ClaudeGateway.ps1'

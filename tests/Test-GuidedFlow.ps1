@@ -64,7 +64,7 @@ function Get-ClaudeFlowStepQuestions {
 function Get-ClaudeFlowStepPlan {
     param($Record, $Discovery)
     $mark = if ($env:GUIDED_FLOW_PLAN_MARK) { $env:GUIDED_FLOW_PLAN_MARK } else { 'default' }
-    New-ClaudeFlowPlan -Step Foundation -Summary "Create gateway $($Record.decisions.foundation.sku)" `
+    New-ClaudeFlowPlan -Step Foundation -Summary "Create gateway $($Record.decisions.foundation.sku) for $($Record.decisions.foundation.foundryAccount)" `
         -Actions @(New-ClaudeFlowAction -Verb Create -Target 'apim/contoso' -Detail "$($Record.decisions.foundation.sku):$mark") `
         -Costs @(New-ClaudeFlowCost -Item 'API Management' -MonthlyUsd 150 -Source 'stub') `
         -Implications @('Developers use the gateway URL') -Requires @('Contributor') -Rollback 'Delete the resource group'
@@ -152,9 +152,10 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Guide';
     Assert 'Change asks selected questions even when a decision exists' ($changePlan -match 'StandardV2')
 
     $answersPath = Join-Path $scratch 'answers.json'
-    @{ 'foundation.sku' = 'BasicV2' } | ConvertTo-Json | Set-Content -LiteralPath $answersPath -Encoding UTF8
+    @{ 'foundation.sku' = 'BasicV2'; 'foundation.foundryAccount' = 'ai-contoso' } | ConvertTo-Json | Set-Content -LiteralPath $answersPath -Encoding UTF8
     $answersPlan = & $start -Action Setup -RecordPath (Join-Path $scratch 'answers-record.json') -FlowModulePath $modules -PlanOnly -AnswersPath $answersPath *>&1 | Out-String
     Assert 'AnswersPath supplies non-interactive answers' ($answersPlan -match 'BasicV2')
+    Assert 'AnswersPath seeds unasked decision keys' ($answersPlan -match 'ai-contoso')
 
     $beforeSecond = (Read-Json $countsPath).Foundation
     & $start -Action Setup -RecordPath $recordPath -FlowModulePath $modules -ApprovedPlanFingerprint $fp -NonInteractiveAnswers @{ 'foundation.sku' = 'BasicV2' } | Out-Null
