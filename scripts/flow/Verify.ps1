@@ -22,12 +22,22 @@ function Invoke-ClaudeFlowStep {
     $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
     $health = Join-Path $root 'scripts\Test-ClaudeHealth.ps1'
     $ok = $false
+    $errorText = ''
     $checked = [DateTime]::UtcNow.ToString('o')
     if ($Record.resourceGroup -and $Record.apimName -and (Test-Path -LiteralPath $health)) {
-        & $health -ResourceGroup $Record.resourceGroup -ApimName $Record.apimName
-        $ok = ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE)
+        $foundation = Get-ClaudeDecision -Record $Record -Key foundation
+        $args = @{ ResourceGroup = $Record.resourceGroup; ApimName = $Record.apimName }
+        if ($foundation -and $foundation.foundryAccount) { $args.FoundryAccount = [string]$foundation.foundryAccount }
+        try {
+            & $health @args
+            $ok = ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE)
+        }
+        catch {
+            $errorText = $_.Exception.Message
+            Write-Host "  Verify warning: $errorText" -ForegroundColor Yellow
+        }
     }
-    @{ verify = @{ checkedUtc = $checked; healthScript = $health; healthPassed = $ok } }
+    @{ verify = @{ checkedUtc = $checked; healthScript = $health; healthPassed = $ok; warning = $errorText } }
 }
 
 function Test-ClaudeFlowStep {

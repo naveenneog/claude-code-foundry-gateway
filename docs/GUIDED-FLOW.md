@@ -146,3 +146,23 @@ is git-ignored.
 | Verify | `scripts\Test-ClaudeHealth.ps1`, [Governance checks](GOVERNANCE-CHECKS.md) |
 | Guide | [Get started](GET-STARTED.md), [Operations](OPERATIONS.md), [Developer setup](../DEVELOPER.md), [FinOps](FINOPS.md) |
 | Status | `scripts\Get-ClaudeGatewayTarget.ps1`, `scripts\Test-ClaudeHealth.ps1`, Azure portal checks in [Operations](OPERATIONS.md) |
+
+## Live proof transcript excerpts
+
+The P66 core was exercised against an isolated Basic v2 gateway in eastus2,
+using the shared Foundry account only for the gateway managed identity's
+temporary data-plane role. The resource group was deleted afterwards and the
+soft-deleted APIM instance was purged. The screenshots below are rendered from
+redacted terminal transcripts; raw transcripts stay under private evidence.
+
+![Guided flow PlanOnly review with skipped absent modules and fingerprint.](guide/07-planonly-stable.png)
+
+![Guided flow resume completing verification from the same active run.](guide/16-setup-resume-verify-warning.png)
+
+![A real governed request returning HTTP 200 through the isolated gateway.](guide/18-real-200-request.png)
+
+![Status command showing decisions, release, recent history and no live drift.](guide/23-status-final.png)
+
+![Second setup replanning the existing gateway instead of skipping forever.](guide/24-second-setup-replan-final.png)
+
+![Change action scoped to the Foundation decision.](guide/25-change-foundation-final.png)

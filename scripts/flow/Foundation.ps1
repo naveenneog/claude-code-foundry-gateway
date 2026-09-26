@@ -103,6 +103,14 @@ function Invoke-ClaudeFlowStep {
         ModelOrganizationName = 'modelOrganizationName'
         ModelIndustry = 'modelIndustry'
         ModelCountryCode = 'modelCountryCode'
+        TpmStandard = 'tpmStandard'
+        QuotaStandard = 'quotaStandard'
+        TpmPremium = 'tpmPremium'
+        QuotaPremium = 'quotaPremium'
+        QuotaOrg = 'quotaOrg'
+        CallsPerMinute = 'callsPerMinute'
+        StandardGroup = 'standardGroup'
+        PremiumGroup = 'premiumGroup'
     }.GetEnumerator()) {
         $propertyName = [string]$pair.Value
         if ($d.PSObject.Properties.Name -contains $propertyName -and $d.$propertyName) { $args[$pair.Key] = $d.$propertyName }

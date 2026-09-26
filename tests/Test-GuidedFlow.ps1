@@ -134,6 +134,9 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Guide';
     Assert 'PlanOnly notes absent branch modules without failing' ($planOnly -match 'Skipped absent step: Entitlement' -and $planOnly -match 'Skipped absent step: FinOps')
     Assert 'PlanOnly writes nothing' (-not (Test-Path -LiteralPath $recordPath) -and -not (Test-Path -LiteralPath $guidePath))
     $fp = [regex]::Match($planOnly, 'Fingerprint:\s+([a-f0-9]{64})').Groups[1].Value
+    $planOnlyAgain = & $start -Action Setup -RecordPath $recordPath -FlowModulePath $modules -PlanOnly -NonInteractiveAnswers @{ 'foundation.sku' = 'BasicV2' } *>&1 | Out-String
+    $fpAgain = [regex]::Match($planOnlyAgain, 'Fingerprint:\s+([a-f0-9]{64})').Groups[1].Value
+    Assert 'repeated PlanOnly keeps the same step order and fingerprint' ($fpAgain -eq $fp)
 
     Assert 'apply without a matching fingerprint is refused' ((Get-Thrown { & $start -Action Setup -RecordPath $recordPath -FlowModulePath $modules -NonInteractiveAnswers @{ 'foundation.sku' = 'BasicV2' } }) -match 'ApprovedPlanFingerprint')
     Assert 'a wrong fingerprint is refused' ((Get-Thrown { & $start -Action Setup -RecordPath $recordPath -FlowModulePath $modules -ApprovedPlanFingerprint ('0' * 64) -NonInteractiveAnswers @{ 'foundation.sku' = 'BasicV2' } }) -match 'does not match')

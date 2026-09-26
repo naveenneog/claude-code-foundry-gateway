@@ -147,7 +147,7 @@ param entitlementResolverUrl string = 'https://resolver-not-deployed.invalid'
 param entitlementResolverAudience string = 'https://resolver-not-deployed.invalid'
 
 @description('Optional extra Entra audience accepted from external-idp sign-in. Empty keeps the shipped Azure CLI/helper-script audiences only.')
-param desktopExtraAudience string = ''
+param desktopExtraAudience string = 'urn:disabled:claude-extra-audience'
 
 @description('How long the gateway may serve an identity the directory has already changed, in seconds. This is the staleness bound, and it also sets the resolver cost, because cost follows cache misses rather than requests.')
 @minValue(60)

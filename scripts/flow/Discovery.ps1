@@ -66,8 +66,14 @@ function Get-ClaudeFlowDiscovery {
                 $differences.Add("record names API Management '$recordApim' in '$recordGroup', but discovery did not find it")
             }
             elseif ($live.Count -eq 1 -and $recordUrl) {
-                $urls = @($live[0].gatewayUrl, $live[0].properties.gatewayUrl) | Where-Object { $_ }
-                if ($urls.Count -and $recordUrl -notin $urls -and $recordUrl.TrimEnd('/') -notin @($urls | ForEach-Object { ([string]$_).TrimEnd('/') })) {
+                $urls = [System.Collections.Generic.List[string]]::new()
+                foreach ($candidate in @($live[0].gatewayUrl, $live[0].properties.gatewayUrl)) {
+                    if ($candidate) { $urls.Add([string]$candidate) }
+                }
+                $recordTrimmed = $recordUrl.TrimEnd('/')
+                $liveTrimmed = @($urls.ToArray() | ForEach-Object { ([string]$_).TrimEnd('/') })
+                $matches = @($liveTrimmed | Where-Object { $recordTrimmed -eq $_ -or $recordTrimmed.StartsWith($_ + '/', [StringComparison]::OrdinalIgnoreCase) })
+                if ($urls.Count -and -not $matches.Count) {
                     $differences.Add("record gatewayUrl '$recordUrl' differs from live '$($urls[0])'")
                 }
             }

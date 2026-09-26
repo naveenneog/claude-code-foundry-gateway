@@ -123,6 +123,7 @@ function Get-FlowPrincipal {
 function Get-FlowModules {
     param([string]$ModulePath, [string]$ForAction)
     $loaded = @{}
+    $infos = [System.Collections.Generic.List[object]]::new()
     if (Test-Path -LiteralPath $ModulePath) {
         foreach ($file in @(Get-ChildItem -LiteralPath $ModulePath -Filter '*.ps1' -File | Sort-Object Name)) {
             if ($file.Name -in @('FlowContract.ps1', 'Discovery.ps1')) { continue }
@@ -133,6 +134,7 @@ function Get-FlowModules {
             $info = & (Get-Command Get-ClaudeFlowStepInfo -ErrorAction Stop).ScriptBlock
             $actions = @($info.Actions)
             if ($actions.Count -and $ForAction -notin $actions) { continue }
+            $infos.Add($info)
             $loaded[$info.Name] = [pscustomobject]@{
                 Info = $info
                 Questions = (Get-Command Get-ClaudeFlowStepQuestions -ErrorAction Stop).ScriptBlock
@@ -143,7 +145,7 @@ function Get-FlowModules {
             }
         }
     }
-    $present = @($loaded.Values | ForEach-Object { $_.Info })
+    $present = @($infos.ToArray())
     $ordered = if ($present.Count) { @(Get-ClaudeFlowStepOrder -Steps $present) } else { @() }
     $steps = foreach ($info in $ordered) { $loaded[$info.Name] }
     $skipped = foreach ($name in $script:ExpectedFlowSteps) {
