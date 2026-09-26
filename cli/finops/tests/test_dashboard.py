@@ -1,5 +1,5 @@
 import pytest
-from textual.widgets import Input, Static
+from textual.widgets import Input, Static, TabbedContent
 
 from claude_finops.brand import BANNER, COMPACT, PRODUCT
 from claude_finops.config import Config
@@ -52,8 +52,9 @@ async def test_dashboard_panels_fit_and_receive_keyboard_focus(size):
             assert panel.region.height >= 4
             assert panel.border_title
         text = str(app.query_one("#brand", Static).render())
-        assert (BANNER in text) is (size[0] >= 120)
-        assert (PRODUCT if size[0] >= 120 else COMPACT) in text
+        for line in BANNER.splitlines():
+            assert line in text
+        assert PRODUCT in text
         panels[0].focus()
         focused = {app.focused.id}
         for _ in range(4):
@@ -63,6 +64,35 @@ async def test_dashboard_panels_fit_and_receive_keyboard_focus(size):
         await pilot.press("enter")
         await pilot.pause()
         assert len(app.screen_stack) == 2
+
+
+@pytest.mark.parametrize("size", [(80, 24), (100, 30), (120, 30), (160, 48)])
+async def test_banner_appears_on_supported_terminal_sizes_and_tabs(size):
+    app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"))
+    async with app.run_test(size=size) as pilot:
+        await pilot.pause(.25)
+        await app.workers.wait_for_complete()
+        for tab in ("overview", "budgets", "settings"):
+            app.query_one(TabbedContent).active = tab
+            await pilot.pause(.25)
+            await app.workers.wait_for_complete()
+            await pilot.pause(.25)
+            rendered = "\n".join(strip.text for strip in app.screen._compositor.render_strips())
+            for line in BANNER.splitlines():
+                assert line in rendered
+            brand = str(app.query_one("#brand", Static).render())
+            assert PRODUCT in brand
+            assert str(app.query_one("#identity", Static).render())[:32] in brand
+
+
+async def test_compact_heading_below_documented_minimum():
+    app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"))
+    async with app.run_test(size=(79, 24)) as pilot:
+        await pilot.pause(.25)
+        await app.workers.wait_for_complete()
+        rendered = "\n".join(strip.text for strip in app.screen._compositor.render_strips())
+        assert COMPACT in rendered
+        assert BANNER not in rendered
 
 
 async def test_local_filter_and_revision_four_slash_lookup():
