@@ -58,6 +58,17 @@ function Get-AumSha256Hex([string]$Value) {
     return -join ($bytes | ForEach-Object { $_.ToString('x2') })
 }
 
+function ConvertFrom-AumBase64JsonValue {
+    param([AllowNull()][string]$Value)
+    if (-not $Value) { return [pscustomobject]@{} }
+    try {
+        $text = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Value))
+        if ($text -notmatch '^\s*\{') { throw 'Expected an object.' }
+        return $text | ConvertFrom-Json
+    }
+    catch { throw "Invalid JSON named value: $($_.Exception.Message)" }
+}
+
 switch ([string]$request.action) {
     'delegated_publish' {
         if ($nv['turnstile-integration'] -notmatch 'governanceAuthority=Turnstile') {
@@ -117,7 +128,7 @@ switch ([string]$request.action) {
         }
     }
     'usd_status' {
-        $state = ConvertFrom-ClaudeUsdValue $nv['usd-budget-state']
+        $state = ConvertFrom-AumBase64JsonValue $nv['usd-budget-state']
         if (-not $state.PSObject.Properties.Count) {
             $result = [ordered]@{ enabled = $false; fresh = $false; items = [pscustomobject]@{}; reconcile_interval_seconds = 300; state_max_age_seconds = 900 }
         }
