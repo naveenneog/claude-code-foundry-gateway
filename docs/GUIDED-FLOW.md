@@ -48,9 +48,12 @@ two phases ([ADR-0032](adr/0032-guided-flow-starts-at-once.md)).
 **1. The installer asks its own questions.** The flow prints the Foundation
 review, which names the installer's questions, and runs
 `Install-ClaudeGateway.ps1` without `-Yes`. It passes only the values the
-record's foundation decision holds; the installer asks the rest with its own
-defaults. The flow asks for no fingerprint in this phase: the installer creates
-nothing until its summary is confirmed, and the summary states the monthly price.
+record's foundation decision holds, and the record's subscription id when it has
+one; the installer asks the rest with its own defaults. The flow asks for no
+fingerprint in this phase: the installer creates nothing until its summary is
+confirmed, and the summary states the monthly price. That includes the Claude
+deployment it creates when the subscription has none: the summary lists it, and
+it is created first, after the confirmation.
 
 ![Attended Setup with an empty record: the first line says nothing is read from Azure, then the Foundation review names the questions Install-ClaudeGateway.ps1 asks next and says it creates nothing until its summary is confirmed.](guide/30-attended-setup-start.png)
 
@@ -69,17 +72,28 @@ has created nothing.
 **2. The flow continues once the gateway exists.** It reads the new gateway,
 asks the FinOps question with each tool priced in the gateway's region, then the
 remaining steps' questions, prints their review and asks for the first eight
-characters of its fingerprint.
+characters of its fingerprint. A mistyped fingerprint here applies none of those
+steps and says that the gateway foundation is set up and recorded.
 
 ![Setup reading the recorded gateway in 2.9 s, pricing the FinOps tools in eastus2 in 4.5 s, then the FinOps question with each tool's monthly list price in that region.](guide/33-finops-priced-in-region.png)
 
 When the record already names a gateway, Setup and Guide check that gateway and
 do not run the installer again. `-Action Change -Change foundation` runs the
-installer; in a console its reuse menu offers the recorded gateway.
+installer with `-ExistingApimName` and `-ResourceGroup` set to the recorded
+gateway, so it updates that gateway and keeps its region, tier, name and
+publisher. In a console the flow passes nothing else, and the installer asks its
+other questions; the tier changes through `-Change sku`.
 
 Without a console, the flow plans every step in one review and runs the
 installer with `-Yes` and the recorded values, adding `-DeployProjection` when
 the entitlement store is the Cosmos projection.
+
+Values the flow passes to the installer reach the Azure CLI, which on Windows is
+`az.cmd`: `cmd.exe` re-reads `& | < > ^ ( ) " %` in an argument. The flow refuses
+a recorded value that holds one of them before the installer runs, and the
+installer refuses such a value, typed or read from Azure, before its summary.
+A recorded subscription that is not a subscription id is refused, so discovery
+and the installer use the same subscription.
 
 `CLAUDE_INTERACTIVE=1` treats a process whose input is redirected as a console,
 so a test can drive an attended run through standard input
@@ -153,6 +167,14 @@ then skips only history entries with that `runId`. A different fingerprint start
 a new run, and a successful verification clears `activeRun`. If a step throws
 before returning its changes, no success-shaped history is written for that step.
 
+An attended run records its two phases in `activeRun.phase` (`lead` for the
+installer, `after-lead` for the steps after it) with the names of the steps in
+`activeRun.steps`. When a step after the installer fails, the next run of the
+same action plans the same steps, without the foundation check the recorded
+gateway would otherwise add, so its fingerprint can match: it prints
+`Resuming the Setup run started <time>`, and the steps that run completed are
+skipped.
+
 ## Update
 
 ```powershell
@@ -181,7 +203,7 @@ cost and caller impact before applying.
 
 | `-Change` | Module | What changes | Runbook |
 |---|---|---|---|
-| `foundation` | `Foundation.ps1` | Runs `Install-ClaudeGateway.ps1`. In a console the installer asks its questions and its reuse menu offers the recorded gateway; without a console it runs with `-Yes` against the recorded `apim-<prefix>`, keeping the live tier, region and publisher | [Setup](SETUP.md) |
+| `foundation` | `Foundation.ps1` | Runs `Install-ClaudeGateway.ps1 -ExistingApimName <recorded gateway>`, which updates that gateway and keeps its region, tier, name and publisher. In a console the installer asks its other questions; without a console it runs with `-Yes` and the recorded choices. The review prices the live gateway, as already running | [Setup](SETUP.md) |
 | `sku` | `Tier.ps1` | API Management tier; Basic v2 and Standard v2 change in place | [Tier](UPDATE-AND-CHANGE.md#2-change-the-api-management-tier) |
 | `entitlementStore` | `Entitlement.ps1` | Named values to the Cosmos projection and back, after a clean comparison | [Entitlement](UPDATE-AND-CHANGE.md#3-move-entitlement-between-named-values-and-the-projection) |
 | `network` | `Network.ps1` | Enterprise network edge, through its own fingerprinted review | [Network](UPDATE-AND-CHANGE.md#4-change-the-enterprise-network-edge) |

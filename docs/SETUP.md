@@ -62,7 +62,9 @@ subscription, resource group and location.
 The gateway is a front door and cannot create a model, but the installer can
 deploy a model for you. If no account in the subscription has a Claude
 deployment, it lists the models the account is entitled to deploy, asks which one
-and at what capacity, and creates it before continuing. Claude is not offered in
+and at what capacity, and lists that deployment in its summary. It creates the
+deployment first, after the summary is confirmed, and not at all under `-WhatIf`,
+so declining at the summary leaves nothing behind. Claude is not offered in
 every region, so an account in a region without it fails with that stated rather
 than with a deployment error.
 
@@ -591,6 +593,19 @@ Two constraints:
 - **The deployment follows the instance.** The API and named values are parented
   to API Management, so the wizard switches to that instance's resource group
   and region and tells you it has done so.
+
+To update a known gateway without the menu, name it:
+`./Install-ClaudeGateway.ps1 -ExistingApimName <apim> -ResourceGroup <rg>`. The
+installer takes the same reuse path, keeps the instance's region, tier, name and
+publisher, and does not ask for them; it refuses an instance that is not found or
+is not a v2 tier. The guided flow's `-Change foundation` runs it this way
+([Guided flow](GUIDED-FLOW.md#attended-setup)).
+
+On Windows the Azure CLI is `az.cmd`, and `cmd.exe` re-reads
+`& | < > ^ ( ) " %` in an argument. Before its summary the installer checks the
+values it passes to `az` (subscription, Foundry account and group, gateway group,
+region, name, publisher email and tier groups) and stops, naming the value, when
+one holds such a character; nothing has been created at that point.
 
 Re-running against a gateway you already set up is the supported way to update
 policies or budgets. Live state is preserved: the wizard reads the current

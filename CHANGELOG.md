@@ -811,8 +811,31 @@ exact streaming cache-creation detail remains **U13**.
 - **Setup and Guide over a recorded gateway ran the installer again (P68).** The Foundation plan
   said `Check`, while its apply ran `Install-ClaudeGateway.ps1 -Yes`, whose reuse menu defaults to
   creating a new gateway; found by reading the code. Setup and Guide now check the recorded
-  gateway; `-Change foundation` runs the installer, and without a console it targets the recorded
-  `apim-<prefix>` with its live tier, region and publisher.
+  gateway; `-Change foundation` runs the installer with the new `-ExistingApimName`, which takes
+  the installer's own reuse path for that gateway and keeps its region, tier, name and publisher.
+- **The installer created a Claude deployment before its summary (P68 council).** With no Claude
+  deployment in the subscription, it deployed the chosen model before asking "Create these
+  resources?", so declining left a model behind, and `-WhatIf` created one. The summary now lists
+  the deployment, and it is created first after the confirmation, never under `-WhatIf`.
+- **A value with `&` reached `az.cmd` (P68 council).** The first P68 version of `-Change
+  foundation` forwarded the live gateway's publisher email to the installer, which passes it to
+  the Azure CLI; on Windows `cmd.exe` re-reads `& | < > ^ ( ) " %`, so an `&` in it ran a second
+  command (reproduced with a stub). The flow no longer forwards it, refuses such record values
+  before the installer runs, and the installer checks the values it passes to `az` before its
+  summary.
+- **A failed step after the installer did not resume (P68 council).** The retry planned the
+  foundation check that the new gateway added, so the fingerprint changed and completed steps ran
+  again. The run records its phase and steps, and a retry plans the same steps and resumes.
+- **The flow could read the gateway in one subscription and install in another (P68 council).**
+  Discovery honoured the record's `subscriptionId` and the installer was not given it. One
+  resolver serves both, the id is passed and fingerprinted, and a name instead of an id is refused.
+- **The Change review priced the recorded tier and region (P68 council),** not the live ones the
+  installer keeps. It prices the live gateway, as already running.
+- **A mistyped fingerprint after the installer said "nothing was written" (P68 council).** It says
+  that the gateway foundation is set up and that the remaining steps were not applied.
+- **Attended Change passed the recorded values (P68 council),** so the installer skipped the
+  questions and the reuse menu the review named. It passes only the recorded gateway, and the
+  installer asks the rest.
 - **Setup stopped on the Cosmos entitlement store (P68).** Without a console the flow now passes
   `-DeployProjection` with the projection, which the installer requires under `-Yes`.
 - **The installer's next steps were numbered 0, 0, 1, 2, 3, 4 (P68).** They are numbered in the

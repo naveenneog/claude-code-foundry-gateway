@@ -79,8 +79,10 @@ that read, or the record's location when nothing was read.
    `Install-ClaudeGateway.ps1` without `-Yes`, passing only the values the record's foundation
    decision holds. The installer asks the rest with its own prompts and defaults, and its summary
    and confirmation are the approval for the resources it creates; the flow asks for no
-   fingerprint in this phase. An installer that returns without writing its record (cancelled
-   at the summary) stops the flow before any other step.
+   fingerprint in this phase. The installer therefore writes nothing before that confirmation: the
+   Claude deployment it creates in a subscription that has none is listed in the summary and
+   created after it. An installer that returns without writing its record (cancelled at the
+   summary) stops the flow before any other step.
 2. The flow reads the new gateway (one `az apim show`), then asks the remaining steps' questions
    (FinOps first, priced in the gateway's region), prints their review and asks for the typed
    fingerprint, as ADR-0030 describes.
@@ -88,7 +90,10 @@ that read, or the record's location when nothing was read.
 The flow asks no foundation question itself in an attended run. In every run, when the record
 already names a gateway, Setup and Guide check that gateway instead of running the installer
 again, as the Foundation plan already said; the review names `-Action Change -Change foundation`,
-which runs the installer. **Without a console**, and
+which runs the installer with `-ExistingApimName` and `-ResourceGroup` set to the recorded gateway.
+That is the installer's own reuse path: it adopts the gateway's region, tier, name and publisher
+from Azure, so the flow passes none of them, and in a console the flow passes nothing else and the
+installer asks its other questions. **Without a console**, and
 with `-PlanOnly`, `-ApprovedPlanFingerprint` or `-WhatIf`, the flow plans every step in one
 review as before and passes the record's values with `-Yes`, adding `-DeployProjection` when the
 entitlement store is the Cosmos projection, so the projection is deployed rather than refused.
@@ -99,6 +104,21 @@ writes the choices the flow records (`sku`, `location`, `foundryAccount`,
 `foundryResourceGroup`) into `onboarding/claude-gateway.json`. `CLAUDE_INTERACTIVE=1` makes
 `Test-ClaudeInteractive` treat a process whose input is redirected as a console, so a test can
 drive an attended run through standard input.
+
+**One subscription, and values `cmd.exe` cannot re-read.** Discovery and the installer take the
+subscription from one resolver (the record's `subscriptionId`, then the foundation decision's), and
+the installer receives it as `-SubscriptionId`, which the fingerprint binds; a subscription that is
+not an id is refused. On Windows `az` is `az.cmd`, and `cmd.exe` re-reads `& | < > ^ ( ) " %` in
+an argument, so a value holding one can end the argument early or run a second command. The flow
+refuses such a record value before the installer runs, discovery passes a recorded name to `az`
+only when it is letters, digits and `. _ -`, and the installer checks the values it passes to `az`
+before its summary.
+
+**Resume.** An attended run records its phases in `activeRun` (`lead`, then `after-lead` with the
+names of the steps). A retry of a failed second phase plans those same steps, without the
+foundation check that the now-recorded gateway would add, so its fingerprint can match ADR-0030's
+resume rule and the completed steps are skipped. A mistyped fingerprint in the second phase applies
+nothing and says that the gateway foundation is set up.
 
 **Prices at the choice.** The installer's region prompt lists the Foundry account's region and
 the other regions in its geography (from `az account list-locations`), each with the monthly
@@ -119,6 +139,7 @@ because its FinOps step follows. The installer's next steps are numbered in orde
   waiting for and about how long.
 + The installer's decisions are the administrator's again, and each one that changes cost shows the
   cost where it is chosen.
++ Change foundation updates the recorded gateway by name, and its review prices that live gateway.
 - In an attended run the Foundation review cannot state the region, tier or monthly total before
   the installer asks; it names the questions to come, and the installer's summary states them.
 - An attended run asks for the fingerprint only for the steps after the installer, because their

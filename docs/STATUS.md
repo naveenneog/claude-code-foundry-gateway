@@ -30,8 +30,10 @@ found that its apply runs the installer for a recorded gateway while its plan sa
       installer; live on 2026-09-27 the real installer asked 26 questions and, declined at its
       summary, created nothing ([GUIDED-FLOW](GUIDED-FLOW.md#attended-setup), images 30-34)
 - [x] With a recorded gateway, Setup and Guide check it and never run the installer;
-      `-Change foundation` runs it (attended: it asks; unattended: `-Yes` against the recorded
-      `apim-<prefix>` with the live tier, region and publisher)
+      `-Change foundation` runs it with `-ExistingApimName`, which updates that gateway and keeps
+      its region, tier, name and publisher (attended: nothing else is passed and the installer
+      asks; unattended: `-Yes` with the recorded choices). Live with `-WhatIf` on PowerShell 7
+      and 5.1: the reference gateway was adopted with no menu or placement prompt
 - [x] Without a console, Setup passes `-Yes`, and `-DeployProjection` with the Cosmos store, so the
       installer deploys the projection instead of stopping; every argument a plan passes is a
       parameter of the installer
@@ -51,6 +53,24 @@ found that its apply runs the installer for a recorded gateway while its plan sa
       Foundry region; FinOps monthly totals had six decimals; a recorded gateway's price was
       counted as new; declining at the summary ended in a stack trace
 - [ ] Council verdicts and `node .ironclad/gate.mjs --stage packet` exits 0
+
+Council, first review (gpt-6-astra, 2026-09-27): BLOCK on all five seats, seven findings, each
+reproduced on PowerShell 7 and 5.1. All fixed in `fe53ac7`, each with a test that fails when the
+fix is removed (ten mutations caught with the full 109 assertions run):
+
+| # | Seat | Finding | Fix |
+|---|---|---|---|
+| 1 | Security (BLOCK) | Unattended `-Change foundation` forwarded the live publisher email to the installer, which passes it to `az.cmd`; an `&` in it ran a second command | `-ExistingApimName` lets the installer adopt the gateway's own values, so the flow forwards none; the flow refuses record values holding `& \| < > ^ ( ) " %` before the installer; the installer checks what it passes to `az` before its summary |
+| 2 | Architect (BLOCK) | With no Claude deployment in the subscription, the installer created one before its summary, which the attended flow treats as the approval | The summary lists the deployment; it is created after the confirmation, never under `-WhatIf`; an AST check keeps every `New-ClaudeDeployment` call after the confirmation |
+| 3 | Architect, QA | A failed step after the installer did not resume: the retry planned the new foundation check, so the fingerprint changed and FinOps ran twice | `activeRun` records the phase and steps; a retry plans the same steps and resumes with one run id |
+| 4 | Coder | Discovery honoured the record's `subscriptionId`, the installer was not given it | One resolver for both; the id is passed and fingerprinted; a name instead of an id is refused |
+| 5 | Coder, UX | The Change review priced the recorded tier and region, not the live ones kept | Priced from the live gateway, as already running |
+| 6 | UX | A mistyped fingerprint after the installer said "nothing was written" | It says the foundation is set up and the remaining steps were not applied, without a stack trace |
+| 7 | UX | Attended Change passed the recorded values, so the installer skipped the reuse menu the review promised | Only the recorded gateway is passed; the review says the installer updates it and asks the rest |
+
+The mutation that made attended Change copy the recorded choices also exposed a loose assertion: the
+attended Change test checked that four arguments were absent, not that nothing else was passed. It
+now checks the exact argument set.
 
 ## P67 developer workstation fixes from the owner's test, 2026-09-27
 
