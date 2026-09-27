@@ -13,12 +13,18 @@
     Returns an empty string when neither has a value, after a warning that says what to pass,
     so the calling script can still fail with its own message.
 
+    -ForApimName limits the recorded group names to the gateway they were recorded for: when
+    the record names a different API Management instance, StandardGroup and PremiumGroup
+    return an empty string, so a caller falls back to its own default instead of publishing
+    another gateway's groups.
+
 .EXAMPLE
     [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup)
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('ResourceGroup', 'ApimName', 'StandardGroup', 'PremiumGroup')][string]$Field = 'ResourceGroup'
+    [ValidateSet('ResourceGroup', 'ApimName', 'StandardGroup', 'PremiumGroup')][string]$Field = 'ResourceGroup',
+    [string]$ForApimName
 )
 
 $fromEnvironment = switch ($Field) { 'ResourceGroup' { $env:CLAUDE_RG } 'ApimName' { $env:CLAUDE_APIM } default { $null } }
@@ -28,6 +34,7 @@ $config = Join-Path (Split-Path $PSScriptRoot -Parent) 'onboarding/claude-gatewa
 if (Test-Path $config) {
     try {
         $recorded = Get-Content $config -Raw | ConvertFrom-Json
+        if ($ForApimName -and $Field -in @('StandardGroup', 'PremiumGroup') -and [string]$recorded.apimName -ne $ForApimName) { return '' }
         $value = switch ($Field) { 'ResourceGroup' { $recorded.resourceGroup } 'ApimName' { $recorded.apimName } 'StandardGroup' { $recorded.standardGroup } 'PremiumGroup' { $recorded.premiumGroup } }
         if ($value) { return [string]$value }
     }

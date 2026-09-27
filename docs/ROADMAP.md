@@ -410,6 +410,17 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       the gateway; the Intune detection script runs under Windows PowerShell 5.1. Open: Intune
       admin center pictures, which need an Intune administrator role this tenant does not grant
       the owner
+- [ ] P66 guided flow — acceptance: one entry point, `Start-ClaudeGateway.ps1`, that sets up a
+      gateway, updates one built by an older release, changes a recorded decision (tier,
+      entitlement store, network edge, Desktop sign-in), configures the FinOps tool, budgets,
+      workbooks and reports, diagnoses the administrator deployment and the developer
+      workstation, and writes a tenant-specific how-to guide; every change is planned, priced
+      and fingerprinted before it applies, and the fingerprint binds the target estate.
+      [ADR-0030](adr/0030-guided-flow.md). **Merged 2026-09-26/27**: orchestrator, lifecycle
+      (update, tier, projection, network, Desktop sign-in) and diagnostics, each proven live on
+      an isolated gateway; an integrated run on 2026-09-27 found and fixed nine defects
+      ([STATUS](STATUS.md#p66-guided-flow-2026-09-27)). Open: the FinOps modules
+      (`flow-finops`), not merged when this entry was written
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so

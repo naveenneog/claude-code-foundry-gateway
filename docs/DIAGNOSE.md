@@ -83,6 +83,10 @@ raw terminal transcripts or bearer tokens to a support ticket.
 
 ## Guided flow
 
+`.\Start-ClaudeGateway.ps1 -Action Diagnose -SupportBundle` runs both scripts
+with the decision record and writes their bundles to `onboarding\support\`,
+which is git-ignored.
+
 `scripts/flow/Diagnose.ps1` implements the ADR-0030 step interface. Its plan
 contains only `Check` actions and writes nothing. Apply runs the same diagnostics
 and returns results to the orchestrator; the decision record is not changed.

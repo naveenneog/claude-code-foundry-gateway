@@ -43,8 +43,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$ResourceGroup,
     [Parameter(Mandatory = $true)][string]$ApimName,
-    [string]$StandardGroup = 'claude-code-standard',
-    [string]$PremiumGroup = 'claude-code-premium',
+    [string]$StandardGroup,
+    [string]$PremiumGroup,
     [switch]$AsJson,
     [bool]$FailOnDrift = $true,
 
@@ -56,6 +56,13 @@ param(
     # whether the projection agrees with them.
     [string]$ExportGatewayPath
 )
+
+# The groups recorded for this gateway, then the default names. A fixed default compared a gateway
+# installed with other group names against the tenant's claude-code-* groups.
+if (-not $StandardGroup) { $StandardGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') StandardGroup -ForApimName $ApimName 3>$null) }
+if (-not $PremiumGroup) { $PremiumGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') PremiumGroup -ForApimName $ApimName 3>$null) }
+if (-not $StandardGroup) { $StandardGroup = 'claude-code-standard' }
+if (-not $PremiumGroup) { $PremiumGroup = 'claude-code-premium' }
 
 $ErrorActionPreference = 'Stop'
 

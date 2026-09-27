@@ -247,6 +247,7 @@ try {
     Invoke-Check 'Guided flow contract'                      'Test-FlowContract.ps1'
     Invoke-Check 'Guided lifecycle update and change flow'    'Test-FlowLifecycle.ps1'
     Invoke-Check 'Guided flow orchestrator'                  'Test-GuidedFlow.ps1'
+Invoke-Check 'Tier groups follow their gateway'          'Test-TierGroupTarget.ps1'
 
     if ($IncludeAzure) {
         Invoke-Check 'Foundry discovery is selective'      'Test-Discovery.ps1' -Azure

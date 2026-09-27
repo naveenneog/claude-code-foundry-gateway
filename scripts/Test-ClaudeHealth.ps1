@@ -26,6 +26,11 @@
 
     Nothing is written. Every check is a read.
 
+.PARAMETER FoundryResourceGroup
+    The Foundry account's resource group, when it is not the gateway's. The
+    installer accepts a Foundry account in another resource group; without this
+    the model and bypass checks look in the gateway's group.
+
 .PARAMETER FailOn
     Which severity makes the run exit non-zero: 'fail' (default) or 'warn'.
     Use 'warn' when running it as a scheduled gate.
@@ -41,6 +46,7 @@ param(
     [Parameter(Mandatory = $true)][string]$ResourceGroup,
     [Parameter(Mandatory = $true)][string]$ApimName,
     [string]$FoundryAccount,
+    [string]$FoundryResourceGroup,
     [string]$WorkspaceName,
     [ValidateSet('fail', 'warn')][string]$FailOn = 'fail',
     # Show each check's own output as well as the verdict.
@@ -71,8 +77,17 @@ function Invoke-Check {
     # on the success or error stream, so 2>&1 captured nothing and sixty lines
     # of sub-check output landed on the operator's console underneath the
     # summary that was supposed to replace it.
-    $out = & $path @ScriptArgs *>&1 | Out-String
-    $code = $LASTEXITCODE
+    # A check that throws is a failed check, not the end of the run: before this,
+    # the bypass check threw on a Foundry account in another resource group and
+    # every check after it went unreported.
+    try {
+        $out = & $path @ScriptArgs *>&1 | Out-String
+        $code = $LASTEXITCODE
+    }
+    catch {
+        Add-Result $Name 'fail' "check stopped: $($_.Exception.Message)" $Fix
+        return $null
+    }
     if ($Detailed) { Write-Host $out -ForegroundColor DarkGray }
     if ($code -eq 0) { Add-Result $Name 'pass' $OkDetail '' }
     else { Add-Result $Name 'fail' $BadDetail $Fix }
@@ -126,6 +141,7 @@ try {
     . (Join-Path $PSScriptRoot 'ClaudeBusinessUnit.ps1')
     . (Join-Path $PSScriptRoot 'ClaudeModelDeployment.ps1')
     $acct = $FoundryAccount
+    $foundryGroup = if ($FoundryResourceGroup) { $FoundryResourceGroup } else { $ResourceGroup }
     if (-not $acct) {
         $names = @((az cognitiveservices account list -g $ResourceGroup --query "[?kind=='AIServices'].name" -o tsv 2>$null) -split "`n" | Where-Object { $_ })
         if ($names.Count -eq 1) { $acct = $names[0].Trim() }
@@ -133,7 +149,7 @@ try {
     if (-not $acct) {
         Add-Result 'Models are priced' 'warn' 'could not identify the Foundry account' 'Pass -FoundryAccount.'
     } else {
-        $deployed = @(Get-ClaudeDeployment -Account $acct -ResourceGroup $ResourceGroup | ForEach-Object { $_.name })
+        $deployed = @(Get-ClaudeDeployment -Account $acct -ResourceGroup $foundryGroup | ForEach-Object { $_.name })
         $unpriced = @($deployed | Where-Object { -not $ClaudePriceBook[$_] })
         if (-not $deployed.Count) {
             Add-Result 'Models are priced' 'warn' "no Claude deployment on $acct" 'Deploy one, or check the account name.'
@@ -149,8 +165,11 @@ try {
 }
 
 # --- 5. the bypass ---------------------------------------------------------
+$bypassArgs = @{ ResourceGroup = $ResourceGroup; ApimName = $ApimName }
+if ($FoundryAccount) { $bypassArgs.FoundryAccount = $FoundryAccount }
+if ($FoundryResourceGroup) { $bypassArgs.FoundryResourceGroup = $FoundryResourceGroup }
 Invoke-Check 'Foundry bypass closed' 'Get-ClaudeBypass.ps1' `
-    @{ ResourceGroup = $ResourceGroup } `
+    $bypassArgs `
     'nothing reaches Foundry without passing through the gateway' `
     'a principal can call Foundry directly, skipping every control here' `
     './scripts/Get-ClaudeBypass.ps1 lists them. See docs/SETUP.md 4.2.' | Out-Null
