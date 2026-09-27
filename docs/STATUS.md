@@ -21,7 +21,8 @@ deployment and the developer machine. Design: [ADR-0030](adr/0030-guided-flow.md
       redacted support bundles (merged `c210462`)
 - [x] FinOps tool, token and dollar budgets with a scheduled reconciler, workbooks and reports as
       flow steps (merged from `flow-finops` at `9e5237c`)
-- [ ] `node .ironclad/gate.mjs --stage packet` on the integration merge
+- [x] `node .ironclad/gate.mjs --stage packet` on the integration merge: `4ffa97b`, 2026-09-27
+      01:59-02:13Z, 22 passed, 2 warned (file size, open unknowns), 0 failed; Test-All 856.8 s
 
 | Live proof | Result |
 |---|---|
