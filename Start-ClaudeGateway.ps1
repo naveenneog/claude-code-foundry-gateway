@@ -17,6 +17,17 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# A refusal is an answer, not a crash. Run at top level, the flow prints the reason without
+# PowerShell's code excerpt and exits 1; called from another script, it stays an exception (U36).
+$script:FlowTopLevel = -not $MyInvocation.PSCommandPath
+trap {
+    if (-not $script:FlowTopLevel) { break }
+    Write-Host ''
+    Write-Host $_.Exception.Message -ForegroundColor Red
+    if ($env:CLAUDE_FLOW_DEBUG -eq '1') { Write-Host $_.ScriptStackTrace -ForegroundColor DarkGray }
+    else { Write-Host 'The flow stopped here. To see where in the scripts, set CLAUDE_FLOW_DEBUG=1 and run it again.' -ForegroundColor DarkGray }
+    exit 1
+}
 $root = $PSScriptRoot
 if (-not $FlowModulePath) { $FlowModulePath = Join-Path $root 'scripts\flow' }
 . (Join-Path $root 'scripts\flow\FlowContract.ps1')
@@ -338,7 +349,11 @@ function Show-Status {
     param($Record, $Discovery)
     Write-Host ''
     Write-Host 'Claude gateway status' -ForegroundColor Cyan
-    if (-not $Record) { Write-Host "No decision record at $RecordPath."; return }
+    if (-not (Test-Path -LiteralPath $RecordPath)) {
+        Write-Host "No decision record at $RecordPath, so nothing is recorded and nothing was compared with Azure."
+        Write-Host 'To create one: .\Start-ClaudeGateway.ps1 -Action Setup' -ForegroundColor DarkGray
+        return
+    }
     Write-Host ''
     Write-Host 'Decisions' -ForegroundColor Cyan
     if ($Record.decisions) { $Record.decisions | ConvertTo-Json -Depth 8 }
@@ -354,6 +369,8 @@ function Show-Status {
         foreach ($d in @($Discovery.comparison.differences)) { Write-Host "  DRIFT $d" -ForegroundColor Yellow }
     } elseif ($Discovery.comparison -and $Discovery.comparison.status -eq 'unknown') {
         Write-Host "  not checked: $($Discovery.comparison.reason)" -ForegroundColor Yellow
+    } elseif ($Discovery.comparison -and $Discovery.comparison.status -eq 'nothing-recorded') {
+        Write-Host '  no gateway is recorded, so nothing is recorded to compare with Azure' -ForegroundColor DarkGray
     } else { Write-Host '  none detected' -ForegroundColor Green }
 }
 
@@ -443,6 +460,12 @@ $attended = [bool]((Test-ClaudeInteractive) -and -not $PlanOnly -and -not $Appro
 $discovery = Get-FlowDiscoveryForSteps -Record $record -CurrentAction $Action -Attended $attended
 if ($Action -eq 'Status') { Show-Status -Record $record -Discovery $discovery; return }
 if ($Action -ne 'Guide') { Assert-RecordMatchesLive -Discovery $discovery }
+elseif ($discovery.comparison -and @($discovery.comparison.differences | Where-Object { $_ }).Count) {
+    # Guide changes nothing in Azure, so it goes on, and says that the guide names the recorded values.
+    Write-Host 'The decision record does not match live state, so the guide names the recorded values:' -ForegroundColor Yellow
+    foreach ($d in @($discovery.comparison.differences | Where-Object { $_ })) { Write-Host "  DRIFT $d" -ForegroundColor Yellow }
+    Write-Host 'Setup and Change refuse to apply over this drift until the record or the gateway is corrected.' -ForegroundColor DarkGray
+}
 
 $modules = Get-FlowModules -ModulePath $FlowModulePath -ForAction $Action
 foreach ($note in $modules.Skipped) { Write-Host $note -ForegroundColor DarkGray }

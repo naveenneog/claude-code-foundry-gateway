@@ -1581,6 +1581,8 @@ $config = [ordered]@{
         premium  = @{ tokensPerMinute = $TpmPremium;  tokensPerDay = $QuotaPremium }
     }
     organisation = @{ tokensPerMonth = $QuotaOrg; shared = $true; softCap = $true }
+    # The request ceiling, so an unattended Change of the foundation gives it back (P72).
+    requestsPerMinute = $CallsPerMinute
     generated = (Get-Date -Format 'yyyy-MM-dd HH:mm')
 }
 $configPath = Join-Path $pkg 'claude-gateway.json'
