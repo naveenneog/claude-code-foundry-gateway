@@ -126,7 +126,7 @@ try {
     foreach ($f in 'scripts\ClaudeChoice.ps1', 'scripts\AzureRetailPrice.ps1', 'scripts\ClaudeGatewayRegion.ps1', 'scripts\flow\FlowContract.ps1', 'scripts\flow\Discovery.ps1', 'scripts\flow\Foundation.ps1', 'scripts\flow\lib\LifecycleCommon.ps1') {
         if (Test-Path -LiteralPath (Join-Path $root $f)) { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $shadow $f) }
     }
-    $installerParams = @('SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'EntitlementStore', 'AuthMode', 'DesktopSignInKind', 'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience', 'DesktopEntraResource', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode', 'TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup')
+    $installerParams = @('SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'ExistingApimName', 'EntitlementStore', 'AuthMode', 'DesktopSignInKind', 'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience', 'DesktopEntraResource', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode', 'TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup')
     $stubInstaller = @(
         '[CmdletBinding(SupportsShouldProcess)]'
         'param('
@@ -163,8 +163,9 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'FinOps'
     $shadowConfig = Join-Path $shadow 'onboarding\claude-gateway.json'
     $installerLog = Join-Path $scratch 'installer.json'
     $finopsLog = Join-Path $scratch 'finops.log'
+    $budgetsLog = Join-Path $scratch 'budgets.log'
     function Reset-Shadow {
-        foreach ($f in $shadowConfig, $installerLog, $finopsLog) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue }
+        foreach ($f in $shadowConfig, $installerLog, $finopsLog, $budgetsLog) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue }
     }
     $recorded = [ordered]@{
         schemaVersion = 2; mode = 'gateway'; gatewayUrl = 'https://apim-p68.azure-api.net'; apimName = 'apim-p68'; resourceGroup = 'rg-p68'
@@ -263,11 +264,52 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'FinOps'
     Assert 'an installer that writes no record stops the flow with the reason and no stack trace' ($cancel.ExitCode -ne 0 -and $cancel.All -match 'Install-ClaudeGateway\.ps1 finished without writing' -and $cancel.All -notmatch 'Line \|' -and -not $cancel.TimedOut) ($cancel.All | Select-Object -Last 3)
     Assert 'after a cancelled installer no FinOps question is asked' (@(Read-JsonLines $finopsLog).Count -eq 0)
 
-    # Change foundation over a recorded gateway, attended: the installer runs and asks.
+    # Change foundation over a recorded gateway, attended: the installer updates that gateway and asks the rest.
     Reset-Shadow
     $change = Invoke-Child -Script $shadowStart -Attended -Arguments @('-Action', 'Change', '-Change', 'foundation', '-RecordPath', (New-RecordedGateway 'recorded-change.json')) -InputLines @('stub-answer') -Environment @{ P68_AZ_URL = 'https://apim-p68.azure-api.net'; P68_INSTALLER_LOG = $installerLog }
     $changeRun = if (Test-Path -LiteralPath $installerLog) { Read-Json $installerLog } else { $null }
     Assert 'attended -Change foundation over a recorded gateway runs the installer without -Yes' ($change.ExitCode -eq 0 -and $changeRun -and -not ($changeRun.bound.PSObject.Properties.Name -contains 'Yes') -and $changeRun.answer -eq 'stub-answer') ($change.All | Select-Object -Last 3)
+    Assert 'attended -Change foundation names the recorded gateway to the installer, and nothing else it could ask' ($changeRun -and ((@($changeRun.bound.PSObject.Properties.Name) | Sort-Object) -join ',') -eq 'ExistingApimName,ResourceGroup,SkipFinOpsOffer' -and $changeRun.bound.ExistingApimName -eq 'apim-p68' -and $changeRun.bound.ResourceGroup -eq 'rg-p68') ($changeRun.bound | ConvertTo-Json -Compress)
+
+    # A mistyped fingerprint after the installer created the gateway: the message says what exists.
+    Reset-Shadow
+    $mistyped = Invoke-Child -Script $shadowStart -Attended -Arguments @('-Action', 'Setup', '-RecordPath', (Join-Path $scratch 'mistyped-record.json')) -InputLines @('stub-answer', '', 'nomatch1') -Environment @{ P68_AZ_URL = 'https://apim-p68.azure-api.net'; P68_INSTALLER_LOG = $installerLog; P68_FINOPS_LOG = $finopsLog }
+    Assert 'a mistyped fingerprint after the installer says the foundation is set up and the rest was not applied' ($mistyped.ExitCode -ne 0 -and $mistyped.All -match 'gateway foundation is set up' -and $mistyped.All -match 'not applied' -and $mistyped.All -notmatch 'nothing was written' -and $mistyped.All -notmatch 'Line \|') ($mistyped.All | Select-Object -Last 3)
+
+    # A step after the installer fails: the next run resumes that run instead of starting another.
+    Reset-Shadow
+    $fakeBudgets = Join-Path $shadow 'scripts\flow\Budgets.ps1'
+    Set-Content -LiteralPath $fakeBudgets -Encoding UTF8 -Value @'
+function Get-ClaudeFlowStepInfo { [pscustomobject]@{ Name = 'Budgets'; Title = 'Budgets'; DecisionKey = 'budgets'; DependsOn = @('FinOps'); Actions = @('Setup', 'Change') } }
+function Get-ClaudeFlowStepQuestions { param($Record, $Discovery) @() }
+function Get-ClaudeFlowStepPlan { param($Record, $Discovery) New-ClaudeFlowPlan -Step Budgets -Summary 'Configure budgets' -Actions @(New-ClaudeFlowAction -Verb Write -Target 'budgets' -Detail 'test') -Costs @(New-ClaudeFlowCost -Item 'Budgets' -MonthlyUsd 0 -Source 'test') -Reversible $true -Rollback 'none' }
+function Invoke-ClaudeFlowStep { param($Record, $Plan) Add-Content -LiteralPath $env:P68_BUDGETS_LOG -Value 'applied'; if ($env:P68_BUDGETS_FAIL -eq '1') { throw 'budgets apply failed (test)' }; @{ budgets = [pscustomobject]@{ mode = 'tokens' } } }
+function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets'; Passed = $true; Checks = @() } }
+'@
+    try {
+        $phaseTwoFp = & {
+            . (Join-Path $root 'scripts\flow\FlowContract.ps1')
+            . (Join-Path $root 'scripts\ClaudeChoice.ps1')
+            $finPlan = & { . $fakeFinOps; Get-ClaudeFlowStepPlan -Record $null -Discovery $null }
+            $budPlan = & { . $fakeBudgets; Get-ClaudeFlowStepPlan -Record $null -Discovery $null }
+            Get-ClaudeFlowFingerprint -Plans @($finPlan, $budPlan)
+        }
+        $resumeRecord = Join-Path $scratch 'resume-record.json'
+        $resumeEnv = @{ P68_AZ_URL = 'https://apim-p68.azure-api.net'; P68_INSTALLER_LOG = $installerLog; P68_FINOPS_LOG = $finopsLog; P68_BUDGETS_LOG = $budgetsLog; P68_BUDGETS_FAIL = '1' }
+        $firstTry = Invoke-Child -Script $shadowStart -Attended -Arguments @('-Action', 'Setup', '-RecordPath', $resumeRecord) -InputLines @('stub-answer', '', $phaseTwoFp.Substring(0, 8)) -Environment $resumeEnv
+        $finAppliedFirst = @(Get-Content -LiteralPath $finopsLog -ErrorAction SilentlyContinue | Where-Object { $_ -match '"applied"' }).Count
+        $resumeEnv.P68_BUDGETS_FAIL = $null
+        $secondTry = Invoke-Child -Script $shadowStart -Attended -Arguments @('-Action', 'Setup', '-RecordPath', $resumeRecord) -InputLines @($phaseTwoFp.Substring(0, 8)) -Environment $resumeEnv
+        $finAppliedSecond = @(Get-Content -LiteralPath $finopsLog -ErrorAction SilentlyContinue | Where-Object { $_ -match '"applied"' }).Count
+        $budApplied = @(Get-Content -LiteralPath $budgetsLog -ErrorAction SilentlyContinue).Count
+        $resumed = if (Test-Path -LiteralPath $resumeRecord) { Read-Json $resumeRecord } else { $null }
+        $finEntry = @($resumed.history | Where-Object decision -eq 'finops')
+        $budEntry = @($resumed.history | Where-Object decision -eq 'budgets')
+        Assert 'a failed step after the installer ends the first run after FinOps applied' ($firstTry.ExitCode -ne 0 -and $finAppliedFirst -eq 1 -and $firstTry.All -match 'budgets apply failed') ($firstTry.All | Select-Object -Last 2)
+        Assert 'the next run resumes that run: FinOps is not applied again and Budgets is' ($secondTry.ExitCode -eq 0 -and $finAppliedSecond -eq 1 -and $budApplied -eq 2 -and $secondTry.Text -match 'Resuming') ("exit=$($secondTry.ExitCode) finops=$finAppliedSecond budgets=$budApplied; " + ($secondTry.All | Select-Object -Last 2))
+        Assert 'the resumed run keeps one run id for the steps after the installer and ends without an active run' ($resumed -and $finEntry.Count -eq 1 -and $budEntry.Count -eq 1 -and $finEntry[0].runId -eq $budEntry[0].runId -and -not ($resumed.PSObject.Properties.Name -contains 'activeRun')) ((@($resumed.history | ForEach-Object { "$($_.decision):$($_.runId)" })) -join ',')
+    }
+    finally { Remove-Item -LiteralPath $fakeBudgets -Force -ErrorAction SilentlyContinue }
 
     # ------------------------------------------------------------------ unattended runs
     Reset-Shadow
@@ -292,20 +334,35 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'FinOps'
     Assert 'Guide never runs the installer' ($gApply.ExitCode -eq 0 -and -not (Test-Path -LiteralPath $installerLog)) ($gApply.All | Select-Object -Last 3)
 
     # ------------------------------------------------------------------ Foundation step, in process
+    # The stub az.cmd first on PATH, so the cmd.exe guard is active on any machine; prices stubbed per region.
+    $savedPath = $env:PATH
+    $env:PATH = $script:azBin + [IO.Path]::PathSeparator + $env:PATH
+    try {
     $f = & {
         . (Join-Path $root 'scripts\flow\FlowContract.ps1')
         . (Join-Path $root 'scripts\ClaudeChoice.ps1')
         . (Join-Path $root 'scripts\flow\Foundation.ps1')
+        function Invoke-RestMethod {
+            param($Uri, $TimeoutSec, $ErrorAction)
+            $rates = if ([uri]::UnescapeDataString([string]$Uri) -match "armRegionName eq 'westus'") { @(0.20, 0.90, 3.60) } else { @(0.21, 0.96, 3.84) }
+            $rows = for ($i = 0; $i -lt 3; $i++) { [pscustomobject]@{ meterName = @('Basic v2 Unit', 'Standard v2 Unit', 'Premium v2 Unit')[$i]; retailPrice = $rates[$i]; type = 'Consumption'; skuName = 'v2'; productName = 'API Management'; tierMinimumUnits = 0; unitOfMeasure = '1 Hour'; currencyCode = 'USD' } }
+            [pscustomobject]@{ Items = @($rows); NextPageLink = $null }
+        }
         $emptyRecord = [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{}; history = @() }
         $withDecision = { param($store) [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{ foundation = [pscustomobject]@{ sku = 'BasicV2'; entitlementStore = $store; authMode = 'interactive'; desktopSignInKind = 'helper-script' } }; history = @() } }
-        $gatewayRecord = [pscustomobject]@{ schemaVersion = 2; apimName = 'apim-p68'; resourceGroup = 'rg-p68'; gatewayUrl = 'https://apim-p68.azure-api.net'; decisions = [pscustomobject]@{ foundation = [pscustomobject]@{ sku = 'BasicV2' } }; history = @() }
+        $gatewayRecord = [pscustomobject]@{ schemaVersion = 2; apimName = 'apim-p68'; resourceGroup = 'rg-p68'; gatewayUrl = 'https://apim-p68.azure-api.net'; decisions = [pscustomobject]@{ foundation = [pscustomobject]@{ sku = 'BasicV2'; location = 'westus'; resourceGroup = 'rg-p68'; namePrefix = 'p68'; publisherEmail = 'old@contoso.com'; entitlementStore = 'named-value' } }; history = @() }
         $oddRecord = [pscustomobject]@{ schemaVersion = 2; apimName = 'contoso-gateway'; resourceGroup = 'rg-p68'; gatewayUrl = 'https://contoso-gateway.azure-api.net'; decisions = [pscustomobject]@{ foundation = [pscustomobject]@{ sku = 'BasicV2' } }; history = @() }
-        $live = [pscustomobject]@{ name = 'apim-p68'; resourceGroup = 'rg-p68'; sku = 'StandardV2'; location = 'eastus2'; publisherEmail = 'ops@contoso.com'; gatewayUrl = 'https://apim-p68.azure-api.net' }
+        $live = [pscustomobject]@{ name = 'apim-p68'; resourceGroup = 'rg-p68'; sku = 'StandardV2'; location = 'eastus2'; publisherEmail = 'ops&calc@contoso.com'; gatewayUrl = 'https://apim-p68.azure-api.net' }
         $ctx = { param($action, $attended, $gateway) [pscustomobject]@{ action = $action; attended = $attended; gateway = $gateway; Region = $null } }
-        $oddThrown = try { Get-ClaudeFlowStepPlan -Record $oddRecord -Discovery (& $ctx 'Change' $false $null) | Out-Null; '' } catch { $_.Exception.Message }
+        $thrown = { param($record, $discovery) try { Get-ClaudeFlowStepPlan -Record $record -Discovery $discovery | Out-Null; '' } catch { $_.Exception.Message } }
         $unsafeRecord = [pscustomobject]@{ schemaVersion = 2; apimName = 'apim-p68'; resourceGroup = 'rg-p68&calc'; gatewayUrl = 'https://apim-p68.azure-api.net'; decisions = [pscustomobject]@{ foundation = [pscustomobject]@{ sku = 'BasicV2' } }; history = @() }
-        $unsafeThrown = try { Get-ClaudeFlowStepPlan -Record $unsafeRecord -Discovery (& $ctx 'Change' $false $null) | Out-Null; '' } catch { $_.Exception.Message }
+        $unsafeDecision = [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{ foundation = [pscustomobject]@{ sku = 'BasicV2'; entitlementStore = 'named-value'; modelOrganizationName = 'AT&T' } }; history = @() }
+        $withSubscription = { param($sub) [pscustomobject]@{ schemaVersion = 2; subscriptionId = $sub; apimName = 'apim-p68'; resourceGroup = 'rg-p68'; gatewayUrl = 'https://apim-p68.azure-api.net'; decisions = [pscustomobject]@{ foundation = [pscustomobject]@{ sku = 'BasicV2' } }; history = @() } }
+        $subscriptionOnly = [pscustomobject]@{ schemaVersion = 2; subscriptionId = '00000000-0000-0000-0000-00000000000a'; decisions = [pscustomobject]@{}; history = @() }
         $attendedPlan = Get-ClaudeFlowStepPlan -Record $emptyRecord -Discovery (& $ctx 'Setup' $true $null)
+        $changeAttended = Get-ClaudeFlowStepPlan -Record $gatewayRecord -Discovery (& $ctx 'Change' $true $live)
+        $subA = Get-ClaudeFlowStepPlan -Record (& $withSubscription '00000000-0000-0000-0000-00000000000a') -Discovery (& $ctx 'Change' $false $live)
+        $subB = Get-ClaudeFlowStepPlan -Record (& $withSubscription '00000000-0000-0000-0000-00000000000b') -Discovery (& $ctx 'Change' $false $live)
         [pscustomobject]@{
             Info = Get-ClaudeFlowStepInfo
             AttendedQuestions = @(Get-ClaudeFlowStepQuestions -Record $emptyRecord -Discovery (& $ctx 'Setup' $true $null))
@@ -319,12 +376,22 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'FinOps'
             RecordedUnattended = Get-ClaudeFlowStepPlan -Record $gatewayRecord -Discovery (& $ctx 'Setup' $false $live)
             GuideRecorded = Get-ClaudeFlowStepPlan -Record $gatewayRecord -Discovery (& $ctx 'Guide' $true $live)
             GuideEmpty = Get-ClaudeFlowStepPlan -Record $emptyRecord -Discovery (& $ctx 'Guide' $false $null)
-            ChangeAttended = Get-ClaudeFlowStepPlan -Record $gatewayRecord -Discovery (& $ctx 'Change' $true $live)
+            ChangeAttended = $changeAttended
+            ChangeAttendedReview = (Format-ClaudeFlowReview -Plans @($changeAttended))
             ChangeUnattended = Get-ClaudeFlowStepPlan -Record $gatewayRecord -Discovery (& $ctx 'Change' $false $live)
-            OddThrown = $oddThrown
-            UnsafeThrown = $unsafeThrown
+            Odd = Get-ClaudeFlowStepPlan -Record $oddRecord -Discovery (& $ctx 'Change' $false $null)
+            UnsafeThrown = & $thrown $unsafeRecord (& $ctx 'Change' $false $null)
+            UnsafeDecisionUnattended = & $thrown $unsafeDecision (& $ctx 'Setup' $false $null)
+            UnsafeDecisionAttended = & $thrown $unsafeDecision (& $ctx 'Setup' $true $null)
+            SubA = $subA
+            SubB = $subB
+            SubFingerprints = @((Get-ClaudeFlowFingerprint -Plans @($subA)), (Get-ClaudeFlowFingerprint -Plans @($subB)))
+            SubSetupAttended = Get-ClaudeFlowStepPlan -Record $subscriptionOnly -Discovery (& $ctx 'Setup' $true $null)
+            SubNameThrown = & $thrown (& $withSubscription 'Contoso Prod') (& $ctx 'Change' $false $live)
         }
     }
+    }
+    finally { $env:PATH = $savedPath }
     Assert 'Foundation declares that an attended run may apply it first' ([bool]$f.Info.AttendedFirst)
     Assert 'in an attended run the flow asks no foundation question itself' ($f.AttendedQuestions.Count -eq 0) (($f.AttendedQuestions | ForEach-Object Key) -join ',')
     Assert 'without a console the four foundation questions stay' ((($f.UnattendedQuestions | ForEach-Object Key) -join ',') -eq 'foundation.sku,foundation.entitlementStore,foundation.authMode,foundation.desktopSignInKind')
@@ -336,18 +403,27 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'FinOps'
     Assert 'Setup over a recorded gateway checks it, attended or not' (-not $f.Recorded.Data.runsInstaller -and -not $f.RecordedUnattended.Data.runsInstaller -and @($f.Recorded.Actions)[0].Verb -eq 'Check')
     Assert 'the cost of a recorded gateway is named as already running, not as a new cost' ([string]@($f.Recorded.Costs)[0].Item -match 'already running') ([string]@($f.Recorded.Costs)[0].Item)
     Assert 'Guide never runs the installer, with or without a recorded gateway' (-not $f.GuideRecorded.Data.runsInstaller -and -not $f.GuideEmpty.Data.runsInstaller)
-    Assert 'attended -Change foundation runs the installer, which asks' ($f.ChangeAttended.Data.runsInstaller -and $f.ChangeAttended.Data.asksInConsole -and -not (Test-Key $f.ChangeAttended.Data.installerArgs 'Yes'))
+    $ca = $f.ChangeAttended.Data.installerArgs
+    Assert 'attended -Change foundation runs the installer, which asks' ($f.ChangeAttended.Data.runsInstaller -and $f.ChangeAttended.Data.asksInConsole -and -not (Test-Key $ca 'Yes'))
+    Assert 'attended -Change foundation names the recorded gateway, and passes nothing the installer asks' (((@($ca.Keys) | Sort-Object) -join ',') -eq 'ExistingApimName,ResourceGroup,SkipFinOpsOffer' -and $ca['ExistingApimName'] -eq 'apim-p68' -and $ca['ResourceGroup'] -eq 'rg-p68') ($ca | ConvertTo-Json -Compress)
+    Assert 'the attended -Change review says the installer updates the recorded gateway, and promises no reuse menu' ($f.ChangeAttendedReview -match 'updates rg-p68/apim-p68' -and $f.ChangeAttendedReview -notmatch 'reuse') $f.ChangeAttendedReview
     $cu = $f.ChangeUnattended.Data.installerArgs
-    Assert 'unattended -Change foundation targets the recorded gateway, keeping its live tier, region and publisher' ($f.ChangeUnattended.Data.runsInstaller -and $cu['Yes'] -eq $true -and $cu['NamePrefix'] -eq 'p68' -and $cu['ResourceGroup'] -eq 'rg-p68' -and $cu['Sku'] -eq 'StandardV2' -and $cu['Location'] -eq 'eastus2' -and $cu['PublisherEmail'] -eq 'ops@contoso.com') ($cu | ConvertTo-Json -Compress)
-    Assert 'unattended -Change foundation refuses a gateway the installer cannot name' ($f.OddThrown -match 'contoso-gateway' -and $f.OddThrown -match 'console') $f.OddThrown
+    Assert 'unattended -Change foundation targets the recorded gateway by name, and passes no tier, region, name or live publisher' ($f.ChangeUnattended.Data.runsInstaller -and $cu['Yes'] -eq $true -and $cu['ExistingApimName'] -eq 'apim-p68' -and $cu['ResourceGroup'] -eq 'rg-p68' -and @($cu.Keys | Where-Object { $_ -in 'NamePrefix', 'Sku', 'Location', 'PublisherEmail' }).Count -eq 0) ($cu | ConvertTo-Json -Compress)
+    $cuCost = @($f.ChangeUnattended.Costs)[0]
+    Assert 'the -Change review prices the live gateway the installer keeps, as already running' ($cuCost.MonthlyUsd -eq 700.80 -and [string]$cuCost.Item -match 'StandardV2' -and [string]$cuCost.Item -match 'already running') ("$($cuCost.Item): $($cuCost.MonthlyUsd)")
+    Assert 'unattended -Change foundation targets a gateway of any name through -ExistingApimName' ($f.Odd.Data.installerArgs['ExistingApimName'] -eq 'contoso-gateway' -and -not (Test-Key $f.Odd.Data.installerArgs 'NamePrefix')) ($f.Odd.Data.installerArgs | ConvertTo-Json -Compress)
     Assert 'unattended -Change foundation refuses a recorded name with cmd.exe metacharacters' ($f.UnsafeThrown -match 'cmd\.exe' -and $f.UnsafeThrown -match 'rg-p68&calc') $f.UnsafeThrown
+    Assert 'a foundation value with a cmd.exe metacharacter is refused before the installer, attended or not' ($f.UnsafeDecisionUnattended -match 'ModelOrganizationName' -and $f.UnsafeDecisionUnattended -match 'cmd\.exe' -and $f.UnsafeDecisionAttended -match 'ModelOrganizationName') "unattended: $($f.UnsafeDecisionUnattended) | attended: $($f.UnsafeDecisionAttended)"
+    Assert 'the recorded subscription id reaches the installer, so discovery and the install use one subscription' ($f.SubA.Data.installerArgs['SubscriptionId'] -eq '00000000-0000-0000-0000-00000000000a' -and $f.SubSetupAttended.Data.installerArgs['SubscriptionId'] -eq '00000000-0000-0000-0000-00000000000a') "change: $($f.SubA.Data.installerArgs['SubscriptionId']) setup: $($f.SubSetupAttended.Data.installerArgs['SubscriptionId'])"
+    Assert 'a different recorded subscription gives a different fingerprint' ($f.SubFingerprints[0] -ne $f.SubFingerprints[1])
+    Assert 'a recorded subscription that is not an id is refused before the installer' ($f.SubNameThrown -match 'subscription id' -and $f.SubNameThrown -match 'Contoso Prod') $f.SubNameThrown
     $installerCommand = Get-Command (Join-Path $root 'Install-ClaudeGateway.ps1')
-    $unknownArgs = @(foreach ($plan in $f.Attended, $f.Projection, $f.NamedValue, $f.ChangeUnattended) { foreach ($k in @(if ($plan.Data.installerArgs) { $plan.Data.installerArgs.Keys })) { if (-not $installerCommand.Parameters.ContainsKey([string]$k)) { $k } } })
+    $unknownArgs = @(foreach ($plan in $f.Attended, $f.Projection, $f.NamedValue, $f.ChangeAttended, $f.ChangeUnattended, $f.SubA) { foreach ($k in @(if ($plan.Data.installerArgs) { $plan.Data.installerArgs.Keys })) { if (-not $installerCommand.Parameters.ContainsKey([string]$k)) { $k } } })
     Assert 'every installer argument the plans pass is a parameter of Install-ClaudeGateway.ps1' ($unknownArgs.Count -eq 0) ($unknownArgs -join ',')
 
     # Every installer section that asks something is named in the attended Foundation review.
     $installerText = [IO.File]::ReadAllText((Join-Path $root 'Install-ClaudeGateway.ps1'))
-    $asksNothing = @('Summary', 'Deploying', 'Resource group', 'Entra groups', 'Sync entitlement', 'Projection deployment', 'Onboarding package', 'Verifying the controls', 'Done')
+    $asksNothing = @('Summary', 'Deploying', 'Claude deployment', 'Resource group', 'Entra groups', 'Sync entitlement', 'Projection deployment', 'Onboarding package', 'Verifying the controls', 'Done')
     $named = [ordered]@{
         'Azure sign-in' = 'subscription'; 'Foundry account' = 'Foundry account'; 'Which models each tier may call' = 'models each tier may call'
         'Where to put the gateway' = 'region'; 'Choices' = 'entitlement store'; 'Budgets' = 'token budgets'; 'Standard tier' = 'token budgets for each tier'
@@ -519,6 +595,58 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'FinOps'
     Assert 'the installer records sku, location and the Foundry account in its record' ($installerText -match '(?m)^\s+sku\s+=\s+\$Sku' -and $installerText -match '(?m)^\s+location\s+=\s+' -and $installerText -match '(?m)^\s+foundryAccount\s+=\s+\$FoundryAccount' -and $installerText -match '(?m)^\s+foundryResourceGroup\s+=\s+\$FoundryResourceGroup')
     Assert 'the installer''s Location prompt is the priced region prompt' ($installerText -notmatch "Read-Default -Prompt 'Location'" -and $installerText -match 'Read-GatewayRegion -Default \$Location')
     Assert 'the installer''s Foundry account search states an estimate and reports each account as it is read' ($installerText -match 'candidate account\(s\), about 4 s each' -and $installerText -match '\[\{0\}/\{1\}\] \{2\}: \{3\} \(\{4:N1\} s\)')
+
+    # ------------------------------------------------------------------ the installer's approval boundary
+    # The attended flow asks for no fingerprint before the installer: its summary is the approval, so
+    # nothing may be written before it, the Claude deployment of a subscription that has none included.
+    $installerAst = [Management.Automation.Language.Parser]::ParseInput($installerText, [ref]$null, [ref]$null)
+    $top = @($installerAst.EndBlock.Statements)
+    $topIndexOf = { param($node) for ($i = 0; $i -lt $top.Count; $i++) { if ($node.Extent.StartOffset -ge $top[$i].Extent.StartOffset -and $node.Extent.EndOffset -le $top[$i].Extent.EndOffset) { return $i } }; return -1 }
+    $deployCalls = @($installerAst.FindAll({ param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'New-ClaudeDeployment' }, $true))
+    $confirmAt = -1; $whatIfAt = -1
+    for ($i = 0; $i -lt $top.Count; $i++) {
+        if ($confirmAt -lt 0 -and $top[$i].Extent.Text -match 'Read-YesNo' -and $top[$i].Extent.Text -match 'Create these resources\?') { $confirmAt = $i }
+        if ($whatIfAt -lt 0 -and $top[$i].Extent.Text -match '^if \(\$WhatIfPreference\)' -and $top[$i].Extent.Text -match '\breturn\b') { $whatIfAt = $i }
+    }
+    $deployAts = @($deployCalls | ForEach-Object { & $topIndexOf $_ })
+    Assert 'the installer creates a Claude deployment only after its summary is confirmed, and never under -WhatIf' ($deployCalls.Count -ge 1 -and $confirmAt -ge 0 -and $whatIfAt -ge 0 -and @($deployAts | Where-Object { $_ -le $confirmAt -or $_ -le $whatIfAt }).Count -eq 0) "deploy at $($deployAts -join ',') confirm at $confirmAt whatif at $whatIfAt"
+    Assert 'the summary names the Claude deployment it will create, and the tier lists include it' ($installerText -match "'Claude deployment'" -and $installerText -match '\$deployed \+= \$pendingDeployment')
+
+    # az.cmd: a value the installer passes to the Azure CLI must not hold what cmd.exe re-reads.
+    $guard = & {
+        foreach ($name in 'Write-Bad', 'Assert-AzArgumentsSafe') { if ($fnText.ContainsKey($name)) { . ([scriptblock]::Create($fnText[$name])) } }
+        if (-not (Get-Command Assert-AzArgumentsSafe -ErrorAction SilentlyContinue)) { return [pscustomobject]@{ Missing = $true } }
+        $try = { param($values, $shim) try { Assert-AzArgumentsSafe -Values $values -Shim $shim 6>$null; '' } catch { $_.Exception.Message } }
+        [pscustomobject]@{
+            Missing = $false
+            Safe = & $try ([ordered]@{ PublisherEmail = 'ops@contoso.com'; ResourceGroup = 'rg-claude.gw_1'; Location = 'eastus2' }) $true
+            Unsafe = & $try ([ordered]@{ ResourceGroup = 'rg-ok'; PublisherEmail = 'ops&calc@contoso.com' }) $true
+            Paren = & $try ([ordered]@{ ResourceGroup = 'rg (prod)' }) $true
+            NoShim = & $try ([ordered]@{ PublisherEmail = 'ops&calc@contoso.com' }) $false
+        }
+    }
+    Assert 'the installer refuses a value that holds a cmd.exe metacharacter, naming it, when az is a .cmd shim' (-not $guard.Missing -and $guard.Safe -eq '' -and $guard.Unsafe -match 'PublisherEmail' -and $guard.Unsafe -match 'Nothing was created' -and $guard.Paren -match 'ResourceGroup') ("safe='$($guard.Safe)' unsafe='$($guard.Unsafe)' paren='$($guard.Paren)'")
+    Assert 'the check is off where az is not a .cmd shim' (-not $guard.Missing -and $guard.NoShim -eq '') $guard.NoShim
+    $guardCall = @($top | Where-Object { $_.Extent.Text -match '^Assert-AzArgumentsSafe' })
+    $summaryAt = -1; for ($i = 0; $i -lt $top.Count; $i++) { if ($top[$i].Extent.Text -match "^Write-Head 'Summary'") { $summaryAt = $i; break } }
+    Assert 'the installer checks the values it passes to az before its summary' ($guardCall.Count -eq 1 -and [array]::IndexOf($top, $guardCall[0]) -lt $summaryAt -and $guardCall[0].Extent.Text -match 'PublisherEmail\s*=\s*\$PublisherEmail' -and $guardCall[0].Extent.Text -match 'ExistingApimName\s*=\s*\$ExistingApim' -and $guardCall[0].Extent.Text -match 'SubscriptionId\s*=\s*\$SubscriptionId') "summary at $summaryAt"
+
+    # -ExistingApimName takes the installer's own reuse path for a named gateway, with no menu.
+    $adoptAssign = @($installerAst.FindAll({ param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$useExistingGateway' }, $false))
+    $adopted = $null
+    if ($adoptAssign.Count -eq 1) {
+        $adopt = & ([scriptblock]::Create($adoptAssign[0].Right.Extent.Text))
+        $adopted = & {
+            . (Join-Path $root 'scripts\ClaudeGatewayRegion.ps1')
+            function Write-Note { param($t) }; function Write-Ok { param($t) }; function Write-Warn2 { param($t) }
+            $ResourceGroup = 'rg-typed'; $ExistingApim = ''; $Location = 'westus'; $Sku = ''; $PublisherEmail = ''; $NamePrefix = ''
+            . $adopt ([pscustomobject]@{ name = 'contoso-gateway'; resourceGroup = 'rg-live'; location = 'East US 2'; sku = [pscustomobject]@{ name = 'StandardV2' }; publisherEmail = 'ops@contoso.com'; identity = [pscustomobject]@{ type = 'SystemAssigned' } })
+            [pscustomobject]@{ ExistingApim = $ExistingApim; ResourceGroup = $ResourceGroup; Location = $Location; Sku = $Sku; PublisherEmail = $PublisherEmail; NamePrefix = $NamePrefix }
+        }
+    }
+    Assert 'reusing a gateway adopts its name, group, region, tier and publisher' ($adopted -and $adopted.ExistingApim -eq 'contoso-gateway' -and $adopted.ResourceGroup -eq 'rg-live' -and $adopted.Location -eq 'eastus2' -and $adopted.Sku -eq 'StandardV2' -and $adopted.PublisherEmail -eq 'ops@contoso.com' -and $adopted.NamePrefix -eq 'contoso-gateway') ($adopted | ConvertTo-Json -Compress)
+    Assert 'the installer takes -ExistingApimName, adopts it before the placement prompts, and skips the region prompt for it' ($installerText -match '\[string\]\$ExistingApimName' -and $installerText -match '(?s)if \(\$ExistingApimName\) \{.*?\. \$useExistingGateway.*?Read-Default -Prompt ''Resource group''' -and $installerText -match '\$Location = if \(\$ExistingApim\) \{ \$Location \} else \{ Read-GatewayRegion -Default \$Location \}')
+    Assert 'the reuse menu adopts its choice the same way' ($installerText -match '(?s)-Prompt ''Which''.*?\. \$useExistingGateway \$reusable\[')
 
     # ------------------------------------------------------------------ FinOps pricing in the flow
     $finops = & {

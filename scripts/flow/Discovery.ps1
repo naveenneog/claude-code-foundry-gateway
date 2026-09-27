@@ -95,7 +95,7 @@ function Get-ClaudeFlowDiscovery {
         # argument, so a recorded name is passed only when it is letters, digits and . _ -. That covers
         # every API Management name; a resource group with parentheses, which Azure allows, is not read.
         $safeName = { param([string]$Value) $Value -match '^[A-Za-z0-9._-]{1,90}$' }
-        $subscription = if ($Record.subscriptionId) { [string]$Record.subscriptionId } elseif ($decision -and $decision.subscriptionId) { [string]$decision.subscriptionId } else { '' }
+        $subscription = Get-ClaudeFlowRecordSubscription -Record $Record
         $read = $null
         if (-not ((& $safeName $recordGroup) -and (& $safeName $recordApim))) {
             $status = 'unknown'
@@ -105,7 +105,7 @@ function Get-ClaudeFlowDiscovery {
         else {
             $arguments = @('apim', 'show', '-g', $recordGroup, '-n', $recordApim)
             # A subscription is passed only as an id; a name is free text and may hold any of those.
-            if ($subscription -match '^[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}$') { $arguments += @('--subscription', $subscription) }
+            if (Test-ClaudeFlowSubscriptionId $subscription) { $arguments += @('--subscription', $subscription) }
             $read = Invoke-ClaudeFlowAzRead -What "API Management $recordGroup/$recordApim" -AboutSeconds $script:ClaudeFlowGatewayReadSeconds -Arguments $arguments
         }
         if ($read -and $read.NotFound) {

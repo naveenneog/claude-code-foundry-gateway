@@ -2888,8 +2888,8 @@ $mutations = @(
     @{ Suite = 'Test-ModelDeployment.ps1'
        Name  = 'the installer stops passing provider data'
        File  = 'Install-ClaudeGateway.ps1'
-       From  = '-Capacity ([int]$cap) -ProviderData $providerData'
-       To    = '-Capacity ([int]$cap)' }
+       From  = '-Capacity $pendingDeployment.capacity -ProviderData $providerData'
+       To    = '-Capacity $pendingDeployment.capacity' }
 
     @{ Suite = 'Test-ModelDeployment.ps1'
        Name  = 'the manual deployment goes back to an inline body'

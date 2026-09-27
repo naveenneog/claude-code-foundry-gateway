@@ -16,6 +16,17 @@ $script:ClaudeFlowInstallerTopics = @(
     'business units, after it deploys'
 )
 
+# What it asks when it updates a recorded gateway (-ExistingApimName): the gateway keeps its own
+# region, tier, name and publisher, so those are not asked.
+$script:ClaudeFlowInstallerUpdateTopics = @(
+    'the Foundry account and its Claude deployments'
+    'the models each tier may call'
+    'the entitlement store, revocation window, team budget behaviour, developers with no team, developer address, developer sign-in and Claude Desktop sign-in'
+    'the token budgets for each tier, the organisation ceiling and the request ceiling'
+    'the Entra groups for each tier'
+    'business units, after it deploys'
+)
+
 function Get-ClaudeFlowStepInfo {
     [pscustomobject]@{ Name = 'Foundation'; Title = 'Gateway foundation'; DecisionKey = 'foundation'; DependsOn = @(); Actions = @('Setup', 'Change', 'Guide'); AttendedFirst = $true }
 }
@@ -138,41 +149,60 @@ function Get-ClaudeFlowFoundationCost {
     return (New-ClaudeFlowCost -Item "API Management $Sku" -Source 'Azure Retail Prices API via installer/BOM' -UnknownReason 'price is discovered during live setup for the selected region and unit count')
 }
 
+function Assert-ClaudeFlowInstallerArgsSafe {
+    # The installer passes these values to az. On Windows az is a .cmd shim, and cmd.exe re-reads
+    # & | < > ^ ( ) " % in an argument, which can end it early or run a second command.
+    param([System.Collections.IDictionary]$InstallerArgs)
+    if (-not (Test-ClaudeFlowAzCmdShim)) { return }
+    foreach ($key in @($InstallerArgs.Keys)) {
+        $value = $InstallerArgs[$key]
+        if ($value -isnot [string]) { continue }
+        if ($value -match '[&|<>^()"%\r\n]') {
+            throw "The foundation value -$key '$value' holds '$($Matches[0])', which cmd.exe re-reads in an Azure CLI argument (& | < > ^ ( ) `" %), so it is not passed to Install-ClaudeGateway.ps1. Change it in the decision record or the answers file."
+        }
+    }
+}
+
 function Get-ClaudeFlowFoundationInstallerArgs {
     # The exact Install-ClaudeGateway.ps1 arguments. The plan carries them, so the approval
     # fingerprint binds what the installer is given (ADR-0032).
-    param($Decision, [bool]$Attended, $Record = $null, $Gateway = $null)
+    param($Decision, [bool]$Attended, $Record = $null, [bool]$UpdateRecorded = $false)
     $installerArgs = [ordered]@{}
     if (-not $Attended) { $installerArgs['Yes'] = $true }
     # The flow's FinOps step follows the installer, so the installer does not offer it.
     $installerArgs['SkipFinOpsOffer'] = $true
-    foreach ($pair in (Get-ClaudeFlowFoundationInstallerMap).GetEnumerator()) {
-        $name = [string]$pair.Value
-        if ($Decision -and $Decision.PSObject.Properties.Name -contains $name -and $null -ne $Decision.$name -and [string]$Decision.$name -ne '') { $installerArgs[$pair.Key] = $Decision.$name }
+    # Discovery read the gateway in this subscription, so the installer is given the same one.
+    $subscription = Get-ClaudeFlowRecordSubscription -Record $Record
+    if ($subscription) {
+        if (-not (Test-ClaudeFlowSubscriptionId $subscription)) {
+            throw "The record names the subscription '$subscription', which is not a subscription id, so discovery and Install-ClaudeGateway.ps1 could use different subscriptions. Record the id instead (az account show --query id -o tsv)."
+        }
+        $installerArgs['SubscriptionId'] = $subscription
+    }
+    $skip = @('SubscriptionId')
+    if ($UpdateRecorded) {
+        # -ExistingApimName takes the installer's reuse path, which adopts the gateway's own region,
+        # tier, name and publisher, so none of those is passed.
+        foreach ($value in @([string]$Record.apimName, [string]$Record.resourceGroup)) {
+            if ($value -notmatch '^[A-Za-z0-9._-]{1,90}$') {
+                throw "The recorded gateway '$([string]$Record.resourceGroup)/$([string]$Record.apimName)' has characters that cmd.exe would re-read in an Azure CLI argument, so it is not passed to Install-ClaudeGateway.ps1."
+            }
+        }
+        $installerArgs['ExistingApimName'] = [string]$Record.apimName
+        $installerArgs['ResourceGroup'] = [string]$Record.resourceGroup
+        $skip += @('ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku')
+    }
+    # Updating in a console, the installer asks every other question; otherwise it takes the record's values.
+    if (-not ($UpdateRecorded -and $Attended)) {
+        foreach ($pair in (Get-ClaudeFlowFoundationInstallerMap).GetEnumerator()) {
+            if ($pair.Key -in $skip) { continue }
+            $name = [string]$pair.Value
+            if ($Decision -and $Decision.PSObject.Properties.Name -contains $name -and $null -ne $Decision.$name -and [string]$Decision.$name -ne '') { $installerArgs[$pair.Key] = $Decision.$name }
+        }
     }
     # Unattended, the installer refuses the projection without its deployer.
     if (-not $Attended -and [string]$installerArgs['EntitlementStore'] -eq 'projection') { $installerArgs['DeployProjection'] = $true }
-    if (-not $Attended -and $Record -and $Record.apimName -and $Record.resourceGroup) {
-        # Under -Yes the installer's reuse menu takes 'create a new one', so it cannot reuse a gateway
-        # by choice. It targets apim-<prefix> in the recorded group instead, keeping the live tier,
-        # region and publisher; the tier changes through -Change sku.
-        $name = [string]$Record.apimName
-        if ($name -notmatch '^apim-(.+)$') {
-            throw "The recorded gateway '$name' is not named apim-<prefix>, so Install-ClaudeGateway.ps1 -Yes cannot target it. Run -Change foundation in a console, where the installer's reuse menu offers it."
-        }
-        $prefix = $Matches[1]
-        # The installer passes these to az, a .cmd shim that cmd.exe re-reads (see Discovery.ps1).
-        foreach ($value in @($name, [string]$Record.resourceGroup)) {
-            if ($value -notmatch '^[A-Za-z0-9._-]{1,90}$') {
-                throw "The recorded gateway '$([string]$Record.resourceGroup)/$name' has characters that cmd.exe would re-read in an Azure CLI argument, so it is not passed to Install-ClaudeGateway.ps1."
-            }
-        }
-        $installerArgs['NamePrefix'] = $prefix
-        $installerArgs['ResourceGroup'] = [string]$Record.resourceGroup
-        if ($Gateway -and $Gateway.sku) { $installerArgs['Sku'] = [string]$Gateway.sku }
-        if ($Gateway -and $Gateway.location) { $installerArgs['Location'] = [string]$Gateway.location }
-        if ($Gateway -and $Gateway.publisherEmail) { $installerArgs['PublisherEmail'] = [string]$Gateway.publisherEmail }
-    }
+    Assert-ClaudeFlowInstallerArgsSafe -InstallerArgs $installerArgs
     return $installerArgs
 }
 
@@ -189,6 +219,14 @@ function Get-ClaudeFlowStepPlan {
     $rollback = 'Delete or restore the resource group after taking a gateway backup'
     # Setup runs the installer only when no gateway is recorded; Change foundation always; Guide never.
     $runsInstaller = ($context.Action -eq 'Change') -or ($context.Action -eq 'Setup' -and -not $existing)
+    # A recorded gateway keeps its own tier and region, so its price is what is running now.
+    $runningCost = {
+        $liveSku = if ($context.Gateway -and $context.Gateway.sku) { [string]$context.Gateway.sku } else { $sku }
+        $liveLocation = if ($context.Gateway -and $context.Gateway.location) { [string]$context.Gateway.location } else { $location }
+        $cost = Get-ClaudeFlowFoundationCost -Sku $liveSku -Location $liveLocation
+        $cost.Item = "$($cost.Item), already running"
+        $cost
+    }
 
     if (-not $runsInstaller) {
         $check = if ($existing) {
@@ -196,51 +234,65 @@ function Get-ClaudeFlowStepPlan {
         } else {
             New-ClaudeFlowAction -Verb Check -Target 'the decision record' -Detail 'No gateway is recorded; Setup creates one'
         }
-        $running = Get-ClaudeFlowFoundationCost -Sku $sku -Location $location
-        if ($existing) { $running.Item = "$($running.Item), already running" }
+        $cost = if ($existing) { & $runningCost } else { Get-ClaudeFlowFoundationCost -Sku $sku -Location $location }
         return New-ClaudeFlowPlan -Step Foundation -Summary $(if ($existing) { 'Existing gateway foundation is recorded' } else { 'No gateway foundation is recorded' }) `
             -Actions @($check) `
-            -Costs @($running) `
+            -Costs @($cost) `
             -Implications @('To change the gateway''s own settings, run .\Start-ClaudeGateway.ps1 -Action Change -Change foundation, which runs Install-ClaudeGateway.ps1 and asks its questions.') `
             -Requires $requires -Reversible $true -Rollback $rollback `
             -Data @{ sku = $sku; entitlementStore = $d.entitlementStore; authMode = $d.authMode; desktopSignInKind = $d.desktopSignInKind; inputs = $inputs; runsInstaller = $false; attended = $context.Attended; asksInConsole = $false }
     }
 
-    $installerArgs = Get-ClaudeFlowFoundationInstallerArgs -Decision $d -Attended $context.Attended -Record $(if ($context.Action -eq 'Change') { $Record } else { $null }) -Gateway $context.Gateway
+    # The installer runs over a recorded gateway only for Change, and then it updates that gateway.
+    $updateRecorded = $existing
+    $installerArgs = Get-ClaudeFlowFoundationInstallerArgs -Decision $d -Attended $context.Attended -Record $Record -UpdateRecorded $updateRecorded
+    $target = "$($Record.resourceGroup)/$($Record.apimName)"
     if ($context.Attended) {
-        $passed = @($installerArgs.Keys | Where-Object { $_ -ne 'SkipFinOpsOffer' })
-        $passing = if ($passed.Count) { '; it is given the recorded ' + (@($passed | ForEach-Object { "-$_" }) -join ', ') } else { '' }
-        $reuse = if ($existing) { "; its reuse menu offers $($Record.resourceGroup)/$($Record.apimName)" } else { '' }
-        return New-ClaudeFlowPlan -Step Foundation -Summary 'Install-ClaudeGateway.ps1 asks its own questions and sets up the gateway' `
-            -Actions @(New-ClaudeFlowAction -Verb Run -Target 'Install-ClaudeGateway.ps1' -Detail ('asks for ' + ($script:ClaudeFlowInstallerTopics -join '; ') + $passing + $reuse)) `
-            -Costs @(New-ClaudeFlowCost -Item 'API Management' -Source 'Azure Retail Prices API, at the installer''s region and tier prompts' -UnknownReason 'chosen at the installer''s region and tier prompts, which show each monthly list price') `
-            -Implications @('Install-ClaudeGateway.ps1 creates nothing until you confirm its summary, which states the monthly price.', 'After the installer, the flow reads the new gateway and asks the remaining questions, priced in its region.') `
+        $topics = if ($updateRecorded) { @($script:ClaudeFlowInstallerUpdateTopics) } else { @($script:ClaudeFlowInstallerTopics) }
+        if ($installerArgs.Contains('SubscriptionId')) { $topics = @($topics | Where-Object { $_ -ne 'the subscription' }) }
+        elseif ($updateRecorded) { $topics = @('the subscription') + $topics }
+        if ($updateRecorded) {
+            $summary = 'Install-ClaudeGateway.ps1 updates the recorded gateway and asks its other questions'
+            $detail = "updates $target, keeping its region, tier, name and publisher; asks for " + ($topics -join '; ')
+            $costs = @(& $runningCost)
+            $implications = @('Install-ClaudeGateway.ps1 changes nothing until you confirm its summary.', 'The tier changes through .\Start-ClaudeGateway.ps1 -Action Change -Change sku.')
+        }
+        else {
+            $passed = @($installerArgs.Keys | Where-Object { $_ -ne 'SkipFinOpsOffer' })
+            $passing = if ($passed.Count) { '; it is given the recorded ' + (@($passed | ForEach-Object { "-$_" }) -join ', ') } else { '' }
+            $summary = 'Install-ClaudeGateway.ps1 asks its own questions and sets up the gateway'
+            $detail = 'asks for ' + ($topics -join '; ') + $passing
+            $costs = @(New-ClaudeFlowCost -Item 'API Management' -Source 'Azure Retail Prices API, at the installer''s region and tier prompts' -UnknownReason 'chosen at the installer''s region and tier prompts, which show each monthly list price')
+            $implications = @('Install-ClaudeGateway.ps1 creates nothing until you confirm its summary, which states the monthly price.', 'After the installer, the flow reads the new gateway and asks the remaining questions, priced in its region.')
+        }
+        return New-ClaudeFlowPlan -Step Foundation -Summary $summary `
+            -Actions @(New-ClaudeFlowAction -Verb Run -Target 'Install-ClaudeGateway.ps1' -Detail $detail) `
+            -Costs $costs -Implications $implications `
             -Requires $requires -Reversible $true -Rollback $rollback `
             -Data @{ sku = $d.sku; inputs = $inputs; installerArgs = $installerArgs; runsInstaller = $true; attended = $true; asksInConsole = $true }
     }
 
-    if ($existing) {
-        $target = "$($installerArgs['ResourceGroup'])/apim-$($installerArgs['NamePrefix'])"
-        $shape = @(@($installerArgs['Sku'], $installerArgs['Location']) | Where-Object { $_ }) -join ' in '
-        $actions = @(New-ClaudeFlowAction -Verb Run -Target 'Install-ClaudeGateway.ps1 -Yes' -Detail "against $target$(if ($shape) { " ($shape)" }), with the recorded foundation values and the installer's defaults for the rest")
+    if ($updateRecorded) {
+        $actions = @(New-ClaudeFlowAction -Verb Run -Target 'Install-ClaudeGateway.ps1 -Yes' -Detail "updates $target, keeping its region, tier, name and publisher, with the recorded foundation values and the installer's defaults for the rest")
         $summary = 'Run the installer again against the recorded gateway'
+        $costs = @(& $runningCost)
     } else {
         $rg = if ($inputs.Contains('resourceGroup')) { [string]$inputs['resourceGroup'] } else { '(resource group chosen by the installer)' }
         $apim = if ($inputs.Contains('namePrefix')) { "apim-$($inputs['namePrefix'])" } else { 'apim-(name chosen by the installer)' }
         $region = if ($inputs.Contains('location')) { [string]$inputs['location'] } else { '(region chosen by the installer)' }
         $foundry = if ($inputs.Contains('foundryAccount')) { "Foundry $($inputs['foundryAccount'])$(if ($inputs.Contains('foundryResourceGroup')) { " in $($inputs['foundryResourceGroup'])" })" } else { 'Foundry account chosen by the installer' }
-        $subscription = if ($inputs.Contains('subscriptionId')) { "; subscription $($inputs['subscriptionId'])" } else { '' }
+        $subscription = if ($installerArgs.Contains('SubscriptionId')) { "; subscription $($installerArgs['SubscriptionId'])" } else { '' }
         $actions = @(New-ClaudeFlowAction -Verb Create -Target "$rg/$apim" -Detail "$sku API Management in $region; $foundry$subscription")
         $summary = "Set up a $sku governed gateway"
+        $costs = @(Get-ClaudeFlowFoundationCost -Sku $sku -Location $location)
     }
     New-ClaudeFlowPlan -Step Foundation -Summary $summary `
         -Actions $actions `
-        -Costs @(Get-ClaudeFlowFoundationCost -Sku $sku -Location $location) `
+        -Costs $costs `
         -Implications @('All later choices are written into one decision record and developer handover.', 'Installer implementation remains Install-ClaudeGateway.ps1, run with -Yes: it takes the recorded values and its own defaults for the rest.') `
         -Requires $requires -Reversible $true -Rollback $rollback `
         -Data @{ sku = $sku; entitlementStore = $d.entitlementStore; authMode = $d.authMode; desktopSignInKind = $d.desktopSignInKind; inputs = $inputs; installerArgs = $installerArgs; runsInstaller = $true; attended = $false; asksInConsole = $false }
 }
-
 function Get-ClaudeFlowFileStamp {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return '' }
@@ -257,7 +309,6 @@ function Merge-ClaudeFlowFoundationDecision {
         if ($Config.PSObject.Properties.Name -contains $name -and $Config.$name) { $merged[$name] = $Config.$name }
     }
     if ($Config.PSObject.Properties.Name -contains 'desktopSignIn' -and $Config.desktopSignIn -and $Config.desktopSignIn.kind) { $merged['desktopSignInKind'] = [string]$Config.desktopSignIn.kind }
-    if ([string]$Config.apimName -match '^apim-(.+)$') { $merged['namePrefix'] = $Matches[1] }
     return [pscustomobject]$merged
 }
 

@@ -40,6 +40,10 @@ param(
     [ValidateSet('BasicV2', 'StandardV2', 'PremiumV2')]
     [string]$Sku,
 
+    # Update this existing v2 gateway, taking the reuse path without the menu: its region, tier,
+    # name and publisher are kept. The guided flow's -Change foundation passes it (ADR-0032).
+    [string]$ExistingApimName,
+
     [ValidateSet('named-value','projection')]
     [string]$EntitlementStore,
     [ValidateSet('private','public')]
@@ -234,6 +238,23 @@ function Write-NextSteps {
     }
 }
 
+# On Windows az is az.cmd, and cmd.exe re-reads & | < > ^ ( ) " % in an argument: such a value ends
+# the argument early or runs a second command. Checked before the summary, so nothing is created.
+function Assert-AzArgumentsSafe {
+    param(
+        [System.Collections.IDictionary]$Values,
+        [bool]$Shim = [bool]((Get-Command az -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source -match '\.(cmd|bat)$')
+    )
+    if (-not $Shim) { return }
+    foreach ($name in @($Values.Keys)) {
+        $value = [string]$Values[$name]
+        if ($value -match '[&|<>^()"%\r\n]') {
+            Write-Bad "$name '$value' holds '$($Matches[0])', which cmd.exe re-reads in an Azure CLI argument on Windows."
+            throw "Stopped before the summary: $name holds a character that the Azure CLI's cmd.exe shim re-reads (& | < > ^ ( ) `" %). Nothing was created."
+        }
+    }
+}
+
 # --------------------------------------------------------------- 0. sign-in
 
 . (Join-Path $root 'scripts/Show-Banner.ps1')
@@ -303,6 +324,7 @@ Write-Ok "subscription: $subName"
 # ------------------------------------------------------- 1. Foundry account
 
 Write-Step 'Foundry account'
+$pendingDeployment = $null
 if (-not $FoundryAccount) {
     Write-Note 'Looking for accounts with a Claude deployment...'
 
@@ -411,12 +433,15 @@ if (-not $FoundryAccount) {
             $providerData = @{ organizationName = "$org".Trim(); industry = "$industry".Trim(); countryCode = "$country".Trim().ToUpper() }
         }
 
-        Write-Note "deploying $($chosen.model) to $($target.name)..."
-        $made = New-ClaudeDeployment -Account $target.name -ResourceGroup $target.rg `
-            -Model $chosen.model -Version $chosen.version -Sku $chosen.sku -Capacity ([int]$cap) -ProviderData $providerData
-        Write-Ok "deployed $(Format-ClaudeDeployment $made)"
+        # Created after the summary is confirmed, with everything else: the summary is the approval,
+        # and the guided flow asks for no other one before the installer (ADR-0032).
+        $pendingDeployment = [pscustomobject]@{
+            name = $chosen.model; model = $chosen.model; version = $chosen.version; sku = $chosen.sku; capacity = [int]$cap
+            account = $target.name; resourceGroup = $target.rg
+        }
+        Write-Note "$($chosen.model) is deployed to $($target.name) after you confirm the summary."
 
-        $withClaude += [pscustomobject]@{ Name = $target.name; Rg = $target.rg; Loc = $target.loc; Models = $made.name }
+        $withClaude += [pscustomobject]@{ Name = $target.name; Rg = $target.rg; Loc = $target.loc; Models = "$($chosen.model) (deployed after the summary)" }
     }
 
     Write-Host ''
@@ -454,6 +479,7 @@ Write-Ok "$FoundryAccount (rg $FoundryResourceGroup)"
 # a model the account does not serve, and the developer sees a refusal naming a
 # model that looks correct.
 $deployed = @(Get-ClaudeDeployment -Account $FoundryAccount -ResourceGroup $FoundryResourceGroup)
+if ($pendingDeployment -and $pendingDeployment.account -eq $FoundryAccount) { $deployed += $pendingDeployment }
 $modelsStd = ''
 $modelsPrm = ''
 $recordedDeployments = @()
@@ -494,6 +520,50 @@ else {
 # ------------------------------------------------------------- 2. placement
 
 Write-Step 'Where to put the gateway'
+
+# Reusing an instance adopts its group, region, tier, publisher and name. Dot-sourced, so it sets
+# these script variables; used by -ExistingApimName and by the reuse menu below.
+$ExistingApim = ''
+$useExistingGateway = {
+    param($instance)
+    $ExistingApim = $instance.name
+    # The children are parented to the APIM, so the deployment has to target its resource group,
+    # not whatever was answered above.
+    if ($ResourceGroup -and $ResourceGroup -ne $instance.resourceGroup) {
+        Write-Note "Deploying into '$($instance.resourceGroup)' instead - that is where $($instance.name) lives."
+    }
+    $ResourceGroup = $instance.resourceGroup
+    $Location = ConvertTo-ClaudeArmRegionName ([string]$instance.location)
+    $Sku = $instance.sku.name
+    $PublisherEmail = $instance.publisherEmail
+    # Stable, so re-running does not create a fresh Application Insights and Log Analytics
+    # workspace every time.
+    $NamePrefix = ($instance.name -replace '^apim-', '')
+    Write-Ok "reusing $($instance.name) ($($instance.sku.name), $($instance.resourceGroup))"
+    if ($instance.identity.type -and $instance.identity.type -notmatch 'SystemAssigned') {
+        Write-Warn2 "$($instance.name) has identity '$($instance.identity.type)'. Deploying sets SystemAssigned, which the gateway needs to call Foundry."
+    }
+}
+if ($ExistingApimName) {
+    $named = $null
+    if ($ResourceGroup) {
+        $json = Invoke-AzOptional { az apim show -g $ResourceGroup -n $ExistingApimName -o json }
+        if ($json) { $named = ($json | Out-String) | ConvertFrom-Json }
+        if ($named -and -not $named.resourceGroup) { $named | Add-Member -NotePropertyName resourceGroup -NotePropertyValue $ResourceGroup -Force }
+    }
+    else {
+        $listed = az apim list -o json 2>$null | ConvertFrom-Json
+        $named = @($listed | Where-Object { $_.name -eq $ExistingApimName })[0]
+    }
+    if (-not $named) {
+        Write-Bad "API Management '$ExistingApimName' was not found$(if ($ResourceGroup) { " in '$ResourceGroup'" }) in this subscription."
+        throw 'The gateway to update was not found. Nothing was created.'
+    }
+    if ([string]$named.sku.name -notmatch 'V2$') {
+        throw "$ExistingApimName is $($named.sku.name); only v2 tiers meter Anthropic tokens, so budgets would read zero. Nothing was created."
+    }
+    . $useExistingGateway $named
+}
 if (-not $Location) { $Location = az cognitiveservices account show -g $FoundryResourceGroup -n $FoundryAccount --query location -o tsv }
 if (-not $Location) {
     Write-Bad "Could not resolve the location of '$FoundryAccount'."
@@ -504,7 +574,8 @@ $ResourceGroup = if ($ResourceGroup) { $ResourceGroup } else {
     Read-Default -Prompt 'Resource group' -Default $FoundryResourceGroup `
         -Help 'Created if it does not exist. Same region as Foundry keeps latency down.'
 }
-$Location = Read-GatewayRegion -Default $Location
+# A gateway being updated keeps its region.
+$Location = if ($ExistingApim) { $Location } else { Read-GatewayRegion -Default $Location }
 
 # ------------------------------------------------- reuse an existing gateway
 #
@@ -516,7 +587,6 @@ $Location = Read-GatewayRegion -Default $Location
 # Only v2 SKUs are offered. Classic tiers attach the policies happily but meter
 # zero Anthropic tokens, so every budget silently reads as zero usage.
 
-$ExistingApim = ''
 if (-not $NamePrefix) {
     $allApim = az apim list -o json 2>$null | ConvertFrom-Json
     $reusable = @($allApim | Where-Object { $_.sku.name -match 'V2$' })
@@ -545,25 +615,7 @@ if (-not $NamePrefix) {
             }
 
         if ([int]$pick -le $reusable.Count) {
-            $chosen = $reusable[[int]$pick - 1]
-            $ExistingApim = $chosen.name
-            # The children are parented to the APIM, so the deployment has to
-            # target its resource group, not whatever was answered above.
-            if ($ResourceGroup -ne $chosen.resourceGroup) {
-                Write-Note "Deploying into '$($chosen.resourceGroup)' instead - that is where $($chosen.name) lives."
-                $ResourceGroup = $chosen.resourceGroup
-            }
-            $Location = $chosen.location
-            $Sku      = $chosen.sku.name
-            $PublisherEmail = $chosen.publisherEmail
-            # Stable, so re-running does not create a fresh Application Insights
-            # and Log Analytics workspace every time.
-            $NamePrefix = ($chosen.name -replace '^apim-', '')
-            Write-Ok "reusing $($chosen.name) ($($chosen.sku.name), $($chosen.resourceGroup))"
-
-            if ($chosen.identity.type -and $chosen.identity.type -notmatch 'SystemAssigned') {
-                Write-Warn2 "$($chosen.name) has identity '$($chosen.identity.type)'. Deploying sets SystemAssigned, which the gateway needs to call Foundry."
-            }
+            . $useExistingGateway $reusable[[int]$pick - 1]
         }
     }
 }
@@ -1070,6 +1122,13 @@ Write-Note 'Membership of these Entra groups is what grants access.'
 $StandardGroup = Read-Default -Prompt 'Standard tier group' -Default $StandardGroup
 $PremiumGroup  = Read-Default -Prompt 'Premium tier group'  -Default $PremiumGroup
 
+# Every value below reaches az. Checked before the summary, so a refusal creates nothing (ADR-0032).
+Assert-AzArgumentsSafe -Values ([ordered]@{
+    SubscriptionId = $SubscriptionId; FoundryAccount = $FoundryAccount; FoundryResourceGroup = $FoundryResourceGroup
+    ResourceGroup = $ResourceGroup; Location = $Location; NamePrefix = $NamePrefix; ExistingApimName = $ExistingApim
+    PublisherEmail = $PublisherEmail; StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup
+})
+
 # --------------------------------------------------------------- 5. summary
 
 $apimName = if ($ExistingApim) { $ExistingApim } else { "apim-$NamePrefix" }
@@ -1090,6 +1149,9 @@ $rows = [ordered]@{
     ' '                     = ''
     'Entra groups'          = "$StandardGroup, $PremiumGroup"
     'Developer sign-in'     = $AuthMode
+}
+if ($pendingDeployment) {
+    $rows.Insert(2, 'Claude deployment', ("{0} v{1} on {2}, {3} capacity {4} - deployed first, after you confirm" -f $pendingDeployment.model, $pendingDeployment.version, $pendingDeployment.account, $pendingDeployment.sku, $pendingDeployment.capacity))
 }
 foreach ($k in $rows.Keys) {
     if ([string]::IsNullOrWhiteSpace($k)) { Write-Host '' ; continue }
@@ -1130,6 +1192,13 @@ if (-not (Read-YesNo $(if ($ExistingApim) { 'Apply this to the existing gateway?
 # ---------------------------------------------------------------- 6. deploy
 
 Write-Head 'Deploying'
+
+if ($pendingDeployment) {
+    Write-Step 'Claude deployment'
+    $made = New-ClaudeDeployment -Account $pendingDeployment.account -ResourceGroup $pendingDeployment.resourceGroup `
+        -Model $pendingDeployment.model -Version $pendingDeployment.version -Sku $pendingDeployment.sku -Capacity $pendingDeployment.capacity -ProviderData $providerData
+    Write-Ok "deployed $(Format-ClaudeDeployment $made)"
+}
 
 Write-Step 'Resource group'
 # A resource group cannot be moved, and every resource below takes its location

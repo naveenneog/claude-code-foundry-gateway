@@ -204,6 +204,28 @@ function Get-ClaudeFlowReleaseInfo {
     [pscustomobject]@{ version = [string]$version; commit = [string]$commit }
 }
 
+function Get-ClaudeFlowRecordSubscription {
+    # The one subscription the record names: top level first, then the foundation decision. Discovery
+    # and the installer both use it, so they read and write the same subscription (ADR-0032).
+    param($Record)
+    if ($null -eq $Record) { return '' }
+    if ($Record.PSObject.Properties.Name -contains 'subscriptionId' -and $Record.subscriptionId) { return ([string]$Record.subscriptionId).Trim() }
+    $decision = Get-ClaudeDecision -Record $Record -Key foundation
+    if ($decision -and $decision.PSObject.Properties.Name -contains 'subscriptionId' -and $decision.subscriptionId) { return ([string]$decision.subscriptionId).Trim() }
+    return ''
+}
+
+function Test-ClaudeFlowSubscriptionId {
+    param([string]$Value)
+    return ($Value -match '^[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}$')
+}
+
+function Test-ClaudeFlowAzCmdShim {
+    # On Windows az is az.cmd, and cmd.exe re-reads & | < > ^ ( ) " % in the arguments it is given.
+    $az = Get-Command az -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    return [bool]($az -and $az.Source -match '\.(cmd|bat)$')
+}
+
 function Get-ClaudeFlowStepOrder {
     # Dependencies first; steps with no order between them keep the order they were given in.
     param([object[]]$Steps = @())
