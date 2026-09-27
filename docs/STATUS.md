@@ -38,6 +38,19 @@ Acceptance criteria:
 Baseline audit: `node .ironclad/gate.mjs --stage packet --no-run` passed on `aa7ed19`
 (20 passed, 2 warned, 0 failed, 4 skipped). Existing warnings are file size and open unknowns.
 
+First implementation green: `Test-ModelLifecycle.ps1`, 69 assertions, 0 failed on PowerShell 7
+and Windows PowerShell 5.1. RED on both hosts was `model lifecycle implementation exists`.
+The real flow, standalone command, backup and profile generators run against an offline Azure
+stub. Related FlowContract, FlowLifecycle, ModelDeployment, GovernanceAuthority and
+ModelsAndPlugins suites passed. Mutations, isolated live proof and packet gate remain pending.
+
+Read-only reference drift, 2026-09-27 20:19Z: both `models-standard` and `models-premium` are
+`,,` (allow all), and `turnstile-integration` reports `governanceAuthority=Turnstile`,
+`budgetAuthority=Gateway`. This differs from the supplied starting inventory. The Foundry
+account has all four stated Claude deployments in `Succeeded`, version 2, GlobalStandard.
+No reference write was made. The owner plan will describe the current state and refuse an
+apply over Turnstile ownership.
+
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
 
 The owner's test on 2026-09-27: `Start-ClaudeGateway.ps1` showed nothing for a long time and asked

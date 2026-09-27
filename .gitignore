@@ -31,6 +31,7 @@ onboarding/*.png
 onboarding/claude-gateway.json
 onboarding/aum-service.json
 onboarding/profiles/
+onboarding/model-snapshots/
 
 # Raw transcripts are inputs to the rendered images; the images are what ship.
 docs/transcripts/

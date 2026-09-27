@@ -502,7 +502,7 @@ if ($deployed.Count) {
     # Premium gets everything. Standard gets everything except Opus, which is
     # five times the price of Sonnet per output token - that is the distinction
     # the two tiers exist to make. Both are editable afterwards with
-    # Set-ClaudeCapability.ps1, so this only has to be a sensible start.
+    # Sync-ClaudeModels.ps1, so this only has to be a sensible start.
     $all = @($deployed.name | Sort-Object -Unique)
     $nonOpus = @($deployed | Where-Object { $_.model -notlike '*opus*' } | ForEach-Object { $_.name } | Sort-Object -Unique)
     if (-not $nonOpus.Count) { $nonOpus = $all }

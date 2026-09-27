@@ -68,6 +68,10 @@ non-secret named-value snapshot. The standalone command uses the same preparatio
 failure prevents all managed writes. The apply rechecks relevant state again before writing,
 changes only the two model named values through the failure-reporting writer, and reads them
 back. Other named values, membership, entitlements, quotas and policies are untouched.
+The existing Turnstile governance-authority guard applies to models as it does to
+`Set-ClaudeTier.ps1`: a preview remains available, but apply refuses Turnstile-owned tiers.
+No ownership switch is implicit. A read-only reference check at 2026-09-27 20:19Z found
+Turnstile ownership and two unrestricted lists, unlike the owner's earlier inventory.
 
 Writes across Azure and the filesystem are not an atomic transaction. A failed write stops
 the operation and names the snapshot and the need to replan; no success is recorded.

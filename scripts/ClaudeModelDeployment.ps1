@@ -65,7 +65,7 @@ function Select-ClaudeDeployment {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true, Position = 0)][AllowEmptyCollection()][AllowNull()]$Deployments)
 
-    $items = @($Deployments) | Where-Object { $_ }
+    $items = @(@($Deployments) | Where-Object { $_ })
     if (-not $items.Count) { return @() }
     return @($items | Where-Object {
         $_.model -and (

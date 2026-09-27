@@ -196,6 +196,7 @@ try {
     Invoke-Check 'Business unit chargeback'                'Test-BusinessUnits.ps1'
     Invoke-Check 'Teams and the budget cascade'            'Test-Teams.ps1'
     Invoke-Check 'Model discovery and deployment'          'Test-ModelDeployment.ps1'
+    Invoke-Check 'Model lifecycle and tier client handover' 'Test-ModelLifecycle.ps1'
     Invoke-Check 'Client attribution and the workbook'     'Test-Observability.ps1'
     Invoke-Check 'Scripts ask for what they were not given' 'Test-ClaudeChoice.ps1'
     Invoke-Check 'USD budget scripts and gateway contracts' 'Test-UsdBudgets.ps1'
