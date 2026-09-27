@@ -46,11 +46,11 @@ defaults for the budgets, request ceiling, groups and Choices, since only
 `-Change foundation` resets them. Filed as P73 in the [ROADMAP](ROADMAP.md).
 
 Mutations, each in its own copy of the worktree, counted as caught only when the suite ran its
-baseline number of checks and at least one failed: 24 of 24 caught. The first run caught 20 of 22.
+baseline number of checks and at least one failed: 25 of 25 caught. The first run caught 20 of 22.
 The two survivors were the budget merge, masked because the round trip's answers already put the
 budgets in the decision, and Status with no record file, masked by the branch for a record
 without a gateway. The tests now check the merge from a decision that holds no budgets, and Status
-in both cases.
+in both cases. The 25th, added with the last fix, keeps a resolver access for a named-value store.
 
 - [x] `tests/Test-FlowPermutations.ps1` runs the real orchestrator, discovery and Foundation step,
       with a stub installer and a stub Azure CLI, over action (Setup, Change foundation, Guide,
