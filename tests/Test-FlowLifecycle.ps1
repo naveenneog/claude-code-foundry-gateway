@@ -148,6 +148,26 @@ Assert 'standalone update writes release and record only after applying' ($updat
 Assert 'plans do not call Set-ApimNamedValue directly' ((Get-Content (Join-Path $root 'scripts\flow\migrations\0002-policy-and-named-values.ps1') -Raw).IndexOf('function Get-ClaudeFlowMigrationPlan') -lt (Get-Content (Join-Path $root 'scripts\flow\migrations\0002-policy-and-named-values.ps1') -Raw).IndexOf('function Invoke-ClaudeFlowMigration'))
 
 Write-Host ''
+Write-Host 'P66 lifecycle - live discovery reads the CLI shape' -ForegroundColor Cyan
+# az apim nv list returns flattened objects (name, value, secret at the top level). Measured
+# 2026-09-27 on a gateway installed by the current release: reading properties.value made every
+# value empty, so Update planned a false "whitespace/empty -> disabled URI sentinel" change.
+$liveShape = & {
+    function az {
+        $joined = $args -join ' '
+        if ($joined -like 'apim show*') { return '{"id":"/subscriptions/s1/resourceGroups/rg-x/providers/Microsoft.ApiManagement/service/apim-x","location":"eastus2","sku":{"name":"BasicV2","capacity":1}}' }
+        if ($joined -like 'apim nv list*') { return '[{"name":"external-idp-extra-audience","value":"urn:disabled:claude-extra-audience","secret":false},{"name":"entitlement-source","value":"named-value","secret":false},{"name":"a-secret","value":null,"secret":true}]' }
+        if ($joined -like 'account get-access-token*') { return 'token' }
+        throw "unexpected az $joined"
+    }
+    function Invoke-RestMethod { [pscustomobject]@{ properties = [pscustomobject]@{ value = '<policies />' } } }
+    Get-ClaudeFlowLifecycleLiveDiscovery -ResourceGroup rg-x -ApimName apim-x
+}
+$liveMap = Get-ClaudeFlowLifecycleNamedValueMap -Discovery $liveShape
+Assert 'live discovery reads named-value values from the CLI output' ($liveMap['external-idp-extra-audience'] -eq 'urn:disabled:claude-extra-audience' -and $liveMap['entitlement-source'] -eq 'named-value') (($liveMap.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join '; ')
+Assert 'live discovery leaves secret named values out' (-not $liveMap.ContainsKey('a-secret'))
+
+Write-Host ''
 if ($fail) { Write-Host "$fail assertion(s) failed." -ForegroundColor Red; exit 1 }
 Write-Host 'Lifecycle flow contract holds.' -ForegroundColor Green
 exit 0

@@ -780,6 +780,11 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **Update planned a false change on every current gateway.** Live discovery read named values
+  as `properties.value`, but `az apim nv list` returns flattened objects, so every value read as
+  empty and migration 0002 always proposed "whitespace/empty -> disabled URI sentinel" for the
+  Desktop audience. It reads either shape now and leaves secret values out. Measured 2026-09-27:
+  on a gateway installed by the current release, all three migrations now report no change.
 - **`Sync-ClaudeAccess.ps1` published the tenant's default groups to a gateway installed with
   other group names.** It and `Compare-ClaudeEntitlement.ps1` defaulted to `claude-code-standard`
   and `claude-code-premium`, and the installer's closing instructions run the sync without group

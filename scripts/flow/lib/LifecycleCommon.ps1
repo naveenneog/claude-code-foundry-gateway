@@ -131,9 +131,14 @@ function global:Get-ClaudeFlowLifecycleLiveDiscovery {
         capacity = $apim.sku.capacity
         apimId = $apim.id
         policy = $policy.properties.value
-        namedValues = @($nvs | Where-Object { -not $_.properties.secret } | ForEach-Object {
-            [pscustomobject]@{ name = $_.name; value = $_.properties.value }
-        })
+        # az apim nv list returns flattened objects; ARM returns them under properties.
+        namedValues = @($nvs | Where-Object {
+                $isSecret = if ($_.PSObject.Properties.Name -contains 'properties' -and $_.properties) { $_.properties.secret } else { $_.secret }
+                -not $isSecret
+            } | ForEach-Object {
+                $value = if ($_.PSObject.Properties.Name -contains 'properties' -and $_.properties) { $_.properties.value } else { $_.value }
+                [pscustomobject]@{ name = $_.name; value = $value }
+            })
     }
 }
 
