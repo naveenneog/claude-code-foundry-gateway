@@ -203,6 +203,15 @@ unit emails. A filtered unit's HTML and CSV never contain another unit's people.
 
 ## Deploy scheduled reporting
 
+The guided flow uses `scripts/flow/Reports.ps1` as the product entry point for this
+feature. It collects the same P50 decisions: allowed recipient domains, recipients,
+UTC cron and delivery choice, then calls the existing schedule, recipient and report
+scripts. The plan shows the standing networking estimate for the private report
+deployment, and the usage-priced ACS, storage and job lines. Apply registers or
+updates the schedule, writes recipients through the safe configuration path, and
+generates one real report at the end so the administrator can inspect actual CSV,
+HTML and manifest artifacts before relying on monthly delivery.
+
 ### 1. Publish the code revision
 
 The jobs fetch a **full commit ID already on the repository's origin remote**. A branch

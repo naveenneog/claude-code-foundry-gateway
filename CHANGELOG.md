@@ -29,6 +29,12 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- Guided-flow FinOps modules for tool selection, USD/token budgets, monitoring workbooks
+  and chargeback reports, including a scheduled USD reconciler job definition for
+  deployments without the AUM service.
+- `Register-ClaudeUsdReconciler.ps1` and `infra/usd-reconciler-job.bicep` deploy
+  that no-AUM-service USD reconciler as a five-minute Container Apps scheduled job
+  with a pinned image/commit and least-privilege managed identity.
 - **Guided lifecycle update and change modules (P66).** `scripts/Update-ClaudeGateway.ps1`
   plans and applies ordered migrations for older decision records, current policy hash drift,
   policy-referenced named values and optional job commit pins, with a named-value snapshot before

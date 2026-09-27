@@ -3,17 +3,18 @@
   "id": "usd-budgets",
   "kind": "flow",
   "title": "USD budgets: dated category prices, delayed gateway stops",
-  "subtitle": "P21/P59 - no inference proxy. Exact decimal arithmetic on observed categories; streaming cache writes and invoice reconciliation remain explicit gaps.",
+  "subtitle": "P21/P59 + P66 flow - no inference proxy. Exact decimal arithmetic on observed categories; streaming cache writes and invoice reconciliation remain explicit gaps.",
   "width": 1280,
   "height": 986,
   "outputs": ["docs/images/architecture/usd-budgets.png"],
-  "sources": ["infra/policy.xml", "infra/main.bicep", "scripts/ClaudeUsdBudgets.ps1", "scripts/Sync-ClaudeUsdBudgets.ps1", "service/aum/aum_service/usd_budgets.py", "service/aum/aum_service/usd_reconcile.py", "service/aum/aum_service/usd_service.py", "service/aum/function_app.py", "analytics/chargeback-ledger.kql"],
+  "sources": ["infra/policy.xml", "infra/main.bicep", "infra/usd-reconciler-job.bicep", "scripts/ClaudeUsdBudgets.ps1", "scripts/Sync-ClaudeUsdBudgets.ps1", "scripts/Register-ClaudeUsdReconciler.ps1", "scripts/flow/Budgets.ps1", "service/aum/aum_service/usd_budgets.py", "service/aum/aum_service/usd_reconcile.py", "service/aum/aum_service/usd_service.py", "service/aum/function_app.py", "analytics/chargeback-ledger.kql"],
   "identifiers": {
     "budgets": {"label": "usd-budgets", "source": "infra/main.bicep", "match": "key: 'usd-budgets'"},
     "state": {"label": "usd-budget-state", "source": "infra/main.bicep", "match": "key: 'usd-budget-state'"},
     "api": {"label": "UsdBudgets", "source": "service/aum/aum_service/usd_service.py", "match": "class UsdBudgets:"},
     "timer": {"label": "reconcile_usd_budgets", "source": "service/aum/function_app.py", "match": "def reconcile_usd_budgets("},
     "direct": {"label": "Sync-ClaudeUsdBudgets.ps1", "source": "scripts/Sync-ClaudeUsdBudgets.ps1", "match": "aum_service.usd_command"},
+    "job-template": {"label": "Register-ClaudeUsdReconciler.ps1", "source": "scripts/Register-ClaudeUsdReconciler.ps1", "match": "usd-reconciler-job.bicep"},
     "price": {"label": "price_row", "source": "service/aum/aum_service/usd_budgets.py", "match": "def price_row("},
     "authority": {"label": "check_authority", "source": "service/aum/aum_service/usd_budgets.py", "match": "def check_authority("},
     "usage": {"label": "UsageJson", "source": "infra/policy.xml", "match": "name=\"UsageJson\""},
@@ -48,9 +49,9 @@
       "Nonstream TTL split known; streaming writes remain unknown"
     ]},
     {"id": "reconcile", "x": 446, "y": 382, "w": 385, "h": 200, "tone": "blue", "title": "5 - Reconcile off the request path", "lines": [
-      "[[timer]]: every five minutes",
+      "[[timer]] / [[job-template]]: every five minutes",
       "[[direct]]: on demand",
-      "[[price]]: Decimal, separate categories; an unpriced model is never zero"
+      "[[price]]: Decimal; unpriced is never zero"
     ]},
     {"id": "snapshot", "x": 874, "y": 382, "w": 385, "h": 200, "tone": "blue", "title": "6 - Publish a bounded-age decision", "lines": [
       "[[state]]: scope spend and UTC windows",

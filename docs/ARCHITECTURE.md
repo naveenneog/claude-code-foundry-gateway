@@ -156,7 +156,9 @@ Unpriced models are reported and refused for enforced scopes, never counted as z
 
 The AUM service timer runs every five minutes under its existing identity, lease and
 audit. `Sync-ClaudeUsdBudgets.ps1` invokes the same engine on demand with Azure CLI
-sign-in. State expires after 15 minutes. Ingestion, execution and APIM propagation add
+sign-in. P66's guided Budgets step adds the non-service fallback: a five-minute
+Container Apps job definition pinned to a repository commit, with a managed identity
+limited to gateway named values and workspace reads. State expires after 15 minutes. Ingestion, execution and APIM propagation add
 delay; no hard currency overshoot guarantee is made. Nonstream counts can be complete,
 including both cache-write TTLs. Streaming cache reads depend on capped custom metrics
 and cache writes remain unknown. A known subtotal under budget is not complete spend.

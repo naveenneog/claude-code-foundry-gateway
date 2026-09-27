@@ -395,6 +395,13 @@ every question wrongly and look right doing it. Re-run after editing a query.
 ./scripts/Publish-ClaudeWorkbook.ps1 -Remove
 ```
 
+The guided flow's monitoring step does this for the whole shipped collection. It
+discovers every `analytics/*.kql` source and every `infra/workbook*.json` definition
+at runtime, publishes the saved functions first, then publishes each workbook with a
+stable display name. Adding a new workbook file therefore becomes part of the flow
+without adding another hard-coded list. The step reports the workbook names and their
+sources in the decision history so an administrator can open the matching portal links.
+
 ![Publishing the workbook, naming the workspace it is bound to, the functions it uses, and the portal link to open it](guide/obs-2-publish-workbook.png)
 
 The identifier is derived from the resource group and the display name, so

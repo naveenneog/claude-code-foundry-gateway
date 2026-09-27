@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 
 from azure.identity import AzureCliCredential, ManagedIdentityCredential
 
@@ -13,7 +14,11 @@ def main():
     parser.add_argument("--workspace-id", required=True)
     parser.add_argument("--managed-identity", action="store_true")
     args = parser.parse_args()
-    credential = ManagedIdentityCredential() if args.managed_identity else AzureCliCredential()
+    credential = (
+        ManagedIdentityCredential(client_id=os.environ.get("AZURE_CLIENT_ID"))
+        if args.managed_identity
+        else AzureCliCredential()
+    )
     arm = NamedValues(args.gateway_id, AzureHttp(credential, "https://management.azure.com/.default"))
     logs = LogAnalytics(args.workspace_id, AzureHttp(credential, "https://api.loganalytics.io/.default"))
     print(json.dumps(reconcile_direct(arm, logs), separators=(",", ":"), sort_keys=True))
