@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from contextlib import nullcontext
 from typing import Any
 
 
@@ -14,6 +15,7 @@ class Backend(ABC):
     unit_direct_departments = True
     native_user_budget_records = False
     maximum_boost_days = None
+    identity_independent_reads = frozenset()
 
     @abstractmethod
     def read(self, resource: str, **params: Any) -> dict:
@@ -25,6 +27,12 @@ class Backend(ABC):
 
     def close(self):
         pass
+
+    def read_cycle(self):
+        return nullcontext()
+
+    def prepare_read(self, resource):
+        """Resolve address metadata needed before an identity-independent read."""
 
     def people_filter(self, scope_id):
         return {"department_id": scope_id}

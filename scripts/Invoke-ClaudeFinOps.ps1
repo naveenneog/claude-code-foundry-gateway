@@ -69,6 +69,77 @@ function ConvertFrom-AumBase64JsonValue {
     catch { throw "Invalid JSON named value: $($_.Exception.Message)" }
 }
 
+function Get-AumUsdRead([string]$Action) {
+    switch ($Action) {
+        'usd_budgets' {
+            $doc = ConvertFrom-ClaudeUsdValue $nv['usd-budgets']
+            $items = @()
+            if ($doc.items) {
+                foreach ($entry in $doc.items.PSObject.Properties) {
+                    $parts = $entry.Name.Split(':', 2)
+                    $items += [ordered]@{
+                        scope_type = $parts[0]; scope_id = $parts[1]
+                        amount_usd = [string]$entry.Value.amount_usd
+                        period = [string]$entry.Value.period
+                        price_book_date = [string]$entry.Value.price_book_date
+                        writable = ($nv['turnstile-integration'] -notmatch '(?:^|;)(?:governanceAuthority|budgetAuthority)=Turnstile(?:;|$)')
+                    }
+                }
+            }
+            return [ordered]@{
+                schema_version = 1; currency = 'USD'
+                revision = Get-AumSha256Hex $nv['usd-budgets']
+                price_book_date = [string]$doc.price_book.date
+                items = @($items)
+            }
+        }
+        'usd_status' {
+            $state = ConvertFrom-AumBase64JsonValue $nv['usd-budget-state']
+            if (-not $state.PSObject.Properties.Count) {
+                return [ordered]@{ enabled = $false; fresh = $false; items = [pscustomobject]@{}; reconcile_interval_seconds = 300; state_max_age_seconds = 900 }
+            }
+            if ($state.encoding -eq 'compact-v1') {
+                $expanded = [ordered]@{}
+                foreach ($name in $state.PSObject.Properties.Name) {
+                    if ($name -notin @('encoding', 'periods', 'price_book_date', 'items')) { $expanded[$name] = $state.$name }
+                }
+                $expanded['items'] = [ordered]@{}
+                foreach ($entry in $state.items.PSObject.Properties) {
+                    $parts = $entry.Name.Split(':', 2)
+                    $data = @($entry.Value)
+                    $periodBounds = @($state.periods.PSObject.Properties[$data[0]].Value)
+                    $flags = [int]$data[6]
+                    $expanded['items'][$entry.Name] = [ordered]@{
+                        scope_type = $parts[0]; scope_id = $parts[1]; period = [string]$data[0]
+                        period_start = [string]$periodBounds[0]; period_end = [string]$periodBounds[1]
+                        price_book_date = [string]$state.price_book_date
+                        budget_usd = [string]$data[1]; effective_budget_usd = [string]$data[2]
+                        spent_usd = $data[3]; status = [string]$data[4]; enforcement = [string]$data[5]
+                        exact = (($flags -band 1) -ne 0)
+                        cache_read_known = (($flags -band 2) -ne 0)
+                        cache_write_known = (($flags -band 4) -ne 0)
+                        unpriced_models = @($data[7])
+                    }
+                }
+                $state = [pscustomobject]$expanded
+            }
+            $state | Add-Member -NotePropertyName reconcile_interval_seconds -NotePropertyValue 300 -Force
+            $state | Add-Member -NotePropertyName state_max_age_seconds -NotePropertyValue 900 -Force
+            $state | Add-Member -NotePropertyName enabled -NotePropertyValue $true -Force
+            $state | Add-Member -NotePropertyName fresh -NotePropertyValue $true -Force
+            return $state
+        }
+        'usd_price_book' {
+            $doc = ConvertFrom-ClaudeUsdValue $nv['usd-budgets']
+            return [ordered]@{
+                revision = Get-AumSha256Hex $nv['usd-budgets']
+                price_book = $doc.price_book
+            }
+        }
+        default { throw 'Unsupported USD read.' }
+    }
+}
+
 switch ([string]$request.action) {
     'developer_publish' {
         $arguments = @{ ResourceGroup=$ResourceGroup; ApimName=$ApimName }
@@ -126,65 +197,8 @@ switch ([string]$request.action) {
             usd_supported = $nv.ContainsKey('usd-budgets') -and $nv.ContainsKey('usd-budget-state')
         }
     }
-    'usd_budgets' {
-        $doc = ConvertFrom-ClaudeUsdValue $nv['usd-budgets']
-        $items = @()
-        if ($doc.items) {
-            foreach ($entry in $doc.items.PSObject.Properties) {
-                $parts = $entry.Name.Split(':', 2)
-                $items += [ordered]@{
-                    scope_type = $parts[0]; scope_id = $parts[1]
-                    amount_usd = [string]$entry.Value.amount_usd
-                    period = [string]$entry.Value.period
-                    price_book_date = [string]$entry.Value.price_book_date
-                    writable = ($nv['turnstile-integration'] -notmatch '(?:^|;)(?:governanceAuthority|budgetAuthority)=Turnstile(?:;|$)')
-                }
-            }
-        }
-        $result = [ordered]@{
-            schema_version = 1; currency = 'USD'
-            revision = Get-AumSha256Hex $nv['usd-budgets']
-            price_book_date = [string]$doc.price_book.date
-            items = @($items)
-        }
-    }
-    'usd_status' {
-        $state = ConvertFrom-AumBase64JsonValue $nv['usd-budget-state']
-        if (-not $state.PSObject.Properties.Count) {
-            $result = [ordered]@{ enabled = $false; fresh = $false; items = [pscustomobject]@{}; reconcile_interval_seconds = 300; state_max_age_seconds = 900 }
-        }
-        else {
-            if ($state.encoding -eq 'compact-v1') {
-                $expanded = [ordered]@{}
-                foreach ($name in $state.PSObject.Properties.Name) {
-                    if ($name -notin @('encoding', 'periods', 'price_book_date', 'items')) { $expanded[$name] = $state.$name }
-                }
-                $expanded['items'] = [ordered]@{}
-                foreach ($entry in $state.items.PSObject.Properties) {
-                    $parts = $entry.Name.Split(':', 2)
-                    $data = @($entry.Value)
-                    $periodBounds = @($state.periods.PSObject.Properties[$data[0]].Value)
-                    $flags = [int]$data[6]
-                    $expanded['items'][$entry.Name] = [ordered]@{
-                        scope_type = $parts[0]; scope_id = $parts[1]; period = [string]$data[0]
-                        period_start = [string]$periodBounds[0]; period_end = [string]$periodBounds[1]
-                        price_book_date = [string]$state.price_book_date
-                        budget_usd = [string]$data[1]; effective_budget_usd = [string]$data[2]
-                        spent_usd = $data[3]; status = [string]$data[4]; enforcement = [string]$data[5]
-                        exact = (($flags -band 1) -ne 0)
-                        cache_read_known = (($flags -band 2) -ne 0)
-                        cache_write_known = (($flags -band 4) -ne 0)
-                        unpriced_models = @($data[7])
-                    }
-                }
-                $state = [pscustomobject]$expanded
-            }
-            $result = $state
-            $result | Add-Member -NotePropertyName reconcile_interval_seconds -NotePropertyValue 300 -Force
-            $result | Add-Member -NotePropertyName state_max_age_seconds -NotePropertyValue 900 -Force
-            $result | Add-Member -NotePropertyName enabled -NotePropertyValue $true -Force
-            $result | Add-Member -NotePropertyName fresh -NotePropertyValue $true -Force
-        }
+    { $_ -in 'usd_budgets', 'usd_status' } {
+        $result = Get-AumUsdRead ([string]$request.action)
     }
     'usd_price_book' {
         if ($request.body -and $request.body.price_book) {
@@ -201,11 +215,7 @@ switch ([string]$request.action) {
             $result.price_book = $request.body.price_book
         }
         else {
-            $doc = ConvertFrom-ClaudeUsdValue $nv['usd-budgets']
-            $result = [ordered]@{
-                revision = Get-AumSha256Hex $nv['usd-budgets']
-                price_book = $doc.price_book
-            }
+            $result = Get-AumUsdRead 'usd_price_book'
         }
     }
     { $_ -in 'usd_budget', 'usd_budget_remove' } {
@@ -396,5 +406,17 @@ switch ([string]$request.action) {
         $result.effect = 'Registry and related values read back. New scopes have no budget until explicitly assigned.'
     }
     default { throw 'Unsupported bridge action.' }
+}
+if ($request.action -eq 'read' -and $request.parameters.snapshot) {
+    $result['reads'] = [ordered]@{}
+    foreach ($read in @('usd_budgets', 'usd_status', 'usd_price_book')) {
+        try { $result.reads[$read] = Get-AumUsdRead $read }
+        catch {
+            $result.reads[$read] = @{
+                error = "Cannot read $read from gateway named values. Check the stored USD configuration."
+                exit_code = 7
+            }
+        }
+    }
 }
 $result | ConvertTo-Json -Depth 30 -Compress

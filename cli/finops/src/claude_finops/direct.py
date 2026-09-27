@@ -3,7 +3,12 @@ from fnmatch import fnmatchcase
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from contextvars import ContextVar, copy_context
+from copy import deepcopy
+from threading import RLock
 
 import httpx
 
@@ -24,15 +29,73 @@ class DirectBackend(Backend):
     native_modes = True
     person_budget_period = "day"
     budget_warning_threshold = False
+    identity_independent_reads = frozenset({
+        "overview", "budgets", "catalog", "tiers", "distribution", "trends",
+        "people", "requests", "request", "anomalies", "apply",
+    })
 
     def __init__(self, config):
         self.config = config.validate()
+        self._cycle = ContextVar("direct_read_cycle", default=None)
+        self._prepare_lock = RLock()
+        self._client = None
         self.root = Path(config.repository) if config.repository else Path(__file__).resolve().parents[4]
         self.bridge = self.root / "scripts" / "Invoke-ClaudeFinOps.ps1"
         if not self.bridge.exists():
             raise FinOpsError("Direct mode needs the gateway repository. Set repository in config.")
         if not config.resource_group or not config.apim_name:
             raise FinOpsError("Run aum configure to discover the Direct gateway and workspace, or set resource_group and apim_name.")
+
+    @contextmanager
+    def read_cycle(self):
+        if self._cycle.get() is not None:
+            yield
+            return
+        context = self._cycle.set({"lock": RLock()})
+        try:
+            yield
+        finally:
+            self._cycle.reset(context)
+
+    def _snapshot(self, resource="read"):
+        cycle = self._cycle.get()
+        if cycle is None:
+            return self._bridge(resource)
+        with cycle["lock"]:
+            if "value" not in cycle:
+                cycle["value"] = self._bridge("read", snapshot=True)
+            state = cycle["value"]
+            if resource == "read":
+                return deepcopy(state)
+            result = state.get("reads", {}).get(resource)
+            if not isinstance(result, dict):
+                raise FinOpsError(f"Gateway snapshot has no {resource} result. Refresh the current gateway scripts.", 7)
+            if result.get("error"):
+                raise FinOpsError(result["error"], result.get("exit_code", 7))
+            return deepcopy(result)
+
+    def _invalidate_snapshot(self):
+        cycle = self._cycle.get()
+        if cycle is not None:
+            with cycle["lock"]:
+                cycle.pop("value", None)
+
+    def prepare_read(self, resource):
+        if resource in {"catalog", "tiers", "apply"}:
+            return
+        with self._prepare_lock:
+            if not self.config.subscription:
+                try:
+                    subscription = json.loads(self._az("account", "show", "-o", "json"))["id"]
+                    self.config.subscription = str(UUID(subscription))
+                except (ValueError, KeyError, TypeError, AttributeError):
+                    raise FinOpsError("Cannot determine the selected Azure subscription. Run aum configure before querying the gateway ledger.", 3) from None
+
+    def close(self):
+        with self._prepare_lock:
+            if self._client is not None:
+                self._client.close()
+                self._client = None
 
     def _bridge(self, action, body=None, **params):
         folder = self.root / ".finops-evidence"
@@ -70,9 +133,12 @@ class DirectBackend(Backend):
         access = resource_token("https://api.loganalytics.io", self.config.subscription,
                                 self.config.tenant_id, runner=az)
         try:
-            with httpx.Client(timeout=90) as client:
-                response = client.post(f"https://api.loganalytics.io/v1/workspaces/{workspace}/query",
-                                       headers={"Authorization": "Bearer " + access}, json={"query": kql})
+            with self._prepare_lock:
+                if self._client is None:
+                    self._client = httpx.Client(timeout=90)
+                client = self._client
+            response = client.post(f"https://api.loganalytics.io/v1/workspaces/{workspace}/query",
+                                   headers={"Authorization": "Bearer " + access}, json={"query": kql})
             if not response.is_success:
                 raise http_error(response.status_code)
             payload = response.json()
@@ -107,7 +173,7 @@ class DirectBackend(Backend):
         if resource == "capabilities":
             identity = params.get("identity") or self.read("whoami")
             result = current_capabilities(identity)
-            state = self._bridge("read")
+            state = self._snapshot()
             writer = identity.get("role") == "owner" and state.get("authority") == "Gateway"
             result["authority"] = state.get("authority", "unknown")
             result["features"]["bulk_budget"] = {"enabled": False, "actions": []}
@@ -143,15 +209,18 @@ class DirectBackend(Backend):
         if resource == "apply":
             return dict(configured=False, direct=True, note="Direct writes verify named values and compensate on failure; no server apply job.", executions=[])
         if resource in {"usd_budgets", "usd_status", "usd_price_book"}:
-            return self._bridge(resource)
+            return self._snapshot(resource)
         if resource in {"catalog", "tiers", "budgets"}:
-            state = self._bridge("read")
             if resource == "catalog":
-                return state["catalog"]
+                return self._snapshot()["catalog"]
             if resource == "tiers":
-                return dict(items=state["tiers"])
+                return dict(items=self._snapshot()["tiers"])
             month = params["month"]
-            usage = self.query(self._ledger(month) + "\n| summarize used_tokens=sum(total_tokens) by business_unit")
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                pending = pool.submit(copy_context().run, self.query,
+                                      self._ledger(month) + "\n| summarize used_tokens=sum(total_tokens) by business_unit")
+                state = self._snapshot()
+                usage = pending.result()
             used = {r["business_unit"]: r["used_tokens"] for r in usage}
             rows = []
             for item in state["registry"]:
@@ -179,7 +248,7 @@ class DirectBackend(Backend):
             ledger += f"\n| where user_id == {value} or actor == {value}"
         needs_ledger = resource in {"people", "requests", "request"} or (resource == "trends" and params.get("interval") == "hour")
         if params.get("organization_id") and needs_ledger:
-            parents = self._bridge("read").get("parents", {})
+            parents = self._snapshot().get("parents", {})
             unit = params["organization_id"]
             leaves = [unit] + [key for key, parent in parents.items() if parent == unit]
             ledger += "\n| where business_unit in (" + ",".join(self._quote(key) for key in leaves) + ")"
@@ -259,9 +328,11 @@ class DirectBackend(Backend):
                 raise FinOpsError("Direct mode changes only the current month. Use Turnstile for historical budgets.")
         if resource == "apply":
             raise FinOpsError("Direct writes use the repository scripts immediately; there is no separate apply job.")
-        if resource in {"usd_budget", "usd_budget_remove", "usd_reconcile", "usd_price_book"}:
-            if resource == "usd_reconcile":
-                params.setdefault("workspace_id", self.config.workspace)
-                params.setdefault("subscription_id", self.config.subscription)
+        if resource == "usd_reconcile":
+            params.setdefault("workspace_id", self.config.workspace)
+            params.setdefault("subscription_id", self.config.subscription)
+        self._invalidate_snapshot()
+        try:
             return self._bridge(resource, body, **params)
-        return self._bridge(resource, body, **params)
+        finally:
+            self._invalidate_snapshot()

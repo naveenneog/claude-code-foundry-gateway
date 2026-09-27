@@ -2,6 +2,9 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal
 import time
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
+from threading import RLock
 
 from .errors import FinOpsError
 from .rules import (allocation_left, apply_state, identifier, month_window, parse_tokens,
@@ -18,6 +21,8 @@ class Engine(FeatureEngine):
         self.month = month or datetime.now(timezone.utc).strftime("%Y-%m")
         self._identity = None
         self._capabilities = None
+        self._identity_lock = RLock()
+        self._capabilities_lock = RLock()
         self.change_reason = ""
         month_window(self.month)
 
@@ -31,14 +36,20 @@ class Engine(FeatureEngine):
 
     def read(self, resource, **params):
         if resource == "whoami":
-            previous = self._identity
-            self._identity = self.backend.read(resource, month=self.month, **params)
-            identity_keys = ("id", "email", "role", "manager_scope")
-            if previous and tuple(previous.get(k) for k in identity_keys) != tuple(self._identity.get(k) for k in identity_keys):
-                self._capabilities = None
-            return self._identity
+            with self._identity_lock:
+                previous = self._identity
+                self._identity = self.backend.read(resource, month=self.month, **params)
+                identity_keys = ("id", "email", "role", "manager_scope")
+                if previous and tuple(previous.get(k) for k in identity_keys) != tuple(self._identity.get(k) for k in identity_keys):
+                    self._capabilities = None
+                return self._identity
+        if resource in self.backend.identity_independent_reads and not params.get("cursor"):
+            self.backend.prepare_read(resource)
+            return self.backend.read(resource, month=self.month, **params)
         if self._identity is None:
-            self.read("whoami")
+            with self._identity_lock:
+                if self._identity is None:
+                    self.read("whoami")
         if resource in READ_FEATURES:
             self.require_feature(READ_FEATURES[resource])
         else:
@@ -51,18 +62,26 @@ class Engine(FeatureEngine):
         return managed_catalog(self._identity, result) if resource == "catalog" else result
 
     def status(self):
-        budgets = self.read("budgets")
-        if self.has_feature("usd_budgets"):
-            try:
-                from .usd import merge_usd_into_budgets
-                budgets = merge_usd_into_budgets(budgets, self.read("usd_budgets"), self.read("usd_status"))
-            except FinOpsError:
-                pass
-        return dict(month=self.month, backend=self.backend.name, overview=self.read("overview"),
-                    budgets=budgets, apply=self.read("apply"))
+        if not self.backend.identity_independent_reads and self._identity is None:
+            self.read("whoami")
+        with self.backend.read_cycle(), ThreadPoolExecutor(max_workers=3) as pool:
+            pending = {name: pool.submit(copy_context().run, self.read, name)
+                       for name in ("budgets", "overview", "apply")}
+            has_usd = self.has_feature("usd_budgets")
+            result = dict(month=self.month, backend=self.backend.name,
+                          **{name: task.result() for name, task in pending.items()})
+            if has_usd:
+                try:
+                    from .usd import merge_usd_into_budgets
+                    result["budgets"] = merge_usd_into_budgets(
+                        result["budgets"], self.read("usd_budgets"), self.read("usd_status"))
+                except FinOpsError as error:
+                    result["usd_error"] = str(error)
+            return result
 
     def governance(self):
-        return dict(catalog=self.read("catalog"), tiers=self.read("tiers"), apply=self.read("apply"))
+        with self.backend.read_cycle():
+            return dict(catalog=self.read("catalog"), tiers=self.read("tiers"), apply=self.read("apply"))
 
     def chargeback(self, dimension="organization"):
         if dimension not in {"organization", "department"}:

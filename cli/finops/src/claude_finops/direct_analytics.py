@@ -25,7 +25,7 @@ def people(backend, ledger, params):
            "\n| project person_id, actor, user_id, tier, used_tokens, window_tokens, last_seen=timestamp"
            f"\n| sort by person_id asc | serialize row=row_number() | where row > {offset} | take {limit}")
     rows = backend.query(kql)
-    state = backend._bridge("read") if rows else {}
+    state = backend._snapshot() if rows else {}
     defaults = {tier["id"]: tier["tokens_per_day"] for tier in state.get("tiers", [])}
     current = params["month"] == datetime.now(timezone.utc).strftime("%Y-%m")
     result = []

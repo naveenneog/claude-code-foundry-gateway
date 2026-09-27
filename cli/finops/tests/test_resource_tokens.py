@@ -170,3 +170,25 @@ def test_waiting_for_a_concurrent_token_obeys_the_callers_deadline(monkeypatch):
         finally:
             release.set()
         first.result(timeout=3)
+
+
+def test_direct_queries_share_one_http_client_and_close_it(monkeypatch):
+    clients = []
+    original = httpx.Client
+    transport = httpx.MockTransport(lambda _: httpx.Response(200, json={
+        "tables": [{"columns": [], "rows": []}]}))
+
+    def client(*args, **kwargs):
+        result = original(*args, transport=transport, **kwargs)
+        clients.append(result)
+        return result
+
+    monkeypatch.setattr("claude_finops.direct.az", lambda *args, **kwargs: jwt(time.time() + 3600))
+    monkeypatch.setattr(httpx, "Client", client)
+    backend = DirectBackend(config.Config(backend="direct", subscription=SUB, resource_group="rg-contoso",
+                                         apim_name="apim-contoso", workspace=SUB))
+    backend.query("print tokens=42")
+    backend.query("print tokens=42")
+    assert len(clients) == 1 and not clients[0].is_closed
+    backend.close()
+    assert clients[0].is_closed
