@@ -448,7 +448,7 @@ if (-not $NamePrefix) {
         Write-Host ''
         for ($i = 0; $i -lt $reusable.Count; $i++) {
             $r = $reusable[$i]
-            $has = az apim api list -g $r.resourceGroup --service-name $r.name --query "[?name=='claude-foundry'].name" -o tsv 2>$null
+            $has = Invoke-AzOptional { az apim api list -g $r.resourceGroup --service-name $r.name --query "[?name=='claude-foundry'].name" -o tsv }
             $note = if ($has) { 'already has the Claude API - this would update it' } else { 'would add the Claude API' }
             Write-Host ("       {0}. {1,-24} {2,-10} {3,-14} {4}" -f ($i + 1), $r.name, $r.sku.name, $r.location, $r.resourceGroup) -ForegroundColor White
             Write-Host ("          {0}" -f $note) -ForegroundColor DarkGray
@@ -864,6 +864,8 @@ Write-Host '                 every client rather than only Desktop.' -Foreground
 Write-Host ''
 Write-Host '    Changeable later by reissuing the file and re-running the onboarding script.' -ForegroundColor DarkGray
 
+$desktopSignInRecord = [ordered]@{ kind = 'helper-script' }
+$desktopGatewayAudience = 'urn:disabled:claude-extra-audience'
 $AuthMode = if ($AuthMode) { $AuthMode } else {
     Read-Default -Prompt 'Developer sign-in (interactive/device/helper)' -Default 'interactive' `
         -Help 'Pick device if any developer works on a machine with no browser - it costs nothing on a laptop.' -Validate {
@@ -902,8 +904,6 @@ $AuthMode = if ($AuthMode) { $AuthMode } else {
                 }
         }
 
-        $desktopSignInRecord = [ordered]@{ kind = 'helper-script' }
-        $desktopGatewayAudience = ''
         if ($DesktopSignInKind -ne 'helper-script') {
             $defaultIssuer = "https://login.microsoftonline.com/$($acct.tenantId)/v2.0"
             $DesktopEntraIssuer = if ($DesktopEntraIssuer) { $DesktopEntraIssuer } else { $defaultIssuer }
@@ -1258,7 +1258,7 @@ az deployment group create `
         quotaPremium=$QuotaPremium `
         quotaOrg=$QuotaOrg `
         callsPerMinute=$CallsPerMinute `
-        desktopExtraAudience=$desktopGatewayAudience `
+        desktopExtraAudience=$(if ($desktopGatewayAudience) { $desktopGatewayAudience } else { 'urn:disabled:claude-extra-audience' }) `
         entitlementSource=$(if ($entSrc) { $entSrc } else { 'named-value' }) `
         entitlementResolverUrl=$(if ($entUrl) { $entUrl } else { 'https://resolver-not-deployed.invalid' }) `
         entitlementResolverAudience=$(if ($entAud) { $entAud } else { 'https://resolver-not-deployed.invalid' }) `

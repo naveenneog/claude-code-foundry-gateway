@@ -35,6 +35,19 @@ exact streaming cache-creation detail remains **U13**.
 - `Register-ClaudeUsdReconciler.ps1` and `infra/usd-reconciler-job.bicep` deploy
   that no-AUM-service USD reconciler as a five-minute Container Apps scheduled job
   with a pinned image/commit and least-privilege managed identity.
+- **Guided lifecycle update and change modules (P66).** `scripts/Update-ClaudeGateway.ps1`
+  plans and applies ordered migrations for older decision records, current policy hash drift,
+  policy-referenced named values and optional job commit pins, with a named-value snapshot before
+  any write and `release`/`history` recorded afterward. New flow step modules cover API Management
+  tier changes, named values ↔ projection entitlement moves, enterprise network review execution
+  and Desktop sign-in changes. `docs/UPDATE-AND-CHANGE.md` gives the step-by-step and manual
+  equivalents.
+- **Guided flow core (P66).** `Start-ClaudeGateway.ps1` now orchestrates setup,
+  change, guide and status from one decision record and one reviewed plan
+  fingerprint, with absent parallel-branch modules skipped rather than failed.
+  `scripts/flow/Discovery.ps1`, `Foundation.ps1`, `DeviceProfiles.ps1`,
+  `Verify.ps1` and `Guide.ps1` provide the owned step modules, and
+  `docs/GUIDED-FLOW.md` documents the product path and manual equivalents.
 - **Guided diagnostics (P66).** `scripts/Debug-ClaudeSetup.ps1` and
   `scripts/Debug-ClaudeWorkstation.ps1` run read-only administrator and developer
   checks with PASS/WARN/FAIL/SKIP evidence, exact fixes and redacted support
