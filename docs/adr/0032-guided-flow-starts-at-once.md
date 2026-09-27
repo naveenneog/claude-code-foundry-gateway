@@ -110,15 +110,20 @@ subscription from one resolver (the record's `subscriptionId`, then the foundati
 the installer receives it as `-SubscriptionId`, which the fingerprint binds; a subscription that is
 not an id is refused. On Windows `az` is `az.cmd`, and `cmd.exe` re-reads `& | < > ^ ( ) " %` in
 an argument, so a value holding one can end the argument early or run a second command. The flow
-refuses such a record value before the installer runs, discovery passes a recorded name to `az`
-only when it is letters, digits and `. _ -`, and the installer checks the values it passes to `az`
-before its summary.
+refuses a list or an object where the installer takes one value (parameter binding would join it
+into text after any check of its parts), and a record value holding one of those characters for
+the installer parameters that reach `az`, measured on the installer's `az` calls; the organisation
+details go to Azure in a JSON body and pass. Discovery passes a recorded name to `az` only when it
+is letters, digits and `. _ -`. The installer checks its bound parameters after its prerequisites,
+before its first `az` call that uses one, and the adopted and derived values before its summary.
 
 **Resume.** An attended run records its phases in `activeRun` (`lead`, then `after-lead` with the
 names of the steps). A retry of a failed second phase plans those same steps, without the
 foundation check that the now-recorded gateway would add, so its fingerprint can match ADR-0030's
-resume rule and the completed steps are skipped. A mistyped fingerprint in the second phase applies
-nothing and says that the gateway foundation is set up.
+resume rule and the completed steps are skipped. The restriction applies only when the steps present
+are the recorded ones; a step added or removed since, a new prerequisite included, makes the run
+plan every step again, so a plan is never missing a dependency. A mistyped fingerprint in the
+second phase applies nothing and says that the gateway foundation is set up.
 
 **Prices at the choice.** The installer's region prompt lists the Foundry account's region and
 the other regions in its geography (from `az account list-locations`), each with the monthly

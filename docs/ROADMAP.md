@@ -386,11 +386,15 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       then a raise that lifts it). **Merged 2026-09-26**: `aum usd`; live: 403
       `usd_budget_exceeded` 73.8 s after the crossing request, 200 after the raise. Open: **U13**,
       a live AUM-service deployment of the dollar routes
-- [ ] P63 split the five files over the size budget — the gate's `quality.filesize` warning:
-      `tests/Test-BusinessUnitsNegative.ps1` (3,208 lines, budget 800),
-      `tests/Test-AdminSurface.ps1` (1,348), `Install-ClaudeGateway.ps1` (1,254, budget 700),
-      `scripts/Test-FoundryDirect.ps1` (942) and `scripts/Setup-ClaudeFoundryDirect.ps1` (866);
-      split by responsibility, with every assertion and mutation kept
+- [ ] P63 split the files over the size budget — the gate's `quality.filesize` warning, eight files
+      at the P68 gate on 2026-09-27: `tests/Test-BusinessUnitsNegative.ps1` (3,266 lines, budget
+      800), `Install-ClaudeGateway.ps1` (1,626, budget 700; P67 and P68 added the recorded
+      deployments, the priced region and tier prompts, the numbered next steps, the `az.cmd` check
+      and `-ExistingApimName`), `tests/Test-AdminSurface.ps1` (1,350),
+      `scripts/Test-FoundryDirect.ps1` (942), `tests/Test-WorkstationClients.ps1` (932),
+      `scripts/Setup-ClaudeFoundryDirect.ps1` (866), `scripts/New-ClaudeCodePolicy.ps1` (728) and
+      `scripts/setup-claude-workstation.sh` (709); split by responsibility, with every assertion and
+      mutation kept
 - [x] P64 add and remove developers from AUM by email — acceptance: AUM searches the whole Entra
       directory while an administrator types an email, UPN or name (guests included), adds a
       person to a discovered tier group and optionally a unit or team group, removes them from

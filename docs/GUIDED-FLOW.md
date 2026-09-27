@@ -88,10 +88,15 @@ Without a console, the flow plans every step in one review and runs the
 installer with `-Yes` and the recorded values, adding `-DeployProjection` when
 the entitlement store is the Cosmos projection.
 
-Values the flow passes to the installer reach the Azure CLI, which on Windows is
-`az.cmd`: `cmd.exe` re-reads `& | < > ^ ( ) " %` in an argument. The flow refuses
-a recorded value that holds one of them before the installer runs, and the
-installer refuses such a value, typed or read from Azure, before its summary.
+Values the flow passes to the installer can reach the Azure CLI, which on
+Windows is `az.cmd`: `cmd.exe` re-reads `& | < > ^ ( ) " %` in an argument. The
+flow refuses a list or an object where the installer takes one value, and a
+recorded value that reaches `az` (the subscription, Foundry account and group,
+gateway group, region, name, publisher email, tier groups, and the Desktop
+client id and audience) when it holds one of those characters. The
+organisation details pass: they go to Azure in a JSON body, not to `az`. The
+installer checks its parameters again at startup, before its first `az` call
+that uses one, and checks the values it adopted or derived before its summary.
 A recorded subscription that is not a subscription id is refused, so discovery
 and the installer use the same subscription.
 
@@ -173,7 +178,9 @@ installer, `after-lead` for the steps after it) with the names of the steps in
 same action plans the same steps, without the foundation check the recorded
 gateway would otherwise add, so its fingerprint can match: it prints
 `Resuming the Setup run started <time>`, and the steps that run completed are
-skipped.
+skipped. This happens only when the steps present are the recorded ones. When a
+step was added or removed since, for example a new prerequisite of a recorded
+step, the run prints that the steps differ and plans every step again.
 
 ## Update
 

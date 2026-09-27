@@ -820,12 +820,15 @@ exact streaming cache-creation detail remains **U13**.
 - **A value with `&` reached `az.cmd` (P68 council).** The first P68 version of `-Change
   foundation` forwarded the live gateway's publisher email to the installer, which passes it to
   the Azure CLI; on Windows `cmd.exe` re-reads `& | < > ^ ( ) " %`, so an `&` in it ran a second
-  command (reproduced with a stub). The flow no longer forwards it, refuses such record values
-  before the installer runs, and the installer checks the values it passes to `az` before its
-  summary.
+  command (reproduced with a stub). The flow no longer forwards it. It refuses a list where the
+  installer takes one value, and a character `cmd.exe` re-reads in the values that reach `az`
+  (the organisation details go in a JSON body and pass). The installer checks its bound
+  parameters before its first `az` call that uses one, and the adopted and derived values before
+  its summary.
 - **A failed step after the installer did not resume (P68 council).** The retry planned the
   foundation check that the new gateway added, so the fingerprint changed and completed steps ran
-  again. The run records its phase and steps, and a retry plans the same steps and resumes.
+  again. The run records its phase and steps, and a retry plans the same steps and resumes, when
+  the steps present are the recorded ones; otherwise it plans every step again.
 - **The flow could read the gateway in one subscription and install in another (P68 council).**
   Discovery honoured the record's `subscriptionId` and the installer was not given it. One
   resolver serves both, the id is passed and fingerprinted, and a name instead of an id is refused.

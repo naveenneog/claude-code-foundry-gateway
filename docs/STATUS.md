@@ -72,6 +72,20 @@ The mutation that made attended Change copy the recorded choices also exposed a 
 attended Change test checked that four arguments were absent, not that nothing else was passed. It
 now checks the exact argument set.
 
+Council, second review of those fixes (gpt-6-astra, 2026-09-27): all seven fixes confirmed on
+PowerShell 7 and 5.1, and BLOCK on three new findings, each reproduced. Fixed in `5c5ee36`; five
+mutations that undo these fixes are caught, with the first round's ten, at the full 114
+assertions:
+
+| # | Seat | Finding | Fix |
+|---|---|---|---|
+| N1 | Security (BLOCK) | A JSON list in the record passed the flow's check (non-strings were skipped); binding joined it into text that reached `az` before the installer's check | The flow refuses a list or object where the installer takes one value; the installer checks its bound parameters before its first `az` call that uses one |
+| N2 | Coder, UX | The flow refused an organisation name such as `AT&T`, which reaches Azure in a JSON body, not `az`; the first-round test enforced that refusal | The character check covers only the parameters that reach `az`, measured on the installer's `az` calls; the test now requires `AT&T` to pass and refuses `ai&calc` as a Foundry account |
+| N3 | Architect, QA | A retry resumed the recorded steps after a step gained a new prerequisite, which then never ran | A second phase resumes only when the present steps are the recorded ones; otherwise every step is planned again, and the output says so |
+
+The shadow repository in `Test-FlowStart` now prices API Management from a stub, so its child runs
+make no network call; the first-round live-price change had made them reach the Retail Prices API.
+
 ## P67 developer workstation fixes from the owner's test, 2026-09-27
 
 The owner ran the flows on another workstation on 2026-09-27. After `Setup-ClaudeWorkstation.ps1`,

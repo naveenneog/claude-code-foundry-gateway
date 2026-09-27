@@ -602,10 +602,15 @@ is not a v2 tier. The guided flow's `-Change foundation` runs it this way
 ([Guided flow](GUIDED-FLOW.md#attended-setup)).
 
 On Windows the Azure CLI is `az.cmd`, and `cmd.exe` re-reads
-`& | < > ^ ( ) " %` in an argument. Before its summary the installer checks the
-values it passes to `az` (subscription, Foundry account and group, gateway group,
-region, name, publisher email and tier groups) and stops, naming the value, when
-one holds such a character; nothing has been created at that point.
+`& | < > ^ ( ) " %` in an argument. The installer checks the parameters it was
+given that reach `az` (subscription, Foundry account and group, gateway group,
+region, name prefix, existing gateway name, publisher email, tier groups, and
+the Desktop client id and audience) right after its prerequisites, before its
+first `az` call that uses one. It checks again before its summary, covering the
+values it adopted from a reused gateway and the Desktop gateway audience it
+derived. Either check stops the installer, naming the value; nothing has been
+created at that point. The organisation details for a first Claude deployment
+are not checked: they go to Azure in a JSON body.
 
 Re-running against a gateway you already set up is the supported way to update
 policies or budgets. Live state is preserved: the wizard reads the current
