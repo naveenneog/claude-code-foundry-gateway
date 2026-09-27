@@ -31,6 +31,7 @@ $script:certificateReader = if (Get-Command Read-ClaudeAddressCertificate -Error
 
 function Reset-State {
     $script:writes = @()
+    $script:reads = @()
     $script:events = @()
     $script:missingPrice = $false
     $script:priceCalls = @()
@@ -84,6 +85,7 @@ function Get-AzureRetailPrice {
 }
 function Invoke-ClaudeNetworkArm {
     param($Url, $Method = 'get', $Body, $StateDirectory, [switch]$AllowNotFound, $IfMatch, [switch]$IfNoneMatch)
+    if ($Method -eq 'get') { $script:reads += $Url }
     if ($Method -ne 'get') {
         $script:writes += [pscustomobject]@{ Url = $Url; Method = $Method; Body = (Copy-Object $Body); IfMatch = $IfMatch; IfNoneMatch = [bool]$IfNoneMatch }
         if ($Url -like "$apimId*") { throw 'The ARM URL omitted its authority.' }
@@ -150,6 +152,7 @@ try {
         $p.Data.DnsRecord.Name -eq 'claude' -and $p.Data.DnsRecord.Target -eq 'apim-contoso.azure-api.net' -and
             ($p | ConvertTo-Json -Depth 30) -notmatch '"TXT"'
     }
+    Check 'subscription ID is required' { Reject { New-Plan @{ SubscriptionId = 'subscription-name' } } 'subscription ID' }
     foreach ($sku in 'BasicV2','StandardV2','PremiumV2') {
         Check "$sku offers supplied certificates, not managed issuance" {
             $script:live.sku.name = $sku
@@ -164,7 +167,10 @@ try {
     Check 'a different DNS suffix cannot be mistaken for the selected zone' { Reject { New-Plan @{ Hostname = 'claude.notcontoso.test' } } 'zone' }
     Check 'a CNAME at the zone apex is refused before a write' { Reject { New-Plan @{ Hostname = 'contoso.test' } } 'apex' }
     Check 'a DNS zone in another subscription is refused' { Reject { New-Plan @{ DnsZoneResourceId = $zoneId.Replace($sub,'00000000-0000-0000-0000-000000000099') } } 'subscription' }
-    Check 'a private DNS zone is not treated as public Azure DNS' { Reject { New-Plan @{ DnsZoneResourceId = $zoneId.Replace('/dnsZones/','/privateDnsZones/') } } 'DNS zone' }
+    Check 'a private DNS zone is not treated as public Azure DNS' {
+        (Reject { New-Plan @{ DnsZoneResourceId = $zoneId.Replace('/dnsZones/','/privateDnsZones/') } } 'DNS zone') -and
+            @($script:reads | Where-Object { $_ -match '/privateDnsZones/' }).Count -eq 0
+    }
     Check 'a CLI metacharacter cannot reach resource discovery' { Reject { New-Plan @{ ResourceGroup = 'rg&whoami' } } 'resource group' }
     Check 'unsupported gateway tiers fail before writes' {
         $script:live.sku.name = 'Developer'
@@ -248,6 +254,12 @@ try {
         (Reject { Apply-Plan $p } 'certificate.*changed') -and $script:writes.Count -eq 0
     }
     Reset-State
+    Check 'changed PFX contents invalidate approval even when the certificate thumbprint stays' {
+        $p = New-Plan @{ CertificateSource = 'Pfx'; PfxPath = 'C:\fixture.pfx' }
+        $script:cert.PfxSha256 = 'changed'
+        (Reject { Apply-Plan $p } 'certificate.*changed') -and $script:writes.Count -eq 0
+    }
+    Reset-State
     Check 'an APIM write failure leaves the recorded address unchanged' {
         $p = New-Plan; $script:patchFails = $true
         (Reject { Apply-Plan $p } 'APIM write refused') -and ((Read-ClaudeDecisionRecord $recordPath).gatewayUrl -eq $script:record.gatewayUrl)
@@ -255,7 +267,7 @@ try {
     Reset-State
     Check 'a failed provisioning state is not mistaken for ready' {
         $p = New-Plan; $script:patchState = 'Failed'
-        (Reject { Apply-Plan $p } 'Failed') -and ((Read-ClaudeDecisionRecord $recordPath).gatewayUrl -eq $script:record.gatewayUrl)
+        (Reject { Apply-Plan $p } '^APIM hostname update Failed\.') -and ((Read-ClaudeDecisionRecord $recordPath).gatewayUrl -eq $script:record.gatewayUrl)
     }
     Reset-State
     Check 'DNS timeout reports failure and does not publish the company URL' {
@@ -296,8 +308,10 @@ try {
         @($script:writes | Where-Object Url -match '/roleAssignments/').Count -eq 0
     }
     Reset-State
-    Apply-Plan (New-Plan) | Out-Null
-    Check 'new DNS records use conditional creation' { @($script:writes | Where-Object { $_.Url -match '/CNAME/' -and $_.IfNoneMatch }).Count -eq 1 }
+    Check 'new DNS records use conditional creation' {
+        Apply-Plan (New-Plan) | Out-Null
+        @($script:writes | Where-Object { $_.Url -match '/CNAME/' -and $_.IfNoneMatch }).Count -eq 1
+    }
     Check 'the APIM update uses PATCH and leaves network settings unchanged' {
         @($script:writes | Where-Object { $_.Url -match '/Microsoft.ApiManagement/service/' -and $_.Method -eq 'patch' }).Count -eq 1 -and
             $script:live.properties.publicNetworkAccess -eq 'Disabled' -and $script:live.properties.virtualNetworkType -eq 'External'
@@ -366,6 +380,16 @@ try {
         Apply-Plan (New-Plan) | Out-Null
         [IO.File]::ReadAllText((Join-Path $scratch 'onboarding-developer-contoso-test.html')) -match 'https://claude.contoso.test/claude' -and
             [IO.File]::ReadAllText((Join-Path $copied 'claude-gateway.json')) -match 'https://claude.contoso.test/claude'
+    }
+    Reset-State
+    Check 'generated Outlook mail decodes and updates its base64 HTML body' {
+        $emlPath = Join-Path $scratch 'onboarding-developer-contoso-test.eml'
+        $body = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('<p>https://apim-contoso.azure-api.net/claude</p>'))
+        [IO.File]::WriteAllText($emlPath, "To: dev@contoso.test`r`nContent-Transfer-Encoding: base64`r`n`r`n$body")
+        Apply-Plan (New-Plan) | Out-Null
+        $mail = [IO.File]::ReadAllText($emlPath)
+        $parts = $mail -split '\r?\n\r?\n', 2
+        [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(($parts[1] -replace '\s',''))) -eq '<p>https://claude.contoso.test/claude</p>'
     }
     Reset-State
     Check 'a record naming another gateway is refused before any write' {

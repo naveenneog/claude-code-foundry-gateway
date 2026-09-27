@@ -48,7 +48,7 @@ Check 'a portal hostname cannot masquerade as a gateway address' {
     $script:proxyType = 'Proxy'
     $d.comparison.status -eq 'drift'
 }
-foreach ($bad in 'http://claude.contoso.test/claude','https://claude.contoso.test.attacker.test/claude','https://user@claude.contoso.test/claude','https://claude.contoso.test:444/claude','https://claude.contoso.test/claude?token=fixture','https://claude.contoso.test/claude#fragment') {
+foreach ($bad in 'http://claude.contoso.test/claude','http://claude.contoso.test:443/claude','https://claude.contoso.test.attacker.test/claude','https://user@claude.contoso.test/claude','https://claude.contoso.test:444/claude','https://claude.contoso.test/claude?token=fixture','https://claude.contoso.test/claude#fragment') {
     Check "discovery refuses the noncanonical company URL: $bad" {
         $record.gatewayUrl = $bad
         (Get-ClaudeFlowDiscovery -Record $record).comparison.status -eq 'drift'

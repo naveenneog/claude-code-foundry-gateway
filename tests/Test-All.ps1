@@ -216,6 +216,7 @@ try {
     Invoke-Check 'Company address plan, apply and publication' 'Test-CompanyAddress.ps1' -SerialLane
     Invoke-Check 'Company certificate and TLS boundaries'    'Test-CompanyCertificate.ps1' -SerialLane
     Invoke-Check 'Company address guided-flow integration'   'Test-CompanyFlow.ps1' -SerialLane
+    Invoke-Check 'Company address detectors reject mutations' 'Test-CompanyAddressNegative.ps1' -SerialLane -TimeoutSeconds 900
     Invoke-Check 'Network access impact and uncertainty'     'Test-NetworkImpact.ps1'
     Invoke-Check 'Network decisions and cost deltas'         'Test-NetworkDecisions.ps1'
     Invoke-Check 'Network explicit change approval'          'Test-NetworkApproval.ps1'
