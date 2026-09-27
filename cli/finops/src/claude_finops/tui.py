@@ -474,7 +474,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
 
     @on(DataTable.RowSelected)
     def show_detail(self, event):
-        if len(self.screen_stack) != 1:
+        if len(self.screen_stack) != 1 or event.data_table.id != f"table-{self.active}":
             return
         row = self.selected()
         if row:
