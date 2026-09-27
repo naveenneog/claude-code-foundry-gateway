@@ -394,7 +394,11 @@ try {
                 try { $merge = Get-ClaudeFlowFoundationInstallerArgs -Decision $d -Attended $false -Record $record -UpdateRecorded $true } catch { $err = $_.Exception.Message }
                 [pscustomobject]@{ Kind = $s.Kind; Config = $s.Config; Args = $merge; Error = $err }
             }
-            [pscustomobject]@{ Plans = @($out); Missing = @($missing); Merged = @($merged) }
+            [pscustomobject]@{ Plans = @($out); Missing = @($missing); Merged = @($merged); NamedValueResolver = $(
+                $d = Merge-ClaudeFlowFoundationDecision -Decision ([pscustomobject]@{ sku = 'BasicV2'; resolverInboundAccess = 'private' }) -Config ([pscustomobject]@{ sku = 'BasicV2'; entitlementStore = 'named-value'; resolverInboundAccess = 'private'; desktopSignIn = [pscustomobject]@{ kind = 'helper-script' } })
+                $record = [pscustomobject]@{ schemaVersion = 2; apimName = 'apim-p72'; resourceGroup = 'rg-p72'; decisions = [pscustomobject]@{ foundation = $d }; history = @() }
+                Get-ClaudeFlowFoundationInstallerArgs -Decision $d -Attended $false -Record $record -UpdateRecorded $true
+            ) }
         }
         finally { Remove-Item Env:\CLAUDE_FLOW_SKIP_AZ_DISCOVERY -ErrorAction SilentlyContinue }
     }
@@ -459,6 +463,9 @@ try {
     $merges = @('sku', 'location', 'foundryAccount', 'foundryResourceGroup', 'resourceGroup', 'entitlementStore', 'resolverInboundAccess', 'authMode', 'standardGroup', 'premiumGroup', 'desktopSignIn', 'tiers', 'tiers.standard', 'tiers.premium', 'organisation', 'organisation.tokensPerMonth', 'requestsPerMinute')
     $absent = @($merges | Where-Object { $configKeys -notcontains $_ })
     Assert "the installer's record holds every field the merge reads ($($merges.Count))" ($configKeys.Count -gt 10 -and $absent.Count -eq 0) ("absent: " + ($absent -join ', '))
+
+    $nvArgs = $inProcess.NamedValueResolver
+    Assert 'a named-value store keeps no resolver access, so a later switch to the projection on Basic v2 is not refused for it' ($nvArgs -and -not $nvArgs.Contains('ResolverInboundAccess') -and [string]$nvArgs['EntitlementStore'] -eq 'named-value') ((@($nvArgs.Keys) | ForEach-Object { "$_=$($nvArgs[$_])" }) -join ', ')
 
     foreach ($name in $checked.Keys) {
         $detail = if ($failures.Contains($name)) { "$($failures[$name].Count) of $($checked[$name]): " + (@($failures[$name] | Select-Object -First 3) -join '; ') } else { '' }

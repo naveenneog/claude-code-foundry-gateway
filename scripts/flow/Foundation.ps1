@@ -344,9 +344,14 @@ function Merge-ClaudeFlowFoundationDecision {
     $merged = [ordered]@{}
     if ($Decision) { foreach ($p in $Decision.PSObject.Properties) { $merged[$p.Name] = $p.Value } }
     $names = @($Config.PSObject.Properties.Name)
-    foreach ($name in 'sku', 'location', 'foundryAccount', 'foundryResourceGroup', 'resourceGroup', 'entitlementStore', 'resolverInboundAccess', 'authMode', 'standardGroup', 'premiumGroup') {
+    foreach ($name in 'sku', 'location', 'foundryAccount', 'foundryResourceGroup', 'resourceGroup', 'entitlementStore', 'authMode', 'standardGroup', 'premiumGroup') {
         if ($names -contains $name -and $Config.$name) { $merged[$name] = $Config.$name }
     }
+    # The installer records a resolver access for every store; it means something only for the
+    # projection. Kept for a named-value store, it would stop a later switch to the projection on
+    # Basic v2, which has no private resolver.
+    if ([string]$merged['entitlementStore'] -eq 'projection' -and $names -contains 'resolverInboundAccess' -and $Config.resolverInboundAccess) { $merged['resolverInboundAccess'] = $Config.resolverInboundAccess }
+    elseif ($merged.Contains('resolverInboundAccess')) { $merged.Remove('resolverInboundAccess') }
     $from = { param($object, [string]$property) if ($object -and @($object.PSObject.Properties.Name) -contains $property) { $object.$property } else { $null } }
     $tiers = & $from $Config 'tiers'
     foreach ($pair in @(@('standard', 'tokensPerMinute', 'tpmStandard'), @('standard', 'tokensPerDay', 'quotaStandard'), @('premium', 'tokensPerMinute', 'tpmPremium'), @('premium', 'tokensPerDay', 'quotaPremium'))) {
