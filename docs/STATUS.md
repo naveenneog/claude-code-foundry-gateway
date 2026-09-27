@@ -2,6 +2,42 @@
 
 **Active packets (2026-09-28, run in parallel worktrees):** P69 the company address in the flow, P70 newly deployed models reach the tiers and the workstations, P71 AUM answers fast and says why it cannot, P72 permutation tests of the guided flow and the installer ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
+## P70 newly deployed models reach the tiers and the workstations, 2026-09-28
+
+In progress on `p70-model-lifecycle`, based on `aa7ed19`. The lead runs the council and merges;
+this branch stops at a passing packet gate. The reference gateway is read-only throughout.
+
+Acceptance criteria:
+
+- [ ] A Change-only `models` step and a standalone model-sync command discover the chosen
+      Foundry account's Claude deployments, compare tier lists and the record, and show model,
+      version, SKU/capacity and price-book status before a write
+- [ ] Each deployment has an explicit tier choice, from the console or the flow's answers file;
+      missing deployments have a keep/drop choice. Empty-list allow-all semantics cannot turn
+      removal into an unintended access grant
+- [ ] A fingerprint binds the target, discovered state, decisions, prices and generated outputs.
+      Apply refuses stale or incomplete plans and takes a named-value snapshot before writing;
+      only `models-standard` and `models-premium` can change
+- [ ] The record preserves unrelated fields and per-deployment client overrides, updates
+      `deployments` and `models`, and regenerates per-tier device profiles. The developer handover
+      states how rerunning setup changes `availableModels`, pinned aliases, capabilities and
+      Desktop `inferenceModels`
+- [ ] Unpriced models are labelled unpriced, never free. Pricing and named-value propagation
+      have cited research or measured evidence in UNKNOWNS and ADR-0034; every wait names its
+      purpose, estimate and elapsed time
+- [ ] Offline stubbed-Azure tests run on PowerShell 7 and Windows PowerShell 5.1; each new
+      detector is broken deliberately, its failure and full assertion count recorded, and restored
+- [ ] An isolated gateway in `rg-p70-models`, with dedicated `claude-p70-*` groups, returns
+      `403 model_not_allowed` before and `200` after a deployment is added to the caller's tier.
+      The proof costs less than USD 5; its resource group, soft-deleted gateway, groups and exact
+      shared-Foundry role assignment are removed with creation/deletion times recorded
+- [ ] A read-only reference-gateway plan, an exact owner apply command, redacted live terminal
+      images numbered 50 onward, updated model/flow/developer docs and architecture artifacts
+      accompany a passing `node .ironclad/gate.mjs --stage packet`. ROADMAP remains unticked
+
+Baseline audit: `node .ironclad/gate.mjs --stage packet --no-run` passed on `aa7ed19`
+(20 passed, 2 warned, 0 failed, 4 skipped). Existing warnings are file size and open unknowns.
+
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
 
 The owner's test on 2026-09-27: `Start-ClaudeGateway.ps1` showed nothing for a long time and asked
