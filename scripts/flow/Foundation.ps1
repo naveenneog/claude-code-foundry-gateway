@@ -269,7 +269,8 @@ function Invoke-ClaudeFlowStep {
     $before = Get-ClaudeFlowFileStamp -Path $written
     & $installer @installerArgs
     if (-not (Test-Path -LiteralPath $written) -or (Get-ClaudeFlowFileStamp -Path $written) -eq $before) {
-        throw 'Install-ClaudeGateway.ps1 finished without writing onboarding\claude-gateway.json, so it created nothing: it was cancelled at its summary or stopped before deploying. The guided flow stopped before the remaining steps; run it again when ready.'
+        # A cancellation, not a fault: the orchestrator reports it without a stack trace.
+        throw [System.OperationCanceledException]::new('Install-ClaudeGateway.ps1 finished without writing onboarding\claude-gateway.json, so it created nothing: it was cancelled at its summary or stopped before deploying. The guided flow stopped before the remaining steps; run it again when ready.')
     }
     $cfg = Get-Content -LiteralPath $written -Raw | ConvertFrom-Json
     $changes = @{}

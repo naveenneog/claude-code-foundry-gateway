@@ -235,7 +235,7 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'FinOps'
     Reset-Shadow
     $cancelRecord = Join-Path $scratch 'cancel-record.json'
     $cancel = Invoke-Child -Script $shadowStart -Attended -Arguments @('-Action', 'Setup', '-RecordPath', $cancelRecord) -InputLines @('cancel') -Environment @{ P68_INSTALLER_LOG = $installerLog; P68_FINOPS_LOG = $finopsLog }
-    Assert 'an installer that writes no record stops the flow with the reason' ($cancel.ExitCode -ne 0 -and $cancel.All -match 'Install-ClaudeGateway\.ps1 finished without writing' -and -not $cancel.TimedOut) ($cancel.All | Select-Object -Last 3)
+    Assert 'an installer that writes no record stops the flow with the reason and no stack trace' ($cancel.ExitCode -ne 0 -and $cancel.All -match 'Install-ClaudeGateway\.ps1 finished without writing' -and $cancel.All -notmatch 'Line \|' -and -not $cancel.TimedOut) ($cancel.All | Select-Object -Last 3)
     Assert 'after a cancelled installer no FinOps question is asked' (@(Read-JsonLines $finopsLog).Count -eq 0)
 
     # Change foundation over a recorded gateway, attended: the installer runs and asks.

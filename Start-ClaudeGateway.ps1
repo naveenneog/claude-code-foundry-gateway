@@ -451,7 +451,8 @@ if ($attended) {
         Write-Host (Format-ClaudeFlowReview -Plans @($lead.Plans))
         if (-not $PSCmdlet.ShouldProcess($RecordPath, "Apply guided flow action $Action")) { return }
         $leadRunId = Start-FlowRun -Record $record -Path $RecordPath -CurrentAction $Action -CurrentChange $Change -Fingerprint (Get-ClaudeFlowFingerprint -Plans @($lead.Plans))
-        Invoke-ApplySteps -Steps $lead.Steps -Plans @($lead.Plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $leadRunId
+        try { Invoke-ApplySteps -Steps $lead.Steps -Plans @($lead.Plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $leadRunId }
+        catch [System.OperationCanceledException] { Write-Host ''; Write-Host $_.Exception.Message -ForegroundColor Yellow; exit 1 }
         Invoke-VerifySteps -Steps $lead.Steps -Record $record
         Remove-FlowRecordProperty $record 'activeRun'
         Write-FlowDecisionRecord -Record $record -Path $RecordPath
@@ -491,7 +492,8 @@ if ($ApprovedPlanFingerprint) {
 
 if ($PSCmdlet.ShouldProcess($RecordPath, "Apply guided flow action $Action")) {
     $runId = Start-FlowRun -Record $record -Path $RecordPath -CurrentAction $Action -CurrentChange $Change -Fingerprint $fingerprint
-    Invoke-ApplySteps -Steps $steps -Plans @($plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $runId
+    try { Invoke-ApplySteps -Steps $steps -Plans @($plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $runId }
+    catch [System.OperationCanceledException] { Write-Host ''; Write-Host $_.Exception.Message -ForegroundColor Yellow; exit 1 }
     Invoke-VerifySteps -Steps $steps -Record $record
     Remove-FlowRecordProperty $record 'activeRun'
     Write-FlowDecisionRecord -Record $record -Path $RecordPath
