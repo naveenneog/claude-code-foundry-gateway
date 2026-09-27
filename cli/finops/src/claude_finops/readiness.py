@@ -55,7 +55,10 @@ def database_failure(config, client, status=None, credential=None):
         config.turnstile_resource_group = group
         server_path = (f"{subscription}/resourceGroups/{group}"
                        "/providers/Microsoft.DBforPostgreSQL/flexibleServers")
-        servers = read(server_path, "2024-08-01")["value"]
+        inventory = read(server_path, "2024-08-01")
+        if inventory.get("nextLink"):
+            return FinOpsError(unknown, 7)
+        servers = inventory["value"]
         if not isinstance(servers, list):
             return FinOpsError(unknown, 7)
         if len(servers) != 1:

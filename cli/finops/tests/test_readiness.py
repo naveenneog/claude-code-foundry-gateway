@@ -19,7 +19,7 @@ SERVER = "pg-turnstile-contoso"
 INTEGRATION = f"version=1;url={URL};scope={SCOPE};resourceGroup={GROUP}"
 
 
-def backend(monkeypatch, *, response=500, inventory=None, group=GROUP, integration=INTEGRATION):
+def backend(monkeypatch, *, response=500, inventory=None, group=GROUP, integration=INTEGRATION, next_link=False):
     config = Config(backend="turnstile", url=URL, scope=SCOPE, subscription=SUB,
                     resource_group="rg-gateway", apim_name="apim-contoso")
     config.turnstile_resource_group = group
@@ -38,7 +38,8 @@ def backend(monkeypatch, *, response=500, inventory=None, group=GROUP, integrati
                          id=f"/subscriptions/{SUB}/resourceGroups/{row.get('resourceGroup', GROUP)}"
                             f"/providers/Microsoft.DBforPostgreSQL/flexibleServers/{row.get('name')}",
                          properties={"state": row.get("state")}) for row in rows]
-        return httpx.Response(200, json={"value": rows})
+        return httpx.Response(200, json={"value": rows, **(
+            {"nextLink": "https://management.azure.com/page-two"} if next_link else {})})
 
     def respond(request):
         if request.url.host == "management.azure.com":
@@ -300,4 +301,14 @@ def test_slow_signin_credential_still_reports_verified_stopped_database(monkeypa
     assert caught.value.code == 9
     assert SERVER in str(caught.value)
     assert calls and not requests
+    target.close()
+
+
+def test_a_partial_inventory_page_cannot_identify_the_only_database(monkeypatch):
+    target, calls, _ = backend(monkeypatch, next_link=True)
+    with pytest.raises(FinOpsError) as caught:
+        target.read("whoami")
+    assert caught.value.code == 7 and "could not be verified" in str(caught.value)
+    assert len(calls) == 1
+    assert "flexible-server start" not in str(caught.value)
     target.close()
