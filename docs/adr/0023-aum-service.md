@@ -163,3 +163,17 @@ conflict; they never truncate, widen scope, or silently stop enforcing.
   Insights/site/storage endpoints only when their recorded deployment choice
   enabled them. A same-named VM and unselected optional resources are retained.
   An isolated failing regression exposed the gap; no live collision existed.
+- **Verified source gap, 2026-09-25:** saved `ClaudeChargeback`/`ClaudeCost`
+  functions are workspace-wide, not bound to `AUM_APIM_RESOURCE_ID`. The
+  dedicated-workspace live proof did not test shared-workspace isolation.
+  Unit predicates after aggregation do not isolate identically named entities
+  across gateways; observed-person lookup and warning timers are also affected.
+  Shared-workspace acceptance requires a new source-bound contract covering
+  LLM logs, trace/cache metrics and membership maps before joins/aggregation,
+  or enforceable workspace exclusivity. Current deployment does not enforce
+  that constraint; document the limitation rather than claiming it is solved.
+- **Rechecked 2026-09-27:** unchanged for the service's reads
+  (`queries.py`), observed-person lookup (`azure.py`) and warnings
+  (`notifications.py`). The dollar-budget reconciler added later filters on
+  `gateway_id` before summing (`usd_reconcile.py`), so dollar budgets are bound
+  to one gateway.

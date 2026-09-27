@@ -786,6 +786,12 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **The AUM service guide did not say its analytics read the whole workspace.** A warning written
+  on the `aum-service` branch on 2026-09-25 never reached `main`: the service's usage reads,
+  observed-person lookup and warnings call the saved `ClaudeChargeback` and `ClaudeCost` functions
+  without filtering by gateway, so in a Log Analytics workspace shared by several gateways they mix
+  those gateways' data. `docs/AUM-SERVICE.md` and ADR-0023 now say so, and name the exception
+  checked on 2026-09-27: the dollar-budget reconciler keeps only its own gateway's rows.
 - **Update planned a false change on every current gateway.** Live discovery read named values
   as `properties.value`, but `az apim nv list` returns flattened objects, so every value read as
   empty and migration 0002 always proposed "whitespace/empty -> disabled URI sentinel" for the
