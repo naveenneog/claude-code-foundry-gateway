@@ -34,6 +34,7 @@ Start with [Setup](docs/SETUP.md) for deployment or
 
 | You need to… | Start with |
 |---|---|
+| Let one guided flow set up, update, change, diagnose and generate the handover guide | [Guided flow](docs/GUIDED-FLOW.md) — `Start-ClaudeGateway.ps1`, review fingerprint, resume and manual equivalents |
 | Use the CLI, VS Code or Desktop on Windows/macOS | [Developer setup](DEVELOPER.md) — prerequisites, setup, verification and fixes |
 | Stand up a gateway | [Setup](docs/SETUP.md) — required roles, installer and portal deployment |
 | Update an older gateway or change tier, entitlement, network or Desktop sign-in | [Update and change](docs/UPDATE-AND-CHANGE.md) — fingerprinted plans, snapshots and rollback |

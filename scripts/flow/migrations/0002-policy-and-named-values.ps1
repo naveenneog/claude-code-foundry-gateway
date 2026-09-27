@@ -16,7 +16,7 @@ function Get-ClaudeFlowMigrationInfo {
 function Test-ClaudePolicyHasLifecycleMarkers {
     param([AllowEmptyString()][string]$Policy)
     if (-not $Policy) { return $false }
-    foreach ($marker in @('usd-budgets', 'usd-budget-state', 'external-idp-extra-audience', '00000000-0000-0000-0000-000000000000', 'entitlement-source')) {
+    foreach ($marker in @('usd-budgets', 'usd-budget-state', 'external-idp-extra-audience', 'urn:disabled:claude-extra-audience', 'entitlement-source')) {
         if (-not $Policy.Contains($marker)) { return $false }
     }
     return $true
@@ -50,7 +50,7 @@ function Get-ClaudeFlowMigrationPlan {
         $actions += New-ClaudeFlowAction -Verb Create -Target "named value $name" -Detail $detail
     }
     if ($normalizeDisabledAudience) {
-        $actions += New-ClaudeFlowAction -Verb Update -Target 'named value external-idp-extra-audience' -Detail 'whitespace/empty -> disabled GUID sentinel'
+        $actions += New-ClaudeFlowAction -Verb Update -Target 'named value external-idp-extra-audience' -Detail 'whitespace/empty -> disabled URI sentinel'
     }
     if (-not $actions.Count) { return New-ClaudeFlowPlan -Step '0002-policy-and-named-values' -Summary 'Policy hash and policy-referenced named values already match this release.' }
     New-ClaudeFlowPlan -Step '0002-policy-and-named-values' `
@@ -88,7 +88,7 @@ function Invoke-ClaudeFlowMigration {
         Set-ApimNamedValue -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Id $name -Value ([string]$defaults[$name].Value)
     }
     if ($Plan.Data.NormalizeDisabledAudience) {
-        Set-ApimNamedValue -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Id 'external-idp-extra-audience' -Value '00000000-0000-0000-0000-000000000000'
+        Set-ApimNamedValue -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -Id 'external-idp-extra-audience' -Value 'urn:disabled:claude-extra-audience'
     }
     $policyXml = [IO.File]::ReadAllText([string]$Plan.Data.PolicyPath)
     $body = @{ properties = @{ format = 'rawxml'; value = $policyXml } } | ConvertTo-Json -Depth 5

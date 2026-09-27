@@ -3,11 +3,11 @@
     Shared helpers for P66 lifecycle update and change steps. Dot-sourcing this file performs no Azure writes.
 #>
 
-function Get-ClaudeFlowLifecycleRepoRoot {
+function global:Get-ClaudeFlowLifecycleRepoRoot {
     return (Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent)
 }
 
-function Get-ClaudeFlowLifecycleFileHash {
+function global:Get-ClaudeFlowLifecycleFileHash {
     param([Parameter(Mandatory = $true)][string]$Path)
     $sha = [Security.Cryptography.SHA256]::Create()
     try {
@@ -17,7 +17,7 @@ function Get-ClaudeFlowLifecycleFileHash {
     finally { $sha.Dispose() }
 }
 
-function Get-ClaudeFlowLifecycleStringHash {
+function global:Get-ClaudeFlowLifecycleStringHash {
     param([AllowEmptyString()][string]$Text)
     $sha = [Security.Cryptography.SHA256]::Create()
     try {
@@ -26,7 +26,7 @@ function Get-ClaudeFlowLifecycleStringHash {
     finally { $sha.Dispose() }
 }
 
-function Get-ClaudeFlowLifecyclePolicyNamedValueReferences {
+function global:Get-ClaudeFlowLifecyclePolicyNamedValueReferences {
     param([string]$PolicyPath = (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'infra\policy.xml'))
     if (-not (Test-Path -LiteralPath $PolicyPath)) { throw "Policy file '$PolicyPath' does not exist." }
     $text = [IO.File]::ReadAllText($PolicyPath)
@@ -36,7 +36,7 @@ function Get-ClaudeFlowLifecyclePolicyNamedValueReferences {
         Sort-Object -Unique)
 }
 
-function Get-ClaudeFlowLifecycleTemplateNamedValueDefaults {
+function global:Get-ClaudeFlowLifecycleTemplateNamedValueDefaults {
     param([string]$BicepPath = (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'infra\main.bicep'))
     if (-not (Test-Path -LiteralPath $BicepPath)) { throw "Bicep file '$BicepPath' does not exist." }
     $text = [IO.File]::ReadAllText($BicepPath)
@@ -54,7 +54,7 @@ function Get-ClaudeFlowLifecycleTemplateNamedValueDefaults {
             '^entitlement-resolver-url$' { 'https://resolver-not-deployed.invalid'; break }
             '^entitlement-resolver-audience$' { 'https://resolver-not-deployed.invalid'; break }
             '^entitlement-cache-seconds$' { '3600'; break }
-            '^external-idp-extra-audience$' { '00000000-0000-0000-0000-000000000000'; break }
+            '^external-idp-extra-audience$' { 'urn:disabled:claude-extra-audience'; break }
             '^tpm-standard$' { '20000'; break }
             '^quota-standard$' { '500000'; break }
             '^tpm-premium$' { '80000'; break }
@@ -67,7 +67,7 @@ function Get-ClaudeFlowLifecycleTemplateNamedValueDefaults {
     return $defaults
 }
 
-function Get-ClaudeFlowLifecycleNamedValueMap {
+function global:Get-ClaudeFlowLifecycleNamedValueMap {
     param($Discovery)
     $map = @{}
     if ($Discovery -and $Discovery.PSObject.Properties.Name -contains 'namedValues' -and $Discovery.namedValues) {
@@ -91,7 +91,7 @@ function Get-ClaudeFlowLifecycleNamedValueMap {
     return $map
 }
 
-function Get-ClaudeFlowLifecycleRecordTarget {
+function global:Get-ClaudeFlowLifecycleRecordTarget {
     param([Parameter(Mandatory = $true)]$Record, $Discovery = $null)
     $decision = $null
     if ($Record.PSObject.Properties.Name -contains 'decisions' -and $Record.decisions -and
@@ -107,14 +107,14 @@ function Get-ClaudeFlowLifecycleRecordTarget {
     }
 }
 
-function Import-ClaudeFlowLifecycleDiscovery {
+function global:Import-ClaudeFlowLifecycleDiscovery {
     param([string]$Path)
     if (-not $Path) { return $null }
     if (-not (Test-Path -LiteralPath $Path)) { throw "Discovery fixture '$Path' does not exist." }
     return (Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json)
 }
 
-function Get-ClaudeFlowLifecycleLiveDiscovery {
+function global:Get-ClaudeFlowLifecycleLiveDiscovery {
     param([string]$ResourceGroup, [string]$ApimName, [string]$ApiId = 'claude-foundry')
     if (-not $ResourceGroup -or -not $ApimName) { throw 'ResourceGroup and ApimName are required for live discovery.' }
     $apim = az apim show -g $ResourceGroup -n $ApimName -o json | ConvertFrom-Json
@@ -137,7 +137,7 @@ function Get-ClaudeFlowLifecycleLiveDiscovery {
     }
 }
 
-function Get-ClaudeFlowLifecycleApimMeterName {
+function global:Get-ClaudeFlowLifecycleApimMeterName {
     param([Parameter(Mandatory = $true)][string]$Sku)
     switch ($Sku) {
         'BasicV2' { 'Basic v2 Unit' }
@@ -147,7 +147,7 @@ function Get-ClaudeFlowLifecycleApimMeterName {
     }
 }
 
-function Get-ClaudeFlowLifecycleApimMonthlyCost {
+function global:Get-ClaudeFlowLifecycleApimMonthlyCost {
     param([Parameter(Mandatory = $true)][string]$Sku, [Parameter(Mandatory = $true)][string]$Region, [int]$Units = 1)
     $root = Get-ClaudeFlowLifecycleRepoRoot
     . (Join-Path $root 'scripts\AzureRetailPrice.ps1')
@@ -158,7 +158,7 @@ function Get-ClaudeFlowLifecycleApimMonthlyCost {
     return New-ClaudeFlowCost -Item "API Management $Sku ($Units unit)" -Source 'Azure Retail Prices API' -UnknownReason "no retail meter found for $Sku in $Region"
 }
 
-function Assert-ClaudeFlowLifecycleSnapshotBeforeWrite {
+function global:Assert-ClaudeFlowLifecycleSnapshotBeforeWrite {
     param([Parameter(Mandatory = $true)]$Plan)
     if (-not $Plan.Data -or -not $Plan.Data.SnapshotPath) { throw 'A named-value snapshot path is required before applying this lifecycle change.' }
     if ($Plan.Data.SnapshotTaken -eq $true) { return }

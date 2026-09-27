@@ -26,6 +26,7 @@ function Get-ClaudeFlowStepQuestions {
 
 function Get-ClaudeFlowStepPlan {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
+    . (Join-Path (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts') 'ClaudeDesktopSignIn.ps1')
     $target = Get-ClaudeFlowLifecycleRecordTarget -Record $Record -Discovery $Discovery
     $current = Get-ClaudeDecision -Record $Record -Key desktopSignIn
     $desired = if ($Discovery -and $Discovery.desiredDesktopSignIn) { $Discovery.desiredDesktopSignIn } elseif ($current -is [string]) { [string]$current } elseif ($current -and $current.target) { $current.target } else { $null }

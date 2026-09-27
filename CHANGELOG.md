@@ -36,6 +36,12 @@ exact streaming cache-creation detail remains **U13**.
   tier changes, named values ↔ projection entitlement moves, enterprise network review execution
   and Desktop sign-in changes. `docs/UPDATE-AND-CHANGE.md` gives the step-by-step and manual
   equivalents.
+- **Guided flow core (P66).** `Start-ClaudeGateway.ps1` now orchestrates setup,
+  change, guide and status from one decision record and one reviewed plan
+  fingerprint, with absent parallel-branch modules skipped rather than failed.
+  `scripts/flow/Discovery.ps1`, `Foundation.ps1`, `DeviceProfiles.ps1`,
+  `Verify.ps1` and `Guide.ps1` provide the owned step modules, and
+  `docs/GUIDED-FLOW.md` documents the product path and manual equivalents.
 - **Guided diagnostics (P66).** `scripts/Debug-ClaudeSetup.ps1` and
   `scripts/Debug-ClaudeWorkstation.ps1` run read-only administrator and developer
   checks with PASS/WARN/FAIL/SKIP evidence, exact fixes and redacted support

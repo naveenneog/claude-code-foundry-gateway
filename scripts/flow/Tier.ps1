@@ -16,7 +16,7 @@ function Get-ClaudeFlowStepInfo {
     }
 }
 
-function Get-ClaudeFlowTierResearch {
+function global:Get-ClaudeFlowTierResearch {
     @(
         'Microsoft Learn, Upgrade and scale an Azure API Management instance, fetched 2026-09-26: https://learn.microsoft.com/en-us/azure/api-management/upgrade-and-scale',
         'Microsoft Learn, Azure API Management v2 tiers overview, fetched 2026-09-26: https://learn.microsoft.com/en-us/azure/api-management/v2-service-tiers-overview',
@@ -25,7 +25,7 @@ function Get-ClaudeFlowTierResearch {
     )
 }
 
-function Get-ClaudeFlowTierChangeOptions {
+function global:Get-ClaudeFlowTierChangeOptions {
     param([Parameter(Mandatory = $true)]$Record, $Discovery)
     $target = Get-ClaudeFlowLifecycleRecordTarget -Record $Record -Discovery $Discovery
     $current = if ($target.Sku) { $target.Sku } else { 'BasicV2' }

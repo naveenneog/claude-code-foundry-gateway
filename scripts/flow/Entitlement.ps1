@@ -10,7 +10,7 @@ function Get-ClaudeFlowStepInfo {
     [pscustomobject]@{ Name = 'Entitlement'; Title = 'Entitlement store'; DecisionKey = 'entitlementStore'; DependsOn = @('Foundation'); Actions = @('Change') }
 }
 
-function Get-ClaudeFlowEntitlementSource {
+function global:Get-ClaudeFlowEntitlementSource {
     param($Record, $Discovery)
     $nv = Get-ClaudeFlowLifecycleNamedValueMap -Discovery $Discovery
     if ($nv.ContainsKey('entitlement-source')) { return $nv['entitlement-source'] }

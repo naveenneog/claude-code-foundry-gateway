@@ -64,7 +64,7 @@ $freshDiscovery = [pscustomobject]@{
 $noopPolicy = Get-ClaudeFlowMigrationPlan -Record $record -Discovery $freshDiscovery
 Assert 'migration is idempotent when policy and named values match' (Test-ClaudeFlowPlanIsNoop $noopPolicy)
 
-$normalizedPolicy = '<policies>usd-budgets usd-budget-state external-idp-extra-audience 00000000-0000-0000-0000-000000000000 entitlement-source</policies>'
+$normalizedPolicy = '<policies>usd-budgets usd-budget-state external-idp-extra-audience urn:disabled:claude-extra-audience entitlement-source</policies>'
 $normalizedPlan = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomobject]@{ resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; location = 'eastus2'; sku = 'BasicV2'; policy = $normalizedPolicy; namedValues = $allNv })
 Assert 'APIM-normalized current policy markers do not cause repeated updates' (Test-ClaudeFlowPlanIsNoop $normalizedPlan)
 

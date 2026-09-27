@@ -19,7 +19,8 @@ $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'flow\lib\LifecycleCommon.ps1')
 
 if (-not (Test-Path -LiteralPath $RecordPath)) {
-    throw "No decision record found at '$RecordPath'. Pass -RecordPath or run the guided setup first."
+    Write-Warning "No decision record found at '$RecordPath'. Nothing can be updated until setup has written the record."
+    return [pscustomobject]@{ Plans = @(); Fingerprint = ''; SnapshotPath = $null; MissingRecord = $true }
 }
 $record = Read-ClaudeDecisionRecord -Path $RecordPath
 $discovery = Import-ClaudeFlowLifecycleDiscovery -Path $DiscoveryPath

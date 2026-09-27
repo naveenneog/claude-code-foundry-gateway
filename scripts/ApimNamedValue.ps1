@@ -144,7 +144,7 @@ function Set-ApimNamedValue {
         # creating a named value. external-idp-extra-audience also appears in an
         # <audience> element, so policy validation needs a nonempty GUID-shaped
         # sentinel that the policy explicitly treats as disabled.
-        $emptySentinel = if ($Id -eq 'external-idp-extra-audience') { '00000000-0000-0000-0000-000000000000' } else { ' ' }
+        $emptySentinel = if ($Id -eq 'external-idp-extra-audience') { 'urn:disabled:claude-extra-audience' } else { ' ' }
         $sub = az account show --query id -o tsv
         if (-not $sub) { throw 'Could not determine the current Azure subscription for an empty named value write.' }
         $token = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv

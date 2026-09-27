@@ -146,8 +146,8 @@ param entitlementResolverUrl string = 'https://resolver-not-deployed.invalid'
 @description('Entra audience the gateway asks for a managed identity token against, when calling the resolver. Separate from the URL on purpose: the two often differ, and conflating them produces a token the resolver rejects.')
 param entitlementResolverAudience string = 'https://resolver-not-deployed.invalid'
 
-@description('Optional extra Entra audience accepted from external-idp sign-in. The all-zero GUID sentinel keeps the shipped Azure CLI/helper-script audiences only while satisfying API Management policy validation.')
-param desktopExtraAudience string = '00000000-0000-0000-0000-000000000000'
+@description('Optional extra Entra audience accepted from external-idp sign-in. Empty keeps the shipped Azure CLI/helper-script audiences only.')
+param desktopExtraAudience string = 'urn:disabled:claude-extra-audience'
 
 @description('How long the gateway may serve an identity the directory has already changed, in seconds. This is the staleness bound, and it also sets the resolver cost, because cost follows cache misses rather than requests.')
 @minValue(60)
