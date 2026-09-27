@@ -452,6 +452,27 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       the Foundry account's region and the rest of its geography with each v2 tier's monthly list
       price, prices the tier prompt, records `sku`, `location` and the Foundry account, and offers
       the FinOps tool at the end, as `Install-ClaudeGateway.ps1` does since P68
+- [ ] P70 newly deployed models reach the tiers and the workstations — acceptance: after an
+      administrator deploys a Claude model on the Foundry account, one guided change lists the
+      Claude deployments that the tier lists (`models-standard`, `models-premium`) and the decision
+      record do not have, asks which tiers get each (the answers file without a console), takes a
+      named-value backup, updates the tier lists and the record's `deployments` and `models`,
+      regenerates the device profiles, and names the developer step; a model with no price in the
+      price book is stated as such; proven with real requests on an isolated gateway (200 for the
+      added model in its tier, 403 in the other)
+- [ ] P71 AUM answers fast and says why it cannot — acceptance: with the Turnstile database stopped,
+      `aum` and its terminal UI stop within about 5 s and name the stopped server and the command
+      that starts it, instead of `Read failed (exit 7)` after 30 s or more; the terminal UI shows
+      each panel as its data arrives, with an estimate while it waits; Direct reuses one token per
+      process and batches its gateway reads, and time-to-first-data for `whoami`, `budget list`,
+      `usage show` and `status` is measured before and after on the reference estate (**U32**)
+- [ ] P72 permutation tests of the guided flow and the installer — acceptance: every combination of
+      action (Setup, Change foundation, Guide, Status), record state (none, recorded and matching,
+      recorded with another gateway URL, recorded but missing, not readable), mode (attended,
+      `-PlanOnly`, unattended apply), entitlement store and Desktop sign-in kind holds the flow's
+      invariants; the installer's summary reflects every combination of tier, entitlement store,
+      developer sign-in, Desktop sign-in and address under `-WhatIf`, on PowerShell 7 and 5.1; each
+      failure found is fixed test-first
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so
