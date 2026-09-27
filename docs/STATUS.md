@@ -1,6 +1,33 @@
 # Status
 
-**Active packets:** P66 guided flow ([below](#p66-guided-flow-2026-09-27)). Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets:** P67 developer workstation fixes from the owner's test ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)); P68 guided flow redesign and P69 the company address follow it ([ROADMAP](ROADMAP.md)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+
+## P67 developer workstation fixes from the owner's test, 2026-09-27
+
+The owner ran the flows on another workstation on 2026-09-27. After `Setup-ClaudeWorkstation.ps1`,
+the Claude Code CLI (2.1.101) returned `400 "thinking.type.enabled" is not supported` for
+`claude-opus-5`, Claude Desktop showed an empty **Credential kind** and no Entra sign-in, and
+Diagnose waited for minutes on `claude doctor` and printed its output unreadably. Design:
+[ADR-0031](adr/0031-client-keys-every-release-reads.md); research: **U27**, **U28**; open: **U29**.
+
+- [ ] Desktop Entra sign-in renders keys that Desktop 2.2553.1.0 reads (`interactive`,
+      `inferenceGatewayOidc`, and `inferenceGatewayOidcAuthFlow` for broker), checked against the
+      installed release's schema; the helper-script keys are unchanged
+- [ ] Claude Code settings declare capabilities for recorded Opus 5, Opus 5.5 and Sonnet 5
+      deployments, found by model rather than deployment name, in the Windows and macOS/Linux
+      workstation setups and the MDM profiles
+- [ ] The installer records each Claude deployment's name, model and version in
+      `claude-gateway.json`
+- [ ] Workstation setup compares the installed Claude Code and Claude Desktop with the releases the
+      recorded models and keys need, updates an older Claude Code with `claude update` unless
+      `-SkipInstall`, and names every Claude Code on PATH and which one runs
+- [ ] Diagnostics run `claude doctor` with no input, a time limit and UTF-8 decoding; read the
+      Desktop configuration from its real sources and check it against the installed release;
+      show Desktop's recent `[custom-3p]` log errors; name an unfinished decision record; never
+      print an empty `--tenant`
+- [ ] Live: Claude Code 2.1.101 answers through the reference gateway with the settings the setup
+      writes
+- [ ] `node .ironclad/gate.mjs --stage packet` exits 0
 
 ## P66 guided flow, 2026-09-27
 

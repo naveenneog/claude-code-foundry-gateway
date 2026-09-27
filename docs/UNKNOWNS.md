@@ -33,6 +33,11 @@ fails the release stage while any remain. Detail for each one follows below.
 | U24 | OPEN | Does Microsoft Graph `$search` find directory users by a full email address consistently, for members and guests? Measured 2026-09-26 by P64: in the reference tenant `$search` did not return the signed-in owner for their full email, so `aum developer find` falls back to exact `mail`, `userPrincipalName` and `otherMails` filters for a typed address. Partial-email behaviour in a tenant with many guests is not measured ([advanced queries](https://learn.microsoft.com/graph/aad-advanced-queries)) | P64, [ADR-0029](adr/0029-aum-developer-membership.md) |
 | U25 | OPEN | How does `aum developer add` and `remove` publish on a gateway whose entitlement comes from the Cosmos projection rather than named values? P64 documents that such a gateway publishes through its projection pipeline after the group write ([AUM.md](AUM.md)); a live add-then-remove through a projection-backed gateway (P61) is not measured | P64, P61 |
 | U26 | OPEN | Which checks fail intermittently when the whole suite runs, and why? The "AUM - commands, dashboard and pilot" check (and its predecessor, Terminal FinOps) failed under the full Test-All run on 2026-09-25 (six agents' concurrent load), in the P62 branch gate on 2026-09-26 (~11:41Z), and in the lead's integration gate on `c25d246` (13:06-13:20Z, 141.9 s), each time alone. The same tree then passed directly (320 tests, 134 s), in three concurrent pytest runs (320 each) and in a verbose gate rerun (13:26-13:40Z, 67 of 67). The failing test was not identified, because Test-All's summary does not keep a failing check's output; a rerun that passes is recorded here, not treated as proof. The "Wizard reaches summary on PS 5.1" check behaves the same way: it failed alone in the P61 branch gate (07:14Z) and in the lead's gate on `55b2a17` (13:47-14:00Z, 70.1 s), and passed when run directly (79.6 s). So does "Chargeback report generation": it failed alone after 2.5 s in the lead's gate on 2026-09-26 (17:00-17:14Z) and passed directly (78 assertions, 3.1 s); a P52 gate on 2026-09-25 recorded that check failing once with `Access to the path '...\empty\.building-<id>' is denied` from a directory move. Other workloads were running on the workstation during these gates | P50, P52, P56 |
+| U27 | CLOSED | Which Desktop sign-in keys does an installed Claude Desktop read? Researched and measured 2026-09-27: `inferenceIdpOidc`, `inferenceIdpAuthFlow` and the `external-idp` kind need Desktop 2.7032.0; `interactive` with `inferenceGatewayOidc` (1.6889.0) and `inferenceGatewayOidcAuthFlow` (1.25927.0) is read as `external-idp` by later releases, with no end date. The installed 2.2553.1.0 reads neither new key ([detail](#u27--desktop-sign-in-keys-by-release--closed-2026-09-27)) | P67, [ADR-0031](adr/0031-client-keys-every-release-reads.md) |
+| U28 | CLOSED | Which Claude Code releases work with `claude-opus-5` and `claude-sonnet-5` through Foundry deployments? Measured 2026-09-27: 2.1.101 returns `400 thinking.type.enabled is not supported`; with `ANTHROPIC_DEFAULT_*_MODEL_SUPPORTED_CAPABILITIES` it answers, and so does 2.1.272 at effort `high` and `max`. Sonnet 5 arrived in 2.1.197 and Opus 5 in 2.1.219 ([detail](#u28--claude-code-releases-and-the-5-series-models--closed-2026-09-27)) | P67, [ADR-0031](adr/0031-client-keys-every-release-reads.md) |
+| U29 | OPEN | What made Claude Desktop report `ENOTFOUND` on the owner's workstation on 2026-09-27? Not reproduced here. Its configuration then had no readable credential kind (U27). `Debug-ClaudeWorkstation.ps1` now shows Desktop's own recent `[custom-3p]` warnings and errors from `%LOCALAPPDATA%\Claude-3p\logs\main.log`, which name the failing host | P67 |
+| U30 | OPEN | Can the guided flow create the company address itself: an API Management custom hostname with a certificate and a DNS record, on each v2 tier, and at what cost? Not researched yet | P69 |
+| U31 | OPEN | Can the flow show the customer's own prices (an agreement's price sheet) instead of Azure retail list prices, and with what role? Not researched yet | P68 |
 
 ---
 
@@ -566,6 +571,63 @@ customer tenant. An operator on a normal subscription may not hit this at all �
 the accelerator should not assume either way, which is why
 `infra/projection.bicep` makes network access an explicit choice rather than a
 default.
+
+---
+
+## U27 — Desktop sign-in keys by release — CLOSED 2026-09-27
+
+**Symptom.** On the owner's workstation, after `Setup-ClaudeWorkstation.ps1` wrote a Desktop
+profile for Entra sign-in, **Configure third-party inference** showed the gateway base URL, an
+empty **Credential kind** and "Connection needs Credential kind".
+
+**Research.** The configuration reference
+(<https://claude.com/docs/third-party/claude-desktop/configuration>, retrieved 2026-09-27) lists:
+
+| Key or value | Added in | Note |
+|---|---|---|
+| `inferenceCredentialKind` | 1.8555.0 | one of `static`, `helper-script`, `interactive`, `vendor-profile`, `workforce`, `external-idp` |
+| `inferenceGatewayOidc` | 1.6889.0 | deprecated in favour of `inferenceIdpOidc`; "the original spelling will keep working; no end date has been set" |
+| `inferenceGatewayOidcAuthFlow` | 1.25927.0 | `browser` (default) or `broker`; same deprecation note |
+| `inferenceIdpOidc`, `inferenceIdpAuthFlow` | 2.7032.0 | the new spelling |
+| `interactive` with `inferenceGatewayOidc` | — | "read as `external-idp`" |
+
+**Measurement.** The Desktop release installed on this workstation, 2.2553.1.0 (MSIX), carries a
+configuration schema of 171 keys. It has `inferenceGatewayOidc` and `inferenceGatewayOidcAuthFlow`,
+not `inferenceIdpOidc` or `inferenceIdpAuthFlow`, and its credential kinds exclude `external-idp`
+(`tests/fixtures/claude-desktop-schema-2.2553.1.0.json`). ADR-0027's profile wrote only keys and a
+kind this release does not read, which matches the symptom.
+
+**Resolution.** [ADR-0031](adr/0031-client-keys-every-release-reads.md): render the original
+spelling, which every release since 1.25927.0 reads.
+
+## U28 — Claude Code releases and the 5-series models — CLOSED 2026-09-27
+
+**Symptom.** Claude Code 2.1.101 on the owner's workstation returned
+`API Error: 400 ... "thinking.type.enabled" is not supported for this model. Use
+"thinking.type.adaptive" and "output_config.effort"` for `claude-opus-5` through the gateway.
+The VS Code extension on the same machine worked.
+
+**Research.** The Claude Code changelog
+(<https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md>, retrieved 2026-09-27) adds
+Claude Sonnet 5 in 2.1.197, Claude Opus 5 in 2.1.219 and Claude Opus 5.5 in 2.1.280, and added
+capability overrides for pinned third-party models in 2.1.84. The model configuration guide
+(<https://code.claude.com/docs/en/model-config>, retrieved 2026-09-27) says Claude Code never
+recognises a pinned Microsoft Foundry deployment name and detects capabilities from the model ID
+unless `ANTHROPIC_DEFAULT_<ALIAS>_MODEL_SUPPORTED_CAPABILITIES` lists them (`effort`,
+`xhigh_effort`, `max_effort`, `thinking`, `adaptive_thinking`, `interleaved_thinking`).
+
+**Measurement**, 2026-09-27, `claude -p` through the reference gateway with `claude-sonnet-5`
+and an isolated `CLAUDE_CONFIG_DIR`:
+
+| Claude Code | Capability variable | Result |
+|---|---|---|
+| 2.1.101 | none | 400 `thinking.type.enabled` |
+| 2.1.101 | `..._SUPPORTS` (the changelog's shorthand) | 400 |
+| 2.1.101 | `..._SUPPORTED_CAPABILITIES` with all six | answered; also at `--effort max` |
+| 2.1.272 | `..._SUPPORTED_CAPABILITIES` with all six | answered at `--effort high` and `max` |
+
+**Resolution.** [ADR-0031](adr/0031-client-keys-every-release-reads.md): declare capabilities for
+recorded models, and report or update a Claude Code older than the release that knows them.
 
 ---
 
