@@ -9,25 +9,25 @@ this branch stops at a passing packet gate. The reference gateway is read-only t
 
 Acceptance criteria:
 
-- [ ] A Change-only `models` step and a standalone model-sync command discover the chosen
+- [x] A Change-only `models` step and a standalone model-sync command discover the chosen
       Foundry account's Claude deployments, compare tier lists and the record, and show model,
       version, SKU/capacity and price-book status before a write
-- [ ] Each deployment has an explicit tier choice, from the console or the flow's answers file;
+- [x] Each deployment has an explicit tier choice, from the console or the flow's answers file;
       missing deployments have a keep/drop choice. Empty-list allow-all semantics cannot turn
       removal into an unintended access grant
-- [ ] A fingerprint binds the target, discovered state, decisions, prices and generated outputs.
+- [x] A fingerprint binds the target, discovered state, decisions, prices and generated outputs.
       Apply refuses stale or incomplete plans and takes a named-value snapshot before writing;
       only `models-standard` and `models-premium` can change
-- [ ] The record preserves unrelated fields and per-deployment client overrides, updates
+- [x] The record preserves unrelated fields and per-deployment client overrides, updates
       `deployments` and `models`, and regenerates per-tier device profiles. The developer handover
       states how rerunning setup changes `availableModels`, pinned aliases, capabilities and
       Desktop `inferenceModels`
-- [ ] Unpriced models are labelled unpriced, never free. Pricing and named-value propagation
+- [x] Unpriced models are labelled unpriced, never free. Pricing and named-value propagation
       have cited research or measured evidence in UNKNOWNS and ADR-0034; every wait names its
       purpose, estimate and elapsed time
-- [ ] Offline stubbed-Azure tests run on PowerShell 7 and Windows PowerShell 5.1; each new
+- [x] Offline stubbed-Azure tests run on PowerShell 7 and Windows PowerShell 5.1; each new
       detector is broken deliberately, its failure and full assertion count recorded, and restored
-- [ ] An isolated gateway in `rg-p70-models`, with dedicated `claude-p70-*` groups, returns
+- [x] An isolated gateway in `rg-p70-models`, with dedicated `claude-p70-*` groups, returns
       `403 model_not_allowed` before and `200` after a deployment is added to the caller's tier.
       The proof costs less than USD 5; its resource group, soft-deleted gateway, groups and exact
       shared-Foundry role assignment are removed with creation/deletion times recorded
@@ -80,6 +80,83 @@ ModelsAndPlugins 92, WorkstationClients 178 and Architecture 36 assertions, all 
 The GuidedFlow suite also passed on Windows PowerShell 5.1. Full installer previews passed
 on both hosts; the PowerShell 7 preview with explicit model subsets took 23.7 s.
 The 15-spec architecture render passed; its new model-lifecycle image was inspected.
+The existing FlowStart suite passed with the new Change-only module present.
+All 42 frozen-source detector mutations on PowerShell 7 were caught at the full 83
+assertions; the restored run passed. The additional fresh-record detector was caught
+at all 84 assertions on both hosts. The PowerShell 5.1 42-case run also caught every mutation at 83 assertions and passed after
+restoration. The two full runs plus the fresh-record case provide 43 caught mutations per host.
+
+Post-purge cleanup detail: after the second attempt, ARM again listed the old resource group
+and its already deleted gateway while `az apim show` returned `ServiceNotFound`; the activity
+log showed successful deletions and no new resource-group write. With no other resource in
+that group, a second group deletion completed at 21:46:53Z after 73.6 s. The next proof
+refused to reuse the lingering group until it was absent. Its cleanup now rechecks the
+resource group after purging API Management.
+
+Final live attempt: Basic v2 installation completed in 269.3 s. The first Haiku request,
+21:55:00Z, returned `403 error.code=model_not_allowed` (0.597 s). The approved guided Change
+completed in 330.5 s: its non-secret snapshot took 17.5 s, the standard-model write 21.3 s,
+readback 22.5 s and both profiles 1.0 s; the later management reads account for the remaining
+time. At 22:01:49Z, the first request after apply returned standard-tier 200 in 1.539 s.
+That is 1.6 s after apply returned, not a claim of 1.6 s propagation after the named-value
+write. The post-write management verification ran before that request.
+At 22:04:28Z Sonnet returned premium-tier 200 (2.649 s), and at 22:04:29Z Haiku returned
+`403 error.code=model_not_allowed` (0.603 s), proving the other tier remained restricted.
+The generated standard files list Haiku and Sonnet; premium lists only Sonnet.
+Images 50-54 were rendered from live, dated command transcripts and inspected; the apply
+image is labelled as an excerpt, with its complete raw transcript retained privately.
+
+Final cleanup completed with no failures. Times below are UTC on 2026-09-27; principal and
+group object ids remain only in private evidence. Creation of the managed identity and role
+was part of the installer, completed before the first gateway read.
+
+| Created object | Created / first verified | Removed / absence verified |
+|---|---|---|
+| `rg-p70-models`, tagged `purpose=p70-proof` | 21:47:54 | Deleted 22:07:32; independently absent at 22:13:51 |
+| Basic v2 `apim-p70eb00b`, its managed identity, Log Analytics and Application Insights | Installer completed 21:52:33; gateway verified 21:52:36 | Group deletion 22:07:32; soft-deleted API Management purged 22:09:08 |
+| Cognitive Services User on the shared Foundry account, for that identity only | Created by the installer | Exact assignment deleted 22:04:49; all three proof identities have zero remaining assignments at 22:13:51 |
+| `claude-p70-standard` | 21:47:59 | Deleted 22:09:19; absent at 22:13:51 |
+| `claude-p70-premium` | 21:48:03 | Deleted 22:09:25; absent at 22:13:51 |
+
+The final independent read found no resource group, no soft-deleted proof gateway, no dedicated
+group and no role assignment for any proof identity. Estimated API Management cost across all
+three resource-bearing attempts is USD 0.2136 (0.09 + 0.0483 + 0.0753), calculated at
+USD 150 / 730 hours and including cleanup time. Successful requests used at most 16 output
+tokens each; rejected requests did not call Foundry. No extra compute or Foundry deployment
+was provisioned. This is below the USD 5 ceiling with a wide margin, but is not invoice
+reconciliation (U2). Image 55 shows the final cleanup; it was inspected after redaction.
+
+**Owner command and current reference state.** The following exact read-only command ran at
+21:57Z and produced fingerprint
+`12a41e22c399b185385c3127d96e0861ca209514cbf345650ecf4c500ae11a47`.
+It uses a separate reference record rather than the disposable proof record:
+
+```powershell
+.\scripts\Sync-ClaudeModels.ps1 -RecordPath .\onboarding\reference\claude-gateway.json `
+    -ResourceGroup rg-contosohub -ApimName apim-claude-gw-fzgql9 `
+    -FoundryAccount ai-contosohub530569751908 -FoundryResourceGroup rg-contosohub `
+    -TierAssignments @{ 'claude-opus-5-5' = 'premium'; 'claude-haiku-4-5' = 'both' } -PlanOnly
+```
+
+Observed preview: `models-standard` would change from `,,` to
+`,claude-haiku-4-5,claude-opus-5,claude-sonnet-5,`; `models-premium` stays `,,`.
+The plan copies the dated Haiku price to its deployed spelling, leaves Opus 5.5 unpriced,
+and writes the new record and tier profiles. No reference file or Azure value was written.
+Both models are already allowed by the current unrestricted lists. This choice would
+**restrict standard**, not merely add access. The current authority is Turnstile, so apply
+is refused until the owner chooses the authoritative change path.
+
+After an owner-reviewed ownership decision, the exact apply command is the same command
+with `-PlanOnly` replaced by `-ApprovedPlanFingerprint <fresh-reviewed-fingerprint>`.
+The old captured fingerprint is not an approval for a later changed estate.
+The alternate authoritative path is Turnstile's Gateway governance page; P70 does not switch
+authority or write through a second control plane.
+
+Open decisions for the lead: council verdicts and merge; the reference ownership/access
+choice; a separate cache-rate schema change before pricing Opus 5.5 automatically.
+MDM assignment and actual Windows/macOS/Linux fleet rollout remain operator actions.
+No real managed device or Desktop app was changed by this live proof.
+The packet gate is the remaining branch step. ROADMAP's P70 box remains unticked.
 
 Read-only reference drift, 2026-09-27 20:19Z: both `models-standard` and `models-premium` are
 `,,` (allow all), and `turnstile-integration` reports `governanceAuthority=Turnstile`,

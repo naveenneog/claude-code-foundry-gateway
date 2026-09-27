@@ -114,6 +114,30 @@ procedure is in [Governance checks](GOVERNANCE-CHECKS.md).
 Every discovery, backup, write, readback and profile-generation wait gives
 its purpose and an estimate, followed by the elapsed time.
 
+![A live isolated-gateway model plan: only Haiku is added to standard, premium remains Sonnet-only, the dated Haiku price mapping and unpriced Opus 5.5 status are shown, and the review ends with a fingerprint.](guide/50-model-change-plan.png)
+
+The isolated apply captured 24 non-secret named values, skipped one secret
+value, updated `models-standard` and regenerated both tier profiles. It did
+not change the premium model list.
+
+![Excerpt from the approved live model change: the gateway snapshot precedes the named-value update, readback and both profile verifications pass, and each wait reports elapsed time.](guide/51-model-change-applied.png)
+
+Real non-streaming requests on 2026-09-27 used the signed-in account, moved
+between the two dedicated proof groups. Haiku returned 403 before the change,
+200 in standard after the change, and 403 after the account moved to premium.
+Sonnet returned 200 in each tier, establishing that the denied Haiku request
+was a model decision, not missing entitlement.
+
+![Five real gateway requests: Sonnet returns 200 in standard and premium; Haiku is model_not_allowed before the change, returns 200 in standard afterwards, and remains model_not_allowed in premium.](guide/52-model-tier-requests.png)
+
+The proof resource group, soft-deleted gateway, dedicated tier groups and
+the gateway identity's exact shared-Foundry role assignment were removed.
+An independent read at 22:13Z found none remaining. The three attempts
+consumed an estimated USD 0.2136 of API Management time; invoice
+reconciliation remains U2.
+
+![Final isolated-proof cleanup records the resource group, gateway purge, exact role-assignment removal and deletion of both dedicated Entra groups, with UTC times.](guide/55-model-proof-cleanup.png)
+
 ## The four things that have to agree
 
 | State | Location | Consequence of a mismatch |
@@ -216,6 +240,8 @@ DeviceProfiles/Guide run preserves that selection. Assignment through Intune,
 Jamf or Group Policy remains a fleet action; a local sync does not silently
 update devices ([MDM](MDM.md)).
 
+![The generated live client files give standard Haiku and Sonnet, keep premium Sonnet-only, pin the Haiku alias within each tier and declare Sonnet's adaptive-thinking capabilities.](guide/53-model-client-handover.png)
+
 ## Retiring one
 
 When Foundry no longer lists a deployment, the model question offers `drop`.
@@ -241,6 +267,19 @@ services, and can write an empty allow-all list on last-entry removal.
 The reviewed sync is the lifecycle path described here.
 
 ## Troubleshoot and next steps
+
+### Reference-gateway preview
+
+A read-only preview on 2026-09-27 at 21:57Z found both reference model lists
+at `,,` and tier governance owned by Turnstile. The gateway therefore already
+allowed every model, unlike the earlier inventory. Choosing Opus 5.5 for
+premium and Haiku for both would restrict standard to its three other
+existing deployments, leave premium unrestricted, and generate a separate
+record and profiles. Apply remains blocked by Turnstile ownership; it does
+not silently switch authority. The operator decides that ownership and
+access change separately.
+
+![Read-only reference model preview with current Turnstile ownership, the existing unrestricted lists, the proposed standard-tier restriction, unpriced Opus 5.5 and the exact fingerprint.](guide/54-reference-model-plan.png)
 
 | Symptom | Meaning or next check |
 |---|---|

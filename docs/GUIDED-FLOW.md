@@ -236,6 +236,8 @@ Turnstile-owned tiers are visible in the preview but cannot be changed by this
 step. The detailed [model handover](MODELS.md#what-developers-change) distinguishes
 local generation from MDM distribution and a developer rerunning setup.
 
+![The live Change models preview shows each deployment's model, version, SKU, capacity, record status and price status before its fingerprint.](guide/50-model-change-plan.png)
+
 ## Diagnose
 
 ```powershell

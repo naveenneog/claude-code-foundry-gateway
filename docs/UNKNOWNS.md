@@ -47,7 +47,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | ID | State | Question | Blocks |
 |---|---|---|---|
 | U34 | CLOSED | Which dated prices and model-name mappings can a model lifecycle change safely write, especially `claude-opus-5-5` and the dotted Haiku entry? Researched 2026-09-28: the published Opus 5.5 input/output rates are USD 4/20 per million, but its cache-read multiplier is 0.05x, not the accelerator's 0.1x. P70 leaves it explicitly unpriced in defaults. An unambiguous Haiku spelling can copy the existing dated USD 1/5 entry; no family-price inference. [ADR-0034](adr/0034-model-lifecycle.md), [Anthropic pricing](https://platform.claude.com/docs/en/about-claude/pricing) | P70 pricing decision resolved; broader cache-rate schema remains separate |
-| U35 | OPEN | How soon does an API Management v2 gateway enforce a changed model named value, and is the entitlement cache involved? | P70 propagation statement and isolated live proof |
+| U35 | CLOSED | How soon does an API Management v2 gateway enforce a changed model named value, and is the entitlement cache involved? Measured on the isolated Basic v2 gateway on 2026-09-27: Haiku returned 403 before the Change and 200 on the first request after it, at 22:01:49Z, 1.6 s after apply returned. The apply included post-write management verification, so this is not a 1.6 s write-propagation bound. The policy reads model lists outside the entitlement cache; no immediate-propagation SLA is claimed. | P70 propagation statement resolved by measurement |
 
 These entries belong to P70; U33 is reserved for the parallel P69 packet.
 
@@ -55,8 +55,16 @@ U35 research, 2026-09-28: the [named-value reference](https://learn.microsoft.co
 describes plain values in policies but promises no propagation interval. Its four-hour refresh
 applies to Key Vault secret rotation, not plain model lists. `infra/policy.xml` expands the
 model lists in the request's `modelAllowed` expression, outside the entitlement lookup cache.
-The isolated P70 request proof will measure propagation rather than infer it from a management
-readback or from `entitlement-cache-seconds`.
+The isolated P70 request proof measured actual enforcement: `claude-haiku-4-5` returned
+`403 error.code=model_not_allowed` at 21:55:00Z and standard-tier 200 at 22:01:49Z after
+the reviewed Change. The named-value update took 21.3 s, readback 22.5 s, and the apply
+performed further management verification before returning. The first request then took
+1.539 s. This demonstrates propagation by that request, not instantaneous application or
+a published interval, and does not infer a delay from `entitlement-cache-seconds`.
+After the same account moved to the dedicated premium group, Sonnet returned premium-tier
+200 at 22:04:28Z and Haiku returned `403 error.code=model_not_allowed` at 22:04:29Z.
+The isolated resources, groups and exact shared-Foundry role assignment were deleted;
+independent absence checks passed at 22:13:51Z.
 
 ## Detail
 

@@ -132,6 +132,8 @@ variables and Desktop `inferenceModels`. Unrelated user settings remain.
 The gateway URL, authentication choice and Entra entitlement are unchanged.
 The record itself does not grant access.
 
+![The model change's tier-specific handover: Claude Code availableModels, alias and capability values agree with Desktop inferenceModels; the standard and premium outputs contain different permitted deployments.](docs/guide/53-model-client-handover.png)
+
 The clients read the refreshed configuration at startup. On a managed device,
 the platform team's MDM policy takes precedence and is redistributed through
 the fleet tool; a user-settings rerun cannot override it.
