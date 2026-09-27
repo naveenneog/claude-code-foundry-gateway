@@ -1,6 +1,6 @@
 # Status
 
-**Active packet:** P68 the guided flow starts at once and gives the foundation to the installer ([below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)); P69 the company address follows it ([ROADMAP](ROADMAP.md)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packet:** P69 the company address in the flow ([ROADMAP](ROADMAP.md)). P68 the guided flow starts at once and gives the foundation to the installer is merged ([below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
 
@@ -52,7 +52,7 @@ found that its apply runs the installer for a recorded gateway while its plan sa
       about 56 s (now an estimate and one line per account); Windows PowerShell 5.1 listed only the
       Foundry region; FinOps monthly totals had six decimals; a recorded gateway's price was
       counted as new; declining at the summary ended in a stack trace
-- [ ] Council verdicts and `node .ironclad/gate.mjs --stage packet` exits 0
+- [x] Council verdicts and `node .ironclad/gate.mjs --stage packet` exits 0: three council rounds, five PASS verdicts in the third; gate PASS at `57b8d3a` (22 passed, 2 warned, 0 failed, 2 skipped; Test-All passed in 1,192.5 s)
 
 Council, first review (gpt-6-astra, 2026-09-27): BLOCK on all five seats, seven findings, each
 reproduced on PowerShell 7 and 5.1. All fixed in `fe53ac7`, each with a test that fails when the
@@ -85,6 +85,32 @@ assertions:
 
 The shadow repository in `Test-FlowStart` now prices API Management from a stub, so its child runs
 make no network call; the first-round live-price change had made them reach the Retail Prices API.
+
+Council, third review (gpt-6-astra, 2026-09-28): N1-N3 confirmed on PowerShell 7 and 5.1, no new
+high-confidence defect. Its probes: lists, objects and hashtables refused with and without the
+shim (8 of 8); zero executions past either installer check for the malicious list, an unsafe bound
+audience and an unsafe derived audience; legitimate values accepted for all twelve parameters that
+reach `az` (spaced group names, a plus-addressed email, an `api://` audience) and all 132 tested
+character and parameter combinations refused; organisation and industry values with `&`, `( )`
+and quotes passed unchanged; unchanged step sets resume, changed sets are planned again, and a
+different action or `-Change` ignores the stale run.
+
+Council: Architect PASS (discovery reads only the recorded gateway; an attended run applies the
+installer first and the other steps in a second phase with its own fingerprint and resume; Change
+foundation uses the installer's own reuse path by name; resume is restricted only to an unchanged
+step set). Coder PASS (one subscription resolver; destination-aware checks of the installer
+arguments; lists refused before binding; values priced from the live gateway; the reuse adoption
+shared by the named path and the menu). QA PASS, with gaps named (Test-FlowStart, 114 assertions;
+22 mutations of P68's detectors caught with the full assertion count, the last fifteen together at
+114; the installer's region, tier, reuse and named
+paths run live with `-WhatIf` on PowerShell 7 and 5.1; not run: an attended apply that creates a
+gateway, a subscription with no Claude deployment, the macOS/Linux installer, which has no priced
+prompts yet). UX PASS (first line in 0.76 s with an empty record; every Azure read states an
+estimate and its time; prices at the region and tier prompts; numbered next steps; cancellation and
+a mistyped fingerprint say what exists). Security PASS (no record, typed or adopted value that
+reaches `az` can carry what `cmd.exe` re-reads; recorded names are allow-listed for discovery; the
+five captures were inspected for identifiers; the flow asks for no fingerprint only where the
+installer's own confirmation precedes every write).
 
 ## P67 developer workstation fixes from the owner's test, 2026-09-27
 

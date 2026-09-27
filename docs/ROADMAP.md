@@ -434,7 +434,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       and end with a real Claude Code reply; diagnostics never wait for input and read the real
       Desktop configuration and logs.
       [ADR-0031](adr/0031-client-keys-every-release-reads.md), **U27**, **U28**, **U29**
-- [ ] P68 guided flow redesign from the owner's test — acceptance: `Start-ClaudeGateway.ps1`
+- [x] P68 guided flow redesign from the owner's test, merged 2026-09-28 ([STATUS](STATUS.md#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)) — acceptance: `Start-ClaudeGateway.ps1`
       shows its first question within seconds and names each slow step while it runs; Setup
       hands every installer decision (tiers, sections, defaults) back to the installer's own
       prompts instead of passing `-Yes`, and a projection choice no longer stops the installer;
