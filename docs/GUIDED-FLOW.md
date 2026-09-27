@@ -25,7 +25,8 @@ by the step modules present on the branch. It never invents resource names.
 | Area | Asked by | Why |
 |---|---|---|
 | Gateway foundation | `Foundation.ps1` | API Management v2 SKU, entitlement store, developer sign-in and Desktop sign-in affect cost, scale, support and client configuration. Manual equivalent: [Setup](SETUP.md). |
-| Entitlement, network, FinOps, budgets, monitoring and reports | Parallel-branch modules when present | These modules are skipped with a clear note until their branches merge. Manual equivalents: [Scale](SCALE.md), [Network](NETWORK.md), [FinOps](FINOPS.md), [Budgets](BUDGETS.md), [Monitoring](MONITORING.md), [Chargeback reports](CHARGEBACK-REPORTS.md). |
+| Tier, entitlement store, network edge and Desktop sign-in | `Tier.ps1`, `Entitlement.ps1`, `Network.ps1`, `DesktopSignIn.ps1` | These run under `-Action Change`. Setup lists each one with the command that changes it. Manual equivalents: [Update and change](UPDATE-AND-CHANGE.md), [Scale](SCALE.md), [Network](NETWORK.md). |
+| FinOps, budgets, monitoring and reports | FinOps modules when present | A module file that is not present is listed as skipped. Manual equivalents: [FinOps](FINOPS.md), [Budgets](BUDGETS.md), [Monitoring](MONITORING.md), [Chargeback reports](CHARGEBACK-REPORTS.md). |
 | Device profiles | `DeviceProfiles.ps1` | Per-tier MDM payloads must mirror the recorded gateway, model and Desktop sign-in choices. Manual equivalent: [MDM](MDM.md). |
 | Verification | `Verify.ps1` | Runs the gateway health checks after setup or change. Manual equivalent: [Operations health](OPERATIONS.md#2-check-health-and-headroom). |
 | Guide | `Guide.ps1` | Writes `onboarding/HOW-TO-USE.md` with this tenant's names and the operator/developer/FinOps instructions. |
@@ -35,6 +36,15 @@ by the step modules present on the branch. It never invents resource names.
 After questions, every present module returns a plan. The flow prints one review
 with actions, list-price cost where known, unknown-cost reasons, implications,
 required roles and rollback notes, then prints a SHA-256 fingerprint.
+
+The Foundation line names the resource group, gateway, region, Foundry account
+and subscription, and the plan carries every installer input. A fingerprint
+approved for one estate is therefore refused for another. The API Management
+line is priced from the
+[Azure Retail Prices API](https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices)
+at plan time. When that API cannot be reached, the price shows as unknown with
+that reason, the fingerprint differs from a priced plan, and a new `-PlanOnly`
+run is needed.
 
 Preview only:
 
@@ -86,23 +96,36 @@ before returning its changes, no success-shaped history is written for that step
 
 ```powershell
 .\Start-ClaudeGateway.ps1 -Action Update
+.\Start-ClaudeGateway.ps1 -Action Update -ApprovedPlanFingerprint <fingerprint>
 ```
 
-When `Update-ClaudeGateway.ps1` is present, the flow delegates to that lifecycle
-script. Until the lifecycle branch is merged, the flow says the module is absent
-and exits successfully; use the manual update guidance in [Operations](OPERATIONS.md).
+The first command runs `scripts\Update-ClaudeGateway.ps1` with the record path
+and only plans. It compares the record schema, the deployed policy and the named
+values the current policy references, and pinned job definitions, with the
+current repository, then prints the migrations and a fingerprint. The second
+command passes `-Apply` and that fingerprint; the updater takes a named-value
+snapshot before its first write. `-PlanOnly` never applies. See
+[Update and change](UPDATE-AND-CHANGE.md#1-update-an-older-deployment).
 
 ## Change one decision
 
 ```powershell
-.\Start-ClaudeGateway.ps1 -Action Change -Change foundation
+.\Start-ClaudeGateway.ps1 -Action Change -Change sku
 ```
 
-`-Change` narrows planning to the present module that owns the decision key.
-Future lifecycle modules own tier, entitlement, network and Desktop sign-in
-changes. Change re-asks that module's questions even when the record already
-has a value; the current value is shown as the default/recommended option. The
-review still shows cost and caller impact before applying.
+`-Change` narrows planning to the module that owns the decision key. Change
+re-asks that module's questions even when the record already has a value; the
+current value is shown as the default/recommended option. The review still shows
+cost and caller impact before applying.
+
+| `-Change` | Module | What changes | Runbook |
+|---|---|---|---|
+| `foundation` | `Foundation.ps1` | Installer inputs for the gateway | [Setup](SETUP.md) |
+| `sku` | `Tier.ps1` | API Management tier; Basic v2 and Standard v2 change in place | [Tier](UPDATE-AND-CHANGE.md#2-change-the-api-management-tier) |
+| `entitlementStore` | `Entitlement.ps1` | Named values to the Cosmos projection and back, after a clean comparison | [Entitlement](UPDATE-AND-CHANGE.md#3-move-entitlement-between-named-values-and-the-projection) |
+| `network` | `Network.ps1` | Enterprise network edge, through its own fingerprinted review | [Network](UPDATE-AND-CHANGE.md#4-change-the-enterprise-network-edge) |
+| `desktopSignIn` | `DesktopSignIn.ps1` | Claude Desktop sign-in kind and gateway audience | [Desktop sign-in](UPDATE-AND-CHANGE.md#5-change-claude-desktop-sign-in) |
+| `deviceProfiles` | `DeviceProfiles.ps1` | Per-tier MDM payloads | [MDM](MDM.md) |
 
 ## Diagnose
 
@@ -110,10 +133,10 @@ review still shows cost and caller impact before applying.
 .\Start-ClaudeGateway.ps1 -Action Diagnose
 ```
 
-When the setup or workstation debug scripts from the diagnose branch are
-present, the flow delegates to them with `-RecordPath`; `-SupportBundle` is
-passed through when requested. Until the diagnose branch is merged, use
-[Debugging](DEBUGGING.md) and [Troubleshooting](TROUBLESHOOTING.md).
+The flow runs `scripts\Debug-ClaudeSetup.ps1` for the administrator deployment
+and `scripts\Debug-ClaudeWorkstation.ps1` for the developer machine, passing
+`-RecordPath` and, when requested, `-SupportBundle`. Both are read-only. See
+[Diagnostics](DIAGNOSE.md) and [Troubleshooting](TROUBLESHOOTING.md).
 
 ## Status and drift
 

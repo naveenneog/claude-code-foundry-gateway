@@ -780,6 +780,11 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **`Start-ClaudeGateway.ps1 -Action Update` could only plan.** It called the updater without
+  `-Apply` or the fingerprint, so an older gateway could be reviewed through the flow but had to
+  be updated with `scripts\Update-ClaudeGateway.ps1` directly. `-ApprovedPlanFingerprint` now
+  applies the reviewed update plan, `-PlanOnly` never applies, and the plan output names the
+  command that applies it.
 - **A guided-setup approval did not bind the estate it would create.** The Foundation review
   said "Create API Management governed Claude gateway - BasicV2" for every target, so two setups
   aimed at different resource groups printed the same fingerprint, and an approval for one was

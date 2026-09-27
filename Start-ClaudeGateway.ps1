@@ -359,7 +359,13 @@ Set-FlowAnswersOnRecord -Record $record -Answers $script:FlowAnswers
 if ($Action -eq 'Update') {
     $update = Join-Path $root 'scripts\Update-ClaudeGateway.ps1'
     if (-not (Test-Path -LiteralPath $update)) { $update = Join-Path $root 'Update-ClaudeGateway.ps1' }
-    if (Test-Path -LiteralPath $update) { & $update -RecordPath $RecordPath -WhatIf:$WhatIfPreference; return }
+    if (Test-Path -LiteralPath $update) {
+        $updateArgs = @{ RecordPath = $RecordPath }
+        if ($ApprovedPlanFingerprint -and -not $PlanOnly) { $updateArgs.Apply = $true; $updateArgs.ApprovedPlanFingerprint = $ApprovedPlanFingerprint }
+        & $update @updateArgs -WhatIf:$WhatIfPreference
+        if (-not $updateArgs.Apply) { Write-Host 'To apply this update plan: .\Start-ClaudeGateway.ps1 -Action Update -ApprovedPlanFingerprint <fingerprint>' -ForegroundColor DarkGray }
+        return
+    }
     Write-Host 'Update-ClaudeGateway.ps1 is not present on this branch; Update is skipped.' -ForegroundColor Yellow
     return
 }

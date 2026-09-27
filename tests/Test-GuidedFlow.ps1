@@ -259,6 +259,25 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Tier'; 
         Get-ClaudeFlowLifecycleApimMonthlyCost -Sku BasicV2 -Region eastus2
     }
     Assert 'an unreachable price API is reported as unreachable, not as a missing meter' ($null -eq $offlinePrice.MonthlyUsd -and $offlinePrice.UnknownReason -match 'could not be reached') $offlinePrice.UnknownReason
+
+    # Update through the flow: plan by default, apply only with an approved fingerprint.
+    $shadow = Join-Path $scratch 'shadow'
+    New-Item -ItemType Directory -Force -Path (Join-Path $shadow 'scripts\flow') | Out-Null
+    Copy-Item -LiteralPath (Join-Path $root 'Start-ClaudeGateway.ps1') -Destination $shadow
+    Copy-Item -LiteralPath (Join-Path $root 'scripts\ClaudeChoice.ps1') -Destination (Join-Path $shadow 'scripts')
+    Copy-Item -LiteralPath (Join-Path $root 'scripts\flow\FlowContract.ps1') -Destination (Join-Path $shadow 'scripts\flow')
+    $updateLog = Join-Path $scratch 'update-args.txt'
+    "[CmdletBinding(SupportsShouldProcess)] param([string]`$RecordPath,[switch]`$Apply,[string]`$ApprovedPlanFingerprint) ('apply=' + [bool]`$Apply + ';fp=' + `$ApprovedPlanFingerprint) | Set-Content -LiteralPath '$($updateLog -replace '''','''''')'" | Set-Content -LiteralPath (Join-Path $shadow 'scripts\Update-ClaudeGateway.ps1') -Encoding UTF8
+    $shadowStart = Join-Path $shadow 'Start-ClaudeGateway.ps1'
+    & $shadowStart -Action Update -RecordPath $recordPath | Out-Null
+    $updatePlanned = Get-Content -LiteralPath $updateLog -Raw
+    & $shadowStart -Action Update -RecordPath $recordPath -ApprovedPlanFingerprint 'abc12345' | Out-Null
+    $updateApplied = Get-Content -LiteralPath $updateLog -Raw
+    & $shadowStart -Action Update -RecordPath $recordPath -ApprovedPlanFingerprint 'abc12345' -PlanOnly | Out-Null
+    $updatePlanOnly = Get-Content -LiteralPath $updateLog -Raw
+    Assert 'Update without a fingerprint only plans' ($updatePlanned -match 'apply=False;fp=\s*$')
+    Assert 'Update with an approved fingerprint applies that plan' ($updateApplied -match 'apply=True;fp=abc12345')
+    Assert 'Update with PlanOnly never applies' ($updatePlanOnly -match 'apply=False')
 }
 finally {
     $env:GUIDED_FLOW_FAIL_FOUNDATION = $null
