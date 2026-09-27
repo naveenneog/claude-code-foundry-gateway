@@ -45,6 +45,13 @@ defaults for the budgets, request ceiling, groups and Choices, since only
 `entitlement-cache-seconds` is read back, so pressing Enter through an attended
 `-Change foundation` resets them. Filed as P73 in the [ROADMAP](ROADMAP.md).
 
+Mutations, each in its own copy of the worktree, counted as caught only when the suite ran its
+baseline number of checks and at least one failed: 24 of 24 caught. The first run caught 20 of 22.
+The two survivors were the budget merge, masked because the round trip's answers already put the
+budgets in the decision, and Status with no record file, masked by the branch for a record
+without a gateway. The tests now check the merge from a decision that holds no budgets, and Status
+in both cases.
+
 - [x] `tests/Test-FlowPermutations.ps1` runs the real orchestrator, discovery and Foundation step,
       with a stub installer and a stub Azure CLI, over action (Setup, Change foundation, Guide,
       Status) × record state (none, recorded and matching, another gateway URL, missing, signed
@@ -69,8 +76,13 @@ defaults for the budgets, request ceiling, groups and Choices, since only
       summary with its reason. 16 cases cover every pair of levels (62 pairs, checked by the
       suite), plus 6 refusals and a reused gateway; 44 checks; 46 installer runs in 8-12 s
 - [x] Each failure found is fixed test-first, starting with the two above
-- [ ] The installer matrix runs once live and read-only against the reference subscription on
-      both shells; the result and timings are recorded here
+- [x] The installer matrix runs once live and read-only against the reference subscription on
+      both shells; the result and timings are recorded here. 2026-09-27 22:18-22:26 UTC, `-Live`
+      with the reference Foundry account and, for the reuse case, the reference gateway read only:
+      23 of 23 cases on PowerShell 7 and 23 of 23 on Windows PowerShell 5.1, one process per shell;
+      42 checks passed (the two about the stub's Azure CLI calls apply offline only); 458 s and
+      455 s in the installer, about 20 s per case; 470 s wall. Nothing was created: every case stops
+      at the `-WhatIf` summary
 - [x] The address dimension: P69 owns the installer's address section and adds its parameter.
       The harness adds the address when P69 merges, or the follow-up is recorded in ROADMAP.
       Recorded in P73; the summary row and the address question's hostname are tested now
