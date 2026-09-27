@@ -29,6 +29,16 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Reviewed model lifecycle (P70).** `-Action Change -Change models` and
+  `scripts/Sync-ClaudeModels.ps1` discover the selected Foundry account, show deployment
+  model/version/SKU/capacity and price status, accept per-deployment tier choices, snapshot
+  before writes, update only the model named values, and regenerate the record and both
+  tiers' MDM/workstation handovers. Stale plans, Turnstile-owned tiers, malformed discovery
+  and last-entry allow-all removal are refused. Dated unambiguous price mappings preserve
+  history; Opus 5.5 stays explicitly unpriced because the current financial readers do not
+  represent its published cache-read multiplier. The installer gains `-StandardModels` and
+  `-PremiumModels` for an unattended initial subset. [Model guide](docs/MODELS.md),
+  [ADR-0034](docs/adr/0034-model-lifecycle.md).
 - Guided-flow FinOps modules for tool selection, USD/token budgets, monitoring workbooks
   and chargeback reports, including a scheduled USD reconciler job definition for
   deployments without the AUM service.

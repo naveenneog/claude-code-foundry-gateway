@@ -49,6 +49,18 @@ writes the decision record after each completed step, verifies, and generates
 `onboarding/HOW-TO-USE.md`. It does not replace API Management, Foundry,
 Turnstile, AUM or the reporting jobs; it coordinates their setup and handover.
 
+## Model lifecycle administration
+
+![Model lifecycle: read Foundry and gateway state, approve a fingerprint, check ownership and snapshot, write the two model lists, preserve dated prices and records, then generate separate tier profiles for existing fleet and workstation routes.](images/architecture/model-lifecycle.png)
+
+Source: [15-model-lifecycle.json](architecture/15-model-lifecycle.json);
+[ADR-0034](adr/0034-model-lifecycle.md). The Change-only model step introduces no
+Azure resource or new inference path. It snapshots before writes and refuses
+Turnstile-owned tiers. Client-file generation is separate from MDM assignment
+and a developer rerunning setup. Unpriced models remain visible; publication
+of a changed tariff to reporting and scheduled reconcilers is a separate
+financial operation.
+
 ## Request path
 
 ![Six request hops: sign in, admit, serve, meter, attribute and observe. Four budget layers and projection admission, absence and expiry outcomes are shown, followed by the components each optional profile adds.](images/architecture/request-path.png)

@@ -71,6 +71,15 @@ from the comparison. Reproduced offline on both hosts (84 assertions, one failur
 fixed by normalizing absent/empty decisions without ignoring other decision changes.
 Removing the fix fails exactly that test; all 84 assertions pass before and after the
 mutation on PowerShell 7 and 5.1. Cleanup continues before the final live retry.
+Second-attempt cleanup finished with no failures: exact shared-Foundry assignment
+21:35:01Z, resource group 21:38:04Z, soft-deleted gateway 21:39:41Z, dedicated groups
+21:39:49Z and 21:39:57Z. Estimated API Management cost USD 0.0483.
+
+Related regressions: GuidedFlow 44, FlowLifecycle 33, GovernanceAuthority 132, Backup 43,
+ModelsAndPlugins 92, WorkstationClients 178 and Architecture 36 assertions, all passing.
+The GuidedFlow suite also passed on Windows PowerShell 5.1. Full installer previews passed
+on both hosts; the PowerShell 7 preview with explicit model subsets took 23.7 s.
+The 15-spec architecture render passed; its new model-lifecycle image was inspected.
 
 Read-only reference drift, 2026-09-27 20:19Z: both `models-standard` and `models-premium` are
 `,,` (allow all), and `turnstile-integration` reports `governanceAuthority=Turnstile`,
