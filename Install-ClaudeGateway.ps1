@@ -384,6 +384,7 @@ Write-Ok "$FoundryAccount (rg $FoundryResourceGroup)"
 $deployed = @(Get-ClaudeDeployment -Account $FoundryAccount -ResourceGroup $FoundryResourceGroup)
 $modelsStd = ''
 $modelsPrm = ''
+$recordedDeployments = @()
 if ($deployed.Count) {
     Write-Step 'Which models each tier may call'
     Write-Host ''
@@ -407,6 +408,12 @@ if ($deployed.Count) {
     $modelsStd = ',' + (($stdPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ',') + ','
     $modelsPrm = ',' + (($prmPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ',') + ','
     Write-Ok "standard $modelsStd  premium $modelsPrm"
+    # Recorded with the model behind each name, because a deployment may be named anything and the
+    # clients configure capabilities by model (ADR-0031).
+    $allowed = @(($modelsStd + $modelsPrm) -split ',' | Where-Object { $_ } | Select-Object -Unique)
+    $recordedDeployments = @($deployed | Where-Object { $allowed -contains $_.name } | ForEach-Object {
+        [ordered]@{ name = $_.name; model = $_.model; version = $_.version }
+    })
 }
 else {
     Write-Note "no Claude deployment visible on $FoundryAccount - leaving both tier model lists empty"
@@ -1389,6 +1396,10 @@ $config = [ordered]@{
     resolverInboundAccess = $ResolverInboundAccess
     projectionDeployer = './scripts/Deploy-ClaudeProjection.ps1'
     desktopSignIn = $desktopSignInRecord
+    # Each Claude deployment the tiers allow, with its model: the workstation setup pins Claude
+    # Code by model and declares the model's capabilities (ADR-0031).
+    deployments = @($recordedDeployments | ForEach-Object { $_ })
+    models = @($recordedDeployments | ForEach-Object { $_.name })
     tiers = @{
         standard = @{ tokensPerMinute = $TpmStandard; tokensPerDay = $QuotaStandard }
         premium  = @{ tokensPerMinute = $TpmPremium;  tokensPerDay = $QuotaPremium }

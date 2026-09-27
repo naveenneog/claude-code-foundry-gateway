@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted for P60.
+Accepted for P60. The rendered Desktop key names are superseded by
+[ADR-0031](0031-client-keys-every-release-reads.md): Desktop releases before 2.7032.0 do not read
+`inferenceIdpOidc`, `inferenceIdpAuthFlow` or the `external-idp` credential kind. The recorded
+`desktopSignIn` shape below is unchanged.
 
 ## Context
 

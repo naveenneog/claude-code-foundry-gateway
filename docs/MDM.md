@@ -95,16 +95,30 @@ The generator outputs one tier's payloads:
 | `claude-code.README.txt` | Generated operator notes for that tier. |
 | `claude-desktop.managed-settings.json` | Desktop Linux JSON and a readable source for Windows/macOS managed Desktop keys. |
 | `claude-desktop.reg` | Windows Desktop policy values under `HKLM\SOFTWARE\Policies\Claude`. |
-| `claude-desktop.mobileconfig` | macOS Desktop configuration profile for the `com.anthropic.claudefordesktop` managed preferences domain. Every Desktop value is written as a plist `<string>`; booleans are `"true"` / `"false"` strings and arrays or objects such as `inferenceModels` and `inferenceIdpOidc` are JSON documents encoded as one string, which Anthropic documents as portable for `.mobileconfig`. |
+| `claude-desktop.mobileconfig` | macOS Desktop configuration profile for the `com.anthropic.claudefordesktop` managed preferences domain. Every Desktop value is written as a plist `<string>`; booleans are `"true"` / `"false"` strings and arrays or objects such as `inferenceModels` and `inferenceGatewayOidc` are JSON documents encoded as one string, which Anthropic documents as portable for `.mobileconfig`. |
 
 The administrator's Claude Desktop sign-in choice (`desktopSignIn`, P60) is
 recorded in `onboarding/claude-gateway.json`. The same generator run emits either
-helper-script Desktop keys or `external-idp` keys (`inferenceCredentialKind`,
-`inferenceIdpOidc`, `inferenceIdpAuthFlow`) that match that recorded choice, in
-`claude-desktop.managed-settings.json`, `claude-desktop.reg` and
+helper-script Desktop keys or Entra sign-in keys that match that recorded choice,
+in `claude-desktop.managed-settings.json`, `claude-desktop.reg` and
 `claude-desktop.mobileconfig`.
 [ADR-0027](adr/0027-claude-desktop-sign-in-choice.md) records what each choice
 needs: an Entra public-client app, consent, and the audience the gateway accepts.
+
+A fleet runs mixed Desktop releases, so the generator writes the Entra sign-in in
+the original spelling by default: `inferenceCredentialKind: interactive`,
+`inferenceGatewayOidc`, and `inferenceGatewayOidcAuthFlow: broker` for the broker
+flow. Every release since 1.25927.0 reads it, and Anthropic's configuration
+reference reads it as `external-idp` with no end date set. `-DesktopKeySpelling
+current` writes `external-idp`, `inferenceIdpOidc` and `inferenceIdpAuthFlow`
+instead, which only Desktop 2.7032.0 and later read
+([ADR-0031](adr/0031-client-keys-every-release-reads.md)).
+
+The Claude Code payloads pin each alias to the newest recorded deployment in its
+family and declare that model's capabilities
+(`ANTHROPIC_DEFAULT_<ALIAS>_MODEL_SUPPORTED_CAPABILITIES`), so a Claude Code
+release older than the model does not send `thinking.type.enabled` and get a
+`400`.
 
 ## 3. Intune on Windows
 

@@ -35,10 +35,12 @@ own those Azure/Entra steps; developers only consume the bundle.
 This is an example of the PowerShell wizard's shape, not values to deploy.
 `authMode` is read by the onboarding wrapper. `desktopSignIn` is read by the
 Desktop setup path: `helper-script` writes the credential helper keys; an
-`external-idp` record writes `inferenceIdpOidc` and `inferenceIdpAuthFlow`
-instead. Legacy files without `mode` or `desktopSignIn` are inferred as gateway
-mode and helper-script. Current low-level workstation setup has model defaults
-independent of this file: supply/verify your actual deployment names as
+`external-idp` record writes Desktop's own Entra sign-in keys, in the spelling
+the Desktop release on the machine reads ([ADR-0031](../docs/adr/0031-client-keys-every-release-reads.md)).
+Legacy files without `mode` or `desktopSignIn` are inferred as gateway mode and
+helper-script. The installer records `deployments` (each deployment's name and
+model); the workstation setup pins the Claude Code aliases from that list, and
+a record without it falls back to `models` and then to the setup's defaults, as
 described in [Developer setup](../DEVELOPER.md#one-command).
 
 `New-OnboardingEmail.ps1` then adds one HTML, text and `.eml` file per developer
@@ -75,7 +77,7 @@ would go stale, not because it is sensitive.
 | How | When |
 |-----|------|
 | `New-OnboardingEmail.ps1` generates the message | one person at a time; attach the config and bundle yourself or include an approved internal download link |
-| Internal share or intranet page, with `-DistributionUrl` | a team; the email then carries a two-line command that fetches both |
+| Internal share or intranet page, with `-DistributionUrl` | a team; the email then carries a command that fetches the setup scripts and the config |
 | Bundle it with the setup script in your software portal | a managed rollout |
 
 The generated `.eml` and Graph-send payload contain the message, **not a MIME

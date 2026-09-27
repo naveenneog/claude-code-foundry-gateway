@@ -786,6 +786,70 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **Claude Code returned `400 "thinking.type.enabled" is not supported` through the gateway.**
+  Claude Code does not recognise a Foundry deployment name, so a release older than the model
+  sent the older thinking request; measured with 2.1.101 for `claude-opus-5` and
+  `claude-sonnet-5`. The workstation setups and the MDM profiles now declare
+  `ANTHROPIC_DEFAULT_<ALIAS>_MODEL_SUPPORTED_CAPABILITIES` for each pinned model by family rule
+  (Opus 4.7 and later, Sonnet, Fable and Mythos 5 and later), pin each alias to the newest
+  recorded model in its family, run `claude update` when a recorded model needs a newer release,
+  and end by asking Claude Code itself for a reply. The installer records each deployment's model
+  in `claude-gateway.json`; `capabilities` and `claudeCode` on a deployment override the rule.
+  2.1.101 with the new settings answered through the reference gateway by every model selection,
+  and returned the 400 without them. ADR-0031.
+- **Claude Desktop showed an empty Credential kind, and its Entra Sign in did nothing.** The
+  Entra sign-in profile used `external-idp`, `inferenceIdpOidc` and `inferenceIdpAuthFlow`, which
+  only Desktop 2.7032.0 and later read. The setups now write the spelling the Desktop that reads
+  the profile knows: on Windows the older of the installed and running builds, because the
+  per-user installer keeps an older `app-<version>` build running until it is restarted, as on
+  the owner's workstation (2.9939.2 installed, 1.44121.2 running). The MDM generator writes the
+  original spelling, which every release since 1.25927.0 reads, unless
+  `-DesktopKeySpelling current`. ADR-0031, U27.
+- **Diagnose waited for minutes on `claude doctor` and printed it unreadably.** Client commands
+  now run with standard input closed, a time limit (45 s for `claude doctor`,
+  `CLAUDE_DIAGNOSE_DOCTOR_TIMEOUT_SECONDS`) and UTF-8 decoding. Diagnose also names an unfinished
+  decision record instead of "Gateway URL not supplied", never prints an empty `--tenant`, checks
+  Claude Code against the recorded models, checks the Desktop sign-in keys against the release
+  that reads them, reports a running Desktop build older than the installed one, and shows
+  Desktop's recent log errors.
+- **On PowerShell 7 the workstation scripts ran npm's extensionless `claude`.** `Group-Object`
+  sorts its groups on PowerShell 7, which put npm's POSIX script before `claude.cmd`, and Windows
+  cannot start it. Every Claude Code on PATH is now listed one per folder, in PATH order, with
+  the `.exe`, `.cmd`, `.bat` or `.ps1` chosen; a command that cannot start is reported, not
+  thrown.
+- **The macOS/Linux setup broke under a Windows `jq.exe`, and differed from the Windows setup.**
+  Under WSL, `jq` can resolve to the Windows `jq.exe`, whose CRLF output left a carriage return
+  in every value. Values are stripped now, and the setup pins the haiku alias to a recorded Haiku
+  deployment, keeps the developer's own VS Code variables and honours `claudeCode` overrides, as
+  the Windows setup does. The macOS/Linux diagnostics read the `Claude-3p` profile instead of
+  Desktop's MCP file and gain the model check.
+- **The Windows setup dropped the developer's own environment variables.** It replaced the whole
+  `env` block of `~/.claude/settings.json` and the whole `claudeCode.environmentVariables` array
+  in VS Code. It now changes only the variables it owns, and removes `ANTHROPIC_FOUNDRY_RESOURCE`.
+- **On Windows PowerShell 5.1 the setup's gateway check never sent its request.** `Invoke-WebRequest`
+  without `-UseBasicParsing` throws `Object reference not set to an instance of an object` on a
+  machine without Internet Explorer; measured on this workstation, the same POST returned 200 with
+  the switch. The setup, the workstation diagnostics and the preflight now pass it. Found by the
+  new end-to-end run of the Windows setup on both PowerShell hosts.
+- **The onboarding email's command downloaded only `Setup-ClaudeWorkstation.ps1`.** The setup now
+  needs `ClaudeClientSupport.ps1` and `ClaudeDesktopSignIn.ps1` beside it and stops at once,
+  naming them, when they are missing; Desktop also needs its token helpers. The email's command
+  fetches every file the setup reads from its own folder, taken from the script itself, and the
+  test runs the setup from a folder holding only those files.
+- **The MDM generator ignored a record with one deployment on Windows PowerShell 5.1, and pinned
+  the haiku alias past an explicit `-SonnetModel`.** Assigning an `if` statement unrolled the
+  one-element list, which has no `Count` there. With no Haiku deployment recorded, the haiku alias
+  now follows the Sonnet choice, including one the administrator passed.
+- **Diagnostics passed a capability declaration that breaks requests.** They compared a
+  declaration with the record only when the installed release predated the model. Each pinned
+  alias is now judged on what Claude Code was measured to send (ADR-0031): a declaration listing
+  `thinking` without `adaptive_thinking` made 2.1.101 and 2.1.272 send `thinking.type.enabled`,
+  and only 2.1.272 retried; with no declaration, 2.1.101 sent it for the name `claude-sonnet-5`
+  but not for a custom name. Declarations compare as sets, in any order.
+- **The macOS/Linux time limits could be outlived.** The watchdog used where `timeout(1)` is
+  missing, as on stock macOS, sent only TERM to one process. It now sends KILL 5 s later to the
+  command's process group, and `timeout` gets `-k 5`. The bash model rules and this helper moved
+  into `scripts/claude-client-support.sh`, which both bash scripts source.
 - **The AUM service guide did not say its analytics read the whole workspace.** A warning written
   on the `aum-service` branch on 2026-09-25 never reached `main`: the service's usage reads,
   observed-person lookup and warnings call the saved `ClaudeChargeback` and `ClaudeCost` functions
