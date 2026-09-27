@@ -125,10 +125,30 @@ resource gatewayWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 var bootstrap = '''
 set -euo pipefail
 echo "usd reconciler: start $(date -u +%Y-%m-%dT%H:%M:%SZ), commit ${REPO_REF}"
-tdnf install -y git tar gzip libstdc++ python3 python3-pip >/dev/null 2>&1 || true
 mkdir -p /work
 cd /work
-git init -q && git fetch -q --depth 1 "${REPO_URL}" "${REPO_REF}" && git checkout -q FETCH_HEAD
+python3 - <<'PY'
+import glob
+import os
+import shutil
+import tarfile
+import urllib.request
+
+repo = os.environ["REPO_URL"].removesuffix(".git")
+ref = os.environ["REPO_REF"]
+archive = f"{repo}/archive/{ref}.tar.gz"
+urllib.request.urlretrieve(archive, "repo.tgz")
+with tarfile.open("repo.tgz", "r:gz") as package:
+    package.extractall(".")
+extracted = glob.glob("claude-code-foundry-gateway-*")
+if len(extracted) != 1:
+    raise SystemExit(f"Expected one extracted repository, found {extracted!r}")
+if os.path.exists("repo"):
+    shutil.rmtree("repo")
+os.rename(extracted[0], "repo")
+PY
+cd repo
+python3 -m pip --version >/dev/null 2>&1 || python3 -m ensurepip --upgrade
 python3 -m pip install -q -r service/aum/requirements.txt
 az login --identity --client-id "${AZURE_CLIENT_ID}" --allow-no-subscriptions --output none
 PYTHONPATH=service/aum python3 -m aum_service.usd_command --gateway-id "${GATEWAY_ID}" --workspace-id "${WORKSPACE_ID}" --managed-identity

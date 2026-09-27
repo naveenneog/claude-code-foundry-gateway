@@ -28,7 +28,7 @@ Assert 'template uses Container Apps schedule trigger' ($template -match "trigge
 Assert 'template defaults to every five minutes' ($template.Contains("param cronExpression string = '*/5 * * * *'"))
 Assert 'template command and args are JSON arrays, not CLI inline args' ($template -match "(?s)command:\s*\[\s*'/bin/bash'\s*'-c'" -and $template -notmatch '--args')
 Assert 'template runs the shared USD command engine' ($template -match 'python3 -m aum_service.usd_command' -and $template -match '--managed-identity')
-Assert 'template fetches pinned repository ref' ($template.Contains('git init -q && git fetch -q --depth 1 "${REPO_URL}" "${REPO_REF}" && git checkout -q FETCH_HEAD') -and $template -notmatch 'git clone.*main')
+Assert 'template fetches pinned repository ref' ($template.Contains('archive = f"{repo}/archive/{ref}.tar.gz"') -and $template -notmatch 'git clone.*main')
 Assert 'template uses user-assigned managed identity' ($template -match 'Microsoft.ManagedIdentity/userAssignedIdentities' -and $template -match "type: 'UserAssigned'")
 Assert 'gateway role has only named-value writer actions' ($template -match 'Microsoft.ApiManagement/service/namedValues/write' -and $template -notmatch 'Microsoft.ApiManagement/service/apis/write' -and $template -notmatch 'Microsoft.ApiManagement/service/policies/write')
 Assert 'gateway role assignment is scoped to the gateway resource' ($template -match 'scope: gateway' -and $template -match 'roleDefinitionId: writerRole.id')
