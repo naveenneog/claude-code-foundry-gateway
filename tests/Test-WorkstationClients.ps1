@@ -535,6 +535,12 @@ if ([string]$args[0] -eq '--version') { '2.1.101 (Claude Code)'; exit 0 }
         Set-Content -LiteralPath (Join-Path $e2eStubs 'claude') -Encoding ASCII -Value "#!/bin/sh`nexec node `"`$basedir/cli.js`" `"`$@`""
         Set-Content -LiteralPath (Join-Path $e2eStubs 'claude.ps1') -Encoding ASCII -Value "& (Join-Path `$PSScriptRoot 'claude-e2e.ps1') @args"
         Set-Content -LiteralPath (Join-Path $e2eStubs 'code.cmd') -Encoding ASCII -Value "@echo off`r`nif `"%1`"==`"--version`" (echo 1.139.1& exit /b 0)`r`nif `"%1`"==`"--list-extensions`" (echo anthropic.claude-code& exit /b 0)`r`nexit /b 0"
+        # The setup installs a missing tool with winget and then reloads PATH from the registry,
+        # which would drop these stubs. So node is stubbed too, and winget and npm only record a
+        # call and fail: nothing is installed, and a call fails the test below.
+        Set-Content -LiteralPath (Join-Path $e2eStubs 'node.cmd') -Encoding ASCII -Value "@echo off`r`necho v22.0.0"
+        Set-Content -LiteralPath (Join-Path $e2eStubs 'winget.cmd') -Encoding ASCII -Value "@echo off`r`necho winget %*>>`"%STUB_LOG%`"`r`necho winget is stubbed in this test 1>&2`r`nexit /b 1"
+        Set-Content -LiteralPath (Join-Path $e2eStubs 'npm.cmd') -Encoding ASCII -Value "@echo off`r`necho npm %*>>`"%STUB_LOG%`"`r`necho npm is stubbed in this test 1>&2`r`nexit /b 1"
 
         # The gateway stand-in records each request and answers like the gateway. It also serves the
         # scripts folder and the record under a distribution path with a $web segment and an & in it.
@@ -542,8 +548,10 @@ if ([string]$args[0] -eq '--version') { '2.1.101 (Claude Code)'; exit 0 }
         $requestLog = Join-Path $e2e 'requests.log'
         $e2eRecord = Join-Path $e2e 'claude-gateway.json'
         $serveBase = '/$web/Engineering&Tools/claude'
-        $listenerJob = Start-Job -ArgumentList $port, $requestLog, $serveBase, (Join-Path $root 'scripts'), $e2eRecord -ScriptBlock {
-            param($port, $requestLog, $serveBase, $scriptsDir, $recordFile)
+        $e2eServed = Join-Path $e2e 'served'
+        New-Item -ItemType Directory -Force -Path $e2eServed | Out-Null
+        $listenerJob = Start-Job -ArgumentList $port, $requestLog, $serveBase, (Join-Path $root 'scripts'), $e2eRecord, $e2eServed -ScriptBlock {
+            param($port, $requestLog, $serveBase, $scriptsDir, $recordFile, $extraDir)
             $listener = New-Object System.Net.HttpListener
             $listener.Prefixes.Add("http://127.0.0.1:$port/")
             $listener.Start()
@@ -553,7 +561,7 @@ if ([string]$args[0] -eq '--version') { '2.1.101 (Claude Code)'; exit 0 }
                 $path = [Uri]::UnescapeDataString($ctx.Request.RawUrl)
                 if ($path.StartsWith($serveBase + '/')) {
                     $name = $path.Substring($serveBase.Length + 1)
-                    $file = if ($name -eq 'claude-gateway.json') { $recordFile } else { Join-Path $scriptsDir $name }
+                    $file = if ($name -eq 'claude-gateway.json') { $recordFile } elseif ($name -match '^[A-Za-z0-9._-]+$' -and (Test-Path -LiteralPath (Join-Path $extraDir $name))) { Join-Path $extraDir $name } else { Join-Path $scriptsDir $name }
                     [IO.File]::AppendAllText($requestLog, ('{0} {1} file' -f $ctx.Request.HttpMethod, $path) + [Environment]::NewLine)
                     if ($name -match '^[A-Za-z0-9._-]+$' -and (Test-Path -LiteralPath $file -PathType Leaf)) {
                         $bytes = [IO.File]::ReadAllBytes($file); $ctx.Response.StatusCode = 200; $ctx.Response.ContentType = 'text/plain'
@@ -658,18 +666,30 @@ if ([string]$args[0] -eq '--version') { '2.1.101 (Claude Code)'; exit 0 }
         foreach ($name in $e2eSaved.Keys) { [Environment]::SetEnvironmentVariable($name, $e2eSaved[$name], 'Process') }
         Assert 'the onboarding check reaches the gateway on this host' ($checkRun.Text -match 'claude-sonnet-5 -> HTTP 200') ((($checkRun.Text -split "`r?`n" | Where-Object { $_ -match 'FAIL|HTTP|token' }) | Select-Object -First 4) -join ' | ')
 
-        # The same email for a file share: a folder path with a space and an & in it.
-        $share = Join-Path $e2e 'Share & Tools\claude'
+        # The same email for a file share, given as a relative path from where the developer opens
+        # PowerShell, with a space, an &, an apostrophe and a curly apostrophe in it.
+        $shareName = 'Share & O' + [char]0x2019 + "Brien's Tools"
+        $share = Join-Path $e2e "$shareName\claude"
         New-Item -ItemType Directory -Force -Path $share | Out-Null
         Get-ChildItem -LiteralPath (Join-Path $root 'scripts') -File | Copy-Item -Destination $share
         Copy-Item -LiteralPath $e2eRecord -Destination $share
         $shareDev = Join-Path $e2e 'dev-share'; New-Item -ItemType Directory -Force -Path $shareDev | Out-Null
-        $shareCommand = Get-EmailCommand $e2eRecord $share 'share'
+        $shareCommand = Get-EmailCommand $e2eRecord "..\$shareName\claude" 'share'
         & $enterSandbox
         $shareRun = Invoke-BoundedScript $shareCommand.File @() 180 $shareDev
         foreach ($name in $e2eSaved.Keys) { [Environment]::SetEnvironmentVariable($name, $e2eSaved[$name], 'Process') }
         $shareArrived = @(Get-ChildItem -LiteralPath (Join-Path $shareDev 'claude-setup') -File -ErrorAction SilentlyContinue | ForEach-Object Name)
-        Assert 'the email''s command copies every file from a share path with a space and & in it, and the setup runs' ($shareCommand.Text -match 'Copy-Item' -and $fetched.Count -and @($fetched | Where-Object { $shareArrived -notcontains $_ }).Count -eq 0 -and $shareRun.Text -match 'Everything is configured') ((($shareRun.Text -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -Last 6) -join ' | ')
+        Assert 'the email''s command copies every file from a relative share path with a space, &, '' and a curly quote, and the setup runs' ($shareCommand.Text -match 'Copy-Item' -and $fetched.Count -and @($fetched | Where-Object { $shareArrived -notcontains $_ }).Count -eq 0 -and $shareRun.Text -match 'Everything is configured') ((($shareRun.Text -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -Last 6) -join ' | ')
+
+        # A record that is not UTF-8 is reported, not read with its characters replaced.
+        [IO.File]::WriteAllBytes((Join-Path $e2eServed 'claude-gateway-cp1252.json'), [byte[]](@([Text.Encoding]::ASCII.GetBytes('{ "gatewayUrl": "https://caf')) + @(0xE9) + @([Text.Encoding]::ASCII.GetBytes('.contoso.example/claude" }'))))
+        & $enterSandbox
+        $badRun = Invoke-BoundedScript (Join-Path $e2eScripts 'Setup-ClaudeWorkstation.ps1') @('-ConfigPath', ("http://127.0.0.1:$port" + $serveBase + '/claude-gateway-cp1252.json'), '-SkipInstall') 60
+        foreach ($name in $e2eSaved.Keys) { [Environment]::SetEnvironmentVariable($name, $e2eSaved[$name], 'Process') }
+        Assert 'a record that is not UTF-8 is reported, and nothing is configured from it' ($badRun.Text -match 'Could not read' -and $badRun.Text -match 'No gateway configuration' -and $badRun.Text -notmatch 'caf\S*\.contoso\.example') ((($badRun.Text -split "`r?`n" | Where-Object { $_ -match 'Could not|gateway' }) | Select-Object -First 3) -join ' | ')
+
+        $calls = if (Test-Path -LiteralPath $stubLog) { Get-Content -LiteralPath $stubLog -Raw } else { '' }
+        Assert 'no run installed anything: winget and npm were never called' ($calls -notmatch '(?m)^(winget|npm) ') (($calls -split "`r?`n" | Where-Object { $_ -match '^(winget|npm) ' }) -join ' | ')
     }
     finally {
         foreach ($name in $e2eSaved.Keys) { [Environment]::SetEnvironmentVariable($name, $e2eSaved[$name], 'Process') }
@@ -881,6 +901,7 @@ for p in perl setsid timeout; do
   esac
   check "$p" ignores-term bash -c 'trap "" TERM; sleep 30; echo late'
   check "$p" orphan bash -c 'bash -c "trap \"\" TERM; sleep 30; echo orphan-survived" & wait'
+  check "$p" leftover bash -c 'sleep 30 & echo done'
 done
 s=$(date +%s); CLAUDE_BOUNDED_GROUP=none run_bounded_ 2 bash -c 'trap "" TERM; exec sleep 30' </dev/null >/dev/null 2>&1; rc=$?; echo "none/ignores-term rc=$rc secs=$(( $(date +%s) - s )) out=[]"
 out="$(run_bounded_ 10 bash -c 'echo ran; exit 3' </dev/null)"; echo "passthrough rc=$? out=[$out]"
@@ -890,6 +911,12 @@ out="$(run_bounded_ 10 bash -c 'echo ran; exit 3' </dev/null)"; echo "passthroug
         Assert "run_bounded_ was checked with a process-group provider ($($ran -join ', '))" ($ran.Count -ge 1) $boundedOut.Trim()
         foreach ($m in [regex]::Matches($boundedOut, '(?m)^(perl|setsid|timeout|none)/(ignores-term|orphan) rc=(\d+) secs=(\d+) out=\[([^\]]*)\]')) {
             Assert "run_bounded_ ($($m.Groups[1].Value), $($m.Groups[2].Value)) ends within the limit and releases the output" ($m.Groups[3].Value -eq '124' -and [int]$m.Groups[4].Value -le 12 -and $m.Groups[5].Value -notmatch 'late|survived') $m.Value
+        }
+        # A command that exits on its own but leaves a child holding the output: the exit code is
+        # its own, the child is ended rather than kept until it finishes, and the watchdog is
+        # stopped at once rather than left to run to its deadline (2 s + 5 s).
+        foreach ($m in [regex]::Matches($boundedOut, '(?m)^(perl|setsid|timeout)/leftover rc=(\d+) secs=(\d+) out=\[([^\]]*)\]')) {
+            Assert "run_bounded_ ($($m.Groups[1].Value)) ends what a finished command left running" ($m.Groups[2].Value -eq '0' -and [int]$m.Groups[3].Value -le 4 -and $m.Groups[4].Value -eq 'done') $m.Value
         }
         Assert 'run_bounded_ passes a normal exit code and output through' ($boundedOut -match 'passthrough rc=3 out=\[ran\]') $boundedOut.Trim()
     }

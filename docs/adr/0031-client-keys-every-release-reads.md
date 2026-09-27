@@ -95,8 +95,9 @@ folder in PATH order, and on Windows only a file Windows can start is chosen (`.
 `.bat`, `.ps1`): npm also writes an extensionless POSIX script beside `claude.cmd`. Client
 commands run with standard input closed, UTF-8 decoding and a time limit
 (`Invoke-ClaudeClientCommand`, and `run_bounded_` in bash, which runs the command in its own
-process group from perl, `setsid` or GNU `timeout` and, once the time is up, sends TERM and then
-KILL 5 s later to the whole group, so a child that outlives the command still ends); a command
+process group from perl, `setsid` or GNU `timeout`; once the time is up it sends TERM and then
+KILL 5 s later to the whole group, and once the command has exited it ends anything the command
+left running in the group, signalling only the group so that no reused PID is hit); a command
 that cannot start is a result, not an exception.
 
 **What each release sends.** Measured 2026-09-27 by pointing Claude Code at a local listener

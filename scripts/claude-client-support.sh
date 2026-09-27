@@ -143,12 +143,14 @@ alias_check_() {
 # Runs a command for at most $1 seconds, then ends it and everything it started: TERM, then KILL 5 s
 # later, to the command's own process group. Returns 124 when it ran out of time. The group comes
 # from perl (setpgrp; macOS ships perl), setsid (util-linux) or GNU timeout, which is started with
-# a longer timer than this one so that only this watchdog decides. Once the time is up the watchdog
-# always finishes, so a child that outlives the command on TERM still gets KILL and releases the
-# output it holds. With none of the three only the command itself can be ended.
-# CLAUDE_BOUNDED_GROUP=perl|setsid|timeout|none picks one, for tests.
+# a longer timer than this one so that only this watchdog decides. Once the command has exited,
+# anything it left running in its group is ended too, so no child keeps captured output open past
+# the limit. Each process is signalled through its group, whose ID cannot be reused while any
+# member lives; the command's own PID is signalled only while it is still running. With no group
+# provider only the command itself can be ended. CLAUDE_BOUNDED_GROUP=perl|setsid|timeout|none
+# picks one, for tests.
 run_bounded_() {
-  local secs="$1" rc pid watchdog marker target provider tool
+  local secs="$1" rc pid watchdog marker target provider tool timed_out=0 i
   shift
   provider="${CLAUDE_BOUNDED_GROUP:-}"
   if [ -z "$provider" ]; then
@@ -178,16 +180,22 @@ run_bounded_() {
       pid=$!; target="$pid" ;;
   esac
   ( sleep "$secs"; : > "$marker"
-    kill -TERM -- "$target" 2>/dev/null; kill -TERM "$pid" 2>/dev/null
+    kill -TERM -- "$target" 2>/dev/null
     sleep 5
-    kill -KILL -- "$target" 2>/dev/null; kill -KILL "$pid" 2>/dev/null ) >/dev/null 2>&1 &
+    kill -KILL -- "$target" 2>/dev/null ) >/dev/null 2>&1 &
   watchdog=$!
   wait "$pid"; rc=$?
-  if [ -e "$marker" ]; then
-    wait "$watchdog" 2>/dev/null
-    rm -f "$marker"
-    return 124
-  fi
+  # The command has been reaped, so its PID may be reused from here on: the watchdog stops now,
+  # before it could signal that PID again.
   kill "$watchdog" 2>/dev/null; wait "$watchdog" 2>/dev/null
+  [ -e "$marker" ] && timed_out=1
+  rm -f "$marker"
+  if [ "$target" != "$pid" ] && kill -0 -- "$target" 2>/dev/null; then
+    kill -TERM -- "$target" 2>/dev/null
+    i=0
+    while [ "$i" -lt 5 ] && kill -0 -- "$target" 2>/dev/null; do sleep 1; i=$(( i + 1 )); done
+    kill -KILL -- "$target" 2>/dev/null
+  fi
+  if [ "$timed_out" = "1" ]; then return 124; fi
   return "$rc"
 }
