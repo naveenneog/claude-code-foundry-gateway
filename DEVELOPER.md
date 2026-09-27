@@ -59,14 +59,18 @@ There is no Azure portal action that configures a workstation. On managed
 machines, install the approved clients from your software portal first and use
 `-SkipInstall` / `--skip-install`.
 
-**Deployment names differ?** The low-level setup does not read a `models` list
-from this config. On Windows pass `-Models` explicitly to the setup command; on
-macOS/Linux use the appendix to set aliases and Desktop's model list. Do not
-assume a generated config alone changes the default model names.
+**Deployment names differ?** The setup reads the deployments recorded in
+`claude-gateway.json` (`deployments`, with the model behind each one) and pins
+each Claude Code alias by model, not by name: the newest Opus, the newest
+Sonnet, and a Haiku deployment when one is recorded, otherwise the Sonnet one.
+A newly deployed model becomes its alias the next time the setup runs. On
+Windows, `-Models` replaces the recorded list for one run.
 
 It checks what you already have, installs anything missing, configures **all
 three clients** — Claude Code CLI, the VS Code extension, and Claude Desktop
-including Cowork — then makes a real call through the gateway to prove it works.
+including Cowork — then makes a real call through the gateway, and one through
+Claude Code itself, to prove it works. A Claude Code older than a recorded model
+is updated with `claude update` (skipped with `-SkipInstall` / `--skip-install`).
 Read warnings as well as the exit code: Desktop configuration is skipped if the
 app is absent. The shell script configures an installed Linux Desktop package
 but does not install one. Verify each client you intend to use.
@@ -210,6 +214,9 @@ conversation history and connected tools can also contain your prompts.
 | `429` | Honour `Retry-After`. It may be a request/token limit, projection miss admission or Foundry capacity; the platform team can distinguish them |
 | `503` naming entitlement or an expired projection | A platform sync/resolver issue, not a request for a new API key. Send the time and redacted error to the platform team |
 | `DeploymentNotFound` / `model_not_allowed` | Ask for the actual deployed and permitted model names. Do not add a catalogue of models to settings |
+| `API Error: 400 ... "thinking.type.enabled" is not supported for this model` | This Claude Code release predates the model and sends the older thinking request. Re-run the setup script: it declares each pinned model's capabilities and runs `claude update`. By hand: [step 3](#appendix--configuring-it-by-hand) |
+| Desktop shows **Connection needs Credential kind** and the Credential kind field is empty | The profile uses sign-in keys this Desktop release does not read. Re-run the setup script; it writes the keys the installed and running Desktop reads ([ADR-0031](docs/adr/0031-client-keys-every-release-reads.md)) |
+| Desktop's Entra **Sign in** does nothing after an update | An older Desktop build is still running, usually started from a shortcut to a versioned `app-<version>` folder. Quit Desktop including the tray icon and start it from the Start menu. `.\scripts\Debug-ClaudeWorkstation.ps1` names the running build and the shortcut |
 | Extension prompts for Anthropic sign-in | Settings not picked up — reload the VS Code window |
 | Desktop asks for an Anthropic password | You picked Google or email. Sign out, quit completely, reopen, choose **Or sign in with Gateway** |
 | Desktop works but your usage never appears in your team's report | Same cause — you are signed into Anthropic, not the gateway. Check **Settings → Connection** names your gateway URL |
@@ -343,21 +350,33 @@ with the deployments your platform team permits:
     "CLAUDE_CODE_USE_FOUNDRY": "1",
     "ANTHROPIC_FOUNDRY_BASE_URL": "https://<your-gateway>.azure-api.net/claude",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES": "effort,xhigh_effort,max_effort,thinking,adaptive_thinking,interleaved_thinking",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-sonnet-5"
+    "ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES": "effort,xhigh_effort,max_effort,thinking,adaptive_thinking,interleaved_thinking",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-sonnet-5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES": "effort,xhigh_effort,max_effort,thinking,adaptive_thinking,interleaved_thinking"
   },
   "availableModels": ["claude-sonnet-5", "claude-opus-5"],
   "enforceAvailableModels": true
 }
 ```
 
-Two traps the script handles for you:
+Three traps the script handles for you:
 
 - Do **not** also set `ANTHROPIC_FOUNDRY_RESOURCE`. It is mutually exclusive
   with the base URL, and the session dies with
   `baseURL and resource are mutually exclusive`
 - Point the **haiku** alias at an allowed deployment. If no Haiku deployment is
   available, an allowed Sonnet deployment avoids a mid-task `DeploymentNotFound`
+- Declare each pinned model's capabilities. Claude Code does not recognise a
+  Foundry deployment name, so a release older than the model sends
+  `thinking.type.enabled` and the model returns `400`. Opus 4.7 and later,
+  Sonnet 5 and later, and Fable and Mythos 5 and later take the six values
+  above. A declaration turns off every capability it does not list; one that
+  lists `thinking` without `adaptive_thinking` sends `thinking.type.enabled`
+  on 2.1.101 and 2.1.272 alike. Measured with Claude Code 2.1.101 and 2.1.272
+  on 2026-09-27; source:
+  [Model configuration](https://code.claude.com/docs/en/model-config)
 
 **4. VS Code usually needs nothing more.** The extension reads the same
 `~/.claude/settings.json`, and its own setting description says to prefer it
@@ -541,11 +560,18 @@ The platform team may record `desktopSignIn.kind: external-idp` in
 instead of the helper-script keys. Claude Code and VS Code still use Azure CLI
 Foundry mode.
 
+Desktop 2.7032.0 renamed the sign-in keys. The setup writes the spelling the
+Desktop on the machine reads: on Windows, the lower of the installed and the
+running build; on macOS, the installed app; on Linux, the original spelling.
+Anthropic's configuration reference reads the original spelling as
+`external-idp` and has set no end date for it
+([ADR-0031](docs/adr/0031-client-keys-every-release-reads.md)).
+
 | Choice | Desktop keys | Gateway audience | Consent and Conditional Access |
 |---|---|---|---|
 | Helper script, the default | `inferenceCredentialKind: helper-script` plus `inferenceCredentialHelper` | The existing Azure CLI audiences, `https://cognitiveservices.azure.com` and `https://ai.azure.com` | No app registration or new consent. Conditional Access is whatever applies to Azure CLI sign-in. |
-| External IdP, browser | `inferenceCredentialKind: external-idp`, `inferenceIdpAuthFlow: browser`, `inferenceIdpOidc` | In `id_token` mode, `aud` is the Desktop public-client app id. In `access_token` mode, `aud` is the supplied gateway API audience. | Needs a public-client app registration. If tenant user consent is blocked, Entra returns `AADSTS65001` or "Need admin approval" until an authorized admin grants consent. |
-| External IdP, broker | Same IdP block with `inferenceIdpAuthFlow: broker` | Same audience rule as browser mode | Uses the Microsoft Entra broker for managed-device or token-protection Conditional Access. Requires broker redirect URIs and is not a Linux sign-in flow. |
+| External IdP, browser | Before 2.7032.0: `inferenceCredentialKind: interactive` and `inferenceGatewayOidc`. From 2.7032.0: `inferenceCredentialKind: external-idp` and `inferenceIdpOidc`. Browser is the default flow and writes no flow key | In `id_token` mode, `aud` is the Desktop public-client app id. In `access_token` mode, `aud` is the supplied gateway API audience. | Needs a public-client app registration. If tenant user consent is blocked, Entra returns `AADSTS65001` or "Need admin approval" until an authorized admin grants consent. |
+| External IdP, broker | The same IdP block, plus `inferenceGatewayOidcAuthFlow: broker` before 2.7032.0 or `inferenceIdpAuthFlow: broker` from 2.7032.0 | Same audience rule as browser mode | Uses the Microsoft Entra broker for managed-device or token-protection Conditional Access. Requires broker redirect URIs and is not a Linux sign-in flow. |
 
 Create or discover the Desktop public-client registration with:
 

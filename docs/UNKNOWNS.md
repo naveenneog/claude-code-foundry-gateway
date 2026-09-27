@@ -38,6 +38,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | U29 | OPEN | What made Claude Desktop report `ENOTFOUND` on the owner's workstation on 2026-09-27? Not reproduced here. Its configuration then had no readable credential kind (U27). `Debug-ClaudeWorkstation.ps1` now shows Desktop's own recent `[custom-3p]` warnings and errors from `%LOCALAPPDATA%\Claude-3p\logs\main.log`, which name the failing host | P67 |
 | U30 | OPEN | Can the guided flow create the company address itself: an API Management custom hostname with a certificate and a DNS record, on each v2 tier, and at what cost? Not researched yet | P69 |
 | U31 | OPEN | Can the flow show the customer's own prices (an agreement's price sheet) instead of Azure retail list prices, and with what role? Not researched yet | P68 |
+| U32 | OPEN | What stops the reference Turnstile database every evening? Measured 2026-09-27 from the activity log: `pg-tsclaude-zpk4sh4prbsls` (rg-turnstile-claudegw) was stopped at 19:05Z on 09-23, 09-24 and 09-25 by an application whose token was issued by a tenant other than the subscription's. While stopped, Turnstile's `auth/me` waits about 30 s and returns 500, which AUM reports as `Read failed (exit 7)` ([detail](#u32--the-turnstile-database-stops-every-evening--open)) | f10, f11 |
 
 ---
 
@@ -597,8 +598,20 @@ not `inferenceIdpOidc` or `inferenceIdpAuthFlow`, and its credential kinds exclu
 (`tests/fixtures/claude-desktop-schema-2.2553.1.0.json`). ADR-0027's profile wrote only keys and a
 kind this release does not read, which matches the symptom.
 
-**Resolution.** [ADR-0031](adr/0031-client-keys-every-release-reads.md): render the original
-spelling, which every release since 1.25927.0 reads.
+**Resolution.** [ADR-0031](adr/0031-client-keys-every-release-reads.md): write the spelling the
+release that reads the profile knows. With no release known, the original spelling, which every
+release since 1.25927.0 reads.
+
+**Owner's evidence, 2026-09-27.** On the owner's workstation the per-user installer had installed
+Desktop 2.9939.2 in the background, while the running process was `app-1.44121.2\claude.exe`,
+most likely started from a shortcut pinned to that versioned folder. 1.44121.2 reads neither
+`external-idp` nor `inferenceIdpOidc`, and its **Sign in** button did nothing. After 2.9939.2 was
+started, Desktop showed "Identity provider sign-in (OIDC)" with the browser flow and the recorded
+client id. The app registration, the redirect `http://127.0.0.1/callback`, the
+`external-idp-extra-audience` named value and the policy branch were correct. So the release that
+reads a profile is the running one when it is older than the installed one:
+`Get-ClaudeDesktopReadingVersion` takes the older of the two, and `Debug-ClaudeWorkstation.ps1`
+reports the running build and any versioned shortcut.
 
 ## U28 — Claude Code releases and the 5-series models — CLOSED 2026-09-27
 
@@ -628,6 +641,68 @@ and an isolated `CLAUDE_CONFIG_DIR`:
 
 **Resolution.** [ADR-0031](adr/0031-client-keys-every-release-reads.md): declare capabilities for
 recorded models, and report or update a Claude Code older than the release that knows them.
+
+**Live proof of the setup's settings**, 2026-09-27 08:52Z, Claude Code 2.1.101 with the settings
+`Set-ClaudeCodeGatewaySettings` writes for `claude-opus-5` and `claude-sonnet-5`, through the
+reference gateway, isolated `CLAUDE_CONFIG_DIR`:
+
+| Invocation | Result |
+|---|---|
+| `claude -p ping` (default model) | answered, 12.4 s |
+| `--model opus`, `--model sonnet` | answered, 8.2 s and 10.1 s |
+| `--model claude-sonnet-5`, `--model claude-opus-5` | answered, 8.7 s and 9.0 s |
+| `--model claude-opus-5 --effort max` | answered, 9.4 s |
+| default model, same settings without `_SUPPORTED_CAPABILITIES` | 400 `thinking.type.enabled` |
+
+**What each release sends**, 2026-09-27, captured by a local listener standing in for the gateway
+(`thinking` field of the message request; `--model sonnet`):
+
+| Pinned name | Declaration | 2.1.101 | 2.1.272 |
+|---|---|---|---|
+| `claude-sonnet-5` | none | `enabled` | `adaptive` |
+| `claude-sonnet-5` | `thinking` | `enabled` | `enabled` |
+| `claude-sonnet-5` | all six | `adaptive` | `adaptive` |
+| `prod-fast` | none | `adaptive` | `adaptive` |
+| `prod-fast` | `thinking` | `enabled` | `enabled` |
+| `prod-fast` | all six | `adaptive` | `adaptive` |
+
+With the listener answering `enabled` with the model's real 400, 2.1.272 sent a second request with
+`adaptive` and answered; 2.1.101 sent one request and failed. Through the reference gateway,
+2.1.101 with `thinking` or `effort,thinking` returned the 400, and with `adaptive_thinking`,
+`effort` or all six in another order it answered; 2.1.272 answered in every case.
+
+## U32 — The Turnstile database stops every evening — OPEN
+
+**Symptom.** On 2026-09-27 the owner reported AUM taking 33–36 s per command and failing with
+`Read failed (exit 7)`, and Turnstile sign-in failing.
+
+**Measurement.** AUM reads through the Turnstile backend named by the `turnstile-integration`
+named value. The Turnstile App Service answered `/health`, but the authenticated
+`GET /api/v1/auth/me` waited about 30 s for a database connection and returned 500. The
+PostgreSQL Flexible Server `pg-tsclaude-zpk4sh4prbsls` was in state `Stopped`. Its activity log
+for the previous 7 days:
+
+| UTC | Operation | Caller |
+|---|---|---|
+| 09-23 19:05–19:09 | stop | an application from another tenant |
+| 09-23 19:40–19:42 | start | the owner |
+| 09-24 19:05–19:07 | stop | the same application |
+| 09-24 19:42–19:44 | start | the owner |
+| 09-25 19:05–19:08 | stop | the same application |
+| 09-27 08:15–08:17 | start | P67 session, owner's account |
+
+The stop token's claims name an application (`idtyp` `app`) issued by a tenant other than the
+subscription's, so the stop comes from an automation outside this
+deployment, most likely a subscription-level cost policy. After the start, `auth/me` returned 200
+in 1.2 s. To check it on a gateway's Turnstile: `az postgres flexible-server show -g <rg> -n
+<server> --query id -o tsv`, then `az monitor activity-log list --resource-id <id> --offset 7d`,
+and read `caller` and `claims` on the `Microsoft.DBforPostgreSQL/flexibleServers/stop/action`
+events.
+
+**Open.** Which automation this is and whether it can exclude the server. Until then the server
+is expected to stop again at about 19:05Z. The product side is queued as f10 and f11: a Turnstile
+readiness endpoint that answers 503 at once when the database is unavailable, and an AUM
+preflight that names the stopped database instead of `exit 7`.
 
 ---
 

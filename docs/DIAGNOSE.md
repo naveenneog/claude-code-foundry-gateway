@@ -15,6 +15,10 @@ P66 adds two read-only diagnostics entry points and one guided-flow module:
 ./scripts/debug-claude-workstation.sh \
   --gateway-url https://<apim>.azure-api.net/claude \
   --tenant-id <tenant-id>
+
+# Reading the gateway, tenant and deployments from the record
+./scripts/Debug-ClaudeWorkstation.ps1 -RecordPath ./claude-gateway.json
+./scripts/debug-claude-workstation.sh --config ./claude-gateway.json
 ```
 
 Every check prints `PASS`, `WARN`, `FAIL` or `SKIP`, the evidence used, the exact
@@ -55,12 +59,16 @@ machine:
 | Azure CLI | `az` is installed. | Install Azure CLI from the approved package channel. |
 | Azure sign-in and tenant | `az account show` succeeds and matches the tenant supplied by the platform team. | `az login --tenant <tenant-id> --allow-no-subscriptions`. |
 | Cognitive Services token | A token for `https://cognitiveservices.azure.com` is obtainable. The token is never printed. | Re-run `az login`; inspect Entra sign-in logs if issuance fails. |
-| Claude Code | `claude --version` runs and `claude doctor` output is captured where available. | Install/update Claude Code and reopen the terminal. |
+| Claude Code | `claude --version` runs. Every Claude Code on PATH is listed, one per folder, and the first one is the one that runs. `claude doctor` runs with no input and a time limit, 45 s by default (`CLAUDE_DIAGNOSE_DOCTOR_TIMEOUT_SECONDS`), because some releases wait for a key press. | Install/update Claude Code and reopen the terminal. |
+| Claude Code and the recorded models | Each alias `~/.claude/settings.json` pins is judged on what Claude Code was measured to send ([ADR-0031](adr/0031-client-keys-every-release-reads.md)). FAIL: a release that predates the pinned model, with no declaration and a model id as the pinned name, or with a declaration listing `thinking` without `adaptive_thinking`; either sends `thinking.type.enabled`, which the model refuses with `400`. WARN: the same on a custom deployment name or on a release that retries after the `400`; any other declaration that differs from the record, since a declaration turns off every capability it does not list; a model newer than the release table without its declaration; a declaration the record does not expect; an update available. | Re-run workstation setup, or `claude update`. |
 | Managed settings precedence | Reports which source wins: Windows HKLM, file, HKCU; macOS/Linux managed profile or managed file over user settings. | Remove stale lower-precedence settings or deploy the intended MDM/file source. See [MDM](MDM.md). |
 | User settings and environment | Reads `~/.claude/settings.json` and process environment variables that point at the gateway. | Set `CLAUDE_CODE_USE_FOUNDRY=1` and `ANTHROPIC_FOUNDRY_BASE_URL=https://<apim>.azure-api.net/claude`. |
 | Conflicts | Detects mutually exclusive `ANTHROPIC_FOUNDRY_BASE_URL` and `ANTHROPIC_FOUNDRY_RESOURCE`, or mismatched base URLs. | Keep the gateway base URL and remove the resource variable. |
 | VS Code and extension | `code` is present, the `anthropic.claude-code` extension is installed, and settings are discoverable. | `code --install-extension anthropic.claude-code`, then reload each window. |
 | Claude Desktop | Finds third-party configuration and reports `helper-script` or `external-idp`. | Re-run workstation setup or deploy Desktop managed settings. Portal/client: Claude Desktop > Settings > Connection. |
+| Claude Desktop running build (Windows) | The running Desktop build against the installed one, and shortcuts that start a versioned `app-<version>` build. | Quit Desktop including the tray icon and start it from the Start menu; repoint the shortcut. |
+| Claude Desktop sign-in configuration | The sign-in keys in the policy (Windows: HKLM, then HKCU) or the local `Claude-3p` profile, checked against the release that reads them: on Windows the older of the installed and running builds, on macOS the installed app. On Linux the release is not read. A `helper-script` profile whose helper file is missing fails. | Re-run workstation setup, or regenerate the MDM profile with the spelling the fleet reads ([MDM](MDM.md)). |
+| Claude Desktop recent errors (Windows) | Error lines from `%LOCALAPPDATA%\Claude-3p\logs\main.log`, such as `ENOTFOUND <host>`. | Follow the error; `ENOTFOUND` means the gateway host in the profile does not resolve. See [Troubleshooting](TROUBLESHOOTING.md#claude-desktop). |
 | Network path | DNS, proxy and `NODE_EXTRA_CA_CERTS` evidence for the gateway host. | Fix DNS, proxy or custom CA; see [Network](NETWORK.md). |
 | Gateway real request | Sends one real request unless skipped. | Rerun without `-NoRequest`; if the request fails, keep the redacted status, body and UTC time. |
 

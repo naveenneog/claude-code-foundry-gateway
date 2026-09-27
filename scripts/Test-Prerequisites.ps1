@@ -193,7 +193,7 @@ function Test-ClaudePrerequisites {
         # Reachability. A proxy or firewall block is far easier to diagnose here
         # than as a deployment timeout twenty minutes in.
         try {
-            $null = Invoke-WebRequest 'https://management.azure.com/' -Method Head -TimeoutSec 12 -ErrorAction Stop
+            $null = Invoke-WebRequest 'https://management.azure.com/' -Method Head -TimeoutSec 12 -UseBasicParsing -ErrorAction Stop
             P-Ok 'management.azure.com reachable'
         }
         catch {
@@ -227,7 +227,7 @@ function Test-ClaudePrerequisites {
 
         if ($GatewayUrl) {
             try {
-                $null = Invoke-WebRequest ($GatewayUrl.TrimEnd('/') + '/api/hello') -Method Head -TimeoutSec 12 -ErrorAction Stop
+                $null = Invoke-WebRequest ($GatewayUrl.TrimEnd('/') + '/api/hello') -Method Head -TimeoutSec 12 -UseBasicParsing -ErrorAction Stop
                 P-Ok 'gateway reachable'
             }
             catch {

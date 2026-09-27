@@ -409,11 +409,12 @@ where it costs money, with the figure at your stated developer count:
 > **Desktop sign-in is separate.** `helper-script` keeps today's Desktop
 > behavior: `get-foundry-token` reuses Azure CLI sign-in and the gateway accepts
 > only the Foundry data-plane audiences. `external-idp-browser` and
-> `external-idp-broker` write `inferenceCredentialKind: external-idp` with
-> `inferenceIdpOidc`; the gateway accepts the recorded Desktop app audience
-> only when that choice is in `claude-gateway.json`. Use
-> `scripts/New-ClaudeDesktopEntraApp.ps1 -WhatIf` to review the Entra app
-> registration before creating it.
+> `external-idp-broker` record Desktop's own Entra sign-in; the workstation setup
+> writes it in the key spelling the Desktop release on the machine reads
+> ([ADR-0031](adr/0031-client-keys-every-release-reads.md)). The gateway accepts
+> the recorded Desktop app audience only when that choice is in
+> `claude-gateway.json`. Use `scripts/New-ClaudeDesktopEntraApp.ps1 -WhatIf` to
+> review the Entra app registration before creating it.
 
 **4. The summary, before anything is created.** Reusing is called out
 explicitly, along with what will and will not be touched.

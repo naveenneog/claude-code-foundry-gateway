@@ -61,8 +61,17 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$desktopSignInHelper = Join-Path $PSScriptRoot 'ClaudeDesktopSignIn.ps1'
-if (Test-Path $desktopSignInHelper) { . $desktopSignInHelper }
+# ClaudeClientSupport.ps1 and ClaudeDesktopSignIn.ps1 define what the steps below call; without
+# them the setup would fail halfway with an unknown command, so it stops here and says why.
+$missingHelpers = @('ClaudeClientSupport.ps1', 'ClaudeDesktopSignIn.ps1' | Where-Object { -not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $_)) })
+if ($missingHelpers.Count) {
+    Write-Host "    [FAIL] $($missingHelpers -join ' and ') must be in the same folder as this script ($PSScriptRoot)." -ForegroundColor Red
+    Write-Host '    Fetch the whole scripts folder, or use the command in your onboarding email, which fetches every file.' -ForegroundColor DarkGray
+    exit 1
+}
+. (Join-Path $PSScriptRoot 'ClaudeDesktopSignIn.ps1')
+# Model capabilities, client versions and bounded client commands (ADR-0031).
+. (Join-Path $PSScriptRoot 'ClaudeClientSupport.ps1')
 
 function Write-Head($t) {
     Write-Host ''
@@ -131,6 +140,16 @@ if (-not $GatewayUrl) {
 $GatewayUrl = $GatewayUrl.TrimEnd('/')
 Write-Ok "gateway: $GatewayUrl"
 if ($TenantId) { Write-Note "tenant : $TenantId" }
+# The deployments the gateway serves, with the model behind each one. -Models names win when
+# passed; otherwise the record written by the installer; otherwise the default names.
+$deployments = @(if ($PSBoundParameters.ContainsKey('Models')) {
+    Get-ClaudeRecordedDeployment -Config ([pscustomobject]@{}) -Names $Models
+} else {
+    $recorded = @(Get-ClaudeRecordedDeployment -Config $cfg)
+    if ($recorded.Count) { $recorded } else { Get-ClaudeRecordedDeployment -Config ([pscustomobject]@{}) -Names $Models }
+})
+$Models = @($deployments | ForEach-Object { $_.name })
+Write-Note ("models : " + (($deployments | ForEach-Object { if ($_.model -and $_.model -ne $_.name) { "$($_.name) ($($_.model))" } else { $_.name } }) -join ', '))
 $desktopSignIn = if (Get-Command Get-ClaudeDesktopSignIn -ErrorAction SilentlyContinue) {
     Get-ClaudeDesktopSignIn -Config $(if ($cfg) { $cfg } else { [pscustomobject]@{} })
 } else {
@@ -201,10 +220,34 @@ foreach ($p in $prereqs) {
     }
 }
 
-# Claude Code CLI.
-if (Test-Cmd 'claude') {
-    $v = try { (& claude --version 2>&1 | Select-Object -First 1) } catch { '' }
-    Write-Ok "Claude Code CLI  $v"
+# Claude Code CLI. Every install on PATH is listed, because the first one is the one that runs,
+# and a newer install behind an older one changes nothing.
+$claudeInstalls = @(Get-ClaudeCodeInstall)
+$requiredClaude = Get-ClaudeCodeRequiredVersion -Deployments $deployments
+if ($claudeInstalls.Count) {
+    $claudePath = $claudeInstalls[0].Source
+    $versionRun = Invoke-ClaudeClientCommand -Path $claudePath -Arguments @('--version') -TimeoutSeconds 60
+    $v = $versionRun.Output
+    if ($versionRun.StartFailed -or $versionRun.TimedOut) { Write-Warn2 "Claude Code CLI at $claudePath did not report a version: $(if ($versionRun.TimedOut) { 'no answer in 60 s' } else { $v })"; $v = '' }
+    else { Write-Ok "Claude Code CLI  $v" }
+    Write-Note "runs from $claudePath"
+    foreach ($other in ($claudeInstalls | Select-Object -Skip 1)) { Write-Note "also on PATH, not used: $($other.Source)" }
+    if ($requiredClaude -and (Test-ClaudeClientVersionAtLeast -Installed $v -Required $requiredClaude.Version) -eq $false) {
+        Write-Warn2 "Claude Code $((ConvertTo-ClaudeClientVersion $v)) predates $($requiredClaude.Version), the first release that knows $($requiredClaude.Model)."
+        Write-Note 'The capability settings written below make its requests work; the update brings the rest.'
+        if ($SkipInstall) { Write-Note 'Update it with: claude update' }
+        else {
+            Write-Note 'updating with claude update (at most 5 minutes) ...'
+            $update = Invoke-ClaudeClientCommand -Path $claudePath -Arguments @('update') -TimeoutSeconds 300
+            $after = (Invoke-ClaudeClientCommand -Path $claudePath -Arguments @('--version') -TimeoutSeconds 60).Output
+            if ((Test-ClaudeClientVersionAtLeast -Installed $after -Required $requiredClaude.Version) -eq $true) { Write-Ok "Claude Code CLI  $after" }
+            else {
+                $why = if ($update.TimedOut) { 'claude update did not finish in 5 minutes' } else { (($update.Output -split "`r?`n") | Select-Object -Last 3) -join ' / ' }
+                Write-Warn2 "Claude Code is still $((ConvertTo-ClaudeClientVersion $after)): $why"
+                Write-Note "The one that runs is $claudePath. If it came from a package or software portal, update it there."
+            }
+        }
+    }
 }
 elseif ($SkipInstall) { Write-Warn2 'Claude Code CLI missing (skipped)' }
 else {
@@ -257,29 +300,19 @@ $settings = if (Test-Path $settingsPath) {
     try { Get-Content $settingsPath -Raw | ConvertFrom-Json } catch { [pscustomobject]@{} }
 } else { [pscustomobject]@{} }
 
-$envBlock = [ordered]@{
-    CLAUDE_CODE_USE_FOUNDRY        = '1'
-    ANTHROPIC_FOUNDRY_BASE_URL     = $GatewayUrl
-    ANTHROPIC_DEFAULT_OPUS_MODEL   = ($Models | Where-Object { $_ -match 'opus' }   | Select-Object -First 1)
-    ANTHROPIC_DEFAULT_SONNET_MODEL = ($Models | Where-Object { $_ -match 'sonnet' } | Select-Object -First 1)
-}
-if (-not $envBlock.ANTHROPIC_DEFAULT_OPUS_MODEL)   { $envBlock.Remove('ANTHROPIC_DEFAULT_OPUS_MODEL') }
-if (-not $envBlock.ANTHROPIC_DEFAULT_SONNET_MODEL) { $envBlock.Remove('ANTHROPIC_DEFAULT_SONNET_MODEL') }
-# Haiku has no Foundry deployment in most tenants; point the alias at Sonnet so
-# background tasks do not fail with DeploymentNotFound mid-session.
-if ($envBlock.ANTHROPIC_DEFAULT_SONNET_MODEL) { $envBlock['ANTHROPIC_DEFAULT_HAIKU_MODEL'] = $envBlock.ANTHROPIC_DEFAULT_SONNET_MODEL }
-
-# ANTHROPIC_FOUNDRY_RESOURCE is mutually exclusive with the base URL and the
-# session dies with "baseURL and resource are mutually exclusive".
-$settings | Add-Member -NotePropertyName 'env' -NotePropertyValue ([pscustomobject]$envBlock) -Force
-$settings | Add-Member -NotePropertyName 'availableModels' -NotePropertyValue $Models -Force
-$settings | Add-Member -NotePropertyName 'enforceAvailableModels' -NotePropertyValue $true -Force
-if ($settings.env.PSObject.Properties.Name -contains 'ANTHROPIC_FOUNDRY_RESOURCE') {
-    $settings.env.PSObject.Properties.Remove('ANTHROPIC_FOUNDRY_RESOURCE')
-}
+# One function writes this for the CLI, and its variables are repeated for VS Code below. It
+# keeps the developer's other settings and environment variables, removes
+# ANTHROPIC_FOUNDRY_RESOURCE (mutually exclusive with the base URL), pins each alias to a
+# deployment by model, and declares the model's capabilities (ADR-0031).
+$settings = Set-ClaudeCodeGatewaySettings -Settings $settings -GatewayUrl $GatewayUrl -Deployments $deployments
+$envBlock = [ordered]@{ CLAUDE_CODE_USE_FOUNDRY = '1'; ANTHROPIC_FOUNDRY_BASE_URL = $GatewayUrl }
+$modelEnvironment = Get-ClaudeCodeModelEnvironment -Deployments $deployments
+foreach ($k in $modelEnvironment.Keys) { $envBlock[$k] = $modelEnvironment[$k] }
 
 $settings | ConvertTo-Json -Depth 8 | Set-Content $settingsPath -Encoding UTF8
 Write-Ok $settingsPath
+$declared = @($modelEnvironment.Keys | Where-Object { $_ -like '*_SUPPORTED_CAPABILITIES' })
+if ($declared.Count) { Write-Note "capabilities declared for: $(($declared | ForEach-Object { ($_ -replace '^ANTHROPIC_DEFAULT_','') -replace '_MODEL_SUPPORTED_CAPABILITIES$','' }) -join ', ')" }
 
 # ---------------------------------------------------------------- 4. VS Code
 
@@ -312,7 +345,9 @@ if (-not $SkipVSCode) {
 
         if ($vs) {
             if (Test-Path $vsPath) { Copy-Item $vsPath "$vsPath.bak" -Force }
-            $arr = foreach ($k in $envBlock.Keys) { [pscustomobject]@{ name = $k; value = [string]$envBlock[$k] } }
+            # Entries the developer added for other purposes are kept; the gateway's are replaced.
+            $keep = @($vs.'claudeCode.environmentVariables' | Where-Object { $_ -and $_.name -and $script:ClaudeCodeGatewayEnvKeys -notcontains $_.name })
+            $arr = @($keep) + @(foreach ($k in $envBlock.Keys) { [pscustomobject]@{ name = $k; value = [string]$envBlock[$k] } })
             $vs | Add-Member -NotePropertyName 'claudeCode.environmentVariables' -NotePropertyValue @($arr) -Force
             $vs | ConvertTo-Json -Depth 8 | Set-Content $vsPath -Encoding UTF8
             Write-Ok "$vsPath  ($(@($arr).Count) variables)"
@@ -327,18 +362,17 @@ if (-not $SkipVSCode) {
 if (-not $SkipDesktop) {
     Write-Step 'Claude Desktop'
 
-    $desktopInstalled = $false
-    try {
-        $pkg = Get-AppxPackage -Name '*Claude*' -ErrorAction SilentlyContinue
-        if ($pkg) { $desktopInstalled = $true; Write-Ok "installed  $($pkg.Version)" }
-    } catch { }
-    if (-not $desktopInstalled) {
-        $proc = Get-Process -Name 'Claude' -ErrorAction SilentlyContinue
-        if ($proc) { $desktopInstalled = $true; Write-Ok 'installed (running)' }
-    }
+    $desktopInstall = Get-ClaudeDesktopInstall
+    $desktopInstalled = [bool]$desktopInstall.Installed
+    if ($desktopInstalled) { Write-Ok "installed  $($desktopInstall.Version)" }
     if (-not $desktopInstalled) {
         if ($SkipInstall) { Write-Warn2 'Claude Desktop missing (skipped)' }
-        else { if (Install-With-Winget -Id 'Anthropic.Claude' -Label 'Claude Desktop') { $desktopInstalled = $true } }
+        else {
+            if (Install-With-Winget -Id 'Anthropic.Claude' -Label 'Claude Desktop') {
+                $desktopInstalled = $true
+                $desktopInstall = Get-ClaudeDesktopInstall
+            }
+        }
     }
 
     if ($desktopInstalled) {
@@ -413,10 +447,27 @@ if (-not $SkipDesktop) {
             $profilePath = Join-Path $lib "$($meta.appliedId).json"
             if (Test-Path $profilePath) { Copy-Item $profilePath "$profilePath.bak" -Force }
 
-            $profile = New-ClaudeDesktopSettings -GatewayUrl $GatewayUrl -Models $Models -HelperPath $helperCmd -DesktopSignIn $desktopSignIn -NoCowork:$NoCowork
+            $desktopReads = Get-ClaudeDesktopReadingVersion -Install $desktopInstall
+            $profile = New-ClaudeDesktopSettings -GatewayUrl $GatewayUrl -Models $Models -HelperPath $helperCmd -DesktopSignIn $desktopSignIn -NoCowork:$NoCowork -DesktopVersion $desktopReads
 
             $profile | ConvertTo-Json -Depth 6 | Set-Content $profilePath -Encoding UTF8
             Write-Ok "profile written$(if (-not $NoCowork) { ' (Cowork enabled)' })"
+            $flowKey = @('inferenceGatewayOidcAuthFlow', 'inferenceIdpAuthFlow') | Where-Object { $profile.Contains($_) } | Select-Object -First 1
+            Write-Note "sign-in: $($profile.inferenceCredentialKind)$(if ($flowKey) { ' (' + $profile[$flowKey] + ')' }) for Desktop $(if ($desktopReads) { $desktopReads } else { 'of unknown version' })"
+            if ($desktopInstall.RunningVersion -and $desktopInstall.Version -and $desktopInstall.RunningVersion -ne $desktopInstall.Version) {
+                Write-Warn2 "Claude Desktop $($desktopInstall.Version) is installed, but $($desktopInstall.RunningVersion) is running ($($desktopInstall.RunningPath))."
+                foreach ($s in @(Get-ClaudeDesktopVersionedShortcut)) { Write-Note "shortcut to one build: $($s.Shortcut) -> $($s.Target)" }
+                Write-Note 'Quit Desktop fully, including the tray icon, and start it from the Start menu.'
+            }
+            # A release older than the keys needs ignores them, and the Connection screen then
+            # shows an empty Credential kind. Say so now rather than after the first failed chat.
+            $desktopNeeds = Get-ClaudeDesktopRequiredVersion -Settings $profile
+            $desktopOk = if ($desktopNeeds) { Test-ClaudeClientVersionAtLeast -Installed $desktopReads -Required $desktopNeeds } else { $true }
+            if ($desktopOk -eq $false) {
+                Write-Warn2 "Claude Desktop $desktopReads is older than $desktopNeeds, which this sign-in needs. Update Claude Desktop, then reopen it."
+                $problems += 'Claude Desktop version'
+            }
+            elseif ($null -eq $desktopOk) { Write-Note "Claude Desktop version unknown; this sign-in needs $desktopNeeds or later." }
             Write-Note 'Quit Claude Desktop completely, including the tray icon, then reopen.'
         }
     }
@@ -429,10 +480,15 @@ $token = az account get-access-token --resource https://cognitiveservices.azure.
 if (-not $token) { Write-Bad 'could not acquire a token'; $problems += 'token' }
 else {
     Write-Ok 'Entra token acquired'
-    $body = @{ model = ($Models | Select-Object -First 1); max_tokens = 16
+    # The Sonnet deployment is in every tier by default; an Opus-only request refuses standard users.
+    $probeModel = $envBlock['ANTHROPIC_DEFAULT_SONNET_MODEL']
+    if (-not $probeModel) { $probeModel = $Models | Select-Object -First 1 }
+    $body = @{ model = $probeModel; max_tokens = 16
                messages = @(@{ role = 'user'; content = 'Reply with exactly: READY' }) } | ConvertTo-Json -Depth 5
+    # -UseBasicParsing: without it Windows PowerShell 5.1 throws "Object reference not set to an
+    # instance of an object" on a machine without Internet Explorer, and no request is sent (measured).
     try {
-        $resp = Invoke-WebRequest -Method Post -Uri "$GatewayUrl/v1/messages" -TimeoutSec 90 `
+        $resp = Invoke-WebRequest -Method Post -Uri "$GatewayUrl/v1/messages" -TimeoutSec 90 -UseBasicParsing `
             -Headers @{ Authorization = "Bearer $token"; 'anthropic-version' = '2023-06-01'; 'Content-Type' = 'application/json' } `
             -Body $body
         Write-Ok "gateway responded  HTTP $($resp.StatusCode)"
@@ -451,6 +507,24 @@ else {
             default { Write-Note $_.Exception.Message }
         }
         if ($code -ne 429) { $problems += "gateway $code" }
+    }
+
+    # The same path the developer will use: Claude Code itself, with the settings just written.
+    # A raw request proves the gateway; this proves the client and its model settings, and is
+    # what catches the next client and model mismatch (ADR-0031).
+    $cliNow = @(Get-ClaudeCodeInstall) | Select-Object -First 1
+    if ($cliNow -and $probeModel -and $probeModel -match '^[A-Za-z0-9._-]+$') {
+        Write-Note "asking Claude Code for one reply through the gateway ($probeModel, at most 2 minutes) ..."
+        $cliCall = Invoke-ClaudeClientCommand -Path $cliNow.Source -Arguments @('-p', 'ping', '--model', $probeModel) -TimeoutSeconds 120 -WorkingDirectory ([IO.Path]::GetTempPath())
+        if ($cliCall.TimedOut) { Write-Warn2 'Claude Code did not answer within 2 minutes'; $problems += 'Claude Code request' }
+        elseif ($cliCall.ExitCode -eq 0 -and $cliCall.Output -notmatch 'API Error') { Write-Ok "Claude Code answered through the gateway in $($cliCall.Seconds) s" }
+        else {
+            $firstLine = (($cliCall.Output -split "`r?`n") | Where-Object { $_ } | Select-Object -First 1)
+            Write-Bad "Claude Code request failed: $firstLine"
+            if ($cliCall.Output -match 'thinking\.type\.enabled') { Write-Note 'This Claude Code does not know the model. Update it (claude update) or check the capability settings above.' }
+            elseif ($cliCall.Output -match '\b403\b') { Write-Note 'Refused by the gateway: check your tier includes this model.' }
+            $problems += 'Claude Code request'
+        }
     }
 }
 

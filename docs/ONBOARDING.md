@@ -229,14 +229,16 @@ The config file carries **no secret**: the gateway URL, the tenant id and the
 tier limits. All of it is information the developer needs, none of it grants
 access. Access is group membership.
 
-> Put `Setup-ClaudeWorkstation.ps1` and `claude-gateway.json` on a share or
-> internal site and pass `-DistributionUrl`; the email then contains a
-> two-line command that fetches and runs them.
-> Also distribute the complete scripts folder, including Desktop's token
-> helpers. The email generator's two-file download is not a complete Desktop
-> installation bundle. **Manual:** attach the config and bundle/link in your
-> mail client and include [DEVELOPER.md](../DEVELOPER.md); no Graph mail grant is
-> required to send that handover yourself.
+> Put `claude-gateway.json` and the setup scripts on a share or internal site and
+> pass `-DistributionUrl`; the email then contains a command that fetches them
+> into a `claude-setup` folder and runs the setup. The files are taken from
+> `Setup-ClaudeWorkstation.ps1` itself: the script, `ClaudeClientSupport.ps1`,
+> `ClaudeDesktopSignIn.ps1`, `Show-Banner.ps1`, `Test-Prerequisites.ps1` and
+> Desktop's token helpers `get-foundry-token.ps1` and `get-foundry-token.cmd`.
+> The setup stops at once, naming the missing file, without the first two.
+> **Manual:** attach the config and those files, or link the scripts folder, in
+> your mail client and include [DEVELOPER.md](../DEVELOPER.md); no Graph mail
+> grant is required to send that handover yourself.
 
 ---
 

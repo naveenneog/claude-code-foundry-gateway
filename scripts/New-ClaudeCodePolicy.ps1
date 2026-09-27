@@ -124,6 +124,13 @@ param(
     [string]$DesktopCredentialHelper = '/usr/local/bin/get-foundry-token.sh',
     [string]$DesktopCredentialHelperWindows = 'C:\Program Files\ClaudeFoundry\get-foundry-token.cmd',
 
+    # Which spelling of the Desktop Entra sign-in keys a fleet profile carries. original
+    # (interactive with inferenceGatewayOidc) is read by every Desktop since 1.25927.0, and later
+    # releases read it as external-idp. current (external-idp with inferenceIdpOidc) needs Desktop
+    # 2.7032.0 on every device; switch once the fleet is there (ADR-0031).
+    [ValidateSet('original', 'current')]
+    [string]$DesktopKeySpelling = 'original',
+
     [string]$OutputPath = './policy-claude-code'
 )
 
@@ -151,10 +158,10 @@ if (-not (Get-Command Get-ClaudeDesktopSignIn -ErrorAction SilentlyContinue)) {
         }
     }
     function New-ClaudeDesktopSettings {
-        param([string]$GatewayUrl, [string[]]$Models, [string]$HelperPath, $DesktopSignIn, [switch]$NoCowork)
+        param([string]$GatewayUrl, [string[]]$Models, [string]$HelperPath, $DesktopSignIn, [switch]$NoCowork, [string]$DesktopVersion, [string]$KeySpelling = 'original')
         $settings = [ordered]@{
             inferenceProvider = 'gateway'; inferenceGatewayBaseUrl = $GatewayUrl
-            inferenceGatewayAuthScheme = 'bearer'; inferenceCredentialKind = $DesktopSignIn.kind
+            inferenceGatewayAuthScheme = 'bearer'; inferenceCredentialKind = 'helper-script'
             inferenceModels = @($Models | ForEach-Object { [ordered]@{ name = $_ } })
             chatTabEnabled = $true; isClaudeCodeForDesktopEnabled = $true
             inferenceModelPricingEnabled = $true
@@ -170,11 +177,21 @@ if (-not (Get-Command Get-ClaudeDesktopSignIn -ErrorAction SilentlyContinue)) {
         $oidc = [ordered]@{ issuer = $DesktopSignIn.issuer; clientId = $DesktopSignIn.clientId; bearerTokenType = $DesktopSignIn.bearerTokenType }
         if ($DesktopSignIn.scopes) { $oidc['scopes'] = $DesktopSignIn.scopes }
         if ($DesktopSignIn.resource) { $oidc['resource'] = $DesktopSignIn.resource }
-        $settings['inferenceIdpAuthFlow'] = $DesktopSignIn.flow
-        $settings['inferenceIdpOidc'] = $oidc
+        # ADR-0031: the spelling every Desktop release since 1.25927.0 reads, unless the fleet is on 2.7032.0.
+        if ($KeySpelling -eq 'current') {
+            $settings['inferenceCredentialKind'] = 'external-idp'
+            $settings['inferenceIdpOidc'] = $oidc
+            if ($DesktopSignIn.flow -eq 'broker') { $settings['inferenceIdpAuthFlow'] = 'broker' }
+            return $settings
+        }
+        $settings['inferenceCredentialKind'] = 'interactive'
+        $settings['inferenceGatewayOidc'] = $oidc
+        if ($DesktopSignIn.flow -eq 'broker') { $settings['inferenceGatewayOidcAuthFlow'] = 'broker' }
         return $settings
     }
 }
+$clientSupport = Join-Path $PSScriptRoot 'ClaudeClientSupport.ps1'
+if (Test-Path $clientSupport) { . $clientSupport }
 
 $banner = Join-Path $PSScriptRoot 'Show-Banner.ps1'
 if (Test-Path $banner) { . $banner; Show-ClaudeBanner -Subtitle 'Claude Code managed settings' }
@@ -192,14 +209,27 @@ if ($ConfigPath) {
     if (-not (Test-Path $ConfigPath)) { throw "Config not found: $ConfigPath" }
     $cfg = Get-Content $ConfigPath -Raw | ConvertFrom-Json
     if (-not $GatewayUrl -and $cfg.gatewayUrl) { $GatewayUrl = $cfg.gatewayUrl }
-    if ($cfg.models) {
+    # @(...) around the whole if: assigning an if statement unrolls a one-element array, and on
+    # Windows PowerShell 5.1 a single PSCustomObject has no Count, so one deployment was ignored.
+    $recordedDeployments = @(if (Get-Command Get-ClaudeRecordedDeployment -ErrorAction SilentlyContinue) { Get-ClaudeRecordedDeployment -Config $cfg })
+    if ($recordedDeployments.Count -and (Get-Command Get-ClaudeCodePinnedModel -ErrorAction SilentlyContinue)) {
+        # By model, not by deployment name: a deployment may be named anything.
+        $pinnedByModel = Get-ClaudeCodePinnedModel -Deployments $recordedDeployments
+        if ($pinnedByModel.Contains('OPUS') -and -not $PSBoundParameters.ContainsKey('OpusModel')) { $OpusModel = $pinnedByModel['OPUS'].name }
+        if ($pinnedByModel.Contains('SONNET') -and -not $PSBoundParameters.ContainsKey('SonnetModel')) { $SonnetModel = $pinnedByModel['SONNET'].name }
+        # Only a recorded Haiku deployment. Without one, the haiku alias follows the Sonnet
+        # choice below, including a -SonnetModel the administrator passed.
+        $haikuPin = if ($pinnedByModel.Contains('HAIKU')) { $pinnedByModel['HAIKU'] } else { $null }
+        if ($haikuPin -and [string]$haikuPin.model -match 'haiku' -and -not $PSBoundParameters.ContainsKey('HaikuModel')) { $HaikuModel = $haikuPin.name }
+    }
+    elseif ($cfg.models) {
         $o = $cfg.models | Where-Object { $_ -match 'opus' }   | Select-Object -First 1
         $s = $cfg.models | Where-Object { $_ -match 'sonnet' } | Select-Object -First 1
         if ($o) { $OpusModel = $o }
         if ($s) { $SonnetModel = $s }
     }
 }
-else { $cfg = [pscustomobject]@{} }
+else { $cfg = [pscustomobject]@{}; $recordedDeployments = @() }
 
 if (-not $GatewayUrl) {
     throw ("Pass -GatewayUrl, or -ConfigPath pointing at onboarding/claude-gateway.json. Where to find it: " +
@@ -235,11 +265,28 @@ $settings = [ordered]@{
     availableModels = @($AvailableModels)
 }
 
+# ADR-0031: Claude Code does not recognise a pinned Foundry deployment name, so an older release
+# sends thinking.type.enabled to a 5-series model and gets a 400. Declare what each pinned
+# model supports; an unknown model is left to Claude Code's own detection.
+if (Get-Command Get-ClaudeModelClientSupport -ErrorAction SilentlyContinue) {
+    $deploymentByName = @{}
+    foreach ($d in @($recordedDeployments)) { $deploymentByName[[string]$d.name] = $d }
+    foreach ($pin in @(@('OPUS', $OpusModel), @('SONNET', $SonnetModel), @('HAIKU', $HaikuModel))) {
+        if (-not $pin[1]) { continue }
+        $known = if ($deploymentByName.ContainsKey([string]$pin[1])) { Get-ClaudeDeploymentClientSupport $deploymentByName[[string]$pin[1]] } else { Get-ClaudeModelClientSupport -Model ([string]$pin[1]) }
+        if ($known) { $settings.env["ANTHROPIC_DEFAULT_$($pin[0])_MODEL_SUPPORTED_CAPABILITIES"] = $known.Capabilities }
+    }
+}
+else {
+    Write-Host '  ClaudeClientSupport.ps1 is not next to this script, so no model capabilities are declared.' -ForegroundColor Yellow
+    Write-Host '  Claude Code before 2.1.219 then fails with 400 thinking.type.enabled on claude-opus-5.' -ForegroundColor Yellow
+}
+
 # Claude Desktop reads its own keys. They are emitted here so one run produces
 # one tier's complete profile rather than two half-profiles that can drift.
 $desktopSignIn = Get-ClaudeDesktopSignIn -Config $cfg
 $desktop = New-ClaudeDesktopSettings -GatewayUrl $GatewayUrl -Models $AvailableModels `
-    -HelperPath $DesktopCredentialHelper -DesktopSignIn $desktopSignIn -NoCowork:($DesktopTabs -ne 'default')
+    -HelperPath $DesktopCredentialHelper -DesktopSignIn $desktopSignIn -NoCowork:($DesktopTabs -ne 'default') -KeySpelling $DesktopKeySpelling
 $desktop['chatTabEnabled'] = $true
 $desktop['isClaudeCodeForDesktopEnabled'] = ($DesktopTabs -ne 'chat-only')
 if ($desktopSignIn.kind -eq 'helper-script') {

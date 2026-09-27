@@ -54,10 +54,25 @@ New-Item -ItemType Directory -Force -Path $OutputPath | Out-Null
 $tpm = '{0:n0}' -f $tierCfg.tokensPerMinute
 $tpd = '{0:n0}' -f $tierCfg.tokensPerDay
 
+# Every file Setup-ClaudeWorkstation.ps1 reads from its own folder, taken from the script itself,
+# so a helper added to it later is fetched too. Setup stops at once without ClaudeClientSupport.ps1
+# and ClaudeDesktopSignIn.ps1, and Desktop needs the token helpers. tests/Test-WorkstationClients.ps1
+# runs the setup from a folder holding only these files.
+$setupScript = Join-Path $PSScriptRoot 'Setup-ClaudeWorkstation.ps1'
+$setupFiles = @('Setup-ClaudeWorkstation.ps1')
+if (Test-Path -LiteralPath $setupScript) {
+    $setupFiles += @([regex]::Matches((Get-Content -LiteralPath $setupScript -Raw), "Join-Path \`$PSScriptRoot '([A-Za-z0-9._-]+)'") | ForEach-Object { $_.Groups[1].Value })
+}
+$setupFiles = @($setupFiles | Select-Object -Unique)
+$fileList = "'" + ($setupFiles -join "', '") + "'"
+
 $cmd = if ($DistributionUrl) {
-    "irm $($DistributionUrl.TrimEnd('/'))/Setup-ClaudeWorkstation.ps1 -OutFile Setup-ClaudeWorkstation.ps1`n" +
-    ".\Setup-ClaudeWorkstation.ps1 -ConfigPath $($DistributionUrl.TrimEnd('/'))/claude-gateway.json"
+    $base = $DistributionUrl.TrimEnd('/')
+    "New-Item -ItemType Directory -Force claude-setup | Out-Null; Set-Location claude-setup`n" +
+    "$fileList | ForEach-Object { Invoke-RestMethod `"$base/`$_`" -OutFile `$_ }`n" +
+    ".\Setup-ClaudeWorkstation.ps1 -ConfigPath $base/claude-gateway.json"
 } else {
+    "# In the folder that holds claude-gateway.json and $($setupFiles -join ', '):`n" +
     ".\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json"
 }
 

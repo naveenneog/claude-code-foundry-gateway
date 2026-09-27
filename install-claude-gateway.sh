@@ -368,14 +368,22 @@ step_ "Onboarding package"
 PKG="$HERE/onboarding"
 mkdir -p "$PKG"
 CONFIG_PATH="$PKG/claude-gateway.json"
+# Each Claude deployment with the model behind it: the workstation setups pin Claude Code by model
+# and declare its capabilities (ADR-0031). A deployment may be named anything.
+DEPLOYMENTS_JSON="$(az cognitiveservices account deployment list -g "$FOUNDRY_RG" -n "$FOUNDRY_ACCOUNT" -o json 2>/dev/null \
+  | jq '[ .[] | select((.properties.model.format // "") == "Anthropic" or ((.properties.model.name // "") | test("claude")))
+          | {name: .name, model: .properties.model.name, version: (.properties.model.version // "")} ]' 2>/dev/null || true)"
+[ -z "$DEPLOYMENTS_JSON" ] && DEPLOYMENTS_JSON="[]"
 jq -n \
   --arg url "$GATEWAY_URL" --arg tenant "$TENANT_ID" --arg apim "$APIM_NAME" \
   --arg rg "$RESOURCE_GROUP" --arg sg "$STANDARD_GROUP" --arg pg "$PREMIUM_GROUP" \
   --argjson tpms "$TPM_STANDARD" --argjson qs "$QUOTA_STANDARD" \
   --argjson tpmp "$TPM_PREMIUM"  --argjson qp "$QUOTA_PREMIUM" \
+  --argjson deps "$DEPLOYMENTS_JSON" \
   --arg gen "$(date '+%Y-%m-%d %H:%M')" '{
     gatewayUrl:$url, tenantId:$tenant, apimName:$apim, resourceGroup:$rg,
     standardGroup:$sg, premiumGroup:$pg,
+    deployments: $deps, models: [ $deps[].name ],
     tiers: { standard:{tokensPerMinute:$tpms, tokensPerDay:$qs},
              premium: {tokensPerMinute:$tpmp, tokensPerDay:$qp} },
     generated:$gen }' > "$CONFIG_PATH"

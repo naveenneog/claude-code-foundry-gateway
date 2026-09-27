@@ -56,6 +56,15 @@ note_()  { printf '    %s%s%s\n' "$C_GREY" "$1" "$C_OFF"; }
 PROBLEMS=()
 problem_() { PROBLEMS+=("$1"); }
 
+# ADR-0031: the model rules and the bounded client command live in one file, shared with
+# debug-claude-workstation.sh. It must sit beside this script.
+CLIENT_SUPPORT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/claude-client-support.sh"
+if [ ! -f "$CLIENT_SUPPORT" ]; then
+  echo "claude-client-support.sh must be in the same folder as this script ($(dirname "${BASH_SOURCE[0]}"))." >&2
+  echo "Fetch the whole scripts folder, not this file alone." >&2
+  exit 1
+fi
+. "$CLIENT_SUPPORT"
 usage_() { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
 
 # --------------------------------------------------------------------- args
@@ -121,12 +130,21 @@ if [ -n "$CONFIG" ]; then
     fi
     if [ -n "$raw" ]; then
       CONFIG_RAW="$raw"
-      [ -z "$GATEWAY_URL" ] && GATEWAY_URL="$(printf '%s' "$raw" | jq -r '.gatewayUrl // empty')"
-      [ -z "$TENANT_ID" ]   && TENANT_ID="$(printf '%s' "$raw" | jq -r '.tenantId // empty')"
+      [ -z "$GATEWAY_URL" ] && GATEWAY_URL="$(printf '%s' "$raw" | jq_value_ '.gatewayUrl // empty')"
+      [ -z "$TENANT_ID" ]   && TENANT_ID="$(printf '%s' "$raw" | jq_value_ '.tenantId // empty')"
       ok_ "loaded from $CONFIG"
-      tpm="$(printf '%s' "$raw" | jq -r '.tiers.standard.tokensPerMinute // empty')"
-      tpd="$(printf '%s' "$raw" | jq -r '.tiers.standard.tokensPerDay // empty')"
+      tpm="$(printf '%s' "$raw" | jq_value_ '.tiers.standard.tokensPerMinute // empty')"
+      tpd="$(printf '%s' "$raw" | jq_value_ '.tiers.standard.tokensPerDay // empty')"
       [ -n "$tpm" ] && note_ "standard tier: $tpm tokens/min, $tpd tokens/day"
+      # The deployments the installer recorded, by name; each one's model is read below.
+      recorded="$(printf '%s' "$raw" | jq_value_ '(.deployments // [])[] | .name // empty' 2>/dev/null)"
+      [ -z "$recorded" ] && recorded="$(printf '%s' "$raw" | jq_value_ '(.models // [])[] | strings' 2>/dev/null)"
+      if [ -n "$recorded" ]; then
+        MODELS=()
+        while IFS= read -r line; do [ -n "$line" ] && MODELS+=("$line"); done <<EOF
+$recorded
+EOF
+      fi
     else
       warn_ "could not read $CONFIG"
     fi
@@ -166,15 +184,15 @@ DESKTOP_SIGNIN_SCOPES=""
 DESKTOP_SIGNIN_AUDIENCE=""
 DESKTOP_SIGNIN_RESOURCE=""
 if [ -n "$CONFIG_RAW" ] && command -v jq >/dev/null 2>&1; then
-  DESKTOP_SIGNIN_KIND="$(printf '%s' "$CONFIG_RAW" | jq -r '.desktopSignIn.kind // "helper-script"')"
+  DESKTOP_SIGNIN_KIND="$(printf '%s' "$CONFIG_RAW" | jq_value_ '.desktopSignIn.kind // "helper-script"')"
   if [ "$DESKTOP_SIGNIN_KIND" = "external-idp" ]; then
-    DESKTOP_SIGNIN_FLOW="$(printf '%s' "$CONFIG_RAW" | jq -r '.desktopSignIn.flow // empty')"
-    DESKTOP_SIGNIN_TOKEN_TYPE="$(printf '%s' "$CONFIG_RAW" | jq -r '.desktopSignIn.bearerTokenType // "id_token"')"
-    DESKTOP_SIGNIN_CLIENT_ID="$(printf '%s' "$CONFIG_RAW" | jq -r '.desktopSignIn.clientId // empty')"
-    DESKTOP_SIGNIN_ISSUER="$(printf '%s' "$CONFIG_RAW" | jq -r '.desktopSignIn.issuer // empty')"
-    DESKTOP_SIGNIN_SCOPES="$(printf '%s' "$CONFIG_RAW" | jq -r '.desktopSignIn.scopes // empty')"
-    DESKTOP_SIGNIN_AUDIENCE="$(printf '%s' "$CONFIG_RAW" | jq -r '.desktopSignIn.audience // empty')"
-    DESKTOP_SIGNIN_RESOURCE="$(printf '%s' "$CONFIG_RAW" | jq -r '.desktopSignIn.resource // empty')"
+    DESKTOP_SIGNIN_FLOW="$(printf '%s' "$CONFIG_RAW" | jq_value_ '.desktopSignIn.flow // empty')"
+    DESKTOP_SIGNIN_TOKEN_TYPE="$(printf '%s' "$CONFIG_RAW" | jq_value_ '.desktopSignIn.bearerTokenType // "id_token"')"
+    DESKTOP_SIGNIN_CLIENT_ID="$(printf '%s' "$CONFIG_RAW" | jq_value_ '.desktopSignIn.clientId // empty')"
+    DESKTOP_SIGNIN_ISSUER="$(printf '%s' "$CONFIG_RAW" | jq_value_ '.desktopSignIn.issuer // empty')"
+    DESKTOP_SIGNIN_SCOPES="$(printf '%s' "$CONFIG_RAW" | jq_value_ '.desktopSignIn.scopes // empty')"
+    DESKTOP_SIGNIN_AUDIENCE="$(printf '%s' "$CONFIG_RAW" | jq_value_ '.desktopSignIn.audience // empty')"
+    DESKTOP_SIGNIN_RESOURCE="$(printf '%s' "$CONFIG_RAW" | jq_value_ '.desktopSignIn.resource // empty')"
     case "$DESKTOP_SIGNIN_FLOW" in browser|broker) ;; *) bad_ "desktopSignIn.flow must be browser or broker"; exit 1 ;; esac
     case "$DESKTOP_SIGNIN_TOKEN_TYPE" in id_token|access_token) ;; *) bad_ "desktopSignIn.bearerTokenType must be id_token or access_token"; exit 1 ;; esac
     if ! printf '%s' "$DESKTOP_SIGNIN_CLIENT_ID" | grep -Eq '^[0-9a-fA-F-]{36}$'; then bad_ "desktopSignIn.clientId must be a GUID"; exit 1; fi
@@ -260,7 +278,28 @@ fi
 
 # Claude Code CLI.
 if have_ claude; then
-  ok_ "Claude Code CLI  $(claude --version 2>/dev/null | head -1)"
+  cc_version="$(claude --version 2>/dev/null </dev/null | head -1)"
+  ok_ "Claude Code CLI  $cc_version"
+  note_ "runs from $(command -v claude)"
+  cc_have="$(printf '%s' "$cc_version" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+  cc_need=""; cc_need_model=""
+  for m in "${MODELS[@]}"; do
+    need="$(deployment_min_claude_code_ "$m")"
+    if [ -n "$need" ] && { [ -z "$cc_need" ] || ! version_at_least_ "$cc_need" "$need"; }; then cc_need="$need"; cc_need_model="$(model_of_ "$m")"; fi
+  done
+  if [ -n "$cc_need" ] && [ -n "$cc_have" ] && ! version_at_least_ "$cc_have" "$cc_need"; then
+    warn_ "Claude Code $cc_have predates $cc_need, the first release that knows $cc_need_model."
+    note_ "The capability settings written below make its requests work; the update brings the rest."
+    if [ "$SKIP_INSTALL" = "1" ]; then
+      note_ "update it with: claude update"
+    else
+      note_ "updating with claude update (at most 5 minutes) ..."
+      run_bounded_ 300 claude update </dev/null >/dev/null 2>&1
+      cc_after="$(claude --version 2>/dev/null </dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+      if [ -n "$cc_after" ] && version_at_least_ "$cc_after" "$cc_need"; then ok_ "Claude Code CLI  $cc_after"
+      else warn_ "Claude Code is still ${cc_after:-unknown}; the one that runs is $(command -v claude)"; fi
+    fi
+  fi
 elif [ "$SKIP_INSTALL" = "1" ]; then
   warn_ "Claude Code CLI missing (skipped)"
 else
@@ -306,10 +345,23 @@ CLAUDE_DIR="$HOME/.claude"
 mkdir -p "$CLAUDE_DIR"
 SETTINGS="$CLAUDE_DIR/settings.json"
 
-SONNET=""; OPUS=""
+SONNET=""; OPUS=""; HAIKU=""; OPUS_VER="0.0"; SONNET_VER="0.0"; HAIKU_VER="0.0"
 for m in "${MODELS[@]}"; do
-  case "$m" in *sonnet*) SONNET="$m" ;; *opus*) OPUS="$m" ;; esac
+  # By the model behind the deployment, not the deployment name; the newest in a family wins.
+  mm="$(model_of_ "$m")"; mv="$(model_identity_ "$mm" | cut -d' ' -f2)"; mv="${mv:-0.0}"
+  case "$mm" in
+    *sonnet*) if [ -z "$SONNET" ] || version_gt_ "$mv.0" "$SONNET_VER.0"; then SONNET="$m"; SONNET_VER="$mv"; fi ;;
+    *opus*)   if [ -z "$OPUS" ]   || version_gt_ "$mv.0" "$OPUS_VER.0";   then OPUS="$m";   OPUS_VER="$mv";   fi ;;
+    *haiku*)  if [ -z "$HAIKU" ]  || version_gt_ "$mv.0" "$HAIKU_VER.0";  then HAIKU="$m";  HAIKU_VER="$mv";  fi ;;
+  esac
 done
+# The haiku alias falls back to Sonnet because most tenants have no Haiku deployment, and the
+# failure otherwise surfaces mid-task as DeploymentNotFound.
+[ -z "$HAIKU" ] && HAIKU="$SONNET"
+OPUS_CAPS=""; SONNET_CAPS=""; HAIKU_CAPS=""
+[ -n "$OPUS" ] && OPUS_CAPS="$(deployment_caps_ "$OPUS")"
+[ -n "$SONNET" ] && SONNET_CAPS="$(deployment_caps_ "$SONNET")"
+[ -n "$HAIKU" ] && HAIKU_CAPS="$(deployment_caps_ "$HAIKU")"
 
 if have_ jq; then
   [ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
@@ -320,22 +372,25 @@ if have_ jq; then
   # ANTHROPIC_FOUNDRY_RESOURCE is mutually exclusive with the base URL, so it is
   # deleted rather than merely not set - a leftover value kills the session with
   # "baseURL and resource are mutually exclusive".
-  #
-  # The haiku alias points at Sonnet because most tenants have no Haiku
-  # deployment, and the failure otherwise surfaces mid-task as
-  # DeploymentNotFound.
   tmp="$(mktemp)"
   jq \
     --arg url "$GATEWAY_URL" \
     --arg sonnet "$SONNET" \
     --arg opus "$OPUS" \
+    --arg haiku "$HAIKU" \
+    --arg opusCaps "$OPUS_CAPS" \
+    --arg sonnetCaps "$SONNET_CAPS" \
+    --arg haikuCaps "$HAIKU_CAPS" \
     --argjson models "$models_json" '
       .env = (.env // {})
       | .env.CLAUDE_CODE_USE_FOUNDRY = "1"
       | .env.ANTHROPIC_FOUNDRY_BASE_URL = $url
       | (if $opus   != "" then .env.ANTHROPIC_DEFAULT_OPUS_MODEL   = $opus   else . end)
       | (if $sonnet != "" then .env.ANTHROPIC_DEFAULT_SONNET_MODEL = $sonnet else . end)
-      | (if $sonnet != "" then .env.ANTHROPIC_DEFAULT_HAIKU_MODEL  = $sonnet else . end)
+      | (if $haiku  != "" then .env.ANTHROPIC_DEFAULT_HAIKU_MODEL  = $haiku  else . end)
+      | (if $opusCaps   != "" then .env.ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES   = $opusCaps   else del(.env.ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES) end)
+      | (if $sonnetCaps != "" then .env.ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES = $sonnetCaps else del(.env.ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES) end)
+      | (if $haikuCaps  != "" then .env.ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES  = $haikuCaps  else del(.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES) end)
       | del(.env.ANTHROPIC_FOUNDRY_RESOURCE)
       | .availableModels = $models
       | .enforceAvailableModels = true
@@ -371,18 +426,27 @@ if [ "$SKIP_VSCODE" = "0" ]; then
     cp "$VS_SETTINGS" "$VS_SETTINGS.bak" 2>/dev/null || true
 
     env_arr="$(jq -n \
-      --arg url "$GATEWAY_URL" --arg sonnet "$SONNET" --arg opus "$OPUS" '
+      --arg url "$GATEWAY_URL" --arg sonnet "$SONNET" --arg opus "$OPUS" --arg haiku "$HAIKU" \
+      --arg opusCaps "$OPUS_CAPS" --arg sonnetCaps "$SONNET_CAPS" --arg haikuCaps "$HAIKU_CAPS" '
       [ {name:"CLAUDE_CODE_USE_FOUNDRY", value:"1"},
         {name:"ANTHROPIC_FOUNDRY_BASE_URL", value:$url} ]
       + (if $opus   != "" then [{name:"ANTHROPIC_DEFAULT_OPUS_MODEL",   value:$opus}]   else [] end)
-      + (if $sonnet != "" then [{name:"ANTHROPIC_DEFAULT_SONNET_MODEL", value:$sonnet},
-                                {name:"ANTHROPIC_DEFAULT_HAIKU_MODEL",  value:$sonnet}] else [] end)')"
+      + (if $sonnet != "" then [{name:"ANTHROPIC_DEFAULT_SONNET_MODEL", value:$sonnet}] else [] end)
+      + (if $haiku  != "" then [{name:"ANTHROPIC_DEFAULT_HAIKU_MODEL",  value:$haiku}]  else [] end)
+      + (if $opusCaps   != "" then [{name:"ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES",   value:$opusCaps}]   else [] end)
+      + (if $sonnetCaps != "" then [{name:"ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES", value:$sonnetCaps}] else [] end)
+      + (if $haikuCaps  != "" then [{name:"ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES",  value:$haikuCaps}]  else [] end)')"
+    # Variables this script does not own belong to the developer and are kept.
+    owned='["CLAUDE_CODE_USE_FOUNDRY","ANTHROPIC_FOUNDRY_BASE_URL","ANTHROPIC_FOUNDRY_RESOURCE","ANTHROPIC_DEFAULT_OPUS_MODEL","ANTHROPIC_DEFAULT_SONNET_MODEL","ANTHROPIC_DEFAULT_HAIKU_MODEL","ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES","ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES","ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES"]'
 
     tmp="$(mktemp)"
     # VS Code settings.json is JSONC; jq needs strict JSON, so comments and
     # trailing commas are stripped first. The backup above is the safety net.
     sed -e 's://[^"]*$::' "$VS_SETTINGS" \
-      | jq --argjson ev "$env_arr" '.["claudeCode.environmentVariables"] = $ev' > "$tmp" 2>/dev/null \
+      | jq --argjson ev "$env_arr" --argjson owned "$owned" '
+          .["claudeCode.environmentVariables"] =
+            (((.["claudeCode.environmentVariables"] // []) | if type == "array" then . else [] end
+              | map(select((.name // "") as $n | ($owned | index($n)) == null))) + $ev)' > "$tmp" 2>/dev/null \
       && mv "$tmp" "$VS_SETTINGS" \
       && ok_ "$VS_SETTINGS" \
       || { rm -f "$tmp"; warn_ "could not edit VS Code settings.json - left unchanged"
@@ -485,7 +549,7 @@ HELPEOF
       note_ "created the profile library"
     fi
 
-    applied="$(jq -r '.appliedId' "$META")"
+    applied="$(jq_value_ '.appliedId' "$META")"
     PROFILE="$LIB/$applied.json"
     [ -f "$PROFILE" ] && cp "$PROFILE" "$PROFILE.bak"
 
@@ -513,6 +577,15 @@ HELPEOF
           coworkTabEnabled: $cowork
         }' > "$PROFILE"
     else
+      # ADR-0031: the current spelling for a Desktop that reads it (2.7032.0 or later), otherwise
+      # the original spelling that every release since 1.25927.0 reads, and later ones read as
+      # external-idp. Linux and an unreadable version get the original spelling.
+      DESKTOP_VERSION=""
+      if [ "$PLATFORM" = "macos" ] && [ -f "/Applications/Claude.app/Contents/Info.plist" ]; then
+        DESKTOP_VERSION="$(defaults read /Applications/Claude.app/Contents/Info.plist CFBundleShortVersionString 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+      fi
+      use_current="false"
+      if [ -n "$DESKTOP_VERSION" ] && version_at_least_ "$DESKTOP_VERSION" "2.7032.0"; then use_current="true"; fi
       jq -n \
         --arg url "$GATEWAY_URL" \
         --arg flow "$DESKTOP_SIGNIN_FLOW" \
@@ -521,26 +594,25 @@ HELPEOF
         --arg tokenType "$DESKTOP_SIGNIN_TOKEN_TYPE" \
         --arg scopes "$DESKTOP_SIGNIN_SCOPES" \
         --arg resource "$DESKTOP_SIGNIN_RESOURCE" \
+        --argjson current "$use_current" \
         --argjson models "$models_json" \
-        --argjson cowork "$cowork_val" '{
+        --argjson cowork "$cowork_val" '
+        ({ issuer: $issuer, clientId: $clientId, bearerTokenType: $tokenType }
+          + (if $scopes != "" then {scopes: $scopes} else {} end)
+          + (if $resource != "" then {resource: $resource} else {} end)) as $oidc
+        | {
           inferenceProvider: "gateway",
           inferenceGatewayBaseUrl: $url,
           inferenceGatewayAuthScheme: "bearer",
-          inferenceCredentialKind: "external-idp",
-          inferenceIdpAuthFlow: $flow,
-          inferenceIdpOidc: ({
-            issuer: $issuer,
-            clientId: $clientId,
-            bearerTokenType: $tokenType
-          }
-          + (if $scopes != "" then {scopes: $scopes} else {} end)
-          + (if $resource != "" then {resource: $resource} else {} end)),
           inferenceModels: $models,
           chatTabEnabled: true,
           isClaudeCodeForDesktopEnabled: true,
           inferenceModelPricingEnabled: true,
           coworkTabEnabled: $cowork
-        }' > "$PROFILE"
+        }
+        + (if $current then {inferenceCredentialKind: "external-idp", inferenceIdpOidc: $oidc}
+           else {inferenceCredentialKind: "interactive", inferenceGatewayOidc: $oidc} end)
+        + (if $flow == "broker" then (if $current then {inferenceIdpAuthFlow: "broker"} else {inferenceGatewayOidcAuthFlow: "broker"} end) else {} end)' > "$PROFILE"
     fi
 
     if [ "$NO_COWORK" = "1" ]; then ok_ "profile written"; else ok_ "profile written (Cowork enabled)"; fi
@@ -562,8 +634,9 @@ if [ -z "$TOKEN" ]; then
   bad_ "could not acquire a token"; problem_ "token"
 else
   ok_ "Entra token acquired"
-  body="$(jq -n --arg m "${MODELS[0]}" '{model:$m, max_tokens:16, messages:[{role:"user", content:"Reply with exactly: READY"}]}' 2>/dev/null \
-          || printf '{"model":"%s","max_tokens":16,"messages":[{"role":"user","content":"Reply with exactly: READY"}]}' "${MODELS[0]}")"
+  PROBE_MODEL="${SONNET:-${MODELS[0]}}"
+  body="$(jq -n --arg m "$PROBE_MODEL" '{model:$m, max_tokens:16, messages:[{role:"user", content:"Reply with exactly: READY"}]}' 2>/dev/null \
+          || printf '{"model":"%s","max_tokens":16,"messages":[{"role":"user","content":"Reply with exactly: READY"}]}' "$PROBE_MODEL")"
   hdrs="$(mktemp)"
   code="$(curl -sS -o /dev/null -D "$hdrs" -w '%{http_code}' \
       -X POST "$GATEWAY_URL/v1/messages" \
@@ -587,6 +660,29 @@ else
     *)   bad_ "HTTP $code"; problem_ "gateway $code" ;;
   esac
   rm -f "$hdrs"
+
+  # The same path the developer will use: Claude Code itself, with the settings just written.
+  # A raw request proves the gateway; this proves the client and its model settings, and is
+  # what catches the next client and model mismatch (ADR-0031).
+  if have_ claude && [ -n "$PROBE_MODEL" ]; then
+    note_ "asking Claude Code for one reply through the gateway ($PROBE_MODEL, at most 2 minutes) ..."
+    cc_start="$(date +%s)"
+    cc_out="$(cd "${TMPDIR:-/tmp}" && run_bounded_ 120 claude -p ping --model "$PROBE_MODEL" </dev/null 2>&1)"; cc_rc=$?
+    cc_secs=$(( $(date +%s) - cc_start ))
+    if [ "$cc_rc" = "124" ]; then
+      warn_ "Claude Code did not answer within 2 minutes"; problem_ "Claude Code request"
+    elif [ "$cc_rc" = "0" ] && ! printf '%s' "$cc_out" | grep -q 'API Error'; then
+      ok_ "Claude Code answered through the gateway in ${cc_secs} s"
+    else
+      bad_ "Claude Code request failed: $(printf '%s\n' "$cc_out" | grep -v '^[[:space:]]*$' | head -1)"
+      if printf '%s' "$cc_out" | grep -q 'thinking\.type\.enabled'; then
+        note_ "This Claude Code does not know the model. Update it (claude update) or check the capability settings above."
+      elif printf '%s' "$cc_out" | grep -qw '403'; then
+        note_ "Refused by the gateway: check your tier includes this model."
+      fi
+      problem_ "Claude Code request"
+    fi
+  fi
 fi
 
 # ------------------------------------------------------------------ summary

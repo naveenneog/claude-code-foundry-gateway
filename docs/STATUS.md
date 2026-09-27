@@ -10,24 +10,65 @@ the Claude Code CLI (2.1.101) returned `400 "thinking.type.enabled" is not suppo
 Diagnose waited for minutes on `claude doctor` and printed its output unreadably. Design:
 [ADR-0031](adr/0031-client-keys-every-release-reads.md); research: **U27**, **U28**; open: **U29**.
 
-- [ ] Desktop Entra sign-in renders keys that Desktop 2.2553.1.0 reads (`interactive`,
-      `inferenceGatewayOidc`, and `inferenceGatewayOidcAuthFlow` for broker), checked against the
-      installed release's schema; the helper-script keys are unchanged
-- [ ] Claude Code settings declare capabilities for recorded Opus 5, Opus 5.5 and Sonnet 5
-      deployments, found by model rather than deployment name, in the Windows and macOS/Linux
-      workstation setups and the MDM profiles
-- [ ] The installer records each Claude deployment's name, model and version in
+- [x] Desktop Entra sign-in is written in the spelling the Desktop release that reads it knows:
+      `interactive`, `inferenceGatewayOidc` and `inferenceGatewayOidcAuthFlow` before 2.7032.0 or
+      when unknown, `external-idp`, `inferenceIdpOidc` and `inferenceIdpAuthFlow` from 2.7032.0;
+      on Windows the older of the installed and running builds decides; the MDM generator
+      defaults to the original spelling (`-DesktopKeySpelling current` for a 2.7032.0 fleet);
+      the helper-script keys are unchanged
+- [x] Claude Code settings declare capabilities by model family, not by a list of models (Opus
+      4.7 and later, Sonnet, Fable and Mythos 5 and later), with per-deployment `capabilities`
+      and `claudeCode` overrides in the record; each alias is pinned to the newest recorded model
+      in its family; in the Windows and macOS/Linux setups and the MDM profiles
+- [x] The installer records each Claude deployment's name, model and version in
       `claude-gateway.json`
-- [ ] Workstation setup compares the installed Claude Code and Claude Desktop with the releases the
+- [x] Workstation setup compares the installed Claude Code and Claude Desktop with the releases the
       recorded models and keys need, updates an older Claude Code with `claude update` unless
-      `-SkipInstall`, and names every Claude Code on PATH and which one runs
-- [ ] Diagnostics run `claude doctor` with no input, a time limit and UTF-8 decoding; read the
-      Desktop configuration from its real sources and check it against the installed release;
-      show Desktop's recent `[custom-3p]` log errors; name an unfinished decision record; never
-      print an empty `--tenant`
-- [ ] Live: Claude Code 2.1.101 answers through the reference gateway with the settings the setup
-      writes
+      `-SkipInstall`, names every Claude Code on PATH and which one runs, keeps the developer's
+      own settings and VS Code variables, and ends by asking Claude Code itself for one reply
+- [x] Diagnostics run `claude doctor` with no input, a time limit and UTF-8 decoding; read the
+      Desktop configuration from its real sources and check it against the release that reads
+      it; report a running Desktop build older than the installed one and versioned shortcuts;
+      show Desktop's recent `[custom-3p]` log errors; flag a pinned model newer than the release
+      table without its declaration; name an unfinished decision record; never print an empty
+      `--tenant`. The macOS/Linux diagnostics gain the model check and read the `Claude-3p`
+      profile instead of `claude_desktop_config.json`, which is Desktop's MCP file
+- [x] Live: Claude Code 2.1.101 answers through the reference gateway with the settings the setup
+      writes, by every model selection; without the declarations it returns the 400 (**U28**)
+- [x] Council review of the packet diff (gpt-6-astra, 2026-09-27): five findings, all confirmed
+      and fixed, below
 - [ ] `node .ironclad/gate.mjs --stage packet` exits 0
+
+Found while testing P67, and fixed in it:
+
+| Defect | Evidence | Fix |
+|---|---|---|
+| On PowerShell 7 the setup and diagnostics ran npm's extensionless `claude`, which Windows cannot start ("not a valid application for this OS platform") | `Test-GuidedFlow.ps1` on this workstation, whose npm folder holds `claude`, `claude.cmd` and `claude.ps1`; `Group-Object` sorts its groups on PowerShell 7, which put the extensionless file first. PowerShell 5.1 kept PATH order | `Get-ClaudeCodeInstall` keeps one install per folder in PATH order and chooses `.exe`, `.cmd`, `.bat` or `.ps1`; `Invoke-ClaudeClientCommand` returns a start failure instead of throwing |
+| Under a Windows `jq.exe` every bash value ended in a carriage return, so no model matched a rule | The macOS/Linux setup run end to end from Git Bash wrote `claude-opus-5\r`; WSL appends the Windows PATH, where `WinGet\Links\jq` is that `jq.exe` | `jq_value_` strips carriage returns for all 17 value reads |
+| The macOS/Linux setup pinned the haiku alias to Sonnet even with a Haiku deployment recorded, replaced the developer's VS Code variables, and ignored `claudeCode` overrides | The same end-to-end run, compared key by key with the PowerShell module | Same pinning, merge and release rules as `ClaudeClientSupport.ps1` |
+| On Windows PowerShell 5.1 the setup's gateway check threw `Object reference not set to an instance of an object` and sent nothing | The new end-to-end run of the Windows setup against a local gateway stand-in, on both hosts; the same POST returned 200 with `-UseBasicParsing` | `-UseBasicParsing` in the setup, the diagnostics and the preflight |
+
+Council findings (all reproduced before fixing):
+
+| # | Finding | Verdict | Fix |
+|---|---|---|---|
+| 1 | The MDM generator skipped a one-deployment record on Windows PowerShell 5.1 | Confirmed | `@(...)` around the assignment; test with one deployment, run on 5.1 |
+| 2 | The onboarding email fetched only the setup script, which now needs its helpers | Confirmed | The email fetches every file the setup reads, taken from the script; the setup stops at once and names a missing helper; the Windows end-to-end run uses only those files |
+| 3 | Diagnostics passed a declaration that breaks requests when the release knew the model | Confirmed, and refined by measurement: 2.1.272 retries after the 400, 2.1.101 does not | Per-alias verdicts from the request capture (**U28**), in PowerShell and bash, compared word for word over fifteen cases |
+| 4 | The MDM haiku alias ignored an explicit `-SonnetModel` | Confirmed | Only a recorded Haiku deployment takes the alias |
+| 5 | The bash watchdog could be outlived by a command that ignores TERM | Confirmed | KILL 5 s after TERM to the process group; `timeout -k 5`; tested with a TERM-ignoring child on both paths |
+
+A harness defect also surfaced: Windows PowerShell 5.1 drops the double quotes inside a native
+argument, so a `bash -c` script lost the quotes of its JSON and its `trap "" TERM`. The tests now
+pass bash scripts as files.
+
+Tests: `tests/Test-WorkstationClients.ps1`, 161 assertions on PowerShell 7 and 5.1, about 155 s.
+It runs the macOS/Linux setup and diagnostics against a scratch HOME with the clients stubbed, and
+the Windows setup from a folder holding only the files the onboarding email fetches, against a
+local listener standing in for the gateway. Every new detector was broken on a copy and seen to
+fail with the full assertion count: 3 in the model rules, 1 at the 2.7032.0 boundary, 8 in the
+bash setup, 3 in install selection, 5 in the diagnostics and rule copies, and 11 for the council
+fixes, two of them on Windows PowerShell 5.1 because only that host shows them.
 
 ## P66 guided flow, 2026-09-27
 

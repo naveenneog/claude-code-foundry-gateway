@@ -194,6 +194,21 @@ a model the gateway is willing to serve, which presents as the model missing:
     -AvailableModels claude-opus-5, claude-sonnet-5
 ```
 
+A reissued `claude-gateway.json` lists the deployment under `deployments`, with
+its model. Developers who re-run the workstation setup get the newest deployment
+in each family pinned to its alias, with its capability declaration. Claude Code
+does not recognise a Foundry deployment name, so the declaration is what stops a
+release older than the model from sending `thinking.type.enabled` and getting a
+`400` ([ADR-0031](adr/0031-client-keys-every-release-reads.md)). Opus 4.7 and
+later, Sonnet 5 and later, and Fable and Mythos 5 and later are covered by rule.
+For any other model, add `capabilities` (a comma-separated list, or `none`) and
+`claudeCode` (the first Claude Code release that knows it) to its `deployments`
+entry:
+
+```json
+{ "name": "prod-next", "model": "claude-next-1", "capabilities": "effort,thinking", "claudeCode": "2.2.10" }
+```
+
 ---
 
 ## Retiring one

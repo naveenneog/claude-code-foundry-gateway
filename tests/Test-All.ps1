@@ -221,6 +221,7 @@ try {
     Invoke-Check 'Network edge checks detect breakage'       'Test-NetworkEdgeNegative.ps1'
     Invoke-Check 'Projection checks detect breakage'        'Test-ProjectionNegative.ps1'
     Invoke-Check 'Claude Desktop sign-in choice'             'Test-DesktopSignIn.ps1'
+    Invoke-Check 'Workstation clients read what setup writes' 'Test-WorkstationClients.ps1' -SerialLane
     Invoke-Check 'Adding models, and plugin governance'    'Test-ModelsAndPlugins.ps1'
     Invoke-Check 'Backup and restore'                      'Test-Backup.ps1'
     Invoke-Check 'Turnstile - usage mapping and its rules' 'Test-Turnstile.ps1'

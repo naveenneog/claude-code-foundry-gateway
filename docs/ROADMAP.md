@@ -423,9 +423,12 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       defects ([STATUS](STATUS.md#p66-guided-flow-2026-09-27)). Open: the 403 message names the
       default tier groups; the FinOps steps have not yet run on the same estate as the others
 - [ ] P67 developer workstation fixes from the owner's test — acceptance: Claude Desktop Entra
-      sign-in uses keys every supported release reads; Claude Code declares capabilities for the
-      recorded 5-series models and is compared with, and updated to, the release that knows them;
-      diagnostics never wait for input and read the real Desktop configuration and logs.
+      sign-in uses the key spelling the Desktop release that reads it knows, including a running
+      build older than the installed one; Claude Code declares capabilities by model family for
+      the recorded models, pins each alias to the newest model in its family, and is compared
+      with, and updated to, the release that knows them; the Windows and macOS/Linux setups agree
+      and end with a real Claude Code reply; diagnostics never wait for input and read the real
+      Desktop configuration and logs.
       [ADR-0031](adr/0031-client-keys-every-release-reads.md), **U27**, **U28**, **U29**
 - [ ] P68 guided flow redesign from the owner's test — acceptance: `Start-ClaudeGateway.ps1`
       shows its first question within seconds and names each slow step while it runs; Setup

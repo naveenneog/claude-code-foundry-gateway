@@ -91,18 +91,25 @@ if (Test-Path $desktop) {
     $helperSettings = New-ClaudeDesktopSettings -GatewayUrl 'https://gw.example/claude' -Models @('claude-sonnet-5') -HelperPath 'C:\h\get-foundry-token.cmd' -DesktopSignIn $helperChoice
     Assert 'helper settings keep the existing credential kind' ($helperSettings.inferenceCredentialKind -eq 'helper-script')
     Assert 'helper settings include the helper path' ($helperSettings.inferenceCredentialHelper -eq 'C:\h\get-foundry-token.cmd')
-    Assert 'helper settings do not include IdP keys' (-not $helperSettings.Contains('inferenceIdpOidc') -and -not $helperSettings.Contains('inferenceIdpAuthFlow'))
+    Assert 'helper settings do not include IdP keys' (-not ($helperSettings.Contains('inferenceIdpOidc') -or $helperSettings.Contains('inferenceIdpAuthFlow') -or $helperSettings.Contains('inferenceGatewayOidc') -or $helperSettings.Contains('inferenceGatewayOidcAuthFlow')))
 
+    # ADR-0031: with no Desktop release known, an external-idp choice is written in the original
+    # spelling, which every release since 1.25927.0 reads.
     $browserSettings = New-ClaudeDesktopSettings -GatewayUrl 'https://gw.example/claude' -Models @('claude-sonnet-5') -HelperPath 'C:\h\get-foundry-token.cmd' -DesktopSignIn $browserChoice
-    Assert 'external-idp settings use the new credential kind' ($browserSettings.inferenceCredentialKind -eq 'external-idp')
-    Assert 'external-idp settings include the IdP block' ($browserSettings.inferenceIdpOidc.clientId -eq $browser.desktopSignIn.clientId)
+    Assert 'external-idp settings use the interactive kind when the release is unknown' ($browserSettings.inferenceCredentialKind -eq 'interactive')
+    Assert 'external-idp settings write the IdP block under inferenceGatewayOidc' ($browserSettings.inferenceGatewayOidc.clientId -eq $browser.desktopSignIn.clientId -and -not $browserSettings.Contains('inferenceIdpOidc'))
     Assert 'browser settings do not write a helper' (-not $browserSettings.Contains('inferenceCredentialHelper'))
     Assert 'id-token audience is the desktop app client id' ((Get-ClaudeDesktopGatewayAudience -DesktopSignIn $browserChoice) -eq $browser.desktopSignIn.clientId)
 
     $brokerSettings = New-ClaudeDesktopSettings -GatewayUrl 'https://gw.example/claude' -Models @('claude-sonnet-5') -HelperPath 'C:\h\get-foundry-token.cmd' -DesktopSignIn $brokerChoice
-    Assert 'broker settings write the broker flow' ($brokerSettings.inferenceIdpAuthFlow -eq 'broker')
-    Assert 'access-token settings write scopes' ($brokerSettings.inferenceIdpOidc.scopes -eq $broker.desktopSignIn.scopes)
+    Assert 'broker settings write the broker flow' ($brokerSettings.inferenceGatewayOidcAuthFlow -eq 'broker' -and -not $brokerSettings.Contains('inferenceIdpAuthFlow'))
+    Assert 'access-token settings write scopes' ($brokerSettings.inferenceGatewayOidc.scopes -eq $broker.desktopSignIn.scopes)
     Assert 'access-token audience is explicit' ((Get-ClaudeDesktopGatewayAudience -DesktopSignIn $brokerChoice) -eq $broker.desktopSignIn.audience)
+
+    $atBoundary = New-ClaudeDesktopSettings -GatewayUrl 'https://gw.example/claude' -Models @('claude-sonnet-5') -DesktopSignIn $brokerChoice -DesktopVersion '2.7032.0'
+    Assert 'Desktop 2.7032.0 gets the current spelling' ($atBoundary.inferenceCredentialKind -eq 'external-idp' -and $atBoundary.inferenceIdpAuthFlow -eq 'broker' -and $atBoundary.inferenceIdpOidc.scopes -eq $broker.desktopSignIn.scopes -and -not $atBoundary.Contains('inferenceGatewayOidc'))
+    $belowBoundary = New-ClaudeDesktopSettings -GatewayUrl 'https://gw.example/claude' -Models @('claude-sonnet-5') -DesktopSignIn $brokerChoice -DesktopVersion '2.7031.9'
+    Assert 'a release before 2.7032.0 gets the original spelling' ($belowBoundary.inferenceCredentialKind -eq 'interactive' -and $belowBoundary.inferenceGatewayOidcAuthFlow -eq 'broker' -and -not $belowBoundary.Contains('inferenceIdpOidc'))
 }
 
 Write-Host ''
@@ -130,7 +137,7 @@ $gen = if (Test-Path $policyGen) { Get-Content $policyGen -Raw } else { '' }
 Assert 'PowerShell workstation reads desktopSignIn' ($ps -match 'Get-ClaudeDesktopSignIn')
 Assert 'PowerShell workstation writes shared Desktop settings' ($ps -match 'New-ClaudeDesktopSettings')
 Assert 'shell workstation reads desktopSignIn' ($sh -match 'desktopSignIn')
-Assert 'shell workstation writes external-idp when recorded' ($sh -match 'inferenceIdpOidc' -and $sh -match 'inferenceIdpAuthFlow')
+Assert 'shell workstation writes both spellings, chosen by the Desktop release' ($sh -match 'inferenceIdpOidc' -and $sh -match 'inferenceIdpAuthFlow' -and $sh -match 'inferenceGatewayOidc:' -and $sh -match 'inferenceGatewayOidcAuthFlow' -and $sh -match 'CFBundleShortVersionString')
 Assert 'MDM generator reads the recorded choice' ($gen -match 'Get-ClaudeDesktopSignIn')
 Assert 'MDM generator writes the same Desktop connection keys' ($gen -match 'New-ClaudeDesktopSettings')
 
@@ -199,12 +206,14 @@ try {
         $helperPayload = (Get-MobileconfigPayload -Path $helperMobile -PayloadType 'com.anthropic.claudefordesktop').Values
         Assert 'helper Desktop mobileconfig includes helper credential kind' ($helperPayload['inferenceCredentialKind'].Value -eq 'helper-script')
         Assert 'helper Desktop mobileconfig includes helper path' ($helperPayload.ContainsKey('inferenceCredentialHelper'))
-        Assert 'helper Desktop mobileconfig excludes external IdP keys' (-not $helperPayload.ContainsKey('inferenceIdpOidc') -and -not $helperPayload.ContainsKey('inferenceIdpAuthFlow'))
+        Assert 'helper Desktop mobileconfig excludes external IdP keys' (-not ($helperPayload.ContainsKey('inferenceIdpOidc') -or $helperPayload.ContainsKey('inferenceIdpAuthFlow') -or $helperPayload.ContainsKey('inferenceGatewayOidc') -or $helperPayload.ContainsKey('inferenceGatewayOidcAuthFlow')))
 
+        # The MDM generator defaults to the original spelling (-DesktopKeySpelling original), because
+        # a fleet mixes Desktop releases and every release since 1.25927.0 reads it.
         $externalPayload = (Get-MobileconfigPayload -Path $browserMobile -PayloadType 'com.anthropic.claudefordesktop').Values
-        Assert 'external-idp Desktop mobileconfig includes external credential kind' ($externalPayload['inferenceCredentialKind'].Value -eq 'external-idp')
-        Assert 'external-idp Desktop mobileconfig includes IdP flow' ($externalPayload['inferenceIdpAuthFlow'].Value -eq 'broker')
-        Assert 'external-idp Desktop mobileconfig includes IdP object' ($externalPayload['inferenceIdpOidc'].Value -match '"bearerTokenType":"access_token"')
+        Assert 'external-idp Desktop mobileconfig includes the interactive credential kind' ($externalPayload['inferenceCredentialKind'].Value -eq 'interactive')
+        Assert 'external-idp Desktop mobileconfig includes IdP flow' ($externalPayload['inferenceGatewayOidcAuthFlow'].Value -eq 'broker' -and -not $externalPayload.ContainsKey('inferenceIdpAuthFlow'))
+        Assert 'external-idp Desktop mobileconfig includes IdP object' ($externalPayload['inferenceGatewayOidc'].Value -match '"bearerTokenType":"access_token"' -and -not $externalPayload.ContainsKey('inferenceIdpOidc'))
         Assert 'external-idp Desktop mobileconfig excludes helper path' (-not $externalPayload.ContainsKey('inferenceCredentialHelper'))
     }
 }
