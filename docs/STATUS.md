@@ -42,7 +42,9 @@ Diagnose waited for minutes on `claude doctor` and printed its output unreadably
       22 passed, 2 warned (file size, open unknowns), 0 failed; pushed to `origin/main`
 - [x] The same gate on the merge of the second review's fixes, `4327563`, 12:52-13:10Z: 22
       passed, 2 warned, 0 failed; held back from `origin/main` for the third review's findings
-- [ ] `node .ironclad/gate.mjs --stage packet` on the merge of the third review's fixes
+- [x] `node .ironclad/gate.mjs --stage packet` on the merge of the third review's fixes, `25bda4d`,
+      2026-09-27 13:38-13:57Z: 22 passed, 2 warned (file size, open unknowns), 0 failed; pushed to
+      `origin/main` with `4327563`
 
 Found while testing P67, and fixed in it:
 
