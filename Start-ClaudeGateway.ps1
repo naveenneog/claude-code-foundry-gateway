@@ -459,12 +459,17 @@ if ($Change) {
 $afterLead = $false
 $resumeRun = Get-FlowResumeRun -Record $record -CurrentAction $Action -CurrentChange $Change
 if ($resumeRun) {
+    # Resumed only when the steps after the installer are the ones recorded: a step added or removed
+    # since, or a new dependency, would otherwise be left out of an incomplete plan.
     $resumeNames = @($resumeRun.steps | ForEach-Object { [string]$_ })
-    $presentNames = @($steps | ForEach-Object { $_.Info.Name })
-    if (@($resumeNames | Where-Object { $_ -notin $presentNames }).Count -eq 0) {
+    $candidateNames = @($steps | Where-Object { -not ($_.Info.PSObject.Properties.Name -contains 'AttendedFirst' -and $_.Info.AttendedFirst) } | ForEach-Object { $_.Info.Name })
+    if ((@($resumeNames | Sort-Object) -join ',') -eq (@($candidateNames | Sort-Object) -join ',')) {
         $steps = @($steps | Where-Object { $_.Info.Name -in $resumeNames })
         $afterLead = $true
         Write-Host ("Resuming the {0} run started {1}: {2}. The gateway foundation was set up in that run." -f $Action, $resumeRun.startedUtc, (@($steps | ForEach-Object { $_.Info.Title }) -join ', ')) -ForegroundColor Cyan
+    }
+    else {
+        Write-Host ("The steps differ from those of the interrupted {0} run started {1}, so every step is planned again." -f $Action, $resumeRun.startedUtc) -ForegroundColor Yellow
     }
 }
 

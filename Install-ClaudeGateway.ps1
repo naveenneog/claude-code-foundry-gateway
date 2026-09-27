@@ -250,7 +250,7 @@ function Assert-AzArgumentsSafe {
         $value = [string]$Values[$name]
         if ($value -match '[&|<>^()"%\r\n]') {
             Write-Bad "$name '$value' holds '$($Matches[0])', which cmd.exe re-reads in an Azure CLI argument on Windows."
-            throw "Stopped before the summary: $name holds a character that the Azure CLI's cmd.exe shim re-reads (& | < > ^ ( ) `" %). Nothing was created."
+            throw "Stopped: $name holds a character that the Azure CLI's cmd.exe shim re-reads (& | < > ^ ( ) `" %). Nothing was created."
         }
     }
 }
@@ -268,6 +268,15 @@ Write-Host ' Nothing is created until you confirm the summary.' -ForegroundColor
 . (Join-Path $root 'scripts/ClaudeChoice.ps1')
 . (Join-Path $root 'scripts/ClaudeGatewayRegion.ps1')
 if (-not (Test-ClaudePrerequisites -Mode Admin)) { return }
+
+# The parameters as bound, before the first az call that uses one. A list passed to one of these
+# arrives as text joined by binding, so it is checked here too.
+Assert-AzArgumentsSafe -Values ([ordered]@{
+    SubscriptionId = $SubscriptionId; FoundryAccount = $FoundryAccount; FoundryResourceGroup = $FoundryResourceGroup
+    ResourceGroup = $ResourceGroup; Location = $Location; NamePrefix = $NamePrefix; ExistingApimName = $ExistingApimName
+    PublisherEmail = $PublisherEmail; StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup
+    DesktopEntraClientId = $DesktopEntraClientId; DesktopEntraAudience = $DesktopEntraAudience
+})
 
 Write-Step 'Azure sign-in'
 $acct = az account show -o json 2>$null | ConvertFrom-Json
@@ -1127,6 +1136,7 @@ Assert-AzArgumentsSafe -Values ([ordered]@{
     SubscriptionId = $SubscriptionId; FoundryAccount = $FoundryAccount; FoundryResourceGroup = $FoundryResourceGroup
     ResourceGroup = $ResourceGroup; Location = $Location; NamePrefix = $NamePrefix; ExistingApimName = $ExistingApim
     PublisherEmail = $PublisherEmail; StandardGroup = $StandardGroup; PremiumGroup = $PremiumGroup
+    DesktopGatewayAudience = $desktopGatewayAudience
 })
 
 # --------------------------------------------------------------- 5. summary

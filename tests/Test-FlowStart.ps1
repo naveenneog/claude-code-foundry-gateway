@@ -126,6 +126,19 @@ try {
     foreach ($f in 'scripts\ClaudeChoice.ps1', 'scripts\AzureRetailPrice.ps1', 'scripts\ClaudeGatewayRegion.ps1', 'scripts\flow\FlowContract.ps1', 'scripts\flow\Discovery.ps1', 'scripts\flow\Foundation.ps1', 'scripts\flow\lib\LifecycleCommon.ps1') {
         if (Test-Path -LiteralPath (Join-Path $root $f)) { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $shadow $f) }
     }
+    # Offline and deterministic: the shadow prices API Management from fixed rates, not the Retail Prices API.
+    Set-Content -LiteralPath (Join-Path $shadow 'scripts\AzureRetailPrice.ps1') -Encoding UTF8 -Value @'
+function Get-AzureRetailMeter { param($ServiceName, $Region, $TimeoutSec) , @() }
+function Get-AzureRetailPriceAcrossRegions { param($ServiceName, $MeterName, $TimeoutSec) , @() }
+function Get-AzureRetailPrice {
+    param($ServiceName, $Region, $MeterName, $SkuName, $ProductName, [switch]$IncludeFreeTier, $Tier)
+    $rate = @{ 'Basic v2 Unit' = 0.21; 'Standard v2 Unit' = 0.96; 'Premium v2 Unit' = 3.84 }[[string]$MeterName]
+    if ($null -eq $rate) { return $null }
+    [pscustomobject]@{ UnitPrice = [decimal]$rate; Currency = 'USD'; RetrievedUtc = '2026-09-27T00:00:00Z'; MeterName = $MeterName }
+}
+function Get-AzureRetailPriceUnavailableReason { '' }
+function ConvertTo-MonthlyPrice { param([decimal]$HourlyPrice, [int]$Units = 1) [math]::Round($HourlyPrice * 730 * $Units, 2) }
+'@
     $installerParams = @('SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'ExistingApimName', 'EntitlementStore', 'AuthMode', 'DesktopSignInKind', 'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience', 'DesktopEntraResource', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode', 'TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup')
     $stubInstaller = @(
         '[CmdletBinding(SupportsShouldProcess)]'
@@ -308,8 +321,42 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
         Assert 'a failed step after the installer ends the first run after FinOps applied' ($firstTry.ExitCode -ne 0 -and $finAppliedFirst -eq 1 -and $firstTry.All -match 'budgets apply failed') ($firstTry.All | Select-Object -Last 2)
         Assert 'the next run resumes that run: FinOps is not applied again and Budgets is' ($secondTry.ExitCode -eq 0 -and $finAppliedSecond -eq 1 -and $budApplied -eq 2 -and $secondTry.Text -match 'Resuming') ("exit=$($secondTry.ExitCode) finops=$finAppliedSecond budgets=$budApplied; " + ($secondTry.All | Select-Object -Last 2))
         Assert 'the resumed run keeps one run id for the steps after the installer and ends without an active run' ($resumed -and $finEntry.Count -eq 1 -and $budEntry.Count -eq 1 -and $finEntry[0].runId -eq $budEntry[0].runId -and -not ($resumed.PSObject.Properties.Name -contains 'activeRun')) ((@($resumed.history | ForEach-Object { "$($_.decision):$($_.runId)" })) -join ',')
+
+        # The steps change before the retry: Budgets gains a prerequisite that did not exist. Resuming the
+        # recorded steps would leave it out, so the retry plans every step again.
+        Reset-Shadow
+        $bootstrapLog = Join-Path $scratch 'bootstrap.log'
+        Remove-Item -LiteralPath $bootstrapLog -Force -ErrorAction SilentlyContinue
+        $changedRecord = Join-Path $scratch 'changed-record.json'
+        $changedEnv = @{ P68_AZ_URL = 'https://apim-p68.azure-api.net'; P68_INSTALLER_LOG = $installerLog; P68_FINOPS_LOG = $finopsLog; P68_BUDGETS_LOG = $budgetsLog; P68_BOOTSTRAP_LOG = $bootstrapLog; P68_BUDGETS_FAIL = '1' }
+        $null = Invoke-Child -Script $shadowStart -Attended -Arguments @('-Action', 'Setup', '-RecordPath', $changedRecord) -InputLines @('stub-answer', '', $phaseTwoFp.Substring(0, 8)) -Environment $changedEnv
+        $fakeBootstrap = Join-Path $shadow 'scripts\flow\Bootstrap.ps1'
+        Set-Content -LiteralPath $fakeBootstrap -Encoding UTF8 -Value @'
+function Get-ClaudeFlowStepInfo { [pscustomobject]@{ Name = 'Bootstrap'; Title = 'Bootstrap'; DecisionKey = 'bootstrap'; DependsOn = @('FinOps'); Actions = @('Setup', 'Change') } }
+function Get-ClaudeFlowStepQuestions { param($Record, $Discovery) @() }
+function Get-ClaudeFlowStepPlan { param($Record, $Discovery) New-ClaudeFlowPlan -Step Bootstrap -Summary 'Bootstrap' -Actions @(New-ClaudeFlowAction -Verb Write -Target 'bootstrap' -Detail 'test') -Costs @(New-ClaudeFlowCost -Item 'Bootstrap' -MonthlyUsd 0 -Source 'test') -Reversible $true -Rollback 'none' }
+function Invoke-ClaudeFlowStep { param($Record, $Plan) Add-Content -LiteralPath $env:P68_BOOTSTRAP_LOG -Value 'applied'; @{ bootstrap = [pscustomobject]@{ done = $true } } }
+function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Bootstrap'; Passed = $true; Checks = @() } }
+'@
+        Set-Content -LiteralPath $fakeBudgets -Encoding UTF8 -Value @'
+function Get-ClaudeFlowStepInfo { [pscustomobject]@{ Name = 'Budgets'; Title = 'Budgets'; DecisionKey = 'budgets'; DependsOn = @('FinOps', 'Bootstrap'); Actions = @('Setup', 'Change') } }
+function Get-ClaudeFlowStepQuestions { param($Record, $Discovery) @() }
+function Get-ClaudeFlowStepPlan { param($Record, $Discovery) New-ClaudeFlowPlan -Step Budgets -Summary 'Configure budgets' -Actions @(New-ClaudeFlowAction -Verb Write -Target 'budgets' -Detail 'test') -Costs @(New-ClaudeFlowCost -Item 'Budgets' -MonthlyUsd 0 -Source 'test') -Reversible $true -Rollback 'none' }
+function Invoke-ClaudeFlowStep { param($Record, $Plan) Add-Content -LiteralPath $env:P68_BUDGETS_LOG -Value 'applied'; if (-not (Get-ClaudeDecision -Record $Record -Key bootstrap)) { throw 'budgets needs bootstrap first (test)' }; @{ budgets = [pscustomobject]@{ mode = 'tokens' } } }
+function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets'; Passed = $true; Checks = @() } }
+'@
+        $changedEnv.P68_BUDGETS_FAIL = $null
+        $changedPlan = Invoke-Child -Script $shadowStart -Arguments @('-Action', 'Setup', '-PlanOnly', '-RecordPath', $changedRecord) -Environment $changedEnv
+        $changedApply = Invoke-Child -Script $shadowStart -Arguments @('-Action', 'Setup', '-RecordPath', $changedRecord, '-ApprovedPlanFingerprint', (Get-Fingerprint $changedPlan.Text)) -Environment $changedEnv
+        $changedFinal = if (Test-Path -LiteralPath $changedRecord) { Read-Json $changedRecord } else { $null }
+        $bootApplied = @(Get-Content -LiteralPath $bootstrapLog -ErrorAction SilentlyContinue).Count
+        Assert 'when the steps changed after a failed second phase, the retry says so and plans every step again' ($changedPlan.Text -match 'every step is planned again' -and $changedPlan.Text -match '\[Bootstrap\]' -and $changedPlan.Text -notmatch 'Resuming') ($changedPlan.All | Select-Object -Last 3)
+        Assert 'that retry applies the new prerequisite before the step that needs it and ends without an active run' ($changedApply.ExitCode -eq 0 -and $bootApplied -eq 1 -and $changedFinal -and $changedFinal.decisions.budgets.mode -eq 'tokens' -and -not ($changedFinal.PSObject.Properties.Name -contains 'activeRun')) ("exit=$($changedApply.ExitCode) bootstrap=$bootApplied; " + ($changedApply.All | Select-Object -Last 2))
     }
-    finally { Remove-Item -LiteralPath $fakeBudgets -Force -ErrorAction SilentlyContinue }
+    finally {
+        Remove-Item -LiteralPath $fakeBudgets -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath (Join-Path $shadow 'scripts\flow\Bootstrap.ps1') -Force -ErrorAction SilentlyContinue
+    }
 
     # ------------------------------------------------------------------ unattended runs
     Reset-Shadow
@@ -356,7 +403,10 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
         $ctx = { param($action, $attended, $gateway) [pscustomobject]@{ action = $action; attended = $attended; gateway = $gateway; Region = $null } }
         $thrown = { param($record, $discovery) try { Get-ClaudeFlowStepPlan -Record $record -Discovery $discovery | Out-Null; '' } catch { $_.Exception.Message } }
         $unsafeRecord = [pscustomobject]@{ schemaVersion = 2; apimName = 'apim-p68'; resourceGroup = 'rg-p68&calc'; gatewayUrl = 'https://apim-p68.azure-api.net'; decisions = [pscustomobject]@{ foundation = [pscustomobject]@{ sku = 'BasicV2' } }; history = @() }
-        $unsafeDecision = [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{ foundation = [pscustomobject]@{ sku = 'BasicV2'; entitlementStore = 'named-value'; modelOrganizationName = 'AT&T' } }; history = @() }
+        $withFoundation = { param($values) $d = [ordered]@{ sku = 'BasicV2'; entitlementStore = 'named-value' }; foreach ($k in $values.Keys) { $d[$k] = $values[$k] }; [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{ foundation = [pscustomobject]$d }; history = @() } }
+        $orgDecision = & $withFoundation @{ modelOrganizationName = 'AT&T' }
+        $unsafeAccount = & $withFoundation @{ foundryAccount = 'ai&calc' }
+        $arrayAccount = & $withFoundation @{ foundryAccount = @('ai&echo.P68_ARRAY_MARKER') }
         $withSubscription = { param($sub) [pscustomobject]@{ schemaVersion = 2; subscriptionId = $sub; apimName = 'apim-p68'; resourceGroup = 'rg-p68'; gatewayUrl = 'https://apim-p68.azure-api.net'; decisions = [pscustomobject]@{ foundation = [pscustomobject]@{ sku = 'BasicV2' } }; history = @() } }
         $subscriptionOnly = [pscustomobject]@{ schemaVersion = 2; subscriptionId = '00000000-0000-0000-0000-00000000000a'; decisions = [pscustomobject]@{}; history = @() }
         $attendedPlan = Get-ClaudeFlowStepPlan -Record $emptyRecord -Discovery (& $ctx 'Setup' $true $null)
@@ -381,8 +431,11 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
             ChangeUnattended = Get-ClaudeFlowStepPlan -Record $gatewayRecord -Discovery (& $ctx 'Change' $false $live)
             Odd = Get-ClaudeFlowStepPlan -Record $oddRecord -Discovery (& $ctx 'Change' $false $null)
             UnsafeThrown = & $thrown $unsafeRecord (& $ctx 'Change' $false $null)
-            UnsafeDecisionUnattended = & $thrown $unsafeDecision (& $ctx 'Setup' $false $null)
-            UnsafeDecisionAttended = & $thrown $unsafeDecision (& $ctx 'Setup' $true $null)
+            OrgPlan = & { try { Get-ClaudeFlowStepPlan -Record $orgDecision -Discovery (& $ctx 'Setup' $false $null) } catch { $_.Exception.Message } }
+            UnsafeAccountUnattended = & $thrown $unsafeAccount (& $ctx 'Setup' $false $null)
+            UnsafeAccountAttended = & $thrown $unsafeAccount (& $ctx 'Setup' $true $null)
+            ArrayAccountUnattended = & $thrown $arrayAccount (& $ctx 'Setup' $false $null)
+            ArrayAccountAttended = & $thrown $arrayAccount (& $ctx 'Setup' $true $null)
             SubA = $subA
             SubB = $subB
             SubFingerprints = @((Get-ClaudeFlowFingerprint -Plans @($subA)), (Get-ClaudeFlowFingerprint -Plans @($subB)))
@@ -413,7 +466,9 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
     Assert 'the -Change review prices the live gateway the installer keeps, as already running' ($cuCost.MonthlyUsd -eq 700.80 -and [string]$cuCost.Item -match 'StandardV2' -and [string]$cuCost.Item -match 'already running') ("$($cuCost.Item): $($cuCost.MonthlyUsd)")
     Assert 'unattended -Change foundation targets a gateway of any name through -ExistingApimName' ($f.Odd.Data.installerArgs['ExistingApimName'] -eq 'contoso-gateway' -and -not (Test-Key $f.Odd.Data.installerArgs 'NamePrefix')) ($f.Odd.Data.installerArgs | ConvertTo-Json -Compress)
     Assert 'unattended -Change foundation refuses a recorded name with cmd.exe metacharacters' ($f.UnsafeThrown -match 'cmd\.exe' -and $f.UnsafeThrown -match 'rg-p68&calc') $f.UnsafeThrown
-    Assert 'a foundation value with a cmd.exe metacharacter is refused before the installer, attended or not' ($f.UnsafeDecisionUnattended -match 'ModelOrganizationName' -and $f.UnsafeDecisionUnattended -match 'cmd\.exe' -and $f.UnsafeDecisionAttended -match 'ModelOrganizationName') "unattended: $($f.UnsafeDecisionUnattended) | attended: $($f.UnsafeDecisionAttended)"
+    Assert 'a value that reaches az with a cmd.exe metacharacter is refused before the installer, attended or not' ($f.UnsafeAccountUnattended -match 'FoundryAccount' -and $f.UnsafeAccountUnattended -match 'cmd\.exe' -and $f.UnsafeAccountAttended -match 'FoundryAccount') "unattended: $($f.UnsafeAccountUnattended) | attended: $($f.UnsafeAccountAttended)"
+    Assert 'an organisation name with & is passed: it goes to Azure in a JSON body, not to az' ($f.OrgPlan -isnot [string] -and $f.OrgPlan.Data.installerArgs['ModelOrganizationName'] -eq 'AT&T') $(if ($f.OrgPlan -is [string]) { $f.OrgPlan } else { $f.OrgPlan.Data.installerArgs | ConvertTo-Json -Compress })
+    Assert 'a list where the installer takes one value is refused, attended or not, whatever its parts hold' ($f.ArrayAccountUnattended -match 'FoundryAccount' -and $f.ArrayAccountUnattended -match 'list or an object' -and $f.ArrayAccountAttended -match 'list or an object') "unattended: $($f.ArrayAccountUnattended) | attended: $($f.ArrayAccountAttended)"
     Assert 'the recorded subscription id reaches the installer, so discovery and the install use one subscription' ($f.SubA.Data.installerArgs['SubscriptionId'] -eq '00000000-0000-0000-0000-00000000000a' -and $f.SubSetupAttended.Data.installerArgs['SubscriptionId'] -eq '00000000-0000-0000-0000-00000000000a') "change: $($f.SubA.Data.installerArgs['SubscriptionId']) setup: $($f.SubSetupAttended.Data.installerArgs['SubscriptionId'])"
     Assert 'a different recorded subscription gives a different fingerprint' ($f.SubFingerprints[0] -ne $f.SubFingerprints[1])
     Assert 'a recorded subscription that is not an id is refused before the installer' ($f.SubNameThrown -match 'subscription id' -and $f.SubNameThrown -match 'Contoso Prod') $f.SubNameThrown
@@ -627,9 +682,23 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
     }
     Assert 'the installer refuses a value that holds a cmd.exe metacharacter, naming it, when az is a .cmd shim' (-not $guard.Missing -and $guard.Safe -eq '' -and $guard.Unsafe -match 'PublisherEmail' -and $guard.Unsafe -match 'Nothing was created' -and $guard.Paren -match 'ResourceGroup') ("safe='$($guard.Safe)' unsafe='$($guard.Unsafe)' paren='$($guard.Paren)'")
     Assert 'the check is off where az is not a .cmd shim' (-not $guard.Missing -and $guard.NoShim -eq '') $guard.NoShim
-    $guardCall = @($top | Where-Object { $_.Extent.Text -match '^Assert-AzArgumentsSafe' })
+    $guardCalls = @($top | Where-Object { $_.Extent.Text -match '^Assert-AzArgumentsSafe' } | Sort-Object { $_.Extent.StartOffset })
     $summaryAt = -1; for ($i = 0; $i -lt $top.Count; $i++) { if ($top[$i].Extent.Text -match "^Write-Head 'Summary'") { $summaryAt = $i; break } }
-    Assert 'the installer checks the values it passes to az before its summary' ($guardCall.Count -eq 1 -and [array]::IndexOf($top, $guardCall[0]) -lt $summaryAt -and $guardCall[0].Extent.Text -match 'PublisherEmail\s*=\s*\$PublisherEmail' -and $guardCall[0].Extent.Text -match 'ExistingApimName\s*=\s*\$ExistingApim' -and $guardCall[0].Extent.Text -match 'SubscriptionId\s*=\s*\$SubscriptionId') "summary at $summaryAt"
+    $preSummary = @($guardCalls | Where-Object { $_.Extent.Text -match 'PublisherEmail\s*=\s*\$PublisherEmail' -and $_.Extent.Text -match 'ExistingApimName\s*=\s*\$ExistingApim\b' })
+    Assert 'the installer checks the values it passes to az, adopted and derived ones included, before its summary' ($preSummary.Count -eq 1 -and [array]::IndexOf($top, $preSummary[0]) -lt $summaryAt -and $preSummary[0].Extent.Text -match 'SubscriptionId\s*=\s*\$SubscriptionId' -and $preSummary[0].Extent.Text -match 'DesktopGatewayAudience\s*=\s*\$desktopGatewayAudience') "summary at $summaryAt"
+    # Bound parameters are checked before the first az call that uses one: a list passed to one of
+    # them arrives as text joined by binding, and the first az calls come long before the summary.
+    $azBound = @('SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'ExistingApimName', 'StandardGroup', 'PremiumGroup', 'DesktopEntraClientId', 'DesktopEntraAudience')
+    $boundPattern = '\$(' + ($azBound -join '|') + ')\b'
+    $firstAzUse = -1
+    for ($i = 0; $i -lt $top.Count; $i++) {
+        if ($top[$i] -is [Management.Automation.Language.FunctionDefinitionAst]) { continue }
+        $uses = @($top[$i].FindAll({ param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'az' -and $n.Extent.Text -match $boundPattern }, $true))
+        if ($uses.Count) { $firstAzUse = $i; break }
+    }
+    $early = if ($guardCalls.Count) { $guardCalls[0] } else { $null }
+    $earlyMissing = @($azBound | Where-Object { -not $early -or $early.Extent.Text -notmatch ($_ + '\s*=\s*\$' + $_ + '\b') })
+    Assert 'the installer checks every bound parameter that reaches az before its first az call that uses one' ($early -and $firstAzUse -ge 0 -and [array]::IndexOf($top, $early) -lt $firstAzUse -and $earlyMissing.Count -eq 0) "early at $(if ($early) { [array]::IndexOf($top, $early) }), first use at $firstAzUse, missing $($earlyMissing -join ',')"
 
     # -ExistingApimName takes the installer's own reuse path for a named gateway, with no menu.
     $adoptAssign = @($installerAst.FindAll({ param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$useExistingGateway' }, $false))

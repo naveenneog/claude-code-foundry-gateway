@@ -31,6 +31,13 @@ function Get-ClaudeFlowStepInfo {
     [pscustomobject]@{ Name = 'Foundation'; Title = 'Gateway foundation'; DecisionKey = 'foundation'; DependsOn = @(); Actions = @('Setup', 'Change', 'Guide'); AttendedFirst = $true }
 }
 
+# Install-ClaudeGateway.ps1 parameters whose values reach az as native arguments, directly or through
+# the Desktop gateway audience derived from them (measured on the installer's az calls, 2026-09-27).
+$script:ClaudeFlowAzBoundInstallerArgs = @(
+    'SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix',
+    'PublisherEmail', 'ExistingApimName', 'StandardGroup', 'PremiumGroup', 'DesktopEntraClientId', 'DesktopEntraAudience'
+)
+
 function Get-ClaudeFlowFoundationContext {
     # The orchestrator adds action and attended to discovery; a plan without them is an unattended Setup.
     param($Discovery)
@@ -150,13 +157,20 @@ function Get-ClaudeFlowFoundationCost {
 }
 
 function Assert-ClaudeFlowInstallerArgsSafe {
-    # The installer passes these values to az. On Windows az is a .cmd shim, and cmd.exe re-reads
-    # & | < > ^ ( ) " % in an argument, which can end it early or run a second command.
+    # Every installer parameter takes one value: a list or an object would be turned into text by
+    # parameter binding, after any check of its parts. Values that reach az are also checked for what
+    # cmd.exe re-reads, since az is a .cmd shim on Windows: & | < > ^ ( ) " % in an argument can end it
+    # early or run a second command. The organisation details go to Azure in a JSON body, not to az.
     param([System.Collections.IDictionary]$InstallerArgs)
-    if (-not (Test-ClaudeFlowAzCmdShim)) { return }
     foreach ($key in @($InstallerArgs.Keys)) {
         $value = $InstallerArgs[$key]
-        if ($value -isnot [string]) { continue }
+        if ($null -ne $value -and $value -isnot [string] -and $value -isnot [System.ValueType]) {
+            throw "The foundation value -$key is a list or an object; Install-ClaudeGateway.ps1 takes one value there. Change it in the decision record or the answers file."
+        }
+    }
+    if (-not (Test-ClaudeFlowAzCmdShim)) { return }
+    foreach ($key in @($InstallerArgs.Keys | Where-Object { $_ -in $script:ClaudeFlowAzBoundInstallerArgs })) {
+        $value = [string]$InstallerArgs[$key]
         if ($value -match '[&|<>^()"%\r\n]') {
             throw "The foundation value -$key '$value' holds '$($Matches[0])', which cmd.exe re-reads in an Azure CLI argument (& | < > ^ ( ) `" %), so it is not passed to Install-ClaudeGateway.ps1. Change it in the decision record or the answers file."
         }
