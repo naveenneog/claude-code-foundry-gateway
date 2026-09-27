@@ -45,6 +45,21 @@ fails the release stage while any remain. Detail for each one follows below.
 
 ## Detail
 
+### U26 - P71 observation, 2026-09-28
+
+During P71's refresh changes, full pytest runs identified the exact failing
+cases: `test_service_terminal_hides_unoffered_views_and_opens_real_core_tabs`,
+`test_preselected_people_team_does_not_trigger_refresh_loop`,
+`test_compact_rankings_keep_a_team_and_drill_into_server_filter` and
+`test_lookup_jumps_to_scope`. Queued widget focus could reactivate the previous
+pane after the worker completed; an already-dismissed modal's row event could
+then reach the destination table. P71 makes the focus handoff immediate and
+checks the row event's originating table. A deterministic queued-focus mutation
+and a modal-origin mutation each fail the full relevant selector; the restored
+full AUM run passes 408 tests. This is evidence for these observed failures,
+not a retrospective diagnosis of the unrecorded 2026-09-25/26 failures. The
+locked packet gate and any failure output are recorded in P71's STATUS section.
+
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 
 **Answer: yes.** A constant `counter-key` is a single counter shared by every caller. P11 can
@@ -719,11 +734,20 @@ for the previous 7 days:
 | 09-25 19:05–19:08 | stop | the same application |
 | 09-27 08:15–08:17 | start | P67 session, owner's account |
 | 09-27 19:05:18–19:07:19 | stop | not re-attributed by P71; operation and timestamps read only |
+| 09-27 22:23:22–22:25:35 | start and Ready verification | P71, under the owner's explicit authorization |
 
 P71's read at **2026-09-27 20:13:35Z** found the server `Stopped`. This packet
 has authorization to start that server after measuring the stopped case and
 leave it running for the owner's morning test. That authorization does not
 cover the stopping automation, Turnstile settings or any other resource.
+That authorized start completed with `Ready` verified at **22:25:35Z**. The
+database was left running. P71's stopped terminal read rendered exit 9 and the
+manual command in **4.046 s** after refresh start (**4.725 s** including the
+Textual harness startup). Running Turnstile then returned identity in **4.126 s**
+and status in **8.938 s** from a fresh CLI process. Short credential/metadata
+deadlines can still produce an explicit unverified exit 7 under workstation or
+network load; they do not establish a stopped server. The external automation
+has not been changed.
 
 The stop token's claims name an application (`idtyp` `app`) issued by a tenant other than the
 subscription's, so the stop comes from an automation outside this

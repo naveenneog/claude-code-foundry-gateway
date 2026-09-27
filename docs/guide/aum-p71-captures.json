@@ -1,0 +1,86 @@
+{
+  "packet": "P71",
+  "version": 1,
+  "captures": [
+    {
+      "live": true,
+      "command": "aum --backend turnstile --redact",
+      "captured_at_utc": "2026-09-27T22:22:48.810459+00:00",
+      "phase": "stopped database",
+      "source_commit": "a44e239b08daaf745a9a55aa6c7fb402c0ed69f8",
+      "elapsed_seconds": 4.156,
+      "size": [
+        80,
+        24
+      ],
+      "image": "aum-60-turnstile-stopped.png",
+      "tool": "Textual run_test compositor; guide/render-terminal.mjs",
+      "redaction": {
+        "applied": true,
+        "inspected": true,
+        "rules": "AUM display redaction plus guide Redactor; no raw identities or tokens"
+      },
+      "sha256": "897e765cdb8589fef11497b5b621b10bf6ffb77bcdfa1407427320e20715cf63"
+    },
+    {
+      "live": true,
+      "command": "aum --backend turnstile --redact",
+      "captured_at_utc": "2026-09-27T22:26:47.865884+00:00",
+      "phase": "current read complete",
+      "source_commit": "a44e239b08daaf745a9a55aa6c7fb402c0ed69f8",
+      "elapsed_seconds": 4.968,
+      "size": [
+        120,
+        32
+      ],
+      "image": "aum-63-turnstile-ready.png",
+      "tool": "Textual run_test compositor; guide/render-terminal.mjs",
+      "redaction": {
+        "applied": true,
+        "inspected": true,
+        "rules": "AUM display redaction plus guide Redactor; no raw identities or tokens"
+      },
+      "sha256": "e0688f6eb10c48c45f479bfc889b81a21ac4ccf1725499fc6f266a8b8ac3a4ad"
+    },
+    {
+      "live": true,
+      "command": "aum --backend direct --redact",
+      "captured_at_utc": "2026-09-27T22:31:43.649650+00:00",
+      "phase": "first data; other sources pending",
+      "source_commit": "d6f00215cfb9932d5809d15a012ab8e210a2b5b2",
+      "elapsed_seconds": 3.437,
+      "size": [
+        120,
+        32
+      ],
+      "image": "aum-61-direct-progressive.png",
+      "tool": "Textual run_test compositor; guide/render-terminal.mjs",
+      "redaction": {
+        "applied": true,
+        "inspected": true,
+        "rules": "AUM display redaction plus guide Redactor; no raw identities or tokens"
+      },
+      "sha256": "77d8d7989b87ad1cf5f623800c0d16f3ca2f02ce8f3dd127f0d6cd7d0a0b55e1"
+    },
+    {
+      "live": true,
+      "command": "aum --backend direct --redact",
+      "captured_at_utc": "2026-09-27T22:31:46.858153+00:00",
+      "phase": "current read complete",
+      "source_commit": "d6f00215cfb9932d5809d15a012ab8e210a2b5b2",
+      "elapsed_seconds": 6.625,
+      "size": [
+        120,
+        32
+      ],
+      "image": "aum-62-direct-ready.png",
+      "tool": "Textual run_test compositor; guide/render-terminal.mjs",
+      "redaction": {
+        "applied": true,
+        "inspected": true,
+        "rules": "AUM display redaction plus guide Redactor; no raw identities or tokens"
+      },
+      "sha256": "6bc525d06391217c81d0873a56432a03fcbad64ee360bd2b67dd58a93431e748"
+    }
+  ]
+}

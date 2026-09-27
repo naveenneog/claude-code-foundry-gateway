@@ -445,6 +445,74 @@ refresh once; a write is never automatically repeated. Settings offers an explic
 sign-out preview; `az logout` is the equivalent outside AUM. Both affect the shared
 Azure CLI session, not only AUM.
 
+### Read latency and progress
+
+Direct reuses resource tokens within the process until two minutes before known
+expiry. Opaque tokens have a five-minute reuse limit. Concurrent reads share
+acquisition; different resources and selected Azure contexts do not share tokens.
+Tokens stay in memory and explicit sign-out clears the cache.
+
+Each Direct refresh shares one gateway snapshot, obtained through one PowerShell
+bridge process and one named-value listing. Catalog, tiers, token limits and the
+existing USD converters read that snapshot. Independent Log Analytics queries
+overlap and reuse their HTTP client. A new refresh or any write invalidates the
+snapshot; write preflight, read-back and compensation still use current values.
+
+Overview displays each source as it arrives. Pending panels name their source,
+and the progress line shows an estimate and elapsed time. Estimates are not
+network deadlines or ingestion guarantees. A delayed trend query no longer
+holds back current usage or budget rows; its failure remains visible alongside
+the other results. Pending catalog modes read as pending, not as an assumed
+strict mode. Settings remains readable while sign-in is pending.
+
+Direct's Azure-authorized facts can arrive before its identity label; edits
+remain disabled during identity verification. Scoped HTTP data still follows the
+current identity/scope check. A 401 or 403 clears partial protected data rather
+than preserving a previously wider view. Superseded refreshes cannot repaint the
+new view.
+
+The P71 live measurements and their method are in
+[STATUS](STATUS.md#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28).
+These captures use live read-only sources with display redaction, not examples:
+[provenance and hashes](guide/aum-p71-captures.json).
+
+![Live Direct first data while the remaining sources are still pending.](guide/aum-61-direct-progressive.png)
+
+![Live Direct Overview after the current read completes.](guide/aum-62-direct-ready.png)
+
+### Turnstile database stopped
+
+Turnstile's `/health` is a liveness check and can return 200 while its database is
+stopped. AUM bounds the authenticated identity request instead. On a timeout or
+5xx, an Azure-selected profile can read PostgreSQL state through ARM using its
+existing Azure rights. No App Service secret or connection string is read.
+
+Discovery stores the integration's `resourceGroup` as
+`turnstile_resource_group` in the address-only profile. Older gateway-backed
+profiles resolve that group from the matching `turnstile-integration` named
+value. Exactly one validated server in that group, reported `Stopped` by Azure,
+produces exit **9** with its name and this manual command:
+
+```powershell
+az postgres flexible-server start -g <turnstile-resource-group> -n <server-name> --subscription <subscription-id>
+```
+
+The command resumes paid compute; AUM never runs it automatically. No backend
+fallback changes the selected authority. A profile with no Azure subscription,
+denied metadata reads, an ambiguous inventory or another server state retains
+exit 7 with the diagnostic limit stated. Authentication and scope denials retain
+their own codes. The single-server association is the explicit assumption
+recorded as **U35** in [UNKNOWNS](UNKNOWNS.md), not a connection-string match.
+
+![Live stopped-database failure with the manual start command visible at 80 columns.](guide/aum-60-turnstile-stopped.png)
+
+![Live Turnstile Overview after the separately authorized database start.](guide/aum-63-turnstile-ready.png)
+
+The reference database was started under the owner's separate P71 authorization,
+not by the client. That start does not change the external automation in **U32**.
+[Troubleshooting](TROUBLESHOOTING.md#turnstile-database-stopped) distinguishes this
+condition from the browser's tenant-consent failure.
+
 ### Direct gateway access
 
 ```json
@@ -1078,6 +1146,7 @@ Interactive `:` → **Export complete chargeback CSV** writes under
 | 6, conflict | Refresh and preview again |
 | 7, service/job failure | Check network, Azure access and job logs; do not blindly repeat a write |
 | 8, apply still pending | Follow `aum governance show`; the save may already have succeeded |
+| 9, verified stopped Turnstile database | Azure reports the named PostgreSQL server as `Stopped`; the message contains its explicit paid start command. AUM starts nothing automatically |
 | Unknown Direct cost | Check unpriced facts and the published `ClaudeCost` price book |
 
 ```powershell

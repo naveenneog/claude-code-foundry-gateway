@@ -216,6 +216,9 @@ is the reporting view, not a reconciled invoice.
 [Turnstile](docs/TURNSTILE.md) optionally provides a browser console and delegated
 management. [AUM (Azure Usage Management)](docs/CLI-FINOPS.md) provides the
 terminal FinOps console and scriptable commands over Turnstile or the gateway.
+Its [progressive reads and bounded readiness](docs/AUM.md#read-latency-and-progress)
+show arriving data and name an Azure-verified stopped Turnstile database without
+starting it automatically.
 See [console choices](docs/FINOPS.md#optional-consoles) for access differences.
 Custom metrics remain useful for pilot diagnostics, not complete scaled billing.
 

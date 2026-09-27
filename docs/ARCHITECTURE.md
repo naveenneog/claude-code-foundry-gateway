@@ -458,7 +458,8 @@ scheduled jobs (P49); a plan that needs those fails before it writes. See
 
 Source: [06-finops.json](architecture/06-finops.json), verified against the local
 [`cli/finops`](../cli/finops) implementation merged to main at `c7f0a29`. The design is
-recorded in [ADR-0018](adr/0018-terminal-finops.md).
+recorded in [ADR-0018](adr/0018-terminal-finops.md) and P71's
+[ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md).
 
 The product is **AUM - Azure Usage Management**, a terminal FinOps console with command
 **`aum`**. The naming packet on branch `aum` adds that command and retains `claude-finops`
@@ -486,6 +487,20 @@ A preview is not a write. A saved Turnstile value is not a completed gateway app
 Turnstile person budgets are not the gateway's per-person daily overrides. These distinctions
 belong in both terminal faces. The [AUM how-to](CLI-FINOPS.md) describes installation,
 configuration, commands and the first release's scope.
+
+P71 adds progressive source completion within the terminal and a read-cycle
+snapshot within Direct. Azure still authorizes each Direct request; HTTP scope
+verification still precedes protected data. Tokens remain in process memory,
+and writes invalidate read snapshots rather than using cached preflight state.
+The stopped-database diagnostic reads ARM metadata in the recorded Turnstile
+group after an authenticated readiness failure. Its credential may be acquired
+concurrently, but no healthy-path database inventory or automatic start is added.
+
+![AUM readiness uses bounded authenticated HTTP and read-only Azure diagnosis; Direct shares a snapshot and returns independent sources progressively.](images/architecture/aum-readiness.png)
+
+Source: [15-aum-readiness.json](architecture/15-aum-readiness.json). The Windows
+MSI launcher runs its existing Python entry point directly; other command
+wrappers and their children have an owned process timeout boundary.
 
 ## Optional independent AUM service (P55)
 

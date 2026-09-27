@@ -9,27 +9,28 @@ review and merge; the branch stops at a passing packet gate. The ROADMAP box rem
 open until that merge. The owner's 2026-09-27 investigation measured Turnstile reads
 at 33-36 s followed by exit 7, despite a healthy liveness endpoint. Direct reads
 paid repeatedly for Azure CLI tokens and PowerShell bridge processes. Research:
-**U20**, **U26**, **U32** and [ADR-0018](adr/0018-terminal-finops.md).
+**U20**, **U26**, **U32**, **U35**, [ADR-0018](adr/0018-terminal-finops.md) and
+[ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md).
 
-- [ ] A stopped Turnstile database produces an actionable command/UI failure in
+- [x] A stopped Turnstile database produces an actionable command/UI failure in
       about 5 s, naming the verified server and its Azure CLI start command; the
       client never starts a paid resource automatically
-- [ ] One process reuses each resource's token until near expiry; Direct batches
+- [x] One process reuses each resource's token until near expiry; Direct batches
       gateway reads and overlaps independent Log Analytics queries without
       changing authorization, accounting, write confirmation or compensation
-- [ ] Terminal panels render as their data arrives, with named waits and estimates;
+- [x] Terminal panels render as their data arrives, with named waits and estimates;
       identity is no longer a global Direct-data barrier, and scoped HTTP data
       remains subject to the existing identity and scope checks
-- [ ] Offline tests are written and observed failing before implementation; each
+- [x] Offline tests are written and observed failing before implementation; each
       new detector is broken deliberately and catches its mutation at the full
       relevant test count, then passes after restoration
-- [ ] Read-only before/after time-to-first-data is recorded for `whoami`, `budget
+- [x] Read-only before/after time-to-first-data is recorded for `whoami`, `budget
       list`, `usage show` and `status` on the reference gateway; stopped and running
       Turnstile results are recorded separately
-- [ ] The database is started only after stopped-case evidence, under the owner's
+- [x] The database is started only after stopped-case evidence, under the owner's
       explicit authorization, and remains running for the morning test; no other
       Azure, Entra or Turnstile resource is changed
-- [ ] ADR-0035, AUM, troubleshooting, changelog and architecture records describe
+- [x] ADR-0035, AUM, troubleshooting, changelog and architecture records describe
       the behavior; terminal captures numbered 60 onward are redacted and inspected
 - [ ] The worktree venv runs pytest through `Test-FinOps.ps1`, and the locked
       `node .ironclad/gate.mjs --stage packet` passes with that AUM check included
@@ -37,8 +38,105 @@ paid repeatedly for Azure CLI tokens and PowerShell bridge processes. Research:
 Initial observation, 2026-09-27 **20:13:35Z**: PostgreSQL
 `pg-tsclaude-zpk4sh4prbsls` in `rg-turnstile-claudegw` was `Stopped`. Its activity
 log records tonight's stop starting at **19:05:18Z** and succeeding at
-**19:07:19Z**. No start has been requested by this packet yet. The initial
-no-run gate passed (20 passed, 2 warnings, 0 failures; commands not executed).
+**19:07:19Z**. The authorized start was requested at **22:23:22Z**, and `Ready`
+was verified at **22:25:35Z**; the database was left running. No gateway named
+value, App Service setting, Entra object or stopping automation was changed.
+
+### Measurement method and results
+
+Three sequential fresh `aum.exe` processes per Direct command, saved profiles,
+warm Azure CLI session, `--json --plain --redact`; `perf_counter` starts at process
+launch and stops at the first stdout byte. Successful JSON is first data; error
+JSON is not data. CLI output is one completed object, whereas terminal panels
+arrive independently. The same reference gateway, workspace and current-month
+selection were used before and after. Other workloads shared the workstation;
+no claim of a network SLA or an isolated benchmark is made.
+
+| Direct command | Before median, s (range) | After median, s (range) |
+|---|---:|---:|
+| `whoami` | 4.254 (4.195-4.284) | 5.187 (4.459-5.918) |
+| `budget list` | 11.278 (11.137-16.094) | 6.704 (5.618-8.578) |
+| `usage show` | 6.539 (6.109-9.151) | 3.737 (3.567-5.929) |
+| `status` | 24.619 (24.119-26.946) | 6.205 (6.032-6.234) |
+
+Before: 2026-09-27 20:22-20:24Z. After: 22:30-22:31Z. Budget, usage and status
+median reductions were 41%, 43% and 75%. `whoami` retains its account/permission
+lookups and was not faster in the final sample; an earlier after sample was
+4.360 s. The earlier Direct after sample was 5.031 / 2.868 / 5.417 s for budget /
+usage / status. Both samples are retained rather than selecting only the faster
+one. The original configure baseline was measured separately; setup/discovery
+is not included in the saved-profile timings.
+
+Stopped Turnstile, repeated before changes: `whoami` **34.297 s**, `status`
+**33.364 s**, exit 7; the first cold attempt took 65.660 s. With bounded readiness,
+successful stopped diagnoses returned exit 9 at **5.249 s** for `whoami` and
+**4.947 s** for `status` (22:09Z); another loaded status run took **6.218 s**.
+The final stopped terminal capture rendered the error at **4.046 s** after
+refresh start, with **4.725 s** including Textual harness startup; its displayed
+capture was taken at 4.156 s. The error named the verified server and the exact
+manual start command. Credential/metadata timeouts also occurred under load;
+they remain explicit unverified exit 7 rather than a false stopped diagnosis.
+The five-second goal is approximate, not guaranteed for a cold or loaded
+workstation. These limits remain a council decision for the lead.
+
+After the separate database start, Turnstile `whoami` returned current identity
+at **4.126 s** and `status` at **8.938 s** (22:26Z). Its terminal rendered first
+data at **3.578 s**, settling at **4.968 s**. Direct's terminal rendered first
+data at **3.437 s**, with identity and other sources still pending, and settled
+at **6.625 s**. Textual `run_test` supplied the real read-only backend; timestamps
+were taken at render callbacks and the final worker completion, not by a tight
+screen-polling loop.
+
+Private timing-only JSON and mutation logs are in this worktree's ignored
+`.finops-evidence` directory. Public captures are
+`docs/guide/aum-60-turnstile-stopped.png`, `aum-61-direct-progressive.png`,
+`aum-62-direct-ready.png` and `aum-63-turnstile-ready.png`, all inspected for
+identifiers. [Capture provenance and hashes](guide/aum-p71-captures.json);
+[rendered evidence](AUM.md#read-latency-and-progress).
+
+### Tests, detector mutations and branch history
+
+`tests/Test-FinOps.ps1` ran pytest, not SKIP: **408 passed** on 2026-09-27 after
+the final code changes (baseline 320). Settled 80x24 and 160x48 snapshot grids
+are unchanged. `Test-AumReadBatch.ps1`: **14/14** on PowerShell 7 and Windows
+PowerShell 5.1. Existing Direct write/compensation checks: **19**. Architecture:
+**36 assertions**, including its isolated mutations, plus 19 Node checks.
+Documentation references and screenshot checks passed; the latter ran 27 Node
+provenance/privacy checks. Script encoding: 259 files checked.
+
+**59 deliberate mutations caught**, each restoring exact source bytes and
+running its whole relevant selector, with no focus/skip or reduced count:
+
+| Detector group | Mutations caught | Full cases per mutation |
+|---|---:|---:|
+| Initial stopped-state diagnosis | 10 | 32 |
+| Resource token reuse/context/expiry/sign-out | 7 | 7 |
+| ARM boundaries, readiness and token-lock deadline | 12 | 49 |
+| Direct snapshots, concurrency, scope, writes and PowerShell USD batch | 11 | 26 |
+| Progressive UI, errors, scope, stale generations and redaction | 12 | 55 |
+| Queued focus completion | 1 | 15 |
+| Windows wrapper/MSI/sign-in deadlines | 3 | 3 |
+| Credential-timeout stopped diagnosis | 1 | 46 |
+| Modal row-event origin | 1 | 11 |
+| Complete database inventory | 1 | 44 |
+
+Two initial mutations survived and exposed weak detectors: the ARM redirect
+stub did not record the redirected host, and a timing-only focus race was not
+deterministic. Both assertions were strengthened; the repeated mutations failed
+at their full counts, then restored runs passed. No assertion was weakened.
+The refresh work also exposed the Textual `loading` reactive-name collision,
+queued old-pane focus and a dismissed lookup event bubbling into the destination
+table; each was read in the failing existing tests and fixed before green.
+These observations do not establish the cause of every historical U26 failure.
+
+Ordered commits: plan `183b3e4`; ADR/unknowns `8932e26`; initial readiness
+`c213ac3`; resource tokens `bb9dad7`; ARM readiness `52a915d`; Direct speed
+`d121598`; progressive terminal `1f4f5fd`; Windows deadline `a44e239`;
+credential timeout `d6f0021`; lookup event origin `bdbf654`; complete inventory
+`f2e2514`. Every green implementation cycle was committed without rewriting
+history. Council remains with the lead; U32 external automation and U35's
+single-server deployment association remain explicit. U20's unavailable AUM
+service and large-directory limits are unchanged.
 
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
 

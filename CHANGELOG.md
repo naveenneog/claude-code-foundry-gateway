@@ -29,6 +29,15 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **AUM latency and readiness (P71).** Direct shares one named-value snapshot per
+  read cycle, reuses resource tokens until near expiry and overlaps independent
+  telemetry reads. The terminal displays arriving panels with named, estimated
+  waits and elapsed time. Turnstile readiness names an Azure-verified stopped
+  PostgreSQL server and its manual paid start command (exit 9); no resource is
+  started automatically. Windows Azure CLI deadlines include wrapper-child
+  cleanup. Existing scope checks, preview/write rules and settled terminal
+  snapshots remain. [AUM](docs/AUM.md#read-latency-and-progress),
+  [ADR-0035](docs/adr/0035-aum-bounded-readiness-and-progressive-reads.md).
 - Guided-flow FinOps modules for tool selection, USD/token budgets, monitoring workbooks
   and chargeback reports, including a scheduled USD reconciler job definition for
   deployments without the AUM service.

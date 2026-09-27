@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "id": "aum-readiness",
+  "kind": "flow",
+  "title": "AUM: fast facts and bounded readiness",
+  "subtitle": "P71: identity gates scoped HTTP data, not independent Azure-authorized Direct facts. No automatic paid start or authority fallback.",
+  "width": 1280,
+  "height": 900,
+  "outputs": ["docs/images/architecture/aum-readiness.png"],
+  "sources": ["cli/finops/src/claude_finops/backend.py", "cli/finops/src/claude_finops/engine.py", "cli/finops/src/claude_finops/config.py", "cli/finops/src/claude_finops/progressive.py", "cli/finops/src/claude_finops/dashboard.py", "cli/finops/src/claude_finops/http_backend.py", "cli/finops/src/claude_finops/turnstile.py", "cli/finops/src/claude_finops/readiness.py", "cli/finops/src/claude_finops/windows_process.py", "scripts/Invoke-ClaudeFinOps.ps1"],
+  "identifiers": {
+    "progress": {"label": "ProgressiveRefresh", "source": "cli/finops/src/claude_finops/progressive.py", "match": "class ProgressiveRefresh:"},
+    "diagnose": {"label": "database_failure", "source": "cli/finops/src/claude_finops/readiness.py", "match": "def database_failure("},
+    "tokens": {"label": "resource_token", "source": "cli/finops/src/claude_finops/config.py", "match": "def resource_token("},
+    "auth-me": {"label": "/api/v1/auth/me", "source": "cli/finops/src/claude_finops/turnstile.py", "match": "\"whoami\": \"/api/v1/auth/me\""},
+    "bridge": {"label": "Invoke-ClaudeFinOps.ps1", "source": "scripts/Invoke-ClaudeFinOps.ps1", "kind": "file"}
+  },
+  "groups": [
+    {"x": 0, "y": 0, "w": 620, "h": 860, "tone": "blue", "title": "Direct: existing Azure authorization"},
+    {"x": 660, "y": 0, "w": 620, "h": 860, "tone": "purple", "title": "Turnstile: existing server scope"}
+  ],
+  "nodes": [
+    {"id": "direct", "x": 20, "y": 62, "w": 580, "h": 160, "tone": "blue", "title": "One read cycle",
+     "lines": ["[[tokens]]: one acquisition per resource and context", "One bridge snapshot; current write preflight is never cached", "Independent telemetry queries overlap"]},
+    {"id": "sources", "x": 20, "y": 298, "w": 580, "h": 220, "tone": "blue", "title": "Existing sources, unchanged accounting",
+     "lines": ["[[bridge]] lists nonsecret named values once", "Shared catalog, tiers and token/USD converters", "Log Analytics: request-time ledger and priced workspace facts", "A new cycle or any write invalidates the snapshot"]},
+    {"id": "panels", "x": 20, "y": 594, "w": 580, "h": 230, "tone": "teal", "title": "Current data, source by source",
+     "lines": ["[[progress]] paints each completed source", "Named waits, estimates and elapsed time; settings remain usable", "Optional failures stay visible beside successful reads", "Identity still gates edits; superseded reads cannot repaint"]},
+    {"id": "probe", "x": 680, "y": 62, "w": 580, "h": 160, "tone": "purple", "title": "Authenticated identity is readiness",
+     "lines": ["GET [[auth-me]] with a short timeout", "Azure credential may load concurrently in memory", "A healthy /health alone does not establish database readiness"]},
+    {"id": "diagnose", "x": 680, "y": 298, "w": 580, "h": 220, "tone": "purple", "title": "Timeout or 5xx: read-only ARM diagnosis",
+     "lines": ["[[diagnose]] uses the recorded deployment group", "The integration must match the selected origin and scope", "Exactly one validated PostgreSQL server; observed state only", "No redirects, connection strings or resource writes"]},
+    {"id": "result", "x": 680, "y": 594, "w": 580, "h": 230, "tone": "slate", "title": "An explicit reason, not an automatic action",
+     "lines": ["Stopped: exit 9, server name and manual paid start command", "Unverified, Ready or ambiguous: exit 7 with the limit stated", "401 / 403 remain authentication / scope errors", "The client never starts the database or changes authority"]}
+  ],
+  "edges": [
+    {"from": "direct", "to": "sources", "kind": "data", "points": [[310, 222], [310, 298]]},
+    {"from": "sources", "to": "panels", "kind": "data", "points": [[310, 518], [310, 594]]},
+    {"from": "probe", "to": "diagnose", "kind": "control", "points": [[970, 222], [970, 298]]},
+    {"from": "diagnose", "to": "result", "kind": "data", "points": [[970, 518], [970, 594]]}
+  ],
+  "notice": "Server state is a read-time observation. A single-server group is the recorded U35 deployment assumption, not a verified connection-string association. Token expiry, read snapshots, authorization, ingestion and gateway enforcement are separate facts."
+}
