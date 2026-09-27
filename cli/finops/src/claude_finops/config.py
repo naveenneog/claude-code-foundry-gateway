@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import base64
 import time
+from threading import RLock
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -12,15 +13,45 @@ from urllib.parse import urlsplit
 from .errors import FinOpsError
 
 
-def token_needs_refresh(value):
-    if not value:
-        return True
+_resource_tokens: dict[tuple[str, tuple[str, ...]], tuple[str, float]] = {}
+_resource_token_lock = RLock()
+
+
+def clear_resource_tokens():
+    with _resource_token_lock:
+        _resource_tokens.clear()
+
+
+def resource_token(resource, subscription="", tenant_id="", *, force=False, timeout=120, runner=None):
+    selected = ("--tenant", tenant_id) if tenant_id else ("--subscription", subscription) if subscription else ()
+    key = (resource, selected)
+    with _resource_token_lock:
+        value, acquired = _resource_tokens.get(key, ("", 0.0))
+        if (force or token_needs_refresh(value)
+                or (_token_expiry(value) is None and time.monotonic() - acquired >= 300)):
+            _resource_tokens.pop(key, None)
+            value = (runner or az)("account", "get-access-token", "--resource", resource,
+                                   "--query", "accessToken", "-o", "tsv", *selected, timeout=timeout)
+            if not value:
+                raise FinOpsError("No access token. Run az login in the selected backend's tenant.", 3)
+            _resource_tokens[key] = (value, time.monotonic())
+        return value
+
+
+def _token_expiry(value):
     try:
         payload = value.split(".")[1]
         expiry = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))["exp"]
-        return float(expiry) <= time.time() + 120
-    except (IndexError, KeyError, ValueError, TypeError):
-        return False
+        return float(expiry)
+    except (AttributeError, IndexError, KeyError, ValueError, TypeError):
+        return None
+
+
+def token_needs_refresh(value):
+    if not value:
+        return True
+    expiry = _token_expiry(value)
+    return expiry is not None and expiry <= time.time() + 120
 
 
 def az(*args: str, timeout: float = 120) -> str:
@@ -39,6 +70,8 @@ def az(*args: str, timeout: float = 120) -> str:
         if "AADSTS50105" in result.stderr:
             raise FinOpsError("AADSTS50105: no app role for the selected backend. Check the existing AUM or Turnstile app assignment; Azure administrators can choose Direct with existing RBAC.", 4)
         raise FinOpsError("Azure CLI refused the operation. Run az login in the correct tenant and check Azure role assignments.", 3)
+    if args[:1] == ("logout",):
+        clear_resource_tokens()
     return result.stdout.strip()
 
 

@@ -8,7 +8,7 @@ from uuid import uuid4
 import httpx
 
 from .backend import Backend
-from .config import az
+from .config import az, resource_token
 from .errors import FinOpsError, http_error
 from .rules import identifier, month_window, query_window
 from .capabilities import current_capabilities
@@ -67,8 +67,8 @@ class DirectBackend(Backend):
         if not self.config.workspace:
             raise FinOpsError("Usage requires workspace in config: the Log Analytics workspace customer id. Find it in Azure Portal > Log Analytics > Overview.")
         workspace = identifier(self.config.workspace)
-        access = self._az("account", "get-access-token", "--resource", "https://api.loganalytics.io",
-                         "--query", "accessToken", "-o", "tsv")
+        access = resource_token("https://api.loganalytics.io", self.config.subscription,
+                                self.config.tenant_id, runner=az)
         try:
             with httpx.Client(timeout=90) as client:
                 response = client.post(f"https://api.loganalytics.io/v1/workspaces/{workspace}/query",
