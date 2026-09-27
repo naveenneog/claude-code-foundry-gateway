@@ -140,7 +140,7 @@ try {
             $r = $results[$shell][$c.id]
             if (-not $r) { continue }
             $f = $c.factors
-            if (-not $r.reachedSummary -or $r.failure) { Add-Bad 'reaches the summary and stops at -WhatIf' $c.id $r.failure; continue }
+            if (-not $r.reachedSummary -or -not $r.sawSummary -or $r.failure) { Add-Bad 'reaches the summary and stops at -WhatIf' $c.id $r.failure; continue }
             if (@($r.unexpected).Count) { Add-Bad 'makes only the Azure CLI reads the stub knows' $c.id (@($r.unexpected) -join '; ') }
             if ((Get-Row $r 'API Management') -notmatch ('^apim-p72perm\s+\(' + $f.tier + '\)\s+new$')) { Add-Bad 'the summary names the new gateway and its tier' $c.id (Get-Row $r 'API Management') }
             $resolver = if ($f.tier -eq 'BasicV2') { 'public' } else { 'private' }
@@ -168,7 +168,8 @@ try {
         foreach ($c in $refusals) {
             $r = $results[$shell][$c.id]
             if (-not $r) { continue }
-            if ($r.reachedSummary -or -not $r.failure) { Add-Bad 'each refusal stops before the summary' $c.id 'reached the summary'; continue }
+            # Before the summary means no Summary heading at all, not only no -WhatIf stop after it.
+            if ($r.sawSummary -or $r.reachedSummary -or -not $r.failure) { Add-Bad 'each refusal stops before the summary' $c.id $(if ($r.sawSummary) { 'printed the summary' } else { 'reached the -WhatIf stop' }); continue }
             if ($r.failure -notmatch [regex]::Escape($c.expect)) { Add-Bad 'each refusal names what to pass' $c.id "want '$($c.expect)', got '$($r.failure)'" }
             if ($r.failure -notmatch 'Nothing was created') { Add-Bad 'each refusal says that nothing was created' $c.id $r.failure }
         }

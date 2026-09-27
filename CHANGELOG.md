@@ -831,7 +831,8 @@ exact streaming cache-creation detail remains **U13**.
 - **One plan had two fingerprints (P72).** `ConvertTo-Json` escapes `'`, `<`, `>` and `&` on
   Windows PowerShell 5.1 only, and `Sort-Object` compares by culture, so a plan reviewed on one shell
   was refused on the other. The flow writes its canonical text itself and sorts keys ordinally.
-  Every fingerprint changes once: a fingerprint printed by an earlier release does not match.
+  A plan whose text holds those characters or a non-ASCII character has a new fingerprint, so the
+  fingerprint an earlier release printed for it does not match; a plan without them keeps its own.
 - **An unattended Change foundation lost what the installer recorded (P72).** The installer
   records Desktop sign-in as `external-idp` with a flow; the merge copied that as
   `desktopSignInKind`, a value `-DesktopSignInKind` refuses, and dropped the Desktop app, issuer,
@@ -842,8 +843,11 @@ exact streaming cache-creation detail remains **U13**.
   PowerShell 5.1, the apply stopped after writing `activeRun`. The release info now records no
   commit instead.
 - **A refusal of the guided flow printed PowerShell's code excerpt (P72).** A top-level run prints
-  the reason and exits 1; `CLAUDE_FLOW_DEBUG=1` adds where it stopped. Called from another script,
-  the refusal stays an exception.
+  the reason and exits 1; a cancel (the installer cancelled at its summary, a mistyped confirmation)
+  prints in yellow. An error the flow does not expect says so and names
+  `$env:CLAUDE_FLOW_DEBUG = '1'`, which prints where it stopped. Called from another script or
+  dot-sourced, a refusal or a cancel is an exception and never exits the caller; before, a cancel ran
+  `exit 1` there.
 - **Guide with nothing recorded wrote placeholders, then failed its verification (P72).** It now
   refuses before planning. Over drift it names the differences instead of going on silently.
   Status with no decision record says that nothing is recorded, not "none detected".

@@ -94,6 +94,7 @@ foreach ($case in @($cases)) {
         shell = [string]$PSVersionTable.PSVersion
         seconds = $seconds
         reachedSummary = [bool](@($text | Where-Object { $_ -match 'WhatIf - stopping before any change' }).Count)
+        sawSummary = [bool](@($text | Where-Object { $_.Trim() -eq 'Summary' }).Count)
         failure = $failure
         rows = ConvertTo-SummaryRows -Lines $text
         audience = $(if ($audience.Count) { $audience[0] } else { '' })

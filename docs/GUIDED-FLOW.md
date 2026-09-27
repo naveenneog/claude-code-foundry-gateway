@@ -177,13 +177,19 @@ The fingerprint is the same on PowerShell 7 and Windows PowerShell 5.1, so a
 plan reviewed on one can be applied on the other. The flow writes the plan's
 canonical text itself: `ConvertTo-Json` escapes `'`, `<`, `>` and `&` on
 Windows PowerShell 5.1 only, and until P72 the same plan had a different
-fingerprint on each shell. That change gives every plan a new fingerprint, so a
-fingerprint printed by an earlier release does not match; run `-PlanOnly` again.
+fingerprint on each shell. A plan whose text holds one of those characters or a
+non-ASCII character, or whose keys sort differently by culture than by code
+point, therefore has a new fingerprint, and the fingerprint an earlier release
+printed for it does not match; run `-PlanOnly` again. A plan without them keeps
+its fingerprint.
 
-A refusal (drift, a fingerprint that does not match, a mistyped confirmation, a
-missing answer) prints its reason and exits 1. `CLAUDE_FLOW_DEBUG=1` also
-prints where in the scripts it stopped. Called from another PowerShell script,
-the flow raises the refusal as an exception instead
+A refusal (drift, a fingerprint that does not match, a missing answer) and a
+cancel (the installer cancelled at its summary, a mistyped confirmation) print
+the reason and exit 1. An error the flow does not expect says so, and
+`$env:CLAUDE_FLOW_DEBUG = '1'` makes the next run print where in the scripts it
+stopped. Called from another PowerShell script, or dot-sourced, the flow raises
+the refusal or the cancel (`System.OperationCanceledException`) as an exception
+and does not exit its caller
 ([U36](UNKNOWNS.md#u36--a-top-level-run-and-an-in-process-call--closed-2026-09-28)).
 
 ## Resume after failure
@@ -292,7 +298,7 @@ planning and names `-Action Setup`.
 | Suite | What it runs | What it holds |
 |---|---|---|
 | `tests/Test-FlowStart.ps1` | The orchestrator, discovery and Foundation step in a copy of the repository, with a stub installer, Azure CLI and prices; attended runs through standard input | The first line and the recorded gateway's read are timed; the installer asks its own questions in a console; the FinOps question follows the installer; a failed second phase resumes |
-| `tests/Test-FlowPermutations.ps1` | The same copy over Setup, Change foundation, Guide and Status × no record, a matching gateway, another gateway URL, a missing gateway, signed out and no Azure CLI × attended, `-PlanOnly` and unattended apply; the stub installer takes the real installer's parameter block; Foundation's installer arguments over 432 combinations in process | The installer runs only for Change foundation or a Setup with no gateway recorded; `-Yes` exactly when unattended; `-DeployProjection` exactly when unattended with the projection store; drift stops Setup and Change; a failed read is not drift; `-PlanOnly` and Status write nothing; a refusal has no code excerpt; each argument is valid for its installer parameter; a recorded foundation comes back unchanged through an unattended Change; one plan has one fingerprint on both shells |
+| `tests/Test-FlowPermutations.ps1` | The same copy over Setup, Change foundation, Guide and Status × no record, a matching gateway, another gateway URL, a missing gateway, signed out and no Azure CLI × attended, `-PlanOnly` and unattended apply, then `-WhatIf`, Update with no record, and cancels through callers that use `&` or dot-source it, on both shells; the stub installer takes the real installer's parameter block; Foundation's installer arguments over 432 combinations in process | The installer runs only for Change foundation or a Setup with no gateway recorded; `-Yes` exactly when unattended; `-DeployProjection` exactly when unattended with the projection store; drift stops Setup and Change; a failed read is not drift; `-PlanOnly` and Status write nothing; a refusal has no code excerpt, and a caller receives it as an exception; each argument is valid for its installer parameter; a recorded foundation comes back unchanged through an unattended Change; one plan has one fingerprint on both shells |
 | `tests/Test-InstallerPermutations.ps1` | The real installer under `-WhatIf -Yes`, in process, with the Azure CLI and the Retail Prices API stubbed, on PowerShell 7 and Windows PowerShell 5.1: every combination of tier × entitlement store × developer sign-in × Desktop sign-in (96 cases), six refusals and a reused gateway; `-Live` and `-Pairs` run 16 cases that cover every pair of levels | The summary names each choice; an external IdP Desktop sign-in derives its gateway audience with or without `-AuthMode`; each refusal comes before the summary, names what to pass and says that nothing was created; both shells print the same summary |
 
 `tests/Test-InstallerPermutations.ps1 -Live -FoundryAccount <account>

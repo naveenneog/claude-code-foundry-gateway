@@ -61,7 +61,7 @@ in both cases. The 25th mutation keeps a resolver access for a named-value store
       planning, and Guide goes on; a read that failed is reported as not read, never as drift;
       Status and `-PlanOnly` write nothing; a refusal prints its reason and no PowerShell code
       excerpt ([U36](UNKNOWNS.md#u36--a-top-level-run-and-an-in-process-call--closed-2026-09-28)).
-      76 runs, 11 of them on 5.1, then 8 store and 4 round-trip runs; 34 checks; about 100 s
+      77 runs, 11 of them on 5.1; 16 boundary runs (`-WhatIf`, Update with no record, cancels through `&`, dot-sourced and prompt callers on both shells, unexpected errors); 8 store and 4 round-trip runs; 43 checks; about 110-130 s
 - [x] In process, Foundation's installer arguments over entitlement store × Desktop sign-in ×
       developer sign-in × tier × attended or unattended × new or recorded gateway:
       `-DeployProjection` exactly when unattended with the projection store; with
@@ -92,6 +92,23 @@ in both cases. The 25th mutation keeps a resolver access for a named-value store
       and the `-Yes` Desktop parameters, with a live image
       ([70](guide/70-installer-summary-every-choice.png)); CHANGELOG
 - [ ] Council, five seats; the packet gate exits 0
+
+Council round 1 (gpt-6-astra, read-only, over `aa7ed19..6d5320f`): BLOCK. It ran the installer,
+flow-contract and flow suites; all passed, and the blocks come from reading the code.
+
+| Seat | Verdict | Finding | Now |
+|---|---|---|---|
+| Architect | BLOCK | A1: the docs said every fingerprint changes; a plan with only ASCII text and code-point-ordered keys keeps its own | GUIDED-FLOW and CHANGELOG say which plans change |
+| Coder | BLOCK | C1: the merge kept a resolver access for the named-value store | fixed in `744fd18` before the review ended; 25th mutation |
+| Coder | BLOCK | C2: a cancelled installer and a mistyped confirmation still ran `exit 1`, so a caller got no exception, and a dot-sourced run could exit its caller | both raise `OperationCanceledException`; the trap exits only at top level; a dot-sourced run is a call ([U36](UNKNOWNS.md#u36--a-top-level-run-and-an-in-process-call--closed-2026-09-28)); 8 caller runs, `&`, dot-sourced from a script and at a prompt, on both shells |
+| QA | BLOCK | Q1: "before the summary" was the `-WhatIf` stop line, so a refusal after the summary would pass | the driver records the Summary heading; a refusal must print neither |
+| QA | BLOCK | Q2: "nothing read from Azure before the installer" was true whenever the installer ran, and saw only `apim show` | every Azure CLI call is logged with its time and compared with the installer's start |
+| QA | should-fix | Q3: no orchestrator `-WhatIf` or Update runs | `-WhatIf` for Setup, Change and Guide; Update with no record. Update over a live gateway reads it through several Azure CLI calls the stub does not answer; `tests/Test-FlowLifecycle.ps1` covers its plan and apply |
+| UX | PASS | the debugging hint read `set CLAUDE_FLOW_DEBUG=1` on every refusal | it shows only for an error the flow does not expect, as `$env:CLAUDE_FLOW_DEBUG = '1'` |
+| Security | PASS | no new path to `az.cmd`; the values the merge adds are either az-bound and checked, or ValidateSet parameters, or Desktop configuration | none needed |
+
+The gate on `f474fe4` failed on one check: the architecture manifest was stale after `744fd18`
+changed `scripts/flow/Foundation.ps1`, a source of a diagram, without a re-render. Rendered again.
 
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
 

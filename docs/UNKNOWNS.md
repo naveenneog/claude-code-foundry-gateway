@@ -754,6 +754,21 @@ Both shells gave the same results. The [about_Automatic_Variables][u36-auto] ref
 top-level run therefore prints the reason and exits 1; a call from another script still receives
 the exception. `tests/Test-FlowPermutations.ps1` checks both.
 
+**Measured again 2026-09-28, after council round 1 of P72**, on both shells:
+
+| Invocation or error | Observed |
+|---|---|
+| `. script.ps1` from another script | `InvocationName` is `.`; `PSCommandPath` is the calling script |
+| `. script.ps1` at a prompt (`-Command`) | `InvocationName` is `.`; `PSCommandPath` is empty |
+| `throw 'text'` | `RuntimeException`; `FullyQualifiedErrorId` equals the message |
+| `$null.Method()` | `RuntimeException`; `FullyQualifiedErrorId` is `InvokeMethodOnNull` |
+| a cmdlet error under `-ErrorAction Stop` | its own exception type, such as `DriveNotFoundException` |
+
+A dot-sourced run shares its caller's scope, and at a prompt that is the console's global scope,
+where `exit` closes the console. The flow therefore treats a dot-sourced run as a call and raises
+the exception. The flow refuses by throwing its reason, so an error whose id is its own message
+is a refusal, printed without the debugging hint; any other error prints the hint.
+
 [u36-auto]: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_automatic_variables#myinvocation
 
 ---

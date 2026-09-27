@@ -18,14 +18,18 @@ param(
 
 $ErrorActionPreference = 'Stop'
 # A refusal is an answer, not a crash. Run at top level, the flow prints the reason without
-# PowerShell's code excerpt and exits 1; called from another script, it stays an exception (U36).
-$script:FlowTopLevel = -not $MyInvocation.PSCommandPath
+# PowerShell's code excerpt and exits 1. Called from another script or dot-sourced, it raises the
+# refusal as an exception, and a dot-sourced run never exits its caller (U36).
+$script:FlowTopLevel = -not $MyInvocation.PSCommandPath -and $MyInvocation.InvocationName -ne '.'
 trap {
     if (-not $script:FlowTopLevel) { break }
+    $cancelled = $_.Exception -is [System.OperationCanceledException]
+    # The flow refuses by throwing its reason, whose error id is that text; anything else was not expected.
+    $refusal = $cancelled -or ($_.Exception -is [System.Management.Automation.RuntimeException] -and $_.FullyQualifiedErrorId -eq $_.Exception.Message)
     Write-Host ''
-    Write-Host $_.Exception.Message -ForegroundColor Red
+    Write-Host $_.Exception.Message -ForegroundColor $(if ($cancelled) { 'Yellow' } else { 'Red' })
     if ($env:CLAUDE_FLOW_DEBUG -eq '1') { Write-Host $_.ScriptStackTrace -ForegroundColor DarkGray }
-    else { Write-Host 'The flow stopped here. To see where in the scripts, set CLAUDE_FLOW_DEBUG=1 and run it again.' -ForegroundColor DarkGray }
+    elseif (-not $refusal) { Write-Host "The flow stopped on an error it does not expect. To see where: `$env:CLAUDE_FLOW_DEBUG = '1', then run the same command again." -ForegroundColor DarkGray }
     exit 1
 }
 $root = $PSScriptRoot
@@ -510,8 +514,8 @@ if ($attended -and -not $afterLead) {
         Write-Host (Format-ClaudeFlowReview -Plans @($lead.Plans))
         if (-not $PSCmdlet.ShouldProcess($RecordPath, "Apply guided flow action $Action")) { return }
         $leadRunId = Start-FlowRun -Record $record -Path $RecordPath -CurrentAction $Action -CurrentChange $Change -Fingerprint (Get-ClaudeFlowFingerprint -Plans @($lead.Plans)) -Phase 'lead' -StepNames $leadNames
-        try { Invoke-ApplySteps -Steps $lead.Steps -Plans @($lead.Plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $leadRunId }
-        catch [System.OperationCanceledException] { Write-Host ''; Write-Host $_.Exception.Message -ForegroundColor Yellow; exit 1 }
+        # A cancelled installer raises OperationCanceledException, which the trap reports (U36).
+        Invoke-ApplySteps -Steps $lead.Steps -Plans @($lead.Plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $leadRunId
         Invoke-VerifySteps -Steps $lead.Steps -Record $record
         Remove-FlowRecordProperty $record 'activeRun'
         Write-FlowDecisionRecord -Record $record -Path $RecordPath
@@ -548,11 +552,9 @@ if ($ApprovedPlanFingerprint) {
     if ($typed -ne $fingerprint.Substring(0, 8)) {
         if ($afterLead) {
             # The foundation exists and is recorded; only this review's steps were declined.
-            Write-Host ''
-            Write-Host "Confirmation did not match, so the steps in this review were not applied. The gateway foundation is set up and recorded in $RecordPath; run .\Start-ClaudeGateway.ps1 -Action $Action again to review and apply the rest." -ForegroundColor Yellow
-            exit 1
+            throw [System.OperationCanceledException]::new("Confirmation did not match, so the steps in this review were not applied. The gateway foundation is set up and recorded in $RecordPath; run .\Start-ClaudeGateway.ps1 -Action $Action again to review and apply the rest.")
         }
-        throw 'Confirmation did not match; nothing was written.'
+        throw [System.OperationCanceledException]::new('Confirmation did not match; nothing was written.')
     }
 } else {
     throw 'Pass -ApprovedPlanFingerprint to apply this reviewed plan without a console.'
@@ -560,8 +562,7 @@ if ($ApprovedPlanFingerprint) {
 
 if ($PSCmdlet.ShouldProcess($RecordPath, "Apply guided flow action $Action")) {
     $runId = Start-FlowRun -Record $record -Path $RecordPath -CurrentAction $Action -CurrentChange $Change -Fingerprint $fingerprint -Phase $(if ($afterLead) { 'after-lead' } else { '' }) -StepNames @($steps | ForEach-Object { $_.Info.Name })
-    try { Invoke-ApplySteps -Steps $steps -Plans @($plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $runId }
-    catch [System.OperationCanceledException] { Write-Host ''; Write-Host $_.Exception.Message -ForegroundColor Yellow; exit 1 }
+    Invoke-ApplySteps -Steps $steps -Plans @($plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $runId
     Invoke-VerifySteps -Steps $steps -Record $record
     Remove-FlowRecordProperty $record 'activeRun'
     Write-FlowDecisionRecord -Record $record -Path $RecordPath

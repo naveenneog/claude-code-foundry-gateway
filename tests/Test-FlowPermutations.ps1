@@ -30,7 +30,7 @@ exit /b %ERRORLEVEL%
 '@
 Set-Content -LiteralPath (Join-Path $script:azBin 'az-stub.ps1') -Encoding UTF8 -Value @'
 $ErrorActionPreference = 'Stop'
-if ($env:P72_AZ_LOG) { Add-Content -LiteralPath $env:P72_AZ_LOG -Value (($args -join ' ')) }
+if ($env:P72_AZ_LOG) { Add-Content -LiteralPath $env:P72_AZ_LOG -Value ([ordered]@{ ticks = [DateTime]::UtcNow.Ticks; args = ($args -join ' ') } | ConvertTo-Json -Compress) }
 $joined = $args -join ' '
 if ($joined -like 'apim show *') {
     switch ($env:P72_AZ_MODE) {
@@ -58,9 +58,10 @@ foreach ($p in $installerAst.ParamBlock.Parameters) {
 $stubInstaller = @(
     '[CmdletBinding(SupportsShouldProcess)]'
     $installerAst.ParamBlock.Extent.Text
+    '$started = [DateTime]::UtcNow.Ticks'
     '$bound = [ordered]@{}; foreach ($k in $PSBoundParameters.Keys) { $bound[$k] = [string]$PSBoundParameters[$k] }'
     "`$answer = if (`$Yes) { '(Yes)' } else { Read-Host 'stub installer question' }"
-    '[ordered]@{ bound = $bound; answer = $answer } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $env:P72_INSTALLER_LOG -Encoding UTF8'
+    '[ordered]@{ started = $started; bound = $bound; answer = $answer } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $env:P72_INSTALLER_LOG -Encoding UTF8'
     "if (`$answer -eq 'cancel') { return }"
     @'
 $kind = if ($DesktopSignInKind) { $DesktopSignInKind } else { 'helper-script' }
@@ -90,7 +91,7 @@ function Get-ClaudeFlowStepQuestions {
     @([pscustomobject]@{ Key = 'finops.tool'; Question = 'Which FinOps tool?'; Options = @((New-ClaudeChoiceOption -Value 'Direct' -Label 'AUM Direct' -Recommended -Reason 'test default'), (New-ClaudeChoiceOption -Value 'None' -Label 'None')); AcceptRecommendedWithoutConsole = $true })
 }
 function Get-ClaudeFlowStepPlan { param($Record, $Discovery) New-ClaudeFlowPlan -Step FinOps -Summary 'Configure AUM Direct' -Actions @(New-ClaudeFlowAction -Verb Write -Target 'AUM profile' -Detail 'test') -Costs @(New-ClaudeFlowCost -Item 'AUM Direct' -MonthlyUsd 0 -Source 'test') -Reversible $true -Rollback 'Delete the AUM profile' }
-function Invoke-ClaudeFlowStep { param($Record, $Plan) @{ finops = [pscustomobject]@{ tool = 'Direct' } } }
+function Invoke-ClaudeFlowStep { param($Record, $Plan) if ($env:P72_FINOPS_FAIL -eq '1') { $null.NotAMethod() }; @{ finops = [pscustomobject]@{ tool = 'Direct' } } }
 function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'FinOps'; Passed = $true; Checks = @() } }
 '@
 $priceStub = @'
@@ -105,7 +106,7 @@ function Get-AzureRetailPrice {
 function Get-AzureRetailPriceUnavailableReason { '' }
 function ConvertTo-MonthlyPrice { param([decimal]$HourlyPrice, [int]$Units = 1) [math]::Round($HourlyPrice * 730 * $Units, 2) }
 '@
-$shadowFiles = @('Start-ClaudeGateway.ps1', 'scripts\ClaudeChoice.ps1', 'scripts\ClaudeGatewayRegion.ps1', 'scripts\flow\FlowContract.ps1', 'scripts\flow\Discovery.ps1', 'scripts\flow\Foundation.ps1', 'scripts\flow\lib\LifecycleCommon.ps1')
+$shadowFiles = @('Start-ClaudeGateway.ps1', 'scripts\ClaudeChoice.ps1', 'scripts\ClaudeGatewayRegion.ps1', 'scripts\Update-ClaudeGateway.ps1', 'scripts\flow\FlowContract.ps1', 'scripts\flow\Discovery.ps1', 'scripts\flow\Foundation.ps1', 'scripts\flow\lib\LifecycleCommon.ps1')
 function New-Shadow([string]$Dir) {
     foreach ($d in 'scripts\flow\lib', 'onboarding') { New-Item -ItemType Directory -Force -Path (Join-Path $Dir $d) | Out-Null }
     foreach ($f in $shadowFiles) { if (Test-Path -LiteralPath (Join-Path $root $f)) { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $Dir $f) } }
@@ -123,7 +124,7 @@ function New-RecordFile([string]$Path, [string]$Store = 'named-value') {
 function Get-FileText([string]$Path) { if (Test-Path -LiteralPath $Path) { [IO.File]::ReadAllText($Path) } else { $null } }
 
 # One run: its own shadow, record and logs, so runs can go in parallel.
-function New-Run([string]$Id, [string]$Action, [string]$Record, [string]$Mode, [string]$Shell = '7', [string]$Store = 'named-value', [hashtable]$Answers = $null, [string]$RecordFrom = '', [string]$Fingerprint = '') {
+function New-Run([string]$Id, [string]$Action, [string]$Record, [string]$Mode, [string]$Shell = '7', [string]$Store = 'named-value', [hashtable]$Answers = $null, [string]$RecordFrom = '', [string]$Fingerprint = '', [hashtable]$Env = @{}, [string[]]$InputLines = @('stub-answer', '', 'nomatch1'), [string]$Caller = '') {
     $dir = Join-Path $scratch "runs\$Id"
     New-Shadow $dir
     $recordPath = Join-Path $dir 'record.json'
@@ -132,13 +133,34 @@ function New-Run([string]$Id, [string]$Action, [string]$Record, [string]$Mode, [
     $argv = @('-Action', $Action, '-RecordPath', $recordPath)
     if ($Action -eq 'Change') { $argv += @('-Change', 'foundation') }
     if ($Mode -eq 'planonly') { $argv += '-PlanOnly' }
+    if ($Mode -eq 'whatif') { $argv += '-WhatIf' }
     if ($Mode -eq 'apply') { $argv += @('-ApprovedPlanFingerprint', $Fingerprint) }
     $answersPath = ''
     if ($Answers) { $answersPath = Join-Path $dir 'answers.json'; $Answers | ConvertTo-Json | Set-Content -LiteralPath $answersPath -Encoding UTF8; $argv += @('-AnswersPath', $answersPath) }
+    # A caller script runs the flow in process (&) or dot-sourced (.), catches what it raises and goes on.
+    # -Caller 'prompt' dot-sources it at global scope through -Command, as a console prompt does.
+    $script = Join-Path $dir 'Start-ClaudeGateway.ps1'
+    $command = ''
+    if ($Caller -eq 'prompt') {
+        $quoted = @($argv | ForEach-Object { $a = [string]$_; if ($a -match '^-[A-Za-z]+$') { $a } else { "'" + $a.Replace("'", "''") + "'" } }) -join ' '
+        $command = "try { . '$script' $quoted; 'CALLER NOTHING RAISED' } catch { ""CALLER CAUGHT: `$(`$_.Exception.GetType().FullName): `$(`$_.Exception.Message)"" }; 'CALLER CONTINUED'"
+        $argv = @()
+    }
+    elseif ($Caller) {
+        $quoted = @($argv | ForEach-Object { $a = [string]$_; if ($a -match '^-[A-Za-z]+$') { $a } else { "'" + $a.Replace("'", "''") + "'" } }) -join ' '
+        $callerPath = Join-Path $dir 'caller.ps1'
+        Set-Content -LiteralPath $callerPath -Encoding UTF8 -Value @(
+            '$ErrorActionPreference = ''Stop'''
+            "try { $Caller '$script' $quoted; 'CALLER NOTHING RAISED' }"
+            'catch { "CALLER CAUGHT: $($_.Exception.GetType().FullName): $($_.Exception.Message)" }'
+            "'CALLER CONTINUED'"
+        )
+        $script = $callerPath; $argv = @()
+    }
     [pscustomobject]@{
-        Id = $Id; Action = $Action; Record = $Record; Mode = $Mode; Shell = $Shell; Store = $Store; Dir = $dir; RecordPath = $recordPath; Args = $argv
+        Id = $Id; Action = $Action; Record = $Record; Mode = $Mode; Shell = $Shell; Store = $Store; Dir = $dir; RecordPath = $recordPath; Args = $argv; Script = $script; Command = $command; Env = $Env; Caller = $Caller
         Before = (Get-FileText $recordPath); InstallerLog = (Join-Path $dir 'installer.json'); AzLog = (Join-Path $dir 'az.log')
-        Input = @('stub-answer', '', 'nomatch1')
+        Input = $InputLines
     }
 }
 function Start-Run($Run) {
@@ -146,9 +168,15 @@ function Start-Run($Run) {
     $psi = [Diagnostics.ProcessStartInfo]::new($exe)
     $psi.ArgumentList.Add('-NoProfile')
     if ($Run.Mode -ne 'attended') { $psi.ArgumentList.Add('-NonInteractive') }
-    $psi.ArgumentList.Add('-File')
-    $psi.ArgumentList.Add((Join-Path $Run.Dir 'Start-ClaudeGateway.ps1'))
-    foreach ($a in $Run.Args) { $psi.ArgumentList.Add([string]$a) }
+    if ($Run.Command) {
+        $psi.ArgumentList.Add('-Command')
+        $psi.ArgumentList.Add($Run.Command)
+    }
+    else {
+        $psi.ArgumentList.Add('-File')
+        $psi.ArgumentList.Add($Run.Script)
+        foreach ($a in $Run.Args) { $psi.ArgumentList.Add([string]$a) }
+    }
     $psi.UseShellExecute = $false
     $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
     foreach ($name in 'CLAUDE_FLOW_SKIP_AZ_DISCOVERY', 'CLAUDE_INTERACTIVE', 'CLAUDE_NONINTERACTIVE') { [void]$psi.Environment.Remove($name) }
@@ -158,6 +186,7 @@ function Start-Run($Run) {
     $psi.Environment['P72_AZ_LOG'] = $Run.AzLog
     $psi.Environment['P72_INSTALLER_LOG'] = $Run.InstallerLog
     if ($Run.Mode -eq 'attended') { $psi.Environment['CLAUDE_INTERACTIVE'] = '1' }
+    foreach ($k in $Run.Env.Keys) { $psi.Environment[$k] = [string]$Run.Env[$k] }
     $process = [Diagnostics.Process]::Start($psi)
     foreach ($line in $Run.Input) { $process.StandardInput.WriteLine($line) }
     $process.StandardInput.Close()
@@ -182,7 +211,7 @@ function Invoke-Runs([object[]]$Runs, [int]$Throttle = 6, [int]$TimeoutSeconds =
             $installer = if (Test-Path -LiteralPath $r.InstallerLog) { Get-Content -LiteralPath $r.InstallerLog -Raw | ConvertFrom-Json } else { $null }
             $done[$r.Id] = [pscustomobject]@{
                 Run = $r; Text = $out; All = ($out + "`n" + $err); ExitCode = $(if ($h.Process.HasExited) { $h.Process.ExitCode } else { -1 }); TimedOut = $timedOut
-                Installer = $installer; AzCalls = @(if (Test-Path -LiteralPath $r.AzLog) { Get-Content -LiteralPath $r.AzLog }); After = (Get-FileText $r.RecordPath)
+                Installer = $installer; AzCalls = @(if (Test-Path -LiteralPath $r.AzLog) { Get-Content -LiteralPath $r.AzLog | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json } }); After = (Get-FileText $r.RecordPath)
                 Fingerprint = [regex]::Match($out, 'Fingerprint:\s+([a-f0-9]{64})').Groups[1].Value
             }
             [void]$running.Remove($h)
@@ -237,6 +266,7 @@ try {
         $unknown = $r.Record -in 'signedout', 'noaz'
         Test-Case 'every run ends, without a timeout' $res (-not $res.TimedOut) ''
         if ($res.ExitCode -ne 0) { Test-Case 'a refusal prints its reason and no PowerShell code excerpt' $res ($res.All -notmatch $excerpt) (($res.All -split "`n" | Where-Object { $_ -match $excerpt } | Select-Object -First 1)) }
+        if ($res.ExitCode -ne 0) { Test-Case 'a deliberate refusal shows no debugging hint' $res ($res.All -notmatch 'does not expect') '' }
         if ($r.Action -eq 'Status') {
             Test-Case 'Status writes nothing' $res ($res.After -eq $r.Before) ''
             Test-Case 'Status ends without an error' $res ($res.ExitCode -eq 0) ($res.All -split "`n" | Select-Object -Last 2)
@@ -266,7 +296,11 @@ try {
         if ($unknown) {
             Test-Case 'a read that failed is reported as not read, never as drift' $res ($res.All -match 'not read|not installed|not on PATH' -and $res.All -notmatch 'does not match live state') ''
         }
-        if (-not $recorded) { Test-Case 'with nothing recorded, nothing is read from Azure before the installer' $res (-not @($res.AzCalls | Where-Object { $_ -like 'apim show*' }).Count -or $res.Installer) (@($res.AzCalls) -join '; ') }
+        if (-not $recorded) {
+            # Every Azure CLI call, in order: none before the installer starts, and none at all without it.
+            $early = @($res.AzCalls | Where-Object { -not $res.Installer -or [long]$_.ticks -lt [long]$res.Installer.started })
+            Test-Case 'with nothing recorded, nothing is read from Azure before the installer' $res ($early.Count -eq 0) (@($early | ForEach-Object args) -join '; ')
+        }
         switch ($r.Mode) {
             'planonly' {
                 Test-Case '-PlanOnly prints a fingerprint and writes nothing' $res ($res.ExitCode -eq 0 -and $res.Fingerprint -and $res.After -eq $r.Before) "exit=$($res.ExitCode) $(($res.All -split "`n" | Select-Object -Last 1))"
@@ -290,6 +324,7 @@ try {
         $res = $results[$id]
         Test-Case 'the fingerprint of another plan changes nothing' $res ($res.ExitCode -ne 0 -and $res.All -match 'does not match plan fingerprint' -and -not $res.Installer -and $res.After -eq $res.Run.Before) "exit=$($res.ExitCode)"
         Test-Case 'a refusal prints its reason and no PowerShell code excerpt' $res ($res.All -notmatch $excerpt) (($res.All -split "`n" | Where-Object { $_ -match $excerpt } | Select-Object -First 1))
+        Test-Case 'a deliberate refusal shows no debugging hint' $res ($res.All -notmatch 'does not expect') ''
     }
     if ($has51) {
         foreach ($a in $actions) {
@@ -300,6 +335,39 @@ try {
             }
         }
     }
+
+    # ------------------------------------------------------------------ -WhatIf, Update, callers and unexpected errors
+    $edge = [System.Collections.Generic.List[object]]::new()
+    foreach ($pair in @(@('Setup', 'none'), @('Setup', 'match'), @('Change', 'match'), @('Guide', 'match'))) { $edge.Add((New-Run "$($pair[0])-$($pair[1])-whatif" $pair[0] $pair[1] 'whatif')) }
+    $edge.Add((New-Run 'Update-none' 'Update' 'none' 'planonly'))
+    $edge.Add((New-Run 'Setup-none-cancel' 'Setup' 'none' 'attended' -InputLines @('cancel')))
+    foreach ($shell in @('7') + $(if ($has51) { @('5.1') } else { @() })) {
+        $edge.Add((New-Run "inprocess-cancel-$shell" 'Setup' 'none' 'attended' $shell -InputLines @('cancel') -Caller '&'))
+        $edge.Add((New-Run "dotsource-cancel-$shell" 'Setup' 'none' 'attended' $shell -InputLines @('cancel') -Caller '.'))
+        $edge.Add((New-Run "inprocess-mistyped-$shell" 'Setup' 'none' 'attended' $shell -Caller '&'))
+        $edge.Add((New-Run "prompt-dotsource-cancel-$shell" 'Setup' 'none' 'attended' $shell -InputLines @('cancel') -Caller 'prompt'))
+    }
+    $matchFp = $results['Setup-match-planonly'].Fingerprint
+    $edge.Add((New-Run 'unexpected-error' 'Setup' 'match' 'apply' -Fingerprint $matchFp -Env @{ P72_FINOPS_FAIL = '1' }))
+    $edge.Add((New-Run 'unexpected-error-debug' 'Setup' 'match' 'apply' -Fingerprint $matchFp -Env @{ P72_FINOPS_FAIL = '1'; CLAUDE_FLOW_DEBUG = '1' }))
+    $edges = Invoke-Runs @($edge)
+    foreach ($id in @($edges.Keys | Where-Object { $_ -like '*-whatif' })) {
+        $res = $edges[$id]
+        Test-Case '-WhatIf prints the review, runs no installer and writes nothing' $res ($res.ExitCode -eq 0 -and $res.Text -match 'WhatIf: no guided flow changes were written' -and -not $res.Installer -and $res.After -eq $res.Run.Before) "exit=$($res.ExitCode) $(($res.All -split "`n" | Where-Object { $_.Trim() } | Select-Object -Last 1))"
+    }
+    $res = $edges['Update-none']
+    Test-Case 'Update with no record says that nothing can be updated and writes nothing' $res ($res.ExitCode -eq 0 -and $res.All -match 'Nothing can be updated' -and -not $res.After) "exit=$($res.ExitCode)"
+    $res = $edges['Setup-none-cancel']
+    Test-Case 'a cancelled installer ends a top-level run with its reason, exit 1, no code excerpt and no debugging hint' $res ($res.ExitCode -eq 1 -and $res.All -match 'finished without writing' -and $res.All -notmatch $excerpt -and $res.All -notmatch 'does not expect') "exit=$($res.ExitCode)"
+    foreach ($id in @($edges.Keys | Where-Object { $_ -like 'inprocess-*' -or $_ -like 'dotsource-*' -or $_ -like 'prompt-dotsource-*' })) {
+        $res = $edges[$id]
+        $want = if ($id -like '*mistyped*') { 'CALLER CAUGHT: System.OperationCanceledException: Confirmation did not match, so the steps in this review were not applied' } else { 'CALLER CAUGHT: System.OperationCanceledException: Install-ClaudeGateway.ps1 finished without writing' }
+        Test-Case 'called in process or dot-sourced, a cancel reaches the caller as an exception and the caller goes on' $res ($res.ExitCode -eq 0 -and $res.Text -match [regex]::Escape($want) -and $res.Text -match 'CALLER CONTINUED' -and $res.Text -notmatch 'CALLER NOTHING RAISED') "exit=$($res.ExitCode) $(($res.Text -split "`n" | Where-Object { $_ -match 'CALLER' }) -join ' | ')"
+    }
+    $res = $edges['unexpected-error']
+    Test-Case 'an unexpected error names itself and how to see where it stopped, in PowerShell syntax' $res ($res.ExitCode -eq 1 -and $res.All -match 'does not expect' -and $res.All -match [regex]::Escape("`$env:CLAUDE_FLOW_DEBUG = '1'") -and $res.All -notmatch $excerpt) "exit=$($res.ExitCode)"
+    $res = $edges['unexpected-error-debug']
+    Test-Case 'with CLAUDE_FLOW_DEBUG=1 an unexpected error prints where it stopped' $res ($res.ExitCode -eq 1 -and $res.All -match '(?m)^at ' -and $res.All -notmatch 'does not expect') "exit=$($res.ExitCode)"
 
     # ------------------------------------------------------------------ store, unattended, in child processes
     $storeRuns = [System.Collections.Generic.List[object]]::new()
