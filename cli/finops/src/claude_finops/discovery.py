@@ -116,6 +116,7 @@ def discover(*, backend=None, subscription=None, resource_group=None, apim_name=
                   apim_resource_id=selected_apim["id"])
     if mode == "turnstile":
         config.url, config.scope = integration["url"], integration["scope"]
+        config.turnstile_resource_group = integration.get("resourceGroup", "")
     if mode == "aum-service":
         service = selected_service or choose("AUM Function app", services, selected=service_app,
                                             interactive=interactive, picker=picker)

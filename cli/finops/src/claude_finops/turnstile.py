@@ -32,6 +32,15 @@ WRITE_ROUTES = {
 class TurnstileBackend(HttpBackend):
     name = "Turnstile"
 
+    def _request_timeout(self, method, path):
+        return 1.25 if method == "GET" and path == READ_ROUTES["whoami"] else super()._request_timeout(method, path)
+
+    def _unavailable_error(self, method, path, status=None):
+        if method == "GET" and path == READ_ROUTES["whoami"]:
+            from .readiness import database_failure
+            return database_failure(self.config, status)
+        return super()._unavailable_error(method, path, status)
+
     def read(self, resource, **params):
         if resource == "capabilities":
             identity = params.get("identity") or self.read("whoami")

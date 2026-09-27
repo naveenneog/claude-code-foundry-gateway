@@ -23,7 +23,7 @@ def token_needs_refresh(value):
         return False
 
 
-def az(*args: str) -> str:
+def az(*args: str, timeout: float = 120) -> str:
     # az is a cmd wrapper on Windows. A list alone does not neutralize cmd metacharacters.
     if any(re.search(r'[&|<>^%!"\r\n]', str(arg)) for arg in args):
         raise FinOpsError("Unsafe Azure CLI argument. Use a simple resource name or a JSON body file.")
@@ -32,7 +32,7 @@ def az(*args: str) -> str:
         raise FinOpsError("Azure CLI is missing. Install Azure CLI, then run az login.", 3)
     try:
         result = subprocess.run([executable, *map(str, args)], capture_output=True, text=True,
-                                encoding="utf-8", timeout=120, check=False)
+                                encoding="utf-8", timeout=timeout, check=False)
     except (OSError, subprocess.TimeoutExpired):
         raise FinOpsError("Azure CLI did not finish. Check az account show and network access.", 7) from None
     if result.returncode:
@@ -71,6 +71,7 @@ class Config:
     workspace: str = ""
     workspace_resource_id: str = ""
     tenant_id: str = ""
+    turnstile_resource_group: str = ""
     theme: str = "gateway"
     ascii: bool = False
 
@@ -87,6 +88,10 @@ class Config:
         for value in (self.resource_group, self.apim_name):
             if value and not re.fullmatch(r"[A-Za-z0-9._()-]+", value):
                 raise FinOpsError("Use a simple Azure resource group and APIM name.")
+        if self.turnstile_resource_group and (
+                not isinstance(self.turnstile_resource_group, str)
+                or not re.fullmatch(r"[A-Za-z0-9._-]{1,90}", self.turnstile_resource_group)):
+            raise FinOpsError("Use a simple Turnstile resource group name without shell metacharacters.")
         if self.subscription:
             from uuid import UUID
             try:
@@ -135,4 +140,5 @@ def load_config(path: Path | None = None, **overrides) -> Config:
         settings = parse_integration(raw)
         config.url = config.url or settings["url"]
         config.scope = config.scope or settings["scope"]
+        config.turnstile_resource_group = settings.get("resourceGroup", "")
     return config.validate()

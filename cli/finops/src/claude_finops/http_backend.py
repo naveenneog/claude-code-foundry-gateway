@@ -24,7 +24,10 @@ class HttpBackend(Backend):
                 self._token = self._token_provider()
             try:
                 response = self._client.request(method, path, params=params, json=body,
+                    timeout=self._request_timeout(method, path),
                     headers={"Authorization": "Bearer " + self._token, **(extra_headers or {})})
+            except httpx.TimeoutException:
+                raise self._unavailable_error(method, path) from None
             except httpx.HTTPError:
                 raise FinOpsError(f"{self.name} is unreachable. Check the HTTPS URL, VPN and network; writes are not retried.", 7) from None
             if response.status_code == 401 and method == "GET" and attempt == 0:
@@ -33,6 +36,8 @@ class HttpBackend(Backend):
             if not 200 <= response.status_code < 300:
                 if optional and response.status_code in {403, 404, 405}:
                     return None
+                if response.status_code >= 500:
+                    raise self._unavailable_error(method, path, response.status_code)
                 raise http_error(response.status_code)
             if response.status_code == 204:
                 return {"deleted": True}
@@ -48,6 +53,14 @@ class HttpBackend(Backend):
                     return None
                 raise FinOpsError("Unexpected server response. Check the API URL and compatible contract version.", 7) from None
         raise http_error(401)
+
+    def _request_timeout(self, method, path):
+        return 60
+
+    def _unavailable_error(self, method, path, status=None):
+        if status:
+            return http_error(status)
+        return FinOpsError(f"{self.name} is unreachable. Check the HTTPS URL, VPN and network; writes are not retried.", 7)
 
     def close(self):
         self._token = None
