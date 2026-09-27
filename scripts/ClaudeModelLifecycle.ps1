@@ -58,6 +58,7 @@ function Get-ClaudeModelTarget {
         Set-ClaudeRecordProperty $target $key $value
     }
     $tenantId = if ($Record.tenantId) { $Record.tenantId } else { '' }
+    if ($target.SubscriptionId -and -not (Test-ClaudeFlowSubscriptionId $target.SubscriptionId)) { throw 'The model target subscription must be a subscription GUID before account discovery.' }
     if (-not $target.SubscriptionId -or -not $tenantId) {
         $account = Invoke-ClaudeModelAz -Arguments @('account','show') -What 'Reading the selected Azure account' -SubscriptionId $target.SubscriptionId
         if (-not $target.SubscriptionId) { $target.SubscriptionId = [string]$account.id }
@@ -231,7 +232,10 @@ function New-ClaudeModelPlan {
     foreach ($d in $Discovery.Deployments) {
         $price = Get-ClaudeDeploymentPrice $d $book
         $tiers = @('standard','premium' | Where-Object { $d.name -in $sets[$_] }) -join ','
-        $actions += New-ClaudeFlowAction -Verb Check -Target $d.name -Detail "$($d.model), version $($d.version), $($d.sku), capacity $($d.capacity), $($d.state); tiers $(if ($tiers) { $tiers } else { 'none' }); $($price.Detail)"
+        $old = @($Record.deployments | Where-Object name -eq $d.name)
+        if ($old.Count -gt 1) { throw "Duplicate deployment '$($d.name)' in the record." }
+        $recordState = if (-not $old.Count) { 'new' } elseif ($old[0].model -ne $d.model) { "model $($old[0].model) -> $($d.model)" } elseif ($old[0].version -ne $d.version) { "version $($old[0].version) -> $($d.version)" } else { 'current' }
+        $actions += New-ClaudeFlowAction -Verb Check -Target $d.name -Detail "$($d.model), version $($d.version), $($d.sku), capacity $($d.capacity), $($d.state); record: $recordState; tiers $(if ($tiers) { $tiers } else { 'none' }); $($price.Detail)"
         $prices += [pscustomobject]@{ Deployment = $d.name; Price = $price }
         if ($d.name -notin @($permitted.name)) { continue }
         if ($price.SourceKey -and $price.SourceKey -ne $d.name) {
@@ -240,8 +244,6 @@ function New-ClaudeModelPlan {
             $actions += New-ClaudeFlowAction -Verb Write -Target "$PriceBookPath [$($d.name)]" -Detail "copy dated rate from $($price.SourceKey); existing prices retained"
         }
         $costs += New-ClaudeFlowCost -Item "Inference $($d.name)" -Source ([string]$book.source) -UnknownReason $(if ($price.Status -eq 'unpriced') { $price.Detail } else { 'usage-dependent; token volume is not specified' })
-        $old = @($Record.deployments | Where-Object name -eq $d.name)
-        if ($old.Count -gt 1) { throw "Duplicate deployment '$($d.name)' in the record." }
         $entry = if ($old.Count) { $old[0] | ConvertTo-Json -Depth 20 | ConvertFrom-Json } else { [pscustomobject]@{} }
         foreach ($field in 'name','model','version','sku','capacity') { Set-ClaudeRecordProperty $entry $field $d.$field }
         $recorded += $entry

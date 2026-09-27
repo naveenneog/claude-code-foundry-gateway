@@ -50,6 +50,19 @@ retirement succeeds without another named-value write. `Test-On-PS51.ps1` reache
 complete installer's summary and stopped under `-WhatIf`.
 Detector preflight: 80 assertions on each host, adding valid-JSON/nonzero-exit failure,
 the named-value writer's own exit check and renderer drift before apply.
+Third green: 83 assertions on each host, including subscription validation before account
+discovery, record-version/new-deployment labels in the review and a subscription-bound backup
+token. The first 39 PowerShell 7 mutations were all caught at 80 assertions with the tree restored.
+The final mutation run uses a frozen test/source copy on each host.
+
+First isolated proof attempt, 2026-09-27 20:56-21:22Z: Basic v2 installed and a real standard
+Sonnet request returned 200. Haiku returned 403 with `error.type=invalid_request_error`;
+the proof runner incorrectly checked that field for `model_not_allowed` instead of
+`error.code`, so the bounded wait expired before the Change. This was a proof-runner error,
+not a gateway failure. All resources were removed: Foundry role assignment 21:13:04Z,
+`rg-p70-models` 21:15:29Z, soft-deleted API Management 21:21:59Z, and the two dedicated
+groups 21:22:06Z / 21:22:13Z. Estimated API Management cost including cleanup: USD 0.09.
+The corrected proof will rerun; no reference gateway or default tier group was written.
 
 Read-only reference drift, 2026-09-27 20:19Z: both `models-standard` and `models-premium` are
 `,,` (allow all), and `turnstile-integration` reports `governanceAuthority=Turnstile`,

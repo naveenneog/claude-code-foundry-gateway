@@ -493,6 +493,20 @@ try {
         Reset-State; $p = Plan; $p.Data.RendererStamp = 'not-the-reviewed-renderer'
         Reject { Apply $p } 'profile renderer'
     }
+    Check 'an unsafe subscription is refused before discovery even without a tenant in the record' {
+        Reset-State; $global:P70record.subscriptionId = 'bad&subscription'
+        $global:P70record.PSObject.Properties.Remove('tenantId')
+        (Reject { Plan } 'subscription|GUID') -and $global:P70calls.Count -eq 0
+    }
+    Check 'model review distinguishes an existing recorded model from a newly discovered model' {
+        Reset-State
+        $p = Plan; $text = Format-ClaudeFlowReview @($p)
+        $text -match 'record: new' -and $text -match 'record: version 1 -> 2'
+    }
+    Check 'backup token discovery is bound to the model target subscription' {
+        Reset-State; Apply (Plan)
+        @($global:P70calls | Where-Object { ($_ -join ' ') -like 'account get-access-token*' -and (Arg $_ '--subscription') -ne $global:P70sub }).Count -eq 0
+    }
 }
 finally {
     $env:CLAUDE_NONINTERACTIVE = $oldNoninteractive
