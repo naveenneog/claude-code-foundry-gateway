@@ -111,6 +111,15 @@ for each case. Dedicated runner tests cover exit codes, output, missing summarie
 All 59 cases then passed in 82.9 s on PowerShell 7 and 164.8 s on Windows PowerShell 5.1, with
 the same 71/30/24 full assertion counts. The charter budget is not increased.
 
+**Handoff state: blocked, not packet-complete.** At `81508b1`, the corrected gate attempt retried
+the shared `.gate-lock` every 60 seconds for the full permitted 60 minutes. Another run retained
+the lock, so this attempt never started the packet gate and exited 1. That lock was not removed.
+The last executed packet gate therefore remains the timeout above: 21 passed, 2 warned, 1 failed,
+2 skipped, with the Bicep build passing in 15.2 s. Targeted checks and all 59 mutations pass after
+the speedup, but there is no passing full gate to claim. The lead still needs an available gate
+window, the five council verdicts, and a decision about the positive company-domain proof that
+requires a delegated domain. No merge, push, history rewrite or roadmap completion was performed.
+
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
 
 The owner's test on 2026-09-27: `Start-ClaudeGateway.ps1` showed nothing for a long time and asked
