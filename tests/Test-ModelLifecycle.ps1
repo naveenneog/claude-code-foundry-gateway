@@ -507,6 +507,18 @@ try {
         Reset-State; Apply (Plan)
         @($global:P70calls | Where-Object { ($_ -join ' ') -like 'account get-access-token*' -and (Arg $_ '--subscription') -ne $global:P70sub }).Count -eq 0
     }
+    Check 'a fresh installer record without decisions survives the flow run journal' {
+        Reset-State
+        $global:P70record.PSObject.Properties.Remove('decisions')
+        $global:P70record.PSObject.Properties.Remove('schemaVersion')
+        $global:P70record.PSObject.Properties.Remove('__recordPath')
+        Save $global:P70recordPath $global:P70record
+        $preview = & (Join-Path $root 'Start-ClaudeGateway.ps1') -Action Change -Change models -RecordPath $global:P70recordPath -AnswersPath $answers -PlanOnly *>&1 | Out-String
+        $fp = [regex]::Match($preview, 'Fingerprint:\s+([a-f0-9]{64})').Groups[1].Value
+        & (Join-Path $root 'Start-ClaudeGateway.ps1') -Action Change -Change models -RecordPath $global:P70recordPath -AnswersPath $answers -ApprovedPlanFingerprint $fp | Out-Null
+        $r = Json $global:P70recordPath
+        @($r.models).Count -eq 4 -and @($r.history | Where-Object decision -eq models).Count -eq 1 -and 'activeRun' -notin $r.PSObject.Properties.Name
+    }
 }
 finally {
     $env:CLAUDE_NONINTERACTIVE = $oldNoninteractive

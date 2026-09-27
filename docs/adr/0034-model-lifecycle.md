@@ -76,6 +76,9 @@ The existing Turnstile governance-authority guard applies to models as it does t
 `Set-ClaudeTier.ps1`: a preview remains available, but apply refuses Turnstile-owned tiers.
 No ownership switch is implicit. A read-only reference check at 2026-09-27 20:19Z found
 Turnstile ownership and two unrestricted lists, unlike the owner's earlier inventory.
+The record comparison normalizes schema 1/2 and an absent or empty decisions object:
+the installer omits it, and the flow's own run journal introduces it. Other decision
+fields still participate in drift detection.
 
 Writes across Azure and the filesystem are not an atomic transaction. A failed write stops
 the operation and names the snapshot and the need to replan; no success is recorded.

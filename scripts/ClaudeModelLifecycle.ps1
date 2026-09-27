@@ -125,6 +125,7 @@ function Get-ClaudeModelRecordStamp {
     Set-ClaudeRecordProperty $copy 'schemaVersion' 2
     foreach ($key in '__recordPath','activeRun','history','release') { $copy.PSObject.Properties.Remove($key) }
     if ($copy.decisions) { $copy.decisions.PSObject.Properties.Remove('models') }
+    if (-not $copy.decisions -or @($copy.decisions.PSObject.Properties).Count -eq 0) { $copy.PSObject.Properties.Remove('decisions') }
     return Get-ClaudeFlowLifecycleStringHash (ConvertTo-ClaudeFlowCanonical $copy)
 }
 

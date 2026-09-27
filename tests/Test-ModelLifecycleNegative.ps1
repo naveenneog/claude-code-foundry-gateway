@@ -1,7 +1,9 @@
 # Each mutation runs the entire lifecycle suite in a private source copy, then restores its file.
 param(
     [string]$HostExecutable = (Get-Process -Id $PID).Path,
-    [string]$OutputPath
+    [string]$OutputPath,
+    [switch]$ValidateOnly,
+    [string[]]$CaseNames
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -15,7 +17,7 @@ Mutation 'native-exit-is-not-success' $life 'if ($code -ne 0)' 'if ($false)'
 Mutation 'deployment-json-array' $life '($Array -and -not $text.TrimStart().StartsWith(''[''))' '$false'
 Mutation 'safe-az-names' $life '$Value -isnot [string] -or $Value -notmatch ''^[A-Za-z0-9][A-Za-z0-9._-]*$''' '$false'
 Mutation 'gateway-record-mode' $life '$Record.mode -and $Record.mode -ne ''gateway''' '$false'
-Mutation 'subscription-is-an-id' $life '-not (Test-ClaudeFlowSubscriptionId $target.SubscriptionId)' '$false'
+Mutation 'subscription-is-an-id' $life '-not (Test-ClaudeFlowSubscriptionId $target.SubscriptionId)' '$false' 2
 Mutation 'backend-is-the-selected-account' $life '-not $expected -or ([string]$api.serviceUrl).TrimEnd(''/'') -ne $expected' '$false'
 Mutation 'duplicate-deployment-refusal' $life '$seen.ContainsKey($d.name)' '$false'
 Mutation 'missing-list-refusal' $life '-not $named.ContainsKey($id)' '$false'
@@ -53,6 +55,20 @@ Mutation 'wrong-fingerprint-cannot-apply' 'scripts\Sync-ClaudeModels.ps1' '-not 
 Mutation 'subscription-before-account-discovery' $life '$target.SubscriptionId -and -not (Test-ClaudeFlowSubscriptionId $target.SubscriptionId)' '$false'
 Mutation 'record-drift-shown-in-review' $life '; record: $recordState; tiers' '; tiers'
 Mutation 'snapshot-token-uses-target-tenant' 'scripts\Backup-ClaudeGateway.ps1' '--query accessToken -o tsv @scope' '--query accessToken -o tsv'
+Mutation 'fresh-installer-record-normalization' $life 'if (-not $copy.decisions -or @($copy.decisions.PSObject.Properties).Count -eq 0) { $copy.PSObject.Properties.Remove(''decisions'') }' '$null = $copy.decisions'
+
+if ($CaseNames) {
+    foreach ($name in $CaseNames) { if ($name -notin @($cases.Name)) { throw "Unknown requested mutation '$name'." } }
+    $selected = @($cases | Where-Object { $_.Name -in $CaseNames })
+    $cases.Clear()
+    foreach ($case in $selected) { $cases.Add($case) }
+}
+foreach ($case in $cases) {
+    $text = [IO.File]::ReadAllText((Join-Path $root $case.File)).Replace("`r`n","`n")
+    $hits = [regex]::Matches($text, [regex]::Escape($case.Before)).Count
+    if ($hits -ne $case.Occurrences) { throw "Mutation '$($case.Name)' matched $hits sites, expected $($case.Occurrences)." }
+}
+if ($ValidateOnly) { Write-Host "All $($cases.Count) mutation sites match the current source."; return }
 
 $scratch = Join-Path ([IO.Path]::GetTempPath()) ('p70-mutations-' + [guid]::NewGuid().ToString('N'))
 $shadow = Join-Path $scratch 'source'

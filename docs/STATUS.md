@@ -63,6 +63,14 @@ not a gateway failure. All resources were removed: Foundry role assignment 21:13
 `rg-p70-models` 21:15:29Z, soft-deleted API Management 21:21:59Z, and the two dedicated
 groups 21:22:06Z / 21:22:13Z. Estimated API Management cost including cleanup: USD 0.09.
 The corrected proof will rerun; no reference gateway or default tier group was written.
+Second isolated attempt: the installer completed in 330.6 s, Sonnet returned standard-tier
+200, and Haiku returned `403 error.code=model_not_allowed`. The Change took its snapshot
+but refused before named-value writes because a fresh installer record omits `decisions`;
+the flow journal introduced an empty decisions object after the model decision was excluded
+from the comparison. Reproduced offline on both hosts (84 assertions, one failure), then
+fixed by normalizing absent/empty decisions without ignoring other decision changes.
+Removing the fix fails exactly that test; all 84 assertions pass before and after the
+mutation on PowerShell 7 and 5.1. Cleanup continues before the final live retry.
 
 Read-only reference drift, 2026-09-27 20:19Z: both `models-standard` and `models-premium` are
 `,,` (allow all), and `turnstile-integration` reports `governanceAuthority=Turnstile`,
