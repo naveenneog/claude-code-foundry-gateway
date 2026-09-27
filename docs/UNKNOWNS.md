@@ -44,7 +44,7 @@ fails the release stage while any remain. Detail for each one follows below.
 
 ## Detail
 
-### U30 -- The company address -- CLOSED 2026-09-28
+### U30 — The company address — CLOSED 2026-09-28
 
 **Answer.** Basic v2, Standard v2 and Premium v2 support custom gateway domains, using either an
 uploaded PFX or a certificate held in Key Vault. The [v2 overview][u30-v2] explicitly lists

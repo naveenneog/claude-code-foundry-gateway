@@ -214,8 +214,77 @@ cost and caller impact before applying.
 | `sku` | `Tier.ps1` | API Management tier; Basic v2 and Standard v2 change in place | [Tier](UPDATE-AND-CHANGE.md#2-change-the-api-management-tier) |
 | `entitlementStore` | `Entitlement.ps1` | Named values to the Cosmos projection and back, after a clean comparison | [Entitlement](UPDATE-AND-CHANGE.md#3-move-entitlement-between-named-values-and-the-projection) |
 | `network` | `Network.ps1` | Enterprise network edge, through its own fingerprinted review | [Network](UPDATE-AND-CHANGE.md#4-change-the-enterprise-network-edge) |
+| `address` | `Address.ps1` | Company hostname, supplied certificate, DNS and verified developer URL | [Company address](SETUP.md#company-address) |
 | `desktopSignIn` | `DesktopSignIn.ps1` | Claude Desktop sign-in kind and gateway audience | [Desktop sign-in](UPDATE-AND-CHANGE.md#5-change-claude-desktop-sign-in) |
 | `deviceProfiles` | `DeviceProfiles.ps1` | Per-tier MDM payloads | [MDM](MDM.md) |
+
+### Change the company address
+
+```powershell
+.\Start-ClaudeGateway.ps1 -Action Change -Change address
+```
+
+This Change-only step asks for the hostname, `KeyVault` or `Pfx` certificate,
+and `AzureDns` or `External` hosting. It reads only the selected gateway,
+certificate and DNS zone/record, then produces the shared address script's plan,
+component costs and fingerprint. Basic v2 and Standard v2 require an explicit
+old hostname when replacing their single custom gateway binding.
+
+An answers file can supply these fields without a console:
+
+```json
+{
+  "address.hostname": "claude.contoso.com",
+  "address.certificateSource": "KeyVault",
+  "address.keyVaultCertificateId": "https://kv-contoso.vault.azure.net/certificates/company",
+  "address.dnsMode": "AzureDns",
+  "address.dnsZoneResourceId": "/subscriptions/<sub>/resourceGroups/<dns-rg>/providers/Microsoft.Network/dnsZones/contoso.com",
+  "address.replaceHostname": ""
+}
+```
+
+```powershell
+.\Start-ClaudeGateway.ps1 -Action Change -Change address `
+  -AnswersPath .\address-answers.json -PlanOnly
+.\Start-ClaudeGateway.ps1 -Action Change -Change address `
+  -AnswersPath .\address-answers.json -ApprovedPlanFingerprint <fingerprint>
+```
+
+With PFX, `address.pfxPath` names the file and the transient
+`-AddressCertificatePassword` parameter takes a `SecureString` on both plan and
+apply. Passwords and certificate bytes are refused in answers. The fingerprint
+binds the PFX file hash or Key Vault reference and certificate metadata, not
+the password. A changed live hostname collection, DNS record, certificate or
+tier requires a new review.
+
+DNS creation and resolution precede the APIM hostname PATCH. The step preserves
+other hostname configurations and service properties, proves the company
+hostname with normal TLS trust and an exact certificate pin, then publishes
+`gatewayUrl` and updates the generated onboarding artifacts. A failure does not
+record a successful address change. The already-configured binding can be
+reused on a subsequent review after a DNS or TLS problem is resolved.
+
+For unattended Setup, the `foundation.addressMode`,
+`foundation.addressHostname`, `foundation.addressCertificateSource`,
+`foundation.addressKeyVaultCertificateId`, `foundation.addressPfxPath` and
+`foundation.addressDnsZoneResourceId` inputs reach the installer. Its nested
+address plan and costs are fingerprinted, and a changed nested plan is refused
+before installer writes. Attended Setup continues to use the installer's own
+choices and summary confirmation.
+
+The [live isolated run](SETUP.md#company-address) demonstrated authoritative DNS
+and Azure's public-domain ownership refusal, not a successful custom-hostname
+binding. The Basic v2 `.test` name could not pass that public validation. The
+positive company TLS proof remains blocked until an administrator supplies a
+delegated domain; the default gateway transport was also checked read-only on
+PowerShell 7 and 5.1, with HTTP 401 and the expected trusted certificate.
+
+![Live company-address review with explicit component costs and supplied-certificate constraints; public hostname ownership remains a prerequisite.](guide/40-company-address-review.png)
+
+The standalone equivalent is `scripts\Set-ClaudeGatewayAddress.ps1`, with
+`-PlanOnly` followed by `-ApprovedPlanFingerprint`. Design:
+[ADR-0033](adr/0033-company-address.md); prerequisites and prices:
+[Setup](SETUP.md#company-address).
 
 ## Diagnose
 
@@ -245,6 +314,11 @@ field. A read that fails for another reason (no sign-in, no network, no Azure
 CLI) is reported with its reason and is not drift; Status then says drift was not
 checked.
 
+A company URL is not drift when its exact HTTPS hostname is a live `Proxy`
+binding. A removed binding, a portal-only hostname, a non-HTTPS URL or a URL
+with credentials, a query, a fragment or a different port is not accepted as
+that company gateway address.
+
 ## Generated guide
 
 ```powershell
@@ -262,6 +336,7 @@ is git-ignored.
 | Guided step | Manual script or guide |
 |---|---|
 | Foundation | `Install-ClaudeGateway.ps1`, [Setup](SETUP.md) |
+| Company address | `scripts\Set-ClaudeGatewayAddress.ps1`, [Company address](SETUP.md#company-address) |
 | Device profiles | `scripts\New-ClaudeCodePolicy.ps1`, [MDM](MDM.md) |
 | Verify | `scripts\Test-ClaudeHealth.ps1`, [Governance checks](GOVERNANCE-CHECKS.md) |
 | Guide | [Get started](GET-STARTED.md), [Operations](OPERATIONS.md), [Developer setup](../DEVELOPER.md), [FinOps](FINOPS.md) |

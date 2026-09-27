@@ -16,28 +16,90 @@ that answers only when queried at its Azure name servers does not satisfy that r
 The sequence is corrected to DNS before binding. Positive company-hostname TLS proof is blocked
 without a delegated domain; none is bought or borrowed. U30 and ADR-0033 record the limitation.
 
-- [ ] U30 is closed with dated Microsoft Learn and Azure Retail Prices API evidence for every
+- [x] U30 is closed with dated Microsoft Learn and Azure Retail Prices API evidence for every
       v2 tier, certificate source, DNS record, update wait and component price; ADR-0033 records
       the design before production code
-- [ ] One script plans without writes and applies the hostname, certificate and DNS records;
+- [x] One script plans without writes and applies the hostname, certificate and DNS records;
       existing hostname configurations and service/network properties survive the ARM update
-- [ ] Azure DNS records are created in the selected writable zone; external DNS gets exact
+- [x] Azure DNS records are created in the selected writable zone; external DNS gets exact
       records and a bounded resolution wait; every wait names its purpose, estimate and elapsed time
-- [ ] Certificate choices match the selected tier; Key Vault access uses the gateway managed
+- [x] Certificate choices match the selected tier; Key Vault access uses the gateway managed
       identity; no certificate password, private key or token enters the record, plan or logs
-- [ ] The installer asks for the address and certificate alongside its other choices, states
+- [x] The installer asks for the address and certificate alongside its other choices, states
       each component's cost before confirmation, and applies only after deployment
-- [ ] `-Action Change -Change address` has an ADR-0030 plan, cost, fingerprint, apply and verification;
+- [x] `-Action Change -Change address` has an ADR-0030 plan, cost, fingerprint, apply and verification;
       a successful HTTPS proof updates the onboarding address and developer-facing artifacts
-- [ ] Offline tests run on PowerShell 7 and Windows PowerShell 5.1; every new detector is
+- [x] Offline tests run on PowerShell 7 and Windows PowerShell 5.1; every new detector is
       negative-tested with the complete assertion count; each green is committed
 - [ ] An isolated Basic v2 gateway proves an authoritative Azure DNS CNAME and an HTTPS request
       with the company SNI/Host and certificate, with spend below USD 5; all created resources,
       assignments and groups are deleted and the soft-deleted gateway is purged
-- [ ] Redacted, inspected live terminal images numbered 40 onward are embedded in the updated
+- [x] Redacted, inspected live terminal images numbered 40 onward are embedded in the updated
       setup/flow documentation; architecture sources, images and manifest remain current
 - [ ] The locked packet gate exits 0; the branch and evidence are reported to the lead without
       merging, pushing or ticking the roadmap entry
+
+Implementation: `b10e945` (certificate/TLS), `99ade80` (shared script and installer/Change wiring),
+`e607df8` (unattended Foundation plan and price binding), `c6b5749` (DNS-before-binding and
+handover consistency), `643ae41` (negative detectors). Plan `c433f89`; contract `10c7a41`.
+
+| Evidence | PowerShell 7 | Windows PowerShell 5.1 |
+|---|---|---|
+| `Test-CompanyAddress.ps1` | 71/71 assertions | 71/71 assertions |
+| `Test-CompanyCertificate.ps1` | 30/30 assertions | 30/30 assertions |
+| `Test-CompanyFlow.ps1` | 24/24 assertions | 24/24 assertions |
+| `Test-CompanyAddressNegative.ps1` | 59/59 mutations caught | 59/59 mutations caught |
+| Actual `Invoke-ClaudeAddressHttps`, read-only against the reference Azure hostname without a token | HTTP 401; trusted chain and exact pin; 0.91 s | HTTP 401; trusted chain and exact pin; 1.24 s |
+
+The first RED runs completed 61 address and 30 certificate assertions on both hosts, all failing
+for the absent implementation or empty-region price restriction. Unattended Foundation then
+failed three of 22 integration assertions before its wiring was added. The live DNS sequence
+failed its new offline ownership assertion before being corrected. Mutations run each complete
+suite in a private copy and restore the source after every case. One mutation initially survived:
+removing the discovery HTTPS-scheme check was concealed by the port check on ordinary HTTP.
+An HTTP URL explicitly using port 443 now isolates that detector. The full assertion counts
+above run under each mutation; no test is skipped.
+
+Related checks passed: `Test-NetworkTransport`, `Test-FlowContract`, `Test-AdminSurface`,
+`Test-FlowStart` (114 assertions, including its own PowerShell 5.1 probes), `Test-On-PS51` (real
+installer `-WhatIf` reaches the summary), `Test-DocReferences` and `Test-Architecture` (36
+assertions). The architecture generator rendered 15 specs and 17 PNG outputs with current
+source hashes. The new company-address diagram and images 40-42 were inspected after rendering;
+the screenshots' hashes and redacted command provenance are in
+`docs/guide/company-address-captures.json`.
+
+**Live resources and cleanup, all times UTC on 2026-09-27.** No resource outside the owned proof
+group was written. The existing Foundry account was only referenced by the template with
+`grantFoundryRole=false`; no Entra group or Key Vault was created.
+
+| Created | Time / scope | Deleted or purged |
+|---|---|---|
+| `rg-p69-address`, tag `purpose=p69-proof` | 20:38:41.905 | Delete requested 20:52:14.326; confirmed absent 20:55:00.080 (165.7 s) |
+| Azure DNS `p69-company-address.test` | 20:38:49.248, in the proof group | With the group |
+| Basic v2 `apim-p69-address-0927` | Template deployment finished 20:41:14.822; 148.0 s including final read | With the group; `az apim deletedservice purge` finished 20:56:31.515 (91.4 s); absence confirmed |
+| `log-p69-address-0927`, `appi-p69-address-0927`, and its Failure Anomalies smart-detector rule | Same template deployment, in the proof group | With the group |
+| Local, self-signed RSA PFX for the reserved test hostname | Supplied to APIM; never imported into a certificate store | Temporary PFX and public PEM removed after capture |
+
+The authoritative CNAME resolved after 15.1 s in the retry, and a separate
+`Resolve-DnsName -Type CNAME -Server <Azure-nameserver>` at 20:52:06.873 returned the planned
+target and TTL 300 in 0.576 s. Both PFX hostname PATCHes failed
+`CustomHostnameOwnershipCheckFailed`; the second failure followed that DNS readiness.
+`curl.exe --resolve <company-host>:443:<gateway-IP> --cacert <proof-public-certificate>` then
+failed the handshake, exit 35 (0.472 s). The isolated Azure hostname returned the policy's
+`401 A Microsoft Entra ID token is required`, TLS verification 0, in 6.770 s.
+**The positive company-hostname TLS acceptance remains blocked**, not passed, without an
+administrator-owned public domain. No ownership validation was bypassed and no domain was
+bought or borrowed.
+
+The proof group's 0.2717-hour lifetime gives an elapsed-time Basic v2 list-price estimate of
+USD 0.0558, plus one short-lived DNS zone, a handful of queries and unauthenticated telemetry;
+the USD 5 ceiling was retained. Invoice reconciliation is unavailable (**U2**). A first cleanup
+log calculation mixed local `DateTime` and UTC strings; a final UTC-offset calculation corrected
+it from USD 1.1860 to USD 0.0558. A read-only cleanup check at 21:27 UTC again found no resource
+group and no matching soft-deleted gateway.
+
+Council review and the decision about the blocked public-domain proof belong to the lead.
+The roadmap entry remains unticked.
 
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
 

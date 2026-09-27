@@ -49,6 +49,22 @@ writes the decision record after each completed step, verifies, and generates
 `onboarding/HOW-TO-USE.md`. It does not replace API Management, Foundry,
 Turnstile, AUM or the reporting jobs; it coordinates their setup and handover.
 
+## Optional company hostname
+
+![Company address control path: a priced installer or Change review creates DNS first, configures the supplied certificate and preserves APIM hostnames, then publishes the developer URL only after trusted TLS and a gateway HTTP 401.](images/architecture/company-address.png)
+
+Source: [15-company-address.json](architecture/15-company-address.json);
+[ADR-0033](adr/0033-company-address.md).
+
+The address path adds no inference proxy. Azure DNS maps the company hostname
+to the same gateway. A supplied PFX is uploaded to APIM, or the gateway's
+system-assigned identity reads the certificate's backing secret from Key Vault.
+The address script patches only the hostname collection, preserving other
+bindings and service/network properties. The decision record and generated
+handover artifacts change only after a DNS/TLS gateway proof. Public DNS
+ownership remains required; an authoritative-only `.test` zone was rejected
+on the isolated Basic v2 gateway ([U30](UNKNOWNS.md#u30--the-company-address--closed-2026-09-28)).
+
 ## Request path
 
 ![Six request hops: sign in, admit, serve, meter, attribute and observe. Four budget layers and projection admission, absence and expiry outcomes are shown, followed by the components each optional profile adds.](images/architecture/request-path.png)

@@ -29,6 +29,14 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Company address in the installer and guided flow (P69).** The company choice now plans
+  and applies public DNS, a supplied PFX or Key Vault certificate, and a preserved APIM Proxy
+  hostname, with component prices before approval. `-Change address` uses the same fingerprinted
+  plan. A trusted, pinned HTTPS gateway response precedes publication to developer settings.
+  The isolated Basic v2 proof established authoritative DNS but could not bind its undelegated
+  `.test` name: Azure requires public CNAME ownership. No free managed certificate is available
+  on v2; the positive company TLS proof remains blocked without a delegated domain
+  ([Setup](docs/SETUP.md#company-address), [ADR-0033](docs/adr/0033-company-address.md)).
 - Guided-flow FinOps modules for tool selection, USD/token budgets, monitoring workbooks
   and chargeback reports, including a scheduled USD reconciler job definition for
   deployments without the AUM service.
