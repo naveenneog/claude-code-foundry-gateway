@@ -24,7 +24,28 @@ parameter given takes 18-20 s, of which nine Azure CLI calls take nearly all; a 
 combinations on two shells takes about 36 minutes that way. The suites therefore stub the Azure
 CLI and the Retail Prices API, and the live matrix runs once, outside Test-All.
 
-- [ ] `tests/Test-FlowPermutations.ps1` runs the real orchestrator, discovery and Foundation step,
+What the suites found, each fixed test-first (commits `acf993b`, `bf78e0a`, `12821ca`):
+
+| # | Found by | Defect | Now | Held by |
+|---|---|---|---|---|
+| 1 | reading, then live `-WhatIf -Yes` | `-AuthMode` skipped the Claude Desktop sign-in section, so an external IdP choice became the helper script | the section runs whatever `-AuthMode` is | installer suite: the gateway audience in the 6 external IdP cases with `-AuthMode` |
+| 2 | reading | the summary, which is the approval, named 1 of 7 choices | it names the store and resolver access, revocation window, team budget behaviour, developers with no team, address, developer and Desktop sign-in | installer suite: each row in 16 cases on both shells |
+| 3 | installer suite | the address question showed `https://<prefix>.azure-api.net`; the gateway is `apim-<prefix>` | the gateway's hostname | installer suite: the question and the summary row |
+| 4 | installer suite | under `-Yes`, an external IdP sign-in without its app, scope or audience reached the summary (with `-AuthMode`) or stopped naming a record field | stops before the summary, naming the parameter, saying that nothing was created | installer suite: 6 refusals |
+| 5 | flow suite | one plan had two fingerprints: `ConvertTo-Json` escapes `' < > &` on 5.1 only, and `Sort-Object` compares by culture; 10 of 12 plans differed | the flow writes its canonical JSON strings itself and sorts keys ordinally | flow suite: 11 plans on both shells; `Test-FlowContract.ps1`: the canonical text of a pinned value |
+| 6 | flow suite | 24 of 29 refusals printed PowerShell's code excerpt, and one wrapped the reason across lines | a top-level run prints the reason and exits 1; an in-process call still gets the exception ([U36](UNKNOWNS.md#u36--a-top-level-run-and-an-in-process-call--closed-2026-09-28)) | flow suite: 26 refusals; `Test-GuidedFlow.ps1`: the in-process refusals |
+| 7 | flow suite | every apply ran `git`: without it, or outside a repository on 5.1, the apply stopped after writing `activeRun` | the release info records no commit | flow suite: the applies without an Azure CLI (PATH without git) and 3 applies on 5.1 in a copy that is not a repository |
+| 8 | flow suite | the merge recorded Desktop sign-in as `external-idp`, which `-DesktopSignInKind` refuses, and dropped the app, issuer, scopes, audience, token type, tier groups, budgets and request ceiling, so an unattended Change foundation failed or reset them | the merge maps them back in parameter values; the flow passes `-DesktopBearerTokenType` and `-ResolverInboundAccess`; the installer records `requestsPerMinute` | flow suite: Setup then Change foundation give the installer the same 15 values; 3 recorded Desktop shapes; the installer's record holds the 17 fields the merge reads |
+| 9 | flow suite | unattended, an external IdP sign-in without its app was approved and failed in the installer | the plan refuses, naming `foundation.desktopEntraClientId` | flow suite: 4 cases |
+| 10 | flow suite | Guide went on silently over drift, and with nothing recorded wrote placeholders and then failed its verification | Guide names the drift; with nothing recorded it refuses before planning | flow suite: 4 and 3 cases |
+| 11 | flow suite | Status with no record said "none detected" | it says that nothing is recorded | flow suite: Status in each record state |
+
+Found and not fixed here: an installer re-run over an existing gateway offers the installer's
+defaults for the budgets, request ceiling, groups and Choices, since only
+`entitlement-cache-seconds` is read back, so pressing Enter through an attended
+`-Change foundation` resets them. Filed as P73 in the [ROADMAP](ROADMAP.md).
+
+- [x] `tests/Test-FlowPermutations.ps1` runs the real orchestrator, discovery and Foundation step,
       with a stub installer and a stub Azure CLI, over action (Setup, Change foundation, Guide,
       Status) × record state (none, recorded and matching, another gateway URL, missing, signed
       out, no Azure CLI) × mode (attended, `-PlanOnly`, unattended apply). In each combination:
@@ -32,24 +53,31 @@ CLI and the Retail Prices API, and the live matrix runs once, outside Test-All.
       passed exactly when unattended; drift (another URL, missing) stops Setup and Change before
       planning, and Guide goes on; a read that failed is reported as not read, never as drift;
       Status and `-PlanOnly` write nothing; a refusal prints its reason and no PowerShell code
-      excerpt ([U36](UNKNOWNS.md#u36--a-top-level-run-and-an-in-process-call--closed-2026-09-28))
-- [ ] In process, Foundation's installer arguments over entitlement store × Desktop sign-in ×
+      excerpt ([U36](UNKNOWNS.md#u36--a-top-level-run-and-an-in-process-call--closed-2026-09-28)).
+      76 runs, 11 of them on 5.1, then 8 store and 4 round-trip runs; 34 checks; about 100 s
+- [x] In process, Foundation's installer arguments over entitlement store × Desktop sign-in ×
       developer sign-in × tier × attended or unattended × new or recorded gateway:
       `-DeployProjection` exactly when unattended with the projection store; with
       `-ExistingApimName`, the recorded region, tier, name and publisher are never passed; an
       external-IdP Desktop sign-in without a client id is refused by the plan, before approval;
-      distinct inputs give distinct fingerprints
-- [ ] `tests/Test-InstallerPermutations.ps1` runs the real installer under `-WhatIf -Yes`, with
+      distinct inputs give distinct fingerprints. 432 plans; every argument is checked against the
+      installer's parameter block and its ValidateSets, read from its AST
+- [x] `tests/Test-InstallerPermutations.ps1` runs the real installer under `-WhatIf -Yes`, with
       the Azure CLI and the Retail Prices API stubbed in process, over tier × entitlement store ×
       developer sign-in × Desktop sign-in, with and without `-AuthMode`, on PowerShell 7 and
       Windows PowerShell 5.1: the summary names each choice, and each refusal comes before the
-      summary with its reason
-- [ ] Each failure found is fixed test-first, starting with the two above
+      summary with its reason. 16 cases cover every pair of levels (62 pairs, checked by the
+      suite), plus 6 refusals and a reused gateway; 44 checks; 46 installer runs in 8-12 s
+- [x] Each failure found is fixed test-first, starting with the two above
 - [ ] The installer matrix runs once live and read-only against the reference subscription on
       both shells; the result and timings are recorded here
-- [ ] The address dimension: P69 owns the installer's address section and adds its parameter.
-      The harness adds the address when P69 merges, or the follow-up is recorded in ROADMAP
-- [ ] GUIDED-FLOW.md names the suites and what they hold; CHANGELOG
+- [x] The address dimension: P69 owns the installer's address section and adds its parameter.
+      The harness adds the address when P69 merges, or the follow-up is recorded in ROADMAP.
+      Recorded in P73; the summary row and the address question's hostname are tested now
+- [x] GUIDED-FLOW.md names the suites and what they hold
+      ([What the tests hold](GUIDED-FLOW.md#what-the-tests-hold)); SETUP.md describes the summary
+      and the `-Yes` Desktop parameters, with a live image
+      ([70](guide/70-installer-summary-every-choice.png)); CHANGELOG
 - [ ] Council, five seats; the packet gate exits 0
 
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27

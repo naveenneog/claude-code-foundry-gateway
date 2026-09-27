@@ -209,6 +209,10 @@ try {
     $first = [System.Collections.Generic.List[object]]::new()
     foreach ($a in $actions) { foreach ($r in $records) { foreach ($m in 'planonly', 'attended') { $first.Add((New-Run "$a-$r-$m" $a $r $m)) } } }
     foreach ($r in $records) { $first.Add((New-Run "Status-$r" 'Status' $r 'status')) }
+    # A record without a gateway, as a cancelled attended Setup leaves it (activeRun, no gateway).
+    $noGateway = Join-Path $scratch 'record-no-gateway.json'
+    [ordered]@{ schemaVersion = 2; decisions = [ordered]@{ foundation = [ordered]@{ sku = 'BasicV2' } }; activeRun = [ordered]@{ id = 'run1'; action = 'Setup'; phase = 'lead' }; history = @() } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $noGateway -Encoding UTF8
+    $first.Add((New-Run 'Status-nogateway' 'Status' 'nogateway' 'status' -RecordFrom $noGateway))
     # The same plans on Windows PowerShell 5.1: their fingerprints must match those from PowerShell 7.
     if ($has51) { foreach ($a in $actions) { foreach ($r in 'none', 'match', 'signedout', 'noaz') { if ($a -eq 'Guide' -and $r -eq 'none') { continue }; $first.Add((New-Run "$a-$r-planonly-51" $a $r 'planonly' '5.1')) } } }
     $clock = [Diagnostics.Stopwatch]::StartNew()
@@ -236,7 +240,7 @@ try {
         if ($r.Action -eq 'Status') {
             Test-Case 'Status writes nothing' $res ($res.After -eq $r.Before) ''
             Test-Case 'Status ends without an error' $res ($res.ExitCode -eq 0) ($res.All -split "`n" | Select-Object -Last 2)
-            $want = switch ($r.Record) { 'none' { 'nothing is recorded' } 'match' { 'none detected' } { $_ -in 'drift', 'missing' } { 'DRIFT' } default { 'not checked' } }
+            $want = switch ($r.Record) { 'none' { 'No decision record at' } 'nogateway' { 'no gateway is recorded, so nothing is recorded to compare' } 'match' { 'none detected' } { $_ -in 'drift', 'missing' } { 'DRIFT' } default { 'not checked' } }
             Test-Case 'Status reports the comparison for each record state' $res ($res.Text -match $want) "want '$want'"
             continue
         }
@@ -374,14 +378,17 @@ try {
                 try { $null = Get-ClaudeFlowStepPlan -Record $record -Discovery ([pscustomobject]@{ action = $(if ($recorded) { 'Change' } else { 'Setup' }); attended = $false; gateway = $null }) } catch { $err = $_.Exception.Message }
                 $missing.Add([pscustomobject]@{ Desktop = $desktop; Recorded = $recorded; Error = $err })
             } }
-            # The record each Desktop sign-in leaves, in the real installer's shape, merged into the decision.
+            # The record each Desktop sign-in leaves, in the real installer's shape, merged into a decision
+            # that holds none of it, as after an attended Setup where the installer asked everything.
+            $typed = [ordered]@{ standardGroup = 'eng-claude-standard'; premiumGroup = 'eng-claude-premium'; resolverInboundAccess = 'public'; requestsPerMinute = 90; tiers = [pscustomobject]@{ standard = [pscustomobject]@{ tokensPerMinute = 30000; tokensPerDay = 600000 }; premium = [pscustomobject]@{ tokensPerMinute = 90000; tokensPerDay = 6000000 } }; organisation = [pscustomobject]@{ tokensPerMonth = 200000000; shared = $true; softCap = $true } }
             $shapes = @(
                 [pscustomobject]@{ Kind = 'helper-script'; Config = [pscustomobject]@{ kind = 'helper-script' } }
                 [pscustomobject]@{ Kind = 'external-idp-browser'; Config = [pscustomobject]@{ kind = 'external-idp'; flow = 'browser'; bearerTokenType = 'id_token'; clientId = '11111111-2222-4333-8444-555555555555'; issuer = 'https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0' } }
                 [pscustomobject]@{ Kind = 'external-idp-broker'; Config = [pscustomobject]@{ kind = 'external-idp'; flow = 'broker'; bearerTokenType = 'access_token'; clientId = '11111111-2222-4333-8444-555555555555'; issuer = 'https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0'; scopes = 'api://p72-gateway/user_impersonation'; audience = 'api://p72-gateway' } }
             )
             $merged = foreach ($s in $shapes) {
-                $d = Merge-ClaudeFlowFoundationDecision -Decision ([pscustomobject]@{ sku = 'BasicV2' }) -Config ([pscustomobject]@{ sku = 'BasicV2'; desktopSignIn = $s.Config })
+                $config = [pscustomobject]([ordered]@{ sku = 'BasicV2'; entitlementStore = 'projection'; desktopSignIn = $s.Config } + $typed)
+                $d = Merge-ClaudeFlowFoundationDecision -Decision ([pscustomobject]@{ sku = 'BasicV2' }) -Config $config
                 $record = [pscustomobject]@{ schemaVersion = 2; apimName = 'apim-p72'; resourceGroup = 'rg-p72'; decisions = [pscustomobject]@{ foundation = $d }; history = @() }
                 $merge = $null; $err = ''
                 try { $merge = Get-ClaudeFlowFoundationInstallerArgs -Decision $d -Attended $false -Record $record -UpdateRecorded $true } catch { $err = $_.Exception.Message }
@@ -431,6 +438,9 @@ try {
         if ($ok -and $m.Kind -ne 'helper-script') { $ok = [string]$ia['DesktopEntraClientId'] -eq $m.Config.clientId -and [string]$ia['DesktopBearerTokenType'] -eq $m.Config.bearerTokenType -and [string]$ia['DesktopEntraIssuer'] -eq $m.Config.issuer }
         if ($ok -and $m.Config.PSObject.Properties.Name -contains 'scopes') { $ok = [string]$ia['DesktopEntraScopes'] -eq $m.Config.scopes -and [string]$ia['DesktopEntraAudience'] -eq $m.Config.audience }
         Test-Case 'the installer''s Desktop sign-in record, merged into the decision, gives the installer back that sign-in' $res $ok $(if ($m.Error) { $m.Error } elseif ($ia) { "kind=$($ia['DesktopSignInKind']) client=$($ia['DesktopEntraClientId']) bearer=$($ia['DesktopBearerTokenType'])" } else { 'no arguments' })
+        $typedWant = [ordered]@{ StandardGroup = 'eng-claude-standard'; PremiumGroup = 'eng-claude-premium'; ResolverInboundAccess = 'public'; EntitlementStore = 'projection'; CallsPerMinute = '90'; TpmStandard = '30000'; QuotaStandard = '600000'; TpmPremium = '90000'; QuotaPremium = '6000000'; QuotaOrg = '200000000' }
+        $typedMiss = @(foreach ($k in $typedWant.Keys) { $got = if ($ia -and $ia.Contains($k)) { [string]$ia[$k] } else { '(not passed)' }; if ($got -ne $typedWant[$k]) { "$k=$got" } })
+        Test-Case 'the budgets, groups, request ceiling and resolver access the installer recorded come back through the merge' $res (-not $typedMiss.Count) ($typedMiss -join ', ')
     }
 
     # The merge reads what the installer writes: every field it maps back is a key of the record the

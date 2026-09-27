@@ -3,7 +3,7 @@
 # PowerShell 5.1. Offline: tests/InstallerPermutationDriver.ps1 stubs the Azure CLI, the Retail
 # Prices API and the reachability probe in process, so a case takes under a second instead of the
 # 18-20 s measured live. -Live runs the same cases read-only against the signed-in subscription.
-param([switch]$Live, [string]$FoundryAccount, [string]$FoundryResourceGroup, [int]$Parallel = 4)
+param([switch]$Live, [string]$FoundryAccount, [string]$FoundryResourceGroup, [string]$ReuseGateway, [string]$ReuseResourceGroup, [int]$Parallel = 4)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $fail = 0
@@ -22,12 +22,11 @@ $placement = [ordered]@{ FoundryAccount = 'ai-p72'; FoundryResourceGroup = 'rg-a
 $reuse = [ordered]@{ FoundryAccount = 'ai-p72'; FoundryResourceGroup = 'rg-ai-p72'; ResourceGroup = 'rg-p72live'; ExistingApimName = 'apim-p72live' }
 $reusedName = 'apim-p72live'; $reusedSku = 'StandardV2'
 if ($Live) {
-    if (-not $FoundryAccount -or -not $FoundryResourceGroup) { throw '-Live needs -FoundryAccount and -FoundryResourceGroup: a Foundry account with a Claude deployment in the signed-in subscription.' }
-    $gateway = az apim list --query '[0].{name:name, rg:resourceGroup, sku:sku.name}' -o json | ConvertFrom-Json
+    if (-not $FoundryAccount -or -not $FoundryResourceGroup -or -not $ReuseGateway -or -not $ReuseResourceGroup) { throw '-Live needs -FoundryAccount and -FoundryResourceGroup (a Foundry account with a Claude deployment) and -ReuseGateway and -ReuseResourceGroup (a v2 gateway to read for the reuse case), in the signed-in subscription.' }
     $placement.FoundryAccount = $FoundryAccount; $placement.FoundryResourceGroup = $FoundryResourceGroup; $placement.ResourceGroup = 'rg-p72-whatif'
     $placement.Location = [string](az cognitiveservices account show -g $FoundryResourceGroup -n $FoundryAccount --query location -o tsv)
-    $reuse = [ordered]@{ FoundryAccount = $FoundryAccount; FoundryResourceGroup = $FoundryResourceGroup; ResourceGroup = [string]$gateway.rg; ExistingApimName = [string]$gateway.name }
-    $reusedName = [string]$gateway.name; $reusedSku = [string]$gateway.sku
+    $reuse = [ordered]@{ FoundryAccount = $FoundryAccount; FoundryResourceGroup = $FoundryResourceGroup; ResourceGroup = $ReuseResourceGroup; ExistingApimName = $ReuseGateway }
+    $reusedName = $ReuseGateway; $reusedSku = [string](az apim show -g $ReuseResourceGroup -n $ReuseGateway --query sku.name -o tsv)
 }
 
 # The pairs design: every developer sign-in with every Desktop sign-in (the defect this packet
