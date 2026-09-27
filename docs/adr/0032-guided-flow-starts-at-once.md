@@ -28,6 +28,12 @@ accounts in turn (2.3-4.1 s each, about 39 s), measured one call at a time on 20
 every step module takes about 1 s. No step reads those lists: the only discovery field a step uses
 is `comparison`, which compares the record with the one gateway the record names.
 
+Reading `Foundation.ps1` for this decision found that its plan says `Check` when the record
+names a gateway, while its apply runs the installer anyway. Under `-Yes` without a name prefix
+the installer's reuse menu defaults to creating a new gateway, so an unattended second Setup, or
+any Guide apply, would create a second API Management instance. This was found by reading the
+code, not by a run.
+
 ADR-0030 has the orchestrator ask every question before anything is written and each step apply
 "without prompting". The installer's questions depend on answers the orchestrator does not have
 (the subscription decides the Foundry accounts, the Foundry account decides the region and the
@@ -59,27 +65,52 @@ Option 3 and option C.
 **Discovery.** `Get-ClaudeFlowDiscovery` makes no listing call. It reads the gateway the record
 names (`az apim show`), only when the record names one, and returns the same `comparison` as
 before. Every Azure call the orchestrator makes before its first question prints one line naming
-what it reads with an estimate, and one line with the time it took. An empty record makes no Azure
-call before the first question.
+what it reads with an estimate, and one line with the time it took. With an empty record the flow
+makes no Azure call before its first question or, in an attended run, before the installer starts,
+and its first line of output says so. Discovery also returns Region: the gateway's region from
+that read, or the record's location when nothing was read.
 
-**Foundation in a console.** `Invoke-ClaudeFlowStep` for `Foundation` runs `Install-ClaudeGateway.ps1`
-without `-Yes`, passing only the values the record already holds, so the installer asks the rest
-with its own prompts and defaults. The flow asks no foundation question itself in a console; its
-review names the installer's questions instead. The installer's summary and confirmation remain the
-approval for the resources it creates. **Without a console** the flow passes the record's values
-with `-Yes`, as before, and adds `-DeployProjection` when the entitlement store is the Cosmos
-projection, so the projection is deployed rather than refused.
+**Foundation in a console.** An attended run is one in a console without `-PlanOnly`,
+`-ApprovedPlanFingerprint` or `-WhatIf`. When the record names no gateway, or the action is
+`-Change foundation`, an attended run has two phases:
 
-**Prices at the choice.** The installer's region prompt lists the Foundry account's region and the
-other regions in its geography, each with the monthly list price of the API Management v2 tiers
-there; its tier prompt lists each tier's monthly list price in the chosen region. Prices come from
-the Azure Retail Prices API through `scripts/AzureRetailPrice.ps1`, at 730 hours a month, and are
-named as list prices with the time they were read. A price the API does not publish is shown as
-not published, never as zero. The agreement's own price sheet is named as the authority: reading
-it takes a billing role, not a subscription role (**U31**).
+1. The flow prints the Foundation review, which names the installer's questions, and runs
+   `Install-ClaudeGateway.ps1` without `-Yes`, passing only the values the record's foundation
+   decision holds. The installer asks the rest with its own prompts and defaults, and its summary
+   and confirmation are the approval for the resources it creates; the flow asks for no
+   fingerprint in this phase. An installer that returns without writing its record (cancelled
+   at the summary) stops the flow before any other step.
+2. The flow reads the new gateway (one `az apim show`), then asks the remaining steps' questions
+   (FinOps first, priced in the gateway's region), prints their review and asks for the typed
+   fingerprint, as ADR-0030 describes.
 
-**After the installer.** In a console the installer ends by offering the FinOps tool setup
-(`scripts/Select-ClaudeFinOpsTooling.ps1`); its next steps are numbered in order.
+The flow asks no foundation question itself in an attended run. In every run, when the record
+already names a gateway, Setup and Guide check that gateway instead of running the installer
+again, as the Foundation plan already said; the review names `-Action Change -Change foundation`,
+which runs the installer. **Without a console**, and
+with `-PlanOnly`, `-ApprovedPlanFingerprint` or `-WhatIf`, the flow plans every step in one
+review as before and passes the record's values with `-Yes`, adding `-DeployProjection` when the
+entitlement store is the Cosmos projection, so the projection is deployed rather than refused.
+
+The orchestrator adds `action` and `attended` to the discovery object it passes to each step,
+and the FinOps step prices its choices in discovery's `Region`. The installer
+writes the choices the flow records (`sku`, `location`, `foundryAccount`,
+`foundryResourceGroup`) into `onboarding/claude-gateway.json`. `CLAUDE_INTERACTIVE=1` makes
+`Test-ClaudeInteractive` treat a process whose input is redirected as a console, so a test can
+drive an attended run through standard input.
+
+**Prices at the choice.** The installer's region prompt lists the Foundry account's region and
+the other regions in its geography (from `az account list-locations`), each with the monthly
+list price of the three API Management v2 tiers there, read in one Azure Retail Prices API call
+for the three unit meters in every region; its tier prompt lists each tier's monthly list price
+in the chosen region. Prices are per unit at 730 hours a month through
+`scripts/AzureRetailPrice.ps1`, named as list prices with the time they were read. A price the
+API does not publish is shown as not published, never as zero. The agreement's own price sheet
+is named as the authority: reading it takes a billing role, not a subscription role (**U31**).
+
+**After the installer.** Run on its own in a console, the installer ends by offering the FinOps
+tool setup (`scripts/Select-ClaudeFinOpsTooling.ps1`); the flow passes `-SkipFinOpsOffer`
+because its FinOps step follows. The installer's next steps are numbered in order.
 
 ## Consequences
 
@@ -87,8 +118,10 @@ it takes a billing role, not a subscription role (**U31**).
   waiting for and about how long.
 + The installer's decisions are the administrator's again, and each one that changes cost shows the
   cost where it is chosen.
-- In a console the flow's review cannot state the region, tier or monthly total before the
-  installer asks; it names the questions to come, and the installer's summary states them.
+- In an attended run the Foundation review cannot state the region, tier or monthly total before
+  the installer asks; it names the questions to come, and the installer's summary states them.
+- An attended run asks for the fingerprint only for the steps after the installer, because their
+  plans depend on what the installer created.
 - Status and Change see drift only in the recorded gateway, which is the only drift they acted on.
 
 ## How we'd know this was wrong

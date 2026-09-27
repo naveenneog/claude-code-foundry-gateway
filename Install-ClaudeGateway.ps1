@@ -85,6 +85,10 @@ param(
 
     [switch]$ChooseFinOps,
 
+    # The guided flow passes this: its FinOps step follows the installer, so the installer
+    # neither offers the FinOps tool nor lists it as a next step (ADR-0032).
+    [switch]$SkipFinOpsOffer,
+
     # Accept every default without prompting.
     [switch]$Yes
 )
@@ -170,6 +174,66 @@ function Read-YesNo {
     return $a -match '^y'
 }
 
+# The region, priced (ADR-0032): the Foundry account's region and the other regions in its
+# geography, each with the monthly list price of the three v2 tiers, from one Retail Prices API
+# call. Returns the ARM region name.
+function Read-GatewayRegion {
+    param([string]$Default)
+    if ($Yes) { return $Default }
+    Write-Note 'Reading the regions this subscription can use and the API Management v2 list prices there (about 6 s)...'
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    $json = Invoke-AzOptional { az account list-locations -o json }
+    $locations = @()
+    # Assigned first: on Windows PowerShell 5.1, @(... | ConvertFrom-Json) holds the whole array
+    # as one element, and every region then fails the geography match.
+    if ($json) { try { $parsed = ($json | Out-String) | ConvertFrom-Json; $locations = @($parsed) } catch { $locations = @() } }
+    $script:GatewayPrices = Get-ClaudeApimV2Prices
+    Write-Note ('read in {0:N1} s' -f $watch.Elapsed.TotalSeconds)
+    $physical = @($locations | Where-Object { $_ -and $_.metadata -and $_.metadata.regionType -eq 'Physical' } | ForEach-Object { [string]$_.name })
+    $options = @()
+    if ($script:GatewayPrices.ByRegion) { $options = @(Get-ClaudeGatewayRegionOptions -FoundryRegion $Default -Locations $locations -Prices $script:GatewayPrices) }
+    if ($options.Count) {
+        Write-Host ''
+        foreach ($line in (Format-ClaudeGatewayRegionTable -Options $options -Prices $script:GatewayPrices)) { Write-Host "    $line" -ForegroundColor DarkGray }
+        Write-Host ''
+    }
+    else {
+        $why = if ($script:GatewayPrices.Unreachable) { $script:GatewayPrices.Unreachable } else { 'no region list was returned' }
+        Write-Warn2 "API Management prices could not be read ($why). The summary prices the choice if it can."
+    }
+    $answer = Read-Default -Prompt 'Region (number or name)' -Default $Default -Validate {
+        param($x)
+        if (Resolve-ClaudeGatewayRegionAnswer -Answer $x -Options $options -KnownRegions $physical) { return $true }
+        # Nothing to check against when neither list could be read.
+        if (-not $physical.Count -and -not $options.Count) { return $true }
+        Write-Warn2 "'$x' is not a region this subscription can use. Enter a number from the list or a region name such as $Default."
+        return $false
+    }
+    $resolved = Resolve-ClaudeGatewayRegionAnswer -Answer $answer -Options $options -KnownRegions $physical
+    if ($resolved) { return $resolved }
+    return (ConvertTo-ClaudeArmRegionName $answer)
+}
+
+# Each v2 tier's monthly list price in the chosen region, above the tier prompt.
+function Show-GatewayTierPrices {
+    param([string]$Region)
+    if (-not $script:GatewayPrices -or -not $script:GatewayPrices.ByRegion) { $script:GatewayPrices = Get-ClaudeApimV2Prices }
+    if (-not $script:GatewayPrices.ByRegion) { Write-Note "Tier prices could not be read: $($script:GatewayPrices.Unreachable)"; return }
+    foreach ($line in (Format-ClaudeApimTierPriceLines -Region $Region -Prices $script:GatewayPrices)) { Write-Host "      $line" -ForegroundColor DarkGray }
+}
+
+# Next steps, numbered in the order they are printed.
+function Write-NextSteps {
+    param([object[]]$Steps = @())
+    $n = 0
+    foreach ($s in @($Steps)) {
+        $n++
+        Write-Host ("   {0}. {1}" -f $n, $s.Title) -ForegroundColor $(if ($s.Warn) { 'Yellow' } else { 'White' })
+        foreach ($line in @($s.Detail)) { Write-Host $line }
+        Write-Host ''
+    }
+}
+
 # --------------------------------------------------------------- 0. sign-in
 
 . (Join-Path $root 'scripts/Show-Banner.ps1')
@@ -181,6 +245,7 @@ Write-Host ' Nothing is created until you confirm the summary.' -ForegroundColor
 . (Join-Path $root 'scripts/Test-Prerequisites.ps1')
 . (Join-Path $root 'scripts/ClaudeModelDeployment.ps1')
 . (Join-Path $root 'scripts/ClaudeChoice.ps1')
+. (Join-Path $root 'scripts/ClaudeGatewayRegion.ps1')
 if (-not (Test-ClaudePrerequisites -Mode Admin)) { return }
 
 Write-Step 'Azure sign-in'
@@ -432,7 +497,7 @@ $ResourceGroup = if ($ResourceGroup) { $ResourceGroup } else {
     Read-Default -Prompt 'Resource group' -Default $FoundryResourceGroup `
         -Help 'Created if it does not exist. Same region as Foundry keeps latency down.'
 }
-$Location = Read-Default -Prompt 'Location' -Default $Location
+$Location = Read-GatewayRegion -Default $Location
 
 # ------------------------------------------------- reuse an existing gateway
 #
@@ -611,6 +676,7 @@ else {
         Write-Host ("      {0} suggested on volume. It also brings VNet integration and zones." -f $suggested) -ForegroundColor DarkGray
     }
     Write-Host ''
+    if (-not $Yes) { Show-GatewayTierPrices -Region $Location; Write-Host '' }
 
     Read-Default -Prompt 'API Management SKU' -Default $suggested `
         -Help 'Must be a v2 tier. Classic tiers attach the policies but meter zero Anthropic tokens, so budgets never trigger.' -Validate {
@@ -1385,6 +1451,11 @@ $config = [ordered]@{
     tenantId      = $acct.tenantId
     apimName      = $apimName
     resourceGroup = $ResourceGroup
+    # What the guided flow records as the foundation decision (ADR-0032).
+    sku           = $Sku
+    location      = (ConvertTo-ClaudeArmRegionName $Location)
+    foundryAccount = $FoundryAccount
+    foundryResourceGroup = $FoundryResourceGroup
     standardGroup = $StandardGroup
     premiumGroup  = $PremiumGroup
     # How developers sign in. Decided once, here, rather than left to whoever
@@ -1428,41 +1499,51 @@ Write-Host "  Tenant    $($acct.tenantId)" -ForegroundColor Green
 Write-Host ''
 Write-Host '  Next:' -ForegroundColor White
 Write-Host ''
+$nextSteps = [System.Collections.Generic.List[object]]::new()
 if ($budgetMode -eq 'stop') {
-    Write-Host '   0. You chose stop for team budgets' -ForegroundColor Yellow
-    Write-Host '        The per-team quota is deployed and enforcing. Set a figure per team:'
-    Write-Host "        ./scripts/Set-ClaudeBusinessUnit.ps1 -Id <team> -MonthlyBudgetUsd <n> -ApimName $apimName -ResourceGroup $ResourceGroup"
-    Write-Host '        Until a team has one, nothing refuses it. The counter does not see'
-    Write-Host '        cached tokens, so it triggers later than the dollar figure suggests.'
-    Write-Host ''
+    $nextSteps.Add([pscustomobject]@{ Title = 'You chose stop for team budgets'; Warn = $true; Detail = @(
+        '        The per-team quota is deployed and enforcing. Set a figure per team:'
+        "        ./scripts/Set-ClaudeBusinessUnit.ps1 -Id <team> -MonthlyBudgetUsd <n> -ApimName $apimName -ResourceGroup $ResourceGroup"
+        '        Until a team has one, nothing refuses it. The counter does not see'
+        '        cached tokens, so it triggers later than the dollar figure suggests.'
+    ) })
 }
 if ($addressMode -eq 'custom') {
-    Write-Host '   0. You chose a company address' -ForegroundColor Yellow
-    Write-Host '        Nothing here configured it. Add the hostname and certificate to the'
-    Write-Host '        gateway, point DNS at it, then hand developers that address instead:'
-    Write-Host "        az apim update -g $ResourceGroup -n $apimName --set hostnameConfigurations=..."
-    Write-Host '        Do it before onboarding anyone, or they are configured against the'
-    Write-Host '        Azure address and have to be reconfigured later.'
-    Write-Host ''
+    $nextSteps.Add([pscustomobject]@{ Title = 'You chose a company address'; Warn = $true; Detail = @(
+        '        Nothing here configured it. Add the hostname and certificate to the'
+        '        gateway, point DNS at it, then hand developers that address instead:'
+        "        az apim update -g $ResourceGroup -n $apimName --set hostnameConfigurations=..."
+        '        Do it before onboarding anyone, or they are configured against the'
+        '        Azure address and have to be reconfigured later.'
+    ) })
 }
-Write-Host '   1. Entitle a developer'
-Write-Host "        ./scripts/Set-ClaudeDeveloper.ps1 -User dev@contoso.com -Tier standard ``"
-Write-Host "            -ApimName $apimName -ResourceGroup $ResourceGroup"
-Write-Host '      Takes an email, a UPN or an object id, adds them to the group and'
-Write-Host '      publishes in one step. The raw route needs an object id, not an email:'
-Write-Host '        $oid = az ad user show --id dev@contoso.com --query id -o tsv'
-Write-Host "        az ad group member add --group $StandardGroup --member-id `$oid"
-Write-Host "        ./scripts/Sync-ClaudeAccess.ps1 -ApimName $apimName -ResourceGroup $ResourceGroup"
-Write-Host '      Portal route: docs/ONBOARDING.md section 2'
-Write-Host ''
-Write-Host '   2. Send them the setup'
-Write-Host "        ./scripts/New-OnboardingEmail.ps1 -ConfigPath $configPath -To dev@contoso.com"
-Write-Host ''
-Write-Host '   3. Close the direct-access bypass - see docs/SETUP.md section 4.1' -ForegroundColor Yellow
-Write-Host '      Anyone holding Cognitive Services User on the Foundry account'
-Write-Host '      can skip the gateway entirely and ignore these budgets.'
-Write-Host ''
-if ($ChooseFinOps) {
+$nextSteps.Add([pscustomobject]@{ Title = 'Entitle a developer'; Warn = $false; Detail = @(
+    "        ./scripts/Set-ClaudeDeveloper.ps1 -User dev@contoso.com -Tier standard ``"
+    "            -ApimName $apimName -ResourceGroup $ResourceGroup"
+    '      Takes an email, a UPN or an object id, adds them to the group and'
+    '      publishes in one step. The raw route needs an object id, not an email:'
+    '        $oid = az ad user show --id dev@contoso.com --query id -o tsv'
+    "        az ad group member add --group $StandardGroup --member-id `$oid"
+    "        ./scripts/Sync-ClaudeAccess.ps1 -ApimName $apimName -ResourceGroup $ResourceGroup"
+    '      Portal route: docs/ONBOARDING.md section 2'
+) })
+$nextSteps.Add([pscustomobject]@{ Title = 'Send them the setup'; Warn = $false; Detail = @(
+    "        ./scripts/New-OnboardingEmail.ps1 -ConfigPath $configPath -To dev@contoso.com"
+) })
+$nextSteps.Add([pscustomobject]@{ Title = 'Close the direct-access bypass - see docs/SETUP.md section 4.1'; Warn = $true; Detail = @(
+    '      Anyone holding Cognitive Services User on the Foundry account'
+    '      can skip the gateway entirely and ignore these budgets.'
+) })
+# ADR-0032: run on its own in a console, the installer ends by offering the FinOps tool. The
+# guided flow passes -SkipFinOpsOffer because its FinOps step follows.
+$offerFinOps = -not $ChooseFinOps -and -not $SkipFinOpsOffer -and -not $Yes -and (Test-ClaudeInteractive)
+if (-not $ChooseFinOps -and -not $SkipFinOpsOffer -and -not $offerFinOps) {
+    $nextSteps.Add([pscustomobject]@{ Title = "Choose optional FinOps tooling: .\scripts\Select-ClaudeFinOpsTooling.ps1 -Region $Location"; Warn = $false; Detail = @() })
+}
+Write-NextSteps -Steps $nextSteps
+if ($ChooseFinOps -or ($offerFinOps -and (Read-YesNo "Set up a FinOps tool now? It lists each tool with its monthly price in $Location" $true))) {
     & (Join-Path $root 'scripts\Select-ClaudeFinOpsTooling.ps1') -Region $Location -SubscriptionId $SubscriptionId
 }
-else { Write-Host '   4. Choose optional FinOps tooling: .\scripts\Select-ClaudeFinOpsTooling.ps1' }
+elseif ($offerFinOps) {
+    Write-Note "Later: .\scripts\Select-ClaudeFinOpsTooling.ps1 -Region $Location"
+}

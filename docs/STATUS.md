@@ -8,24 +8,35 @@ The owner's test on 2026-09-27: `Start-ClaudeGateway.ps1` showed nothing for a l
 nothing first; Setup took the installer's decisions away (`-Yes`) and stopped on the Cosmos store;
 a region choice showed no cost; the installer did not offer the FinOps tool; its next steps were
 numbered 0, 0, 1. Measured on this workstation against the reference subscription: 66 s before
-the first line of output, all of it discovery that no step reads. Design:
+the first line of output, all of it discovery that no step reads. Reading `Foundation.ps1` also
+found that its apply runs the installer for a recorded gateway while its plan says `Check`; under
+`-Yes` the installer's reuse menu defaults to a new gateway. Design:
 [ADR-0032](adr/0032-guided-flow-starts-at-once.md); research: **U31**.
 
-- [ ] Discovery makes no listing call; with an empty record no Azure call runs before the first
-      question, and the first line of output appears within 3 s
-- [ ] With a record that names a gateway, discovery reads that one gateway, and prints what it
-      reads with an estimate before, and the time it took after
-- [ ] In a console, Setup runs the installer without `-Yes`, passing only the values the record
-      holds, and its review names the questions the installer asks next
+- [ ] Discovery makes no listing call. With an empty record it makes no Azure call, and the first
+      line of output appears within 3 s and says that nothing is read
+- [ ] With a record that names a gateway, discovery reads that one gateway, printing what it reads
+      with an estimate before and the time it took after; a gateway Azure reports missing is drift,
+      and a read that fails for another reason is reported and is not drift
+- [ ] In an attended run with no recorded gateway, Setup prints a Foundation review that names the
+      installer's questions and runs the installer without `-Yes`, passing only the record's
+      values; an installer that writes no record stops the flow; then Setup reads the new gateway
+      and asks the remaining questions, FinOps priced in the gateway's region, and asks for the
+      typed fingerprint for those steps only
+- [ ] With a recorded gateway, Setup and Guide check it and never run the installer;
+      `-Change foundation` runs it
 - [ ] Without a console, Setup passes `-Yes`, and `-DeployProjection` with the Cosmos store, so the
       installer deploys the projection instead of stopping
 - [ ] The installer's region prompt lists the Foundry account's region and the others in its
       geography with each v2 tier's monthly list price; its tier prompt lists each tier's price in
       the chosen region; a price the API does not publish reads as not published; the agreement's
       price sheet is named as the authority
-- [ ] In a console the installer ends by offering the FinOps tool; its next steps are numbered
-      1, 2, 3 and so on
-- [ ] Live: Setup against the reference subscription shows its first question within 3 s
+- [ ] The installer records `sku`, `location`, `foundryAccount` and `foundryResourceGroup`; run on
+      its own in a console it ends by offering the FinOps tool; its next steps are numbered 1, 2, 3
+      and so on
+- [ ] Live: `-Action Setup -PlanOnly` against the reference subscription prints its first line
+      within 3 s with an empty record, and reads the reference gateway in one call with a record
+      that names it
 - [ ] Council verdicts and `node .ironclad/gate.mjs --stage packet` exits 0
 
 ## P67 developer workstation fixes from the owner's test, 2026-09-27

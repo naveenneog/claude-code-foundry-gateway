@@ -2315,8 +2315,8 @@ $mutations = @(
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'two statements are fused on one line again'
        File  = 'Install-ClaudeGateway.ps1'
-       From  = "Write-Host '   1. Entitle a developer'"
-       To    = "Write-Host '   1. Entitle a developer'Write-Host ''" }
+       From  = "Write-Host '  Next:' -ForegroundColor White"
+       To    = "Write-Host '  Next:'Write-Host ''" }
 
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the installer promises 30-45 minutes again'
