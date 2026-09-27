@@ -379,7 +379,7 @@ class FeatureUI:
         except (FinOpsError, OSError, ValueError) as error:
             if backend is not None:
                 backend.close()
-            self.notify(self.redactor.text(str(error)), severity="error")
+            self.notify(self._error_text(error), severity="error")
             return
         self.engine.backend.close()
         self.engine, self.config = engine, config

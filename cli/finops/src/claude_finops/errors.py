@@ -1,9 +1,10 @@
 class FinOpsError(Exception):
     """A safe, actionable message; never include raw transport errors or tokens."""
 
-    def __init__(self, message: str, code: int = 2):
+    def __init__(self, message: str, code: int = 2, *, details: dict[str, str] | None = None):
         super().__init__(message)
         self.code = code
+        self.details = details or {}
 
 
 def http_error(status: int) -> FinOpsError:

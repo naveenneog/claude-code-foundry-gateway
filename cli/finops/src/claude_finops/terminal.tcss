@@ -23,6 +23,7 @@ DataTable { height: 1fr; }
 .all-metrics { display: none; }
 .ascii .titled-table { border: ascii $secondary; }
 #note-overview { height: 1; }
+#note-overview.read-error, .context.read-error { height: auto; max-height: 100%; overflow-y: auto; }
 #dashboard { height: 1fr; }
 .dashboard-panel { border: solid $secondary; border-title-color: $foreground; padding: 0 1; color: $foreground; overflow: hidden; }
 .dashboard-panel:focus { border: solid $accent; background: $surface; }

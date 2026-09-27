@@ -68,6 +68,7 @@ def emit(ctx, operation, *, mutation=False):
         display(state["redactor"].present(result), as_json=state["json"], plain=state["plain"], no_color=state["no_color"])
         return result
     except FinOpsError as error:
+        state["redactor"].present(error.details)
         display(state["redactor"].present(dict(error=str(error), exit_code=error.code)),
                 as_json=state["json"], plain=state["plain"], no_color=True)
         raise typer.Exit(error.code) from None

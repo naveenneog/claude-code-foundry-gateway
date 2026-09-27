@@ -93,6 +93,11 @@ class Dashboard(Vertical):
             panel.update("No current data. Refresh an authorized view.")
             panel.detail = {}
 
+    def begin_load(self):
+        for panel in self.query(DashboardPanel):
+            panel.update("Loading current facts (estimate 3-5 s)...")
+            panel.detail = {}
+
     def update_data(self, data, raw=None, query=""):
         raw = raw or data
         ascii_only = self.app.config.ascii
@@ -107,15 +112,34 @@ class Dashboard(Vertical):
         quality = ""
         if self.size.width >= 120:
             quality = f"   Cache read {human(totals.get('cache_read_tokens'))}   P95 {human(totals.get('p95_latency_ms'))} ms"
-        kpis.update(
-            f"Tokens {human(totals.get('total_tokens'))}   Cost {money(totals.get('estimated_cost'))} est   Requests {human(totals.get('total_requests'))}{quality}\n"
-            + (f"Allocated scopes {gauge(used, limit, 16, ascii_only)}  {human(used)} / {human(limit)}"
-               if scopes else "Budget use unavailable: no allocated scope limit returned.")
-        )
+        budget_line = (f"Allocated scopes {gauge(used, limit, 16, ascii_only)}  {human(used)} / {human(limit)}"
+                       if scopes else "Budget use unavailable: no allocated scope limit returned.")
+        if "budgets" in data.get("_pending", []):
+            budget_line = "Loading gateway budgets (estimate ~5 s)..."
+        elif data.get("_errors", {}).get("budgets"):
+            budget_line = "Budget read failed: " + data["_errors"]["budgets"]
+        usage_line = f"Tokens {human(totals.get('total_tokens'))}   Cost {money(totals.get('estimated_cost'))} est   Requests {human(totals.get('total_requests'))}{quality}"
+        if "overview" in data.get("_pending", []):
+            usage_line = "Loading month usage (estimate ~3 s)..."
+        elif data.get("_errors", {}).get("overview"):
+            usage_line = "Usage read failed: " + data["_errors"]["overview"]
+        kpis.update(usage_line + "\n" + budget_line)
         self._trends(data, raw, ascii_only)
         self._rankings(data, raw, query, ascii_only)
         self._risks(data, raw, query)
         self._anomalies(data, raw, query)
+        for panel_id, sources in {
+            "dash-trend": ("trends",),
+            "dash-rank": ("ranking", "teams"), "dash-risks": ("budgets",),
+            "dash-anomalies": ("anomalies",),
+        }.items():
+            panel = self.query_one("#" + panel_id, DashboardPanel)
+            errors = [data["_errors"][key] for key in sources if key in data.get("_errors", {})]
+            pending = [key for key in sources if key in data.get("_pending", [])]
+            if errors:
+                panel.update("Read failed: " + "; ".join(errors))
+            elif len(pending) == len(sources):
+                panel.update("Loading " + ", ".join(pending) + " (estimate 3-5 s)...")
 
     def _trends(self, data, raw, ascii_only):
         panel = self.query_one("#dash-trend", DashboardPanel)
@@ -180,7 +204,8 @@ class Dashboard(Vertical):
             amount = row.get("total_tokens", 0)
             bar = ("#" if ascii_only else "━") * max(1, round(amount / maximum * 8))
             name = row.get("name", row["id"])[:20]
-            mode = modes.get(row["id"], "STRICT")
+            mode = ("mode pending" if "catalog" in data.get("_pending", []) else
+                    "mode unavailable" if "catalog" in data.get("_errors", {}) else modes.get(row["id"], "STRICT"))
             line = f"{kind} {name:<20} {bar:<8} {human(amount):>7}"
             if panel.size.width >= 64:
                 line += f" [{mode}]"

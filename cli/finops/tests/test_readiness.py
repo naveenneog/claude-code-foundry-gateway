@@ -281,3 +281,12 @@ def test_diagnosis_reuses_the_http_pool_without_mixing_bearer_audiences(monkeypa
     assert all(request.headers["Authorization"] == "Bearer arm-test-only" for request in calls)
     assert all(request.headers["Authorization"] == "Bearer test-only" for request in requests)
     target.close()
+
+
+def test_redacted_cli_failure_hides_database_and_group_but_keeps_the_manual_command(monkeypatch):
+    target, _, _ = backend(monkeypatch)
+    monkeypatch.setattr("claude_finops.cli.connect", lambda _: target)
+    result = CliRunner().invoke(app, ["whoami", "--json", "--backend", "fake", "--redact"])
+    assert result.exit_code == 9
+    assert SERVER not in result.output and GROUP not in result.output
+    assert "az postgres flexible-server start" in result.output

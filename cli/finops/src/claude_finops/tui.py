@@ -1,5 +1,4 @@
 import asyncio
-from datetime import datetime
 
 from rich.text import Text
 from textual import on, work
@@ -17,15 +16,16 @@ from .output import safe_text
 from .palette import FinOpsCommands
 from .rules import can_edit, can_budget_write
 from .redaction import Redactor
-from .scope import scope_label, visible_tabs
+from .scope import visible_tabs
 from .screens import ChangeScreen, DetailScreen, ExportScreen, LookupScreen, MonthScreen
 from .views import DIMENSIONS, TABS, view_rows
 from .ui_features import FeatureUI, EXTRA_TABS
 from .capabilities import enabled
 from .feature_screens import FilterChips
+from .progressive import ProgressiveRefresh
 
 
-class FinOpsApp(FeatureUI, App):
+class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
     TITLE = PRODUCT
     CSS_PATH = "terminal.tcss"
     COMMANDS = {FinOpsCommands}
@@ -60,6 +60,9 @@ class FinOpsApp(FeatureUI, App):
         self.redactor = Redactor(redact)
         self.identity = {}
         self.editable = False
+        self.verifying_identity = False
+        self._refresh_serial = 0
+        self._waiting = set()
         self.allowed_tabs = visible_tabs({})
         self.team = ""
         self.people_query = ""
@@ -89,7 +92,7 @@ class FinOpsApp(FeatureUI, App):
 
     def compose(self) -> ComposeResult:
         yield Static(COMPACT, id="brand", markup=False)
-        yield Static("Signing in through Azure CLI...", id="identity", markup=False)
+        yield Static("Signing in through Azure CLI (estimate 3-5 s)...", id="identity", markup=False)
         yield FilterChips("", id="filter-chips", markup=False)
         yield Input(placeholder="Filter visible rows (Esc clears; / searches the server)", id="quick-filter",
                     password=self.redactor.enabled)
@@ -199,6 +202,8 @@ class FinOpsApp(FeatureUI, App):
         return self.query_one("#main-tabs", TabbedContent).active
 
     def check_action(self, action, parameters):
+        if action in {"edit", "apply"} and self.verifying_identity:
+            return False
         if action == "tab":
             if len(self.screen_stack) > 1 or isinstance(self.focused, Input):
                 return False
@@ -233,6 +238,8 @@ class FinOpsApp(FeatureUI, App):
         if len(self.screen_stack) != 1 or tab not in self.allowed_tabs:
             return
         self.query_one("#main-tabs", TabbedContent).active = tab
+        if tab not in {"ask", "approvals", "advanced"}:
+            self.set_focus(self.query_one("#dash-kpis" if tab == "overview" else f"#table-{tab}"))
 
     @on(TabbedContent.TabActivated)
     def switched(self, event):
@@ -242,15 +249,15 @@ class FinOpsApp(FeatureUI, App):
         self.refresh_bindings()
         self.action_refresh()
 
-    def update_access(self, identity):
+    def update_access(self, identity, preserve_current=False):
         before = tuple(self.identity.get(key) for key in ("id", "email", "role", "manager_scope"))
         after = tuple(identity.get(key) for key in ("id", "email", "role", "manager_scope"))
         self.identity = identity
+        self.editable = can_edit(identity) and not self.redactor.enabled
         if before == after:
             return
-        self.editable = can_edit(identity) and not self.redactor.enabled
         self.allowed_tabs = visible_tabs(identity)
-        if before != after:
+        if before != after and not preserve_current:
             self.data.clear()
             self.records.clear()
             self.clear_query_context()
@@ -268,64 +275,12 @@ class FinOpsApp(FeatureUI, App):
         self.refresh_bindings()
         self.update_key_hints()
 
-    @work(exclusive=True, group="view")
-    async def action_refresh(self):
-        tab = self.active
-        self.query_one(f"#note-{tab}", Static).update("Loading current server data... (q still works)")
-        try:
-            identity = await asyncio.to_thread(self.engine.read, "whoami")
-            self.update_access(identity)
-            await self.refresh_features()
-            if tab not in self.allowed_tabs:
-                return
-            data = await self.load_tab(tab)
-            self.data[tab] = data
-            self.render_tab(tab, data)
-            stamp = "12:00 +00:00 example" if self.engine.backend.name == "Example" else datetime.now().astimezone().strftime("%H:%M:%S %z")
-            display_identity = self.present(self.identity)
-            who = display_identity.get("email", display_identity.get("name", "caller"))
-            scope = scope_label(display_identity)
-            prefix = f"{self.engine.month} | {self.engine.backend.name} | {self.identity.get('role', 'unknown')} | "
-            suffix = f" | @ {stamp}"
-            available = max(8, self.size.width - len(prefix) - len(suffix) - 2)
-            if len(who) > available:
-                who = who[:available - 3] + "..."
-            identity = prefix + who + suffix
-            if scope:
-                identity += " | " + scope
-            self.query_one("#identity", Static).update(safe_text(identity))
-            self.update_brand()
-            mode = "[redacted/read-only] " if self.redactor.enabled else ""
-            self.query_one("#status", Static).update(mode + "<Enter> details <Tab> panel </> lookup <r> refresh")
-            if tab == "overview":
-                self.query_one("#dash-kpis", DashboardPanel).focus()
-            else:
-                self.query_one(f"#table-{tab}", DataTable).focus()
-            self.maybe_tour()
-        except FinOpsError as error:
-            self.data.pop(tab, None)
-            self.records.pop(tab, None)
-            self.query_one(f"#table-{tab}", DataTable).clear(columns=True)
-            if tab == "overview":
-                self.query_one(Dashboard).clear()
-            self.query_one(f"#note-{tab}", Static).update(str(error))
-            fix = "Check managed scope in Settings; r refreshes." if error.code == 4 else "r retries; ? explains sign-in."
-            self.query_one("#status", Static).update(f"Read failed (exit {error.code}). {fix}")
-
     async def load_tab(self, tab):
         read = self.engine.read
         if tab in {"ask", "approvals", "advanced"}:
             return await self.load_feature_tab(tab)
         if tab == "overview":
-            overview, budgets, ranking, teams, trends, anomalies, catalog = await asyncio.gather(
-                asyncio.to_thread(read, "overview", **self.scope_filters), asyncio.to_thread(read, "budgets"),
-                self.optional_dashboard_read("usage_breakdown", "distribution", dimension=self.ranking_dimension, limit=10, **self.scope_filters),
-                self.optional_dashboard_read("usage_breakdown", "distribution", dimension="department", limit=10, **self.scope_filters),
-                asyncio.to_thread(read, "trends", interval="day", group_by="none", **self.scope_filters),
-                self.optional_dashboard_read("anomaly_findings", "anomalies", limit=10, **self.scope_filters),
-                asyncio.to_thread(read, "catalog"))
-            return dict(overview=overview, budgets=budgets, ranking=ranking, teams=teams,
-                        trends=trends, anomalies=anomalies, catalog=catalog)
+            return await self.load_overview()
         if tab == "budgets":
             budgets, catalog = await asyncio.gather(asyncio.to_thread(read, "budgets"), asyncio.to_thread(read, "catalog"))
             modes = {row["id"]: enforcement_badge(row) for key in ("organizations", "departments") for row in catalog[key]}

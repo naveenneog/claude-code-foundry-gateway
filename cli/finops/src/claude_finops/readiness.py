@@ -77,9 +77,11 @@ def database_failure(config, client, status=None, credential=None):
                 command += f" --subscription {config.subscription}"
             return FinOpsError(prefix + f"PostgreSQL server {name} in {group} is Stopped. "
                                f"Start manually: {command}. "
-                               "Starting resumes compute charges; AUM did not start it.", 9)
+                               "Starting resumes compute charges; AUM did not start it.", 9,
+                               details={"server_name": name, "resource_group": group})
         return FinOpsError(prefix + f"Azure reports PostgreSQL server {name} in {group} as {state}, "
                            "not Stopped. Check the Turnstile API and database connectivity; "
-                           "no resource was started.", 7)
+                           "no resource was started.", 7,
+                           details={"server_name": name, "resource_group": group})
     except (FinOpsError, httpx.HTTPError, TimeoutError, ValueError, KeyError, TypeError, AttributeError):
         return FinOpsError(unknown, 7)

@@ -74,6 +74,9 @@ class DashboardRows(ModalScreen):
             self.app.push_screen(DetailScreen("Context parent — no unit-wide access", row))
             return
         self.dismiss()
+        self.app.call_after_refresh(self.open_selected, kind, row)
+
+    def open_selected(self, kind, row):
         if kind == "budget":
             self.app.budget_parent = None
             self.app.pending_selection = row.get("scope_id")
@@ -89,4 +92,5 @@ class DashboardRows(ModalScreen):
             self.app.reset_paging()
             self.app.update_filter_chips()
             self.app.action_tab("usage")
+        self.app.query_one(f"#table-{self.app.active}", DataTable).focus()
         self.app.action_refresh()
