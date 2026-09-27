@@ -40,6 +40,15 @@ param(
     [ValidateSet('BasicV2', 'StandardV2', 'PremiumV2')]
     [string]$Sku,
 
+    [ValidateSet('azure','custom')][string]$AddressMode,
+    [string]$AddressHostname,
+    [ValidateSet('KeyVault','Pfx')][string]$AddressCertificateSource,
+    [string]$AddressKeyVaultCertificateId,
+    [string]$AddressPfxPath,
+    [securestring]$AddressCertificatePassword,
+    [string]$AddressDnsZoneResourceId,
+    [string]$AddressReplaceHostname,
+
     # Update this existing v2 gateway, taking the reuse path without the menu: its region, tier,
     # name and publisher are kept. The guided flow's -Change foundation passes it (ADR-0032).
     [string]$ExistingApimName,
@@ -978,13 +987,59 @@ Write-Host '               later becomes a DNS change nobody notices.' -Foregrou
 Write-Host ''
 Write-Host '    This is the one choice on this page that is expensive to change afterwards.' -ForegroundColor DarkGray
 
-$addressMode = Read-Default -Prompt 'Developer address (azure/custom)' -Default 'azure' `
-    -Help 'Choosing custom does not configure it here - it records the intent and prints the steps at the end.' -Validate {
+$addressPlan = $null
+$addressResult = $null
+$savedAddressConfig = $null
+$savedAddressPath = Join-Path $root 'onboarding\claude-gateway.json'
+$addressApimName = if ($ExistingApim) { $ExistingApim } else { "apim-$NamePrefix" }
+if (Test-Path -LiteralPath $savedAddressPath) {
+    $saved = Get-Content -LiteralPath $savedAddressPath -Raw | ConvertFrom-Json
+    if ($saved.apimName -eq $addressApimName -and $saved.resourceGroup -eq $ResourceGroup -and
+        (-not $saved.subscriptionId -or $saved.subscriptionId -eq $SubscriptionId)) { $savedAddressConfig = $saved }
+}
+$addressDefault = if ($savedAddressConfig -and $savedAddressConfig.address.hostname) { 'custom' } else { 'azure' }
+$addressMode = if ($AddressMode) { $AddressMode } else { Read-Default -Prompt 'Developer address (azure/custom)' -Default $addressDefault `
+    -Help 'Custom configures a supplied certificate, the gateway hostname and DNS, then proves HTTPS before publishing the address.' -Validate {
         param($x)
         if ($x -in @('azure','custom')) { return $true }
         Write-Warn2 'Must be azure or custom.'
         return $false
+    } }
+if ($addressMode -eq 'custom') {
+    . (Join-Path $root 'scripts\ClaudeGatewayAddress.ps1')
+    $previous = if ($savedAddressConfig) { $savedAddressConfig.address } else { $null }
+    if (-not $AddressHostname) { $AddressHostname = Read-Default -Prompt 'Company hostname' -Default $(if ($previous) { $previous.hostname } else { '' }) -Help 'A DNS hostname, such as claude.contoso.com; not a URL. The domain is already owned by your organization.' }
+    if (-not $AddressCertificateSource) { $AddressCertificateSource = Read-Default -Prompt 'Certificate source (KeyVault/Pfx)' -Default $(if ($previous) { $previous.certificateSource } else { 'KeyVault' }) -Help 'No v2 tier offers a free managed certificate. KeyVault references an existing certificate; Pfx uploads its certificate and private key.' }
+    if ($AddressCertificateSource -eq 'KeyVault' -and -not $AddressKeyVaultCertificateId) {
+        $AddressKeyVaultCertificateId = Read-Default -Prompt 'Key Vault certificate or secret URL' -Default $(if ($previous) { $previous.keyVaultCertificateId } else { '' }) -Help 'Example: https://<vault>.vault.azure.net/certificates/<name>. A versionless reference permits rotation.'
     }
+    if ($AddressCertificateSource -eq 'Pfx') {
+        if (-not $AddressPfxPath) { $AddressPfxPath = Read-Default -Prompt 'PFX file path' -Default $(if ($previous) { $previous.pfxPath } else { '' }) -Help 'The file contains the hostname certificate, its private key and chain.' }
+        if (-not $AddressCertificatePassword -and -not $Yes) { $AddressCertificatePassword = Read-Host 'PFX password (Enter if none; not recorded)' -AsSecureString }
+    }
+    if (-not $AddressDnsZoneResourceId) {
+        $dnsChoice = Read-Default -Prompt 'DNS hosting (AzureDns/External)' -Default $(if ($previous -and $previous.dnsZoneResourceId) { 'AzureDns' } else { 'External' }) -Help 'AzureDns writes a CNAME in an existing public zone in this subscription; External prints the record and waits for your provider.'
+        if ($dnsChoice -eq 'AzureDns') {
+            $AddressDnsZoneResourceId = Read-Default -Prompt 'Azure DNS zone resource ID' -Default $(if ($previous) { $previous.dnsZoneResourceId } else { '' }) -Help 'Azure portal > DNS zones > the public zone > Properties > Resource ID.'
+        }
+        elseif ($dnsChoice -ne 'External') { throw 'DNS hosting must be AzureDns or External.' }
+    }
+    $addressArgs = @{
+        SubscriptionId = $SubscriptionId; ResourceGroup = $ResourceGroup; ApimName = $addressApimName
+        Hostname = $AddressHostname; CertificateSource = $AddressCertificateSource; KeyVaultCertificateId = $AddressKeyVaultCertificateId
+        PfxPath = $AddressPfxPath; CertificatePassword = $AddressCertificatePassword; DnsZoneResourceId = $AddressDnsZoneResourceId
+        ReplaceHostname = $AddressReplaceHostname
+    }
+    if (-not $ExistingApim) {
+        $addressArgs.Gateway = [pscustomobject]@{
+            id = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.ApiManagement/service/$addressApimName"
+            name = $addressApimName; location = $Location; sku = @{ name = $Sku }
+            properties = @{ provisioningState = 'Succeeded'; hostnameConfigurations = @() }
+        }
+    }
+    $addressPlan = Get-ClaudeAddressPlan @addressArgs
+    Write-Host (Format-ClaudeFlowReview @($addressPlan))
+}
 
 # How developers sign in. Asked here rather than left to each workstation,
 # because a fleet where half the machines authenticate one way and half another
@@ -1159,6 +1214,7 @@ $rows = [ordered]@{
     ' '                     = ''
     'Entra groups'          = "$StandardGroup, $PremiumGroup"
     'Developer sign-in'     = $AuthMode
+    'Developer address'     = if ($addressPlan) { "https://$AddressHostname/claude ($AddressCertificateSource; costs shown above)" } else { "https://$apimName.azure-api.net/claude" }
 }
 if ($pendingDeployment) {
     $rows.Insert(2, 'Claude deployment', ("{0} v{1} on {2}, {3} capacity {4} - deployed first, after you confirm" -f $pendingDeployment.model, $pendingDeployment.version, $pendingDeployment.account, $pendingDeployment.sku, $pendingDeployment.capacity))
@@ -1341,6 +1397,7 @@ if ($liveId) {
                 apimDeveloperPortalStatus = @{ value = $(if ($live.developerPortalStatus) { "$($live.developerPortalStatus)" } else { 'Disabled' }) }
                 apimLegacyPortalStatus    = @{ value = $(if ($live.legacyPortalStatus) { "$($live.legacyPortalStatus)" } else { 'Disabled' }) }
                 apimCustomProperties      = @{ value = $(if ($live.customProperties) { $live.customProperties } else { @{} }) }
+                apimHostnameConfigurations = @{ value = @($live.hostnameConfigurations) }
             }
         }
         $preserveFile = Join-Path ([IO.Path]::GetTempPath()) "claude-gw-preserve-$deployName.json"
@@ -1431,6 +1488,11 @@ Write-Ok 'deployed'
 
 $gatewayUrl = az deployment group show -g $ResourceGroup -n $deployName --query "properties.outputs.gatewayUrl.value" -o tsv 2>$null
 if (-not $gatewayUrl) { $gatewayUrl = "https://$apimName.azure-api.net/claude" }
+if ($addressPlan) {
+    Write-Step 'Company address, certificate and DNS'
+    $addressResult = Invoke-ClaudeAddressPlan -Plan $addressPlan -CertificatePassword $AddressCertificatePassword
+    $gatewayUrl = $addressResult.GatewayUrl
+}
 
 # ---------------------------------------------------------------- 7. groups
 
@@ -1537,6 +1599,7 @@ $config = [ordered]@{
     tenantId      = $acct.tenantId
     apimName      = $apimName
     resourceGroup = $ResourceGroup
+    subscriptionId = $SubscriptionId
     # What the guided flow records as the foundation decision (ADR-0032).
     sku           = $Sku
     location      = (ConvertTo-ClaudeArmRegionName $Location)
@@ -1565,7 +1628,21 @@ $config = [ordered]@{
     generated = (Get-Date -Format 'yyyy-MM-dd HH:mm')
 }
 $configPath = Join-Path $pkg 'claude-gateway.json'
+if ($savedAddressConfig) {
+    foreach ($p in $savedAddressConfig.PSObject.Properties) {
+        if (-not $config.Contains($p.Name)) { $config[$p.Name] = $p.Value }
+    }
+}
+if ($addressResult) {
+    $config['address'] = $addressResult.Address
+    $recordToWrite = [pscustomobject]$config
+    Set-ClaudeDecision -Record $recordToWrite -Key address -Value $addressResult.Address
+    Update-ClaudeAddressArtifacts -RecordPath $configPath -OldUrl $(if ($savedAddressConfig) { $savedAddressConfig.gatewayUrl } else { '' }) -NewUrl $gatewayUrl
+    Write-ClaudeDecisionRecord -Record $recordToWrite -Path $configPath
+}
+else {
 $config | ConvertTo-Json -Depth 6 | Set-Content $configPath -Encoding UTF8
+}
 Write-Ok "config: $configPath"
 
 # ---------------------------------------------------------------- 9. verify
@@ -1595,12 +1672,10 @@ if ($budgetMode -eq 'stop') {
     ) })
 }
 if ($addressMode -eq 'custom') {
-    $nextSteps.Add([pscustomobject]@{ Title = 'You chose a company address'; Warn = $true; Detail = @(
-        '        Nothing here configured it. Add the hostname and certificate to the'
-        '        gateway, point DNS at it, then hand developers that address instead:'
-        "        az apim update -g $ResourceGroup -n $apimName --set hostnameConfigurations=..."
-        '        Do it before onboarding anyone, or they are configured against the'
-        '        Azure address and have to be reconfigured later.'
+    $nextSteps.Add([pscustomobject]@{ Title = 'Company address configured and proven'; Warn = $false; Detail = @(
+        "        $gatewayUrl is recorded in claude-gateway.json."
+        '        Existing developer machines need the redistributed settings.'
+        '        A later address change is .\Start-ClaudeGateway.ps1 -Action Change -Change address.'
     ) })
 }
 $nextSteps.Add([pscustomobject]@{ Title = 'Entitle a developer'; Warn = $false; Detail = @(

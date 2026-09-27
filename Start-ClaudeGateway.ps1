@@ -13,7 +13,8 @@ param(
     [string]$FlowModulePath,
     [hashtable]$NonInteractiveAnswers,
     [string]$AnswersPath,
-    [switch]$SupportBundle
+    [switch]$SupportBundle,
+    [securestring]$AddressCertificatePassword
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,7 +26,7 @@ $discoveryScript = Join-Path $root 'scripts\flow\Discovery.ps1'
 if (Test-Path -LiteralPath $discoveryScript) { . $discoveryScript }
 
 $script:ExpectedFlowSteps = @(
-    'Foundation', 'Tier', 'Entitlement', 'Network', 'DesktopSignIn',
+    'Foundation', 'Tier', 'Entitlement', 'Network', 'DesktopSignIn', 'Address',
     'FinOps', 'Budgets', 'Monitoring', 'Reports', 'DeviceProfiles', 'Verify', 'Guide'
 )
 
@@ -100,6 +101,9 @@ function Read-FlowAnswers {
     }
     if ($InlineAnswers) {
         foreach ($key in $InlineAnswers.Keys) { $answers[$key] = $InlineAnswers[$key] }
+    }
+    foreach ($key in $answers.Keys) {
+        if ($key -match '^(address|foundation)\..*(password|encodedCertificate)$') { throw 'Certificate passwords and bytes cannot be stored in answers. Use the transient -AddressCertificatePassword SecureString parameter.' }
     }
     return $answers
 }
@@ -216,7 +220,20 @@ function Invoke-Questions {
         $questions = @(& $step.Questions -Record $Record -Discovery $Discovery)
         foreach ($q in $questions) {
             if (-not $q.Key) { throw "Step '$($step.Info.Name)' returned a question without a key." }
+            if ($q.PSObject.Properties.Name -contains 'When' -and -not (& $q.When $Record)) { continue }
             $existing = Get-FlowDecisionPath -Record $Record -Path ('decisions.' + $q.Key)
+            if ($q.PSObject.Properties.Name -contains 'Type' -and $q.Type -eq 'Text') {
+                if ($script:FlowAnswers.ContainsKey($q.Key)) { $value = $script:FlowAnswers[$q.Key] }
+                elseif (Test-ClaudeInteractive) {
+                    $value = Read-Host "$($q.Question)$(if ($existing) { " [$existing]" })"
+                    if (-not $value) { $value = $existing }
+                }
+                else { $value = $existing }
+                if ($null -ne $value -and $value -isnot [string]) { throw "Answer '$($q.Key)' must be text, not a list or object." }
+                if (-not $q.Optional -and [string]::IsNullOrWhiteSpace($value)) { throw "Answer '$($q.Key)' is required in -AnswersPath or -NonInteractiveAnswers." }
+                Set-FlowDecisionPath -Record $Record -Path $q.Key -Value ([string]$value)
+                continue
+            }
             if ($CurrentAction -ne 'Change' -and $null -ne $existing -and "$existing" -ne '') { continue }
             if ($CurrentAction -eq 'Change' -and $null -ne $existing -and "$existing" -ne '') {
                 $q.Options = @(Set-CurrentOptionRecommended -Options @($q.Options) -Current $existing)
@@ -299,7 +316,9 @@ function Invoke-ApplySteps {
         }
         $before = if ($step.Info.DecisionKey) { Get-ClaudeDecision -Record $Record -Key $step.Info.DecisionKey } else { $null }
         Write-Host "Applying $($step.Info.Name)..." -ForegroundColor Cyan
-        $changes = & $step.Invoke -Record $Record -Plan $plan
+        $invokeArgs = @{ Record = $Record; Plan = $plan }
+        if ($step.Info.Name -eq 'Address') { $invokeArgs.CertificatePassword = $AddressCertificatePassword }
+        $changes = & $step.Invoke @invokeArgs
         if ($null -eq $principal) { $principal = Get-FlowPrincipal }
         foreach ($key in @($changes.Keys)) {
             if ($key -eq $step.Info.DecisionKey) { Set-ClaudeDecision -Record $Record -Key $key -Value $changes[$key] }

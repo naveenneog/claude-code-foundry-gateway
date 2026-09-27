@@ -124,10 +124,17 @@ function Get-ClaudeFlowDiscovery {
                 sku = if ($live.sku) { [string]$live.sku.name } else { '' }
                 publisherEmail = [string]$live.publisherEmail
                 gatewayUrl = [string]$live.gatewayUrl
+                hostnameConfigurations = @($live.hostnameConfigurations)
             }
             $recordUrl = if ($Record.gatewayUrl) { ([string]$Record.gatewayUrl).TrimEnd('/') } else { '' }
             $liveUrl = $gateway.gatewayUrl.TrimEnd('/')
-            if ($recordUrl -and $liveUrl -and -not ($recordUrl -eq $liveUrl -or $recordUrl.StartsWith($liveUrl + '/', [StringComparison]::OrdinalIgnoreCase))) {
+            $companyMatch = $false
+            $parsedUrl = $null
+            if ([uri]::TryCreate($recordUrl, [UriKind]::Absolute, [ref]$parsedUrl) -and $parsedUrl.Scheme -eq 'https' -and
+                $parsedUrl.Port -eq 443 -and -not $parsedUrl.UserInfo -and -not $parsedUrl.Query -and -not $parsedUrl.Fragment) {
+                $companyMatch = @($live.hostnameConfigurations | Where-Object { $_.type -eq 'Proxy' -and $_.hostName -ieq $parsedUrl.DnsSafeHost }).Count -eq 1
+            }
+            if ($recordUrl -and $liveUrl -and -not ($recordUrl -eq $liveUrl -or $recordUrl.StartsWith($liveUrl + '/', [StringComparison]::OrdinalIgnoreCase) -or $companyMatch)) {
                 $differences.Add("record gatewayUrl '$($Record.gatewayUrl)' differs from live '$($gateway.gatewayUrl)'")
             }
         }

@@ -23,7 +23,9 @@ function Invoke-ClaudeNetworkArm {
         [ValidateSet('get','put','patch','delete','post')][string]$Method = 'get',
         [object]$Body,
         [string]$StateDirectory,
-        [switch]$AllowNotFound
+        [switch]$AllowNotFound,
+        [string]$IfMatch,
+        [switch]$IfNoneMatch
     )
     if ($Url -notmatch '^https://management\.azure\.com/(subscriptions|providers)/') { throw 'Expected an Azure Resource Manager URL.' }
     $file = $null
@@ -42,6 +44,8 @@ function Invoke-ClaudeNetworkArm {
             $script:ClaudeNetworkTokens[$scope] = $cached
         }
         $request = @{Method=$Method;Uri=$Url;Headers=@{Authorization="Bearer $($cached.token)"};TimeoutSec=45;ErrorAction='Stop'}
+        if ($IfMatch) { $request.Headers['If-Match'] = $IfMatch }
+        if ($IfNoneMatch) { $request.Headers['If-None-Match'] = '*' }
         if ($null -ne $Body) {
             if (-not $StateDirectory -or -not (Test-Path $StateDirectory -PathType Container)) { throw 'A local state directory is required for ARM request files.' }
             $file = Join-Path $StateDirectory ('request-' + [guid]::NewGuid().ToString('N') + '.json')

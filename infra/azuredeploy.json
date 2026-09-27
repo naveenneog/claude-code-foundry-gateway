@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "11168566443361268398"
+      "templateHash": "3883996851565788669"
     },
     "description": "Governed gateway for Claude Code on Microsoft Foundry: per-developer token budgets, tiering, and chargeback, with no model credential on any developer machine."
   },
@@ -120,6 +120,13 @@
       "defaultValue": {},
       "metadata": {
         "description": "Protocol and cipher settings the gateway already has. Empty for a new gateway."
+      }
+    },
+    "apimHostnameConfigurations": {
+      "type": "array",
+      "defaultValue": [],
+      "metadata": {
+        "description": "Hostname bindings read from a template-owned gateway before redeployment. Unrelated bindings and their certificates are retained."
       }
     },
     "sonnetDeployment": {
@@ -501,7 +508,7 @@
       "identity": {
         "type": "SystemAssigned"
       },
-      "properties": "[union(createObject('publisherEmail', parameters('publisherEmail'), 'publisherName', parameters('publisherName'), 'virtualNetworkType', parameters('apimVirtualNetworkType'), 'publicNetworkAccess', parameters('apimPublicNetworkAccess'), 'developerPortalStatus', parameters('apimDeveloperPortalStatus'), 'legacyPortalStatus', parameters('apimLegacyPortalStatus')), if(empty(parameters('apimSubnetId')), createObject(), createObject('virtualNetworkConfiguration', createObject('subnetResourceId', parameters('apimSubnetId')))), if(empty(parameters('apimCustomProperties')), createObject(), createObject('customProperties', parameters('apimCustomProperties'))))]"
+      "properties": "[union(createObject('publisherEmail', parameters('publisherEmail'), 'publisherName', parameters('publisherName'), 'virtualNetworkType', parameters('apimVirtualNetworkType'), 'publicNetworkAccess', parameters('apimPublicNetworkAccess'), 'developerPortalStatus', parameters('apimDeveloperPortalStatus'), 'legacyPortalStatus', parameters('apimLegacyPortalStatus')), if(empty(parameters('apimSubnetId')), createObject(), createObject('virtualNetworkConfiguration', createObject('subnetResourceId', parameters('apimSubnetId')))), if(empty(parameters('apimCustomProperties')), createObject(), createObject('customProperties', parameters('apimCustomProperties'))), if(empty(parameters('apimHostnameConfigurations')), createObject(), createObject('hostnameConfigurations', parameters('apimHostnameConfigurations'))))]"
     },
     {
       "type": "Microsoft.ApiManagement/service/loggers",
