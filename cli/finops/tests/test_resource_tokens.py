@@ -148,3 +148,25 @@ def test_known_expiry_is_reused_beyond_the_opaque_fallback_window(monkeypatch):
     clock[0] += 400
     config.resource_token(RESOURCE, SUB)
     assert len(calls) == 1
+
+
+def test_waiting_for_a_concurrent_token_obeys_the_callers_deadline(monkeypatch):
+    acquired, release = threading.Event(), threading.Event()
+
+    def run(*args, **kwargs):
+        acquired.set()
+        assert release.wait(timeout=3)
+        return jwt(time.time() + 3600)
+
+    monkeypatch.setattr(config, "az", run)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(config.resource_token, RESOURCE, SUB)
+        assert acquired.wait(timeout=3)
+        start = time.perf_counter()
+        try:
+            with pytest.raises(FinOpsError, match="token.*timed out"):
+                config.resource_token(RESOURCE, SUB, timeout=.05)
+            assert time.perf_counter() - start < .3
+        finally:
+            release.set()
+        first.result(timeout=3)

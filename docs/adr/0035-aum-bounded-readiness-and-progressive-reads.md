@@ -59,6 +59,19 @@ delays. The approximately-five-second acceptance is measured end to end with a
 warm Azure CLI session; the ledger records cold-start and metadata-lookup costs
 separately rather than treating a configured timeout as a timing measurement.
 
+The first live implementation measured the PostgreSQL CLI inventory at **3.075 s**
+and `az rest` at **2.524 s**, exceeding its 2.5 s diagnostic subprocess budget.
+The diagnostic therefore uses bounded ARM HTTP reads with one resource token,
+including the named-value read for older profiles. It does not add a healthy-path
+inventory request or accept a timeout as proof that a database stopped. The tests
+pin the exact ARM origin, resource group, subscription, API version and no-redirect
+behavior instead of the removed CLI command spelling.
+For an Azure-selected profile the diagnostic ARM credential is acquired while
+the authenticated readiness request is pending. The database inventory is still
+read only on timeout or 5xx; an address-only app-role profile does not acquire that
+credential. Token acquisition, including a wait on another in-process acquisition,
+has a bounded deadline. A healthy API does not require a successful ARM read.
+
 ### Direct read cycles
 
 Resource tokens are kept only in process memory, keyed by resource and selected

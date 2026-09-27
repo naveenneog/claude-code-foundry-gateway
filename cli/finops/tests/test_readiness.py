@@ -25,24 +25,37 @@ def backend(monkeypatch, *, response=500, inventory=None, group=GROUP, integrati
     config.turnstile_resource_group = group
     calls, requests = [], []
 
-    def run(*args, **kwargs):
-        calls.append((args, kwargs))
-        if args[:3] == ("apim", "nv", "show"):
-            return integration
-        assert args[:3] == ("postgres", "flexible-server", "list"), args
+    def arm(request):
+        calls.append(request)
+        if request.url.path.endswith("/namedValues/turnstile-integration"):
+            return httpx.Response(200, json={"properties": {"value": integration}})
+        assert request.url.path.endswith("/providers/Microsoft.DBforPostgreSQL/flexibleServers")
         if isinstance(inventory, Exception):
-            raise inventory
-        return json.dumps(inventory if inventory is not None else [
-            dict(name=SERVER, resourceGroup=GROUP, state="Stopped")])
+            return httpx.Response(403, text="private-azure-details")
+        rows = inventory if inventory is not None else [dict(name=SERVER, resourceGroup=GROUP, state="Stopped")]
+        if isinstance(rows, list):
+            rows = [dict(name=row.get("name"),
+                         id=f"/subscriptions/{SUB}/resourceGroups/{row.get('resourceGroup', GROUP)}"
+                            f"/providers/Microsoft.DBforPostgreSQL/flexibleServers/{row.get('name')}",
+                         properties={"state": row.get("state")}) for row in rows]
+        return httpx.Response(200, json={"value": rows})
 
     def respond(request):
+        if request.url.host == "management.azure.com":
+            return arm(request)
         requests.append(request)
         if response == "timeout":
             raise httpx.ReadTimeout("private-transport-details", request=request)
         return httpx.Response(response, json={"role": "owner"} if response == 200 else
                               {"detail": "private-server-details"})
 
-    monkeypatch.setattr("claude_finops.config.az", run)
+    original = httpx.Client
+    arm_transport = httpx.MockTransport(arm)
+    monkeypatch.setattr(httpx, "Client", lambda *args, **kwargs:
+                        original(*args, transport=kwargs.pop("transport", arm_transport), **kwargs))
+    monkeypatch.setattr("claude_finops.config.resource_token", lambda *args, **kwargs: "arm-test-only")
+    monkeypatch.setattr("claude_finops.config.az", lambda *args, **kwargs:
+                        (_ for _ in ()).throw(AssertionError("Metadata uses ARM, not a fresh inventory subprocess.")))
     result = TurnstileBackend(config, token_provider=lambda: "test-only",
                              transport=httpx.MockTransport(respond))
     return result, calls, requests
@@ -57,7 +70,7 @@ def test_stopped_database_has_specific_exit_and_exact_manual_start(monkeypatch, 
     assert f"az postgres flexible-server start -g {GROUP} -n {SERVER}" in str(caught.value)
     assert f"--subscription {SUB}" in str(caught.value)
     assert "Stopped" in str(caught.value)
-    assert all("start" not in args for args, _ in calls)
+    assert all(request.method == "GET" for request in calls)
     assert all(request.method == "GET" and request.url.path == "/api/v1/auth/me" for request in requests)
     assert "private-" not in str(caught.value) and "test-only" not in str(caught.value)
     target.close()
@@ -121,12 +134,14 @@ def test_old_gateway_profile_resolves_matching_integration_and_bounds_every_azur
     with pytest.raises(FinOpsError) as caught:
         target.read("whoami")
     assert caught.value.code == 9
-    assert [args[:3] for args, _ in calls] == [
-        ("apim", "nv", "show"), ("postgres", "flexible-server", "list")]
-    assert all(0 < kwargs["timeout"] <= 2.5 for _, kwargs in calls)
-    assert all(args[args.index("--subscription") + 1] == SUB for args, _ in calls)
-    assert calls[-1][0][calls[-1][0].index("--resource-group") + 1] == GROUP
-    assert all(not any(char in arg for char in "()|&<>^") for args, _ in calls for arg in args)
+    assert [request.url.path for request in calls] == [
+        f"/subscriptions/{SUB}/resourceGroups/rg-gateway/providers/Microsoft.ApiManagement/"
+        "service/apim-contoso/namedValues/turnstile-integration",
+        f"/subscriptions/{SUB}/resourceGroups/{GROUP}/providers/Microsoft.DBforPostgreSQL/flexibleServers"]
+    assert all(0 < seconds <= 2.5 for request in calls for seconds in request.extensions["timeout"].values())
+    assert all(request.url.host == "management.azure.com" and request.method == "GET" for request in calls)
+    assert all(request.headers["Authorization"] == "Bearer arm-test-only" for request in calls)
+    assert calls[-1].url.params["api-version"] == "2024-08-01"
     target.close()
 
 
@@ -143,7 +158,7 @@ def test_mismatched_or_unsafe_integration_never_selects_another_database(monkeyp
     with pytest.raises(FinOpsError) as caught:
         target.read("whoami")
     assert caught.value.code == 7 and "could not be verified" in str(caught.value)
-    assert len(calls) == 1 and calls[0][0][:3] == ("apim", "nv", "show")
+    assert len(calls) == 1 and calls[0].url.path.endswith("/namedValues/turnstile-integration")
     target.close()
 
 
@@ -194,4 +209,75 @@ def test_writes_are_never_repeated_or_reclassified_as_database_starts(monkeypatc
                      scope_type="department", scope_id="sales-emea")
     assert caught.value.code == 7
     assert not calls and len(requests) == 1 and requests[0].method == "PUT"
+    target.close()
+
+
+def test_metadata_reuses_one_arm_token_and_cannot_follow_redirects(monkeypatch):
+    target, _, _ = backend(monkeypatch, group="")
+    tokens = []
+    monkeypatch.setattr("claude_finops.config.resource_token", lambda *args, **kwargs:
+                        tokens.append((args, kwargs)) or "arm-test-only")
+    with pytest.raises(FinOpsError) as caught:
+        target.read("whoami")
+    assert caught.value.code == 9
+    assert len(tokens) == 1
+    assert tokens[0][0][:2] == ("https://management.azure.com/", SUB)
+    assert 0 < tokens[0][1]["timeout"] <= 2.5
+    target.close()
+
+
+def test_diagnostic_token_acquisition_overlaps_readiness_but_healthy_never_reads_inventory(monkeypatch):
+    import threading
+    target, calls, _ = backend(monkeypatch, response=200)
+    acquiring = threading.Event()
+    requested = threading.Event()
+
+    def acquire(*args, **kwargs):
+        acquiring.set()
+        assert requested.wait(timeout=3), "The readiness request must not wait for an ARM credential."
+        return "arm-test-only"
+
+    def respond(request):
+        assert acquiring.wait(timeout=3), "Acquire the diagnostic credential while readiness is pending."
+        requested.set()
+        return httpx.Response(200, json={"role": "owner"})
+
+    monkeypatch.setattr("claude_finops.config.resource_token", acquire)
+    target._client.close()
+    target._client = httpx.Client(base_url=URL, transport=httpx.MockTransport(respond))
+    assert target.read("whoami")["role"] == "owner"
+    assert not calls
+    target.close()
+
+
+@pytest.mark.parametrize("status", [302, 401, 403, 404, 429, 500])
+def test_arm_errors_are_bounded_not_followed_retried_or_echoed(monkeypatch, status):
+    target, _, _ = backend(monkeypatch)
+    requests = []
+    def respond(request):
+        if request.url.host == "turnstile.contoso.com":
+            return httpx.Response(500)
+        requests.append(request)
+        return httpx.Response(status, text="private-arm-details",
+                              headers={"Location": "https://unrelated.contoso.com/steal"})
+
+    target._client.close()
+    target._client = httpx.Client(base_url=URL, transport=httpx.MockTransport(respond))
+    with pytest.raises(FinOpsError) as caught:
+        target.read("whoami")
+    assert caught.value.code == 7 and "could not be verified" in str(caught.value)
+    assert "private-" not in str(caught.value)
+    assert len(requests) == 1 and requests[0].url.host == "management.azure.com"
+    target.close()
+
+
+def test_diagnosis_reuses_the_http_pool_without_mixing_bearer_audiences(monkeypatch):
+    target, calls, requests = backend(monkeypatch)
+    monkeypatch.setattr(httpx, "Client", lambda *args, **kwargs:
+                        (_ for _ in ()).throw(AssertionError("Reuse the existing TLS/client pool for metadata.")))
+    with pytest.raises(FinOpsError) as caught:
+        target.read("whoami")
+    assert caught.value.code == 9
+    assert all(request.headers["Authorization"] == "Bearer arm-test-only" for request in calls)
+    assert all(request.headers["Authorization"] == "Bearer test-only" for request in requests)
     target.close()

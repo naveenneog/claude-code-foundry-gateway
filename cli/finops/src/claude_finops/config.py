@@ -25,7 +25,9 @@ def clear_resource_tokens():
 def resource_token(resource, subscription="", tenant_id="", *, force=False, timeout=120, runner=None):
     selected = ("--tenant", tenant_id) if tenant_id else ("--subscription", subscription) if subscription else ()
     key = (resource, selected)
-    with _resource_token_lock:
+    if not _resource_token_lock.acquire(timeout=timeout):
+        raise FinOpsError("Waiting for an Azure resource token timed out. Retry after the current sign-in finishes.", 7)
+    try:
         value, acquired = _resource_tokens.get(key, ("", 0.0))
         if (force or token_needs_refresh(value)
                 or (_token_expiry(value) is None and time.monotonic() - acquired >= 300)):
@@ -36,6 +38,8 @@ def resource_token(resource, subscription="", tenant_id="", *, force=False, time
                 raise FinOpsError("No access token. Run az login in the selected backend's tenant.", 3)
             _resource_tokens[key] = (value, time.monotonic())
         return value
+    finally:
+        _resource_token_lock.release()
 
 
 def _token_expiry(value):
