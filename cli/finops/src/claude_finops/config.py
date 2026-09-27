@@ -66,8 +66,21 @@ def az(*args: str, timeout: float = 120) -> str:
     if not executable:
         raise FinOpsError("Azure CLI is missing. Install Azure CLI, then run az login.", 3)
     try:
-        result = subprocess.run([executable, *map(str, args)], capture_output=True, text=True,
-                                encoding="utf-8", timeout=timeout, check=False)
+        command = [executable, *map(str, args)]
+        environment = None
+        launcher = Path(executable)
+        python = launcher.parent.parent / "python.exe"
+        if launcher.suffix.lower() == ".cmd" and python.is_file():
+            script = launcher.read_text(encoding="utf-8-sig")
+            if '"%~dp0\\..\\python.exe" -IBm azure.cli %*' in script:
+                command = [str(python), "-IBm", "azure.cli", *map(str, args)]
+                environment = dict(os.environ, AZ_INSTALLER="MSI")
+        if os.name == "nt" and Path(command[0]).suffix.lower() in {".cmd", ".bat"}:
+            from .windows_process import run_wrapper
+            result = run_wrapper(command, timeout=timeout)
+        else:
+            result = subprocess.run(command, capture_output=True, text=True,
+                                    encoding="utf-8", timeout=timeout, check=False, env=environment)
     except (OSError, subprocess.TimeoutExpired):
         raise FinOpsError("Azure CLI did not finish. Check az account show and network access.", 7) from None
     if result.returncode:
@@ -79,9 +92,10 @@ def az(*args: str, timeout: float = 120) -> str:
     return result.stdout.strip()
 
 
-def token(scope: str, subscription: str = "", tenant_id: str = "") -> str:
+def token(scope: str, subscription: str = "", tenant_id: str = "", *, timeout=120) -> str:
     selected = ("--tenant", tenant_id) if tenant_id else ("--subscription", subscription) if subscription else ()
-    value = az("account", "get-access-token", "--scope", scope, "--query", "accessToken", "-o", "tsv", *selected)
+    value = az("account", "get-access-token", "--scope", scope, "--query", "accessToken", "-o", "tsv", *selected,
+               timeout=timeout)
     if not value:
         raise FinOpsError("No access token. Run az login in the selected backend's tenant.", 3)
     return value

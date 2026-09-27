@@ -72,6 +72,18 @@ read only on timeout or 5xx; an address-only app-role profile does not acquire t
 credential. Token acquisition, including a wait on another in-process acquisition,
 has a bounded deadline. A healthy API does not require a successful ARM read.
 
+Live terminal measurement also reproduced a Windows process-tree failure:
+`subprocess.run(timeout=...)` killed the `az.cmd` wrapper, but its Python child
+kept redirected pipes open. An offline two-second child outlived a 150 ms timeout.
+AUM recognizes the installed MSI launcher's existing `python.exe -IBm azure.cli`
+entry point and calls that owned process directly with the same installer
+environment. Other Windows wrappers run in an owned Windows job, terminated with
+their descendants on timeout. The Turnstile sign-in credential has its own short
+deadline. This does not terminate any other operator's process or change Azure
+CLI's global account. Windows job inheritance and termination are documented in
+[Job Objects](https://learn.microsoft.com/windows/win32/procthread/job-objects),
+retrieved 2026-09-27 UTC.
+
 ### Direct read cycles
 
 Resource tokens are kept only in process memory, keyed by resource and selected

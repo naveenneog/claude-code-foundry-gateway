@@ -11,7 +11,8 @@ class HttpBackend(Backend):
     def __init__(self, config, token_provider=None, transport=None):
         config.validate()
         self.config = config
-        self._token_provider = token_provider or (lambda: token(config.scope, config.subscription, config.tenant_id))
+        self._token_provider = token_provider or (lambda: token(
+            config.scope, config.subscription, config.tenant_id, timeout=self._token_timeout()))
         self._token = None
         self._features = None
         self._etags = {}
@@ -56,6 +57,9 @@ class HttpBackend(Backend):
 
     def _request_timeout(self, method, path):
         return 60
+
+    def _token_timeout(self):
+        return 120
 
     def _unavailable_error(self, method, path, status=None):
         if status:
