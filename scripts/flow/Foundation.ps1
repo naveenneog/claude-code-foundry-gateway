@@ -160,7 +160,14 @@ function Get-ClaudeFlowFoundationInstallerArgs {
         if ($name -notmatch '^apim-(.+)$') {
             throw "The recorded gateway '$name' is not named apim-<prefix>, so Install-ClaudeGateway.ps1 -Yes cannot target it. Run -Change foundation in a console, where the installer's reuse menu offers it."
         }
-        $installerArgs['NamePrefix'] = $Matches[1]
+        $prefix = $Matches[1]
+        # The installer passes these to az, a .cmd shim that cmd.exe re-reads (see Discovery.ps1).
+        foreach ($value in @($name, [string]$Record.resourceGroup)) {
+            if ($value -notmatch '^[A-Za-z0-9._-]{1,90}$') {
+                throw "The recorded gateway '$([string]$Record.resourceGroup)/$name' has characters that cmd.exe would re-read in an Azure CLI argument, so it is not passed to Install-ClaudeGateway.ps1."
+            }
+        }
+        $installerArgs['NamePrefix'] = $prefix
         $installerArgs['ResourceGroup'] = [string]$Record.resourceGroup
         if ($Gateway -and $Gateway.sku) { $installerArgs['Sku'] = [string]$Gateway.sku }
         if ($Gateway -and $Gateway.location) { $installerArgs['Location'] = [string]$Gateway.location }

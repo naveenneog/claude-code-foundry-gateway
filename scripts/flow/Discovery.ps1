@@ -91,18 +91,31 @@ function Get-ClaudeFlowDiscovery {
         $status = 'nothing-recorded'
     }
     else {
-        $arguments = @('apim', 'show', '-g', $recordGroup, '-n', $recordApim)
+        # az is a .cmd shim on Windows, and cmd.exe re-reads & | < > ^ ( ) and quotes in an unquoted
+        # argument, so a recorded name is passed only when it is letters, digits and . _ -. That covers
+        # every API Management name; a resource group with parentheses, which Azure allows, is not read.
+        $safeName = { param([string]$Value) $Value -match '^[A-Za-z0-9._-]{1,90}$' }
         $subscription = if ($Record.subscriptionId) { [string]$Record.subscriptionId } elseif ($decision -and $decision.subscriptionId) { [string]$decision.subscriptionId } else { '' }
-        if ($subscription) { $arguments += @('--subscription', $subscription) }
-        $read = Invoke-ClaudeFlowAzRead -What "API Management $recordGroup/$recordApim" -AboutSeconds $script:ClaudeFlowGatewayReadSeconds -Arguments $arguments
-        if ($read.NotFound) {
+        $read = $null
+        if (-not ((& $safeName $recordGroup) -and (& $safeName $recordApim))) {
+            $status = 'unknown'
+            $reason = "the recorded gateway '$recordGroup/$recordApim' has characters that cmd.exe would re-read in an Azure CLI argument, so it was not read"
+            Write-Host "Recorded gateway not read: $reason." -ForegroundColor Yellow
+        }
+        else {
+            $arguments = @('apim', 'show', '-g', $recordGroup, '-n', $recordApim)
+            # A subscription is passed only as an id; a name is free text and may hold any of those.
+            if ($subscription -match '^[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}$') { $arguments += @('--subscription', $subscription) }
+            $read = Invoke-ClaudeFlowAzRead -What "API Management $recordGroup/$recordApim" -AboutSeconds $script:ClaudeFlowGatewayReadSeconds -Arguments $arguments
+        }
+        if ($read -and $read.NotFound) {
             $differences.Add("record names API Management '$recordApim' in '$recordGroup', but Azure reports it was not found: $($read.Failure)")
         }
-        elseif ($read.Failure) {
+        elseif ($read -and $read.Failure) {
             $status = 'unknown'
             $reason = "the recorded gateway could not be read: $($read.Failure)"
         }
-        else {
+        elseif ($read) {
             $live = $read.Value
             $gateway = [pscustomobject]@{
                 name = [string]$live.name

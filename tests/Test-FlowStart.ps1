@@ -199,6 +199,31 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'FinOps'
     $noAz = Invoke-Child -Script $shadowStart -Arguments @('-Action', 'Setup', '-PlanOnly', '-RecordPath', (New-RecordedGateway 'recorded-noaz.json')) -NoAz
     Assert 'without the Azure CLI the read is reported as not installed and the plan completes' ((Get-Fingerprint $noAz.Text) -and $noAz.Text -match 'Azure CLI' -and $noAz.Text -match 'not (installed|on PATH)') $noAz.All
 
+    # az is a .cmd shim on Windows: cmd.exe re-reads & | < > ^ ( ) in an unquoted argument, so a
+    # recorded name carrying them would run another command. Such a name is not passed to az.
+    $unsafeLog = Join-Path $scratch 'az-unsafe.log'
+    $marker = Join-Path $scratch 'injected.txt'
+    $unsafePath = Join-Path $scratch 'recorded-unsafe.json'
+    $unsafe = [ordered]@{ schemaVersion = 2; gatewayUrl = 'https://apim-p68.azure-api.net'; apimName = 'apim-p68'; resourceGroup = "rg-p68&echo injected>`"$marker`""; subscriptionId = 'Contoso (Prod) & Test'; decisions = [ordered]@{ foundation = [ordered]@{ sku = 'BasicV2' } }; history = @() }
+    $unsafe | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $unsafePath -Encoding UTF8
+    $unsafeRun = Invoke-Child -Script $shadowStart -Arguments @('-Action', 'Setup', '-PlanOnly', '-RecordPath', $unsafePath) -Environment @{ P68_AZ_LOG = $unsafeLog }
+    Assert 'a recorded name with cmd.exe metacharacters is not passed to the Azure CLI' (@(Read-JsonLines $unsafeLog).Count -eq 0 -and -not (Test-Path -LiteralPath $marker)) ((@(Read-JsonLines $unsafeLog) | ForEach-Object { $_.args -join ' ' }) -join '; ')
+    Assert 'that record is reported as not read, and it is not drift' ((Get-Fingerprint $unsafeRun.Text) -and $unsafeRun.Text -match 'not read' -and $unsafeRun.Text -match 'cmd\.exe') $unsafeRun.All
+    $namedSubPath = Join-Path $scratch 'recorded-subscription-name.json'
+    $namedSub = [ordered]@{ schemaVersion = 2; gatewayUrl = 'https://apim-p68.azure-api.net'; apimName = 'apim-p68'; resourceGroup = 'rg-p68'; subscriptionId = 'Contoso (Prod) & Test'; decisions = [ordered]@{ foundation = [ordered]@{ sku = 'BasicV2' } }; history = @() }
+    $namedSub | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $namedSubPath -Encoding UTF8
+    $subLog = Join-Path $scratch 'az-subscription.log'
+    $subRun = Invoke-Child -Script $shadowStart -Arguments @('-Action', 'Setup', '-PlanOnly', '-RecordPath', $namedSubPath) -Environment @{ P68_AZ_LOG = $subLog; P68_AZ_URL = 'https://apim-p68.azure-api.net' }
+    $subCalls = @(Read-JsonLines $subLog)
+    Assert 'a recorded subscription that is not an id is left out of the az call' ($subCalls.Count -eq 1 -and ($subCalls[0].args -join ' ') -eq 'apim show -g rg-p68 -n apim-p68 -o json' -and (Get-Fingerprint $subRun.Text)) (($subCalls | ForEach-Object { $_.args -join ' ' }) -join '; ')
+    $guidSubPath = Join-Path $scratch 'recorded-subscription-id.json'
+    $namedSub.subscriptionId = '00000000-0000-0000-0000-00000000abcd'
+    $namedSub | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $guidSubPath -Encoding UTF8
+    $guidLog = Join-Path $scratch 'az-subscription-id.log'
+    $null = Invoke-Child -Script $shadowStart -Arguments @('-Action', 'Setup', '-PlanOnly', '-RecordPath', $guidSubPath) -Environment @{ P68_AZ_LOG = $guidLog; P68_AZ_URL = 'https://apim-p68.azure-api.net' }
+    $guidCalls = @(Read-JsonLines $guidLog)
+    Assert 'a recorded subscription id is passed with --subscription' ($guidCalls.Count -eq 1 -and ($guidCalls[0].args -join ' ') -eq 'apim show -g rg-p68 -n apim-p68 --subscription 00000000-0000-0000-0000-00000000abcd -o json') (($guidCalls | ForEach-Object { $_.args -join ' ' }) -join '; ')
+
     # ------------------------------------------------------------------ attended run, empty record
     Reset-Shadow
     $expectedFp = & {
@@ -278,6 +303,8 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'FinOps'
         $live = [pscustomobject]@{ name = 'apim-p68'; resourceGroup = 'rg-p68'; sku = 'StandardV2'; location = 'eastus2'; publisherEmail = 'ops@contoso.com'; gatewayUrl = 'https://apim-p68.azure-api.net' }
         $ctx = { param($action, $attended, $gateway) [pscustomobject]@{ action = $action; attended = $attended; gateway = $gateway; Region = $null } }
         $oddThrown = try { Get-ClaudeFlowStepPlan -Record $oddRecord -Discovery (& $ctx 'Change' $false $null) | Out-Null; '' } catch { $_.Exception.Message }
+        $unsafeRecord = [pscustomobject]@{ schemaVersion = 2; apimName = 'apim-p68'; resourceGroup = 'rg-p68&calc'; gatewayUrl = 'https://apim-p68.azure-api.net'; decisions = [pscustomobject]@{ foundation = [pscustomobject]@{ sku = 'BasicV2' } }; history = @() }
+        $unsafeThrown = try { Get-ClaudeFlowStepPlan -Record $unsafeRecord -Discovery (& $ctx 'Change' $false $null) | Out-Null; '' } catch { $_.Exception.Message }
         $attendedPlan = Get-ClaudeFlowStepPlan -Record $emptyRecord -Discovery (& $ctx 'Setup' $true $null)
         [pscustomobject]@{
             Info = Get-ClaudeFlowStepInfo
@@ -295,6 +322,7 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'FinOps'
             ChangeAttended = Get-ClaudeFlowStepPlan -Record $gatewayRecord -Discovery (& $ctx 'Change' $true $live)
             ChangeUnattended = Get-ClaudeFlowStepPlan -Record $gatewayRecord -Discovery (& $ctx 'Change' $false $live)
             OddThrown = $oddThrown
+            UnsafeThrown = $unsafeThrown
         }
     }
     Assert 'Foundation declares that an attended run may apply it first' ([bool]$f.Info.AttendedFirst)
@@ -312,6 +340,7 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'FinOps'
     $cu = $f.ChangeUnattended.Data.installerArgs
     Assert 'unattended -Change foundation targets the recorded gateway, keeping its live tier, region and publisher' ($f.ChangeUnattended.Data.runsInstaller -and $cu['Yes'] -eq $true -and $cu['NamePrefix'] -eq 'p68' -and $cu['ResourceGroup'] -eq 'rg-p68' -and $cu['Sku'] -eq 'StandardV2' -and $cu['Location'] -eq 'eastus2' -and $cu['PublisherEmail'] -eq 'ops@contoso.com') ($cu | ConvertTo-Json -Compress)
     Assert 'unattended -Change foundation refuses a gateway the installer cannot name' ($f.OddThrown -match 'contoso-gateway' -and $f.OddThrown -match 'console') $f.OddThrown
+    Assert 'unattended -Change foundation refuses a recorded name with cmd.exe metacharacters' ($f.UnsafeThrown -match 'cmd\.exe' -and $f.UnsafeThrown -match 'rg-p68&calc') $f.UnsafeThrown
     $installerCommand = Get-Command (Join-Path $root 'Install-ClaudeGateway.ps1')
     $unknownArgs = @(foreach ($plan in $f.Attended, $f.Projection, $f.NamedValue, $f.ChangeUnattended) { foreach ($k in @(if ($plan.Data.installerArgs) { $plan.Data.installerArgs.Keys })) { if (-not $installerCommand.Parameters.ContainsKey([string]$k)) { $k } } })
     Assert 'every installer argument the plans pass is a parameter of Install-ClaudeGateway.ps1' ($unknownArgs.Count -eq 0) ($unknownArgs -join ',')
