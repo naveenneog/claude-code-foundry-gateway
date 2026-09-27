@@ -59,6 +59,12 @@ and a modal-origin mutation each fail the full relevant selector; the restored
 full AUM run passes 408 tests. This is evidence for these observed failures,
 not a retrospective diagnosis of the unrecorded 2026-09-25/26 failures. The
 locked packet gate and any failure output are recorded in P71's STATUS section.
+The first P71 gate exceeded its 1,800 s suite deadline on 2026-09-27 at 23:33Z.
+The surviving runner's own timing receipt recorded AUM PASS in 249.5 s and
+guided-flow start FAIL in 225.2 s; the latter passed directly in 90.8 s afterward.
+The failed guided-flow assertion was not retained by the gate's timeout branch.
+No assertion or timeout was relaxed; the next run retains the original runner's
+stdout/stderr as separate evidence.
 
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 

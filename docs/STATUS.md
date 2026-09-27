@@ -138,6 +138,27 @@ history. Council remains with the lead; U32 external automation and U35's
 single-server deployment association remain explicit. U20's unavailable AUM
 service and large-directory limits are unchanged.
 
+### Packet gate
+
+Attempt 1, `6c5d6fd`, **2026-09-27 23:03:14-23:33:30Z**: the shared lock was
+acquired after 15 one-minute waits and released in `finally`. The gate returned
+1 because Test-All exceeded the unchanged 1,800 s command limit. Build passed;
+scorecard: 21 passed, 2 warnings, 1 failure, 2 unconfigured checks skipped.
+The Windows shell timeout left the child Test-All process running briefly.
+Its own subsequently written receipt was recovered by the verified runner PID:
+**77 checks, AUM PASS in 249.5 s**, optional AUM service SKIP, and guided-flow
+start FAIL in 225.2 s. The child tree then exited; no other operator's process
+was stopped.
+
+The exact guided-flow assertion was not retained by the original gate, which
+discards captured output on timeout. Direct `Test-FlowStart.ps1` then passed in
+**90.8 s**; that is a rerun, not proof that the prior failure was harmless.
+No guided-flow code or assertion was changed. A second gate retains the
+unchanged Test-All command's stdout/stderr through a local observational Node
+preload; it does not replace the command, alter arguments/results, relax a
+timeout or skip a check. Any timed-out descendant of that gate is cleaned up
+before its lock is released. Evidence remains under `.finops-evidence`.
+
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
 
 The owner's test on 2026-09-27: `Start-ClaudeGateway.ps1` showed nothing for a long time and asked
