@@ -121,6 +121,9 @@ if (Test-Path -LiteralPath $cliSettingsPath) {
 # Claude Code sends thinking.type.enabled to a model it does not know, and the 5-series models
 # refuse it with a 400. A release that knows the model, or a capability declaration, avoids it.
 $recordedDeployments = @(Get-ClaudeRecordedDeployment -Config $record)
+# Names read from settings.json stand in for a missing record, but they are not a record: nothing
+# can be "not declared by the record" then, as alias_check_ in bash also judges it.
+$deploymentsFromRecord = $recordedDeployments.Count -gt 0
 if (-not $recordedDeployments.Count -and $cliSettings) {
     $names = @('OPUS', 'SONNET', 'HAIKU' | ForEach-Object { [string](Get-ClaudeDiagnoseProperty $cliSettings "env.ANTHROPIC_DEFAULT_$($_)_MODEL") } | Where-Object { $_ } | Select-Object -Unique)
     $recordedDeployments = @(Get-ClaudeRecordedDeployment -Config ([pscustomobject]@{}) -Names $names)
@@ -137,8 +140,8 @@ if ($claudeVersion -and $cliSettings) {
         $pinnedName = [string](Get-ClaudeDiagnoseProperty $cliSettings "env.ANTHROPIC_DEFAULT_$($alias)_MODEL")
         if (-not $pinnedName) { continue }
         $variable = "ANTHROPIC_DEFAULT_$($alias)_MODEL_SUPPORTED_CAPABILITIES"
-        $recorded = $deploymentByName.ContainsKey($pinnedName)
-        $known = if ($recorded) { Get-ClaudeDeploymentClientSupport $deploymentByName[$pinnedName] } else { Get-ClaudeModelClientSupport -Model $pinnedName }
+        $recorded = $deploymentsFromRecord -and $deploymentByName.ContainsKey($pinnedName)
+        $known = if ($deploymentByName.ContainsKey($pinnedName)) { Get-ClaudeDeploymentClientSupport $deploymentByName[$pinnedName] } else { Get-ClaudeModelClientSupport -Model $pinnedName }
         if ($known) { $pinnedKnown += $alias }
         $aliasChecks += Get-ClaudeCodeAliasCheck -Variable $variable -PinnedName $pinnedName -Declared ([string](Get-ClaudeDiagnoseProperty $cliSettings "env.$variable")) -Known $known -Recorded:$recorded -Installed $claudeVersion
     }

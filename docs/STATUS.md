@@ -36,8 +36,10 @@ Diagnose waited for minutes on `claude doctor` and printed its output unreadably
 - [x] Live: Claude Code 2.1.101 answers through the reference gateway with the settings the setup
       writes, by every model selection; without the declarations it returns the 400 (**U28**)
 - [x] Council review of the packet diff (gpt-6-astra, 2026-09-27): five findings, all confirmed
-      and fixed, below
-- [ ] `node .ironclad/gate.mjs --stage packet` exits 0
+      and fixed, below; a second review of those fixes found five more, all confirmed and fixed
+- [x] `node .ironclad/gate.mjs --stage packet` on the merge `ea31a5f`, 2026-09-27 11:40-11:57Z:
+      22 passed, 2 warned (file size, open unknowns), 0 failed; pushed to `origin/main`
+- [ ] `node .ironclad/gate.mjs --stage packet` on the merge of the second review's fixes
 
 Found while testing P67, and fixed in it:
 
@@ -58,17 +60,33 @@ Council findings (all reproduced before fixing):
 | 4 | The MDM haiku alias ignored an explicit `-SonnetModel` | Confirmed | Only a recorded Haiku deployment takes the alias |
 | 5 | The bash watchdog could be outlived by a command that ignores TERM | Confirmed | KILL 5 s after TERM to the process group; `timeout -k 5`; tested with a TERM-ignoring child on both paths |
 
+Second review of those fixes (gpt-6-astra, 2026-09-27; all reproduced before fixing):
+
+| # | Finding | Verdict | Fix |
+|---|---|---|---|
+| 1 | A child that outlived the command on TERM kept the output open: the watchdog was cancelled when the command exited, and GNU `timeout` stops when its own child exits | Confirmed | The command runs in its own process group from perl, `setsid` or GNU `timeout` (with a longer timer than the watchdog's); once the time is up the watchdog always sends KILL to the group; tested with a child that ignores TERM after its parent exits, on each provider present |
+| 2 | The email's download URL was expanded as PowerShell: a `$web` segment vanished, and an `&` broke the command | Confirmed | One single-quoted literal; files joined to it; a file share or folder is copied; the test runs the email's command over HTTP from `/$web/Engineering&Tools/claude`, and from a folder path with a space and `&` |
+| 3 | The onboarding wrapper's final check, `Debug-ClaudeCode.ps1`, still called `Invoke-WebRequest` without `-UseBasicParsing` | Confirmed | Added there, and in the administrator diagnostics and `Show-Governance.ps1`; the test runs the check on both hosts |
+| 4 | Bash did not count a name in an older record's `models` list as recorded | Confirmed; the review also exposed the reverse case, where PowerShell counted names read from `settings.json` as a record | Both follow the record only; four more alias cases, for an older record and no record, compared word for word |
+| 5 | Without Git Bash or jq every bash check was skipped and the suite still passed | Confirmed | The suite fails unless `CLAUDE_TEST_SKIP_BASH=1` asks for the skip by name |
+
+The end-to-end run of the email's command on Windows PowerShell 5.1 then found one more defect: a
+record the installer writes on 5.1 starts with a UTF-8 byte-order mark, and the setup could not read
+it over HTTP there. The setup decodes the bytes as UTF-8 and drops the mark, and the test writes its
+record with a mark so both hosts check it.
+
 A harness defect also surfaced: Windows PowerShell 5.1 drops the double quotes inside a native
 argument, so a `bash -c` script lost the quotes of its JSON and its `trap "" TERM`. The tests now
 pass bash scripts as files.
 
-Tests: `tests/Test-WorkstationClients.ps1`, 161 assertions on PowerShell 7 and 5.1, about 155 s.
+Tests: `tests/Test-WorkstationClients.ps1`, 174 assertions on PowerShell 7 and 5.1, about 190 s.
 It runs the macOS/Linux setup and diagnostics against a scratch HOME with the clients stubbed, and
-the Windows setup from a folder holding only the files the onboarding email fetches, against a
-local listener standing in for the gateway. Every new detector was broken on a copy and seen to
-fail with the full assertion count: 3 in the model rules, 1 at the 2.7032.0 boundary, 8 in the
-bash setup, 3 in install selection, 5 in the diagnostics and rule copies, and 11 for the council
-fixes, two of them on Windows PowerShell 5.1 because only that host shows them.
+the onboarding email's own command, which fetches the setup files and runs the Windows setup,
+against a local listener standing in for the gateway and the distribution site. Every new detector
+was broken on a copy and seen to fail with the full assertion count: 3 in the model rules, 1 at
+the 2.7032.0 boundary, 8 in the bash setup, 3 in install selection, 5 in the diagnostics and rule
+copies, 11 for the first review's fixes and 8 for the second's, four of them on Windows
+PowerShell 5.1 because only that host shows them.
 
 ## P66 guided flow, 2026-09-27
 

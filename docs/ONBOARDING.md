@@ -231,7 +231,10 @@ access. Access is group membership.
 
 > Put `claude-gateway.json` and the setup scripts on a share or internal site and
 > pass `-DistributionUrl`; the email then contains a command that fetches them
-> into a `claude-setup` folder and runs the setup. The files are taken from
+> into a `claude-setup` folder and runs the setup. An `http(s)` location is
+> downloaded, and any other location, such as a file share, is copied. The
+> location is written as one quoted value, so a `$web` container or an `&` in the
+> path is kept as written. The files are taken from
 > `Setup-ClaudeWorkstation.ps1` itself: the script, `ClaudeClientSupport.ps1`,
 > `ClaudeDesktopSignIn.ps1`, `Show-Banner.ps1`, `Test-Prerequisites.ps1` and
 > Desktop's token helpers `get-foundry-token.ps1` and `get-foundry-token.cmd`.

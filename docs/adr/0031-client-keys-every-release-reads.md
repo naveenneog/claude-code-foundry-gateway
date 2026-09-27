@@ -94,8 +94,10 @@ what catches the next client and model mismatch. Every Claude Code on PATH is li
 folder in PATH order, and on Windows only a file Windows can start is chosen (`.exe`, `.cmd`,
 `.bat`, `.ps1`): npm also writes an extensionless POSIX script beside `claude.cmd`. Client
 commands run with standard input closed, UTF-8 decoding and a time limit
-(`Invoke-ClaudeClientCommand`, and `run_bounded_` in bash, which sends KILL 5 s after TERM and
-ends the command's process group); a command that cannot start is a result, not an exception.
+(`Invoke-ClaudeClientCommand`, and `run_bounded_` in bash, which runs the command in its own
+process group from perl, `setsid` or GNU `timeout` and, once the time is up, sends TERM and then
+KILL 5 s later to the whole group, so a child that outlives the command still ends); a command
+that cannot start is a result, not an exception.
 
 **What each release sends.** Measured 2026-09-27 by pointing Claude Code at a local listener
 that recorded each request body, for the alias pinned to `claude-sonnet-5` and to a custom name

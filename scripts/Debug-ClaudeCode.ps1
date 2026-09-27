@@ -96,7 +96,7 @@ if ($token) {
     foreach ($m in $Models) {
         $body = @{ model = $m; max_tokens = 16; messages = @(@{ role = 'user'; content = 'say OK' }) } | ConvertTo-Json -Depth 5
         try {
-            $r = Invoke-WebRequest -Method Post -Uri ($GatewayBaseUrl.TrimEnd('/') + '/v1/messages') -TimeoutSec 90 `
+            $r = Invoke-WebRequest -Method Post -Uri ($GatewayBaseUrl.TrimEnd('/') + '/v1/messages') -TimeoutSec 90 -UseBasicParsing `
                  -Headers @{ Authorization = "Bearer $token"; 'anthropic-version' = '2023-06-01'; 'Content-Type' = 'application/json' } `
                  -Body $body
             Ok "$m -> HTTP $($r.StatusCode)"

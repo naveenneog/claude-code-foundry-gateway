@@ -56,10 +56,11 @@ model_of_() {
   fi
   if [ -n "$m" ]; then printf '%s' "$m"; else printf '%s' "$1"; fi
 }
-# 0 when the record lists a deployment with this name.
+# 0 when the record lists a deployment with this name: in `deployments`, or in `models` for a record
+# written before the installer recorded deployments, as Get-ClaudeRecordedDeployment reads it.
 deployment_recorded_() {
   [ -n "${CONFIG_RAW:-}" ] && command -v jq >/dev/null 2>&1 &&
-    [ -n "$(printf '%s' "$CONFIG_RAW" | jq_value_ --arg n "$1" '(.deployments // [])[] | select(.name == $n) | .name' 2>/dev/null | head -1)" ]
+    [ "$(printf '%s' "$CONFIG_RAW" | jq_value_ --arg n "$1" '((.deployments // []) | map(.name // empty)) as $d | (if ($d | length) > 0 then $d else ((.models // []) | map(strings)) end) | index($n) != null' 2>/dev/null)" = "true" ]
 }
 # The capabilities a deployment's model takes. An administrator's override in the record wins: a
 # capability list, or "none".
@@ -139,39 +140,54 @@ alias_check_() {
   return 0
 }
 
-# Runs a command for at most $1 seconds, then ends it: TERM, and KILL 5 s later. Returns 124 when
-# it ran out of time. GNU timeout ends the command's process group. macOS has no timeout(1)
-# unless coreutils is installed; there perl, which macOS ships, starts the command in a process
-# group of its own so the watchdog can end its children too, and output they hold open is
-# released. CLAUDE_BOUNDED_NO_TIMEOUT=1 skips timeout(1), so tests reach the watchdog.
+# Runs a command for at most $1 seconds, then ends it and everything it started: TERM, then KILL 5 s
+# later, to the command's own process group. Returns 124 when it ran out of time. The group comes
+# from perl (setpgrp; macOS ships perl), setsid (util-linux) or GNU timeout, which is started with
+# a longer timer than this one so that only this watchdog decides. Once the time is up the watchdog
+# always finishes, so a child that outlives the command on TERM still gets KILL and releases the
+# output it holds. With none of the three only the command itself can be ended.
+# CLAUDE_BOUNDED_GROUP=perl|setsid|timeout|none picks one, for tests.
 run_bounded_() {
-  local secs="$1" rc pid watchdog marker target
+  local secs="$1" rc pid watchdog marker target provider tool
   shift
-  if [ -z "${CLAUDE_BOUNDED_NO_TIMEOUT:-}" ]; then
-    if command -v timeout >/dev/null 2>&1; then
-      timeout -k 5 "$secs" "$@"; rc=$?
-      [ "$rc" = "137" ] && rc=124
-      return "$rc"
-    fi
-    if command -v gtimeout >/dev/null 2>&1; then
-      gtimeout -k 5 "$secs" "$@"; rc=$?
-      [ "$rc" = "137" ] && rc=124
-      return "$rc"
+  provider="${CLAUDE_BOUNDED_GROUP:-}"
+  if [ -z "$provider" ]; then
+    if command -v perl >/dev/null 2>&1; then provider=perl
+    elif command -v setsid >/dev/null 2>&1; then provider=setsid
+    elif command -v timeout >/dev/null 2>&1 || command -v gtimeout >/dev/null 2>&1; then provider=timeout
+    else provider=none
     fi
   fi
   marker="$(mktemp 2>/dev/null || printf '%s/claude-bounded-%s-%s' "${TMPDIR:-/tmp}" "$$" "$RANDOM")"
   rm -f "$marker"
-  if command -v perl >/dev/null 2>&1; then
-    perl -e 'setpgrp(0, 0); exec { $ARGV[0] } @ARGV or exit 127;' -- "$@" &
-    pid=$!; target="-$pid"
-  else
-    "$@" &
-    pid=$!; target="$pid"
-  fi
-  ( sleep "$secs"; : > "$marker"; kill -TERM -- "$target" 2>/dev/null; sleep 5; kill -KILL -- "$target" 2>/dev/null ) >/dev/null 2>&1 &
+  case "$provider" in
+    perl)
+      perl -e 'setpgrp(0, 0); exec { $ARGV[0] } @ARGV or exit 127;' -- "$@" &
+      pid=$!; target="-$pid" ;;
+    setsid)
+      # A background job of a shell without job control is not a group leader, so setsid does
+      # not fork and the job itself leads the new group.
+      setsid "$@" &
+      pid=$!; target="-$pid" ;;
+    timeout)
+      tool=timeout; command -v timeout >/dev/null 2>&1 || tool=gtimeout
+      "$tool" -k 5 $(( secs + 30 )) "$@" &
+      pid=$!; target="-$pid" ;;
+    *)
+      "$@" &
+      pid=$!; target="$pid" ;;
+  esac
+  ( sleep "$secs"; : > "$marker"
+    kill -TERM -- "$target" 2>/dev/null; kill -TERM "$pid" 2>/dev/null
+    sleep 5
+    kill -KILL -- "$target" 2>/dev/null; kill -KILL "$pid" 2>/dev/null ) >/dev/null 2>&1 &
   watchdog=$!
   wait "$pid"; rc=$?
+  if [ -e "$marker" ]; then
+    wait "$watchdog" 2>/dev/null
+    rm -f "$marker"
+    return 124
+  fi
   kill "$watchdog" 2>/dev/null; wait "$watchdog" 2>/dev/null
-  if [ -e "$marker" ]; then rm -f "$marker"; return 124; fi
   return "$rc"
 }

@@ -53,7 +53,7 @@ if [ ! -f "$CLIENT_SUPPORT" ]; then
 fi
 . "$CLIENT_SUPPORT"
 CONFIG_RAW=""
-if [ -n "$CONFIG" ] && [ -f "$CONFIG" ]; then CONFIG_RAW="$(cat "$CONFIG" 2>/dev/null || true)"; fi
+if [ -n "$CONFIG" ] && [ -f "$CONFIG" ]; then CONFIG_RAW="$(cat "$CONFIG" 2>/dev/null || true)"; CONFIG_RAW="${CONFIG_RAW#$'\xef\xbb\xbf'}"; fi
 if [ -n "$CONFIG_RAW" ] && command -v jq >/dev/null 2>&1; then
   [ -z "$GATEWAY_URL" ] && GATEWAY_URL="$(printf '%s' "$CONFIG_RAW" | jq_value_ '.gatewayUrl // empty' 2>/dev/null)"
   [ -z "$TENANT_ID" ] && TENANT_ID="$(printf '%s' "$CONFIG_RAW" | jq_value_ '.tenantId // empty' 2>/dev/null)"

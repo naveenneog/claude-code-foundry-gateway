@@ -84,7 +84,7 @@ if ($GatewayUrl) {
             } else {
                 $body = @{ model = 'claude-sonnet-5'; max_tokens = 8; messages = @(@{ role='user'; content='say OK' }) } | ConvertTo-Json -Depth 6
                 try {
-                    $r = Invoke-WebRequest -Method Post -Uri ($GatewayUrl.TrimEnd('/') + '/v1/messages') -Headers @{ Authorization = 'Bearer ' + $tok.accessToken; 'anthropic-version'='2023-06-01'; 'Content-Type'='application/json' } -Body $body -TimeoutSec 90
+                    $r = Invoke-WebRequest -UseBasicParsing -Method Post -Uri ($GatewayUrl.TrimEnd('/') + '/v1/messages') -Headers @{ Authorization = 'Bearer ' + $tok.accessToken; 'anthropic-version'='2023-06-01'; 'Content-Type'='application/json' } -Body $body -TimeoutSec 90
                     Add-ClaudeDiagnoseCheck 'Gateway real request' 'PASS' "HTTP $($r.StatusCode); tier=$($r.Headers['x-claude-tier'] -join '')" 'No fix needed.' 'Azure portal > API Management services > <gateway> > APIs > Claude API > Test'
                     $gatewayRequestPassed = $true
                 } catch {
