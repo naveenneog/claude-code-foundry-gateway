@@ -69,16 +69,18 @@ $fileList = "'" + ($setupFiles -join "', '") + "'"
 $cmd = if ($DistributionUrl) {
     # The location becomes one single-quoted literal, so a $web container (Azure static websites)
     # or an & in a path stays text, and every file name is joined to it rather than expanded in it.
-    $base = $DistributionUrl.TrimEnd('/', '\')
-    $from = "`$from = '" + $base.Replace("'", "''") + "'`n"
+    # EscapeSingleQuotedStringContent also doubles the curly quotes PowerShell reads as quotes.
+    $base = if ($DistributionUrl -match '^[A-Za-z]:[\\/]$') { $DistributionUrl } else { $DistributionUrl.TrimEnd('/', '\') }
+    $escaped = [System.Management.Automation.Language.CodeGeneration]::EscapeSingleQuotedStringContent($base)
     $folder = "New-Item -ItemType Directory -Force claude-setup | Out-Null; Set-Location claude-setup`n"
     if ($base -match '^https?://') {
-        $from + $folder +
+        "`$from = '$escaped'`n" + $folder +
         "$fileList | ForEach-Object { Invoke-RestMethod -Uri (`$from + '/' + `$_) -OutFile `$_ }`n" +
         ".\Setup-ClaudeWorkstation.ps1 -ConfigPath (`$from + '/claude-gateway.json')"
     } else {
-        # A file share or folder: copied, because Invoke-RestMethod reads only URLs.
-        $from + $folder +
+        # A file share or folder: copied, because Invoke-RestMethod reads only URLs. Resolved where
+        # the developer runs the command, before it moves into claude-setup, so a relative path works.
+        "`$from = Convert-Path -LiteralPath '$escaped'`n" + $folder +
         "$fileList | ForEach-Object { Copy-Item -LiteralPath (Join-Path `$from `$_) -Destination . }`n" +
         ".\Setup-ClaudeWorkstation.ps1 -ConfigPath (Join-Path `$from 'claude-gateway.json')"
     }

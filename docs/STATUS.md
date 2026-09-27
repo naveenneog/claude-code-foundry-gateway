@@ -36,10 +36,13 @@ Diagnose waited for minutes on `claude doctor` and printed its output unreadably
 - [x] Live: Claude Code 2.1.101 answers through the reference gateway with the settings the setup
       writes, by every model selection; without the declarations it returns the 400 (**U28**)
 - [x] Council review of the packet diff (gpt-6-astra, 2026-09-27): five findings, all confirmed
-      and fixed, below; a second review of those fixes found five more, all confirmed and fixed
+      and fixed, below; a second review of those fixes found five more, and a third review six
+      more, all confirmed and fixed
 - [x] `node .ironclad/gate.mjs --stage packet` on the merge `ea31a5f`, 2026-09-27 11:40-11:57Z:
       22 passed, 2 warned (file size, open unknowns), 0 failed; pushed to `origin/main`
-- [ ] `node .ironclad/gate.mjs --stage packet` on the merge of the second review's fixes
+- [x] The same gate on the merge of the second review's fixes, `4327563`, 12:52-13:10Z: 22
+      passed, 2 warned, 0 failed; held back from `origin/main` for the third review's findings
+- [ ] `node .ironclad/gate.mjs --stage packet` on the merge of the third review's fixes
 
 Found while testing P67, and fixed in it:
 
@@ -75,18 +78,29 @@ record the installer writes on 5.1 starts with a UTF-8 byte-order mark, and the 
 it over HTTP there. The setup decodes the bytes as UTF-8 and drops the mark, and the test writes its
 record with a mark so both hosts check it.
 
+Third review, of the second review's fixes (gpt-6-astra, 2026-09-27; all reproduced before fixing):
+
+| # | Finding | Verdict | Fix |
+|---|---|---|---|
+| 1 | The email-command runs have no `-SkipInstall`, and on a machine without Node the setup would run the real winget and then reload PATH from the registry, dropping the test's stubs | Confirmed on reading `Install-With-Winget`; not reached here, where Node is installed | `node`, `winget` and `npm` are stubbed; winget and npm only record a call and fail, and a call fails the test |
+| 2 | After the command ended on TERM, the watchdog still sent KILL to its PID 5 s later, which may belong to another process by then | Confirmed | The watchdog stops as soon as the command is reaped, and signals go through the group, whose ID cannot be reused while a member lives |
+| 3 | A command that exited on its own before the limit could leave a child holding the captured output past it | Confirmed | Once the command has exited, anything left in its group is ended; tested with `sleep 30 & echo done`, which now returns `done` and exit 0 within about 1 s |
+| 4 | A curly apostrophe (`’`) in a share path broke the email's command, since PowerShell reads it as a quote | Confirmed | `EscapeSingleQuotedStringContent`, as PowerShell itself escapes |
+| 5 | A relative share path was resolved inside `claude-setup` | Confirmed | `Convert-Path` where the developer runs the command, before it changes folder |
+| 6 | A record in another encoding was read with its characters replaced | Confirmed | A strict UTF-8 decoder: such a record is reported as unreadable |
+
 A harness defect also surfaced: Windows PowerShell 5.1 drops the double quotes inside a native
 argument, so a `bash -c` script lost the quotes of its JSON and its `trap "" TERM`. The tests now
 pass bash scripts as files.
 
-Tests: `tests/Test-WorkstationClients.ps1`, 174 assertions on PowerShell 7 and 5.1, about 190 s.
+Tests: `tests/Test-WorkstationClients.ps1`, 178 assertions on PowerShell 7 and 5.1, about 200 s.
 It runs the macOS/Linux setup and diagnostics against a scratch HOME with the clients stubbed, and
 the onboarding email's own command, which fetches the setup files and runs the Windows setup,
 against a local listener standing in for the gateway and the distribution site. Every new detector
 was broken on a copy and seen to fail with the full assertion count: 3 in the model rules, 1 at
 the 2.7032.0 boundary, 8 in the bash setup, 3 in install selection, 5 in the diagnostics and rule
-copies, 11 for the first review's fixes and 8 for the second's, four of them on Windows
-PowerShell 5.1 because only that host shows them.
+copies, and 11, 8 and 5 for the three reviews' fixes, four of them on Windows PowerShell 5.1
+because only that host shows them.
 
 ## P66 guided flow, 2026-09-27
 

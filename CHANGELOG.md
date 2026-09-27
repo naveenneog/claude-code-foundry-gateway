@@ -837,14 +837,17 @@ exact streaming cache-creation detail remains **U13**.
   writes `claude-gateway.json` with `Set-Content -Encoding UTF8`, which on 5.1 starts the file with
   a UTF-8 byte-order mark; 5.1 left it in a `text/plain` body as three characters that
   `ConvertFrom-Json` refused, and the setup reported "No gateway configuration". The setup decodes
-  the downloaded bytes as UTF-8 and drops the mark; the bash scripts drop it too.
+  the downloaded bytes as UTF-8 and drops the mark; bytes that are not UTF-8 are reported as an
+  unreadable record rather than read with characters replaced. The bash scripts drop the mark too.
 - **The onboarding email's command downloaded only `Setup-ClaudeWorkstation.ps1`.** The setup now
   needs `ClaudeClientSupport.ps1` and `ClaudeDesktopSignIn.ps1` beside it and stops at once,
   naming them, when they are missing; Desktop also needs its token helpers. The email's command
   fetches every file the setup reads from its own folder, taken from the script itself. The
-  location is one single-quoted literal, so a `$web` container or an `&` in a path stays text, and
-  a file share or folder is copied with `Copy-Item`. The test runs the email's command as written,
-  over HTTP from a path with `$web` and `&` in it and from a folder path with a space and `&`.
+  location is one single-quoted literal, escaped as PowerShell escapes it, curly quotes included,
+  so a `$web` container, an `&` or an apostrophe in a path stays text; a file share or folder is
+  resolved where the developer runs the command, so a relative path works, and copied with
+  `Copy-Item`. The test runs the email's command as written, over HTTP from a path with `$web` and
+  `&` in it and from a relative folder path with a space, `&`, `'` and `’`.
 - **The MDM generator ignored a record with one deployment on Windows PowerShell 5.1, and pinned
   the haiku alias past an explicit `-SonnetModel`.** Assigning an `if` statement unrolled the
   one-element list, which has no `Count` there. With no Haiku deployment recorded, the haiku alias
@@ -858,10 +861,13 @@ exact streaming cache-creation detail remains **U13**.
 - **The macOS/Linux time limits could be outlived.** The watchdog used where `timeout(1)` is
   missing, as on stock macOS, sent only TERM to one process, and a child that outlived the command
   on TERM kept the captured output open. The command now runs in its own process group (from perl,
-  `setsid` or GNU `timeout`), and once the time is up the watchdog always sends KILL to the group
-  5 s after TERM. The bash model rules and this helper moved into
-  `scripts/claude-client-support.sh`, which both bash scripts source; its alias check also counts a
-  name in an older record's `models` list as recorded, as the PowerShell diagnostics do.
+  `setsid` or GNU `timeout`); once the time is up TERM and then KILL 5 s later go to the group, and
+  once the command has exited, on time or not, anything it left running in its group is ended too.
+  Signals go through the group, whose ID cannot be reused while a member lives, and the watchdog
+  stops as soon as the command is reaped, so no reused PID is signalled. The bash model rules and
+  this helper moved into `scripts/claude-client-support.sh`, which both bash scripts source; its
+  alias check also counts a name in an older record's `models` list as recorded, as the
+  PowerShell diagnostics do.
 - **The AUM service guide did not say its analytics read the whole workspace.** A warning written
   on the `aum-service` branch on 2026-09-25 never reached `main`: the service's usage reads,
   observed-person lookup and warnings call the saved `ClaudeChargeback` and `ClaudeCost` functions
