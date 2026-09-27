@@ -28,8 +28,8 @@ What the suites found, each fixed test-first (commits `acf993b`, `bf78e0a`, `128
 
 | # | Found by | Defect | Now | Held by |
 |---|---|---|---|---|
-| 1 | reading, then live `-WhatIf -Yes` | `-AuthMode` skipped the Claude Desktop sign-in section, so an external IdP choice became the helper script | the section runs whatever `-AuthMode` is | installer suite: the gateway audience in the 6 external IdP cases with `-AuthMode` |
-| 2 | reading | the summary, which is the approval, named 1 of 7 choices | it names the store and resolver access, revocation window, team budget behaviour, developers with no team, address, developer and Desktop sign-in | installer suite: each row in 16 cases on both shells |
+| 1 | reading, then live `-WhatIf -Yes` | `-AuthMode` skipped the Claude Desktop sign-in section, so an external IdP choice became the helper script | the section runs whatever `-AuthMode` is | installer suite: the gateway audience in the 36 external IdP cases with `-AuthMode` |
+| 2 | reading | the summary, which is the approval, named 1 of 7 choices | it names the store and resolver access, revocation window, team budget behaviour, developers with no team, address, developer and Desktop sign-in | installer suite: each row in 96 cases on both shells |
 | 3 | installer suite | the address question showed `https://<prefix>.azure-api.net`; the gateway is `apim-<prefix>` | the gateway's hostname | installer suite: the question and the summary row |
 | 4 | installer suite | under `-Yes`, an external IdP sign-in without its app, scope or audience reached the summary (with `-AuthMode`) or stopped naming a record field | stops before the summary, naming the parameter, saying that nothing was created | installer suite: 6 refusals |
 | 5 | flow suite | one plan had two fingerprints: `ConvertTo-Json` escapes `' < > &` on 5.1 only, and `Sort-Object` compares by culture; 10 of 12 plans differed | the flow writes its canonical JSON strings itself and sorts keys ordinally | flow suite: 11 plans on both shells; `Test-FlowContract.ps1`: the canonical text of a pinned value |
@@ -50,7 +50,7 @@ baseline number of checks and at least one failed: 25 of 25 caught. The first ru
 The two survivors were the budget merge, masked because the round trip's answers already put the
 budgets in the decision, and Status with no record file, masked by the branch for a record
 without a gateway. The tests now check the merge from a decision that holds no budgets, and Status
-in both cases. The 25th, added with the last fix, keeps a resolver access for a named-value store.
+in both cases. The 25th mutation keeps a resolver access for a named-value store; the check added with that fix catches it.
 
 - [x] `tests/Test-FlowPermutations.ps1` runs the real orchestrator, discovery and Foundation step,
       with a stub installer and a stub Azure CLI, over action (Setup, Change foundation, Guide,
@@ -73,8 +73,9 @@ in both cases. The 25th, added with the last fix, keeps a resolver access for a 
       the Azure CLI and the Retail Prices API stubbed in process, over tier × entitlement store ×
       developer sign-in × Desktop sign-in, with and without `-AuthMode`, on PowerShell 7 and
       Windows PowerShell 5.1: the summary names each choice, and each refusal comes before the
-      summary with its reason. 16 cases cover every pair of levels (62 pairs, checked by the
-      suite), plus 6 refusals and a reused gateway; 44 checks; 46 installer runs in 8-12 s
+      summary with its reason. Offline, every combination: 96 cases, plus 6 refusals and a
+      reused gateway, 103 per shell, 44 checks, about 40 s; `-Live` and `-Pairs` run 16 cases that
+      cover every pair of levels (62 pairs, checked by the suite), 23 per shell
 - [x] Each failure found is fixed test-first, starting with the two above
 - [x] The installer matrix runs once live and read-only against the reference subscription on
       both shells; the result and timings are recorded here. 2026-09-27 22:18-22:26 UTC, `-Live`

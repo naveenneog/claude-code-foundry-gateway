@@ -34,8 +34,8 @@ exact streaming cache-creation detail remains **U13**.
   attended, `-PlanOnly` and unattended apply (76 runs, some on Windows PowerShell 5.1), a recorded
   foundation through an unattended Change, and Foundation's installer arguments over 432
   combinations. `tests/Test-InstallerPermutations.ps1` runs the installer under `-WhatIf -Yes` over
-  tier × entitlement store × developer sign-in × Desktop sign-in (every pair of levels), six
-  refusals and a reused gateway, on both shells, offline in about 10 s; `-Live` runs the same cases
+  every combination of tier × entitlement store × developer sign-in × Desktop sign-in (96 cases), six
+  refusals and a reused gateway, on both shells, offline in about 40 s; `-Live` runs 16 cases that cover every pair of levels
   read-only against the signed-in subscription. [Guided flow](docs/GUIDED-FLOW.md#what-the-tests-hold).
 - Guided-flow FinOps modules for tool selection, USD/token budgets, monitoring workbooks
   and chargeback reports, including a scheduled USD reconciler job definition for

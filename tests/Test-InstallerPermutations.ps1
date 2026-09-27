@@ -3,7 +3,7 @@
 # PowerShell 5.1. Offline: tests/InstallerPermutationDriver.ps1 stubs the Azure CLI, the Retail
 # Prices API and the reachability probe in process, so a case takes under a second instead of the
 # 18-20 s measured live. -Live runs the same cases read-only against the signed-in subscription.
-param([switch]$Live, [string]$FoundryAccount, [string]$FoundryResourceGroup, [string]$ReuseGateway, [string]$ReuseResourceGroup, [int]$Parallel = 4)
+param([switch]$Live, [string]$FoundryAccount, [string]$FoundryResourceGroup, [string]$ReuseGateway, [string]$ReuseResourceGroup, [int]$Parallel = 4, [switch]$Pairs)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $fail = 0
@@ -29,9 +29,12 @@ if ($Live) {
     $reusedName = $ReuseGateway; $reusedSku = [string](az apim show -g $ReuseResourceGroup -n $ReuseGateway --query sku.name -o tsv)
 }
 
-# The pairs design: every developer sign-in with every Desktop sign-in (the defect this packet
-# found is that pair), and tier and store rotated so that every pair of levels of any two of the
-# four factors occurs. The coverage is checked below, so an edit cannot drop a pair unnoticed.
+# Offline, every combination of tier x store x developer sign-in x Desktop sign-in (96 cases, about
+# 40 s on both shells). Live, or with -Pairs, the pairs design: every developer sign-in with every
+# Desktop sign-in (the defect this packet found is that pair), and tier and store rotated so that
+# every pair of levels of any two of the four factors occurs, in 16 cases of about 20 s each live.
+# The coverage of either design is checked below, so an edit cannot drop a case unnoticed.
+if ($Live) { $Pairs = [switch]$true }
 $tiers = @('BasicV2', 'StandardV2', 'PremiumV2')
 $stores = @('named-value', 'projection')
 $auths = @('', 'interactive', 'device', 'helper')
@@ -39,27 +42,33 @@ $desktops = @('', 'helper-script', 'external-idp-browser', 'external-idp-broker'
 $cases = [System.Collections.Generic.List[object]]::new()
 for ($a = 0; $a -lt 4; $a++) {
     for ($d = 0; $d -lt 4; $d++) {
-        $p = [ordered]@{} + $placement
-        $f = [ordered]@{ tier = $tiers[($a + $d) % 3]; store = $stores[($a + [math]::Floor($d / 2)) % 2]; auth = $auths[$a]; desktop = $desktops[$d]; bearer = 'id_token' }
-        $p.Sku = $f.tier
-        $p.EntitlementStore = $f.store
-        if ($f.store -eq 'projection') { $p.DeployProjection = $true }
-        if ($f.auth) { $p.AuthMode = $f.auth }
-        if ($f.desktop) { $p.DesktopSignInKind = $f.desktop }
-        if ($f.desktop -like 'external-idp-*') {
-            $p.DesktopEntraClientId = $clientId
-            if ($a % 2) { $f.bearer = 'access_token'; $p.DesktopBearerTokenType = 'access_token'; $p.DesktopEntraScopes = $scope; $p.DesktopEntraAudience = $audience }
+        $levels = [System.Collections.Generic.List[object]]::new()
+        if ($Pairs) { $levels.Add(@($tiers[($a + $d) % 3], $stores[($a + [math]::Floor($d / 2)) % 2])) }
+        else { foreach ($t in $tiers) { foreach ($s in $stores) { $levels.Add(@($t, $s)) } } }
+        foreach ($level in $levels) {
+            $p = [ordered]@{} + $placement
+            $f = [ordered]@{ tier = $level[0]; store = $level[1]; auth = $auths[$a]; desktop = $desktops[$d]; bearer = 'id_token' }
+            $p.Sku = $f.tier
+            $p.EntitlementStore = $f.store
+            if ($f.store -eq 'projection') { $p.DeployProjection = $true }
+            if ($f.auth) { $p.AuthMode = $f.auth }
+            if ($f.desktop) { $p.DesktopSignInKind = $f.desktop }
+            if ($f.desktop -like 'external-idp-*') {
+                $p.DesktopEntraClientId = $clientId
+                if ($a % 2) { $f.bearer = 'access_token'; $p.DesktopBearerTokenType = 'access_token'; $p.DesktopEntraScopes = $scope; $p.DesktopEntraAudience = $audience }
+            }
+            $cases.Add([pscustomobject]@{ id = "case-$a$d-$($f.tier)-$($f.store)"; factors = $f; params = $p })
         }
-        $cases.Add([pscustomobject]@{ id = "pair-$a$d"; factors = $f; params = $p })
     }
 }
-$pairs = @{}
+$covered = @{}
 foreach ($c in $cases) {
     $v = @("tier=$($c.factors.tier)", "store=$($c.factors.store)", "auth=$($c.factors.auth)", "desktop=$($c.factors.desktop)")
-    for ($i = 0; $i -lt 4; $i++) { for ($j = $i + 1; $j -lt 4; $j++) { $pairs["$($v[$i])|$($v[$j])"] = $true } }
+    for ($i = 0; $i -lt 4; $i++) { for ($j = $i + 1; $j -lt 4; $j++) { $covered["$($v[$i])|$($v[$j])"] = $true } }
 }
 $expectedPairs = 3 * 2 + 3 * 4 + 3 * 4 + 2 * 4 + 2 * 4 + 4 * 4
-Assert "the design covers every pair of levels of any two factors ($expectedPairs pairs in $($cases.Count) cases)" ($pairs.Count -eq $expectedPairs) "$($pairs.Count) of $expectedPairs"
+if ($Pairs) { Assert "the design covers every pair of levels of any two factors ($expectedPairs pairs in $($cases.Count) cases)" ($covered.Count -eq $expectedPairs) "$($covered.Count) of $expectedPairs" }
+else { Assert "the design is every combination of the four factors ($($cases.Count) distinct cases)" ($cases.Count -eq 96 -and @($cases | ForEach-Object id | Sort-Object -Unique).Count -eq 96 -and $covered.Count -eq $expectedPairs) "$($cases.Count) cases" }
 
 # Refusals: each stops before the summary, with a reason that names what to pass.
 function New-RefusalCase([string]$Id, [hashtable]$Extra, [string]$Expect) {
