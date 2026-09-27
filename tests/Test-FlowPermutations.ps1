@@ -433,6 +433,23 @@ try {
         Test-Case 'the installer''s Desktop sign-in record, merged into the decision, gives the installer back that sign-in' $res $ok $(if ($m.Error) { $m.Error } elseif ($ia) { "kind=$($ia['DesktopSignInKind']) client=$($ia['DesktopEntraClientId']) bearer=$($ia['DesktopBearerTokenType'])" } else { 'no arguments' })
     }
 
+    # The merge reads what the installer writes: every field it maps back is a key of the record the
+    # real installer builds (its $config hashtable), so the stub installer's shape cannot drift alone.
+    $configAst = $installerAst.Find({ param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$config' -and $n.Right.Extent.Text -match '^\[ordered\]@\{' }, $true)
+    $configKeys = @()
+    if ($configAst) {
+        $table = $configAst.Right.Find({ param($n) $n -is [System.Management.Automation.Language.HashtableAst] }, $true)
+        foreach ($pair in $table.KeyValuePairs) {
+            $key = $pair.Item1.Extent.Text.Trim("'", '"')
+            $configKeys += $key
+            $inner = $pair.Item2.Find({ param($n) $n -is [System.Management.Automation.Language.HashtableAst] }, $true)
+            if ($inner) { foreach ($sub in $inner.KeyValuePairs) { $configKeys += "$key.$($sub.Item1.Extent.Text.Trim("'", '"'))" } }
+        }
+    }
+    $merges = @('sku', 'location', 'foundryAccount', 'foundryResourceGroup', 'resourceGroup', 'entitlementStore', 'resolverInboundAccess', 'authMode', 'standardGroup', 'premiumGroup', 'desktopSignIn', 'tiers', 'tiers.standard', 'tiers.premium', 'organisation', 'organisation.tokensPerMonth', 'requestsPerMinute')
+    $absent = @($merges | Where-Object { $configKeys -notcontains $_ })
+    Assert "the installer's record holds every field the merge reads ($($merges.Count))" ($configKeys.Count -gt 10 -and $absent.Count -eq 0) ("absent: " + ($absent -join ', '))
+
     foreach ($name in $checked.Keys) {
         $detail = if ($failures.Contains($name)) { "$($failures[$name].Count) of $($checked[$name]): " + (@($failures[$name] | Select-Object -First 3) -join '; ') } else { '' }
         Assert "$name ($($checked[$name]))" (-not $failures.Contains($name)) $detail
