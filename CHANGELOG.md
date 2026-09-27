@@ -799,6 +799,8 @@ exact streaming cache-creation detail remains **U13**.
   so every later check went unreported and the guided Verify step recorded only a warning. Both
   take `-FoundryResourceGroup` now, a throwing sub-check is recorded as a failed check, and the
   guided flow and `Debug-ClaudeSetup.ps1` pass the recorded Foundry account and group.
+  `Debug-ClaudeSetup.ps1` waits `-HealthTimeoutSeconds` (300 by default) for the health check,
+  which measured 182-201 s against a shared Foundry account; it had waited 90 s.
 - **The guided Verify step passed when the health check failed.** It checked only that a health
   run was recorded. It now also requires the health check to pass, and names the command to see
   and fix each failing check.
