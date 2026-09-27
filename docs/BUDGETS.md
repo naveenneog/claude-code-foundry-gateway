@@ -124,10 +124,11 @@ stay fresh without a person running `Sync-ClaudeUsdBudgets.ps1`.
 The script deploys `infra/usd-reconciler-job.bicep` beside the gateway. The template
 creates or reuses a Container Apps environment, a user-assigned managed identity, and
 one scheduled job with cron `*/5 * * * *` in UTC. The job starts from the tag-pinned
-`mcr.microsoft.com/azure-cli:2.90.0` image, fetches the public repository at the
-pinned commit, installs the AUM-service Python requirements, signs in with its
-managed identity, and runs the same Python engine as `Sync-ClaudeUsdBudgets.ps1`:
-`python -m aum_service.usd_command --managed-identity`.
+`python:3.12.11-slim-bookworm` image, fetches the public repository tarball at the
+pinned commit, installs the AUM-service Python requirements, and runs the same Python
+engine as `Sync-ClaudeUsdBudgets.ps1`: `python3 -m aum_service.usd_command
+--managed-identity`. It uses Azure Identity's managed-identity endpoint directly;
+there is no Azure CLI sign-in inside the container.
 
 Permissions are deliberately narrow:
 
