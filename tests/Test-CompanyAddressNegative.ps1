@@ -1,7 +1,6 @@
 # Every mutation runs the complete original assertion count in a private copy.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-$engine = (Get-Process -Id $PID).Path
 $scratch = Join-Path ([IO.Path]::GetTempPath()) ('company-mutations-' + [guid]::NewGuid().ToString('N'))
 $cases = @(
     @('address','(?m)^    if \(-not \(Test-ClaudeFlowSubscriptionId \$SubscriptionId\)\).*$', '    if ($false) { throw ''subscription'' }','subscription ID is required','invalid subscription'),
@@ -70,12 +69,23 @@ $paths = @{
     start = 'Start-ClaudeGateway.ps1'; transport = 'scripts\ClaudeNetwork.ps1'
 }
 function Run-Suite([string]$Test) {
-    $saved = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    try { $output = @(& $engine -NoProfile -NonInteractive -File (Join-Path $scratch "tests\$Test") 2>&1); $code = $LASTEXITCODE }
-    finally { $ErrorActionPreference = $saved }
-    $text = $output -join "`n"
+    $pipeline = [powershell]::Create()
+    try {
+        $null = $pipeline.AddScript(@'
+param($Path)
+$global:LASTEXITCODE = 0
+& $Path 6>&1
+[pscustomobject]@{ P69SuiteExit = $LASTEXITCODE }
+'@).AddArgument((Join-Path $scratch "tests\$Test"))
+        try { $output = @($pipeline.Invoke()) }
+        catch { throw "Suite did not reach its full summary: $Test`n$($_.Exception.Message)" }
+        $exit = @($output | Where-Object { $_.PSObject.Properties.Name -contains 'P69SuiteExit' })
+        $code = if ($exit.Count -eq 1) { [int]$exit[0].P69SuiteExit } else { -1 }
+        $text = (@($output | Where-Object { $_.PSObject.Properties.Name -notcontains 'P69SuiteExit' }) -join "`n") + "`n" + ($pipeline.Streams.Error -join "`n")
+    }
+    finally { $pipeline.Dispose() }
     $count = [regex]::Match($text, 'Company (?:address|certificate|flow): (\d+) assertions, \d+ passed, (\d+) failed\.')
-    if (-not $count.Success) { throw "Suite did not reach its full summary: $Test`n$text" }
+    if (-not $count.Success -or $code -eq -1) { throw "Suite did not reach its full summary: $Test`n$text" }
     [pscustomobject]@{ Code = $code; Text = $text; Count = [int]$count.Groups[1].Value }
 }
 try {

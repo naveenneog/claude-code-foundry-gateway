@@ -49,6 +49,7 @@ handover consistency), `643ae41` (negative detectors). Plan `c433f89`; contract 
 | `Test-CompanyCertificate.ps1` | 30/30 assertions | 30/30 assertions |
 | `Test-CompanyFlow.ps1` | 24/24 assertions | 24/24 assertions |
 | `Test-CompanyAddressNegative.ps1` | 59/59 mutations caught | 59/59 mutations caught |
+| `Test-CompanyMutationRunner.ps1` | 5/5 assertions | 5/5 assertions |
 | Actual `Invoke-ClaudeAddressHttps`, read-only against the reference Azure hostname without a token | HTTP 401; trusted chain and exact pin; 0.91 s | HTTP 401; trusted chain and exact pin; 1.24 s |
 
 The first RED runs completed 61 address and 30 certificate assertions on both hosts, all failing
@@ -100,6 +101,15 @@ group and no matching soft-deleted gateway.
 
 Council review and the decision about the blocked public-domain proof belong to the lead.
 The roadmap entry remains unticked.
+
+First locked packet gate, `e6ddf0d`: exit 1 after 1,817.3 s because Test-All exceeded its unchanged
+1,800-second budget. The P69 mutation check alone occupied 10 minutes 38 seconds in the serial
+lane, repeatedly starting native PowerShell processes. The gate's timed-out shell left its
+Test-All child running; only that verified P69 process tree was stopped by explicit process IDs.
+The fix retains every mutation and assertion but uses a fresh, disposable PowerShell runspace
+for each case. Dedicated runner tests cover exit codes, output, missing summaries and isolation.
+All 59 cases then passed in 82.9 s on PowerShell 7 and 164.8 s on Windows PowerShell 5.1, with
+the same 71/30/24 full assertion counts. The charter budget is not increased.
 
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
 
