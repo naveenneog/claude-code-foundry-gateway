@@ -34,12 +34,26 @@ function Get-FinOpsFlowDiscoveryValue {
     return $null
 }
 
+$script:FinOpsFlowChoiceCache = @{}
+
 function Get-FinOpsFlowChoices {
     param($Discovery)
     $region = [string](Get-FinOpsFlowDiscoveryValue $Discovery 'Region')
     $prices = Get-FinOpsFlowDiscoveryValue $Discovery 'AumPrices'
     $turnstile = Get-FinOpsFlowDiscoveryValue $Discovery 'TurnstilePrices'
-    if ($region -and $null -eq $prices) { $prices = Get-ClaudeAumPrices -Region $region }
+    if ($region -and $null -eq $prices) {
+        # Read once per region: the question and the plan both need the choices (ADR-0032).
+        if ($script:FinOpsFlowChoiceCache.ContainsKey($region)) { return @($script:FinOpsFlowChoiceCache[$region]) }
+        # Measured 2026-09-27 for eastus2: 3.8 s for the AUM prices and 2.4 s for the Turnstile comparison.
+        Write-Host ("Pricing the FinOps tools in {0} from the Azure Retail Prices API (about 6 s)..." -f $region) -ForegroundColor DarkGray
+        $watch = [Diagnostics.Stopwatch]::StartNew()
+        $prices = Get-ClaudeAumPrices -Region $region
+        if ($null -eq $turnstile -and $null -ne $prices) { $turnstile = Get-ClaudeFinOpsComparisonPrice -Region $region -AumPrices $prices }
+        Write-Host ("  priced in {0:N1} s" -f $watch.Elapsed.TotalSeconds) -ForegroundColor DarkGray
+        $choices = @(Get-ClaudeFinOpsChoices -Prices $prices -TurnstilePrices $turnstile)
+        $script:FinOpsFlowChoiceCache[$region] = $choices
+        return $choices
+    }
     if ($region -and $null -eq $turnstile -and $null -ne $prices) { $turnstile = Get-ClaudeFinOpsComparisonPrice -Region $region -AumPrices $prices }
     return @(Get-ClaudeFinOpsChoices -Prices $prices -TurnstilePrices $turnstile)
 }

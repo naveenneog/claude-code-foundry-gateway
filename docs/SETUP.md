@@ -62,7 +62,9 @@ subscription, resource group and location.
 The gateway is a front door and cannot create a model, but the installer can
 deploy a model for you. If no account in the subscription has a Claude
 deployment, it lists the models the account is entitled to deploy, asks which one
-and at what capacity, and creates it before continuing. Claude is not offered in
+and at what capacity, and lists that deployment in its summary. It creates the
+deployment first, after the summary is confirmed, and not at all under `-WhatIf`,
+so declining at the summary leaves nothing behind. Claude is not offered in
 every region, so an account in a region without it fails with that stated rather
 than with a deployment error.
 
@@ -167,6 +169,19 @@ and confirm the subscription's regional capacity before deploying.
 
 Deploy the gateway in the **same region as the Foundry account** where possible.
 A cross-region hop adds latency to every token.
+
+In a console, `Install-ClaudeGateway.ps1` lists the Foundry account's region
+first and then the other regions in its geography that publish an API
+Management v2 price, each with the monthly list price of the three v2 tiers
+for one unit at 730 hours. The prices come from one
+[Azure Retail Prices API](https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices)
+call, and the geography from `az account list-locations`. A tier the API does
+not publish in a region reads as not published. These are list prices: the
+agreement's price sheet states what the organization pays, and reading it
+takes a billing role rather than a subscription role
+([View and download your organization's Azure pricing](https://learn.microsoft.com/azure/cost-management-billing/manage/ea-pricing),
+**U31**). `install-claude-gateway.sh` asks for the region without prices
+([ROADMAP](ROADMAP.md)).
 
 ---
 
@@ -363,17 +378,27 @@ deployment.
 
 **1. Prerequisites, sign-in, and Foundry discovery.** Everything is checked
 before anything is touched, and only accounts with a Claude deployment are
-offered — here 13 candidates narrowed to one.
+offered — here 13 candidates narrowed to one. The search states its estimate
+(about 4 s per account) and reports each account as it is read.
 
 ![The wizard checking prerequisites, confirming the Azure sign-in and subscription, then listing the single Foundry account that has Claude deployments](guide/run-1-prerequisites.png)
 
-**2. Reuse an existing gateway, or create one.** API Management is the whole
+![The Foundry account search stating 13 candidate accounts at about 4 s each, then one line per account with what it holds and how long it took.](guide/34-installer-foundry-progress.png)
+
+**2. Region and tier, priced.** The region prompt lists the Foundry account's
+region and the rest of its geography with each v2 tier's monthly list price
+([Region](#region)); the tier prompt repeats the three prices for the chosen
+region.
+
+![The installer's region prompt: nine US regions, each with the Basic v2, Standard v2 and Premium v2 monthly list price from the Azure Retail Prices API and the time they were read, the agreement's price sheet named as the authority; then each tier's price in eastus2 above the tier prompt.](guide/31-installer-region-prices.png)
+
+**3. Reuse an existing gateway, or create one.** API Management is the whole
 cost of this accelerator, so any v2 instance you already own is offered first,
 annotated with whether it already carries the Claude API.
 
 ![The wizard listing two existing v2 API Management instances with their SKU, region and resource group, plus a third option to create a new one](guide/run-2-reuse-existing-apim.png)
 
-**3. Budgets.** Every prompt has a working default in brackets — Enter accepts
+**4. Budgets.** Every prompt has a working default in brackets — Enter accepts
 it. These become APIM named values, so they are changeable later without
 redeploying.
 
@@ -416,7 +441,7 @@ where it costs money, with the figure at your stated developer count:
 > `claude-gateway.json`. Use `scripts/New-ClaudeDesktopEntraApp.ps1 -WhatIf` to
 > review the Entra app registration before creating it.
 
-**4. The summary, before anything is created.** Reusing is called out
+**5. The summary, before anything is created.** Reusing is called out
 explicitly, along with what will and will not be touched.
 
 ![The summary listing subscription, Foundry account, resource group, API Management instance marked REUSING, both tier budgets and the Entra groups, ending with a confirmation prompt](guide/run-4-summary.png)
@@ -434,10 +459,17 @@ entitlement, verifies the controls, and writes `onboarding/claude-gateway.json`
 > created by the wizard, and
 > [onboarding/README.md](../onboarding/README.md) explains what lands there.
 >
-> It holds the gateway URL, tenant id, group names and tier limits — **no
-> secret**. Access is Entra group membership, enforced at the gateway, so the
+> It holds the gateway URL, tenant id, the API Management tier and region, the
+> Foundry account name, group names and tier limits — **no secret**. Access is
+> Entra group membership, enforced at the gateway, so the
 > file is safe to email or put on a share. Someone holding it without being in
 > the group still gets `403`.
+
+It ends with numbered next steps. Run on its own in a console, it then offers
+the FinOps tool setup (`scripts/Select-ClaudeFinOpsTooling.ps1`), which lists
+each tool with its monthly price in the gateway's region; `-ChooseFinOps` opens
+it without asking. The guided flow passes `-SkipFinOpsOffer`, because its FinOps
+step follows the installer ([Guided flow](GUIDED-FLOW.md#attended-setup)).
 
 Re-runnable, so it is also how you change budgets later.
 
@@ -561,6 +593,24 @@ Two constraints:
 - **The deployment follows the instance.** The API and named values are parented
   to API Management, so the wizard switches to that instance's resource group
   and region and tells you it has done so.
+
+To update a known gateway without the menu, name it:
+`./Install-ClaudeGateway.ps1 -ExistingApimName <apim> -ResourceGroup <rg>`. The
+installer takes the same reuse path, keeps the instance's region, tier, name and
+publisher, and does not ask for them; it refuses an instance that is not found or
+is not a v2 tier. The guided flow's `-Change foundation` runs it this way
+([Guided flow](GUIDED-FLOW.md#attended-setup)).
+
+On Windows the Azure CLI is `az.cmd`, and `cmd.exe` re-reads
+`& | < > ^ ( ) " %` in an argument. The installer checks the parameters it was
+given that reach `az` (subscription, Foundry account and group, gateway group,
+region, name prefix, existing gateway name, publisher email, tier groups, and
+the Desktop client id and audience) right after its prerequisites, before its
+first `az` call that uses one. It checks again before its summary, covering the
+values it adopted from a reused gateway and the Desktop gateway audience it
+derived. Either check stops the installer, naming the value; nothing has been
+created at that point. The organisation details for a first Claude deployment
+are not checked: they go to Azure in a JSON body.
 
 Re-running against a gateway you already set up is the supported way to update
 policies or budgets. Live state is preserved: the wizard reads the current

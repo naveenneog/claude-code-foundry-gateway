@@ -195,6 +195,77 @@ function Get-AzureRetailPrice {
     }
 }
 
+function Get-AzureRetailPriceAcrossRegions {
+    <#
+    .SYNOPSIS
+        The unit price of named meters of one service, in every region that publishes them.
+
+    .DESCRIPTION
+        One query instead of one per region: the filter names the service and each meter with eq,
+        joined with or, and leaves the region out. Measured 2026-09-27: the three API Management
+        v2 unit meters in every region are 182 rows on one page, read in 0.7 s.
+
+        The guarantees of Get-AzureRetailPrice hold per region and meter: consumption rows only,
+        free-tier rows dropped, the marginal row of a tiered meter. A region that does not publish
+        a meter is absent from the result, never priced at 0. Returns $null when the API cannot
+        be reached; Get-AzureRetailPriceUnavailableReason says why.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$ServiceName,
+        [Parameter(Mandatory = $true)][string[]]$MeterName,
+        [int]$TimeoutSec = 60
+    )
+
+    Set-StrictMode -Version Latest
+
+    $key = "$ServiceName|*|" + (@($MeterName | Sort-Object) -join ',')
+    if ($script:RetailPriceCache.ContainsKey($key)) {
+        $hit = $script:RetailPriceCache[$key]
+        if ($null -eq $hit) { return $null }
+        return , $hit
+    }
+
+    # eq and or only. See note 1 in the file header.
+    $meters = @($MeterName | ForEach-Object { "meterName eq '$($_ -replace "'", "''")'" }) -join ' or '
+    $filter = "serviceName eq '$($ServiceName -replace "'", "''")' and priceType eq 'Consumption' and ($meters)"
+    $url = $script:RetailPriceEndpoint + '?$filter=' + [uri]::EscapeDataString($filter)
+
+    $rows = @()
+    $page = 0
+    try {
+        while ($url -and $page -lt 20) {
+            $resp = Invoke-RestMethod -Uri $url -TimeoutSec $TimeoutSec -ErrorAction Stop
+            $rows += @($resp.Items)
+            $page++
+            $url = $resp.NextPageLink
+        }
+    }
+    catch {
+        $script:RetailPriceUnavailable = $_.Exception.Message
+        $script:RetailPriceCache[$key] = $null
+        return $null
+    }
+
+    $retrieved = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    $usable = @($rows | Where-Object { $_.type -eq 'Consumption' -and $_.skuName -notlike '*Free*' -and $_.productName -notlike '*Free*' })
+    $prices = @(
+        $usable | Group-Object { "$($_.armRegionName)|$($_.meterName)" } | ForEach-Object {
+            $pick = @($_.Group | Sort-Object { [decimal]$_.tierMinimumUnits })[-1]
+            [pscustomobject]@{
+                Region        = [string]$pick.armRegionName
+                MeterName     = [string]$pick.meterName
+                UnitPrice     = [decimal]$pick.retailPrice
+                UnitOfMeasure = [string]$pick.unitOfMeasure
+                Currency      = [string]$pick.currencyCode
+                RetrievedUtc  = $retrieved
+            }
+        }
+    )
+    $script:RetailPriceCache[$key] = $prices
+    return , $prices
+}
+
 function Get-AzureRetailPriceUnavailableReason {
     <#
     .SYNOPSIS

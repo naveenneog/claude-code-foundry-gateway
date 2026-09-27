@@ -386,11 +386,15 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       then a raise that lifts it). **Merged 2026-09-26**: `aum usd`; live: 403
       `usd_budget_exceeded` 73.8 s after the crossing request, 200 after the raise. Open: **U13**,
       a live AUM-service deployment of the dollar routes
-- [ ] P63 split the five files over the size budget — the gate's `quality.filesize` warning:
-      `tests/Test-BusinessUnitsNegative.ps1` (3,208 lines, budget 800),
-      `tests/Test-AdminSurface.ps1` (1,348), `Install-ClaudeGateway.ps1` (1,254, budget 700),
-      `scripts/Test-FoundryDirect.ps1` (942) and `scripts/Setup-ClaudeFoundryDirect.ps1` (866);
-      split by responsibility, with every assertion and mutation kept
+- [ ] P63 split the files over the size budget — the gate's `quality.filesize` warning, eight files
+      at the P68 gate on 2026-09-27: `tests/Test-BusinessUnitsNegative.ps1` (3,266 lines, budget
+      800), `Install-ClaudeGateway.ps1` (1,626, budget 700; P67 and P68 added the recorded
+      deployments, the priced region and tier prompts, the numbered next steps, the `az.cmd` check
+      and `-ExistingApimName`), `tests/Test-AdminSurface.ps1` (1,350),
+      `scripts/Test-FoundryDirect.ps1` (942), `tests/Test-WorkstationClients.ps1` (932),
+      `scripts/Setup-ClaudeFoundryDirect.ps1` (866), `scripts/New-ClaudeCodePolicy.ps1` (728) and
+      `scripts/setup-claude-workstation.sh` (709); split by responsibility, with every assertion and
+      mutation kept
 - [x] P64 add and remove developers from AUM by email — acceptance: AUM searches the whole Entra
       directory while an administrator types an email, UPN or name (guests included), adds a
       person to a discovered tier group and optionally a unit or team group, removes them from
@@ -422,7 +426,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       proven live on an isolated gateway; an integrated run on 2026-09-27 found and fixed nine
       defects ([STATUS](STATUS.md#p66-guided-flow-2026-09-27)). Open: the 403 message names the
       default tier groups; the FinOps steps have not yet run on the same estate as the others
-- [ ] P67 developer workstation fixes from the owner's test — acceptance: Claude Desktop Entra
+- [x] P67 developer workstation fixes from the owner's test, merged 2026-09-27 (`ea31a5f`, `4327563`, `25bda4d`; [STATUS](STATUS.md#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)) — acceptance: Claude Desktop Entra
       sign-in uses the key spelling the Desktop release that reads it knows, including a running
       build older than the installed one; Claude Code declares capabilities by model family for
       the recorded models, pins each alias to the newest model in its family, and is compared
@@ -430,16 +434,24 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       and end with a real Claude Code reply; diagnostics never wait for input and read the real
       Desktop configuration and logs.
       [ADR-0031](adr/0031-client-keys-every-release-reads.md), **U27**, **U28**, **U29**
-- [ ] P68 guided flow redesign from the owner's test — acceptance: `Start-ClaudeGateway.ps1`
+- [x] P68 guided flow redesign from the owner's test, merged 2026-09-28 ([STATUS](STATUS.md#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)) — acceptance: `Start-ClaudeGateway.ps1`
       shows its first question within seconds and names each slow step while it runs; Setup
       hands every installer decision (tiers, sections, defaults) back to the installer's own
       prompts instead of passing `-Yes`, and a projection choice no longer stops the installer;
       each choice that changes cost shows its price, including the region, from a source the
       review names (**U31**); after the installer finishes, Setup offers the FinOps tool;
-      numbered next steps are numbered
+      numbered next steps are numbered. [ADR-0032](adr/0032-guided-flow-starts-at-once.md)
 - [ ] P69 the company address in the flow — acceptance: choosing a company address creates the
       custom hostname, certificate and DNS record, states their cost before creating them, and
       proves a request through the new address (**U30**)
+- [ ] The agreement's price sheet at each choice — acceptance: when the administrator holds a
+      billing role that can read the agreement's price sheet, the flow and the installer show the
+      agreement's prices and name the billing scope they came from; without the role they show
+      Azure retail list prices, as P68 does (**U31**)
+- [ ] The macOS/Linux installer prices its choices — acceptance: `install-claude-gateway.sh` lists
+      the Foundry account's region and the rest of its geography with each v2 tier's monthly list
+      price, prices the tier prompt, records `sku`, `location` and the Foundry account, and offers
+      the FinOps tool at the end, as `Install-ClaudeGateway.ps1` does since P68
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so

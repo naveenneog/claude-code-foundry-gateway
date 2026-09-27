@@ -14,22 +14,96 @@ non-interactively and verifies its own work.
 Without `-Action`, an interactive console shows a menu. Without a console, pass
 one of `Setup`, `Update`, `Change`, `Diagnose`, `Guide` or `Status`.
 
+The first line appears at once. With no gateway in the record it says that
+nothing is read from Azure; with a recorded gateway it names the one read, with
+an estimate before it starts and the time it took after. Measured on
+2026-09-27 against the reference subscription: with an empty record the first
+line appeared after 0.76 s and the review after 2.3 s, against 66 s before
+[ADR-0032](adr/0032-guided-flow-starts-at-once.md).
+
 The default record is `onboarding/claude-gateway.json`. It is environment
 specific and git-ignored. Use `-RecordPath` to use a different record.
 
 ## What the flow asks and why
 
-The orchestrator discovers live options first, then asks the questions exposed
-by the step modules present on the branch. It never invents resource names.
+Discovery reads only the gateway the record names (`az apim show`), and nothing
+when the record names none. The flow then asks the questions exposed by the step
+modules present on the branch. It never invents resource names.
 
 | Area | Asked by | Why |
 |---|---|---|
-| Gateway foundation | `Foundation.ps1` | API Management v2 SKU, entitlement store, developer sign-in and Desktop sign-in affect cost, scale, support and client configuration. Manual equivalent: [Setup](SETUP.md). |
+| Gateway foundation | `Install-ClaudeGateway.ps1` in a console; `Foundation.ps1` without one | In a console the installer asks its own questions ([Attended setup](#attended-setup)). Without a console the flow asks the API Management v2 SKU, entitlement store, developer sign-in and Desktop sign-in and passes them to the installer with `-Yes`. Manual equivalent: [Setup](SETUP.md). |
 | Tier, entitlement store, network edge and Desktop sign-in | `Tier.ps1`, `Entitlement.ps1`, `Network.ps1`, `DesktopSignIn.ps1` | These run under `-Action Change`. Setup lists each one with the command that changes it. Manual equivalents: [Update and change](UPDATE-AND-CHANGE.md), [Scale](SCALE.md), [Network](NETWORK.md). |
 | FinOps, budgets, monitoring and reports | `FinOps.ps1`, `Budgets.ps1`, `Monitoring.ps1`, `Reports.ps1` | FinOps tool (none, AUM Direct, AUM service, Turnstile, or Turnstile plus AUM), token or dollar budgets (without the AUM service, a scheduled reconciler job), the workbook collection and chargeback reports. Manual equivalents: [FinOps](FINOPS.md), [Budgets](BUDGETS.md), [Monitoring](MONITORING.md), [Chargeback reports](CHARGEBACK-REPORTS.md). |
 | Device profiles | `DeviceProfiles.ps1` | Per-tier MDM payloads must mirror the recorded gateway, model and Desktop sign-in choices. Manual equivalent: [MDM](MDM.md). |
 | Verification | `Verify.ps1` | Runs the gateway health checks after setup or change. Manual equivalent: [Operations health](OPERATIONS.md#2-check-health-and-headroom). |
 | Guide | `Guide.ps1` | Writes `onboarding/HOW-TO-USE.md` with this tenant's names and the operator/developer/FinOps instructions. |
+
+## Attended setup
+
+An attended run is `-Action Setup` in a console, without `-PlanOnly`,
+`-ApprovedPlanFingerprint` or `-WhatIf`. With no gateway in the record it has
+two phases ([ADR-0032](adr/0032-guided-flow-starts-at-once.md)).
+
+**1. The installer asks its own questions.** The flow prints the Foundation
+review, which names the installer's questions, and runs
+`Install-ClaudeGateway.ps1` without `-Yes`. It passes only the values the
+record's foundation decision holds, and the record's subscription id when it has
+one; the installer asks the rest with its own defaults. The flow asks for no
+fingerprint in this phase: the installer creates nothing until its summary is
+confirmed, and the summary states the monthly price. That includes the Claude
+deployment it creates when the subscription has none: the summary lists it, and
+it is created first, after the confirmation.
+
+![Attended Setup with an empty record: the first line says nothing is read from Azure, then the Foundation review names the questions Install-ClaudeGateway.ps1 asks next and says it creates nothing until its summary is confirmed.](guide/30-attended-setup-start.png)
+
+The installer's region prompt lists the Foundry account's region and the other
+regions in its geography, each with the monthly list price of the three API
+Management v2 tiers, and its tier prompt lists each tier's price in the chosen
+region ([Setup](SETUP.md#region)).
+
+![The installer's region prompt: nine US regions, each with the Basic v2, Standard v2 and Premium v2 monthly list price from the Azure Retail Prices API and the time they were read, the agreement's price sheet named as the authority; then each tier's price in eastus2 above the tier prompt.](guide/31-installer-region-prices.png)
+
+Declining at the summary stops the flow before any other step, and the installer
+has created nothing.
+
+![The installer's summary with the Basic v2 price in eastus2, the answer n at "Create these resources?", and the flow reporting that the installer created nothing and Setup stopped before the remaining steps.](guide/32-installer-summary-declined.png)
+
+**2. The flow continues once the gateway exists.** It reads the new gateway,
+asks the FinOps question with each tool priced in the gateway's region, then the
+remaining steps' questions, prints their review and asks for the first eight
+characters of its fingerprint. A mistyped fingerprint here applies none of those
+steps and says that the gateway foundation is set up and recorded.
+
+![Setup reading the recorded gateway in 2.9 s, pricing the FinOps tools in eastus2 in 4.5 s, then the FinOps question with each tool's monthly list price in that region.](guide/33-finops-priced-in-region.png)
+
+When the record already names a gateway, Setup and Guide check that gateway and
+do not run the installer again. `-Action Change -Change foundation` runs the
+installer with `-ExistingApimName` and `-ResourceGroup` set to the recorded
+gateway, so it updates that gateway and keeps its region, tier, name and
+publisher. In a console the flow passes nothing else, and the installer asks its
+other questions; the tier changes through `-Change sku`.
+
+Without a console, the flow plans every step in one review and runs the
+installer with `-Yes` and the recorded values, adding `-DeployProjection` when
+the entitlement store is the Cosmos projection.
+
+Values the flow passes to the installer can reach the Azure CLI, which on
+Windows is `az.cmd`: `cmd.exe` re-reads `& | < > ^ ( ) " %` in an argument. The
+flow refuses a list or an object where the installer takes one value, and a
+recorded value that reaches `az` (the subscription, Foundry account and group,
+gateway group, region, name, publisher email, tier groups, and the Desktop
+client id and audience) when it holds one of those characters. The
+organisation details pass: they go to Azure in a JSON body, not to `az`. The
+installer checks its parameters again at startup, before its first `az` call
+that uses one, and checks the values it adopted or derived before its summary.
+A recorded subscription that is not a subscription id is refused, so discovery
+and the installer use the same subscription.
+
+`CLAUDE_INTERACTIVE=1` treats a process whose input is redirected as a console,
+so a test can drive an attended run through standard input
+(`tests/Test-FlowStart.ps1`). `CLAUDE_NONINTERACTIVE=1` and `-NonInteractive`
+take precedence over it.
 
 ## Review and fingerprint
 
@@ -37,8 +111,14 @@ After questions, every present module returns a plan. The flow prints one review
 with actions, list-price cost where known, unknown-cost reasons, implications,
 required roles and rollback notes, then prints a SHA-256 fingerprint.
 
+In an attended run the review and fingerprint cover the steps after the
+installer, because their plans depend on what the installer created.
+`-PlanOnly`, `-ApprovedPlanFingerprint` and `-WhatIf` show and apply the
+unattended plan, in which the installer runs with `-Yes`.
+
 The Foundation line names the resource group, gateway, region, Foundry account
-and subscription, and the plan carries every installer input. A fingerprint
+and subscription, and the plan carries every installer input and the exact
+installer arguments. A fingerprint
 approved for one estate is therefore refused for another. The API Management
 line is priced from the
 [Azure Retail Prices API](https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices)
@@ -92,6 +172,16 @@ then skips only history entries with that `runId`. A different fingerprint start
 a new run, and a successful verification clears `activeRun`. If a step throws
 before returning its changes, no success-shaped history is written for that step.
 
+An attended run records its two phases in `activeRun.phase` (`lead` for the
+installer, `after-lead` for the steps after it) with the names of the steps in
+`activeRun.steps`. When a step after the installer fails, the next run of the
+same action plans the same steps, without the foundation check the recorded
+gateway would otherwise add, so its fingerprint can match: it prints
+`Resuming the Setup run started <time>`, and the steps that run completed are
+skipped. This happens only when the steps present are the recorded ones. When a
+step was added or removed since, for example a new prerequisite of a recorded
+step, the run prints that the steps differ and plans every step again.
+
 ## Update
 
 ```powershell
@@ -120,7 +210,7 @@ cost and caller impact before applying.
 
 | `-Change` | Module | What changes | Runbook |
 |---|---|---|---|
-| `foundation` | `Foundation.ps1` | Installer inputs for the gateway | [Setup](SETUP.md) |
+| `foundation` | `Foundation.ps1` | Runs `Install-ClaudeGateway.ps1 -ExistingApimName <recorded gateway>`, which updates that gateway and keeps its region, tier, name and publisher. In a console the installer asks its other questions; without a console it runs with `-Yes` and the recorded choices. The review prices the live gateway, as already running | [Setup](SETUP.md) |
 | `sku` | `Tier.ps1` | API Management tier; Basic v2 and Standard v2 change in place | [Tier](UPDATE-AND-CHANGE.md#2-change-the-api-management-tier) |
 | `entitlementStore` | `Entitlement.ps1` | Named values to the Cosmos projection and back, after a clean comparison | [Entitlement](UPDATE-AND-CHANGE.md#3-move-entitlement-between-named-values-and-the-projection) |
 | `network` | `Network.ps1` | Enterprise network edge, through its own fingerprinted review | [Network](UPDATE-AND-CHANGE.md#4-change-the-enterprise-network-edge) |
@@ -148,8 +238,12 @@ the folder is git-ignored. See [Diagnostics](DIAGNOSE.md) and
 ```
 
 Status prints the recorded decisions, release metadata, recent history and any
-record-versus-live drift discovered by `scripts/flow/Discovery.ps1`. Apply
-actions refuse to continue over a known mismatch, naming the differing field.
+record-versus-live drift discovered by `scripts/flow/Discovery.ps1`. A recorded
+gateway that Azure reports missing, or whose gateway URL differs from the record,
+is drift, and apply actions refuse to continue over it, naming the differing
+field. A read that fails for another reason (no sign-in, no network, no Azure
+CLI) is reported with its reason and is not drift; Status then says drift was not
+checked.
 
 ## Generated guide
 
@@ -206,3 +300,12 @@ FinOps modules merged, so it lists them as absent.
 ![Update on a gateway installed by the current release: all three migrations report no change.](guide/28-integrated-update-no-change.png)
 
 ![Health check with Foundry in another resource group: every check reports; the bypass check fails because the shared Foundry account has direct principals.](guide/29-integrated-health.png)
+
+### Attended setup, 2026-09-27
+
+Images 30 to 34 are excerpts of two attended runs against the reference subscription on
+2026-09-27, driven through standard input with `CLAUDE_INTERACTIVE=1`. The first had an empty
+record and was declined at the installer's summary, so nothing was created. The second had a
+record naming the reference gateway and stopped at the fingerprint prompt with a wrong entry, so
+nothing was written. Names are redacted by `guide/render-terminal.mjs`; the raw transcripts stay
+under private evidence.

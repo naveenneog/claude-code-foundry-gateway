@@ -67,8 +67,10 @@ profile. AUM service creates the owned app and deploys the service. Turnstile co
 an existing Turnstile deployment; deploying Turnstile remains this guide's separate
 procedure and the review links back to it rather than hiding that cost.
 
-For a new gateway, `Install-ClaudeGateway.ps1 -ChooseFinOps` opens the same selector after the
-install. [AUM service: choose a FinOps tool](AUM-SERVICE.md#choose-a-finops-tool) has the full
+For a new gateway, `Install-ClaudeGateway.ps1` run on its own in a console ends by offering the
+same selector, and `-ChooseFinOps` opens it without asking; the guided flow's FinOps step takes
+the place of the offer. [AUM service: choose a FinOps tool](AUM-SERVICE.md#choose-a-finops-tool)
+has the full
 comparison.
 
 ## Sign-in

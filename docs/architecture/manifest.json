@@ -5,7 +5,7 @@
       "id": "system-overview",
       "source": "docs/architecture/01-system.json",
       "inputs": {
-        "Start-ClaudeGateway.ps1": "839567083ec4b82230537e85008623d2e2f7b4ba1a4ed402449aaf573f5b4ec3",
+        "Start-ClaudeGateway.ps1": "2fc6f5b778d5fcdc41dcdf387c54459dff92cd5ec424968ce407039079cf9c29",
         "analytics/chargeback-cost.kql": "8d8a66a8980348851f37889579bf019666b229105bb4e64caae02c474de080b1",
         "analytics/chargeback-ledger.kql": "3924ba7e4edb21d761b16254452c0509a2a9d27558033d7a980c5e201e22b2f5",
         "docs/architecture/01-system.json": "dfb279d7bec41abefa25f18d44dfef14c47435d4d45467577f02cc4ca6d8b4f3",
@@ -32,7 +32,7 @@
         "scripts/Sync-ClaudeAccess.ps1": "f4f5896df08c22bbfa9702ac0afa532e4cc4c4c990a82a4d7d4676b43e8c0c84",
         "scripts/Sync-ClaudeProjection.ps1": "ddbd769cb42acd5290db364633441ca5f73af9de980d1ef3d596c299e37ffe8e",
         "scripts/flow/DeviceProfiles.ps1": "1d2854b24c442983e0960a6cde793d97328e87d5cf0d6d4c947f2d0adad6f3de",
-        "scripts/flow/Foundation.ps1": "f43d10a8f9adc137a39d245a517d1d07530400b18122a222626a4e229cea41bd",
+        "scripts/flow/Foundation.ps1": "19bf58ce717da6584e73eb441c9a4dcf40e7a63f1f9489b880c73ce7f585dc06",
         "scripts/flow/Guide.ps1": "73bb63882ee1726fd8528e5e3045ecf6fd57a89dfa82a32f6e190cd2494461db",
         "scripts/flow/Verify.ps1": "7a8b05c6848499a8fbc26d87c90f4f3bfaa899538eeb1e6c068dd7bedda847fa",
         "sync/src/apply-projection.mjs": "7ffef6a6c7c1dd6fcc35db219968ce2cab132daa1dc4131f2a200c6d54d344af"

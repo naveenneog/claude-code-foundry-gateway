@@ -34,6 +34,8 @@ Assert (@($choices | Where-Object Category -eq 'Network').Count -eq 2) 'public a
 Assert (@($choices | Where-Object { -not $_.Implications }).Count -eq 0) 'every choice explains implications'
 Assert (@($choices | Where-Object { -not $_.Cost }).Count -eq 0) 'every choice describes cost'
 Assert ((Format-ClaudeAumCost $null) -match 'unknown') 'missing prices never become free'
+Assert ((Format-ClaudeAumCost 55.467417) -eq '$55.47 /month USD list price') 'a monthly total shows cents, not six decimals'
+Assert ((Format-ClaudeAumCost 0.045 '/GB-month + usage') -eq '$0.045 /GB-month + usage USD list price') 'a unit rate keeps the precision the price list publishes'
 $revision = 'a' * 64
 Assert ((Format-ClaudeAumIfMatch $revision) -ceq ('"' + $revision + '"')) 'If-Match uses the HTTP entity-tag quoting required by PowerShell'
 

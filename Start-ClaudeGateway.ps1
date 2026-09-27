@@ -250,7 +250,7 @@ function Test-StepCompleted {
 }
 
 function Start-FlowRun {
-    param($Record, [string]$Path, [string]$CurrentAction, [string]$CurrentChange, [string]$Fingerprint)
+    param($Record, [string]$Path, [string]$CurrentAction, [string]$CurrentChange, [string]$Fingerprint, [string]$Phase = '', [string[]]$StepNames = @())
     $existing = $null
     if ($Record.PSObject.Properties.Name -contains 'activeRun') { $existing = $Record.activeRun }
     if ($existing -and $existing.action -eq $CurrentAction -and [string]$existing.change -eq [string]$CurrentChange -and $existing.fingerprint -eq $Fingerprint -and $existing.id) {
@@ -263,14 +263,32 @@ function Start-FlowRun {
         fingerprint = $Fingerprint
         startedUtc = [DateTime]::UtcNow.ToString('o')
     }
+    # ADR-0032: an attended run applies the installer ('lead') and then the other steps ('after-lead').
+    # The steps are recorded so a retry of the second phase plans the same steps and can resume it.
+    if ($Phase) {
+        Set-FlowRecordProperty $run 'phase' $Phase
+        Set-FlowRecordProperty $run 'steps' @($StepNames)
+    }
     Set-FlowRecordProperty $Record 'activeRun' $run
     Write-FlowDecisionRecord -Record $Record -Path $Path
     return [string]$run.id
 }
 
+function Get-FlowResumeRun {
+    # The interrupted second phase of an attended run, when it is the same action and change.
+    param($Record, [string]$CurrentAction, [string]$CurrentChange)
+    if (-not ($Record.PSObject.Properties.Name -contains 'activeRun') -or -not $Record.activeRun) { return $null }
+    $run = $Record.activeRun
+    if ($run.action -ne $CurrentAction -or [string]$run.change -ne [string]$CurrentChange) { return $null }
+    if (-not ($run.PSObject.Properties.Name -contains 'phase') -or $run.phase -ne 'after-lead') { return $null }
+    if (-not @($run.steps).Count) { return $null }
+    return $run
+}
+
 function Invoke-ApplySteps {
     param($Steps, $Plans, $Record, [string]$Path, [string]$CurrentAction, [string]$RunId)
-    $principal = Get-FlowPrincipal
+    # Read after the first step runs, so no Azure call waits in front of the installer (ADR-0032).
+    $principal = $null
     $release = Get-ClaudeFlowReleaseInfo -Repo $root
     for ($i = 0; $i -lt $Steps.Count; $i++) {
         $step = $Steps[$i]
@@ -282,6 +300,7 @@ function Invoke-ApplySteps {
         $before = if ($step.Info.DecisionKey) { Get-ClaudeDecision -Record $Record -Key $step.Info.DecisionKey } else { $null }
         Write-Host "Applying $($step.Info.Name)..." -ForegroundColor Cyan
         $changes = & $step.Invoke -Record $Record -Plan $plan
+        if ($null -eq $principal) { $principal = Get-FlowPrincipal }
         foreach ($key in @($changes.Keys)) {
             if ($key -eq $step.Info.DecisionKey) { Set-ClaudeDecision -Record $Record -Key $key -Value $changes[$key] }
             else { Set-FlowRecordProperty $Record $key $changes[$key] }
@@ -333,7 +352,36 @@ function Show-Status {
     Write-Host 'Live drift' -ForegroundColor Cyan
     if ($Discovery.comparison -and $Discovery.comparison.differences -and @($Discovery.comparison.differences).Count) {
         foreach ($d in @($Discovery.comparison.differences)) { Write-Host "  DRIFT $d" -ForegroundColor Yellow }
+    } elseif ($Discovery.comparison -and $Discovery.comparison.status -eq 'unknown') {
+        Write-Host "  not checked: $($Discovery.comparison.reason)" -ForegroundColor Yellow
     } else { Write-Host '  none detected' -ForegroundColor Green }
+}
+
+function Get-FlowAttendedLead {
+    # ADR-0032: in an attended run a step that declares AttendedFirst, and whose plan asks its own
+    # questions in the console, is applied before the other steps are asked anything.
+    param($Steps, $Record, $Discovery, [string]$CurrentAction)
+    $lead = [System.Collections.Generic.List[object]]::new()
+    $plans = [System.Collections.Generic.List[object]]::new()
+    $asked = [System.Collections.Generic.List[object]]::new()
+    foreach ($step in $Steps) {
+        if (-not ($step.Info.PSObject.Properties.Name -contains 'AttendedFirst' -and $step.Info.AttendedFirst)) { break }
+        Invoke-Questions -Steps @($step) -Record $Record -Discovery $Discovery -CurrentAction $CurrentAction
+        $asked.Add($step)
+        $plan = & $step.Plan -Record $Record -Discovery $Discovery
+        if (-not ($plan.Data -and $plan.Data.asksInConsole)) { break }
+        $lead.Add($step)
+        $plans.Add($plan)
+    }
+    [pscustomobject]@{ Steps = @($lead); Plans = @($plans); Asked = @($asked) }
+}
+
+function Get-FlowDiscoveryForSteps {
+    param($Record, [string]$CurrentAction, [bool]$Attended)
+    $found = Get-FlowDiscovery -Record $Record
+    Set-FlowRecordProperty $found 'action' $CurrentAction
+    Set-FlowRecordProperty $found 'attended' $Attended
+    return $found
 }
 
 if (-not $Action) {
@@ -390,7 +438,9 @@ if ($Action -eq 'Diagnose') {
     return
 }
 
-$discovery = Get-FlowDiscovery -Record $record
+# ADR-0032: an attended run is a console without -PlanOnly, -ApprovedPlanFingerprint or -WhatIf.
+$attended = [bool]((Test-ClaudeInteractive) -and -not $PlanOnly -and -not $ApprovedPlanFingerprint -and -not $WhatIfPreference)
+$discovery = Get-FlowDiscoveryForSteps -Record $record -CurrentAction $Action -Attended $attended
 if ($Action -eq 'Status') { Show-Status -Record $record -Discovery $discovery; return }
 if ($Action -ne 'Guide') { Assert-RecordMatchesLive -Discovery $discovery }
 
@@ -404,13 +454,64 @@ if ($Change) {
     if (-not $steps.Count) { throw "No present guided flow step owns change '$Change'." }
 }
 
-Invoke-Questions -Steps $steps -Record $record -Discovery $discovery -CurrentAction $Action
+# A retry of an interrupted second phase plans the same steps, so its fingerprint can match and the
+# steps that run completed are skipped (ADR-0032).
+$afterLead = $false
+$resumeRun = Get-FlowResumeRun -Record $record -CurrentAction $Action -CurrentChange $Change
+if ($resumeRun) {
+    # Resumed only when the steps after the installer are the ones recorded: a step added or removed
+    # since, or a new dependency, would otherwise be left out of an incomplete plan.
+    $resumeNames = @($resumeRun.steps | ForEach-Object { [string]$_ })
+    $candidateNames = @($steps | Where-Object { -not ($_.Info.PSObject.Properties.Name -contains 'AttendedFirst' -and $_.Info.AttendedFirst) } | ForEach-Object { $_.Info.Name })
+    if ((@($resumeNames | Sort-Object) -join ',') -eq (@($candidateNames | Sort-Object) -join ',')) {
+        $steps = @($steps | Where-Object { $_.Info.Name -in $resumeNames })
+        $afterLead = $true
+        Write-Host ("Resuming the {0} run started {1}: {2}. The gateway foundation was set up in that run." -f $Action, $resumeRun.startedUtc, (@($steps | ForEach-Object { $_.Info.Title }) -join ', ')) -ForegroundColor Cyan
+    }
+    else {
+        Write-Host ("The steps differ from those of the interrupted {0} run started {1}, so every step is planned again." -f $Action, $resumeRun.startedUtc) -ForegroundColor Yellow
+    }
+}
+
+# Attended: the installer asks its own questions first; its summary and confirmation approve what
+# it creates. The steps after it are asked, planned and approved once the gateway exists.
+$askedFirst = @()
+if ($attended -and -not $afterLead) {
+    $lead = Get-FlowAttendedLead -Steps $steps -Record $record -Discovery $discovery -CurrentAction $Action
+    $askedFirst = @($lead.Asked | ForEach-Object { $_.Info.Name })
+    if ($lead.Steps.Count) {
+        $leadNames = @($lead.Steps | ForEach-Object { $_.Info.Name })
+        $rest = @($steps | Where-Object { $_.Info.Name -notin $leadNames })
+        Write-Host ''
+        Write-Host ("First: {0}. Then: {1}." -f (@($lead.Steps | ForEach-Object { $_.Info.Title }) -join ', '), $(if ($rest.Count) { (@($rest | ForEach-Object { $_.Info.Title }) -join ', ') + ', asked once the gateway exists' } else { 'nothing else' })) -ForegroundColor Cyan
+        Write-Host (Format-ClaudeFlowReview -Plans @($lead.Plans))
+        if (-not $PSCmdlet.ShouldProcess($RecordPath, "Apply guided flow action $Action")) { return }
+        $leadRunId = Start-FlowRun -Record $record -Path $RecordPath -CurrentAction $Action -CurrentChange $Change -Fingerprint (Get-ClaudeFlowFingerprint -Plans @($lead.Plans)) -Phase 'lead' -StepNames $leadNames
+        try { Invoke-ApplySteps -Steps $lead.Steps -Plans @($lead.Plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $leadRunId }
+        catch [System.OperationCanceledException] { Write-Host ''; Write-Host $_.Exception.Message -ForegroundColor Yellow; exit 1 }
+        Invoke-VerifySteps -Steps $lead.Steps -Record $record
+        Remove-FlowRecordProperty $record 'activeRun'
+        Write-FlowDecisionRecord -Record $record -Path $RecordPath
+        $afterLead = $true
+        $steps = $rest
+        if (-not $steps.Count) { return }
+        Write-Host ''
+        Write-Host ("{0} is done. Next: {1}." -f (@($lead.Steps | ForEach-Object { $_.Info.Title }) -join ', '), (@($steps | ForEach-Object { $_.Info.Title }) -join ', ')) -ForegroundColor Cyan
+        $discovery = Get-FlowDiscoveryForSteps -Record $record -CurrentAction $Action -Attended $attended
+        Assert-RecordMatchesLive -Discovery $discovery
+    }
+}
+
+Invoke-Questions -Steps @($steps | Where-Object { $_.Info.Name -notin $askedFirst }) -Record $record -Discovery $discovery -CurrentAction $Action
 $plans = foreach ($step in $steps) { & $step.Plan -Record $record -Discovery $discovery }
 $review = Format-ClaudeFlowReview -Plans $plans
 $fingerprint = Get-ClaudeFlowFingerprint -Plans $plans
 Write-Host $review
 Write-Host ''
 Write-Host "Fingerprint: $fingerprint" -ForegroundColor Cyan
+if ($PlanOnly -and (Test-ClaudeInteractive) -and @($plans | Where-Object { $_.Data -and $_.Data.runsInstaller }).Count) {
+    Write-Host 'This is the unattended plan, in which Install-ClaudeGateway.ps1 runs with -Yes. In a console, Setup without -PlanOnly runs the installer first, so that it asks its own questions, and plans the steps after it then.' -ForegroundColor DarkGray
+}
 
 if ($PlanOnly) { return }
 if ($WhatIfPreference) { Write-Host 'WhatIf: no guided flow changes were written.' -ForegroundColor Yellow; return }
@@ -421,14 +522,23 @@ if ($ApprovedPlanFingerprint) {
     }
 } elseif (Test-ClaudeInteractive) {
     $typed = Read-Host "Type the first 8 characters of the fingerprint ($($fingerprint.Substring(0, 8))) to apply"
-    if ($typed -ne $fingerprint.Substring(0, 8)) { throw 'Confirmation did not match; nothing was written.' }
+    if ($typed -ne $fingerprint.Substring(0, 8)) {
+        if ($afterLead) {
+            # The foundation exists and is recorded; only this review's steps were declined.
+            Write-Host ''
+            Write-Host "Confirmation did not match, so the steps in this review were not applied. The gateway foundation is set up and recorded in $RecordPath; run .\Start-ClaudeGateway.ps1 -Action $Action again to review and apply the rest." -ForegroundColor Yellow
+            exit 1
+        }
+        throw 'Confirmation did not match; nothing was written.'
+    }
 } else {
     throw 'Pass -ApprovedPlanFingerprint to apply this reviewed plan without a console.'
 }
 
 if ($PSCmdlet.ShouldProcess($RecordPath, "Apply guided flow action $Action")) {
-    $runId = Start-FlowRun -Record $record -Path $RecordPath -CurrentAction $Action -CurrentChange $Change -Fingerprint $fingerprint
-    Invoke-ApplySteps -Steps $steps -Plans @($plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $runId
+    $runId = Start-FlowRun -Record $record -Path $RecordPath -CurrentAction $Action -CurrentChange $Change -Fingerprint $fingerprint -Phase $(if ($afterLead) { 'after-lead' } else { '' }) -StepNames @($steps | ForEach-Object { $_.Info.Name })
+    try { Invoke-ApplySteps -Steps $steps -Plans @($plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $runId }
+    catch [System.OperationCanceledException] { Write-Host ''; Write-Host $_.Exception.Message -ForegroundColor Yellow; exit 1 }
     Invoke-VerifySteps -Steps $steps -Record $record
     Remove-FlowRecordProperty $record 'activeRun'
     Write-FlowDecisionRecord -Record $record -Path $RecordPath

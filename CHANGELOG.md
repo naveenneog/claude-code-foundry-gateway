@@ -734,6 +734,28 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Changed
 
+- **The guided flow starts at once (P68).** `Start-ClaudeGateway.ps1` listed every subscription,
+  API Management instance, Foundry account, workspace and deployment before its first line, 66 s on
+  the reference subscription, for lists no step read. Discovery now reads only the gateway the
+  record names, with one `az apim show` announced with an estimate and timed; with an empty record
+  it reads nothing, and the first line appeared after 0.76 s and the review after 2.3 s. A gateway
+  Azure reports missing, or a URL that differs, is drift; a read that fails for another reason is
+  reported and is not drift, and Status says drift was not checked. The FinOps step announces its
+  price read and reads each region once. ADR-0032.
+- **In a console, Setup gives the foundation to the installer (P68).** Setup runs
+  `Install-ClaudeGateway.ps1` first without `-Yes`, so the installer asks its own questions and its
+  summary approves what it creates; declining there stops the flow with no stack trace. Setup then
+  reads the new gateway and asks the remaining steps, FinOps first and priced in the gateway's
+  region, with the typed fingerprint. `CLAUDE_INTERACTIVE=1` lets a test drive an attended run
+  through standard input. ADR-0032, [Guided flow](docs/GUIDED-FLOW.md#attended-setup).
+- **The installer prices its region and tier choices (P68).** The region prompt lists the Foundry
+  account's region and the rest of its geography with each v2 tier's monthly list price from one
+  Azure Retail Prices API call, and names the agreement's price sheet as the authority (**U31**);
+  the tier prompt prices each tier in the chosen region. The installer records `sku`, `location`,
+  `foundryAccount` and `foundryResourceGroup` in `claude-gateway.json`, numbers its next steps, and
+  run on its own in a console offers the FinOps tool; `-SkipFinOpsOffer` is for the guided flow.
+  The Foundry account search states its estimate and reports each account as it is read.
+
 - **AUM shows the owner's ASCII art on every tab.** The four-line art was in the code byte for byte
   but appeared only at 120x38 or larger and only on Overview, so common terminals never showed it.
   It is now the header on every tab at AUM's documented minimum of 80x24 or larger, with the
@@ -785,6 +807,46 @@ exact streaming cache-creation detail remains **U13**.
   converts to 1,388,888,888 tokens and back to exactly $5000.00.
 
 ### Fixed
+
+- **Setup and Guide over a recorded gateway ran the installer again (P68).** The Foundation plan
+  said `Check`, while its apply ran `Install-ClaudeGateway.ps1 -Yes`, whose reuse menu defaults to
+  creating a new gateway; found by reading the code. Setup and Guide now check the recorded
+  gateway; `-Change foundation` runs the installer with the new `-ExistingApimName`, which takes
+  the installer's own reuse path for that gateway and keeps its region, tier, name and publisher.
+- **The installer created a Claude deployment before its summary (P68 council).** With no Claude
+  deployment in the subscription, it deployed the chosen model before asking "Create these
+  resources?", so declining left a model behind, and `-WhatIf` created one. The summary now lists
+  the deployment, and it is created first after the confirmation, never under `-WhatIf`.
+- **A value with `&` reached `az.cmd` (P68 council).** The first P68 version of `-Change
+  foundation` forwarded the live gateway's publisher email to the installer, which passes it to
+  the Azure CLI; on Windows `cmd.exe` re-reads `& | < > ^ ( ) " %`, so an `&` in it ran a second
+  command (reproduced with a stub). The flow no longer forwards it. It refuses a list where the
+  installer takes one value, and a character `cmd.exe` re-reads in the values that reach `az`
+  (the organisation details go in a JSON body and pass). The installer checks its bound
+  parameters before its first `az` call that uses one, and the adopted and derived values before
+  its summary.
+- **A failed step after the installer did not resume (P68 council).** The retry planned the
+  foundation check that the new gateway added, so the fingerprint changed and completed steps ran
+  again. The run records its phase and steps, and a retry plans the same steps and resumes, when
+  the steps present are the recorded ones; otherwise it plans every step again.
+- **The flow could read the gateway in one subscription and install in another (P68 council).**
+  Discovery honoured the record's `subscriptionId` and the installer was not given it. One
+  resolver serves both, the id is passed and fingerprinted, and a name instead of an id is refused.
+- **The Change review priced the recorded tier and region (P68 council),** not the live ones the
+  installer keeps. It prices the live gateway, as already running.
+- **A mistyped fingerprint after the installer said "nothing was written" (P68 council).** It says
+  that the gateway foundation is set up and that the remaining steps were not applied.
+- **Attended Change passed the recorded values (P68 council),** so the installer skipped the
+  questions and the reuse menu the review named. It passes only the recorded gateway, and the
+  installer asks the rest.
+- **Setup stopped on the Cosmos entitlement store (P68).** Without a console the flow now passes
+  `-DeployProjection` with the projection, which the installer requires under `-Yes`.
+- **The installer's next steps were numbered 0, 0, 1, 2, 3, 4 (P68).** They are numbered in the
+  order they print.
+- **Windows PowerShell 5.1 listed only the Foundry region (P68).** `@(... | ConvertFrom-Json)`
+  held the parsed region array as one element there; measured with the installer on 5.1.
+- **FinOps monthly totals printed six decimals (P68).** Monthly totals show cents; unit rates keep
+  the precision the price list publishes.
 
 - **Claude Code returned `400 "thinking.type.enabled" is not supported` through the gateway.**
   Claude Code does not recognise a Foundry deployment name, so a release older than the model

@@ -17,8 +17,11 @@
 #>
 
 function Test-ClaudeInteractive {
-    if ($env:CLAUDE_NONINTERACTIVE -eq '1' -or $env:CI -or $env:TF_BUILD -or $env:GITHUB_ACTIONS) { return $false }
+    if ($env:CLAUDE_NONINTERACTIVE -eq '1') { return $false }
     if (@([Environment]::GetCommandLineArgs() | Where-Object { $_ -match '^-noni' }).Count) { return $false }
+    # A test drives an attended run through redirected standard input (ADR-0032).
+    if ($env:CLAUDE_INTERACTIVE -eq '1') { return $true }
+    if ($env:CI -or $env:TF_BUILD -or $env:GITHUB_ACTIONS) { return $false }
     try { if ([Console]::IsInputRedirected) { return $false } } catch { return $false }
     return [Environment]::UserInteractive
 }
