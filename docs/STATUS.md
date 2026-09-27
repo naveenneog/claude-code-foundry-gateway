@@ -104,6 +104,21 @@ the 2.7032.0 boundary, 8 in the bash setup, 3 in install selection, 5 in the dia
 copies, and 11, 8 and 5 for the three reviews' fixes, four of them on Windows PowerShell 5.1
 because only that host shows them.
 
+Council: Architect PASS (the model rules and the bounded client command live in one PowerShell
+module and one bash library, compared case by case; the Desktop key spelling follows the release
+that reads it; the gateway, its policy and its components are unchanged, so no architecture
+picture changed, and only the manifest's source hash for the Windows setup moved). Coder PASS (the
+setups, the MDM generator and both diagnostics share those modules; the 21 defects the three
+reviews found are fixed, each with a test). QA PASS, with gaps named (178 assertions on PowerShell
+7 and 5.1, both setups run end to end against a local stand-in, 44 mutations caught, Claude Code
+2.1.101 proven through the reference gateway; not run: a real macOS or Linux machine, bash 3.2, a
+real Desktop Entra sign-in, an Intune deployment). UX PASS, with a reservation (every client
+command waits a stated time and says what it waits for; the setup ends with a real Claude Code
+reply; diagnostics name the running Desktop build and the fix; the guided flow's own delays and
+choices are P68). Security PASS (no secret in source or logs; the tests use stubs and a local
+listener, and their fake token is built at run time; the published unknowns drop tenant and
+principal ids; client commands take fixed words only).
+
 ## P66 guided flow, 2026-09-27
 
 Asked by the owner: one product-like flow for setup, updating older setups, tier upgrades,
