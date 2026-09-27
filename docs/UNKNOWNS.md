@@ -37,7 +37,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | U28 | CLOSED | Which Claude Code releases work with `claude-opus-5` and `claude-sonnet-5` through Foundry deployments? Measured 2026-09-27: 2.1.101 returns `400 thinking.type.enabled is not supported`; with `ANTHROPIC_DEFAULT_*_MODEL_SUPPORTED_CAPABILITIES` it answers, and so does 2.1.272 at effort `high` and `max`. Sonnet 5 arrived in 2.1.197 and Opus 5 in 2.1.219 ([detail](#u28--claude-code-releases-and-the-5-series-models--closed-2026-09-27)) | P67, [ADR-0031](adr/0031-client-keys-every-release-reads.md) |
 | U29 | OPEN | What made Claude Desktop report `ENOTFOUND` on the owner's workstation on 2026-09-27? Not reproduced here. Its configuration then had no readable credential kind (U27). `Debug-ClaudeWorkstation.ps1` now shows Desktop's own recent `[custom-3p]` warnings and errors from `%LOCALAPPDATA%\Claude-3p\logs\main.log`, which name the failing host | P67 |
 | U30 | OPEN | Can the guided flow create the company address itself: an API Management custom hostname with a certificate and a DNS record, on each v2 tier, and at what cost? Not researched yet | P69 |
-| U31 | OPEN | Can the flow show the customer's own prices (an agreement's price sheet) instead of Azure retail list prices, and with what role? Not researched yet | P68 |
+| U31 | CLOSED | Can the flow show the customer's own prices (an agreement's price sheet) instead of Azure retail list prices, and with what role? Researched 2026-09-27: the price sheet of an Enterprise Agreement, Microsoft Customer Agreement or Microsoft Partner Agreement is readable only with a billing role (for MCA: billing profile owner, contributor, reader or invoice manager; for EA: as the Enterprise Admin's policy allows), not with a subscription role, and the API downloads the whole sheet as a file. The flow shows Azure Retail Prices API list prices, named as list prices, and names the price sheet as the authority ([detail](#u31--customer-prices--closed-2026-09-27)) | P68, [ADR-0032](adr/0032-guided-flow-starts-at-once.md) |
 | U32 | OPEN | What stops the reference Turnstile database every evening? Measured 2026-09-27 from the activity log: `pg-tsclaude-zpk4sh4prbsls` (rg-turnstile-claudegw) was stopped at 19:05Z on 09-23, 09-24 and 09-25 by an application whose token was issued by a tenant other than the subscription's. While stopped, Turnstile's `auth/me` waits about 30 s and returns 500, which AUM reports as `Read failed (exit 7)` ([detail](#u32--the-turnstile-database-stops-every-evening--open)) | f10, f11 |
 
 ---
@@ -670,6 +670,33 @@ With the listener answering `enabled` with the model's real 400, 2.1.272 sent a 
 `adaptive` and answered; 2.1.101 sent one request and failed. Through the reference gateway,
 2.1.101 with `thinking` or `effort,thinking` returned the 400, and with `adaptive_thinking`,
 `effort` or all six in another order it answered; 2.1.272 answered in every case.
+
+## U31 — Customer prices — CLOSED 2026-09-27
+
+**Question.** Can the guided flow and the installer show the prices of the customer's own
+agreement instead of Azure retail list prices, and with what role?
+
+**Research**, Microsoft Learn, retrieved 2026-09-27:
+
+| Agreement | Who can read the price sheet | Source |
+|---|---|---|
+| Microsoft Customer Agreement | billing profile owner, contributor, reader or invoice manager | [View and download your organization's Azure pricing](https://learn.microsoft.com/azure/cost-management-billing/manage/ea-pricing#download-pricing-for-an-mca-or-mpa-account) |
+| Microsoft Partner Agreement | the Admin Agent or billing admin role in the partner organization | same page |
+| Enterprise Agreement | the administrative roles the Enterprise Admin's policy allows | [same page](https://learn.microsoft.com/azure/cost-management-billing/manage/ea-pricing) |
+
+The price sheet APIs sit at the billing account or billing profile scope
+(`/providers/Microsoft.Billing/billingAccounts/{id}[/billingProfiles/{id}]/providers/Microsoft.Consumption/pricesheets/download`)
+and return the whole sheet as a file
+([Migrate from EA to MCA APIs](https://learn.microsoft.com/azure/cost-management-billing/costs/migrate-cost-management-api#price-sheet-for-a-scope-by-billing-account)).
+None of these is a subscription role, so the administrator who runs the installer, who holds
+Contributor on a subscription, cannot read it unless also given a billing role. The Azure Retail
+Prices API needs no credential and filters on `serviceName`, `meterName` and `armRegionName`
+([Azure Retail Prices overview](https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices)).
+
+**Resolution.** [ADR-0032](adr/0032-guided-flow-starts-at-once.md): prices at each choice are
+Azure Retail Prices API list prices, named as such with the time they were read, and the
+agreement's price sheet is named as the authority with the role it needs. Reading the price
+sheet for an administrator who holds a billing role is a roadmap entry, not P68.
 
 ## U32 — The Turnstile database stops every evening — OPEN
 

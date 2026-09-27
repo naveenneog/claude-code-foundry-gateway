@@ -422,7 +422,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       proven live on an isolated gateway; an integrated run on 2026-09-27 found and fixed nine
       defects ([STATUS](STATUS.md#p66-guided-flow-2026-09-27)). Open: the 403 message names the
       default tier groups; the FinOps steps have not yet run on the same estate as the others
-- [ ] P67 developer workstation fixes from the owner's test — acceptance: Claude Desktop Entra
+- [x] P67 developer workstation fixes from the owner's test, merged 2026-09-27 (`ea31a5f`, `4327563`, `25bda4d`; [STATUS](STATUS.md#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)) — acceptance: Claude Desktop Entra
       sign-in uses the key spelling the Desktop release that reads it knows, including a running
       build older than the installed one; Claude Code declares capabilities by model family for
       the recorded models, pins each alias to the newest model in its family, and is compared
@@ -436,10 +436,14 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       prompts instead of passing `-Yes`, and a projection choice no longer stops the installer;
       each choice that changes cost shows its price, including the region, from a source the
       review names (**U31**); after the installer finishes, Setup offers the FinOps tool;
-      numbered next steps are numbered
+      numbered next steps are numbered. [ADR-0032](adr/0032-guided-flow-starts-at-once.md)
 - [ ] P69 the company address in the flow — acceptance: choosing a company address creates the
       custom hostname, certificate and DNS record, states their cost before creating them, and
       proves a request through the new address (**U30**)
+- [ ] The agreement's price sheet at each choice — acceptance: when the administrator holds a
+      billing role that can read the agreement's price sheet, the flow and the installer show the
+      agreement's prices and name the billing scope they came from; without the role they show
+      Azure retail list prices, as P68 does (**U31**)
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so

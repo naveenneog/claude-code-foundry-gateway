@@ -1,6 +1,32 @@
 # Status
 
-**Active packets:** P67 developer workstation fixes from the owner's test ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)); P68 guided flow redesign and P69 the company address follow it ([ROADMAP](ROADMAP.md)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packet:** P68 the guided flow starts at once and gives the foundation to the installer ([below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)); P69 the company address follows it ([ROADMAP](ROADMAP.md)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+
+## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
+
+The owner's test on 2026-09-27: `Start-ClaudeGateway.ps1` showed nothing for a long time and asked
+nothing first; Setup took the installer's decisions away (`-Yes`) and stopped on the Cosmos store;
+a region choice showed no cost; the installer did not offer the FinOps tool; its next steps were
+numbered 0, 0, 1. Measured on this workstation against the reference subscription: 66 s before
+the first line of output, all of it discovery that no step reads. Design:
+[ADR-0032](adr/0032-guided-flow-starts-at-once.md); research: **U31**.
+
+- [ ] Discovery makes no listing call; with an empty record no Azure call runs before the first
+      question, and the first line of output appears within 3 s
+- [ ] With a record that names a gateway, discovery reads that one gateway, and prints what it
+      reads with an estimate before, and the time it took after
+- [ ] In a console, Setup runs the installer without `-Yes`, passing only the values the record
+      holds, and its review names the questions the installer asks next
+- [ ] Without a console, Setup passes `-Yes`, and `-DeployProjection` with the Cosmos store, so the
+      installer deploys the projection instead of stopping
+- [ ] The installer's region prompt lists the Foundry account's region and the others in its
+      geography with each v2 tier's monthly list price; its tier prompt lists each tier's price in
+      the chosen region; a price the API does not publish reads as not published; the agreement's
+      price sheet is named as the authority
+- [ ] In a console the installer ends by offering the FinOps tool; its next steps are numbered
+      1, 2, 3 and so on
+- [ ] Live: Setup against the reference subscription shows its first question within 3 s
+- [ ] Council verdicts and `node .ironclad/gate.mjs --stage packet` exits 0
 
 ## P67 developer workstation fixes from the owner's test, 2026-09-27
 
