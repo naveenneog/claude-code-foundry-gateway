@@ -786,6 +786,57 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **Update planned a false change on every current gateway.** Live discovery read named values
+  as `properties.value`, but `az apim nv list` returns flattened objects, so every value read as
+  empty and migration 0002 always proposed "whitespace/empty -> disabled URI sentinel" for the
+  Desktop audience. It reads either shape now and leaves secret values out. Measured 2026-09-27:
+  on a gateway installed by the current release, all three migrations now report no change.
+- **`Sync-ClaudeAccess.ps1` published the tenant's default groups to a gateway installed with
+  other group names.** It and `Compare-ClaudeEntitlement.ps1` defaulted to `claude-code-standard`
+  and `claude-code-premium`, and the installer's closing instructions run the sync without group
+  names. Measured 2026-09-27: on a gateway installed with `claude-p66i09270024-*` groups (0
+  members), the health check reported "drift: missing=7", the 7 members of the default groups.
+  An earlier guided-flow proof's 200 came through the same default groups. Both scripts now take
+  the groups recorded for that gateway in `onboarding/claude-gateway.json` (only when the record
+  names the same API Management instance), then the defaults. `Test-TierGroupTarget.ps1` holds it.
+- **The health check stopped at the bypass check when Foundry is in another resource group.**
+  The installer accepts `-FoundryResourceGroup`, but `Get-ClaudeBypass.ps1` looked for the
+  account in the gateway's group and threw, and `Test-ClaudeHealth.ps1` let the throw end the run,
+  so every later check went unreported and the guided Verify step recorded only a warning. Both
+  take `-FoundryResourceGroup` now, a throwing sub-check is recorded as a failed check, and the
+  guided flow and `Debug-ClaudeSetup.ps1` pass the recorded Foundry account and group.
+  `Debug-ClaudeSetup.ps1` waits `-HealthTimeoutSeconds` (300 by default) for the health check,
+  which measured 182-201 s against a shared Foundry account; it had waited 90 s.
+- **The guided Verify step passed when the health check failed.** It checked only that a health
+  run was recorded. It now also requires the health check to pass, and names the command to see
+  and fix each failing check.
+- **`Start-ClaudeGateway.ps1 -Action Diagnose -SupportBundle` wrote `True.zip`.** The flow passed
+  the switch value to scripts that take a zip path. Each script now gets its own path under the
+  git-ignored `onboarding\support\` folder.
+- **`Start-ClaudeGateway.ps1 -Action Update` could only plan.** It called the updater without
+  `-Apply` or the fingerprint, so an older gateway could be reviewed through the flow but had to
+  be updated with `scripts\Update-ClaudeGateway.ps1` directly. `-ApprovedPlanFingerprint` now
+  applies the reviewed update plan, `-PlanOnly` never applies, and the plan output names the
+  command that applies it.
+- **A guided-setup approval did not bind the estate it would create.** The Foundation review
+  said "Create API Management governed Claude gateway - BasicV2" for every target, so two setups
+  aimed at different resource groups printed the same fingerprint, and an approval for one was
+  accepted for the other. The review now names the resource group, gateway, region, Foundry
+  account and subscription, the plan carries every installer input, and the Basic v2 line is
+  priced from the Azure Retail Prices API ($150.00/month in eastus2, measured 2026-09-27). Found
+  on the first integrated run: the fingerprint matched the one from a run a day earlier against
+  a different resource group.
+- **Helpers defined by a guided-flow module were gone by the time the plan ran.** The
+  orchestrator dot-sourced each module inside a function, so a module's own helper functions
+  ended with that function and only `global:` helpers survived. It now keeps each module's new
+  helpers at script scope, as ADR-0030's one-session contract says; `Test-GuidedFlow.ps1` runs
+  the shipped modules through the orchestrator to hold it.
+- **Setup reported present modules as absent.** Tier, Entitlement, Network and Desktop sign-in
+  run under `-Action Change`, and Setup printed "Skipped absent step ... not present on this
+  branch" for each. Setup now lists them with the command that changes them, for example
+  `.\Start-ClaudeGateway.ps1 -Action Change -Change sku`, and reserves "absent" for missing files.
+- **An unreachable price API was reported as a missing meter.** The lifecycle price helper now
+  says the Azure Retail Prices API could not be reached, and to rerun the plan.
 - **The Intune detection script in the MDM guide failed under Windows PowerShell 5.1.** It hashed
   the policy with `SHA256.HashData` and `Convert.ToHexString`, which 5.1 does not have, so a
   remediation would always report drift. It uses `ComputeHash` now, and `Test-DocReferences.ps1`

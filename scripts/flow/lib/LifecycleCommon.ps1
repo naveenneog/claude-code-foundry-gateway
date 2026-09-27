@@ -131,9 +131,14 @@ function global:Get-ClaudeFlowLifecycleLiveDiscovery {
         capacity = $apim.sku.capacity
         apimId = $apim.id
         policy = $policy.properties.value
-        namedValues = @($nvs | Where-Object { -not $_.properties.secret } | ForEach-Object {
-            [pscustomobject]@{ name = $_.name; value = $_.properties.value }
-        })
+        # az apim nv list returns flattened objects; ARM returns them under properties.
+        namedValues = @($nvs | Where-Object {
+                $isSecret = if ($_.PSObject.Properties.Name -contains 'properties' -and $_.properties) { $_.properties.secret } else { $_.secret }
+                -not $isSecret
+            } | ForEach-Object {
+                $value = if ($_.PSObject.Properties.Name -contains 'properties' -and $_.properties) { $_.properties.value } else { $_.value }
+                [pscustomobject]@{ name = $_.name; value = $value }
+            })
     }
 }
 
@@ -154,6 +159,10 @@ function global:Get-ClaudeFlowLifecycleApimMonthlyCost {
     $price = Get-AzureRetailPrice -ServiceName 'API Management' -Region $Region -MeterName (Get-ClaudeFlowLifecycleApimMeterName -Sku $Sku)
     if ($price) {
         return New-ClaudeFlowCost -Item "API Management $Sku ($Units unit)" -MonthlyUsd (ConvertTo-MonthlyPrice -HourlyPrice $price.UnitPrice -Units $Units) -Source 'Azure Retail Prices API' -RetrievedUtc $price.RetrievedUtc
+    }
+    $unreachable = Get-AzureRetailPriceUnavailableReason
+    if ($unreachable) {
+        return New-ClaudeFlowCost -Item "API Management $Sku ($Units unit)" -Source 'Azure Retail Prices API' -UnknownReason "the Azure Retail Prices API could not be reached ($unreachable); rerun the plan to price it"
     }
     return New-ClaudeFlowCost -Item "API Management $Sku ($Units unit)" -Source 'Azure Retail Prices API' -UnknownReason "no retail meter found for $Sku in $Region"
 }

@@ -36,6 +36,10 @@
     The Foundry (AIServices) account. Discovered from the resource group when not
     given.
 
+.PARAMETER FoundryResourceGroup
+    The Foundry account's resource group, when it is not the gateway's. The
+    installer accepts a Foundry account in another resource group.
+
 .PARAMETER IncludeRead
     Also list read-only data-plane holders.
 
@@ -52,6 +56,7 @@
 param(
     [string]$ResourceGroup = $(& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') ResourceGroup),
     [string]$FoundryAccount,
+    [string]$FoundryResourceGroup,
     [string]$ApimName,
     [switch]$IncludeRead,
     [switch]$AsJson
@@ -73,8 +78,9 @@ if (-not $ApimName) { $ApimName = Select-ClaudeGateway -ResourceGroup $ResourceG
 if (-not $FoundryAccount) {
     $FoundryAccount = Select-ClaudeFoundryAccount -ResourceGroup $ResourceGroup -ApimName $ApimName
 }
-$scope = az cognitiveservices account show -g $ResourceGroup -n $FoundryAccount --query id -o tsv 2>$null
-if (-not $scope) { throw "Foundry account '$FoundryAccount' not found in $ResourceGroup." }
+$foundryGroup = if ($FoundryResourceGroup) { $FoundryResourceGroup } else { $ResourceGroup }
+$scope = az cognitiveservices account show -g $foundryGroup -n $FoundryAccount --query id -o tsv 2>$null
+if (-not $scope) { throw "Foundry account '$FoundryAccount' not found in $foundryGroup. Pass -FoundryResourceGroup when it is not the gateway's resource group." }
 
 # The gateway is meant to hold this role. Flagging it would teach the operator to
 # ignore the output.

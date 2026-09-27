@@ -13,7 +13,10 @@ param(
     [switch]$NoRequest,
     [string]$SupportBundle,
     [switch]$AsJson,
-    [ValidateSet('fail','warn')][string]$FailOn = 'warn'
+    [ValidateSet('fail','warn')][string]$FailOn = 'warn',
+    # Measured 2026-09-27: 182-201 s for Test-ClaudeHealth.ps1 against a shared Foundry account,
+    # most of it the bypass check's role-assignment read. 90 s cut it off.
+    [int]$HealthTimeoutSeconds = 300
 )
 
 $ErrorActionPreference = 'Continue'
@@ -164,12 +167,18 @@ if ($ResourceGroup -and $ApimName) {
     $healthPath = Join-Path $PSScriptRoot 'Test-ClaudeHealth.ps1'
     if (Test-Path $healthPath) {
         $healthJson = $null
+        $foundationDecision = if ($record -and $record.decisions) { Get-ClaudeDiagnoseProperty $record.decisions 'foundation' } else { $null }
+        $healthAccount = if ($FoundryAccount) { $FoundryAccount } elseif ($foundationDecision) { [string](Get-ClaudeDiagnoseProperty $foundationDecision 'foundryAccount') } else { '' }
+        $healthFoundryGroup = if ($foundationDecision) { [string](Get-ClaudeDiagnoseProperty $foundationDecision 'foundryResourceGroup') } else { '' }
         try {
             $job = Start-Job -ScriptBlock {
-                param($Path, $Rg, $Name)
-                & $Path -ResourceGroup $Rg -ApimName $Name -AsJson *>&1 | Out-String
-            } -ArgumentList $healthPath, $ResourceGroup, $ApimName
-            if (Wait-Job $job -Timeout 90) {
+                param($Path, $Rg, $Name, $Account, $FoundryRg)
+                $healthArgs = @{ ResourceGroup = $Rg; ApimName = $Name; AsJson = $true }
+                if ($Account) { $healthArgs.FoundryAccount = $Account }
+                if ($FoundryRg) { $healthArgs.FoundryResourceGroup = $FoundryRg }
+                & $Path @healthArgs *>&1 | Out-String
+            } -ArgumentList $healthPath, $ResourceGroup, $ApimName, $healthAccount, $healthFoundryGroup
+            if (Wait-Job $job -Timeout $HealthTimeoutSeconds) {
                 $healthOutput = Receive-Job $job | Out-String
                 $jsonStart = $healthOutput.IndexOf('{')
                 if ($jsonStart -ge 0) { $healthJson = ConvertFrom-ClaudeDiagnoseJson $healthOutput.Substring($jsonStart) }
@@ -187,7 +196,7 @@ if ($ResourceGroup -and $ApimName) {
                 }
             }
         } else {
-            Add-ClaudeDiagnoseCheck 'Business units and budgets consistency' 'WARN' 'Test-ClaudeHealth.ps1 did not return JSON within 90 seconds.' './scripts/Test-ClaudeHealth.ps1 -ResourceGroup <rg> -ApimName <apim> -Detailed' 'Azure portal > API Management services > <gateway> > Named values'
+            Add-ClaudeDiagnoseCheck 'Business units and budgets consistency' 'WARN' "Test-ClaudeHealth.ps1 did not return JSON within $HealthTimeoutSeconds seconds; raise -HealthTimeoutSeconds." './scripts/Test-ClaudeHealth.ps1 -ResourceGroup <rg> -ApimName <apim> -Detailed' 'Azure portal > API Management services > <gateway> > Named values'
         }
     }
 }

@@ -123,6 +123,7 @@ function Get-FlowPrincipal {
 function Get-FlowModules {
     param([string]$ModulePath, [string]$ForAction)
     $loaded = @{}
+    $otherAction = [System.Collections.Generic.List[object]]::new()
     $infos = [System.Collections.Generic.List[object]]::new()
     if (Test-Path -LiteralPath $ModulePath) {
         foreach ($file in @(Get-ChildItem -LiteralPath $ModulePath -Filter '*.ps1' -File | Sort-Object Name)) {
@@ -130,10 +131,20 @@ function Get-FlowModules {
             foreach ($name in 'Get-ClaudeFlowStepInfo','Get-ClaudeFlowStepQuestions','Get-ClaudeFlowStepPlan','Invoke-ClaudeFlowStep','Test-ClaudeFlowStep') {
                 if (Get-Command $name -ErrorAction SilentlyContinue) { Remove-Item "function:\$name" -Force -ErrorAction SilentlyContinue -WhatIf:$false }
             }
+            $functionsBefore = @{}
+            foreach ($fn in @(Get-ChildItem function:)) { $functionsBefore[$fn.Name] = $fn.ScriptBlock }
             . $file.FullName
+            # ADR-0030: modules share one session. Dot-sourcing here defines their helpers in this
+            # function's scope, which ends on return, so each new helper is kept at script scope.
+            foreach ($fn in @(Get-ChildItem function:)) {
+                if ($fn.Name -like '*-ClaudeFlowStep*') { continue }
+                if (-not $functionsBefore.ContainsKey($fn.Name) -or $functionsBefore[$fn.Name] -ne $fn.ScriptBlock) {
+                    Set-Item -LiteralPath "function:script:$($fn.Name)" -Value $fn.ScriptBlock -WhatIf:$false
+                }
+            }
             $info = & (Get-Command Get-ClaudeFlowStepInfo -ErrorAction Stop).ScriptBlock
             $actions = @($info.Actions)
-            if ($actions.Count -and $ForAction -notin $actions) { continue }
+            if ($actions.Count -and $ForAction -notin $actions) { $otherAction.Add($info); continue }
             $infos.Add($info)
             $loaded[$info.Name] = [pscustomobject]@{
                 Info = $info
@@ -148,10 +159,17 @@ function Get-FlowModules {
     $present = @($infos.ToArray())
     $ordered = if ($present.Count) { @(Get-ClaudeFlowStepOrder -Steps $present) } else { @() }
     $steps = foreach ($info in $ordered) { $loaded[$info.Name] }
+    $presentNames = @($loaded.Keys) + @($otherAction | ForEach-Object { [string]$_.Name })
     $skipped = foreach ($name in $script:ExpectedFlowSteps) {
-        if (-not $loaded.ContainsKey($name)) { "Skipped absent step: $name (module scripts\flow\$name.ps1 is not present on this branch)." }
+        if ($name -notin $presentNames) { "Skipped absent step: $name (module scripts\flow\$name.ps1 is not present on this branch)." }
     }
-    [pscustomobject]@{ Steps = @($steps); Skipped = @($skipped) }
+    # Present modules that another action runs, named with the command that runs them.
+    $elsewhere = foreach ($info in $otherAction) {
+        if ($ForAction -ne 'Change' -and 'Change' -in @($info.Actions) -and 'Setup' -notin @($info.Actions) -and $info.DecisionKey) {
+            "Not part of ${ForAction}: $($info.Name) - change it later with .\Start-ClaudeGateway.ps1 -Action Change -Change $($info.DecisionKey)"
+        }
+    }
+    [pscustomobject]@{ Steps = @($steps); Skipped = @($skipped) + @($elsewhere) }
 }
 
 function Get-FlowDiscovery {
@@ -341,16 +359,30 @@ Set-FlowAnswersOnRecord -Record $record -Answers $script:FlowAnswers
 if ($Action -eq 'Update') {
     $update = Join-Path $root 'scripts\Update-ClaudeGateway.ps1'
     if (-not (Test-Path -LiteralPath $update)) { $update = Join-Path $root 'Update-ClaudeGateway.ps1' }
-    if (Test-Path -LiteralPath $update) { & $update -RecordPath $RecordPath -WhatIf:$WhatIfPreference; return }
+    if (Test-Path -LiteralPath $update) {
+        $updateArgs = @{ RecordPath = $RecordPath }
+        if ($ApprovedPlanFingerprint -and -not $PlanOnly) { $updateArgs.Apply = $true; $updateArgs.ApprovedPlanFingerprint = $ApprovedPlanFingerprint }
+        & $update @updateArgs -WhatIf:$WhatIfPreference
+        if (-not $updateArgs.Apply) { Write-Host 'To apply this update plan: .\Start-ClaudeGateway.ps1 -Action Update -ApprovedPlanFingerprint <fingerprint>' -ForegroundColor DarkGray }
+        return
+    }
     Write-Host 'Update-ClaudeGateway.ps1 is not present on this branch; Update is skipped.' -ForegroundColor Yellow
     return
 }
 if ($Action -eq 'Diagnose') {
     $scripts = @('scripts\Debug-ClaudeSetup.ps1', 'scripts\Debug-ClaudeWorkstation.ps1') | ForEach-Object { Join-Path $root $_ } | Where-Object { Test-Path -LiteralPath $_ }
     if ($scripts.Count) {
+        # The debug scripts take a zip path. Passing the switch itself wrote a file named True.zip.
+        $bundleStamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ')
+        $bundleDir = Join-Path $root 'onboarding\support'
         foreach ($s in $scripts) {
             $args = @{ RecordPath = $RecordPath }
-            if ($SupportBundle) { $args.SupportBundle = $true }
+            if ($SupportBundle) {
+                if (-not (Test-Path -LiteralPath $bundleDir)) { New-Item -ItemType Directory -Path $bundleDir -Force -WhatIf:$false | Out-Null }
+                $kind = if ((Split-Path $s -Leaf) -like '*Workstation*') { 'workstation' } else { 'setup' }
+                $args.SupportBundle = Join-Path $bundleDir "claude-$kind-support-$bundleStamp.zip"
+                Write-Host "Support bundle: $($args.SupportBundle)" -ForegroundColor DarkGray
+            }
             & $s @args
         }
     }
