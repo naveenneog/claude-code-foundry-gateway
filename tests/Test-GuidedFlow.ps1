@@ -138,11 +138,20 @@ function Invoke-ClaudeFlowStep {
 }
 function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Guide'; Passed = (Test-Path -LiteralPath (Join-Path (Split-Path $Record.__recordPath -Parent) 'HOW-TO-USE.md')); Checks = @() } }
 '@ | Set-Content -LiteralPath (Join-Path $modules 'Guide.ps1') -Encoding UTF8
+    @'
+function Get-ClaudeFlowStepInfo { [pscustomobject]@{ Name = 'Tier'; Title = 'Tier'; DecisionKey = 'sku'; DependsOn = @('Foundation'); Actions = @('Change') } }
+function Get-ClaudeFlowStepQuestions { param($Record, $Discovery) @() }
+function Get-ClaudeFlowStepPlan { param($Record, $Discovery) New-ClaudeFlowPlan -Step Tier -Summary 'Tier' }
+function Invoke-ClaudeFlowStep { param($Record, $Plan) @{} }
+function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Tier'; Passed = $true; Checks = @() } }
+'@ | Set-Content -LiteralPath (Join-Path $modules 'Tier.ps1') -Encoding UTF8
 
     $planOnly = & $start -Action Setup -RecordPath $recordPath -FlowModulePath $modules -PlanOnly -NonInteractiveAnswers @{ 'foundation.sku' = 'BasicV2' } *>&1 | Out-String
     Assert 'PlanOnly prints the combined review' ($planOnly -match '\[Foundation\]' -and $planOnly -match '\[DeviceProfiles\]' -and $planOnly -match '\[Guide\]')
     Assert 'PlanOnly prints a fingerprint' ($planOnly -match 'Fingerprint:\s+[a-f0-9]{64}')
     Assert 'PlanOnly notes absent branch modules without failing' ($planOnly -match 'Skipped absent step: Entitlement' -and $planOnly -match 'Skipped absent step: FinOps')
+    Assert 'a present Change-only module is not reported as absent' ($planOnly -notmatch 'Skipped absent step: Tier')
+    Assert 'a present Change-only module is named with the command that runs it' ($planOnly -match 'Tier[^\r\n]*-Action Change -Change sku')
     Assert 'PlanOnly writes nothing' (-not (Test-Path -LiteralPath $recordPath) -and -not (Test-Path -LiteralPath $guidePath))
     $fp = [regex]::Match($planOnly, 'Fingerprint:\s+([a-f0-9]{64})').Groups[1].Value
     $planOnlyAgain = & $start -Action Setup -RecordPath $recordPath -FlowModulePath $modules -PlanOnly -NonInteractiveAnswers @{ 'foundation.sku' = 'BasicV2' } *>&1 | Out-String
@@ -215,6 +224,41 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Guide';
 
     $status = & $start -Action Status -RecordPath $recordPath -FlowModulePath $modules *>&1 | Out-String
     Assert 'Status prints decisions, release and history' ($status -match 'Decisions' -and $status -match 'Release' -and $status -match 'History')
+
+    # The real Foundation plan: an approval must not carry over to a different estate.
+    $realFoundationPlan = {
+        param([string]$ResourceGroup, [string]$NamePrefix)
+        . (Join-Path $root 'scripts\flow\FlowContract.ps1')
+        . (Join-Path $root 'scripts\flow\Foundation.ps1')
+        $foundation = [pscustomobject]@{ sku = 'BasicV2'; subscriptionId = '00000000-0000-0000-0000-000000000001'; resourceGroup = $ResourceGroup; location = 'eastus2'; namePrefix = $NamePrefix; foundryAccount = 'ai-contoso'; foundryResourceGroup = 'rg-ai' }
+        $rec = [pscustomobject]@{ schemaVersion = 2; decisions = [pscustomobject]@{ foundation = $foundation }; history = @() }
+        $plan = Get-ClaudeFlowStepPlan -Record $rec -Discovery $null
+        [pscustomobject]@{ Fingerprint = (Get-ClaudeFlowFingerprint -Plans @($plan)); Review = (Format-ClaudeFlowReview -Plans @($plan)) }
+    }
+    $planA = & $realFoundationPlan 'rg-p66-a' 'p66a'
+    $planB = & $realFoundationPlan 'rg-p66-b' 'p66b'
+    Assert 'the Foundation fingerprint changes when the target resource group and name change' ($planA.Fingerprint -ne $planB.Fingerprint)
+    Assert 'the Foundation review names the resource group, gateway, region and Foundry account' ($planA.Review -match 'rg-p66-a/apim-p66a' -and $planA.Review -match 'eastus2' -and $planA.Review -match 'ai-contoso')
+
+    # The same through the orchestrator with the shipped modules: module helpers must stay callable.
+    $realReviews = foreach ($pair in @(@('rg-p66-a', 'p66a'), @('rg-p66-b', 'p66b'))) {
+        $realAnswers = Join-Path $scratch "real-answers-$($pair[1]).json"
+        @{ 'foundation.sku' = 'BasicV2'; 'foundation.resourceGroup' = $pair[0]; 'foundation.namePrefix' = $pair[1]; 'foundation.location' = 'eastus2'; 'foundation.foundryAccount' = 'ai-contoso'; 'deviceProfiles.conversationStorage' = 'local' } | ConvertTo-Json | Set-Content -LiteralPath $realAnswers -Encoding UTF8
+        try { & $start -Action Setup -PlanOnly -RecordPath (Join-Path $scratch "real-record-$($pair[1]).json") -AnswersPath $realAnswers *>&1 | Out-String }
+        catch { "THREW: $($_.Exception.Message)" }
+    }
+    $realFpA = [regex]::Match([string]$realReviews[0], 'Fingerprint:\s+([a-f0-9]{64})').Groups[1].Value
+    $realFpB = [regex]::Match([string]$realReviews[1], 'Fingerprint:\s+([a-f0-9]{64})').Groups[1].Value
+    Assert 'the orchestrator plans the shipped modules and names the target' ([string]$realReviews[0] -match 'rg-p66-a/apim-p66a' -and $realFpA) ([string]$realReviews[0] | Select-String -Pattern 'THREW.*' | ForEach-Object { $_.Matches[0].Value })
+    Assert 'the orchestrator fingerprint differs between two targets' ($realFpA -and $realFpB -and $realFpA -ne $realFpB)
+
+    $offlinePrice = & {
+        . (Join-Path $root 'scripts\flow\FlowContract.ps1')
+        . (Join-Path $root 'scripts\flow\lib\LifecycleCommon.ps1')
+        function Invoke-RestMethod { throw 'simulated outage' }
+        Get-ClaudeFlowLifecycleApimMonthlyCost -Sku BasicV2 -Region eastus2
+    }
+    Assert 'an unreachable price API is reported as unreachable, not as a missing meter' ($null -eq $offlinePrice.MonthlyUsd -and $offlinePrice.UnknownReason -match 'could not be reached') $offlinePrice.UnknownReason
 }
 finally {
     $env:GUIDED_FLOW_FAIL_FOUNDATION = $null

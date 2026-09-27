@@ -1,3 +1,5 @@
+. (Join-Path $PSScriptRoot 'lib\LifecycleCommon.ps1')
+
 function Get-ClaudeFlowStepInfo {
     [pscustomobject]@{ Name = 'Foundation'; Title = 'Gateway foundation'; DecisionKey = 'foundation'; DependsOn = @(); Actions = @('Setup', 'Change', 'Guide') }
 }
@@ -56,34 +58,9 @@ function Get-ClaudeFlowFoundationData {
     return $d
 }
 
-function Get-ClaudeFlowStepPlan {
-    param($Record, $Discovery)
-    $d = Get-ClaudeDecision -Record $Record -Key foundation
-    if (-not $d) { $d = [pscustomobject]@{} }
-    $sku = if ($d.sku) { [string]$d.sku } else { 'BasicV2' }
-    $existing = $Record.apimName -and $Record.resourceGroup
-    $actions = if ($existing) {
-        @(New-ClaudeFlowAction -Verb Check -Target "$($Record.resourceGroup)/$($Record.apimName)" -Detail 'Compare existing gateway with the recorded decisions')
-    } else {
-        @(New-ClaudeFlowAction -Verb Create -Target 'API Management governed Claude gateway' -Detail $sku)
-    }
-    New-ClaudeFlowPlan -Step Foundation -Summary $(if ($existing) { 'Existing gateway foundation is recorded' } else { "Set up a $sku governed gateway" }) `
-        -Actions $actions `
-        -Costs @(New-ClaudeFlowCost -Item "API Management $sku" -Source 'Azure Retail Prices API via installer/BOM' -UnknownReason 'price is discovered during live setup for the selected region and unit count') `
-        -Implications @('All later choices are written into one decision record and developer handover.', 'Installer implementation remains Install-ClaudeGateway.ps1.') `
-        -Requires @('Azure Contributor on the gateway resource group', 'User Access Administrator or Owner on the Foundry account for the managed identity grant') `
-        -Reversible $true -Rollback 'Delete or restore the resource group after taking a gateway backup' `
-        -Data @{ sku = $sku; entitlementStore = $d.entitlementStore; authMode = $d.authMode; desktopSignInKind = $d.desktopSignInKind }
-}
-
-function Invoke-ClaudeFlowStep {
-    param($Record, $Plan)
-    $d = Get-ClaudeDecision -Record $Record -Key foundation
-    if (-not $d) { $d = [pscustomobject]@{} }
-    $installer = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'Install-ClaudeGateway.ps1'
-    if (-not (Test-Path -LiteralPath $installer)) { throw "Installer not found: $installer" }
-    $args = @{ Yes = $true }
-    foreach ($pair in @{
+function Get-ClaudeFlowFoundationInstallerMap {
+    # Install-ClaudeGateway.ps1 parameter -> foundation decision property.
+    [ordered]@{
         SubscriptionId = 'subscriptionId'
         FoundryAccount = 'foundryAccount'
         FoundryResourceGroup = 'foundryResourceGroup'
@@ -111,7 +88,64 @@ function Invoke-ClaudeFlowStep {
         CallsPerMinute = 'callsPerMinute'
         StandardGroup = 'standardGroup'
         PremiumGroup = 'premiumGroup'
-    }.GetEnumerator()) {
+    }
+}
+
+function Get-ClaudeFlowFoundationInputs {
+    # The installer inputs present on the decision. The plan carries them, so the approval
+    # fingerprint binds the subscription, resource group, names and quotas it will create.
+    param($Decision)
+    $inputs = [ordered]@{}
+    foreach ($name in (Get-ClaudeFlowFoundationInstallerMap).Values) {
+        if ($Decision.PSObject.Properties.Name -contains $name -and $null -ne $Decision.$name -and [string]$Decision.$name -ne '') { $inputs[$name] = $Decision.$name }
+    }
+    return $inputs
+}
+
+function Get-ClaudeFlowFoundationCost {
+    param([string]$Sku, [string]$Location)
+    if ($Location -and -not $env:CLAUDE_FLOW_SKIP_AZ_DISCOVERY) {
+        try { return (Get-ClaudeFlowLifecycleApimMonthlyCost -Sku $Sku -Region $Location) }
+        catch { return (New-ClaudeFlowCost -Item "API Management $Sku (1 unit)" -Source 'Azure Retail Prices API' -UnknownReason "price lookup failed: $($_.Exception.Message)") }
+    }
+    return (New-ClaudeFlowCost -Item "API Management $Sku" -Source 'Azure Retail Prices API via installer/BOM' -UnknownReason 'price is discovered during live setup for the selected region and unit count')
+}
+
+function Get-ClaudeFlowStepPlan {
+    param($Record, $Discovery)
+    $d = Get-ClaudeDecision -Record $Record -Key foundation
+    if (-not $d) { $d = [pscustomobject]@{} }
+    $sku = if ($d.sku) { [string]$d.sku } else { 'BasicV2' }
+    $inputs = Get-ClaudeFlowFoundationInputs -Decision $d
+    $existing = $Record.apimName -and $Record.resourceGroup
+    $actions = if ($existing) {
+        @(New-ClaudeFlowAction -Verb Check -Target "$($Record.resourceGroup)/$($Record.apimName)" -Detail 'Compare existing gateway with the recorded decisions')
+    } else {
+        $rg = if ($inputs.Contains('resourceGroup')) { [string]$inputs['resourceGroup'] } else { '(resource group chosen by the installer)' }
+        $apim = if ($inputs.Contains('namePrefix')) { "apim-$($inputs['namePrefix'])" } else { 'apim-(name chosen by the installer)' }
+        $region = if ($inputs.Contains('location')) { [string]$inputs['location'] } else { '(region chosen by the installer)' }
+        $foundry = if ($inputs.Contains('foundryAccount')) { "Foundry $($inputs['foundryAccount'])$(if ($inputs.Contains('foundryResourceGroup')) { " in $($inputs['foundryResourceGroup'])" })" } else { 'Foundry account chosen by the installer' }
+        $subscription = if ($inputs.Contains('subscriptionId')) { "; subscription $($inputs['subscriptionId'])" } else { '' }
+        @(New-ClaudeFlowAction -Verb Create -Target "$rg/$apim" -Detail "$sku API Management in $region; $foundry$subscription")
+    }
+    $location = if ($inputs.Contains('location')) { [string]$inputs['location'] } else { '' }
+    New-ClaudeFlowPlan -Step Foundation -Summary $(if ($existing) { 'Existing gateway foundation is recorded' } else { "Set up a $sku governed gateway" }) `
+        -Actions $actions `
+        -Costs @(Get-ClaudeFlowFoundationCost -Sku $sku -Location $location) `
+        -Implications @('All later choices are written into one decision record and developer handover.', 'Installer implementation remains Install-ClaudeGateway.ps1.') `
+        -Requires @('Azure Contributor on the gateway resource group', 'User Access Administrator or Owner on the Foundry account for the managed identity grant') `
+        -Reversible $true -Rollback 'Delete or restore the resource group after taking a gateway backup' `
+        -Data @{ sku = $sku; entitlementStore = $d.entitlementStore; authMode = $d.authMode; desktopSignInKind = $d.desktopSignInKind; inputs = $inputs }
+}
+
+function Invoke-ClaudeFlowStep {
+    param($Record, $Plan)
+    $d = Get-ClaudeDecision -Record $Record -Key foundation
+    if (-not $d) { $d = [pscustomobject]@{} }
+    $installer = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'Install-ClaudeGateway.ps1'
+    if (-not (Test-Path -LiteralPath $installer)) { throw "Installer not found: $installer" }
+    $args = @{ Yes = $true }
+    foreach ($pair in (Get-ClaudeFlowFoundationInstallerMap).GetEnumerator()) {
         $propertyName = [string]$pair.Value
         if ($d.PSObject.Properties.Name -contains $propertyName -and $d.$propertyName) { $args[$pair.Key] = $d.$propertyName }
     }

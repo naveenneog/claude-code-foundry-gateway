@@ -780,6 +780,25 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **A guided-setup approval did not bind the estate it would create.** The Foundation review
+  said "Create API Management governed Claude gateway - BasicV2" for every target, so two setups
+  aimed at different resource groups printed the same fingerprint, and an approval for one was
+  accepted for the other. The review now names the resource group, gateway, region, Foundry
+  account and subscription, the plan carries every installer input, and the Basic v2 line is
+  priced from the Azure Retail Prices API ($150.00/month in eastus2, measured 2026-09-27). Found
+  on the first integrated run: the fingerprint matched the one from a run a day earlier against
+  a different resource group.
+- **Helpers defined by a guided-flow module were gone by the time the plan ran.** The
+  orchestrator dot-sourced each module inside a function, so a module's own helper functions
+  ended with that function and only `global:` helpers survived. It now keeps each module's new
+  helpers at script scope, as ADR-0030's one-session contract says; `Test-GuidedFlow.ps1` runs
+  the shipped modules through the orchestrator to hold it.
+- **Setup reported present modules as absent.** Tier, Entitlement, Network and Desktop sign-in
+  run under `-Action Change`, and Setup printed "Skipped absent step ... not present on this
+  branch" for each. Setup now lists them with the command that changes them, for example
+  `.\Start-ClaudeGateway.ps1 -Action Change -Change sku`, and reserves "absent" for missing files.
+- **An unreachable price API was reported as a missing meter.** The lifecycle price helper now
+  says the Azure Retail Prices API could not be reached, and to rerun the plan.
 - **The Intune detection script in the MDM guide failed under Windows PowerShell 5.1.** It hashed
   the policy with `SHA256.HashData` and `Convert.ToHexString`, which 5.1 does not have, so a
   remediation would always report drift. It uses `ComputeHash` now, and `Test-DocReferences.ps1`

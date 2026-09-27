@@ -155,6 +155,10 @@ function global:Get-ClaudeFlowLifecycleApimMonthlyCost {
     if ($price) {
         return New-ClaudeFlowCost -Item "API Management $Sku ($Units unit)" -MonthlyUsd (ConvertTo-MonthlyPrice -HourlyPrice $price.UnitPrice -Units $Units) -Source 'Azure Retail Prices API' -RetrievedUtc $price.RetrievedUtc
     }
+    $unreachable = Get-AzureRetailPriceUnavailableReason
+    if ($unreachable) {
+        return New-ClaudeFlowCost -Item "API Management $Sku ($Units unit)" -Source 'Azure Retail Prices API' -UnknownReason "the Azure Retail Prices API could not be reached ($unreachable); rerun the plan to price it"
+    }
     return New-ClaudeFlowCost -Item "API Management $Sku ($Units unit)" -Source 'Azure Retail Prices API' -UnknownReason "no retail meter found for $Sku in $Region"
 }
 

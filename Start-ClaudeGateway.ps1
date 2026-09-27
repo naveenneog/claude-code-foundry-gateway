@@ -123,6 +123,7 @@ function Get-FlowPrincipal {
 function Get-FlowModules {
     param([string]$ModulePath, [string]$ForAction)
     $loaded = @{}
+    $otherAction = [System.Collections.Generic.List[object]]::new()
     $infos = [System.Collections.Generic.List[object]]::new()
     if (Test-Path -LiteralPath $ModulePath) {
         foreach ($file in @(Get-ChildItem -LiteralPath $ModulePath -Filter '*.ps1' -File | Sort-Object Name)) {
@@ -130,10 +131,20 @@ function Get-FlowModules {
             foreach ($name in 'Get-ClaudeFlowStepInfo','Get-ClaudeFlowStepQuestions','Get-ClaudeFlowStepPlan','Invoke-ClaudeFlowStep','Test-ClaudeFlowStep') {
                 if (Get-Command $name -ErrorAction SilentlyContinue) { Remove-Item "function:\$name" -Force -ErrorAction SilentlyContinue -WhatIf:$false }
             }
+            $functionsBefore = @{}
+            foreach ($fn in @(Get-ChildItem function:)) { $functionsBefore[$fn.Name] = $fn.ScriptBlock }
             . $file.FullName
+            # ADR-0030: modules share one session. Dot-sourcing here defines their helpers in this
+            # function's scope, which ends on return, so each new helper is kept at script scope.
+            foreach ($fn in @(Get-ChildItem function:)) {
+                if ($fn.Name -like '*-ClaudeFlowStep*') { continue }
+                if (-not $functionsBefore.ContainsKey($fn.Name) -or $functionsBefore[$fn.Name] -ne $fn.ScriptBlock) {
+                    Set-Item -LiteralPath "function:script:$($fn.Name)" -Value $fn.ScriptBlock -WhatIf:$false
+                }
+            }
             $info = & (Get-Command Get-ClaudeFlowStepInfo -ErrorAction Stop).ScriptBlock
             $actions = @($info.Actions)
-            if ($actions.Count -and $ForAction -notin $actions) { continue }
+            if ($actions.Count -and $ForAction -notin $actions) { $otherAction.Add($info); continue }
             $infos.Add($info)
             $loaded[$info.Name] = [pscustomobject]@{
                 Info = $info
@@ -148,10 +159,17 @@ function Get-FlowModules {
     $present = @($infos.ToArray())
     $ordered = if ($present.Count) { @(Get-ClaudeFlowStepOrder -Steps $present) } else { @() }
     $steps = foreach ($info in $ordered) { $loaded[$info.Name] }
+    $presentNames = @($loaded.Keys) + @($otherAction | ForEach-Object { [string]$_.Name })
     $skipped = foreach ($name in $script:ExpectedFlowSteps) {
-        if (-not $loaded.ContainsKey($name)) { "Skipped absent step: $name (module scripts\flow\$name.ps1 is not present on this branch)." }
+        if ($name -notin $presentNames) { "Skipped absent step: $name (module scripts\flow\$name.ps1 is not present on this branch)." }
     }
-    [pscustomobject]@{ Steps = @($steps); Skipped = @($skipped) }
+    # Present modules that another action runs, named with the command that runs them.
+    $elsewhere = foreach ($info in $otherAction) {
+        if ($ForAction -ne 'Change' -and 'Change' -in @($info.Actions) -and $info.DecisionKey) {
+            "Not part of ${ForAction}: $($info.Name) - change it later with .\Start-ClaudeGateway.ps1 -Action Change -Change $($info.DecisionKey)"
+        }
+    }
+    [pscustomobject]@{ Steps = @($steps); Skipped = @($skipped) + @($elsewhere) }
 }
 
 function Get-FlowDiscovery {
