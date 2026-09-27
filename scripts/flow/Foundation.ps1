@@ -189,9 +189,11 @@ function Get-ClaudeFlowStepPlan {
         } else {
             New-ClaudeFlowAction -Verb Check -Target 'the decision record' -Detail 'No gateway is recorded; Setup creates one'
         }
+        $running = Get-ClaudeFlowFoundationCost -Sku $sku -Location $location
+        if ($existing) { $running.Item = "$($running.Item), already running" }
         return New-ClaudeFlowPlan -Step Foundation -Summary $(if ($existing) { 'Existing gateway foundation is recorded' } else { 'No gateway foundation is recorded' }) `
             -Actions @($check) `
-            -Costs @(Get-ClaudeFlowFoundationCost -Sku $sku -Location $location) `
+            -Costs @($running) `
             -Implications @('To change the gateway''s own settings, run .\Start-ClaudeGateway.ps1 -Action Change -Change foundation, which runs Install-ClaudeGateway.ps1 and asks its questions.') `
             -Requires $requires -Reversible $true -Rollback $rollback `
             -Data @{ sku = $sku; entitlementStore = $d.entitlementStore; authMode = $d.authMode; desktopSignInKind = $d.desktopSignInKind; inputs = $inputs; runsInstaller = $false; attended = $context.Attended; asksInConsole = $false }

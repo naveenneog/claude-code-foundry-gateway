@@ -57,7 +57,9 @@ function Get-ClaudeAumPrices {
 function Format-ClaudeAumCost {
     param($Value, [string]$Unit = '/month')
     if ($null -eq $Value) { return "unknown $Unit (Retail API has no verified meter; not zero)" }
-    return ('$' + ([decimal]$Value).ToString('0.00####', [Globalization.CultureInfo]::InvariantCulture) + " $Unit USD list price")
+    # A monthly total in cents; a unit rate at the precision the price list publishes.
+    $format = if ($Unit -eq '/month') { '0.00' } else { '0.00####' }
+    return ('$' + ([decimal]$Value).ToString($format, [Globalization.CultureInfo]::InvariantCulture) + " $Unit USD list price")
 }
 
 function Format-ClaudeAumIfMatch {

@@ -325,12 +325,19 @@ if (-not $FoundryAccount) {
         Write-Bad 'No AIServices or OpenAI accounts found in this subscription.'
         throw 'No candidate Foundry account.'
     }
-    Write-Note "checking $($accounts.Count) candidate account(s)..."
+    # Measured 2026-09-27: 2.3-4.1 s per account, one at a time; 13 accounts took about 56 s
+    # with no output, which reads as stuck (ADR-0032).
+    Write-Note ("checking {0} candidate account(s), about 4 s each (about {1} s)..." -f $accounts.Count, (4 * $accounts.Count))
 
     $withClaude = @()
+    $checked = 0
     foreach ($a in $accounts) {
+        $checked++
+        $watch = [Diagnostics.Stopwatch]::StartNew()
         $names = az cognitiveservices account deployment list -g $a.rg -n $a.name --query "[].name" -o tsv 2>$null
         $deps = @($names | Where-Object { $_ -like '*claude*' })
+        $found = if ($deps.Count) { "$($deps.Count) Claude deployment(s)" } else { 'no Claude deployment' }
+        Write-Note ("  [{0}/{1}] {2}: {3} ({4:N1} s)" -f $checked, $accounts.Count, $a.name, $found, $watch.Elapsed.TotalSeconds)
         if ($deps.Count -gt 0) {
             $withClaude += [pscustomobject]@{ Name = $a.name; Rg = $a.rg; Loc = $a.loc; Models = ($deps -join ', ') }
         }

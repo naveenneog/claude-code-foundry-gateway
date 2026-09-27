@@ -306,6 +306,7 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'FinOps'
     Assert 'named values add no -DeployProjection' (-not (Test-Key $f.NamedValue.Data.installerArgs 'DeployProjection') -and $f.NamedValue.Data.installerArgs['Yes'] -eq $true)
     Assert 'a plan without flow context is the unattended Setup plan' ($f.NoContext.Data.runsInstaller -and $f.NoContext.Data.installerArgs['Yes'] -eq $true -and @($f.NoContext.Actions)[0].Verb -eq 'Create')
     Assert 'Setup over a recorded gateway checks it, attended or not' (-not $f.Recorded.Data.runsInstaller -and -not $f.RecordedUnattended.Data.runsInstaller -and @($f.Recorded.Actions)[0].Verb -eq 'Check')
+    Assert 'the cost of a recorded gateway is named as already running, not as a new cost' ([string]@($f.Recorded.Costs)[0].Item -match 'already running') ([string]@($f.Recorded.Costs)[0].Item)
     Assert 'Guide never runs the installer, with or without a recorded gateway' (-not $f.GuideRecorded.Data.runsInstaller -and -not $f.GuideEmpty.Data.runsInstaller)
     Assert 'attended -Change foundation runs the installer, which asks' ($f.ChangeAttended.Data.runsInstaller -and $f.ChangeAttended.Data.asksInConsole -and -not (Test-Key $f.ChangeAttended.Data.installerArgs 'Yes'))
     $cu = $f.ChangeUnattended.Data.installerArgs
@@ -488,6 +489,7 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'FinOps'
     Assert 'the installer offers the FinOps tool in a console unless -Yes or -SkipFinOpsOffer' ($nextSection -match 'Set up a FinOps tool now\?' -and $nextSection -match '-not \$SkipFinOpsOffer' -and $nextSection -match '-not \$Yes' -and $nextSection -match 'Test-ClaudeInteractive')
     Assert 'the installer records sku, location and the Foundry account in its record' ($installerText -match '(?m)^\s+sku\s+=\s+\$Sku' -and $installerText -match '(?m)^\s+location\s+=\s+' -and $installerText -match '(?m)^\s+foundryAccount\s+=\s+\$FoundryAccount' -and $installerText -match '(?m)^\s+foundryResourceGroup\s+=\s+\$FoundryResourceGroup')
     Assert 'the installer''s Location prompt is the priced region prompt' ($installerText -notmatch "Read-Default -Prompt 'Location'" -and $installerText -match 'Read-GatewayRegion -Default \$Location')
+    Assert 'the installer''s Foundry account search states an estimate and reports each account as it is read' ($installerText -match 'candidate account\(s\), about 4 s each' -and $installerText -match '\[\{0\}/\{1\}\] \{2\}: \{3\} \(\{4:N1\} s\)')
 
     # ------------------------------------------------------------------ FinOps pricing in the flow
     $finops = & {
