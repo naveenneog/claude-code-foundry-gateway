@@ -2,6 +2,44 @@
 
 **Active packets (2026-09-28, run in parallel worktrees):** P69 the company address in the flow, P70 newly deployed models reach the tiers and the workstations, P71 AUM answers fast and says why it cannot, P72 permutation tests of the guided flow and the installer ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
+## P71 AUM answers fast and says why it cannot, 2026-09-28
+
+Implementation is on `p71-aum-speed`, based on `aa7ed19`. The lead owns the council
+review and merge; the branch stops at a passing packet gate. The ROADMAP box remains
+open until that merge. The owner's 2026-09-27 investigation measured Turnstile reads
+at 33-36 s followed by exit 7, despite a healthy liveness endpoint. Direct reads
+paid repeatedly for Azure CLI tokens and PowerShell bridge processes. Research:
+**U20**, **U26**, **U32** and [ADR-0018](adr/0018-terminal-finops.md).
+
+- [ ] A stopped Turnstile database produces an actionable command/UI failure in
+      about 5 s, naming the verified server and its Azure CLI start command; the
+      client never starts a paid resource automatically
+- [ ] One process reuses each resource's token until near expiry; Direct batches
+      gateway reads and overlaps independent Log Analytics queries without
+      changing authorization, accounting, write confirmation or compensation
+- [ ] Terminal panels render as their data arrives, with named waits and estimates;
+      identity is no longer a global Direct-data barrier, and scoped HTTP data
+      remains subject to the existing identity and scope checks
+- [ ] Offline tests are written and observed failing before implementation; each
+      new detector is broken deliberately and catches its mutation at the full
+      relevant test count, then passes after restoration
+- [ ] Read-only before/after time-to-first-data is recorded for `whoami`, `budget
+      list`, `usage show` and `status` on the reference gateway; stopped and running
+      Turnstile results are recorded separately
+- [ ] The database is started only after stopped-case evidence, under the owner's
+      explicit authorization, and remains running for the morning test; no other
+      Azure, Entra or Turnstile resource is changed
+- [ ] ADR-0035, AUM, troubleshooting, changelog and architecture records describe
+      the behavior; terminal captures numbered 60 onward are redacted and inspected
+- [ ] The worktree venv runs pytest through `Test-FinOps.ps1`, and the locked
+      `node .ironclad/gate.mjs --stage packet` passes with that AUM check included
+
+Initial observation, 2026-09-27 **20:13:35Z**: PostgreSQL
+`pg-tsclaude-zpk4sh4prbsls` in `rg-turnstile-claudegw` was `Stopped`. Its activity
+log records tonight's stop starting at **19:05:18Z** and succeeding at
+**19:07:19Z**. No start has been requested by this packet yet. The initial
+no-run gate passed (20 passed, 2 warnings, 0 failures; commands not executed).
+
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
 
 The owner's test on 2026-09-27: `Start-ClaudeGateway.ps1` showed nothing for a long time and asked

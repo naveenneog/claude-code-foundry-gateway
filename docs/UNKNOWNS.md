@@ -38,7 +38,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | U29 | OPEN | What made Claude Desktop report `ENOTFOUND` on the owner's workstation on 2026-09-27? Not reproduced here. Its configuration then had no readable credential kind (U27). `Debug-ClaudeWorkstation.ps1` now shows Desktop's own recent `[custom-3p]` warnings and errors from `%LOCALAPPDATA%\Claude-3p\logs\main.log`, which name the failing host | P67 |
 | U30 | OPEN | Can the guided flow create the company address itself: an API Management custom hostname with a certificate and a DNS record, on each v2 tier, and at what cost? Not researched yet | P69 |
 | U31 | CLOSED | Can the flow show the customer's own prices (an agreement's price sheet) instead of Azure retail list prices, and with what role? Researched 2026-09-27: the price sheet of an Enterprise Agreement, Microsoft Customer Agreement or Microsoft Partner Agreement is readable only with a billing role (for MCA: billing profile owner, contributor, reader or invoice manager; for EA: as the Enterprise Admin's policy allows), not with a subscription role, and the API downloads the whole sheet as a file. The flow shows Azure Retail Prices API list prices, named as list prices, and names the price sheet as the authority ([detail](#u31--customer-prices--closed-2026-09-27)) | P68, [ADR-0032](adr/0032-guided-flow-starts-at-once.md) |
-| U32 | OPEN | What stops the reference Turnstile database every evening? Measured 2026-09-27 from the activity log: `pg-tsclaude-zpk4sh4prbsls` (rg-turnstile-claudegw) was stopped at 19:05Z on 09-23, 09-24 and 09-25 by an application whose token was issued by a tenant other than the subscription's. While stopped, Turnstile's `auth/me` waits about 30 s and returns 500, which AUM reports as `Read failed (exit 7)` ([detail](#u32--the-turnstile-database-stops-every-evening--open)) | f10, f11 |
+| U32 | OPEN | What stops the reference Turnstile database every evening? Measured 2026-09-27 from the activity log: `pg-tsclaude-zpk4sh4prbsls` (rg-turnstile-claudegw) was stopped at 19:05Z on 09-23, 09-24 and 09-25 by an application whose token was issued by a tenant other than the subscription's. P71 observed it Stopped at 20:13:35Z on 09-27; that evening's stop started at 19:05:18Z and succeeded at 19:07:19Z. While stopped, Turnstile's `auth/me` waits about 30 s and returns 500, which AUM reports as `Read failed (exit 7)` ([detail](#u32--the-turnstile-database-stops-every-evening--open)) | P71, f10, f11 |
 
 ---
 
@@ -717,6 +717,12 @@ for the previous 7 days:
 | 09-24 19:42–19:44 | start | the owner |
 | 09-25 19:05–19:08 | stop | the same application |
 | 09-27 08:15–08:17 | start | P67 session, owner's account |
+| 09-27 19:05:18–19:07:19 | stop | not re-attributed by P71; operation and timestamps read only |
+
+P71's read at **2026-09-27 20:13:35Z** found the server `Stopped`. This packet
+has authorization to start that server after measuring the stopped case and
+leave it running for the owner's morning test. That authorization does not
+cover the stopping automation, Turnstile settings or any other resource.
 
 The stop token's claims name an application (`idtyp` `app`) issued by a tenant other than the
 subscription's, so the stop comes from an automation outside this
