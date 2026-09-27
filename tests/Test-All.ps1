@@ -251,6 +251,7 @@ try {
     Invoke-Check 'Guided lifecycle update and change flow'    'Test-FlowLifecycle.ps1'
     Invoke-Check 'Guided flow orchestrator'                  'Test-GuidedFlow.ps1'
     Invoke-Check 'Guided flow start and installer prices'    'Test-FlowStart.ps1' -SerialLane
+    Invoke-Check 'Installer summary across permutations'     'Test-InstallerPermutations.ps1'
 Invoke-Check 'Tier groups follow their gateway'          'Test-TierGroupTarget.ps1'
 
     if ($IncludeAzure) {
