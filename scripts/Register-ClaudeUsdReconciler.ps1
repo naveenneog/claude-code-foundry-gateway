@@ -11,7 +11,7 @@ param(
     [string]$RepositoryUrl,
     [string]$RepositoryRef,
     [string]$Cron = '*/5 * * * *',
-    [string]$Image = 'mcr.microsoft.com/azure-cli:2.90.0',
+    [string]$Image = 'python:3.12.11-slim-bookworm',
     [string]$ExistingEnvironmentId,
     [string]$Location,
     [switch]$RunNow

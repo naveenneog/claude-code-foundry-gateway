@@ -19,8 +19,8 @@ param repositoryRef string
 @description('Five-minute UTC cron for the scheduled reconciler.')
 param cronExpression string = '*/5 * * * *'
 
-@description('Container image. It provides Azure CLI and Python.')
-param image string = 'mcr.microsoft.com/azure-cli:2.90.0'
+@description('Container image. It provides Python for the reconciler. The tag is pinned.')
+param image string = 'python:3.12.11-slim-bookworm'
 
 @description('Optional existing Container Apps environment. Empty creates a dedicated Consumption environment.')
 param existingEnvironmentId string = ''
@@ -150,7 +150,6 @@ PY
 cd repo
 python3 -m pip --version >/dev/null 2>&1 || python3 -m ensurepip --upgrade
 python3 -m pip install -q -r service/aum/requirements.txt
-az login --identity --client-id "${AZURE_CLIENT_ID}" --allow-no-subscriptions --output none
 PYTHONPATH=service/aum python3 -m aum_service.usd_command --gateway-id "${GATEWAY_ID}" --workspace-id "${WORKSPACE_ID}" --managed-identity
 '''
 

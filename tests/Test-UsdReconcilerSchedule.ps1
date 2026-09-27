@@ -15,11 +15,11 @@ $params = New-ClaudeUsdReconcilerParameters `
     -WorkspaceResourceId '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-contoso/providers/Microsoft.OperationalInsights/workspaces/log-contoso' `
     -WorkspaceCustomerId '11111111-1111-1111-1111-111111111111' `
     -RepositoryUrl 'https://github.com/contoso/gateway.git' -RepositoryRef ('a' * 40) `
-    -Cron '*/5 * * * *' -Image 'mcr.microsoft.com/azure-cli:2.90.0' -Location 'eastus2'
+    -Cron '*/5 * * * *' -Image 'python:3.12.11-slim-bookworm' -Location 'eastus2'
 
 Assert 'parameter builder pins full commit' ($params.parameters.repositoryRef.value -eq ('a' * 40))
 Assert 'parameter builder keeps five-minute schedule as data' ($params.parameters.cronExpression.value -eq '*/5 * * * *')
-Assert 'parameter builder pins image tag' ($params.parameters.image.value -eq 'mcr.microsoft.com/azure-cli:2.90.0')
+Assert 'parameter builder pins image tag' ($params.parameters.image.value -eq 'python:3.12.11-slim-bookworm')
 Assert 'mutable repository refs are refused' ((Throws { New-ClaudeUsdReconcilerParameters -GatewayResourceId x -WorkspaceResourceId y -WorkspaceCustomerId z -RepositoryUrl 'https://github.com/contoso/gateway.git' -RepositoryRef main }) -match 'full published commit')
 Assert 'non-five-minute cron is refused' ((Throws { New-ClaudeUsdReconcilerParameters -GatewayResourceId x -WorkspaceResourceId y -WorkspaceCustomerId z -RepositoryUrl 'https://github.com/contoso/gateway.git' -RepositoryRef ('a' * 40) -Cron '*/10 * * * *' }) -match 'five minutes')
 Assert 'untagged images are refused' ((Throws { New-ClaudeUsdReconcilerParameters -GatewayResourceId x -WorkspaceResourceId y -WorkspaceCustomerId z -RepositoryUrl 'https://github.com/contoso/gateway.git' -RepositoryRef ('a' * 40) -Image 'mcr.microsoft.com/azure-cli' }) -match 'tag-pinned')
