@@ -64,6 +64,7 @@ function global:az {
     $global:LASTEXITCODE = 0
     if ($global:P70azFailure -and $joined.StartsWith($global:P70azFailure)) {
         $global:LASTEXITCODE = 3
+        if ($global:P70failureJson) { return $global:P70failureJson }
         return 'ERROR: denied'
     }
     if ($joined -like 'account get-access-token*') { return ('offline-' + 'credential') }
@@ -124,7 +125,7 @@ function global:Invoke-RestMethod {
 function Reset-State {
     $global:P70nvs = @{ 'models-standard' = ',sonnet,retired,'; 'models-premium' = ',opus,sonnet,retired,'; 'quota-standard' = '654321' }
     $global:P70rawDeployments = Clone $global:P70originalDeployments
-    $global:P70azFailure = ''; $global:P70badDeployments = ''; $global:P70failWrite = ''
+    $global:P70azFailure = ''; $global:P70failureJson = ''; $global:P70badDeployments = ''; $global:P70failWrite = ''
     $global:P70backupFails = $false; $global:P70backupRead = $false; $global:P70dropWrite = $false
     $global:P70backend = 'https://ai-models.services.ai.azure.com/anthropic'
     $global:P70writes.Clear(); $global:P70calls.Clear()
@@ -276,7 +277,11 @@ try {
         $p.Data.PriceBookAfter.models.sonnet.inputPerM -eq 1.5
     }
     Reset-State
-    Check 'apply cannot run without preparation and snapshot' { $global:P70plan = Plan; Reject { Invoke-ClaudeModelChange -Record $global:P70record -Plan $global:P70plan } 'snapshot|prepar' }
+    Check 'apply cannot run without preparation and snapshot' {
+        $global:P70plan = Plan
+        (Reject { Invoke-ClaudeModelChange -Record $global:P70record -Plan $global:P70plan } 'snapshot|prepar') -and
+            @($global:P70calls | Where-Object { ($_ -join ' ') -match '^apim nv (update|create)' }).Count -eq 0
+    }
     Check 'failed snapshot stops Azure and local managed writes' {
         $global:P70backupFails = $true
         (Reject { Apply $global:P70plan } 'backup|snapshot') -and $global:P70writes.Count -eq 0 -and (Json $global:P70recordPath).deployments[0].version -eq '1'
@@ -475,6 +480,18 @@ try {
         $before = $global:P70writes.Count
         & $standalone -RecordPath $global:P70recordPath -AnswersPath $answers -ApprovedPlanFingerprint $fp | Out-Null
         $global:P70writes.Count -eq $before
+    }
+    Check 'a nonzero Azure exit carrying valid JSON is still a failed read' {
+        Reset-State; $global:P70azFailure = 'cognitiveservices account deployment list'; $global:P70failureJson = '[]'
+        Reject { Plan } 'az exit 3'
+    }
+    Check 'the shared named-value writer reports a failed native command itself' {
+        Reset-State; $global:P70backupRead = $true; $global:P70failWrite = 'models-standard'
+        Reject { Set-ApimNamedValue -ResourceGroup rg-models -ApimName apim-models -SubscriptionId $global:P70sub -Id models-standard -Value ',sonnet,' } 'az exit 7'
+    }
+    Check 'a profile renderer change invalidates a prepared model plan' {
+        Reset-State; $p = Plan; $p.Data.RendererStamp = 'not-the-reviewed-renderer'
+        Reject { Apply $p } 'profile renderer'
     }
 }
 finally {

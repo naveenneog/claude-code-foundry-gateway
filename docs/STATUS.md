@@ -48,6 +48,8 @@ Second green: 77 assertions, 0 failed on both hosts. Explicit `-StandardModels` 
 deployment. Price status appears in each model question. Reusing the same answers after a
 retirement succeeds without another named-value write. `Test-On-PS51.ps1` reached the
 complete installer's summary and stopped under `-WhatIf`.
+Detector preflight: 80 assertions on each host, adding valid-JSON/nonzero-exit failure,
+the named-value writer's own exit check and renderer drift before apply.
 
 Read-only reference drift, 2026-09-27 20:19Z: both `models-standard` and `models-premium` are
 `,,` (allow all), and `turnstile-integration` reports `governanceAuthority=Turnstile`,
