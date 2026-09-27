@@ -2,6 +2,56 @@
 
 **Active packets (2026-09-28, run in parallel worktrees):** P69 the company address in the flow, P70 newly deployed models reach the tiers and the workstations, P71 AUM answers fast and says why it cannot, P72 permutation tests of the guided flow and the installer ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
+## P72 permutation tests of the guided flow and the installer, 2026-09-28
+
+The owner's test on 2026-09-27 found the guided flow's defects one path at a time. P72 tests the
+combinations the [ROADMAP](ROADMAP.md) entry names. Work is isolated to `p72-permutations`, based
+on `aa7ed19`. Reading the installer to size the matrix found two defects before any test ran, both
+measured against the reference subscription with `-WhatIf -Yes` (read-only) at 20:17 UTC on
+2026-09-27:
+
+- The Claude Desktop sign-in section of `Install-ClaudeGateway.ps1` is inside the `else` branch
+  that asks the developer sign-in, so `-AuthMode` skips it. With `-AuthMode device
+  -DesktopSignInKind external-idp-browser -DesktopEntraClientId <id>` the run printed no Desktop
+  gateway audience; the same run without `-AuthMode` printed `Desktop gateway audience: <id>`.
+  The flow's unattended Setup and Change foundation pass both parameters.
+- The installer's summary is the approval ([ADR-0032](adr/0032-guided-flow-starts-at-once.md)).
+  It names the developer sign-in, and not the entitlement store, the Claude Desktop sign-in or the
+  developer address.
+
+Measured before the tests: each live installer run under `-WhatIf -Yes` with every placement
+parameter given takes 18-20 s, of which nine Azure CLI calls take nearly all; a matrix of 54
+combinations on two shells takes about 36 minutes that way. The suites therefore stub the Azure
+CLI and the Retail Prices API, and the live matrix runs once, outside Test-All.
+
+- [ ] `tests/Test-FlowPermutations.ps1` runs the real orchestrator, discovery and Foundation step,
+      with a stub installer and a stub Azure CLI, over action (Setup, Change foundation, Guide,
+      Status) × record state (none, recorded and matching, another gateway URL, missing, signed
+      out, no Azure CLI) × mode (attended, `-PlanOnly`, unattended apply). In each combination:
+      the installer runs only for Change foundation or a Setup with no gateway recorded; `-Yes` is
+      passed exactly when unattended; drift (another URL, missing) stops Setup and Change before
+      planning, and Guide goes on; a read that failed is reported as not read, never as drift;
+      Status and `-PlanOnly` write nothing; a refusal prints its reason and no PowerShell code
+      excerpt ([U36](UNKNOWNS.md#u36--a-top-level-run-and-an-in-process-call--closed-2026-09-28))
+- [ ] In process, Foundation's installer arguments over entitlement store × Desktop sign-in ×
+      developer sign-in × tier × attended or unattended × new or recorded gateway:
+      `-DeployProjection` exactly when unattended with the projection store; with
+      `-ExistingApimName`, the recorded region, tier, name and publisher are never passed; an
+      external-IdP Desktop sign-in without a client id is refused by the plan, before approval;
+      distinct inputs give distinct fingerprints
+- [ ] `tests/Test-InstallerPermutations.ps1` runs the real installer under `-WhatIf -Yes`, with
+      the Azure CLI and the Retail Prices API stubbed in process, over tier × entitlement store ×
+      developer sign-in × Desktop sign-in, with and without `-AuthMode`, on PowerShell 7 and
+      Windows PowerShell 5.1: the summary names each choice, and each refusal comes before the
+      summary with its reason
+- [ ] Each failure found is fixed test-first, starting with the two above
+- [ ] The installer matrix runs once live and read-only against the reference subscription on
+      both shells; the result and timings are recorded here
+- [ ] The address dimension: P69 owns the installer's address section and adds its parameter.
+      The harness adds the address when P69 merges, or the follow-up is recorded in ROADMAP
+- [ ] GUIDED-FLOW.md names the suites and what they hold; CHANGELOG
+- [ ] Council, five seats; the packet gate exits 0
+
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
 
 The owner's test on 2026-09-27: `Start-ClaudeGateway.ps1` showed nothing for a long time and asked
