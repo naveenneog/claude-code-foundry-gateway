@@ -9,6 +9,13 @@ and DNS instructions. P69 makes that choice an applied, priced and verified part
 and a later Change. Work is isolated to `p69-company-address`, based on `aa7ed19`; council review
 and merging belong to the lead. The reference gateway and other existing services are read-only.
 
+Live finding, 2026-09-27 20:44 UTC (2026-09-28 locally): the isolated Basic v2 instance deployed in
+148.0 s, but its uploaded-PFX hostname PATCH returned `CustomHostnameOwnershipCheckFailed` for
+`claude.p69-company-address.test`. Azure requires public CNAME ownership even on Basic v2; a zone
+that answers only when queried at its Azure name servers does not satisfy that requirement.
+The sequence is corrected to DNS before binding. Positive company-hostname TLS proof is blocked
+without a delegated domain; none is bought or borrowed. U30 and ADR-0033 record the limitation.
+
 - [ ] U30 is closed with dated Microsoft Learn and Azure Retail Prices API evidence for every
       v2 tier, certificate source, DNS record, update wait and component price; ADR-0033 records
       the design before production code

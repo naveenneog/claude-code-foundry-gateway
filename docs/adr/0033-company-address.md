@@ -72,6 +72,16 @@ review prints the complete record and apply waits for it to resolve. Every wait 
 resource/condition, an estimate, a timeout, progress and the elapsed time on success or failure.
 The APIM update timeout is 45 minutes; DNS propagation is bounded separately.
 
+**Live correction, 2026-09-28.** The first isolated Basic v2 binding attempt, 20:44 UTC on
+2026-09-27, returned `CustomHostnameOwnershipCheckFailed`: Azure could not find a CNAME from the
+reserved `.test` hostname to the gateway. This is the same public-ownership requirement the
+domain article explicitly describes for Standard v2 and Premium v2, now measured on Basic v2 too.
+The DNS record and its resolution wait therefore precede the hostname PATCH, not follow it.
+The initial sequence was wrong even for a delegated customer zone. A direct authoritative
+nameserver query does not satisfy Azure's public validation. There is no documented bypass, and
+P69 does not try one. The requested positive isolated SNI proof is blocked without a delegated
+domain; the authoritative DNS proof and the refusal remain measurable.
+
 **Prices.** The existing `AzureRetailPrice.ps1` helper supplies Public Zone and Public Queries
 at their first tiers and Key Vault Operations and Certificate Renewal Request in the gateway
 region. Empty-region global meters are valid inputs. The review distinguishes an already-billed

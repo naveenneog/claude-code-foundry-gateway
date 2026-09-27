@@ -150,6 +150,15 @@ Check 'the step applies the approved plan rather than silently replanning it' {
         if ($Plan.Data.fixed -ne 'approved' -or $RecordPath -ne 'C:\fixture.json') { throw 'Plan or record was not forwarded.' }
         [pscustomobject]@{ GatewayUrl = 'https://claude.contoso.test/claude'; Address = @{ hostname = 'claude.contoso.test' } }
     }
+    Check 'the step updates the top-level installer address as well as the flow decision' {
+        function Invoke-ClaudeAddressPlan {
+            param($Plan, $CertificatePassword, $RecordPath)
+            [pscustomobject]@{ GatewayUrl = 'https://new.contoso.test/claude'; Address = @{ hostname = 'new.contoso.test' } }
+        }
+        $r = [pscustomobject]@{ __recordPath = 'C:\fixture.json'; address = [pscustomobject]@{ hostname = 'old.contoso.test' } }
+        $result = Invoke-ClaudeFlowStep -Record $r -Plan (New-ClaudeFlowPlan -Step Address)
+        $r.address.hostname -eq 'new.contoso.test' -and $result.address.hostname -eq 'new.contoso.test'
+    }
     $result = Invoke-ClaudeFlowStep -Record ([pscustomobject]@{ __recordPath = 'C:\fixture.json' }) -Plan $p
     $result.gatewayUrl -eq 'https://claude.contoso.test/claude' -and $result.address.hostname -eq 'claude.contoso.test'
 }

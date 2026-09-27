@@ -484,6 +484,7 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
         'Where to put the gateway' = 'region'; 'Choices' = 'entitlement store'; 'Budgets' = 'token budgets'; 'Standard tier' = 'token budgets for each tier'
         'Premium tier' = 'token budgets for each tier'; 'Organisation ceiling' = 'organisation ceiling'; 'Safety valve' = 'request ceiling'
         'Entitlement groups' = 'Entra groups'; 'Business units (optional)' = 'business units'
+        'Company address, certificate and DNS' = 'certificate source and DNS hosting'
     }
     $headings = @([regex]::Matches($installerText, "(?m)Write-(?:Step|Head)\s+'([^']+)'") | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
     $unnamed = @($headings | Where-Object { $_ -notin $asksNothing -and -not $named.Contains($_) })

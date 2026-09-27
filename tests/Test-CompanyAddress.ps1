@@ -40,6 +40,8 @@ function Reset-State {
     $script:tlsTrusted = $true
     $script:patchFails = $false
     $script:patchState = 'Succeeded'
+    $script:existingGrant = $false
+    $script:requireDnsFirst = $false
     $script:live = [pscustomobject]@{
         id = $apimId; name = 'apim-contoso'; location = 'eastus2'; sku = @{ name = 'BasicV2'; capacity = 1 }
         identity = @{ type = 'SystemAssigned'; principalId = '00000000-0000-0000-0000-000000000002'; tenantId = $sub }
@@ -88,6 +90,7 @@ function Invoke-ClaudeNetworkArm {
         if ($Url -match '/Microsoft.ApiManagement/service/') {
             $script:events += 'binding'
             if ($script:patchFails) { throw 'AuthorizationFailed: APIM write refused' }
+            if ($script:requireDnsFirst -and -not $script:dnsRecord) { throw 'CustomHostnameOwnershipCheckFailed: CNAME must exist before binding.' }
             if ($Body.properties -and $Body.properties.hostnameConfigurations) {
                 $script:live.properties.hostnameConfigurations = Copy-Object $Body.properties.hostnameConfigurations
             }
@@ -104,10 +107,12 @@ function Invoke-ClaudeNetworkArm {
         return [pscustomobject]@{ name = 'grant' }
     }
     if ($Url -match '/Microsoft.ApiManagement/service/') { return Copy-Object $script:live }
+    if ($Url -match '/roleAssignments') {
+        return [pscustomobject]@{ value = @(if ($script:existingGrant) { @{ properties = @{ principalId = $script:live.identity.principalId; roleDefinitionId = "/subscriptions/$sub/providers/Microsoft.Authorization/roleDefinitions/4633458b-17de-408a-b874-0445c86b69e6" } } }) }
+    }
     if ($Url -match '/CNAME/') { return Copy-Object $script:dnsRecord }
     if ($Url -match '/dnsZones/') { return Copy-Object $script:zone }
     if ($Url -match '/Microsoft.KeyVault/vaults/') { return Copy-Object $script:vault }
-    if ($Url -match '/roleAssignments') { return [pscustomobject]@{ value = @() } }
     throw "Unexpected ARM read: $Url"
 }
 function Resolve-DnsName {
@@ -270,14 +275,28 @@ try {
         $p = New-Plan
         $result = Apply-Plan $p
         $after = Read-ClaudeDecisionRecord $recordPath
-        $script:events -join ',' -eq 'grant,binding,dns,proof' -and $after.gatewayUrl -eq 'https://claude.contoso.test/claude' -and
+        $script:events -join ',' -eq 'dns,grant,binding,proof' -and $after.gatewayUrl -eq 'https://claude.contoso.test/claude' -and
             $result.GatewayUrl -eq $after.gatewayUrl -and $after.unknownField.survives -eq 'yes' -and @($after.history).Count -eq 1
+    }
+    Reset-State
+    Check 'DNS ownership is established before the first custom hostname PATCH' {
+        $script:requireDnsFirst = $true
+        Apply-Plan (New-Plan) | Out-Null
+        $script:events -join ',' -eq 'dns,grant,binding,proof'
     }
     Check 'the gateway read permission is the narrowly named Secrets User role' {
         $grant = @($script:writes | Where-Object Url -match '/roleAssignments/')[0]
         $grant.Body.properties.roleDefinitionId -like '*/4633458b-17de-408a-b874-0445c86b69e6' -and
             $grant.Body.properties.principalId -eq '00000000-0000-0000-0000-000000000002'
     }
+    Reset-State
+    Check 'an existing certificate-read role is not assigned a second time' {
+        $script:existingGrant = $true
+        Apply-Plan (New-Plan) | Out-Null
+        @($script:writes | Where-Object Url -match '/roleAssignments/').Count -eq 0
+    }
+    Reset-State
+    Apply-Plan (New-Plan) | Out-Null
     Check 'new DNS records use conditional creation' { @($script:writes | Where-Object { $_.Url -match '/CNAME/' -and $_.IfNoneMatch }).Count -eq 1 }
     Check 'the APIM update uses PATCH and leaves network settings unchanged' {
         @($script:writes | Where-Object { $_.Url -match '/Microsoft.ApiManagement/service/' -and $_.Method -eq 'patch' }).Count -eq 1 -and
@@ -308,6 +327,26 @@ try {
             $grant.Body.properties.accessPolicies[0].permissions.keys -contains 'get'
     }
     Reset-State
+    Check 'enabling system identity retains every user-assigned identity' {
+        $script:live.identity = [pscustomobject]@{ type = 'UserAssigned'; userAssignedIdentities = @{ "$rgId/providers/Microsoft.ManagedIdentity/userAssignedIdentities/existing" = @{} } }
+        Apply-Plan (New-Plan) | Out-Null
+        $identityWrite = @($script:writes | Where-Object { $_.Body.identity })[0]
+        $identityWrite.Body.identity.type -eq 'SystemAssigned, UserAssigned' -and
+            $identityWrite.Body.identity.userAssignedIdentities.PSObject.Properties.Name -contains "$rgId/providers/Microsoft.ManagedIdentity/userAssignedIdentities/existing"
+    }
+    Reset-State
+    Check 'a changed vault permission model is refused before a grant' {
+        $p = New-Plan
+        $script:vault.properties.enableRbacAuthorization = $false
+        (Reject { Apply-Plan $p } 'permission model changed') -and @($script:writes | Where-Object { $_.Url -match '/roleAssignments/|/accessPolicies/' }).Count -eq 0
+    }
+    Reset-State
+    Check 'a known matching binding is not needlessly patched on retry' {
+        $script:live.properties.hostnameConfigurations += @{ type = 'Proxy'; hostName = 'claude.contoso.test'; certificateSource = 'KeyVault'; keyVaultId = $script:cert.SecretId; certificate = @{ thumbprint = $script:thumbprint }; certificateStatus = 'Completed' }
+        Apply-Plan (New-Plan) | Out-Null
+        @($script:writes | Where-Object { $_.Url -match '/Microsoft.ApiManagement/service/' }).Count -eq 0
+    }
+    Reset-State
     Check 'existing generated profiles change the URL, not unrelated settings' {
         $profile = Join-Path $scratch 'profiles\standard'
         New-Item -ItemType Directory -Path $profile -Force | Out-Null
@@ -317,6 +356,16 @@ try {
         $text = [IO.File]::ReadAllText((Join-Path $profile 'managed-settings.json'))
         $text -match 'https://claude.contoso.test/claude' -and $text -match '"custom":"retained"' -and
             [IO.File]::ReadAllText((Join-Path $scratch 'HOW-TO-USE.md')) -match 'https://claude.contoso.test/claude'
+    }
+    Reset-State
+    Check 'existing onboarding mail and copied records do not retain the old URL' {
+        [IO.File]::WriteAllText((Join-Path $scratch 'onboarding-developer-contoso-test.html'), 'Gateway https://apim-contoso.azure-api.net/claude')
+        $copied = Join-Path $scratch 'developer-package'
+        New-Item -ItemType Directory -Path $copied -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $copied 'claude-gateway.json'), '{"gatewayUrl":"https://apim-contoso.azure-api.net/claude","custom":"yes"}')
+        Apply-Plan (New-Plan) | Out-Null
+        [IO.File]::ReadAllText((Join-Path $scratch 'onboarding-developer-contoso-test.html')) -match 'https://claude.contoso.test/claude' -and
+            [IO.File]::ReadAllText((Join-Path $copied 'claude-gateway.json')) -match 'https://claude.contoso.test/claude'
     }
     Reset-State
     Check 'a record naming another gateway is refused before any write' {
@@ -330,6 +379,16 @@ try {
         $before = [IO.File]::ReadAllText($recordPath)
         Apply-Plan $p | Out-Null
         [IO.File]::ReadAllText($recordPath) -eq $before
+    }
+    Reset-State
+    Check 'a mismatched hostname cannot pass even the isolated TLS proof contract' {
+        $p = New-Plan @{ IsolatedProof = $true; DnsServer = 'ns1.example.test'; ConnectAddress = '192.0.2.1' }
+        $original = ${function:Invoke-ClaudeAddressHttps}
+        try {
+            function Invoke-ClaudeAddressHttps { [pscustomobject]@{ StatusCode = 401; Thumbprint = $script:thumbprint; Trusted = $false; Hostname = 'other.contoso.test' } }
+            Reject { Apply-Plan $p } 'hostname'
+        }
+        finally { Set-Item function:Invoke-ClaudeAddressHttps $original }
     }
     Check 'test-only TLS cannot be used for a production hostname' { Reject { New-Plan @{ Hostname = 'claude.contoso.com'; DnsZoneResourceId = ''; IsolatedProof = $true; DnsServer = 'ns1.example.test'; ConnectAddress = '192.0.2.1' } } 'test' }
     Check 'a connect-IP override requires isolated proof mode' { Reject { New-Plan @{ ConnectAddress = '192.0.2.1' } } 'IsolatedProof' }

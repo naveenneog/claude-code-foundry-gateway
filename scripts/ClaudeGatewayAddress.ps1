@@ -123,7 +123,8 @@ function Get-ClaudeAddressPlan {
     if ($CertificateSource -eq 'KeyVault') { $actions += New-ClaudeFlowAction -Verb Grant -Target $certificate.VaultId -Detail 'Gateway system-assigned identity: Key Vault Secrets User, or additive secret get/list access policy; networking unchanged.' }
     $actions += New-ClaudeFlowAction -Verb Update -Target $id -Detail "Bind Proxy hostname $Hostname; retain other hostname and service properties.$(if ($ReplaceHostname) { " Replace only $ReplaceHostname; its callers must be reconfigured." })"
     $dnsDetail = "$Hostname CNAME $($dns.Target); TTL $(if ($dns.Before) { $dns.Before.properties.TTL } else { 300 }) s. No APIM managed-certificate TXT record."
-    $actions += New-ClaudeFlowAction -Verb $(if ($DnsZoneResourceId) { if ($dns.Before) { 'Update' } else { 'Create' } } else { 'Check' }) -Target $(if ($dns.Id) { $dns.Id } else { 'External DNS provider' }) -Detail $dnsDetail
+    $dnsAction = New-ClaudeFlowAction -Verb $(if ($DnsZoneResourceId) { if ($dns.Before) { 'Update' } else { 'Create' } } else { 'Check' }) -Target $(if ($dns.Id) { $dns.Id } else { 'External DNS provider' }) -Detail $dnsDetail
+    $actions = @($dnsAction) + @($actions)
     $actions += New-ClaudeFlowAction -Verb Check -Target "https://$Hostname/claude/v1/messages" -Detail 'DNS, configured certificate with SNI/Host, and unauthenticated gateway HTTP 401 before publishing.'
     $costs = @(Wait-ClaudeAddress -Condition 'company-address list prices' -About 'about 5 s' -TimeoutSeconds 180 -Check {
         @{ Done = $true; Value = @(Get-ClaudeAddressCosts -DnsZoneResourceId $DnsZoneResourceId -CertificateSource $CertificateSource -Region $Gateway.location) }
@@ -194,19 +195,38 @@ function Update-ClaudeAddressArtifacts {
     if (-not $OldUrl -or $OldUrl -eq $NewUrl) { return }
     $dir = Split-Path -Parent $RecordPath
     $files = @()
-    $guide = Join-Path $dir 'HOW-TO-USE.md'
-    if (Test-Path -LiteralPath $guide) { $files += Get-Item -LiteralPath $guide }
+    $directories = New-Object 'Collections.Generic.Queue[string]'
+    $directories.Enqueue($dir)
     $profiles = Join-Path $dir 'profiles'
-    if (Test-Path -LiteralPath $profiles) { $files += Get-ChildItem -LiteralPath $profiles -Recurse -File | Where-Object { $_.Extension -in @('.json','.xml','.mobileconfig','.reg','.ps1','.sh','.md','.txt','.html') } }
+    while ($directories.Count) {
+        foreach ($item in Get-ChildItem -LiteralPath $directories.Dequeue()) {
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
+            if ($item.PSIsContainer) { $directories.Enqueue($item.FullName); continue }
+            $isProfile = $item.FullName.StartsWith($profiles + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)
+            if ($item.FullName -ne [IO.Path]::GetFullPath($RecordPath) -and
+                ($item.Name -eq 'HOW-TO-USE.md' -or $item.Name -eq 'claude-gateway.json' -or
+                ($item.Name -like 'onboarding-*' -and $item.Extension -in @('.html','.txt','.eml')) -or
+                ($isProfile -and $item.Extension -in @('.json','.xml','.mobileconfig','.reg','.ps1','.sh','.md','.txt','.html')))) { $files += $item }
+        }
+    }
     foreach ($file in $files) {
         $text = [IO.File]::ReadAllText($file.FullName)
-        if (-not $text.Contains($OldUrl)) { continue }
+        $updated = $text.Replace($OldUrl, $NewUrl)
+        if ($file.Extension -eq '.eml' -and $text -match '(?is)^(.*?Content-Transfer-Encoding:\s*base64[^\r\n]*\r?\n\r?\n)([a-zA-Z0-9+/=\s]+)$') {
+            $header = $Matches[1]
+            $html = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(($Matches[2] -replace '\s','')))
+            if ($html.Contains($OldUrl)) {
+                $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($html.Replace($OldUrl, $NewUrl)))
+                $updated = $header + [regex]::Replace($encoded, '.{1,76}', { param($m) $m.Value + "`r`n" })
+            }
+        }
+        if ($updated -eq $text) { continue }
         $bytes = [IO.File]::ReadAllBytes($file.FullName)
         $encoding = New-Object Text.UTF8Encoding($false)
         if ($bytes.Length -ge 2 -and $bytes[0] -eq 255 -and $bytes[1] -eq 254) { $encoding = [Text.Encoding]::Unicode }
         elseif ($bytes.Length -ge 2 -and $bytes[0] -eq 254 -and $bytes[1] -eq 255) { $encoding = [Text.Encoding]::BigEndianUnicode }
         elseif ($bytes.Length -ge 3 -and $bytes[0] -eq 239 -and $bytes[1] -eq 187 -and $bytes[2] -eq 191) { $encoding = New-Object Text.UTF8Encoding($true) }
-        [IO.File]::WriteAllText($file.FullName, $text.Replace($OldUrl, $NewUrl), $encoding)
+        [IO.File]::WriteAllText($file.FullName, $updated, $encoding)
         Write-Host "  Updated generated address in $($file.Name)."
     }
 }
@@ -230,43 +250,6 @@ function Invoke-ClaudeAddressPlan {
         $currentDns = Invoke-ClaudeNetworkArm $dnsUri -AllowNotFound
         if ((ConvertTo-ClaudeFlowCanonical $currentDns) -ne (ConvertTo-ClaudeFlowCanonical $d.DnsRecord.Before)) { throw 'DNS record changed since review; no write was made.' }
     }
-    if ($d.CertificateSource -eq 'KeyVault') { $gateway = Grant-ClaudeAddressCertificateRead -Gateway $gateway -Plan $Plan -TimeoutSeconds $TimeoutSeconds -PollSeconds $PollSeconds }
-    $binding = @{ type = 'Proxy'; hostName = $d.Hostname; defaultSslBinding = $false; negotiateClientCertificate = $false }
-    $currentBinding = @($gateway.properties.hostnameConfigurations | Where-Object { $_.type -eq 'Proxy' -and $_.hostName -eq $d.Hostname })
-    if ($currentBinding.Count) {
-        $binding.defaultSslBinding = [bool]$currentBinding[0].defaultSslBinding
-        $binding.negotiateClientCertificate = [bool]$currentBinding[0].negotiateClientCertificate
-    }
-    if ($d.CertificateSource -eq 'KeyVault') { $binding.certificateSource = 'KeyVault'; $binding.keyVaultId = $cert.SecretId; $binding.identityClientId = $null }
-    else {
-        $binding.certificateSource = 'Custom'
-        $binding.encodedCertificate = [Convert]::ToBase64String([IO.File]::ReadAllBytes($d.PfxPath))
-        if ($CertificatePassword) { $binding.certificatePassword = (New-Object Net.NetworkCredential('', $CertificatePassword)).Password }
-    }
-    try {
-        Wait-ClaudeAddress -Condition 'hostname update submission and certificate access' -About 'about 5 s; new Key Vault grants can take 10 minutes' -TimeoutSeconds ([Math]::Min(600, $TimeoutSeconds)) -PollSeconds $PollSeconds -Check {
-            $fresh = Invoke-ClaudeNetworkArm $uri
-            if ((Get-ClaudeAddressHostState $fresh) -ne $d.HostnameBaseline) { throw 'Gateway hostnames changed during certificate access setup; review again.' }
-            try {
-                $body = Get-ClaudeAddressHostnamePatch -Gateway $fresh -Plan $Plan -Binding $binding
-                Invoke-ClaudeNetworkArm $uri -Method patch -Body $body -StateDirectory ([IO.Path]::GetTempPath()) | Out-Null
-                @{ Done = $true; Status = 'submitted' }
-            }
-            catch {
-                if ($d.CertificateSource -eq 'KeyVault' -and $_.Exception.Message -match 'KeyVault.*(Access|Forbidden)|Failed to access.*KeyVault|Access denied.*Key Vault') {
-                    @{ Done = $false; Status = 'Key Vault access has not propagated to the gateway identity' }
-                } else { throw }
-            }
-        } | Out-Null
-    }
-    finally { $binding.Remove('encodedCertificate'); $binding.Remove('certificatePassword') }
-    Wait-ClaudeAddress -Condition "APIM hostname $($d.Hostname)" -About 'about 5-15 minutes; Azure can take longer' -TimeoutSeconds $TimeoutSeconds -PollSeconds $PollSeconds -Check {
-        $g = Invoke-ClaudeNetworkArm $uri
-        if ($g.properties.provisioningState -in @('Failed','Canceled')) { throw "APIM hostname update $($g.properties.provisioningState)." }
-        $hostConfig = @($g.properties.hostnameConfigurations | Where-Object { $_.type -eq 'Proxy' -and $_.hostName -ieq $d.Hostname })
-        if ($hostConfig.Count -and $hostConfig[0].certificateStatus -eq 'Failed') { throw 'APIM hostname certificate status is Failed.' }
-        @{ Done = ($g.properties.provisioningState -eq 'Succeeded' -and $hostConfig.Count -eq 1 -and $hostConfig[0].certificateStatus -ne 'InProgress'); Status = $g.properties.provisioningState }
-    } | Out-Null
     if ($dnsUri) {
         $properties = @{ TTL = 300; CNAMERecord = @{ cname = $d.DnsRecord.Target } }
         $condition = @{ IfNoneMatch = $true }
@@ -289,10 +272,54 @@ function Invoke-ClaudeAddressPlan {
         catch { $reason = "DNS resolver: $($_.Exception.Message)" }
         @{ Done = $matchesDns; Status = $reason }
     } | Out-Null
+    if ($d.CertificateSource -eq 'KeyVault') { $gateway = Grant-ClaudeAddressCertificateRead -Gateway $gateway -Plan $Plan -TimeoutSeconds $TimeoutSeconds -PollSeconds $PollSeconds }
+    $binding = @{ type = 'Proxy'; hostName = $d.Hostname; defaultSslBinding = $false; negotiateClientCertificate = $false }
+    $currentBinding = @($gateway.properties.hostnameConfigurations | Where-Object { $_.type -eq 'Proxy' -and $_.hostName -eq $d.Hostname })
+    if ($currentBinding.Count) {
+        $binding.defaultSslBinding = [bool]$currentBinding[0].defaultSslBinding
+        $binding.negotiateClientCertificate = [bool]$currentBinding[0].negotiateClientCertificate
+    }
+    $bindingMatches = $currentBinding.Count -eq 1 -and $currentBinding[0].certificate.thumbprint -ieq $cert.Thumbprint -and
+        $currentBinding[0].certificateSource -eq $(if ($d.CertificateSource -eq 'Pfx') { 'Custom' } else { 'KeyVault' }) -and
+        ($d.CertificateSource -ne 'KeyVault' -or $currentBinding[0].keyVaultId -eq $cert.SecretId) -and -not $d.ReplaceHostname
+    if ($d.CertificateSource -eq 'KeyVault') { $binding.certificateSource = 'KeyVault'; $binding.keyVaultId = $cert.SecretId; $binding.identityClientId = $null }
+    else {
+        $binding.certificateSource = 'Custom'
+        $binding.encodedCertificate = [Convert]::ToBase64String([IO.File]::ReadAllBytes($d.PfxPath))
+        if ($CertificatePassword) { $binding.certificatePassword = (New-Object Net.NetworkCredential('', $CertificatePassword)).Password }
+    }
+    try {
+        if (-not $bindingMatches) {
+        Wait-ClaudeAddress -Condition 'hostname update submission and certificate access' -About 'about 5 s; new Key Vault grants can take 10 minutes' -TimeoutSeconds ([Math]::Min(600, $TimeoutSeconds)) -PollSeconds $PollSeconds -Check {
+            $fresh = Invoke-ClaudeNetworkArm $uri
+            if ((Get-ClaudeAddressHostState $fresh) -ne $d.HostnameBaseline) { throw 'Gateway hostnames changed during certificate access setup; review again.' }
+            try {
+                $body = Get-ClaudeAddressHostnamePatch -Gateway $fresh -Plan $Plan -Binding $binding
+                Invoke-ClaudeNetworkArm $uri -Method patch -Body $body -StateDirectory ([IO.Path]::GetTempPath()) | Out-Null
+                @{ Done = $true; Status = 'submitted' }
+            }
+            catch {
+                if ($d.CertificateSource -eq 'KeyVault' -and $_.Exception.Message -match 'KeyVault.*(Access|Forbidden)|Failed to access.*KeyVault|Access denied.*Key Vault') {
+                    @{ Done = $false; Status = 'Key Vault access has not propagated to the gateway identity' }
+                } else { throw }
+            }
+        } | Out-Null
+        }
+        else { Write-Host '  The company hostname already has the supplied certificate; no APIM patch is needed.' }
+    }
+    finally { $binding.Remove('encodedCertificate'); $binding.Remove('certificatePassword') }
+    Wait-ClaudeAddress -Condition "APIM hostname $($d.Hostname)" -About 'about 5-15 minutes; Azure can take longer' -TimeoutSeconds $TimeoutSeconds -PollSeconds $PollSeconds -Check {
+        $g = Invoke-ClaudeNetworkArm $uri
+        if ($g.properties.provisioningState -in @('Failed','Canceled')) { throw "APIM hostname update $($g.properties.provisioningState)." }
+        $hostConfig = @($g.properties.hostnameConfigurations | Where-Object { $_.type -eq 'Proxy' -and $_.hostName -ieq $d.Hostname })
+        if ($hostConfig.Count -and $hostConfig[0].certificateStatus -eq 'Failed') { throw 'APIM hostname certificate status is Failed.' }
+        @{ Done = ($g.properties.provisioningState -eq 'Succeeded' -and $hostConfig.Count -eq 1 -and $hostConfig[0].certificateStatus -ne 'InProgress'); Status = $g.properties.provisioningState }
+    } | Out-Null
     $proof = Wait-ClaudeAddress -Condition "HTTPS proof through $($d.Hostname) with SNI and Host" -About 'about 5 s' -TimeoutSeconds 45 -Check {
         $result = Invoke-ClaudeAddressHttps -Hostname $d.Hostname -Thumbprint $cert.Thumbprint -ConnectAddress $d.ConnectAddress -IsolatedProof:$d.IsolatedProof
         if ($result.StatusCode -ne 401) { throw "HTTPS returned $($result.StatusCode), not the gateway's unauthenticated 401." }
         if ($result.Thumbprint -ine $cert.Thumbprint) { throw 'HTTPS did not present the configured certificate.' }
+        if ($result.Hostname -ine $d.Hostname) { throw 'HTTPS proof used a different hostname.' }
         if (-not $result.Trusted -and -not $d.IsolatedProof) { throw 'HTTPS certificate trust failed; the record was not changed.' }
         @{ Done = $true; Value = $result }
     }

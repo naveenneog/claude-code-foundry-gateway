@@ -49,6 +49,7 @@ function Get-ClaudeFlowStepPlan {
 function Invoke-ClaudeFlowStep {
     param($Record, $Plan, [securestring]$CertificatePassword)
     $result = Invoke-ClaudeAddressPlan -Plan $Plan -CertificatePassword $CertificatePassword -RecordPath $Record.__recordPath
+    Set-ClaudeRecordProperty $Record address $result.Address
     @{ gatewayUrl = $result.GatewayUrl; address = $result.Address }
 }
 
