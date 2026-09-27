@@ -1,6 +1,6 @@
 # ADR-0030: One guided flow sets up, updates and changes a deployment from one decision record
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0032](0032-guided-flow-starts-at-once.md) for discovery and for the `Foundation` step in a console (2026-09-27)
 - **Date:** 2026-09-26
 - **Packet:** P66
 - **Deciders:** claude-code-foundry-gateway maintainers

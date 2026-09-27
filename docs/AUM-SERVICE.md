@@ -42,8 +42,10 @@ Run the selector before creating infrastructure:
 | Turnstile + AUM | Same people, through Turnstile's API | Turnstile; no additional AUM service | AUM is another client of Turnstile, not a second writer |
 
 The selector shows costs, roles and prerequisites. For a new gateway,
-`Install-ClaudeGateway.ps1 -ChooseFinOps` opens the same selector after install.
-Without the switch, the installer prints its command and creates no FinOps tool.
+`Install-ClaudeGateway.ps1` run on its own in a console ends by offering the same selector, and
+`-ChooseFinOps` opens it without asking. With `-Yes`, or with `-SkipFinOpsOffer` (which the
+guided flow passes because its FinOps step follows), the installer creates no FinOps tool; with
+`-Yes` it prints the selector's command as its last next step.
 
 Pass `-Region <discovered-region>` for regional comparison prices. The selector
 quotes a lean/public and a dedicated/private Turnstile shape from Retail meters

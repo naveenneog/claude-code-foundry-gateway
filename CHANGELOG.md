@@ -734,6 +734,28 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Changed
 
+- **The guided flow starts at once (P68).** `Start-ClaudeGateway.ps1` listed every subscription,
+  API Management instance, Foundry account, workspace and deployment before its first line, 66 s on
+  the reference subscription, for lists no step read. Discovery now reads only the gateway the
+  record names, with one `az apim show` announced with an estimate and timed; with an empty record
+  it reads nothing, and the first line appeared after 0.76 s and the review after 2.3 s. A gateway
+  Azure reports missing, or a URL that differs, is drift; a read that fails for another reason is
+  reported and is not drift, and Status says drift was not checked. The FinOps step announces its
+  price read and reads each region once. ADR-0032.
+- **In a console, Setup gives the foundation to the installer (P68).** Setup runs
+  `Install-ClaudeGateway.ps1` first without `-Yes`, so the installer asks its own questions and its
+  summary approves what it creates; declining there stops the flow with no stack trace. Setup then
+  reads the new gateway and asks the remaining steps, FinOps first and priced in the gateway's
+  region, with the typed fingerprint. `CLAUDE_INTERACTIVE=1` lets a test drive an attended run
+  through standard input. ADR-0032, [Guided flow](docs/GUIDED-FLOW.md#attended-setup).
+- **The installer prices its region and tier choices (P68).** The region prompt lists the Foundry
+  account's region and the rest of its geography with each v2 tier's monthly list price from one
+  Azure Retail Prices API call, and names the agreement's price sheet as the authority (**U31**);
+  the tier prompt prices each tier in the chosen region. The installer records `sku`, `location`,
+  `foundryAccount` and `foundryResourceGroup` in `claude-gateway.json`, numbers its next steps, and
+  run on its own in a console offers the FinOps tool; `-SkipFinOpsOffer` is for the guided flow.
+  The Foundry account search states its estimate and reports each account as it is read.
+
 - **AUM shows the owner's ASCII art on every tab.** The four-line art was in the code byte for byte
   but appeared only at 120x38 or larger and only on Overview, so common terminals never showed it.
   It is now the header on every tab at AUM's documented minimum of 80x24 or larger, with the
@@ -785,6 +807,20 @@ exact streaming cache-creation detail remains **U13**.
   converts to 1,388,888,888 tokens and back to exactly $5000.00.
 
 ### Fixed
+
+- **Setup and Guide over a recorded gateway ran the installer again (P68).** The Foundation plan
+  said `Check`, while its apply ran `Install-ClaudeGateway.ps1 -Yes`, whose reuse menu defaults to
+  creating a new gateway; found by reading the code. Setup and Guide now check the recorded
+  gateway; `-Change foundation` runs the installer, and without a console it targets the recorded
+  `apim-<prefix>` with its live tier, region and publisher.
+- **Setup stopped on the Cosmos entitlement store (P68).** Without a console the flow now passes
+  `-DeployProjection` with the projection, which the installer requires under `-Yes`.
+- **The installer's next steps were numbered 0, 0, 1, 2, 3, 4 (P68).** They are numbered in the
+  order they print.
+- **Windows PowerShell 5.1 listed only the Foundry region (P68).** `@(... | ConvertFrom-Json)`
+  held the parsed region array as one element there; measured with the installer on 5.1.
+- **FinOps monthly totals printed six decimals (P68).** Monthly totals show cents; unit rates keep
+  the precision the price list publishes.
 
 - **Claude Code returned `400 "thinking.type.enabled" is not supported` through the gateway.**
   Claude Code does not recognise a Foundry deployment name, so a release older than the model

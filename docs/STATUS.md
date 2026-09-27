@@ -13,30 +13,43 @@ found that its apply runs the installer for a recorded gateway while its plan sa
 `-Yes` the installer's reuse menu defaults to a new gateway. Design:
 [ADR-0032](adr/0032-guided-flow-starts-at-once.md); research: **U31**.
 
-- [ ] Discovery makes no listing call. With an empty record it makes no Azure call, and the first
-      line of output appears within 3 s and says that nothing is read
-- [ ] With a record that names a gateway, discovery reads that one gateway, printing what it reads
+- [x] Discovery makes no listing call. With an empty record it makes no Azure call, and the first
+      line of output appears within 3 s and says that nothing is read. Live, reference
+      subscription: first line 0.76 s, review 2.3 s (was 66 s); `Test-FlowStart` asserts no az call
+      and the first line under 3 s
+- [x] With a record that names a gateway, discovery reads that one gateway, printing what it reads
       with an estimate before and the time it took after; a gateway Azure reports missing is drift,
-      and a read that fails for another reason is reported and is not drift
-- [ ] In an attended run with no recorded gateway, Setup prints a Foundation review that names the
+      and a read that fails for another reason is reported and is not drift. Live: one
+      `az apim show`, announced "about 4 s", read in 2.8 s; `Test-FlowStart` covers match, URL
+      drift, not found, not signed in, no Azure CLI and Status
+- [x] In an attended run with no recorded gateway, Setup prints a Foundation review that names the
       installer's questions and runs the installer without `-Yes`, passing only the record's
       values; an installer that writes no record stops the flow; then Setup reads the new gateway
       and asks the remaining questions, FinOps priced in the gateway's region, and asks for the
-      typed fingerprint for those steps only
-- [ ] With a recorded gateway, Setup and Guide check it and never run the installer;
-      `-Change foundation` runs it
-- [ ] Without a console, Setup passes `-Yes`, and `-DeployProjection` with the Cosmos store, so the
-      installer deploys the projection instead of stopping
-- [ ] The installer's region prompt lists the Foundry account's region and the others in its
+      typed fingerprint for those steps only. `Test-FlowStart` drives it end to end with a stub
+      installer; live on 2026-09-27 the real installer asked 26 questions and, declined at its
+      summary, created nothing ([GUIDED-FLOW](GUIDED-FLOW.md#attended-setup), images 30-34)
+- [x] With a recorded gateway, Setup and Guide check it and never run the installer;
+      `-Change foundation` runs it (attended: it asks; unattended: `-Yes` against the recorded
+      `apim-<prefix>` with the live tier, region and publisher)
+- [x] Without a console, Setup passes `-Yes`, and `-DeployProjection` with the Cosmos store, so the
+      installer deploys the projection instead of stopping; every argument a plan passes is a
+      parameter of the installer
+- [x] The installer's region prompt lists the Foundry account's region and the others in its
       geography with each v2 tier's monthly list price; its tier prompt lists each tier's price in
       the chosen region; a price the API does not publish reads as not published; the agreement's
-      price sheet is named as the authority
-- [ ] The installer records `sku`, `location`, `foundryAccount` and `foundryResourceGroup`; run on
+      price sheet is named as the authority. Live on PowerShell 7 and Windows PowerShell 5.1: nine
+      US regions at USD 150 / 700 / 2,800, matching the summary's USD 150/month
+- [x] The installer records `sku`, `location`, `foundryAccount` and `foundryResourceGroup`; run on
       its own in a console it ends by offering the FinOps tool; its next steps are numbered 1, 2, 3
       and so on
-- [ ] Live: `-Action Setup -PlanOnly` against the reference subscription prints its first line
+- [x] Live: `-Action Setup -PlanOnly` against the reference subscription prints its first line
       within 3 s with an empty record, and reads the reference gateway in one call with a record
       that names it
+- [x] Found in the live runs and fixed with tests: the installer's Foundry search was silent for
+      about 56 s (now an estimate and one line per account); Windows PowerShell 5.1 listed only the
+      Foundry region; FinOps monthly totals had six decimals; a recorded gateway's price was
+      counted as new; declining at the summary ended in a stack trace
 - [ ] Council verdicts and `node .ironclad/gate.mjs --stage packet` exits 0
 
 ## P67 developer workstation fixes from the owner's test, 2026-09-27

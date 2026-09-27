@@ -2,8 +2,9 @@
 
 ## Status
 
-Proposed for P68. Amends [ADR-0030](0030-guided-flow.md) for the `Foundation` step in a console and
-for discovery; the rest of ADR-0030 stands.
+Accepted for P68, 2026-09-27. Amends [ADR-0030](0030-guided-flow.md) for the `Foundation` step in
+a console and for discovery; the rest of ADR-0030 stands. Implemented in `f48d545` and `f955295`;
+tests in `tests/Test-FlowStart.ps1`.
 
 ## Context
 
