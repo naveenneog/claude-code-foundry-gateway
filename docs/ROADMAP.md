@@ -417,10 +417,11 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       workstation, and writes a tenant-specific how-to guide; every change is planned, priced
       and fingerprinted before it applies, and the fingerprint binds the target estate.
       [ADR-0030](adr/0030-guided-flow.md). **Merged 2026-09-26/27**: orchestrator, lifecycle
-      (update, tier, projection, network, Desktop sign-in) and diagnostics, each proven live on
-      an isolated gateway; an integrated run on 2026-09-27 found and fixed nine defects
-      ([STATUS](STATUS.md#p66-guided-flow-2026-09-27)). Open: the FinOps modules
-      (`flow-finops`), not merged when this entry was written
+      (update, tier, projection, network, Desktop sign-in), diagnostics and the FinOps steps
+      (tool, token and dollar budgets with a scheduled reconciler, workbooks, reports), each
+      proven live on an isolated gateway; an integrated run on 2026-09-27 found and fixed nine
+      defects ([STATUS](STATUS.md#p66-guided-flow-2026-09-27)). Open: the 403 message names the
+      default tier groups; the FinOps steps have not yet run on the same estate as the others
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so

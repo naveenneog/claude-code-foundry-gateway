@@ -26,7 +26,7 @@ by the step modules present on the branch. It never invents resource names.
 |---|---|---|
 | Gateway foundation | `Foundation.ps1` | API Management v2 SKU, entitlement store, developer sign-in and Desktop sign-in affect cost, scale, support and client configuration. Manual equivalent: [Setup](SETUP.md). |
 | Tier, entitlement store, network edge and Desktop sign-in | `Tier.ps1`, `Entitlement.ps1`, `Network.ps1`, `DesktopSignIn.ps1` | These run under `-Action Change`. Setup lists each one with the command that changes it. Manual equivalents: [Update and change](UPDATE-AND-CHANGE.md), [Scale](SCALE.md), [Network](NETWORK.md). |
-| FinOps, budgets, monitoring and reports | FinOps modules when present | A module file that is not present is listed as skipped. Manual equivalents: [FinOps](FINOPS.md), [Budgets](BUDGETS.md), [Monitoring](MONITORING.md), [Chargeback reports](CHARGEBACK-REPORTS.md). |
+| FinOps, budgets, monitoring and reports | `FinOps.ps1`, `Budgets.ps1`, `Monitoring.ps1`, `Reports.ps1` | FinOps tool (none, AUM Direct, AUM service, Turnstile, or Turnstile plus AUM), token or dollar budgets (without the AUM service, a scheduled reconciler job), the workbook collection and chargeback reports. Manual equivalents: [FinOps](FINOPS.md), [Budgets](BUDGETS.md), [Monitoring](MONITORING.md), [Chargeback reports](CHARGEBACK-REPORTS.md). |
 | Device profiles | `DeviceProfiles.ps1` | Per-tier MDM payloads must mirror the recorded gateway, model and Desktop sign-in choices. Manual equivalent: [MDM](MDM.md). |
 | Verification | `Verify.ps1` | Runs the gateway health checks after setup or change. Manual equivalent: [Operations health](OPERATIONS.md#2-check-health-and-headroom). |
 | Guide | `Guide.ps1` | Writes `onboarding/HOW-TO-USE.md` with this tenant's names and the operator/developer/FinOps instructions. |
@@ -192,3 +192,17 @@ redacted terminal transcripts; raw transcripts stay under private evidence.
 ![Second setup replanning the existing gateway instead of skipping forever.](guide/24-second-setup-replan-final.png)
 
 ![Change action scoped to the Foundation decision.](guide/25-change-foundation-final.png)
+
+### Integrated run, 2026-09-27
+
+One isolated Basic v2 estate, set up and then updated, checked and diagnosed with
+the flow, then torn down. Names are redacted. The review was captured before the
+FinOps modules merged, so it lists them as absent.
+
+![Setup review naming the resource group, gateway, region, Foundry account and subscription, with the Basic v2 price from the Azure Retail Prices API and the Change command for each Change-only module.](guide/26-integrated-setup-review.png)
+
+![A developer entitled through the gateway's own tier group is served: HTTP 200, tier standard.](guide/27-integrated-real-200.png)
+
+![Update on a gateway installed by the current release: all three migrations report no change.](guide/28-integrated-update-no-change.png)
+
+![Health check with Foundry in another resource group: every check reports; the bypass check fails because the shared Foundry account has direct principals.](guide/29-integrated-health.png)

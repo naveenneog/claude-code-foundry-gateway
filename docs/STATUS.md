@@ -1,6 +1,6 @@
 # Status
 
-**Active packets:** P66 guided flow ([below](#p66-guided-flow-2026-09-27)); its FinOps modules are on `flow-finops`, not merged yet. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets:** P66 guided flow ([below](#p66-guided-flow-2026-09-27)). Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P66 guided flow, 2026-09-27
 
@@ -19,15 +19,17 @@ deployment and the developer machine. Design: [ADR-0030](adr/0030-guided-flow.md
       projection; network edge review; Desktop sign-in change (merged `8a1615a`)
 - [x] Read-only diagnostics for the administrator deployment and the developer workstation, with
       redacted support bundles (merged `c210462`)
-- [ ] FinOps tool, token and dollar budgets with a scheduled reconciler, workbooks and reports as
-      flow steps: on `flow-finops`, not merged
-- [ ] `node .ironclad/gate.mjs --stage packet` on the integration merge
+- [x] FinOps tool, token and dollar budgets with a scheduled reconciler, workbooks and reports as
+      flow steps (merged from `flow-finops` at `9e5237c`)
+- [x] `node .ironclad/gate.mjs --stage packet` on the integration merge: `4ffa97b`, 2026-09-27
+      01:59-02:13Z, 22 passed, 2 warned (file size, open unknowns), 0 failed; Test-All 856.8 s
 
 | Live proof | Result |
 |---|---|
 | Orchestrator, 2026-09-26 | Isolated Basic v2 `rg-p66-guided-flow-09262008`: PlanOnly, Setup, resume, Status, a second Setup that replans, a Change plan, a request returning 200; torn down. That 200 came through the tenant's default `claude-code-*` groups (defect 5 below) |
 | Lifecycle, 2026-09-26 | A gateway from the `280a16e` installer updated, then 200; Basic v2 to Standard v2 and back in place (Standard window about 68 s); projection deployed, compared clean, flipped, then 200; torn down; under $0.60 |
 | Diagnostics, 2026-09-26 | Read-only against the reference gateway: request 200; one stale premium entitlement; organisation ceiling 100M below unit budgets of 6.94B; 13 bypass principals plus 4 partial |
+| FinOps, 2026-09-27 | `rg-p66-finops-p66finops09270431`, Basic v2: HTTP 200; AUM Direct `aum whoami` (owner, azure-rbac); saved functions and both workbooks deployed; the scheduled reconciler job (template, pinned image and commit, every 5 minutes) wrote `usd-budget-state` status `stop` at $0.0157 against a $0.00005 budget and the next request returned 403 `usd_budget_exceeded`; after raising the budget to $1 the next scheduled run wrote `allow` and the next request returned 200; one chargeback report generated; torn down; about $3.05 list across five attempts |
 | Integrated run, 2026-09-27 00:24Z onward | `rg-p66i09270024`, eastus2. Review priced Basic v2 at $150.00/month from the Azure Retail Prices API; Setup took 12 minutes. Entitled through the gateway's own group: HTTP 200, tier standard, 20 tokens. Health: 7 of 8 pass; the bypass check fails on the shared Foundry account. Status: no drift. Update: all three migrations report no change. Diagnose: administrator and workstation checks with two support bundles |
 
 Defects the integrated run found, each fixed with a test seen failing first:
@@ -52,8 +54,9 @@ Security PASS (recorded tier groups apply only to the gateway they were recorded
 bundles are git-ignored; nothing secret is written).
 
 Open: the gateway's 403 message still names `claude-code-standard` and `claude-code-premium` on a
-gateway installed with other group names (`infra/policy.xml`); the FinOps modules; the reference
-gateway's diagnostics findings above; the tenant-blocked items in [UNKNOWNS](UNKNOWNS.md).
+gateway installed with other group names (`infra/policy.xml`); the FinOps modules have not yet run
+in the same session as the other steps on one estate; the reference gateway's diagnostics
+findings above; the tenant-blocked items in [UNKNOWNS](UNKNOWNS.md).
 
 ## P46 acceptance criteria — managers scoped, and budget modes
 

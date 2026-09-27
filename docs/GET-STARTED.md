@@ -27,9 +27,10 @@ For an unattended apply, first review without writing:
 The flow writes `onboarding/claude-gateway.json`, appends history after each
 completed step, resumes from the first incomplete step after a failure, and
 writes a tenant-specific `onboarding/HOW-TO-USE.md` guide that is git-ignored.
-If a module built on another branch is not present yet, it is listed as skipped
-instead of failing. The manual tracks below remain the fallback and deep
-reference. See [Guided flow](GUIDED-FLOW.md).
+Tier, entitlement store, network edge and Desktop sign-in changes run later with
+`.\Start-ClaudeGateway.ps1 -Action Change -Change <key>`; Setup lists each key.
+The manual tracks below remain the fallback and deep reference. See
+[Guided flow](GUIDED-FLOW.md).
 
 | Person | Owns | Typical time | Added standing cost |
 |---|---|---:|---:|
