@@ -48,6 +48,7 @@ param(
     [securestring]$AddressCertificatePassword,
     [string]$AddressDnsZoneResourceId,
     [string]$AddressReplaceHostname,
+    [string]$AddressApprovedPlanFingerprint,
 
     # Update this existing v2 gateway, taking the reuse path without the menu: its region, tier,
     # name and publisher are kept. The guided flow's -Change foundation passes it (ADR-0032).
@@ -1038,6 +1039,9 @@ if ($addressMode -eq 'custom') {
         }
     }
     $addressPlan = Get-ClaudeAddressPlan @addressArgs
+    if ($AddressApprovedPlanFingerprint -and (Get-ClaudeFlowFingerprint @($addressPlan)) -ne $AddressApprovedPlanFingerprint) {
+        throw 'The company-address plan changed since the guided review; no installer writes were made. Review the flow again.'
+    }
     Write-Host (Format-ClaudeFlowReview @($addressPlan))
 }
 

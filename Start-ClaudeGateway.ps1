@@ -317,7 +317,7 @@ function Invoke-ApplySteps {
         $before = if ($step.Info.DecisionKey) { Get-ClaudeDecision -Record $Record -Key $step.Info.DecisionKey } else { $null }
         Write-Host "Applying $($step.Info.Name)..." -ForegroundColor Cyan
         $invokeArgs = @{ Record = $Record; Plan = $plan }
-        if ($step.Info.Name -eq 'Address') { $invokeArgs.CertificatePassword = $AddressCertificatePassword }
+        if ($step.Info.Name -eq 'Address' -or ($step.Info.Name -eq 'Foundation' -and $AddressCertificatePassword)) { $invokeArgs.CertificatePassword = $AddressCertificatePassword }
         $changes = & $step.Invoke @invokeArgs
         if ($null -eq $principal) { $principal = Get-FlowPrincipal }
         foreach ($key in @($changes.Keys)) {
