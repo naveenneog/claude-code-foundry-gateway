@@ -139,6 +139,26 @@ function Set-ApimNamedValue {
 
     Test-ApimNamedValueLength -Id $Id -Value $Value
 
+    if ($Value -eq '') {
+        # API Management's ARM and CLI surfaces both reject an empty value when
+        # creating a named value. external-idp-extra-audience also appears in an
+        # <audience> element, so policy validation needs a nonempty GUID-shaped
+        # sentinel that the policy explicitly treats as disabled.
+        $emptySentinel = if ($Id -eq 'external-idp-extra-audience') { 'urn:disabled:claude-extra-audience' } else { ' ' }
+        $sub = az account show --query id -o tsv
+        if (-not $sub) { throw 'Could not determine the current Azure subscription for an empty named value write.' }
+        $token = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv
+        $uri = "https://management.azure.com/subscriptions/$sub/resourceGroups/$ResourceGroup/providers/Microsoft.ApiManagement/service/$ApimName/namedValues/$Id`?api-version=2024-05-01"
+        $body = @{ properties = @{ displayName = $Id; value = $emptySentinel; secret = [bool]$Secret } } | ConvertTo-Json -Depth 5
+        try {
+            Invoke-RestMethod -Uri $uri -Method Put -Headers @{ Authorization = "Bearer $token"; 'Content-Type' = 'application/json' } -Body $body | Out-Null
+            return
+        }
+        catch {
+            throw "Writing empty named value '$Id' failed. $($_.Exception.Message)"
+        }
+    }
+
     $exists = az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id $Id -o tsv --query name 2>$null
 
     # Errors are captured rather than discarded, so a failure can be reported

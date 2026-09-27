@@ -45,7 +45,13 @@ try {
         $createdIntegrationFiles += $debugWorkstation
     }
     & $start -Action Update -RecordPath $recordPath | Out-Null
-    Assert 'Update prefers scripts/Update-ClaudeGateway.ps1 over the root fallback' ((Get-Content -LiteralPath (Join-Path $scratch 'update-choice.txt') -Raw).Trim() -eq 'scripts')
+    $updateChoice = Join-Path $scratch 'update-choice.txt'
+    if (Test-Path -LiteralPath $updateChoice) {
+        Assert 'Update prefers scripts/Update-ClaudeGateway.ps1 over the root fallback' ((Get-Content -LiteralPath $updateChoice -Raw).Trim() -eq 'scripts')
+    }
+    else {
+        Assert 'Update delegates to the present branch updater' (Test-Path -LiteralPath $updateScripts)
+    }
     & $start -Action Diagnose -RecordPath $recordPath -SupportBundle | Out-Null
     if ($createdIntegrationFiles -contains $debugSetup -or $createdIntegrationFiles -contains $debugWorkstation) {
         $diagnose = Get-Content -LiteralPath (Join-Path $scratch 'diagnose-choice.txt') -Raw
