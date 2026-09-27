@@ -135,8 +135,11 @@ cost and caller impact before applying.
 
 The flow runs `scripts\Debug-ClaudeSetup.ps1` for the administrator deployment
 and `scripts\Debug-ClaudeWorkstation.ps1` for the developer machine, passing
-`-RecordPath` and, when requested, `-SupportBundle`. Both are read-only. See
-[Diagnostics](DIAGNOSE.md) and [Troubleshooting](TROUBLESHOOTING.md).
+`-RecordPath`. Both are read-only. With `-SupportBundle`, each script writes a
+redacted zip under `onboarding\support\`
+(`claude-setup-support-<utc>.zip` and `claude-workstation-support-<utc>.zip`);
+the folder is git-ignored. See [Diagnostics](DIAGNOSE.md) and
+[Troubleshooting](TROUBLESHOOTING.md).
 
 ## Status and drift
 

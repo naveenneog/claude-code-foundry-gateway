@@ -28,6 +28,7 @@ function Invoke-ClaudeFlowStep {
         $foundation = Get-ClaudeDecision -Record $Record -Key foundation
         $args = @{ ResourceGroup = $Record.resourceGroup; ApimName = $Record.apimName }
         if ($foundation -and $foundation.foundryAccount) { $args.FoundryAccount = [string]$foundation.foundryAccount }
+        if ($foundation -and $foundation.foundryResourceGroup) { $args.FoundryResourceGroup = [string]$foundation.foundryResourceGroup }
         try {
             & $health @args
             $ok = ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE)
@@ -43,8 +44,10 @@ function Invoke-ClaudeFlowStep {
 function Test-ClaudeFlowStep {
     param($Record)
     $v = Get-ClaudeDecision -Record $Record -Key verify
+    $healthFix = "Run .\scripts\Test-ClaudeHealth.ps1 -ResourceGroup $($Record.resourceGroup) -ApimName $($Record.apimName) -Detailed, apply each listed fix, then rerun .\Start-ClaudeGateway.ps1 -Action Setup."
     $checks = @(
         @{ Name = 'health run recorded'; Passed = [bool]($v -and $v.checkedUtc); Evidence = $(if ($v) { $v.checkedUtc } else { '' }); Fix = 'Run Start-ClaudeGateway.ps1 -Action Setup or Change to execute Verify.' }
+        @{ Name = 'health checks passed'; Passed = [bool]($v -and $v.healthPassed -eq $true); Evidence = $(if ($v -and $v.warning) { [string]$v.warning } elseif ($v -and $v.healthPassed -eq $true) { 'Test-ClaudeHealth.ps1 exited 0' } else { 'Test-ClaudeHealth.ps1 reported a failing check' }); Fix = $healthFix }
     )
     [pscustomobject]@{ Step = 'Verify'; Passed = (@($checks | Where-Object { -not $_.Passed }).Count -eq 0); Checks = @($checks) }
 }

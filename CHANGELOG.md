@@ -780,6 +780,26 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **`Sync-ClaudeAccess.ps1` published the tenant's default groups to a gateway installed with
+  other group names.** It and `Compare-ClaudeEntitlement.ps1` defaulted to `claude-code-standard`
+  and `claude-code-premium`, and the installer's closing instructions run the sync without group
+  names. Measured 2026-09-27: on a gateway installed with `claude-p66i09270024-*` groups (0
+  members), the health check reported "drift: missing=7", the 7 members of the default groups.
+  An earlier guided-flow proof's 200 came through the same default groups. Both scripts now take
+  the groups recorded for that gateway in `onboarding/claude-gateway.json` (only when the record
+  names the same API Management instance), then the defaults. `Test-TierGroupTarget.ps1` holds it.
+- **The health check stopped at the bypass check when Foundry is in another resource group.**
+  The installer accepts `-FoundryResourceGroup`, but `Get-ClaudeBypass.ps1` looked for the
+  account in the gateway's group and threw, and `Test-ClaudeHealth.ps1` let the throw end the run,
+  so every later check went unreported and the guided Verify step recorded only a warning. Both
+  take `-FoundryResourceGroup` now, a throwing sub-check is recorded as a failed check, and the
+  guided flow and `Debug-ClaudeSetup.ps1` pass the recorded Foundry account and group.
+- **The guided Verify step passed when the health check failed.** It checked only that a health
+  run was recorded. It now also requires the health check to pass, and names the command to see
+  and fix each failing check.
+- **`Start-ClaudeGateway.ps1 -Action Diagnose -SupportBundle` wrote `True.zip`.** The flow passed
+  the switch value to scripts that take a zip path. Each script now gets its own path under the
+  git-ignored `onboarding\support\` folder.
 - **`Start-ClaudeGateway.ps1 -Action Update` could only plan.** It called the updater without
   `-Apply` or the fingerprint, so an older gateway could be reviewed through the flow but had to
   be updated with `scripts\Update-ClaudeGateway.ps1` directly. `-ApprovedPlanFingerprint` now

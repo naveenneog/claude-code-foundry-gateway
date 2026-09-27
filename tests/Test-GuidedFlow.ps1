@@ -20,6 +20,7 @@ $recordPath = Join-Path $scratch 'onboarding\claude-gateway.json'
 $guidePath = Join-Path $scratch 'onboarding\HOW-TO-USE.md'
 $countsPath = Join-Path $scratch 'counts.json'
 $start = Join-Path $root 'Start-ClaudeGateway.ps1'
+$testStartUtc = [DateTime]::UtcNow
 try {
     $env:CLAUDE_FLOW_SKIP_AZ_DISCOVERY = '1'
     $env:GUIDED_FLOW_COUNTS = $countsPath
@@ -278,6 +279,46 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Tier'; 
     Assert 'Update without a fingerprint only plans' ($updatePlanned -match 'apply=False;fp=\s*$')
     Assert 'Update with an approved fingerprint applies that plan' ($updateApplied -match 'apply=True;fp=abc12345')
     Assert 'Update with PlanOnly never applies' ($updatePlanOnly -match 'apply=False')
+
+    # Diagnose -SupportBundle: each script gets its own zip path, never the switch value itself.
+    $diagnoseLog = Join-Path $scratch 'diagnose-args.txt'
+    foreach ($debugName in 'Debug-ClaudeSetup', 'Debug-ClaudeWorkstation') {
+        "param([string]`$RecordPath,[string]`$SupportBundle) ('$debugName=' + `$SupportBundle) | Add-Content -LiteralPath '$($diagnoseLog -replace '''','''''')'" | Set-Content -LiteralPath (Join-Path $shadow "scripts\$debugName.ps1") -Encoding UTF8
+    }
+    Push-Location $scratch
+    try { & $shadowStart -Action Diagnose -RecordPath $recordPath -SupportBundle | Out-Null }
+    finally { Pop-Location }
+    $bundleArgs = @(Get-Content -LiteralPath $diagnoseLog)
+    $setupBundle = ([string]($bundleArgs | Where-Object { $_ -like 'Debug-ClaudeSetup=*' })).Split('=', 2)[1]
+    $workstationBundle = ([string]($bundleArgs | Where-Object { $_ -like 'Debug-ClaudeWorkstation=*' })).Split('=', 2)[1]
+    Assert 'Diagnose -SupportBundle gives each script a zip path, not the switch value' ($setupBundle -match '\.zip$' -and $workstationBundle -match '\.zip$' -and $setupBundle -ne $workstationBundle) "setup=$setupBundle workstation=$workstationBundle"
+    Assert 'support bundles are written under the git-ignored onboarding\support folder' ($setupBundle -match 'onboarding[\\/]support[\\/]' -and $workstationBundle -match 'onboarding[\\/]support[\\/]')
+    Assert 'no True.zip is written' (-not (Test-Path -LiteralPath (Join-Path $scratch 'True.zip')) -and -not (Test-Path -LiteralPath (Join-Path $root 'True.zip')))
+
+    # Verify: hands the Foundry account and its resource group to the health check, and fails when it fails.
+    $verifyShadow = Join-Path $scratch 'vshadow'
+    New-Item -ItemType Directory -Force -Path (Join-Path $verifyShadow 'scripts\flow') | Out-Null
+    Copy-Item -LiteralPath (Join-Path $root 'scripts\flow\Verify.ps1') -Destination (Join-Path $verifyShadow 'scripts\flow')
+    $healthLog = Join-Path $scratch 'health-args.txt'
+    "param([string]`$ResourceGroup,[string]`$ApimName,[string]`$FoundryAccount,[string]`$FoundryResourceGroup) ('rg=' + `$ResourceGroup + ';acct=' + `$FoundryAccount + ';frg=' + `$FoundryResourceGroup) | Set-Content -LiteralPath '$($healthLog -replace '''','''''')'; exit [int]`$env:GUIDED_FLOW_HEALTH_EXIT" | Set-Content -LiteralPath (Join-Path $verifyShadow 'scripts\Test-ClaudeHealth.ps1') -Encoding UTF8
+    $verifyResult = & {
+        . (Join-Path $root 'scripts\flow\FlowContract.ps1')
+        . (Join-Path $verifyShadow 'scripts\flow\Verify.ps1')
+        $rec = [pscustomobject]@{ schemaVersion = 2; resourceGroup = 'rg-gw'; apimName = 'apim-gw'; decisions = [pscustomobject]@{ foundation = [pscustomobject]@{ foundryAccount = 'ai-x'; foundryResourceGroup = 'rg-ai' } }; history = @() }
+        $env:GUIDED_FLOW_HEALTH_EXIT = '1'
+        $changes = Invoke-ClaudeFlowStep -Record $rec -Plan $null
+        $rec.decisions | Add-Member -NotePropertyName verify -NotePropertyValue ([pscustomobject]$changes.verify) -Force
+        $whenFailing = Test-ClaudeFlowStep -Record $rec
+        $env:GUIDED_FLOW_HEALTH_EXIT = '0'
+        $changes = Invoke-ClaudeFlowStep -Record $rec -Plan $null
+        $rec.decisions.verify = [pscustomobject]$changes.verify
+        $whenPassing = Test-ClaudeFlowStep -Record $rec
+        $env:GUIDED_FLOW_HEALTH_EXIT = $null
+        [pscustomobject]@{ Failing = $whenFailing; Passing = $whenPassing }
+    }
+    Assert 'Verify hands the Foundry account and its resource group to the health check' ((Get-Content -LiteralPath $healthLog -Raw) -match 'rg=rg-gw;acct=ai-x;frg=rg-ai')
+    Assert 'Verify fails when the health check fails' (-not $verifyResult.Failing.Passed)
+    Assert 'Verify passes when the health check passes' ([bool]$verifyResult.Passing.Passed)
 }
 finally {
     $env:GUIDED_FLOW_FAIL_FOUNDATION = $null
@@ -285,6 +326,7 @@ finally {
     $env:GUIDED_FLOW_PLAN_MARK = $null
     $env:GUIDED_FLOW_COUNTS = $null
     $env:CLAUDE_FLOW_SKIP_AZ_DISCOVERY = $null
+    Get-ChildItem -LiteralPath (Join-Path $root 'onboarding\support') -Filter 'claude-*-support-*.zip' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTimeUtc -ge $testStartUtc } | Remove-Item -Force -ErrorAction SilentlyContinue
     foreach ($file in @($createdIntegrationFiles)) { if ($file) { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue } }
     Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue
 }

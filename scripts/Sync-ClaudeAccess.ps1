@@ -31,8 +31,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$ApimName,
     [Parameter(Mandatory = $true)][string]$ResourceGroup,
-    [string]$StandardGroup = 'claude-code-standard',
-    [string]$PremiumGroup = 'claude-code-premium',
+    [string]$StandardGroup,
+    [string]$PremiumGroup,
     [string[]]$AdditionalStandardOids = @(),
     [string[]]$AdditionalPremiumOids = @(),
     [switch]$AllowEmpty,
@@ -42,6 +42,13 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# The groups recorded for this gateway, then the default names. A fixed default published the
+# tenant's claude-code-* groups to a gateway installed with other group names.
+if (-not $StandardGroup) { $StandardGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') StandardGroup -ForApimName $ApimName 3>$null) }
+if (-not $PremiumGroup) { $PremiumGroup = [string](& (Join-Path $PSScriptRoot 'Get-ClaudeGatewayTarget.ps1') PremiumGroup -ForApimName $ApimName 3>$null) }
+if (-not $StandardGroup) { $StandardGroup = 'claude-code-standard' }
+if (-not $PremiumGroup) { $PremiumGroup = 'claude-code-premium' }
 
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 

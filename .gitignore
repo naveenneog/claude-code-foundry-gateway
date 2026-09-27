@@ -65,3 +65,7 @@ config/price-book.json
 /chargeback-reports/
 .chargeback-*/
 onboarding/HOW-TO-USE.md
+# Diagnose support bundles written by Start-ClaudeGateway.ps1 -Action Diagnose -SupportBundle.
+# Redacted, but they describe this tenant and workstation.
+onboarding/support/
+True.zip

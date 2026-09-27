@@ -372,9 +372,17 @@ if ($Action -eq 'Update') {
 if ($Action -eq 'Diagnose') {
     $scripts = @('scripts\Debug-ClaudeSetup.ps1', 'scripts\Debug-ClaudeWorkstation.ps1') | ForEach-Object { Join-Path $root $_ } | Where-Object { Test-Path -LiteralPath $_ }
     if ($scripts.Count) {
+        # The debug scripts take a zip path. Passing the switch itself wrote a file named True.zip.
+        $bundleStamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ')
+        $bundleDir = Join-Path $root 'onboarding\support'
         foreach ($s in $scripts) {
             $args = @{ RecordPath = $RecordPath }
-            if ($SupportBundle) { $args.SupportBundle = $true }
+            if ($SupportBundle) {
+                if (-not (Test-Path -LiteralPath $bundleDir)) { New-Item -ItemType Directory -Path $bundleDir -Force -WhatIf:$false | Out-Null }
+                $kind = if ((Split-Path $s -Leaf) -like '*Workstation*') { 'workstation' } else { 'setup' }
+                $args.SupportBundle = Join-Path $bundleDir "claude-$kind-support-$bundleStamp.zip"
+                Write-Host "Support bundle: $($args.SupportBundle)" -ForegroundColor DarkGray
+            }
             & $s @args
         }
     }

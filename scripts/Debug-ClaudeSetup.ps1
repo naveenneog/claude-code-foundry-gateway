@@ -164,11 +164,17 @@ if ($ResourceGroup -and $ApimName) {
     $healthPath = Join-Path $PSScriptRoot 'Test-ClaudeHealth.ps1'
     if (Test-Path $healthPath) {
         $healthJson = $null
+        $foundationDecision = if ($record -and $record.decisions) { Get-ClaudeDiagnoseProperty $record.decisions 'foundation' } else { $null }
+        $healthAccount = if ($FoundryAccount) { $FoundryAccount } elseif ($foundationDecision) { [string](Get-ClaudeDiagnoseProperty $foundationDecision 'foundryAccount') } else { '' }
+        $healthFoundryGroup = if ($foundationDecision) { [string](Get-ClaudeDiagnoseProperty $foundationDecision 'foundryResourceGroup') } else { '' }
         try {
             $job = Start-Job -ScriptBlock {
-                param($Path, $Rg, $Name)
-                & $Path -ResourceGroup $Rg -ApimName $Name -AsJson *>&1 | Out-String
-            } -ArgumentList $healthPath, $ResourceGroup, $ApimName
+                param($Path, $Rg, $Name, $Account, $FoundryRg)
+                $healthArgs = @{ ResourceGroup = $Rg; ApimName = $Name; AsJson = $true }
+                if ($Account) { $healthArgs.FoundryAccount = $Account }
+                if ($FoundryRg) { $healthArgs.FoundryResourceGroup = $FoundryRg }
+                & $Path @healthArgs *>&1 | Out-String
+            } -ArgumentList $healthPath, $ResourceGroup, $ApimName, $healthAccount, $healthFoundryGroup
             if (Wait-Job $job -Timeout 90) {
                 $healthOutput = Receive-Job $job | Out-String
                 $jsonStart = $healthOutput.IndexOf('{')
