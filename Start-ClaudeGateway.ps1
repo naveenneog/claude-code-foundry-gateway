@@ -165,7 +165,7 @@ function Get-FlowModules {
     }
     # Present modules that another action runs, named with the command that runs them.
     $elsewhere = foreach ($info in $otherAction) {
-        if ($ForAction -ne 'Change' -and 'Change' -in @($info.Actions) -and $info.DecisionKey) {
+        if ($ForAction -ne 'Change' -and 'Change' -in @($info.Actions) -and 'Setup' -notin @($info.Actions) -and $info.DecisionKey) {
             "Not part of ${ForAction}: $($info.Name) - change it later with .\Start-ClaudeGateway.ps1 -Action Change -Change $($info.DecisionKey)"
         }
     }
