@@ -43,6 +43,11 @@ and Windows PowerShell 5.1. RED on both hosts was `model lifecycle implementatio
 The real flow, standalone command, backup and profile generators run against an offline Azure
 stub. Related FlowContract, FlowLifecycle, ModelDeployment, GovernanceAuthority and
 ModelsAndPlugins suites passed. Mutations, isolated live proof and packet gate remain pending.
+Second green: 77 assertions, 0 failed on both hosts. Explicit `-StandardModels` and
+`-PremiumModels` support an unattended initial subset; unknown selections are refused before
+deployment. Price status appears in each model question. Reusing the same answers after a
+retirement succeeds without another named-value write. `Test-On-PS51.ps1` reached the
+complete installer's summary and stopped under `-WhatIf`.
 
 Read-only reference drift, 2026-09-27 20:19Z: both `models-standard` and `models-premium` are
 `,,` (allow all), and `turnstile-integration` reports `governanceAuthority=Turnstile`,

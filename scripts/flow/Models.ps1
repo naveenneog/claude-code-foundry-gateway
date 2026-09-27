@@ -8,7 +8,15 @@ function Get-ClaudeFlowStepQuestions {
     param($Record, $Discovery)
     $state = Get-ClaudeModelDiscovery (Get-ClaudeModelTarget $Record)
     Set-ClaudeRecordProperty $Discovery 'modelLifecycle' $state
-    Get-ClaudeModelQuestions -Record $Record -Discovery $state
+    $args = @{ Record = $Record; Discovery = $state }
+    $decision = Get-ClaudeDecision $Record models
+    if ($decision -and $decision.priceBookPath) {
+        if ($decision.priceBookPath -isnot [string]) { throw 'models.priceBookPath must be a scalar string.' }
+        $path = $decision.priceBookPath
+        if (-not [IO.Path]::IsPathRooted($path)) { $path = Join-Path (Get-ClaudeFlowLifecycleRepoRoot) $path }
+        $args.PriceBook = Get-ClaudeModelPriceBook $path
+    }
+    Get-ClaudeModelQuestions @args
 }
 
 function Get-ClaudeFlowStepPlan {

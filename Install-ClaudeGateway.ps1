@@ -60,6 +60,8 @@ param(
 
     [string]$StandardGroup = 'claude-code-standard',
     [string]$PremiumGroup = 'claude-code-premium',
+    [ValidateNotNullOrEmpty()][string[]]$StandardModels,
+    [ValidateNotNullOrEmpty()][string[]]$PremiumModels,
 
     # How developers sign in. Written into claude-gateway.json and honoured by
     # Onboard-ClaudeDeveloper.ps1; it configures nothing on this machine.
@@ -507,10 +509,16 @@ if ($deployed.Count) {
     $nonOpus = @($deployed | Where-Object { $_.model -notlike '*opus*' } | ForEach-Object { $_.name } | Sort-Object -Unique)
     if (-not $nonOpus.Count) { $nonOpus = $all }
 
-    $stdPick = Read-Default -Prompt 'Models for the standard tier' -Default ($nonOpus -join ',') `
-        -Help 'Comma-separated deployment names. Opus is left out by default because it costs five times Sonnet per output token.'
-    $prmPick = Read-Default -Prompt 'Models for the premium tier' -Default ($all -join ',') `
-        -Help 'Comma-separated deployment names.'
+    $stdPick = if ($PSBoundParameters.ContainsKey('StandardModels')) { $StandardModels -join ',' } else {
+        Read-Default -Prompt 'Models for the standard tier' -Default ($nonOpus -join ',') `
+            -Help 'Comma-separated deployment names. The default excludes Opus.'
+    }
+    $prmPick = if ($PSBoundParameters.ContainsKey('PremiumModels')) { $PremiumModels -join ',' } else {
+        Read-Default -Prompt 'Models for the premium tier' -Default ($all -join ',') -Help 'Comma-separated deployment names.'
+    }
+    foreach ($selected in @(($stdPick + ',' + $prmPick) -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+        if ($selected -notin $all) { throw "Model '$selected' is not deployed on the selected Foundry account." }
+    }
 
     $modelsStd = ',' + (($stdPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ',') + ','
     $modelsPrm = ',' + (($prmPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ',') + ','

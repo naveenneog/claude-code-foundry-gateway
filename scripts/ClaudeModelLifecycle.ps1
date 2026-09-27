@@ -48,6 +48,7 @@ function Assert-ClaudeModelName {
 
 function Get-ClaudeModelTarget {
     param($Record)
+    if ($Record.mode -and $Record.mode -ne 'gateway') { throw 'Model lifecycle requires a gateway record, not a direct-Foundry mode.' }
     $target = Get-ClaudeFlowLifecycleRecordTarget -Record $Record
     $foundation = Get-ClaudeDecision -Record $Record -Key foundation
     foreach ($key in 'subscriptionId','resourceGroup','apimName','foundryAccount','foundryResourceGroup') {
@@ -143,11 +144,14 @@ function Get-ClaudeModelAssignments {
 }
 
 function Get-ClaudeModelQuestions {
-    param($Record, $Discovery)
+    param($Record, $Discovery, $PriceBook = $null)
+    if (-not $PriceBook) { $PriceBook = Get-ClaudeModelPriceBook (Join-Path (Split-Path $PSScriptRoot -Parent) 'config\price-book.json') }
     $questions = @()
+    $prior = Get-ClaudeModelAssignments $Record
+    $retired = @($prior.Keys | Where-Object { $prior[$_] -eq 'drop' })
     $names = @(@($Discovery.Deployments.name) + @($Record.models) +
         @(ConvertFrom-ClaudeModelList $Discovery.NamedValues['models-standard']) +
-        @(ConvertFrom-ClaudeModelList $Discovery.NamedValues['models-premium']) | Where-Object { $_ } | Sort-Object -Unique)
+        @(ConvertFrom-ClaudeModelList $Discovery.NamedValues['models-premium']) + $retired | Where-Object { $_ } | Sort-Object -Unique)
     foreach ($name in $names) {
         $live = @($Discovery.Deployments | Where-Object name -eq $name)
         $allowed = @('standard','premium' | Where-Object { $Discovery.NamedValues["models-$_"] -eq ',,' -or $name -in @(ConvertFrom-ClaudeModelList $Discovery.NamedValues["models-$_"]) })
@@ -157,7 +161,7 @@ function Get-ClaudeModelQuestions {
         if ($live.Count) {
             foreach ($value in 'standard','premium','both','none') { $options += New-ClaudeChoiceOption -Value $value -Label $value }
         } else { $options += New-ClaudeChoiceOption -Value drop -Label 'Drop missing deployment from both tier lists' }
-        $detail = if ($live.Count) { Format-ClaudeDeployment $live[0] } else { "$name is missing from Foundry" }
+        $detail = if ($live.Count) { (Format-ClaudeDeployment $live[0]) + '; ' + (Get-ClaudeDeploymentPrice $live[0] $PriceBook).Detail } else { "$name is missing from Foundry" }
         $questions += [pscustomobject]@{
             Key = 'models.tiers.' + $name.Replace('.','~'); Question = "$detail - which tiers get it?"
             Options = $options; WhereToFind = @('Foundry > Models + endpoints; API Management > Named values > models-standard/models-premium')
@@ -181,7 +185,7 @@ function New-ClaudeModelPlan {
     $bookAfter = $book | ConvertTo-Json -Depth 40 | ConvertFrom-Json
     $recordAfter = $Record | ConvertTo-Json -Depth 40 | ConvertFrom-Json
     $recordAfter.PSObject.Properties.Remove('__recordPath')
-    $questions = @(Get-ClaudeModelQuestions $Record $Discovery)
+    $questions = @(Get-ClaudeModelQuestions $Record $Discovery -PriceBook $book)
     $knownNames = @($questions | ForEach-Object { $_.Key.Substring('models.tiers.'.Length).Replace('~','.') })
     foreach ($name in $TierAssignments.Keys) {
         if ($name -notin $knownNames) { throw "Unknown deployment assignment '$name'; it was not discovered or recorded." }
@@ -358,7 +362,9 @@ function Invoke-ClaudeModelChange {
         Write-ClaudeModelRecord -Record $Record -Path $d.RecordPath
         Write-Host "Developer handover: $($d.ProfileRoot)\README.md"
         Write-Host 'Rerun workstation setup with its tier record; redistribute the MDM payloads through the fleet tool.'
-        return @{ models = [pscustomobject]@{ tiers = [pscustomobject]@{}; priceBookPath = $d.PriceBookPath; snapshot = $d.SnapshotPath } }
+        $selections = [ordered]@{}
+        foreach ($name in ($d.Assignments.Keys | Sort-Object)) { $selections[$name.Replace('.','~')] = $d.Assignments[$name] }
+        return @{ models = [pscustomobject]@{ tiers = [pscustomobject]$selections; priceBookPath = $d.PriceBookPath; snapshot = $d.SnapshotPath } }
     }
     catch { throw "Model change failed; snapshot: $($d.SnapshotPath). Partial writes may exist; replan before retrying. $($_.Exception.Message)" }
 }

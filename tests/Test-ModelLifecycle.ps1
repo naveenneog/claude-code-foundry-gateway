@@ -161,6 +161,20 @@ function Apply($Plan) {
     Invoke-ClaudeModelChange -Record $global:P70record -Plan $Plan | Out-Null
 }
 
+function Installer-Models($Standard, $Premium) {
+    $source = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
+    $from = $source.IndexOf('$deployed = @(Get-ClaudeDeployment')
+    $to = $source.IndexOf('# ------------------------------------------------------------- 2. placement', $from)
+    $body = '[CmdletBinding()]param([string[]]$StandardModels,[string[]]$PremiumModels)' + "`n" +
+        $source.Substring($from, $to - $from) + "`n" +
+        '[pscustomobject]@{ Standard=$modelsStd; Premium=$modelsPrm; Deployments=@($recordedDeployments) }'
+    function Write-Step { param($Text) }
+    function Write-Ok { param($Text) }
+    function Read-Default { param($Prompt,$Default,$Help) $Default }
+    $FoundryAccount = 'ai-models'; $FoundryResourceGroup = 'rg-foundry'; $pendingDeployment = $null
+    & ([scriptblock]::Create($body)) -StandardModels $Standard -PremiumModels $Premium
+}
+
 $oldNoninteractive = $env:CLAUDE_NONINTERACTIVE
 $env:CLAUDE_NONINTERACTIVE = '1'
 try {
@@ -416,6 +430,51 @@ try {
     Check 'installer names the existing lifecycle command, not a missing capability script' {
         $text = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
         $text -match 'Sync-ClaudeModels.ps1' -and $text -notmatch 'Set-ClaudeCapability.ps1'
+    }
+    Check 'installer accepts explicit initial model lists for an unattended isolated install' {
+        $command = Get-Command (Join-Path $root 'Install-ClaudeGateway.ps1')
+        $command.Parameters.ContainsKey('StandardModels') -and $command.Parameters.ContainsKey('PremiumModels')
+    }
+    Check 'installer uses only the specified models and records their live model identities' {
+        $selected = Installer-Models @('sonnet') @('sonnet','opus')
+        $selected.Standard -eq ',sonnet,' -and $selected.Premium -eq ',sonnet,opus,' -and @($selected.Deployments).Count -eq 2 -and $selected.Deployments[0].model -match '^claude-'
+    }
+    Check 'installer refuses an explicitly supplied undeployed model before deployment' {
+        Reject { Installer-Models @('made-up') @('opus') } 'not deployed|unknown.*deployment'
+    }
+    Check 'model choices show the price status before the administrator selects a tier' {
+        Reset-State
+        $state = Get-ClaudeModelDiscovery (Get-ClaudeModelTarget $global:P70record)
+        $qs = @(Get-ClaudeModelQuestions -Record $global:P70record -Discovery $state -PriceBook (Get-ClaudeModelPriceBook $global:P70bookPath))
+        @($qs | Where-Object Key -eq 'models.tiers.next~opus')[0].Question -match 'unpriced' -and @($qs | Where-Object Key -eq 'models.tiers.claude-haiku-4-5')[0].Question -match 'per million'
+    }
+    Check 'oversized model lists fail before backup or writes' {
+        $extra = 1..85 | ForEach-Object { 'missing-' + $_.ToString('000') + ('x' * 45) }
+        $global:P70nvs['models-standard'] = ',sonnet,' + ($extra -join ',') + ','
+        (Reject { Plan } '4096') -and -not $global:P70backupRead
+    }
+    Check 'a direct-Foundry record is refused by the shared flow implementation' {
+        Reset-State; $global:P70record.mode = 'foundry-direct'
+        Reject { Plan } 'gateway record|mode'
+    }
+    Check 'profiles preserve a single deployment as JSON arrays in both clients' {
+        Reset-State; $global:P70rawDeployments = @($global:P70rawDeployments[0])
+        $global:P70nvs['models-standard'] = ',sonnet,'; $global:P70nvs['models-premium'] = ',sonnet,'
+        Apply (Plan @{})
+        $desktop = Json (Join-Path $scratch 'profiles\standard\claude-desktop.managed-settings.json')
+        $code = Json (Join-Path $scratch 'profiles\standard\claude-code.managed-settings.json')
+        $desktop.inferenceModels -is [array] -and @($desktop.inferenceModels).Count -eq 1 -and $code.availableModels -is [array] -and $code.availableModels[0] -eq 'sonnet'
+    }
+    Check 'retrying exactly the same standalone answers after retirement is idempotent' {
+        Reset-State
+        $preview = & $standalone -RecordPath $global:P70recordPath -AnswersPath $answers -PlanOnly *>&1 | Out-String
+        $fp = [regex]::Match($preview, 'Fingerprint:\s+([a-f0-9]{64})').Groups[1].Value
+        & $standalone -RecordPath $global:P70recordPath -AnswersPath $answers -ApprovedPlanFingerprint $fp | Out-Null
+        $preview = & $standalone -RecordPath $global:P70recordPath -AnswersPath $answers -PlanOnly *>&1 | Out-String
+        $fp = [regex]::Match($preview, 'Fingerprint:\s+([a-f0-9]{64})').Groups[1].Value
+        $before = $global:P70writes.Count
+        & $standalone -RecordPath $global:P70recordPath -AnswersPath $answers -ApprovedPlanFingerprint $fp | Out-Null
+        $global:P70writes.Count -eq $before
     }
 }
 finally {

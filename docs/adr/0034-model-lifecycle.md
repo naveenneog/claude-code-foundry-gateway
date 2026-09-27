@@ -50,6 +50,10 @@ The flow uses `models.tiers.<deployment>` answer keys. A period in a deployment 
 as `~` in that question key because the flow treats periods as path separators; the Azure
 deployment name itself is unchanged. `models.priceBookPath` can select a private dated book.
 Unknown choices, duplicate deployment identities and unknown assignment keys are refused.
+Completed `drop` decisions remain in the decision record, so the same answers file can be
+reused after the deployment has disappeared from both lists. The installer accepts explicit
+`-StandardModels` and `-PremiumModels` for an unattended initial subset and rejects unknown
+deployment names before provisioning.
 
 Removal which would empty a restricted tier is refused: writing `,,` would grant access to
 all models, not revoke access. An already unrestricted tier is stated as such and is never

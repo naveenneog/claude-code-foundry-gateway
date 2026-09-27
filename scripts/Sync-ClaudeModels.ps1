@@ -58,7 +58,7 @@ if (-not $PriceBookPath) { $PriceBookPath = Join-Path $root 'config\price-book.j
 if (-not [IO.Path]::IsPathRooted($PriceBookPath)) { $PriceBookPath = Join-Path $root $PriceBookPath }
 $target = Get-ClaudeModelTarget $record
 $discovery = Get-ClaudeModelDiscovery $target
-foreach ($q in @(Get-ClaudeModelQuestions $record $discovery)) {
+foreach ($q in @(Get-ClaudeModelQuestions $record $discovery -PriceBook (Get-ClaudeModelPriceBook $PriceBookPath))) {
     $name = $q.Key.Substring('models.tiers.'.Length).Replace('~','.')
     if (-not $assignments.ContainsKey($name)) {
         $assignments[$name] = Select-ClaudeChoice -Parameter $q.Key -Question $q.Question -Options $q.Options -WhereToFind $q.WhereToFind -AcceptRecommendedWithoutConsole:$q.AcceptRecommendedWithoutConsole
