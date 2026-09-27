@@ -4,8 +4,9 @@
 
 ## P70 newly deployed models reach the tiers and the workstations, 2026-09-28
 
-In progress on `p70-model-lifecycle`, based on `aa7ed19`. The lead runs the council and merges;
-this branch stops at a passing packet gate. The reference gateway is read-only throughout.
+Ready for the lead's council review on `p70-model-lifecycle`, based on `aa7ed19`.
+The packet gate passed on `9447488`; the final ledger commit records that result.
+The lead runs the council and merges. The reference gateway was read-only throughout.
 
 Acceptance criteria:
 
@@ -31,7 +32,7 @@ Acceptance criteria:
       `403 model_not_allowed` before and `200` after a deployment is added to the caller's tier.
       The proof costs less than USD 5; its resource group, soft-deleted gateway, groups and exact
       shared-Foundry role assignment are removed with creation/deletion times recorded
-- [ ] A read-only reference-gateway plan, an exact owner apply command, redacted live terminal
+- [x] A read-only reference-gateway plan, an exact owner apply command, redacted live terminal
       images numbered 50 onward, updated model/flow/developer docs and architecture artifacts
       accompany a passing `node .ironclad/gate.mjs --stage packet`. ROADMAP remains unticked
 
@@ -156,7 +157,19 @@ Open decisions for the lead: council verdicts and merge; the reference ownership
 choice; a separate cache-rate schema change before pricing Opus 5.5 automatically.
 MDM assignment and actual Windows/macOS/Linux fleet rollout remain operator actions.
 No real managed device or Desktop app was changed by this live proof.
-The packet gate is the remaining branch step. ROADMAP's P70 box remains unticked.
+**Packet gate:** `node .ironclad/gate.mjs --stage packet` exited 0 at `9447488`,
+2026-09-27 22:17:16-22:40:22Z (1,385.6 s). Test-All passed in 1,376.6 s; the Bicep build
+passed in 7.2 s. Scorecard: 22 passed, 2 warned, 0 failed, 2 skipped (no lint/typecheck
+commands declared). Warnings remain the existing eight oversized files and 21 unrelated
+open unknowns; no detector or budget was relaxed. The shared lock was acquired after
+60.1 s and released in `finally`. Another packet acquired it afterwards; P70 did not
+remove that later owner's lock.
+
+P70 commits before the gate: plan `0204d5d`, contract `02a45c9`, first green `dfc75f0`,
+selection/installer `8f3fe54`, detector preflight `9b2571e`, subscription/record-delta
+checks `7c1c28b`, live fresh-record fix `dc1847f`, guides/architecture `2676a90`, live
+evidence `9447488`. No merge, push or history rewrite was performed. ROADMAP's P70 box
+remains unticked. Council verdicts are intentionally left to the lead, as assigned.
 
 Read-only reference drift, 2026-09-27 20:19Z: both `models-standard` and `models-premium` are
 `,,` (allow all), and `turnstile-integration` reports `governanceAuthority=Turnstile`,
