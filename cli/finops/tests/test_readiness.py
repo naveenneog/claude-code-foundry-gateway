@@ -290,3 +290,14 @@ def test_redacted_cli_failure_hides_database_and_group_but_keeps_the_manual_comm
     assert result.exit_code == 9
     assert SERVER not in result.output and GROUP not in result.output
     assert "az postgres flexible-server start" in result.output
+
+
+def test_slow_signin_credential_still_reports_verified_stopped_database(monkeypatch):
+    target, calls, requests = backend(monkeypatch)
+    target._token_provider = lambda: (_ for _ in ()).throw(FinOpsError("Azure CLI did not finish.", 7))
+    with pytest.raises(FinOpsError) as caught:
+        target.read("whoami")
+    assert caught.value.code == 9
+    assert SERVER in str(caught.value)
+    assert calls and not requests
+    target.close()

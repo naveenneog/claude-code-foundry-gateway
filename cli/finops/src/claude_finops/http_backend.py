@@ -22,7 +22,12 @@ class HttpBackend(Backend):
     def _request(self, method, path, params=None, body=None, extra_headers=None, optional=False):
         for attempt in range(2 if method == "GET" else 1):
             if token_needs_refresh(self._token):
-                self._token = self._token_provider()
+                try:
+                    self._token = self._token_provider()
+                except FinOpsError as error:
+                    if error.code != 7:
+                        raise
+                    raise self._unavailable_error(method, path) from None
             try:
                 response = self._client.request(method, path, params=params, json=body,
                     timeout=self._request_timeout(method, path),
