@@ -28,7 +28,7 @@
         "scripts/Export-ClaudeTurnstileUsage.ps1": "d68e00c953f4bb47492b39862b263377d33ccdf39f15c0e26bb2fbfa783efdb6",
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
         "scripts/Publish-ClaudeQueries.ps1": "d54164f58a76b5d352d46d615da8f877f16df61ce9d2ecb0f3d3c1e7c6a7c72b",
-        "scripts/Setup-ClaudeWorkstation.ps1": "cabaf483ca6ef69967a50e28527d985b165eee458522faed913abd495f4797c1",
+        "scripts/Setup-ClaudeWorkstation.ps1": "9a44bf645c8435c9e5e18ea5720da5c6b56401696453904868c2855ee22e4387",
         "scripts/Sync-ClaudeAccess.ps1": "f4f5896df08c22bbfa9702ac0afa532e4cc4c4c990a82a4d7d4676b43e8c0c84",
         "scripts/Sync-ClaudeProjection.ps1": "ddbd769cb42acd5290db364633441ca5f73af9de980d1ef3d596c299e37ffe8e",
         "scripts/flow/DeviceProfiles.ps1": "1d2854b24c442983e0960a6cde793d97328e87d5cf0d6d4c947f2d0adad6f3de",

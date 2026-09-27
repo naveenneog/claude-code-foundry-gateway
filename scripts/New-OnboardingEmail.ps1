@@ -31,8 +31,8 @@ param(
     [string]$DisplayName,
     [ValidateSet('standard', 'premium')][string]$Tier = 'standard',
 
-    # Where the developer can fetch the setup script and config. A share, an
-    # internal site, or the repo. Leave empty to attach instead.
+    # Where the developer fetches the setup scripts and claude-gateway.json: an http(s) site, or a
+    # file share or folder. Leave empty to attach them instead.
     [string]$DistributionUrl,
 
     [string]$SupportContact = 'your platform team',
@@ -67,10 +67,21 @@ $setupFiles = @($setupFiles | Select-Object -Unique)
 $fileList = "'" + ($setupFiles -join "', '") + "'"
 
 $cmd = if ($DistributionUrl) {
-    $base = $DistributionUrl.TrimEnd('/')
-    "New-Item -ItemType Directory -Force claude-setup | Out-Null; Set-Location claude-setup`n" +
-    "$fileList | ForEach-Object { Invoke-RestMethod `"$base/`$_`" -OutFile `$_ }`n" +
-    ".\Setup-ClaudeWorkstation.ps1 -ConfigPath $base/claude-gateway.json"
+    # The location becomes one single-quoted literal, so a $web container (Azure static websites)
+    # or an & in a path stays text, and every file name is joined to it rather than expanded in it.
+    $base = $DistributionUrl.TrimEnd('/', '\')
+    $from = "`$from = '" + $base.Replace("'", "''") + "'`n"
+    $folder = "New-Item -ItemType Directory -Force claude-setup | Out-Null; Set-Location claude-setup`n"
+    if ($base -match '^https?://') {
+        $from + $folder +
+        "$fileList | ForEach-Object { Invoke-RestMethod -Uri (`$from + '/' + `$_) -OutFile `$_ }`n" +
+        ".\Setup-ClaudeWorkstation.ps1 -ConfigPath (`$from + '/claude-gateway.json')"
+    } else {
+        # A file share or folder: copied, because Invoke-RestMethod reads only URLs.
+        $from + $folder +
+        "$fileList | ForEach-Object { Copy-Item -LiteralPath (Join-Path `$from `$_) -Destination . }`n" +
+        ".\Setup-ClaudeWorkstation.ps1 -ConfigPath (Join-Path `$from 'claude-gateway.json')"
+    }
 } else {
     "# In the folder that holds claude-gateway.json and $($setupFiles -join ', '):`n" +
     ".\Setup-ClaudeWorkstation.ps1 -ConfigPath .\claude-gateway.json"

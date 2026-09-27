@@ -828,14 +828,23 @@ exact streaming cache-creation detail remains **U13**.
   in VS Code. It now changes only the variables it owns, and removes `ANTHROPIC_FOUNDRY_RESOURCE`.
 - **On Windows PowerShell 5.1 the setup's gateway check never sent its request.** `Invoke-WebRequest`
   without `-UseBasicParsing` throws `Object reference not set to an instance of an object` on a
-  machine without Internet Explorer; measured on this workstation, the same POST returned 200 with
-  the switch. The setup, the workstation diagnostics and the preflight now pass it. Found by the
-  new end-to-end run of the Windows setup on both PowerShell hosts.
+  machine without Internet Explorer, and hangs in a hidden window; measured on this workstation,
+  the same POST returned 200 with the switch. The setup, the workstation diagnostics, the
+  preflight, the onboarding wrapper's final check (`Debug-ClaudeCode.ps1`), the administrator
+  diagnostics and `Show-Governance.ps1` now pass it. Found by the new end-to-end run of the
+  Windows setup on both PowerShell hosts.
+- **The setup could not read a record fetched over HTTP on Windows PowerShell 5.1.** The installer
+  writes `claude-gateway.json` with `Set-Content -Encoding UTF8`, which on 5.1 starts the file with
+  a UTF-8 byte-order mark; 5.1 left it in a `text/plain` body as three characters that
+  `ConvertFrom-Json` refused, and the setup reported "No gateway configuration". The setup decodes
+  the downloaded bytes as UTF-8 and drops the mark; the bash scripts drop it too.
 - **The onboarding email's command downloaded only `Setup-ClaudeWorkstation.ps1`.** The setup now
   needs `ClaudeClientSupport.ps1` and `ClaudeDesktopSignIn.ps1` beside it and stops at once,
   naming them, when they are missing; Desktop also needs its token helpers. The email's command
-  fetches every file the setup reads from its own folder, taken from the script itself, and the
-  test runs the setup from a folder holding only those files.
+  fetches every file the setup reads from its own folder, taken from the script itself. The
+  location is one single-quoted literal, so a `$web` container or an `&` in a path stays text, and
+  a file share or folder is copied with `Copy-Item`. The test runs the email's command as written,
+  over HTTP from a path with `$web` and `&` in it and from a folder path with a space and `&`.
 - **The MDM generator ignored a record with one deployment on Windows PowerShell 5.1, and pinned
   the haiku alias past an explicit `-SonnetModel`.** Assigning an `if` statement unrolled the
   one-element list, which has no `Count` there. With no Haiku deployment recorded, the haiku alias
@@ -847,9 +856,12 @@ exact streaming cache-creation detail remains **U13**.
   and only 2.1.272 retried; with no declaration, 2.1.101 sent it for the name `claude-sonnet-5`
   but not for a custom name. Declarations compare as sets, in any order.
 - **The macOS/Linux time limits could be outlived.** The watchdog used where `timeout(1)` is
-  missing, as on stock macOS, sent only TERM to one process. It now sends KILL 5 s later to the
-  command's process group, and `timeout` gets `-k 5`. The bash model rules and this helper moved
-  into `scripts/claude-client-support.sh`, which both bash scripts source.
+  missing, as on stock macOS, sent only TERM to one process, and a child that outlived the command
+  on TERM kept the captured output open. The command now runs in its own process group (from perl,
+  `setsid` or GNU `timeout`), and once the time is up the watchdog always sends KILL to the group
+  5 s after TERM. The bash model rules and this helper moved into
+  `scripts/claude-client-support.sh`, which both bash scripts source; its alias check also counts a
+  name in an older record's `models` list as recorded, as the PowerShell diagnostics do.
 - **The AUM service guide did not say its analytics read the whole workspace.** A warning written
   on the `aum-service` branch on 2026-09-25 never reached `main`: the service's usage reads,
   observed-person lookup and warnings call the saved `ClaudeChargeback` and `ClaudeCost` functions

@@ -128,6 +128,9 @@ if [ -n "$CONFIG" ]; then
     else
       raw="$(cat "$CONFIG" 2>/dev/null || true)"
     fi
+    # A record the installer wrote on Windows PowerShell 5.1 starts with a UTF-8 byte-order mark.
+    # jq 1.8.2 reads it (measured); removing it keeps what jq reads independent of the jq release.
+    raw="${raw#$'\xef\xbb\xbf'}"
     if [ -n "$raw" ]; then
       CONFIG_RAW="$raw"
       [ -z "$GATEWAY_URL" ] && GATEWAY_URL="$(printf '%s' "$raw" | jq_value_ '.gatewayUrl // empty')"

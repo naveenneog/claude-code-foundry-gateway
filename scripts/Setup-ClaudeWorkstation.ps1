@@ -100,8 +100,12 @@ Write-Step 'Configuration'
 $cfg = $null
 if ($ConfigPath) {
     try {
+        # Decoded from the bytes: a record the installer wrote on Windows PowerShell 5.1 starts
+        # with a UTF-8 byte-order mark, which 5.1 leaves in a text/plain body as three characters
+        # that ConvertFrom-Json refuses (measured).
         $raw = if ($ConfigPath -match '^https?://') {
-            (Invoke-WebRequest -Uri $ConfigPath -UseBasicParsing -TimeoutSec 30).Content
+            $bytes = (Invoke-WebRequest -Uri $ConfigPath -UseBasicParsing -TimeoutSec 30).RawContentStream.ToArray()
+            [Text.Encoding]::UTF8.GetString($bytes).TrimStart([char]0xFEFF)
         } else { Get-Content $ConfigPath -Raw }
         $cfg = $raw | ConvertFrom-Json
         if (-not $GatewayUrl) { $GatewayUrl = $cfg.gatewayUrl }

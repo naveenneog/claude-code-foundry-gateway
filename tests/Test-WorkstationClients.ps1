@@ -14,7 +14,7 @@ $desktopHelper = Join-Path $root 'scripts\ClaudeDesktopSignIn.ps1'
 $schema = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'fixtures\claude-desktop-schema-2.2553.1.0.json') -Raw | ConvertFrom-Json
 $allCaps = 'effort,xhigh_effort,max_effort,thinking,adaptive_thinking,interleaved_thinking'
 # A fake bearer token for the stubs (header {"alg":"none"}), built here so no token-shaped literal is in the source.
-$fakeJwt = 'eyJ' + 'hbGciOiJub25lIn0' + '.' + 'eyJzdWIiOiJwNjcifQ' + '.c2ln'
+$fakeJwt = 'eyJ' + 'hbGciOiJub25lIn0' + '.' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('{"sub":"p67","oid":"p67","aud":"https://cognitiveservices.azure.com","exp":4102444800}')).TrimEnd('=').Replace('+', '-').Replace('/', '_') + '.c2ln'
 
 Write-Host ''
 Write-Host 'P67 Claude Code model support' -ForegroundColor Cyan
@@ -41,28 +41,39 @@ if (Test-Path -LiteralPath $support) {
     # One verdict per pinned alias, on what each release was measured to send (request capture,
     # 2026-09-27): the cases below are also run through alias_check_ in bash further down.
     $aliasRecordJson = '{"deployments":[{"name":"claude-opus-5","model":"claude-opus-5"},{"name":"prod-big","model":"claude-opus-5"},{"name":"claude-haiku-4-5","model":"claude-haiku-4-5"},{"name":"claude-opus-6","model":"claude-opus-6"},{"name":"prod-plain","model":"claude-opus-5","capabilities":"none"},{"name":"prod-next","model":"claude-next-1","capabilities":"effort,thinking","claudeCode":"2.2.10"}]}'
-    $aliasDeployments = @(Get-ClaudeRecordedDeployment -Config ($aliasRecordJson | ConvertFrom-Json))
-    $aliasByName = @{}; foreach ($d in $aliasDeployments) { $aliasByName[$d.name] = $d }
+    # A record written before the installer recorded deployments lists names only, under models.
+    $aliasRecords = @{ main = $aliasRecordJson; legacy = '{"models":["claude-haiku-4-5","claude-opus-5"]}'; none = '' }
+    $aliasByRecord = @{}
+    foreach ($key in @($aliasRecords.Keys)) {
+        $byName = @{}
+        if ($aliasRecords[$key]) { foreach ($d in @(Get-ClaudeRecordedDeployment -Config ($aliasRecords[$key] | ConvertFrom-Json))) { $byName[$d.name] = $d } }
+        $aliasByRecord[$key] = $byName
+    }
     $aliasCases = @(
-        [pscustomobject]@{ Label = 'the declaration in another order'; Pinned = 'claude-opus-5'; Declared = 'interleaved_thinking,adaptive_thinking,thinking,max_effort,xhigh_effort,effort'; Installed = '2.1.101'; Expect = 'ok'; Match = '^$' }
-        [pscustomobject]@{ Label = 'thinking without adaptive on an old release'; Pinned = 'claude-opus-5'; Declared = 'thinking'; Installed = '2.1.101'; Expect = 'fail'; Match = 'sends thinking\.type\.enabled, which the model refuses with 400' }
-        [pscustomobject]@{ Label = 'thinking without adaptive on a release that knows the model'; Pinned = 'claude-opus-5'; Declared = 'thinking'; Installed = '2.1.272'; Expect = 'warn'; Match = 'retries with adaptive thinking' }
-        [pscustomobject]@{ Label = 'a partial declaration'; Pinned = 'claude-opus-5'; Declared = 'effort,adaptive_thinking'; Installed = '2.1.101'; Expect = 'warn'; Match = 'turns off every capability' }
-        [pscustomobject]@{ Label = 'no declaration, model id, old release'; Pinned = 'claude-opus-5'; Declared = ''; Installed = '2.1.101'; Expect = 'fail'; Match = 'predates that model \(first known to Claude Code 2\.1\.219\)' }
-        [pscustomobject]@{ Label = 'no declaration, custom name, old release'; Pinned = 'prod-big'; Declared = ''; Installed = '2.1.101'; Expect = 'warn'; Match = 'prod-big \(claude-opus-5\).*depends on the release' }
-        [pscustomobject]@{ Label = 'no declaration, a release that knows the model'; Pinned = 'claude-opus-5'; Declared = ''; Installed = '2.1.272'; Expect = 'ok'; Match = '^$' }
-        [pscustomobject]@{ Label = 'no declaration, a model newer than the table'; Pinned = 'claude-opus-6'; Declared = ''; Installed = '2.1.290'; Expect = 'warn'; Match = 'no Claude Code release is recorded' }
-        [pscustomobject]@{ Label = 'a declaration for a model that needs none'; Pinned = 'claude-haiku-4-5'; Declared = 'effort,thinking'; Installed = '2.1.101'; Expect = 'warn'; Match = 'which the record does not declare' }
-        [pscustomobject]@{ Label = 'no declaration for a model that needs none'; Pinned = 'claude-haiku-4-5'; Declared = ''; Installed = '2.1.101'; Expect = 'ok'; Match = '^$' }
-        [pscustomobject]@{ Label = 'an unrecorded unknown name'; Pinned = 'mystery'; Declared = 'effort'; Installed = '2.1.101'; Expect = 'ok'; Match = '^$' }
-        [pscustomobject]@{ Label = 'a declaration where the record says none'; Pinned = 'prod-plain'; Declared = 'effort'; Installed = '2.1.101'; Expect = 'warn'; Match = 'prod-plain, which the record does not declare' }
-        [pscustomobject]@{ Label = 'an override model, not declared, below its release'; Pinned = 'prod-next'; Declared = ''; Installed = '2.2.9'; Expect = 'warn'; Match = 'prod-next \(claude-next-1\).*2\.2\.10.*depends on the release' }
-        [pscustomobject]@{ Label = 'an override model declared as the record says'; Pinned = 'prod-next'; Declared = 'effort,thinking'; Installed = '2.1.101'; Expect = 'ok'; Match = '^$' }
-        [pscustomobject]@{ Label = 'thinking without adaptive, release unreadable'; Pinned = 'claude-opus-5'; Declared = 'thinking'; Installed = ''; Expect = 'fail'; Match = 'Claude Code of unknown version sends' }
+        [pscustomobject]@{ Label = 'the declaration in another order'; Record = 'main'; Pinned = 'claude-opus-5'; Declared = 'interleaved_thinking,adaptive_thinking,thinking,max_effort,xhigh_effort,effort'; Installed = '2.1.101'; Expect = 'ok'; Match = '^$' }
+        [pscustomobject]@{ Label = 'thinking without adaptive on an old release'; Record = 'main'; Pinned = 'claude-opus-5'; Declared = 'thinking'; Installed = '2.1.101'; Expect = 'fail'; Match = 'sends thinking\.type\.enabled, which the model refuses with 400' }
+        [pscustomobject]@{ Label = 'thinking without adaptive on a release that knows the model'; Record = 'main'; Pinned = 'claude-opus-5'; Declared = 'thinking'; Installed = '2.1.272'; Expect = 'warn'; Match = 'retries with adaptive thinking' }
+        [pscustomobject]@{ Label = 'a partial declaration'; Record = 'main'; Pinned = 'claude-opus-5'; Declared = 'effort,adaptive_thinking'; Installed = '2.1.101'; Expect = 'warn'; Match = 'turns off every capability' }
+        [pscustomobject]@{ Label = 'no declaration, model id, old release'; Record = 'main'; Pinned = 'claude-opus-5'; Declared = ''; Installed = '2.1.101'; Expect = 'fail'; Match = 'predates that model \(first known to Claude Code 2\.1\.219\)' }
+        [pscustomobject]@{ Label = 'no declaration, custom name, old release'; Record = 'main'; Pinned = 'prod-big'; Declared = ''; Installed = '2.1.101'; Expect = 'warn'; Match = 'prod-big \(claude-opus-5\).*depends on the release' }
+        [pscustomobject]@{ Label = 'no declaration, a release that knows the model'; Record = 'main'; Pinned = 'claude-opus-5'; Declared = ''; Installed = '2.1.272'; Expect = 'ok'; Match = '^$' }
+        [pscustomobject]@{ Label = 'no declaration, a model newer than the table'; Record = 'main'; Pinned = 'claude-opus-6'; Declared = ''; Installed = '2.1.290'; Expect = 'warn'; Match = 'no Claude Code release is recorded' }
+        [pscustomobject]@{ Label = 'a declaration for a model that needs none'; Record = 'main'; Pinned = 'claude-haiku-4-5'; Declared = 'effort,thinking'; Installed = '2.1.101'; Expect = 'warn'; Match = 'which the record does not declare' }
+        [pscustomobject]@{ Label = 'no declaration for a model that needs none'; Record = 'main'; Pinned = 'claude-haiku-4-5'; Declared = ''; Installed = '2.1.101'; Expect = 'ok'; Match = '^$' }
+        [pscustomobject]@{ Label = 'an unrecorded unknown name'; Record = 'main'; Pinned = 'mystery'; Declared = 'effort'; Installed = '2.1.101'; Expect = 'ok'; Match = '^$' }
+        [pscustomobject]@{ Label = 'a declaration where the record says none'; Record = 'main'; Pinned = 'prod-plain'; Declared = 'effort'; Installed = '2.1.101'; Expect = 'warn'; Match = 'prod-plain, which the record does not declare' }
+        [pscustomobject]@{ Label = 'an override model, not declared, below its release'; Record = 'main'; Pinned = 'prod-next'; Declared = ''; Installed = '2.2.9'; Expect = 'warn'; Match = 'prod-next \(claude-next-1\).*2\.2\.10.*depends on the release' }
+        [pscustomobject]@{ Label = 'an override model declared as the record says'; Record = 'main'; Pinned = 'prod-next'; Declared = 'effort,thinking'; Installed = '2.1.101'; Expect = 'ok'; Match = '^$' }
+        [pscustomobject]@{ Label = 'thinking without adaptive, release unreadable'; Record = 'main'; Pinned = 'claude-opus-5'; Declared = 'thinking'; Installed = ''; Expect = 'fail'; Match = 'Claude Code of unknown version sends' }
+        [pscustomobject]@{ Label = 'an older record''s models count as recorded'; Record = 'legacy'; Pinned = 'claude-haiku-4-5'; Declared = 'effort'; Installed = '2.1.101'; Expect = 'warn'; Match = 'claude-haiku-4-5, which the record does not declare' }
+        [pscustomobject]@{ Label = 'an older record, model id, old release'; Record = 'legacy'; Pinned = 'claude-opus-5'; Declared = ''; Installed = '2.1.101'; Expect = 'fail'; Match = 'predates that model' }
+        [pscustomobject]@{ Label = 'no record: a declaration is not judged against one'; Record = 'none'; Pinned = 'claude-haiku-4-5'; Declared = 'effort'; Installed = '2.1.101'; Expect = 'ok'; Match = '^$' }
+        [pscustomobject]@{ Label = 'no record, model id, old release'; Record = 'none'; Pinned = 'claude-sonnet-5'; Declared = ''; Installed = '2.1.101'; Expect = 'fail'; Match = 'first known to Claude Code 2\.1\.197' }
     )
     $aliasVerdicts = @(foreach ($c in $aliasCases) {
-        $recorded = $aliasByName.ContainsKey($c.Pinned)
-        $known = if ($recorded) { Get-ClaudeDeploymentClientSupport $aliasByName[$c.Pinned] } else { Get-ClaudeModelClientSupport -Model $c.Pinned }
+        $byName = $aliasByRecord[$c.Record]
+        $recorded = $byName.ContainsKey($c.Pinned)
+        $known = if ($recorded) { Get-ClaudeDeploymentClientSupport $byName[$c.Pinned] } else { Get-ClaudeModelClientSupport -Model $c.Pinned }
         Get-ClaudeCodeAliasCheck -Variable 'ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES' -PinnedName $c.Pinned -Declared $c.Declared -Known $known -Recorded:$recorded -Installed $c.Installed
     })
     for ($i = 0; $i -lt $aliasCases.Count; $i++) {
@@ -438,6 +449,13 @@ Say 'OK'
     Assert 'a release that knows the model retries after the 400, so it is a warning' ($newDecl -match '^\s*WARN' -and $newDecl -match 'retries with adaptive thinking') $newDecl
     Assert 'a partial declaration is reported with what it turns off' ($newDecl -match "is 'effort,adaptive_thinking' for prod-fast" -and $newDecl -match 'turns off every capability') $newDecl
     Assert 'a declaration in another order is the same declaration' ($newDecl -notmatch 'HAIKU_MODEL_SUPPORTED_CAPABILITIES') $newDecl
+
+    # No record: the pinned names stand in for one, but a declaration cannot be "not declared by the
+    # record", as alias_check_ in bash also judges it.
+    @{ env = @{ CLAUDE_CODE_USE_FOUNDRY = '1'; ANTHROPIC_FOUNDRY_BASE_URL = 'https://apim-test.azure-api.net/claude'; ANTHROPIC_DEFAULT_OPUS_MODEL = 'claude-opus-5'; ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES = $allCaps; ANTHROPIC_DEFAULT_SONNET_MODEL = 'claude-sonnet-5'; ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES = $allCaps; ANTHROPIC_DEFAULT_HAIKU_MODEL = 'claude-haiku-4-5'; ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES = 'effort' } } |
+        ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $settingsPath -Encoding UTF8
+    $noRecord = Get-CheckBlock (Invoke-WorkstationDiag (Join-Path $diagScratch 'no-such-record.json')).Text 'Claude Code and the recorded models'
+    Assert 'without a record nothing is called undeclared by the record' ($noRecord -match '^\s*WARN' -and $noRecord -match 'claude update' -and $noRecord -notmatch 'which the record does not declare') $noRecord
 }
 finally {
     foreach ($name in $savedEnv.Keys) { [Environment]::SetEnvironmentVariable($name, $savedEnv[$name], 'Process') }
@@ -460,10 +478,10 @@ else {
     $hostExe = (Get-Process -Id $PID).Path
     # A hard time limit for each script run here: without -UseBasicParsing, Windows PowerShell 5.1
     # in a hidden window hung in Invoke-WebRequest instead of failing, and blocked the suite.
-    function Invoke-BoundedScript([string]$Script, [string[]]$Arguments = @(), [int]$TimeoutSeconds = 180) {
+    function Invoke-BoundedScript([string]$Script, [string[]]$Arguments = @(), [int]$TimeoutSeconds = 180, [string]$WorkingDirectory = $e2e) {
         $out = Join-Path $e2e ('run-{0}.out' -f [guid]::NewGuid().ToString('N'))
         $quoted = @(@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $Script) + $Arguments | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } })
-        $p = Start-Process -FilePath $hostExe -ArgumentList $quoted -RedirectStandardOutput $out -RedirectStandardError "$out.err" -WindowStyle Hidden -PassThru
+        $p = Start-Process -FilePath $hostExe -ArgumentList $quoted -WorkingDirectory $WorkingDirectory -RedirectStandardOutput $out -RedirectStandardError "$out.err" -WindowStyle Hidden -PassThru
         # Windows PowerShell 5.1 keeps no exit code unless the handle is read while the process runs.
         $null = $p.Handle
         $finished = $p.WaitForExit($TimeoutSeconds * 1000)
@@ -472,20 +490,19 @@ else {
         [pscustomobject]@{ Text = $text; ExitCode = $(if ($finished) { $p.ExitCode } else { $null }); TimedOut = -not $finished }
     }
     try {
-        $e2eHome = Join-Path $e2e 'home'; $e2eStubs = Join-Path $e2e 'stubs'; $e2eScripts = Join-Path $e2e 'claude-setup'
+        $e2eHome = Join-Path $e2e 'home'; $e2eStubs = Join-Path $e2e 'stubs'; $e2eDev = Join-Path $e2e 'dev'; $e2eScripts = Join-Path $e2eDev 'claude-setup'
         $e2eVs = Join-Path $e2eHome 'AppData\Roaming\Code\User'; $e2eLocal = Join-Path $e2eHome 'AppData\Local'
-        New-Item -ItemType Directory -Force -Path $e2eStubs, $e2eScripts, (Join-Path $e2eHome '.claude'), $e2eVs, $e2eLocal | Out-Null
-
-        # The files the email tells a developer to fetch, read from the email it generates.
-        $emailConfig = Join-Path $e2e 'email-config.json'
-        Set-Content -LiteralPath $emailConfig -Encoding UTF8 -Value '{ "gatewayUrl": "https://gw.contoso.example/claude", "tenantId": "11111111-1111-1111-1111-111111111111", "standardGroup": "claude-code-standard", "tiers": { "standard": { "tokensPerMinute": 20000, "tokensPerDay": 500000 } } }'
-        $null = Invoke-BoundedScript (Join-Path $root 'scripts\New-OnboardingEmail.ps1') @('-ConfigPath', $emailConfig, '-To', 'dev@contoso.example', '-DistributionUrl', 'https://share.contoso.example/claude', '-OutputPath', (Join-Path $e2e 'email')) 60
-        $emailText = @(Get-ChildItem -LiteralPath (Join-Path $e2e 'email') -Filter '*.txt' -ErrorAction SilentlyContinue | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join ''
-        $fetchLine = @($emailText -split "`r?`n" | Where-Object { $_ -match 'Invoke-RestMethod' }) | Select-Object -First 1
-        $fetched = @([regex]::Matches([string]$fetchLine, "'([A-Za-z0-9._-]+)'") | ForEach-Object { $_.Groups[1].Value })
-        $absent = @($fetched | Where-Object { -not (Test-Path -LiteralPath (Join-Path $root "scripts\$_")) })
-        Assert 'the email fetches the setup, its helpers and the Desktop token helpers' ((@('Setup-ClaudeWorkstation.ps1', 'ClaudeClientSupport.ps1', 'ClaudeDesktopSignIn.ps1', 'get-foundry-token.ps1', 'get-foundry-token.cmd') | Where-Object { $fetched -notcontains $_ }).Count -eq 0 -and $absent.Count -eq 0) "fetched: $($fetched -join ', ')"
-        foreach ($f in $fetched) { Copy-Item -LiteralPath (Join-Path $root "scripts\$f") -Destination $e2eScripts }
+        New-Item -ItemType Directory -Force -Path $e2eStubs, $e2eDev, (Join-Path $e2eHome '.claude'), $e2eVs, $e2eLocal | Out-Null
+        # The email's command, as a developer pastes it: from "Open PowerShell and run:" to the next paragraph.
+        function Get-EmailCommand([string]$Config, [string]$From, [string]$Name) {
+            $emailDir = Join-Path $e2e "email-$Name"
+            $null = Invoke-BoundedScript (Join-Path $root 'scripts\New-OnboardingEmail.ps1') @('-ConfigPath', $Config, '-To', 'dev@contoso.example', '-DistributionUrl', $From, '-OutputPath', $emailDir) 60
+            $text = @(Get-ChildItem -LiteralPath $emailDir -Filter '*.txt' -ErrorAction SilentlyContinue | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }) -join ''
+            $m = [regex]::Match($text, '(?s)Open PowerShell and run:\s*\r?\n\r?\n(.*?)\r?\n\r?\nIt checks')
+            $file = Join-Path $e2e "email-command-$Name.ps1"
+            Set-Content -LiteralPath $file -Encoding UTF8 -Value $(if ($m.Success) { $m.Groups[1].Value } else { "throw 'no command in the email'" })
+            [pscustomobject]@{ File = $file; Text = $(if ($m.Success) { $m.Groups[1].Value } else { '' }) }
+        }
 
         # Only the setup script: it stops at once and names what is missing.
         $alone = Join-Path $e2e 'alone'; New-Item -ItemType Directory -Force -Path $alone | Out-Null
@@ -500,8 +517,10 @@ if "%1"=="account" if "%2"=="show" (
   echo {"tenantId":"11111111-1111-1111-1111-111111111111","user":{"name":"dev@contoso.example","type":"user"}}
   exit /b 0
 )
+set "QUERY="
+for %%A in (%*) do if /i "%%~A"=="--query" set "QUERY=1"
 if "%1"=="account" if "%2"=="get-access-token" (
-  echo @FAKE_JWT@
+  if defined QUERY (echo @FAKE_JWT@) else (echo {"accessToken":"@FAKE_JWT@","expiresOn":"2099-12-31 00:00:00.000000"})
   exit /b 0
 )
 echo {}
@@ -517,17 +536,32 @@ if ([string]$args[0] -eq '--version') { '2.1.101 (Claude Code)'; exit 0 }
         Set-Content -LiteralPath (Join-Path $e2eStubs 'claude.ps1') -Encoding ASCII -Value "& (Join-Path `$PSScriptRoot 'claude-e2e.ps1') @args"
         Set-Content -LiteralPath (Join-Path $e2eStubs 'code.cmd') -Encoding ASCII -Value "@echo off`r`nif `"%1`"==`"--version`" (echo 1.139.1& exit /b 0)`r`nif `"%1`"==`"--list-extensions`" (echo anthropic.claude-code& exit /b 0)`r`nexit /b 0"
 
-        # The gateway stand-in records each request and answers like the gateway.
+        # The gateway stand-in records each request and answers like the gateway. It also serves the
+        # scripts folder and the record under a distribution path with a $web segment and an & in it.
         $port = Get-Random -Minimum 20000 -Maximum 40000
         $requestLog = Join-Path $e2e 'requests.log'
-        $listenerJob = Start-Job -ArgumentList $port, $requestLog -ScriptBlock {
-            param($port, $requestLog)
+        $e2eRecord = Join-Path $e2e 'claude-gateway.json'
+        $serveBase = '/$web/Engineering&Tools/claude'
+        $listenerJob = Start-Job -ArgumentList $port, $requestLog, $serveBase, (Join-Path $root 'scripts'), $e2eRecord -ScriptBlock {
+            param($port, $requestLog, $serveBase, $scriptsDir, $recordFile)
             $listener = New-Object System.Net.HttpListener
             $listener.Prefixes.Add("http://127.0.0.1:$port/")
             $listener.Start()
             while ($listener.IsListening) {
                 $ctx = $listener.GetContext()
                 if ($ctx.Request.RawUrl -eq '/p67-stop') { $ctx.Response.StatusCode = 204; $ctx.Response.Close(); $listener.Stop(); break }
+                $path = [Uri]::UnescapeDataString($ctx.Request.RawUrl)
+                if ($path.StartsWith($serveBase + '/')) {
+                    $name = $path.Substring($serveBase.Length + 1)
+                    $file = if ($name -eq 'claude-gateway.json') { $recordFile } else { Join-Path $scriptsDir $name }
+                    [IO.File]::AppendAllText($requestLog, ('{0} {1} file' -f $ctx.Request.HttpMethod, $path) + [Environment]::NewLine)
+                    if ($name -match '^[A-Za-z0-9._-]+$' -and (Test-Path -LiteralPath $file -PathType Leaf)) {
+                        $bytes = [IO.File]::ReadAllBytes($file); $ctx.Response.StatusCode = 200; $ctx.Response.ContentType = 'text/plain'
+                        if ($ctx.Request.HttpMethod -ne 'HEAD') { $ctx.Response.OutputStream.Write($bytes, 0, $bytes.Length) }
+                    }
+                    else { $ctx.Response.StatusCode = 404 }
+                    $ctx.Response.Close(); continue
+                }
                 $body = (New-Object IO.StreamReader($ctx.Request.InputStream, [Text.Encoding]::UTF8)).ReadToEnd()
                 $auth = [string]$ctx.Request.Headers['Authorization']
                 $kind = if ($auth -match '^Bearer eyJ') { 'bearer-jwt' } elseif ($auth) { 'other' } else { 'none' }
@@ -547,15 +581,15 @@ if ([string]$args[0] -eq '--version') { '2.1.101 (Claude Code)'; exit 0 }
         }
         Assert 'the gateway stand-in is listening' $up "port $port"
 
-        $e2eRecord = Join-Path $e2e 'claude-gateway.json'
-        Set-Content -LiteralPath $e2eRecord -Encoding UTF8 -Value (@"
+        # With a UTF-8 byte-order mark, as the installer writes it on Windows PowerShell 5.1.
+        [IO.File]::WriteAllText($e2eRecord, (@"
 { "gatewayUrl": "http://127.0.0.1:$port/claude", "tenantId": "11111111-1111-1111-1111-111111111111",
   "deployments": [ { "name": "claude-opus-5", "model": "claude-opus-5" }, { "name": "prod-big", "model": "claude-opus-5-5" },
                    { "name": "claude-sonnet-5", "model": "claude-sonnet-5" }, { "name": "claude-haiku-4-5", "model": "claude-haiku-4-5" } ],
   "desktopSignIn": { "kind": "external-idp", "flow": "broker", "bearerTokenType": "id_token", "clientId": "22222222-2222-2222-2222-222222222222",
                      "issuer": "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0" },
   "tiers": { "standard": { "tokensPerMinute": 20000, "tokensPerDay": 500000 } } }
-"@)
+"@), (New-Object System.Text.UTF8Encoding($true)))
         Set-Content -LiteralPath (Join-Path $e2eHome '.claude\settings.json') -Encoding UTF8 -Value '{ "env": { "ANTHROPIC_FOUNDRY_RESOURCE": "left-over", "MY_TOOL": "keep" }, "theme": "dark" }'
         Set-Content -LiteralPath (Join-Path $e2eVs 'settings.json') -Encoding UTF8 -Value @'
 {
@@ -565,17 +599,27 @@ if ([string]$args[0] -eq '--version') { '2.1.101 (Claude Code)'; exit 0 }
 }
 '@
         $stubLog = Join-Path $e2e 'claude-calls.log'
-        $env:PATH = $e2eStubs + [IO.Path]::PathSeparator + $e2eSaved['PATH']
-        $env:USERPROFILE = $e2eHome
-        $env:APPDATA = Join-Path $e2eHome 'AppData\Roaming'
-        $env:LOCALAPPDATA = $e2eLocal
-        $env:CLAUDE_CLIENT_DESKTOP_VERSION = '2.9939.2'
-        $env:CLAUDE_CLIENT_DESKTOP_RUNNING_VERSION = '1.44121.2'
-        $env:STUB_LOG = $stubLog
+        $enterSandbox = {
+            $env:PATH = $e2eStubs + [IO.Path]::PathSeparator + $e2eSaved['PATH']
+            $env:USERPROFILE = $e2eHome
+            $env:APPDATA = Join-Path $e2eHome 'AppData\Roaming'
+            $env:LOCALAPPDATA = $e2eLocal
+            $env:CLAUDE_CLIENT_DESKTOP_VERSION = '2.9939.2'
+            $env:CLAUDE_CLIENT_DESKTOP_RUNNING_VERSION = '1.44121.2'
+            $env:STUB_LOG = $stubLog
+        }
+        & $enterSandbox
+        # The email's command, run as written. It fetches the files over HTTP and runs the setup,
+        # without -SkipInstall, so the stub's claude update runs too.
+        $httpCommand = Get-EmailCommand $e2eRecord ("http://127.0.0.1:$port" + $serveBase) 'http'
+        $fetched = @([regex]::Matches([string](@($httpCommand.Text -split "`r?`n" | Where-Object { $_ -match 'ForEach-Object' }) | Select-Object -First 1), "'([A-Za-z0-9._-]+)'") | ForEach-Object { $_.Groups[1].Value })
+        Assert 'the email fetches the setup, its helpers and the Desktop token helpers' ((@('Setup-ClaudeWorkstation.ps1', 'ClaudeClientSupport.ps1', 'ClaudeDesktopSignIn.ps1', 'get-foundry-token.ps1', 'get-foundry-token.cmd') | Where-Object { $fetched -notcontains $_ }).Count -eq 0) "fetched: $($fetched -join ', ')"
         $setupSw = [Diagnostics.Stopwatch]::StartNew()
-        $setupRun = Invoke-BoundedScript (Join-Path $e2eScripts 'Setup-ClaudeWorkstation.ps1') @('-ConfigPath', $e2eRecord, '-SkipInstall') 180
+        $setupRun = Invoke-BoundedScript $httpCommand.File @() 180 $e2eDev
         $setupOut = $setupRun.Text
         $setupSw.Stop()
+        $arrived = @(Get-ChildItem -LiteralPath $e2eScripts -File -ErrorAction SilentlyContinue | ForEach-Object Name)
+        Assert 'the email''s command downloads every file from a path with $web and & in it' ($fetched.Count -and @($fetched | Where-Object { $arrived -notcontains $_ }).Count -eq 0) "arrived: $($arrived -join ', ')"
         foreach ($name in $e2eSaved.Keys) { [Environment]::SetEnvironmentVariable($name, $e2eSaved[$name], 'Process') }
         $tail = (($setupOut -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -Last 12) -join ' | '
         Assert "the Windows setup finishes in under 2 minutes ($([int]$setupSw.Elapsed.TotalSeconds) s)" (-not $setupRun.TimedOut -and $setupSw.Elapsed.TotalSeconds -lt 120) $(if ($setupRun.TimedOut) { "no exit within 180 s; ended. $tail" } else { '' })
@@ -606,6 +650,26 @@ if ([string]$args[0] -eq '--version') { '2.1.101 (Claude Code)'; exit 0 }
         $calls = if (Test-Path -LiteralPath $stubLog) { Get-Content -LiteralPath $stubLog -Raw } else { '' }
         Assert 'the Windows setup asks Claude Code itself for a reply' ($calls -match '-p ping --model claude-sonnet-5' -and $setupOut -match 'Claude Code answered through the gateway') $calls.Trim()
         Assert 'the Windows setup names the Claude Code release the record needs' ($setupOut -match 'predates 2\.1\.280' -and $setupOut -match 'claude update') $tail
+        Assert 'the Windows setup runs claude update for an older Claude Code' ($calls -match '(?m)^update\s*$' -and $setupOut -match 'updating with claude update') $calls.Trim()
+        # The check the onboarding wrapper runs after the setup, on this host: on Windows PowerShell
+        # 5.1 its request failed without -UseBasicParsing.
+        & $enterSandbox
+        $checkRun = Invoke-BoundedScript (Join-Path $root 'scripts\Debug-ClaudeCode.ps1') @('-GatewayBaseUrl', "http://127.0.0.1:$port/claude", '-Models', 'claude-sonnet-5', '-SkipLiveCall') 120
+        foreach ($name in $e2eSaved.Keys) { [Environment]::SetEnvironmentVariable($name, $e2eSaved[$name], 'Process') }
+        Assert 'the onboarding check reaches the gateway on this host' ($checkRun.Text -match 'claude-sonnet-5 -> HTTP 200') ((($checkRun.Text -split "`r?`n" | Where-Object { $_ -match 'FAIL|HTTP|token' }) | Select-Object -First 4) -join ' | ')
+
+        # The same email for a file share: a folder path with a space and an & in it.
+        $share = Join-Path $e2e 'Share & Tools\claude'
+        New-Item -ItemType Directory -Force -Path $share | Out-Null
+        Get-ChildItem -LiteralPath (Join-Path $root 'scripts') -File | Copy-Item -Destination $share
+        Copy-Item -LiteralPath $e2eRecord -Destination $share
+        $shareDev = Join-Path $e2e 'dev-share'; New-Item -ItemType Directory -Force -Path $shareDev | Out-Null
+        $shareCommand = Get-EmailCommand $e2eRecord $share 'share'
+        & $enterSandbox
+        $shareRun = Invoke-BoundedScript $shareCommand.File @() 180 $shareDev
+        foreach ($name in $e2eSaved.Keys) { [Environment]::SetEnvironmentVariable($name, $e2eSaved[$name], 'Process') }
+        $shareArrived = @(Get-ChildItem -LiteralPath (Join-Path $shareDev 'claude-setup') -File -ErrorAction SilentlyContinue | ForEach-Object Name)
+        Assert 'the email''s command copies every file from a share path with a space and & in it, and the setup runs' ($shareCommand.Text -match 'Copy-Item' -and $fetched.Count -and @($fetched | Where-Object { $shareArrived -notcontains $_ }).Count -eq 0 -and $shareRun.Text -match 'Everything is configured') ((($shareRun.Text -split "`r?`n" | Where-Object { $_.Trim() }) | Select-Object -Last 6) -join ' | ')
     }
     finally {
         foreach ($name in $e2eSaved.Keys) { [Environment]::SetEnvironmentVariable($name, $e2eSaved[$name], 'Process') }
@@ -624,7 +688,8 @@ Write-Host 'P67 macOS and Linux setup writes what the Windows setup writes' -For
 # The real setup-claude-workstation.sh, run against a scratch HOME with az, claude, code, curl,
 # uname and claude-desktop stubbed, so the platform is Linux and nothing leaves the machine.
 $bash = $null
-if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
+if ($env:CLAUDE_TEST_BASH_PATH) { if ($env:CLAUDE_TEST_BASH_PATH -ne 'none') { $bash = $env:CLAUDE_TEST_BASH_PATH } }
+elseif ([Environment]::OSVersion.Platform -eq 'Win32NT') {
     foreach ($candidate in @('C:\Program Files\Git\bin\bash.exe', 'C:\Program Files\Git\usr\bin\bash.exe', "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe")) {
         if (Test-Path -LiteralPath $candidate) { $bash = $candidate; break }
     }
@@ -632,7 +697,11 @@ if ([Environment]::OSVersion.Platform -eq 'Win32NT') {
 else { $cmd = Get-Command bash -ErrorAction SilentlyContinue; if ($cmd) { $bash = $cmd.Source } }
 $bashJq = if ($bash) { (& $bash -c 'command -v jq >/dev/null 2>&1 && echo yes' 2>$null) -eq 'yes' } else { $false }
 if (-not $bash -or -not $bashJq) {
-    Write-Host "  [SKIP] $(if (-not $bash) { 'no Git Bash or bash on this host' } else { 'bash has no jq' }); the bash setup was not run" -ForegroundColor Yellow
+    # Without bash and jq none of the macOS/Linux checks run, so that is a failure unless the skip
+    # is asked for by name; a quiet skip would report a contract nobody checked.
+    $why = if (-not $bash) { 'no Git Bash or bash on this host' } else { 'bash has no jq' }
+    if ($env:CLAUDE_TEST_SKIP_BASH -eq '1') { Write-Host "  [SKIP] $why; CLAUDE_TEST_SKIP_BASH=1, so the macOS/Linux setup and diagnostics were NOT checked" -ForegroundColor Yellow }
+    else { Assert 'bash and jq are present for the macOS/Linux checks' $false "$why. Install Git for Windows and jq (winget install jqlang.jq), or set CLAUDE_TEST_SKIP_BASH=1 to skip these checks on purpose." }
 }
 else {
     $bashScratch = Join-Path ([IO.Path]::GetTempPath()) "ws-bash-$PID-$(Get-Random)"
@@ -783,8 +852,8 @@ printf '200'
         Assert 'both bash scripts source the library and keep no copy of the rules' ($localCopies.Count -eq 0) ($localCopies -join ', ')
 
         # The same verdict, word for word, from Get-ClaudeCodeAliasCheck and alias_check_.
-        $shCases = @($aliasCases | ForEach-Object { "alias_check_ 'ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES' '$($_.Pinned)' '$($_.Declared)' '$($_.Installed)'; echo" })
-        $shScript = ". '$(ConvertTo-BashPath $libPath)'`nCONFIG_RAW='$aliasRecordJson'`n" + ($shCases -join "`n")
+        $shCases = @($aliasCases | ForEach-Object { "CONFIG_RAW='$($aliasRecords[$_.Record])'; alias_check_ 'ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES' '$($_.Pinned)' '$($_.Declared)' '$($_.Installed)'; echo" })
+        $shScript = ". '$(ConvertTo-BashPath $libPath)'`n" + ($shCases -join "`n")
         $shVerdicts = @((Invoke-BashText $shScript) -split "`r?`n" | Where-Object { $_ -match '^(ok|warn|fail)\|' })
         $differ = @(for ($i = 0; $i -lt $aliasCases.Count; $i++) {
             $ps = "$($aliasVerdicts[$i].Status)|$($aliasVerdicts[$i].Text)"
@@ -793,20 +862,34 @@ printf '200'
         })
         Assert "alias_check_ gives the PowerShell verdict for all $($aliasCases.Count) cases" ($shVerdicts.Count -eq $aliasCases.Count -and $differ.Count -eq 0) ($differ -join ' || ')
 
-        # A hard time limit: a command that ignores TERM ends within the limit plus the 5 s grace,
-        # its output is released, and a normal exit code passes through. The second run takes the
-        # watchdog, which is what macOS without coreutils uses.
+        # A hard time limit: a command that ignores TERM, and a child that outlives its parent on TERM
+        # while holding the output, both end within the limit plus the 5 s grace, their output is
+        # released, and a normal exit code passes through. Each process-group provider present here
+        # is run; perl is what macOS uses, setsid or GNU timeout what Linux uses.
         $boundedScript = @'
 . '@LIB@'
-s=$(date +%s); out="$(run_bounded_ 2 bash -c 'trap "" TERM; sleep 30; echo late' </dev/null)"; rc=$?; echo "timeout rc=$rc secs=$(( $(date +%s) - s )) out=[$out]"
-export CLAUDE_BOUNDED_NO_TIMEOUT=1
-s=$(date +%s); out="$(run_bounded_ 2 bash -c 'trap "" TERM; sleep 30; echo late' </dev/null)"; rc=$?; echo "watchdog rc=$rc secs=$(( $(date +%s) - s )) out=[$out]"
+check() {
+  local provider="$1" label="$2" s out rc; shift 2
+  s=$(date +%s); out="$(CLAUDE_BOUNDED_GROUP="$provider" run_bounded_ 2 "$@" </dev/null)"; rc=$?
+  echo "$provider/$label rc=$rc secs=$(( $(date +%s) - s )) out=[$out]"
+}
+for p in perl setsid timeout; do
+  case "$p" in
+    perl) command -v perl >/dev/null 2>&1 || { echo "$p/absent"; continue; } ;;
+    setsid) command -v setsid >/dev/null 2>&1 || { echo "$p/absent"; continue; } ;;
+    timeout) { command -v timeout >/dev/null 2>&1 || command -v gtimeout >/dev/null 2>&1; } || { echo "$p/absent"; continue; } ;;
+  esac
+  check "$p" ignores-term bash -c 'trap "" TERM; sleep 30; echo late'
+  check "$p" orphan bash -c 'bash -c "trap \"\" TERM; sleep 30; echo orphan-survived" & wait'
+done
+s=$(date +%s); CLAUDE_BOUNDED_GROUP=none run_bounded_ 2 bash -c 'trap "" TERM; exec sleep 30' </dev/null >/dev/null 2>&1; rc=$?; echo "none/ignores-term rc=$rc secs=$(( $(date +%s) - s )) out=[]"
 out="$(run_bounded_ 10 bash -c 'echo ran; exit 3' </dev/null)"; echo "passthrough rc=$? out=[$out]"
 '@.Replace('@LIB@', (ConvertTo-BashPath $libPath))
         $boundedOut = Invoke-BashText $boundedScript
-        foreach ($path in 'timeout', 'watchdog') {
-            $m = [regex]::Match($boundedOut, "$path rc=(\d+) secs=(\d+) out=\[([^\]]*)\]")
-            Assert "run_bounded_ ($path) ends a command that ignores TERM" ($m.Success -and $m.Groups[1].Value -eq '124' -and [int]$m.Groups[2].Value -le 12 -and $m.Groups[3].Value -notmatch 'late') $boundedOut.Trim()
+        $ran = @([regex]::Matches($boundedOut, '(?m)^(perl|setsid|timeout)/ignores-term ') | ForEach-Object { $_.Groups[1].Value })
+        Assert "run_bounded_ was checked with a process-group provider ($($ran -join ', '))" ($ran.Count -ge 1) $boundedOut.Trim()
+        foreach ($m in [regex]::Matches($boundedOut, '(?m)^(perl|setsid|timeout|none)/(ignores-term|orphan) rc=(\d+) secs=(\d+) out=\[([^\]]*)\]')) {
+            Assert "run_bounded_ ($($m.Groups[1].Value), $($m.Groups[2].Value)) ends within the limit and releases the output" ($m.Groups[3].Value -eq '124' -and [int]$m.Groups[4].Value -le 12 -and $m.Groups[5].Value -notmatch 'late|survived') $m.Value
         }
         Assert 'run_bounded_ passes a normal exit code and output through' ($boundedOut -match 'passthrough rc=3 out=\[ran\]') $boundedOut.Trim()
     }

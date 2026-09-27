@@ -140,6 +140,8 @@ function Invoke-Normalised {
 
     if ($PSVersionTable.PSVersion.Major -ge 6) { $Params['SkipHttpErrorCheck'] = $true }
     $Params['ErrorAction'] = 'Stop'
+    # Without it Windows PowerShell 5.1 throws on a machine without Internet Explorer.
+    $Params['UseBasicParsing'] = $true
 
     try {
         $r = Invoke-WebRequest @Params
