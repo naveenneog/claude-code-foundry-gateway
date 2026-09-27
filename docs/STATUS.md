@@ -2,6 +2,36 @@
 
 **Active packets (2026-09-28, run in parallel worktrees):** P69 the company address in the flow, P70 newly deployed models reach the tiers and the workstations, P71 AUM answers fast and says why it cannot, P72 permutation tests of the guided flow and the installer ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
+## P69 the company address in the flow, 2026-09-28
+
+The owner's installer run selected a company address but ended with manual hostname, certificate
+and DNS instructions. P69 makes that choice an applied, priced and verified part of installation
+and a later Change. Work is isolated to `p69-company-address`, based on `aa7ed19`; council review
+and merging belong to the lead. The reference gateway and other existing services are read-only.
+
+- [ ] U30 is closed with dated Microsoft Learn and Azure Retail Prices API evidence for every
+      v2 tier, certificate source, DNS record, update wait and component price; ADR-0033 records
+      the design before production code
+- [ ] One script plans without writes and applies the hostname, certificate and DNS records;
+      existing hostname configurations and service/network properties survive the ARM update
+- [ ] Azure DNS records are created in the selected writable zone; external DNS gets exact
+      records and a bounded resolution wait; every wait names its purpose, estimate and elapsed time
+- [ ] Certificate choices match the selected tier; Key Vault access uses the gateway managed
+      identity; no certificate password, private key or token enters the record, plan or logs
+- [ ] The installer asks for the address and certificate alongside its other choices, states
+      each component's cost before confirmation, and applies only after deployment
+- [ ] `-Action Change -Change address` has an ADR-0030 plan, cost, fingerprint, apply and verification;
+      a successful HTTPS proof updates the onboarding address and developer-facing artifacts
+- [ ] Offline tests run on PowerShell 7 and Windows PowerShell 5.1; every new detector is
+      negative-tested with the complete assertion count; each green is committed
+- [ ] An isolated Basic v2 gateway proves an authoritative Azure DNS CNAME and an HTTPS request
+      with the company SNI/Host and certificate, with spend below USD 5; all created resources,
+      assignments and groups are deleted and the soft-deleted gateway is purged
+- [ ] Redacted, inspected live terminal images numbered 40 onward are embedded in the updated
+      setup/flow documentation; architecture sources, images and manifest remain current
+- [ ] The locked packet gate exits 0; the branch and evidence are reported to the lead without
+      merging, pushing or ticking the roadmap entry
+
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
 
 The owner's test on 2026-09-27: `Start-ClaudeGateway.ps1` showed nothing for a long time and asked
