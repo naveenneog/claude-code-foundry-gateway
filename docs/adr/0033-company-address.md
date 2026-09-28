@@ -140,14 +140,26 @@ choice, so the installer cannot inherit a different unreviewed address from anot
 
 Proposed decisions and applied decisions are separate. Questions and plans use the proposed
 record; durable `decisions` and each history entry's `from` come from the applied snapshot before
-questions. A successful step advances its own applied decision; failure does not publish the
-proposal. This rule applies to every step, not just Address.
+questions. A successful step returns every decision it changed, including cross-decision work
+such as profile regeneration. An explicit `DecisionChanges` map commits those keys; an explicit
+`decisions` snapshot replaces the applied decision snapshot, and `RemovedProperties` lists
+top-level removals. Legacy owning-decision return values remain supported. No decision is
+inferred from an arbitrary mutation of the step's working copy. Failure does not commit its
+returned changes, and unselected proposals remain unapplied.
+
+Status, Guide, drift and discovery read applied state. Only the selected planning/apply steps
+receive proposed answers. Each apply receives a private working record based on applied
+decisions plus its selected proposal; other decisions remain applied until a successful result
+explicitly changes them. This rule applies to every step, including DesktopSignIn and Models.
 
 An address apply can persist an explicitly unverified recovery receipt separately from applied
 decisions before it changes Azure. Recovery is limited to that receipt's gateway, previous URL,
 desired certificate/hostname and expected live hostname collection. It permits only a new
 address review and fingerprint; it never marks the new URL verified or permits unrelated drift.
 Returning to the Azure URL clears company metadata and updates the generated handover.
+The installer passes its onboarding record path to the address apply, so a failure after
+replacement still leaves an unverified receipt. Recovery uses the shared subscription resolver,
+including a legacy subscription stored under the Foundation decision.
 
 Each wait has a remaining deadline. Its check runs in a cancellable process, with arguments
 transferred over standard input rather than native command-line interpolation. The process tree,

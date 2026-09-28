@@ -18,6 +18,29 @@ without a delegated domain; none is bought or borrowed. The lead accepted this s
 2026-09-28; the positive proof moves to P74 and is not complete. U30 covers the research;
 P69 did not need the reserved U33 identifier.
 
+### Council round 2 corrections
+
+The lead's five-seat review of `c82f951..1345956` (read-only, 2026-09-28) returned BLOCK.
+A1, Q1, U1 and S1 are closed by that review. P74 remains an accepted scope deferral, not done.
+The following changes are planned test-first; fixes still require a new gate and council review.
+
+| Seat | Verdict | Finding | Fix and regression required |
+|---|---|---|---|
+| Architect | BLOCK (A2 partial) | Only the owning decision advances; DesktopSignIn loses `deviceProfiles.regenerate` | Explicit cross-decision changes committed only after success; exercise the real step and Models |
+| Coder | BLOCK (C2 partial) | Foundation's Azure-transition result merges deletions back into old metadata | Explicit removals or snapshot replacement for both address copies |
+| Coder | BLOCK (C1 partial) | Installer omits the receipt path; legacy Foundation-only subscription fails recovery | Real installer 503 proof failure records an unverified receipt; shared subscription resolver |
+| QA | BLOCK | Single-decision fixture missed cross-decision writes and removal propagation | Executable tests and full-selector-count mutations for all round-2 paths |
+| UX | BLOCK | Status, Guide and discovery read proposed answers | Applied-only read consumers; proposals limited to selected planning/apply decisions |
+| Security | PASS for prior S1 | Validated PFX buffer and deadline cleanup retained | Preserve the passing round-1 detectors |
+
+Integration is a normal merge of `main` (`f98f885`, including P72 and P70), not a rebase.
+P72's refusal handling and Guide drift warning, P70's Models prepare/apply boundary, and the
+scoped address recovery exception are retained. Ledger differences against main must contain
+only P69's own contributions. Under ADR-0025, Certificate, CompanyFlow, Installer and
+MutationRunner are candidates for the parallel lane after private-scratch and mocked-service
+inspection and three runs at the suite's parallel throttle. Deadline and mutation checks remain
+exclusive unless separate load evidence supports moving them. The 1,800-second budget stands.
+
 ### Council round 1 corrections
 
 The lead's five-seat review of `aa7ed19..c82f951` (gpt-6-astra, read-only, 2026-09-28)
