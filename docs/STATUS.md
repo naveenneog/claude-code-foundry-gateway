@@ -167,7 +167,15 @@ setup computes no price and is not warned. `tests/Test-BashInstaller.ps1` has tw
 reporting `jq-1.7-dirty` and `jq-1.7.1`: the first is warned and installs, the second is not warned,
 and neither is the jq on the machine (66 checks, in 43 s).
 
-- [ ] Council, five seats; the packet gate exits 0
+Council round 4 (gpt-6-astra, five seats, read-only, over `dcca62c..9cd7b77`): all five seats PASS.
+B2 is closed as a warned limit, not an arithmetic fix: the warning is proportionate for prices the
+API writes with at most 7 significant digits, and it does not make jq 1.7.0 exact for a price
+written with 17. The Coder seat checked the pattern against `jq-1.7`, `jq-1.7-dirty`, a trailing
+carriage return and distribution suffixes (warned) and `jq-1.7.1` and `jq-1.8.2` (not warned), in
+bash 3.2 syntax; the merge of main changed only the Active packets line.
+
+- [x] Council, five seats (round 4, all PASS)
+- [ ] The packet gate exits 0
 
 ## P72 permutation tests of the guided flow and the installer, 2026-09-28
 
