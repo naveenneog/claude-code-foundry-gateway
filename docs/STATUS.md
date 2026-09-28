@@ -184,6 +184,23 @@ The prior 83 mutation receipts remain historical evidence (90 cumulative).
 The terminal layout is unchanged; the architecture source/image and its
 fingerprints are regenerated for the added cycle boundary.
 
+**Round-2 packet gate: PASS, exit 0**, at **`45dd9c6`**, on 2026-09-28
+**03:52:06-04:14:40Z**. Test-All passed in **1,344.6 s**, within the unchanged
+1,800 s limit; Bicep build passed in **7.4 s**. Gate scorecard: **22 passed,
+2 existing warnings, 0 failures**; lint/typecheck remain unconfigured.
+Test-All ran **79 checks: 78 PASS, 1 SKIP**, the separate optional AUM-service
+venv. **AUM ran all 448 tests and passed in 202.71 s** (206.3 s for its enclosing
+check). The shared lock was acquired after five one-minute waits and removed
+in `finally`. Full output and the copied timings file are retained under
+`.finops-evidence`.
+
+The unchanged batch suite passed **14/14 on PowerShell 7 and 5.1**. The updated
+architecture diagram was inspected and its source/image fingerprints validated.
+No Azure resource was changed, no new merge was needed, and nothing was pushed
+or rewritten. This final ledger entry is the only change after the passing
+gate. Security's S1 fix remains for the lead's re-review; the other four
+round-2 PASS verdicts are preserved, and ROADMAP P71 remains unticked.
+
 ### Council round 1 corrections
 
 The lead's read-only council over `aa7ed19..aa9070c` returned **BLOCK** on
