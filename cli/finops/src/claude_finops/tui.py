@@ -1,5 +1,5 @@
 import asyncio
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 
 from rich.text import Text
 from textual import events, on, work
@@ -24,7 +24,7 @@ from .ui_features import FeatureUI, EXTRA_TABS
 from .capabilities import enabled
 from .feature_screens import FilterChips
 from .progressive import ProgressiveRefresh
-from .guarded_publication import guarded_publish, published
+from .guarded_publication import guarded_publish, published, PublicationOrigin
 
 
 class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
@@ -57,12 +57,10 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
     def __init__(self, engine, config, no_color=False, preview_only=False, redact=False, first_run=None):
         super().__init__()
         self.animation_level = "none"
-        self.engine, self.config = engine, config
-        self._principal_revision = engine.identity_revision
-        self._pending_principal = None
+        self.config = config
+        self._bind_engine(engine)
         self._clearing_principal = False
         self._principal_notice = False
-        engine.identity_listeners.append(self._principal_verified)
         self.preview_only = preview_only
         self.redactor = Redactor(redact)
         self.identity = {}
@@ -162,8 +160,34 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
             if self.is_running:
                 self.call_later(self._synchronize_principal)
 
+    def _bind_engine(self, engine):
+        previous = getattr(self, "engine", None)
+        if previous is not None and self._principal_verified in previous.identity_listeners:
+            previous.identity_listeners.remove(self._principal_verified)
+        self.engine = engine
+        self._principal_revision = engine.identity_revision
+        self._pending_principal = None
+        engine.identity_listeners.append(self._principal_verified)
+
+    def current_guard(self):
+        engine, revision = self.engine, self.engine.identity_revision
+        source = engine.backend.read_guard()
+        @contextmanager
+        def origin():
+            with source():
+                if engine is not self.engine or revision != engine.identity_revision:
+                    raise FinOpsError("The sign-in changed. Previous UI data is no longer current.", 3)
+                yield
+        return PublicationOrigin(origin, self._reject_publication)
+
+    def _reject_publication(self, error):
+        if self.is_running and not self._clearing_principal:
+            self._synchronize_principal()
+            self._clear_principal_state(dict(self.engine._identity or self.identity))
+            self._show_read_error(self.active, error)
+
     def _synchronize_principal(self):
-        if self._clearing_principal or not self.is_running or not self.query("#main-tabs"):
+        if self._clearing_principal or not self.is_running or not self.screen_stack or not self.query("#main-tabs"):
             return
         pending = self._pending_principal
         if pending is None and self.engine.identity_revision != self._principal_revision:
@@ -181,6 +205,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
         self._clearing_principal = True
         try:
             self._refresh_serial += 1
+            self._waiting.clear()
             self.data.clear()
             self.records.clear()
             self._data_guards.clear()
@@ -193,8 +218,14 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
                 table.clear(columns=True)
             for field in self.query(Input):
                 field.value = ""
+            for picker in self.query(Select):
+                if picker.id in {"people-team", "lookup-team"}:
+                    picker.set_options([])
+                    picker.value = Select.BLANK
+            for note in self.query(".context"):
+                note.update("The sign-in changed. Previous data was cleared; refresh this view.")
             for text in self.query(TextArea):
-                with guarded_publish(self.engine.backend.read_guard()):
+                with guarded_publish(self.safe_message_guard()):
                     text.load_text("The sign-in changed. Previous data was cleared.")
             for screen in list(self.screen_stack)[1:]:
                 for name, empty in (("data", {}), ("row", {}), ("rows", []), ("results", []),
@@ -204,16 +235,16 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
             while len(self.screen_stack) > 1:
                 self.pop_screen()
             self.query_one(Dashboard).clear()
-            self.identity = identity
-            self.allowed_tabs = visible_tabs(identity)
+            self.update_access(identity)
+            self.editable = False
             self._show_read_error(self.active, FinOpsError("The sign-in changed. Previous data was cleared; refresh for this identity.", 3))
             self.query_one("#status", Static).update("The sign-in changed. Previous data was cleared; r refreshes.")
         finally:
             self._clearing_principal = False
 
     async def on_event(self, event):
+        self._synchronize_principal()
         if isinstance(event, events.InputEvent):
-            self._synchronize_principal()
             self._principal_notice = False
         await super().on_event(event)
 
@@ -237,6 +268,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
 
     @published(lambda self: self.safe_message_guard())
     def update_brand(self):
+        self._synchronize_principal()
         if not self.query("#brand") or not self.query("#main-tabs"):
             return
         show_art = self.size.width >= 80 and self.size.height >= 24
@@ -336,6 +368,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
         self.allowed_tabs = visible_tabs(identity)
         if before != after and not preserve_current:
             self.data.clear()
+            self._data_guards.clear()
             self.records.clear()
             self.clear_query_context()
             for tab, _ in TABS + EXTRA_TABS:
@@ -377,7 +410,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
                 self.team = ""
             if not self.team and departments:
                 self.team = departments[0]["id"]
-            with guarded_publish(self.engine.backend.read_guard()), select.prevent(Select.Changed):
+            with guarded_publish(self.current_guard()), select.prevent(Select.Changed):
                 select.set_options([(label["name"], row["id"]) for row, label in zip(departments, labels)])
                 if self.team:
                     select.value = self.team
@@ -425,14 +458,14 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
         previous = self._data_guards.get(tab)
         if previous is not None and previous[0] is not data:
             return
-        guard = previous[1] if previous is not None else self.engine.backend.read_guard()
+        guard = previous[1] if previous is not None else self.current_guard()
         try:
             with guarded_publish(guard, on_rejected=lambda error: self._show_read_error(tab, error)):
                 self._render_tab(tab, data)
         except FinOpsError as error:
             self._show_read_error(tab, error)
 
-    @published(lambda self, tab, data: self.cached_guard(tab) if tab in self._data_guards else self.engine.backend.read_guard())
+    @published(lambda self, tab, data: self.cached_guard(tab) if tab in self._data_guards else self.current_guard())
     def _render_tab(self, tab, data):
         utc = self.engine.backend.name == "Example"
         _, _, records, _ = view_rows(tab, data, ascii_only=self.config.ascii, utc=utc)
@@ -481,7 +514,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
         if len(self.screen_stack) != 1 or not event.data_table.display or event.data_table.id != f"table-{self.active}":
             return
         row = self.selected()
-        if not row:
+        if not row and self.active not in self.data:
             return
         try:
             with guarded_publish(self.cached_guard(), on_rejected=lambda error: self._show_read_error(self.active, error)):
@@ -626,13 +659,13 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
                 guard = source_guard
                 if tab == "requests":
                     row = await asyncio.to_thread(self.engine.read, "request", request_id=row["request_id"])
-                    guard = self.engine.backend.read_guard()
+                    guard = self.current_guard()
                 elif tab == "people" and row.get("scope_id"):
                     row = await asyncio.to_thread(self.engine.person_detail, row["scope_id"], row["parent_scope_id"])
-                    guard = self.engine.backend.read_guard()
+                    guard = self.current_guard()
                 elif tab == "advanced" and self.advanced_view in {"releases", "subscriptions"}:
                     row = await asyncio.to_thread(self.engine.read, "release" if self.advanced_view == "releases" else "application", id=row["id"])
-                    guard = self.engine.backend.read_guard()
+                    guard = self.current_guard()
                 if guard is None:
                     raise FinOpsError("Current detail has no verified source. Refresh before opening it.", 3)
                 with guarded_publish(guard):

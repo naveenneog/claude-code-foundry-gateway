@@ -2,12 +2,14 @@
 
 import json
 from pathlib import Path
+from contextlib import nullcontext
 
 import typer
 
 from .discovery import discover
 from .errors import FinOpsError
 from .output import display
+from .guarded_publication import guarded_publish
 
 
 def configure(ctx: typer.Context, workspace: str | None = None, save: bool = False,
@@ -41,9 +43,12 @@ def configure(ctx: typer.Context, workspace: str | None = None, save: bool = Fal
         result.update(saved=saved, profile=str(output),
                       note="No Azure resource was changed. Use --save to write this local profile." if not saved
                       else "Saved addresses only. Run aum --config with this profile to verify whoami.")
-        display(state["redactor"].present(result), as_json=state["json"], plain=state["plain"], no_color=state["no_color"])
+        # Discovery publishes address metadata before any backend session exists.
+        with guarded_publish(nullcontext):
+            display(state["redactor"].present(result), as_json=state["json"], plain=state["plain"], no_color=state["no_color"])
     except (FinOpsError, OSError) as error:
         code = error.code if isinstance(error, FinOpsError) else 7
         text = str(error) if isinstance(error, FinOpsError) else "Cannot write the local profile. Choose a writable --config path."
-        display(dict(error=text, exit_code=code), as_json=state["json"], plain=state["plain"], no_color=True)
+        with guarded_publish(nullcontext):
+            display(dict(error=text, exit_code=code), as_json=state["json"], plain=state["plain"], no_color=True)
         raise typer.Exit(code) from None

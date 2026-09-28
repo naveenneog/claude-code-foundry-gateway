@@ -51,7 +51,7 @@ class DeveloperPicker(ModalScreen):
         try:
             with self.app.engine.backend.read_cycle():
                 result = await asyncio.to_thread(developer_find, self.app.engine, self.app.config, self.search_text, cursor=self.cursor)
-                self.read_guard = self.app.engine.backend.read_guard()
+                self.read_guard = self.app.current_guard()
                 self.publish_developers(result)
         except FinOpsError as error:
             with guarded_publish(self.app.safe_message_guard()):

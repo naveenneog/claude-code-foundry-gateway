@@ -5,6 +5,7 @@ import json
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
+from .guarded_publication import published, enclosing_publication
 
 
 def safe_text(value):
@@ -25,6 +26,7 @@ def linear(value, prefix=""):
         yield f"{prefix}: {safe_text(value) if value is not None else 'unknown'}"
 
 
+@published(lambda *args, **kwargs: enclosing_publication())
 def display(value, *, as_json=False, plain=False, no_color=False):
     if as_json:
         print(json.dumps(value, indent=2, ensure_ascii=True, default=str))
@@ -36,6 +38,7 @@ def display(value, *, as_json=False, plain=False, no_color=False):
     render(console, value)
 
 
+@published(lambda *args, **kwargs: enclosing_publication())
 def render(console, value, title=""):
     if isinstance(value, dict):
         simple = {k: v for k, v in value.items() if not isinstance(v, (dict, list))}

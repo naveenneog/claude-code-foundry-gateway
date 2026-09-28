@@ -29,7 +29,7 @@ SOURCES = {
 
 class ProgressiveRefresh:
     def publish_tab(self, tab, data):
-        guard = self.engine.backend.read_guard()
+        guard = self.current_guard()
         with guarded_publish(guard, on_rejected=lambda error: self._show_read_error(tab, error)):
             self.data[tab] = data
             self._data_guards[tab] = (data, guard)
@@ -39,7 +39,7 @@ class ProgressiveRefresh:
         return (self.is_running and self._refresh_serial == serial
                 and bool(self.query("#main-tabs")) and self.active == tab)
 
-    @published(lambda self: self.engine.backend.read_guard())
+    @published(lambda self: self.safe_message_guard())
     def _show_wait(self):
         if not self._waiting or not self.is_running or not self.query("#status"):
             return
@@ -84,7 +84,7 @@ class ProgressiveRefresh:
         self.present(getattr(error, "details", {}))
         return safe_text(self.redactor.text(str(error)))
 
-    @published(lambda self: self.engine.backend.read_guard())
+    @published(lambda self: self.current_guard())
     def _show_identity(self):
         stamp = ("12:00 +00:00 example" if self.engine.backend.name == "Example"
                  else datetime.now().astimezone().strftime("%H:%M:%S %z"))
@@ -118,7 +118,8 @@ class ProgressiveRefresh:
         self.update_brand()
         fix = "Check managed scope in Settings; r refreshes." if error.code == 4 else (
             "No resource started. r retries; 0 opens Settings." if error.code == 9 else "r retries; ? explains sign-in.")
-        self.query_one("#status", Static).update(f"Read failed (exit {error.code}). {fix}")
+        reason = "The sign-in changed. " if "sign-in changed" in str(error).lower() else ""
+        self.query_one("#status", Static).update(f"{reason}Read failed (exit {error.code}). {fix}")
 
     @work(exclusive=True, group="view")
     async def action_refresh(self):
@@ -168,7 +169,7 @@ class ProgressiveRefresh:
                 else:
                     if not self._current_refresh(serial, tab):
                         return
-                    with guarded_publish(self.engine.backend.read_guard()):
+                    with guarded_publish(self.current_guard()):
                         self.update_access(identity, preserve_current=independent and not self.identity)
                         self._show_identity()
                     if tab not in self.allowed_tabs:

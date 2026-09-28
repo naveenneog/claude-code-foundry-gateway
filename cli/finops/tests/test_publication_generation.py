@@ -515,7 +515,7 @@ async def test_highlight_input_after_b_verifies_cannot_publish_a_row(bearer_tui_
     original_update = Static.update
 
     def update(widget, value="", **kwargs):
-        if principal[0] == "b" and widget.id == "status" and ("a-second" in str(value) or "only-a" in str(value)):
+        if (engine._identity or {}).get("id") == "b" and widget.id == "status" and ("a-second" in str(value) or "only-a" in str(value)):
             leaked.append(str(value))
         return original_update(widget, value, **kwargs)
 
@@ -594,6 +594,31 @@ async def test_principal_change_closes_prior_forms_and_clears_state_before_input
         assert len(app.screen_stack) == 1
         assert app.identity["id"] == "b" and not app.data and not app.records
         assert app.ask_history == [] and app.ask_conversation is None and app.preferences is None
+
+
+async def test_principal_change_clears_cached_picker_options_before_input(bearer_tui_estate):
+    engine, principal = bearer_tui_estate
+    app = FinOpsApp(engine, Config(backend="fake"), first_run=False)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        app.action_tab("people")
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        assert "A_ONLY_TEAM" in str(app.query_one("#people-team", Select)._options)
+        principal[0] = "b"
+        await asyncio.to_thread(engine.read, "whoami")
+        await pilot.press("tab")
+        assert "A_ONLY" not in str(app.query_one("#people-team", Select)._options)
+        assert app.team == ""
+
+
+@pytest.mark.parametrize("style", ["json", "plain", "table"])
+def test_output_formatter_cannot_publish_outside_the_choke_point(style, capsys):
+    from claude_finops.output import display
+    with pytest.raises(FinOpsError, match="unguarded"):
+        display({"private": "A_ONLY"}, as_json=style == "json", plain=style == "plain")
+    assert "A_ONLY" not in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("surface", ["lookup-catalog", "lookup-results", "detail", "export", "people-selector",
@@ -716,13 +741,14 @@ async def test_delayed_screen_or_export_read_cannot_publish_after_identity_chang
         assert fired, "The source must finish under A before B is verified."
         assert not published, "Completed A-only values must never briefly reach a B-visible widget."
         if surface.startswith("lookup"):
-            assert "sign-in changed" in str(app.screen.query_one("#lookup-status", Static).render())
-            assert not getattr(app.screen, "results", [])
+            assert len(app.screen_stack) == 1 and not app.records
+            assert "sign-in changed" in str(app.query_one("#status", Static).render())
         elif surface == "detail":
             assert len(app.screen_stack) == 1
             assert "sign-in changed" in str(app.query_one("#status", Static).render())
         elif surface == "export":
-            assert "sign-in changed" in str(app.screen.query_one("#export-status", Static).render())
+            assert len(app.screen_stack) == 1
+            assert "sign-in changed" in str(app.query_one("#status", Static).render())
             assert not list(tmp_path.glob("finops-reports\\*.csv"))
         elif surface in {"assistant-history", "assistant-settings", "membership"}:
             assert len(app.screen_stack) == 1

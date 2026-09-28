@@ -3,12 +3,30 @@
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import wraps
+from dataclasses import dataclass
 import inspect
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 
 from .errors import FinOpsError
 
 
-_publication_depth = ContextVar("aum_publication_depth", default=0)
+@dataclass
+class _PublicationScope:
+    origin: Callable[[], AbstractContextManager]
+    active: bool = True
+
+
+_publication_scope = ContextVar("aum_publication_scope", default=None)
+
+
+@dataclass(frozen=True)
+class PublicationOrigin:
+    guard: Callable[[], AbstractContextManager]
+    on_rejected: Callable[[FinOpsError], None]
+
+    def __call__(self):
+        return self.guard()
 
 
 @contextmanager
@@ -17,32 +35,37 @@ def guarded_publish(origin, *, on_rejected=None):
         raise FinOpsError("No originating guard for this data. Refresh before publishing.", 3)
     try:
         with origin():
-            marker = _publication_depth.set(_publication_depth.get() + 1)
+            scope = _PublicationScope(origin)
+            marker = _publication_scope.set(scope)
             try:
                 yield
             finally:
-                _publication_depth.reset(marker)
+                scope.active = False
+                _publication_scope.reset(marker)
     except FinOpsError as error:
+        if on_rejected is None and isinstance(origin, PublicationOrigin):
+            on_rejected = origin.on_rejected
         if on_rejected is not None:
             on_rejected(error)
         raise
 
 
 def publication_active():
-    return _publication_depth.get() > 0
+    scope = _publication_scope.get()
+    return scope is not None and scope.active
 
 
 def enclosing_publication():
     if not publication_active():
         raise FinOpsError("Backend data reached an unguarded renderer. Refresh the current view.", 3)
-    return _enclosing_guard
-
-
-@contextmanager
-def _enclosing_guard():
-    if not publication_active():
-        raise FinOpsError("Backend data reached an unguarded renderer. Refresh the current view.", 3)
-    yield
+    scope = _publication_scope.get()
+    @contextmanager
+    def guard():
+        if not scope.active:
+            raise FinOpsError("Backend data reached an unguarded renderer. Refresh the current view.", 3)
+        with scope.origin():
+            yield
+    return guard
 
 
 def published(origin, *, rejection=None):

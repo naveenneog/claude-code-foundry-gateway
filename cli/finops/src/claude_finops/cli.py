@@ -107,7 +107,8 @@ def root(ctx: typer.Context,
         if show_banner(tty=terminal_output(), as_json=as_json, plain=plain, screen_reader=screen_reader):
             typer.echo(BANNER)
         if as_json:
-            display(dict(product=PRODUCT, version=__version__), as_json=True)
+            with guarded_publish(nullcontext):
+                display(dict(product=PRODUCT, version=__version__), as_json=True)
         else:
             typer.echo(f"{PRODUCT} {__version__}")
         raise typer.Exit()

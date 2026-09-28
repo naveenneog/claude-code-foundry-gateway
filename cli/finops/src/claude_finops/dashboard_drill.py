@@ -54,8 +54,9 @@ class DashboardRows(ModalScreen):
                 self.populate_rows()
         except FinOpsError as error:
             self.rows = []
-            with guarded_publish(self.app.safe_message_guard()):
-                self.query_one(Label).update(self.app._error_text(error))
+            if self.query(Label):
+                with guarded_publish(self.app.safe_message_guard()):
+                    self.query_one(Label).update(self.app._error_text(error))
 
     @published(lambda self: self.read_guard)
     def populate_rows(self):

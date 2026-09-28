@@ -32,8 +32,8 @@ class FeatureUI:
 
     async def _publish_read(self, operation, publish, *args, **params):
         with self.engine.backend.read_cycle():
+            guard = self.current_guard()
             result = await asyncio.to_thread(operation, *args, **params)
-            guard = self.engine.backend.read_guard()
             with guarded_publish(guard):
                 return publish(result, guard)
 
@@ -134,11 +134,12 @@ class FeatureUI:
                 yield Button("Open", id="advanced-load")
 
     async def refresh_features(self):
+        guard = self.current_guard()
         features = await asyncio.to_thread(self.engine.capabilities, refresh=self.config.backend in {"direct", "aum-service"})
-        with guarded_publish(self.engine.backend.read_guard()):
+        with guarded_publish(guard):
             self._apply_features(features)
 
-    @published(lambda self, features: self.engine.backend.read_guard())
+    @published(lambda self, features: self.current_guard())
     def _apply_features(self, features):
         self.feature_caps = features
         supported = self.feature_caps.get("features", {}).get("supported_views")
@@ -421,10 +422,12 @@ class FeatureUI:
             self.notify(self._error_text(error), severity="error")
             return
         self.engine.backend.close()
-        self.engine, self.config = engine, config
+        self._bind_engine(engine)
+        self.config = config
         self.identity = {}
         self.preferences = None
         self.data.clear()
+        self._data_guards.clear()
         self.records.clear()
         self.clear_query_context()
         if len(self.screen_stack) > 1:
@@ -467,7 +470,7 @@ class FeatureUI:
             with self.engine.backend.read_cycle():
                 await asyncio.to_thread(self.engine.read, "whoami")
                 self._synchronize_principal()
-                origin = self.ask_reply_guard or self.engine.backend.read_guard()
+                origin = self.ask_reply_guard or self.current_guard()
                 with guarded_publish(origin):
                     conversation, history = self.ask_conversation, list(self.ask_history)
                 await self._publish_read(self.engine.ask, publish, question, conversation, history)
@@ -499,7 +502,7 @@ class FeatureUI:
     async def load_feature_tab(self, tab):
         if tab == "ask":
             settings = await asyncio.to_thread(self.engine.read, "assistant_settings")
-            with guarded_publish(self.engine.backend.read_guard()):
+            with guarded_publish(self.current_guard()):
                 if not settings.get("model_available"):
                     self.query_one("#ask-answer", TextArea).load_text(
                         "The assistant API exists, but no model is available. An Owner can choose an advertised model.")

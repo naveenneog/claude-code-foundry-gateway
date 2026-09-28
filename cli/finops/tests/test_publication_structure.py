@@ -5,13 +5,12 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1] / "src" / "claude_finops"
-UI_FILES = (
-    "tui.py", "ui_features.py", "progressive.py", "screens.py", "feature_screens.py",
-    "dashboard.py", "dashboard_drill.py", "group_screens.py", "developer_screens.py",
-    "cli.py", "commands_local.py",
-)
+UI_FILES = tuple(sorted(path.name for path in ROOT.glob("*.py") if path.name in {
+    "cli.py", "commands_local.py", "output.py", "feature_engine.py",
+} or any(isinstance(node, ast.ImportFrom) and (node.module or "").startswith("textual")
+         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))))))
 SINKS = {"update", "load_text", "add_row", "set_options", "copy_to_clipboard",
-         "open_url", "write", "write_text", "display", "echo", "ask"}
+         "open_url", "write", "write_text", "display", "render", "print", "echo", "ask"}
 VALUE_WIDGETS = {"Label", "Static", "TextArea", "Input", "Select"}
 
 # Exact (file, qualified function, normalized call) exceptions for static/local
@@ -113,10 +112,10 @@ def sinks(source, filename, allowed=None):
             name = node.func.attr if isinstance(node.func, ast.Attribute) else (
                 node.func.id if isinstance(node.func, ast.Name) else "")
             sink = name in SINKS or (name in VALUE_WIDGETS and bool(node.args))
-            # Container dict updates and cache sets are not presentation writes.
-            if name == "update" and isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
-                if node.func.value.id in {"filters", "result", "params", "config", "values"}:
-                    sink = False
+            if name == "run" and any(keyword.arg == "input" for keyword in node.keywords):
+                sink = True
+            if name == "write" and isinstance(node.func, ast.Attribute) and ast.unparse(node.func.value).endswith("backend"):
+                sink = bool(node.args and isinstance(node.args[0], ast.Constant) and node.args[0].value == "assistant_ask")
             if name == "ask" and not (isinstance(node.func, ast.Attribute) and
                                       ast.unparse(node.func.value).endswith("engine")):
                 sink = False
@@ -178,3 +177,31 @@ def test_allowlist_entries_are_exact_and_explained():
         file, function, call = key
         assert file in UI_FILES and function and "(" in call
         assert call in ast.unparse(ast.parse((ROOT / file).read_text(encoding="utf-8")))
+
+
+def test_all_textual_modules_and_output_formatters_are_covered():
+    presentation = {"output.py"}
+    for path in ROOT.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        if any(isinstance(node, ast.ImportFrom) and (node.module or "").startswith("textual")
+               for node in ast.walk(tree)):
+            presentation.add(path.name)
+    assert presentation <= set(UI_FILES)
+
+
+def test_alias_name_cannot_hide_a_widget_update():
+    code = """
+def handler(self):
+    result = self.query_one('#status')
+    result.update(self.cached_row)
+"""
+    assert len(sinks(code, "example.py", {})) == 1
+
+
+def test_clipboard_subprocess_and_assistant_backend_request_are_sinks():
+    code = """
+def handler(self):
+    subprocess.run(['clipboard'], input=self.cached_id)
+    self.backend.write('assistant_ask', {'history': self.history})
+"""
+    assert len(sinks(code, "example.py", {})) == 2

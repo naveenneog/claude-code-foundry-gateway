@@ -25,11 +25,11 @@ class FilterChips(Static, can_focus=True):
 class ActionForm(ModalScreen):
     BINDINGS = [("escape", "cancel", "Cancel")]
 
-    def __init__(self, title, fields, operation, *, mutation=True, read_guard=nullcontext):
+    def __init__(self, title, fields, operation, *, mutation=True, read_guard=None):
         super().__init__()
         self.heading, self.fields, self.operation = title, fields, operation
         self.mutation = mutation
-        self.read_guard = read_guard
+        self.read_guard = read_guard if read_guard is not None else self.app.current_guard()
         self.preview = None
         self.busy = False
 
@@ -150,7 +150,7 @@ class ActionForm(ModalScreen):
 class FiltersScreen(ModalScreen):
     BINDINGS = [("escape", "dismiss", "Cancel")]
 
-    @published(lambda self: self.app.engine.backend.read_guard())
+    @published(lambda self: self.app.current_guard())
     def compose(self):
         with Vertical(id="change-dialog"):
             yield Label("Server filters — the server still enforces your scope")

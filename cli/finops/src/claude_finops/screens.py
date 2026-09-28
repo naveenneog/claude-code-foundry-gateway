@@ -19,10 +19,10 @@ from .guarded_publication import guarded_publish, published
 class DetailScreen(ModalScreen):
     BINDINGS = [("escape", "dismiss", "Back")]
 
-    def __init__(self, title, data, read_guard=nullcontext):
+    def __init__(self, title, data, read_guard=None):
         super().__init__()
         self.heading, self.data = title, data
-        self.read_guard = read_guard
+        self.read_guard = read_guard if read_guard is not None else self.app.current_guard()
 
     def compose(self):
         try:
@@ -103,7 +103,7 @@ class LookupScreen(ModalScreen):
                 catalog = await asyncio.to_thread(self.app.engine.read, "catalog")
                 rows = catalog.get("departments", [])
                 shown = self.app.present(rows)
-                with guarded_publish(self.app.engine.backend.read_guard()):
+                with guarded_publish(self.app.current_guard()):
                     selector = self.query_one("#lookup-team", Select)
                     selector.set_options([(label["name"], row["id"]) for row, label in zip(rows, shown)])
                     if self.app.team in {row["id"] for row in rows}:
@@ -125,7 +125,7 @@ class LookupScreen(ModalScreen):
         try:
             with self.app.engine.backend.read_cycle():
                 results = await asyncio.to_thread(self.app.engine.lookup, query, self.app.team)
-                self.results_guard = self.app.engine.backend.read_guard()
+                self.results_guard = self.app.current_guard()
                 with guarded_publish(self.results_guard):
                     self.results = results
                     table = self.query_one(DataTable)
@@ -161,11 +161,11 @@ class ChangeScreen(ModalScreen):
 
     BINDINGS = [("escape", "cancel", "Cancel")]
 
-    def __init__(self, engine, kind, row=None, rows=None, remove=False, *, read_guard=nullcontext):
+    def __init__(self, engine, kind, row=None, rows=None, remove=False, *, read_guard=None):
         super().__init__()
         self.engine, self.kind, self.row = engine, kind, row or {}
         self.rows, self.removing = rows or [], remove
-        self.read_guard = read_guard
+        self.read_guard = read_guard if read_guard is not None else self.app.current_guard()
         self.preview_plan = None
         self.applying = False
         self.saved = False
@@ -394,7 +394,7 @@ class ExportScreen(ModalScreen):
             with self.app.engine.backend.read_cycle():
                 result = await asyncio.to_thread(self.app.engine.chargeback)
                 content = chargeback_csv(self.app.present(result["items"]), self.app.engine.month)
-                with guarded_publish(self.app.engine.backend.read_guard()):
+                with guarded_publish(self.app.current_guard()):
                     folder = Path.cwd() / "finops-reports"
                     folder.mkdir(exist_ok=True)
                     with (folder / name).open("x", encoding="utf-8", newline="") as output:
