@@ -129,6 +129,13 @@ records the full selection, timings and mutation proof. No second full run,
 deadline change or assertion change replaced those failures. Their cause is
 not established by this run; U26 remains open.
 
+The round 7 council reports that these three cases passed together with pinned
+P71 imports in **4.77 s**. The lead also reports that the round 6 full run
+overlapped its P79 gate, which ran at AboveNormal priority from **21:44 to
+22:28 IST on 2026-09-28**. This is an observed overlap, not a controlled
+reproduction of the cause. Round 7 leaves the assertions and deadlines
+unchanged and retains U26 as open after its requested final full-suite run.
+
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 
 **Answer: yes.** A constant `counter-key` is a single counter shared by every caller. P11 can

@@ -196,6 +196,14 @@ exception-cycle control. That single command acquired and released its own
 lock. The architecture renderer verified 16 specs and 18 PNGs; the updated AUM
 readiness image was inspected. Final removal-probe results follow below.
 
+The refusal boundary is committed as `95a6475`. Mutation preparation adds a
+stopped-app ownership control and bounds the cyclic-exception fixtures: a
+removed cycle detector produces a failing test rather than hanging collection
+or the test process. The final pre-mutation baseline passed **177 cases in
+79.05 s** (80.99 s wall). Its command waited in one-minute intervals for the
+shared lock, then released the lock in `finally` before returning. The 27
+removal probes each run that same complete selector in a separate command.
+
 ### Council round 6 corrections
 
 The sixth review over `4cf7508..dd46186` confirmed the runtime B4/B5 fixes on

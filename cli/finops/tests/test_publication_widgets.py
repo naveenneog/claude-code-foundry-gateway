@@ -18,6 +18,16 @@ from claude_finops.tui import FinOpsApp
 from test_publication_generation import bearer_tui_estate
 
 
+class BoundedContextCycle(RuntimeError):
+    reads = 0
+
+    @property
+    def __context__(self):
+        self.reads += 1
+        assert self.reads < 3, "A repeated exception must end traversal, not wait for a timeout."
+        return self
+
+
 async def test_repeated_user_edits_remain_usable():
     app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
     async with app.run_test(size=(100, 30)) as pilot:
@@ -203,9 +213,8 @@ async def test_application_exception_boundary_uses_only_the_safe_refusal(wrappin
 @pytest.mark.parametrize("cycle", [False, True])
 def test_unrelated_application_errors_retain_framework_handling(monkeypatch, cycle):
     app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
-    error = RuntimeError("Unrelated application failure")
-    if cycle:
-        error.__context__ = error
+    error_type = BoundedContextCycle if cycle else RuntimeError
+    error = error_type("Unrelated application failure")
     handled = []
     monkeypatch.setattr(App, "_handle_exception", lambda self, error: handled.append(error))
     app._handle_exception(error)
@@ -214,20 +223,11 @@ def test_unrelated_application_errors_retain_framework_handling(monkeypatch, cyc
 
 def test_exception_chain_cycle_is_bounded_before_framework_handling(monkeypatch):
     app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
-    reads = []
-
-    class ContextCycle(RuntimeError):
-        @property
-        def __context__(self):
-            reads.append(self)
-            assert len(reads) < 3, "A repeated exception must end traversal, not wait for a timeout."
-            return self
-
-    error, handled = ContextCycle("unrelated cycle"), []
+    error, handled = BoundedContextCycle("unrelated cycle"), []
     monkeypatch.setattr(App, "_handle_exception", lambda self, error: handled.append(error))
     app._handle_exception(error)
     assert handled == [error]
-    assert len(reads) <= 1
+    assert error.reads <= 1
 
 
 @pytest.mark.parametrize("prior_handler", [False, True])
@@ -289,5 +289,29 @@ async def test_loop_handler_does_not_claim_a_foreign_app_refusal():
                 loop.call_exception_handler(context)
             assert forwarded == [context]
             assert app.is_running and app._exception is None
+    finally:
+        loop.set_exception_handler(original)
+
+
+async def test_retained_loop_hook_forwards_after_its_app_stops():
+    app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
+    loop = asyncio.get_running_loop()
+    original = loop.get_exception_handler()
+    forwarded = []
+
+    def previous(loop, context):
+        forwarded.append(context)
+
+    loop.set_exception_handler(previous)
+    try:
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            hook = loop.get_exception_handler()
+            assert hook is not previous
+        context = {"message": "retained hook", "exception": FinOpsError("The app has stopped.", 3)}
+        with app._context():
+            hook(loop, context)
+        assert forwarded == [context]
+        assert loop.get_exception_handler() is previous
     finally:
         loop.set_exception_handler(original)
