@@ -70,7 +70,11 @@ function Invoke-ClaudeFlowStep {
     Set-ClaudeDecision -Record $Record -Key desktopSignIn -Value $Plan.Data.Desired
     Set-ClaudeDecision -Record $Record -Key deviceProfiles -Value ([ordered]@{ regenerate = $true; reason = 'Desktop sign-in changed'; changedUtc = [DateTime]::UtcNow.ToString('o') })
     Add-ClaudeDecisionHistory -Record $Record -Action Change -Decision desktopSignIn -From $Plan.Data.BeforeAudience -To $Plan.Data.Audience -Commit (Get-ClaudeFlowReleaseInfo).commit
-    @{ desktopSignIn = $Plan.Data.Desired; deviceProfiles = @{ regenerate = $true } }
+    @{
+        desktopSignIn = $Plan.Data.Desired
+        DecisionChanges = @{ deviceProfiles = (Get-ClaudeDecision $Record deviceProfiles) }
+        RecordChanges = @{ desktopSignIn = $Plan.Data.Desired }
+    }
 }
 
 function Test-ClaudeFlowStep {

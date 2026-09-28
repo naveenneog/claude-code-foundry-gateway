@@ -63,7 +63,7 @@ function Invoke-ClaudeFlowStep {
     $result = Invoke-ClaudeAddressPlan -Plan $Plan -CertificatePassword $CertificatePassword -RecordPath $Record.__recordPath
     Set-ClaudeRecordProperty $Record address $result.Address
     $Record.PSObject.Properties.Remove('pendingAddress')
-    @{ gatewayUrl = $result.GatewayUrl; address = $result.Address }
+    @{ gatewayUrl = $result.GatewayUrl; address = $result.Address; RecordChanges = @{ address = $result.Address }; RemovedProperties = @('pendingAddress') }
 }
 
 function Test-ClaudeFlowStep {

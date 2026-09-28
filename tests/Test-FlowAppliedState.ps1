@@ -18,6 +18,32 @@ function Run-Flow($Parameters) {
     }
     finally { $pipeline.Dispose() }
 }
+function Run-StepApply($ModuleName,$Record,$Plan) {
+    $pipeline=[powershell]::Create()
+    try {
+        $null=$pipeline.AddScript(@'
+param($Root,$ModuleName,$Record,$Plan)
+. (Join-Path $Root 'scripts\flow\FlowContract.ps1')
+. (Join-Path $Root "scripts\flow\$ModuleName.ps1")
+$invoke=(Get-Command Invoke-ClaudeFlowStep).ScriptBlock
+$info=Get-ClaudeFlowStepInfo
+$t=$null;$e=$null
+$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $Root 'Start-ClaudeGateway.ps1'),[ref]$t,[ref]$e)
+foreach($name in 'Set-FlowRecordProperty','Remove-FlowRecordProperty','Write-FlowDecisionRecord','Test-StepCompleted','Invoke-ApplySteps'){
+    $node=$ast.Find({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true)
+    . ([scriptblock]::Create($node.Extent.Text))
+}
+function Get-FlowPrincipal {'fixture'}
+function Get-ClaudeFlowReleaseInfo {param($Repo)[pscustomobject]@{version='fixture';commit='fixture'}}
+$script:FlowAppliedDecisions=Copy-ClaudeFlowValue $Record.decisions
+$failure=''
+try{Invoke-ApplySteps -Steps @([pscustomobject]@{Info=$info;Invoke=$invoke}) -Plans @($Plan) -Record $Record -Path $Record.__recordPath -CurrentAction Change -RunId fixture | Out-Null}
+catch{$failure=$_.Exception.Message}
+[pscustomobject]@{Failure=$failure;Record=$Record}
+'@).AddArgument($scratch).AddArgument($ModuleName).AddArgument($Record).AddArgument($Plan)
+        @($pipeline.Invoke())[-1]
+    }finally{$pipeline.Dispose()}
+}
 try {
     New-Item -ItemType Directory -Path (Join-Path $scratch 'scripts\flow') -Force | Out-Null
     foreach ($file in 'Start-ClaudeGateway.ps1','scripts\ClaudeChoice.ps1','scripts\flow\FlowContract.ps1') {
@@ -26,18 +52,19 @@ try {
     [IO.File]::WriteAllText((Join-Path $scratch 'scripts\flow\Discovery.ps1'), @'
 function Get-ClaudeFlowDiscovery {
     param($RecordPath,$Record)
+    if($Record.discoveryWitness){$Record.decisions|ConvertTo-Json -Depth 20|Set-Content -LiteralPath $Record.discoveryWitness -Encoding UTF8}
     [pscustomobject]@{ record=$Record; gateway=$null; comparison=[pscustomobject]@{ status='match'; differences=@() } }
 }
 '@)
     [IO.File]::WriteAllText((Join-Path $scratch 'scripts\flow\Synthetic.ps1'), @'
-function Get-ClaudeFlowStepInfo { [pscustomobject]@{ Name='Synthetic'; Title='Generic decision'; DecisionKey='choice'; DependsOn=@(); Actions=@('Change') } }
+function Get-ClaudeFlowStepInfo { [pscustomobject]@{ Name='Synthetic'; Title='Generic decision'; DecisionKey='choice'; DependsOn=@(); Actions=@('Change','Guide') } }
 function Get-ClaudeFlowStepQuestions {
     param($Record,$Discovery)
     @([pscustomobject]@{ Key='choice.value'; Type='Text'; Question='Proposed value'; Optional=$false })
 }
 function Get-ClaudeFlowStepPlan {
     param($Record,$Discovery)
-    New-ClaudeFlowPlan -Step Synthetic -Actions @(New-ClaudeFlowAction -Verb Update -Target 'fixture') -Data @{ wanted=$Record.decisions.choice.value }
+    New-ClaudeFlowPlan -Step Synthetic -Summary "Fixture choices: $($Record.decisions.choice.value), $($Record.decisions.finops.tool)" -Actions @(New-ClaudeFlowAction -Verb Update -Target 'fixture') -Data @{ wanted=$Record.decisions.choice.value }
 }
 function Invoke-ClaudeFlowStep {
     param($Record,$Plan)
@@ -87,6 +114,67 @@ function az { $global:LASTEXITCODE=0; '{"user":{"name":"admin@contoso.com"}}' }
             }
             Check 'only a successful step advances its applied decision' { $after.decisions.choice.value -eq 'new' -and $after.decisions.choice.pin -eq 'new-pin' }
         }
+    }
+    $readPath=Join-Path $scratch 'read-only.json'
+    $discoveryPath=Join-Path $scratch 'discovery-seen.json'
+    Write-Json $readPath @{schemaVersion=2;discoveryWitness=$discoveryPath;history=@();decisions=@{choice=@{value='old'};finops=@{tool='None'}}}
+    $answers=@{'choice.value'='new';'finops.tool'='AumService'}
+    $status=Run-Flow @{Action='Status';RecordPath=$readPath;NonInteractiveAnswers=$answers}
+    Check 'Status displays applied decisions rather than unselected proposed answers' {
+        -not $status.Failed -and $status.Text -match '"tool":\s*"None"' -and $status.Text -notmatch '"tool":\s*"AumService"'
+    }
+    Check 'discovery receives applied values even when answers propose other decisions' {
+        $seen=Get-Content -Raw $discoveryPath|ConvertFrom-Json
+        $seen.finops.tool -eq 'None' -and $seen.choice.value -eq 'old'
+    }
+    $guide=Run-Flow @{Action='Guide';PlanOnly=$true;RecordPath=$readPath;NonInteractiveAnswers=$answers}
+    Check 'Guide plans from applied state and ignores proposed answers' {
+        -not $guide.Failed -and $guide.Text -match 'Fixture choices: old, None' -and $guide.Text -notmatch 'Fixture choices: new'
+    }
+    New-Item -ItemType Directory -Path (Join-Path $scratch 'scripts\flow\lib') -Force|Out-Null
+    foreach($file in 'scripts\flow\DesktopSignIn.ps1','scripts\flow\Foundation.ps1','scripts\flow\lib\LifecycleCommon.ps1','scripts\ClaudeDesktopSignIn.ps1','scripts\ClaudeGatewayAddressInput.ps1'){
+        Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $scratch $file)
+    }
+    [IO.File]::WriteAllText((Join-Path $scratch 'scripts\ApimNamedValue.ps1'),@'
+function Set-ApimNamedValue {
+    param($ResourceGroup,$ApimName,$Id,$Value)
+    if($Record.failApply){throw 'mocked Desktop write failed'}
+}
+'@)
+    foreach($fail in $false,$true){
+        $path=Join-Path $scratch "desktop-$fail.json"
+        $r=[pscustomobject]@{schemaVersion=2;__recordPath=$path;failApply=$fail;history=@();decisions=[pscustomobject]@{
+            desktopSignIn=[pscustomobject]@{kind='old'};deviceProfiles=[pscustomobject]@{regenerate=$false};unselected=[pscustomobject]@{value='applied'}
+        }}
+        Write-Json $path $r
+        $p=[pscustomobject]@{Actions=@(@{Verb='Update';Target='fixture'});Data=@{Target=@{ResourceGroup='rg-fixture';ApimName='apim-fixture'};Desired=@{kind='helper-script'};Audience='';BeforeAudience='before';SnapshotPath='fixture';SnapshotTaken=$true}}
+        $result=Run-StepApply DesktopSignIn $r $p
+        $saved=Get-Content -Raw $path|ConvertFrom-Json
+        Check "real DesktopSignIn commits its cross-decision change only after success ($fail)" {
+            if($fail){$result.Failure -match 'mocked Desktop write failed' -and $saved.decisions.deviceProfiles.regenerate -eq $false -and @($saved.history).Count -eq 0}
+            else{-not $result.Failure -and $saved.decisions.deviceProfiles.regenerate -eq $true -and $saved.decisions.unselected.value -eq 'applied'}
+        }
+    }
+    [IO.File]::WriteAllText((Join-Path $scratch 'Install-ClaudeGateway.ps1'),@'
+param()
+$recordPath=Join-Path $PSScriptRoot 'onboarding\claude-gateway.json'
+$config=Get-Content -Raw $recordPath|ConvertFrom-Json
+$config.gatewayUrl='https://apim-fixture.azure-api.net/claude'
+$config.PSObject.Properties.Remove('address')
+$config.PSObject.Properties.Remove('pendingAddress')
+$config.decisions.PSObject.Properties.Remove('address')
+$config.decisions.foundation=[pscustomobject]@{addressMode='azure'}
+$config|ConvertTo-Json -Depth 20|Set-Content -LiteralPath $recordPath -Encoding UTF8
+'@)
+    New-Item -ItemType Directory -Path (Join-Path $scratch 'onboarding') -Force|Out-Null
+    $path=Join-Path $scratch 'onboarding\claude-gateway.json'
+    $r=[pscustomobject]@{schemaVersion=2;__recordPath=$path;gatewayUrl='https://old.contoso.test/claude';history=@();address=@{hostname='old.contoso.test'};pendingAddress=@{unverified=$true};decisions=[pscustomobject]@{foundation=[pscustomobject]@{addressMode='custom';addressHostname='old.contoso.test'};address=[pscustomobject]@{hostname='old.contoso.test'};unselected=@{value='applied'}}}
+    Write-Json $path $r
+    $result=Run-StepApply Foundation $r ([pscustomobject]@{Data=@{runsInstaller=$true;installerArgs=@{}}})
+    $saved=Get-Content -Raw $path|ConvertFrom-Json
+    Check 'Foundation Azure transition removes both company metadata copies through the orchestrator' {
+        -not $result.Failure -and $saved.gatewayUrl -eq 'https://apim-fixture.azure-api.net/claude' -and
+            -not $saved.address -and -not $saved.decisions.address -and -not $saved.pendingAddress -and $saved.decisions.unselected.value -eq 'applied'
     }
 }
 finally { if (Test-Path $scratch) { Remove-Item -LiteralPath $scratch -Recurse -Force } }

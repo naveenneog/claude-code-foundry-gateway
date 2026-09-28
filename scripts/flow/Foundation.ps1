@@ -391,6 +391,8 @@ function Invoke-ClaudeFlowStep {
     $cfg = Get-Content -LiteralPath $written -Raw | ConvertFrom-Json
     $changes = @{}
     foreach ($p in $cfg.PSObject.Properties) { $changes[$p.Name] = $p.Value }
+    if (-not $changes.ContainsKey('decisions')) { $changes['decisions'] = [pscustomobject]@{} }
+    $changes['RemovedProperties'] = @('address','pendingAddress' | Where-Object { $cfg.PSObject.Properties.Name -notcontains $_ })
     $changes['foundation'] = Merge-ClaudeFlowFoundationDecision -Decision $d -Config $cfg
     return $changes
 }
