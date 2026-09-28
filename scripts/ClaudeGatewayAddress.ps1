@@ -4,22 +4,7 @@
 . (Join-Path $PSScriptRoot 'AzureRetailPrice.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeGatewayCertificate.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeGatewayAddressRecovery.ps1')
-
-function Wait-ClaudeAddress {
-    param([string]$Condition, [string]$About, [int]$TimeoutSeconds = 2700, [int]$PollSeconds = 15, [scriptblock]$Check)
-    $watch = [Diagnostics.Stopwatch]::StartNew()
-    Write-Host ("Waiting for {0} ({1}; timeout {2} s)..." -f $Condition, $About, $TimeoutSeconds)
-    try {
-        while ($true) {
-            $state = & $Check
-            if ($state.Done) { Write-Host ("  {0} ready in {1:N1} s." -f $Condition, $watch.Elapsed.TotalSeconds); return $state.Value }
-            if ($watch.Elapsed.TotalSeconds -ge $TimeoutSeconds) { throw ("{0} timed out after {1:N1} s: {2}" -f $Condition, $watch.Elapsed.TotalSeconds, $state.Status) }
-            Write-Host ("  {0}: {1}; elapsed {2:N1} s." -f $Condition, $state.Status, $watch.Elapsed.TotalSeconds)
-            Start-Sleep -Seconds ([Math]::Min($PollSeconds, [Math]::Max(0, $TimeoutSeconds - $watch.Elapsed.TotalSeconds)))
-        }
-    }
-    catch { Write-Host ("  {0} stopped after {1:N1} s." -f $Condition, $watch.Elapsed.TotalSeconds); throw }
-}
+. (Join-Path $PSScriptRoot 'ClaudeGatewayAddressWait.ps1')
 
 function Get-ClaudeAddressHostState {
     param($Gateway)
@@ -89,7 +74,8 @@ function Get-ClaudeAddressPlan {
     }
     $id = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.ApiManagement/service/$ApimName"
     if (-not $Gateway) {
-        $Gateway = Wait-ClaudeAddress -Condition "gateway metadata $ResourceGroup/$ApimName" -About 'about 4 s' -TimeoutSeconds 45 -Check {
+        $Gateway = Wait-ClaudeAddress -Condition "gateway metadata $ResourceGroup/$ApimName" -About 'about 4 s' -TimeoutSeconds 45 -Arguments @($id) -Check {
+            param($id)
             @{ Done = $true; Value = (Invoke-ClaudeNetworkArm "https://management.azure.com${id}?api-version=2024-05-01") }
         }
     }
@@ -110,15 +96,17 @@ function Get-ClaudeAddressPlan {
         $zoneName = $Matches[3].ToLowerInvariant()
         if ($Hostname -ieq $zoneName) { throw 'A CNAME cannot be created at the DNS zone apex.' }
         if (-not $Hostname.EndsWith(".$zoneName", [StringComparison]::OrdinalIgnoreCase)) { throw 'The hostname is not below the selected DNS zone.' }
-        $zone = Invoke-ClaudeNetworkArm "https://management.azure.com${DnsZoneResourceId}?api-version=2018-05-01"
+        $zone = Invoke-ClaudeAddressArm "https://management.azure.com${DnsZoneResourceId}?api-version=2018-05-01"
         if (-not $zone -or $zone.id -ine $DnsZoneResourceId) { throw 'The selected DNS zone could not be read.' }
         $dns.Name = $Hostname.Substring(0, $Hostname.Length - $zoneName.Length - 1)
         $dns.Id = "$DnsZoneResourceId/CNAME/$($dns.Name)"
-        $dns.Before = Invoke-ClaudeNetworkArm "https://management.azure.com$($dns.Id)?api-version=2018-05-01" -AllowNotFound
+        $dns.Before = Invoke-ClaudeAddressArm "https://management.azure.com$($dns.Id)?api-version=2018-05-01" -AllowNotFound
         if ($dns.Before -and -not $dns.Before.etag) { throw 'The existing DNS record has no etag; refusing an unconditional overwrite.' }
     }
-    $certificate = Wait-ClaudeAddress -Condition 'certificate metadata and hostname validation' -About 'about 5 s' -TimeoutSeconds 60 -Check {
-        @{ Done = $true; Value = (Read-ClaudeAddressCertificate -CertificateSource $CertificateSource -KeyVaultCertificateId $KeyVaultCertificateId -PfxPath $PfxPath -CertificatePassword $CertificatePassword -Hostname $Hostname -SubscriptionId $SubscriptionId) }
+    $certificateArgs=@{CertificateSource=$CertificateSource;KeyVaultCertificateId=$KeyVaultCertificateId;PfxPath=$PfxPath;CertificatePassword=$CertificatePassword;Hostname=$Hostname;SubscriptionId=$SubscriptionId}
+    $certificate = Wait-ClaudeAddress -Condition 'certificate metadata and hostname validation' -About 'about 5 s' -TimeoutSeconds 60 -Arguments @($certificateArgs) -Check {
+        param($values)
+        @{ Done = $true; Value = (Read-ClaudeAddressCertificate @values) }
     }
     $actions = @()
     if ($CertificateSource -eq 'KeyVault') { $actions += New-ClaudeFlowAction -Verb Grant -Target $certificate.VaultId -Detail 'Gateway system-assigned identity: Key Vault Secrets User, or additive secret get/list access policy; networking unchanged.' }
@@ -127,8 +115,9 @@ function Get-ClaudeAddressPlan {
     $dnsAction = New-ClaudeFlowAction -Verb $(if ($DnsZoneResourceId) { if ($dns.Before) { 'Update' } else { 'Create' } } else { 'Check' }) -Target $(if ($dns.Id) { $dns.Id } else { 'External DNS provider' }) -Detail $dnsDetail
     $actions = @($dnsAction) + @($actions)
     $actions += New-ClaudeFlowAction -Verb Check -Target "https://$Hostname/claude/v1/messages" -Detail 'DNS, configured certificate with SNI/Host, and unauthenticated gateway HTTP 401 before publishing.'
-    $costs = @(Wait-ClaudeAddress -Condition 'company-address list prices' -About 'about 5 s' -TimeoutSeconds 180 -Check {
-        @{ Done = $true; Value = @(Get-ClaudeAddressCosts -DnsZoneResourceId $DnsZoneResourceId -CertificateSource $CertificateSource -Region $Gateway.location) }
+    $costs = @(Wait-ClaudeAddress -Condition 'company-address list prices' -About 'about 5 s' -TimeoutSeconds 180 -Arguments @($DnsZoneResourceId,$CertificateSource,$Gateway.location) -Check {
+        param($zone,$source,$region)
+        @{ Done = $true; Value = @(Get-ClaudeAddressCosts -DnsZoneResourceId $zone -CertificateSource $source -Region $region) }
     })
     New-ClaudeFlowPlan -Step Address -Summary "Configure and prove https://$Hostname/claude" -Actions $actions -Costs $costs `
         -Requires @('API Management Service Contributor', 'DNS Zone Contributor on the selected Azure DNS zone, or a DNS provider operator', 'For Key Vault: permission to assign Secrets User or amend the vault access policy') `
@@ -152,29 +141,33 @@ function Get-ClaudeAddressHostnamePatch {
 }
 
 function Grant-ClaudeAddressCertificateRead {
-    param($Gateway, $Plan, [int]$TimeoutSeconds, [int]$PollSeconds)
+    param($Gateway, $Plan, [double]$TimeoutSeconds, [double]$PollSeconds)
     $d = $Plan.Data
     $uri = "https://management.azure.com$($d.GatewayId)?api-version=2024-05-01"
     if (-not $Gateway.identity.principalId -or $Gateway.identity.type -notmatch 'SystemAssigned') {
         $identity = @{ type = 'SystemAssigned' }
         if ($Gateway.identity.userAssignedIdentities) { $identity.type = 'SystemAssigned, UserAssigned'; $identity.userAssignedIdentities = $Gateway.identity.userAssignedIdentities }
-        Invoke-ClaudeNetworkArm $uri -Method patch -Body @{ identity = $identity } -StateDirectory ([IO.Path]::GetTempPath()) | Out-Null
-        $Gateway = Wait-ClaudeAddress -Condition 'gateway managed identity' -About 'about 1-5 minutes' -TimeoutSeconds $TimeoutSeconds -PollSeconds $PollSeconds -Check {
+        Invoke-ClaudeAddressArm $uri -Method patch -Body @{ identity = $identity } -StateDirectory ([IO.Path]::GetTempPath()) | Out-Null
+        $Gateway = Wait-ClaudeAddress -Condition 'gateway managed identity' -About 'about 1-5 minutes' -TimeoutSeconds $TimeoutSeconds -PollSeconds $PollSeconds -Arguments @($uri) -Check {
+            param($uri)
             $g = Invoke-ClaudeNetworkArm $uri
             if ($g.properties.provisioningState -in @('Failed','Canceled')) { throw "Gateway managed identity update $($g.properties.provisioningState)." }
             @{ Done = ($g.properties.provisioningState -eq 'Succeeded' -and [bool]$g.identity.principalId); Value = $g; Status = $g.properties.provisioningState }
         }
     }
-    $vault = Invoke-ClaudeNetworkArm "https://management.azure.com$($d.Certificate.VaultId)?api-version=2023-07-01"
+    $vault = Invoke-ClaudeAddressArm "https://management.azure.com$($d.Certificate.VaultId)?api-version=2023-07-01"
     if ([bool]$vault.properties.enableRbacAuthorization -ne [bool]$d.Certificate.Rbac) { throw 'Key Vault permission model changed since review.' }
     $principal = [string]$Gateway.identity.principalId
     if ($vault.properties.enableRbacAuthorization) {
         $role = "/subscriptions/$($d.SubscriptionId)/providers/Microsoft.Authorization/roleDefinitions/4633458b-17de-408a-b874-0445c86b69e6"
-        $assignments = Get-ClaudeNetworkPages "https://management.azure.com$($vault.id)/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01"
+        $assignments = Wait-ClaudeAddress -Condition 'Key Vault role assignments' -About 'about 4 s' -TimeoutSeconds 45 -Arguments @("https://management.azure.com$($vault.id)/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01") -Check {
+            param($uri)
+            @{Done=$true;Value=(Get-ClaudeNetworkPages $uri)}
+        }
         if (@($assignments | Where-Object { $_.properties.principalId -eq $principal -and $_.properties.roleDefinitionId -eq $role }).Count) { return $Gateway }
         $name = Get-ClaudeNetworkStableGuid "$($vault.id)|$principal|$role"
         $grantUri = "https://management.azure.com$($vault.id)/providers/Microsoft.Authorization/roleAssignments/${name}?api-version=2022-04-01"
-        Invoke-ClaudeNetworkArm $grantUri -Method put -Body @{ properties = @{ roleDefinitionId = $role; principalId = $principal; principalType = 'ServicePrincipal' } } -StateDirectory ([IO.Path]::GetTempPath()) | Out-Null
+        Invoke-ClaudeAddressArm $grantUri -Method put -Body @{ properties = @{ roleDefinitionId = $role; principalId = $principal; principalType = 'ServicePrincipal' } } -StateDirectory ([IO.Path]::GetTempPath()) | Out-Null
     }
     else {
         $old = @($vault.properties.accessPolicies | Where-Object { $_.objectId -eq $principal })
@@ -186,7 +179,7 @@ function Grant-ClaudeAddressCertificateRead {
         }
         $policy = @{ tenantId = $vault.properties.tenantId; objectId = $principal; permissions = $permissions }
         if ($old.Count -and $old[0].applicationId) { $policy.applicationId = $old[0].applicationId }
-        Invoke-ClaudeNetworkArm "https://management.azure.com$($vault.id)/accessPolicies/add?api-version=2023-07-01" -Method put -Body @{ properties = @{ accessPolicies = @($policy) } } -StateDirectory ([IO.Path]::GetTempPath()) | Out-Null
+        Invoke-ClaudeAddressArm "https://management.azure.com$($vault.id)/accessPolicies/add?api-version=2023-07-01" -Method put -Body @{ properties = @{ accessPolicies = @($policy) } } -StateDirectory ([IO.Path]::GetTempPath()) | Out-Null
     }
     return $Gateway
 }
@@ -234,22 +227,26 @@ function Update-ClaudeAddressArtifacts {
 
 function Invoke-ClaudeAddressPlan {
     [CmdletBinding()]
-    param($Plan, [securestring]$CertificatePassword, [string]$RecordPath, [int]$TimeoutSeconds = 2700, [int]$DnsTimeoutSeconds = 600, [int]$PollSeconds = 15)
+    param($Plan, [securestring]$CertificatePassword, [string]$RecordPath, [double]$TimeoutSeconds = 2700, [double]$DnsTimeoutSeconds = 600, [double]$PollSeconds = 15)
     $d = $Plan.Data
     $record = if ($RecordPath) { Read-ClaudeDecisionRecord $RecordPath } else { $null }
     if ($record -and ($record.apimName -ine $d.ApimName -or $record.resourceGroup -ine $d.ResourceGroup -or ($record.subscriptionId -and $record.subscriptionId -ine $d.SubscriptionId))) {
         throw 'The record names a different gateway; no company-address write was made.'
     }
     $uri = "https://management.azure.com$($d.GatewayId)?api-version=2024-05-01"
-    $gateway = Invoke-ClaudeNetworkArm $uri
+    $gateway = Invoke-ClaudeAddressArm $uri
     if ($gateway.properties.provisioningState -ne 'Succeeded') { throw "Gateway provisioning is $($gateway.properties.provisioningState); review again after it completes." }
     if ((Get-ClaudeAddressHostState $gateway) -ne $d.HostnameBaseline -or $gateway.sku.name -ne $d.Sku) { throw 'Gateway hostname state or tier changed since review; no write was made.' }
     $pfxBytes = if ($d.CertificateSource -eq 'Pfx') { [IO.File]::ReadAllBytes($d.PfxPath) } else { $null }
-    $cert = Read-ClaudeAddressCertificate -CertificateSource $d.CertificateSource -KeyVaultCertificateId $d.KeyVaultCertificateId -PfxPath $d.PfxPath -PfxBytes $pfxBytes -CertificatePassword $CertificatePassword -Hostname $d.Hostname -SubscriptionId $d.SubscriptionId
+    $certificateArgs=@{CertificateSource=$d.CertificateSource;KeyVaultCertificateId=$d.KeyVaultCertificateId;PfxPath=$d.PfxPath;PfxBytes=$pfxBytes;CertificatePassword=$CertificatePassword;Hostname=$d.Hostname;SubscriptionId=$d.SubscriptionId}
+    $cert = Wait-ClaudeAddress -Condition 'reviewed certificate metadata' -About 'about 5 s' -TimeoutSeconds 60 -Arguments @($certificateArgs) -Check {
+        param($values)
+        @{Done=$true;Value=(Read-ClaudeAddressCertificate @values)}
+    }
     if ($cert.Thumbprint -ne $d.Certificate.Thumbprint -or $cert.PfxSha256 -ne $d.Certificate.PfxSha256 -or $cert.SecretId -ne $d.Certificate.SecretId) { throw 'The certificate changed since review; no write was made.' }
     $dnsUri = if ($d.DnsRecord.Id) { "https://management.azure.com$($d.DnsRecord.Id)?api-version=2018-05-01" } else { '' }
     if ($dnsUri) {
-        $currentDns = Invoke-ClaudeNetworkArm $dnsUri -AllowNotFound
+        $currentDns = Invoke-ClaudeAddressArm $dnsUri -AllowNotFound
         if ((ConvertTo-ClaudeFlowCanonical $currentDns) -ne (ConvertTo-ClaudeFlowCanonical $d.DnsRecord.Before)) { throw 'DNS record changed since review; no write was made.' }
     }
     if ($record -and -not $d.IsolatedProof) {
@@ -264,10 +261,11 @@ function Invoke-ClaudeAddressPlan {
             if ($d.DnsRecord.Before.properties.metadata) { $properties.metadata = $d.DnsRecord.Before.properties.metadata }
             $condition = @{ IfMatch = $d.DnsRecord.Before.etag }
         }
-        Invoke-ClaudeNetworkArm $dnsUri -Method put -Body @{ properties = $properties } -StateDirectory ([IO.Path]::GetTempPath()) @condition | Out-Null
+        Invoke-ClaudeAddressArm $dnsUri -Method put -Body @{ properties = $properties } -StateDirectory ([IO.Path]::GetTempPath()) @condition | Out-Null
     }
     else { Write-Host "External DNS record: $($d.Hostname) 300 IN CNAME $($d.DnsRecord.Target)." }
-    Wait-ClaudeAddress -Condition "DNS CNAME $($d.Hostname)" -About 'about 1-10 minutes; provider TTL dependent' -TimeoutSeconds $DnsTimeoutSeconds -PollSeconds $PollSeconds -Check {
+    Wait-ClaudeAddress -Condition "DNS CNAME $($d.Hostname)" -About 'about 1-10 minutes; provider TTL dependent' -TimeoutSeconds $DnsTimeoutSeconds -PollSeconds $PollSeconds -Arguments @($d) -Check {
+        param($d)
         $args = @{ Name = $d.Hostname; Type = 'CNAME'; DnsOnly = $true; NoHostsFile = $true; QuickTimeout = $true; ErrorAction = 'Stop' }
         if ($d.DnsServer) { $args.Server = $d.DnsServer }
         $matchesDns = $false; $reason = 'CNAME is not the planned gateway'
@@ -296,7 +294,8 @@ function Invoke-ClaudeAddressPlan {
     }
     try {
         if (-not $bindingMatches) {
-        Wait-ClaudeAddress -Condition 'hostname update submission and certificate access' -About 'about 5 s; new Key Vault grants can take 10 minutes' -TimeoutSeconds ([Math]::Min(600, $TimeoutSeconds)) -PollSeconds $PollSeconds -Check {
+        Wait-ClaudeAddress -Condition 'hostname update submission and certificate access' -About 'about 5 s; new Key Vault grants can take 10 minutes' -TimeoutSeconds ([Math]::Min([double]600, $TimeoutSeconds)) -PollSeconds $PollSeconds -Arguments @($uri,$d,$Plan,$binding) -Check {
+            param($uri,$d,$Plan,$binding)
             $fresh = Invoke-ClaudeNetworkArm $uri
             if ((Get-ClaudeAddressHostState $fresh) -ne $d.HostnameBaseline) { throw 'Gateway hostnames changed during certificate access setup; review again.' }
             try {
@@ -314,14 +313,16 @@ function Invoke-ClaudeAddressPlan {
         else { Write-Host '  The company hostname already has the supplied certificate; no APIM patch is needed.' }
     }
     finally { $binding.Remove('encodedCertificate'); $binding.Remove('certificatePassword') }
-    Wait-ClaudeAddress -Condition "APIM hostname $($d.Hostname)" -About 'about 5-15 minutes; Azure can take longer' -TimeoutSeconds $TimeoutSeconds -PollSeconds $PollSeconds -Check {
+    Wait-ClaudeAddress -Condition "APIM hostname $($d.Hostname)" -About 'about 5-15 minutes; Azure can take longer' -TimeoutSeconds $TimeoutSeconds -PollSeconds $PollSeconds -Arguments @($uri,$d) -Check {
+        param($uri,$d)
         $g = Invoke-ClaudeNetworkArm $uri
         if ($g.properties.provisioningState -in @('Failed','Canceled')) { throw "APIM hostname update $($g.properties.provisioningState)." }
         $hostConfig = @($g.properties.hostnameConfigurations | Where-Object { $_.type -eq 'Proxy' -and $_.hostName -ieq $d.Hostname })
         if ($hostConfig.Count -and $hostConfig[0].certificateStatus -eq 'Failed') { throw 'APIM hostname certificate status is Failed.' }
         @{ Done = ($g.properties.provisioningState -eq 'Succeeded' -and $hostConfig.Count -eq 1 -and $hostConfig[0].certificateStatus -ne 'InProgress'); Status = $g.properties.provisioningState }
     } | Out-Null
-    $proof = Wait-ClaudeAddress -Condition "HTTPS proof through $($d.Hostname) with SNI and Host" -About 'about 5 s' -TimeoutSeconds 45 -Check {
+    $proof = Wait-ClaudeAddress -Condition "HTTPS proof through $($d.Hostname) with SNI and Host" -About 'about 5 s' -TimeoutSeconds 45 -Arguments @($d,$cert) -Check {
+        param($d,$cert)
         $result = Invoke-ClaudeAddressHttps -Hostname $d.Hostname -Thumbprint $cert.Thumbprint -ConnectAddress $d.ConnectAddress -IsolatedProof:$d.IsolatedProof
         if ($result.StatusCode -ne 401) { throw "HTTPS returned $($result.StatusCode), not the gateway's unauthenticated 401." }
         if ($result.Thumbprint -ine $cert.Thumbprint) { throw 'HTTPS did not present the configured certificate.' }

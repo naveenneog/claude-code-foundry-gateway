@@ -92,7 +92,7 @@ $global:LASTEXITCODE = 0
 }
 try {
     $files = @(
-        'scripts\ClaudeGatewayAddress.ps1','scripts\ClaudeGatewayCertificate.ps1','scripts\ClaudeGatewayAddressRecovery.ps1','scripts\Set-ClaudeGatewayAddress.ps1',
+        'scripts\ClaudeGatewayAddress.ps1','scripts\ClaudeGatewayCertificate.ps1','scripts\ClaudeGatewayAddressRecovery.ps1','scripts\ClaudeGatewayAddressWait.ps1','scripts\Set-ClaudeGatewayAddress.ps1',
         'scripts\ClaudeNetwork.ps1','scripts\AzureRetailPrice.ps1','scripts\ClaudeChoice.ps1','scripts\ClaudeGatewayRegion.ps1','scripts\ClaudeGatewayAddressInput.ps1',
         'scripts\flow\FlowContract.ps1','scripts\flow\Discovery.ps1','scripts\flow\Address.ps1','scripts\flow\Foundation.ps1',
         'scripts\flow\lib\LifecycleCommon.ps1','Install-ClaudeGateway.ps1','Start-ClaudeGateway.ps1','infra\main.bicep',

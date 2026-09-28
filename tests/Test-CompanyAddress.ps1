@@ -17,6 +17,10 @@ function Copy-Object($Value) { $json = $Value | ConvertTo-Json -Depth 30; $parse
 $entry = Join-Path $root 'scripts\Set-ClaudeGatewayAddress.ps1'
 Check 'the company address implementation exists' { Test-Path -LiteralPath $entry }
 if (Test-Path -LiteralPath $entry) { . $entry }
+function Invoke-ClaudeAddressCheck {
+    param($Check,$Arguments,$TimeoutMilliseconds)
+    & $Check @Arguments
+}
 
 $scratch = Join-Path ([IO.Path]::GetTempPath()) ('company-address-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $scratch -Force | Out-Null
@@ -141,7 +145,7 @@ function New-Plan([hashtable]$Overrides = @{}) {
     Get-ClaudeAddressPlan @p
 }
 function Apply-Plan($Plan) {
-    Invoke-ClaudeAddressPlan -Plan $Plan -RecordPath $recordPath -TimeoutSeconds 0 -DnsTimeoutSeconds 0 -PollSeconds 0
+    Invoke-ClaudeAddressPlan -Plan $Plan -RecordPath $recordPath -TimeoutSeconds 0.2 -DnsTimeoutSeconds 0.2 -PollSeconds 0.05
 }
 try {
     Reset-State
@@ -448,7 +452,7 @@ try {
     Check 'test-only TLS cannot be used for a production hostname' { Reject { New-Plan @{ Hostname = 'claude.contoso.com'; DnsZoneResourceId = ''; IsolatedProof = $true; DnsServer = 'ns1.example.test'; ConnectAddress = '192.0.2.1' } } 'test' }
     Check 'a connect-IP override requires isolated proof mode' { Reject { New-Plan @{ ConnectAddress = '192.0.2.1' } } 'IsolatedProof' }
     Check 'a timed wait says condition, estimate and elapsed time' {
-        $log = @(Wait-ClaudeAddress -Condition 'DNS test' -About 'about 1 minute' -TimeoutSeconds 0 -PollSeconds 0 -Check { @{ Done = $true; Value = 'ready'; Status = 'ready' } } 6>&1) -join "`n"
+        $log = @(Wait-ClaudeAddress -Condition 'DNS test' -About 'about 1 minute' -TimeoutSeconds 1 -PollSeconds 0 -Check { @{ Done = $true; Value = 'ready'; Status = 'ready' } } 6>&1) -join "`n"
         $log -match 'DNS test' -and $log -match 'about 1 minute' -and $log -match 'in [0-9.,]+ s'
     }
     Reset-State
