@@ -466,13 +466,21 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       each panel as its data arrives, with an estimate while it waits; Direct reuses one token per
       process and batches its gateway reads, and time-to-first-data for `whoami`, `budget list`,
       `usage show` and `status` is measured before and after on the reference estate (**U32**)
-- [ ] P72 permutation tests of the guided flow and the installer — acceptance: every combination of
+- [x] P72 permutation tests of the guided flow and the installer — acceptance: every combination of
       action (Setup, Change foundation, Guide, Status), record state (none, recorded and matching,
       recorded with another gateway URL, recorded but missing, not readable), mode (attended,
       `-PlanOnly`, unattended apply), entitlement store and Desktop sign-in kind holds the flow's
       invariants; the installer's summary reflects every combination of tier, entitlement store,
       developer sign-in, Desktop sign-in and address under `-WhatIf`, on PowerShell 7 and 5.1; each
       failure found is fixed test-first
+- [ ] P73 an installer re-run offers the gateway's live values — acceptance: over an existing
+      gateway (`-ExistingApimName`, the reuse menu or `-Change foundation` in a console), the budget,
+      request ceiling, tier group and Choices prompts default to the gateway's live named values and
+      the recorded choices, the way the revocation window does since 2026-09-23; found in P72:
+      `Install-ClaudeGateway.ps1` reads only `entitlement-cache-seconds` from the gateway, so pressing
+      Enter through an attended re-run resets custom budgets and groups to the installer's defaults;
+      `tests/Test-InstallerPermutations.ps1` gains the developer address dimension once P69's
+      address parameter is merged
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so

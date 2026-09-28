@@ -45,6 +45,12 @@ try {
     Assert 'a changed action changes the fingerprint' ($f1 -ne (Get-ClaudeFlowFingerprint -Plans @($changed, $noop)))
     $pricier = New-ClaudeFlowPlan -Step Foundation -Summary 'Gateway' -Actions @($a) -Costs @((New-ClaudeFlowCost -Item 'API Management Basic v2' -MonthlyUsd 151.00 -Source 'Azure Retail Prices API'), $u) -Implications @('Developers need az login') -Requires @('Owner') -Reversible $true -Rollback 'Delete the resource group'
     Assert 'a changed price changes the fingerprint' ($f1 -ne (Get-ClaudeFlowFingerprint -Plans @($pricier, $noop)))
+    # One plan, one fingerprint on every shell (P72): ConvertTo-Json escapes ' < > & on Windows
+    # PowerShell 5.1 only, so strings are written by the flow's own encoder, non-ASCII as \u.
+    $keyed = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([StringComparer]::Ordinal)
+    $keyed['b'] = "the gateway's <a&b> " + [string][char]0x2014 + ' "q"'; $keyed['B'] = 1; $keyed['a-b'] = $true; $keyed['a_b'] = $null
+    $canon = ConvertTo-ClaudeFlowCanonical $keyed
+    Assert 'the canonical form escapes only quotes, backslashes, control and non-ASCII characters, with keys in ordinal order' ($canon -eq ('{"B":1,"a-b":true,"a_b":null,"b":"the gateway''s <a&b> \u2014 \"q\""}')) $canon
 
     # Decision record
     $path = Join-Path $scratch 'claude-gateway.json'

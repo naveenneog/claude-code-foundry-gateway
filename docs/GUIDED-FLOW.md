@@ -82,11 +82,23 @@ do not run the installer again. `-Action Change -Change foundation` runs the
 installer with `-ExistingApimName` and `-ResourceGroup` set to the recorded
 gateway, so it updates that gateway and keeps its region, tier, name and
 publisher. In a console the flow passes nothing else, and the installer asks its
-other questions; the tier changes through `-Change sku`.
+other questions; the tier changes through `-Change sku`. With no gateway
+recorded, `-Change foundation` runs the installer as Setup does, to create one.
 
 Without a console, the flow plans every step in one review and runs the
 installer with `-Yes` and the recorded values, adding `-DeployProjection` when
-the entitlement store is the Cosmos projection.
+the entitlement store is the Cosmos projection. An external IdP Desktop sign-in
+needs `foundation.desktopEntraClientId`, the id of the Desktop public-client
+app, and with `access_token` also `foundation.desktopEntraScopes` and
+`foundation.desktopEntraAudience`: the installer cannot ask for them without a
+console, so the plan refuses without them, before it is approved.
+
+After the installer, the foundation decision holds what it created, in the
+installer's own parameter values: tier, region, Foundry account, entitlement
+store and resolver access, developer sign-in, Claude Desktop sign-in with its
+app, issuer, token type, scopes and audience, the tier groups, the token budgets
+and the request ceiling. An unattended `-Change foundation` gives them back to
+the installer, so it keeps them.
 
 Values the flow passes to the installer can reach the Azure CLI, which on
 Windows is `az.cmd`: `cmd.exe` re-reads `& | < > ^ ( ) " %` in an argument. The
@@ -160,6 +172,24 @@ used from another PowerShell script, override the file.
 
 The supplied value must match the printed fingerprint, or at least its first
 eight characters. `-WhatIf` prints the same review and writes nothing.
+
+The fingerprint is the same on PowerShell 7 and Windows PowerShell 5.1, so a
+plan reviewed on one can be applied on the other. The flow writes the plan's
+canonical text itself: `ConvertTo-Json` escapes `'`, `<`, `>` and `&` on
+Windows PowerShell 5.1 only, and until P72 the same plan had a different
+fingerprint on each shell. The canonical text changed with P72, so a fingerprint
+printed by an earlier release may no longer match its plan, depending on the
+shell that printed it and the plan's text; when one is refused, run `-PlanOnly`
+again.
+
+A refusal (drift, a fingerprint that does not match, a missing answer) and a
+cancel (the installer cancelled at its summary, a mistyped confirmation) print
+the reason and exit 1. An error the flow does not expect says so, and
+`$env:CLAUDE_FLOW_DEBUG = '1'` makes the next run print where in the scripts it
+stopped. Called from another PowerShell script, or dot-sourced, the flow raises
+the refusal or the cancel (`System.OperationCanceledException`) as an exception
+and does not exit its caller
+([U36](UNKNOWNS.md#u36--a-top-level-run-and-an-in-process-call--closed-2026-09-28)).
 
 ## Resume after failure
 
@@ -243,7 +273,11 @@ gateway that Azure reports missing, or whose gateway URL differs from the record
 is drift, and apply actions refuse to continue over it, naming the differing
 field. A read that fails for another reason (no sign-in, no network, no Azure
 CLI) is reported with its reason and is not drift; Status then says drift was not
-checked.
+checked. With no decision record, Status says that nothing is recorded, and
+nothing is compared with Azure.
+
+Guide changes nothing in Azure, so it goes on over drift: it names each
+difference and says that the guide names the recorded values.
 
 ## Generated guide
 
@@ -255,7 +289,22 @@ The guide contains tenant-specific names, gateway URL, cost instructions,
 administrator daily tasks, developer setup steps in the requested order (VS Code,
 CLI, Desktop, then MDM), FinOps tool usage, workbooks/reports, and the commands
 to update, change and diagnose. It is written to `onboarding/HOW-TO-USE.md` and
-is git-ignored.
+is git-ignored. Guide needs a recorded gateway: with none, it stops before
+planning and names `-Action Setup`.
+
+## What the tests hold
+
+| Suite | What it runs | What it holds |
+|---|---|---|
+| `tests/Test-FlowStart.ps1` | The orchestrator, discovery and Foundation step in a copy of the repository, with a stub installer, Azure CLI and prices; attended runs through standard input | The first line and the recorded gateway's read are timed; the installer asks its own questions in a console; the FinOps question follows the installer; a failed second phase resumes |
+| `tests/Test-FlowPermutations.ps1` | The same copy over Setup, Change foundation, Guide and Status × no record, a matching gateway, another gateway URL, a missing gateway, signed out and no Azure CLI × attended, `-PlanOnly` and unattended apply, then `-WhatIf`, Update with no record, and cancels through callers that use `&` or dot-source it, on both shells; the stub installer takes the real installer's parameter block; Foundation's installer arguments over 432 combinations in process | The installer runs only for Change foundation or a Setup with no gateway recorded; `-Yes` exactly when unattended; `-DeployProjection` exactly when unattended with the projection store; drift stops Setup and Change; a failed read is not drift; `-PlanOnly` and Status write nothing; a refusal has no code excerpt, and a caller receives it as an exception; each argument is valid for its installer parameter; a recorded foundation comes back unchanged through an unattended Change; one plan has one fingerprint on both shells |
+| `tests/Test-InstallerPermutations.ps1` | The real installer under `-WhatIf -Yes`, in process, with the Azure CLI and the Retail Prices API stubbed, on PowerShell 7 and Windows PowerShell 5.1: every combination of tier × entitlement store × developer sign-in × Desktop sign-in (96 cases), six refusals and a reused gateway; `-Live` and `-Pairs` run 16 cases that cover every pair of levels | The summary names each choice; an external IdP Desktop sign-in derives its gateway audience with or without `-AuthMode`; each refusal comes before the summary, names what to pass and says that nothing was created; both shells print the same summary |
+
+`tests/Test-InstallerPermutations.ps1 -Live -FoundryAccount <account>
+-FoundryResourceGroup <group> -ReuseGateway <gateway> -ReuseResourceGroup <group>`
+runs the same installer cases read-only against the signed-in subscription (each
+case about 20 s, mostly Azure CLI start-up); the reuse case reads the named
+gateway.
 
 ## Manual equivalents
 
