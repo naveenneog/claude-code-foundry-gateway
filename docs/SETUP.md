@@ -150,6 +150,11 @@ Basic v2 resolver endpoint is public because Basic v2 has no outbound VNet
 integration; APIM outbound IPs are not treated as the primary control.
 Authentication is.
 
+A developer count above the named-value ceiling is noted at the count, and the
+store question then recommends the Cosmos projection. Choosing named values for
+more developers than they hold is stated after the store question, with the
+Cosmos store as the remedy, and asks "Continue with named values".
+
 ### Tooling
 
 | Tool | Version | Why |
@@ -473,13 +478,17 @@ The prompt calls the address "expensive to change afterwards" because deployed
 workstations need redistributed settings when the URL changes.
 
 The installer checks an existing `onboarding/claude-gateway.json` against the
-selected gateway before its summary and before creating resources. A different
-gateway, resource group or recorded subscription stops the run and leaves the
-record unchanged. The refusal names both gateways and the record path; the
-selected gateway needs its own checkout/record, or the previous record can be
-backed up and moved elsewhere before another installation. This check applies
-to both Azure and company-address choices and includes legacy subscriptions
-recorded under the Foundation decision.
+selected gateway as soon as the gateway is chosen (after the name prefix), before
+the remaining questions and before creating resources. A different gateway,
+resource group or recorded subscription is stated with both gateways and the
+record path. In a console the installer offers to keep that record as
+`onboarding/claude-gateway.<resource group>-<instance>.json` and start a new one
+for the selected gateway (default yes); `-ArchiveSavedRecord` does the same
+unattended. Otherwise the run stops and leaves the record unchanged; the selected
+gateway then needs its own checkout, or the record can be moved first. Under
+`-WhatIf` the record is not moved. This check applies to both Azure and
+company-address choices and includes legacy subscriptions recorded under the
+Foundation decision.
 The guided flow's first Setup journal is recognized separately: it has no
 gateway identity yet. After approval, it is bound to the selected gateway for
 recovery, without publishing a URL until HTTPS proof succeeds.

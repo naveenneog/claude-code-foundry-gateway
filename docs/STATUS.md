@@ -47,10 +47,15 @@ for its failed check.
 
 `ed62bef` commits the shard/receipt contracts; `1505b2e` commits the offline native boundary;
 `f728d86` commits the runner and its scenarios, including P79's process-start identity from
-`0e64028`. Main integration is still pending. With the shared lock still occupied after its
+`0e64028`. Main `449489b` (P79 merge `6468235`) is integrated before handoff. The resolution retains
+P79's final probe inside `try/finally`, compares the process start time obtained from the operating
+system, and includes both new P79 registrations. The default inventory now has 95 checks.
+Under P78's own shared lock, the merged sharding suite passed 79 assertions in 2.2 s, remote
+contracts 37 in 1.0 s and full RunnerIntegrity 68 in 214.0 s; the lock was removed in `finally`.
+With the shared lock previously occupied after its
 estimated release, the workflow also runs count-preserving Core, Runner and Wizard negative
 proofs on three of its existing VMs. Baseline-only diagnostics do not count as negative proofs.
-Hosted measurements and the full local RunnerIntegrity check remain pending.
+Green hosted measurements remain pending.
 
 The first hosted attempt, [36454004081](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36454004081)
 on `aee8fda`, found missing Playwright Chromium executables in the screenshot/redaction checks,
@@ -67,7 +72,101 @@ mutations and runner proofs caught 12/12, with their complete 4/2 and 20-asserti
 U50-U53 track hosted compatibility, timing, remote-run identity and detector evidence. No product architecture
 component changes; this is test execution and evidence transport, not an accelerator deployment.
 
-**Active packets (2026-09-28, run in parallel worktrees):** P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets (2026-09-28, run in parallel worktrees):** P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)); P78 the test suite runs in parallel on GitHub-hosted runners, P80 AUM shows every action it has, and P81 USD budgets are the primary enforcer, each on its own branch until the owner reviews it. Each has its own section on its branch; the section lands here when the packet merges. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+
+## P79 fixes from the owner's test on 2026-09-28
+
+The owner ran `main` (`040ca87`, then `0345e85`) from his own clone on 2026-09-28 and sent four
+defects, each with a screenshot. Work is on `p79-owner-test-fixes`, based on `0345e85`.
+
+1. The guided flow's FinOps step stopped at "Applying FinOps..." with "Cannot convert value to type
+   System.String." (`scripts/flow/FinOps.ps1:157`). `& $path @($Command.arguments)` passes the
+   argument list as one array: every script the step runs is an advanced script, which refuses an
+   array for a `[string]` parameter, so every choice but None failed on both shells, whatever its
+   arguments. In a splatted array a string such as `-Accept` is a positional value to a script,
+   not a parameter name, so the AUM service and Turnstile plus AUM choices would have been wrong
+   too; and the scripts' output would have reached the step's change set.
+2. `.\Update-ClaudeGateway.ps1` from the repository root read
+   `C:\Users\nag\onboarding\claude-gateway.json`: the root shim's `-RecordPath` default is the
+   relative `onboarding/claude-gateway.json`, and `Read-ClaudeDecisionRecord` reads it with
+   `[IO.File]::ReadAllText`, which resolves a relative path against the process's start directory,
+   not PowerShell's current folder.
+3. The installer, creating a new gateway (`rg-hello-agent-dev/hocon-gateway`) in a checkout whose
+   record names another (`rg-contosohub/apim-claude-gw-fzgql9`), refused only at the address
+   question, after every other answer, and left moving the record to the administrator.
+4. After the developer count (250), the installer warned "This holds about 93 developers" and
+   asked "Continue anyway", saying the store that removes the limit "is not built yet". P61 built
+   the Cosmos entitlement store on every v2 tier; the tier and the store are chosen after this.
+
+- [x] Each FinOps choice applies its commands with the parameters it plans, on both shells, and the
+      step returns only its change set: tested with stubs that carry the real scripts' parameter
+      blocks (`tests/Test-FlowFinOpsApply.ps1`, 11 checks; against the previous `FinOps.ps1` 8 fail
+      with the owner's error; `872b88b`)
+- [x] A record path given relative to PowerShell's current folder is read and written there,
+      whatever the process's start directory; the root Update shim reads the repository's record
+      (`tests/Test-RelativeRecordPath.ps1`, 8 checks, each child started in one folder and moved to
+      another; all 8 fail before the fix with the owner's error; `cd1005b`)
+- [x] The installer compares a saved record with the chosen gateway as soon as the gateway is
+      chosen; attended, it offers to archive the saved record under its gateway's name and go on;
+      unattended, it refuses unless `-ArchiveSavedRecord`; `-WhatIf` moves nothing
+      (`tests/Test-CompanyInstaller.ps1`, 5 new checks, 22 on both shells; against the `0345e85`
+      installer the 5 fail and the other 17 pass, on both shells; `5885d4e`, `5de7ba2`)
+- [x] The developer count asks nothing about the entitlement store; after the store is chosen,
+      named values for more developers than they hold is stated with the Cosmos store as the remedy
+      (`tests/Test-AdminSurface.ps1`, 682 checks; 4 fail against the previous installer; `f14f92f`)
+- [x] SETUP.md, GUIDED-FLOW.md and CHANGELOG. Architecture: no component, data flow, identity,
+      schedule or network path changes; the manifest's source hashes are refreshed, no image changes
+- [x] Mutations: 16 of 16 caught. Each mutation ran in its own copy of the worktree; it counts as
+      caught only when a suite ran its baseline number of checks (FinOpsApply 11, RelativeRecordPath
+      8, CompanyInstaller 22, AdminSurface 682) and at least one failed. FinOps: the arguments as one
+      array, the output returned into the change set, `Confirm` dropped, `aum`'s arguments as one
+      array, no exit-code reset, `NoConfigure` dropped. Records: the read and the write resolved
+      against the process directory, the shim passing a relative path through. Installer:
+      `-ArchiveSavedRecord` ignored, no console question, the record never moved, the record moved
+      under `-WhatIf`, the comparison back at the address question, the store warning back at the
+      developer count, the Cosmos store called unbuilt
+- [x] Heavier suites once on the branch: FlowOrdinalOrder 35, GuidedFlow 44, FlowStart 114,
+      FlowPermutations 43, InstallerPermutations 44; CompanyInstaller 22 and FinOpsApply 11 with
+      Windows PowerShell 5.1 as the host. Suites that start child shells through
+      `ProcessStartInfo.ArgumentList` (RelativeRecordPath, FlowStart, FlowPermutations, Test-All)
+      need PowerShell 7 as the host, which is how Test-All runs them; their children run on both
+- [x] Council round 1, five seats, over `0345e85..5de7ba2`: Architect, Coder, QA, UX and Security
+      PASS. Its one note, the stale "21 on both shells", is corrected above
+- [x] The first packet gate, at `01f9605` on 2026-09-28 (19:20), failed one check: "Test-All counts
+      every check" (`tests/Test-RunnerIntegrity.ps1`). Its `Get-Registered` reads a check name between
+      single quotes with no quote inside, so the new registration `'Decision record paths are
+      PowerShell''s'` was not read: the copied runner had no stub for `Test-RelativeRecordPath.ps1` and
+      exited 1. The check is renamed "Relative decision record paths follow the current folder", and
+      the integrity test now asserts that every `Invoke-Check` line in the registration is read,
+      naming any line that is not (it fails on `01f9605` with that line; 47 checks pass after)
+- [x] The second gate, at `d0226dd` (20:13), failed two checks that P79 does not change, under
+      96-100% CPU load from other sessions: "Business unit checks detect breakage [3/4]" timed out
+      at 600 s, and "Test-All counts every check" failed after 325 s. Run alone, the integrity test
+      then failed twice with "every non-skipped check runs in its own process - 90 of 91" while all
+      91 stub checks passed: each stub named its record `<process id>.json`, and Windows reuses
+      process ids, so a later stub overwrote an earlier one's record. Records are now named by
+      process id and that process's start time, and identity checks use that pair. A probe
+      assertion runs one stub and checks the name; it failed on the old naming ("files:
+      48620.json") and passes after; the integrity test passes 48 checks in 272 s under the same load
+- [x] Council round 2, five seats, over `01f9605..d0226dd`: all five seats PASS
+- [x] Council round 3, five seats, over `d0226dd..0e64028`: Architect, UX and Security PASS; two
+      BLOCKs on the probe, both fixed test-first. Coder: the probe wrote and read its files before
+      the `try` whose `finally` removes the scratch folder, so a failed write or unreadable record
+      left the folder behind. QA: the probe accepted any number after the process id, so a constant
+      such as `Proc = "$PID-0"`, which brings back the overwrite, passed. The probe now runs inside
+      that `try`, starts the stub with `Start-Process -PassThru`, and requires exit code 0 and a
+      record named `<id>-<start ticks>` from the started process's own id and start time. Evidence,
+      run in private copies (`p79-r3-probe.ps1`, 254 s): the fixed probe fails on `Proc = "$PID-0"`,
+      on records named by process id and on an empty `Proc`; the old probe passes on
+      `Proc = "$PID-0"`; with an unreadable record, the old test leaves its scratch folder behind
+      and the fixed test removes it; the fixed integrity test passes 48 checks
+- [x] Council round 4, five seats, over `0e64028..96bee6a`: all five seats PASS
+- [x] The packet gate exits 0. Gate 3, at `0e64028` (20:47-21:24), passed: Test-All in 2,216 s,
+      22 passed, 2 warned (open unknowns), 0 failed. Gate 4, at `96bee6a` (21:44-22:28), the tree
+      that merges, passed: Test-All in 2,666 s, 22 passed, 2 warned, 0 failed. Both ran while other
+      sessions held the machine at 88-100% CPU; the lead raised only the gate's own processes to
+      AboveNormal priority. Gate 4 ran without the shared lock, which the P71 agent held from 21:25
+      for its mutation and full-suite runs
 
 ## P77 a 60-minute gate budget while the exclusive checks are sharded, 2026-09-28
 

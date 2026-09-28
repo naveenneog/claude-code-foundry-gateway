@@ -414,7 +414,7 @@
       "id": "company-address",
       "source": "docs/architecture/15-company-address.json",
       "inputs": {
-        "Install-ClaudeGateway.ps1": "f4294664cb6c1616f70528c53ed499d311115d6a0fe0a3470d0705ce970fc0b6",
+        "Install-ClaudeGateway.ps1": "1aa5ae08b5225c9e0b738ffd6fe8c86a7a717c2181743ae06e22f403a1c07d8c",
         "Start-ClaudeGateway.ps1": "86e92a50b603e0466f2d94ef03964f1ef8a511fe49262bfb694d6df32ad2d4dc",
         "docs/architecture/15-company-address.json": "83c08d15d71fcf6a002d004090b67ea77c858b70efa3718e8ff11aebae276981",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
@@ -431,7 +431,7 @@
         "scripts/ClaudeNetwork.ps1": "5709a3e94dfc7ca71e75429ea4d278b7737198a5488e07556fccc28cda9d00f9",
         "scripts/flow/Address.ps1": "88b0499d3eaf5423f98f4e6cb1ca1b2f221c4a44d4b8677a790ada807e495869",
         "scripts/flow/Discovery.ps1": "42af4fad6cb875d2ff4618c3d5f9f0b45eb11ce02123ccf960a10928385c9c67",
-        "scripts/flow/FlowContract.ps1": "6552dea6ecc96bdc948affb7d169bf942c4ca2b0861a3a77f73cc5d16f66e344",
+        "scripts/flow/FlowContract.ps1": "5fe01f9f68710671039ba8d1fd4a303ccd3547d7f29096e23d87c58dae1b8bf8",
         "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4"
       },
       "outputs": [
@@ -465,7 +465,7 @@
         "scripts/Show-Banner.ps1": "03aa9c855b2aade332ba6810887c86700fa39dfc6bf04dfc8bc4057a4ad5db41",
         "scripts/Sync-ClaudeModels.ps1": "1afdc91387e87f10388e088060d530f5cca37ffb9c8a4d7ff97b82e9b7b73510",
         "scripts/flow/DeviceProfiles.ps1": "7f3925af5eab6f23599031b118834d1faeb657a960b20af505788ceb6097fbc4",
-        "scripts/flow/FlowContract.ps1": "6552dea6ecc96bdc948affb7d169bf942c4ca2b0861a3a77f73cc5d16f66e344",
+        "scripts/flow/FlowContract.ps1": "5fe01f9f68710671039ba8d1fd4a303ccd3547d7f29096e23d87c58dae1b8bf8",
         "scripts/flow/Models.ps1": "25d480b8b0c4d48e22fb5e1f2f7f273aa3aa735b4dafe8db60a35d7f6e6d6503",
         "scripts/setup-claude-workstation.sh": "1956dd1986603ad1399e92a44aac5562b3c2baee5fb9af17fb1bbb1cf8ffa6b7"
       },

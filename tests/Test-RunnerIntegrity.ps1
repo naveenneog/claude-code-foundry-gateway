@@ -145,20 +145,23 @@ Assert 'at least ten offline checks are registered' ($registered.Count -ge 10)
 $registrationBlock = [regex]::Match($source, '(?s)# BEGIN CHECK REGISTRATION(.*?)# END CHECK REGISTRATION').Groups[1].Value
 $unread = @($registrationBlock -split "`r?`n" | Where-Object { $_ -match '^\s*Invoke-Check\s' -and @(Get-Registered $_ -Azure).Count -ne 1 } | ForEach-Object { $_.Trim() })
 Assert 'every Invoke-Check line in the registration is read' ($registrationBlock -match 'Invoke-Check' -and $unread.Count -eq 0) "not read; a check name is single-quoted with no apostrophe: $($unread -join '; ')"
-# A stub run on its own shows how its record is named: by process id and that process's start time.
-$probeDir = Join-Path $scratch ('probe-' + [guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path $probeDir -Force | Out-Null
-$probeStub = Join-Path $probeDir 'Probe.ps1'
-[IO.File]::WriteAllText($probeStub, $script:StubTemplate.Replace('MARKS', $probeDir.Replace("'", "''")).Replace('BODY', 'exit 0'))
-& pwsh -NoProfile -NonInteractive -File $probeStub -Token probe | Out-Null
-$probeFiles = @(Get-ChildItem -LiteralPath $probeDir -Filter '*.json')
-$probeRecord = if ($probeFiles.Count -eq 1) { Get-Content -LiteralPath $probeFiles[0].FullName -Raw | ConvertFrom-Json }
-Assert 'a stub record is named by process id and start time, so a reused process id keeps both records' (
-    $probeFiles.Count -eq 1 -and $probeRecord.Proc -match "^$($probeRecord.Pid)-\d+$" -and
-    $probeFiles[0].Name -eq "$($probeRecord.Proc).json" -and [long]($probeRecord.Proc -split '-')[1] -le [long]$probeRecord.Start
-) "files: $(($probeFiles | ForEach-Object Name) -join ', '); Proc: $($probeRecord.Proc)"
 $savedThrottle = $env:TEST_ALL_THROTTLE
 try {
+    # A stub run on its own shows how its record is named: by process id and that process's start time,
+    # compared with the start time the operating system reports to the process that started the stub.
+    $probeDir = Join-Path $scratch ('probe-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $probeDir -Force | Out-Null
+    $probeStub = Join-Path $probeDir 'Probe.ps1'
+    [IO.File]::WriteAllText($probeStub, $script:StubTemplate.Replace('MARKS', $probeDir.Replace("'", "''")).Replace('BODY', 'exit 0'))
+    $probe = Start-Process pwsh -ArgumentList @('-NoProfile', '-NonInteractive', '-File', "`"$probeStub`"", '-Token', 'probe') -NoNewWindow -Wait -PassThru -RedirectStandardOutput (Join-Path $probeDir 'output.txt')
+    $probeProc = "$($probe.Id)-$($probe.StartTime.ToUniversalTime().Ticks)"
+    $probeFiles = @(Get-ChildItem -LiteralPath $probeDir -Filter '*.json')
+    $probeRecord = if ($probeFiles.Count -eq 1) { Get-Content -LiteralPath $probeFiles[0].FullName -Raw | ConvertFrom-Json }
+    Assert 'a stub record is named by process id and start time, so a reused process id keeps both records' (
+        $probe.ExitCode -eq 0 -and $probeFiles.Count -eq 1 -and $probeRecord.Proc -eq $probeProc -and
+        $probeFiles[0].Name -eq "$probeProc.json"
+    ) "exit $($probe.ExitCode); files: $(($probeFiles | ForEach-Object Name) -join ', '); Proc: $($probeRecord.Proc); expected: $probeProc"
+
     $env:TEST_ALL_THROTTLE = $null
     $r = Invoke-Scenario $source
     $skipped = @($r.Timings | Where-Object Result -eq 'SKIP')
