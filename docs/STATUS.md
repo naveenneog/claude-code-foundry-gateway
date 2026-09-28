@@ -36,13 +36,28 @@ defects, each with a screenshot. Work is on `p79-owner-test-fixes`, based on `03
       another; all 8 fail before the fix with the owner's error; `cd1005b`)
 - [x] The installer compares a saved record with the chosen gateway as soon as the gateway is
       chosen; attended, it offers to archive the saved record under its gateway's name and go on;
-      unattended, it refuses unless `-ArchiveSavedRecord` (`tests/Test-CompanyInstaller.ps1`, 4 new
-      checks, 21 on both shells; the 4 fail against the previous installer; `5885d4e`)
+      unattended, it refuses unless `-ArchiveSavedRecord`; `-WhatIf` moves nothing
+      (`tests/Test-CompanyInstaller.ps1`, 5 new checks, 22 on both shells; against the `0345e85`
+      installer the 5 fail and the other 17 pass, on both shells; `5885d4e`, `5de7ba2`)
 - [x] The developer count asks nothing about the entitlement store; after the store is chosen,
       named values for more developers than they hold is stated with the Cosmos store as the remedy
       (`tests/Test-AdminSurface.ps1`, 682 checks; 4 fail against the previous installer; `f14f92f`)
 - [x] SETUP.md, GUIDED-FLOW.md and CHANGELOG. Architecture: no component, data flow, identity,
       schedule or network path changes; the manifest's source hashes are refreshed, no image changes
+- [x] Mutations: 16 of 16 caught. Each mutation ran in its own copy of the worktree; it counts as
+      caught only when a suite ran its baseline number of checks (FinOpsApply 11, RelativeRecordPath
+      8, CompanyInstaller 22, AdminSurface 682) and at least one failed. FinOps: the arguments as one
+      array, the output returned into the change set, `Confirm` dropped, `aum`'s arguments as one
+      array, no exit-code reset, `NoConfigure` dropped. Records: the read and the write resolved
+      against the process directory, the shim passing a relative path through. Installer:
+      `-ArchiveSavedRecord` ignored, no console question, the record never moved, the record moved
+      under `-WhatIf`, the comparison back at the address question, the store warning back at the
+      developer count, the Cosmos store called unbuilt
+- [x] Heavier suites once on the branch: FlowOrdinalOrder 35, GuidedFlow 44, FlowStart 114,
+      FlowPermutations 43, InstallerPermutations 44; CompanyInstaller 22 and FinOpsApply 11 with
+      Windows PowerShell 5.1 as the host. Suites that start child shells through
+      `ProcessStartInfo.ArgumentList` (RelativeRecordPath, FlowStart, FlowPermutations, Test-All)
+      need PowerShell 7 as the host, which is how Test-All runs them; their children run on both
 - [ ] Council, five seats; the packet gate exits 0
 
 ## P77 a 60-minute gate budget while the exclusive checks are sharded, 2026-09-28
