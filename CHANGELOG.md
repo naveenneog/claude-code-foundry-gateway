@@ -47,6 +47,9 @@ exact streaming cache-creation detail remains **U13**.
   generation through cache, screen and command/file output boundaries.
   Cached dialogs/forms and request actions retain the item's originating guard;
   connection closure invalidates deferred references to the old source.
+  Round-five publication uses one guarded execution boundary with an AST
+  contract; verified principal transitions clear all presentation/assistant
+  state before input, including highlighted status and outgoing history.
 - **Reviewed model lifecycle (P70).** `-Action Change -Change models` and
   `scripts/Sync-ClaudeModels.ps1` discover the selected Foundry account, show deployment
   model/version/SKU/capacity and price status, accept per-deployment tier choices, snapshot

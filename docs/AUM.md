@@ -480,6 +480,20 @@ copy/ledger actions follow the same rule; closing their source connection
 invalidates the retained guard. A stale dialog explains the sign-in change
 without displaying the previous principal's row or defaults.
 
+All backend-derived presentation and assistant-context reuse pass through
+`guarded_publish` with their originating guard. A verified principal change
+clears tables, selections, picker options, open forms/dialogs, cached
+capabilities/preferences and assistant conversation/history before another
+input is dispatched. Highlighted status, clipboard/ledger actions and assistant
+requests do not reuse the previous principal's data. Publication rejection
+clears the current view and explains the sign-in change.
+
+The offline structural test scans the presentation/output modules for direct
+widget/property/status/clipboard/export/assistant writes outside this boundary.
+Its exact, documented static-write allowlist covers local shell labels, resets
+and fixed controls, not whole handlers. JSON/linear/table formatters require an
+active guarded publication, and an async wait cannot be inside that write scope.
+
 Overview displays each source as it arrives. Pending panels name their source,
 and the progress line shows an estimate and elapsed time. Estimates are not
 network deadlines or ingestion guarantees. A delayed trend query no longer

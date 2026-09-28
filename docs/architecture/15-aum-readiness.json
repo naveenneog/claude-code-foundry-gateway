@@ -12,7 +12,8 @@
     "progress": {"label": "ProgressiveRefresh", "source": "cli/finops/src/claude_finops/progressive.py", "match": "class ProgressiveRefresh:"},
     "diagnose": {"label": "database_failure", "source": "cli/finops/src/claude_finops/readiness.py", "match": "def database_failure("},
     "tokens": {"label": "resource_token", "source": "cli/finops/src/claude_finops/config.py", "match": "def resource_token("},
-    "guard": {"label": "read_guard", "source": "cli/finops/src/claude_finops/http_backend.py", "match": "def read_guard("},
+    "guard": {"label": "guarded_publish", "source": "cli/finops/src/claude_finops/guarded_publication.py", "match": "def guarded_publish("},
+    "principal": {"label": "PrincipalUI", "source": "cli/finops/src/claude_finops/principal_ui.py", "match": "class PrincipalUI:"},
     "auth-me": {"label": "/api/v1/auth/me", "source": "cli/finops/src/claude_finops/turnstile.py", "match": "\"whoami\": \"/api/v1/auth/me\""},
     "bridge": {"label": "Invoke-ClaudeFinOps.ps1", "source": "scripts/Invoke-ClaudeFinOps.ps1", "kind": "file"}
   },
@@ -26,7 +27,7 @@
     {"id": "sources", "x": 20, "y": 298, "w": 580, "h": 220, "tone": "blue", "title": "Existing sources, unchanged accounting",
      "lines": ["[[bridge]] lists nonsecret named values once", "Shared catalog, tiers and token/USD converters", "Snapshots and complete aggregates validate their generation", "An obsolete cycle cannot rebind its cached account"]},
     {"id": "panels", "x": 20, "y": 594, "w": 580, "h": 230, "tone": "teal", "title": "Current data, source by source",
-     "lines": ["[[progress]] paints each completed source", "[[guard]] validates before cache, screen or output", "Deferred dialogs and exports retain the source generation", "Fatal errors clear the refresh before obsolete data appears"]},
+     "lines": ["[[progress]] uses [[guard]] for results", "[[principal]] clears old state before input", "Status, clipboard, exports and assistant context are guarded", "AST checks direct sinks; static writes have exact exceptions"]},
     {"id": "probe", "x": 680, "y": 62, "w": 580, "h": 160, "tone": "purple", "title": "Authenticated identity is readiness",
      "lines": ["GET [[auth-me]] with a short timeout", "Azure credential may load concurrently in memory", "A healthy /health alone does not establish database readiness"]},
     {"id": "diagnose", "x": 680, "y": 298, "w": 580, "h": 220, "tone": "purple", "title": "Timeout or 5xx: read-only ARM diagnosis",

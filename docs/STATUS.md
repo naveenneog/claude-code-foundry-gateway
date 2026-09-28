@@ -146,8 +146,8 @@ requires a class-wide boundary rather than further isolated guard handoffs.
 | Coder | PASS | Cached detail retains its source guard | Retained |
 | QA | PASS | Unchanged-A details and close invalidation pass | Retained |
 | UX | PASS | Round-4 behavior accepted | Retained |
-| Security | BLOCK | B4: highlighted rows write old-principal data to status | Pending: one guarded publication choke point plus structural enforcement |
-| Security | BLOCK | B5: old assistant conversation/history is sent under a new principal | Pending: clear all prior-principal state before input and guard assistant egress |
+| Security | BLOCK | B4: highlighted rows write old-principal data to status | `89852aa`: common `guarded_publish` boundary and pre-input reset; `9b4e258`/`164780a`: formatter/property/async structural enforcement |
+| Security | BLOCK | B5: old assistant conversation/history is sent under a new principal | `89852aa`: verify current identity, clear old conversation/history before reuse and guard the outgoing assistant request; principal lifecycle consolidated in `a526061`/`b326db5` |
 
 The B4/B5 replays and a structural bypass detector fail before implementation.
 Backend-derived widget/status/clipboard/export/JSON/CSV and assistant egress
@@ -156,6 +156,47 @@ invalidate UI state before later input, including tables, selections, open
 forms/dialogs and assistant history. Static presentation writes have an explicit
 commented allowlist checked by the structural test. Only affected pytest and
 the full publication selector run; no Test-FinOps, Test-All, gate or merge.
+
+The bearer-aware replays failed before implementation (**3 failed, 33 passed**):
+an A-only budget scope/figures reached the highlighted status under verified B,
+A's conversation/history reached B's assistant request, and a prior-principal
+form remained open. The new structural contract also failed before
+centralization (**1 failed, 4 passed**). B4's final test observes the state at
+Textual's input-dispatch boundary; clearing after the handler is insufficient.
+B5's B-authenticated request has no A conversation or history, and the UI cache
+retains only B's response. Tables, selections, picker options, forms/dialogs,
+capabilities, preferences and assistant state clear on the verified transition.
+
+`guarded_publish(origin)` is the sole guarded execution boundary. Synchronous
+render helpers and generators delegate to it; formatters refuse calls outside
+it. UI origins retain engine/revision provenance and rejection cleanup. A
+deferred child cannot inherit an expired publication scope; generators recheck
+their source per item, and async publication decorators or guarded scopes
+spanning an `await` are rejected. Lookup and saved-view APIs now require an
+explicit source guard rather than guessing one after a handoff.
+
+The AST detector automatically discovers **16 presentation/output modules**,
+including `tui.py`, `ui_features.py`, the new principal lifecycle, formatter and
+assistant egress modules. It checks widget calls and value/label assignments,
+status, clipboard subprocesses, export writes and assistant requests. Its
+**51 exact static-write exceptions** each have a comment/reason; no entire
+handler is allowlisted. Aliasing a widget as `result` does not hide a write.
+
+Final publication selector: **53 tests passed** (40 end-to-end publication,
+10 structural, 3 execution-lifetime tests). **Four mutations caught**, each at
+the full 53-case count: an unguarded handler status write failed 1/53; skipping
+principal clearing failed 4/53; bypassing the central origin check failed 10/53;
+a direct handler property write failed 1/53. Exact source bytes were restored.
+The affected pytest selection passed **232 tests in 182.41 s**, with existing
+settled snapshots unchanged; the 53-case selector passed again after the
+principal-lifecycle consolidation. No assertion or time budget was relaxed.
+
+Reset now closes obsolete dialogs rather than leaving a refusal dialog open;
+the prior replay assertions were updated to require cleared state and no
+old-principal output. A pre-existing `ChangeScreen.remove` boolean shadowed
+Textual's removal method and was renamed to `removing` so actual closure works.
+No Test-FinOps, Test-All, gate, main merge, push or database operation was run.
+The lead owns integration and full validation; ROADMAP P71 remains unticked.
 
 ### Council round 4 corrections
 

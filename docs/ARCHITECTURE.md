@@ -521,6 +521,10 @@ generation; cached account metadata cannot revive an invalidated cycle.
 Round 3 extends complete-cycle pinning to HTTP backends and adds captured
 publication guards before cache, partial/final rendering and command/file output.
 Deferred controls retain the source guard rather than checking only after display.
+Round 5 routes presentation and assistant-context reuse through one
+`guarded_publish` function. `PrincipalUI` clears prior-principal state before
+input dispatch; an AST test checks the publication boundary across UI/output
+modules with exact static-write exceptions.
 
 ![AUM readiness uses bounded authenticated HTTP and read-only Azure diagnosis; Direct shares a snapshot and returns independent sources progressively.](images/architecture/aum-readiness.png)
 

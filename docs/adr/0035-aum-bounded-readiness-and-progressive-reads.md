@@ -220,6 +220,16 @@ publishing stale values. An AST contract rejects bypassing sinks and has a
 commented, exact static-text allowlist; allowlist entries do not exempt a whole
 handler. This replaces the earlier convention that each handler manually
 remembered to apply a guard.
+`guarded_publish` is the single execution function; `published` delegates
+synchronous renderer/generator execution to it. Source origins retain both
+backend validation and the UI engine/revision, including rejection cleanup.
+`PrincipalUI` drains verified transitions before event/input dispatch, closes
+obsolete controls and clears all old-principal presentation state. Assistant
+egress re-verifies identity before using its cached context. Formatters require
+an active publication; expired inherited scopes and async publication
+decorators are refused. The structural detector discovers presentation modules
+and checks calls, widget property assignments and clipboard subprocesses,
+with 51 exact commented static-write exceptions and no handler exemptions.
 
 ## Consequences
 
