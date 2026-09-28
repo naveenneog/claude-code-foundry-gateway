@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from .backend import Backend
 from .config import token, token_needs_refresh
 from .errors import FinOpsError, http_error
+from .guarded_publication import publication_sink
 
 
 class HttpBackend(Backend):
@@ -88,7 +89,8 @@ class HttpBackend(Backend):
                         raise self._unavailable_error(method, path) from None
                 generation, access = self._credential_generation, self._token
             try:
-                response = self._client.request(method, path, params=params, json=body,
+                send = self._assistant_request if method == "POST" and path == "/api/v1/assistant/ask" else self._client.request
+                response = send(method, path, params=params, json=body,
                     timeout=self._request_timeout(method, path),
                     headers={"Authorization": "Bearer " + access, **(extra_headers or {})})
             except httpx.TimeoutException:
@@ -121,6 +123,10 @@ class HttpBackend(Backend):
                     return None
                 raise FinOpsError("Unexpected server response. Check the API URL and compatible contract version.", 7) from None
         raise http_error(401)
+
+    @publication_sink
+    def _assistant_request(self, *args, **kwargs):
+        return self._client.request(*args, **kwargs)
 
     def _request_timeout(self, method, path):
         return 60

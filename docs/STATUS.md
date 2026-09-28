@@ -165,6 +165,18 @@ static registry is pinned by a digest. The initial real-Textual runtime
 reproductions reported **11 failed**, all from a missing sink refusal;
 runtime implementation and mutation receipts follow separately.
 
+The sink implementation's expanded RED run reported **25 failed** (21 missing
+refusals and four missing explicit-deferral cases). Widget methods/properties,
+clipboard, links and the HTTP assistant transport now validate at execution.
+The runtime file passes **25 cases**; the existing publication file passes
+**40**, and lifetime/structure checks pass **30**. Existing replay setup writes
+now declare their input origin; their scheduling, refusal and data assertions
+are unchanged. Six specific Textual input/mount handlers retain source guards;
+application handlers and layout/idle callbacks gain no publication authority.
+Deferred async callbacks hold no identity lock across an await. U26 records
+30 passing baseline navigation repetitions and the 20-case file run without
+claiming a reproduction or fix for the reported cancellation.
+
 ### Council round 5 corrections
 
 The fifth review closed B3 and retained Architect/Coder/QA/UX PASS. Security

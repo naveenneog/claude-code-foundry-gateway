@@ -102,6 +102,17 @@ assertions. All five original containment mutations were reconfirmed at seven
 cases each; the next full AUM run passed 468 tests. Exact timings and the failed
 run are in P71's STATUS section and private evidence.
 
+Round 6's reviewer observed
+`test_navigation_immediately_after_worker_completion_cannot_restore_old_pane`
+raise worker cancellation once in a 232-case affected run (1 failed, 231
+passed, 337.85 s), then pass alone. The bounded local attempt held the shared
+lock from **13:50:34Z to 13:53:17Z on 2026-09-28**. Thirty separate runs of that
+case passed, followed by **20 passed in 20.65 s** for `test_progressive_tui.py`.
+The attempt used a frozen copy of `829ef40`'s package (the reviewed `dd46186`
+production code), with its import path checked before running. No timeout,
+assertion or synchronization was changed. This attempt did not reproduce the
+reviewer's cancellation; U26 remains open for that result.
+
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 
 **Answer: yes.** A constant `counter-key` is a single counter shared by every caller. P11 can

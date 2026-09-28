@@ -7,7 +7,7 @@ from functools import partial
 from textual import on, work
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, DataTable, Input, Label, Select, Static, TextArea
+from .publication_widgets import Button, DataTable, Input, Label, Select, Static, TextArea
 
 from .errors import FinOpsError
 from .output import chargeback_csv, safe_text
@@ -48,6 +48,7 @@ class DetailScreen(ModalScreen):
 class MonthScreen(ModalScreen):
     BINDINGS = [("escape", "dismiss", "Cancel")]
 
+    @published(lambda self: self.app.safe_message_guard())
     def compose(self):
         with Vertical(id="month-dialog"):
             yield Label("Choose month (YYYY-MM)")
@@ -72,7 +73,8 @@ class MonthScreen(ModalScreen):
         self.app.scope_filters.pop("from", None)
         self.app.scope_filters.pop("to", None)
         self.app.request_before = ""
-        self.app.query_one("#request-before", Input).value = ""
+        with guarded_publish(self.app.safe_message_guard()):
+            self.app.query_one("#request-before", Input).value = ""
         self.app.update_filter_chips()
         self.dismiss()
         self.app.action_refresh()
@@ -85,6 +87,7 @@ class MonthScreen(ModalScreen):
 class LookupScreen(ModalScreen):
     BINDINGS = [("escape", "dismiss", "Back")]
 
+    @published(lambda self: self.app.safe_message_guard())
     def compose(self):
         with Vertical(id="lookup-dialog"):
             yield Label("Find units, teams, models; people in the selected team", markup=False)
@@ -120,7 +123,8 @@ class LookupScreen(ModalScreen):
     @work(exclusive=True)
     async def search(self):
         query = self.query_one("#lookup-query", Input).value
-        self.query_one("#lookup-status", Static).update("Searching...")
+        with guarded_publish(self.app.safe_message_guard()):
+            self.query_one("#lookup-status", Static).update("Searching...")
         try:
             with self.app.engine.backend.read_cycle():
                 results = await asyncio.to_thread(self.app.engine.lookup, query, self.app.team)
@@ -285,7 +289,8 @@ class ChangeScreen(ModalScreen):
     @on(Button.Pressed, "#preview")
     @work(exclusive=True, group="change")
     async def preview(self):
-        self.query_one("#form-status", Static).update("Refreshing permissions and allocation...")
+        with guarded_publish(self.app.safe_message_guard()):
+            self.query_one("#form-status", Static).update("Refreshing permissions and allocation...")
         try:
             self.preview_plan = await asyncio.to_thread(self.operation())
             if self.kind == "budget":
@@ -322,7 +327,8 @@ class ChangeScreen(ModalScreen):
         self.applying = True
         self.query_one("#apply-change", Button).disabled = True
         self.query_one("#preview", Button).disabled = True
-        self.query_one("#form-status", Static).update("Saving once. Do not close this terminal.")
+        with guarded_publish(self.app.safe_message_guard()):
+            self.query_one("#form-status", Static).update("Saving once. Do not close this terminal.")
         try:
             fresh = await asyncio.to_thread(self.operation())
             if any(fresh.get(key) != self.preview_plan.get(key) for key in ("before", "after", "parent_headroom")):
@@ -334,7 +340,8 @@ class ChangeScreen(ModalScreen):
             elif self.engine.backend.name == "Direct":
                 message = "Gateway script completed; read-back verified. Refresh to inspect current values."
             else:
-                self.query_one("#form-status", Static).update("Saved. Following gateway apply; usually about two minutes...")
+                with guarded_publish(self.app.safe_message_guard()):
+                    self.query_one("#form-status", Static).update("Saved. Following gateway apply; usually about two minutes...")
                 deadline = asyncio.get_running_loop().time() + 180
                 while True:
                     status = await asyncio.to_thread(self.engine.read, "apply")
@@ -359,7 +366,8 @@ class ChangeScreen(ModalScreen):
     @on(Button.Pressed, "#cancel-change")
     def action_cancel(self):
         if self.applying:
-            self.query_one("#form-status", Static).update("A write is in progress. Wait for its result before closing.")
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one("#form-status", Static).update("A write is in progress. Wait for its result before closing.")
             return
         self.dismiss()
         self.app.action_refresh()
@@ -384,11 +392,13 @@ class ExportScreen(ModalScreen):
     async def export(self):
         name = self.query_one("#export-name", Input).value
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,100}\.csv", name):
-            self.query_one("#export-status", Static).update("Use a CSV filename, without directory separators.")
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one("#export-status", Static).update("Use a CSV filename, without directory separators.")
             return
         button = self.query_one("#export-csv", Button)
         button.disabled = True
-        self.query_one("#export-status", Static).update("Reading every catalog scope, not just the top ranking...")
+        with guarded_publish(self.app.safe_message_guard()):
+            self.query_one("#export-status", Static).update("Reading every catalog scope, not just the top ranking...")
         try:
             with self.app.engine.backend.read_cycle():
                 result = await asyncio.to_thread(self.app.engine.chargeback)

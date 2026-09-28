@@ -3,11 +3,11 @@
 from contextlib import contextmanager, nullcontext
 
 from textual import events
-from textual.widgets import DataTable, Input, Select, Static, TextArea
+from .publication_widgets import DataTable, Input, Select, Static, TextArea
 
 from .dashboard import Dashboard
 from .errors import FinOpsError
-from .guarded_publication import guarded_publish, published, PublicationOrigin
+from .guarded_publication import guarded_publish, published, PublicationOrigin, guarded_deferred
 from .screens import ChangeScreen
 
 
@@ -30,7 +30,7 @@ class PrincipalUI:
         if engine is self.engine and revision != self._principal_revision:
             self._pending_principal = (dict(identity), revision)
             if self.is_running:
-                self.call_later(self._synchronize_principal)
+                self.call_later(guarded_deferred(self.safe_message_guard(), self._synchronize_principal))
 
     def _bind_engine(self, engine):
         previous = getattr(self, "engine", None)

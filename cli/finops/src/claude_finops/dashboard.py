@@ -1,7 +1,7 @@
 """A monitoring dashboard: scoped facts, compact gauges, and focusable detail panels."""
 
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Static
+from .publication_widgets import Static
 from datetime import datetime, timezone
 
 from .rules import human
@@ -88,6 +88,7 @@ class DashboardPanel(Static, can_focus=True):
 
 
 class Dashboard(Vertical):
+    @published(lambda self: self.app.safe_message_guard())
     def compose(self):
         yield DashboardPanel("Budget and month-to-date usage", "dash-kpis")
         with Horizontal(id="dash-main"):
@@ -98,12 +99,14 @@ class Dashboard(Vertical):
                 yield DashboardPanel("Budget risks", "dash-risks")
                 yield DashboardPanel("Recent anomalies", "dash-anomalies")
 
+    @published(lambda self: self.app.safe_message_guard())
     def clear(self):
         for panel in self.query(DashboardPanel):
             panel.update("No current data. Refresh an authorized view.")
             panel.detail = {}
             panel.read_guard = None
 
+    @published(lambda self: self.app.safe_message_guard())
     def begin_load(self):
         for panel in self.query(DashboardPanel):
             panel.update("Loading current facts (estimate 3-5 s)...")

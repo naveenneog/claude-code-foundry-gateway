@@ -1,11 +1,11 @@
 from textual import on
 from textual.containers import Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, DataTable, Label
+from .publication_widgets import Button, DataTable, Label
 
 from .screens import DetailScreen
 from .errors import FinOpsError
-from .guarded_publication import guarded_publish, published
+from .guarded_publication import guarded_publish, published, guarded_deferred
 
 
 class DashboardRows(ModalScreen):
@@ -115,7 +115,7 @@ class DashboardRows(ModalScreen):
             self.app.push_screen(DetailScreen("Context parent — no unit-wide access", row, read_guard=self.read_guard))
             return
         self.dismiss()
-        self.app.call_after_refresh(self.open_selected, kind, row)
+        self.app.call_after_refresh(guarded_deferred(self.read_guard, self.open_selected), kind, row)
 
     def open_selected(self, kind, row):
         try:

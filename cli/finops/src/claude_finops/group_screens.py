@@ -3,7 +3,7 @@ import asyncio
 from textual import on, work
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, DataTable, Input, Label, Static
+from .publication_widgets import Button, DataTable, Input, Label, Static
 
 from .errors import FinOpsError
 from .feature_screens import ActionForm
@@ -20,6 +20,7 @@ class GroupPicker(ModalScreen):
         self.scope_kind = scope_kind
         self.rows, self.cursor, self.search_text = [], None, ""
 
+    @published(lambda self: self.app.safe_message_guard())
     def compose(self):
         with Vertical(id="detail-dialog"):
             yield Label("Select or create the Entra group for this scope", markup=False)
@@ -77,7 +78,8 @@ class GroupPicker(ModalScreen):
             return
         group = self.rows[event.cursor_row]
         if not group.get("securityEnabled") or group.get("mailEnabled") or group.get("groupTypes"):
-            self.query_one("#group-status", Static).update("Choose an assigned-membership, non-mail-enabled security group.")
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one("#group-status", Static).update("Choose an assigned-membership, non-mail-enabled security group.")
             return
         self.dismiss()
         with guarded_publish(self.read_guard):

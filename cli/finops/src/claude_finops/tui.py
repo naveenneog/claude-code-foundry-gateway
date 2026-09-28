@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 
 from rich.text import Text
 from textual import on, work
@@ -6,7 +7,8 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.theme import Theme
-from textual.widgets import Button, DataTable, Input, Select, Static, TabbedContent, TabPane, TextArea
+from textual.widgets import TabbedContent, TabPane
+from .publication_widgets import Button, DataTable, Input, Select, Static, TextArea, PublicationWidget
 
 from .errors import FinOpsError
 from .accessibility import AsciiFilter
@@ -23,7 +25,7 @@ from .ui_features import FeatureUI, EXTRA_TABS
 from .capabilities import enabled
 from .feature_screens import FilterChips
 from .progressive import ProgressiveRefresh
-from .guarded_publication import guarded_publish, published
+from .guarded_publication import guarded_publish, published, guarded_deferred, publication_sink
 from .principal_ui import PrincipalUI
 
 
@@ -96,6 +98,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, App):
                                   panel="#000000", warning="#FFFFFF", error="#FFFFFF", success="#FFFFFF", dark=True))
         self.theme = "no-color" if no_color else (config.theme if config.theme in self.available_themes else "gateway")
 
+    @published(lambda self: self.safe_message_guard())
     def compose(self) -> ComposeResult:
         yield Static(COMPACT, id="brand", markup=False)
         yield Static("Signing in through Azure CLI (estimate 3-5 s)...", id="identity", markup=False)
@@ -144,6 +147,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, App):
         yield Static("1-8 / 0 tabs | Tab / Shift+Tab focus | Enter details | ? one-screen tour", id="status", markup=False)
         yield Static("", id="key-hints", markup=False)
 
+    @published(lambda self: self.safe_message_guard())
     def on_mount(self):
         if self.config.ascii:
             self.add_class("ascii")
@@ -195,7 +199,33 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, App):
     def on_resize(self):
         self.update_brand()
         if self.data.get("overview"):
-            self.call_after_refresh(self.render_tab, "overview", self.data["overview"])
+            self.call_after_refresh(guarded_deferred(self.cached_guard("overview"), self.render_tab),
+                                    "overview", self.data["overview"])
+
+    @publication_sink
+    def copy_to_clipboard(self, text):
+        return super().copy_to_clipboard(text)
+
+    @publication_sink
+    def open_url(self, url, *, new_tab=True):
+        return super().open_url(url, new_tab=new_tab)
+
+    def _publication_rejected(self, error):
+        self._reject_publication(error)
+
+    async def _dispatch_action(self, namespace, action_name, params):
+        if isinstance(namespace, PublicationWidget):
+            for cls in type(namespace).__mro__:
+                method = cls.__dict__.get("action_" + action_name)
+                if method is not None:
+                    if cls.__module__.startswith("textual.widgets."):
+                        callback = namespace._framework_callback(namespace.input_origin(), method.__get__(namespace, cls))
+                        result = callback(*params)
+                        if inspect.isawaitable(result):
+                            await result
+                        return True
+                    break
+        return await super()._dispatch_action(namespace, action_name, params)
 
     def get_line_filters(self):
         filters = list(super().get_line_filters())
@@ -452,7 +482,8 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, App):
         self.query_one("#dash-kpis" if self.active == "overview" else f"#table-{self.active}").focus()
 
     def action_clear_filter(self):
-        self.query_one("#quick-filter", Input).value = ""
+        with guarded_publish(self.safe_message_guard()):
+            self.query_one("#quick-filter", Input).value = ""
         self.query_one("#quick-filter", Input).display = False
         self.filters.pop(self.active, None)
         if self.breadcrumbs:

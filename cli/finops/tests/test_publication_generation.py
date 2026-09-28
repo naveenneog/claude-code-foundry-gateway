@@ -16,6 +16,7 @@ from claude_finops.cli import emit, report_chargeback
 from claude_finops.config import Config
 from claude_finops.engine import Engine
 from claude_finops.errors import FinOpsError
+from claude_finops.guarded_publication import guarded_publish
 from claude_finops.redaction import Redactor
 from claude_finops.tui import FinOpsApp
 from claude_finops.fake import FakeBackend
@@ -411,7 +412,8 @@ async def test_cached_dialog_handoffs_retain_origin_during_deferred_composition(
         await pilot.pause()
         await app.workers.wait_for_complete()
         if surface == "pin-chart":
-            app.query_one("#ask-question", Input).value = "Show usage"
+            with guarded_publish(app.current_guard()):
+                app.query_one("#ask-question", Input).value = "Show usage"
             await app.ask_current()
             await pilot.pause()
             assert "A_ONLY_CHART" in str(app.ask_reply)
@@ -568,14 +570,16 @@ async def test_assistant_context_is_cleared_before_b_request(bearer_tui_estate, 
         app.action_tab("ask")
         await pilot.pause()
         await app.workers.wait_for_complete()
-        app.query_one("#ask-question", Input).value = "A question"
+        with guarded_publish(app.current_guard()):
+            app.query_one("#ask-question", Input).value = "A question"
         await app.ask_current()
         assert app.ask_history and app.ask_conversation == "a-conversation"
         old_guard = app.ask_reply_guard
         principal[0] = "b"
         await asyncio.to_thread(engine.read, "whoami")
         assert guard_exit_code(old_guard) == 3
-        app.query_one("#ask-question", Input).value = "B question"
+        with guarded_publish(app.current_guard()):
+            app.query_one("#ask-question", Input).value = "B question"
         await app.ask_current()
         assert len(asks) == 2 and asks[-1][0] == "Bearer token-b"
         assert asks[-1][1]["history"] == [] and asks[-1][1]["conversation_id"] is None
@@ -723,7 +727,8 @@ async def test_delayed_screen_or_export_read_cannot_publish_after_identity_chang
             await pilot.pause()
             await app.workers.wait_for_complete()
             if surface == "lookup-results":
-                app.screen.query_one("#lookup-query", Input).value = "a-only"
+                with guarded_publish(app.current_guard()):
+                    app.screen.query_one("#lookup-query", Input).value = "a-only"
                 app.screen.search()
         elif surface == "detail":
             app.open_detail({"request_id": "a-only"})
@@ -736,7 +741,8 @@ async def test_delayed_screen_or_export_read_cannot_publish_after_identity_chang
         elif surface == "assistant-settings":
             app.action_assistant_configure()
         elif surface == "assistant-answer":
-            app.query_one("#ask-question", Input).value = "Show usage"
+            with guarded_publish(app.current_guard()):
+                app.query_one("#ask-question", Input).value = "Show usage"
             app.run_worker(app.ask_current())
         elif surface == "membership":
             app.team = "a-only"

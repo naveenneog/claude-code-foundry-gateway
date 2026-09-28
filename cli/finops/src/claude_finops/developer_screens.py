@@ -3,12 +3,12 @@ import asyncio
 from textual import on, work
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, DataTable, Input, Label, Select, Static
+from .publication_widgets import Button, DataTable, Input, Label, Select, Static
 
 from .developer_actions import developer_change, developer_find
 from .errors import FinOpsError
 from .feature_screens import ActionForm
-from .guarded_publication import guarded_publish, published
+from .guarded_publication import guarded_publish, published, guarded_deferred
 
 
 class DeveloperPicker(ModalScreen):
@@ -19,6 +19,7 @@ class DeveloperPicker(ModalScreen):
         self.rows, self.cursor, self.search_text = [], None, ""
         self.debounce = None
 
+    @published(lambda self: self.app.safe_message_guard())
     def compose(self):
         with Vertical(id="detail-dialog"):
             yield Label("Add developer from Microsoft Entra directory", markup=False)
@@ -38,7 +39,7 @@ class DeveloperPicker(ModalScreen):
             self.debounce.stop()
         value = self.query_one("#developer-search", Input).value
         if len(value.strip()) >= 3:
-            self.debounce = self.set_timer(0.35, self.search)
+            self.debounce = self.set_timer(0.35, guarded_deferred(self.app.current_guard(), self.search))
 
     @on(Input.Submitted, "#developer-search")
     def search(self):

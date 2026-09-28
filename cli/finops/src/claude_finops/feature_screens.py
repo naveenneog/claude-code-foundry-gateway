@@ -5,7 +5,7 @@ from pathlib import Path
 from textual import on, work
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Select, Static
+from .publication_widgets import Button, Input, Label, Select, Static
 
 from .errors import FinOpsError
 from .guarded_publication import guarded_publish, published
@@ -127,7 +127,8 @@ class ActionForm(ModalScreen):
                 state = json.dumps(self.app.present({key: result.get(key) for key in
                     ("status_code", "headers", "usage", "error", "seconds")}), ensure_ascii=True, indent=2)
             if result.get("requested_at") and not self.app.engine.backend.immediate_writes:
-                self.query_one("#action-status", Static).update("Saved; following apply status...")
+                with guarded_publish(self.app.safe_message_guard()):
+                    self.query_one("#action-status", Static).update("Saved; following apply status...")
                 outcome = await asyncio.to_thread(self.app.engine.wait_for_apply, result["requested_at"])
                 state = outcome["state"]
             with guarded_publish(self.read_guard):
@@ -199,6 +200,7 @@ class FiltersScreen(ModalScreen):
 class TourScreen(ModalScreen):
     BINDINGS = [("escape", "finish", "Start")]
 
+    @published(lambda self: self.app.safe_message_guard())
     def compose(self):
         with Vertical(id="detail-dialog"):
             yield Label("Welcome to AUM — one engine, terminal and commands")

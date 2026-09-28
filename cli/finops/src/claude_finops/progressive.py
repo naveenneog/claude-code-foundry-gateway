@@ -5,13 +5,13 @@ from datetime import datetime
 import time
 
 from textual import work
-from textual.widgets import DataTable, Static
+from .publication_widgets import DataTable, Static
 
 from .dashboard import Dashboard, DashboardPanel
 from .errors import FinOpsError
 from .output import safe_text
 from .scope import scope_label
-from .guarded_publication import guarded_publish, published
+from .guarded_publication import guarded_publish, published, guarded_deferred
 
 
 SOURCES = {
@@ -135,7 +135,8 @@ class ProgressiveRefresh:
         self.query_one(f"#table-{tab}", DataTable).clear(columns=True)
         note = self.query_one(f"#note-{tab}", Static)
         note.remove_class("read-error")
-        note.update("Loading current data (estimate 3-5 s); sources appear as they arrive.")
+        with guarded_publish(self.safe_message_guard()):
+            note.update("Loading current data (estimate 3-5 s); sources appear as they arrive.")
         if tab == "overview":
             self.query_one(Dashboard).display = True
             self.query_one(Dashboard).begin_load()
@@ -145,7 +146,7 @@ class ProgressiveRefresh:
             if "governance_authority" in local:
                 local["governance_authority"] = "not yet verified"
             self.render_tab(tab, local)
-        timer = self.set_interval(.25, self._show_wait)
+        timer = self.set_interval(.25, guarded_deferred(self.safe_message_guard(), self._show_wait))
         data_task = None
         identity_error = ""
         independent = bool(self.engine.backend.identity_independent_reads)
@@ -164,7 +165,8 @@ class ProgressiveRefresh:
                     identity_error = self._error_text(error)
                     self.identity = {}
                     self.feature_caps = {}
-                    self.query_one("#identity", Static).update("Direct | identity unavailable; read-only data")
+                    with guarded_publish(self.safe_message_guard()):
+                        self.query_one("#identity", Static).update("Direct | identity unavailable; read-only data")
                     self.update_brand()
                 else:
                     if not self._current_refresh(serial, tab):
