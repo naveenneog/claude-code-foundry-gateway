@@ -822,14 +822,16 @@ exact streaming cache-creation detail remains **U13**.
   printing both before P68. It now lists the default region and the other regions in its
   geography that publish an API Management v2 price, cheapest Basic v2 first, each with the three
   tiers' monthly list price for one unit at 730 hours, from one Retail Prices API call and rounded
-  to the cent as the PowerShell installer rounds it; prices the tier prompt and the summary; and
+  to the cent as the PowerShell installer rounds it on PowerShell 7 ([decimal] of the double, half to
+  even); prices the tier prompt and the summary; and
   says so, with the reason, when the prices cannot be read or are not in the form the API
   publishes. It reads a next page of the price list only on `https://prices.azure.com`. Its
   record gains `mode`, `sku`, `location`, `foundryAccount`, `foundryResourceGroup` and
   `requestsPerMinute`, and, run on its own in a terminal, it offers the FinOps tool
   (`--choose-finops`, `--skip-finops-offer`). `tests/Test-BashInstaller.ps1` runs 19 installs in
   Git Bash with stub `az`, `curl` and `pwsh`, and compares the region table with the one
-  `Install-ClaudeGateway.ps1` prints for the same list, over 160 prices.
+  `Install-ClaudeGateway.ps1` prints for the same list, over 170 prices, ten of them written with trailing
+  zeros, an exponent, 16 or 17 significant digits or above 10,000.
 - **jq.exe on Windows ends lines with CRLF (P75).** In Git Bash, command substitution drops the
   carriage return of the last line only, so the last field of every other region line kept one,
   and a price the region does not publish printed as USD 0.00. The region lines drop it before

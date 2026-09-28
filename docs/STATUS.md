@@ -29,6 +29,7 @@ line only, so a single value (a URL, a price) keeps none, and lines that `read` 
 The region lines drop it before they are split, and the stub `az` and `curl` refuse any argument
 that carries one. The discovery loop that already existed (`--foundry-account` not given) reads
 `jq -r` output the same way and is not changed here.
+
 - [x] Asked in a terminal, the region prompt lists the default region first (the Foundry
       account's region unless `--location` names another) and then the other physical regions in
       its geography group that publish a v2 price, cheapest Basic v2 first, each with the three v2
@@ -54,6 +55,7 @@ that carries one. The discovery loop that already existed (`--foundry-account` n
       FinOps offer accepted, declined, skipped and forced, and no PowerShell 7; the script uses no
       construct that needs bash 4, since it states that it runs on macOS
 - [x] SETUP.md and CHANGELOG
+
 Mutations, each in its own copy of the worktree, counted as caught only when the suite ran all 49
 checks and at least one failed: 24 of 24 caught, among them free-tier rows kept, the first tier
 instead of the marginal one, other geographies or unpriced regions listed, the summary pricing Basic
@@ -96,6 +98,48 @@ unpublished price, the type checks removed from either region read, the transfor
 ignored, a price written as a string taken, any next page followed, the API's own next-page form
 refused, a half cent rounded up, every price rounded as a double, and the price map defaulted with
 the stray brace.
+
+Council round 2 (gpt-6-astra, five seats, read-only, over `426b132..2cb7c7a`): BLOCK. Every
+round-1 BLOCK is closed.
+
+| Seat | Verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | BLOCK | B1: one price written in different ways was rounded differently. jq 1.7 and later keep a number's literal text, so `0.2005000000` and `2.005000000e-1` took the double fallback and gave 146.37 a month where `0.2005` gave 146.36; `10000.0005` gave 7300000.37 where PowerShell gives 7300000.36. 40 of 7,420 inputs differed | `547df27` |
+| Coder | PASS | the round-1 findings 3 and 4 closed | none needed |
+| QA | PASS | findings 6 and 7 closed; add B1's literals to the parity fixture | `547df27` |
+| UX | PASS | finding 9 closed | none needed |
+| Security | PASS | finding 10 closed; no `--` before the URL is safe after the URL check | none needed |
+
+`ConvertTo-MonthlyPrice` computes `[math]::Round([decimal]$HourlyPrice * 730, 2)`. On PowerShell 7,
+ConvertFrom-Json reads the price as a double, and `[decimal]` of a double is .NET's VarDecFromR8:
+the double is scaled by a power of ten chosen from its binary exponent, in double arithmetic, and
+rounded half to even to at most 15 significant digits (measured on .NET 10.0.12: 0.0074999999999999945
+becomes 0.0075, and 3.9985000000000052 becomes 3.9985). Cutting the double's shortest decimal form to
+15 digits, tried first, gave 5.47 and 2918.91 for those two, where PowerShell 7 gives 5.48 and
+2918.90: 2,485 differences over 124,993 prices of at most 17 significant digits, 72,000 of them a
+hair from a half-cent month. The installer's `monthly` now takes the same steps as VarDecFromR8:
+the binary exponent by exact halving and doubling (jq 1.5 has no `frexp`), the same power of ten
+and scale, the same rounding, then the 730-hour product on digit strings with cents half to even.
+Over the same 124,993 prices, run through the installer's own definitions with jq 1.8.2: 0
+differences from PowerShell 7; over 3,000 of them through the whole transform: 0.
+
+Two limits, stated in the installer: Windows PowerShell 5.1 reads a price written without an
+exponent as an exact decimal, so above 15 significant digits the two PowerShell hosts can differ by
+a cent, and this installer gives PowerShell 7's; jq 1.7 and later round a price written with more
+than 17 significant digits to 17 before converting it (0.0105000000000000501 becomes
+0.01050000000000005, where .NET reads 0.010500000000000051), so such a price can differ by a cent.
+Every one of the 43 differences in a set of 132,993 had 18 significant digits. The Retail Prices
+API wrote the 182 API Management v2 prices with at most 7 significant digits (read 2026-09-28).
+
+The parity fixture has ten written prices: B1's three, 6.25E-2, 0.2214999999999999, 1.25e-05, and
+four 17-digit prices a hair from a half-cent month (PowerShell 7: 5.48, 147.10, 752.27 and 2918.90).
+Against `2cb7c7a`'s installer the parity check fails (pr67: bash 5.47, PowerShell 5.48); after the
+fix the 62 checks pass, in 50 s.
+
+Mutations, the same rule, at 62 checks: 36 of 36 caught. The two that changed the former rounding
+(a half cent rounded up, every price rounded as a double) targeted code that is gone; three take
+their place: cents rounded half up on the digit string, the 15-digit conversion rounding half up,
+and the 15-digit conversion truncating.
 
 - [ ] Council, five seats; the packet gate exits 0
 ## P72 permutation tests of the guided flow and the installer, 2026-09-28
