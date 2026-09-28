@@ -68,11 +68,8 @@ def profile_lock(path: Path):
         yield
 
 
-def require_profile_revision(path: Path, revision: str, before: bytes | None = None):
-    current = read_profile(path)
+def profile_conflict(path: Path, revision: str, before: bytes | None, current: bytes | None) -> FinOpsError:
     actual = content_revision(current)
-    if actual == revision:
-        return
     changed = "file bytes"
     try:
         prior, latest = json.loads(before or b"{}"), json.loads(current or b"{}")
@@ -83,9 +80,15 @@ def require_profile_revision(path: Path, revision: str, before: bytes | None = N
             changed = "JSON shape"
     except (ValueError, UnicodeError):
         changed = "JSON encoding or content"
-    raise FinOpsError(f"The profile changed since preview: {path}. Changed fields: {changed}. "
-                      f"Reviewed revision: {revision or 'missing'}; current revision: {actual or 'missing'}. "
-                      "No newer file was overwritten. Preview the connection again.", 6)
+    return FinOpsError(f"The profile changed since preview: {path}. Changed fields: {changed}. "
+                       f"Reviewed revision: {revision or 'missing'}; current revision: {actual or 'missing'}. "
+                       "No newer file was overwritten. Preview the connection again.", 6)
+
+
+def require_profile_revision(path: Path, revision: str, before: bytes | None = None):
+    current = read_profile(path)
+    if content_revision(current) != revision:
+        raise profile_conflict(path, revision, before, current)
 
 
 def backup_profile(path: Path) -> Path:

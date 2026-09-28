@@ -115,6 +115,11 @@ class ActionForm(ModalScreen):
         try:
             latest = await asyncio.to_thread(self.operation, self.values(), False)
             if any(latest.get(key) != self.preview.get(key) for key in ("before", "after", "changes", "count")):
+                if self.commit_preview:
+                    from .configure import profile_conflict
+                    reviewed, current = self.preview["profile_change"], latest["profile_change"]
+                    if reviewed.revision != current.revision:
+                        raise profile_conflict(reviewed.path, reviewed.revision, reviewed.before, current.before)
                 raise FinOpsError("State changed since preview. Cancel and refresh.", 6)
             if latest.get("action") == "Bulk person budgets":
                 from .bulk import apply_budget_plan

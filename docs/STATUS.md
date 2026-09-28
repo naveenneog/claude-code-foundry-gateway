@@ -68,6 +68,21 @@ in principal-clearing context. AUM-service membership is disabled with a
 visible explanation; the bridge and its writer restrictions are unchanged.
 Ten consecutive runs and negative proofs are still pending at this green.
 
+The ten-run stability check subsequently passed **10 consecutive fresh pytest
+processes, 4 cases each (40 passes), in 152.750 s**. Each run includes the
+unchanged original 80x24 address assertion, both backend variants with forced
+7/6-column table widths, and a long wrapped URL. No retry after a failed
+iteration was needed. This was a bounded targeted run while the shared gate
+lock was occupied, not a full-suite or mutation run.
+
+The earlier preview-recheck path also needed the requested changed-field
+feedback, rather than its generic conflict sentence. Its added regression
+failed in **5.04 s**; after sharing the same safe field/revision summary with
+the commit path, the transaction, connection and publication suites passed
+**53 tests in 52.80 s**. Both early and final-window conflicts retain the
+reviewed candidate and name the changed fields without displaying raw profile
+contents.
+
 ### PLAN
 
 1. Keep P71's publication rule: every backend-derived widget/status/clipboard/export/assistant publication uses `guarded_publish(origin)` or `guarded_deferred(origin, ...)`. New labels and progress text stay inside the guarded boundary. The existing export-progress exception tracks its new estimated literal and reason; the pinned allowlist stays at 51 entries, with no broader exception ([ADR-0038](adr/0038-aum-actions-and-connection.md)).

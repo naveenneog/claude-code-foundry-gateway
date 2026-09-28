@@ -3,7 +3,7 @@
   "backend": "Example",
   "live": false,
   "hash_format": "utf8-lf-sha256",
-  "captured_at_utc": "2026-09-28T17:57:57.513799+00:00",
+  "captured_at_utc": "2026-09-28T18:11:41.420731+00:00",
   "sizes": [
     [
       80,
@@ -27,7 +27,7 @@
     "cli/finops/src/claude_finops/commands_local.py": "36d78d239f488aa161c65b6138138662d1d6dfb0eb27c2e3a3f55480d48ff337",
     "cli/finops/src/claude_finops/commands_v4.py": "f7d57bbd26e1679223f127eb751a362484b355cb338047cdaac37b8c6f94696f",
     "cli/finops/src/claude_finops/config.py": "a9885ae2a565d46ec7b3ad9d897e554b6af2b1390116c1a5620a736f1e4f4e79",
-    "cli/finops/src/claude_finops/configure.py": "d18456207622c6bedb511841cce27bf23202b605c947b5d35691335ae348d27c",
+    "cli/finops/src/claude_finops/configure.py": "54a93e601392ee85ef65e9682a568b038fb767ed4554eac8c8cfd3d4bb848652",
     "cli/finops/src/claude_finops/contracts.json": "5ec875b6a3007cedf382f63bb65aba22e635228dbf8d06f641d053cfbb2f12bd",
     "cli/finops/src/claude_finops/dashboard.py": "d2ce236358644235deeb2a7b4933b469a3296bcce3f1f481f04c3cc07fba80c5",
     "cli/finops/src/claude_finops/dashboard_drill.py": "57c6f69b4631bcce434b96adba22a783de48570ce5e81704c1fb49442a890d49",
@@ -43,7 +43,7 @@
     "cli/finops/src/claude_finops/fake_features.py": "720b076848c504d28d59aaf5e6104eab41caa1e2371e859e4490963de34331be",
     "cli/finops/src/claude_finops/feature_engine.py": "ed3cabfa8efb02f17aae5a54791da09e7f88ed2b0b3a168afdca245bb49933ca",
     "cli/finops/src/claude_finops/feature_routes.py": "c63546e7a687b407547ad093d67f2f97d1624ad6537c8ff417d0076175ef8421",
-    "cli/finops/src/claude_finops/feature_screens.py": "fdb9113791e48faca81fba5da4a0550affaa2a77d23e7924d0f89783502f1505",
+    "cli/finops/src/claude_finops/feature_screens.py": "26bd77139e0ad3534a059bb73ffd5ee0f3d4503a2c8fb087142d9564070430d3",
     "cli/finops/src/claude_finops/feature_views.py": "795dbca04cbeff692c44d105ad420ec3675826a2a70263c3c9e94e7c9e12d206",
     "cli/finops/src/claude_finops/gateway_probe.py": "5c8612ace85525c0dd2b76f2fc50f75f7cc1b64508359432cb3120087d84d805",
     "cli/finops/src/claude_finops/group_actions.py": "93fc92354528c6c430a0754362970069752257c3df27b8f37e448cbe5e496cd7",

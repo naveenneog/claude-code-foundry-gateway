@@ -60,6 +60,25 @@ async def test_apply_keeps_the_reviewed_revision_after_the_last_comparison(tmp_p
         assert revision(OLD_PROFILE) in message and revision(newer) in message
 
 
+async def test_preview_recheck_conflict_also_names_changed_fields_and_revisions(tmp_path, monkeypatch):
+    from claude_finops import ui_features
+
+    path = tmp_path / "config.json"
+    path.write_bytes(OLD_PROFILE)
+    newer = OLD_PROFILE.replace(b"old.contoso.com", b"changed-before-apply.contoso.com")
+    app = make_app(path)
+    monkeypatch.setattr(ui_features, "connect", lambda config: pytest.fail("A conflict must not connect"))
+    async with app.run_test(size=(100, 34)) as pilot:
+        form = await preview_connection(app, pilot)
+        path.write_bytes(newer)
+        await pilot.click("#action-apply")
+        await settle(app, pilot)
+        assert path.read_bytes() == newer
+        message = str(form.query_one("#action-status", Static).render())
+        assert "Changed fields: url" in message
+        assert revision(OLD_PROFILE) in message and revision(newer) in message
+
+
 async def test_apply_uses_reviewed_config_without_rediscovering_after_comparison(tmp_path, monkeypatch):
     from claude_finops import ui_features
 

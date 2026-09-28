@@ -161,7 +161,7 @@
         "cli/finops/src/claude_finops/cli.py": "e85b655911a0c768d7d5d0e832b213a76510645f8770e59c34fe655cd39f32f8",
         "cli/finops/src/claude_finops/commands_groups.py": "420d39ed6540deec0607f649d478046a868e675ce4f3c78e4503d9d9d9c87294",
         "cli/finops/src/claude_finops/config.py": "a9885ae2a565d46ec7b3ad9d897e554b6af2b1390116c1a5620a736f1e4f4e79",
-        "cli/finops/src/claude_finops/configure.py": "d18456207622c6bedb511841cce27bf23202b605c947b5d35691335ae348d27c",
+        "cli/finops/src/claude_finops/configure.py": "54a93e601392ee85ef65e9682a568b038fb767ed4554eac8c8cfd3d4bb848652",
         "cli/finops/src/claude_finops/developer_actions.py": "59b675db2f55ecf1c2df0029cd73cad4842452481762e1283cea7e2c58432127",
         "cli/finops/src/claude_finops/developers.py": "fee788c49a4b4178c1f8c6c2f3d4a6b5ddf5c2dc516b4f2416dfaa268b0f92d1",
         "cli/finops/src/claude_finops/direct.py": "60bdbdf6b12007a4cc65fd245dd6a1db93d4c34dbee582436fde0020c314323c",
