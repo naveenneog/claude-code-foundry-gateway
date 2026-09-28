@@ -9,17 +9,19 @@
 ## Context
 
 [ADR-0025](0025-parallel-test-suite.md) returned `commandTimeoutMs` to 1,800,000 when
-`tests/Test-All.ps1` ran 39 checks in 790 to 927 seconds. It now runs 89 to 91. Each packet gate on
-2026-09-28 ran on this repository's gate machine (16 logical CPUs) at the default throttle of four,
-under the shared gate lock:
+`tests/Test-All.ps1` ran 39 checks in 790 to 927 seconds. On 2026-09-28 it ran 82 on `main` before
+P75, 83 with P75, and 91 with P69 as well. Each packet gate that day ran on this repository's gate
+machine (16 logical CPUs) at the default throttle of four unless stated, under the shared gate lock.
+The two P69 rows marked "agent" are as the P69 agent reported them; the others are from the gate
+logs and the timings files:
 
 | Tree | Start (IST) | Test-All | Result |
 |---|---|---:|---|
 | P76 on `f98f885` | 11:48 | 1,368.1 s | pass |
 | P75 on `f98f885` | 12:11 | 1,371.1 s | pass |
-| P69 `d361d5d` (the agent's gate) | 12:35 | 1,683.9 s | pass |
+| P69 `d361d5d` (agent) | 12:35 | 1,683.9 s | pass |
 | P75 on `e39c3e4` (reviews ran during it) | 13:07 | 1,688.3 s | pass |
-| P69 `1cd1567` (CPU averaged 68.4%) | after 13:35 | 1,800 s | timeout |
+| P69 `1cd1567` (agent; CPU averaged 68.4%) | after 13:35 | 1,800 s | timeout |
 | P69 `b4e970b` on `040ca87`, throttle 8 | 15:10 | 1,800 s | timeout |
 | P69 `b4e970b` on `040ca87` | 15:54 | 1,800 s | timeout |
 

@@ -662,9 +662,11 @@ it does not use Azure CLI state or scan the entire working tree, and every mutat
 a uniquely named copy in the ignored `.shots-entra` area, never a repository source file.
 
 The current main runner follows [ADR-0025](adr/0025-parallel-test-suite.md): isolated
-parallel checks and complete mutation shards restored the 30-minute gate command budget.
-That supersedes [ADR-0024](adr/0024-test-suite-time-budget.md)'s temporary 60-minute
-budget. Use the merged contract, not a worktree-local timeout change.
+parallel checks and complete mutation shards, at a default throttle of four. ADR-0025 restored
+the 30-minute gate command budget after [ADR-0024](adr/0024-test-suite-time-budget.md)'s temporary
+60-minute one; [ADR-0036](adr/0036-gate-budget-until-sharded.md) sets 60 minutes again from
+2026-09-28, until P78 shards the long exclusive checks. Use the merged contract, not a
+worktree-local timeout change.
 
 Live screenshots are separate from deterministic diagrams. Current portal requirements
 are in `guide/captures/architecture.json` for the lead-operated batch after fresh sign-in;
