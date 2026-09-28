@@ -200,6 +200,10 @@ No Azure resource was changed, no new merge was needed, and nothing was pushed
 or rewritten. This final ledger entry is the only change after the passing
 gate. Security's S1 fix remains for the lead's re-review; the other four
 round-2 PASS verdicts are preserved, and ROADMAP P71 remains unticked.
+At final verification, the shared `main` ref had independently advanced to
+`f98f885` with P70. This gate covers the requested `38ad175` integration plus
+P71; the newer P70 tree was not merged during the completed round. Ledger
+preservation and unchanged ROADMAP were verified against `38ad175`.
 
 ### Council round 1 corrections
 
