@@ -117,7 +117,7 @@ def root(ctx: typer.Context,
     redact = redact or os.environ.get("AUM_REDACT", "").lower() in {"1", "true", "yes"}
     if ctx.invoked_subcommand == "configure":
         ctx.obj = dict(configure=dict(backend=backend, subscription=subscription, resource_group=resource_group,
-                                     apim_name=apim_name, path=config), tty=terminal_output(),
+                                     apim_name=apim_name, path=config, url=url, scope=scope), tty=terminal_output(),
                        json=as_json, plain=plain, what_if=what_if, no_color=no_color, redactor=Redactor(redact))
         return
     try:
@@ -138,7 +138,8 @@ def root(ctx: typer.Context,
             emit(ctx, lambda e: dict(identity=e.read("whoami"), **e.status()))
         else:
             from .tui import FinOpsApp
-            FinOpsApp(engine, settings, no_color=no_color, preview_only=what_if, redact=redact).run()
+            FinOpsApp(engine, settings, no_color=no_color, preview_only=what_if, redact=redact,
+                      profile_path=config).run()
 
 
 @app.command()

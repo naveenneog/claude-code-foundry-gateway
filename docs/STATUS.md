@@ -34,6 +34,7 @@ research register; no other packet's unknowns are edited.
 | Cycle | RED | GREEN | Scope |
 |---|---|---|---|
 | Visible actions and guarded add form | Initial selector: 9 failed, 10 passed, 32.87 s. After the test waited for the existing 350 ms directory debounce, the catalog selector showed 2 failures and 1 pass in 9.80 s: an unhandled catalog error and a stale directory result opening a form. | 76 passed in 104.67 s | `test_p80_usability.py`, `test_publication_structure.py`, `test_developers.py`, `test_usd_budgets.py`, `test_tui.py`. Captures are regenerated after the remaining UI work. |
+| Local connection transaction | 8 failed, 2 passed, 15.99 s: explicit HTTP options were ignored, replacement was not atomic, and the terminal form had only backend/path fields. Exact-byte and selected-profile regressions: 3 failed in 1.85 s. | 91 passed in 79.16 s | `test_p80_connection.py`, `test_discovery.py`, `test_publication_structure.py`, `test_backends.py`, `test_revision4_navigation.py`, `test_p80_usability.py`. No Azure calls; identity and discovery are fixtures. |
 
 The action regressions observed truncated labels (10 cells for an 18-cell
 label), no Add action on Budgets, no `via ...` header and a budget button that
@@ -42,6 +43,14 @@ remained disabled after selecting a writable person. The controls now fit an
 updates the action state. Add-person catalog reads run off the UI thread and
 retain both source guards. Test-only HTTP/Direct labels use a fake backend
 with the unrelated first-run tour disabled.
+
+The connection form now edits the existing address fields, previews them,
+saves with an exclusive timestamped backup and atomic replacement, and verifies
+`whoami` before adopting the new engine. Failure preserves the previous engine
+and restores the original file or removes a newly created one. A changed
+profile invalidates the preview. Explicit `--config` and `AUM_CONFIG` remain
+the selected save target. `aum configure` honors explicit HTTP URL/scope and
+does not discover Azure for that address-only case.
 
 ### CONTRACT / acceptance
 

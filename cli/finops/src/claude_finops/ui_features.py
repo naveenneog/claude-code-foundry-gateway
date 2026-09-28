@@ -1,5 +1,7 @@
 import asyncio
 import json
+from contextlib import nullcontext
+from dataclasses import replace
 from pathlib import Path
 
 from textual.containers import Horizontal
@@ -8,7 +10,7 @@ from .publication_widgets import Button, Input, Select, Static, TextArea, DataTa
 from .backend import connect
 from .bulk import budget_csv_plan
 from .capabilities import enabled
-from .config import Config, load_config, az
+from .config import Config, az
 from .engine import Engine
 from .errors import FinOpsError
 from .feature_screens import ActionForm, FiltersScreen, TourScreen
@@ -403,40 +405,88 @@ class FeatureUI:
                 self.notify(str(error), severity="error")
 
     def action_profile(self):
-        def run(values, apply):
-            config = load_config(Path(values["path"]), backend=values["backend"] or None)
-            if apply:
-                return dict(ui_action="profile", config=config)
-            return dict(preview=not apply, action="Switch profile/backend", after=config.public())
-        self.push_screen(ActionForm("Switch profile or backend", [
-            ("path", "Profile JSON path", str(Path.home() / ".aum" / "config.json"), None),
-            ("backend", "Backend", self.config.backend, [(b, b.title()) for b in ("direct", "aum-service", "turnstile", "fake")])],
-            run, mutation=False))
+        from .configure import connection_config, profile_revision
 
-    async def activate_profile(self, config):
+        def run(values, apply):
+            path = Path(values["path"]).expanduser().resolve()
+            fields = {key: values[key].strip() for key in
+                      ("backend", "url", "scope", "subscription", "resource_group", "apim_name", "tenant_id",
+                       "workspace_resource_id")}
+            if fields["backend"] == "direct":
+                fields = {**fields, "url": "", "scope": "", "workspace": ""}
+            if fields["url"] != self.config.url or fields["backend"] != self.config.backend:
+                fields["turnstile_resource_group"] = ""
+            config = connection_config(replace(self.config, **fields))
+            revision = profile_revision(path)
+            if apply:
+                return dict(ui_action="profile", config=config, profile=str(path), profile_revision=revision)
+            return dict(preview=True, action="Change connection",
+                        before=dict(connection=self.config.public(), profile_revision=revision),
+                        after=dict(connection=config.public(), profile=str(path)),
+                        note="Address-only profile; timestamped backup before saving. Failed whoami restores the previous profile and connection. Gateway authority does not change.")
+        choices = [("direct", "Direct"), ("aum-service", "AUM service"), ("turnstile", "Turnstile")]
+        if self.config.backend == "fake":
+            choices.append(("fake", "Example (test data)"))
+        self.push_screen(ActionForm("Change connection", [
+            ("backend", "Connection kind", self.config.backend, choices),
+            ("url", "HTTP URL (AUM service / Turnstile)", self.config.url, None),
+            ("scope", "HTTP delegated scope", self.config.scope, None),
+            ("subscription", "Azure subscription id (Direct or discovery)", self.config.subscription, None),
+            ("resource_group", "Gateway resource group (Direct or discovery)", self.config.resource_group, None),
+            ("apim_name", "Gateway APIM name (Direct or discovery)", self.config.apim_name, None),
+            ("tenant_id", "Tenant id (blank uses the CLI session)", self.config.tenant_id, None),
+            ("workspace_resource_id", "Log Analytics resource id (blank discovers from gateway)", self.config.workspace_resource_id, None),
+            ("path", "Local profile path", str(self.profile_path), None)],
+            run, mutation=False, local_write=True, apply_label="Save and connect"))
+
+    async def activate_profile(self, config, *, profile=None, revision=""):
+        from .configure import profile_transaction
+
         backend = None
+        previous_engine, previous_config, previous_path = self.engine, self.config, self.profile_path
+        switched = False
+        with guarded_publish(self.safe_message_guard()):
+            self.query_one("#status", Static).update("Verifying the new connection with whoami (estimate 3-10 s)...")
         try:
-            backend = connect(config)
-            engine = Engine(backend, self.engine.month)
-            identity = await asyncio.to_thread(engine.read, "whoami")
+            transaction = profile_transaction(profile, config, revision) if profile is not None else nullcontext()
+            with transaction:
+                backend = connect(config)
+                engine = Engine(backend, self.engine.month)
+                with backend.read_cycle():
+                    identity = await asyncio.to_thread(engine.read, "whoami")
+                    candidate_guard = backend.read_guard()
+                with guarded_publish(candidate_guard):
+                    self._bind_engine(engine)
+                    self.config = config
+                    if profile is not None:
+                        self.profile_path = profile
+                    self.identity = {}
+                    self.preferences = None
+                    self.feature_caps = {}
+                    self._refresh_serial += 1
+                    self.data.clear()
+                    self._data_guards.clear()
+                    self.records.clear()
+                    self.clear_query_context()
+                    while len(self.screen_stack) > 1:
+                        self.pop_screen()
+                    self.update_access(identity)
+            switched = True
         except (FinOpsError, OSError, ValueError, RuntimeError) as error:
-            if backend is not None:
+            reason = self._error_text(error) if isinstance(error, FinOpsError) else "The new connection could not be saved or verified."
+            with guarded_publish(self.safe_message_guard()):
+                if self.engine is not previous_engine:
+                    self._bind_engine(previous_engine)
+                    self.config, self.profile_path = previous_config, previous_path
+                    self._clear_principal_state({})
+                self.query_one("#status", Static).update(f"{reason} The previous connection remains active.")
+            self.notify(reason, severity="error")
+        finally:
+            if backend is not None and not switched:
                 backend.close()
-            self.notify(self._error_text(error), severity="error")
-            return
-        self.engine.backend.close()
-        self._bind_engine(engine)
-        self.config = config
-        self.identity = {}
-        self.preferences = None
-        self.data.clear()
-        self._data_guards.clear()
-        self.records.clear()
-        self.clear_query_context()
-        if len(self.screen_stack) > 1:
-            self.pop_screen()
-        self.update_access(identity)
-        self.action_refresh()
+        if switched:
+            previous_engine.backend.close()
+            self.action_refresh()
 
     def action_sign_out(self):
         def run(values, apply):

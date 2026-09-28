@@ -10,6 +10,7 @@ from textual.widgets import TabbedContent, TabPane
 from .publication_widgets import Button, DataTable, Input, Select, Static, TextArea, PublicationApp
 
 from .errors import FinOpsError
+from .config import profile_path as selected_profile_path
 from .accessibility import AsciiFilter
 from .brand import BANNER, COMPACT, PRODUCT
 from .dashboard import Dashboard, DashboardPanel, enforcement_badge
@@ -58,10 +59,12 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
         Binding("q", "quit", "Quit"),
     ]
 
-    def __init__(self, engine, config, no_color=False, preview_only=False, redact=False, first_run=None):
+    def __init__(self, engine, config, no_color=False, preview_only=False, redact=False, first_run=None,
+                 profile_path=None):
         super().__init__()
         self.animation_level = "none"
         self.config = config
+        self.profile_path = selected_profile_path(profile_path)
         self._bind_engine(engine)
         self._clearing_principal = False
         self._principal_notice = False

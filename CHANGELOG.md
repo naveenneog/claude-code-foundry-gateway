@@ -36,6 +36,11 @@ exact streaming cache-creation detail remains **U13**.
   catalog without a Budgets visit, keeps directory/catalog publication guards
   and shows read errors. The existing authority rules and preview-first
   writers remain; Turnstile has no USD writer.
+  Settings has one connection form with preview, exact-byte timestamped
+  backups, atomic local replacement and rollback after failed identity
+  verification. It retains the selected profile path. The configure command
+  honors explicit HTTP URL/scope, asks before attended replacement and keeps
+  the unattended `--force` requirement.
   [AUM](docs/AUM.md), [ADR-0038](docs/adr/0038-aum-actions-and-connection.md).
 - **AUM latency and readiness (P71).** Direct shares one named-value snapshot per
   read cycle, reuses resource tokens until near expiry and overlaps independent

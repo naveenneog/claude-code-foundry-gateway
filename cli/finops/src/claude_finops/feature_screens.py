@@ -24,10 +24,13 @@ class FilterChips(Static, can_focus=True):
 class ActionForm(ModalScreen):
     BINDINGS = [("escape", "cancel", "Cancel")]
 
-    def __init__(self, title, fields, operation, *, mutation=True, read_guard=None):
+    def __init__(self, title, fields, operation, *, mutation=True, read_guard=None, local_write=False,
+                 apply_label=None):
         super().__init__()
         self.heading, self.fields, self.operation = title, fields, operation
         self.mutation = mutation
+        self.local_write = local_write
+        self.apply_label = apply_label
         self.read_guard = read_guard if read_guard is not None else self.app.current_guard()
         self.preview = None
         self.busy = False
@@ -62,7 +65,8 @@ class ActionForm(ModalScreen):
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="action-cancel")
                 yield Button("Preview", id="action-preview")
-                yield Button("Apply" if self.mutation else "Open", id="action-apply", disabled=True, variant="primary")
+                yield Button(self.apply_label or ("Apply" if self.mutation else "Open"),
+                             id="action-apply", disabled=True, variant="primary")
 
     def values(self):
         with self.read_guard():
@@ -83,22 +87,27 @@ class ActionForm(ModalScreen):
     @work(exclusive=True)
     async def show_preview(self):
         try:
+            if self.local_write:
+                with guarded_publish(self.app.safe_message_guard()):
+                    self.query_one("#action-status", Static).update("Preparing connection preview (estimate 3-30 s)...")
             self.preview = await asyncio.to_thread(self.operation, self.values(), False)
             text = json.dumps(self.app.present({key: value for key, value in self.preview.items()
                               if key in {"action", "count", "before", "after", "changes", "note"}}),
                               indent=2, ensure_ascii=True)
             with guarded_publish(self.read_guard):
                 self.query_one("#action-status", Static).update(text or "Preview ready.")
-            self.query_one("#action-apply", Button).disabled = bool(self.mutation and
+            self.query_one("#action-apply", Button).disabled = bool((self.mutation or self.local_write) and
                 (self.app.preview_only or self.app.redactor.enabled))
-        except (FinOpsError, ValueError) as error:
+        except (FinOpsError, ValueError, OSError) as error:
             with guarded_publish(self.app.safe_message_guard()):
-                self.query_one("#action-status", Static).update(self.app.redactor.text(str(error)))
+                message = "Cannot read the local profile. Check its path and permissions." if isinstance(error, OSError) else str(error)
+                self.query_one("#action-status", Static).update(self.app.redactor.text(message))
 
     @on(Button.Pressed, "#action-apply")
     @work(exclusive=True)
     async def apply_action(self):
-        if self.preview is None or self.busy or (self.mutation and (self.app.preview_only or self.app.redactor.enabled)):
+        if self.preview is None or self.busy or ((self.mutation or self.local_write) and
+                                               (self.app.preview_only or self.app.redactor.enabled)):
             return
         self.busy = True
         self.query_one("#action-apply", Button).disabled = True
@@ -118,7 +127,8 @@ class ActionForm(ModalScreen):
                 elif result["ui_action"] == "compare":
                     self.app.set_comparison(result["month"])
                 elif result["ui_action"] == "profile":
-                    self.app.run_worker(self.app.activate_profile(result["config"]), group="profile", exclusive=True)
+                    self.app.run_worker(self.app.activate_profile(result["config"], profile=Path(result["profile"]),
+                                        revision=result["profile_revision"]), group="profile", exclusive=True)
                 elif result["ui_action"] == "signout":
                     self.app.exit()
                 return
@@ -134,9 +144,10 @@ class ActionForm(ModalScreen):
             with guarded_publish(self.read_guard):
                 self.query_one("#action-status", Static).update(self.app.redactor.text(state))
                 self.query_one("#action-cancel", Button).label = "Done"
-        except (FinOpsError, ValueError) as error:
+        except (FinOpsError, ValueError, OSError) as error:
             with guarded_publish(self.app.safe_message_guard()):
-                self.query_one("#action-status", Static).update(self.app.redactor.text(str(error)))
+                message = "Cannot read the local profile. Check its path and permissions." if isinstance(error, OSError) else str(error)
+                self.query_one("#action-status", Static).update(self.app.redactor.text(message))
         finally:
             self.busy = False
 
