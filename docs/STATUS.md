@@ -475,7 +475,8 @@ took 288.2 s. That run is not a passing gate; its lock was released in `finally`
 - [x] An existing installer record for another gateway is refused before summary approval and
       resource creation, without overwriting it; the refusal names both gateways and the record path
 - [x] The executable installer regression and mutation pass on both PowerShell hosts
-- [ ] The corrected tree runs the packet gate under the shared lock with the unchanged budget
+- [x] The corrected tree runs the packet gate under the shared lock with the unchanged budget;
+      its final timeout is recorded below, not counted as a pass
 
 The real installer regression reproduced the failure before the fix on both hosts: 16 assertions
 ran, with the different-gateway and legacy-subscription cases failing after a deployment write.
@@ -502,6 +503,23 @@ All 102 mutations now pass on both hosts with full 79/31/28/17/20/6 selector cou
 additional draft mutations prove recognition, reject bound or unrelated records, and require
 the approved identity to be retained in the failure receipt. Installer permutations and
 documentation/source checks pass, and the architecture manifest is current.
+
+**Final round-3 gate at `1cd1567`: timeout, not pass.** The lock was acquired after 360.2 s and
+released in `finally`. The gate ran 2026-09-28 08:06:05-08:36:15 UTC and exited 1 after
+1,809.3 s: Test-All reached the unchanged 1,800-second limit; Bicep passed in 7.7 s.
+Scorecard: 21 passed, 2 warned, 1 failed, 2 skipped. The late Test-All timing file, written at
+08:37:32 UTC, reported 87 PASS, zero FAIL and the same two AUM-environment SKIPs (89 checks).
+That late result and the intermediate passing gate do not certify the final tree.
+
+The slowest final-run checks were business-unit mutations 0/4 (392.3 s), 3/4 (313.6 s),
+company-address mutations, all 102 cases (301.7 s), business-unit mutations 1/4 (300.1 s),
+2/4 (296.4 s), and Turnstile mutations 1/2 (220.5 s), 0/2 (218.3 s). Aggregate machine samples,
+including the gate, averaged 68.4% CPU, peaked at 100%, with a maximum processor queue of 82
+and minimum available memory of 14,372 MB. Receipts, load samples and timings are retained in
+session artifacts. No timeout, selector or detector was relaxed.
+
+The Coder correction and first-Setup compatibility tests are ready for re-review; the final
+packet remains blocked on gate duration. ROADMAP P69 is unticked and P74 remains deferred.
 
 ### Council round 2 corrections
 
