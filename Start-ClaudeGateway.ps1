@@ -78,11 +78,12 @@ function Get-FlowDecisionPath {
 
 function Write-FlowDecisionRecord {
     param($Record, [string]$Path)
-    $hadPath = $Record.PSObject.Properties.Name -contains '__recordPath'
-    $oldPath = if ($hadPath) { $Record.__recordPath } else { $null }
-    if ($hadPath) { $Record.PSObject.Properties.Remove('__recordPath') }
-    try { Write-ClaudeDecisionRecord -Record $Record -Path $Path }
-    finally { if ($hadPath) { Set-FlowRecordProperty $Record '__recordPath' $oldPath } }
+    $persisted = Copy-ClaudeFlowValue $Record
+    $persisted.PSObject.Properties.Remove('__recordPath')
+    if ($null -ne $script:FlowAppliedDecisions) {
+        Set-FlowRecordProperty $persisted 'decisions' (Copy-ClaudeFlowValue $script:FlowAppliedDecisions)
+    }
+    Write-ClaudeDecisionRecord -Record $persisted -Path $Path
 }
 
 function Remove-FlowRecordProperty {
@@ -306,6 +307,7 @@ function Invoke-ApplySteps {
     param($Steps, $Plans, $Record, [string]$Path, [string]$CurrentAction, [string]$RunId)
     # Read after the first step runs, so no Azure call waits in front of the installer (ADR-0032).
     $principal = $null
+    if ($null -eq $script:FlowAppliedDecisions) { $script:FlowAppliedDecisions = Copy-ClaudeFlowValue $Record.decisions }
     $release = Get-ClaudeFlowReleaseInfo -Repo $root
     for ($i = 0; $i -lt $Steps.Count; $i++) {
         $step = $Steps[$i]
@@ -314,19 +316,26 @@ function Invoke-ApplySteps {
             Write-Host "Skipping completed step: $($step.Info.Name)" -ForegroundColor DarkGray
             continue
         }
-        $before = if ($step.Info.DecisionKey) { Get-ClaudeDecision -Record $Record -Key $step.Info.DecisionKey } else { $null }
+        $before = if ($step.Info.DecisionKey) { Copy-ClaudeFlowValue $script:FlowAppliedDecisions.PSObject.Properties[$step.Info.DecisionKey].Value } else { $null }
         Write-Host "Applying $($step.Info.Name)..." -ForegroundColor Cyan
         $invokeArgs = @{ Record = $Record; Plan = $plan }
         if ($step.Info.Name -eq 'Address' -or ($step.Info.Name -eq 'Foundation' -and $AddressCertificatePassword)) { $invokeArgs.CertificatePassword = $AddressCertificatePassword }
         $changes = & $step.Invoke @invokeArgs
         if ($null -eq $principal) { $principal = Get-FlowPrincipal }
         foreach ($key in @($changes.Keys)) {
-            if ($key -eq $step.Info.DecisionKey) { Set-ClaudeDecision -Record $Record -Key $key -Value $changes[$key] }
+            if ($key -eq 'decisions') {
+                foreach ($p in $changes[$key].PSObject.Properties) {
+                    Set-FlowRecordProperty $script:FlowAppliedDecisions $p.Name (Copy-ClaudeFlowValue $p.Value)
+                    if ($Record.decisions.PSObject.Properties.Name -notcontains $p.Name) { Set-ClaudeDecision $Record $p.Name (Copy-ClaudeFlowValue $p.Value) }
+                }
+            }
+            elseif ($key -eq $step.Info.DecisionKey) { Set-ClaudeDecision -Record $Record -Key $key -Value $changes[$key] }
             else { Set-FlowRecordProperty $Record $key $changes[$key] }
         }
         if ($changes.ContainsKey($step.Info.DecisionKey) -eq $false -and $step.Info.DecisionKey) {
             $afterDecision = Get-ClaudeDecision -Record $Record -Key $step.Info.DecisionKey
         } else { $afterDecision = $changes[$step.Info.DecisionKey] }
+        if ($step.Info.DecisionKey) { Set-FlowRecordProperty $script:FlowAppliedDecisions $step.Info.DecisionKey (Copy-ClaudeFlowValue $afterDecision) }
         Add-ClaudeDecisionHistory -Record $Record -Action $CurrentAction -Decision $(if ($step.Info.DecisionKey) { $step.Info.DecisionKey } else { $step.Info.Name }) -From $before -To $afterDecision -Principal $principal -Commit $release.commit
         $last = @($Record.history)[@($Record.history).Count - 1]
         Set-FlowRecordProperty $last 'runId' $RunId
@@ -420,6 +429,7 @@ $RecordPath = Resolve-FlowPath $RecordPath
 $script:FlowAnswers = Read-FlowAnswers -Path $AnswersPath -InlineAnswers $NonInteractiveAnswers
 $record = Read-ClaudeDecisionRecord -Path $RecordPath
 if (-not $record) { $record = New-EmptyDecisionRecord }
+$script:FlowAppliedDecisions = if ($record.decisions) { Copy-ClaudeFlowValue $record.decisions } else { [pscustomobject]@{} }
 Set-FlowRecordProperty $record '__recordPath' $RecordPath
 Set-FlowAnswersOnRecord -Record $record -Answers $script:FlowAnswers
 
