@@ -8,9 +8,24 @@ from textual.widgets import DataTable, Input, Select, Static, TextArea
 from .dashboard import Dashboard
 from .errors import FinOpsError
 from .guarded_publication import guarded_publish, published, PublicationOrigin
+from .screens import ChangeScreen
 
 
 class PrincipalUI:
+    def cached_guard(self, tab=None):
+        cached = self._data_guards.get(tab or self.active)
+        if cached is None:
+            raise FinOpsError("Current data has no verified source. Refresh before using it.", 3)
+        return cached[1]
+
+    def open_cached_change(self, kind, row, *, rows=None, remove=False):
+        try:
+            guard = self.cached_guard()
+            with guarded_publish(guard):
+                self.push_screen(ChangeScreen(self.engine, kind, row, rows, remove=remove, read_guard=guard))
+        except FinOpsError as error:
+            self.notify(self._error_text(error), severity="error")
+
     def _principal_verified(self, engine, identity, revision):
         if engine is self.engine and revision != self._principal_revision:
             self._pending_principal = (dict(identity), revision)

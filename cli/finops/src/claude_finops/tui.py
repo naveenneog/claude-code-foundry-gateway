@@ -509,20 +509,6 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, App):
         rows = self.records.get(self.active, [])
         return rows[table.cursor_row] if rows and table.cursor_row < len(rows) else {}
 
-    def cached_guard(self, tab=None):
-        cached = self._data_guards.get(tab or self.active)
-        if cached is None:
-            raise FinOpsError("Current data has no verified source. Refresh before using it.", 3)
-        return cached[1]
-
-    def open_cached_change(self, kind, row, *, rows=None, remove=False):
-        try:
-            guard = self.cached_guard()
-            with guarded_publish(guard):
-                self.push_screen(ChangeScreen(self.engine, kind, row, rows, remove=remove, read_guard=guard))
-        except FinOpsError as error:
-            self.notify(self._error_text(error), severity="error")
-
     @on(DataTable.RowSelected)
     def show_detail(self, event):
         if len(self.screen_stack) != 1 or event.data_table.id != f"table-{self.active}":
