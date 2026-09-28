@@ -58,7 +58,7 @@ class PublicationWidget(PublicationDispatch):
         super().__init__(*args, **kwargs)
 
     def __setattr__(self, name, value):
-        if name in {"value", "text", "label", "border_title", "placeholder", "tooltip"}:
+        if name in {"content", "value", "text", "label", "border_title", "placeholder", "tooltip"}:
             self._set_presentation(name, value)
         else:
             super().__setattr__(name, value)
@@ -66,7 +66,7 @@ class PublicationWidget(PublicationDispatch):
     @publication_sink
     def _set_presentation(self, name, value):
         super().__setattr__(name, value)
-        if name in {"value", "text", "label"}:
+        if name in {"content", "value", "text", "label"}:
             self._publication_origin = publication_origin()
 
     def _publication_rejected(self, error):

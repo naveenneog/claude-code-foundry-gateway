@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import contextmanager
 from functools import partial
 import io
 from types import SimpleNamespace
@@ -70,7 +71,7 @@ async def test_sink_rechecks_origin_even_inside_an_active_but_obsolete_scope(bea
 
 
 @pytest.mark.parametrize("sink", [
-    "label", "placeholder", "textarea", "textarea-edit", "table-row", "table-cell", "table-column",
+    "content", "label", "placeholder", "textarea", "textarea-edit", "table-row", "table-cell", "table-column",
     "clipboard", "link",
 ])
 async def test_app_installs_enforcement_at_every_live_sink(bearer_tui_estate, monkeypatch, sink):
@@ -86,6 +87,7 @@ async def test_app_installs_enforcement_at_every_live_sink(bearer_tui_estate, mo
             value = engine.read("budgets")["items"][0]["scope_name"]
         table = app.query_one("#table-overview", DataTable)
         operations = {
+            "content": lambda: setattr(app.query_one("#status", Static), "content", value),
             "label": lambda: setattr(app.query_one("#find-people", Button), "label", value),
             "placeholder": lambda: setattr(app.query_one("#people-query", Input), "placeholder", value),
             "textarea": lambda: app.query_one("#ask-answer", TextArea).load_text(value),
@@ -229,3 +231,71 @@ def test_output_sinks_check_the_origin_at_the_write(bearer_tui_estate, tmp_path,
         actual += target.read_text()
     assert (value in actual) is (state == "current")
     assert target.exists() is (state == "current" and sink == "export")
+
+
+async def test_content_property_refuses_a_scheduled_old_principal_value(bearer_tui_estate):
+    engine, principal = bearer_tui_estate
+    app = FinOpsApp(engine, Config(backend="fake"), first_run=False)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        with engine.backend.read_cycle():
+            value = engine.read("budgets")["items"][0]["scope_name"]
+        principal[0] = "b"
+        await asyncio.to_thread(engine.read, "whoami")
+        await pilot.pause()
+        status = app.query_one("#status", Static)
+        loop = asyncio.get_running_loop()
+        previous = loop.get_exception_handler()
+        refused, executed = [], asyncio.Event()
+
+        def publish():
+            try:
+                status.content = value
+            finally:
+                executed.set()
+
+        loop.set_exception_handler(lambda loop, context: refused.append(context["exception"]))
+        try:
+            loop.call_soon(publish)
+            await asyncio.wait_for(executed.wait(), timeout=3)
+            await asyncio.sleep(0)
+        finally:
+            loop.set_exception_handler(previous)
+        assert len(refused) == 1 and isinstance(refused[0], FinOpsError)
+        assert refused[0].code == 3
+        assert value not in str(status.render())
+        assert value not in app.export_screenshot()
+
+
+async def test_content_assignment_replaces_and_retains_its_actual_source():
+    from claude_finops.engine import Engine
+    from claude_finops.fake import FakeBackend
+
+    valid = {"previous": True, "content": True}
+
+    def origin(name):
+        @contextmanager
+        def guard():
+            if not valid[name]:
+                raise FinOpsError("The sign-in changed.", 3)
+            yield
+        return guard
+
+    app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        status = app.query_one("#status", Static)
+        with guarded_publish(origin("previous")):
+            status.update("Previous content")
+        with guarded_publish(origin("content")):
+            status.content = "Current content"
+        assert "Current content" in str(status.render())
+        valid["previous"] = False
+        with status.input_origin()():
+            pass
+        valid["content"] = False
+        with pytest.raises(FinOpsError, match="sign-in changed"):
+            with status.input_origin()():
+                pass

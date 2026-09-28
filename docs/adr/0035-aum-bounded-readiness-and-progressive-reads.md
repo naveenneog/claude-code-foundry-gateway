@@ -264,6 +264,38 @@ relaxed to conceal it. The resumed correction runs the full AUM/FinOps Python
 suite once under the shared lock; council round 7 and the integration gate
 remain with the lead.
 
+## Council round 7 amendment, 2026-09-28
+
+The public `Static.content` setter has the same origin check and provenance
+retention as `update`, `value` and `text`. Descriptor setters and raw widget
+state are not supported presentation APIs: they bypass provenance even inside
+a syntactically guarded scope. The structural contract rejects those accesses,
+`exec`/`eval`, additional scheduler spellings and partial methods. Three exact
+internal operations remain necessary: the sink's base setter, its non-content
+attribute forwarding and the framework action MRO lookup. These are local,
+documented expressions, not module or handler exemptions; the 51 static
+presentation exceptions remain unchanged.
+
+Direct or wrapped publication refusals reach the application exception
+boundary before Textual constructs fatal diagnostics. The boundary presents
+only the safe refusal, not wrapper text, callback arguments or traceback
+locals. The app-owned event-loop handler routes the same refusals to that
+boundary and restores the previous handler when its lifetime ends. Other
+exceptions retain their existing application or loop handling. Actual
+scheduled callbacks test both liveness and absence of payload in output.
+
+The installed Textual 6.12.0 implementation was inspected on 2026-09-28:
+`App._handle_exception` calls a fatal renderer with `show_locals=True`;
+`Timer._tick`, `MessagePump._flush_next_callbacks` and screen callbacks reach
+that boundary, while `MessagePump.on_timer` may wrap the original error.
+Python event-loop callback errors have a separate loop handler. The ownership
+and restoration controls therefore accompany the refusal fix, rather than
+assuming that every scheduler runs through message dispatch.
+
+The shared lock is held for one long validation command and released in that
+command's `finally`. One full Python suite follows the fixes. Round 8 and the
+packet gate remain with the lead; no integration or Azure operation occurs.
+
 ## Consequences
 
 No server deployment, account switch, consent, resource grant or authority

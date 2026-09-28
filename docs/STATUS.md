@@ -135,6 +135,52 @@ Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
 
 ## P71 AUM answers fast and says why it cannot, 2026-09-28
 
+### Council round 7 corrections
+
+The seventh review of `9fabf42` returned Architect PASS and Coder, QA, UX and
+Security BLOCK. The existing B4/B5 and round 6 protections remain required.
+
+| Seat | Finding | Correction contract |
+|---|---|---|
+| Architect | PASS | The existing publication component and source-guard boundary remain. |
+| Coder | B7a: `Static.content` writes bypass runtime and AST enforcement; descriptor/raw-state and additional deferred/dynamic spellings escape the detector | `content` writes validate and retain their source. The structural contract rejects unchecked descriptor setters, raw widget state, dynamic code, added scheduler spellings and partial methods. |
+| QA | Only `call_later` exercised refusal liveness | Actual `call_later`, `set_timer`, `call_after_refresh`, `call_next`, event-loop `call_soon` and `call_at` executions retain responsive input and emit no payload. |
+| UX | Timer and screen callbacks report exit 3, then terminate Textual | The application exception boundary recognizes direct and wrapped publication refusals before fatal handling. Unrelated exceptions retain their normal handling. |
+| Security | B7b: a refused Overview callback exposes its data arguments through error rendering | No rejected callback representation or traceback locals reach output. Only the safe refusal explanation is presented. |
+
+Each correction starts with failing behavior/structural cases. Each new rule
+has a removal probe that retains the baseline test identities, executes the
+suite and fails at least one test. Every green implementation is committed
+locally. The shared lock covers one long command at a time and is released in
+that command's `finally`, never held across tool calls. One final full
+AUM/FinOps Python run follows the fixes. Council round 8 and the packet gate
+remain with the lead; no push, merge, Azure read or Azure write is part of
+this correction.
+
+The installed Textual 6.12.0 source explains the observed error path:
+`Timer._tick`, next-callback dispatch and screen refresh callbacks can reach
+`App._handle_exception`; its fatal renderer includes traceback locals.
+`MessagePump.on_timer` can wrap a callback exception in `CallbackError`.
+Event-loop callbacks use the loop's separate exception handler. The correction
+therefore covers the application boundary and its owned event-loop lifetime,
+without changing process-wide handlers outside that lifetime. Sources:
+the installed `textual/app.py`, `textual/message_pump.py`,
+`textual/screen.py` and `textual/timer.py`, inspected on 2026-09-28.
+The initial read-only Ironclad audit exited 0 (20 passed, two existing
+warnings, four skipped commands/checks); no packet gate executed.
+
+B7a's first RED selection reported **41 failed, 66 passed in 47.50 s**
+(50.15 s wall). `content` was accepted by the live sink, the real `call_soon`
+probe wrote the old principal's value without refusal, and replacing content
+left the previous origin attached. The final structural RED selection,
+including imported `exec`/`eval` aliases and an altered internal setter call,
+reported **41 failed, 29 passed in 3.38 s**. These are behavior failures, not
+collection errors. With the runtime setter and structural rules implemented,
+the complete two-file selection passed **110 cases in 45.20 s** (47.15 s
+wall). The original 51 static exceptions are unchanged; only three exact
+sink-implementation expressions are recognized separately, as recorded in
+[ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md).
+
 ### Council round 6 corrections
 
 The sixth review over `4cf7508..dd46186` confirmed the runtime B4/B5 fixes on

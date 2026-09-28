@@ -500,6 +500,10 @@ does not inherit permission from where it was created.
 The sink decorator rejects coroutine, generator and async-generator functions,
 whose bodies would execute after a creation-time check had ended
 ([ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md)).
+The public `content` property also retains and validates its source. The
+structural contract rejects descriptor setters, raw widget-state access and
+dynamic code in presentation modules; those paths bypass provenance even
+when their surrounding function has a guard.
 `guarded_deferred(origin, callback)` checks the retained source when a callback
 runs. Async callbacks retain a scope lifetime without holding an identity lock
 across waits; each later sink checks again. The AST detector separately checks

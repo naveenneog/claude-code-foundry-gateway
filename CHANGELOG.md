@@ -55,6 +55,9 @@ exact streaming cache-creation detail remains **U13**.
   deferral rechecks the source on execution; the structural detector also
   covers lambda/def, dynamic attributes and partials. Sink decorators reject
   coroutine and generator bodies rather than checking only their creation.
+  Round-seven `content` writes retain their source, and the structural contract
+  rejects unchecked descriptor/raw-state/dynamic-code paths, additional
+  scheduler spellings and partial methods.
 - **Reviewed model lifecycle (P70).** `-Action Change -Change models` and
   `scripts/Sync-ClaudeModels.ps1` discover the selected Foundry account, show deployment
   model/version/SKU/capacity and price status, accept per-deployment tier choices, snapshot
