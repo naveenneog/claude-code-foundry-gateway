@@ -459,7 +459,7 @@ changes and main's ledger were confirmed intact. The remaining Coder finding is 
 | Seat | Verdict | Finding | Fix / evidence |
 |---|---|---|---|
 | Architect | PASS | Round-2 state and integration contract accepted | No further change requested |
-| Coder | BLOCK | A saved record for gateway A is ignored for inheritance but passed to address apply for gateway B, which fails after deployment | Resolve and check the record target before approval; refuse a conflict with both gateway names and a corrective action |
+| Coder | BLOCK | A saved record for gateway A is ignored for inheritance but passed to address apply for gateway B, which fails after deployment | `f015de3`: check the saved target and shared subscription resolver before approval; refuse the conflict with both gateway names, scopes, record path and a corrective action |
 | QA | PASS | Round-2 regressions accepted | Add an executable installer conflict case and a full-count mutation |
 | UX | PASS | Applied-only read consumers and P72 refusals retained | New conflict refusal names the selected and recorded gateways |
 | Security | PASS | Existing PFX, scope and deadline boundaries retained | No boundary relaxation |
@@ -472,10 +472,19 @@ processor queue peaked at 29 on 16 logical processors, and available memory stay
 13,463 MB. The slowest check was business-unit mutations 0/4 at 502.0 s; P69's 94 mutations
 took 288.2 s. That run is not a passing gate; its lock was released in `finally`.
 
-- [ ] An existing installer record for another gateway is refused before summary approval and
+- [x] An existing installer record for another gateway is refused before summary approval and
       resource creation, without overwriting it; the refusal names both gateways and the record path
-- [ ] The executable installer regression and mutation pass on both PowerShell hosts
+- [x] The executable installer regression and mutation pass on both PowerShell hosts
 - [ ] The corrected tree runs the packet gate under the shared lock with the unchanged budget
+
+The real installer regression reproduced the failure before the fix on both hosts: 16 assertions
+ran, with the different-gateway and legacy-subscription cases failing after a deployment write.
+After the fix, `Test-CompanyInstaller` passes all 16; the adjacent address and applied-flow
+suites pass 79 and 20. All 96 mutations are caught on PowerShell 7 and Windows PowerShell 5.1
+with the full applicable 79/31/27/16/20/6 selector count. The two new mutations remove the
+pre-approval record-target guard or only its subscription comparison. No check or selector is
+removed. The existing architecture boundary is unchanged; its installer source hashes were
+regenerated with all 16 diagrams.
 
 ### Council round 2 corrections
 
