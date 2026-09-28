@@ -303,7 +303,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
                 self.team = ""
             if not self.team and departments:
                 self.team = departments[0]["id"]
-            with select.prevent(Select.Changed):
+            with self.engine.backend.read_guard()(), select.prevent(Select.Changed):
                 select.set_options([(label["name"], row["id"]) for row, label in zip(departments, labels)])
                 if self.team:
                     select.value = self.team
@@ -512,13 +512,20 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
     @work(exclusive=True, group="detail")
     async def open_detail(self, row):
         try:
-            if self.active == "requests":
-                row = await asyncio.to_thread(self.engine.read, "request", request_id=row["request_id"])
-            elif self.active == "people" and row.get("scope_id"):
-                row = await asyncio.to_thread(self.engine.person_detail, row["scope_id"], row["parent_scope_id"])
-            elif self.active == "advanced" and self.advanced_view in {"releases", "subscriptions"}:
-                row = await asyncio.to_thread(self.engine.read, "release" if self.advanced_view == "releases" else "application", id=row["id"])
-            self.push_screen(DetailScreen("Exact values | Esc returns", row))
+            with self.engine.backend.read_cycle():
+                cached = self._data_guards.get(self.active)
+                if cached:
+                    with cached[1]():
+                        pass
+                if self.active == "requests":
+                    row = await asyncio.to_thread(self.engine.read, "request", request_id=row["request_id"])
+                elif self.active == "people" and row.get("scope_id"):
+                    row = await asyncio.to_thread(self.engine.person_detail, row["scope_id"], row["parent_scope_id"])
+                elif self.active == "advanced" and self.advanced_view in {"releases", "subscriptions"}:
+                    row = await asyncio.to_thread(self.engine.read, "release" if self.advanced_view == "releases" else "application", id=row["id"])
+                guard = self.engine.backend.read_guard()
+                with guard():
+                    self.push_screen(DetailScreen("Exact values | Esc returns", row, read_guard=guard))
         except FinOpsError as error:
             self.query_one("#status", Static).update(str(error))
 

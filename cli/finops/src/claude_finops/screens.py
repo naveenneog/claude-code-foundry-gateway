@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import re
 from functools import partial
+from contextlib import nullcontext
 
 from textual import on, work
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -17,14 +18,21 @@ from .rules import allocation_left, apply_state, human, month_window, parse_toke
 class DetailScreen(ModalScreen):
     BINDINGS = [("escape", "dismiss", "Back")]
 
-    def __init__(self, title, data):
+    def __init__(self, title, data, read_guard=nullcontext):
         super().__init__()
         self.heading, self.data = title, data
+        self.read_guard = read_guard
 
     def compose(self):
+        try:
+            with self.read_guard():
+                content = json.dumps(self.app.present(self.data), indent=2, ensure_ascii=True, default=str)
+        except FinOpsError as error:
+            self.data = {}
+            content = self.app._error_text(error)
         with Vertical(id="detail-dialog"):
             yield Label(self.heading, markup=False)
-            yield TextArea(json.dumps(self.app.present(self.data), indent=2, ensure_ascii=True, default=str), read_only=True, id="detail-text")
+            yield TextArea(content, read_only=True, id="detail-text")
             yield Button("Back (Esc)", id="close-detail")
 
     @on(Button.Pressed, "#close-detail")
@@ -84,13 +92,15 @@ class LookupScreen(ModalScreen):
     async def on_mount(self):
         self.query_one("#lookup-query", Input).focus()
         try:
-            catalog = await asyncio.to_thread(self.app.engine.read, "catalog")
-            rows = catalog.get("departments", [])
-            shown = self.app.present(rows)
-            selector = self.query_one("#lookup-team", Select)
-            selector.set_options([(label["name"], row["id"]) for row, label in zip(rows, shown)])
-            if self.app.team in {row["id"] for row in rows}:
-                selector.value = self.app.team
+            with self.app.engine.backend.read_cycle():
+                catalog = await asyncio.to_thread(self.app.engine.read, "catalog")
+                rows = catalog.get("departments", [])
+                shown = self.app.present(rows)
+                with self.app.engine.backend.read_guard()():
+                    selector = self.query_one("#lookup-team", Select)
+                    selector.set_options([(label["name"], row["id"]) for row, label in zip(rows, shown)])
+                    if self.app.team in {row["id"] for row in rows}:
+                        selector.value = self.app.team
         except FinOpsError as error:
             self.query_one("#lookup-status", Static).update(str(error))
 
@@ -105,23 +115,35 @@ class LookupScreen(ModalScreen):
         query = self.query_one("#lookup-query", Input).value
         self.query_one("#lookup-status", Static).update("Searching...")
         try:
-            self.results = await asyncio.to_thread(self.app.engine.lookup, query, self.app.team)
-            table = self.query_one(DataTable)
-            table.clear(columns=True)
-            table.add_columns("Kind", "Identifier", "Name")
-            for row in self.app.present(self.results):
-                table.add_row(row["kind"], row["id"], row["name"])
-            self.query_one("#lookup-status", Static).update(f"{len(self.results)} matches. Tab then Enter opens; Esc cancels.")
+            with self.app.engine.backend.read_cycle():
+                results = await asyncio.to_thread(self.app.engine.lookup, query, self.app.team)
+                self.results_guard = self.app.engine.backend.read_guard()
+                with self.results_guard():
+                    self.results = results
+                    table = self.query_one(DataTable)
+                    table.clear(columns=True)
+                    table.add_columns("Kind", "Identifier", "Name")
+                    for row in self.app.present(self.results):
+                        table.add_row(row["kind"], row["id"], row["name"])
+                    self.query_one("#lookup-status", Static).update(f"{len(self.results)} matches. Tab then Enter opens; Esc cancels.")
         except FinOpsError as error:
+            self.results = []
+            self.query_one(DataTable).clear(columns=True)
             self.query_one("#lookup-status", Static).update(str(error))
 
     @on(DataTable.RowSelected, "#lookup-results")
     def select_result(self, event):
         if not getattr(self, "results", []):
             return
-        result = self.results[event.cursor_row]
-        self.dismiss()
-        self.app.open_lookup_result(result)
+        try:
+            with self.results_guard():
+                result = self.results[event.cursor_row]
+                self.dismiss()
+                self.app.open_lookup_result(result)
+        except FinOpsError as error:
+            self.results = []
+            self.query_one(DataTable).clear(columns=True)
+            self.query_one("#lookup-status", Static).update(str(error))
 
 
 class ChangeScreen(ModalScreen):
@@ -336,13 +358,16 @@ class ExportScreen(ModalScreen):
         button.disabled = True
         self.query_one("#export-status", Static).update("Reading every catalog scope, not just the top ranking...")
         try:
-            result = await asyncio.to_thread(self.app.engine.chargeback)
-            folder = Path.cwd() / "finops-reports"
-            folder.mkdir(exist_ok=True)
-            with (folder / name).open("x", encoding="utf-8", newline="") as output:
-                output.write(chargeback_csv(self.app.present(result["items"]), self.app.engine.month))
-            self.query_one("#export-status", Static).update(
-                self.app.redactor.text(f"Exported {len(result['items'])} scopes to finops-reports\\{name}."))
+            with self.app.engine.backend.read_cycle():
+                result = await asyncio.to_thread(self.app.engine.chargeback)
+                content = chargeback_csv(self.app.present(result["items"]), self.app.engine.month)
+                with self.app.engine.backend.read_guard()():
+                    folder = Path.cwd() / "finops-reports"
+                    folder.mkdir(exist_ok=True)
+                    with (folder / name).open("x", encoding="utf-8", newline="") as output:
+                        output.write(content)
+                    self.query_one("#export-status", Static).update(
+                        self.app.redactor.text(f"Exported {len(result['items'])} scopes to finops-reports\\{name}."))
         except (OSError, FinOpsError) as error:
             message = str(error) if isinstance(error, FinOpsError) else "Cannot create that file. Choose a new name and a writable current folder."
             self.query_one("#export-status", Static).update(message)

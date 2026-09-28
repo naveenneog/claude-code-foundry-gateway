@@ -5,7 +5,7 @@ import json
 
 import httpx
 import pytest
-from textual.widgets import Static
+from textual.widgets import Static, Input, DataTable, Select
 from types import SimpleNamespace
 import typer
 
@@ -15,6 +15,7 @@ from claude_finops.engine import Engine
 from claude_finops.errors import FinOpsError
 from claude_finops.redaction import Redactor
 from claude_finops.tui import FinOpsApp
+from claude_finops.fake import FakeBackend
 from claude_finops.turnstile import TurnstileBackend
 from test_principal_tokens import estate, a_only_snapshot
 
@@ -36,6 +37,9 @@ def http_estate():
             return httpx.Response(200, json={"points": [], "principal": principal[0], "source": principal[0] + "-only"})
         if request.url.path.endswith("/finops/capabilities"):
             return httpx.Response(200, json={"schema_version": 1, "features": {"private": principal[0]}})
+        if request.url.path.endswith("/enterprise-catalog"):
+            return httpx.Response(200, json={"organizations": [{"id": "a", "name": "A_ONLY_CATALOG"}],
+                                           "departments": [{"id": "a-only", "name": "A_ONLY_CATALOG", "parent_id": "a"}]})
         return httpx.Response(404)
 
     backend = TurnstileBackend(Config(backend="turnstile", url="https://turnstile.contoso.com",
@@ -273,3 +277,102 @@ def test_aum_service_completed_catalog_is_not_cached_after_identity_change():
         assert backend._catalog is None
     finally:
         backend.close()
+
+
+@pytest.mark.parametrize("surface", ["lookup-catalog", "lookup-results", "detail", "export", "people-selector"])
+async def test_delayed_screen_or_export_read_cannot_publish_after_identity_change(http_estate, monkeypatch, tmp_path, surface):
+    engine, principal, _ = http_estate
+    app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
+    original_to_thread = asyncio.to_thread
+    fired = []
+    published = []
+    original_row, original_options = DataTable.add_row, Select.set_options
+
+    def add_row(widget, *values, **kwargs):
+        if principal[0] == "b" and "A_ONLY" in str(values):
+            published.append(values)
+        return original_row(widget, *values, **kwargs)
+
+    def set_options(widget, options):
+        options = list(options)
+        if principal[0] == "b" and "A_ONLY" in str(options):
+            published.append(options)
+        return original_options(widget, options)
+
+    monkeypatch.setattr(DataTable, "add_row", add_row)
+    monkeypatch.setattr(Select, "set_options", set_options)
+    target_resource = "catalog"
+    original_read = engine.read
+
+    if surface == "lookup-results":
+        def lookup(*args):
+            source = original_read("trends")["source"]
+            return [{"id": source, "name": "A_ONLY_RESULT", "kind": "team", "tab": "budgets"}]
+        engine.lookup = lookup
+        target = lookup
+    elif surface == "export":
+        def chargeback(*args):
+            return {"items": [{"id": original_read("trends")["source"], "name": "A_ONLY_RESULT"}]}
+        engine.chargeback = chargeback
+        target = chargeback
+        monkeypatch.chdir(tmp_path)
+    elif surface == "detail":
+        def read(resource, **params):
+            if resource == "request":
+                return {"request_id": original_read("trends")["source"], "marker": "A_ONLY_RESULT"}
+            return original_read(resource, **params)
+        engine.read = read
+        target, target_resource = read, "request"
+    else:
+        target = engine.read
+
+    async def after_completion(operation, *args, **kwargs):
+        result = await original_to_thread(operation, *args, **kwargs)
+        if not fired and operation == target and (
+                surface in {"lookup-results", "export"} or args[:1] == (target_resource,)):
+            verify_b(engine, principal)
+            fired.append(True)
+        return result
+
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        if surface in {"detail", "people-selector"}:
+            app.action_tab("requests" if surface == "detail" else "people")
+            await pilot.pause()
+            await app.workers.wait_for_complete()
+        app.engine = engine
+        app.update_access(engine._identity)
+        monkeypatch.setattr(asyncio, "to_thread", after_completion)
+        if surface.startswith("lookup"):
+            app.action_lookup()
+            await pilot.pause()
+            await app.workers.wait_for_complete()
+            if surface == "lookup-results":
+                app.screen.query_one("#lookup-query", Input).value = "a-only"
+                app.screen.search()
+        elif surface == "detail":
+            app.open_detail({"request_id": "a-only"})
+        elif surface == "export":
+            app.action_export()
+            await pilot.pause()
+            app.screen.export()
+        else:
+            app.action_refresh()
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert fired, "The source must finish under A before B is verified."
+        assert not published, "Completed A-only values must never briefly reach a B-visible widget."
+        if surface.startswith("lookup"):
+            assert "sign-in changed" in str(app.screen.query_one("#lookup-status", Static).render())
+            assert not getattr(app.screen, "results", [])
+        elif surface == "detail":
+            assert len(app.screen_stack) == 1
+            assert "sign-in changed" in str(app.query_one("#status", Static).render())
+        elif surface == "export":
+            assert "sign-in changed" in str(app.screen.query_one("#export-status", Static).render())
+            assert not list(tmp_path.glob("finops-reports\\*.csv"))
+        else:
+            assert "A_ONLY_CATALOG" not in str(app.query_one("#people-team", Select)._options)
+            assert "sign-in changed" in str(app.query_one("#note-people", Static).render())
