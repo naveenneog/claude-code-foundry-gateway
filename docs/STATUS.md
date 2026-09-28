@@ -204,6 +204,24 @@ The restored integrated `Test-FinOps.ps1` then ran **468 tests, all passed in
 197.89 s**, with no warnings. The failed run remains recorded, not erased.
 The 14 new publication mutations bring distinct historical receipts to 104.
 
+**Round-3 packet gate: BLOCKED before execution.** The shared lock was
+unavailable at every one-minute acquisition attempt through the permitted
+**60-minute** wait, including the final retry. The wrapper exited 1 without
+running the packet gate or Test-All; there is therefore **no round-3 Test-All
+duration or gate verdict**. The 1,800 s suite budget is unchanged. The lock was
+not owned by P71 and was not removed. The read-only observation at
+**2026-09-28 06:47:08Z** still found it present; the private blocked receipt
+explicitly records `testAllExecuted=false`, rather than reusing an earlier
+passing gate receipt.
+
+The implementation, mutation proof and requested P70 integration are committed
+at `51a5915`; the remaining acceptance step is the locked gate on that tree.
+Main advanced independently to `e39c3e4` (P76) during the wait; this branch
+integrates the requested `f98f885`, not the later main tree. Preservation of the
+requested main ledger and unticked ROADMAP P71 was verified at integration.
+No push, history rewrite or database stop/start occurred in round 3. Security
+re-review and a new gate lock window remain with the lead.
+
 ### Council round 2 corrections
 
 The lead's second review closed A1, C1, Q1, U1 and S2. S1 remains blocked:
