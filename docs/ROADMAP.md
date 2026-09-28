@@ -473,7 +473,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       invariants; the installer's summary reflects every combination of tier, entitlement store,
       developer sign-in, Desktop sign-in and address under `-WhatIf`, on PowerShell 7 and 5.1; each
       failure found is fixed test-first
-- [ ] P76 one plan, one order on both shells — acceptance: every sort that feeds a plan in the guided
+- [x] P76 one plan, one order on both shells — acceptance: every sort that feeds a plan in the guided
       flow, the Update migrations, the model sync or the installer orders by code point on PowerShell 7
       and Windows PowerShell 5.1, and a check follows every script those load and lists each remaining
       `Sort-Object` with its reason; every step of Setup with the shipped modules, the Update migrations
