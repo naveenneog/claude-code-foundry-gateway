@@ -211,7 +211,7 @@ three lifecycle cases and all **37 runtime sink cases** pass; a separate
 control proves credential invalidation still rejects that original content
 even without an identity-revision change.
 
-The interrupted edit on `2f42fab` rejects coroutine, generator and
+The interrupted edit on `2f42fab`, completed in `6056989`, rejects coroutine, generator and
 async-generator functions at `publication_sink` decoration. Their bodies run
 after the creation-time check would have ended. The resumed RED run restored
 the committed implementation while retaining the three new cases:
@@ -222,6 +222,10 @@ then passed the complete publication selection: **115 passed in 116.06 s**
 cases, six lifetime cases and three input/dispatch cases. No test assertion
 or deadline changed. This is a synchronous-sink contract correction within
 the existing publication component, with no new architecture path.
+The offline architecture check reported the changed source fingerprint
+(`SOURCE_STALE: aum-readiness: ...guarded_publication.py`) in 0.91 s.
+Rendering and checking again verified 16 specs and 18 unchanged PNGs in
+16.50 s. Only the manifest fingerprint changed; the AUM image was inspected.
 
 This worktree uses the main worktree's interpreter with its own source first
 on `PYTHONPATH`. The import check and targeted command were:

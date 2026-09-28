@@ -422,7 +422,7 @@
         "cli/finops/src/claude_finops/direct.py": "60bdbdf6b12007a4cc65fd245dd6a1db93d4c34dbee582436fde0020c314323c",
         "cli/finops/src/claude_finops/engine.py": "69341f446f4d25b8a414f4819f296d830bbc916d3f48bcee91dc45d5a9484962",
         "cli/finops/src/claude_finops/feature_engine.py": "ed3cabfa8efb02f17aae5a54791da09e7f88ed2b0b3a168afdca245bb49933ca",
-        "cli/finops/src/claude_finops/guarded_publication.py": "4a1c2f03e69346831accc10a3c7bd5fea2b58bd0d6cc715dce47f9112d0123db",
+        "cli/finops/src/claude_finops/guarded_publication.py": "26ef39b528c3ae43240577aadcdfed150d945ebeafa156d3439b513f619a27ae",
         "cli/finops/src/claude_finops/http_backend.py": "80f8f3e2508e83b9544d9b17f015d7f8839fc23370f25b01047e31a9d4d1b181",
         "cli/finops/src/claude_finops/principal_ui.py": "43ad052d84d3220db65a20738fa7d7135239e8f08695e01327bea2fb8a8fd043",
         "cli/finops/src/claude_finops/progressive.py": "8e3b8bab364df999ef118fa38ce607f699d42883e48760df87adf507da7c8359",
