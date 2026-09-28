@@ -185,6 +185,13 @@ passes **29 cases**, including isolated lambda and partial rules independent
 of scheduler detection. The application-level sinks live beside the protected
 widgets, and the main UI source remains within its 700-line budget.
 
+An additional scheduled-raw-callback test initially reported **1 failed,
+1 passed**: the sink refused the write but Textual closed its message pump.
+The dispatch boundary now reports `FinOpsError` before the framework leaves
+that loop; both lifecycle cases pass, including 256 ordinary input edits.
+The original terminal/form file passes **11 cases** after its direct setup
+assignments declare their input origin. No outcome assertion changed.
+
 ### Council round 5 corrections
 
 The fifth review closed B3 and retained Architect/Coder/QA/UX PASS. Security

@@ -5,6 +5,7 @@ from claude_finops.config import Config
 from claude_finops.engine import Engine
 from claude_finops.fake import FakeBackend
 from claude_finops.tui import FinOpsApp
+from claude_finops.guarded_publication import guarded_publish
 
 
 def example(role="owner"):
@@ -37,7 +38,8 @@ async def test_lookup_jumps_to_scope():
         await settle(app, pilot)
         await pilot.press("/")
         await pilot.pause()
-        app.screen.query_one("#lookup-query", Input).value = "sales-emea"
+        with guarded_publish(app.current_guard()):
+            app.screen.query_one("#lookup-query", Input).value = "sales-emea"
         await pilot.press("enter")
         await settle(app, pilot)
         assert app.screen.query_one("#lookup-results", DataTable).row_count >= 1
@@ -56,7 +58,8 @@ async def test_budget_form_preview_apply_status():
         table.move_cursor(row=1)
         await pilot.press("e")
         await pilot.pause()
-        app.screen.query_one("#amount", Input).value = "9M"
+        with guarded_publish(app.current_guard()):
+            app.screen.query_one("#amount", Input).value = "9M"
         await pilot.click("#preview")
         await settle(app, pilot)
         assert not app.screen.query_one("#apply-change", Button).disabled
@@ -87,7 +90,8 @@ async def test_palette_and_month_validation():
         assert len(app.screen_stack) == 2
         await pilot.press("escape", "m")
         await pilot.pause()
-        app.screen.query_one("#month-input", Input).value = "invalid"
+        with guarded_publish(app.current_guard()):
+            app.screen.query_one("#month-input", Input).value = "invalid"
         await pilot.click("#set-month")
         assert "YYYY-MM" in str(app.screen.query_one("#month-error").render())
 
@@ -100,7 +104,8 @@ async def test_changed_server_state_blocks_stale_preview():
         await settle(app, pilot)
         app.query_one("#table-budgets", DataTable).move_cursor(row=1)
         await pilot.press("e")
-        app.screen.query_one("#amount", Input).value = "9M"
+        with guarded_publish(app.current_guard()):
+            app.screen.query_one("#amount", Input).value = "9M"
         await pilot.click("#preview")
         await settle(app, pilot)
         app.engine.backend.rows[1]["token_limit"] = 8100000
@@ -118,10 +123,12 @@ async def test_edit_after_preview_disables_apply():
         await settle(app, pilot)
         app.query_one("#table-budgets", DataTable).move_cursor(row=1)
         await pilot.press("e")
-        app.screen.query_one("#amount", Input).value = "9M"
+        with guarded_publish(app.current_guard()):
+            app.screen.query_one("#amount", Input).value = "9M"
         await pilot.click("#preview")
         await settle(app, pilot)
-        app.screen.query_one("#amount", Input).value = "10M"
+        with guarded_publish(app.current_guard()):
+            app.screen.query_one("#amount", Input).value = "10M"
         await pilot.pause()
         assert app.screen.query_one("#apply-change", Button).disabled
 
@@ -132,7 +139,8 @@ async def test_export_rejects_parent_paths_and_remains_read_only():
         await settle(app, pilot)
         app.action_export()
         await pilot.pause()
-        app.screen.query_one("#export-name", Input).value = "..\\outside.csv"
+        with guarded_publish(app.current_guard()):
+            app.screen.query_one("#export-name", Input).value = "..\\outside.csv"
         await pilot.click("#export-csv")
         await settle(app, pilot)
         assert "without directory" in str(app.screen.query_one("#export-status").render())
@@ -148,7 +156,8 @@ async def test_tier_form_preview_and_apply():
         app.query_one("#table-governance", DataTable).move_cursor(row=4)
         await pilot.press("e")
         await pilot.pause()
-        app.screen.query_one("#tokens-per-minute", Input).value = "21k"
+        with guarded_publish(app.current_guard()):
+            app.screen.query_one("#tokens-per-minute", Input).value = "21k"
         await pilot.click("#preview")
         await settle(app, pilot)
         await pilot.click("#apply-change")
@@ -165,7 +174,8 @@ async def test_what_if_mode_cannot_write_from_form():
         await settle(app, pilot)
         app.query_one("#table-budgets", DataTable).move_cursor(row=1)
         await pilot.press("e")
-        app.screen.query_one("#amount", Input).value = "9M"
+        with guarded_publish(app.current_guard()):
+            app.screen.query_one("#amount", Input).value = "9M"
         await pilot.click("#preview")
         await settle(app, pilot)
         assert app.screen.query_one("#apply-change", Button).disabled

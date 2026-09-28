@@ -36,7 +36,15 @@ def widget_sink(operation):
     return write
 
 
-class PublicationWidget:
+class PublicationDispatch:
+    async def _dispatch_message(self, message):
+        try:
+            await super()._dispatch_message(message)
+        except FinOpsError as error:
+            self._publication_rejected(error)
+
+
+class PublicationWidget(PublicationDispatch):
     @publication_sink
     def __init__(self, *args, **kwargs):
         self._publication_origin = publication_origin()
@@ -94,7 +102,7 @@ class PublicationWidget:
         return run
 
 
-class PublicationApp:
+class PublicationApp(PublicationDispatch):
     @publication_sink
     def copy_to_clipboard(self, text):
         return super().copy_to_clipboard(text)
