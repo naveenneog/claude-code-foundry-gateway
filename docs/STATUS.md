@@ -135,6 +135,28 @@ Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
 
 ## P71 AUM answers fast and says why it cannot, 2026-09-28
 
+### Council round 6 corrections
+
+The sixth review over `4cf7508..dd46186` confirmed the runtime B4/B5 fixes on
+reviewed paths but found that indirect/deferred calls bypass the structural
+contract. Runtime sink enforcement, not another call-site convention, is the
+required boundary.
+
+| Seat | Round 6 verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | BLOCK | A deferred callable can outlive a syntactically guarded scope | Pending: sink-layer validation and one explicit guarded deferral wrapper |
+| Coder | PASS | Reviewed runtime implementation accepted | Retained |
+| QA | BLOCK | Lambda, dynamic attribute and partial spellings evade the detector | Pending: RED fixtures/runtime probes and full-selector mutations |
+| UX | PASS | Reviewed B4/B5 behavior accepted | Retained |
+| Security | BLOCK | B6a-d: deferred lambda/def, getattr, setattr and partial can publish outside their source guard | Pending: active/current-origin checks at every presentation sink |
+
+All four probes become failing structural and runtime tests before the fix.
+The existing 51 exact static-write exceptions are retained. Heavier affected
+selections, repetition and mutation batches take the shared lock and release it
+in `finally`; single files and the publication selector remain the initial
+work. U26 records the bounded navigation-flake attempt. This round runs no
+Test-FinOps, Test-All, packet gate, main merge or push.
+
 ### Council round 5 corrections
 
 The fifth review closed B3 and retained Architect/Coder/QA/UX PASS. Security

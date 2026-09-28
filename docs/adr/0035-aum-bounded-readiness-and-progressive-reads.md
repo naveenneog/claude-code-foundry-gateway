@@ -231,6 +231,23 @@ decorators are refused. The structural detector discovers presentation modules
 and checks calls, widget property assignments and clipboard subprocesses,
 with 51 exact commented static-write exceptions and no handler exemptions.
 
+## Council round 6 amendment, 2026-09-28
+
+Presentation sinks enforce the active, current originating publication at
+runtime, independently of a call's spelling. The widget/property, status,
+clipboard, export/formatter and assistant egress layers refuse a deferred raw
+call once its scope ends. `guarded_deferred(origin, callback)` is the explicit
+way to schedule publication: it rechecks the captured origin when the callback
+runs. Deferred async work rechecks at each sink rather than holding an identity
+lock across an await. The AST contract is a second line of defense: dynamic
+sink attributes, partials and guarded-scope callbacks escaping to schedulers
+must not bypass it. The 51 static exceptions remain exact and separate from
+documented framework-internal access needed to implement the sink layer.
+
+The reported navigation cancellation is investigated with a bounded repeated
+test/file run under the shared lock. No timeout, assertion or suite budget is
+relaxed to conceal it. The lead retains full-suite and integration-gate ownership.
+
 ## Consequences
 
 No server deployment, account switch, consent, resource grant or authority
