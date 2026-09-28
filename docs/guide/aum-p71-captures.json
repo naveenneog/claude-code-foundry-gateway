@@ -45,10 +45,10 @@
     {
       "live": true,
       "command": "aum --backend direct --redact",
-      "captured_at_utc": "2026-09-27T22:31:43.649650+00:00",
+      "captured_at_utc": "2026-09-28T02:18:36.077668+00:00",
       "phase": "first data; other sources pending",
-      "source_commit": "d6f00215cfb9932d5809d15a012ab8e210a2b5b2",
-      "elapsed_seconds": 3.437,
+      "source_commit": "bf4de20a555251c0996433600f0b641b694027af",
+      "elapsed_seconds": 7.359,
       "size": [
         120,
         32
@@ -60,15 +60,15 @@
         "inspected": true,
         "rules": "AUM display redaction plus guide Redactor; no raw identities or tokens"
       },
-      "sha256": "77d8d7989b87ad1cf5f623800c0d16f3ca2f02ce8f3dd127f0d6cd7d0a0b55e1"
+      "sha256": "160b193710de42417f104dcc4796a5e238e1ceca3960c02b91611da2815105b1"
     },
     {
       "live": true,
       "command": "aum --backend direct --redact",
-      "captured_at_utc": "2026-09-27T22:31:46.858153+00:00",
+      "captured_at_utc": "2026-09-28T02:18:36.393862+00:00",
       "phase": "current read complete",
-      "source_commit": "d6f00215cfb9932d5809d15a012ab8e210a2b5b2",
-      "elapsed_seconds": 6.625,
+      "source_commit": "bf4de20a555251c0996433600f0b641b694027af",
+      "elapsed_seconds": 7.718,
       "size": [
         120,
         32
@@ -80,7 +80,7 @@
         "inspected": true,
         "rules": "AUM display redaction plus guide Redactor; no raw identities or tokens"
       },
-      "sha256": "6bc525d06391217c81d0873a56432a03fcbad64ee360bd2b67dd58a93431e748"
+      "sha256": "29b2d9746b29b87add841d9920b7b7b96c02b36f00c37d8be3edffb824b0638c"
     }
   ]
 }

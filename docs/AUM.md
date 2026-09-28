@@ -482,6 +482,9 @@ The P71 live measurements and their method are in
 [STATUS](STATUS.md#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28).
 These captures use live read-only sources with display redaction, not examples:
 [provenance and hashes](guide/aum-p71-captures.json).
+Direct captures 61/62 were refreshed after the council's principal-binding fix.
+The stopped/running Turnstile captures 60/63 retain their original dated
+provenance; the correction round changed no database state.
 
 ![Live Direct first data while the remaining sources are still pending.](guide/aum-61-direct-progressive.png)
 

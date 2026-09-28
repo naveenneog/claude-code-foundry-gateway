@@ -149,7 +149,7 @@ historical evidence, not acceptance of these findings.
 | QA | BLOCK | Q1: the deadline test can pass on an immediate launch failure | `12b5c38`: real process creation plus child/grandchild markers and PID exit checks; original 150 ms bound retained; five C1/Q1 mutations caught at all seven cases |
 | UX | BLOCK | U1: a fatal Direct data result waits behind identity/capabilities | `16fc0a7`: fatal completion is observed alongside either metadata stage; partial data clears and edits disable immediately; two mutations caught at all 17 UI cases |
 | Security | BLOCK | S1: resource credentials survive a principal change | `3176bd3`: verified principal/session generations bind reuse; Direct verifies one account per cycle, rejects stale sends/results; HTTP identity credentials refresh and old responses are rejected; nine mutations caught at all 23 credential cases |
-| Security | BLOCK | S2: changed public text contains deployment identifiers | P71 and the U32 row/section use the same synthetic server/group aliases as capture 60; a public-evidence detector checks both |
+| Security | BLOCK | S2: changed public text contains deployment identifiers | `8d44530`: P71 and the U32 row/section use capture 60's synthetic aliases; privacy/U37/TEMP mutations caught at all five cases |
 
 Related corrections: the P71 single-server assumption moves from U35 to U37
 (P70 owns U35; P72 owns U36); batch-read fixtures move to TEMP; the Direct
@@ -183,6 +183,30 @@ task; it also ignores delayed activation events from a previous pane. The
 existing rapid-navigation test and two new deterministic lifecycle tests pin
 those behaviors. Two mutations fail the full 20-case lifecycle selector, and
 the restored navigation/snapshot selection passes 35 cases.
+
+Normal merge **`bf4de20`** integrates `main` **`38ad175`**. Conflicts in CHANGELOG
+and UNKNOWNS retain both packets; U36 and every other non-P71 unknown row remain.
+The diff against main contains the P71 section, P71 changelog additions and
+P71-owned U26/U32/U37 edits only; ROADMAP is identical to main and P71 is unticked.
+The merged worktree's `Test-FinOps.ps1` passed **436 tests with no warnings**.
+
+Round 1 adds **24 caught mutations**: A1 2 (11-case selector), C1/Q1 5 (7),
+U1 2 (17), S1 9 (23), privacy/U37/TEMP 4 (5), lifecycle 2 (20). Each mutation
+ran the complete selector and failed before byte-for-byte restoration.
+The 59 original receipts remain historical evidence; the cumulative count is 83.
+Both PowerShell hosts still execute the 14/14 batch-read assertions, now in TEMP.
+
+A read-only check during the full-suite run returned current Direct data at
+8.015 s and completed at 8.843 s. Turnstile credential/metadata reads exceeded
+their short deadline and returned explicit unverified exit 7 in 3.473-3.640 s;
+the terminal did so in 2.625 s after refresh start. No stopped-server diagnosis
+or successful running-backend read is claimed for that loaded sample. The
+database was neither stopped nor started in this round.
+The updated Direct captures show a later read at **7.359 s** first data and
+**7.718 s** complete; the current account/RBAC header was already available.
+Capture 60 (stopped) and 63 (running Turnstile) remain dated original-packet
+evidence; this round did not recreate either resource state. Updated captures
+61/62 and the U37/principal-bound architecture image were inspected.
 
 Implementation is on `p71-aum-speed`, based on `aa7ed19`. The packet gate passed
 at `84bddeb`; the lead owns the council review and merge. The ROADMAP box remains

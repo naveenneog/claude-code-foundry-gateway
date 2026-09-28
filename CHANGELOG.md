@@ -38,6 +38,9 @@ exact streaming cache-creation detail remains **U13**.
   cleanup. Existing scope checks, preview/write rules and settled terminal
   snapshots remain. [AUM](docs/AUM.md#read-latency-and-progress),
   [ADR-0035](docs/adr/0035-aum-bounded-readiness-and-progressive-reads.md).
+  Council fixes bind credential reuse to verified principal/session generations,
+  contain wrappers before execution, share one monotonic credential deadline,
+  and surface fatal query errors while identity/capabilities are pending.
 - **Permutation tests of the guided flow and the installer (P72).** `tests/Test-FlowPermutations.ps1`
   runs the orchestrator over Setup, Change foundation, Guide and Status × six record states ×
   attended, `-PlanOnly` and unattended apply (76 runs, some on Windows PowerShell 5.1), a recorded

@@ -21,11 +21,11 @@
   ],
   "nodes": [
     {"id": "direct", "x": 20, "y": 62, "w": 580, "h": 160, "tone": "blue", "title": "One read cycle",
-     "lines": ["[[tokens]]: one acquisition per resource and context", "One bridge snapshot; current write preflight is never cached", "Independent telemetry queries overlap"]},
+     "lines": ["[[tokens]]: verified principal/session and one deadline", "One account check and bridge snapshot per read cycle", "Independent telemetry queries overlap; RBAC label can follow"]},
     {"id": "sources", "x": 20, "y": 298, "w": 580, "h": 220, "tone": "blue", "title": "Existing sources, unchanged accounting",
      "lines": ["[[bridge]] lists nonsecret named values once", "Shared catalog, tiers and token/USD converters", "Log Analytics: request-time ledger and priced workspace facts", "A new cycle or any write invalidates the snapshot"]},
     {"id": "panels", "x": 20, "y": 594, "w": 580, "h": 230, "tone": "teal", "title": "Current data, source by source",
-     "lines": ["[[progress]] paints each completed source", "Named waits, estimates and elapsed time; settings remain usable", "Optional failures stay visible beside successful reads", "Identity still gates edits; superseded reads cannot repaint"]},
+     "lines": ["[[progress]] paints each completed source", "Fatal data errors interrupt pending identity/capability waits", "Named waits and estimates; optional failures remain visible", "Changed principals invalidate credentials and old results"]},
     {"id": "probe", "x": 680, "y": 62, "w": 580, "h": 160, "tone": "purple", "title": "Authenticated identity is readiness",
      "lines": ["GET [[auth-me]] with a short timeout", "Azure credential may load concurrently in memory", "A healthy /health alone does not establish database readiness"]},
     {"id": "diagnose", "x": 680, "y": 298, "w": 580, "h": 220, "tone": "purple", "title": "Timeout or 5xx: read-only ARM diagnosis",

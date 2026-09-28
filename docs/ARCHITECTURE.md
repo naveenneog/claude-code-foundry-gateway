@@ -495,12 +495,15 @@ and writes invalidate read snapshots rather than using cached preflight state.
 The stopped-database diagnostic reads ARM metadata in the recorded Turnstile
 group after an authenticated readiness failure. Its credential may be acquired
 concurrently, but no healthy-path database inventory or automatic start is added.
+Council round 1 binds resource reuse to a verified principal/session, checks the
+Direct account once per read cycle, and rejects obsolete in-flight results.
+Fatal data errors are observed concurrently with identity and capability reads.
 
 ![AUM readiness uses bounded authenticated HTTP and read-only Azure diagnosis; Direct shares a snapshot and returns independent sources progressively.](images/architecture/aum-readiness.png)
 
 Source: [15-aum-readiness.json](architecture/15-aum-readiness.json). The Windows
 MSI launcher runs its existing Python entry point directly; other command
-wrappers and their children have an owned process timeout boundary.
+wrappers are created suspended, assigned to their timeout job, then resumed.
 
 ## Optional independent AUM service (P55)
 
