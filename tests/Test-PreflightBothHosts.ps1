@@ -1,6 +1,8 @@
 # Runs the preflight under both PowerShell 7 and Windows PowerShell 5.1, to
 # prove the argument canary actually detects the difference between them.
 
+$ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'TestAzureFixture.ps1')
 $root = Split-Path $PSScriptRoot -Parent
 $pre = Join-Path $root 'scripts/Test-Prerequisites.ps1'
 
@@ -22,20 +24,29 @@ foreach ($h in $hosts) {
     Write-Host " $($h.Name)" -ForegroundColor Cyan
     Write-Host ('=' * 66) -ForegroundColor DarkCyan
 
-    $cmd = ". '$pre'; `$r = Test-ClaudePrerequisites -Mode Admin; Write-Host `"RESULT=`$r`""
-    $out = & $h.Exe -NoProfile -Command $cmd 2>&1 | ForEach-Object { Write-Host $_; $_ } | Out-String
+    $scratch = Join-Path ([IO.Path]::GetTempPath()) ('preflight-' + [guid]::NewGuid().ToString('N'))
+    try {
+        $driver = New-TestAzureFixture -Directory $scratch
+        $out = & $h.Exe -NoProfile -File $driver -Script $pre -Mode Preflight 2>&1 |
+            ForEach-Object { Write-Host $_; $_ } | Out-String
+        $code = $LASTEXITCODE
+        $recorded = (Test-Path -LiteralPath (Join-Path $scratch 'az.calls')) -and
+            (Test-Path -LiteralPath (Join-Path $scratch 'http.calls'))
+        $unexpected = Test-Path -LiteralPath (Join-Path $scratch 'unexpected.calls')
+    }
+    finally { if (Test-Path -LiteralPath $scratch) { Remove-Item -LiteralPath $scratch -Recurse -Force } }
 
     # RESULT must carry a boolean. Matching the bare label was not enough: a
     # failed dot-source is a non-terminating error, so the child carried on and
     # printed "RESULT=" with nothing after it, and the check passed anyway.
     # Its value is not asserted - that depends on what is installed here - but
     # a value must be there, which means the preflight ran and returned.
-    if ($out -match 'RESULT=(True|False)') {
+    if ($out -match 'RESULT=(True|False)' -and $code -eq 0 -and $recorded -and -not $unexpected) {
         Write-Host "  returned $($Matches[1]) on $($h.Name)" -ForegroundColor Green
         $ran++
     }
     else {
-        Write-Host "  FAIL - preflight did not return on $($h.Name)" -ForegroundColor Red
+        Write-Host "  FAIL - preflight did not return clean offline evidence on $($h.Name)" -ForegroundColor Red
         $fail++
     }
 }
