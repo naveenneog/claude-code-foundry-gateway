@@ -45,6 +45,11 @@ exact streaming cache-creation detail remains **U13**.
   reports folder with an absolute path and non-overwrite naming. The installed
   reconciled-report action retains its existing permissions. CLI report output
   supports JSON path metadata and a no-file `--what-if` preview.
+  The AUM guide starts with installation, connection and first run, then tasks,
+  reference and troubleshooting. Historical live evidence remains dated;
+  regenerated Example screens have separate source/output hashes. Related
+  FinOps guides link to the shared setup. The architecture diagram records
+  local backup/report flows without adding an Azure component or authority.
   [AUM](docs/AUM.md), [ADR-0038](docs/adr/0038-aum-actions-and-connection.md).
 - **AUM latency and readiness (P71).** Direct shares one named-value snapshot per
   read cycle, reuses resource tokens until near expiry and overlaps independent

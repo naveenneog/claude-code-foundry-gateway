@@ -36,6 +36,7 @@ research register; no other packet's unknowns are edited.
 | Visible actions and guarded add form | Initial selector: 9 failed, 10 passed, 32.87 s. After the test waited for the existing 350 ms directory debounce, the catalog selector showed 2 failures and 1 pass in 9.80 s: an unhandled catalog error and a stale directory result opening a form. | 76 passed in 104.67 s | `test_p80_usability.py`, `test_publication_structure.py`, `test_developers.py`, `test_usd_budgets.py`, `test_tui.py`. Captures are regenerated after the remaining UI work. |
 | Local connection transaction | 8 failed, 2 passed, 15.99 s: explicit HTTP options were ignored, replacement was not atomic, and the terminal form had only backend/path fields. Exact-byte and selected-profile regressions: 3 failed in 1.85 s. | 91 passed in 79.16 s | `test_p80_connection.py`, `test_discovery.py`, `test_publication_structure.py`, `test_backends.py`, `test_revision4_navigation.py`, `test_p80_usability.py`. No Azure calls; identity and discovery are fixtures. |
 | Complete one-action reports | 8 failed, 3 passed, 10.08 s: no file after the named action, ignored custom name/JSON output, no reconciler offer and a filename-race refusal. | 40 passed in 16.10 s | `test_p80_reports.py` and `test_publication_structure.py`; a prior wider selector passed its other 91 tests while detecting the changed static-literal pin, corrected without broadening its 51 entries. |
+| Guide and capture provenance | 5 failed in 3.82 s: extra top-level sections after Troubleshooting, imperative prose, missing current capture provenance and duplicated Direct setup. | 9 passed in 26.91 s | `test_p80_docs.py` and all snapshot checks: six ordered top-level sections, installer/platform prerequisites, factual prose, retained evidence, linked setup, exact grids and source/output hashes. |
 
 The action regressions observed truncated labels (10 cells for an 18-cell
 label), no Add action on Budgets, no `via ...` header and a budget button that
@@ -59,6 +60,35 @@ created between name selection and exclusive creation. Explicit filenames
 remain supported. The installed P50 action retains its owner restriction and
 preview. `--json --output` writes the CSV and returns its path; `--what-if`
 creates no report folder.
+
+Additional P80 regressions cover catalog changes during the read and cached
+catalog rejection, disabled Turnstile USD, an estimated connection wait and a
+concurrent profile save during verification. All 51 P80-specific tests passed
+in 113.74 s before the locked full-suite run.
+
+### Architecture and guide evidence
+
+The architecture review found no new Azure component, identity, schedule,
+network destination or authority. The local profile transaction and complete
+CSV output are added to `docs/architecture/06-finops.json`, documented in
+`ARCHITECTURE.md` and ADR-0038. The renderer regenerated 16 specifications and
+18 PNGs; its overflow check first rejected the new local-files label, then
+passed after shortening that label. The terminal diagram was inspected.
+The inherited P71 diagram/source manifest was also stale at this branch base;
+regeneration records the source already present here, not later P71 commits.
+
+The guide preserves all 146 pre-existing link targets, including dated live
+measurements and images, and adds current offline examples with explicit
+Example provenance. Section reordering preserves every pre-reorder non-heading
+line and code block. The current generator produces 24 SVGs, four grid JSON
+files and a SHA-256 source/output manifest at both 80x24 and 160x48. Historical
+live captures are not relabelled as P80 live evidence.
+
+Process exception: the short `Test-DocReferences.ps1` run at 21:52 IST included
+its built-in negative self-checks while the shared lock still existed. This
+was a builder scheduling error; the wrapper had not been inspected before
+execution. It made no Azure calls and passed its 42-guide check. Subsequent
+negative batches and the full AUM suite wait for a builder-owned lock.
 
 ### CONTRACT / acceptance
 

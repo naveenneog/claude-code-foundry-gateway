@@ -130,14 +130,14 @@ dollar stop; see [Scale](SCALE.md#the-budget-is-a-delayed-kill-switch-not-a-hard
   `scripts/Open-ClaudeTurnstile.ps1` when web consent is unavailable.
 - **AUM (Azure Usage Management):** the [terminal FinOps console](AUM.md)
   supplies interactive views and scriptable reports/commands over Turnstile,
-  direct gateway access, the AUM service or isolated example data. Start with
-  [Install](AUM.md#install), choose a backend in [Connect](AUM.md#connect), and
-  use the task sections for [budgets](AUM.md#set-a-team-or-unit-budget),
+  direct gateway access, the AUM service or isolated example data.
+  [Install](AUM.md#install) and [Connect](AUM.md#connect) contain the shared
+  setup steps. Task sections cover [budgets](AUM.md#set-a-team-or-unit-budget),
   [USD budgets](AUM.md#set-a-usd-budget), [people](AUM.md#add-a-person-to-a-team)
   and [chargeback reports](AUM.md#create-a-chargeback-report). Direct mode
   requires Azure permissions and is not a delegated-manager boundary. Preview
-  and apply are separate; follow the job result rather than treating a saved
-  budget as enforced. `claude-finops` remains a deprecated alias.
+  and apply are separate; a saved budget is not proof of enforcement.
+  `claude-finops` remains a deprecated alias.
   `scripts/Manage-ClaudeBusinessUnits.ps1` remains the narrower unit-management
   script, not another name for AUM.
 - **Grafana:** optional [existing-instance publication](MONITORING.md#if-you-would-rather-use-grafana).

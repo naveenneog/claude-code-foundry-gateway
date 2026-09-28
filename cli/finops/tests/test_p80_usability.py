@@ -331,19 +331,66 @@ async def test_catalog_failure_stays_in_picker_with_visible_error(directory_pers
         assert not app.engine.backend.writes
 
 
-async def test_on_demand_catalog_cannot_replace_a_stale_directory_guard(directory_person):
+@pytest.mark.parametrize("when", ["before", "during"])
+async def test_on_demand_catalog_cannot_replace_a_stale_directory_guard(directory_person, monkeypatch, when):
     app = example()
     async with app.run_test(size=(100, 30)) as pilot:
         picker = await open_empty_search_add(app, pilot)
 
+        state = {"stale": when == "before"}
+
         @contextmanager
         def stale_directory():
-            raise FinOpsError("Directory sign-in changed. Search again.", 3)
+            if state["stale"]:
+                raise FinOpsError("Directory sign-in changed. Search again.", 3)
             yield
 
+        original = app.engine.read
+
+        def read(resource, **kwargs):
+            result = original(resource, **kwargs)
+            if resource == "budgets" and when == "during":
+                state["stale"] = True
+            return result
+
         picker.read_guard = stale_directory
+        monkeypatch.setattr(app.engine, "read", read)
         await pilot.press("enter")
         await settle(app, pilot)
         assert app.screen is picker
         assert "sign-in changed" in str(picker.query_one("#developer-status", Static).render())
+        assert not app.engine.backend.writes
+
+
+async def test_add_form_keeps_a_cached_catalog_guard(directory_person):
+    app = example()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await settle(app, pilot)
+        app.action_tab("budgets")
+        await settle(app, pilot)
+        picker = await open_empty_search_add(app, pilot)
+
+        @contextmanager
+        def stale_catalog():
+            raise FinOpsError("Catalog sign-in changed. Refresh the scopes.", 3)
+            yield
+
+        app._data_guards["budgets"] = (app.data["budgets"], stale_catalog)
+        await pilot.press("enter")
+        await settle(app, pilot)
+        assert app.screen is picker
+        assert "Catalog sign-in changed" in str(picker.query_one("#developer-status", Static).render())
+
+
+async def test_turnstile_usd_action_is_disabled_without_a_token_fallback():
+    app = example(config=Config(backend="turnstile", url="https://turnstile.contoso.com"))
+    async with app.run_test(size=(100, 30)) as pilot:
+        await settle(app, pilot)
+        app.action_tab("people")
+        await settle(app, pilot)
+        assert app.query_one("#people #action-set-usd-budget", Button).disabled
+        assert "Turnstile" in str(app.query_one("#note-people", Static).render())
+        await pilot.press("u")
+        await pilot.pause()
+        assert len(app.screen_stack) == 1
         assert not app.engine.backend.writes

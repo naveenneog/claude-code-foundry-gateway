@@ -1,5 +1,7 @@
 import json
+import asyncio
 from pathlib import Path
+from threading import Event
 
 import pytest
 from textual.widgets import Button, Input, Select, Static
@@ -249,3 +251,58 @@ async def test_changed_profile_since_preview_is_not_replaced(tmp_path, monkeypat
         assert path.read_bytes() == newer
         assert not list(tmp_path.glob("*.bak.json"))
         assert "changed since preview" in str(form.query_one("#action-status", Static).render()).lower()
+
+
+async def test_connection_wait_shows_an_estimate_and_keeps_the_old_engine(tmp_path, monkeypatch):
+    from claude_finops import ui_features
+
+    path = tmp_path / "config.json"
+    path.write_bytes(OLD_PROFILE)
+    app = make_app(path)
+    old_engine = app.engine
+    entered, release = Event(), Event()
+
+    class WaitingBackend(FakeBackend):
+        def read(self, resource, **params):
+            if resource == "whoami":
+                entered.set()
+                assert release.wait(10), "The test must release the fixture identity read"
+            return super().read(resource, **params)
+
+    monkeypatch.setattr(ui_features, "connect", lambda config: WaitingBackend())
+    async with app.run_test(size=(100, 34)) as pilot:
+        await preview_connection(app, pilot)
+        await pilot.click("#action-apply")
+        try:
+            assert await asyncio.to_thread(entered.wait, 5)
+            assert app.engine is old_engine
+            assert "estimate 3-10 s" in str(app.query_one("#status", Static).render())
+        finally:
+            release.set()
+        await settle(app, pilot)
+
+
+async def test_late_profile_conflict_restores_the_engine_without_overwriting_another_save(tmp_path, monkeypatch):
+    from claude_finops import ui_features
+
+    path = tmp_path / "config.json"
+    path.write_bytes(OLD_PROFILE)
+    app = make_app(path)
+    old_engine, old_config = app.engine, app.config
+    concurrent = OLD_PROFILE.replace(b"old.contoso.com", b"concurrent.contoso.com")
+
+    class ConcurrentSaveBackend(FakeBackend):
+        def read(self, resource, **params):
+            if resource == "whoami":
+                path.write_bytes(concurrent)
+            return super().read(resource, **params)
+
+    monkeypatch.setattr(ui_features, "connect", lambda config: ConcurrentSaveBackend())
+    async with app.run_test(size=(100, 34)) as pilot:
+        await preview_connection(app, pilot)
+        await pilot.click("#action-apply")
+        await settle(app, pilot)
+        assert path.read_bytes() == concurrent
+        assert app.engine is old_engine and app.config is old_config
+        assert next(tmp_path.glob("*.bak.json")).read_bytes() == OLD_PROFILE
+        assert "no newer file was overwritten" in str(app.query_one("#status", Static).render())

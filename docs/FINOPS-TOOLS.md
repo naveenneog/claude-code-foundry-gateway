@@ -31,7 +31,7 @@ for your own region and deployment; run it rather than reusing these numbers.
 | Chargeback reports | Each business unit's monthly CSV and summary, reconciled, archived and emailed | Admins set it up; units receive email | No | A scheduled Container Apps job, Storage, Communication Services | **About $29.70/month** standing networking, plus cents of usage |
 | Grafana (optional) | The same saved functions on a Grafana wall | Teams that already run Grafana | No | An Azure Managed Grafana instance you provide | Essential **$6 per user-month**; Standard **$0.03 per node-hour** plus users |
 
-Terminal FinOps is now **AUM (Azure Usage Management)**. Use the AUM guide for
+Terminal FinOps is now **AUM (Azure Usage Management)**. The AUM guide covers
 [installation](AUM.md#install), [backend selection](AUM.md#connect) and
 [task workflows](AUM.md#how-to). `claude-finops` remains a deprecated command
 alias for one release.
@@ -81,8 +81,8 @@ comparison.
 | Person | Saved queries and workbooks | PowerShell scripts | Terminal FinOps | AUM service | Turnstile |
 |---|---|---|---|---|---|
 | **Administrator** | Azure portal sign-in; Log Analytics Reader on the workspace | `az login`; Azure RBAC on the gateway and workspace | Direct: `az login` and Azure RBAC. Turnstile backend: a Turnstile token from the Azure CLI | `AUM.Admin` app role; token from the Azure CLI | `Turnstile.Admin` app role; web sign-in, or the one-use code |
-| **Unit or team manager** | Only if also given workspace read access, which shows everything | Not applicable | Turnstile backend only, read-only; scope comes from Turnstile | `AUM.Manager` plus membership of the unit's or team's manager group | `Turnstile.Manager` plus membership of the manager group |
-| **Viewer or finance** | Log Analytics Reader | Not applicable | Turnstile backend, read-only | `AUM.Viewer` | `Turnstile.Viewer` |
+| **Unit or team manager** | Only if also given workspace read access, which shows everything | Not applicable | AUM service or Turnstile; reads and permitted budget writes follow the server's scope | `AUM.Manager` plus membership of the unit's or team's manager group | `Turnstile.Manager` plus membership of the manager group |
+| **Viewer or finance** | Log Analytics Reader | Not applicable | AUM service or Turnstile, read-only | `AUM.Viewer` | `Turnstile.Viewer` |
 | **Developer** | No | No | No | **No role**: developers never use the administrative API | **No role**: refused; no account is created |
 | **Scheduled jobs and services** | The reports job reads the workspace | The Turnstile apply job runs the scripts | No | The Function's managed identity | Its apply and usage jobs' managed identities |
 
@@ -192,20 +192,16 @@ Details: [Budgets](BUDGETS.md), [Business units](BUSINESS-UNITS.md) and
 
 ### Flow 3: Terminal FinOps, Direct
 
-1. Install AUM with [the AUM install steps](AUM.md#install).
-2. `az login --tenant <tenant-id>`, then point it at the gateway. `workspace` is the Log Analytics
-   Workspace ID, not the ARM id. `az monitor log-analytics workspace show -g <group> -n <workspace> --query customerId`
-   prints it.
+The shared [AUM installation](AUM.md#install) and [connection](AUM.md#connect)
+sections contain the setup commands and address discovery. The
+[first-run tour](AUM.md#first-run-and-screen-tour) identifies the backend and
+role. Direct uses the gateway's actual diagnostic/logger workspace, with the
+Log Analytics Workspace ID distinct from its ARM resource id.
 
-   ```json
-   { "backend": "direct", "resource_group": "<gateway-resource-group>", "apim_name": "<gateway>",
-     "repository": "<path-to-this-clone>", "workspace": "<workspace-id>" }
-   ```
-
-3. `aum whoami` shows the identity and `method: azure-rbac`; `aum status` shows
-   the month. Run `aum` with no command for the terminal app. `claude-finops` remains a deprecated alias.
-4. Changes preview first and are written only with `--apply`, through the same PowerShell
-   serializers as flow 2, and read back.
+`aum whoami` reports `method: azure-rbac`; `aum status` reads the month.
+[Budget tasks](AUM.md#set-a-team-or-unit-budget) retain preview, explicit
+Apply and read-back through the same serializers as flow 2. The deprecated
+`claude-finops` alias remains available.
 
 Direct shares one gateway snapshot per refresh, reuses resource tokens and
 overlaps independent telemetry queries. The terminal shows arriving panels and
@@ -248,8 +244,8 @@ Details: [AUM Direct gateway access](AUM.md#direct-gateway-access).
 6. Edit budgets, tiers and modes. Each save starts the apply job. Measured: a tier limit reached
    the gateway 112 s after the save, a budget refused the next request 123 s after it, and a mode
    change reached `bu-modes` in 113 s.
-7. Optionally, point the terminal at Turnstile (`"backend": "turnstile"` with its URL and scope).
-   Managers use it read-only within their scope.
+7. The optional AUM connection follows [Connect](AUM.md#connect).
+   Manager reads and permitted budget writes remain within the server's scope.
 
 ![Governance apply: a save in Turnstile reaches the gateway through its apply job](images/architecture/governance-apply.png)
 
@@ -288,7 +284,7 @@ Measured on an isolated Basic v2 gateway on 2026-09-25, then retired:
 ![AUM service live receipts: enforcement in all three modes, and attribution](guide/aum-12-live-modes.png)
 
 Details: [AUM service](AUM-SERVICE.md), and its [architecture](ARCHITECTURE.md#optional-independent-aum-service-p55).
-The terminal's AUM service backend arrives with P52.
+The terminal's AUM service connection is documented in [Connect](AUM.md#connect).
 
 ### Flow 6: monthly chargeback reports by email
 
