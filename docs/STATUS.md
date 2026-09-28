@@ -1074,9 +1074,14 @@ changing its command budget or test selectors.
       refusal were measured; all proof resources were deleted and the gateway purged below USD 5
 - [x] Redacted, inspected live terminal images numbered 40 onward are embedded in the updated
       setup/flow documentation; architecture sources, images and manifest remain current
-- [ ] The current merged tree's locked packet gate exits 0. Round 1 passed at `215d43a`;
-      round 2 at `51e816e` timed out at the unchanged Test-All budget. The requested normal
-      merge of main is recorded; no push, rebase, history rewrite or roadmap completion occurred
+- [x] The current merged tree's locked packet gate exits 0. Round 1 passed at `215d43a`;
+      round 2 at `51e816e` timed out at the then 1,800 s budget, and so did `1cd1567` and, on the
+      merge of `main` `040ca87`, `b4e970b` (at throttle 8 and at the default throttle), which led to
+      P77 ([ADR-0036](adr/0036-gate-budget-until-sharded.md)). Council round 4, all five seats PASS.
+      On `d73e3fd`, `b4e970b` with `main` `9635426` (P77) merged, 2026-09-28 16:43:46-17:17:30 IST
+      under the shared lock at the default throttle: 22 passed, 2 warned, 0 failed, 2 skipped;
+      Test-All passed in 2,015.2 s (89 PASS, 2 SKIP of 91 checks) within the 3,600 s budget, the
+      Bicep build in 7.2 s
 
 Implementation: `b10e945` (certificate/TLS), `99ade80` (shared script and installer/Change wiring),
 `e607df8` (unattended Foundation plan and price binding), `c6b5749` (DNS-before-binding and
