@@ -106,6 +106,11 @@ param(
     # neither offers the FinOps tool nor lists it as a next step (ADR-0032).
     [switch]$SkipFinOpsOffer,
 
+    # A checkout holds one gateway's record. When onboarding\claude-gateway.json names another
+    # gateway, keep it as onboarding\claude-gateway.<resource group>-<instance>.json and start a new
+    # one for this gateway. Asked in a console; without this switch an unattended run refuses (P79).
+    [switch]$ArchiveSavedRecord,
+
     # Accept every default without prompting.
     [switch]$Yes
 )
@@ -798,6 +803,55 @@ $NamePrefix = if ($NamePrefix) { $NamePrefix } else {
         -Help 'API Management names are globally unique DNS labels.'
 }
 
+# ------------------------------------------------- the saved record and the chosen gateway
+#
+# A checkout holds one gateway's record. It is compared with the chosen gateway here, as soon as the
+# gateway is known, so a record for another gateway stops the run before the remaining questions
+# and before anything is created; P69 compared it at the address question, after every answer (P79).
+$savedAddressPath = Join-Path $root 'onboarding\claude-gateway.json'
+$addressApimName = if ($ExistingApim) { $ExistingApim } else { "apim-$NamePrefix" }
+$savedRecordSetAside = $false
+. (Join-Path $root 'scripts\flow\FlowContract.ps1')
+. (Join-Path $root 'scripts\ClaudeGatewayAddressInput.ps1')
+if (Test-Path -LiteralPath $savedAddressPath) {
+    $saved = Read-ClaudeDecisionRecord -Path $savedAddressPath
+    $savedSubscription = Get-ClaudeFlowRecordSubscription -Record $saved
+    $selectedGateway = "$ResourceGroup/$addressApimName"
+    $recordedGateway = if (Test-ClaudeAddressDraftRecord $saved) { $selectedGateway } else { "$([string]$saved.resourceGroup)/$([string]$saved.apimName)" }
+    if ($recordedGateway -ine $selectedGateway -or ($savedSubscription -and $savedSubscription -ine $SubscriptionId)) {
+        $recordedScope = if ($savedSubscription) { $savedSubscription } else { 'not recorded' }
+        $conflict = "Saved record '$savedAddressPath' names gateway '$recordedGateway' (subscription $recordedScope), but the selected gateway is '$selectedGateway' (subscription $SubscriptionId)."
+        $stem = (($recordedGateway -replace '[^A-Za-z0-9._-]', '-') -replace '-+', '-').Trim('-')
+        $archivePath = Join-Path (Split-Path $savedAddressPath -Parent) "claude-gateway.$stem.json"
+        if (Test-Path -LiteralPath $archivePath) {
+            $archivePath = Join-Path (Split-Path $savedAddressPath -Parent) ("claude-gateway.$stem.{0}.json" -f (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ'))
+        }
+        $archiveName = Split-Path $archivePath -Leaf
+        $archive = [bool]$ArchiveSavedRecord
+        if (-not $archive -and -not $Yes) {
+            Write-Host ''
+            Write-Warn2 $conflict
+            $answer = Read-Default -Prompt "Keep that record as $archiveName and start a new one for $selectedGateway (yes/no)" -Default 'yes' `
+                -Help 'yes renames the record, which stays beside the new one; no stops here. Nothing has been created.' -Validate {
+                    param($x)
+                    if ($x -in @('yes','no')) { return $true }
+                    Write-Warn2 'Must be yes or no.'
+                    return $false
+                }
+            $archive = $answer -eq 'yes'
+        }
+        if (-not $archive) {
+            throw "$conflict No resources were created. Rerun with -ArchiveSavedRecord to keep that record as $archiveName and start a new one, use a separate checkout for the selected gateway, or back up and move this record before rerunning."
+        }
+        if ($WhatIfPreference) { Write-Note "WhatIf: would keep the record for $recordedGateway as $archivePath." }
+        else {
+            Move-Item -LiteralPath $savedAddressPath -Destination $archivePath -WhatIf:$false
+            Write-Ok "kept the record for $recordedGateway as $archivePath"
+        }
+        $savedRecordSetAside = $true
+    }
+}
+
 $PublisherEmail = if ($PublisherEmail) { $PublisherEmail } else {
     Read-Default -Prompt 'Publisher email' -Default $acct.user.name -Help 'Shown on the API Management instance.'
 }
@@ -1004,20 +1058,10 @@ Write-Host '    This is the one choice on this page that is expensive to change 
 $addressPlan = $null
 $addressResult = $null
 $savedAddressConfig = $null
-$savedAddressPath = Join-Path $root 'onboarding\claude-gateway.json'
-$addressApimName = if ($ExistingApim) { $ExistingApim } else { "apim-$NamePrefix" }
-. (Join-Path $root 'scripts\flow\FlowContract.ps1')
-. (Join-Path $root 'scripts\ClaudeGatewayAddressInput.ps1')
-if (Test-Path -LiteralPath $savedAddressPath) {
-    $saved = Read-ClaudeDecisionRecord -Path $savedAddressPath
-    $savedSubscription = Get-ClaudeFlowRecordSubscription -Record $saved
-    $selectedGateway = "$ResourceGroup/$addressApimName"
-    $recordedGateway = if (Test-ClaudeAddressDraftRecord $saved) { $selectedGateway } else { "$([string]$saved.resourceGroup)/$([string]$saved.apimName)" }
-    if ($recordedGateway -ine $selectedGateway -or ($savedSubscription -and $savedSubscription -ine $SubscriptionId)) {
-        $recordedScope = if ($savedSubscription) { $savedSubscription } else { 'not recorded' }
-        throw "Saved record '$savedAddressPath' names gateway '$recordedGateway' (subscription $recordedScope), but the selected gateway is '$selectedGateway' (subscription $SubscriptionId). No resources were created. Use a separate checkout for the selected gateway, or back up and move this record before rerunning."
-    }
-    $savedAddressConfig = $saved
+# Compared with the chosen gateway after the name prefix: a record here is this gateway's, or a first
+# Setup's journal, unless it was set aside for another gateway.
+if (-not $savedRecordSetAside -and (Test-Path -LiteralPath $savedAddressPath)) {
+    $savedAddressConfig = Read-ClaudeDecisionRecord -Path $savedAddressPath
 }
 $addressValues = @{}
 foreach ($key in 'AddressMode','AddressHostname','AddressCertificateSource','AddressKeyVaultCertificateId','AddressPfxPath','AddressDnsZoneResourceId','AddressDnsMode','AddressReplaceHostname') {
