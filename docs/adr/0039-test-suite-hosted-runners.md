@@ -75,6 +75,9 @@ The service requirements and FinOps project/test extras are still installed alon
 The installed standalone Bicep compiler reported 0.46.1; the workflow reproduces that version.
 Node 22 compatibility remains part of the hosted run, rather than a claim based on the local
 Node 26.1.0 runtime.
+The first hosted attempt (`aee8fda`, run 36454004081) reached the browser checks but failed
+because npm dependencies do not include the Chromium executable. Setup now runs the checkout's
+Playwright installer explicitly; no browser check is removed or skipped.
 
 The GitHub API's current release tags and commit endpoints returned these pins on 2026-09-28
 (`.github/workflows/test-all.yml:39`, `:49`, `:58`, `:89`, `:107`):

@@ -72,6 +72,8 @@ jobs:
           if ($LASTEXITCODE) { throw 'AUM service dependency installation failed.' }
           npm ci --no-audit --no-fund
           if ($LASTEXITCODE) { throw 'Node dependency installation failed.' }
+          npx --no-install playwright install chromium
+          if ($LASTEXITCODE) { throw 'Playwright Chromium installation failed.' }
           az bicep install --version v0.46.1
           if ($LASTEXITCODE) { throw 'Bicep installation failed.' }
           & 'C:\Program Files\Git\bin\bash.exe' -c 'command -v jq'

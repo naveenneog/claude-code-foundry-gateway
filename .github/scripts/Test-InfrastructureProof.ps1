@@ -146,6 +146,7 @@ try {
         Add-Case 'complete matrix' $workflow 'shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]' 'shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]' $suite
         Add-Case 'FinOps environment creation' $workflow 'python -m venv .venv-finops' 'python -m venv .wrong-finops' $suite
         Add-Case 'AUM environment creation' $workflow 'python -m venv .venv-aum-service' 'python -m venv .wrong-aum' $suite
+        Add-Case 'browser runtime installation' $workflow 'npx --no-install playwright install chromium' 'npx --no-install playwright --version' $suite
         Add-Case 'existing setup manifests' $workflow 'tests/requirements-finops.lock' 'tests/missing-finops.lock' $suite
         Add-Case 'wizard uses offline native fixture' 'tests\Test-On-PS51.ps1' 'TestAzureFixture.ps1' 'MissingAzureFixture.ps1' $suite
         Add-Case 'preflight uses offline native fixture' 'tests\Test-PreflightBothHosts.ps1' 'TestAzureFixture.ps1' 'MissingAzureFixture.ps1' $suite

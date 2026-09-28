@@ -50,7 +50,7 @@ Rejects 'computed labels cannot disappear from a static inventory' {
 } 'literal'
 Rejects 'an undeclared dynamic skip reason fails closed' {
     Get-TestAllRegistration -Text ($fixture.Replace('-SkipReason $optionalSkip', '-SkipReason $unknown'))
-} 'reason'
+} 'one literal-branch declaration'
 Rejects 'an empty registration cannot prove coverage' {
     Get-TestAllRegistration -Text "# BEGIN CHECK REGISTRATION`n# END CHECK REGISTRATION"
 } 'empty'

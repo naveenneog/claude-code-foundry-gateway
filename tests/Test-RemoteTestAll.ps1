@@ -155,6 +155,9 @@ if (Test-Path -LiteralPath $workflowPath) {
         $workflow -match 'cache: pip' -and
         $workflow -match 'cache: npm' -and $workflow.Contains('cli/finops/pyproject.toml') -and
         $workflow.Contains('service/aum/requirements.txt') -and $workflow.Contains('package-lock.json'))
+    Assert 'the actual Playwright Chromium executable is installed for offline browser checks' (
+        $workflow -match '(?m)^\s+npx --no-install playwright install chromium\s*$' -and
+        $workflow -match "if \(\`$LASTEXITCODE\) \{ throw 'Playwright Chromium installation failed\.' \}")
     $manifestPaths = @([regex]::Matches($workflow, '(?:tests[\\/][\w-]+\.lock|cli/finops/pyproject\.toml|service/aum/requirements\.txt|package-lock\.json)') |
         ForEach-Object { $_.Value.Replace('/', '\') } | Sort-Object -Unique)
     Assert 'every referenced dependency manifest exists in the checkout' (

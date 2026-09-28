@@ -38,6 +38,9 @@ exact streaming cache-creation detail remains **U13**.
   [Test execution](tests/README.md), [P78 evidence](docs/STATUS.md),
   [draft ADR-0039](docs/adr/0039-test-suite-hosted-runners.md).
   The charter, product scripts and deployed resources are unchanged.
+  The first hosted attempt exposed missing Chromium installation and an error-pattern assertion
+  that accepted the wrong exception; both have targeted regression coverage
+  (`tests/Test-RemoteTestAll.ps1`, `tests/Test-TestAllSharding.ps1`).
 
 - **P69 council corrections.** Inherited addresses are resolved before Foundation approval;
   proposed decisions no longer overwrite applied state or history; failed replacements have a

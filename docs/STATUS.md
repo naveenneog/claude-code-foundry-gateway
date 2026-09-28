@@ -52,6 +52,12 @@ estimated release, the workflow also runs count-preserving Core, Runner and Wiza
 proofs on three of its existing VMs. Baseline-only diagnostics do not count as negative proofs.
 Hosted measurements and the full local RunnerIntegrity check remain pending.
 
+The first hosted attempt, [36454004081](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36454004081)
+on `aee8fda`, found missing Playwright Chromium executables in the screenshot/redaction checks,
+and one uncaught core mutation: a removed declaration guard was hidden by an overly broad
+expected error pattern matching a later exception. Setup now installs Chromium explicitly and
+the declaration assertion matches the intended diagnostic. These failures are not green evidence.
+
 U50-U53 track hosted compatibility, timing, remote-run identity and detector evidence. No product architecture
 component changes; this is test execution and evidence transport, not an accelerator deployment.
 
