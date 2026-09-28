@@ -512,8 +512,10 @@ Directory and catalog results keep their publication guards through the add
 form. Connection settings use an address-only local profile, a timestamped
 backup and atomic replacement. An OS-held sibling-file lock serializes AUM
 profile writers; the reviewed candidate/revision is not rediscovered at commit.
-Failed `whoami` keeps the previous engine and attempts profile restoration,
-with durable backup/recovery instructions if restoration fails.
+Both `whoami` and the saved profile revision are checked before the UI adopts
+the candidate. Failure keeps the previous engine, identity and cached UI and
+attempts profile restoration. Failed restoration retains the connection form
+with focused, keyboard-scrollable backup/recovery instructions.
 Complete chargeback CSVs use exclusive file creation
 with numbered collision handling. No Azure component, identity, schedule,
 network destination or write authority is added. The diagram's local-files

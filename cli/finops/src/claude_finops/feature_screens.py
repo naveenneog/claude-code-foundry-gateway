@@ -62,7 +62,8 @@ class ActionForm(ModalScreen):
                                      allow_blank=False, id=f"field-{name}")
                     else:
                         yield Input(str(default or ""), id=f"field-{name}", password=self.app.redactor.enabled)
-            yield Static("Preview first. Nothing has been changed.", id="action-status", markup=False)
+            with VerticalScroll(id="action-feedback"):
+                yield Static("Preview first. Nothing has been changed.", id="action-status", markup=False)
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="action-cancel")
                 yield Button("Preview", id="action-preview")

@@ -98,11 +98,16 @@ and its address fields, without requiring an existing JSON file. The screen
 names the current backend as `via Direct`, `via AUM service` or `via Turnstile`.
 A preview shows the current and proposed profile. **Save and connect** keeps
 an exact-byte timestamped backup, replaces the selected local profile atomically
-and verifies `whoami` before adopting the connection. A failed verification
+and verifies both `whoami` and the saved profile revision before adopting the
+connection or dismissing the form. A failed verification
 keeps the prior live connection and attempts to restore its file; with no prior
 profile, recovery removes the new file. A failed restore remains an error in
 the form, with the backup path and steps to release the file lock and restore
-the old file or remove an unverified first profile.
+the old file or remove an unverified first profile. The previous identity,
+configuration and cached UI remain active. Recovery feedback receives keyboard
+focus; Up/Down, Page Up/Page Down and Home/End scroll its complete wrapped text
+at 80x24. The form stays open until the operator closes it or a later connection
+succeeds.
 
 The reviewed candidate bytes and prior revision remain unchanged through
 Apply. AUM writers share an OS-held lock on a sibling `.config.json.lock`

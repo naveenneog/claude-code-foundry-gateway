@@ -4,12 +4,54 @@
 
 Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM guide set. Worktree: `accel-p80`, branch `p80-aum-usability`, based on P71 commit `bcf8554`. Later P71 work remains separate. This packet stays local until the owner reviews it after the 2026-09-29 deployment; no merge, push or history rewrite is authorized.
 
-**Council round 1:** Architect and Security PASS; Coder, QA and UX BLOCK at
-`fb8f849`. The earlier builder results remain below as historical evidence,
-not proof that the council's missed windows or viewport defect were covered.
-Corrections are implemented and verified locally through `39d0c55`, with
-ledger-only evidence following it. The lead runs round 2; no new council
-verdict is claimed here.
+**Council round 2:** Architect and Security PASS; Coder, QA and UX BLOCK at
+`3ace1f7` on UI adoption before the final saved-revision check. Transaction-level
+round-1 probes pass, but did not establish recovery after successful `whoami`
+with a persistent read lock. This path is reopened below. The lead runs round 3.
+
+### Council round 2 corrections
+
+| Seat | Round 2 verdict | Required correction |
+|---|---|---|
+| Architect | PASS | Existing local client/file boundary remains |
+| Security | PASS | Writer-lock contention, nested refusal, exception release and crashed-child behavior passed the review |
+| Coder | BLOCK | Candidate adoption and form dismissal precede the transaction's final saved-revision check; failure then clears the old identity |
+| QA | BLOCK | Missing end-to-end successful-whoami case with a real Windows read lock held through validation and rollback |
+| UX | BLOCK | Dismissed form leaves recovery in the clipped two-line status; the full backup path and instructions must remain readable at 80x24 |
+
+PLAN / CONTRACT: the new regression holds a real read-denying Windows handle
+until after the failure UI is inspected. It checks unchanged engine, configuration,
+identity and cached UI state, the original modal, and the actual rendered recovery
+text through keyboard scrolling. Candidate adoption follows successful transaction
+exit; failure does not clear or dismiss the previous UI. The existing scrollable
+container is reused rather than a new backend or recovery service. U40 and U41
+are reopened before the correction.
+
+RED, GREEN, negative probes and the correction commit are recorded here as
+they complete. Each long command owns and releases its own `.gate-lock`
+within one synchronous invocation. No push, merge, Azure write, writer-authority
+change or council rerun is authorized.
+
+RED: all **3** new end-to-end cases failed, with no collection errors or skips,
+in **11.811 s** of JUnit time. The persistent-lock case observed the previous
+identity become `{}`; its UI case observed the original form disappear.
+The successful-save control also failed because adoption happened before the
+last saved-revision check.
+
+GREEN: the new recovery suite, existing connection/transaction suites and
+publication-structure suite passed **56 tests in 52.56 s**. The real Windows
+handle remains held through successful `whoami`, both denied reads (validation
+and attempted restoration), all old-state assertions and keyboard inspection.
+The viewport test reconstructs every rendered recovery character while
+scrolling at 80x24, including the entire backup path and final instruction.
+It does not substitute an unrendered string or release the handle before
+transaction exit.
+
+The production change moves guarded adoption after the transaction exits
+successfully. The existing five-line feedback area is now an actual
+keyboard-scrollable container; failed connections focus it and do not cover it
+with a duplicate error toast. The old UI remains untouched on the reviewed
+file-validation failure. Negative proofs and final regression results follow.
 
 ### Council round 1 corrections
 

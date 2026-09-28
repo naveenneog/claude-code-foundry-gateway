@@ -48,6 +48,10 @@ exact streaming cache-creation detail remains **U13**.
   Settings now has a wrapping, guarded connection label independent of table
   width caches. AUM-service membership is explicitly unavailable in the
   controls, shortcut, command palette and guide; no membership writer is added.
+  Council round 2 corrections delay UI adoption until saved-revision validation
+  finishes. A post-whoami file failure retains the old identity, cached state
+  and connection form; its complete recovery text is keyboard-scrollable at
+  80x24 instead of being clipped in the application status.
   One Chargeback report action writes the complete month CSV to the local
   reports folder with an absolute path and non-overwrite naming. The installed
   reconciled-report action retains its existing permissions. CLI report output

@@ -458,22 +458,22 @@ class FeatureUI:
                 with backend.read_cycle():
                     identity = await asyncio.to_thread(engine.read, "whoami")
                     candidate_guard = backend.read_guard()
-                with guarded_publish(candidate_guard):
-                    self._bind_engine(engine)
-                    self.config = config
-                    if profile is not None:
-                        self.profile_path = profile
-                    self.identity = {}
-                    self.preferences = None
-                    self.feature_caps = {}
-                    self._refresh_serial += 1
-                    self.data.clear()
-                    self._data_guards.clear()
-                    self.records.clear()
-                    self.clear_query_context()
-                    while len(self.screen_stack) > 1:
-                        self.pop_screen()
-                    self.update_access(identity)
+            with guarded_publish(candidate_guard):
+                self._bind_engine(engine)
+                self.config = config
+                if profile is not None:
+                    self.profile_path = profile
+                self.identity = {}
+                self.preferences = None
+                self.feature_caps = {}
+                self._refresh_serial += 1
+                self.data.clear()
+                self._data_guards.clear()
+                self.records.clear()
+                self.clear_query_context()
+                while len(self.screen_stack) > 1:
+                    self.pop_screen()
+                self.update_access(identity)
             switched = True
         except (FinOpsError, OSError, ValueError, RuntimeError) as error:
             reason = self._error_text(error) if isinstance(error, FinOpsError) else "The new connection could not be saved or verified."
@@ -485,7 +485,12 @@ class FeatureUI:
                 self.query_one("#status", Static).update(f"{reason} The previous connection remains active.")
                 if self.screen.query("#action-status"):
                     self.screen.query_one("#action-status", Static).update(f"{reason} The previous connection remains active.")
-            self.notify(reason, severity="error")
+                    if self.screen.query("#action-feedback"):
+                        feedback = self.screen.query_one("#action-feedback")
+                        feedback.scroll_home(animate=False)
+                        feedback.focus()
+                else:
+                    self.notify(reason, severity="error")
         finally:
             if backend is not None and not switched:
                 backend.close()

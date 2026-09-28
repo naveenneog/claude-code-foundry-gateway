@@ -155,3 +155,19 @@ locked commands, taking 339.57 s of pytest time. The unchanged original
 Settings assertion and deterministic narrow-table/wrapping cases passed ten
 consecutive fresh processes (40 cases, 152.750 s). The lead's round-2 council
 and subsequent packet gate remain pending.
+
+## Council round 2 amendment
+
+The 2026-09-29 review found that transaction validation was correctly guarded
+but the caller adopted the candidate UI before that validation completed.
+The adoption boundary is after successful transaction exit: `whoami` alone
+does not authorize closing the old form or discarding its identity and cached
+state. The final saved-revision check still runs under the profile writer lock.
+A failure retains the old UI and leaves recovery in the same persistent form.
+
+Recovery content uses the existing keyboard-scrollable form container pattern.
+The backup path and full recovery steps remain wrapped, focusable and readable
+at 80x24 instead of relying on the two-line application status. The regression
+holds its real Windows handle through successful identity verification, final
+validation, rollback failure and UI inspection. This changes no Azure component,
+identity, network path, membership writer or gateway authority.
