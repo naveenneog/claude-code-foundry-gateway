@@ -666,6 +666,17 @@ if (-not $NamePrefix) {
 # The deployment itself is the authority: if the SKU is unavailable in the
 # region it fails immediately and says so.
 
+# Whether the entitlement store can hold the declared developers. Identities are held in API
+# Management named values, which cap at 4,096 characters; an object id plus its separator costs 37,
+# so a list holds about 110 and the business unit map - whose entries are longer - binds first at
+# roughly 93. Derived here rather than pasted, on the same two measured constants
+# Measure-ClaudeCeiling.ps1 uses. Without a check the installer took "5000 developers", recommended
+# a SKU, deployed happily, and the wall arrived weeks later as a sync refusing to write a named value.
+$maxChars = 4096
+$oidCost = 37
+$listCeiling = [int][math]::Floor(($maxChars - 1) / $oidCost)
+$buCeiling = [int][math]::Floor(($maxChars - 1) / 44)
+
 $Sku = if ($Sku) { $Sku }
 elseif ($ExistingApim) {
     # Reusing an instance means its SKU is already decided. Asking how many
@@ -694,53 +705,14 @@ else {
     if (-not [int]::TryParse($devs, [ref]$n) -or $n -lt 1) { $n = 50 }
     $script:DeveloperEstimate = $n
 
-    # Whether the entitlement store can hold that many at all.
-    #
-    # The SKU arithmetic above is about request volume, and volume is almost
-    # never what stops this. Identities are held in API Management named values,
-    # which cap at 4,096 characters; an object id plus its separator costs 37, so
-    # a list holds about 110 and the business unit map - whose entries are longer
-    # - binds first at roughly 93.
-    #
-    # Derived here rather than pasted, on the same two measured constants
-    # Measure-ClaudeCeiling.ps1 uses. There is no gateway to measure yet, which
-    # is exactly why this has to be said before one is built rather than after.
-    #
-    # Without this the installer took "5000 developers", recommended a SKU,
-    # deployed happily, and the wall arrived weeks later as a sync refusing to
-    # write a named value - by which time the gateway was in production.
-    $maxChars = 4096
-    $oidCost = 37
-    $listCeiling = [int][math]::Floor(($maxChars - 1) / $oidCost)
-    $buCeiling = [int][math]::Floor(($maxChars - 1) / 44)
-
+    # More developers than named values hold: said here as a note, and asked about after the
+    # entitlement store is chosen below, where the Cosmos store is one of the choices (P79). Until
+    # P79 this asked "Continue anyway" here, before the tier and the store, and said the Cosmos store
+    # was not built; P61 built it on every v2 tier.
     if ($n -gt $buCeiling) {
         Write-Host ''
-        Write-Warn2 ("This holds about {0} developers today, and you said {1}." -f $buCeiling, $n)
-        Write-Host ''
-        Write-Host '      Entitlement lives in API Management named values, which cap at 4,096' -ForegroundColor DarkGray
-        Write-Host ("      characters. A tier list holds about {0} object ids; the business unit" -f $listCeiling) -ForegroundColor DarkGray
-        Write-Host ("      map holds about {0}, and it runs out first. This is a storage limit," -f $buCeiling) -ForegroundColor DarkGray
-        Write-Host '      not a licensing one, and raising the SKU does not move it - a larger' -ForegroundColor DarkGray
-        Write-Host '      tier raises how many named values exist, not how long each one may be.' -ForegroundColor DarkGray
-        Write-Host ''
-        Write-Host '      The store that removes this limit is designed, costed and measured,' -ForegroundColor DarkGray
-        Write-Host '      and is not built yet - see docs/SCALE.md and docs/adr/0011.' -ForegroundColor DarkGray
-        Write-Host ''
-        Write-Host '      Deploying now is still reasonable: the gateway works, and the move to' -ForegroundColor DarkGray
-        Write-Host '      the larger store is a configuration change rather than a redeployment.' -ForegroundColor DarkGray
-        Write-Host ("      But you will be able to entitle about {0} people, not {1}, and the" -f $buCeiling, $n) -ForegroundColor DarkGray
-        Write-Host '      sync will refuse the rest rather than silently dropping them.' -ForegroundColor DarkGray
-        Write-Host ''
-
-        $goOn = Read-Default -Prompt 'Continue anyway (yes/no)' -Default 'yes' `
-            -Help 'yes deploys a gateway that serves the first ~93 and refuses to add more.' -Validate {
-                param($x)
-                if ($x -in @('yes','no')) { return $true }
-                Write-Warn2 'Must be yes or no.'
-                return $false
-            }
-        if ($goOn -eq 'no') { throw 'Stopped before deploying. Nothing was created.' }
+        Write-Note ("{0} developers is more than named values hold (about {1}). The entitlement store question" -f $n, $buCeiling)
+        Write-Note 'below recommends the Cosmos store, which holds them on every v2 tier (docs/SCALE.md).'
     }
 
     # A deliberately generous assumption. Claude Code is chatty - a session is
@@ -899,7 +871,32 @@ if ($Yes -and $EntitlementStore -eq 'projection' -and -not $DeployProjection) {
 if ($FlipProjectionAfterCleanCompare -and -not $DeployProjection) {
     throw '-FlipProjectionAfterCleanCompare requires -DeployProjection.'
 }
-
+# Named values for more developers than they hold, said where the store is chosen (P79).
+if ($EntitlementStore -eq 'named-value' -and $devCount -gt $buCeiling) {
+    Write-Host ''
+    Write-Warn2 ("Named values hold about {0} developers, and you said {1}." -f $buCeiling, $devCount)
+    Write-Host ''
+    Write-Host '      Entitlement lives in API Management named values, which cap at 4,096' -ForegroundColor DarkGray
+    Write-Host ("      characters. A tier list holds about {0} object ids; the business unit" -f $listCeiling) -ForegroundColor DarkGray
+    Write-Host ("      map holds about {0}, and it runs out first. This is a storage limit," -f $buCeiling) -ForegroundColor DarkGray
+    Write-Host '      not a licensing one, and raising the SKU does not move it - a larger' -ForegroundColor DarkGray
+    Write-Host '      tier raises how many named values exist, not how long each one may be.' -ForegroundColor DarkGray
+    Write-Host ''
+    Write-Host '      The Cosmos projection store holds them on every v2 tier: choose projection' -ForegroundColor DarkGray
+    Write-Host '      above, or pass -EntitlementStore projection (docs/SCALE.md, docs/adr/0011).' -ForegroundColor DarkGray
+    Write-Host '      Moving to it later is a configuration change rather than a redeployment.' -ForegroundColor DarkGray
+    Write-Host ("      With named values you can entitle about {0} people, not {1}, and the" -f $buCeiling, $devCount) -ForegroundColor DarkGray
+    Write-Host '      sync will refuse the rest rather than silently dropping them.' -ForegroundColor DarkGray
+    Write-Host ''
+    $goOn = Read-Default -Prompt 'Continue with named values (yes/no)' -Default 'yes' `
+        -Help ("yes deploys a gateway that serves the first ~{0} and refuses to add more." -f $buCeiling) -Validate {
+            param($x)
+            if ($x -in @('yes','no')) { return $true }
+            Write-Warn2 'Must be yes or no.'
+            return $false
+        }
+    if ($goOn -eq 'no') { throw 'Stopped before deploying. Nothing was created. Rerun and choose projection, or pass -EntitlementStore projection.' }
+}
 $ResolverInboundAccess = if ($ResolverInboundAccess) { $ResolverInboundAccess }
 elseif ($EntitlementStore -eq 'projection') {
     switch ($Sku) {
