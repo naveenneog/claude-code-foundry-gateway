@@ -525,6 +525,13 @@ Round 5 routes presentation and assistant-context reuse through one
 `guarded_publish` function. `PrincipalUI` clears prior-principal state before
 input dispatch; an AST test checks the publication boundary across UI/output
 modules with exact static-write exceptions.
+Round 6 adds sink-layer enforcement in `publication_widgets.py` and
+`publication_output.py`, with assistant egress checked at the HTTP transport.
+`publication_sink` delegates to the same publication boundary at each write.
+`guarded_deferred` re-enters a retained origin on execution; async work holds
+no identity lock while suspended. Framework input has narrowly identified
+handlers, not a general exemption for application callbacks. The AST contract
+checks indirect sinks and escaping callbacks as a second line of defense.
 
 ![AUM readiness uses bounded authenticated HTTP and read-only Azure diagnosis; Direct shares a snapshot and returns independent sources progressively.](images/architecture/aum-readiness.png)
 

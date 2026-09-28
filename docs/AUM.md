@@ -493,6 +493,15 @@ widget/property/status/clipboard/export/assistant writes outside this boundary.
 Its exact, documented static-write allowlist covers local shell labels, resets
 and fixed controls, not whole handlers. JSON/linear/table formatters require an
 active guarded publication, and an async wait cannot be inside that write scope.
+The sinks also enforce this at runtime: widget updates and values, status,
+clipboard/links, final terminal/file writers and assistant HTTP egress check
+the active origin at the write. A lambda, dynamic attribute call or partial
+does not inherit permission from where it was created.
+`guarded_deferred(origin, callback)` checks the retained source when a callback
+runs. Async callbacks retain a scope lifetime without holding an identity lock
+across waits; each later sink checks again. The AST detector separately checks
+dynamic sink access and escaping callbacks for all supported schedulers. The
+51 exact static-write exceptions remain unchanged.
 
 Overview displays each source as it arrives. Pending panels name their source,
 and the progress line shows an estimate and elapsed time. Estimates are not

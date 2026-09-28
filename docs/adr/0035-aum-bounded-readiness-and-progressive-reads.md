@@ -243,6 +243,15 @@ lock across an await. The AST contract is a second line of defense: dynamic
 sink attributes, partials and guarded-scope callbacks escaping to schedulers
 must not bypass it. The 51 static exceptions remain exact and separate from
 documented framework-internal access needed to implement the sink layer.
+The concrete layers are `publication_widgets.py` (Textual methods, properties
+and app clipboard/links), `publication_output.py` (final text, rich, CSV file
+and clipboard-helper output), and the HTTP assistant-request transport.
+They delegate to `publication_sink`, which checks the active source through
+`guarded_publish` at the write. Six identified framework input/mount handlers
+and framework input actions use retained provenance; application handlers and
+layout/idle dispatch do not gain implicit authority. A refused scheduled write
+is handled before Textual abandons its message loop, clearing the view and
+retaining the explicit exit-3 explanation.
 
 The reported navigation cancellation is investigated with a bounded repeated
 test/file run under the shared lock. No timeout, assertion or suite budget is

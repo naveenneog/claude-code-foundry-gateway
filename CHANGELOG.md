@@ -50,6 +50,10 @@ exact streaming cache-creation detail remains **U13**.
   Round-five publication uses one guarded execution boundary with an AST
   contract; verified principal transitions clear all presentation/assistant
   state before input, including highlighted status and outgoing history.
+  Round-six widget, terminal/file, clipboard and assistant-transport sinks
+  validate active origins at execution, including indirect calls. Explicit
+  deferral rechecks the source on execution; the structural detector also
+  covers lambda/def, dynamic attributes and partials.
 - **Reviewed model lifecycle (P70).** `-Action Change -Change models` and
   `scripts/Sync-ClaudeModels.ps1` discover the selected Foundry account, show deployment
   model/version/SKU/capacity and price status, accept per-deployment tier choices, snapshot

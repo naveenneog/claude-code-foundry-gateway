@@ -144,11 +144,11 @@ required boundary.
 
 | Seat | Round 6 verdict | Finding | Fix |
 |---|---|---|---|
-| Architect | BLOCK | A deferred callable can outlive a syntactically guarded scope | Pending: sink-layer validation and one explicit guarded deferral wrapper |
+| Architect | BLOCK | A deferred callable can outlive a syntactically guarded scope | `a7dc395` / `5c1eb74`: sink-layer validation and explicit guarded deferral |
 | Coder | PASS | Reviewed runtime implementation accepted | Retained |
-| QA | BLOCK | Lambda, dynamic attribute and partial spellings evade the detector | Pending: RED fixtures/runtime probes and full-selector mutations |
+| QA | BLOCK | Lambda, dynamic attribute and partial spellings evade the detector | `b6aef61`: RED fixtures and extended detector; full-selector mutations pending |
 | UX | PASS | Reviewed B4/B5 behavior accepted | Retained |
-| Security | BLOCK | B6a-d: deferred lambda/def, getattr, setattr and partial can publish outside their source guard | Pending: active/current-origin checks at every presentation sink |
+| Security | BLOCK | B6a-d: deferred lambda/def, getattr, setattr and partial can publish outside their source guard | `a7dc395` / `5c1eb74`: active/current-origin checks at presentation and egress sinks; `bcf8554`: explicit refusal without ending the UI message loop |
 
 All four probes become failing structural and runtime tests before the fix.
 The existing 51 exact static-write exceptions are retained. Heavier affected
@@ -191,6 +191,13 @@ The dispatch boundary now reports `FinOpsError` before the framework leaves
 that loop; both lifecycle cases pass, including 256 ordinary input edits.
 The original terminal/form file passes **11 cases** after its direct setup
 assignments declare their input origin. No outcome assertion changed.
+The remaining directly affected input fixtures also pass as individual files:
+Dashboard **19**, directory forms **4**, feature controls **7**, navigation **6**
+and review regressions **5**. These six files total **52 cases**. Only setup
+assignments gained an originating scope; all deadlines, assertions and
+requested values are unchanged. The architecture renderer verified 16 specs
+and 18 images; the changed AUM readiness image was inspected and contains
+generic component names, not deployment identifiers.
 
 ### Council round 5 corrections
 
