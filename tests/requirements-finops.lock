@@ -1,0 +1,25 @@
+# accel's Python 3.12.10 FinOps test environment, pip freeze --exclude-editable, 2026-09-28.
+annotated-doc==0.0.5
+anyio==4.15.1
+certifi==2026.7.22
+colorama==0.4.6
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.20
+iniconfig==2.3.0
+linkify-it-py==2.2.0
+markdown-it-py==4.2.0
+mdit-py-plugins==0.6.1
+mdurl==0.1.2
+packaging==26.3
+platformdirs==4.11.9
+pluggy==1.6.0
+Pygments==2.21.0
+pytest==9.1.1
+pytest-asyncio==1.4.0
+rich==15.0.0
+shellingham==1.5.4
+textual==6.12.0
+typer==0.27.2
+typing_extensions==4.16.0

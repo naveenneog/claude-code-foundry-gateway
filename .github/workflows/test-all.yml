@@ -1,0 +1,143 @@
+name: Test-All
+
+on:
+  push:
+    branches: [main, p78-parallel-tests, 'p78-ci-experiment-*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Optional exact commit guard for the remote helper
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-all-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  shards:
+    name: Test-All shard ${{ matrix.shard }}/12
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    env:
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+      PYTHONDONTWRITEBYTECODE: '1'
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify requested source
+        run: |
+          if ($env:EXPECTED_SHA -and $env:EXPECTED_SHA -cne $env:GITHUB_SHA) {
+            throw 'The dispatch branch moved; refusing to test a different commit.'
+          }
+          if ((git rev-parse HEAD) -cne $env:GITHUB_SHA) { throw 'Checkout differs from github.sha.' }
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12.10'
+          cache: pip
+          cache-dependency-path: |
+            tests/requirements-finops.lock
+            tests/requirements-aum-service.lock
+            cli/finops/pyproject.toml
+            service/aum/requirements.txt
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install offline prerequisites
+        run: |
+          python -m venv .venv-finops
+          if ($LASTEXITCODE) { throw 'Could not create the FinOps environment.' }
+          .\.venv-finops\Scripts\python.exe -m pip install --disable-pip-version-check -q -r tests\requirements-finops.lock -e "cli\finops[test]"
+          if ($LASTEXITCODE) { throw 'FinOps dependency installation failed.' }
+          python -m venv .venv-aum-service
+          if ($LASTEXITCODE) { throw 'Could not create the AUM service environment.' }
+          .\.venv-aum-service\Scripts\python.exe -m pip install --disable-pip-version-check -q -r tests\requirements-aum-service.lock -r service\aum\requirements.txt
+          if ($LASTEXITCODE) { throw 'AUM service dependency installation failed.' }
+          npm ci --no-audit --no-fund
+          if ($LASTEXITCODE) { throw 'Node dependency installation failed.' }
+          az bicep install --version v0.46.1
+          if ($LASTEXITCODE) { throw 'Bicep installation failed.' }
+          & 'C:\Program Files\Git\bin\bash.exe' -c 'command -v jq'
+          if ($LASTEXITCODE) { throw 'The installer checks require jq on the Git Bash PATH.' }
+      - name: Prove infrastructure failure paths
+        if: ${{ matrix.shard < 3 }}
+        run: |
+          if (${{ matrix.shard }} -eq 1) {
+            git fetch --no-tags --depth=1 origin 0345e85020b25d2f3595832b9453a174f253be64
+            if ($LASTEXITCODE) { throw 'The pre-P78 regression baseline could not be fetched.' }
+          }
+          $modes = @('Core', 'Runner', 'Wizard')
+          $evidence = Join-Path $env:RUNNER_TEMP 'test-all-evidence'
+          New-Item -ItemType Directory -Path $evidence -Force | Out-Null
+          & pwsh -NoProfile -File .\.github\scripts\Test-InfrastructureProof.ps1 `
+            -Mode $modes[${{ matrix.shard }}] -Root $env:GITHUB_WORKSPACE -EvidenceDirectory $evidence
+          if ($LASTEXITCODE) { throw 'Infrastructure negative proofs did not retain their baseline counts and fail as expected.' }
+      - name: Run owned checks
+        run: |
+          $evidence = Join-Path $env:RUNNER_TEMP 'test-all-evidence'
+          New-Item -ItemType Directory -Path $evidence -Force | Out-Null
+          $receipt = Join-Path $evidence 'receipt.json'
+          & pwsh -NoProfile -File .\tests\Test-All.ps1 -ShardIndex ${{ matrix.shard }} -ShardCount 12 -ReceiptPath $receipt 2>&1 |
+            Tee-Object -FilePath (Join-Path $evidence 'console.log')
+          if ($LASTEXITCODE) { throw "Shard ${{ matrix.shard }} failed; inspect its console and receipt." }
+      - name: Preserve shard evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-all-attempt-${{ github.run_attempt }}-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}\test-all-evidence
+          if-no-files-found: error
+          retention-days: 14
+
+  merge:
+    name: Merge Test-All receipts
+    needs: shards
+    if: ${{ always() }}
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: test-all-attempt-${{ github.run_attempt }}-shard-*
+          path: ${{ runner.temp }}\test-all-receipts
+      - name: Prove complete registration coverage
+        env:
+          SHARD_RESULT: ${{ needs.shards.result }}
+        run: |
+          $receipts = Join-Path $env:RUNNER_TEMP 'test-all-receipts'
+          & pwsh -NoProfile -File .\tests\Merge-TestAllReceipts.ps1 -ReceiptDirectory $receipts `
+            -ExpectedCommit $env:GITHUB_SHA -RunId $env:GITHUB_RUN_ID -RunAttempt $env:GITHUB_RUN_ATTEMPT `
+            -OutputPath (Join-Path $env:RUNNER_TEMP 'test-all-merged.json') 2>&1 |
+            Tee-Object -FilePath (Join-Path $env:RUNNER_TEMP 'test-all-merge.log')
+          if ($LASTEXITCODE -or $env:SHARD_RESULT -ne 'success') { throw 'Shard jobs or complete-coverage validation failed.' }
+      - name: Preserve merged evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-all-attempt-${{ github.run_attempt }}-merged
+          path: |
+            ${{ runner.temp }}\test-all-merged.json
+            ${{ runner.temp }}\test-all-merge.log
+          if-no-files-found: error
+          retention-days: 14
