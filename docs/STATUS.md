@@ -39,6 +39,12 @@ requests through the reference gateway; all seven answered. Work is on
       baselines pass 48 of 48. Architect's note: a folder the installer starts to read must be added
       to the copy list; otherwise the check fails when that input is required, and runs without it
       when the installer only reads it if present
+- [x] Council round 2, over `ae2e76f..31b660d`: Architect, Coder, UX and Security PASS; QA BLOCK.
+      The skipped records' content was compared with case-insensitive `-eq`, so a copy that
+      rewrote them in upper case passed in a checkout without an operator record. Each synthetic
+      file now holds its own relative path, compared with `-ceq` (`35a7d2d`). Against `31b660d`
+      that mutation passes 48 of 48; against `35a7d2d` it is caught with and without a saved
+      record, the four earlier mutations are still caught (six runs), and both baselines pass 48 of 48
 - [ ] Council, five seats
 - [ ] The packet gate exits 0, run with a saved record for another gateway in the worktree
 
