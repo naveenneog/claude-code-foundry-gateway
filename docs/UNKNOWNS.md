@@ -113,6 +113,22 @@ production code), with its import path checked before running. No timeout,
 assertion or synchronization was changed. This attempt did not reproduce the
 reviewer's cancellation; U26 remains open for that result.
 
+The resumed round 6 full Python run on `36f3088`, under the shared lock from
+**16:30:27Z to 16:38:50Z on 2026-09-28**, executed 563 cases:
+**560 passed, 3 failed in 498.64 s** (502.38 s wall). The two
+`test_azure_deadline.py` cases
+`test_timeout_terminates_started_children_and_grandchildren` and
+`test_scheduling_delay_before_assignment_cannot_release_uncontained_children`
+failed because their child startup markers were absent.
+`test_dashboard.py::test_redacted_queries_do_not_leak_through_input_or_filter_echo`
+raised `WorkerCancelled` at the worker wait after the lookup handoff.
+All 115 publication cases, including the B4/B5 replays, passed in that run.
+The original stdout and JUnit report remain in
+`.finops-evidence\p71-r6-resume`; [STATUS](STATUS.md#resumed-round-6-proof-on-36f3088)
+records the full selection, timings and mutation proof. No second full run,
+deadline change or assertion change replaced those failures. Their cause is
+not established by this run; U26 remains open.
+
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 
 **Answer: yes.** A constant `counter-key` is a single counter shared by every caller. P11 can

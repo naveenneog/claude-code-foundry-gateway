@@ -146,11 +146,11 @@ required boundary.
 |---|---|---|---|
 | Architect | BLOCK | A deferred callable can outlive a syntactically guarded scope | `a7dc395` / `5c1eb74`: sink-layer validation and explicit guarded deferral |
 | Coder | PASS | Reviewed runtime implementation accepted | Retained |
-| QA | BLOCK | Lambda, dynamic attribute and partial spellings evade the detector | `b6aef61`: RED fixtures and extended detector; full-selector mutations pending |
+| QA | BLOCK | Lambda, dynamic attribute and partial spellings evade the detector | `b6aef61`: RED fixtures and extended detector; 17/17 full-selector mutations caught on `36f3088`, below |
 | UX | PASS | Reviewed B4/B5 behavior accepted | Retained |
-| Security | BLOCK | B6a-d: deferred lambda/def, getattr, setattr and partial can publish outside their source guard | `a7dc395` / `5c1eb74`: active/current-origin checks at presentation and egress sinks; `bcf8554`: explicit refusal without ending the UI message loop |
+| Security | BLOCK | B6a-d: deferred lambda/def, getattr, setattr and partial can publish outside their source guard | `a7dc395` / `5c1eb74`: active/current-origin checks at presentation and egress sinks; `bcf8554`: explicit refusal without ending the UI message loop; `6056989`: synchronous sink functions cannot defer their bodies |
 
-All four probes become failing structural and runtime tests before the fix.
+All four probes failed as structural and runtime tests before the fix.
 The existing 51 exact static-write exceptions are retained. Heavier affected
 selections, repetition and mutation batches take the shared lock and release it
 in `finally`; single files and the publication selector remain the initial
@@ -160,14 +160,14 @@ one full AUM/FinOps Python run under the shared lock. Council round 7, the packe
 gate and integration remain with the lead; this branch is not pushed or merged.
 
 The initial structural run on the reviewed detector reported **13 failed,
-10 passed**: the four B6 forms, eight scheduler variants and computed
+10 passed in 4.22 s**: the four B6 forms, eight scheduler variants and computed
 `getattr` were accepted. The extended detector reports **27 passed**,
 including explicit deferral and callback-alias controls. The exact 51-entry
 static registry is pinned by a digest. The initial real-Textual runtime
-reproductions reported **11 failed**, all from a missing sink refusal;
-runtime implementation and mutation receipts follow separately.
+reproductions reported **11 failed in 13.25 s**, all from a missing sink refusal.
+Final runtime and mutation receipts are below.
 
-The sink implementation's expanded RED run reported **25 failed** (21 missing
+The sink implementation's expanded RED run reported **25 failed in 19.55 s** (21 missing
 refusals and four missing explicit-deferral cases). Widget methods/properties,
 clipboard, links and the HTTP assistant transport now validate at execution.
 The runtime file passes **25 cases**; the existing publication file passes
@@ -245,8 +245,100 @@ $env:PYTHONDONTWRITEBYTECODE = '1'
 
 The import check printed `accel-p71\cli\finops\src\claude_finops\__init__.py`,
 not the main worktree's package. The shared lock remained with P79 during
-these short targeted runs; no mutation batch or gate ran. The final mutation
-and full-suite evidence follows after the lock becomes available.
+these short targeted runs; no mutation batch or gate ran during that period.
+
+#### Resumed round 6 proof on `36f3088`
+
+The shared lock was acquired at **2026-09-28 15:55:10Z (21:25:10 IST)** after
+one-minute retries and released in `finally` at **16:38:50Z (22:08:50 IST)**.
+Only this run's lock was removed. Execution was serial and offline, with the
+P71 import assertion above. The read-only Ironclad audit (`--stage packet
+--no-run --json`) exited 0: 20 passed, two existing warnings, four skipped
+commands/checks. This is not an executed packet gate.
+
+Each B6 spelling has a case in
+[`test_round_six_indirect_and_deferred_probes_are_rejected`](../cli/finops/tests/test_publication_structure.py)
+and in
+[`test_raw_sink_refuses_deferred_backend_data_for_every_spelling`](../cli/finops/tests/test_runtime_publication_sinks.py).
+The runtime cases cover both unchanged and changed principals; both must
+refuse a raw callback after the originating scope ends. The historical RED
+failures above name every case, rather than a collection/import failure.
+
+| Item | Additional named test | Mutation proof on the complete 115-case selector |
+|---|---|---|
+| B6a: lambda/def through `call_later` | `test_lambda_body_never_inherits_the_creation_scope`; `test_nested_callback_created_under_guard_cannot_escape_to_scheduler` (eight schedulers); `test_rejected_raw_scheduled_publication_keeps_the_app_open_and_explains` | Restoring lambda scope inheritance fails 1/115; removing escaped-callback detection fails 9/115. Removing widget method enforcement fails 16/115, including both lambda and nested-def principal variants and the actual scheduled callback. |
+| B6b: `getattr` | `test_computed_getattr_in_presentation_code_is_not_silently_trusted` | Removing literal attribute resolution fails 1/115; removing computed-attribute detection fails 1/115. Removing widget method enforcement fails both runtime `getattr` principal variants. |
+| B6c: `setattr` | Runtime spelling `setattr`, both principal variants | Removing setter detection fails 1/115. Removing widget property enforcement fails 5/115, including both runtime `setattr` cases. |
+| B6d: `functools.partial` | `test_partial_sink_reference_requires_explicit_deferral_without_a_scheduler` | Removing partial-sink detection fails 1/115. Removing widget method enforcement fails both runtime partial principal variants. |
+
+**17/17 mutations were caught.** Every run loaded and executed the exact
+baseline's **115 test identities**, with at least one failing test,
+exit 1, zero skips and zero pytest error results. Each altered file was
+restored in `finally`, and its SHA-256 was compared with its pre-mutation
+bytes. An invalid syntax or changed test count did not count as a catch.
+The 51-entry static registry remained unchanged in the restored source.
+
+| Removed or broken protection | Failed / passed | Pytest seconds |
+|---|---|---|
+| Runtime `publication_sink` source check | 14 / 101 | 64.32 |
+| Deferred sink-body rejection | 3 / 112 | 93.69 |
+| Explicit backend-origin deferred wrapper | 5 / 110 | 125.21 |
+| Lambda creation-scope isolation | 1 / 114 | 79.51 |
+| Escaped callback scheduler detection | 9 / 106 | 114.65 |
+| Literal `getattr` sink resolution | 1 / 114 | 114.41 |
+| Computed `getattr` detection | 1 / 114 | 117.53 |
+| `setattr` sink detection | 1 / 114 | 109.34 |
+| Partial sink-reference detection | 1 / 114 | 116.09 |
+| Refusal recovery before Textual ends dispatch | 1 / 114 | 132.86 |
+| Bounded input-origin depth | 1 / 114 | 142.14 |
+| Original content credential guard | 1 / 114 | 118.13 |
+| Structural check of a new unguarded handler write | 1 / 114 | 116.40 |
+| Widget method sink enforcement | 16 / 99 | 112.43 |
+| Widget property sink enforcement | 5 / 110 | 105.45 |
+| Exact static-registry reason/digest | 1 / 114 | 86.58 |
+| Accepted explicit-deferral AST path | 3 / 112 | 126.06 |
+
+The 17 runs took **1,874.80 s** in pytest (**1,931.21 s wall**).
+The positive explicit-deferral controls still accept a current source and
+preserve ordinary input. Changed sources fail before writing, and the async
+control proves that identity verification can finish while the callback awaits.
+B4's pre-input row clearing and B5's B-authenticated assistant request remain
+green in both publication baselines and the full run.
+
+| Selection | Result | Pytest seconds | Wall seconds |
+|---|---|---|---|
+| Initial resumed publication selection | 115 passed | 116.06 | 120.96 |
+| Locked pre-mutation publication baseline | 115 passed | 66.64 | 69.00 |
+| Locked restored publication selection | 115 passed | 107.23 | 110.25 |
+| Full `cli\finops\tests`, run once | 560 passed, 3 failed; 563 total | 498.64 | 502.38 |
+
+**Full-suite validation is not green.** The requested one full Python run
+started at **16:30:27Z** and ended at **16:38:50Z**. All 115 publication tests
+passed in it, including B4/B5. Its three failures were:
+
+- `test_timeout_terminates_started_children_and_grandchildren`: the child
+  startup marker was absent.
+- `test_scheduling_delay_before_assignment_cannot_release_uncontained_children`:
+  the child startup marker was absent.
+- `test_redacted_queries_do_not_leak_through_input_or_filter_echo`:
+  `WorkerCancelled` at `app.workers.wait_for_complete()` after the lookup handoff.
+
+The missing startup markers and worker cancellation resemble earlier U26
+observations, but this run does not establish their cause. No deadline,
+assertion or synchronization was changed, and no second full run replaced
+the failure. [U26](UNKNOWNS.md#u26---p71-observation-2026-09-28) records the
+exact cases. The Python command was the same interpreter/environment above
+with `-m pytest cli\finops\tests -q -p no:cacheprovider --tb=short`.
+`Test-FinOps.ps1` was not used because its worktree-venv check would skip;
+pytest actually executed all 563 cases.
+
+Private per-run stdout, JUnit reports, source hashes, mutation test identities,
+and the lock receipt persist in `.finops-evidence\p71-r6-resume`.
+The earlier interrupted mutation logs remain historical, not the final proof.
+The branch remains unpushed and unmerged, with no Azure access or writes in
+this resumed work. Council round 7 and the packet gate remain with the lead;
+P71 is not marked complete in ROADMAP. No additional implementation or full
+test run follows this recorded handoff.
 
 ### Council round 5 corrections
 
