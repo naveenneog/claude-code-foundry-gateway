@@ -153,7 +153,7 @@ function ConvertTo-MonthlyPrice { param([decimal]$HourlyPrice, [int]$Units = 1) 
         '[ordered]@{ started = $started; bound = $bound; answer = $answer } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $env:P68_INSTALLER_LOG -Encoding UTF8'
         "if (`$answer -eq 'cancel') { Write-Host 'Cancelled.'; return }"
         "`$store = if (`$EntitlementStore) { `$EntitlementStore } else { 'named-value' }"
-        "[ordered]@{ mode = 'gateway'; gatewayUrl = 'https://apim-p68.azure-api.net'; tenantId = '00000000-0000-0000-0000-000000000000'; apimName = 'apim-p68'; resourceGroup = 'rg-p68'; sku = 'StandardV2'; location = 'eastus2'; foundryAccount = 'ai-p68'; foundryResourceGroup = 'rg-ai-p68'; authMode = 'device'; entitlementStore = `$store; desktopSignIn = @{ kind = 'external-idp-browser' } } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path `$PSScriptRoot 'onboarding\claude-gateway.json') -Encoding UTF8"
+        "[ordered]@{ mode = 'gateway'; gatewayUrl = 'https://apim-p68.azure-api.net'; tenantId = '00000000-0000-0000-0000-000000000000'; apimName = 'apim-p68'; resourceGroup = 'rg-p68'; sku = 'StandardV2'; location = 'eastus2'; foundryAccount = 'ai-p68'; foundryResourceGroup = 'rg-ai-p68'; authMode = 'device'; entitlementStore = `$store; desktopSignIn = @{ kind = 'external-idp'; flow = 'browser'; bearerTokenType = 'id_token'; clientId = '11111111-2222-4333-8444-555555555555'; issuer = 'https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0' } } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path `$PSScriptRoot 'onboarding\claude-gateway.json') -Encoding UTF8"
         "Write-Host 'stub installer wrote its record'"
     ) -join "`n"
     Set-Content -LiteralPath (Join-Path $shadow 'Install-ClaudeGateway.ps1') -Value $stubInstaller -Encoding UTF8
@@ -425,7 +425,7 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
             Recorded = Get-ClaudeFlowStepPlan -Record $gatewayRecord -Discovery (& $ctx 'Setup' $true $live)
             RecordedUnattended = Get-ClaudeFlowStepPlan -Record $gatewayRecord -Discovery (& $ctx 'Setup' $false $live)
             GuideRecorded = Get-ClaudeFlowStepPlan -Record $gatewayRecord -Discovery (& $ctx 'Guide' $true $live)
-            GuideEmpty = Get-ClaudeFlowStepPlan -Record $emptyRecord -Discovery (& $ctx 'Guide' $false $null)
+            GuideEmpty = $(try { Get-ClaudeFlowStepPlan -Record $emptyRecord -Discovery (& $ctx 'Guide' $false $null) } catch { "refused: $($_.Exception.Message)" })
             ChangeAttended = $changeAttended
             ChangeAttendedReview = (Format-ClaudeFlowReview -Plans @($changeAttended))
             ChangeUnattended = Get-ClaudeFlowStepPlan -Record $gatewayRecord -Discovery (& $ctx 'Change' $false $live)
@@ -455,7 +455,7 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
     Assert 'a plan without flow context is the unattended Setup plan' ($f.NoContext.Data.runsInstaller -and $f.NoContext.Data.installerArgs['Yes'] -eq $true -and @($f.NoContext.Actions)[0].Verb -eq 'Create')
     Assert 'Setup over a recorded gateway checks it, attended or not' (-not $f.Recorded.Data.runsInstaller -and -not $f.RecordedUnattended.Data.runsInstaller -and @($f.Recorded.Actions)[0].Verb -eq 'Check')
     Assert 'the cost of a recorded gateway is named as already running, not as a new cost' ([string]@($f.Recorded.Costs)[0].Item -match 'already running') ([string]@($f.Recorded.Costs)[0].Item)
-    Assert 'Guide never runs the installer, with or without a recorded gateway' (-not $f.GuideRecorded.Data.runsInstaller -and -not $f.GuideEmpty.Data.runsInstaller)
+    Assert 'Guide never runs the installer: it checks a recorded gateway, and with none recorded it refuses (P72)' (-not $f.GuideRecorded.Data.runsInstaller -and $f.GuideEmpty -is [string] -and $f.GuideEmpty -match 'No gateway is recorded') ([string]$f.GuideEmpty)
     $ca = $f.ChangeAttended.Data.installerArgs
     Assert 'attended -Change foundation runs the installer, which asks' ($f.ChangeAttended.Data.runsInstaller -and $f.ChangeAttended.Data.asksInConsole -and -not (Test-Key $ca 'Yes'))
     Assert 'attended -Change foundation names the recorded gateway, and passes nothing the installer asks' (((@($ca.Keys) | Sort-Object) -join ',') -eq 'ExistingApimName,ResourceGroup,SkipFinOpsOffer' -and $ca['ExistingApimName'] -eq 'apim-p68' -and $ca['ResourceGroup'] -eq 'rg-p68') ($ca | ConvertTo-Json -Compress)

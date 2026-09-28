@@ -51,6 +51,7 @@ scripts/
   Measure-ClaudeOvershoot.ps1 measure budget observation delay
   Measure-ClaudeProjectionCost.ps1  projection cost assumptions
   Add-ClaudeModel.ps1         deploy, allow, price or retire a model
+  Sync-ClaudeModels.ps1       reviewed deployment/tier/price/profile reconciliation
   Get-ClaudeBypass.ps1        direct Foundry access audit
   Get-ClaudeBom.ps1           created, reused and billable resources
   Backup-ClaudeGateway.ps1    configuration backup

@@ -452,7 +452,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       the Foundry account's region and the rest of its geography with each v2 tier's monthly list
       price, prices the tier prompt, records `sku`, `location` and the Foundry account, and offers
       the FinOps tool at the end, as `Install-ClaudeGateway.ps1` does since P68
-- [ ] P70 newly deployed models reach the tiers and the workstations — acceptance: after an
+- [x] P70 newly deployed models reach the tiers and the workstations — acceptance: after an
       administrator deploys a Claude model on the Foundry account, one guided change lists the
       Claude deployments that the tier lists (`models-standard`, `models-premium`) and the decision
       record do not have, asks which tiers get each (the answers file without a console), takes a
@@ -466,7 +466,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       each panel as its data arrives, with an estimate while it waits; Direct reuses one token per
       process and batches its gateway reads, and time-to-first-data for `whoami`, `budget list`,
       `usage show` and `status` is measured before and after on the reference estate (**U32**)
-- [ ] P72 permutation tests of the guided flow and the installer — acceptance: every combination of
+- [x] P72 permutation tests of the guided flow and the installer — acceptance: every combination of
       action (Setup, Change foundation, Guide, Status), record state (none, recorded and matching,
       recorded with another gateway URL, recorded but missing, not readable), mode (attended,
       `-PlanOnly`, unattended apply), entitlement store and Desktop sign-in kind holds the flow's

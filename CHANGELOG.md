@@ -43,6 +43,30 @@ exact streaming cache-creation detail remains **U13**.
   `.test` name: Azure requires public CNAME ownership. No free managed certificate is available
   on v2; the positive company TLS proof remains blocked without a delegated domain
   ([Setup](docs/SETUP.md#company-address), [ADR-0033](docs/adr/0033-company-address.md)).
+- **Reviewed model lifecycle (P70).** `-Action Change -Change models` and
+  `scripts/Sync-ClaudeModels.ps1` discover the selected Foundry account, show deployment
+  model/version/SKU/capacity and price status, accept per-deployment tier choices, snapshot
+  before writes, update only the model named values, and regenerate the record and both
+  tiers' MDM/workstation handovers. Stale plans, Turnstile-owned tiers, malformed discovery
+  and last-entry allow-all removal are refused. Dated unambiguous price mappings preserve
+  history; Opus 5.5 stays explicitly unpriced because the current financial readers do not
+  represent its published cache-read multiplier. The installer gains `-StandardModels` and
+  `-PremiumModels` for an unattended initial subset. [Model guide](docs/MODELS.md),
+  [ADR-0034](docs/adr/0034-model-lifecycle.md).
+- **P70 council fixes.** Model fingerprints now bind renderer helpers as well as the
+  generator. Raw deployment identities and empty installer selections fail closed;
+  initial tier restrictions reach profiles. Bash removes retired aliases consistently
+  with Windows. Standalone history includes the prior decision and principal, empty
+  named-value writes use a subscription-bound token, and nested generated onboarding
+  records/profiles/snapshots remain git-ignored.
+- **Permutation tests of the guided flow and the installer (P72).** `tests/Test-FlowPermutations.ps1`
+  runs the orchestrator over Setup, Change foundation, Guide and Status × six record states ×
+  attended, `-PlanOnly` and unattended apply (76 runs, some on Windows PowerShell 5.1), a recorded
+  foundation through an unattended Change, and Foundation's installer arguments over 432
+  combinations. `tests/Test-InstallerPermutations.ps1` runs the installer under `-WhatIf -Yes` over
+  every combination of tier × entitlement store × developer sign-in × Desktop sign-in (96 cases), six
+  refusals and a reused gateway, on both shells, offline in about 40 s; `-Live` runs 16 cases that cover every pair of levels
+  read-only against the signed-in subscription. [Guided flow](docs/GUIDED-FLOW.md#what-the-tests-hold).
 - Guided-flow FinOps modules for tool selection, USD/token budgets, monitoring workbooks
   and chargeback reports, including a scheduled USD reconciler job definition for
   deployments without the AUM service.
@@ -822,6 +846,43 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **`-AuthMode` skipped the installer's Claude Desktop sign-in section (P72).** The Desktop
+  questions and the external IdP record sat inside the `else` branch that asks the developer
+  sign-in, so `-AuthMode device -DesktopSignInKind external-idp-browser -DesktopEntraClientId <id>`
+  recorded the helper script without a word; measured live under `-WhatIf -Yes` on 2026-09-27.
+  The guided flow's unattended Setup and Change pass both parameters. The section now runs whatever
+  `-AuthMode` is. Under `-Yes` an external IdP sign-in without its client id, or `access_token`
+  without its scope and audience, stops before the summary, naming the parameter.
+- **The installer's summary named one choice out of seven (P72).** It is the approval, and it now
+  names the entitlement store and resolver access, revocation window, team budget behaviour,
+  developers with no team, developer address and Claude Desktop sign-in beside the developer
+  sign-in. The address question showed `https://<prefix>.azure-api.net`; the gateway is
+  `apim-<prefix>`.
+- **One plan had two fingerprints (P72).** `ConvertTo-Json` escapes `'`, `<`, `>` and `&` on
+  Windows PowerShell 5.1 only, and `Sort-Object` compares by culture, so a plan reviewed on one shell
+  was refused on the other. The flow writes its canonical text itself and sorts keys ordinally.
+  The canonical text changed, so a fingerprint printed by an earlier release may no longer match its
+  plan; when one is refused, run `-PlanOnly` again.
+- **An unattended Change foundation lost what the installer recorded (P72).** The installer
+  records Desktop sign-in as `external-idp` with a flow; the merge copied that as
+  `desktopSignInKind`, a value `-DesktopSignInKind` refuses, and dropped the Desktop app, issuer,
+  scopes, audience and token type, the tier groups and the budgets. The merge maps them back in the
+  installer's parameter values, the flow passes `-DesktopBearerTokenType` and
+  `-ResolverInboundAccess`, and the installer records its request ceiling as `requestsPerMinute`.
+- **Every apply ran `git` (P72).** Without git on the machine, or outside a repository on Windows
+  PowerShell 5.1, the apply stopped after writing `activeRun`. The release info now records no
+  commit instead.
+- **A refusal of the guided flow printed PowerShell's code excerpt (P72).** A top-level run prints
+  the reason and exits 1; a cancel (the installer cancelled at its summary, a mistyped confirmation)
+  prints in yellow. An error the flow does not expect says so and names
+  `$env:CLAUDE_FLOW_DEBUG = '1'`, which prints where it stopped. Called from another script or
+  dot-sourced, a refusal or a cancel is an exception and never exits the caller; before, a cancel ran
+  `exit 1` there.
+- **Guide with nothing recorded wrote placeholders, then failed its verification (P72).** It now
+  refuses before planning. Over drift it names the differences instead of going on silently.
+  Status with no decision record says that nothing is recorded, not "none detected".
+- **Unattended, an external IdP Desktop sign-in without its app failed after approval (P72).** The
+  plan now refuses, naming `foundation.desktopEntraClientId`.
 - **Setup and Guide over a recorded gateway ran the installer again (P68).** The Foundation plan
   said `Check`, while its apply ran `Install-ClaudeGateway.ps1 -Yes`, whose reuse menu defaults to
   creating a new gateway; found by reading the code. Setup and Guide now check the recorded

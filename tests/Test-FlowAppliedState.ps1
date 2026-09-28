@@ -36,6 +36,7 @@ foreach($name in 'Set-FlowRecordProperty','Remove-FlowRecordProperty','Write-Flo
 function Get-FlowPrincipal {'fixture'}
 function Get-ClaudeFlowReleaseInfo {param($Repo)[pscustomobject]@{version='fixture';commit='fixture'}}
 $script:FlowAppliedDecisions=Copy-ClaudeFlowValue $Record.decisions
+if($Plan.PSObject.Properties.Name -contains 'Proposal'){Set-ClaudeDecision $Record $info.DecisionKey $Plan.Proposal}
 $failure=''
 try{Invoke-ApplySteps -Steps @([pscustomobject]@{Info=$info;Invoke=$invoke}) -Plans @($Plan) -Record $Record -Path $Record.__recordPath -CurrentAction Change -RunId fixture | Out-Null}
 catch{$failure=$_.Exception.Message}
@@ -45,6 +46,21 @@ catch{$failure=$_.Exception.Message}
     }finally{$pipeline.Dispose()}
 }
 try {
+    Check 'decision copies retain one-element and multi-element arrays as arrays' {
+        . (Join-Path $root 'scripts\flow\FlowContract.ps1')
+        $one=Copy-ClaudeFlowValue @('new')
+        $many=Copy-ClaudeFlowValue @('old','new')
+        $one -is [array] -and $one.Count -eq 1 -and $one[0] -eq 'new' -and
+            (ConvertTo-Json -InputObject $many -Compress) -eq '["old","new"]'
+    }
+    Check 'decision copies do not alias nested objects or acquire JSON wrapper properties' {
+        . (Join-Path $root 'scripts\flow\FlowContract.ps1')
+        $original=[pscustomobject]@{items=@([pscustomobject]@{name='old'})}
+        $copy=Copy-ClaudeFlowValue $original
+        $copy.items[0].name='new'
+        $original.items[0].name -eq 'old' -and $copy.items -is [array] -and
+            (ConvertTo-Json -InputObject $copy.items -Compress) -eq '[{"name":"new"}]'
+    }
     New-Item -ItemType Directory -Path (Join-Path $scratch 'scripts\flow') -Force | Out-Null
     foreach ($file in 'Start-ClaudeGateway.ps1','scripts\ClaudeChoice.ps1','scripts\flow\FlowContract.ps1') {
         Copy-Item -LiteralPath (Join-Path $root $file) -Destination (Join-Path $scratch $file)
@@ -72,6 +88,7 @@ function Invoke-ClaudeFlowStep {
     @{ disk=$disk; passed=$Record.decisions.choice; plan=$Plan.Data.wanted } | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $Record.witness -Encoding UTF8
     $Record.decisions.choice.pin = 'changed-by-step'
     if ($Record.failApply) { throw 'synthetic apply failure' }
+    if ($Record.omitDecision) { return @{ note='successful resource check, no applied decision change' } }
     @{ choice = [pscustomobject]@{ value=$Plan.Data.wanted; pin='new-pin' } }
 }
 function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step='Synthetic'; Passed=$true; Checks=@() } }
@@ -114,6 +131,16 @@ function az { $global:LASTEXITCODE=0; '{"user":{"name":"admin@contoso.com"}}' }
             }
             Check 'only a successful step advances its applied decision' { $after.decisions.choice.value -eq 'new' -and $after.decisions.choice.pin -eq 'new-pin' }
         }
+    }
+    $unchangedPath=Join-Path $scratch 'no-returned-decision.json'
+    Write-Json $unchangedPath @{schemaVersion=2;omitDecision=$true;witness=(Join-Path $scratch 'no-returned-witness.json');history=@();decisions=@{choice=@{value='old';pin='old-pin'}}}
+    $parameters=@{Action='Change';Change='choice';RecordPath=$unchangedPath;NonInteractiveAnswers=@{'choice.value'='new'}}
+    $preview=Run-Flow ($parameters+@{PlanOnly=$true})
+    $fp=[regex]::Match($preview.Text,'Fingerprint:\s+([a-f0-9]{64})').Groups[1].Value
+    $result=Run-Flow ($parameters+@{ApprovedPlanFingerprint=$fp})
+    Check 'a successful step does not implicitly commit a proposal it never returned' {
+        $saved=Get-Content -Raw $unchangedPath|ConvertFrom-Json
+        -not $result.Failed -and $saved.decisions.choice.value -eq 'old' -and $saved.decisions.choice.pin -eq 'old-pin'
     }
     $readPath=Join-Path $scratch 'read-only.json'
     $discoveryPath=Join-Path $scratch 'discovery-seen.json'
@@ -175,6 +202,50 @@ $config|ConvertTo-Json -Depth 20|Set-Content -LiteralPath $recordPath -Encoding 
     Check 'Foundation Azure transition removes both company metadata copies through the orchestrator' {
         -not $result.Failure -and $saved.gatewayUrl -eq 'https://apim-fixture.azure-api.net/claude' -and
             -not $saved.address -and -not $saved.decisions.address -and -not $saved.pendingAddress -and $saved.decisions.unselected.value -eq 'applied'
+    }
+    Copy-Item -LiteralPath (Join-Path $root 'scripts\flow\Models.ps1') -Destination (Join-Path $scratch 'scripts\flow\Models.ps1')
+    $tokens=$null;$errors=$null
+    $modelAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'scripts\ClaudeModelLifecycle.ps1'),[ref]$tokens,[ref]$errors)
+    $modelFunctions=foreach($name in 'Invoke-ClaudeModelWait','Write-ClaudeModelRecord','Invoke-ClaudeModelChange'){
+        $modelAst.Find({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true).Extent.Text
+    }
+    $modelStubs=@'
+function Assert-ClaudeModelPlanFresh {param($Plan)}
+function Get-ApimNamedValue {param($ResourceGroup,$ApimName,$SubscriptionId,$Id,[switch]$FailOnError);$Plan.Data.AfterNamedValues[$Id]}
+function Write-ClaudeModelProfiles {
+    param($Record,$RecordPath)
+    if($Record.failApply){throw 'mocked profile generation failed'}
+    [pscustomobject]@{regenerate=$false;root='new-generated-profiles';tiers=@('standard','premium')}
+}
+'@
+    [IO.File]::WriteAllText((Join-Path $scratch 'scripts\ClaudeModelLifecycle.ps1'),($modelFunctions -join "`n")+"`n"+$modelStubs)
+    $snapshot=Join-Path $scratch 'model-snapshot.json'
+    Write-Json $snapshot @{fixture='prepared'}
+    foreach($fail in $false,$true){
+        $path=Join-Path $scratch "models-$fail.json"
+        $r=[pscustomobject]@{schemaVersion=2;__recordPath=$path;failApply=$fail;models=@('old');history=@();decisions=[pscustomobject]@{
+            models=[pscustomobject]@{tiers=@{old='both'}};deviceProfiles=[pscustomobject]@{root='old-profiles';regenerate=$true};unselected=[pscustomobject]@{value='applied'}
+        }}
+        Write-Json $path $r
+        $after=[pscustomobject]@{mode='gateway';models=@('new');deployments=@(@{name='new'});tiers=@{standard=@{models=@('new')};premium=@{models=@('new')}};subscriptionId='00000000-0000-0000-0000-000000000001';tenantId='00000000-0000-0000-0000-000000000001';resourceGroup='rg-fixture';apimName='apim-fixture';foundryAccount='ai-fixture';foundryResourceGroup='rg-fixture';gatewayUrl='https://apim-fixture.azure-api.net/claude'}
+        $p=[pscustomobject]@{Proposal=[pscustomobject]@{tiers=@{new='both'}};Data=@{
+            SnapshotTaken=$true;SnapshotPath=$snapshot;RecordPath=$path;RecordAfter=$after;PriceChanged=$false
+            Target=@{ResourceGroup='rg-fixture';ApimName='apim-fixture';SubscriptionId=$after.subscriptionId}
+            Discovery=@{NamedValues=@{'models-standard'=',new,';'models-premium'=',new,'}}
+            AfterNamedValues=@{'models-standard'=',new,';'models-premium'=',new,'}
+            Assignments=@{new='both'};PriceBookPath='fixture-prices.json';ProfileRoot='new-generated-profiles'
+        }}
+        $result=Run-StepApply Models $r $p
+        $saved=Get-Content -Raw $path|ConvertFrom-Json
+        Check "real Models step preserves applied-only decisions on success and failure ($fail)" {
+            if($fail){
+                $result.Failure -match 'mocked profile generation failed' -and $saved.decisions.models.tiers.old -eq 'both' -and
+                    $saved.decisions.models.tiers.PSObject.Properties.Name -notcontains 'new' -and $saved.decisions.deviceProfiles.root -eq 'old-profiles' -and @($saved.history).Count -eq 0
+            }else{
+                -not $result.Failure -and $saved.models[0] -eq 'new' -and $saved.decisions.models.tiers.new -eq 'both' -and
+                    $saved.decisions.deviceProfiles.root -eq 'new-generated-profiles' -and $saved.decisions.unselected.value -eq 'applied'
+            }
+        }
     }
 }
 finally { if (Test-Path $scratch) { Remove-Item -LiteralPath $scratch -Recurse -Force } }

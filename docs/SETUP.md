@@ -442,9 +442,16 @@ where it costs money, with the figure at your stated developer count:
 > review the Entra app registration before creating it.
 
 **5. The summary, before anything is created.** Reusing is called out
-explicitly, along with what will and will not be touched.
+explicitly, along with what will and will not be touched. Below the budgets and
+groups it lists every choice made above: the entitlement store (with the
+resolver's access for the Cosmos projection), the revocation window, the team
+budget behaviour, developers with no team, the developer address with the
+gateway's hostname (`https://apim-<prefix>.azure-api.net/claude`), the developer
+sign-in, and the Claude Desktop sign-in with its app and token type.
 
 ![The summary listing subscription, Foundry account, resource group, API Management instance marked REUSING, both tier budgets and the Entra groups, ending with a confirmation prompt](guide/run-4-summary.png)
+
+![The summary of a new Standard v2 gateway under -WhatIf -Yes, captured live on 2026-09-27: after the budgets and Entra groups it lists the entitlement store as projection with a private resolver, a 60-minute revocation window, report, allow, the developer address, device sign-in and the Claude Desktop external IdP broker sign-in with its app and id_token, then the USD 700/month list price and the WhatIf stop.](guide/70-installer-summary-every-choice.png)
 
 > Identifiers in these screenshots are redacted. The raw captures are not in the
 > repository; `guide/redact-terminal.mjs` holds the redaction map.
@@ -591,6 +598,14 @@ Unattended:
 ```powershell
 ./Install-ClaudeGateway.ps1 -FoundryAccount <account> -Yes
 ```
+
+Under `-Yes`, an external IdP Claude Desktop sign-in needs
+`-DesktopEntraClientId`, and `-DesktopBearerTokenType access_token` also needs
+`-DesktopEntraScopes` and `-DesktopEntraAudience`. Without them the installer
+stops before its summary, names the parameter and says that nothing was
+created. `-DesktopSignInKind` applies whether or not `-AuthMode` is passed;
+before P72, passing `-AuthMode` skipped the Desktop section, and the installer
+recorded the helper script.
 
 ```bash
 # macOS/Linux preview or unattended equivalent, from the repository root

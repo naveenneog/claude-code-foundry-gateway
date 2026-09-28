@@ -111,6 +111,35 @@ does not itself honour every handover mode.
 > non-writable global prefix rather than anything to do with Claude:
 > `npm config set prefix ~/.npm-global && export PATH=~/.npm-global/bin:$PATH`
 
+### After a model change
+
+The administrator's [model change](docs/MODELS.md) generates one workstation
+record per tier, alongside its managed profiles. The platform team distributes
+the matching `standard\claude-gateway.json` or `premium\claude-gateway.json`
+with the existing setup bundle. A Windows command using the standard record
+in the accelerator's output folder is:
+
+```powershell
+.\scripts\Setup-ClaudeWorkstation.ps1 `
+    -ConfigPath .\onboarding\profiles\standard\claude-gateway.json
+```
+
+For macOS/Linux, the selected record can be distributed as
+`claude-gateway.json` and used with the same `--config` command above.
+Rerunning setup refreshes Claude Code's `availableModels`, newest-per-family
+alias pins and capability declarations, the corresponding VS Code model
+variables and Desktop `inferenceModels`. Unrelated user settings remain.
+An owned alias and its capability declaration are removed when its model
+family disappears; Haiku continues to fall back to Sonnet when available.
+The gateway URL, authentication choice and Entra entitlement are unchanged.
+The record itself does not grant access.
+
+![The model change's tier-specific handover: Claude Code availableModels, alias and capability values agree with Desktop inferenceModels; the standard and premium outputs contain different permitted deployments.](docs/guide/53-model-client-handover.png)
+
+The clients read the refreshed configuration at startup. On a managed device,
+the platform team's MDM policy takes precedence and is redistributed through
+the fleet tool; a user-settings rerun cannot override it.
+
 ### Check first, if you would rather not find out afterwards
 
 The setup above configures and then proves it works. If you would rather know

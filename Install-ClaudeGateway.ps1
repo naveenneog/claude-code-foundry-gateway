@@ -71,6 +71,8 @@ param(
 
     [string]$StandardGroup = 'claude-code-standard',
     [string]$PremiumGroup = 'claude-code-premium',
+    [ValidateNotNullOrEmpty()][string[]]$StandardModels,
+    [ValidateNotNullOrEmpty()][string[]]$PremiumModels,
 
     # How developers sign in. Written into claude-gateway.json and honoured by
     # Onboard-ClaudeDeveloper.ps1; it configures nothing on this machine.
@@ -513,18 +515,27 @@ if ($deployed.Count) {
     # Premium gets everything. Standard gets everything except Opus, which is
     # five times the price of Sonnet per output token - that is the distinction
     # the two tiers exist to make. Both are editable afterwards with
-    # Set-ClaudeCapability.ps1, so this only has to be a sensible start.
+    # Sync-ClaudeModels.ps1, so this only has to be a sensible start.
     $all = @($deployed.name | Sort-Object -Unique)
     $nonOpus = @($deployed | Where-Object { $_.model -notlike '*opus*' } | ForEach-Object { $_.name } | Sort-Object -Unique)
     if (-not $nonOpus.Count) { $nonOpus = $all }
 
-    $stdPick = Read-Default -Prompt 'Models for the standard tier' -Default ($nonOpus -join ',') `
-        -Help 'Comma-separated deployment names. Opus is left out by default because it costs five times Sonnet per output token.'
-    $prmPick = Read-Default -Prompt 'Models for the premium tier' -Default ($all -join ',') `
-        -Help 'Comma-separated deployment names.'
+    $stdPick = if ($PSBoundParameters.ContainsKey('StandardModels')) { $StandardModels -join ',' } else {
+        Read-Default -Prompt 'Models for the standard tier' -Default ($nonOpus -join ',') `
+            -Help 'Comma-separated deployment names. The default excludes Opus.'
+    }
+    $prmPick = if ($PSBoundParameters.ContainsKey('PremiumModels')) { $PremiumModels -join ',' } else {
+        Read-Default -Prompt 'Models for the premium tier' -Default ($all -join ',') -Help 'Comma-separated deployment names.'
+    }
+    $standardModelNames = @($stdPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
+    $premiumModelNames = @($prmPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
+    if (-not $standardModelNames.Count -or -not $premiumModelNames.Count) { throw 'Each tier needs at least one deployment. An empty model list means allow all and is not an explicit restriction.' }
+    foreach ($selected in @($standardModelNames + $premiumModelNames)) {
+        if ($selected -notin $all) { throw "Model '$selected' is not deployed on the selected Foundry account." }
+    }
 
-    $modelsStd = ',' + (($stdPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ',') + ','
-    $modelsPrm = ',' + (($prmPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ',') + ','
+    $modelsStd = ',' + ($standardModelNames -join ',') + ','
+    $modelsPrm = ',' + ($premiumModelNames -join ',') + ','
     Write-Ok "standard $modelsStd  premium $modelsPrm"
     # Recorded with the model behind each name, because a deployment may be named anything and the
     # clients configure capabilities by model (ADR-0031).
@@ -534,7 +545,7 @@ if ($deployed.Count) {
     })
 }
 else {
-    Write-Note "no Claude deployment visible on $FoundryAccount - leaving both tier model lists empty"
+    throw "No Claude deployment is available on '$FoundryAccount'. No tier restrictions were discarded; no gateway will be provisioned."
 }
 
 # ------------------------------------------------------------- 2. placement
@@ -828,7 +839,7 @@ if (-not $EntitlementStore) {
     }
 }
 if ($Yes -and $EntitlementStore -eq 'projection' -and -not $DeployProjection) {
-    throw 'Cannot choose projection unattended with -Yes unless -DeployProjection is also passed; projection requires a compare-gated deployer run.'
+    throw 'Cannot choose projection unattended with -Yes unless -DeployProjection is also passed; projection requires a compare-gated deployer run. Nothing was created.'
 }
 if ($FlipProjectionAfterCleanCompare -and -not $DeployProjection) {
     throw '-FlipProjectionAfterCleanCompare requires -DeployProjection.'
@@ -847,7 +858,7 @@ else { 'private' }
 
 if ($EntitlementStore -eq 'projection') {
     if ($Sku -eq 'BasicV2' -and $ResolverInboundAccess -ne 'public') {
-        throw 'BasicV2 cannot use a private resolver because Basic v2 has no outbound VNet integration. Use -ResolverInboundAccess public or choose StandardV2/PremiumV2.'
+        throw 'BasicV2 cannot use a private resolver because Basic v2 has no outbound VNet integration. Use -ResolverInboundAccess public or choose StandardV2/PremiumV2. Nothing was created.'
     }
     if ($Sku -in @('StandardV2','PremiumV2') -and $ResolverInboundAccess -ne 'private') {
         Write-Warn2 "$Sku can reach a private resolver; public resolver was requested explicitly."
@@ -979,7 +990,7 @@ $unassignedMode = Read-Default -Prompt 'Developers with no team (allow/deny)' -D
 Write-Host ''
 Write-Host '  What address will developers be configured against?' -ForegroundColor White
 Write-Host ''
-Write-Host ("    azure      https://{0}.azure-api.net/claude" -f $NamePrefix) -ForegroundColor DarkGray
+Write-Host ("    azure      https://{0}.azure-api.net/claude" -f $(if ($ExistingApim) { $ExistingApim } else { "apim-$NamePrefix" })) -ForegroundColor DarkGray
 Write-Host '               No extra cost, nothing to set up. The instance name is part of' -ForegroundColor DarkGray
 Write-Host '               the address, so replacing the gateway later means reconfiguring' -ForegroundColor DarkGray
 Write-Host '               every developer machine.' -ForegroundColor DarkGray
@@ -1081,83 +1092,94 @@ $AuthMode = if ($AuthMode) { $AuthMode } else {
             Write-Warn2 'Must be interactive, device or helper.'
             return $false
         }
+}
 
-        Write-Host ''
-        Write-Host '  How will Claude Desktop sign in to the gateway?' -ForegroundColor White
-        Write-Host ''
-        Write-Host '    helper-script          Default. Desktop runs get-foundry-token, which uses' -ForegroundColor DarkGray
-        Write-Host '                           the developer Azure CLI sign-in. No app registration,' -ForegroundColor DarkGray
-        Write-Host '                           no new consent, and the gateway audience stays as the' -ForegroundColor DarkGray
-        Write-Host '                           Foundry data-plane audiences.' -ForegroundColor DarkGray
-        Write-Host '    external-idp-browser   Desktop opens the system browser against a public' -ForegroundColor DarkGray
-        Write-Host '                           Entra app registration. Conditional Access applies' -ForegroundColor DarkGray
-        Write-Host '                           as browser sign-in. The gateway must accept the' -ForegroundColor DarkGray
-        Write-Host '                           Desktop app audience for id_token mode, or the API' -ForegroundColor DarkGray
-        Write-Host '                           audience for access_token mode.' -ForegroundColor DarkGray
-        Write-Host '    external-idp-broker    Desktop uses the Microsoft Entra broker. This is for' -ForegroundColor DarkGray
-        Write-Host '                           managed-device or token-protection Conditional Access.' -ForegroundColor DarkGray
-        Write-Host '                           It needs the broker redirect URIs on the public-client' -ForegroundColor DarkGray
-        Write-Host '                           app and is not supported on Linux.' -ForegroundColor DarkGray
-        Write-Host ''
-        Write-Host '    The helper-script path is unchanged for existing installs.' -ForegroundColor DarkGray
+Write-Host ''
+Write-Host '  How will Claude Desktop sign in to the gateway?' -ForegroundColor White
+Write-Host ''
+Write-Host '    helper-script          Default. Desktop runs get-foundry-token, which uses' -ForegroundColor DarkGray
+Write-Host '                           the developer Azure CLI sign-in. No app registration,' -ForegroundColor DarkGray
+Write-Host '                           no new consent, and the gateway audience stays as the' -ForegroundColor DarkGray
+Write-Host '                           Foundry data-plane audiences.' -ForegroundColor DarkGray
+Write-Host '    external-idp-browser   Desktop opens the system browser against a public' -ForegroundColor DarkGray
+Write-Host '                           Entra app registration. Conditional Access applies' -ForegroundColor DarkGray
+Write-Host '                           as browser sign-in. The gateway must accept the' -ForegroundColor DarkGray
+Write-Host '                           Desktop app audience for id_token mode, or the API' -ForegroundColor DarkGray
+Write-Host '                           audience for access_token mode.' -ForegroundColor DarkGray
+Write-Host '    external-idp-broker    Desktop uses the Microsoft Entra broker. This is for' -ForegroundColor DarkGray
+Write-Host '                           managed-device or token-protection Conditional Access.' -ForegroundColor DarkGray
+Write-Host '                           It needs the broker redirect URIs on the public-client' -ForegroundColor DarkGray
+Write-Host '                           app and is not supported on Linux.' -ForegroundColor DarkGray
+Write-Host ''
+Write-Host '    The helper-script path is unchanged for existing installs.' -ForegroundColor DarkGray
 
-        $DesktopSignInKind = if ($DesktopSignInKind) { $DesktopSignInKind } else {
-            Read-Default -Prompt 'Claude Desktop sign-in (helper-script/external-idp-browser/external-idp-broker)' -Default 'helper-script' `
-                -Help 'Pick an external-idp option only after registering the Desktop public-client app.' -Validate {
+$DesktopSignInKind = if ($DesktopSignInKind) { $DesktopSignInKind } else {
+    Read-Default -Prompt 'Claude Desktop sign-in (helper-script/external-idp-browser/external-idp-broker)' -Default 'helper-script' `
+        -Help 'Pick an external-idp option only after registering the Desktop public-client app.' -Validate {
+            param($x)
+            if ($x -in @('helper-script', 'external-idp-browser', 'external-idp-broker')) { return $true }
+            Write-Warn2 'Must be helper-script, external-idp-browser or external-idp-broker.'
+            return $false
+        }
+}
+
+if ($DesktopSignInKind -ne 'helper-script') {
+    $defaultIssuer = "https://login.microsoftonline.com/$($acct.tenantId)/v2.0"
+    $DesktopEntraIssuer = if ($DesktopEntraIssuer) { $DesktopEntraIssuer } else { $defaultIssuer }
+    if ($DesktopEntraClientId -and -not (Test-ClaudeGuid $DesktopEntraClientId)) {
+        throw "Stopped: -DesktopEntraClientId '$DesktopEntraClientId' is not an application (client) id GUID. Nothing was created."
+    }
+    # Unattended, nothing can be asked: the app, and for access_token its scope and audience, are passed.
+    if ($Yes) {
+        $missing = @()
+        if (-not $DesktopEntraClientId) { $missing += '-DesktopEntraClientId (the Desktop public-client app; scripts/New-ClaudeDesktopEntraApp.ps1 creates it)' }
+        if ($DesktopBearerTokenType -eq 'access_token' -and -not $DesktopEntraScopes) { $missing += '-DesktopEntraScopes' }
+        if ($DesktopBearerTokenType -eq 'access_token' -and -not $DesktopEntraAudience) { $missing += '-DesktopEntraAudience' }
+        if ($missing.Count) { throw "Stopped: Claude Desktop sign-in $DesktopSignInKind under -Yes needs $($missing -join ', '). Nothing was created." }
+    }
+    $DesktopEntraClientId = if ($DesktopEntraClientId) { $DesktopEntraClientId } else {
+        Read-Default -Prompt 'Desktop Entra application (client) ID' -Default '' `
+            -Help 'Create it with scripts/New-ClaudeDesktopEntraApp.ps1, or pass -DesktopEntraClientId for unattended runs.' -Validate {
+                param($x)
+                if (Test-ClaudeGuid $x) { return $true }
+                Write-Warn2 'Must be an application client-id GUID.'
+                return $false
+            }
+    }
+    if ($DesktopBearerTokenType -eq 'access_token') {
+        $DesktopEntraScopes = if ($DesktopEntraScopes) { $DesktopEntraScopes } else {
+            Read-Default -Prompt 'Gateway delegated scope' -Default '' `
+                -Help 'Example: api://<gateway-app-id>/user_impersonation. It may require tenant admin consent.' -Validate {
                     param($x)
-                    if ($x -in @('helper-script', 'external-idp-browser', 'external-idp-broker')) { return $true }
-                    Write-Warn2 'Must be helper-script, external-idp-browser or external-idp-broker.'
+                    if (-not [string]::IsNullOrWhiteSpace($x)) { return $true }
+                    Write-Warn2 'Scopes are required for access_token mode.'
                     return $false
                 }
         }
-
-        if ($DesktopSignInKind -ne 'helper-script') {
-            $defaultIssuer = "https://login.microsoftonline.com/$($acct.tenantId)/v2.0"
-            $DesktopEntraIssuer = if ($DesktopEntraIssuer) { $DesktopEntraIssuer } else { $defaultIssuer }
-            $DesktopEntraClientId = if ($DesktopEntraClientId) { $DesktopEntraClientId } else {
-                Read-Default -Prompt 'Desktop Entra application (client) ID' -Default '' `
-                    -Help 'Create it with scripts/New-ClaudeDesktopEntraApp.ps1, or pass -DesktopEntraClientId for unattended runs.' -Validate {
-                        param($x)
-                        if (Test-ClaudeGuid $x) { return $true }
-                        Write-Warn2 'Must be an application client-id GUID.'
-                        return $false
-                    }
-            }
-            if ($DesktopBearerTokenType -eq 'access_token') {
-                $DesktopEntraScopes = if ($DesktopEntraScopes) { $DesktopEntraScopes } else {
-                    Read-Default -Prompt 'Gateway delegated scope' -Default '' `
-                        -Help 'Example: api://<gateway-app-id>/user_impersonation. It may require tenant admin consent.' -Validate {
-                            param($x)
-                            if (-not [string]::IsNullOrWhiteSpace($x)) { return $true }
-                            Write-Warn2 'Scopes are required for access_token mode.'
-                            return $false
-                        }
+        $DesktopEntraAudience = if ($DesktopEntraAudience) { $DesktopEntraAudience } else {
+            Read-Default -Prompt 'Gateway token audience' -Default '' `
+                -Help 'Usually the gateway API app ID URI, used by APIM to validate aud.' -Validate {
+                    param($x)
+                    if (-not [string]::IsNullOrWhiteSpace($x)) { return $true }
+                    Write-Warn2 'Audience is required for access_token mode.'
+                    return $false
                 }
-                $DesktopEntraAudience = if ($DesktopEntraAudience) { $DesktopEntraAudience } else {
-                    Read-Default -Prompt 'Gateway token audience' -Default '' `
-                        -Help 'Usually the gateway API app ID URI, used by APIM to validate aud.' -Validate {
-                            param($x)
-                            if (-not [string]::IsNullOrWhiteSpace($x)) { return $true }
-                            Write-Warn2 'Audience is required for access_token mode.'
-                            return $false
-                        }
-                }
-            }
-            $desktopSignInRecord = [ordered]@{
-                kind = 'external-idp'
-                flow = $(if ($DesktopSignInKind -eq 'external-idp-broker') { 'broker' } else { 'browser' })
-                bearerTokenType = $DesktopBearerTokenType
-                clientId = $DesktopEntraClientId
-                issuer = $DesktopEntraIssuer.TrimEnd('/')
-            }
-            if ($DesktopEntraScopes) { $desktopSignInRecord['scopes'] = $DesktopEntraScopes }
-            if ($DesktopEntraAudience) { $desktopSignInRecord['audience'] = $DesktopEntraAudience }
-            if ($DesktopEntraResource) { $desktopSignInRecord['resource'] = $DesktopEntraResource }
-
-            $desktopChoiceForValidation = Get-ClaudeDesktopSignIn -Config ([pscustomobject]@{ desktopSignIn = [pscustomobject]$desktopSignInRecord })
-            $desktopGatewayAudience = Get-ClaudeDesktopGatewayAudience -DesktopSignIn $desktopChoiceForValidation
-            Write-Note "Desktop gateway audience: $desktopGatewayAudience"
         }
+    }
+    $desktopSignInRecord = [ordered]@{
+        kind = 'external-idp'
+        flow = $(if ($DesktopSignInKind -eq 'external-idp-broker') { 'broker' } else { 'browser' })
+        bearerTokenType = $DesktopBearerTokenType
+        clientId = $DesktopEntraClientId
+        issuer = $DesktopEntraIssuer.TrimEnd('/')
+    }
+    if ($DesktopEntraScopes) { $desktopSignInRecord['scopes'] = $DesktopEntraScopes }
+    if ($DesktopEntraAudience) { $desktopSignInRecord['audience'] = $DesktopEntraAudience }
+    if ($DesktopEntraResource) { $desktopSignInRecord['resource'] = $DesktopEntraResource }
+
+    $desktopChoiceForValidation = Get-ClaudeDesktopSignIn -Config ([pscustomobject]@{ desktopSignIn = [pscustomobject]$desktopSignInRecord })
+    $desktopGatewayAudience = Get-ClaudeDesktopGatewayAudience -DesktopSignIn $desktopChoiceForValidation
+    Write-Note "Desktop gateway audience: $desktopGatewayAudience"
 }
 
 # ---------------------------------------------------------------- 3. limits
@@ -1224,8 +1246,15 @@ $rows = [ordered]@{
     'Request ceiling'       = "$CallsPerMinute requests/min"
     ' '                     = ''
     'Entra groups'          = "$StandardGroup, $PremiumGroup"
+    '  '                    = ''
+    # Every choice on the Choices page, in the order asked: the summary is the approval (ADR-0032).
+    'Entitlement store'     = $(if ($EntitlementStore -eq 'projection') { "projection, resolver $ResolverInboundAccess" } else { $EntitlementStore })
+    'Revocation window'     = $(if ($entitlementCacheSeconds % 60) { "$entitlementCacheSeconds seconds" } else { "$($entitlementCacheSeconds / 60) minutes" })
+    'Team budget behaviour' = $budgetMode
+    'Developers with no team' = $unassignedMode
+    'Developer address'     = $(if ($addressPlan) { "custom, https://$AddressHostname/claude ($AddressCertificateSource; costs shown above)" } else { "azure, https://$apimName.azure-api.net/claude" })
     'Developer sign-in'     = $AuthMode
-    'Developer address'     = if ($addressPlan) { "https://$AddressHostname/claude ($AddressCertificateSource; costs shown above)" } else { "https://$apimName.azure-api.net/claude" }
+    'Claude Desktop sign-in'= $(if ($desktopSignInRecord.kind -eq 'external-idp') { "$DesktopSignInKind, app $DesktopEntraClientId, $DesktopBearerTokenType" } else { 'helper-script, through the developer''s Azure CLI sign-in' })
 }
 if ($pendingDeployment) {
     $rows.Insert(2, 'Claude deployment', ("{0} v{1} on {2}, {3} capacity {4} - deployed first, after you confirm" -f $pendingDeployment.model, $pendingDeployment.version, $pendingDeployment.account, $pendingDeployment.sku, $pendingDeployment.capacity))
@@ -1632,10 +1661,12 @@ $config = [ordered]@{
     deployments = @($recordedDeployments | ForEach-Object { $_ })
     models = @($recordedDeployments | ForEach-Object { $_.name })
     tiers = @{
-        standard = @{ tokensPerMinute = $TpmStandard; tokensPerDay = $QuotaStandard }
-        premium  = @{ tokensPerMinute = $TpmPremium;  tokensPerDay = $QuotaPremium }
+        standard = @{ tokensPerMinute = $TpmStandard; tokensPerDay = $QuotaStandard; models = @($standardModelNames); modelAllowList = $modelsStd }
+        premium  = @{ tokensPerMinute = $TpmPremium;  tokensPerDay = $QuotaPremium; models = @($premiumModelNames); modelAllowList = $modelsPrm }
     }
     organisation = @{ tokensPerMonth = $QuotaOrg; shared = $true; softCap = $true }
+    # The request ceiling, so an unattended Change of the foundation gives it back (P72).
+    requestsPerMinute = $CallsPerMinute
     generated = (Get-Date -Format 'yyyy-MM-dd HH:mm')
 }
 $configPath = Join-Path $pkg 'claude-gateway.json'

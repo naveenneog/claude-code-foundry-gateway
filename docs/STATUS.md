@@ -1,6 +1,438 @@
 # Status
 
-**Active packets (2026-09-28, run in parallel worktrees):** P69 the company address in the flow, P70 newly deployed models reach the tiers and the workstations, P71 AUM answers fast and says why it cannot, P72 permutation tests of the guided flow and the installer ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets (2026-09-28, run in parallel worktrees):** P69 the company address in the flow, P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+
+## P72 permutation tests of the guided flow and the installer, 2026-09-28
+
+The owner's test on 2026-09-27 found the guided flow's defects one path at a time. P72 tests the
+combinations the [ROADMAP](ROADMAP.md) entry names. Work is isolated to `p72-permutations`, based
+on `aa7ed19`. Reading the installer to size the matrix found two defects before any test ran, both
+measured against the reference subscription with `-WhatIf -Yes` (read-only) at 20:17 UTC on
+2026-09-27:
+
+- The Claude Desktop sign-in section of `Install-ClaudeGateway.ps1` is inside the `else` branch
+  that asks the developer sign-in, so `-AuthMode` skips it. With `-AuthMode device
+  -DesktopSignInKind external-idp-browser -DesktopEntraClientId <id>` the run printed no Desktop
+  gateway audience; the same run without `-AuthMode` printed `Desktop gateway audience: <id>`.
+  The flow's unattended Setup and Change foundation pass both parameters.
+- The installer's summary is the approval ([ADR-0032](adr/0032-guided-flow-starts-at-once.md)).
+  It names the developer sign-in, and not the entitlement store, the Claude Desktop sign-in or the
+  developer address.
+
+Measured before the tests: each live installer run under `-WhatIf -Yes` with every placement
+parameter given takes 18-20 s, of which nine Azure CLI calls take nearly all; a matrix of 54
+combinations on two shells takes about 36 minutes that way. The suites therefore stub the Azure
+CLI and the Retail Prices API, and the live matrix runs once, outside Test-All.
+
+What the suites found, each fixed test-first (commits `acf993b`, `bf78e0a`, `12821ca`):
+
+| # | Found by | Defect | Now | Held by |
+|---|---|---|---|---|
+| 1 | reading, then live `-WhatIf -Yes` | `-AuthMode` skipped the Claude Desktop sign-in section, so an external IdP choice became the helper script | the section runs whatever `-AuthMode` is | installer suite: the gateway audience in the 36 external IdP cases with `-AuthMode` |
+| 2 | reading | the summary, which is the approval, named 1 of 7 choices | it names the store and resolver access, revocation window, team budget behaviour, developers with no team, address, developer and Desktop sign-in | installer suite: each row in 96 cases on both shells |
+| 3 | installer suite | the address question showed `https://<prefix>.azure-api.net`; the gateway is `apim-<prefix>` | the gateway's hostname | installer suite: the question and the summary row |
+| 4 | installer suite | under `-Yes`, an external IdP sign-in without its app, scope or audience reached the summary (with `-AuthMode`) or stopped naming a record field | stops before the summary, naming the parameter, saying that nothing was created | installer suite: 6 refusals |
+| 5 | flow suite | one plan had two fingerprints: `ConvertTo-Json` escapes `' < > &` on 5.1 only, and `Sort-Object` compares by culture; 10 of 12 plans differed | the flow writes its canonical JSON strings itself and sorts keys ordinally | flow suite: 11 plans on both shells; `Test-FlowContract.ps1`: the canonical text of a pinned value |
+| 6 | flow suite | 24 of 29 refusals printed PowerShell's code excerpt, and one wrapped the reason across lines | a top-level run prints the reason and exits 1; an in-process call still gets the exception ([U36](UNKNOWNS.md#u36--a-top-level-run-and-an-in-process-call--closed-2026-09-28)) | flow suite: 26 refusals; `Test-GuidedFlow.ps1`: the in-process refusals |
+| 7 | flow suite | every apply ran `git`: without it, or outside a repository on 5.1, the apply stopped after writing `activeRun` | the release info records no commit | flow suite: the applies without an Azure CLI (PATH without git) and 3 applies on 5.1 in a copy that is not a repository |
+| 8 | flow suite | the merge recorded Desktop sign-in as `external-idp`, which `-DesktopSignInKind` refuses, and dropped the app, issuer, scopes, audience, token type, tier groups, budgets and request ceiling, so an unattended Change foundation failed or reset them | the merge maps them back in parameter values; the flow passes `-DesktopBearerTokenType` and `-ResolverInboundAccess`; the installer records `requestsPerMinute` | flow suite: Setup then Change foundation give the installer the same 15 values; 3 recorded Desktop shapes; the installer's record holds the 17 fields the merge reads |
+| 9 | flow suite | unattended, an external IdP sign-in without its app was approved and failed in the installer | the plan refuses, naming `foundation.desktopEntraClientId` | flow suite: 4 cases |
+| 10 | flow suite | Guide went on silently over drift, and with nothing recorded wrote placeholders and then failed its verification | Guide names the drift; with nothing recorded it refuses before planning | flow suite: 4 and 3 cases |
+| 11 | flow suite | Status with no record said "none detected" | it says that nothing is recorded | flow suite: Status in each record state |
+
+Found and not fixed here: an installer re-run over an existing gateway offers the installer's
+defaults for the budgets, request ceiling, groups and Choices, since only
+`entitlement-cache-seconds` is read back, so pressing Enter through an attended
+`-Change foundation` resets them. Filed as P73 in the [ROADMAP](ROADMAP.md).
+
+Mutations, each in its own copy of the worktree, counted as caught only when the suite ran its
+baseline number of checks and at least one failed: 33 of 33 caught, 25 before the council, 7 for the round-1 fixes and 1 for the round-2 fix. The first run caught 20 of 22.
+The two survivors were the budget merge, masked because the round trip's answers already put the
+budgets in the decision, and Status with no record file, masked by the branch for a record
+without a gateway. The tests now check the merge from a decision that holds no budgets, and Status
+in both cases. The 25th mutation keeps a resolver access for a named-value store; the check added with that fix catches it.
+
+- [x] `tests/Test-FlowPermutations.ps1` runs the real orchestrator, discovery and Foundation step,
+      with a stub installer and a stub Azure CLI, over action (Setup, Change foundation, Guide,
+      Status) × record state (none, recorded and matching, another gateway URL, missing, signed
+      out, no Azure CLI) × mode (attended, `-PlanOnly`, unattended apply). In each combination:
+      the installer runs only for Change foundation or a Setup with no gateway recorded; `-Yes` is
+      passed exactly when unattended; drift (another URL, missing) stops Setup and Change before
+      planning, and Guide goes on; a read that failed is reported as not read, never as drift;
+      Status and `-PlanOnly` write nothing; a refusal prints its reason and no PowerShell code
+      excerpt ([U36](UNKNOWNS.md#u36--a-top-level-run-and-an-in-process-call--closed-2026-09-28)).
+      77 runs, 11 of them on 5.1; 16 boundary runs (`-WhatIf`, Update with no record, cancels through `&`, dot-sourced and prompt callers on both shells, unexpected errors); 8 store and 4 round-trip runs; 43 checks; about 110-130 s
+- [x] In process, Foundation's installer arguments over entitlement store × Desktop sign-in ×
+      developer sign-in × tier × attended or unattended × new or recorded gateway:
+      `-DeployProjection` exactly when unattended with the projection store; with
+      `-ExistingApimName`, the recorded region, tier, name and publisher are never passed; an
+      external-IdP Desktop sign-in without a client id is refused by the plan, before approval;
+      distinct inputs give distinct fingerprints. 432 plans; every argument is checked against the
+      installer's parameter block and its ValidateSets, read from its AST
+- [x] `tests/Test-InstallerPermutations.ps1` runs the real installer under `-WhatIf -Yes`, with
+      the Azure CLI and the Retail Prices API stubbed in process, over tier × entitlement store ×
+      developer sign-in × Desktop sign-in, with and without `-AuthMode`, on PowerShell 7 and
+      Windows PowerShell 5.1: the summary names each choice, and each refusal comes before the
+      summary with its reason. Offline, every combination: 96 cases, plus 6 refusals and a
+      reused gateway, 103 per shell, 44 checks, about 40 s; `-Live` and `-Pairs` run 16 cases that
+      cover every pair of levels (62 pairs, checked by the suite), 23 per shell
+- [x] Each failure found is fixed test-first, starting with the two above
+- [x] The installer matrix runs once live and read-only against the reference subscription on
+      both shells; the result and timings are recorded here. 2026-09-27 22:18-22:26 UTC, `-Live`
+      with the reference Foundry account and, for the reuse case, the reference gateway read only:
+      23 of 23 cases on PowerShell 7 and 23 of 23 on Windows PowerShell 5.1, one process per shell;
+      42 checks passed (the two about the stub's Azure CLI calls apply offline only); 458 s and
+      455 s in the installer, about 20 s per case; 470 s wall. Nothing was created: every case stops
+      at the `-WhatIf` summary
+- [x] The address dimension: P69 owns the installer's address section and adds its parameter.
+      The harness adds the address when P69 merges, or the follow-up is recorded in ROADMAP.
+      Recorded in P73; the summary row and the address question's hostname are tested now
+- [x] GUIDED-FLOW.md names the suites and what they hold
+      ([What the tests hold](GUIDED-FLOW.md#what-the-tests-hold)); SETUP.md describes the summary
+      and the `-Yes` Desktop parameters, with a live image
+      ([70](guide/70-installer-summary-every-choice.png)); CHANGELOG
+- [x] Council, five seats; the packet gate exits 0. Round 3 passed on all five seats; the gate on `347b702` passed
+
+Council round 1 (gpt-6-astra, read-only, over `aa7ed19..6d5320f`): BLOCK. It ran the installer,
+flow-contract and flow suites; all passed, and the blocks come from reading the code.
+
+| Seat | Verdict | Finding | Now |
+|---|---|---|---|
+| Architect | BLOCK | A1: the docs said every fingerprint changes; a plan with only ASCII text and code-point-ordered keys keeps its own | GUIDED-FLOW and CHANGELOG say which plans change |
+| Coder | BLOCK | C1: the merge kept a resolver access for the named-value store | fixed in `744fd18` before the review ended; 25th mutation |
+| Coder | BLOCK | C2: a cancelled installer and a mistyped confirmation still ran `exit 1`, so a caller got no exception, and a dot-sourced run could exit its caller | both raise `OperationCanceledException`; the trap exits only at top level; a dot-sourced run is a call ([U36](UNKNOWNS.md#u36--a-top-level-run-and-an-in-process-call--closed-2026-09-28)); 8 caller runs, `&`, dot-sourced from a script and at a prompt, on both shells |
+| QA | BLOCK | Q1: "before the summary" was the `-WhatIf` stop line, so a refusal after the summary would pass | the driver records the Summary heading; a refusal must print neither |
+| QA | BLOCK | Q2: "nothing read from Azure before the installer" was true whenever the installer ran, and saw only `apim show` | every Azure CLI call is logged with its time and compared with the installer's start |
+| QA | should-fix | Q3: no orchestrator `-WhatIf` or Update runs | `-WhatIf` for Setup, Change and Guide; Update with no record. Update over a live gateway reads it through several Azure CLI calls the stub does not answer; `tests/Test-FlowLifecycle.ps1` covers its plan and apply |
+| UX | PASS | the debugging hint read `set CLAUDE_FLOW_DEBUG=1` on every refusal | it shows only for an error the flow does not expect, as `$env:CLAUDE_FLOW_DEBUG = '1'` |
+| Security | PASS | no new path to `az.cmd`; the values the merge adds are either az-bound and checked, or ValidateSet parameters, or Desktop configuration | none needed |
+
+The gate on `f474fe4` failed on one check: the architecture manifest was stale after `744fd18`
+changed `scripts/flow/Foundation.ps1`, a source of a diagram, without a re-render. Rendered again.
+
+Gate on `9f4a7ee`, 05:03-05:27 IST (23:33-23:57 UTC): 22 passed, 2 warned (the existing file-size
+and open-unknowns warnings), 0 failed, 2 skipped (the AUM suites, which need a worktree venv).
+
+Council round 2 (the same agent, over `6d5320f..9f4a7ee`): BLOCK. It reran the flow suite (43
+checks), the installer suite (103 cases per shell, and 23 with `-Pairs`) and probes of the trap.
+
+| Seat | Verdict | Finding | Now |
+|---|---|---|---|
+| Architect | BLOCK | A1 again: the new wording still tied a changed fingerprint to particular characters; on PowerShell 7 a plan with `' < > &` kept its fingerprint, and a plan with a newline changed on both shells | GUIDED-FLOW and CHANGELOG say that an earlier fingerprint may no longer match, and to run `-PlanOnly` again when one is refused |
+| Coder | PASS | C1 and C2 closed; a trap from a dot-sourced run left in the caller's scope rethrows and the caller goes on, on both shells | none needed |
+| QA | BLOCK | Q4: the suite's child processes inherited `CLAUDE_FLOW_DEBUG`, so with it set the unexpected-error check failed | each child starts without `P72_*` variables and `CLAUDE_FLOW_DEBUG`; the suite passes with both set; 33rd mutation |
+| UX | PASS | yellow for a cancel, red otherwise, and the hint only for an unexpected error | none needed |
+| Security | PASS | no new path to Azure CLI or credentials | none needed |
+
+Council round 3 (the same agent, over `9f4a7ee..347b702`): all five seats PASS, no BLOCK. It reran its
+reproduction with `CLAUDE_FLOW_DEBUG` and `P72_FINOPS_FAIL` set: 43 of 43.
+
+Gate on `347b702`, 05:53-06:19 IST (00:23-00:49 UTC): 22 passed, 2 warned (the existing file-size and
+open-unknowns warnings), 0 failed, 2 skipped (AUM, no worktree venv). Test-All passed in 1,538.1 s of its
+1,800 s budget; the P72 suites took 115.5 s (serial lane), 53.7 s and 86.6 s (flow start).
+
+Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
+
+## P70 newly deployed models reach the tiers and the workstations, 2026-09-28
+
+Merged to `main` as `bb75aab` (`--no-ff`, 2026-09-28); the merge tree equals the tree of the
+gated branch head `a0c3e33`. Council round 2 passed all five seats. Integration on
+`p70-model-lifecycle`: the AST-derived renderer import guard passed, `main` (`38ad175`,
+including P72) was merged normally, the requested permutation suites passed, and the merged
+packet gate exited 0 at `586b6f6`. No Azure or real workstation writes were made in this
+integration.
+
+### Council round 2, 2026-09-28
+
+| Seat | Verdict supplied | Evidence / remaining integration work |
+|---|---|---|
+| Architect | PASS | Round-1 dependency fingerprints verified; A2 now has AST-derived transitive import coverage and a caught added-import mutation |
+| Coder | PASS | Initial Sonnet-only allowlist and picker agree; all round-1 fixes verified |
+| QA | PASS | Round-1 regressions verified; P72 installer/flow permutations passed on the merged tree without assertion changes |
+| UX | PASS | No BLOCK or additional UX finding supplied |
+| Security | PASS | Every S1 refusal made zero Azure resource writes; no tracked ignored generated files were found |
+
+Acceptance for this integration: the new import detector catches an added renderer
+dot-source with the complete assertion count and passes after restoration; the normal
+merge retains every `main` ledger entry; the specified P72 suites pass without weakening
+their assertions; the unchanged packet gate exits 0. A P70/P72 behavior contradiction
+is reported rather than resolved by changing an assertion.
+
+The A2 import-coverage follow-up is green. The lifecycle suite derives the renderer's
+transitive dot-source closure from PowerShell ASTs and compares it with paths actually
+hashed by the production stamp function, rather than another handwritten list. Dynamic
+or unresolved paths fail coverage; renderers are never executed to discover imports.
+Baseline and restored runs passed all 138 assertions on PowerShell 7 and 5.1.
+Adding a dot-source to the renderer in a private copy caused exactly one coverage failure,
+with all 138 assertions still run, on both hosts. Variable-bound imports and a transitive
+cycle are covered by the detector's own fixtures.
+
+Integration uses a normal merge of `main` at `38ad175`. The two conflicts were the
+changelog and architecture manifest: both changelog entries were retained, and the
+manifest was regenerated from the merged sources (15 specifications, 17 PNGs).
+The ledger comparison against `main` contains only P70 additions: no removed lines
+in CHANGELOG, STATUS or UNKNOWNS, and no ROADMAP difference. The P72 permutation
+suites and locked packet gate are the remaining integration checks.
+
+Normal merge commit: `5d4353e`, parents `d2b063e` and `38ad175`. The requested merged-tree
+suites all passed on this machine:
+
+| Suite | Checks | Coverage / duration |
+|---|---|---|
+| `Test-InstallerPermutations.ps1` | 44 | 103 cases on each of PowerShell 7 and 5.1: 96 combinations, six refusals and one reused gateway; 96.3 s |
+| `Test-FlowPermutations.ps1` | 43 | 77 base runs plus boundary/store/round-trip cases and 432 Foundation plans; 130.0 s |
+| `Test-FlowStart.ps1` | 114 | Startup, installer handover, fingerprint and resume checks; 133.3 s |
+| `Test-ModelLifecycle.ps1` | 138 per host | Passed on PowerShell 7 and 5.1 after the merge |
+
+No installer-driver stub extension was needed. No P72 assertion or behavior requirement was
+changed. `git diff main HEAD -- CHANGELOG.md docs/STATUS.md docs/UNKNOWNS.md docs/ROADMAP.md`
+contains only P70 additions and no removed lines; ROADMAP matches main. The regenerated
+architecture check passes, and `git ls-files -ci --exclude-standard` lists zero files.
+The merged packet gate exited 0 at `586b6f6`, 2026-09-28 03:26:10-03:51:13 UTC:
+22 passed, 2 existing warnings, 0 failed, 2 skipped. Test-All passed in 1,492.0 s,
+within the unchanged 1,800,000 ms command budget; Bicep passed in 9.2 s. The complete
+gate took 1,503.0 s. The shared lock was acquired after 2,940.9 s of 60-second retries
+(within the 60-minute limit) and released in `finally`.
+
+Round-2/integration commits: plan `4dfdd69`, AST coverage `d2b063e`, normal merge
+`5d4353e`, merged-suite evidence `586b6f6`, then a ledger-only commit for this result.
+No assertion was weakened, no P70/P72 behavior conflict was found, and no requested work
+remains blocked. No push, rebase or history rewrite was performed. The lead owns the
+merge of this branch back to main.
+
+### Council round 1, 2026-09-28
+
+The lead's five-seat review over `aa7ed19..a017814` returned BLOCK. The supplied findings
+and remediation acceptance are recorded below. Each fix requires a failing regression,
+passing tests on PowerShell 7 and 5.1, and a caught mutation with the complete assertion
+count. The gate keeps its 1,800,000 ms command budget and uses the shared lock.
+
+| Seat | Verdict supplied | Finding | Fix / evidence |
+|---|---|---|---|
+| Architect | BLOCK | A1: helper changes can alter generated capabilities without changing the plan fingerprint | Fixed: the stamp hashes seven render/serialization dependencies; change/removal tests cover each, including a real capability-output change |
+| Coder | BLOCK | C1: the installer records the deployment union but not each tier's selections; a Sonnet-only premium tier gets an Opus picker entry | Fixed: tier entries persist normalized models and exact allowlists; real generated standard/premium profiles match a Sonnet-only initial install |
+| Coder | BLOCK | C2: bash setup retains an alias whose model family disappeared | Fixed: absent Opus, Sonnet and Haiku aliases are deleted; the shell's actual jq writer agrees with Windows in all three family-removal cases |
+| QA | BLOCK | Q1: filtering hides malformed raw deployment rows and turns them into apparent removals | Fixed: shared raw identity validation runs before filtering, covering ten mixed valid/malformed array shapes |
+| Security | BLOCK | S1: failed/empty discovery or whitespace/comma-only explicit selections can create allow-all lists | Fixed: failed/malformed discovery and empty normalized tier selections stop before provisioning; zero Claude deployments cannot discard supplied restrictions |
+| Architect | Should-fix | A2: standalone history omits the prior decision and principal | Fixed: history records the preceding model decision and the signed-in account from the target subscription, read after approval |
+| Coder | Should-fix | C3: the empty named-value REST write scopes its URI but not its token | Fixed: the same subscription arguments reach token acquisition and the REST URI |
+| Security | Should-fix | S2: nested reference records and snapshots are not git-ignored | Fixed: nested records, profiles and snapshots are ignored; onboarding documentation remains visible |
+| UX | No separate verdict supplied | No additional finding was included in the handoff | Existing model review and error wording remain in scope |
+
+Completion criteria: all eight findings addressed, no relaxed detector or timeout, directly
+related docs/ADR and architecture hashes updated, and the packet gate exits 0 under the shared
+lock. ROADMAP P70 stays unticked for the lead.
+
+First remediation green: Q1/S1/C1 reproduced as 24 failures at 108 assertions on each
+PowerShell host, then all 108 passed on each host. Existing ModelDeployment checks passed.
+The installer config edit changes only the two tier entries; P72's organisation/request
+fields and summary rows are untouched. Detector mutations follow after the remaining fixes.
+Second remediation green: the remaining model regressions reproduced 22 product failures
+at 133 assertions (a two-path `git check-ignore --quiet` fixture error was corrected
+separately), then all 133 passed on each host. The fast workstation suite reproduced
+three alias-retention failures and now passes all 13 assertions on each host. It executes
+the setup's own jq writer against temporary files and compares its full model environment
+with the Windows helper, without installing clients or making Azure calls.
+Final lifecycle assertions: 135 on each host, all passing. A valid single-deployment
+object cannot substitute for an inventory array. A missing principal now stops before
+the snapshot or any model write; its regression failed on both hosts before the guard.
+
+Negative verification completed: 21 mutations caught on each host, with no incomplete
+run. The 18 lifecycle mutations each ran all 135 assertions; the three alias mutations
+each ran all 13 workstation-model assertions. Baseline and restored runs passed on
+PowerShell 7 and 5.1. The matrix covers raw identity shape/fields and both callers,
+native discovery failure and array shape, empty/normalized selections, both initial tier
+records, renderer stamps and rechecks, history fields, missing principal, token scoping,
+nested generated paths and each removed model-family alias.
+
+Related regressions passed: ModelDeployment 46, ModelsAndPlugins 92, FlowContract 29,
+GuidedFlow 44 and Architecture 36 assertions, plus Azure CLI argument checks, documentation
+references, named-value guards, script encoding and Test-All runner integrity. The 15-spec
+architecture was regenerated and its changed model-lifecycle image inspected. The added
+workstation suite takes about 2 seconds per run; no new long-running suite is registered.
+The packet gate passed at `e6566cc` on 2026-09-28, 00:55:24-01:15:44 UTC:
+22 passed, 2 existing warnings, 0 failed, 2 skipped. Test-All took 1,210.9 s,
+within the unchanged 1,800,000 ms budget; Bicep passed in 7.3 s. Total gate time
+was 1,219.5 s. The shared lock was acquired immediately and released in `finally`.
+The warnings remain the eight oversized files and 21 unrelated open unknowns;
+no test, detector, timeout or charter constraint was relaxed.
+
+Remediation commits: plan `e32b671`; raw discovery and initial tiers `fac106d`;
+renderer/alias/history/scoping fixes `749b9c4`; unattributed-change guard `2983b8d`;
+mutation proof and architecture `e6566cc`. The final ledger-only commit records this gate.
+No requested finding remains unfixed. Council re-review and merge remain with the lead;
+ROADMAP P70 is still unticked, and no merge, push or history rewrite was performed.
+
+Acceptance criteria:
+
+- [x] A Change-only `models` step and a standalone model-sync command discover the chosen
+      Foundry account's Claude deployments, compare tier lists and the record, and show model,
+      version, SKU/capacity and price-book status before a write
+- [x] Each deployment has an explicit tier choice, from the console or the flow's answers file;
+      missing deployments have a keep/drop choice. Empty-list allow-all semantics cannot turn
+      removal into an unintended access grant
+- [x] A fingerprint binds the target, discovered state, decisions, prices and generated outputs.
+      Apply refuses stale or incomplete plans and takes a named-value snapshot before writing;
+      only `models-standard` and `models-premium` can change
+- [x] The record preserves unrelated fields and per-deployment client overrides, updates
+      `deployments` and `models`, and regenerates per-tier device profiles. The developer handover
+      states how rerunning setup changes `availableModels`, pinned aliases, capabilities and
+      Desktop `inferenceModels`
+- [x] Unpriced models are labelled unpriced, never free. Pricing and named-value propagation
+      have cited research or measured evidence in UNKNOWNS and ADR-0034; every wait names its
+      purpose, estimate and elapsed time
+- [x] Offline stubbed-Azure tests run on PowerShell 7 and Windows PowerShell 5.1; each new
+      detector is broken deliberately, its failure and full assertion count recorded, and restored
+- [x] An isolated gateway in `rg-p70-models`, with dedicated `claude-p70-*` groups, returns
+      `403 model_not_allowed` before and `200` after a deployment is added to the caller's tier.
+      The proof costs less than USD 5; its resource group, soft-deleted gateway, groups and exact
+      shared-Foundry role assignment are removed with creation/deletion times recorded
+- [x] A read-only reference-gateway plan, an exact owner apply command, redacted live terminal
+      images numbered 50 onward, updated model/flow/developer docs and architecture artifacts
+      accompany a passing `node .ironclad/gate.mjs --stage packet`. ROADMAP remains unticked
+
+Baseline audit: `node .ironclad/gate.mjs --stage packet --no-run` passed on `aa7ed19`
+(20 passed, 2 warned, 0 failed, 4 skipped). Existing warnings are file size and open unknowns.
+
+First implementation green: `Test-ModelLifecycle.ps1`, 69 assertions, 0 failed on PowerShell 7
+and Windows PowerShell 5.1. RED on both hosts was `model lifecycle implementation exists`.
+The real flow, standalone command, backup and profile generators run against an offline Azure
+stub. Related FlowContract, FlowLifecycle, ModelDeployment, GovernanceAuthority and
+ModelsAndPlugins suites passed. Mutations, isolated live proof and packet gate remain pending.
+Second green: 77 assertions, 0 failed on both hosts. Explicit `-StandardModels` and
+`-PremiumModels` support an unattended initial subset; unknown selections are refused before
+deployment. Price status appears in each model question. Reusing the same answers after a
+retirement succeeds without another named-value write. `Test-On-PS51.ps1` reached the
+complete installer's summary and stopped under `-WhatIf`.
+Detector preflight: 80 assertions on each host, adding valid-JSON/nonzero-exit failure,
+the named-value writer's own exit check and renderer drift before apply.
+Third green: 83 assertions on each host, including subscription validation before account
+discovery, record-version/new-deployment labels in the review and a subscription-bound backup
+token. The first 39 PowerShell 7 mutations were all caught at 80 assertions with the tree restored.
+The final mutation run uses a frozen test/source copy on each host.
+
+First isolated proof attempt, 2026-09-27 20:56-21:22Z: Basic v2 installed and a real standard
+Sonnet request returned 200. Haiku returned 403 with `error.type=invalid_request_error`;
+the proof runner incorrectly checked that field for `model_not_allowed` instead of
+`error.code`, so the bounded wait expired before the Change. This was a proof-runner error,
+not a gateway failure. All resources were removed: Foundry role assignment 21:13:04Z,
+`rg-p70-models` 21:15:29Z, soft-deleted API Management 21:21:59Z, and the two dedicated
+groups 21:22:06Z / 21:22:13Z. Estimated API Management cost including cleanup: USD 0.09.
+The corrected proof will rerun; no reference gateway or default tier group was written.
+Second isolated attempt: the installer completed in 330.6 s, Sonnet returned standard-tier
+200, and Haiku returned `403 error.code=model_not_allowed`. The Change took its snapshot
+but refused before named-value writes because a fresh installer record omits `decisions`;
+the flow journal introduced an empty decisions object after the model decision was excluded
+from the comparison. Reproduced offline on both hosts (84 assertions, one failure), then
+fixed by normalizing absent/empty decisions without ignoring other decision changes.
+Removing the fix fails exactly that test; all 84 assertions pass before and after the
+mutation on PowerShell 7 and 5.1. Cleanup continues before the final live retry.
+Second-attempt cleanup finished with no failures: exact shared-Foundry assignment
+21:35:01Z, resource group 21:38:04Z, soft-deleted gateway 21:39:41Z, dedicated groups
+21:39:49Z and 21:39:57Z. Estimated API Management cost USD 0.0483.
+
+Related regressions: GuidedFlow 44, FlowLifecycle 33, GovernanceAuthority 132, Backup 43,
+ModelsAndPlugins 92, WorkstationClients 178 and Architecture 36 assertions, all passing.
+The GuidedFlow suite also passed on Windows PowerShell 5.1. Full installer previews passed
+on both hosts; the PowerShell 7 preview with explicit model subsets took 23.7 s.
+The 15-spec architecture render passed; its new model-lifecycle image was inspected.
+The existing FlowStart suite passed with the new Change-only module present.
+All 42 frozen-source detector mutations on PowerShell 7 were caught at the full 83
+assertions; the restored run passed. The additional fresh-record detector was caught
+at all 84 assertions on both hosts. The PowerShell 5.1 42-case run also caught every mutation at 83 assertions and passed after
+restoration. The two full runs plus the fresh-record case provide 43 caught mutations per host.
+
+Post-purge cleanup detail: after the second attempt, ARM again listed the old resource group
+and its already deleted gateway while `az apim show` returned `ServiceNotFound`; the activity
+log showed successful deletions and no new resource-group write. With no other resource in
+that group, a second group deletion completed at 21:46:53Z after 73.6 s. The next proof
+refused to reuse the lingering group until it was absent. Its cleanup now rechecks the
+resource group after purging API Management.
+
+Final live attempt: Basic v2 installation completed in 269.3 s. The first Haiku request,
+21:55:00Z, returned `403 error.code=model_not_allowed` (0.597 s). The approved guided Change
+completed in 330.5 s: its non-secret snapshot took 17.5 s, the standard-model write 21.3 s,
+readback 22.5 s and both profiles 1.0 s; the later management reads account for the remaining
+time. At 22:01:49Z, the first request after apply returned standard-tier 200 in 1.539 s.
+That is 1.6 s after apply returned, not a claim of 1.6 s propagation after the named-value
+write. The post-write management verification ran before that request.
+At 22:04:28Z Sonnet returned premium-tier 200 (2.649 s), and at 22:04:29Z Haiku returned
+`403 error.code=model_not_allowed` (0.603 s), proving the other tier remained restricted.
+The generated standard files list Haiku and Sonnet; premium lists only Sonnet.
+Images 50-54 were rendered from live, dated command transcripts and inspected; the apply
+image is labelled as an excerpt, with its complete raw transcript retained privately.
+
+Final cleanup completed with no failures. Times below are UTC on 2026-09-27; principal and
+group object ids remain only in private evidence. Creation of the managed identity and role
+was part of the installer, completed before the first gateway read.
+
+| Created object | Created / first verified | Removed / absence verified |
+|---|---|---|
+| `rg-p70-models`, tagged `purpose=p70-proof` | 21:47:54 | Deleted 22:07:32; independently absent at 22:13:51 |
+| Basic v2 `apim-p70eb00b`, its managed identity, Log Analytics and Application Insights | Installer completed 21:52:33; gateway verified 21:52:36 | Group deletion 22:07:32; soft-deleted API Management purged 22:09:08 |
+| Cognitive Services User on the shared Foundry account, for that identity only | Created by the installer | Exact assignment deleted 22:04:49; all three proof identities have zero remaining assignments at 22:13:51 |
+| `claude-p70-standard` | 21:47:59 | Deleted 22:09:19; absent at 22:13:51 |
+| `claude-p70-premium` | 21:48:03 | Deleted 22:09:25; absent at 22:13:51 |
+
+The final independent read found no resource group, no soft-deleted proof gateway, no dedicated
+group and no role assignment for any proof identity. Estimated API Management cost across all
+three resource-bearing attempts is USD 0.2136 (0.09 + 0.0483 + 0.0753), calculated at
+USD 150 / 730 hours and including cleanup time. Successful requests used at most 16 output
+tokens each; rejected requests did not call Foundry. No extra compute or Foundry deployment
+was provisioned. This is below the USD 5 ceiling with a wide margin, but is not invoice
+reconciliation (U2). Image 55 shows the final cleanup; it was inspected after redaction.
+
+**Owner command and current reference state.** The following exact read-only command ran at
+21:57Z and produced fingerprint
+`12a41e22c399b185385c3127d96e0861ca209514cbf345650ecf4c500ae11a47`.
+It uses a separate reference record rather than the disposable proof record:
+
+```powershell
+.\scripts\Sync-ClaudeModels.ps1 -RecordPath .\onboarding\reference\claude-gateway.json `
+    -ResourceGroup rg-contosohub -ApimName apim-claude-gw-fzgql9 `
+    -FoundryAccount ai-contosohub530569751908 -FoundryResourceGroup rg-contosohub `
+    -TierAssignments @{ 'claude-opus-5-5' = 'premium'; 'claude-haiku-4-5' = 'both' } -PlanOnly
+```
+
+Observed preview: `models-standard` would change from `,,` to
+`,claude-haiku-4-5,claude-opus-5,claude-sonnet-5,`; `models-premium` stays `,,`.
+The plan copies the dated Haiku price to its deployed spelling, leaves Opus 5.5 unpriced,
+and writes the new record and tier profiles. No reference file or Azure value was written.
+Both models are already allowed by the current unrestricted lists. This choice would
+**restrict standard**, not merely add access. The current authority is Turnstile, so apply
+is refused until the owner chooses the authoritative change path.
+
+After an owner-reviewed ownership decision, the exact apply command is the same command
+with `-PlanOnly` replaced by `-ApprovedPlanFingerprint <fresh-reviewed-fingerprint>`.
+The old captured fingerprint is not an approval for a later changed estate.
+The alternate authoritative path is Turnstile's Gateway governance page; P70 does not switch
+authority or write through a second control plane.
+
+Open decisions for the owner: the reference ownership/access choice; a separate cache-rate
+schema change before pricing Opus 5.5 automatically. The council verdicts and the merge are
+recorded above.
+MDM assignment and actual Windows/macOS/Linux fleet rollout remain operator actions.
+No real managed device or Desktop app was changed by this live proof.
+**Packet gate:** `node .ironclad/gate.mjs --stage packet` exited 0 at `9447488`,
+2026-09-27 22:17:16-22:40:22Z (1,385.6 s). Test-All passed in 1,376.6 s; the Bicep build
+passed in 7.2 s. Scorecard: 22 passed, 2 warned, 0 failed, 2 skipped (no lint/typecheck
+commands declared). Warnings remain the existing eight oversized files and 21 unrelated
+open unknowns; no detector or budget was relaxed. The shared lock was acquired after
+60.1 s and released in `finally`. Another packet acquired it afterwards; P70 did not
+remove that later owner's lock.
+
+P70 commits before the gate: plan `0204d5d`, contract `02a45c9`, first green `dfc75f0`,
+selection/installer `8f3fe54`, detector preflight `9b2571e`, subscription/record-delta
+checks `7c1c28b`, live fresh-record fix `dc1847f`, guides/architecture `2676a90`, live
+evidence `9447488`. No merge, push or history rewrite was performed. ROADMAP's P70 box
+remains unticked. Council verdicts are intentionally left to the lead, as assigned.
+
+Read-only reference drift, 2026-09-27 20:19Z: both `models-standard` and `models-premium` are
+`,,` (allow all), and `turnstile-integration` reports `governanceAuthority=Turnstile`,
+`budgetAuthority=Gateway`. This differs from the supplied starting inventory. The Foundry
+account has all four stated Claude deployments in `Succeeded`, version 2, GlobalStandard.
+No reference write was made. The owner plan will describe the current state and refuse an
+apply over Turnstile ownership.
 
 ## P69 the company address in the flow, 2026-09-28
 

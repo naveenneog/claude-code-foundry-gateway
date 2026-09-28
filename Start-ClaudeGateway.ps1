@@ -18,6 +18,21 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# A refusal is an answer, not a crash. Run at top level, the flow prints the reason without
+# PowerShell's code excerpt and exits 1. Called from another script or dot-sourced, it raises the
+# refusal as an exception, and a dot-sourced run never exits its caller (U36).
+$script:FlowTopLevel = -not $MyInvocation.PSCommandPath -and $MyInvocation.InvocationName -ne '.'
+trap {
+    if (-not $script:FlowTopLevel) { break }
+    $cancelled = $_.Exception -is [System.OperationCanceledException]
+    # The flow refuses by throwing its reason, whose error id is that text; anything else was not expected.
+    $refusal = $cancelled -or ($_.Exception -is [System.Management.Automation.RuntimeException] -and $_.FullyQualifiedErrorId -eq $_.Exception.Message)
+    Write-Host ''
+    Write-Host $_.Exception.Message -ForegroundColor $(if ($cancelled) { 'Yellow' } else { 'Red' })
+    if ($env:CLAUDE_FLOW_DEBUG -eq '1') { Write-Host $_.ScriptStackTrace -ForegroundColor DarkGray }
+    elseif (-not $refusal) { Write-Host "The flow stopped on an error it does not expect. To see where: `$env:CLAUDE_FLOW_DEBUG = '1', then run the same command again." -ForegroundColor DarkGray }
+    exit 1
+}
 $root = $PSScriptRoot
 if (-not $FlowModulePath) { $FlowModulePath = Join-Path $root 'scripts\flow' }
 . (Join-Path $root 'scripts\flow\FlowContract.ps1')
@@ -26,7 +41,7 @@ $discoveryScript = Join-Path $root 'scripts\flow\Discovery.ps1'
 if (Test-Path -LiteralPath $discoveryScript) { . $discoveryScript }
 
 $script:ExpectedFlowSteps = @(
-    'Foundation', 'Tier', 'Entitlement', 'Network', 'DesktopSignIn', 'Address',
+    'Foundation', 'Tier', 'Entitlement', 'Network', 'DesktopSignIn', 'Address', 'Models',
     'FinOps', 'Budgets', 'Monitoring', 'Reports', 'DeviceProfiles', 'Verify', 'Guide'
 )
 
@@ -135,7 +150,7 @@ function Get-FlowModules {
     if (Test-Path -LiteralPath $ModulePath) {
         foreach ($file in @(Get-ChildItem -LiteralPath $ModulePath -Filter '*.ps1' -File | Sort-Object Name)) {
             if ($file.Name -in @('FlowContract.ps1', 'Discovery.ps1')) { continue }
-            foreach ($name in 'Get-ClaudeFlowStepInfo','Get-ClaudeFlowStepQuestions','Get-ClaudeFlowStepPlan','Invoke-ClaudeFlowStep','Test-ClaudeFlowStep') {
+            foreach ($name in 'Get-ClaudeFlowStepInfo','Get-ClaudeFlowStepQuestions','Get-ClaudeFlowStepPlan','Initialize-ClaudeFlowStep','Invoke-ClaudeFlowStep','Test-ClaudeFlowStep') {
                 if (Get-Command $name -ErrorAction SilentlyContinue) { Remove-Item "function:\$name" -Force -ErrorAction SilentlyContinue -WhatIf:$false }
             }
             $functionsBefore = @{}
@@ -157,6 +172,7 @@ function Get-FlowModules {
                 Info = $info
                 Questions = (Get-Command Get-ClaudeFlowStepQuestions -ErrorAction Stop).ScriptBlock
                 Plan = (Get-Command Get-ClaudeFlowStepPlan -ErrorAction Stop).ScriptBlock
+                Prepare = $(if (Get-Command Initialize-ClaudeFlowStep -ErrorAction SilentlyContinue) { (Get-Command Initialize-ClaudeFlowStep).ScriptBlock } else { $null })
                 Invoke = (Get-Command Invoke-ClaudeFlowStep -ErrorAction Stop).ScriptBlock
                 Test = (Get-Command Test-ClaudeFlowStep -ErrorAction Stop).ScriptBlock
                 Path = $file.FullName
@@ -361,6 +377,13 @@ function Invoke-ApplySteps {
     }
 }
 
+function Initialize-FlowSteps {
+    param($Steps, $Plans, $Record)
+    for ($i = 0; $i -lt $Steps.Count; $i++) {
+        if ($Steps[$i].Prepare) { & $Steps[$i].Prepare -Record $Record -Plan $Plans[$i] | Out-Null }
+    }
+}
+
 function Invoke-VerifySteps {
     param($Steps, $Record)
     Write-Host ''
@@ -383,7 +406,11 @@ function Show-Status {
     param($Record, $Discovery)
     Write-Host ''
     Write-Host 'Claude gateway status' -ForegroundColor Cyan
-    if (-not $Record) { Write-Host "No decision record at $RecordPath."; return }
+    if (-not (Test-Path -LiteralPath $RecordPath)) {
+        Write-Host "No decision record at $RecordPath, so nothing is recorded and nothing was compared with Azure."
+        Write-Host 'To create one: .\Start-ClaudeGateway.ps1 -Action Setup' -ForegroundColor DarkGray
+        return
+    }
     Write-Host ''
     Write-Host 'Decisions' -ForegroundColor Cyan
     if ($Record.decisions) { $Record.decisions | ConvertTo-Json -Depth 8 }
@@ -399,6 +426,8 @@ function Show-Status {
         foreach ($d in @($Discovery.comparison.differences)) { Write-Host "  DRIFT $d" -ForegroundColor Yellow }
     } elseif ($Discovery.comparison -and $Discovery.comparison.status -eq 'unknown') {
         Write-Host "  not checked: $($Discovery.comparison.reason)" -ForegroundColor Yellow
+    } elseif ($Discovery.comparison -and $Discovery.comparison.status -eq 'nothing-recorded') {
+        Write-Host '  no gateway is recorded, so nothing is recorded to compare with Azure' -ForegroundColor DarkGray
     } else { Write-Host '  none detected' -ForegroundColor Green }
 }
 
@@ -491,6 +520,12 @@ $attended = [bool]((Test-ClaudeInteractive) -and -not $PlanOnly -and -not $Appro
 $discovery = Get-FlowDiscoveryForSteps -Record $record -CurrentAction $Action -Attended $attended
 if ($Action -eq 'Status') { Show-Status -Record $record -Discovery $discovery; return }
 if ($Action -ne 'Guide') { Assert-RecordMatchesLive -Discovery $discovery }
+elseif ($discovery.comparison -and @($discovery.comparison.differences | Where-Object { $_ }).Count) {
+    # Guide changes nothing in Azure, so it goes on, and says that the guide names the recorded values.
+    Write-Host 'The decision record does not match live state, so the guide names the recorded values:' -ForegroundColor Yellow
+    foreach ($d in @($discovery.comparison.differences | Where-Object { $_ })) { Write-Host "  DRIFT $d" -ForegroundColor Yellow }
+    Write-Host 'Setup and Change refuse to apply over this drift until the record or the gateway is corrected.' -ForegroundColor DarkGray
+}
 
 $modules = Get-FlowModules -ModulePath $FlowModulePath -ForAction $Action
 foreach ($note in $modules.Skipped) { Write-Host $note -ForegroundColor DarkGray }
@@ -536,8 +571,8 @@ if ($attended -and -not $afterLead) {
         Write-Host (Format-ClaudeFlowReview -Plans @($lead.Plans))
         if (-not $PSCmdlet.ShouldProcess($RecordPath, "Apply guided flow action $Action")) { return }
         $leadRunId = Start-FlowRun -Record $record -Path $RecordPath -CurrentAction $Action -CurrentChange $Change -Fingerprint (Get-ClaudeFlowFingerprint -Plans @($lead.Plans)) -Phase 'lead' -StepNames $leadNames
-        try { Invoke-ApplySteps -Steps $lead.Steps -Plans @($lead.Plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $leadRunId }
-        catch [System.OperationCanceledException] { Write-Host ''; Write-Host $_.Exception.Message -ForegroundColor Yellow; exit 1 }
+        # A cancelled installer raises OperationCanceledException, which the trap reports (U36).
+        Invoke-ApplySteps -Steps $lead.Steps -Plans @($lead.Plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $leadRunId
         Invoke-VerifySteps -Steps $lead.Steps -Record $record
         Remove-FlowRecordProperty $record 'activeRun'
         Write-FlowDecisionRecord -Record $record -Path $RecordPath
@@ -575,20 +610,18 @@ if ($ApprovedPlanFingerprint) {
     if ($typed -ne $fingerprint.Substring(0, 8)) {
         if ($afterLead) {
             # The foundation exists and is recorded; only this review's steps were declined.
-            Write-Host ''
-            Write-Host "Confirmation did not match, so the steps in this review were not applied. The gateway foundation is set up and recorded in $RecordPath; run .\Start-ClaudeGateway.ps1 -Action $Action again to review and apply the rest." -ForegroundColor Yellow
-            exit 1
+            throw [System.OperationCanceledException]::new("Confirmation did not match, so the steps in this review were not applied. The gateway foundation is set up and recorded in $RecordPath; run .\Start-ClaudeGateway.ps1 -Action $Action again to review and apply the rest.")
         }
-        throw 'Confirmation did not match; nothing was written.'
+        throw [System.OperationCanceledException]::new('Confirmation did not match; nothing was written.')
     }
 } else {
     throw 'Pass -ApprovedPlanFingerprint to apply this reviewed plan without a console.'
 }
 
 if ($PSCmdlet.ShouldProcess($RecordPath, "Apply guided flow action $Action")) {
+    Initialize-FlowSteps -Steps $steps -Plans @($plans) -Record $record
     $runId = Start-FlowRun -Record $record -Path $RecordPath -CurrentAction $Action -CurrentChange $Change -Fingerprint $fingerprint -Phase $(if ($afterLead) { 'after-lead' } else { '' }) -StepNames @($steps | ForEach-Object { $_.Info.Name })
-    try { Invoke-ApplySteps -Steps $steps -Plans @($plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $runId }
-    catch [System.OperationCanceledException] { Write-Host ''; Write-Host $_.Exception.Message -ForegroundColor Yellow; exit 1 }
+    Invoke-ApplySteps -Steps $steps -Plans @($plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $runId
     Invoke-VerifySteps -Steps $steps -Record $record
     Remove-FlowRecordProperty $record 'activeRun'
     Write-FlowDecisionRecord -Record $record -Path $RecordPath

@@ -79,18 +79,38 @@ function Get-ClaudeFlowTotalMonthlyUsd {
     [pscustomobject]@{ KnownMonthlyUsd = $known; Unknown = @($unknown) }
 }
 
+function ConvertTo-ClaudeFlowJsonString {
+    # A JSON string written the same way on every shell. ConvertTo-Json escapes ' < > & as \u0027 on
+    # Windows PowerShell 5.1 and not on PowerShell 7, which gave one plan two fingerprints (P72).
+    param([string]$Text)
+    $sb = New-Object System.Text.StringBuilder ($Text.Length + 2)
+    [void]$sb.Append('"')
+    foreach ($ch in $Text.ToCharArray()) {
+        $code = [int]$ch
+        if ($ch -eq '"') { [void]$sb.Append('\"') }
+        elseif ($ch -eq '\') { [void]$sb.Append('\\') }
+        elseif ($code -lt 0x20 -or $code -gt 0x7e) { [void]$sb.Append(('\u{0:x4}' -f $code)) }
+        else { [void]$sb.Append($ch) }
+    }
+    [void]$sb.Append('"')
+    return $sb.ToString()
+}
+
 function ConvertTo-ClaudeFlowCanonical {
     # Sorted keys and invariant number formatting, so a fingerprint does not depend on property
-    # order or culture. RetrievedUtc is left out: re-reading an unchanged price is not a new plan.
+    # order, culture or shell. RetrievedUtc is left out: re-reading an unchanged price is not a new plan.
     param($Value)
     if ($null -eq $Value) { return 'null' }
-    if ($Value -is [string]) { return ($Value | ConvertTo-Json -Compress) }
+    if ($Value -is [string]) { return (ConvertTo-ClaudeFlowJsonString $Value) }
     if ($Value -is [bool]) { return $(if ($Value) { 'true' } else { 'false' }) }
     if ($Value -is [decimal] -or $Value -is [double] -or $Value -is [int] -or $Value -is [long]) { return ([decimal]$Value).ToString('0.############', [Globalization.CultureInfo]::InvariantCulture) }
     if ($Value -is [System.Collections.IDictionary]) {
-        $pairs = foreach ($k in ($Value.Keys | ForEach-Object { [string]$_ } | Sort-Object)) {
+        # Ordinal: Sort-Object compares by culture, and .NET Framework and .NET sort punctuation differently.
+        [string[]]$keys = @($Value.Keys | ForEach-Object { [string]$_ })
+        [Array]::Sort($keys, [StringComparer]::Ordinal)
+        $pairs = foreach ($k in $keys) {
             if ($k -eq 'RetrievedUtc') { continue }
-            ($k | ConvertTo-Json -Compress) + ':' + (ConvertTo-ClaudeFlowCanonical $Value[$k])
+            (ConvertTo-ClaudeFlowJsonString $k) + ':' + (ConvertTo-ClaudeFlowCanonical $Value[$k])
         }
         return '{' + ($pairs -join ',') + '}'
     }
@@ -102,7 +122,7 @@ function ConvertTo-ClaudeFlowCanonical {
         foreach ($p in $Value.PSObject.Properties) { $table[$p.Name] = $p.Value }
         return ConvertTo-ClaudeFlowCanonical $table
     }
-    return ([string]$Value | ConvertTo-Json -Compress)
+    return (ConvertTo-ClaudeFlowJsonString ([string]$Value))
 }
 
 function Get-ClaudeFlowFingerprint {
@@ -124,9 +144,22 @@ function Read-ClaudeDecisionRecord {
 function Copy-ClaudeFlowValue {
     param($Value)
     if ($null -eq $Value) { return $null }
-    $json = $Value | ConvertTo-Json -Depth 100
-    $copy = $json | ConvertFrom-Json
-    return ,$copy
+    if ($Value -is [System.Collections.IDictionary]) {
+        $copy=[ordered]@{}
+        foreach($key in $Value.Keys){$copy[[string]$key]=Copy-ClaudeFlowValue $Value[$key]}
+        return [pscustomobject]$copy
+    }
+    if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) {
+        $items=New-Object 'Collections.Generic.List[object]'
+        foreach($item in $Value){$items.Add((Copy-ClaudeFlowValue $item))}
+        return ,$items.ToArray()
+    }
+    if ($Value -is [pscustomobject]) {
+        $copy=[ordered]@{}
+        foreach($p in $Value.PSObject.Properties){$copy[$p.Name]=Copy-ClaudeFlowValue $p.Value}
+        return [pscustomobject]$copy
+    }
+    return $Value
 }
 
 function Get-ClaudeDecisionRecordVersion {
@@ -207,9 +240,22 @@ function Write-ClaudeDecisionRecord {
 
 function Get-ClaudeFlowReleaseInfo {
     param([string]$Repo = (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent))
-    $commit = (git -C $Repo rev-parse HEAD 2>$null)
-    $version = (git -C $Repo describe --tags --always 2>$null)
-    [pscustomobject]@{ version = [string]$version; commit = [string]$commit }
+    # A copy without git, or not in a repository, records no commit instead of stopping the apply.
+    # Continue: on Windows PowerShell 5.1 git's stderr under Stop is a terminating NativeCommandError.
+    $commit = ''; $version = ''
+    if (Get-Command git -CommandType Application -ErrorAction SilentlyContinue) {
+        $saved = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $commit = [string](git -C $Repo rev-parse HEAD 2>$null)
+            if ($LASTEXITCODE -ne 0) { $commit = '' }
+            $version = [string](git -C $Repo describe --tags --always 2>$null)
+            if ($LASTEXITCODE -ne 0) { $version = '' }
+        }
+        catch { $commit = ''; $version = '' }
+        finally { $ErrorActionPreference = $saved }
+    }
+    [pscustomobject]@{ version = $version; commit = $commit }
 }
 
 function Get-ClaudeFlowRecordSubscription {

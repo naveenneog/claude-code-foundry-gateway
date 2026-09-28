@@ -39,8 +39,33 @@ fails the release stage while any remain. Detail for each one follows below.
 | U30 | CLOSED | Can the guided flow create the company address itself, on each v2 tier, and at what cost? Researched 2026-09-28: all three support a custom gateway hostname with an uploaded PFX or Key Vault certificate; none supports a free managed certificate. A public CNAME is required before binding; Basic v2 also rejects an undelegated `.test` domain with `CustomHostnameOwnershipCheckFailed`, measured live. Azure DNS public list prices are USD 0.50/zone/month and USD 0.40/million queries; Key Vault operations USD 0.03/10,000, issuer charges separate. Positive company TLS proof is blocked without a delegated domain ([detail](#u30--the-company-address--closed-2026-09-28)) | P69, [ADR-0033](adr/0033-company-address.md) |
 | U31 | CLOSED | Can the flow show the customer's own prices (an agreement's price sheet) instead of Azure retail list prices, and with what role? Researched 2026-09-27: the price sheet of an Enterprise Agreement, Microsoft Customer Agreement or Microsoft Partner Agreement is readable only with a billing role (for MCA: billing profile owner, contributor, reader or invoice manager; for EA: as the Enterprise Admin's policy allows), not with a subscription role, and the API downloads the whole sheet as a file. The flow shows Azure Retail Prices API list prices, named as list prices, and names the price sheet as the authority ([detail](#u31--customer-prices--closed-2026-09-27)) | P68, [ADR-0032](adr/0032-guided-flow-starts-at-once.md) |
 | U32 | OPEN | What stops the reference Turnstile database every evening? Measured 2026-09-27 from the activity log: `pg-tsclaude-zpk4sh4prbsls` (rg-turnstile-claudegw) was stopped at 19:05Z on 09-23, 09-24 and 09-25 by an application whose token was issued by a tenant other than the subscription's. While stopped, Turnstile's `auth/me` waits about 30 s and returns 500, which AUM reports as `Read failed (exit 7)` ([detail](#u32--the-turnstile-database-stops-every-evening--open)) | f10, f11 |
+| U36 | CLOSED | Can `Start-ClaudeGateway.ps1` tell a top-level run from a call by another script, on both shells? Measured 2026-09-28: `$MyInvocation.PSCommandPath` is empty at top level and names the calling script otherwise, on PowerShell 7 and 5.1 | P72 unblocked |
 
 ---
+
+## P70 research before implementation
+
+| ID | State | Question | Blocks |
+|---|---|---|---|
+| U34 | CLOSED | Which dated prices and model-name mappings can a model lifecycle change safely write, especially `claude-opus-5-5` and the dotted Haiku entry? Researched 2026-09-28: the published Opus 5.5 input/output rates are USD 4/20 per million, but its cache-read multiplier is 0.05x, not the accelerator's 0.1x. P70 leaves it explicitly unpriced in defaults. An unambiguous Haiku spelling can copy the existing dated USD 1/5 entry; no family-price inference. [ADR-0034](adr/0034-model-lifecycle.md), [Anthropic pricing](https://platform.claude.com/docs/en/about-claude/pricing) | P70 pricing decision resolved; broader cache-rate schema remains separate |
+| U35 | CLOSED | How soon does an API Management v2 gateway enforce a changed model named value, and is the entitlement cache involved? Measured on the isolated Basic v2 gateway on 2026-09-27: Haiku returned 403 before the Change and 200 on the first request after it, at 22:01:49Z, 1.6 s after apply returned. The apply included post-write management verification, so this is not a 1.6 s write-propagation bound. The policy reads model lists outside the entitlement cache; no immediate-propagation SLA is claimed. | P70 propagation statement resolved by measurement |
+
+These entries belong to P70; U33 is reserved for the parallel P69 packet.
+
+U35 research, 2026-09-28: the [named-value reference](https://learn.microsoft.com/en-us/azure/api-management/api-management-howto-properties)
+describes plain values in policies but promises no propagation interval. Its four-hour refresh
+applies to Key Vault secret rotation, not plain model lists. `infra/policy.xml` expands the
+model lists in the request's `modelAllowed` expression, outside the entitlement lookup cache.
+The isolated P70 request proof measured actual enforcement: `claude-haiku-4-5` returned
+`403 error.code=model_not_allowed` at 21:55:00Z and standard-tier 200 at 22:01:49Z after
+the reviewed Change. The named-value update took 21.3 s, readback 22.5 s, and the apply
+performed further management verification before returning. The first request then took
+1.539 s. This demonstrates propagation by that request, not instantaneous application or
+a published interval, and does not infer a delay from `entitlement-cache-seconds`.
+After the same account moved to the dedicated premium group, Sonnet returned premium-tier
+200 at 22:04:28Z and Haiku returned `403 error.code=model_not_allowed` at 22:04:29Z.
+The isolated resources, groups and exact shared-Foundry role assignment were deleted;
+independent absence checks passed at 22:13:51Z.
 
 ## Detail
 
@@ -777,6 +802,45 @@ events.
 is expected to stop again at about 19:05Z. The product side is queued as f10 and f11: a Turnstile
 readiness endpoint that answers 503 at once when the database is unavailable, and an AUM
 preflight that names the stopped database instead of `exit 7`.
+
+## U36 — A top-level run and an in-process call — CLOSED 2026-09-28
+
+**Question.** P72 prints a refusal of `Start-ClaudeGateway.ps1` as its reason, without
+PowerShell's code excerpt (`Line |` on PowerShell 7, `CategoryInfo` on Windows PowerShell 5.1).
+`tests/Test-GuidedFlow.ps1` calls the script in process and expects the refusal as an exception.
+Can the script tell a top-level run from a call by another script, on both shells?
+
+**Measured 2026-09-28** with a script that prints `$MyInvocation.PSCommandPath` and
+`$MyInvocation.CommandOrigin`, on PowerShell 7 (`pwsh`) and Windows PowerShell 5.1
+(`powershell.exe`):
+
+| Invocation | `PSCommandPath` | `CommandOrigin` |
+|---|---|---|
+| `-File script.ps1` | empty | `Runspace` |
+| `-Command "& script.ps1"` (as from a prompt) | empty | `Runspace` |
+| `& script.ps1` from another script | the calling script's path | `Internal` |
+
+Both shells gave the same results. The [about_Automatic_Variables][u36-auto] reference documents
+`$MyInvocation.PSCommandPath` as the path of the script that invoked the current command. A
+top-level run therefore prints the reason and exits 1; a call from another script still receives
+the exception. `tests/Test-FlowPermutations.ps1` checks both.
+
+**Measured again 2026-09-28, after council round 1 of P72**, on both shells:
+
+| Invocation or error | Observed |
+|---|---|
+| `. script.ps1` from another script | `InvocationName` is `.`; `PSCommandPath` is the calling script |
+| `. script.ps1` at a prompt (`-Command`) | `InvocationName` is `.`; `PSCommandPath` is empty |
+| `throw 'text'` | `RuntimeException`; `FullyQualifiedErrorId` equals the message |
+| `$null.Method()` | `RuntimeException`; `FullyQualifiedErrorId` is `InvokeMethodOnNull` |
+| a cmdlet error under `-ErrorAction Stop` | its own exception type, such as `DriveNotFoundException` |
+
+A dot-sourced run shares its caller's scope, and at a prompt that is the console's global scope,
+where `exit` closes the console. The flow therefore treats a dot-sourced run as a call and raises
+the exception. The flow refuses by throwing its reason, so an error whose id is its own message
+is a refusal, printed without the debugging hint; any other error prints the hint.
+
+[u36-auto]: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_automatic_variables#myinvocation
 
 ---
 

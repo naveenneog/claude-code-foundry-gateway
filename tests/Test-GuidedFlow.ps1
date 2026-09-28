@@ -91,7 +91,7 @@ function Invoke-ClaudeFlowStep {
     }
     $counts['Foundation'] = 1 + $(if ($counts.ContainsKey('Foundation')) { [int]$counts['Foundation'] } else { 0 })
     if ($env:GUIDED_FLOW_COUNTS) { $counts | ConvertTo-Json | Set-Content -LiteralPath $env:GUIDED_FLOW_COUNTS -Encoding UTF8 }
-    @{ gatewayUrl = 'https://apim-contoso.azure-api.net/claude'; resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; foundationApplied = $true }
+    @{ gatewayUrl = 'https://apim-contoso.azure-api.net/claude'; resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; foundationApplied = $true; foundation = $Record.decisions.foundation }
 }
 function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Foundation'; Passed = $true; Checks = @(@{ Name = 'record'; Passed = $true; Evidence = 'applied'; Fix = '' }) } }
 '@ | Set-Content -LiteralPath (Join-Path $modules 'Foundation.ps1') -Encoding UTF8
@@ -252,6 +252,8 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Tier'; 
     $realFpB = [regex]::Match([string]$realReviews[1], 'Fingerprint:\s+([a-f0-9]{64})').Groups[1].Value
     Assert 'the orchestrator plans the shipped modules and names the target' ([string]$realReviews[0] -match 'rg-p66-a/apim-p66a' -and $realFpA) ([string]$realReviews[0] | Select-String -Pattern 'THREW.*' | ForEach-Object { $_.Matches[0].Value })
     Assert 'the orchestrator fingerprint differs between two targets' ($realFpA -and $realFpB -and $realFpA -ne $realFpB)
+    # Guide needs a recorded gateway (P72): with none it refuses before planning.
+    [ordered]@{ schemaVersion = 2; mode = 'gateway'; gatewayUrl = 'https://apim-p66a.azure-api.net'; apimName = 'apim-p66a'; resourceGroup = 'rg-p66-a'; decisions = [ordered]@{}; history = @() } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $scratch 'real-record-guide.json') -Encoding UTF8
     $realGuide = & $start -Action Guide -PlanOnly -RecordPath (Join-Path $scratch 'real-record-guide.json') -AnswersPath (Join-Path $scratch 'real-answers-p66a.json') *>&1 | Out-String
     Assert 'a Change hint names only Change-only modules, not steps that Setup runs' ($realGuide -match 'Not part of Guide: Tier' -and $realGuide -notmatch 'Not part of Guide: Verify')
 
