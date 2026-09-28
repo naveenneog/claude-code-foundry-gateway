@@ -38,6 +38,13 @@ native CLI use. A supplied Azure DNS zone must be in the selected subscription a
 hostname below its apex. P69 adds a record to an existing zone; it does not buy a domain, create
 an unrequested zone or alter a registrar's delegation.
 
+An existing installer record is resolved and checked against the selected gateway before
+approval or resource creation. A different gateway, resource group or recorded subscription is
+a conflict, not an absent default. The installer refuses it, names both targets and the record
+path, and describes using the selected gateway's checkout/record or preserving the old record
+elsewhere before rerunning. It does not deploy first and then discover that address publication
+cannot use the old record.
+
 **Certificates.** The two choices are `KeyVault` and `Pfx`, on all three tiers. A Key Vault
 certificate or secret URL is normalized to the certificate's backing secret reference after
 reading certificate metadata. The certificate must be enabled, current, exportable as a PFX and

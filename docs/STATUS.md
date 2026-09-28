@@ -450,6 +450,33 @@ without a delegated domain; none is bought or borrowed. The lead accepted this s
 2026-09-28; the positive proof moves to P74 and is not complete. U30 covers the research;
 P69 did not need the reserved U33 identifier.
 
+### Council round 3 corrections
+
+The lead's read-only review of `1345956..cabc4c4` returned the following verdicts on 2026-09-28.
+The round-2 A2, C2, C1 and UX findings are closed. The P72 merge semantics, ADR-0025 lane
+changes and main's ledger were confirmed intact. The remaining Coder finding is handled test-first.
+
+| Seat | Verdict | Finding | Fix / evidence |
+|---|---|---|---|
+| Architect | PASS | Round-2 state and integration contract accepted | No further change requested |
+| Coder | BLOCK | A saved record for gateway A is ignored for inheritance but passed to address apply for gateway B, which fails after deployment | Resolve and check the record target before approval; refuse a conflict with both gateway names and a corrective action |
+| QA | PASS | Round-2 regressions accepted | Add an executable installer conflict case and a full-count mutation |
+| UX | PASS | Applied-only read consumers and P72 refusals retained | New conflict refusal names the selected and recorded gateways |
+| Security | PASS | Existing PFX, scope and deadline boundaries retained | No boundary relaxation |
+
+The requested gate at unchanged `cabc4c4` finished before this correction. It acquired the lock
+after 120.1 s, reached Test-All's unchanged 1,800-second limit, and exited 1 after 1,808.7 s.
+The late timing file contained 87 PASS, zero FAIL and two existing AUM-environment SKIPs.
+Across 31 total-machine samples (including the gate), CPU averaged 61.7%, peaked at 100%, the
+processor queue peaked at 29 on 16 logical processors, and available memory stayed above
+13,463 MB. The slowest check was business-unit mutations 0/4 at 502.0 s; P69's 94 mutations
+took 288.2 s. That run is not a passing gate; its lock was released in `finally`.
+
+- [ ] An existing installer record for another gateway is refused before summary approval and
+      resource creation, without overwriting it; the refusal names both gateways and the record path
+- [ ] The executable installer regression and mutation pass on both PowerShell hosts
+- [ ] The corrected tree runs the packet gate under the shared lock with the unchanged budget
+
 ### Council round 2 corrections
 
 The lead's five-seat review of `c82f951..1345956` (read-only, 2026-09-28) returned BLOCK.
@@ -462,7 +489,7 @@ council re-review follow. The review verdicts below are the supplied verdicts, n
 | Architect | BLOCK (A2 partial) | Only the owning decision advances; DesktopSignIn loses `deviceProfiles.regenerate` | `f3f6672`, `51ca117`: explicit cross-decision results; real DesktopSignIn and Models success/failure regressions |
 | Coder | BLOCK (C2 partial) | Foundation's Azure-transition result merges deletions back into old metadata | `f3f6672`: returned snapshots replace applied decisions; explicit property removals clear both address copies |
 | Coder | BLOCK (C1 partial) | Installer omits the receipt path; legacy Foundation-only subscription fails recovery | `6a2eee2`: real installer 503 after replacement leaves an unverified receipt; shared subscription resolver |
-| QA | BLOCK | Single-decision fixture missed cross-decision writes and removal propagation | `4d7c4d0`: 94 full-selector-count mutations on both hosts, including every new boundary |
+| QA | PASS, coverage gaps noted | Single-decision fixture missed cross-decision writes and removal propagation | `4d7c4d0`: 94 full-selector-count mutations on both hosts, including every new boundary |
 | UX | BLOCK | Status, Guide and discovery read proposed answers | `f3f6672`: applied-only read consumers; only selected planning/apply decisions receive proposals |
 | Security | PASS for prior S1 | Validated PFX buffer and deadline cleanup retained | Preserve the passing round-1 detectors |
 
