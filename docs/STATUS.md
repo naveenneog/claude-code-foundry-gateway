@@ -26,16 +26,23 @@ defects, each with a screenshot. Work is on `p79-owner-test-fixes`, based on `03
    asked "Continue anyway", saying the store that removes the limit "is not built yet". P61 built
    the Cosmos entitlement store on every v2 tier; the tier and the store are chosen after this.
 
-- [ ] Each FinOps choice applies its commands with the parameters it plans, on both shells, and the
+- [x] Each FinOps choice applies its commands with the parameters it plans, on both shells, and the
       step returns only its change set: tested with stubs that carry the real scripts' parameter
-      blocks (`tests/Test-FlowFinOpsApply.ps1`)
-- [ ] A record path given relative to PowerShell's current folder is read and written there,
+      blocks (`tests/Test-FlowFinOpsApply.ps1`, 11 checks; against the previous `FinOps.ps1` 8 fail
+      with the owner's error; `872b88b`)
+- [x] A record path given relative to PowerShell's current folder is read and written there,
       whatever the process's start directory; the root Update shim reads the repository's record
-- [ ] The installer compares a saved record with the chosen gateway as soon as the gateway is
+      (`tests/Test-RelativeRecordPath.ps1`, 8 checks, each child started in one folder and moved to
+      another; all 8 fail before the fix with the owner's error; `cd1005b`)
+- [x] The installer compares a saved record with the chosen gateway as soon as the gateway is
       chosen; attended, it offers to archive the saved record under its gateway's name and go on;
-      unattended, it refuses unless `-ArchiveSavedRecord`
-- [ ] The developer count asks nothing about the entitlement store; after the store is chosen,
+      unattended, it refuses unless `-ArchiveSavedRecord` (`tests/Test-CompanyInstaller.ps1`, 4 new
+      checks, 21 on both shells; the 4 fail against the previous installer; `5885d4e`)
+- [x] The developer count asks nothing about the entitlement store; after the store is chosen,
       named values for more developers than they hold is stated with the Cosmos store as the remedy
+      (`tests/Test-AdminSurface.ps1`, 682 checks; 4 fail against the previous installer; `f14f92f`)
+- [x] SETUP.md, GUIDED-FLOW.md and CHANGELOG. Architecture: no component, data flow, identity,
+      schedule or network path changes; the manifest's source hashes are refreshed, no image changes
 - [ ] Council, five seats; the packet gate exits 0
 
 ## P77 a 60-minute gate budget while the exclusive checks are sharded, 2026-09-28

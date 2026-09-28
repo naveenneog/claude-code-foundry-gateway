@@ -857,6 +857,28 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **The guided flow's FinOps step failed for every tool but None (P79).** It stopped at "Applying
+  FinOps..." with "Cannot convert value to type System.String.": `& $path @($Command.arguments)`
+  passed the argument list as one array, which the advanced scripts it runs refuse for a `[string]`
+  parameter, and a string such as `-Accept` in a splatted array is a positional value to a script.
+  A PowerShell script's command now carries named parameters, splatted as a hashtable; `aum`
+  keeps its string arguments; a command's output is shown, not returned into the step's change
+  set. `tests/Test-FlowFinOpsApply.ps1` applies every choice on both shells against stubs that
+  carry the real scripts' parameter blocks.
+- **A relative record path meant the process's start directory (P79).** From the repository root,
+  `.\Update-ClaudeGateway.ps1` read `C:\Users\<name>\onboarding\claude-gateway.json`:
+  `[IO.File]` resolves a relative path against the directory PowerShell started in, which `cd`
+  does not change. `Read-` and `Write-ClaudeDecisionRecord` resolve it against PowerShell's current
+  folder, and the root Update shim resolves a relative `-RecordPath` against the repository, as
+  `Start-ClaudeGateway.ps1` does (`tests/Test-RelativeRecordPath.ps1`).
+- **The installer refused a record for another gateway only after every question (P79).** The
+  comparison now runs when the gateway is chosen; in a console the installer offers to keep that
+  record as `onboarding\claude-gateway.<resource group>-<instance>.json` and start a new one, and
+  `-ArchiveSavedRecord` does the same unattended.
+- **The developer count asked about a store that exists (P79).** Above about 93 developers the
+  installer asked "Continue anyway" before the tier and the entitlement store were chosen, saying
+  the Cosmos store "is not built yet"; P61 built it on every v2 tier. The count now prints a note,
+  and the confirmation follows the store question, only for named values.
 - **The macOS/Linux installer approved every choice against a fixed price (P75).**
   `install-claude-gateway.sh` printed "BasicV2 is about $150/month at list price" and "Provisioning
   takes 30-45 minutes" whatever tier and region were chosen; `Install-ClaudeGateway.ps1` stopped
