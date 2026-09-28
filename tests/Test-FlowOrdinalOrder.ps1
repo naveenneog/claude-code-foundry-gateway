@@ -37,10 +37,14 @@ Assert 'the scan covers the scripts that load FlowContract.ps1: the orchestrator
 Assert 'the flow''s scripts hold no Sort-Object: every sort uses Sort-ClaudeFlowOrdinal' (@($hits).Count -eq 0) (@($hits) -join ', ')
 
 # ------------------------------------------------------------------ every sort the plans can reach
-# The scripts that the fingerprinted plans run: Start-ClaudeGateway.ps1 and every step module, the
+# The scripts that the fingerprinted plans load: Start-ClaudeGateway.ps1 and every step module, the
 # Update migrations, the model sync and the installer, and every script they dot-source, followed
-# through the syntax tree. A Sort-Object in them either became Sort-ClaudeFlowOrdinal or is listed
-# here with the reason its order is the same on both shells or reaches no plan and no Azure write.
+# through the syntax tree. A script a step runs as its own command (Monitoring runs
+# Publish-ClaudeWorkbook.ps1 with &) is not followed: its output is its own, and the one such script
+# with its own fingerprint, the network edge review, hashes the stored text of its review file on
+# apply (ClaudeNetworkReview.ps1). A Sort-Object in the scripts followed either became
+# Sort-ClaudeFlowOrdinal or is listed here with the reason its order is the same on both shells or
+# reaches no plan and no Azure write.
 # A listed sort that is gone or changed fails too, so the list is read again when its code changes.
 $valueKey = 'value key: numbers, times and versions compare by value on both shells'
 $allowed = @(

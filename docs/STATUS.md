@@ -89,15 +89,15 @@ All 14 of those sorts use `Sort-ClaudeFlowOrdinal`, which now takes keys as `Sor
 `-Property` does (script blocks, property names, hashtables with `Expression` and `Descending`),
 compares numbers, times and versions by value, and has `-Descending`. The three libraries load
 `FlowContract.ps1` only when the helper is not already defined, and the installer loads it.
-`tests/Test-FlowOrdinalOrder.ps1` follows every script the fingerprinted plans run (the orchestrator
-and every step module, the Update, the model sync and the installer, and what they dot-source, 43
-scripts, read from the syntax tree) and lists the 17 `Sort-Object` calls left in them, each with
-its reason: a value key (prices, integers, versions), an order that reaches only the console (menus,
-an error), or an order used inside one process (a cache key, set comparisons). A listed call that
-is gone or changed fails the check. `scripts/ClaudeClientSupport.ps1` keeps its three: the
-workstation bundle fetches only the files `Setup-ClaudeWorkstation.ps1` names, so it loads nothing
-more. Against `00b8376`, 22 of the 35 checks fail, on 5.1 each of the four cases above; after the
-fix all 35 pass (`d723f90`).
+`tests/Test-FlowOrdinalOrder.ps1` follows every script the fingerprinted plans load (the
+orchestrator and every step module, the Update, the model sync and the installer, and what they
+dot-source, 43 scripts, read from the syntax tree) and lists the 17 `Sort-Object` calls left in them,
+each with its reason: a value key (prices, integers, versions), an order that reaches only the
+console (menus, an error), or an order used inside one process (a cache key, set comparisons). A
+listed call that is gone or changed fails the check. `scripts/ClaudeClientSupport.ps1` keeps its
+three: the workstation bundle fetches only the files `Setup-ClaudeWorkstation.ps1` names, so it
+loads nothing more. Against `00b8376`, 22 of the 35 checks fail, on 5.1 each of the four cases above;
+after the fix all 35 pass (`d723f90`).
 
 Mutations after that, the same rule, at 35, 33 and 33 checks: 25 of 25 caught. The ten helper
 mutations above rewritten for the new comparer, the three outside `scripts/flow`, and twelve new:
@@ -110,6 +110,18 @@ the seven checks that read it were skipped, so the suite made 34 checks. Those c
 whether or not the probe ran, and the mutation is caught at 35. The 15 suites that load the changed
 scripts pass, among them P70's lifecycle mutations (62 of 62 caught at 138 checks), the installer
 permutations and the guided flow.
+
+Council round 2 (gpt-6-astra, five seats, read-only, over `893c354..48dd68a`): all five seats PASS;
+the round-1 Architect BLOCK and the U+0000 should-fix are closed. Should-fix (Architect): the check
+follows dot-sources only, so a script a step runs as a separate command is not read;
+`scripts/flow/Monitoring.ps1:76-80` runs `Publish-ClaudeWorkbook.ps1` with `&`, and its `Sort-Object`
+at line 207 is not listed. Read after the review: that sort orders the names in an error message
+only. Following every `.ps1` name written in the flow's scripts reaches 123 scripts, most of them
+named in the Guide's text or run as their own tools. The one among them with its own fingerprint,
+the network edge review, hashes the stored text of its review file on apply
+(`scripts/ClaudeNetworkReview.ps1:39`), so the shell that applies it does not change what was
+approved. The check's comment and this section state the boundary: the scripts the plans load, not
+the scripts their steps run.
 
 - [ ] Council, five seats; the packet gate exits 0
 

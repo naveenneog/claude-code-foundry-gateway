@@ -843,7 +843,7 @@ exact streaming cache-creation detail remains **U13**.
   models and the installer's default tier lists had the same fault. All of them order by code point
   through `Sort-ClaudeFlowOrdinal`, which now takes several keys, compares numbers, times and versions
   by value, and has `-Descending`. `tests/Test-FlowOrdinalOrder.ps1` compares every shipped Setup step
-  and a model change on both shells, follows every script the plans run and lists each `Sort-Object`
+  and a model change on both shells, follows every script the plans load and lists each `Sort-Object`
   left in them with its reason. For the shipped lists, PowerShell 7's culture order was already
   code-point order (measured), so its plans keep their fingerprints; on Windows PowerShell 5.1 the
   Monitoring and Update plans have new ones.
