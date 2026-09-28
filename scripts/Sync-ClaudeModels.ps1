@@ -76,6 +76,9 @@ if (-not $ApprovedPlanFingerprint -or $ApprovedPlanFingerprint.Length -lt 8 -or 
 }
 if (-not $PSCmdlet.ShouldProcess($target.ApimName, 'Apply the reviewed model lifecycle plan')) { return }
 $principal = Invoke-ClaudeModelAz -Arguments @('account','show') -SubscriptionId $target.SubscriptionId -What 'Reading the model change principal'
+if ($principal.user.name -isnot [string] -or [string]::IsNullOrWhiteSpace($principal.user.name)) {
+    throw 'The signed-in principal could not be read. No model change or snapshot was written.'
+}
 Initialize-ClaudeModelChange -Record $record -Plan $plan
 $changes = Invoke-ClaudeModelChange -Record $record -Plan $plan
 Set-ClaudeDecision -Record $record -Key models -Value $changes.models

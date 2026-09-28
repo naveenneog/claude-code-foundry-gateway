@@ -71,6 +71,7 @@ function global:az {
     if ($joined -like 'account show*') {
         if ((Arg $words '--query') -eq 'user.name') { return 'operator@contoso.com' }
         if ((Arg $words '--query') -eq 'id') { return $global:P70sub }
+        if ($global:P70missingPrincipal) { return (@{ id = $global:P70sub; user = @{} } | ConvertTo-Json -Compress) }
         return (@{ id = $global:P70sub; tenantId = '00000000-0000-0000-0000-000000000001'; user = @{ name = 'operator@contoso.com' } } | ConvertTo-Json -Compress)
     }
     if ($joined -like 'apim api show*') { return (@{ serviceUrl = $global:P70backend } | ConvertTo-Json -Compress) }
@@ -132,6 +133,7 @@ function Reset-State {
     $global:P70azFailure = ''; $global:P70failureJson = ''; $global:P70badDeployments = ''; $global:P70failWrite = ''
     $global:P70backupFails = $false; $global:P70backupRead = $false; $global:P70dropWrite = $false
     $global:P70allowRestWrite = $false; $global:P70restWrite = $null
+    $global:P70missingPrincipal = $false
     $global:P70backend = 'https://ai-models.services.ai.azure.com/anthropic'
     $global:P70writes.Clear(); $global:P70calls.Clear()
     Save $global:P70bookPath ([ordered]@{ date = '2026-09-15'; source = 'approved test tariff'; privateNote = 'keep'; models = [ordered]@{
@@ -578,6 +580,10 @@ try {
         Reset-State; $global:P70badDeployments = 'not json'
         Reject { Installer-Models @('sonnet') @('sonnet') } 'JSON|array'
     }
+    Check 'S1 a valid deployment object is not accepted in place of an inventory array' {
+        Reset-State; $global:P70badDeployments = $global:P70rawDeployments[0] | ConvertTo-Json -Depth 8 -Compress
+        Reject { Installer-Models @('sonnet') @('sonnet') } 'JSON array'
+    }
     Check 'S1 malformed mixed installer rows are not silently dropped' {
         Reset-State; $global:P70rawDeployments[0].properties.model = $null
         Reject { Installer-Models @('opus') @('opus') } 'deployment identity'
@@ -618,6 +624,14 @@ try {
         $tokens.Count -eq 1 -and (Arg $tokens[0] '--subscription') -eq $global:P70sub -and
             $global:P70restWrite.Uri -like "*/subscriptions/$global:P70sub/resourceGroups/*" -and
             $global:P70restWrite.Body.properties.value -eq 'urn:disabled:claude-extra-audience'
+    }
+    Check 'A2 an unreadable principal cannot leave an unattributed successful change' {
+        Reset-State
+        $preview = & $standalone -RecordPath $global:P70recordPath -AnswersPath $answers -PlanOnly *>&1 | Out-String
+        $fp = [regex]::Match($preview, 'Fingerprint:\s+([a-f0-9]{64})').Groups[1].Value
+        $global:P70missingPrincipal = $true
+        (Reject { & $standalone -RecordPath $global:P70recordPath -AnswersPath $answers -ApprovedPlanFingerprint $fp } 'principal') -and
+            -not $global:P70backupRead -and $global:P70writes.Count -eq 0
     }
     foreach ($path in @(
         'onboarding\reference\claude-gateway.json',

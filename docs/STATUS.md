@@ -42,6 +42,9 @@ separately), then all 133 passed on each host. The fast workstation suite reprod
 three alias-retention failures and now passes all 13 assertions on each host. It executes
 the setup's own jq writer against temporary files and compares its full model environment
 with the Windows helper, without installing clients or making Azure calls.
+Final lifecycle assertions: 135 on each host, all passing. A valid single-deployment
+object cannot substitute for an inventory array. A missing principal now stops before
+the snapshot or any model write; its regression failed on both hosts before the guard.
 
 Acceptance criteria:
 
