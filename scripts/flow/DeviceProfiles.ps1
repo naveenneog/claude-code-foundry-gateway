@@ -37,6 +37,11 @@ function Invoke-ClaudeFlowStep {
     $policy = Join-Path $root 'scripts\New-ClaudeCodePolicy.ps1'
     if (-not (Test-Path -LiteralPath $policy)) { throw "Policy generator not found: $policy" }
     $recordPath = if ($Record.__recordPath) { $Record.__recordPath } else { Join-Path $root 'onboarding\claude-gateway.json' }
+    if ($Record.tiers -and $Record.tiers.standard -and $Record.tiers.standard.PSObject.Properties.Name -contains 'models') {
+        . (Join-Path $root 'scripts\ClaudeModelProfiles.ps1')
+        $profiles = Write-ClaudeModelProfiles -Record $Record -RecordPath $recordPath
+        return @{ deviceProfiles = $profiles }
+    }
     $profileRoot = Join-Path (Split-Path $recordPath -Parent) 'profiles'
     New-Item -ItemType Directory -Path $profileRoot -Force | Out-Null
     $written = @()

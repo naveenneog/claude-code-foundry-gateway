@@ -60,6 +60,8 @@ param(
 
     [string]$StandardGroup = 'claude-code-standard',
     [string]$PremiumGroup = 'claude-code-premium',
+    [ValidateNotNullOrEmpty()][string[]]$StandardModels,
+    [ValidateNotNullOrEmpty()][string[]]$PremiumModels,
 
     # How developers sign in. Written into claude-gateway.json and honoured by
     # Onboard-ClaudeDeveloper.ps1; it configures nothing on this machine.
@@ -502,18 +504,27 @@ if ($deployed.Count) {
     # Premium gets everything. Standard gets everything except Opus, which is
     # five times the price of Sonnet per output token - that is the distinction
     # the two tiers exist to make. Both are editable afterwards with
-    # Set-ClaudeCapability.ps1, so this only has to be a sensible start.
+    # Sync-ClaudeModels.ps1, so this only has to be a sensible start.
     $all = @($deployed.name | Sort-Object -Unique)
     $nonOpus = @($deployed | Where-Object { $_.model -notlike '*opus*' } | ForEach-Object { $_.name } | Sort-Object -Unique)
     if (-not $nonOpus.Count) { $nonOpus = $all }
 
-    $stdPick = Read-Default -Prompt 'Models for the standard tier' -Default ($nonOpus -join ',') `
-        -Help 'Comma-separated deployment names. Opus is left out by default because it costs five times Sonnet per output token.'
-    $prmPick = Read-Default -Prompt 'Models for the premium tier' -Default ($all -join ',') `
-        -Help 'Comma-separated deployment names.'
+    $stdPick = if ($PSBoundParameters.ContainsKey('StandardModels')) { $StandardModels -join ',' } else {
+        Read-Default -Prompt 'Models for the standard tier' -Default ($nonOpus -join ',') `
+            -Help 'Comma-separated deployment names. The default excludes Opus.'
+    }
+    $prmPick = if ($PSBoundParameters.ContainsKey('PremiumModels')) { $PremiumModels -join ',' } else {
+        Read-Default -Prompt 'Models for the premium tier' -Default ($all -join ',') -Help 'Comma-separated deployment names.'
+    }
+    $standardModelNames = @($stdPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
+    $premiumModelNames = @($prmPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
+    if (-not $standardModelNames.Count -or -not $premiumModelNames.Count) { throw 'Each tier needs at least one deployment. An empty model list means allow all and is not an explicit restriction.' }
+    foreach ($selected in @($standardModelNames + $premiumModelNames)) {
+        if ($selected -notin $all) { throw "Model '$selected' is not deployed on the selected Foundry account." }
+    }
 
-    $modelsStd = ',' + (($stdPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ',') + ','
-    $modelsPrm = ',' + (($prmPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ',') + ','
+    $modelsStd = ',' + ($standardModelNames -join ',') + ','
+    $modelsPrm = ',' + ($premiumModelNames -join ',') + ','
     Write-Ok "standard $modelsStd  premium $modelsPrm"
     # Recorded with the model behind each name, because a deployment may be named anything and the
     # clients configure capabilities by model (ADR-0031).
@@ -523,7 +534,7 @@ if ($deployed.Count) {
     })
 }
 else {
-    Write-Note "no Claude deployment visible on $FoundryAccount - leaving both tier model lists empty"
+    throw "No Claude deployment is available on '$FoundryAccount'. No tier restrictions were discarded; no gateway will be provisioned."
 }
 
 # ------------------------------------------------------------- 2. placement
@@ -1577,8 +1588,8 @@ $config = [ordered]@{
     deployments = @($recordedDeployments | ForEach-Object { $_ })
     models = @($recordedDeployments | ForEach-Object { $_.name })
     tiers = @{
-        standard = @{ tokensPerMinute = $TpmStandard; tokensPerDay = $QuotaStandard }
-        premium  = @{ tokensPerMinute = $TpmPremium;  tokensPerDay = $QuotaPremium }
+        standard = @{ tokensPerMinute = $TpmStandard; tokensPerDay = $QuotaStandard; models = @($standardModelNames); modelAllowList = $modelsStd }
+        premium  = @{ tokensPerMinute = $TpmPremium;  tokensPerDay = $QuotaPremium; models = @($premiumModelNames); modelAllowList = $modelsPrm }
     }
     organisation = @{ tokensPerMonth = $QuotaOrg; shared = $true; softCap = $true }
     # The request ceiling, so an unattended Change of the foundation gives it back (P72).

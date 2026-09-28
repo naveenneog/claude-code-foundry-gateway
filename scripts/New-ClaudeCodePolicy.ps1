@@ -205,13 +205,22 @@ if (-not $ConfigPath -and -not $GatewayUrl) {
         Write-Host "  Gateway configuration: recorded by the installer in $ConfigPath" -ForegroundColor DarkGray
     }
 }
+$scopedModels = $false
 if ($ConfigPath) {
     if (-not (Test-Path $ConfigPath)) { throw "Config not found: $ConfigPath" }
     $cfg = Get-Content $ConfigPath -Raw | ConvertFrom-Json
     if (-not $GatewayUrl -and $cfg.gatewayUrl) { $GatewayUrl = $cfg.gatewayUrl }
+    if ($cfg.tiers -and $cfg.tiers.$Tier -and $cfg.tiers.$Tier.PSObject.Properties.Name -contains 'models') {
+        $scopedModels = $true
+        $permittedNames = @($cfg.tiers.$Tier.models)
+        if (-not $permittedNames.Count) { throw "The recorded $Tier tier has no available models." }
+        if (-not $PSBoundParameters.ContainsKey('AvailableModels')) { $AvailableModels = $permittedNames }
+        if (@($AvailableModels | Where-Object { $_ -notin $permittedNames }).Count) { throw "AvailableModels includes a deployment outside the recorded $Tier tier." }
+    }
     # @(...) around the whole if: assigning an if statement unrolls a one-element array, and on
     # Windows PowerShell 5.1 a single PSCustomObject has no Count, so one deployment was ignored.
     $recordedDeployments = @(if (Get-Command Get-ClaudeRecordedDeployment -ErrorAction SilentlyContinue) { Get-ClaudeRecordedDeployment -Config $cfg })
+    if ($scopedModels) { $recordedDeployments = @($recordedDeployments | Where-Object { $_.name -in $AvailableModels }) }
     if ($recordedDeployments.Count -and (Get-Command Get-ClaudeCodePinnedModel -ErrorAction SilentlyContinue)) {
         # By model, not by deployment name: a deployment may be named anything.
         $pinnedByModel = Get-ClaudeCodePinnedModel -Deployments $recordedDeployments
@@ -230,6 +239,17 @@ if ($ConfigPath) {
     }
 }
 else { $cfg = [pscustomobject]@{}; $recordedDeployments = @() }
+
+if ($scopedModels) {
+    $fallback = if ($SonnetModel -in $AvailableModels) { $SonnetModel } else { $AvailableModels[0] }
+    foreach ($alias in 'OpusModel','SonnetModel','HaikuModel') {
+        $value = Get-Variable -Name $alias -ValueOnly
+        if ($value -notin $AvailableModels) {
+            if ($PSBoundParameters.ContainsKey($alias)) { throw "$alias is outside the recorded $Tier tier." }
+            Set-Variable -Name $alias -Value $fallback
+        }
+    }
+}
 
 if (-not $GatewayUrl) {
     throw ("Pass -GatewayUrl, or -ConfigPath pointing at onboarding/claude-gateway.json. Where to find it: " +

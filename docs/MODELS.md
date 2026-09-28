@@ -1,256 +1,309 @@
 # Adding a model
 
-A new Claude model appearing in Foundry is routine. Making it usable takes one
-command.
+`Start-ClaudeGateway.ps1 -Action Change -Change models` reconciles existing
+Foundry Claude deployments with gateway model lists, the deployment record,
+the local price book and both tiers' client profiles. The same operation is
+available as `scripts/Sync-ClaudeModels.ps1`.
+
+The operation does not deploy or delete a Foundry model, change Entra
+membership, assign MDM policy or run software on another workstation.
+[ADR-0034](adr/0034-model-lifecycle.md) defines these boundaries.
 
 ## Prerequisites
 
-- Select the gateway and Foundry resources with
-  [Operations](OPERATIONS.md#1-select-the-gateway-and-workspace).
-- Read access for discovery; Foundry deployment write access if using `-Deploy`;
-  API Management Service Contributor for tier allowlists.
-- An approved USD price/source date and the actual deployment name.
-  Examples below match this repository's example price book, not a current quote.
-- A change window, a configuration backup, and the owner of any managed client
-  policy. Run from the repository root in PowerShell with Azure CLI signed in.
-- If Turnstile owns tiers, coordinate its next apply rather than leaving a
-  gateway-only model edit that will be overwritten.
+Discovery needs read access to the selected Foundry account and API Management
+instance. Apply needs API Management Service Contributor, writable local
+record/profile paths and permission to read a non-secret gateway backup.
+The gateway must own tier governance. When Turnstile owns it, the plan is
+available but apply refuses; its next governance publication would otherwise
+overwrite the model lists.
+
+The default record is `onboarding\claude-gateway.json`, written by the
+installer. `-RecordPath` selects another record. Separate `-FoundryResourceGroup`
+and `-ResourceGroup` arguments on the standalone command support a gateway
+and model account in different groups.
 
 ### Find the target and model values
 
-| Input | Where to find it in the portal | CLI equivalent |
+| Input | Source | Read-only command |
 |---|---|---|
-| Gateway name and resource group | API Management services > selected gateway > Overview > Essentials | `az apim list --query "[].{name:name,rg:resourceGroup}" -o table` |
-| Foundry account and its group | The account used by that gateway's API backend; account > Overview | `az apim api show -g <gateway-rg> --service-name <apim> --api-id claude-foundry --query serviceUrl -o tsv`, then match the account using `az cognitiveservices account list -o table` |
-| Deployment name | Foundry account > Models + endpoints > selected deployment | `az cognitiveservices account deployment list -g <foundry-rg> -n <account> --query "[].{deployment:name,model:properties.model.name,state:properties.provisioningState}" -o table` |
-| Available model/version/SKU | Foundry model catalogue for that account and region; check the actual offered deployment options | `az cognitiveservices account list-models -g <foundry-rg> -n <account> -o json` |
-| Input/output rates | Your approved dated price book and provider agreement; not a numeric field inferred from the model name | Read the approved `config/price-book.json` or the documented example; the script does not discover negotiated prices from Azure |
-| Tier | The platform owner's intended `standard` or `premium` group/profile | `scripts/Set-ClaudeTier.ps1 -List` with the explicit gateway target |
+| Gateway name and group | API Management Overview; deployment record | `az apim list -o table` |
+| Foundry account | The gateway API backend | `az apim api show -g <gateway-rg> --service-name <apim> --api-id claude-foundry --query serviceUrl -o tsv` |
+| Deployment name, model, version, SKU and capacity | Foundry > Build > Models, or Models + endpoints in the classic portal | `az cognitiveservices account deployment list -g <foundry-rg> -n <account> -o json` |
+| Permitted models | API Management > Named values | `az apim nv list -g <gateway-rg> --service-name <apim> -o json` |
+| Approved rates | The dated private price book and provider agreement | `Get-Content .\config\price-book.json` |
 
-The model catalogue name and a deployment's chosen name can differ. Use the
-deployed name in calls and allowlists, and confirm the price mapping; do not
-paste a model catalogue into a client allowlist. Regions and quota eligibility
-are discovered per account, not supplied as a hard-coded default.
+The deployment name is the value in requests and allowlists; it can differ
+from the catalogue model name. The sync checks that the selected account is
+the gateway's backend. Failed discovery is an error, not an empty account.
+Every raw deployment identity is validated before Claude filtering, including
+rows from other publishers. A malformed row cannot appear as a retired model.
 
-**Current script boundary:** `Add-ClaudeModel.ps1` uses one `-ResourceGroup`
-for both its gateway writes and Foundry deployment discovery. `-FoundryAccount`
-selects a name, not a different resource group. When those resources are in
-different groups, use the manual procedure below with each resource's own
-scope; do not change `-ResourceGroup` until one half happens to work and assume
-the other half still targets the right resource.
-
-**Live verification, 2026-09-24 UTC:** account discovery, deployment listing and
-the account-specific model-catalogue command above completed against a discovered
-account, and returned the selected account plus deployment/model records. This
-was read-only: no model was deployed or retired, no rate changed, and no claim
-of completed portal model-creation acceptance is made.
+The Azure portal account view links to the Foundry portal for deployments.
+The model view exposes the actual deployment name, model, version, SKU/capacity
+and provisioning state
+([Microsoft Learn](https://learn.microsoft.com/azure/foundry/foundry-models/how-to/deploy-foundry-models)).
 
 ## 1. Inspect, deploy and allow
 
-```powershell
-./scripts/Add-ClaudeModel.ps1 -Model claude-opus-5 -Tier premium `
-    -InputPerMillion 5 -OutputPerMillion 25 `
-    -ResourceGroup <rg> -ApimName <apim>
-```
-
-That checks the model is deployed, adds it to the tier's allow list, writes its
-price so usage is charged, and prints what developers have to change.
-
-To see where things stand first:
+An administrator deploys the model through Foundry's approved deployment
+process. The model change then discovers it:
 
 ```powershell
-./scripts/Add-ClaudeModel.ps1 -List -ResourceGroup <rg> -ApimName <apim>
+.\Start-ClaudeGateway.ps1 -Action Change -Change models
 ```
 
-```text
-  Model                      Deployed   Priced             In/M        Out/M
-  claude-haiku-4.5           no         yes                  $1           $5
-  claude-opus-5              yes        yes                  $5          $25
-                             tiers: premium
-  claude-sonnet-5            yes        yes                  $2          $10
-                             tiers: standard, premium
-```
+Each deployment shows its model, version, SKU/capacity, state and price status
+before the tier question. A new one offers `standard`, `premium`, `both` or
+`none`; an existing one also offers `keep`. Only a `Succeeded` deployment can
+be newly allowed. Missing deployments offer `keep` or `drop`.
 
-Only Claude deployments are listed. The reference account also carries GPT,
-Sora and embedding deployments; this gateway does not front them, so showing
-them as unpriced would be true and useless.
-
-**Portal/manual:**
-
-1. Foundry > Models + endpoints > select/deploy the approved Claude model.
-   Confirm hosting/version, quota and `Succeeded`; provide the organisation
-   details in [Setup](SETUP.md#azure-resources-you-must-already-have).
-2. APIM > APIs > Named values > `models-standard` / `models-premium` > Edit.
-   Write the approved deployment names with sentinel commas.
-3. Edit the private price book locally and republish `ClaudeCost`; there is no
-   Azure portal rate-setting blade for this accelerator's internal tariff.
-4. Update the permitted/default model names in the managed client profile.
-
-**Verify:** rerun `-List`, call the permitted deployment as the target tier,
-and check the priced ledger's `priced_ok` after ingestion and query publication.
-A model working in Foundry's playground proves the operator's access, not the
-developer's gateway tier.
-
-In the account's deployment view, verify the **Deployment name**, **Model**,
-**Version**, **Deployment type/SKU** and **Provisioning state**. Choose the
-actual deployed name for client aliases and the allowlist; the catalogue model
-name alone is not sufficient.
-
-The Azure portal no longer lists deployments for a Foundry resource: its
-**Resource Management** menu has Projects, Keys and Endpoint, Encryption,
-Networking, Identity, Cost analysis and Properties, and **Overview** sends you
-to the Foundry portal. There, select **Build** > **Models** (**Models +
-endpoints** in the classic portal;
-[Microsoft Learn](https://learn.microsoft.com/azure/foundry/foundry-models/how-to/deploy-foundry-models)).
-The same fields from the CLI, read live on 2026-09-25 and filtered to Claude:
-
-![Live Azure CLI read of the Foundry account's Claude deployments: claude-opus-5 and claude-sonnet-5, version 2, GlobalStandard, capacities 40 and 20, both Succeeded](guide/docs-review-live-foundry-deployments.png)
-
----
-
-## The four things that have to agree
-
-| | Where it lives | What happens if it is missed |
-|---|---|---|
-| **Deployed** | The Foundry account | The gateway forwards and Foundry refuses |
-| **Allowed** | `models-standard` / `models-premium` named values | The gateway refuses with 403 before Foundry sees it |
-| **Priced** | `config/price-book.json` | Served, and reported at **$0** |
-| **Selectable** | `availableModels` in managed settings, if you pin it | The client hides a model the gateway would serve |
-
-The third is the one that fails quietly. A model with no price still works, and
-its usage lands in reports as nothing, which reads as nobody using it rather
-than as a configuration gap. `-List` marks it in red, and the command refuses to
-add an unpriced model unless you pass `-SkipPrice`.
-
-A model that is not deployed is refused outright, and the error names what *is*
-deployed:
-
-```text
-'claude-opus-9' is not deployed on Foundry account 'ai-contoso'.
-Deployed: claude-opus-5, claude-sonnet-5. Pass -Deploy to create it now, or
--SkipDeploymentCheck if you are staging configuration ahead of the deployment.
-```
-
-`-Deploy` creates the Foundry deployment as part of the same command. A quota
-refusal is reported as quota rather than as a generic failure, because the
-answer to one is a quota request and not a retry.
-
----
-
-## The price book
-
-To use your own rates, copy the example and edit it:
-
-```powershell
-Copy-Item config/price-book.example.json config/price-book.json
-```
-
-With no such file, built-in list rates apply, so a fresh clone works. Prices are
-**US dollars per million tokens**:
+Without a console, an answers file supplies the choices:
 
 ```json
 {
-  "date": "2026-09-16",
-  "source": "list price, https://platform.claude.com/docs/en/about-claude/pricing",
+  "models.tiers.claude-opus-5-5": "premium",
+  "models.tiers.claude-haiku-4-5": "both"
+}
+```
+
+```powershell
+.\Start-ClaudeGateway.ps1 -Action Change -Change models `
+    -AnswersPath .\model-answers.json -PlanOnly
+
+.\Start-ClaudeGateway.ps1 -Action Change -Change models `
+    -AnswersPath .\model-answers.json -ApprovedPlanFingerprint <fingerprint>
+```
+
+`-PlanOnly` and `-WhatIf` write nothing, including no snapshot or record.
+A period in a deployment name becomes `~` in its answer key:
+deployment `prod.opus` uses `models.tiers.prod~opus`. The actual model name
+in Azure, the price book and clients does not change.
+
+The standalone equivalent accepts a hashtable as well:
+
+```powershell
+.\scripts\Sync-ClaudeModels.ps1 `
+    -RecordPath .\onboarding\claude-gateway.json `
+    -TierAssignments @{
+        'claude-opus-5-5' = 'premium'
+        'claude-haiku-4-5' = 'both'
+    } -PlanOnly
+```
+
+Its apply uses the same arguments with `-ApprovedPlanFingerprint` instead of
+`-PlanOnly`. Unknown deployment names and malformed choices are refused.
+Completed retirement choices stay recorded, so the same answers file remains
+usable after the retired name has disappeared.
+
+### Review and write boundary
+
+The fingerprint covers the target, live deployments/lists, selections,
+record inputs, price book, output locations and the renderers' dependencies.
+Changes to a Claude Code or Desktop helper invalidate approval even when
+`New-ClaudeCodePolicy.ps1` itself is unchanged. File additions/removals
+participate in that comparison. Apply rechecks the live state,
+takes `Backup-ClaudeGateway.ps1`'s non-secret snapshot, then writes only
+`models-standard` and `models-premium` in Azure and reads them back.
+Backups and the prior record/book are under the record's
+`model-snapshots` directory. The shared flow takes this snapshot before even
+writing its local run journal.
+
+The API Management writes and local files are not one atomic transaction.
+A failure stops with the snapshot path and identifies the need for a new
+plan. A new plan reads any writes that already landed; no automatic rollback
+overwrites another administrator's work. A management readback is not a
+guarantee that every gateway has consumed the value. The real-request
+procedure is in [Governance checks](GOVERNANCE-CHECKS.md).
+Standalone history records both the preceding model decision and the signed-in
+principal. Generated reference records, profiles and snapshots stay git-ignored
+under nested `onboarding` folders as well as at the top level.
+
+Every discovery, backup, write, readback and profile-generation wait gives
+its purpose and an estimate, followed by the elapsed time.
+
+![A live isolated-gateway model plan: only Haiku is added to standard, premium remains Sonnet-only, the dated Haiku price mapping and unpriced Opus 5.5 status are shown, and the review ends with a fingerprint.](guide/50-model-change-plan.png)
+
+The isolated apply captured 24 non-secret named values, skipped one secret
+value, updated `models-standard` and regenerated both tier profiles. It did
+not change the premium model list.
+
+![Excerpt from the approved live model change: the gateway snapshot precedes the named-value update, readback and both profile verifications pass, and each wait reports elapsed time.](guide/51-model-change-applied.png)
+
+Real non-streaming requests on 2026-09-27 used the signed-in account, moved
+between the two dedicated proof groups. Haiku returned 403 before the change,
+200 in standard after the change, and 403 after the account moved to premium.
+Sonnet returned 200 in each tier, establishing that the denied Haiku request
+was a model decision, not missing entitlement.
+
+![Five real gateway requests: Sonnet returns 200 in standard and premium; Haiku is model_not_allowed before the change, returns 200 in standard afterwards, and remains model_not_allowed in premium.](guide/52-model-tier-requests.png)
+
+The proof resource group, soft-deleted gateway, dedicated tier groups and
+the gateway identity's exact shared-Foundry role assignment were removed.
+An independent read at 22:13Z found none remaining. The three attempts
+consumed an estimated USD 0.2136 of API Management time; invoice
+reconciliation remains U2.
+
+![Final isolated-proof cleanup records the resource group, gateway purge, exact role-assignment removal and deletion of both dedicated Entra groups, with UTC times.](guide/55-model-proof-cleanup.png)
+
+## The four things that have to agree
+
+| State | Location | Consequence of a mismatch |
+|---|---|---|
+| Deployed | Selected Foundry account | Foundry refuses a missing or unavailable deployment |
+| Allowed | `models-standard` / `models-premium` | The gateway returns `403 model_not_allowed` before Foundry |
+| Priced | Dated price book and published reporting/reconciler copy | Missing price is **unpriced**, not free; enforced dollar scopes can refuse incomplete pricing |
+| Selectable | Tier records, Claude Code settings and Desktop profiles | The model picker or alias can lag behind the gateway |
+
+Client-side selection is a management control, not the security boundary.
+API Management enforces the tier allowlist even for a modified client.
+The third is the one that fails quietly when a reporting copy of the price
+book is left stale; the sync explicitly labels missing prices rather than
+describing them as zero usage.
+
+## The price book
+
+`config/price-book.json` may hold your negotiated rates. It is private and
+git-ignored; negotiated rates can be
+commercially sensitive. `config/price-book.example.json` is the shipped
+example. When no private file exists, the existing built-in dated rates are
+the starting book. `models.priceBookPath` in the answers file, or
+`-PriceBookPath` on the standalone command, selects another dated book.
+
+```json
+{
+  "date": "2026-09-15",
+  "source": "organisation-approved tariff and source reference",
   "models": {
     "claude-sonnet-5": { "inputPerM": 2.0, "outputPerM": 10.0 }
   }
 }
 ```
 
-Only base input and output are stored. For Anthropic prompt caching, reusing
-cached input costs 0.1x the base input rate, writing to a five-minute cache
-costs 1.25x, and writing to a one-hour cache costs 2x — so the three cache rates
-are derived rather than stored.
+Rates are USD per million input/output tokens. Monthly inference cost is
+unknown without token volume; the plan does not display a missing price as
+zero monthly cost.
 
-`config/price-book.json` is **not** in the repository, because it may hold your
-negotiated rates rather than list price, and a negotiated schedule is
-commercially sensitive. `config/price-book.example.json` ships instead.
+An exact deployment entry wins. For GlobalStandard deployments, an exact
+model entry or an unambiguous dotted/hyphenated numeric spelling can be
+copied to the deployment name. Thus a dated `claude-haiku-4.5` entry can
+produce `claude-haiku-4-5` at the same approved rate. Conflicting equivalent
+entries are refused. Other SKUs need a deployment-specific entry. Historical
+entries and unrelated metadata remain in the book.
 
-A malformed price book raises an error; the script does not quietly fall back to
-built-in rates. See [ADR-0010](adr/0010-financial-semantics.md) for how a dollar
-figure here is calculated and what it does and does not mean.
-After changing prices, republish with `scripts/Publish-ClaudeQueries.ps1` using
-the explicit gateway/workspace. `ClaudeCost` embeds the current book at
-publication; it does not implement an effective-dated price series. Preserve the
-book and exported rows used for each closed month ([FinOps](FINOPS.md)).
+**Opus 5.5 remains unpriced in the defaults.** The
+[Anthropic pricing page](https://platform.claude.com/docs/en/about-claude/pricing),
+retrieved 2026-09-28, publishes USD 4 input and USD 20 output per million,
+with cache reads at **0.05x** input. The accelerator's current financial
+readers assume 0.1x; copying base rates alone would misprice cached usage.
+The same page lists Haiku 4.5 at USD 1/5 and describes Foundry CCU billing
+at per-feature rates, subject to agreement discounts. U34 records the
+decision not to guess a compatible Opus 5.5 rate.
 
----
+A local price-book write is not a reporting publication. Saved `ClaudeCost`
+queries embed the book when `scripts/Publish-ClaudeQueries.ps1` publishes
+them. Scheduled dollar reconcilers carry their own deployed copy. Those
+publication/distribution operations remain explicit, with each closed month's
+exports and price snapshot retained ([FinOps](FINOPS.md),
+[ADR-0010](adr/0010-financial-semantics.md)).
 
 ## What developers change
 
-The model name, and nothing else:
+The administrator record contains the allowed live union in `models`, and
+`deployments` includes each deployment's model/version and existing client
+overrides. The installer and later model changes both record each tier's
+normalized `models` and `modelAllowList`, so initial profiles have the same
+restrictions before any model sync. An installer selection that normalizes to
+empty is refused rather than converted to an unrestricted list. The sync generates:
 
-```bash
-claude --model claude-opus-5
+```text
+onboarding\profiles\standard\claude-gateway.json
+onboarding\profiles\premium\claude-gateway.json
+onboarding\profiles\<tier>\claude-code.*
+onboarding\profiles\<tier>\claude-desktop.*
+onboarding\profiles\README.md
 ```
 
-Their gateway URL, token and settings are unchanged. If your managed settings
-pin `availableModels`, regenerate that profile too — otherwise the client hides
-a model the gateway is willing to serve, which presents as the model missing:
+The selected tier's record accompanies the existing setup bundle. Windows:
 
 ```powershell
-./scripts/New-ClaudeCodePolicy.ps1 -GatewayUrl <url> -Tier premium `
-    -AvailableModels claude-opus-5, claude-sonnet-5
+.\scripts\Setup-ClaudeWorkstation.ps1 `
+    -ConfigPath .\onboarding\profiles\standard\claude-gateway.json
 ```
 
-A reissued `claude-gateway.json` lists the deployment under `deployments`, with
-its model. Developers who re-run the workstation setup get the newest deployment
-in each family pinned to its alias, with its capability declaration. Claude Code
-does not recognise a Foundry deployment name, so the declaration is what stops a
-release older than the model from sending `thinking.type.enabled` and getting a
-`400` ([ADR-0031](adr/0031-client-keys-every-release-reads.md)). Opus 4.7 and
-later, Sonnet 5 and later, and Fable and Mythos 5 and later are covered by rule.
-For any other model, add `capabilities` (a comma-separated list, or `none`) and
-`claudeCode` (the first Claude Code release that knows it) to its `deployments`
-entry:
+macOS/Linux, after the selected record is distributed as `claude-gateway.json`:
 
-```json
-{ "name": "prod-next", "model": "claude-next-1", "capabilities": "effort,thinking", "claudeCode": "2.2.10" }
+```bash
+./scripts/setup-claude-workstation.sh --config ./claude-gateway.json
 ```
 
----
+Rerunning setup updates `availableModels`, the newest recorded model in each
+alias family, the model's capability declarations, VS Code's model
+environment and Desktop `inferenceModels`. The gateway URL, sign-in choice
+and entitlement stay unchanged; unrelated user settings remain. An installed
+older Claude Code may be updated by setup unless `-SkipInstall` or
+`--skip-install` is set
+([developer setup](../DEVELOPER.md#after-a-model-change),
+[ADR-0031](adr/0031-client-keys-every-release-reads.md)).
+An alias and its capability declaration are removed when the selected models
+no longer contain its family, on both Windows and macOS/Linux. Haiku still
+falls back to Sonnet when Sonnet remains selected.
+
+The MDM files use the tier's deployments and safe alias fallbacks. A later
+DeviceProfiles/Guide run preserves that selection. Assignment through Intune,
+Jamf or Group Policy remains a fleet action; a local sync does not silently
+update devices ([MDM](MDM.md)).
+
+![The generated live client files give standard Haiku and Sonnet, keep premium Sonnet-only, pin the Haiku alias within each tier and declare Sonnet's adaptive-thinking capabilities.](guide/53-model-client-handover.png)
 
 ## Retiring one
 
-**Important:** an empty gateway model allowlist means **allow all**, not deny
-all. Removing the last entry with this command writes `,,` and therefore
-reopens all deployed models for that tier. Do not use last-entry removal as a
-revocation operation. First set the complete remaining approved list; if none
-should be callable, disable the relevant entitlement or retire the Foundry
-deployment through an approved change.
+When Foundry no longer lists a deployment, the model question offers `drop`.
+For example:
 
-```powershell
-./scripts/Add-ClaudeModel.ps1 -Model claude-opus-4.8 -Remove -Tier both `
-    -ResourceGroup <rg> -ApimName <apim>
+```json
+{ "models.tiers.retired-deployment": "drop" }
 ```
 
-That takes it out of both tier allow lists and reports what is left. The list
-keeps its sentinel commas, so `,claude-opus-5,claude-opus-4.8,` becomes
-`,claude-opus-5,` and an emptied list becomes `,,`.
+`keep` preserves the gateway's list entry but reports that the deployment is
+unavailable and excludes it from client selection. `none` removes access to a
+deployment that still exists. Neither choice deletes the Foundry deployment.
+The price-book entry stays for reports over earlier usage.
 
-Its price-book entry stays, and that is deliberate: reports over past months
-still need to recognize the retired model. [ADR-0010](adr/0010-financial-semantics.md)
-requires effective-dated pricing; the current query publisher embeds one book,
-so keeping an entry does not by itself preserve past rates. Keep monthly
-exports and price snapshots until that record requirement is implemented.
+**An empty gateway model list means allow all, not deny all.** Removal of the
+last restricted entry is refused. Entitlement revocation is a different
+operation. A previously unrestricted `,,` tier is shown explicitly; choosing
+a restricted set is a reviewed change rather than an assumed denial.
 
-If your managed settings pin `availableModels`, regenerate and redistribute that
-profile too, or the client will keep offering a model the gateway now refuses.
-
-**Portal:** APIM > Named values > model list, then Foundry > Models + endpoints
-if the deployment itself must be removed. The command removes allowlist entries,
-not the Foundry deployment. Verify the old model is refused through each
-intended tier and another allowed model still works.
+`Add-ClaudeModel.ps1` remains the older single-model deployment/price command.
+It does not reconcile records/profiles, uses one resource group for both
+services, and can write an empty allow-all list on last-entry removal.
+The reviewed sync is the lifecycle path described here.
 
 ## Troubleshoot and next steps
 
-| Symptom | Check |
-|---|---|
-| `DeploymentNotFound` | Deployment name versus catalogue model name, account and provisioning state |
-| `model_not_allowed` | Effective tier and full sentinel allowlist |
-| Usage appears free | Price mapping and published book; unknown prices are not zero-cost models |
-| Retired model still works | Empty-list allow-all behavior, other tier membership, stale config or a direct bypass |
+### Reference-gateway preview
 
-[Budgets](BUDGETS.md) covers limits; [Plugins](PLUGINS.md) covers non-model client
-capabilities. Neither a client picker nor plugin policy replaces gateway controls.
+A read-only preview on 2026-09-27 at 21:57Z found both reference model lists
+at `,,` and tier governance owned by Turnstile. The gateway therefore already
+allowed every model, unlike the earlier inventory. Choosing Opus 5.5 for
+premium and Haiku for both would restrict standard to its three other
+existing deployments, leave premium unrestricted, and generate a separate
+record and profiles. Apply remains blocked by Turnstile ownership; it does
+not silently switch authority. The operator decides that ownership and
+access change separately.
+
+![Read-only reference model preview with current Turnstile ownership, the existing unrestricted lists, the proposed standard-tier restriction, unpriced Opus 5.5 and the exact fingerprint.](guide/54-reference-model-plan.png)
+
+| Symptom | Meaning or next check |
+|---|---|
+| `DeploymentNotFound` | Deployment name, selected account and `Succeeded` state |
+| `model_not_allowed` | The caller's effective tier and its complete sentinel list |
+| Unpriced model | Exact deployment price, model mapping and published book |
+| Turnstile ownership refusal | Tier model changes belong to Turnstile's Gateway governance page; ownership is not changed by this command |
+| Fingerprint mismatch | Live state, decisions, price book, record or renderer differs; a new preview describes it |
+| Model present in gateway but absent on a workstation | Distributed tier record, setup rerun and any higher-precedence MDM policy |
+| Retired model still allowed | Unrestricted lists, another tier, propagation, or a direct Foundry bypass |
+
+[Budgets](BUDGETS.md) covers limits; [Plugins](PLUGINS.md) covers non-model
+client capabilities.
