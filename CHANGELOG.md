@@ -879,6 +879,13 @@ exact streaming cache-creation detail remains **U13**.
   installer asked "Continue anyway" before the tier and the entitlement store were chosen, saying
   the Cosmos store "is not built yet"; P61 built it on every v2 tier. The count now prints a note,
   and the confirmation follows the store question, only for named values.
+- **The installer permutation check read the checkout's own saved record (P79 follow-up).** After
+  P79 moved the saved-record comparison to the gateway question, 14 of the check's assertions failed
+  in any checkout whose `onboarding\claude-gateway.json` names another gateway, such as the main
+  worktree, with "Saved record ... names gateway ..."; packet worktrees have no record, so the P79
+  gate passed. `tests/Test-InstallerPermutations.ps1` runs a copy of the installer's inputs without
+  saved records and asserts the copy, the installer path and that the checkout's own record is
+  unchanged.
 - **The macOS/Linux installer approved every choice against a fixed price (P75).**
   `install-claude-gateway.sh` printed "BasicV2 is about $150/month at list price" and "Provisioning
   takes 30-45 minutes" whatever tier and region were chosen; `Install-ClaudeGateway.ps1` stopped
