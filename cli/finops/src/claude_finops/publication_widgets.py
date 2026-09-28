@@ -1,5 +1,6 @@
 """Textual presentation sinks; framework input retains the widget's provenance."""
 
+import asyncio
 from collections.abc import Callable
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
@@ -7,6 +8,7 @@ from functools import wraps
 import inspect
 
 from textual import events
+from textual._context import active_app
 from textual.widgets import (
     Button as TextualButton, DataTable as TextualDataTable, Input as TextualInput,
     Label as TextualLabel, Select as TextualSelect, Static as TextualStatic,
@@ -25,6 +27,16 @@ FRAMEWORK_INPUT_HANDLERS = {
     (TextualTextArea, "_on_key"), (TextualTextArea, "_on_paste"),
     (TextualSelect, "_on_mount"), (TextualSelect, "_update_selection"),
 }
+
+
+def _publication_refusal(error: BaseException | None) -> FinOpsError | None:
+    seen = set()
+    while isinstance(error, BaseException) and id(error) not in seen:
+        if isinstance(error, FinOpsError):
+            return error
+        seen.add(id(error))
+        error = error.__cause__ or error.__context__
+    return None
 
 
 @dataclass(frozen=True)
@@ -47,8 +59,10 @@ class PublicationDispatch:
     async def _dispatch_message(self, message):
         try:
             await super()._dispatch_message(message)
-        except FinOpsError as error:
-            self._publication_rejected(error)
+        except Exception as error:
+            if _publication_refusal(error) is None:
+                raise
+            self.app._handle_exception(error)
 
 
 class PublicationWidget(PublicationDispatch):
@@ -112,6 +126,33 @@ class PublicationWidget(PublicationDispatch):
 
 
 class PublicationApp(PublicationDispatch):
+    def _handle_exception(self, error: Exception) -> None:
+        refusal = _publication_refusal(error)
+        if refusal is not None:
+            self._publication_rejected(refusal)
+            return
+        super()._handle_exception(error)
+
+    async def _process_messages(self, *args, **kwargs):
+        loop = asyncio.get_running_loop()
+        previous = loop.get_exception_handler()
+
+        def handle(loop, context):
+            error = context.get("exception")
+            if self.is_running and active_app.get(None) is self and _publication_refusal(error) is not None:
+                self._handle_exception(error)
+            elif previous is not None:
+                previous(loop, context)
+            else:
+                loop.default_exception_handler(context)
+
+        loop.set_exception_handler(handle)
+        try:
+            return await super()._process_messages(*args, **kwargs)
+        finally:
+            if loop.get_exception_handler() is handle:
+                loop.set_exception_handler(previous)
+
     @publication_sink
     def copy_to_clipboard(self, text):
         return super().copy_to_clipboard(text)

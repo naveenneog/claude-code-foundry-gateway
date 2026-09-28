@@ -181,6 +181,21 @@ wall). The original 51 static exceptions are unchanged; only three exact
 sink-implementation expressions are recognized separately, as recorded in
 [ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md).
 
+B7a is committed as `bee62d2`. The refusal/liveness RED run reported
+**13 failed, 5 passed in 23.28 s** (25.01 s wall). Six newly exercised
+scheduler routes exposed `ROUND7_A_ONLY_COSTS` in fatal output or asyncio
+logging. The real Overview `on_resize`/screen-refresh reproduction made
+**zero renderer calls**, yet leaked its callback's argument through the
+fatal traceback. Direct, explicit-cause and implicit-context refusals also
+terminated the app. The initial shared-boundary GREEN selection passed
+**89 cases in 21.31 s** (22.78 s wall), covering the seven live scheduler
+routes, input after refusal, safe output, unrelated errors and loop ownership.
+The complete publication selector then passed **176 cases in 81.48 s**
+(83.42 s wall), including B4/B5, all previous runtime protections and a bounded
+exception-cycle control. That single command acquired and released its own
+lock. The architecture renderer verified 16 specs and 18 PNGs; the updated AUM
+readiness image was inspected. Final removal-probe results follow below.
+
 ### Council round 6 corrections
 
 The sixth review over `4cf7508..dd46186` confirmed the runtime B4/B5 fixes on

@@ -532,6 +532,12 @@ Round 6 adds sink-layer enforcement in `publication_widgets.py` and
 no identity lock while suspended. Framework input has narrowly identified
 handlers, not a general exemption for application callbacks. The AST contract
 checks indirect sinks and escaping callbacks as a second line of defense.
+Round 7 protects `content` provenance and rejects unchecked descriptor,
+raw-state and dynamic-code escapes. The shared application exception boundary
+unwraps publication refusals before Textual builds a fatal diagnostic. Its
+app-scoped loop handler covers event-loop callbacks and restores the prior
+owner on exit. Refused timers and screen callbacks retain input and show only
+the safe error, not callback arguments or traceback locals.
 
 ![AUM readiness uses bounded authenticated HTTP and read-only Azure diagnosis; Direct shares a snapshot and returns independent sources progressively.](images/architecture/aum-readiness.png)
 

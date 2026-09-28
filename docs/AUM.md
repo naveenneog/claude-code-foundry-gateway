@@ -509,6 +509,11 @@ runs. Async callbacks retain a scope lifetime without holding an identity lock
 across waits; each later sink checks again. The AST detector separately checks
 dynamic sink access and escaping callbacks for all supported schedulers. The
 51 exact static-write exceptions remain unchanged.
+Refused scheduled writes leave input available and report the safe underlying
+error. Application and app-owned event-loop exception handling recognize
+wrapped refusals before rendering a traceback or callback arguments. Unrelated
+errors retain their existing handling, and the event loop's previous handler
+is restored when the app closes.
 
 Overview displays each source as it arrives. Pending panels name their source,
 and the progress line shows an estimate and elapsed time. Estimates are not
