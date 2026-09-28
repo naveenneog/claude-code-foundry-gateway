@@ -176,6 +176,17 @@ that cycle open through assembly, as status and governance already do. This
 prevents an aggregate from combining a completed A-only source with later reads
 after a verified B sign-in.
 
+## Council round 3 amendment, 2026-09-28
+
+HTTP reads pin a generation across complete aggregate assembly, not only each
+request. Already-completed sources cannot be combined after a different
+identity is verified. Progressive delivery and final publication validate the
+same read-cycle generation immediately before writing the UI cache or rendering;
+the outer cycle exit alone is too late for a progressive view. The same
+publication boundary applies to completed capability results and command output.
+A mismatch discards the result and reports sign-in changed, not success with
+data from the previous principal.
+
 ## Consequences
 
 No server deployment, account switch, consent, resource grant or authority

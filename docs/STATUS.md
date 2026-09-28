@@ -135,6 +135,28 @@ Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
 
 ## P71 AUM answers fast and says why it cannot, 2026-09-28
 
+### Council round 3 corrections
+
+The third review over `0e11417..05605e8` confirmed that both round-2 Direct
+reproductions now reject obsolete results with exit 3. Completed HTTP sources
+and progressive publication still require the same protection.
+
+| Seat | Round 3 verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | PASS | Round-2 cycle structure accepted | Retained |
+| Coder | PASS | Round-2 implementation accepted | Retained |
+| QA | PASS | Direct stale-cycle reproductions reject with exit 3 | Retained |
+| UX | PASS | Round-2 error behavior accepted | Retained |
+| Security | BLOCK | B1: completed HTTP sources survive a principal change during aggregate assembly | Pending: pin the HTTP generation for the complete read cycle |
+| Security | BLOCK | B2: partial results reach UI cache/render before the outer cycle check | Pending: validate immediately before partial and final publication, then clear on mismatch |
+
+Both council reproductions become failing tests before implementation. A bounded
+follow-up review covers other cache, screen and JSON publication points for
+already-completed results. After the fixes, main `f98f885` is merged normally,
+P70/P72 ledger entries and U35/U36 remain alongside P71/U37, and architecture is
+regenerated. The packet gate retains its 1,800 s budget and shared lock. No
+database stop/start or history rewrite is performed.
+
 ### Council round 2 corrections
 
 The lead's second review closed A1, C1, Q1, U1 and S2. S1 remains blocked:
