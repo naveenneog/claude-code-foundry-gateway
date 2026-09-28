@@ -46,6 +46,13 @@ No phase timings were retained for that historical sample, so its specific
 cause is not established retrospectively. Evidence: private
 `p71-r1-whoami-phases.json`; no identities or token bodies were recorded.
 
+The full correction suite initially passed 433 tests but emitted unawaited
+coroutine warnings. `d7cd2f2` allocates metadata work only inside its owning
+task; it also ignores delayed activation events from a previous pane. The
+existing rapid-navigation test and two new deterministic lifecycle tests pin
+those behaviors. Two mutations fail the full 20-case lifecycle selector, and
+the restored navigation/snapshot selection passes 35 cases.
+
 Implementation is on `p71-aum-speed`, based on `aa7ed19`. The packet gate passed
 at `84bddeb`; the lead owns the council review and merge. The ROADMAP box remains
 open until that merge. The owner's 2026-09-27 investigation measured Turnstile reads
