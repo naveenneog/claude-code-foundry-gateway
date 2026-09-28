@@ -509,21 +509,31 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
         if row:
             self.open_detail(row)
 
+    def open_detail(self, row, *, read_guard=None):
+        tab = self.active
+        cached = self._data_guards.get(tab)
+        source_guard = read_guard if read_guard is not None else cached[1] if cached else None
+        return self._open_detail(row, tab, source_guard)
+
     @work(exclusive=True, group="detail")
-    async def open_detail(self, row):
+    async def _open_detail(self, row, tab, source_guard):
         try:
             with self.engine.backend.read_cycle():
-                cached = self._data_guards.get(self.active)
-                if cached:
-                    with cached[1]():
+                if source_guard:
+                    with source_guard():
                         pass
-                if self.active == "requests":
+                guard = source_guard
+                if tab == "requests":
                     row = await asyncio.to_thread(self.engine.read, "request", request_id=row["request_id"])
-                elif self.active == "people" and row.get("scope_id"):
+                    guard = self.engine.backend.read_guard()
+                elif tab == "people" and row.get("scope_id"):
                     row = await asyncio.to_thread(self.engine.person_detail, row["scope_id"], row["parent_scope_id"])
-                elif self.active == "advanced" and self.advanced_view in {"releases", "subscriptions"}:
+                    guard = self.engine.backend.read_guard()
+                elif tab == "advanced" and self.advanced_view in {"releases", "subscriptions"}:
                     row = await asyncio.to_thread(self.engine.read, "release" if self.advanced_view == "releases" else "application", id=row["id"])
-                guard = self.engine.backend.read_guard()
+                    guard = self.engine.backend.read_guard()
+                if guard is None:
+                    raise FinOpsError("Current detail has no verified source. Refresh before opening it.", 3)
                 with guard():
                     self.push_screen(DetailScreen("Exact values | Esc returns", row, read_guard=guard))
         except FinOpsError as error:

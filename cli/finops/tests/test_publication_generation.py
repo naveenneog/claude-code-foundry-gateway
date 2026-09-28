@@ -16,6 +16,7 @@ from claude_finops.errors import FinOpsError
 from claude_finops.redaction import Redactor
 from claude_finops.tui import FinOpsApp
 from claude_finops.fake import FakeBackend
+from claude_finops.screens import DetailScreen
 from claude_finops.turnstile import TurnstileBackend
 from test_principal_tokens import estate, a_only_snapshot
 
@@ -277,6 +278,109 @@ def test_aum_service_completed_catalog_is_not_cached_after_identity_change():
         assert backend._catalog is None
     finally:
         backend.close()
+
+
+@pytest.fixture
+def bearer_tui_estate():
+    principal = ["a"]
+
+    def respond(request):
+        person = request.headers["Authorization"].removeprefix("Bearer token-")
+        assert person in {"a", "b"}, "The server fixture authorizes the bearer, not the selected UI identity."
+        path = request.url.path
+        row = {"scope_id": "only-" + person, "scope_name": person.upper() + "_ONLY_BUDGET",
+               "scope_type": "department", "parent_scope_id": person, "used_tokens": 11,
+               "token_limit": 99, "remaining_tokens": 88, "status": "healthy"}
+        if path.endswith("/auth/me"):
+            result = {"id": person, "email": person + "@contoso.com",
+                      "role": "owner" if person == "a" else "member",
+                      "manager_scope": None if person == "a" else {
+                          "organizations": [], "departments": [{"id": "only-b", "parent_id": "b"}],
+                          "writable_department_ids": []}}
+        elif path.endswith("/finops/capabilities"):
+            result = {"schema_version": 1, "features": {}}
+        elif path.endswith("/budgets"):
+            result = {"items": [row]}
+        elif path.endswith("/enterprise-catalog"):
+            result = {"organizations": [{"id": person, "name": person.upper() + "_ONLY_UNIT"}],
+                      "departments": [{"id": "only-" + person, "name": person.upper() + "_ONLY_TEAM", "parent_id": person}]}
+        elif path.endswith("/executive-overview"):
+            result = {"totals": {"total_tokens": 11, "total_requests": 1}}
+        elif path.endswith("/distribution"):
+            result = {"dimension": request.url.params.get("dimension", "organization"), "items": [
+                {"id": "only-" + person, "name": person.upper() + "_ONLY_RANK", "total_tokens": 11}]}
+        elif path.endswith("/trends"):
+            result = {"points": []}
+        elif path.endswith("/anomalies"):
+            result = {"items": []}
+        elif path.endswith("/requests"):
+            result = {"items": [{"request_id": person + "-request", "user_name": person + "@contoso.com",
+                                 "total_tokens": 11, "timestamp": "2026-09-01T00:00:00Z"}]}
+        elif "/requests/" in path:
+            result = {"request_id": person + "-request", "marker": person.upper() + "_ONLY_REQUEST"}
+        elif path.endswith("/assistant/settings"):
+            result = {"model_available": True, "available_models": []}
+        elif path.endswith("/assistant/ask"):
+            result = {"conversation_id": person + "-conversation", "message": person.upper() + "_ONLY_REPLY",
+                      "charts": [{"id": person + "-chart", "title": person.upper() + "_ONLY_CHART",
+                                  "type": "bar", "data": [{"tokens": 11}]}]}
+        else:
+            return httpx.Response(404)
+        return httpx.Response(200, json=result)
+
+    backend = TurnstileBackend(Config(backend="turnstile", url="https://turnstile.contoso.com",
+                                     scope="api://contoso/Turnstile.Manage"),
+                               token_provider=lambda: "token-" + principal[0],
+                               transport=httpx.MockTransport(respond))
+    engine = Engine(backend, "2026-09")
+    yield engine, principal
+    backend.close()
+
+
+def guard_exit_code(guard):
+    try:
+        with guard():
+            pass
+    except FinOpsError as error:
+        return error.code
+    return 0
+
+
+@pytest.mark.parametrize("tab", ["budgets", "requests"])
+async def test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies(bearer_tui_estate, monkeypatch, tab):
+    engine, principal = bearer_tui_estate
+    app = FinOpsApp(engine, Config(backend="fake"), first_run=False)
+    original_compose = DetailScreen.compose
+    observed = {}
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        app.action_tab(tab)
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        assert "A_ONLY" in str(app.data[tab]) or tab == "requests"
+        origin = app._data_guards[tab][1]
+
+        def paused_compose(screen):
+            principal[0] = "b"
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                identity = pool.submit(engine.read, "whoami").result(timeout=5)
+            app.update_access(identity)
+            observed.update(identity=app.identity["id"], cache_cleared=tab not in app.data,
+                            origin_code=guard_exit_code(origin), detail_code=guard_exit_code(screen.read_guard))
+            yield from original_compose(screen)
+
+        monkeypatch.setattr(DetailScreen, "compose", paused_compose)
+        app.action_exact_detail()
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert observed["identity"] == "b" and observed["cache_cleared"]
+        assert observed["origin_code"] == 3
+        assert observed["detail_code"] == 3, "The deferred dialog replaced the source guard with an unpinned guard."
+        assert "A_ONLY" not in app.screen.query_one("#detail-text", TextArea).text
+        assert "sign-in changed" in app.screen.query_one("#detail-text", TextArea).text
+        assert all(row["scope_id"] == "only-b" for row in engine.read("budgets")["items"])
 
 
 @pytest.mark.parametrize("surface", ["lookup-catalog", "lookup-results", "detail", "export", "people-selector",
