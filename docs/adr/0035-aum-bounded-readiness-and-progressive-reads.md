@@ -208,6 +208,19 @@ connection invalidates retained guards rather than leaving deferred items
 authorized indefinitely. No new component, endpoint or authorization authority
 is introduced by these guard-lifetime corrections.
 
+## Council round 5 amendment, 2026-09-28
+
+All backend-derived publication uses one function that accepts the originating
+guard and executes the synchronous write while that guard is valid. It also
+guards reuse of cached assistant context for outgoing requests. The UI observes
+verified principal transitions and clears prior-principal tables, selections,
+forms, dialogs, cached guards, capabilities and assistant context before input
+dispatch or direct action reuse. Failure reports sign-in changed without
+publishing stale values. An AST contract rejects bypassing sinks and has a
+commented, exact static-text allowlist; allowlist entries do not exempt a whole
+handler. This replaces the earlier convention that each handler manually
+remembered to apply a guard.
+
 ## Consequences
 
 No server deployment, account switch, consent, resource grant or authority

@@ -135,6 +135,28 @@ Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
 
 ## P71 AUM answers fast and says why it cannot, 2026-09-28
 
+### Council round 5 corrections
+
+The fifth review closed B3 and retained Architect/Coder/QA/UX PASS. Security
+requires a class-wide boundary rather than further isolated guard handoffs.
+
+| Seat | Round 5 verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | PASS | Round-4 structure accepted | Retained |
+| Coder | PASS | Cached detail retains its source guard | Retained |
+| QA | PASS | Unchanged-A details and close invalidation pass | Retained |
+| UX | PASS | Round-4 behavior accepted | Retained |
+| Security | BLOCK | B4: highlighted rows write old-principal data to status | Pending: one guarded publication choke point plus structural enforcement |
+| Security | BLOCK | B5: old assistant conversation/history is sent under a new principal | Pending: clear all prior-principal state before input and guard assistant egress |
+
+The B4/B5 replays and a structural bypass detector fail before implementation.
+Backend-derived widget/status/clipboard/export/JSON/CSV and assistant egress
+share one publication function taking the source guard. Principal transitions
+invalidate UI state before later input, including tables, selections, open
+forms/dialogs and assistant history. Static presentation writes have an explicit
+commented allowlist checked by the structural test. Only affected pytest and
+the full publication selector run; no Test-FinOps, Test-All, gate or merge.
+
 ### Council round 4 corrections
 
 The fourth review over `05605e8..c909708` closed B1/B2 and confirmed the unchanged
