@@ -266,6 +266,7 @@ Write-Host ' Every prompt has a default. Press Enter to accept it.' -ForegroundC
 Write-Host ' Nothing is created until you confirm the summary.' -ForegroundColor DarkGray
 # Fail here, with a remedy, rather than part-way through a deployment.
 . (Join-Path $root 'scripts/Test-Prerequisites.ps1')
+. (Join-Path $root 'scripts/flow/FlowContract.ps1')
 . (Join-Path $root 'scripts/ClaudeModelDeployment.ps1')
 . (Join-Path $root 'scripts/ClaudeChoice.ps1')
 . (Join-Path $root 'scripts/ClaudeGatewayRegion.ps1')
@@ -505,8 +506,8 @@ if ($deployed.Count) {
     # five times the price of Sonnet per output token - that is the distinction
     # the two tiers exist to make. Both are editable afterwards with
     # Sync-ClaudeModels.ps1, so this only has to be a sensible start.
-    $all = @($deployed.name | Sort-Object -Unique)
-    $nonOpus = @($deployed | Where-Object { $_.model -notlike '*opus*' } | ForEach-Object { $_.name } | Sort-Object -Unique)
+    $all = @(Sort-ClaudeFlowOrdinal -InputObject @($deployed.name) -Unique)
+    $nonOpus = @(Sort-ClaudeFlowOrdinal -InputObject @($deployed | Where-Object { $_.model -notlike '*opus*' } | ForEach-Object { $_.name }) -Unique)
     if (-not $nonOpus.Count) { $nonOpus = $all }
 
     $stdPick = if ($PSBoundParameters.ContainsKey('StandardModels')) { $StandardModels -join ',' } else {

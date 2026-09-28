@@ -14,6 +14,8 @@
 #>
 
 . (Join-Path $PSScriptRoot 'AzureRetailPrice.ps1')
+# Sort-ClaudeFlowOrdinal gives one order on Windows PowerShell 5.1 and PowerShell 7 (P76).
+if (-not (Get-Command Sort-ClaudeFlowOrdinal -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot 'flow\FlowContract.ps1') }
 
 $script:ClaudeApimV2Meters = [ordered]@{ BasicV2 = 'Basic v2 Unit'; StandardV2 = 'Standard v2 Unit'; PremiumV2 = 'Premium v2 Unit' }
 
@@ -70,11 +72,10 @@ function Get-ClaudeGatewayRegionOptions {
     if ($FoundryRegion) {
         $options.Add([pscustomobject]@{ Number = 0; Region = $FoundryRegion; DisplayName = $(if ($foundry.Count) { [string]$foundry[0].displayName } else { $FoundryRegion }); SameAsFoundry = $true; Monthly = (& $monthly $FoundryRegion) })
     }
-    $others = @(
+    $others = @(Sort-ClaudeFlowOrdinal -Key { if ($null -ne $_.Monthly['BasicV2']) { [decimal]$_.Monthly['BasicV2'] } else { [decimal]::MaxValue } }, { $_.Region } -InputObject @(
         $physical | Where-Object { $group -and $_.name -ne $FoundryRegion -and [string]$_.metadata.geographyGroup -eq $group -and $byRegion.ContainsKey([string]$_.name) } |
-            ForEach-Object { [pscustomobject]@{ Number = 0; Region = [string]$_.name; DisplayName = [string]$_.displayName; SameAsFoundry = $false; Monthly = (& $monthly ([string]$_.name)) } } |
-            Sort-Object @{ Expression = { if ($null -ne $_.Monthly['BasicV2']) { [decimal]$_.Monthly['BasicV2'] } else { [decimal]::MaxValue } } }, @{ Expression = { $_.Region } }
-    )
+            ForEach-Object { [pscustomobject]@{ Number = 0; Region = [string]$_.name; DisplayName = [string]$_.displayName; SameAsFoundry = $false; Monthly = (& $monthly ([string]$_.name)) } }
+    ))
     foreach ($o in $others) { $options.Add($o) }
     for ($i = 0; $i -lt $options.Count; $i++) { $options[$i].Number = $i + 1 }
     return @($options)
