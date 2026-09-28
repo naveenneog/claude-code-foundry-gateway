@@ -514,6 +514,11 @@ error. Application and app-owned event-loop exception handling recognize
 wrapped refusals before rendering a traceback or callback arguments. Unrelated
 errors retain their existing handling, and the event loop's previous handler
 is restored when the app closes.
+Attaching a retained widget checks its original source before DOM insertion,
+including shallow copies, composed children, reparenting and cached subtrees.
+The caller's current scope does not replace the widget's source. Protected
+instances refuse class replacement; current-origin writes and attachments
+retain their normal behavior.
 
 Overview displays each source as it arrives. Pending panels name their source,
 and the progress line shows an estimate and elapsed time. Estimates are not

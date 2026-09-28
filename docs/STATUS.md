@@ -135,6 +135,57 @@ Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
 
 ## P71 AUM answers fast and says why it cannot, 2026-09-28
 
+### Council round 8 corrections
+
+The eighth review of `f89e1c0` returned UX PASS and Architect, Coder, QA and
+Security BLOCK. It verified the round 7 mutation and full-suite receipts and
+closed B7b. The remaining counterexamples are stale widget attachment/reuse
+(B8a), presentation-class mutation (B8b) and module-level raw-output aliases
+(B8c).
+
+The correction uses a closed presentation import contract, not another
+spelling denylist. Output and data-bearing widgets come from the protected
+modules; source-level metaprogramming has checked, justified exceptions only.
+The threat model is maintainer-written presentation code, not a sandbox for
+deliberately malicious code in the Python process. Runtime checks cover
+construction, writes, instance class changes, retained-widget attachment/reuse
+and deferred execution. [ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md)
+records the boundary.
+
+Exact A-to-B counterexamples and current-origin controls precede the fixes.
+Each new rule has a removal probe that executes the same test identities as
+its baseline. Every green implementation is committed locally. Each long
+validation command owns and releases its lock in that command's `finally`;
+one full AUM/FinOps Python run follows the fixes. Round 9 and the packet gate
+remain with the lead. No push, merge or Azure operation is part of this round.
+
+Textual 6.12.0 source inspection found that `_register_child` inserts a node
+before calling the child's `_attach` hook. The runtime boundary therefore
+validates retained widget subtrees before registration mutates the DOM, not
+only in a post-attach event. The renderer also caches visuals, which makes
+checking only the public `render` method insufficient for reuse. Sources:
+the installed `textual/app.py`, `textual/dom.py` and `textual/widget.py`,
+inspected on 2026-09-29. The initial read-only Ironclad audit exited 0
+(20 passed, two existing warnings, four skipped commands/checks).
+
+The first runtime RED run reported **6 failed, 4 passed in 9.75 s**
+(11.61 s wall), with `A_ONLY_BUDGET` visible in B's screenshot after mount,
+shallow copy, compose and reparent, plus both protected-instance class-change
+probes. The subtree extension reported **7 failed, 5 passed in 11.74 s**.
+Current-origin attachment controls already passed. Registration now holds the
+kept origins while validating the complete supplied subtree before insertion.
+Class changes fail independently of the caller's active scope. The compose
+fixture uses an approved protected parent; its retained child still has A's
+origin. Its screenshot and refusal assertions are unchanged.
+
+The first implementation run exposed a missing helper import; the next
+exposed the unwrapped test parent's stopped message pump. Neither result is
+credited as RED evidence or a mutation catch. With the shared import wired
+and composition using the protected parent, the runtime/reuse/lifecycle and
+existing publication selection passed **113 cases in 85.92 s** (88.24 s wall),
+including B4/B5 and all seven round 7 scheduler routes. The closed source
+contract and its exact import/exception controls follow separately.
+
 ### Council round 7 corrections
 
 The seventh review of `9fabf42` returned Architect PASS and Coder, QA, UX and

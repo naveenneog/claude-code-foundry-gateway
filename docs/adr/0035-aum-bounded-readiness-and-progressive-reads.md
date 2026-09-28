@@ -296,6 +296,43 @@ The shared lock is held for one long validation command and released in that
 command's `finally`. One full Python suite follows the fixes. Round 8 and the
 packet gate remain with the lead; no integration or Azure operation occurs.
 
+## Council round 8 amendment, 2026-09-29
+
+### Threat model and closed source contract
+
+Presentation modules are maintainer-written. The detector enforces a closed
+import allowlist and a metaprogramming ban. New modules and imports require
+an explicit classification/approval rather than being trusted because a
+known sink name did not match. Presentation output comes only from the
+protected output module; displayed controls use approved wrappers. Raw
+terminal streams, raw output functions, raw Rich consoles, unwrapped Textual
+widgets and direct file/clipboard writers are not presentation imports,
+regardless of aliases.
+
+`sys.modules`, computed `getattr`/`setattr`/`delattr`, writes to classes or
+raw instance state, `object.__setattr__`, dynamic code and dynamic imports
+are not presentation APIs. A necessary internal operation has an exact
+justification entry checked by the tests. This is not a handler-wide or
+module-wide metaprogramming exemption.
+
+The runtime guards cover construction, writes, protected-instance class
+changes, attachment/reuse of retained widgets, and scheduling through retained
+origins. Attachment checks the original source before DOM registration;
+the current caller's scope cannot replace that origin. Reused subtrees and
+compose results take the same path. The round 7 safe refusal and input
+liveness boundaries remain.
+
+Deliberately malicious in-process code is out of scope: Python code with
+access to the process can bypass an in-process check. The source contract
+prevents unsupported operations in maintained presentation code; it is not
+a sandbox or a claim that arbitrary Python reflection is contained.
+
+The installed Textual 6.12.0 `_register_child` implementation inserts into
+the parent's nodes and application registry before `_attach`. Prevalidation
+therefore occurs at the application's registration boundary. Checking only
+`on_mount` or `render` is too late or can miss cached visuals. These native
+paths were inspected on 2026-09-29 before implementation.
+
 ## Consequences
 
 No server deployment, account switch, consent, resource grant or authority

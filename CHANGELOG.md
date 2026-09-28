@@ -60,6 +60,9 @@ exact streaming cache-creation detail remains **U13**.
   scheduler spellings and partial methods. Refused timer, screen and event-loop
   callbacks retain responsive input and report only the safe underlying error,
   without rendering callback arguments or traceback locals.
+  Round-eight attachment validates retained widget origins before DOM
+  insertion, including copied and composed subtrees; protected instances
+  refuse class replacement.
 - **Reviewed model lifecycle (P70).** `-Action Change -Change models` and
   `scripts/Sync-ClaudeModels.ps1` discover the selected Foundry account, show deployment
   model/version/SKU/capacity and price status, accept per-deployment tier choices, snapshot

@@ -538,6 +538,9 @@ unwraps publication refusals before Textual builds a fatal diagnostic. Its
 app-scoped loop handler covers event-loop callbacks and restores the prior
 owner on exit. Refused timers and screen callbacks retain input and show only
 the safe error, not callback arguments or traceback locals.
+Round 8 validates retained widget subtrees before registration inserts them
+into the DOM. Copied widgets keep their original source; a new caller scope
+does not reauthorize that data. Protected instances cannot change class.
 
 ![AUM readiness uses bounded authenticated HTTP and read-only Azure diagnosis; Direct shares a snapshot and returns independent sources progressively.](images/architecture/aum-readiness.png)
 

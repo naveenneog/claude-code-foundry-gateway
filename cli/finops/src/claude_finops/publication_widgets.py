@@ -2,13 +2,14 @@
 
 import asyncio
 from collections.abc import Callable
-from contextlib import AbstractContextManager, contextmanager
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass
 from functools import wraps
 import inspect
 
 from textual import events
 from textual._context import active_app
+from textual.widget import Widget as TextualWidget
 from textual.widgets import (
     Button as TextualButton, DataTable as TextualDataTable, Input as TextualInput,
     Label as TextualLabel, Select as TextualSelect, Static as TextualStatic,
@@ -17,7 +18,7 @@ from textual.widgets import (
 
 from .errors import FinOpsError
 from .guarded_publication import (
-    PublicationOrigin, guarded_deferred, publication_origin, publication_sink,
+    PublicationOrigin, guarded_deferred, guarded_publish, publication_origin, publication_sink,
 )
 
 # Only these framework handlers copy keyboard/picker input into content. Layout,
@@ -72,6 +73,8 @@ class PublicationWidget(PublicationDispatch):
         super().__init__(*args, **kwargs)
 
     def __setattr__(self, name, value):
+        if name == "__class__":
+            raise FinOpsError("Protected presentation widgets cannot change class.", 3)
         if name in {"content", "value", "text", "label", "border_title", "placeholder", "tooltip"}:
             self._set_presentation(name, value)
         else:
@@ -126,6 +129,21 @@ class PublicationWidget(PublicationDispatch):
 
 
 class PublicationApp(PublicationDispatch):
+    def _register(self, parent, *widgets, **kwargs):
+        with ExitStack() as guards:
+            pending, seen = list(widgets), set()
+            while pending:
+                widget = pending.pop()
+                if id(widget) in seen:
+                    continue
+                seen.add(id(widget))
+                if isinstance(widget, PublicationWidget):
+                    guards.enter_context(guarded_publish(widget._publication_origin))
+                if isinstance(widget, TextualWidget):
+                    pending.extend(widget.children)
+                    pending.extend(widget._pending_children)
+            return super()._register(parent, *widgets, **kwargs)
+
     def _handle_exception(self, error: Exception) -> None:
         refusal = _publication_refusal(error)
         if refusal is not None:
