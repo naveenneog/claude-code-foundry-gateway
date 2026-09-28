@@ -1,6 +1,6 @@
 # Status
 
-**Active packets (2026-09-28, run in parallel worktrees):** P69 the company address in the flow, P70 newly deployed models reach the tiers and the workstations, P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets (2026-09-28, run in parallel worktrees):** P69 the company address in the flow, P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P72 permutation tests of the guided flow and the installer, 2026-09-28
 
@@ -135,11 +135,12 @@ Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
 
 ## P70 newly deployed models reach the tiers and the workstations, 2026-09-28
 
-Council round 2 passed all five seats. Integration is complete on `p70-model-lifecycle`:
-the AST-derived renderer import guard passed, `main` (`38ad175`, including P72) was merged
-normally, the requested permutation suites passed, and the merged packet gate exited 0
-at `586b6f6`. ROADMAP P70 remains unticked for the lead. No Azure or real workstation
-writes were made in this integration.
+Merged to `main` as `bb75aab` (`--no-ff`, 2026-09-28); the merge tree equals the tree of the
+gated branch head `a0c3e33`. Council round 2 passed all five seats. Integration on
+`p70-model-lifecycle`: the AST-derived renderer import guard passed, `main` (`38ad175`,
+including P72) was merged normally, the requested permutation suites passed, and the merged
+packet gate exited 0 at `586b6f6`. No Azure or real workstation writes were made in this
+integration.
 
 ### Council round 2, 2026-09-28
 
@@ -407,8 +408,9 @@ The old captured fingerprint is not an approval for a later changed estate.
 The alternate authoritative path is Turnstile's Gateway governance page; P70 does not switch
 authority or write through a second control plane.
 
-Open decisions for the lead: council verdicts and merge; the reference ownership/access
-choice; a separate cache-rate schema change before pricing Opus 5.5 automatically.
+Open decisions for the owner: the reference ownership/access choice; a separate cache-rate
+schema change before pricing Opus 5.5 automatically. The council verdicts and the merge are
+recorded above.
 MDM assignment and actual Windows/macOS/Linux fleet rollout remain operator actions.
 No real managed device or Desktop app was changed by this live proof.
 **Packet gate:** `node .ironclad/gate.mjs --stage packet` exited 0 at `9447488`,
