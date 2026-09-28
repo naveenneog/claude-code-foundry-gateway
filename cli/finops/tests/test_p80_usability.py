@@ -125,6 +125,18 @@ def test_chargeback_report_path_defaults_to_documents_and_never_overwrites(tmp_p
     assert path == folder / "chargeback-2026-09-1.csv"
 
 
+def test_cli_chargeback_can_save_complete_csv_without_overwriting(tmp_path):
+    folder = tmp_path / "reports"
+    folder.mkdir()
+    (folder / "chargeback-2026-09.csv").write_text("old", encoding="utf-8")
+    result = CliRunner().invoke(app, ["--backend", "fake", "--month", "2026-09", "report", "chargeback", "--output", str(folder)])
+    assert result.exit_code == 0, result.output
+    path = folder / "chargeback-2026-09-1.csv"
+    assert path.exists()
+    assert "chargeback-2026-09-1.csv" in result.output
+    assert "scope,tokens" in path.read_text(encoding="utf-8")
+
+
 def test_configure_attended_save_replaces_existing_profile_with_backup(tmp_path, monkeypatch):
     from claude_finops import cli
 

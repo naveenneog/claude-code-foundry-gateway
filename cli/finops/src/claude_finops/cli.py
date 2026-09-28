@@ -18,7 +18,8 @@ from .brand import BANNER, PRODUCT, show_banner
 from . import __version__
 from .redaction import Redactor
 from .guarded_publication import guarded_publish
-from .publication_output import write_text
+from .publication_output import write_export, write_text
+from .reports import chargeback_export_path
 from contextlib import nullcontext
 
 
@@ -369,9 +370,24 @@ def trends_show(ctx: typer.Context, interval: str = "day", group_by: str = "none
 
 @groups["report"].command("chargeback")
 def report_chargeback(ctx: typer.Context, csv: Annotated[bool, typer.Option("--csv")] = False,
-                     dimension: str = "organization"):
+                     dimension: str = "organization",
+                     output: Annotated[Path | None, typer.Option("--output", help="Folder for a complete chargeback CSV.")] = None):
     """Export estimated cost, tokens and cache. Not an Azure invoice."""
-    if csv and not ctx.obj["json"]:
+    if output is not None and not ctx.obj["json"]:
+        try:
+            with ctx.obj["engine"].backend.read_cycle():
+                rows = ctx.obj["engine"].chargeback(dimension)["items"]
+                content = chargeback_csv(ctx.obj["redactor"].present(rows), ctx.obj["engine"].month)
+                with guarded_publish(ctx.obj["engine"].backend.read_guard()):
+                    output.mkdir(parents=True, exist_ok=True)
+                    path = chargeback_export_path(ctx.obj["engine"].month, output)
+                    write_export(path, content)
+                    write_text(f"Saved complete chargeback CSV to {path}")
+        except (FinOpsError, OSError) as error:
+            with guarded_publish(nullcontext):
+                write_text(str(error) if isinstance(error, FinOpsError) else "Cannot create the chargeback report file.", err=True)
+            raise typer.Exit(error.code if isinstance(error, FinOpsError) else 7) from None
+    elif csv and not ctx.obj["json"]:
         try:
             with ctx.obj["engine"].backend.read_cycle():
                 rows = ctx.obj["engine"].chargeback(dimension)["items"]
