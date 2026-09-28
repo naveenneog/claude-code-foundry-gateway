@@ -44,9 +44,13 @@ requests through the reference gateway; all seven answered. Work is on
       rewrote them in upper case passed in a checkout without an operator record. Each synthetic
       file now holds its own relative path, compared with `-ceq` (`35a7d2d`). Against `31b660d`
       that mutation passes 48 of 48; against `35a7d2d` it is caught with and without a saved
-      record, the four earlier mutations are still caught (six runs), and both baselines pass 48 of 48
-- [ ] Council, five seats
-- [ ] The packet gate exits 0, run with a saved record for another gateway in the worktree
+      record, the four earlier mutations are still caught (five runs), and both baselines pass 48 of 48
+- [x] Council round 3, over `31b660d..a196d13`: all five seats PASS
+- [x] The packet gate exits 0, run with the main worktree's saved record (it names the reference
+      gateway) copied into this worktree. Gate 1, at `ae2e76f` (23:16-23:47), passed: Test-All in
+      1,823 s, 22 passed, 0 failed. Gate 3, at `a196d13` (00:12-00:40), the tree that merges,
+      passed: Test-All in 1,714 s, 22 passed, 2 warned (open unknowns), 0 failed. Gate 2, at
+      `31b660d`, was stopped when council round 2 changed the test
 
 ## P79 fixes from the owner's test on 2026-09-28
 
