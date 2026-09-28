@@ -91,8 +91,11 @@ function Get-ApimNamedValue {
         [Parameter(Mandatory = $true)][string]$ResourceGroup,
         [Parameter(Mandatory = $true)][string]$ApimName,
         [Parameter(Mandatory = $true)][string]$Id,
-        [switch]$FailOnError
+        [switch]$FailOnError,
+        [string]$SubscriptionId
     )
+    $subscriptionArgs = @()
+    if ($SubscriptionId) { $subscriptionArgs = @('--subscription', $SubscriptionId) }
     if ($FailOnError) {
         $previousPreference = $ErrorActionPreference
         try {
@@ -100,7 +103,7 @@ function Get-ApimNamedValue {
             # interpreting the exit code, rather than terminating on a real 404.
             $ErrorActionPreference = 'Continue'
             $global:LASTEXITCODE = 0
-            $output = @(az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id $Id --query value -o tsv --only-show-errors 2>&1)
+            $output = @(az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id $Id --query value -o tsv --only-show-errors @subscriptionArgs 2>&1)
             $code = $LASTEXITCODE
         }
         finally { $ErrorActionPreference = $previousPreference }
@@ -114,7 +117,7 @@ function Get-ApimNamedValue {
         if (-not $output.Count) { return $null }
         return ($output -join "`n")
     }
-    $v = az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id $Id --query value -o tsv 2>$null
+    $v = az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id $Id --query value -o tsv @subscriptionArgs 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $v) { return $null }
     return $v
 }
@@ -134,9 +137,12 @@ function Set-ApimNamedValue {
         [Parameter(Mandatory = $true)][string]$ApimName,
         [Parameter(Mandatory = $true)][string]$Id,
         [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value,
-        [switch]$Secret
+        [switch]$Secret,
+        [string]$SubscriptionId
     )
 
+    $subscriptionArgs = @()
+    if ($SubscriptionId) { $subscriptionArgs = @('--subscription', $SubscriptionId) }
     Test-ApimNamedValueLength -Id $Id -Value $Value
 
     if ($Value -eq '') {
@@ -145,9 +151,9 @@ function Set-ApimNamedValue {
         # <audience> element, so policy validation needs a nonempty GUID-shaped
         # sentinel that the policy explicitly treats as disabled.
         $emptySentinel = if ($Id -eq 'external-idp-extra-audience') { 'urn:disabled:claude-extra-audience' } else { ' ' }
-        $sub = az account show --query id -o tsv
+        $sub = if ($SubscriptionId) { $SubscriptionId } else { az account show --query id -o tsv }
         if (-not $sub) { throw 'Could not determine the current Azure subscription for an empty named value write.' }
-        $token = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv
+        $token = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv @subscriptionArgs
         $uri = "https://management.azure.com/subscriptions/$sub/resourceGroups/$ResourceGroup/providers/Microsoft.ApiManagement/service/$ApimName/namedValues/$Id`?api-version=2024-05-01"
         $body = @{ properties = @{ displayName = $Id; value = $emptySentinel; secret = [bool]$Secret } } | ConvertTo-Json -Depth 5
         try {
@@ -159,7 +165,7 @@ function Set-ApimNamedValue {
         }
     }
 
-    $exists = az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id $Id -o tsv --query name 2>$null
+    $exists = az apim nv show -g $ResourceGroup --service-name $ApimName --named-value-id $Id -o tsv --query name @subscriptionArgs 2>$null
 
     # Errors are captured rather than discarded, so a failure can be reported
     # with what the service actually said.
@@ -168,12 +174,13 @@ function Set-ApimNamedValue {
         $global:LASTEXITCODE = 0
         if ($exists) {
             az apim nv update -g $ResourceGroup --service-name $ApimName `
-                --named-value-id $Id --value $Value -o none 2>$err
+                --named-value-id $Id --value $Value -o none @subscriptionArgs 2>$err
         }
         else {
             $args = @('apim', 'nv', 'create', '-g', $ResourceGroup, '--service-name', $ApimName,
                       '--named-value-id', $Id, '--display-name', $Id, '--value', $Value, '-o', 'none')
             if ($Secret) { $args += @('--secret', 'true') }
+            $args += $subscriptionArgs
             az @args 2>$err
         }
         $code = $LASTEXITCODE

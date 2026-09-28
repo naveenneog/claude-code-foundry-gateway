@@ -24,9 +24,10 @@ def child_wrapper(tmp_path):
     child.write_text(
         "import json,os,subprocess,sys,time\nfrom pathlib import Path\n"
         f"Path({str(child_marker)!r}).write_text(json.dumps({{'pid':os.getpid()}}))\n"
-        f"subprocess.Popen([sys.executable, {str(grandchild)!r}])\ntime.sleep(3)\n",
+        f"subprocess.Popen([sys.executable, '-S', {str(grandchild)!r}])\ntime.sleep(3)\n",
         encoding="utf-8")
-    launcher.write_text(f'@echo off\r\n"{sys.executable}" "{child}"\r\n', encoding="utf-8")
+    # The fixed timeout measures containment, not the Windows venv redirector's startup.
+    launcher.write_text(f'@echo off\r\n"{sys._base_executable}" -S "{child}"\r\n', encoding="utf-8")
     return launcher, (child_marker, grandchild_marker)
 
 

@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "id": "model-lifecycle",
+  "kind": "flow",
+  "title": "New deployments reach reviewed tiers and client files.",
+  "subtitle": "P70 is an administrative change, not an inference service. Discovery and review are read-only; device distribution remains explicit.",
+  "width": 1280,
+  "height": 1050,
+  "outputs": ["docs/images/architecture/model-lifecycle.png"],
+  "sources": [
+    "Start-ClaudeGateway.ps1", "scripts/flow/Models.ps1", "scripts/ClaudeModelLifecycle.ps1",
+    "scripts/ClaudeModelPrices.ps1", "scripts/ClaudeModelProfiles.ps1", "scripts/Sync-ClaudeModels.ps1",
+    "scripts/ClaudeModelDeployment.ps1", "scripts/ApimNamedValue.ps1", "scripts/Backup-ClaudeGateway.ps1",
+    "scripts/ClaudeTurnstileGovernance.ps1", "scripts/New-ClaudeCodePolicy.ps1",
+    "scripts/ClaudeClientSupport.ps1", "scripts/ClaudeDesktopSignIn.ps1", "scripts/Show-Banner.ps1",
+    "scripts/flow/FlowContract.ps1", "scripts/setup-claude-workstation.sh", "scripts/flow/DeviceProfiles.ps1", "infra/policy.xml"
+  ],
+  "identifiers": {
+    "flow": { "label": "Change models", "source": "scripts/flow/Models.ps1", "match": "DecisionKey = 'models'" },
+    "sync": { "label": "Sync-ClaudeModels.ps1", "source": "scripts/Sync-ClaudeModels.ps1", "kind": "file" },
+    "plan": { "label": "New-ClaudeModelPlan", "source": "scripts/ClaudeModelLifecycle.ps1", "match": "function New-ClaudeModelPlan" },
+    "snapshot": { "label": "Backup-ClaudeGateway.ps1", "source": "scripts/Backup-ClaudeGateway.ps1", "kind": "file" },
+    "ownership": { "label": "Assert-ClaudeGatewayOwnsGovernance", "source": "scripts/ClaudeTurnstileGovernance.ps1", "match": "function Assert-ClaudeGatewayOwnsGovernance" },
+    "standard": { "label": "models-standard", "source": "infra/policy.xml", "match": "{{models-standard}}" },
+    "premium": { "label": "models-premium", "source": "infra/policy.xml", "match": "{{models-premium}}" },
+    "prices": { "label": "Get-ClaudeDeploymentPrice", "source": "scripts/ClaudeModelPrices.ps1", "match": "function Get-ClaudeDeploymentPrice" },
+    "profiles": { "label": "Write-ClaudeModelProfiles", "source": "scripts/ClaudeModelProfiles.ps1", "match": "function Write-ClaudeModelProfiles" },
+    "code": { "label": "availableModels", "source": "scripts/ClaudeClientSupport.ps1", "match": "'availableModels'" },
+    "desktop": { "label": "inferenceModels", "source": "scripts/New-ClaudeCodePolicy.ps1", "match": "inferenceModels" }
+  },
+  "groups": [],
+  "nodes": [
+    { "id": "sources", "x": 0, "y": 0, "w": 390, "h": 225, "tone": "teal", "title": "1 - Read the selected estate", "lines": [
+      "Raw deployment identities validated before publisher filtering.",
+      "Gateway backend and model lists; governance ownership.",
+      "Existing record and dated private price book."
+    ] },
+    { "id": "review", "x": 445, "y": 0, "w": 390, "h": 225, "tone": "blue", "title": "2 - Review once", "lines": [
+      "[[flow]] or [[sync]]",
+      "[[plan]]",
+      "Per-deployment tier choices; missing keep/drop.",
+      "Fingerprint includes renderer dependencies."
+    ] },
+    { "id": "backup", "x": 890, "y": 0, "w": 390, "h": 225, "tone": "purple", "title": "3 - Recheck before writing", "lines": [
+      "[[ownership]]",
+      "Turnstile-owned tiers refuse apply.",
+      "[[snapshot]]",
+      "Snapshot before the local run journal."
+    ] },
+    { "id": "gateway", "x": 0, "y": 310, "w": 390, "h": 265, "tone": "blue", "title": "4 - Two Azure values only", "lines": [
+      "[[standard]]",
+      "[[premium]]",
+      "Fail-loud writes and exact readback.",
+      "No membership, quota or policy write.",
+      "Real requests measure propagation; readback is not data-plane proof."
+    ] },
+    { "id": "record", "x": 445, "y": 310, "w": 390, "h": 265, "tone": "teal", "title": "5 - Record and prices", "lines": [
+      "Allowed live deployment union; actual model/version.",
+      "Initial and updated per-tier lists; overrides preserved.",
+      "[[prices]]",
+      "Dated exact mappings; historical prices stay.",
+      "Unknown rate is unpriced, never free."
+    ] },
+    { "id": "profiles", "x": 890, "y": 310, "w": 390, "h": 265, "tone": "purple", "title": "6 - Tier-specific handover", "lines": [
+      "[[profiles]]",
+      "Standard and premium MDM payloads.",
+      "One workstation record per tier.",
+      "Newest family pins and capability declarations.",
+      "[[code]] and [[desktop]]"
+    ] },
+    { "id": "distribution", "x": 0, "y": 665, "w": 610, "h": 215, "tone": "slate", "title": "Existing fleet and developer routes", "lines": [
+      "Administrator assigns Intune, Jamf or Group Policy payloads.",
+      "Developer reruns the existing setup with the tier record.",
+      "Removed families lose their aliases; user settings remain.",
+      "The record itself grants no entitlement."
+    ] },
+    { "id": "limits", "x": 670, "y": 665, "w": 610, "h": 215, "tone": "slate", "title": "Explicit boundaries", "lines": [
+      "No remote workstation change or Foundry deployment.",
+      "No cross-service transaction: failure stops and a new plan reads actual state.",
+      "Empty lists mean allow all; last-entry removal is refused.",
+      "Saved-query and scheduled-reconciler tariff publication stay separate."
+    ] }
+  ],
+  "edges": [
+    { "from": "sources", "to": "review", "kind": "data", "points": [[390,112],[445,112]] },
+    { "from": "review", "to": "backup", "kind": "control", "points": [[835,112],[890,112]] },
+    { "from": "backup", "to": "gateway", "kind": "control", "points": [[1085,225],[1085,265],[195,265],[195,310]] },
+    { "from": "gateway", "to": "record", "kind": "control", "points": [[390,442],[445,442]] },
+    { "from": "record", "to": "profiles", "kind": "data", "points": [[835,442],[890,442]] },
+    { "from": "profiles", "to": "distribution", "kind": "data", "points": [[1085,575],[1085,615],[305,615],[305,665]] }
+  ],
+  "notice": "No new Azure component is required by model sync. The existing gateway remains the inference enforcer; generated files are distributed through the existing fleet and workstation processes."
+}
