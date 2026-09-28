@@ -57,7 +57,7 @@ function Get-BudgetsFlowPriceBook {
     $book = Get-BudgetsFlowShippedPriceBook -Path $Path
     $items = [ordered]@{}
     $unknown = [System.Collections.Generic.List[string]]::new()
-    foreach ($model in @($Models | Where-Object { $_ } | Sort-Object -Unique)) {
+    foreach ($model in @(Sort-ClaudeFlowOrdinal -InputObject @($Models | Where-Object { $_ }) -Unique)) {
         if ($book.models.PSObject.Properties.Name -contains $model) { $items[$model] = $book.models.$model }
         else { $unknown.Add($model) }
     }

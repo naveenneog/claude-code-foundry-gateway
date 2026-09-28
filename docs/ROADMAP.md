@@ -448,7 +448,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       billing role that can read the agreement's price sheet, the flow and the installer show the
       agreement's prices and name the billing scope they came from; without the role they show
       Azure retail list prices, as P68 does (**U31**)
-- [ ] The macOS/Linux installer prices its choices — acceptance: `install-claude-gateway.sh` lists
+- [x] P75 the macOS/Linux installer prices its choices — acceptance: `install-claude-gateway.sh` lists
       the Foundry account's region and the rest of its geography with each v2 tier's monthly list
       price, prices the tier prompt, records `sku`, `location` and the Foundry account, and offers
       the FinOps tool at the end, as `Install-ClaudeGateway.ps1` does since P68
@@ -473,6 +473,11 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       invariants; the installer's summary reflects every combination of tier, entitlement store,
       developer sign-in, Desktop sign-in and address under `-WhatIf`, on PowerShell 7 and 5.1; each
       failure found is fixed test-first
+- [x] P76 one plan, one order on both shells — acceptance: every sort that feeds a plan in the guided
+      flow, the Update migrations, the model sync or the installer orders by code point on PowerShell 7
+      and Windows PowerShell 5.1, and a check follows every script those load and lists each remaining
+      `Sort-Object` with its reason; every step of Setup with the shipped modules, the Update migrations
+      and a model change plan the same canonical text on both shells, tested
 - [ ] P73 an installer re-run offers the gateway's live values — acceptance: over an existing
       gateway (`-ExistingApimName`, the reuse menu or `-Change foundation` in a console), the budget,
       request ceiling, tier group and Choices prompts default to the gateway's live named values and

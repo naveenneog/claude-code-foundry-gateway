@@ -849,6 +849,42 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **The macOS/Linux installer approved every choice against a fixed price (P75).**
+  `install-claude-gateway.sh` printed "BasicV2 is about $150/month at list price" and "Provisioning
+  takes 30-45 minutes" whatever tier and region were chosen; `Install-ClaudeGateway.ps1` stopped
+  printing both before P68. It now lists the default region and the other regions in its
+  geography that publish an API Management v2 price, cheapest Basic v2 first, each with the three
+  tiers' monthly list price for one unit at 730 hours, from one Retail Prices API call and rounded
+  to the cent as the PowerShell installer rounds it on PowerShell 7 ([decimal] of the double, half to
+  even); prices the tier prompt and the summary; and
+  says so, with the reason, when the prices cannot be read or are not in the form the API
+  publishes. It reads a next page of the price list only on `https://prices.azure.com`. Its
+  record gains `mode`, `sku`, `location`, `foundryAccount`, `foundryResourceGroup` and
+  `requestsPerMinute`, and, run on its own in a terminal, it offers the FinOps tool
+  (`--choose-finops`, `--skip-finops-offer`). The admin preflight warns on jq 1.7.0, which reads a price
+  written with 17 significant digits through a 16-digit decimal. `tests/Test-BashInstaller.ps1` runs 21 installs in
+  Git Bash with stub `az`, `curl` and `pwsh`, and compares the region table with the one
+  `Install-ClaudeGateway.ps1` prints for the same list, over 170 prices, ten of them written with trailing
+  zeros, an exponent, 16 or 17 significant digits or above 10,000.
+- **jq.exe on Windows ends lines with CRLF (P75).** In Git Bash, command substitution drops the
+  carriage return of the last line only, so the last field of every other region line kept one,
+  and a price the region does not publish printed as USD 0.00. The region lines drop it before
+  they are split, and the test stubs refuse any `az` or `curl` argument that carries one.
+- **One plan still had two fingerprints on the two shells (P76).** A live `-PlanOnly` over the
+  reference record printed one review and two fingerprints: Monitoring sorted its workbooks with
+  `Sort-Object`, which compares by culture, and .NET Framework and .NET weigh a hyphen differently.
+  The named values of the Update migration `0002` had the same fault, and so did the order of the
+  step modules and of the migrations. Merged from P70 the same day, the model change sorted its
+  deployments, tier lists and questions the same way: on Windows PowerShell 5.1 a model change over
+  tier lists already in code-point order proposed rewriting both lists, and its fingerprint differed
+  from PowerShell 7's. The price-book entry a deployment takes, the region choice, the deployable
+  models and the installer's default tier lists had the same fault. All of them order by code point
+  through `Sort-ClaudeFlowOrdinal`, which now takes several keys, compares numbers, times and versions
+  by value, and has `-Descending`. `tests/Test-FlowOrdinalOrder.ps1` compares every shipped Setup step
+  and a model change on both shells, follows every script the plans load and lists each `Sort-Object`
+  left in them with its reason. For the shipped lists, PowerShell 7's culture order was already
+  code-point order (measured), so its plans keep their fingerprints; on Windows PowerShell 5.1 the
+  Monitoring and Update plans have new ones.
 - **`-AuthMode` skipped the installer's Claude Desktop sign-in section (P72).** The Desktop
   questions and the external IdP record sat inside the `else` branch that asks the developer
   sign-in, so `-AuthMode device -DesktopSignInKind external-idp-browser -DesktopEntraClientId <id>`

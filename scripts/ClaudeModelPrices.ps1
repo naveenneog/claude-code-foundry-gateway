@@ -1,4 +1,7 @@
 # Dated deployment-price mappings. No rate is inferred from a model family.
+# Sort-ClaudeFlowOrdinal gives one order on Windows PowerShell 5.1 and PowerShell 7 (P76).
+if (-not (Get-Command Sort-ClaudeFlowOrdinal -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot 'flow\FlowContract.ps1') }
+
 function Get-ClaudeModelPriceBook {
     param([Parameter(Mandatory = $true)][string]$Path)
     if (Test-Path -LiteralPath $Path) {
@@ -10,7 +13,7 @@ function Get-ClaudeModelPriceBook {
     }
     else {
         $models = [ordered]@{}
-        foreach ($key in ($script:ClaudePriceBook.Keys | Sort-Object)) {
+        foreach ($key in @(Sort-ClaudeFlowOrdinal -InputObject @($script:ClaudePriceBook.Keys))) {
             $models[$key] = [pscustomobject]@{ inputPerM = $script:ClaudePriceBook[$key].InputPerM; outputPerM = $script:ClaudePriceBook[$key].OutputPerM }
         }
         $doc = [pscustomobject]@{
@@ -44,12 +47,12 @@ function Get-ClaudeDeploymentPrice {
     elseif ($Deployment.sku -eq 'GlobalStandard') {
         $normal = ([string]$Deployment.model -replace '(?<=\d)\.(?=\d)', '-')
         $candidates = @($names | Where-Object { ($_ -replace '(?<=\d)\.(?=\d)', '-') -eq $normal })
-        $rates = @($candidates | ForEach-Object {
+        $rates = @(Sort-ClaudeFlowOrdinal -Unique -InputObject @($candidates | ForEach-Object {
             $rate = $Book.models.$_
             '{0}:{1}' -f ([decimal]$rate.inputPerM).ToString([Globalization.CultureInfo]::InvariantCulture), ([decimal]$rate.outputPerM).ToString([Globalization.CultureInfo]::InvariantCulture)
-        } | Sort-Object -Unique)
+        }))
         if ($rates.Count -gt 1) { throw "Conflicting price entries for '$($Deployment.model)': $($candidates -join ', '). A deployment-specific price resolves this ambiguity." }
-        if ($candidates.Count) { $key = @($candidates | Sort-Object)[0] }
+        if ($candidates.Count) { $key = @(Sort-ClaudeFlowOrdinal -InputObject $candidates)[0] }
     }
     if (-not $key) {
         $reason = if ($Deployment.model -eq 'claude-opus-5-5') {
