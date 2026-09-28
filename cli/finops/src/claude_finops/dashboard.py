@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from .rules import human
 from .rules import month_window
 from .views import money
+from .errors import FinOpsError
 
 
 def budget_totals(rows):
@@ -65,15 +66,23 @@ class DashboardPanel(Static, can_focus=True):
         super().__init__("Loading live facts...", id=panel_id, classes="dashboard-panel", markup=False)
         self.border_title = title
         self.detail = {}
+        self.read_guard = None
 
     def on_key(self, event):
         if event.key in {"enter", "d"}:
             from .screens import DetailScreen
-            if event.key == "enter" and self.id in {"dash-rank", "dash-risks", "dash-anomalies"}:
-                from .dashboard_drill import DashboardRows
-                self.app.push_screen(DashboardRows(self))
-            else:
-                self.app.push_screen(DetailScreen(str(self.border_title) + " | exact source values", self.detail))
+            try:
+                if self.read_guard is None:
+                    raise FinOpsError("This panel has no verified current data. Wait for its read or refresh.", 3)
+                with self.read_guard():
+                    if event.key == "enter" and self.id in {"dash-rank", "dash-risks", "dash-anomalies"}:
+                        from .dashboard_drill import DashboardRows
+                        self.app.push_screen(DashboardRows(self))
+                    else:
+                        self.app.push_screen(DetailScreen(str(self.border_title) + " | exact source values",
+                                                         self.detail, read_guard=self.read_guard))
+            except FinOpsError as error:
+                self.app.notify(self.app._error_text(error), severity="error")
             event.stop()
 
 
@@ -92,14 +101,18 @@ class Dashboard(Vertical):
         for panel in self.query(DashboardPanel):
             panel.update("No current data. Refresh an authorized view.")
             panel.detail = {}
+            panel.read_guard = None
 
     def begin_load(self):
         for panel in self.query(DashboardPanel):
             panel.update("Loading current facts (estimate 3-5 s)...")
             panel.detail = {}
+            panel.read_guard = None
 
     def update_data(self, data, raw=None, query=""):
         raw = raw or data
+        for panel in self.query(DashboardPanel):
+            panel.read_guard = self.app.cached_guard("overview")
         ascii_only = self.app.config.ascii
         totals = data.get("overview", {}).get("totals", {})
         budgets = data.get("budgets", {}).get("items", [])

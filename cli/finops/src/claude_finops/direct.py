@@ -171,6 +171,7 @@ class DirectBackend(Backend):
             raise FinOpsError("Azure sign-in changed. Refresh the current principal before reading data.", 3)
 
     def close(self):
+        self.invalidate_credentials()
         with self._prepare_lock:
             if self._client is not None:
                 self._client.close()

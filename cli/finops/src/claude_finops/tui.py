@@ -486,6 +486,20 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
         rows = self.records.get(self.active, [])
         return rows[table.cursor_row] if rows and table.cursor_row < len(rows) else {}
 
+    def cached_guard(self, tab=None):
+        cached = self._data_guards.get(tab or self.active)
+        if cached is None:
+            raise FinOpsError("Current data has no verified source. Refresh before using it.", 3)
+        return cached[1]
+
+    def open_cached_change(self, kind, row, *, rows=None, remove=False):
+        try:
+            guard = self.cached_guard()
+            with guard():
+                self.push_screen(ChangeScreen(self.engine, kind, row, rows, remove=remove, read_guard=guard))
+        except FinOpsError as error:
+            self.notify(self._error_text(error), severity="error")
+
     @on(DataTable.RowSelected)
     def show_detail(self, event):
         if len(self.screen_stack) != 1 or event.data_table.id != f"table-{self.active}":
@@ -574,7 +588,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
         if not row:
             return
         kind = "budget" if self.active in {"budgets", "people"} else ("tier" if row.get("kind") == "tier" else "catalog")
-        self.push_screen(ChangeScreen(self.engine, kind, row, self.data.get("budgets", {}).get("items", [])))
+        self.open_cached_change(kind, row, rows=self.data.get("budgets", {}).get("items", []))
 
     def action_usd_edit(self):
         if self.redactor.enabled or not enabled(self.feature_caps, "usd_budgets", "write"):
@@ -582,7 +596,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
         row = self.selected()
         if not row or self.active not in {"budgets", "people"}:
             return
-        self.push_screen(ChangeScreen(self.engine, "usd_budget", row, self.data.get("budgets", {}).get("items", [])))
+        self.open_cached_change("usd_budget", row, rows=self.data.get("budgets", {}).get("items", []))
 
     def action_usd_reconcile(self):
         if enabled(self.feature_caps, "usd_budgets", "reconcile"):
@@ -597,7 +611,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
             self.notify("Tier removal is not supported by the gateway policy.")
             return
         kind = "budget" if self.active in {"budgets", "people"} else "catalog"
-        self.push_screen(ChangeScreen(self.engine, kind, row, remove=True))
+        self.open_cached_change(kind, row, remove=True)
 
     def action_add(self):
         if self.editable:

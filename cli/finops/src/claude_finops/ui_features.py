@@ -21,6 +21,14 @@ EXTRA_TABS = [("approvals", "9 Approvals"), ("ask", "a Ask"), ("advanced", "Adva
 
 
 class FeatureUI:
+    def push_cached_form(self, title, fields, operation, *, read_guard=None):
+        try:
+            guard = read_guard if read_guard is not None else self.cached_guard()
+            with guard():
+                self.push_screen(ActionForm(title, fields, operation, read_guard=guard))
+        except FinOpsError as error:
+            self.notify(self._error_text(error), severity="error")
+
     async def _publish_read(self, operation, publish, *args, **params):
         with self.engine.backend.read_cycle():
             result = await asyncio.to_thread(operation, *args, **params)
@@ -77,6 +85,7 @@ class FeatureUI:
         self.preferences = None
         self.first_run = first_run
         self.ask_reply = None
+        self.ask_reply_guard = None
         self.ask_history = []
         self.ask_conversation = None
         self.approvals_view = "mine"
@@ -236,6 +245,7 @@ class FeatureUI:
         self.breadcrumbs = []
         self.ask_history = []
         self.ask_reply = self.ask_conversation = None
+        self.ask_reply_guard = None
         for selector in ("#request-model", "#request-before", "#people-query", "#ask-question"):
             self.query_one(selector, Input).value = ""
         self.query_one("#ask-answer", TextArea).load_text("Ask about the current authorized scope.")
@@ -307,11 +317,11 @@ class FeatureUI:
         def run(values, apply):
             allowance = int(values["allowance"]) if values["allowance"] else None
             return self.engine.mode_change(values["kind"], values["scope"], values["mode"], allowance, apply=apply)
-        self.push_screen(ActionForm("Set enforcement mode", [
+        self.push_cached_form("Set enforcement mode", [
             ("kind", "Scope kind", kind, [("unit", "Unit"), ("team", "Team")]),
             ("scope", "Stable scope id", key, None),
             ("mode", "Mode", "strict", [(m, m.title()) for m in ("strict", "allowance", "notify")]),
-            ("allowance", "Allowance percent (only allowance)", "", None)], run))
+            ("allowance", "Allowance percent (only allowance)", "", None)], run)
 
     def action_bulk(self):
         if not enabled(self.feature_caps, "bulk_budget", "write") or self.redactor.enabled:
@@ -319,55 +329,59 @@ class FeatureUI:
         self.push_screen(ActionForm("Import person budgets from CSV", [("file", "CSV: team, person, tokens, warning", "", None)],
             lambda values, apply: budget_csv_plan(self.engine, values["file"], apply=apply)))
 
-    def action_request_budget(self, amount="", row=None):
+    def action_request_budget(self, amount="", row=None, *, read_guard=None):
         if not enabled(self.feature_caps, "approvals", "request"):
             return
         row = row or (self.selected() if self.active in {"budgets", "people"} else {})
         kind = {"organization": "unit", "department": "team", "user": "person"}.get(row.get("scope_type"), "team")
-        self.push_screen(ActionForm("Request budget from the parent approver", [
+        self.push_cached_form("Request budget from the parent approver", [
             ("kind", "Scope", kind, [(k, k.title()) for k in ("unit", "team", "person")]),
             ("scope", "Scope id", row.get("scope_id", ""), None),
             ("amount", "Requested monthly tokens", amount, None),
             ("reason", "Reason", "", None)],
             lambda values, apply: self.engine.request_budget(values["kind"], values["scope"], values["amount"],
-                                                              values["reason"], apply=apply)))
+                                                              values["reason"], apply=apply), read_guard=read_guard)
 
     def action_decide(self, decision):
         if not enabled(self.feature_caps, "approvals", decision):
             return
         key = self.selected().get("id", "")
-        self.push_screen(ActionForm(decision.title() + " request", [
+        self.push_cached_form(decision.title() + " request", [
             ("request", "Request id", key, None), ("reason", "Reason", "", None)],
-            lambda values, apply: self.engine.decide_request(values["request"], decision, values["reason"], apply=apply)))
+            lambda values, apply: self.engine.decide_request(values["request"], decision, values["reason"], apply=apply))
 
     def action_boost(self):
         if not enabled(self.feature_caps, "boosts", "create"):
             return
         row = self.selected() if self.active == "people" else {}
-        self.push_screen(ActionForm("Temporary person boost", [
+        self.push_cached_form("Temporary person boost", [
             ("person", "Person id", row.get("scope_id", ""), None),
             ("team", "Team", self.team, None), ("amount", "Additional tokens", "", None),
             ("window", "Budget window", "daily" if self.engine.backend.person_budget_period == "day" else "monthly",
              [("daily", "Daily")] if self.engine.backend.person_budget_period == "day" else [("daily", "Daily"), ("monthly", "Monthly")]),
             ("until", "Expires at (UTC ISO date/time)", "", None), ("reason", "Reason", "", None)],
             lambda values, apply: self.engine.boost(values["person"], values["team"], values["amount"],
-                                                     values["until"], values["reason"], window=values["window"], apply=apply)))
+                                                     values["until"], values["reason"], window=values["window"], apply=apply))
 
     def action_disposition(self, status):
         action = "acknowledge" if status == "acknowledged" else "false_positive"
         if not enabled(self.feature_caps, "anomaly_dispositions", action):
             return
-        self.push_screen(ActionForm("Set anomaly disposition", [
+        self.push_cached_form("Set anomaly disposition", [
             ("id", "Finding id", self.selected().get("id", ""), None), ("reason", "Reason", "", None)],
-            lambda values, apply: self.engine.disposition(values["id"], status, values["reason"], apply=apply)))
+            lambda values, apply: self.engine.disposition(values["id"], status, values["reason"], apply=apply))
 
     def action_copy_request(self):
         if self.active != "requests" or self.redactor.enabled:
             return
         key = self.selected().get("request_id")
         if key:
-            self.copy_to_clipboard(key)
-            self.notify("Copied request id using the terminal clipboard protocol.")
+            try:
+                with self.cached_guard("requests")():
+                    self.copy_to_clipboard(key)
+                    self.notify("Copied request id using the terminal clipboard protocol.")
+            except FinOpsError as error:
+                self.notify(self._error_text(error), severity="error")
 
     def action_open_ledger(self):
         if self.active != "requests" or self.redactor.enabled:
@@ -375,7 +389,8 @@ class FeatureUI:
         key = self.selected().get("request_id")
         if key:
             try:
-                self.open_url(ledger_url(self.config.workspace_resource_id, self.config.tenant_id, key, self.engine.month))
+                with self.cached_guard("requests")():
+                    self.open_url(ledger_url(self.config.workspace_resource_id, self.config.tenant_id, key, self.engine.month))
             except FinOpsError as error:
                 self.notify(str(error), severity="error")
 
@@ -434,6 +449,7 @@ class FeatureUI:
         self.query_one("#ask-answer", TextArea).load_text("Asking the server. No chart data is generated by the client...")
         def publish(reply, guard):
             self.ask_reply = dict(reply, question=question)
+            self.ask_reply_guard = guard
             self.ask_conversation = reply["conversation_id"]
             self.ask_history = (self.ask_history + [{"role": "user", "content": question},
                                {"role": "assistant", "content": reply["message"]}])[-20:]
@@ -445,6 +461,7 @@ class FeatureUI:
             await self._publish_read(self.engine.ask, publish, question, self.ask_conversation, self.ask_history)
         except FinOpsError as error:
             self.ask_reply = self.ask_conversation = None
+            self.ask_reply_guard = None
             self.ask_history = []
             self.query_one("#ask-answer", TextArea).load_text(str(error))
 
@@ -452,11 +469,19 @@ class FeatureUI:
         if not self.ask_reply or not self.ask_reply.get("charts"):
             self.notify("Ask a question that returns a chart first.")
             return
-        charts = self.ask_reply["charts"]
-        self.push_screen(ActionForm("Pin server-authored chart", [
-            ("chart", "Chart", charts[0]["id"], [(c["id"], self.redactor.text(c["title"])) for c in charts]),
-            ("title", "Report title", "Usage report", None)],
-            lambda values, apply: self.engine.pin_chart(self.ask_reply, values["chart"], values["title"], apply=apply)))
+        try:
+            if self.ask_reply_guard is None:
+                raise FinOpsError("The cached assistant reply has no verified source. Ask again before pinning.", 3)
+            with self.ask_reply_guard():
+                reply, guard = self.ask_reply, self.ask_reply_guard
+                charts = reply["charts"]
+                self.push_screen(ActionForm("Pin server-authored chart", [
+                    ("chart", "Chart", charts[0]["id"], [(c["id"], self.redactor.text(c["title"])) for c in charts]),
+                    ("title", "Report title", "Usage report", None)],
+                    lambda values, apply: self.engine.pin_chart(reply, values["chart"], values["title"], apply=apply),
+                    read_guard=guard))
+        except FinOpsError as error:
+            self.notify(self._error_text(error), severity="error")
 
     async def load_feature_tab(self, tab):
         if tab == "ask":
@@ -545,8 +570,8 @@ class FeatureUI:
         if not enabled(self.feature_caps, "notifications", "mark_read"):
             return
         key = self.selected().get("id", "") if self.active == "approvals" else ""
-        self.push_screen(ActionForm("Mark notification read", [("id", "Notification id", key, None)],
-            lambda values, apply: self.engine.mark_notification(values["id"], apply=apply)))
+        self.push_cached_form("Mark notification read", [("id", "Notification id", key, None)],
+            lambda values, apply: self.engine.mark_notification(values["id"], apply=apply))
 
     def action_show_boosts(self):
         self.run_worker(self._show_read_detail("Active and expired boosts", "boosts", limit=50),
@@ -564,7 +589,7 @@ class FeatureUI:
             self.push_screen(ActionForm("Assistant model and cost", [
                 ("model", "Model", settings.get("model_id") or "", choices),
                 ("title", "Auto-title conversations", "yes" if settings.get("auto_title") else "no",
-                 [("yes", "Yes"), ("no", "No")])], operation))
+                 [("yes", "Yes"), ("no", "No")])], operation, read_guard=guard))
         async def load():
             try:
                 await self._publish_read(self.engine.read, publish, "assistant_settings")

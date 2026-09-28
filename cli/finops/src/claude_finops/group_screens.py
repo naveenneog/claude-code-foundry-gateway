@@ -92,8 +92,8 @@ class GroupPicker(ModalScreen):
 def refresh_membership_form(app):
     row = app.selected()
     key = row.get("id", row.get("scope_id", ""))
-    app.push_screen(ActionForm("Refresh selected Entra membership", [
+    app.push_cached_form("Refresh selected Entra membership", [
         ("scopes", "Scope ids (comma-separated; include parent and team)", key, None),
         ("reassign", "Allow replacing an existing unit assignment", "no", [("no", "No"), ("yes", "Yes, reviewed")])],
         lambda values, apply: membership_refresh(app.engine, [v.strip() for v in values["scopes"].split(",") if v.strip()],
-            apply=apply, allow_reassignment=values["reassign"] == "yes")))
+            apply=apply, allow_reassignment=values["reassign"] == "yes"))

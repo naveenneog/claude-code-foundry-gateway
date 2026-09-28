@@ -134,7 +134,7 @@ class HttpBackend(Backend):
         return FinOpsError(f"{self.name} is unreachable. Check the HTTPS URL, VPN and network; writes are not retried.", 7)
 
     def close(self):
-        self._token = None
+        self.invalidate_credentials()
         self._client.close()
 
     def invalidate_credentials(self):

@@ -27,9 +27,12 @@ class DetailScreen(ModalScreen):
         try:
             with self.read_guard():
                 content = json.dumps(self.app.present(self.data), indent=2, ensure_ascii=True, default=str)
+                yield from self.detail_widgets(content)
         except FinOpsError as error:
             self.data = {}
-            content = self.app._error_text(error)
+            yield from self.detail_widgets(self.app._error_text(error))
+
+    def detail_widgets(self, content):
         with Vertical(id="detail-dialog"):
             yield Label(self.heading, markup=False)
             yield TextArea(content, read_only=True, id="detail-text")
@@ -151,15 +154,27 @@ class ChangeScreen(ModalScreen):
 
     BINDINGS = [("escape", "cancel", "Cancel")]
 
-    def __init__(self, engine, kind, row=None, rows=None, remove=False):
+    def __init__(self, engine, kind, row=None, rows=None, remove=False, *, read_guard=nullcontext):
         super().__init__()
         self.engine, self.kind, self.row = engine, kind, row or {}
         self.rows, self.remove = rows or [], remove
+        self.read_guard = read_guard
         self.preview_plan = None
         self.applying = False
         self.saved = False
 
     def compose(self):
+        try:
+            with self.read_guard():
+                yield from self.change_widgets()
+        except FinOpsError as error:
+            self.row, self.rows = {}, []
+            with Vertical(id="change-dialog"):
+                yield Label("Change unavailable", id="form-title", markup=False)
+                yield Static(self.app._error_text(error), id="form-status", markup=False)
+                yield Button("Cancel", id="cancel-change")
+
+    def change_widgets(self):
         title = ("Remove " if self.remove else "Edit ") + self.row.get("scope_id", self.row.get("id", self.kind))
         with Vertical(id="change-dialog"):
             yield Label(title, id="form-title", markup=False)
@@ -229,6 +244,8 @@ class ChangeScreen(ModalScreen):
             self.query_one("#headroom", Static).update(text)
 
     def operation(self, apply=False):
+        with self.read_guard():
+            pass
         confirm = self.value("confirm")
         if self.kind == "budget":
             try:
@@ -284,7 +301,7 @@ class ChangeScreen(ModalScreen):
         amount = self.value("amount")
         row = self.row
         self.dismiss()
-        self.app.action_request_budget(amount=amount, row=row)
+        self.app.action_request_budget(amount=amount, row=row, read_guard=self.read_guard)
 
     @on(Button.Pressed, "#apply-change")
     @work(exclusive=True, group="change")

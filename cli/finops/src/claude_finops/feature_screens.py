@@ -1,6 +1,7 @@
 import asyncio
 import json
 from pathlib import Path
+from contextlib import nullcontext
 
 from textual import on, work
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -23,14 +24,26 @@ class FilterChips(Static, can_focus=True):
 class ActionForm(ModalScreen):
     BINDINGS = [("escape", "cancel", "Cancel")]
 
-    def __init__(self, title, fields, operation, *, mutation=True):
+    def __init__(self, title, fields, operation, *, mutation=True, read_guard=nullcontext):
         super().__init__()
         self.heading, self.fields, self.operation = title, fields, operation
         self.mutation = mutation
+        self.read_guard = read_guard
         self.preview = None
         self.busy = False
 
     def compose(self):
+        try:
+            with self.read_guard():
+                yield from self.form_widgets()
+        except FinOpsError as error:
+            self.fields = []
+            with Vertical(id="change-dialog"):
+                yield Label("Action unavailable", markup=False)
+                yield Static(self.app._error_text(error), id="action-status", markup=False)
+                yield Button("Cancel", id="action-cancel")
+
+    def form_widgets(self):
         if self.mutation and self.app.engine.backend.requires_reason and not any(name == "reason" for name, *_ in self.fields):
             self.fields = [*self.fields, ("reason", "Audit reason (required by AUM service)", self.app.engine.change_reason, None)]
         with Vertical(id="change-dialog"):
@@ -50,6 +63,8 @@ class ActionForm(ModalScreen):
                 yield Button("Apply" if self.mutation else "Open", id="action-apply", disabled=True, variant="primary")
 
     def values(self):
+        with self.read_guard():
+            pass
         values = {name: self.query_one(f"#field-{name}").value for name, *_ in self.fields}
         if self.app.engine.backend.requires_reason and "reason" in values:
             self.app.engine.change_reason = values["reason"]

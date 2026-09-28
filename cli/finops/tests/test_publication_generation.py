@@ -8,6 +8,7 @@ import pytest
 from textual.widgets import Static, Input, DataTable, Select, TextArea
 from types import SimpleNamespace
 import typer
+from contextlib import nullcontext
 
 from claude_finops.cli import emit, report_chargeback
 from claude_finops.config import Config
@@ -17,6 +18,10 @@ from claude_finops.redaction import Redactor
 from claude_finops.tui import FinOpsApp
 from claude_finops.fake import FakeBackend
 from claude_finops.screens import DetailScreen
+from claude_finops.screens import ChangeScreen
+from claude_finops.feature_screens import ActionForm
+from claude_finops.dashboard import DashboardPanel
+from claude_finops.dashboard_drill import DashboardRows
 from claude_finops.turnstile import TurnstileBackend
 from test_principal_tokens import estate, a_only_snapshot
 
@@ -381,6 +386,113 @@ async def test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies(b
         assert "A_ONLY" not in app.screen.query_one("#detail-text", TextArea).text
         assert "sign-in changed" in app.screen.query_one("#detail-text", TextArea).text
         assert all(row["scope_id"] == "only-b" for row in engine.read("budgets")["items"])
+
+
+@pytest.mark.parametrize("surface", ["panel-exact", "rank-list", "rank-exact", "budget-edit", "pin-chart",
+                                    "mode-form", "request-form"])
+async def test_cached_dialog_handoffs_retain_origin_during_deferred_composition(bearer_tui_estate, monkeypatch, surface):
+    engine, principal = bearer_tui_estate
+    app = FinOpsApp(engine, Config(backend="fake"), first_run=False)
+    target = ActionForm if surface in {"pin-chart", "mode-form", "request-form"} else ChangeScreen if surface == "budget-edit" else (
+        DashboardRows if surface == "rank-list" else DetailScreen)
+    original_compose = target.compose
+    observed = {}
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        if surface in {"budget-edit", "mode-form", "request-form"}:
+            app.action_tab("budgets")
+        elif surface == "pin-chart":
+            app.action_tab("ask")
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        if surface == "pin-chart":
+            app.query_one("#ask-question", Input).value = "Show usage"
+            await app.ask_current()
+            await pilot.pause()
+            assert "A_ONLY_CHART" in str(app.ask_reply)
+        if surface == "request-form":
+            app.feature_caps["features"]["approvals"] = {"enabled": True, "actions": ["read", "request"]}
+        if surface == "rank-exact":
+            app.query_one("#dash-rank", DashboardPanel).focus()
+            await pilot.press("enter")
+            await pilot.pause()
+            assert isinstance(app.screen, DashboardRows)
+        origin = app._data_guards[app.active][1]
+
+        def paused_compose(screen):
+            principal[0] = "b"
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                identity = pool.submit(engine.read, "whoami").result(timeout=5)
+            app.update_access(identity)
+            observed.update(origin=guard_exit_code(origin),
+                            dialog=guard_exit_code(getattr(screen, "read_guard", nullcontext)))
+            yield from original_compose(screen)
+
+        monkeypatch.setattr(target, "compose", paused_compose)
+        if surface == "panel-exact":
+            app.query_one("#dash-kpis", DashboardPanel).focus()
+            await pilot.press("d")
+        elif surface == "rank-list":
+            app.query_one("#dash-rank", DashboardPanel).focus()
+            await pilot.press("enter")
+        elif surface == "rank-exact":
+            app.screen.action_detail()
+        elif surface == "budget-edit":
+            app.action_edit()
+        elif surface == "mode-form":
+            app.action_mode()
+        elif surface == "request-form":
+            app.action_request_budget()
+        else:
+            app.action_pin_chart()
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert observed["origin"] == 3
+        assert observed["dialog"] == 3, f"{surface} lost the cached source guard."
+        shown = "\n".join(strip.text for strip in app.screen._compositor.render_strips())
+        assert "A_ONLY" not in shown and "only-a" not in shown
+        assert "sign-in changed" in shown
+
+
+@pytest.mark.parametrize("action", ["action_copy_request", "action_open_ledger"])
+async def test_cached_request_actions_recheck_the_origin_not_an_empty_cycle(bearer_tui_estate, monkeypatch, action):
+    engine, principal = bearer_tui_estate
+    app = FinOpsApp(engine, Config(
+        backend="fake", tenant_id="00000000-0000-0000-0000-000000000071",
+        workspace_resource_id="/subscriptions/00000000-0000-0000-0000-000000000071/resourceGroups/contoso/providers/Microsoft.OperationalInsights/workspaces/contoso"),
+        first_run=False)
+    published, notices = [], []
+    monkeypatch.setattr(app, "copy_to_clipboard", lambda value: published.append(value))
+    monkeypatch.setattr(app, "open_url", lambda value: published.append(value))
+    monkeypatch.setattr(app, "notify", lambda value, **kwargs: notices.append(str(value)))
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        app.action_tab("requests")
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        assert app.selected()["request_id"] == "a-request"
+        principal[0] = "b"
+        await asyncio.to_thread(engine.read, "whoami")
+        assert guard_exit_code(app._data_guards["requests"][1]) == 3
+        getattr(app, action)()
+        assert published == []
+        assert any("sign-in changed" in message for message in notices)
+
+
+@pytest.mark.parametrize("authority", ["http", "direct"])
+def test_cached_item_guards_cannot_outlive_the_source_connection(http_estate, estate, authority):
+    http_engine, _, _ = http_estate
+    direct_backend, _, _, _, _ = estate
+    engine = http_engine if authority == "http" else Engine(direct_backend, "2026-09")
+    with engine.backend.read_cycle():
+        engine.read("trends" if authority == "http" else "overview")
+        origin = engine.backend.read_guard()
+    assert guard_exit_code(origin) == 0
+    engine.backend.close()
+    assert guard_exit_code(origin) == 3, "A deferred cached item must not retain authority after its connection closes."
 
 
 @pytest.mark.parametrize("surface", ["lookup-catalog", "lookup-results", "detail", "export", "people-selector",
