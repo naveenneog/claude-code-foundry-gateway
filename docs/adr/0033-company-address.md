@@ -44,6 +44,11 @@ a conflict, not an absent default. The installer refuses it, names both targets 
 path, and describes using the selected gateway's checkout/record or preserving the old record
 elsewhere before rerunning. It does not deploy first and then discover that address publication
 cannot use the old record.
+The flow's schema-v2 Setup or Change-foundation journal, with no gateway name or resource
+group yet, is not another gateway's record. It is resolved to the selected target in memory;
+after approval, address apply binds its identity before persisting an unverified recovery receipt.
+Its URL remains unpublished on failed proof. A bound, partial, direct-Foundry or unrelated-action
+record cannot take this first-setup path.
 
 **Certificates.** The two choices are `KeyVault` and `Pfx`, on all three tiers. A Key Vault
 certificate or secret URL is normalized to the certificate's backing secret reference after

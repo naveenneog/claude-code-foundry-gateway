@@ -1,4 +1,12 @@
 # One effective address selection for the installer and its unattended flow plan.
+function Test-ClaudeAddressDraftRecord {
+    # The flow writes its run journal before Foundation invokes the installer.
+    param($Record)
+    return [bool]($Record -and $Record.schemaVersion -eq 2 -and -not $Record.apimName -and -not $Record.resourceGroup -and
+        (-not $Record.mode -or $Record.mode -eq 'gateway') -and $Record.activeRun -and
+        ($Record.activeRun.action -eq 'Setup' -or ($Record.activeRun.action -eq 'Change' -and $Record.activeRun.change -eq 'foundation')))
+}
+
 function Resolve-ClaudeAddressInputs {
     param($Record, [System.Collections.IDictionary]$Values = @{})
     $saved = if ($Record -and $Record.address) { $Record.address } elseif ($Record -and $Record.decisions -and $Record.decisions.address) { $Record.decisions.address } else { $null }

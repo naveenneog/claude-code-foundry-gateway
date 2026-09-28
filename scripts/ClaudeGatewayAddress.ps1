@@ -3,6 +3,7 @@
 . (Join-Path $PSScriptRoot 'ClaudeNetwork.ps1')
 . (Join-Path $PSScriptRoot 'AzureRetailPrice.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeGatewayCertificate.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeGatewayAddressInput.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeGatewayAddressRecovery.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeGatewayAddressWait.ps1')
 
@@ -230,8 +231,16 @@ function Invoke-ClaudeAddressPlan {
     param($Plan, [securestring]$CertificatePassword, [string]$RecordPath, [double]$TimeoutSeconds = 2700, [double]$DnsTimeoutSeconds = 600, [double]$PollSeconds = 15)
     $d = $Plan.Data
     $record = if ($RecordPath) { Read-ClaudeDecisionRecord $RecordPath } else { $null }
-    if ($record -and ($record.apimName -ine $d.ApimName -or $record.resourceGroup -ine $d.ResourceGroup -or ($record.subscriptionId -and $record.subscriptionId -ine $d.SubscriptionId))) {
+    $draftRecord = Test-ClaudeAddressDraftRecord $record
+    $recordSubscription = Get-ClaudeFlowRecordSubscription -Record $record
+    if ($record -and ((-not $draftRecord -and ($record.apimName -ine $d.ApimName -or $record.resourceGroup -ine $d.ResourceGroup)) -or ($recordSubscription -and $recordSubscription -ine $d.SubscriptionId))) {
         throw 'The record names a different gateway; no company-address write was made.'
+    }
+    if ($draftRecord) {
+        Set-ClaudeRecordProperty $record apimName $d.ApimName
+        Set-ClaudeRecordProperty $record resourceGroup $d.ResourceGroup
+        Set-ClaudeRecordProperty $record subscriptionId $d.SubscriptionId
+        Set-ClaudeRecordProperty $record mode 'gateway'
     }
     $uri = "https://management.azure.com$($d.GatewayId)?api-version=2024-05-01"
     $gateway = Invoke-ClaudeAddressArm $uri

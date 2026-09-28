@@ -188,6 +188,8 @@ function Invoke-ClaudeAddressHttps {param($Hostname,$Thumbprint,$ConnectAddress,
     $foreign.apimName='apim-saved'
     $foreign.resourceGroup='rg-saved'
     $foreign.gatewayUrl='https://apim-saved.azure-api.net/claude'
+    Set-ClaudeRecordProperty $foreign schemaVersion 2
+    Set-ClaudeRecordProperty $foreign activeRun ([pscustomobject]@{action='Setup';change=''})
     $choice=@{AddressMode='custom';AddressHostname='new.contoso.test';AddressCertificateSource='KeyVault';AddressKeyVaultCertificateId=$initial.address.keyVaultCertificateId;AddressDnsZoneResourceId=$zone;AddressReplaceHostname='old.contoso.test'}
     $conflict=Invoke-Installer $choice $false $foreign
     Check 'a saved record for another gateway is refused before approval and deployment' {
@@ -207,6 +209,18 @@ function Invoke-ClaudeAddressHttps {param($Hostname,$Thumbprint,$ConnectAddress,
     Check 'a conflicting legacy record subscription is refused before deployment' {
         $scopeConflict.Writes.Count -eq 0 -and $scopeConflict.Failure -match '00000000-0000-0000-0000-000000000099' -and
             $scopeConflict.Failure -match [regex]::Escape($sub)
+    }
+    $draft=[pscustomobject]@{
+        schemaVersion=2;history=@();decisions=[pscustomobject]@{foundation=[pscustomobject]@{subscriptionId=$sub}}
+        activeRun=[pscustomobject]@{id='fixture-setup';action='Setup';change='';fingerprint='fixture'}
+    }
+    $firstSetup=Invoke-Installer $choice $false $draft
+    Check 'a first Setup journal is bound to the selected gateway and keeps failed proof unverified' {
+        $saved=Get-Content -Raw $recordPath|ConvertFrom-Json
+        $firstSetup.Failure -match 'HTTPS returned 503' -and $firstSetup.Writes -contains 'deployment' -and
+            $saved.apimName -eq 'apim-contoso' -and $saved.resourceGroup -eq 'rg-contoso' -and
+            -not $saved.gatewayUrl -and $saved.pendingAddress -and $saved.activeRun.id -eq 'fixture-setup' -and
+            (Get-ClaudeAddressRecovery -Record $saved -Gateway $firstSetup.Gateway).Allowed
     }
 }
 finally {if(Test-Path $scratch){Remove-Item -LiteralPath $scratch -Recurse -Force}}

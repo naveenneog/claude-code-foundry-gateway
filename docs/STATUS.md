@@ -486,6 +486,19 @@ pre-approval record-target guard or only its subscription comparison. No check o
 removed. The existing architecture boundary is unchanged; its installer source hashes were
 regenerated with all 16 diagrams.
 
+An intermediate gate at `d361d5d` passed: Test-All 1,683.9 s; gate 1,694.3 s, 22 passed,
+2 warned, zero failed, 2 skipped; 87 of 89 checks passed and the same two missing-environment
+checks skipped. The lock was acquired after 1,200.4 s and released in `finally`.
+
+A closely related compatibility case was then reproduced before handoff: first-time Setup
+writes an unbound run journal before it invokes the installer. The new refusal must not treat
+that journal as another gateway. The executable test failed, then passed after recognizing
+only schema-v2 Setup/Change-foundation journals with no gateway identity. Address apply binds
+the selected identity after approval and retains an unverified receipt on the injected 503;
+bound, partial, direct-Foundry and unrelated-action records cannot use this path. Targeted totals
+are now 17 installer, 28 flow and 79 address assertions on both hosts. The final gate follows
+this compatibility correction; the intermediate gate does not certify the later tree.
+
 ### Council round 2 corrections
 
 The lead's five-seat review of `c82f951..1345956` (read-only, 2026-09-28) returned BLOCK.

@@ -4,6 +4,12 @@ $root = Split-Path $PSScriptRoot -Parent
 $temporaryRoot=Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) 'Temp'
 $scratch = Join-Path $temporaryRoot ('company-mutations-' + [guid]::NewGuid().ToString('N'))
 $cases = @(
+    @('inputs','return \[bool\]\(\$Record -and \$Record.schemaVersion','return [bool]($false -and $Record -and $Record.schemaVersion','a first Setup journal is bound to the selected gateway and keeps failed proof unverified','R3 first-Setup journal recognized','Test-CompanyInstaller.ps1'),
+    @('inputs',' -and -not \$Record.apimName -and -not \$Record.resourceGroup','','bound or unrelated records cannot be initialized as Setup drafts','R3 draft cannot override a bound gateway','Test-CompanyFlow.ps1'),
+    @('inputs','\(-not \$Record.mode -or \$Record.mode -eq ''gateway''\)','$true','bound or unrelated records cannot be initialized as Setup drafts','R3 draft is gateway mode only','Test-CompanyFlow.ps1'),
+    @('inputs','\$Record.schemaVersion -eq 2','$true','bound or unrelated records cannot be initialized as Setup drafts','R3 draft uses the flow schema','Test-CompanyFlow.ps1'),
+    @('inputs','\(\$Record.activeRun.action -eq ''Setup'' -or \(\$Record.activeRun.action -eq ''Change'' -and \$Record.activeRun.change -eq ''foundation''\)\)','$true','bound or unrelated records cannot be initialized as Setup drafts','R3 draft action is foundation setup','Test-CompanyFlow.ps1'),
+    @('address','if \(\$draftRecord\) \{','if ($false) {','a first Setup journal is bound to the selected gateway and keeps failed proof unverified','R3 approved draft binds its target before receipt','Test-CompanyInstaller.ps1'),
     @('installer','if \(\$recordedGateway -ine \$selectedGateway -or \(\$savedSubscription -and \$savedSubscription -ine \$SubscriptionId\)\)','if ($false)','a saved record for another gateway is refused before approval and deployment','R3 saved-record target checked before deployment','Test-CompanyInstaller.ps1'),
     @('installer',' -or \(\$savedSubscription -and \$savedSubscription -ine \$SubscriptionId\)','','a conflicting legacy record subscription is refused before deployment','R3 saved-record subscription checked before deployment','Test-CompanyInstaller.ps1'),
     @('start','if \(\$changes.ContainsKey\(''DecisionChanges''\)\)','if ($false)','real DesktopSignIn commits its cross-decision change only after success (False)','R2 A2 explicit cross-decision commit','Test-FlowAppliedState.ps1'),
@@ -108,6 +114,7 @@ $paths = @{
     installer = 'Install-ClaudeGateway.ps1'; foundation = 'scripts\flow\Foundation.ps1'
     recovery = 'scripts\ClaudeGatewayAddressRecovery.ps1'; wait = 'scripts\ClaudeGatewayAddressWait.ps1'
     desktop = 'scripts\flow\DesktopSignIn.ps1'; contract = 'scripts\flow\FlowContract.ps1'; models = 'scripts\ClaudeModelLifecycle.ps1'
+    inputs = 'scripts\ClaudeGatewayAddressInput.ps1'
 }
 function Run-Suite([string]$Test) {
     $pipeline = [powershell]::Create()

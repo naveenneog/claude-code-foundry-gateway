@@ -63,6 +63,21 @@ $decision = [pscustomobject]@{
 }
 Set-ClaudeDecision -Record $record -Key foundation -Value $decision
 . (Join-Path $root 'scripts\flow\Foundation.ps1')
+Check 'bound or unrelated records cannot be initialized as Setup drafts' {
+    $draft=[pscustomobject]@{schemaVersion=2;activeRun=[pscustomobject]@{action='Setup';change=''}}
+    $invalid=@(
+        @{apimName='apim-other'}, @{resourceGroup='rg-other'}, @{mode='foundry-direct'},
+        @{schemaVersion=1}, @{activeRun=[pscustomobject]@{action='Status';change=''}},
+        @{activeRun=[pscustomobject]@{action='Change';change='address'}}
+    )
+    $refused=$true
+    foreach($override in $invalid){
+        $r=Copy-ClaudeFlowValue $draft
+        foreach($key in $override.Keys){Set-ClaudeRecordProperty $r $key $override[$key]}
+        if(Test-ClaudeAddressDraftRecord $r){$refused=$false}
+    }
+    $refused
+}
 Check 'unattended foundation forwards the explicit company-address choice' {
     $a = Get-ClaudeFlowFoundationInstallerArgs -Decision $decision -Record $record -Attended $false
     $a.AddressMode -eq 'custom' -and $a.AddressHostname -eq 'claude.contoso.test' -and

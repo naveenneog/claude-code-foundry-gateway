@@ -1006,18 +1006,18 @@ $savedAddressConfig = $null
 $savedAddressPath = Join-Path $root 'onboarding\claude-gateway.json'
 $addressApimName = if ($ExistingApim) { $ExistingApim } else { "apim-$NamePrefix" }
 . (Join-Path $root 'scripts\flow\FlowContract.ps1')
+. (Join-Path $root 'scripts\ClaudeGatewayAddressInput.ps1')
 if (Test-Path -LiteralPath $savedAddressPath) {
     $saved = Read-ClaudeDecisionRecord -Path $savedAddressPath
     $savedSubscription = Get-ClaudeFlowRecordSubscription -Record $saved
-    $recordedGateway = "$([string]$saved.resourceGroup)/$([string]$saved.apimName)"
     $selectedGateway = "$ResourceGroup/$addressApimName"
+    $recordedGateway = if (Test-ClaudeAddressDraftRecord $saved) { $selectedGateway } else { "$([string]$saved.resourceGroup)/$([string]$saved.apimName)" }
     if ($recordedGateway -ine $selectedGateway -or ($savedSubscription -and $savedSubscription -ine $SubscriptionId)) {
         $recordedScope = if ($savedSubscription) { $savedSubscription } else { 'not recorded' }
         throw "Saved record '$savedAddressPath' names gateway '$recordedGateway' (subscription $recordedScope), but the selected gateway is '$selectedGateway' (subscription $SubscriptionId). No resources were created. Use a separate checkout for the selected gateway, or back up and move this record before rerunning."
     }
     $savedAddressConfig = $saved
 }
-. (Join-Path $root 'scripts\ClaudeGatewayAddressInput.ps1')
 $addressValues = @{}
 foreach ($key in 'AddressMode','AddressHostname','AddressCertificateSource','AddressKeyVaultCertificateId','AddressPfxPath','AddressDnsZoneResourceId','AddressDnsMode','AddressReplaceHostname') {
     if ($PSBoundParameters.ContainsKey($key)) { $addressValues[$key] = $PSBoundParameters[$key] }

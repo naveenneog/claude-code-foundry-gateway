@@ -478,6 +478,9 @@ selected gateway needs its own checkout/record, or the previous record can be
 backed up and moved elsewhere before another installation. This check applies
 to both Azure and company-address choices and includes legacy subscriptions
 recorded under the Foundation decision.
+The guided flow's first Setup journal is recognized separately: it has no
+gateway identity yet. After approval, it is bound to the selected gateway for
+recovery, without publishing a URL until HTTPS proof succeeds.
 
 All three v2 tiers support an uploaded PFX or a Key Vault certificate. None
 supports a free API Management managed certificate. Basic v2 and Standard v2
