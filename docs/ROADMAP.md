@@ -448,7 +448,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       billing role that can read the agreement's price sheet, the flow and the installer show the
       agreement's prices and name the billing scope they came from; without the role they show
       Azure retail list prices, as P68 does (**U31**)
-- [ ] P75 the macOS/Linux installer prices its choices — acceptance: `install-claude-gateway.sh` lists
+- [x] P75 the macOS/Linux installer prices its choices — acceptance: `install-claude-gateway.sh` lists
       the Foundry account's region and the rest of its geography with each v2 tier's monthly list
       price, prices the tier prompt, records `sku`, `location` and the Foundry account, and offers
       the FinOps tool at the end, as `Install-ClaudeGateway.ps1` does since P68
