@@ -243,6 +243,8 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
 
     @on(TabbedContent.TabActivated)
     def switched(self, event):
+        if event.pane.id != self.active:
+            return
         self.update_brand()
         self.update_key_hints()
         self.query_one("#quick-filter", Input).display = False

@@ -55,7 +55,10 @@ class ProgressiveRefresh:
                 self._show_wait()
 
     async def _metadata_or_data_error(self, operation, data_task):
-        metadata = asyncio.create_task(operation)
+        async def run():
+            return await operation()
+
+        metadata = asyncio.create_task(run())
         try:
             if data_task is not None:
                 completed, _ = await asyncio.wait((metadata, data_task), return_when=asyncio.FIRST_COMPLETED)
@@ -138,7 +141,7 @@ class ProgressiveRefresh:
                 if independent and tab not in {"settings", "ask", "approvals", "advanced"}:
                     data_task = asyncio.create_task(self.load_tab(tab))
                 try:
-                    identity = await self._metadata_or_data_error(self._tracked_read(
+                    identity = await self._metadata_or_data_error(lambda: self._tracked_read(
                         "identity", asyncio.to_thread(self.engine.read, "whoami"), serial, tab), data_task)
                 except FinOpsError as error:
                     if data_task is not None and data_task.done():
@@ -158,7 +161,7 @@ class ProgressiveRefresh:
                     if tab not in self.allowed_tabs:
                         return
                     await self._metadata_or_data_error(
-                        self._tracked_read("capabilities", self.refresh_features(), serial, tab), data_task)
+                        lambda: self._tracked_read("capabilities", self.refresh_features(), serial, tab), data_task)
                 if not self._current_refresh(serial, tab):
                     return
                 self.verifying_identity = False

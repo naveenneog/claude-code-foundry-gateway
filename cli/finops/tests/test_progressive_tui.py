@@ -3,7 +3,7 @@ from copy import deepcopy
 import threading
 
 import pytest
-from textual.widgets import DataTable, Static
+from textual.widgets import DataTable, Static, TabbedContent
 
 from claude_finops.config import Config
 from claude_finops.dashboard import DashboardPanel
@@ -270,3 +270,49 @@ async def test_fatal_data_failure_is_rendered_before_pending_metadata_finishes(m
             backend.release()
         await settle(app, pilot)
         assert "overview" not in app.data
+
+
+@pytest.mark.parametrize("cancel_before_start", [False, True])
+async def test_metadata_cancellation_does_not_allocate_an_unowned_coroutine(monkeypatch, cancel_before_start):
+    import gc
+    import warnings
+    app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
+    calls = []
+    original = asyncio.create_task
+
+    def create(coroutine):
+        task = original(coroutine)
+        if cancel_before_start:
+            task.cancel()
+        return task
+
+    def operation():
+        calls.append("started")
+        return asyncio.to_thread(lambda: 42)
+
+    monkeypatch.setattr(asyncio, "create_task", create)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", RuntimeWarning)
+        if cancel_before_start:
+            with pytest.raises(asyncio.CancelledError):
+                await app._metadata_or_data_error(operation, None)
+            assert calls == []
+        else:
+            assert await app._metadata_or_data_error(operation, None) == 42
+            assert calls == ["started"]
+        gc.collect()
+    assert not [item for item in caught if issubclass(item.category, RuntimeWarning)]
+
+
+async def test_delayed_tab_event_does_not_cancel_the_current_view_worker(monkeypatch):
+    app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await settle(app, pilot)
+        tabs = app.query_one(TabbedContent)
+        old = TabbedContent.TabActivated(tabs, tabs.get_tab("overview"))
+        app.action_tab("budgets")
+        await settle(app, pilot)
+        calls = []
+        monkeypatch.setattr(app, "action_refresh", lambda: calls.append("refresh"))
+        app.switched(old)
+        assert calls == [], "A delayed event from the old pane must not restart the new pane's read."
