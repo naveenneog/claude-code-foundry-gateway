@@ -180,10 +180,13 @@ two new mutations, each in its own copy and counted at 66 checks, are caught: no
 (the jq 1.7.0 check fails), and the match without its guard (the jq 1.7.1 check fails).
 
 - [x] Council, five seats (round 4, all PASS)
-- [ ] The packet gate exits 0 on the tree that merges. At `f32bcde` (P75 on `f98f885`), 2026-09-28
-      12:11:23-12:34:23 IST under the shared lock: 22 passed, 2 warned, 0 failed, 2 skipped; Test-All
-      passed in 1,371.1 s of its 1,800 s budget, the Bicep build in 7.4 s. `main` then gained P76; the
-      gate runs again on the merge of that `main`
+- [x] The packet gate exits 0 on the tree that merges: at `e830a6d` (P75 on `main` `e39c3e4`, with
+      P76), 2026-09-28 13:07:14-13:35:32 IST under the shared lock: 22 passed, 2 warned, 0 failed,
+      2 skipped; Test-All passed in 1,688.3 s of its 1,800 s budget, the Bicep build in 7.8 s. The first
+      gate, at `f32bcde` (P75 on `f98f885`), 12:11:23-12:34:23: the same counts, Test-All 1,371.1 s.
+      Other agents' reviews ran during the second gate: the serial-lane flow checks, whose code P75 does
+      not change, took twice as long (the permutations 215.2 s against 91.0 s in P76's gate and 103.2 s
+      in the first), and the checks' seconds summed to 3,756 against 3,127.
 
 ## P76 one plan, one order on both shells, 2026-09-28
 
