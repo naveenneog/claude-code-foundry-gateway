@@ -247,7 +247,9 @@ The concrete layers are `publication_widgets.py` (Textual methods, properties
 and app clipboard/links), `publication_output.py` (final text, rich, CSV file
 and clipboard-helper output), and the HTTP assistant-request transport.
 They delegate to `publication_sink`, which checks the active source through
-`guarded_publish` at the write. Six identified framework input/mount handlers
+`guarded_publish` at the write. The sink decorator rejects coroutine, generator
+and async-generator functions: checking creation of a deferred body does not
+authorize its later execution. Six identified framework input/mount handlers
 and framework input actions use retained provenance; application handlers and
 layout/idle dispatch do not gain implicit authority. A refused scheduled write
 is handled before Textual abandons its message loop, clearing the view and
@@ -258,7 +260,9 @@ the original credential generation with an unpinned current-identity guard.
 
 The reported navigation cancellation is investigated with a bounded repeated
 test/file run under the shared lock. No timeout, assertion or suite budget is
-relaxed to conceal it. The lead retains full-suite and integration-gate ownership.
+relaxed to conceal it. The resumed correction runs the full AUM/FinOps Python
+suite once under the shared lock; council round 7 and the integration gate
+remain with the lead.
 
 ## Consequences
 

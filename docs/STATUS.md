@@ -154,8 +154,10 @@ All four probes become failing structural and runtime tests before the fix.
 The existing 51 exact static-write exceptions are retained. Heavier affected
 selections, repetition and mutation batches take the shared lock and release it
 in `finally`; single files and the publication selector remain the initial
-work. U26 records the bounded navigation-flake attempt. This round runs no
-Test-FinOps, Test-All, packet gate, main merge or push.
+work. U26 records the bounded navigation-flake attempt. The earlier correction
+pass ran no Test-FinOps, Test-All or packet gate. The resumed correction includes
+one full AUM/FinOps Python run under the shared lock. Council round 7, the packet
+gate and integration remain with the lead; this branch is not pushed or merged.
 
 The initial structural run on the reviewed detector reported **13 failed,
 10 passed**: the four B6 forms, eight scheduler variants and computed
@@ -207,7 +209,40 @@ with `RecursionError` during 1,024 ordinary edits. Input now retains one
 immutable content origin and replaces only the current-input check. The
 three lifecycle cases and all **37 runtime sink cases** pass; a separate
 control proves credential invalidation still rejects that original content
-even without an identity-revision change. Final combined proof follows below.
+even without an identity-revision change.
+
+The interrupted edit on `2f42fab` rejects coroutine, generator and
+async-generator functions at `publication_sink` decoration. Their bodies run
+after the creation-time check would have ended. The resumed RED run restored
+the committed implementation while retaining the three new cases:
+**3 failed, 3 passed in 3.05 s** (6.48 s wall), each failure
+`DID NOT RAISE TypeError`, with all six cases loaded. The completed restriction
+then passed the complete publication selection: **115 passed in 116.06 s**
+(120.96 s wall), including B4/B5, the 37 runtime-sink cases, 29 structural
+cases, six lifetime cases and three input/dispatch cases. No test assertion
+or deadline changed. This is a synchronous-sink contract correction within
+the existing publication component, with no new architecture path.
+
+This worktree uses the main worktree's interpreter with its own source first
+on `PYTHONPATH`. The import check and targeted command were:
+
+```powershell
+$root = (Get-Location).Path
+$python = Join-Path (Split-Path $root) 'accel\.venv-finops\Scripts\python.exe'
+$env:PYTHONPATH = Join-Path $root 'cli\finops\src'
+$env:PYTHONDONTWRITEBYTECODE = '1'
+& $python -c "import claude_finops; from pathlib import Path; print(claude_finops.__file__); assert Path(claude_finops.__file__).resolve() == Path(r'cli\finops\src\claude_finops\__init__.py').resolve()"
+& $python -m pytest cli\finops\tests\test_publication_generation.py `
+    cli\finops\tests\test_publication_structure.py `
+    cli\finops\tests\test_guarded_publication.py `
+    cli\finops\tests\test_runtime_publication_sinks.py `
+    cli\finops\tests\test_publication_widgets.py -q -p no:cacheprovider --tb=short
+```
+
+The import check printed `accel-p71\cli\finops\src\claude_finops\__init__.py`,
+not the main worktree's package. The shared lock remained with P79 during
+these short targeted runs; no mutation batch or gate ran. The final mutation
+and full-suite evidence follows after the lock becomes available.
 
 ### Council round 5 corrections
 

@@ -497,6 +497,9 @@ The sinks also enforce this at runtime: widget updates and values, status,
 clipboard/links, final terminal/file writers and assistant HTTP egress check
 the active origin at the write. A lambda, dynamic attribute call or partial
 does not inherit permission from where it was created.
+The sink decorator rejects coroutine, generator and async-generator functions,
+whose bodies would execute after a creation-time check had ended
+([ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md)).
 `guarded_deferred(origin, callback)` checks the retained source when a callback
 runs. Async callbacks retain a scope lifetime without holding an identity lock
 across waits; each later sink checks again. The AST detector separately checks
