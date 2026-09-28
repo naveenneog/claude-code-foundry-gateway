@@ -2,7 +2,7 @@
   "version": 1,
   "backend": "Example",
   "live": false,
-  "captured_at_utc": "2026-09-28T16:31:42.374646+00:00",
+  "captured_at_utc": "2026-09-28T16:37:08.534858+00:00",
   "sizes": [
     [
       80,
@@ -70,7 +70,7 @@
     "cli/finops/src/claude_finops/service_models.py": "c0010f5449e54104468605d3e67fc9241a9e4c59ae9fb00bc481dcfb5c6da31a",
     "cli/finops/src/claude_finops/service_writes.py": "36d58f543e9d9d39bbce9b4de4494f3ef553719928909de13431f4d0c73b7761",
     "cli/finops/src/claude_finops/terminal.tcss": "686c0f288e31a9be4d2fcb03d09c92d4c4492b363be6ba4342bb4f24ebcf1422",
-    "cli/finops/src/claude_finops/tui.py": "b7a18ec247690e7e0095a4ba2a409a646ada0b28b7cb000384f2c2c53f7e8861",
+    "cli/finops/src/claude_finops/tui.py": "4987ec196d11c145b0843c3d3ce7657769c79c0b7f1e2c71fda98682f971f0f5",
     "cli/finops/src/claude_finops/turnstile.py": "6d7a68d867c2243e3c539268cd2f017b3cd8bd1eb58a287f0285049fb801cbb2",
     "cli/finops/src/claude_finops/ui_features.py": "b1b7350cc5518ae4a143898c3ff6d6ec8f568e476dd5493e4f2c0d63bcf10569",
     "cli/finops/src/claude_finops/usage_refresh.py": "7589af01cff3d468ddeaebdae399c3cb122a59cb64d586d13991605e047bfa5c",

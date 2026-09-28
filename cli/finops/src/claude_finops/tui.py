@@ -23,6 +23,7 @@ from .screens import ChangeScreen, DetailScreen, ExportScreen, LookupScreen, Mon
 from .views import DIMENSIONS, TABS, view_rows
 from .ui_features import FeatureUI, EXTRA_TABS
 from .capabilities import enabled
+from .usd import can_usd_write
 from .feature_screens import FilterChips
 from .progressive import ProgressiveRefresh
 from .guarded_publication import guarded_publish, published, guarded_deferred
@@ -239,7 +240,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
         return self.query_one("#main-tabs", TabbedContent).active
 
     def check_action(self, action, parameters):
-        if action in {"edit", "apply"} and self.verifying_identity:
+        if action in {"edit", "usd_edit", "apply"} and self.verifying_identity:
             return False
         if action == "tab":
             if len(self.screen_stack) > 1 or isinstance(self.focused, Input):
@@ -252,7 +253,11 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
         if action == "add_developer":
             return self.identity.get("role") == "owner" and not self.redactor.enabled and not self.verifying_identity
         if action == "usd_edit":
-            return enabled(self.feature_caps, "usd_budgets", "write") and self.check_action("edit", parameters)
+            if (self.active not in {"people", "budgets"} or self.redactor.enabled
+                    or not enabled(self.feature_caps, "usd_budgets", "write")):
+                return False
+            row = self.selected()
+            return bool(row) and can_usd_write(self.identity, row.get("scope_type"), row.get("scope_id"), row)
         if action == "edit":
             if self.redactor.enabled:
                 return False

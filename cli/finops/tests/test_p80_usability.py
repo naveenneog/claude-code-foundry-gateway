@@ -418,3 +418,35 @@ async def test_settings_connection_is_the_first_visible_fact():
         rendered = "\n".join(strip.text for strip in app.screen._compositor.render_strips())
         assert "via Turnstile" in rendered
         assert "https://turnstile.contoso.com" in rendered
+
+
+async def test_usd_action_keeps_its_own_capability_instead_of_requiring_token_writes():
+    from test_usd_budgets import UsdFake
+
+    class UsdOnly(UsdFake):
+        def read(self, resource, **params):
+            result = super().read(resource, **params)
+            if resource == "capabilities":
+                result["features"]["native_writes"] = {"enabled": True, "actions": []}
+            return result
+
+    backend = UsdOnly()
+    app = example(backend=backend)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await settle(app, pilot)
+        app.action_tab("budgets")
+        await settle(app, pilot)
+        assert not app.check_action("edit", ())
+        button = app.query_one("#budgets #action-set-usd-budget", Button)
+        assert not button.disabled
+        await pilot.click(button)
+        await pilot.pause()
+        assert app.screen.kind == "usd_budget"
+        with guarded_publish(app.current_guard()):
+            app.screen.query_one("#amount", Input).value = "1.23"
+        await pilot.pause()
+        await pilot.click("#preview")
+        await settle(app, pilot)
+        assert app.screen.preview_plan is not None, str(app.screen.query_one("#form-status", Static).render())
+        assert app.screen.preview_plan["preview"] is True
+        assert backend.writes == []
