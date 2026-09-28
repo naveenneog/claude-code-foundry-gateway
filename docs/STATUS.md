@@ -19,8 +19,19 @@ the complete ownership plan and committed timing-table bytes equal those at `688
 The timing table retains its recorded hosted measurements rather than guessed replacements.
 The merged tree's local sharding suite passed 79 assertions in 3.7 s and the remote contract
 suite passed 37 in 2.5 s. Encoding passed for all 295 PowerShell scripts. No long local
-test command or gate ran, and this integration did not take the shared lock. Exact-HEAD
-hosted verification follows the branch push; its receipt is recorded below when complete.
+test command or gate ran, and this integration did not take the shared lock.
+
+**Follow-up hosted receipt:** [run 36472384417, attempt 1](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36472384417),
+accessed 2026-09-29, passed on the clean pushed merge HEAD
+`202ccde6787986eb53a06a2d055c5d72a8e295f1`, tree
+`f5b6403b74fbc25ed9db9547cf52f1478850f675`. `tests/Invoke-RemoteTestAll.ps1` downloaded
+the run's artifacts and independently revalidated exact commit/tree, ownership and ordered
+coverage: **95 PASS, 0 FAIL, 0 SKIP**, across all 12 shards and the successful merge job.
+Queue-to-merge wall time was **635 s (10 min 35 s)**, from 2026-09-28T19:27:37Z to
+19:38:12Z. The updated installer-permutation check passed in 38.8 s; no registration or
+ownership adjustment was needed, and the existing recorded timing table remains unchanged.
+The subsequent receipt-recording commit changes only this STATUS section. The local packet
+gate remains with the lead; ADR-0039 approval is pending and nothing in its proposal is enacted.
 
 Acceptance:
 
