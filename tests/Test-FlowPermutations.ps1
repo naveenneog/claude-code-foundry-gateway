@@ -179,7 +179,8 @@ function Start-Run($Run) {
     }
     $psi.UseShellExecute = $false
     $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
-    foreach ($name in 'CLAUDE_FLOW_SKIP_AZ_DISCOVERY', 'CLAUDE_INTERACTIVE', 'CLAUDE_NONINTERACTIVE') { [void]$psi.Environment.Remove($name) }
+    # Each run starts from the same environment: nothing inherited from the shell that runs the suite.
+    foreach ($name in @($psi.Environment.Keys | Where-Object { $_ -like 'P72_*' -or $_ -in 'CLAUDE_FLOW_SKIP_AZ_DISCOVERY', 'CLAUDE_INTERACTIVE', 'CLAUDE_NONINTERACTIVE', 'CLAUDE_FLOW_DEBUG' })) { [void]$psi.Environment.Remove($name) }
     $psi.Environment['PATH'] = $(if ($Run.Record -eq 'noaz') { Join-Path $env:SystemRoot 'System32' } else { $script:azBin + [IO.Path]::PathSeparator + $env:PATH })
     $psi.Environment['P72_PWSH'] = $script:pwsh
     $psi.Environment['P72_AZ_MODE'] = $Run.Record

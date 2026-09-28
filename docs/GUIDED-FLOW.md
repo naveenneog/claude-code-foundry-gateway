@@ -177,11 +177,10 @@ The fingerprint is the same on PowerShell 7 and Windows PowerShell 5.1, so a
 plan reviewed on one can be applied on the other. The flow writes the plan's
 canonical text itself: `ConvertTo-Json` escapes `'`, `<`, `>` and `&` on
 Windows PowerShell 5.1 only, and until P72 the same plan had a different
-fingerprint on each shell. A plan whose text holds one of those characters or a
-non-ASCII character, or whose keys sort differently by culture than by code
-point, therefore has a new fingerprint, and the fingerprint an earlier release
-printed for it does not match; run `-PlanOnly` again. A plan without them keeps
-its fingerprint.
+fingerprint on each shell. The canonical text changed with P72, so a fingerprint
+printed by an earlier release may no longer match its plan, depending on the
+shell that printed it and the plan's text; when one is refused, run `-PlanOnly`
+again.
 
 A refusal (drift, a fingerprint that does not match, a missing answer) and a
 cancel (the installer cancelled at its summary, a mistyped confirmation) print

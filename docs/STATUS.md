@@ -46,7 +46,7 @@ defaults for the budgets, request ceiling, groups and Choices, since only
 `-Change foundation` resets them. Filed as P73 in the [ROADMAP](ROADMAP.md).
 
 Mutations, each in its own copy of the worktree, counted as caught only when the suite ran its
-baseline number of checks and at least one failed: 25 of 25 caught. The first run caught 20 of 22.
+baseline number of checks and at least one failed: 33 of 33 caught, 25 before the council, 7 for the round-1 fixes and 1 for the round-2 fix. The first run caught 20 of 22.
 The two survivors were the budget merge, masked because the round trip's answers already put the
 budgets in the decision, and Status with no record file, masked by the branch for a record
 without a gateway. The tests now check the merge from a decision that holds no budgets, and Status
@@ -109,6 +109,20 @@ flow-contract and flow suites; all passed, and the blocks come from reading the 
 
 The gate on `f474fe4` failed on one check: the architecture manifest was stale after `744fd18`
 changed `scripts/flow/Foundation.ps1`, a source of a diagram, without a re-render. Rendered again.
+
+Gate on `9f4a7ee`, 05:03-05:27 IST (23:33-23:57 UTC): 22 passed, 2 warned (the existing file-size
+and open-unknowns warnings), 0 failed, 2 skipped (the AUM suites, which need a worktree venv).
+
+Council round 2 (the same agent, over `6d5320f..9f4a7ee`): BLOCK. It reran the flow suite (43
+checks), the installer suite (103 cases per shell, and 23 with `-Pairs`) and probes of the trap.
+
+| Seat | Verdict | Finding | Now |
+|---|---|---|---|
+| Architect | BLOCK | A1 again: the new wording still tied a changed fingerprint to particular characters; on PowerShell 7 a plan with `' < > &` kept its fingerprint, and a plan with a newline changed on both shells | GUIDED-FLOW and CHANGELOG say that an earlier fingerprint may no longer match, and to run `-PlanOnly` again when one is refused |
+| Coder | PASS | C1 and C2 closed; a trap from a dot-sourced run left in the caller's scope rethrows and the caller goes on, on both shells | none needed |
+| QA | BLOCK | Q4: the suite's child processes inherited `CLAUDE_FLOW_DEBUG`, so with it set the unexpected-error check failed | each child starts without `P72_*` variables and `CLAUDE_FLOW_DEBUG`; the suite passes with both set; 33rd mutation |
+| UX | PASS | yellow for a cancel, red otherwise, and the hint only for an unexpected error | none needed |
+| Security | PASS | no new path to Azure CLI or credentials | none needed |
 
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
 

@@ -831,8 +831,8 @@ exact streaming cache-creation detail remains **U13**.
 - **One plan had two fingerprints (P72).** `ConvertTo-Json` escapes `'`, `<`, `>` and `&` on
   Windows PowerShell 5.1 only, and `Sort-Object` compares by culture, so a plan reviewed on one shell
   was refused on the other. The flow writes its canonical text itself and sorts keys ordinally.
-  A plan whose text holds those characters or a non-ASCII character has a new fingerprint, so the
-  fingerprint an earlier release printed for it does not match; a plan without them keeps its own.
+  The canonical text changed, so a fingerprint printed by an earlier release may no longer match its
+  plan; when one is refused, run `-PlanOnly` again.
 - **An unattended Change foundation lost what the installer recorded (P72).** The installer
   records Desktop sign-in as `external-idp` with a flow; the merge copied that as
   `desktopSignInKind`, a value `-DesktopSignInKind` refuses, and dropped the Desktop app, issuer,
