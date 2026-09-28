@@ -175,7 +175,10 @@ carriage return and distribution suffixes (warned) and `jq-1.7.1` and `jq-1.8.2`
 bash 3.2 syntax; the merge of main changed only the Active packets line.
 
 - [x] Council, five seats (round 4, all PASS)
-- [ ] The packet gate exits 0
+- [ ] The packet gate exits 0 on the tree that merges. At `f32bcde` (P75 on `f98f885`), 2026-09-28
+      12:11:23-12:34:23 IST under the shared lock: 22 passed, 2 warned, 0 failed, 2 skipped; Test-All
+      passed in 1,371.1 s of its 1,800 s budget, the Bicep build in 7.4 s. `main` then gained P76; the
+      gate runs again on the merge of that `main`
 
 ## P72 permutation tests of the guided flow and the installer, 2026-09-28
 
