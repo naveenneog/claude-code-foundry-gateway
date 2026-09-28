@@ -91,7 +91,7 @@ in both cases. The 25th mutation keeps a resolver access for a named-value store
       ([What the tests hold](GUIDED-FLOW.md#what-the-tests-hold)); SETUP.md describes the summary
       and the `-Yes` Desktop parameters, with a live image
       ([70](guide/70-installer-summary-every-choice.png)); CHANGELOG
-- [ ] Council, five seats; the packet gate exits 0
+- [x] Council, five seats; the packet gate exits 0. Round 3 passed on all five seats; the gate on `347b702` passed
 
 Council round 1 (gpt-6-astra, read-only, over `aa7ed19..6d5320f`): BLOCK. It ran the installer,
 flow-contract and flow suites; all passed, and the blocks come from reading the code.
@@ -123,6 +123,13 @@ checks), the installer suite (103 cases per shell, and 23 with `-Pairs`) and pro
 | QA | BLOCK | Q4: the suite's child processes inherited `CLAUDE_FLOW_DEBUG`, so with it set the unexpected-error check failed | each child starts without `P72_*` variables and `CLAUDE_FLOW_DEBUG`; the suite passes with both set; 33rd mutation |
 | UX | PASS | yellow for a cancel, red otherwise, and the hint only for an unexpected error | none needed |
 | Security | PASS | no new path to Azure CLI or credentials | none needed |
+
+Council round 3 (the same agent, over `9f4a7ee..347b702`): all five seats PASS, no BLOCK. It reran its
+reproduction with `CLAUDE_FLOW_DEBUG` and `P72_FINOPS_FAIL` set: 43 of 43.
+
+Gate on `347b702`, 05:53-06:19 IST (00:23-00:49 UTC): 22 passed, 2 warned (the existing file-size and
+open-unknowns warnings), 0 failed, 2 skipped (AUM, no worktree venv). Test-All passed in 1,538.1 s of its
+1,800 s budget; the P72 suites took 115.5 s (serial lane), 53.7 s and 86.6 s (flow start).
 
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
 

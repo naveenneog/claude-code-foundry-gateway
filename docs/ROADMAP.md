@@ -466,7 +466,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       each panel as its data arrives, with an estimate while it waits; Direct reuses one token per
       process and batches its gateway reads, and time-to-first-data for `whoami`, `budget list`,
       `usage show` and `status` is measured before and after on the reference estate (**U32**)
-- [ ] P72 permutation tests of the guided flow and the installer — acceptance: every combination of
+- [x] P72 permutation tests of the guided flow and the installer — acceptance: every combination of
       action (Setup, Change foundation, Guide, Status), record state (none, recorded and matching,
       recorded with another gateway URL, recorded but missing, not readable), mode (attended,
       `-PlanOnly`, unattended apply), entitlement store and Desktop sign-in kind holds the flow's
