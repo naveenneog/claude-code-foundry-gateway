@@ -193,6 +193,15 @@ same delayed-completion defect in HTTP backend caches, identity/CSV output,
 lookup/detail/export controls, assistant state and membership links; these
 surfaces keep the read cycle through publication as well.
 
+## Council round 4 amendment, 2026-09-28
+
+A cached item's originating publication guard remains attached when the item
+is passed to another deferred control. A newly opened cycle that performed no
+read cannot replace that guard. Freshly re-read details use their new read's
+guard; cached details retain the prior source guard through dialog composition.
+The lead explicitly owns integration and full-suite/gate execution for this
+round; targeted pytest and mutation evidence are the branch handoff.
+
 ## Consequences
 
 No server deployment, account switch, consent, resource grant or authority

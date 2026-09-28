@@ -135,6 +135,25 @@ Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
 
 ## P71 AUM answers fast and says why it cannot, 2026-09-28
 
+### Council round 4 corrections
+
+The fourth review over `05605e8..c909708` closed B1/B2 and confirmed the unchanged
+Windows fixture assertions and retained U35/U36/U37. Deferred cached-item guard
+handoffs remain the Security finding.
+
+| Seat | Round 4 verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | PASS | Completed-source cycle/publication structure accepted | Retained |
+| Coder | PASS | Round-3 implementation accepted | Retained |
+| QA | PASS | B1/B2 replays reject with exit 3 before cache or render | Retained |
+| UX | PASS | Publication failures are explained without stale output | Retained |
+| Security | BLOCK | B3: cached detail replaces its originating guard with an unpinned new-cycle guard | Pending: retain the cached item's guard through deferred composition and check other cached guard handoffs |
+
+The real Engine/Turnstile/Textual reproduction is tested before the fix. This
+round runs only the publication selector and affected pytest files; the lead
+owns main integration, Test-FinOps, Test-All and the packet gate. No new merge,
+gate, database operation or history rewrite is part of this correction.
+
 ### Council round 3 corrections
 
 The third review over `0e11417..05605e8` confirmed that both round-2 Direct
