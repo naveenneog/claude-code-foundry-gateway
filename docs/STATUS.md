@@ -2,6 +2,192 @@
 
 **Active packets (2026-09-28, run in parallel worktrees):** P69 the company address in the flow, P71 AUM answers fast and says why it cannot, P75 the macOS/Linux installer prices its choices ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
+## P75 the macOS/Linux installer prices its choices, 2026-09-28
+
+`install-claude-gateway.sh` is the macOS and Linux installer. It asks for the region with no
+price, asks for the tier with no price, and its summary, which is the approval, says "BasicV2 is
+about $150/month at list price" whatever tier and region were chosen, and "Provisioning takes
+30-45 minutes". `Install-ClaudeGateway.ps1` stopped printing both before P68 (CHANGELOG: a Premium
+v2 install was approved against the fixed figure at $2,800/month, and the whole install took
+5 minutes 23 seconds), and prices its region and tier prompts since P68
+([ADR-0032](adr/0032-guided-flow-starts-at-once.md)). The bash installer's record also lacks the
+tier, the region and the Foundry account, and it does not offer the FinOps tool. Work is isolated
+to `p75-bash-installer-prices`, based on `38ad175`.
+
+Measured at 01:30 UTC on 2026-09-28: the Azure Retail Prices API query the PowerShell installer
+uses (`serviceName eq 'API Management' and priceType eq 'Consumption'` and the three v2 unit
+meters) returned 182 rows on one page in 0.6 s; in eastus2, Basic v2 0.20548, Standard v2 0.9589
+and Premium v2 3.83562 an hour, USD 150, 700 and 2,800 a month at 730 hours; Italy North
+publishes two of the three meters. `az account list-locations` returned 109 regions in 4.9 s,
+including EUAP and staging regions in the US geography group that publish no v2 price.
+
+Found while testing: jq.exe on Windows ends its output lines with CRLF. In Git Bash, the last,
+empty field of a tab-separated option line was a carriage return, which is not empty and which
+awk reads as 0, so a tier that a region does not publish (in the test fixture, one region without Premium v2) printed
+as USD 0.00. Measured in Git Bash: command substitution drops the carriage return of the last
+line only, so a single value (a URL, a price) keeps none, and lines that `read` splits keep theirs.
+The region lines drop it before they are split, and the stub `az` and `curl` refuse any argument
+that carries one. The discovery loop that already existed (`--foundry-account` not given) reads
+`jq -r` output the same way and is not changed here.
+
+- [x] Asked in a terminal, the region prompt lists the default region first (the Foundry
+      account's region unless `--location` names another) and then the other physical regions in
+      its geography group that publish a v2 price, cheapest Basic v2 first, each with the three v2
+      tiers' monthly list price for one unit at 730 hours, from one Retail Prices API call; a tier
+      a region does not publish reads "not published"; the answer is a number or a region name in
+      any case or spacing, and anything else is asked again
+- [x] The tier prompt shows each tier's monthly list price in the chosen region
+- [x] The summary prices the chosen tier in the chosen region at list price, or says the price
+      could not be read and names the pricing page; it no longer names a fixed price, and the
+      provisioning note is the PowerShell installer's measured figure
+- [x] With the prices unreadable, the region and tier prompts say so with the reason, and the
+      install goes on; under `--yes` there is no table and no tier list, and the summary still
+      prices the choice
+- [x] The record holds `mode`, `sku`, `location`, `foundryAccount`, `foundryResourceGroup` and
+      `requestsPerMinute`, as the PowerShell installer's record does
+- [x] Run on its own in a terminal, it ends by offering the FinOps tool
+      (`scripts/Select-ClaudeFinOpsTooling.ps1 -Region`, through PowerShell 7); `--choose-finops`
+      opens it without asking and `--skip-finops-offer` leaves it out; without PowerShell 7, or
+      under `--yes`, the command is a numbered next step
+- [x] `tests/Test-BashInstaller.ps1` runs the installer in Git Bash from a TEMP copy, with stub
+      `az`, `curl` and `pwsh` and a PATH without the real Azure CLI, over a terminal run, a region
+      named by name, an unknown region, unreadable prices, `--yes`, a full run to the record, the
+      FinOps offer accepted, declined, skipped and forced, and no PowerShell 7; the script uses no
+      construct that needs bash 4, since it states that it runs on macOS
+- [x] SETUP.md and CHANGELOG
+
+Mutations, each in its own copy of the worktree, counted as caught only when the suite ran all 49
+checks and at least one failed: 24 of 24 caught, among them free-tier rows kept, the first tier
+instead of the marginal one, other geographies or unpriced regions listed, the summary pricing Basic
+v2 whatever is chosen, prices read at every use, one page read, the table under `--yes`, the
+record without the tier, the FinOps tool offered under `--yes` or with `CLAUDE_NONINTERACTIVE=1`,
+a bash 4 construct, and a carriage return in the region lines or reaching `az`. A 25th, the
+carriage return strip removed from the next-page link, survived: in Git Bash a single value keeps
+no carriage return, so that strip changed nothing, and it is removed.
+
+Council round 1 (gpt-6-astra, five seats, read-only, over `38ad175..426b132`): BLOCK.
+
+| Seat | Verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | PASS | Should-fix: the cent was rounded half up. `ConvertTo-MonthlyPrice` rounds a `[decimal]` half to even, so 0.2005 an hour was 146.37 a month in bash and 146.36 in PowerShell | The monthly figure is computed on whole billionths of the price as written and rounded half to even. It equals `[math]::Round([decimal]$p * 730, 2)` over the parity run's 160 prices and, in a one-off run, over 3,207 prices, 200 of them half-cent months |
+| Coder | BLOCK | `read` with a tab IFS joins empty fields: with Standard v2 missing, the Premium v2 price printed under Standard v2 | A price that is not published is written `null`, which `money_` prints as not published |
+| Coder | BLOCK | An `az account list-locations` entry that is not a region object stopped both jq reads, and any region name was then taken | Entries that are not objects with a string `name` and an object `metadata` are skipped, as `Read-GatewayRegion` skips them |
+| QA | BLOCK | Without jq the suite printed SKIP and exited 0 with no check | The suite fails without bash or jq; Test-All skips it with the reason |
+| QA | BLOCK | The offer-order check passed when the next step it compares with was absent | Both positions must be found |
+| UX | BLOCK | A price list jq could not transform read as prices that are not published, with no reason | The transform's exit status is checked, a price that is not a number fails it, and the prompts give the reason |
+| Security | BLOCK | `NextPageLink` reached curl unchecked, a `file://` link included | Only a next page on `https://prices.azure.com`, with or without `:443`, is read, and curl runs with `--proto '=https'`. The URL always starts with `https://`, so no argument reads as an option |
+| Security | should-fix | jq's directory and `/usr/bin` can hold a real `pwsh` or `az` | The runs call jq through a stub that names its absolute path; their PATH is the stubs, `/usr/bin` and `/bin`, and the run without PowerShell 7 reports SKIP when `/usr/bin` or `/bin` holds a `pwsh` |
+
+Found while fixing:
+- The API writes its next page as `https://prices.azure.com:443/api/retail/prices?...&$skip=1000`
+  (read 2026-09-28 from a query of more than 1,000 rows). A check for `https://prices.azure.com/`
+  alone would have refused every second page.
+- In bash, `"${x:-{}}"` with `x` set expands to `$x` followed by `}`: the parser ends the expansion
+  at the first `}`. The default is assigned on its own line.
+- In PowerShell, a cast of an empty pipeline, `[string](@() | Select-Object -First 1)`, is `$null`,
+  not `''`, so the suite's missing-jq branch would have thrown. It uses `"$(...)"`.
+
+`tests/Test-BashInstaller.ps1` now holds 62 checks over 19 runs, in about 30 s. The new runs: a
+missing first and middle price, region entries that are not regions, a price written as a string,
+a next page off the host and one over `http://`, and a parity run over 160 prices in 61 regions,
+72 of them half-cent months. In the terminal run and the parity run, the region table must equal
+the one `Format-ClaudeGatewayRegionTable` prints from the same files through
+`Get-ClaudeApimV2Prices`. Against `426b132`'s installer, 8 of the new checks fail. 12 new
+mutations, 12 caught at 62 checks: the order check with its anchor renamed, an empty field for an
+unpublished price, the type checks removed from either region read, the transform's status
+ignored, a price written as a string taken, any next page followed, the API's own next-page form
+refused, a half cent rounded up, every price rounded as a double, and the price map defaulted with
+the stray brace.
+
+Council round 2 (gpt-6-astra, five seats, read-only, over `426b132..2cb7c7a`): BLOCK. Every
+round-1 BLOCK is closed.
+
+| Seat | Verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | BLOCK | B1: one price written in different ways was rounded differently. jq 1.7 and later keep a number's literal text, so `0.2005000000` and `2.005000000e-1` took the double fallback and gave 146.37 a month where `0.2005` gave 146.36; `10000.0005` gave 7300000.37 where PowerShell gives 7300000.36. 40 of 7,420 inputs differed | `547df27` |
+| Coder | PASS | the round-1 findings 3 and 4 closed | none needed |
+| QA | PASS | findings 6 and 7 closed; add B1's literals to the parity fixture | `547df27` |
+| UX | PASS | finding 9 closed | none needed |
+| Security | PASS | finding 10 closed; no `--` before the URL is safe after the URL check | none needed |
+
+`ConvertTo-MonthlyPrice` computes `[math]::Round([decimal]$HourlyPrice * 730, 2)`. On PowerShell 7,
+ConvertFrom-Json reads the price as a double, and `[decimal]` of a double is .NET's VarDecFromR8:
+the double is scaled by a power of ten chosen from its binary exponent, in double arithmetic, and
+rounded half to even to at most 15 significant digits (measured on .NET 10.0.12: 0.0074999999999999945
+becomes 0.0075, and 3.9985000000000052 becomes 3.9985). Cutting the double's shortest decimal form to
+15 digits, tried first, gave 5.47 and 2918.91 for those two, where PowerShell 7 gives 5.48 and
+2918.90: 2,485 differences over 124,993 prices of at most 17 significant digits, 72,000 of them a
+hair from a half-cent month. The installer's `monthly` now takes the same steps as VarDecFromR8:
+the binary exponent by exact halving and doubling (jq 1.5 has no `frexp`), the same power of ten
+and scale, the same rounding, then the 730-hour product on digit strings with cents half to even.
+Over the same 124,993 prices, run through the installer's own definitions with jq 1.8.2: 0
+differences from PowerShell 7; over 3,000 of them through the whole transform: 0.
+
+Two limits, stated in the installer: Windows PowerShell 5.1 reads a price written without an
+exponent as an exact decimal, so above 15 significant digits the two PowerShell hosts can differ by
+a cent, and this installer gives PowerShell 7's; jq 1.7.1 and later round a price written with more
+than 17 significant digits to 17 before converting it (0.0105000000000000501 becomes
+0.01050000000000005, where .NET reads 0.010500000000000051), so such a price can differ by a cent.
+Every one of the 43 differences in a set of 132,993 had 18 significant digits, measured with jq 1.8.2.
+The Retail Prices API wrote the 182 API Management v2 prices with at most 7 significant digits (read
+2026-09-28). jq 1.7.0 differs more: see council round 3 below.
+
+The parity fixture has ten written prices: B1's three, 6.25E-2, 0.2214999999999999, 1.25e-05, and
+four 17-digit prices a hair from a half-cent month (PowerShell 7: 5.48, 147.10, 752.27 and 2918.90).
+Against `2cb7c7a`'s installer the parity check fails (pr67: bash 5.47, PowerShell 5.48); after the
+fix the 62 checks pass, in 50 s.
+
+Mutations, the same rule, at 62 checks: 36 of 36 caught. The two that changed the former rounding
+(a half cent rounded up, every price rounded as a double) targeted code that is gone; three take
+their place: cents rounded half up on the digit string, the 15-digit conversion rounding half up,
+and the 15-digit conversion truncating.
+
+Council round 3 (gpt-6-astra, five seats, read-only, over `2cb7c7a..dcca62c`): BLOCK. B1 is closed:
+its three prices and the four near-ties match PowerShell 7, and 11,705 more inputs (zero, exponent
+forms, 0.0001 to 100,000) differed on none of jq 1.5, 1.6 and 1.8.2.
+
+| Seat | Verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | PASS | B1 closed | none needed |
+| Coder | BLOCK | B2: jq 1.7.0 converts a number literal through a 16-digit decimal (decimal64), so 0.010500000000000051 gives 7.66 a month where PowerShell 7 gives 7.67; 18 of the 11,705 inputs differed on jq 1.7.0. `scripts/preflight.sh` accepts that release | the preflight warns, below |
+| QA | PASS | the literal-preserving fixtures exercise B1 | none needed |
+| UX | BLOCK | B2 in the text: "jq 1.7 and later" is wrong for 1.7.0 | the installer's comment and this section name 1.7.0 and 1.7.1 apart |
+| Security | PASS | the new arithmetic runs no command and reads no path | none needed |
+
+Measured after the review, with the official release binaries of jq 1.5, 1.6, 1.7 (which names
+itself `jq-1.7-dirty` on Windows) and 1.7.1, over the 124,993 prices of at most 17 significant
+digits: jq 1.7.0 differed from PowerShell 7 on 8,686, every one of them written with 17 significant
+digits; jq 1.5, 1.6 and 1.7.1 on none. The jq 1.7.1 release notes name the change: the conversion
+through decimal64 was replaced ([NEWS](https://github.com/jqlang/jq/blob/jq-1.7.1/NEWS.md)). The API
+writes these prices with at most 7 significant digits, so with jq 1.7.0 every published price matches
+PowerShell 7's cent; a refusal of jq 1.7.0 would stop an install over a price form the API does not
+use. The admin preflight warns instead: "jq 1.7.0: a price written with 17 significant digits can be a
+cent off; jq 1.7.1 or later matches the PowerShell installer", with how to upgrade. The developer
+setup computes no price and is not warned. `tests/Test-BashInstaller.ps1` has two more runs, with jq
+reporting `jq-1.7-dirty` and `jq-1.7.1`: the first is warned and installs, the second is not warned,
+and neither is the jq on the machine (66 checks, in 43 s).
+
+Council round 4 (gpt-6-astra, five seats, read-only, over `dcca62c..9cd7b77`): all five seats PASS.
+B2 is closed as a warned limit, not an arithmetic fix: the warning is proportionate for prices the
+API writes with at most 7 significant digits, and it does not make jq 1.7.0 exact for a price
+written with 17. The Coder seat checked the pattern against `jq-1.7`, `jq-1.7-dirty`, a trailing
+carriage return and distribution suffixes (warned) and `jq-1.7.1` and `jq-1.8.2` (not warned), in
+bash 3.2 syntax; the merge of main changed only the Active packets line.
+
+After the review, under the shared lock (2026-09-28 13:03-13:05 IST): the suite against the preflight
+before the warning (`dcca62c`) fails one check, the jq 1.7.0 warning, and passes the other 65; the
+two new mutations, each in its own copy and counted at 66 checks, are caught: no warning on jq 1.7.0
+(the jq 1.7.0 check fails), and the match without its guard (the jq 1.7.1 check fails).
+
+- [x] Council, five seats (round 4, all PASS)
+- [x] The packet gate exits 0 on the tree that merges: at `e830a6d` (P75 on `main` `e39c3e4`, with
+      P76), 2026-09-28 13:07:14-13:35:32 IST under the shared lock: 22 passed, 2 warned, 0 failed,
+      2 skipped; Test-All passed in 1,688.3 s of its 1,800 s budget, the Bicep build in 7.8 s. The first
+      gate, at `f32bcde` (P75 on `f98f885`), 12:11:23-12:34:23: the same counts, Test-All 1,371.1 s.
+      Other agents' reviews ran during the second gate: the serial-lane flow checks, whose code P75 does
+      not change, took twice as long (the permutations 215.2 s against 91.0 s in P76's gate and 103.2 s
+      in the first), and the checks' seconds summed to 3,756 against 3,127.
+
 ## P76 one plan, one order on both shells, 2026-09-28
 
 Merged to `main` as `d731023` (`--no-ff`, 2026-09-28); the merge tree equals the tree of the branch
