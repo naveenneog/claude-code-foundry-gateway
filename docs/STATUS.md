@@ -16,7 +16,9 @@ scanner used about 2.4 cores at 15:45, with 121 threads queued) and the options 
 - [x] `commandTimeoutMs` is 3,600,000; `tests/Test-All.ps1`, its throttle, per-check timeouts and
       shards are unchanged
 - [x] ADR-0036, CHANGELOG, and ROADMAP P78, which returns the budget to 1,800,000
-- [ ] Council, five seats
+- [x] Council, five seats: round 1 BLOCK (ARCHITECTURE.md and REFERENCE.md stated the 30-minute budget
+      as current; the ADR's check counts and two agent-reported gates; fixed in `2d0fa09`), round 2 all
+      five seats PASS. No test run: the change is one charter number and documents
 - [ ] The next packet gate on `main` passes within the new budget
 
 ## P75 the macOS/Linux installer prices its choices, 2026-09-28
