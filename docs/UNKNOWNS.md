@@ -65,6 +65,10 @@ guided-flow start FAIL in 225.2 s; the latter passed directly in 90.8 s afterwar
 The failed guided-flow assertion was not retained by the gate's timeout branch.
 No assertion or timeout was relaxed; the next run retains the original runner's
 stdout/stderr as separate evidence.
+That second gate passed at `84bddeb` on 2026-09-28 00:22:51Z, with complete
+output proving 408 AUM tests passed (192.82 s), and the guided-flow check passed.
+U26 remains open for the earlier unrecorded failures; the retry is not a
+retrospective explanation for them.
 
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 
@@ -754,6 +758,7 @@ and status in **8.938 s** from a fresh CLI process. Short credential/metadata
 deadlines can still produce an explicit unverified exit 7 under workstation or
 network load; they do not establish a stopped server. The external automation
 has not been changed.
+The final P71 read at **2026-09-28 00:23:34Z** still reported `Ready`.
 
 The stop token's claims name an application (`idtyp` `app`) issued by a tenant other than the
 subscription's, so the stop comes from an automation outside this

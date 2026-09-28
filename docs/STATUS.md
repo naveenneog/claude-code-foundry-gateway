@@ -4,8 +4,8 @@
 
 ## P71 AUM answers fast and says why it cannot, 2026-09-28
 
-Implementation is on `p71-aum-speed`, based on `aa7ed19`. The lead owns the council
-review and merge; the branch stops at a passing packet gate. The ROADMAP box remains
+Implementation is on `p71-aum-speed`, based on `aa7ed19`. The packet gate passed
+at `84bddeb`; the lead owns the council review and merge. The ROADMAP box remains
 open until that merge. The owner's 2026-09-27 investigation measured Turnstile reads
 at 33-36 s followed by exit 7, despite a healthy liveness endpoint. Direct reads
 paid repeatedly for Azure CLI tokens and PowerShell bridge processes. Research:
@@ -32,7 +32,7 @@ paid repeatedly for Azure CLI tokens and PowerShell bridge processes. Research:
       Azure, Entra or Turnstile resource is changed
 - [x] ADR-0035, AUM, troubleshooting, changelog and architecture records describe
       the behavior; terminal captures numbered 60 onward are redacted and inspected
-- [ ] The worktree venv runs pytest through `Test-FinOps.ps1`, and the locked
+- [x] The worktree venv runs pytest through `Test-FinOps.ps1`, and the locked
       `node .ironclad/gate.mjs --stage packet` passes with that AUM check included
 
 Initial observation, 2026-09-27 **20:13:35Z**: PostgreSQL
@@ -158,6 +158,24 @@ unchanged Test-All command's stdout/stderr through a local observational Node
 preload; it does not replace the command, alter arguments/results, relax a
 timeout or skip a check. Any timed-out descendant of that gate is cleaned up
 before its lock is released. Evidence remains under `.finops-evidence`.
+
+Attempt 2, `84bddeb`, **2026-09-27 23:58:37Z to 2026-09-28 00:22:51Z**:
+**PASS, exit 0**. The gate reports **22 passed, 2 warnings, 0 failures**;
+lint and typecheck are the two unconfigured checks, not omitted AUM tests.
+The declared Test-All command passed in **1,443.0 s** and the Bicep build in
+**8.9 s**. Its complete output confirms **77 registered checks: 76 PASS,
+1 SKIP** (the separate optional AUM service venv is absent). **AUM ran all
+408 pytest cases, passed in 192.82 s**, with 196.3 s for its enclosing check.
+The guided-flow check also passed on this run. No command, assertion, deadline
+or charter setting was changed. The shared lock was acquired after 18 one-minute
+waits and released in `finally`. Both gate receipts and the second full runner
+output are retained.
+
+Final read, **2026-09-28 00:23:34Z**: the authorized Turnstile PostgreSQL server
+is still **Ready**. The worktree venv and private evidence remain for the lead.
+Only this final ledger record follows the passing gate; implementation and
+published images are unchanged. No merge or push was performed. Council
+verdicts and the ROADMAP completion remain the lead's responsibility.
 
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
 
