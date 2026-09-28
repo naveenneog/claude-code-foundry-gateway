@@ -17,6 +17,28 @@ function Get-Registered([string]$Text, [switch]$Azure) {
         ForEach-Object { [pscustomobject]@{ Name = $_.Groups[1].Value; Script = $_.Groups[2].Value } })
 }
 
+# Each stub check writes one record. Windows reuses process ids, and under heavy process churn a later
+# stub can receive the id of one that has exited, so a record named by process id alone can overwrite
+# another check's record (observed 2026-09-28: 91 checks passed, 90 records).
+$script:StubTemplate = @'
+param([switch]$Check, [switch]$SkipLive, [string]$Shard, [string]$Token, [string]$Text)
+$ErrorActionPreference = 'Stop'
+$marks = 'MARKS'
+$record = [ordered]@{ Script = (Split-Path $PSCommandPath -Leaf); Token = $Token; Pid = $PID
+    Proc = "$PID-$([Diagnostics.Process]::GetCurrentProcess().StartTime.ToUniversalTime().Ticks)"
+    Start = [datetime]::UtcNow.Ticks; End = $null; Check = [bool]$Check; SkipLive = [bool]$SkipLive
+    Text = $Text; Shard = $Shard; Temp = [IO.Path]::GetTempPath() }
+$recordPath = Join-Path $marks "$($record.Proc).json"
+[IO.File]::WriteAllText($recordPath, ($record | ConvertTo-Json))
+Write-Host "OUTPUT:$($record.Script):$Token"
+try {
+    BODY
+} finally {
+    $record.End = [datetime]::UtcNow.Ticks
+    [IO.File]::WriteAllText($recordPath, ($record | ConvertTo-Json))
+}
+'@
+
 function Invoke-Scenario {
     param(
         [string]$RunnerText, [hashtable]$Behaviour = @{}, [string[]]$Missing = @(),
@@ -28,23 +50,7 @@ function Invoke-Scenario {
     New-Item -ItemType Directory -Path $tests, $marks, (Join-Path $dir 'scripts') -Force | Out-Null
     [IO.File]::WriteAllText((Join-Path $tests 'Test-All.ps1'), $RunnerText)
     $quotedMarks = $marks.Replace("'", "''")
-    $stub = @'
-param([switch]$Check, [switch]$SkipLive, [string]$Shard, [string]$Token, [string]$Text)
-$ErrorActionPreference = 'Stop'
-$marks = 'MARKS'
-$record = [ordered]@{ Script = (Split-Path $PSCommandPath -Leaf); Token = $Token; Pid = $PID
-    Start = [datetime]::UtcNow.Ticks; End = $null; Check = [bool]$Check; SkipLive = [bool]$SkipLive
-    Text = $Text; Shard = $Shard; Temp = [IO.Path]::GetTempPath() }
-$recordPath = Join-Path $marks "$PID.json"
-[IO.File]::WriteAllText($recordPath, ($record | ConvertTo-Json))
-Write-Host "OUTPUT:$($record.Script):$Token"
-try {
-    BODY
-} finally {
-    $record.End = [datetime]::UtcNow.Ticks
-    [IO.File]::WriteAllText($recordPath, ($record | ConvertTo-Json))
-}
-'@
+    $stub = $script:StubTemplate
     foreach ($c in (Get-Registered $RunnerText -Azure | Sort-Object Script -Unique)) {
         if ($Missing -contains $c.Script) { continue }
         $body = if ($Behaviour.ContainsKey($c.Script)) { $Behaviour[$c.Script] } else { 'Start-Sleep -Milliseconds 200; exit 0' }
@@ -98,15 +104,35 @@ function Mutate([string]$Text, [string]$From, [string]$To) {
 Write-Host 'Test-All - isolated processes, complete receipts, bounded failures' -ForegroundColor Cyan
 $registered = @(Get-Registered $source)
 Assert 'at least ten offline checks are registered' ($registered.Count -ge 10)
+# Get-Registered reads a name between single quotes with no quote inside. A registration it cannot read
+# (for example an apostrophe written as '') gets no stub below, and the full run fails without naming it.
+$registrationBlock = [regex]::Match($source, '(?s)# BEGIN CHECK REGISTRATION(.*?)# END CHECK REGISTRATION').Groups[1].Value
+$unread = @($registrationBlock -split "`r?`n" | Where-Object { $_ -match '^\s*Invoke-Check\s' -and @(Get-Registered $_ -Azure).Count -ne 1 } | ForEach-Object { $_.Trim() })
+Assert 'every Invoke-Check line in the registration is read' ($registrationBlock -match 'Invoke-Check' -and $unread.Count -eq 0) "not read; a check name is single-quoted with no apostrophe: $($unread -join '; ')"
 $savedThrottle = $env:TEST_ALL_THROTTLE
 try {
+    # A stub run on its own shows how its record is named: by process id and that process's start time,
+    # compared with the start time the operating system reports to the process that started the stub.
+    $probeDir = Join-Path $scratch ('probe-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $probeDir -Force | Out-Null
+    $probeStub = Join-Path $probeDir 'Probe.ps1'
+    [IO.File]::WriteAllText($probeStub, $script:StubTemplate.Replace('MARKS', $probeDir.Replace("'", "''")).Replace('BODY', 'exit 0'))
+    $probe = Start-Process pwsh -ArgumentList @('-NoProfile', '-NonInteractive', '-File', "`"$probeStub`"", '-Token', 'probe') -NoNewWindow -Wait -PassThru -RedirectStandardOutput (Join-Path $probeDir 'output.txt')
+    $probeProc = "$($probe.Id)-$($probe.StartTime.ToUniversalTime().Ticks)"
+    $probeFiles = @(Get-ChildItem -LiteralPath $probeDir -Filter '*.json')
+    $probeRecord = if ($probeFiles.Count -eq 1) { Get-Content -LiteralPath $probeFiles[0].FullName -Raw | ConvertFrom-Json }
+    Assert 'a stub record is named by process id and start time, so a reused process id keeps both records' (
+        $probe.ExitCode -eq 0 -and $probeFiles.Count -eq 1 -and $probeRecord.Proc -eq $probeProc -and
+        $probeFiles[0].Name -eq "$probeProc.json"
+    ) "exit $($probe.ExitCode); files: $(($probeFiles | ForEach-Object Name) -join ', '); Proc: $($probeRecord.Proc); expected: $probeProc"
+
     $env:TEST_ALL_THROTTLE = $null
     $r = Invoke-Scenario $source
     $skipped = @($r.Timings | Where-Object Result -eq 'SKIP')
     $expectedRan = $registered.Count - $skipped.Count
     Assert 'a passing full offline registration passes' ($r.Exit -eq 0) "exit $($r.Exit): $($r.Output.Substring(0, [math]::Min(350, $r.Output.Length)))"
     Assert 'every registered check is summarized once in registration order' (Has-CompleteSummary $r $registered)
-    Assert 'every non-skipped check runs in its own process' ($r.Ran.Count -eq $expectedRan -and @($r.Ran.Pid | Sort-Object -Unique).Count -eq $expectedRan) "$($r.Ran.Count) of $expectedRan"
+    Assert 'every non-skipped check runs in its own process' ($r.Ran.Count -eq $expectedRan -and @($r.Ran.Proc | Sort-Object -Unique).Count -eq $expectedRan) "$($r.Ran.Count) of $expectedRan"
     $expectedSkips = @('AUM service - authority, API and mutations', 'AUM - commands, dashboard and pilot')
     Assert 'both optional Python environments are explicit counted SKIPs' (
         $skipped.Count -eq $expectedSkips.Count -and
@@ -123,7 +149,7 @@ try {
     Assert 'IncludeAzure adds all registered live checks (stubs only)' ($r.Exit -eq 0 -and (Has-CompleteSummary $r $allRegistered) -and $r.Ran.Count -eq ($allRegistered.Count - $expectedSkips.Count))
     $azureScripts = @($allRegistered | Select-Object -Skip $registered.Count | ForEach-Object Script)
     $live = @($r.Ran | Where-Object { $_.Script -in $azureScripts -and -not $_.SkipLive })
-    $offlineEnd = ($r.Ran | Where-Object { $_.Pid -notin $live.Pid } | Measure-Object End -Maximum).Maximum
+    $offlineEnd = ($r.Ran | Where-Object { $_.Proc -notin $live.Proc } | Measure-Object End -Maximum).Maximum
     Assert 'live registrations are last and mutually exclusive' ($live.Count -eq $azureScripts.Count -and (Get-MaxOverlap $live) -eq 1 -and ($live | Measure-Object Start -Minimum).Minimum -ge $offlineEnd)
 
     $mini = With-Checks $source @'
@@ -138,7 +164,7 @@ try {
     $first = $r.Ran | Where-Object Token -eq 'first'
     $exclusive = $r.Ran | Where-Object Script -eq 'Exclusive.ps1'
     Assert 'named switch and string arguments survive native quoting' ($first.Check -and -not $first.SkipLive -and $first.Text -ceq 'space ; $literal & quote"')
-    $overlap = @($r.Ran | Where-Object { $_.Pid -ne $exclusive.Pid -and $_.Start -lt $exclusive.End -and $_.End -gt $exclusive.Start })
+    $overlap = @($r.Ran | Where-Object { $_.Proc -ne $exclusive.Proc -and $_.Start -lt $exclusive.End -and $_.End -gt $exclusive.Start })
     Assert 'an exclusive check never overlaps another check' ($exclusive -and $overlap.Count -eq 0)
     Assert 'every process has a private scratch directory' (@($r.Ran.Temp | Sort-Object -Unique).Count -eq $r.Ran.Count)
 

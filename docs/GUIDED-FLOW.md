@@ -22,7 +22,9 @@ line appeared after 0.76 s and the review after 2.3 s, against 66 s before
 [ADR-0032](adr/0032-guided-flow-starts-at-once.md).
 
 The default record is `onboarding/claude-gateway.json`. It is environment
-specific and git-ignored. Use `-RecordPath` to use a different record.
+specific and git-ignored. Use `-RecordPath` to use a different record; a relative
+path is relative to the repository, from `Start-ClaudeGateway.ps1` and the root
+`Update-ClaudeGateway.ps1` alike.
 
 ## What the flow asks and why
 

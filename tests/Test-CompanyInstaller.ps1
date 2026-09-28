@@ -47,7 +47,7 @@ function Invoke-ClaudeAddressPlan {
     }
     $recordPath=Join-Path $scratch 'onboarding\claude-gateway.json'
     $driver=@'
-param($Root,$Values,$Decline)
+param($Root,$Values,$Decline,$ArchiveAnswer)
 $global:P69InstallWrites=New-Object 'Collections.Generic.List[string]'
 $global:P69InstallUnexpected=New-Object 'Collections.Generic.List[string]'
 $global:P69InstallPlanned=$null
@@ -85,20 +85,20 @@ function Invoke-RestMethod {
     }
     [pscustomobject]@{properties=@{virtualNetworkType='None';hostnameConfigurations=@();customProperties=@{}}}
 }
-function Read-Host { if($Decline -and $Prompt -eq 'Apply this to the existing gateway?'){return 'n'}; return '' }
+function Read-Host { if($Decline -and $Prompt -eq 'Apply this to the existing gateway?'){return 'n'}; if($ArchiveAnswer -and $Prompt -like 'Keep that record as*'){return $ArchiveAnswer}; return '' }
 $lines=New-Object 'Collections.Generic.List[string]'
 $failure=''
 try { & (Join-Path $Root 'Install-ClaudeGateway.ps1') @Values *>&1 | ForEach-Object {$lines.Add([string]$_)} }
 catch {$failure=$_.Exception.Message}
 [pscustomobject]@{Text=$lines -join "`n";Failure=$failure;Writes=@($global:P69InstallWrites);Unexpected=@($global:P69InstallUnexpected);Planned=$global:P69InstallPlanned;Gateway=$global:P69ReceiptGateway}
 '@
-    function Invoke-Installer([hashtable]$Overrides=@{},[bool]$Decline=$false,$SavedRecord=$initial){
+    function Invoke-Installer([hashtable]$Overrides=@{},[bool]$Decline=$false,$SavedRecord=$initial,[string]$ArchiveAnswer=''){
         [IO.File]::WriteAllText($recordPath,($SavedRecord|ConvertTo-Json -Depth 15))
         [IO.File]::WriteAllText((Join-Path $scratch 'onboarding\profiles\standard\managed-settings.json'),'{"gatewayUrl":"https://old.contoso.test/claude"}')
         $values=@{SubscriptionId=$sub;FoundryAccount='ai-contoso';FoundryResourceGroup='rg-contoso';ResourceGroup='rg-contoso';ExistingApimName='apim-contoso';Location='eastus2';Sku='BasicV2';AuthMode='interactive';EntitlementStore='named-value';SkipFinOpsOffer=$true;Yes=$true}
         foreach($k in $Overrides.Keys){$values[$k]=$Overrides[$k]}
         $ps=[powershell]::Create()
-        try {$null=$ps.AddScript($driver).AddArgument($scratch).AddArgument($values).AddArgument($Decline);@($ps.Invoke())[-1]}finally{$ps.Dispose()}
+        try {$null=$ps.AddScript($driver).AddArgument($scratch).AddArgument($values).AddArgument($Decline).AddArgument($ArchiveAnswer);@($ps.Invoke())[-1]}finally{$ps.Dispose()}
     }
     $preview=Invoke-Installer @{WhatIf=$true}
     Check 'real custom WhatIf reaches summary with inherited hostname and costs' {
@@ -206,6 +206,43 @@ function Invoke-ClaudeAddressHttps {param($Hostname,$Thumbprint,$ConnectAddress,
     $legacyConflict.PSObject.Properties.Remove('subscriptionId')
     Set-ClaudeDecision $legacyConflict foundation ([pscustomobject]@{subscriptionId='00000000-0000-0000-0000-000000000099'})
     $scopeConflict=Invoke-Installer $choice $false $legacyConflict
+    # P79: the comparison is made as soon as the gateway is chosen, and the other gateway's record
+    # can be kept beside the new one: -ArchiveSavedRecord, or yes in a console.
+    Check 'the refusal comes when the gateway is chosen, before the Choices questions, and names -ArchiveSavedRecord' {
+        $conflict.Text -notmatch '(?m)^\s*Choices\s*$' -and $conflict.Failure -match '-ArchiveSavedRecord'
+    }
+    $onboarding=Split-Path $recordPath -Parent
+    $clearArchives={Get-ChildItem -LiteralPath $onboarding -Filter 'claude-gateway.rg-saved-apim-saved*.json' -ErrorAction SilentlyContinue|Remove-Item -Force}
+    $archiveOf={@(Get-ChildItem -LiteralPath $onboarding -Filter 'claude-gateway.rg-saved-apim-saved*.json' -ErrorAction SilentlyContinue)}
+    & $clearArchives
+    $archived=Invoke-Installer @{ArchiveSavedRecord=$true;AddressMode='azure'} $false $foreign
+    Check 'with -ArchiveSavedRecord the other gateway''s record is kept beside the new one and the install goes on' {
+        $kept=& $archiveOf
+        $new=Get-Content -Raw $recordPath|ConvertFrom-Json
+        -not $archived.Failure -and $kept.Count -eq 1 -and $kept[0].Name -eq 'claude-gateway.rg-saved-apim-saved.json' -and
+            (Get-Content -Raw $kept[0].FullName|ConvertFrom-Json).apimName -eq 'apim-saved' -and
+            $new.apimName -eq 'apim-contoso' -and $archived.Writes -contains 'deployment'
+    }
+    & $clearArchives
+    $archivePreview=Invoke-Installer @{ArchiveSavedRecord=$true;AddressMode='azure';WhatIf=$true} $false $foreign
+    Check 'under -WhatIf, -ArchiveSavedRecord says what it would keep and moves nothing' {
+        -not $archivePreview.Failure -and $archivePreview.Text -match 'WhatIf: would keep the record for rg-saved/apim-saved' -and
+            (& $archiveOf).Count -eq 0 -and (Get-Content -Raw $recordPath|ConvertFrom-Json).apimName -eq 'apim-saved' -and $archivePreview.Writes.Count -eq 0
+    }
+    & $clearArchives
+    $attendedYes=Invoke-Installer @{Yes=$false;AddressMode='azure'} $false $foreign
+    Check 'in a console, yes (the default) keeps the other record and goes on' {
+        $kept=& $archiveOf
+        -not $attendedYes.Failure -and $kept.Count -eq 1 -and $attendedYes.Text -match 'Keep that record as claude-gateway\.rg-saved-apim-saved\.json' -and
+            (Get-Content -Raw $recordPath|ConvertFrom-Json).apimName -eq 'apim-contoso'
+    }
+    & $clearArchives
+    $attendedNo=Invoke-Installer @{Yes=$false;AddressMode='azure'} $false $foreign 'no'
+    Check 'in a console, no stops before the Choices questions and leaves the record where it was' {
+        $attendedNo.Failure -match 'names gateway' -and $attendedNo.Text -notmatch '(?m)^\s*Choices\s*$' -and
+            $attendedNo.Writes.Count -eq 0 -and (& $archiveOf).Count -eq 0 -and
+            (Get-Content -Raw $recordPath|ConvertFrom-Json).apimName -eq 'apim-saved'
+    }
     Check 'a conflicting legacy record subscription is refused before deployment' {
         $scopeConflict.Writes.Count -eq 0 -and $scopeConflict.Failure -match '00000000-0000-0000-0000-000000000099' -and
             $scopeConflict.Failure -match [regex]::Escape($sub)
