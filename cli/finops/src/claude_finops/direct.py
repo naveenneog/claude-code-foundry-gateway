@@ -53,29 +53,46 @@ class DirectBackend(Backend):
     def read_cycle(self):
         if self._cycle.get() is not None:
             yield
+            if self._cycle.get().get("has_data"):
+                self._check_read_cycle()
             return
         context = self._cycle.set({"lock": RLock(), "account_lock": RLock()})
         try:
             yield
+            if self._cycle.get().get("has_data"):
+                self._check_read_cycle()
         finally:
             self._cycle.reset(context)
+
+    def _check_read_cycle(self):
+        cycle = self._cycle.get()
+        if cycle is not None:
+            credential = cycle.get("credential")
+            if credential is None:
+                raise FinOpsError("Azure sign-in changed. Start a new read cycle for the current principal.", 3)
+            self._check_credential(credential)
 
     def _snapshot(self, resource="read"):
         cycle = self._cycle.get()
         if cycle is None:
             return self._bridge(resource)
+        self.prepare_read(resource)
+        cycle["has_data"] = True
         with cycle["lock"]:
             if "value" not in cycle:
                 cycle["value"] = self._bridge("read", snapshot=True)
             state = cycle["value"]
             if resource == "read":
-                return deepcopy(state)
-            result = state.get("reads", {}).get(resource)
-            if not isinstance(result, dict):
-                raise FinOpsError(f"Gateway snapshot has no {resource} result. Refresh the current gateway scripts.", 7)
-            if result.get("error"):
-                raise FinOpsError(result["error"], result.get("exit_code", 7))
-            return deepcopy(result)
+                result = deepcopy(state)
+            else:
+                result = state.get("reads", {}).get(resource)
+                if not isinstance(result, dict):
+                    raise FinOpsError(f"Gateway snapshot has no {resource} result. Refresh the current gateway scripts.", 7)
+                if result.get("error"):
+                    raise FinOpsError(result["error"], result.get("exit_code", 7))
+                result = deepcopy(result)
+            self._check_read_cycle()
+            return result
 
     def _invalidate_snapshot(self):
         cycle = self._cycle.get()
@@ -93,25 +110,28 @@ class DirectBackend(Backend):
     def _account(self):
         cycle = self._cycle.get()
         with cycle["account_lock"] if cycle is not None else self._prepare_lock:
+            if cycle is not None and "credential" in cycle:
+                self._check_read_cycle()
+                return cycle["account"]
             try:
-                account = cycle.get("account") if cycle is not None else None
-                if account is None:
+                with self._prepare_lock:
                     account = json.loads(self._az("account", "show", "-o", "json"))
                     if not isinstance(account, dict):
                         raise ValueError()
                     if not self.config.subscription and account.get("id"):
                         self.config.subscription = str(UUID(account["id"]))
-                    if cycle is not None:
-                        cycle["account"] = account
-                tenant = account.get("tenantId") or self.config.tenant_id
-                person = account.get("user", {}).get("name")
-                if tenant and person:
-                    directory = Path(os.environ.get("AZURE_CONFIG_DIR", str(Path.home() / ".azure"))).resolve()
-                    session = f"{directory}|{self.config.subscription}|{self.config.tenant_id}"
-                    self._credential_context = bind_resource_principal((tenant, person), session)
-                else:
-                    self.invalidate_credentials()
-                return account
+                    tenant = account.get("tenantId") or self.config.tenant_id
+                    person = account.get("user", {}).get("name")
+                    if tenant and person:
+                        directory = Path(os.environ.get("AZURE_CONFIG_DIR", str(Path.home() / ".azure"))).resolve()
+                        session = f"{directory}|{self.config.subscription}|{self.config.tenant_id}"
+                        self._credential_context = bind_resource_principal((tenant, person), session)
+                        if cycle is not None:
+                            cycle["credential"] = self._credential_context
+                            cycle["account"] = account
+                    else:
+                        self.invalidate_credentials()
+                    return account
             except (ValueError, KeyError, TypeError, AttributeError):
                 raise FinOpsError("Cannot verify the Azure account and subscription. Run aum configure before reading data.", 3) from None
 
@@ -169,7 +189,8 @@ class DirectBackend(Backend):
             raise FinOpsError("Usage requires workspace in config: the Log Analytics workspace customer id. Find it in Azure Portal > Log Analytics > Overview.")
         workspace = identifier(self.config.workspace)
         self.prepare_read("query")
-        credential = self._credential_context
+        cycle = self._cycle.get()
+        credential = cycle["credential"] if cycle is not None else self._credential_context
         if credential is None:
             raise FinOpsError("Azure sign-in changed. Refresh the current principal before reading data.", 3)
         access = resource_token("https://api.loganalytics.io", self.config.subscription,
@@ -214,6 +235,16 @@ class DirectBackend(Backend):
         return az(*args, *(("--subscription", self.config.subscription) if self.config.subscription else ()))
 
     def read(self, resource, **params):
+        cycle = self._cycle.get()
+        if cycle is not None and resource != "whoami":
+            self.prepare_read(resource)
+        result = self._read(resource, **params)
+        if cycle is not None and resource != "whoami":
+            cycle["has_data"] = True
+            self._check_read_cycle()
+        return result
+
+    def _read(self, resource, **params):
         if resource == "capabilities":
             identity = params.get("identity") or self.read("whoami")
             result = current_capabilities(identity)
