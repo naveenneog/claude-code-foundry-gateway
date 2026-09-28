@@ -17,6 +17,213 @@ management, without Turnstile. Administrators can instead choose Turnstile as
 their web FinOps tool; AUM can optionally use its API as another keyboard-facing
 client. Example data is an explicit test backend, never the production default.
 
+## Install
+
+### Windows
+
+1. Install Python 3.12 or later and Azure CLI. AUM Direct uses the signed-in
+   Azure CLI account for gateway reads and writes; HTTP backends use Azure CLI
+   to acquire their existing app tokens.
+2. From the repository root, create a local environment and install AUM:
+
+   ```powershell
+   python -m venv .venv-finops
+   .\.venv-finops\Scripts\python.exe -m pip install -e cli/finops
+   .\.venv-finops\Scripts\aum --version
+   ```
+
+3. Sign in to the tenant that owns the gateway or backend:
+
+   ```powershell
+   az login
+   ```
+
+The PowerShell bridge and tests use the same package entry point
+(`cli/finops/pyproject.toml`). Azure CLI is required for Direct discovery,
+Direct tokens and HTTP app tokens (`cli/finops/src/claude_finops/config.py`).
+
+### macOS and Linux
+
+1. Install Python 3.12 or later and Azure CLI.
+2. From the repository root:
+
+   ```bash
+   python3 -m venv .venv-finops
+   . .venv-finops/bin/activate
+   python -m pip install -e cli/finops
+   aum --version
+   az login
+   ```
+
+3. Use `--plain` or `--screen-reader` for linear output when a terminal UI is
+   not wanted. The console keeps the same engine as the commands.
+
+## Connect
+
+Choose one backend per gateway write authority. P80 does not change the authority
+rules in [ADR-0026](adr/0026-usd-budget-reconciliation.md) or the publication
+rules in [ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md).
+
+| Backend | Token budgets | USD budgets | Add a person | Chargeback | Managers | Cost and where it runs |
+|---|---|---|---|---|---|---|
+| Direct | Yes, through repository scripts and gateway named values | Yes when the gateway owns USD budgets | Yes, with the signed-in admin's delegated Graph rights | Yes, local CSV; reconciled P50 report when installed | No unit-scoped boundary; Azure RBAC is administrative | No AUM server. Runs on the operator workstation; existing gateway and Log Analytics costs remain |
+| AUM service | Yes, through the service's revisioned API | Yes when advertised by capabilities | Yes when the service and Graph path authorize it | Yes; service-scoped data plus local report generation | Yes, through `AUM.Manager` and manager groups | Azure Functions and Storage, plus selected monitoring/network resources |
+| Turnstile | Yes, through Turnstile's API and apply job | Not in P80. The UI says Direct or the AUM service has USD writes; P81 brings USD to Turnstile | Directory membership remains the AUM/script/portal path | Yes for authorized Turnstile data | Yes, through Turnstile roles and manager groups | Existing Turnstile App Service, PostgreSQL and jobs; the AUM client adds no server |
+| Example | Demonstration data only | Demonstration data only when tests enable it | No production directory | Demonstration CSV | No production role | Local tests only |
+
+Configure or change a connection:
+
+```powershell
+aum configure --backend direct --save
+aum configure --backend aum-service --url https://<function-app>.azurewebsites.net --scope api://<app-id>/AUM.Access --save
+aum configure --backend turnstile --url https://<turnstile-app>.azurewebsites.net --scope api://<app-id>/Turnstile.Access --save
+```
+
+In the terminal, open **Settings** and choose **Change connection**. The screen
+names the current backend as `via Direct`, `via AUM service` or `via Turnstile`.
+A saved replacement keeps a timestamped backup of the previous profile before
+the new profile is verified with `whoami`. A failed verification keeps the old
+profile active.
+
+## First run and screen tour
+
+Run:
+
+```powershell
+aum
+```
+
+The header shows the month, backend and role, for example
+`2026-09 | via Turnstile | owner | navg@microsoft.com`. Use `1` through `8`
+and `0` for Settings. `?` opens the current key map. The detailed screen tour is
+kept in [Tour the live terminal](#tour-the-live-terminal), including Overview,
+Budgets, People, Governance, Usage, Trends, Requests, Anomalies and Settings.
+
+## How-to
+
+### Add a person to a team
+
+Terminal: open **People**, choose the team, enter the email or UPN, then use
+**Add person to team**. If the search has no result and the caller is an owner,
+the empty state offers `Add <email> to <team>`. The form searches Entra, loads
+the team/unit catalog on demand, previews tier and group membership changes, and
+then applies only after confirmation.
+
+CLI:
+
+```powershell
+aum developer find sgiddegowda@microsoft.com
+aum developer add sgiddegowda@microsoft.com --tier standard --unit claude-team-ites-1 --what-if
+aum developer add sgiddegowda@microsoft.com --tier standard --unit claude-team-ites-1 --apply
+```
+
+### Set a person's budget
+
+Terminal: open **People**, select a row, then **Set budget** or press `e`.
+If no person is selected, the action says to select a person first. A person
+with no row cannot be edited; add the person to the team first or search the
+correct team/month.
+
+CLI:
+
+```powershell
+aum budget set user sgiddegowda@microsoft.com 100k --team claude-team-ites-1 --what-if
+aum budget set user sgiddegowda@microsoft.com 100k --team claude-team-ites-1 --apply
+```
+
+### Set a team or unit budget
+
+Terminal: open **Budgets**, select a unit or team, then **Set budget** or press
+`e`. The preview checks parent headroom and current server state.
+
+CLI:
+
+```powershell
+aum budget set unit engineering 30M --what-if
+aum budget set team claude-team-ites-1 8M --apply
+```
+
+### Set a USD budget
+
+Terminal: use **Set USD budget** where the backend advertises
+`usd_budgets.write`. USD is the default budget unit on that form. If the backend
+does not advertise the writer, the People and Budgets screens state that USD
+writes need Direct or the AUM service and that P81 brings USD to Turnstile.
+
+CLI:
+
+```powershell
+aum usd set unit engineering 250.00 --what-if
+aum usd set team claude-team-ites-1 75.00 --apply
+```
+
+### Create a chargeback report
+
+Terminal: choose **Chargeback report** from People or Budgets. AUM writes the
+complete chargeback CSV for the current month to a default local report folder
+and never overwrites an existing file. When the P50 generator is present, use
+**Generate reconciled chargeback report** for the reconciled package.
+
+CLI:
+
+```powershell
+aum report chargeback --month 2026-09 --output "$HOME\Documents\AUM"
+aum report generate --month 2026-09 --output finops-reports --formats CSV,HTML --what-if
+```
+
+### Change the connection
+
+Terminal: open **Settings**, read the current `via ...` connection line, choose
+**Change connection**, preview the replacement and apply. AUM verifies `whoami`
+before switching the live app and leaves the old connection active on failure.
+
+CLI:
+
+```powershell
+aum configure --backend direct --save
+aum configure --backend turnstile --url https://<turnstile-app>.azurewebsites.net --scope api://<app-id>/Turnstile.Access --save
+```
+
+### Remove a person
+
+Terminal: open **People**, select the person, then open `:` and choose
+**Remove selected budget or scope** when the backend permits it, or use the
+developer removal flow for Entra membership.
+
+CLI:
+
+```powershell
+aum developer remove sgiddegowda@microsoft.com --what-if
+aum developer remove sgiddegowda@microsoft.com --apply --confirm sgiddegowda@microsoft.com
+```
+
+### Find someone
+
+Terminal: open **People**, choose the team, type in **Search people**, and press
+Enter. Use `/` for the bounded lookup screen across scopes, people, models and
+requests.
+
+CLI:
+
+```powershell
+aum people find sgiddegowda@microsoft.com --team claude-team-ites-1
+aum lookup sgiddegowda@microsoft.com --team claude-team-ites-1
+```
+
+## Reference
+
+Command syntax is in [Command reference](#command-reference). Backend-specific
+details remain in [Direct gateway access](#direct-gateway-access),
+[Optional independent AUM service](#optional-independent-aum-service) and
+[Optional workflows by selected authority](#optional-workflows-by-selected-authority).
+
+## Troubleshooting
+
+Start with [Troubleshoot and validate](#troubleshoot-and-validate). For slow or
+failed startup, see [Read latency and progress](#read-latency-and-progress) and
+[Turnstile database stopped](#turnstile-database-stopped). For manual recovery
+or independent verification, use [Do the same Azure steps by hand](#do-the-same-azure-steps-by-hand).
+
 ## Choose the FinOps tool and authority
 
 | Choice | What it offers | Who signs in | Additional Azure resources and cost |

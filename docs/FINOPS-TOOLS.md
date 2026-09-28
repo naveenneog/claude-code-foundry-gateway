@@ -31,9 +31,10 @@ for your own region and deployment; run it rather than reusing these numbers.
 | Chargeback reports | Each business unit's monthly CSV and summary, reconciled, archived and emailed | Admins set it up; units receive email | No | A scheduled Container Apps job, Storage, Communication Services | **About $29.70/month** standing networking, plus cents of usage |
 | Grafana (optional) | The same saved functions on a Grafana wall | Teams that already run Grafana | No | An Azure Managed Grafana instance you provide | Essential **$6 per user-month**; Standard **$0.03 per node-hour** plus users |
 
-Terminal FinOps is being renamed **AUM (Azure Usage Management)**. Direct is becoming the
-default and it gains an AUM service backend (packet P52, in progress). This guide describes the
-merged `claude-finops` command; [AUM](CLI-FINOPS.md) is updated when P52 lands.
+Terminal FinOps is now **AUM (Azure Usage Management)**. Use the AUM guide for
+[installation](AUM.md#install), [backend selection](AUM.md#connect) and
+[task workflows](AUM.md#how-to). `claude-finops` remains a deprecated command
+alias for one release.
 
 ![Terminal FinOps: one engine, a terminal and scriptable commands, and three backends](images/architecture/terminal-finops.png)
 
@@ -191,12 +192,7 @@ Details: [Budgets](BUDGETS.md), [Business units](BUSINESS-UNITS.md) and
 
 ### Flow 3: Terminal FinOps, Direct
 
-1. Install it from the repository root:
-
-   ```powershell
-   python -m venv .venv-finops
-   .\.venv-finops\Scripts\python.exe -m pip install -e cli/finops
-   ```
+1. Install AUM with [the AUM install steps](AUM.md#install).
 2. `az login --tenant <tenant-id>`, then point it at the gateway. `workspace` is the Log Analytics
    Workspace ID, not the ARM id. `az monitor log-analytics workspace show -g <group> -n <workspace> --query customerId`
    prints it.
