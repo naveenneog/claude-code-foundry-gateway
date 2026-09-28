@@ -37,6 +37,7 @@ research register; no other packet's unknowns are edited.
 | Local connection transaction | 8 failed, 2 passed, 15.99 s: explicit HTTP options were ignored, replacement was not atomic, and the terminal form had only backend/path fields. Exact-byte and selected-profile regressions: 3 failed in 1.85 s. | 91 passed in 79.16 s | `test_p80_connection.py`, `test_discovery.py`, `test_publication_structure.py`, `test_backends.py`, `test_revision4_navigation.py`, `test_p80_usability.py`. No Azure calls; identity and discovery are fixtures. |
 | Complete one-action reports | 8 failed, 3 passed, 10.08 s: no file after the named action, ignored custom name/JSON output, no reconciler offer and a filename-race refusal. | 40 passed in 16.10 s | `test_p80_reports.py` and `test_publication_structure.py`; a prior wider selector passed its other 91 tests while detecting the changed static-literal pin, corrected without broadening its 51 entries. |
 | Guide and capture provenance | 5 failed in 3.82 s: extra top-level sections after Troubleshooting, imperative prose, missing current capture provenance and duplicated Direct setup. | 9 passed in 26.91 s | `test_p80_docs.py` and all snapshot checks: six ordered top-level sections, installer/platform prerequisites, factual prose, retained evidence, linked setup, exact grids and source/output hashes. |
+| Compact-terminal visibility | 3 failed, 1 passed, 12.01 s after image inspection found a three-line People footer, clipped Budgets USD explanation and connection details below the initial Settings rows. | 53 passed in 94.18 s | `test_p80_usability.py` and `test_publication_structure.py`; assertions inspect actual compositor output and footer height, not just widget strings. |
 
 The action regressions observed truncated labels (10 cells for an 18-cell
 label), no Add action on Budgets, no `via ...` header and a budget button that
@@ -83,6 +84,11 @@ Example provenance. Section reordering preserves every pre-reorder non-heading
 line and code block. The current generator produces 24 SVGs, four grid JSON
 files and a SHA-256 source/output manifest at both 80x24 and 160x48. Historical
 live captures are not relabelled as P80 live evidence.
+Visual inspection of the compact examples led to the additional visibility
+cycle above before any locked validation began. The footer now keeps actions
+on one line and navigation on a second; the USD explanation and current
+connection appear before other context. Captures and architecture hashes were
+regenerated again after that correction.
 
 Process exception: the short `Test-DocReferences.ps1` run at 21:52 IST included
 its built-in negative self-checks while the shared lock still existed. This

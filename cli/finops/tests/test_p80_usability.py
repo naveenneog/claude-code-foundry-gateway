@@ -213,6 +213,7 @@ async def test_actions_fit_compact_terminal_and_help_matches_footer(tab):
         hints = str(app.query_one("#key-hints", Static).render())
         for label in labels:
             assert label in hints
+        assert app.query_one("#key-hints", Static).size.height <= 2
         await pilot.press("?")
         await pilot.pause()
         help_text = str(app.screen.data)
@@ -394,3 +395,26 @@ async def test_turnstile_usd_action_is_disabled_without_a_token_fallback():
         await pilot.pause()
         assert len(app.screen_stack) == 1
         assert not app.engine.backend.writes
+
+
+async def test_budget_usd_explanation_is_visible_at_80_columns():
+    app = example(config=Config(backend="turnstile", url="https://turnstile.contoso.com"))
+    async with app.run_test(size=(80, 24)) as pilot:
+        await settle(app, pilot)
+        app.action_tab("budgets")
+        await settle(app, pilot)
+        rendered = "\n".join(strip.text for strip in app.screen._compositor.render_strips())
+        assert "USD budget writes need" in rendered
+        assert "P81 brings USD to Turnstile." in rendered
+
+
+async def test_settings_connection_is_the_first_visible_fact():
+    app = example(config=Config(backend="turnstile", url="https://turnstile.contoso.com"))
+    async with app.run_test(size=(80, 24)) as pilot:
+        await settle(app, pilot)
+        app.action_tab("settings")
+        await settle(app, pilot)
+        assert "connection" in app.records["settings"][0]
+        rendered = "\n".join(strip.text for strip in app.screen._compositor.render_strips())
+        assert "via Turnstile" in rendered
+        assert "https://turnstile.contoso.com" in rendered

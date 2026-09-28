@@ -178,8 +178,9 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
     def update_key_hints(self):
         if not self.query("#key-hints"):
             return
-        keys = ["/ Find", ": Command", "f Filters", "m Month"]
-        if self.active in {"people", "budgets"}:
+        actions_visible = self.active in {"people", "budgets"}
+        keys = [] if actions_visible else ["/ Find", ": Command", "f Filters", "m Month"]
+        if actions_visible:
             if self.identity.get("role") == "owner" and not self.redactor.enabled:
                 keys.append("g Add person to team")
             keys.extend(["e Set budget", "u Set USD budget", "x Chargeback report"])
@@ -187,10 +188,15 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
             keys.append("e Edit")
         if self.check_action("apply", ()):
             keys.append("Ctrl+A Apply")
+        action_line = " | ".join(keys) if actions_visible else ""
+        if actions_visible:
+            keys = [": Command"]
         if self.check_action("next_page", ()):
             keys.append("n/p Page")
         keys.extend(["? Help", "q Quit"])
-        self.query_one("#key-hints", Static).update("  ".join(f"<{key}>" for key in keys))
+        self.query_one("#key-hints", Static).update(
+            action_line + "\n" + " | ".join(keys) if actions_visible else
+            "  ".join(f"<{key}>" for key in keys))
 
     @published(lambda self: self.safe_message_guard())
     def update_brand(self):
@@ -393,8 +399,8 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
             return data
         if tab == "anomalies":
             return await asyncio.to_thread(read, "anomalies", limit=100, **self.scope_filters)
-        return dict(**self.identity, backend=self.engine.backend.name, month=self.engine.month,
-                    connection=self.connection_label(),
+        return dict(connection=self.connection_label(), backend=self.engine.backend.name, month=self.engine.month,
+                    **self.identity,
                     **({"access_note": "Direct: Azure RBAC administrator access, not unit-scoped.\nManagers/viewers: AUM service or Turnstile.",
                         "governance_authority": self.feature_caps.get("authority", "Gateway")}
                        if self.config.backend == "direct" else {"access_note": "AUM service enforces its own app roles and scoped authority; no Turnstile dependency."}
@@ -437,7 +443,8 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
             else:
                 note = "No matching person in this team. Owners can add people after a directory search."
         if tab in {"people", "budgets"} and not enabled(self.feature_caps, "usd_budgets", "write"):
-            note = (note + " " if note else "") + self.usd_unavailable_text()
+            note = (self.usd_unavailable_text() + " " + note if tab == "budgets" else
+                    (note + " " if note else "") + self.usd_unavailable_text())
         self.records[tab] = records
         table = self.query_one(f"#table-{tab}", DataTable)
         table.clear(columns=True)
