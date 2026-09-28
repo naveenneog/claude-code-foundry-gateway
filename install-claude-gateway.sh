@@ -127,24 +127,62 @@ apim_prices_() {
   done
   # Through standard input: all pages are about 100 KB, over the 32,767 characters a Windows
   # command line holds. Consumption rows only, free tiers dropped, the marginal row of a tiered
-  # meter, as Get-AzureRetailPriceAcrossRegions does. One unit at 730 hours to the cent, rounded
-  # half to even, as [math]::Round does on the [decimal] price in ConvertTo-MonthlyPrice: 0.2005 an
-  # hour is 146.36 a month in both installers. The arithmetic is on whole billionths of the price as
-  # written, exact for up to nine decimal places. A longer price is rounded as a double: it cannot
-  # fall on a half cent, which only a price of at most four decimal places does (price x 73000 =
-  # c + 0.5 makes the price (2c + 1)/146000, and 146000 = 2^4 x 5^3 x 73).
+  # meter, as Get-AzureRetailPriceAcrossRegions does. One unit at 730 hours to the cent as
+  # ConvertTo-MonthlyPrice computes it on PowerShell 7: ConvertFrom-Json reads the price as a
+  # double, [decimal] converts the double as .NET's VarDecFromR8 does (scaled by a power of ten in
+  # double arithmetic, then rounded half to even to at most 15 significant digits), and
+  # [math]::Round rounds the product half to even. The same steps run here, in double arithmetic
+  # and on digit strings, so 0.2005 an hour is 146.36 a month in both installers, and the cent does
+  # not depend on the price's size, its trailing zeros or an exponent. Windows PowerShell 5.1 reads
+  # a price written without an exponent as an exact decimal, so for a price with more than 15
+  # significant digits the two PowerShell hosts can differ by a cent; this installer gives
+  # PowerShell 7's cent. jq 1.7 and later round a price written with more than 17 significant
+  # digits to 17 before converting it; the API writes API Management v2 prices with at most 7
+  # (measured 2026-09-28).
   local transformed
   if ! transformed="$(printf '%s' "$pages" | jq -cs '
+    def digits_num: explode | reduce .[] as $c (0; . * 10 + $c - 48);
+    def zeros($n): [range(0; $n)] | map("0") | join("");
+    def odd_digit: (explode[0] - 48) % 2 == 1;
+    def pow10($n): "1e\($n)" | tonumber;
+    def times73: explode | reverse
+      | reduce .[] as $c ({out: [], carry: 0}; (($c - 48) * 73 + .carry) as $v | .out += [($v % 10) + 48] | .carry = (($v - ($v % 10)) / 10))
+      | (.out + (.carry | if . > 0 then (tostring | explode | reverse) else [] end)) | reverse | implode;
+    # frexp exponent e of a positive double, 2^(e-1) <= x < 2^e, by exact halving and doubling
+    # (jq 1.5 has no frexp).
+    def exponent2:
+      {x: ., e: 0}
+      | until(.x < 1; .x = .x / 2 | .e = .e + 1)
+      | until(.x >= 0.5; .x = .x * 2 | .e = .e - 1)
+      | .e;
+    # VarDecFromR8 for a positive double: {d: the integer digits, s: the scale}, value d / 10^s.
+    def dec15:
+      exponent2 as $exp
+      | if $exp < -94 then {d: "0", s: 0} else
+          (14 - (($exp * 19728) / 65536 | floor)) as $p0
+          | (if $p0 >= 0 then ([$p0, 28] | min) as $p | {v: (. * pow10($p)), p: $p}
+             elif $p0 != -1 or . >= 1e15 then {v: (. / pow10(-$p0)), p: $p0}
+             else {v: ., p: 0} end)
+          | (if .v < 1e14 and .p < 28 then {v: (.v * 10), p: (.p + 1)} else . end)
+          | (.v | floor) as $t | (.v - $t) as $fr
+          | {d: ((if $fr > 0.5 or ($fr == 0.5 and (($t / 2 | floor) * 2 != $t)) then $t + 1 else $t end) | tostring), s: .p}
+        end;
     def monthly:
-      tostring as $s
-      | if ($s | test("^[0-9]{1,4}([.][0-9]{1,9})?$")) then
-          ($s | split(".")) as $p
-          | (($p[0] + ((($p[1] // "") + "000000000")[0:9])) | explode | reduce .[] as $d (0; . * 10 + $d - 48)) * 730
-          | (. / 10000000 | floor) as $q | (. - $q * 10000000) as $r
-          | (if $r < 0 then [$q - 1, $r + 10000000] elif $r >= 10000000 then [$q + 1, $r - 10000000] else [$q, $r] end) as [$c, $rest]
-          | if $rest > 5000000 then $c + 1 elif $rest < 5000000 then $c elif ($c / 2 | floor) * 2 == $c then $c else $c + 1 end
-        else (. * 73000 + 0.5 | floor) end
-      | . / 100;
+      (. + 0) as $x
+      | if $x == 0 then 0 else
+          ($x | if . < 0 then -. else . end | dec15) as $q
+          | ($q.d | times73) as $p
+          | (3 - $q.s) as $shift
+          | (if $shift >= 0 then ($p + zeros($shift) | digits_num)
+             else (-$shift) as $l
+               | (zeros($l + 1 - ($p | length)) + $p) as $pp
+               | ($pp | length) as $n
+               | ($pp[0:($n - $l)] | digits_num) as $c
+               | $pp[($n - $l):] as $frac
+               | if $frac[0:1] > "5" or ($frac[0:1] == "5" and (($frac[1:] | test("[1-9]")) or ($pp[($n - $l - 1):($n - $l)] | odd_digit))) then $c + 1 else $c end
+             end) as $cents
+          | (if $x < 0 then -$cents else $cents end) / 100
+        end;
     [ .[].Items[] | select(.type == "Consumption" and .retailPrice != null
         and ((.skuName // "") | test("free"; "i") | not) and ((.productName // "") | test("free"; "i") | not)) ]
     | if any(.[]; (.retailPrice | type) != "number") then error("a retailPrice is not a number") else . end

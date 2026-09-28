@@ -115,8 +115,28 @@ foreach ($loc in @($parityLocations | Select-Object -Skip 1)) {
         $parityRows.Add((Row $loc.name $meter $price))
     }
 }
+# Ten more written as the API could write them: trailing zeros, exponents, 16 significant digits (which
+# [decimal] cuts to 15, 0.2215) and above 10,000; all but 1.25e-05 are half-cent months. Four more are
+# 17-digit prices a hair from a half-cent month, where [decimal]'s conversion (VarDecFromR8, in double
+# arithmetic) and cutting the shortest decimal form to 15 digits give different cents: PowerShell 7
+# prices them 5.48, 147.10, 752.27 and 2918.90. Sentinels are written first and replaced in the JSON text.
+$literals = [ordered]@{ '7.77777701' = '0.2005000000'; '7.77777702' = '2.005000000e-1'; '7.77777703' = '10000.0005'; '7.77777704' = '6.25E-2'; '7.77777705' = '0.2214999999999999'; '7.77777706' = '1.25e-05'; '7.77777707' = '0.0074999999999999945'; '7.77777708' = '0.20149999999999949'; '7.77777709' = '1.0305000000000051'; '7.77777711' = '3.9985000000000052' }
+$n = $parityLocations.Count
+foreach ($sentinel in $literals.Keys) {
+    $name = 'pr{0:D2}' -f $n; $n++
+    $parityLocations += @{ name = $name; displayName = "Parity $name"; metadata = @{ regionType = 'Physical'; geographyGroup = 'US' } }
+    $parityRows.Add((Row $name 'Basic v2 Unit' ([double]$sentinel))); if ($literals[$sentinel] -ne '1.25e-05' -and $sentinel -notin '7.77777707', '7.77777708', '7.77777709', '7.77777711') { $halfCent++ }
+}
 Write-Lf (Join-Path $fixtures 'locations-parity.json') (ConvertTo-Json -InputObject $parityLocations -Depth 5)
 Write-PriceList 'prices-parity.json' $parityRows
+$parityPath = Join-Path $fixtures 'prices-parity.json'
+$parityText = [IO.File]::ReadAllText($parityPath)
+foreach ($sentinel in $literals.Keys) {
+    $pattern = '("retailPrice":\s*)' + [regex]::Escape($sentinel) + '(?=[,\s}])'
+    if ([regex]::Matches($parityText, $pattern).Count -ne 1) { throw "parity fixture: retailPrice $sentinel is not written once" }
+    $parityText = [regex]::Replace($parityText, $pattern, '${1}' + $literals[$sentinel])
+}
+Write-Lf $parityPath $parityText
 Write-Lf (Join-Path $fixtures 'deployments.json') (ConvertTo-Json -InputObject @(@{ name = 'claude-sonnet-5'; properties = @{ model = @{ format = 'Anthropic'; name = 'claude-sonnet-5'; version = '2' } } }) -Depth 6)
 
 # Stubs. Every call is logged; an az call the stub does not know fails with exit 2 and is logged.
@@ -373,7 +393,7 @@ try {
     $psParity = @(Get-PowerShellTableRows 'locations-parity.json' 'prices-parity.json')
     $bashParity = @(Get-TableRows $q)
     $gap = Compare-Rows $bashParity $psParity
-    Assert "$($parityRows.Count) prices in $($parityLocations.Count) regions, $halfCent of them half-cent months, are priced and ordered as Install-ClaudeGateway.ps1 prices and orders them" ($psParity.Count -ge 50 -and -not $gap) "$($bashParity.Count) bash rows, $($psParity.Count) PowerShell rows; $gap"
+    Assert "$($parityRows.Count) prices in $($parityLocations.Count) regions, $halfCent of them half-cent months, ten written with trailing zeros, an exponent, 16 or 17 significant digits or above 10,000, four of them a hair from a half-cent month, are priced and ordered as Install-ClaudeGateway.ps1 prices and orders them on PowerShell 7" ($psParity.Count -ge 50 -and -not $gap) "$($bashParity.Count) bash rows, $($psParity.Count) PowerShell rows; $gap"
 
     # -------------------------------------------------------------- unattended
     $y = $res['yes']
