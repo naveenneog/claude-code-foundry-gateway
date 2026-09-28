@@ -135,10 +135,11 @@ Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
 
 ## P70 newly deployed models reach the tiers and the workstations, 2026-09-28
 
-Council round 2 passed all five seats. Integration is in progress on `p70-model-lifecycle`:
-an AST-derived renderer import guard, a normal merge of `main` (`38ad175`, including P72),
-the requested P72 permutation suites, and a packet gate under the shared lock. ROADMAP P70
-remains unticked. No Azure or real workstation writes are planned.
+Council round 2 passed all five seats. Integration is complete on `p70-model-lifecycle`:
+the AST-derived renderer import guard passed, `main` (`38ad175`, including P72) was merged
+normally, the requested permutation suites passed, and the merged packet gate exited 0
+at `586b6f6`. ROADMAP P70 remains unticked for the lead. No Azure or real workstation
+writes were made in this integration.
 
 ### Council round 2, 2026-09-28
 
@@ -186,7 +187,17 @@ No installer-driver stub extension was needed. No P72 assertion or behavior requ
 changed. `git diff main HEAD -- CHANGELOG.md docs/STATUS.md docs/UNKNOWNS.md docs/ROADMAP.md`
 contains only P70 additions and no removed lines; ROADMAP matches main. The regenerated
 architecture check passes, and `git ls-files -ci --exclude-standard` lists zero files.
-The locked packet gate is the remaining integration step.
+The merged packet gate exited 0 at `586b6f6`, 2026-09-28 03:26:10-03:51:13 UTC:
+22 passed, 2 existing warnings, 0 failed, 2 skipped. Test-All passed in 1,492.0 s,
+within the unchanged 1,800,000 ms command budget; Bicep passed in 9.2 s. The complete
+gate took 1,503.0 s. The shared lock was acquired after 2,940.9 s of 60-second retries
+(within the 60-minute limit) and released in `finally`.
+
+Round-2/integration commits: plan `4dfdd69`, AST coverage `d2b063e`, normal merge
+`5d4353e`, merged-suite evidence `586b6f6`, then a ledger-only commit for this result.
+No assertion was weakened, no P70/P72 behavior conflict was found, and no requested work
+remains blocked. No push, rebase or history rewrite was performed. The lead owns the
+merge of this branch back to main.
 
 ### Council round 1, 2026-09-28
 
