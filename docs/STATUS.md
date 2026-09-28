@@ -4,9 +4,33 @@
 
 ## P70 newly deployed models reach the tiers and the workstations, 2026-09-28
 
-Ready for the lead's council review on `p70-model-lifecycle`, based on `aa7ed19`.
-The packet gate passed on `9447488`; the final ledger commit records that result.
-The lead runs the council and merges. The reference gateway was read-only throughout.
+Council round 1 remediation is in progress on `p70-model-lifecycle`, starting from `a017814`.
+The earlier packet gate passed on `9447488`; that result does not close the findings below.
+The lead runs the council and merges. No Azure or workstation writes are planned in this
+remediation; the reference gateway remains unchanged.
+
+### Council round 1, 2026-09-28
+
+The lead's five-seat review over `aa7ed19..a017814` returned BLOCK. The supplied findings
+and remediation acceptance are recorded below. Each fix requires a failing regression,
+passing tests on PowerShell 7 and 5.1, and a caught mutation with the complete assertion
+count. The gate keeps its 1,800,000 ms command budget and uses the shared lock.
+
+| Seat | Verdict supplied | Finding | Fix / evidence |
+|---|---|---|---|
+| Architect | BLOCK | A1: helper changes can alter generated capabilities without changing the plan fingerprint | Pending: fingerprint and recheck all output dependencies, including presence changes |
+| Coder | BLOCK | C1: the installer records the deployment union but not each tier's selections; a Sonnet-only premium tier gets an Opus picker entry | Pending: persist normalized tier models and model allowlists; restrict the config edit to its tier entries |
+| Coder | BLOCK | C2: bash setup retains an alias whose model family disappeared | Pending: remove absent owned aliases; compare Windows and bash retirement behavior |
+| QA | BLOCK | Q1: filtering hides malformed raw deployment rows and turns them into apparent removals | Pending: validate raw identities before Claude filtering, including mixed arrays |
+| Security | BLOCK | S1: failed/empty discovery or whitespace/comma-only explicit selections can create allow-all lists | Pending: reject unreadable discovery and empty normalized restrictions before provisioning |
+| Architect | Should-fix | A2: standalone history omits the prior decision and principal | Pending: record both without an extra write before approval |
+| Coder | Should-fix | C3: the empty named-value REST write scopes its URI but not its token | Pending: use the same subscription for both |
+| Security | Should-fix | S2: nested reference records and snapshots are not git-ignored | Pending: ignore the documented generated paths at every onboarding depth |
+| UX | No separate verdict supplied | No additional finding was included in the handoff | Existing model review and error wording remain in scope |
+
+Completion criteria: all eight findings addressed, no relaxed detector or timeout, directly
+related docs/ADR and architecture hashes updated, and the packet gate exits 0 under the shared
+lock. ROADMAP P70 stays unticked for the lead.
 
 Acceptance criteria:
 
