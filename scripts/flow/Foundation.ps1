@@ -1,4 +1,5 @@
 . (Join-Path $PSScriptRoot 'lib\LifecycleCommon.ps1')
+. (Join-Path (Split-Path $PSScriptRoot -Parent) 'ClaudeGatewayAddressInput.ps1')
 
 # What Install-ClaudeGateway.ps1 asks, in its order. The attended review names these (ADR-0032);
 # tests/Test-FlowStart.ps1 maps every installer section that asks something to one of them.
@@ -141,6 +142,7 @@ function Get-ClaudeFlowFoundationInstallerMap {
         AddressKeyVaultCertificateId = 'addressKeyVaultCertificateId'
         AddressPfxPath = 'addressPfxPath'
         AddressDnsZoneResourceId = 'addressDnsZoneResourceId'
+        AddressDnsMode = 'addressDnsMode'
         AddressReplaceHostname = 'addressReplaceHostname'
     }
 }
@@ -225,6 +227,10 @@ function Get-ClaudeFlowFoundationInstallerArgs {
     }
     # Unattended, the installer refuses the projection without its deployer.
     if (-not $Attended -and [string]$installerArgs['EntitlementStore'] -eq 'projection') { $installerArgs['DeployProjection'] = $true }
+    if (-not $Attended) {
+        $address = Resolve-ClaudeAddressInputs -Record $Record -Values $installerArgs
+        foreach ($key in $address.Keys) { $installerArgs[$key] = $address[$key] }
+    }
     Assert-ClaudeFlowInstallerArgsSafe -InstallerArgs $installerArgs
     return $installerArgs
 }
@@ -310,14 +316,14 @@ function Get-ClaudeFlowStepPlan {
         $costs = @(Get-ClaudeFlowFoundationCost -Sku $sku -Location $location)
     }
     $addressPlan = $null
-    if ($d.addressMode -eq 'custom') {
+    if ($installerArgs.AddressMode -eq 'custom') {
         if (-not (Get-Command Get-ClaudeAddressPlan -ErrorAction SilentlyContinue)) { . (Join-Path (Split-Path $PSScriptRoot -Parent) 'ClaudeGatewayAddress.ps1') }
         $addressArgs = @{
             SubscriptionId = $installerArgs['SubscriptionId']; ResourceGroup = $installerArgs['ResourceGroup']
             ApimName = $(if ($updateRecorded) { $Record.apimName } else { "apim-$($d.namePrefix)" })
-            Hostname = $d.addressHostname; CertificateSource = $d.addressCertificateSource
-            KeyVaultCertificateId = $d.addressKeyVaultCertificateId; PfxPath = $d.addressPfxPath
-            DnsZoneResourceId = $d.addressDnsZoneResourceId; ReplaceHostname = $d.addressReplaceHostname
+            Hostname = $installerArgs.AddressHostname; CertificateSource = $installerArgs.AddressCertificateSource
+            KeyVaultCertificateId = $installerArgs.AddressKeyVaultCertificateId; PfxPath = $installerArgs.AddressPfxPath
+            DnsZoneResourceId = $installerArgs.AddressDnsZoneResourceId; ReplaceHostname = $installerArgs.AddressReplaceHostname
         }
         if (Get-Variable AddressCertificatePassword -ErrorAction SilentlyContinue) { $addressArgs.CertificatePassword = Get-Variable AddressCertificatePassword -ValueOnly }
         if (-not $updateRecorded) {

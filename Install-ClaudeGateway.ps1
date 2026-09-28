@@ -47,6 +47,7 @@ param(
     [string]$AddressPfxPath,
     [securestring]$AddressCertificatePassword,
     [string]$AddressDnsZoneResourceId,
+    [ValidateSet('AzureDns','External')][string]$AddressDnsMode,
     [string]$AddressReplaceHostname,
     [string]$AddressApprovedPlanFingerprint,
 
@@ -998,7 +999,13 @@ if (Test-Path -LiteralPath $savedAddressPath) {
     if ($saved.apimName -eq $addressApimName -and $saved.resourceGroup -eq $ResourceGroup -and
         (-not $saved.subscriptionId -or $saved.subscriptionId -eq $SubscriptionId)) { $savedAddressConfig = $saved }
 }
-$addressDefault = if ($savedAddressConfig -and $savedAddressConfig.address.hostname) { 'custom' } else { 'azure' }
+. (Join-Path $root 'scripts\ClaudeGatewayAddressInput.ps1')
+$addressValues = @{}
+foreach ($key in 'AddressMode','AddressHostname','AddressCertificateSource','AddressKeyVaultCertificateId','AddressPfxPath','AddressDnsZoneResourceId','AddressDnsMode','AddressReplaceHostname') {
+    if ($PSBoundParameters.ContainsKey($key)) { $addressValues[$key] = $PSBoundParameters[$key] }
+}
+$effectiveAddress = Resolve-ClaudeAddressInputs -Record $savedAddressConfig -Values $addressValues
+$addressDefault = $effectiveAddress.AddressMode
 $addressMode = if ($AddressMode) { $AddressMode } else { Read-Default -Prompt 'Developer address (azure/custom)' -Default $addressDefault `
     -Help 'Custom configures a supplied certificate, the gateway hostname and DNS, then proves HTTPS before publishing the address.' -Validate {
         param($x)
@@ -1008,21 +1015,21 @@ $addressMode = if ($AddressMode) { $AddressMode } else { Read-Default -Prompt 'D
     } }
 if ($addressMode -eq 'custom') {
     . (Join-Path $root 'scripts\ClaudeGatewayAddress.ps1')
-    $previous = if ($savedAddressConfig) { $savedAddressConfig.address } else { $null }
-    if (-not $AddressHostname) { $AddressHostname = Read-Default -Prompt 'Company hostname' -Default $(if ($previous) { $previous.hostname } else { '' }) -Help 'A DNS hostname, such as claude.contoso.com; not a URL. The domain is already owned by your organization.' }
-    if (-not $AddressCertificateSource) { $AddressCertificateSource = Read-Default -Prompt 'Certificate source (KeyVault/Pfx)' -Default $(if ($previous) { $previous.certificateSource } else { 'KeyVault' }) -Help 'No v2 tier offers a free managed certificate. KeyVault references an existing certificate; Pfx uploads its certificate and private key.' }
+    if (-not $AddressHostname) { $AddressHostname = Read-Default -Prompt 'Company hostname' -Default $effectiveAddress.AddressHostname -Help 'A DNS hostname, such as claude.contoso.com; not a URL. The domain is already owned by your organization.' }
+    if (-not $AddressCertificateSource) { $AddressCertificateSource = Read-Default -Prompt 'Certificate source (KeyVault/Pfx)' -Default $(if ($effectiveAddress.AddressCertificateSource) { $effectiveAddress.AddressCertificateSource } else { 'KeyVault' }) -Help 'No v2 tier offers a free managed certificate. KeyVault references an existing certificate; Pfx uploads its certificate and private key.' }
     if ($AddressCertificateSource -eq 'KeyVault' -and -not $AddressKeyVaultCertificateId) {
-        $AddressKeyVaultCertificateId = Read-Default -Prompt 'Key Vault certificate or secret URL' -Default $(if ($previous) { $previous.keyVaultCertificateId } else { '' }) -Help 'Example: https://<vault>.vault.azure.net/certificates/<name>. A versionless reference permits rotation.'
+        $AddressKeyVaultCertificateId = Read-Default -Prompt 'Key Vault certificate or secret URL' -Default $effectiveAddress.AddressKeyVaultCertificateId -Help 'Example: https://<vault>.vault.azure.net/certificates/<name>. A versionless reference permits rotation.'
     }
     if ($AddressCertificateSource -eq 'Pfx') {
-        if (-not $AddressPfxPath) { $AddressPfxPath = Read-Default -Prompt 'PFX file path' -Default $(if ($previous) { $previous.pfxPath } else { '' }) -Help 'The file contains the hostname certificate, its private key and chain.' }
+        if (-not $AddressPfxPath) { $AddressPfxPath = Read-Default -Prompt 'PFX file path' -Default $effectiveAddress.AddressPfxPath -Help 'The file contains the hostname certificate, its private key and chain.' }
         if (-not $AddressCertificatePassword -and -not $Yes) { $AddressCertificatePassword = Read-Host 'PFX password (Enter if none; not recorded)' -AsSecureString }
     }
-    if (-not $AddressDnsZoneResourceId) {
-        $dnsChoice = Read-Default -Prompt 'DNS hosting (AzureDns/External)' -Default $(if ($previous -and $previous.dnsZoneResourceId) { 'AzureDns' } else { 'External' }) -Help 'AzureDns writes a CNAME in an existing public zone in this subscription; External prints the record and waits for your provider.'
+    if (-not $AddressDnsZoneResourceId -or $AddressDnsMode -eq 'External') {
+        $dnsChoice = if ($AddressDnsMode) { $AddressDnsMode } else { Read-Default -Prompt 'DNS hosting (AzureDns/External)' -Default $(if ($effectiveAddress.AddressDnsMode) { $effectiveAddress.AddressDnsMode } else { 'External' }) -Help 'AzureDns writes a CNAME in an existing public zone in this subscription; External prints the record and waits for your provider.' }
         if ($dnsChoice -eq 'AzureDns') {
-            $AddressDnsZoneResourceId = Read-Default -Prompt 'Azure DNS zone resource ID' -Default $(if ($previous) { $previous.dnsZoneResourceId } else { '' }) -Help 'Azure portal > DNS zones > the public zone > Properties > Resource ID.'
+            $AddressDnsZoneResourceId = Read-Default -Prompt 'Azure DNS zone resource ID' -Default $effectiveAddress.AddressDnsZoneResourceId -Help 'Azure portal > DNS zones > the public zone > Properties > Resource ID.'
         }
+        elseif ($dnsChoice -eq 'External') { $AddressDnsZoneResourceId = '' }
         elseif ($dnsChoice -ne 'External') { throw 'DNS hosting must be AzureDns or External.' }
     }
     $addressArgs = @{
@@ -1645,7 +1652,13 @@ if ($addressResult) {
     Write-ClaudeDecisionRecord -Record $recordToWrite -Path $configPath
 }
 else {
-$config | ConvertTo-Json -Depth 6 | Set-Content $configPath -Encoding UTF8
+    $config.Remove('address')
+    if ($config.Contains('decisions') -and $config.decisions) { $config.decisions.PSObject.Properties.Remove('address') }
+    if ($savedAddressConfig -and $savedAddressConfig.address) {
+        . (Join-Path $root 'scripts\ClaudeGatewayAddress.ps1')
+        Update-ClaudeAddressArtifacts -RecordPath $configPath -OldUrl $savedAddressConfig.gatewayUrl -NewUrl $gatewayUrl
+    }
+    [IO.File]::WriteAllText($configPath, ($config | ConvertTo-Json -Depth 30), (New-Object Text.UTF8Encoding($false)))
 }
 Write-Ok "config: $configPath"
 
