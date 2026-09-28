@@ -71,12 +71,24 @@ def enclosing_publication():
 def published(origin, *, rejection=None):
     """Route a synchronous renderer or deferred generator through guarded_publish."""
     def decorate(operation):
+        if inspect.iscoroutinefunction(operation) or inspect.isasyncgenfunction(operation):
+            raise TypeError("Use guarded_publish around each synchronous write, not an async renderer.")
         if inspect.isgeneratorfunction(operation):
             @wraps(operation)
             def generate(*args, **kwargs):
                 failed = rejection(*args, **kwargs) if rejection else None
-                with guarded_publish(origin(*args, **kwargs), on_rejected=failed):
-                    yield from operation(*args, **kwargs)
+                source = origin(*args, **kwargs)
+                iterator = operation(*args, **kwargs)
+                try:
+                    while True:
+                        with guarded_publish(source, on_rejected=failed):
+                            try:
+                                item = next(iterator)
+                            except StopIteration:
+                                return
+                        yield item
+                finally:
+                    iterator.close()
             return generate
 
         @wraps(operation)

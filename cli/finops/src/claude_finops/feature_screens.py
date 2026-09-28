@@ -1,7 +1,6 @@
 import asyncio
 import json
 from pathlib import Path
-from contextlib import nullcontext
 
 from textual import on, work
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -115,7 +114,7 @@ class ActionForm(ModalScreen):
             if result.get("ui_action"):
                 self.dismiss()
                 if result["ui_action"] == "view":
-                    self.app.restore_view(result["view"])
+                    self.app.restore_view(result["view"], read_guard=self.read_guard)
                 elif result["ui_action"] == "compare":
                     self.app.set_comparison(result["month"])
                 elif result["ui_action"] == "profile":
@@ -133,7 +132,7 @@ class ActionForm(ModalScreen):
                 state = outcome["state"]
             with guarded_publish(self.read_guard):
                 self.query_one("#action-status", Static).update(self.app.redactor.text(state))
-            self.query_one("#action-cancel", Button).label = "Done"
+                self.query_one("#action-cancel", Button).label = "Done"
         except (FinOpsError, ValueError) as error:
             with guarded_publish(self.app.safe_message_guard()):
                 self.query_one("#action-status", Static).update(self.app.redactor.text(str(error)))

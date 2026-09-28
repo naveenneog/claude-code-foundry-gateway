@@ -6,6 +6,8 @@ import json
 import httpx
 import pytest
 from textual.widgets import Static, Input, DataTable, Select, TextArea
+from textual.app import App
+from textual import events
 from types import SimpleNamespace
 import typer
 from contextlib import nullcontext
@@ -513,6 +515,12 @@ async def test_highlight_input_after_b_verifies_cannot_publish_a_row(bearer_tui_
     app = FinOpsApp(engine, Config(backend="fake"), first_run=False)
     leaked, observed_input = [], []
     original_update = Static.update
+    original_event = App.on_event
+
+    async def dispatched(owner, event):
+        if owner is app and isinstance(event, events.Key) and event.key == "down" and not event.is_forwarded:
+            observed_input.append((app.identity.get("id"), dict(app.records), app.pending_selection))
+        await original_event(owner, event)
 
     def update(widget, value="", **kwargs):
         if (engine._identity or {}).get("id") == "b" and widget.id == "status" and ("a-second" in str(value) or "only-a" in str(value)):
@@ -520,6 +528,7 @@ async def test_highlight_input_after_b_verifies_cannot_publish_a_row(bearer_tui_
         return original_update(widget, value, **kwargs)
 
     monkeypatch.setattr(Static, "update", update)
+    monkeypatch.setattr(App, "on_event", dispatched)
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
         await app.workers.wait_for_complete()
@@ -533,9 +542,8 @@ async def test_highlight_input_after_b_verifies_cannot_publish_a_row(bearer_tui_
         assert guard_exit_code(origin) == 3
         await pilot.press("down")
         await pilot.pause()
-        observed_input.append((app.identity.get("id"), dict(app.records), app.pending_selection))
         assert not leaked, "A stale highlighted row reached the status widget after B verified."
-        assert observed_input[-1] == ("b", {}, None), "Old cached rows must be cleared before the next input."
+        assert observed_input == [("b", {}, None)], "Old cached rows must be cleared before input dispatch, not after the handler."
         assert all(row["scope_id"] == "only-b" for row in engine.read("budgets")["items"])
 
 

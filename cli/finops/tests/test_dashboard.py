@@ -160,7 +160,8 @@ async def test_redacted_queries_do_not_leak_through_input_or_filter_echo():
         await pilot.pause(.25)
         await app.workers.wait_for_complete()
         app.team = "sales-emea"
-        app.open_lookup_result(dict(kind="person", id=secret_id, name="Private Person", tab="people"))
+        app.open_lookup_result(dict(kind="person", id=secret_id, name="Private Person", tab="people"),
+                               read_guard=app.current_guard())
         await pilot.pause(.25)
         await app.workers.wait_for_complete()
         await pilot.pause(.25)

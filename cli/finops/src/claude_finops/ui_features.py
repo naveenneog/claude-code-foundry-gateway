@@ -279,7 +279,8 @@ class FeatureUI:
         self.push_screen(ActionForm("Open saved view", [("name", "View", next(iter(views)),
                                 [(name, name) for name in views])], run, mutation=False))
 
-    def restore_view(self, view):
+    @published(lambda self, view, *, read_guard: read_guard)
+    def restore_view(self, view, *, read_guard):
         self.engine.month = view.get("month", self.engine.month)
         self.scope_filters = view.get("filters", {})
         self.dimension = view.get("dimension", self.dimension)
@@ -557,6 +558,7 @@ class FeatureUI:
             self.feature_cursor = cursor
         self.action_refresh()
 
+    @published(lambda self, view: self.current_guard())
     def action_advanced(self, view):
         if enabled(self.feature_caps, "advanced"):
             self.advanced_view = view

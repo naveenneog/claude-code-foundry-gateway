@@ -3,7 +3,6 @@ import json
 from pathlib import Path
 import re
 from functools import partial
-from contextlib import nullcontext
 
 from textual import on, work
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -148,7 +147,7 @@ class LookupScreen(ModalScreen):
             with guarded_publish(self.results_guard):
                 result = self.results[event.cursor_row]
                 self.dismiss()
-                self.app.open_lookup_result(result)
+                self.app.open_lookup_result(result, read_guard=self.results_guard)
         except FinOpsError as error:
             self.results = []
             self.query_one(DataTable).clear(columns=True)
@@ -350,7 +349,7 @@ class ChangeScreen(ModalScreen):
                     await asyncio.sleep(3)
             with guarded_publish(self.read_guard):
                 self.query_one("#form-status", Static).update(message)
-            self.query_one("#cancel-change", Button).label = "Done"
+                self.query_one("#cancel-change", Button).label = "Done"
         except FinOpsError as error:
             with guarded_publish(self.app.safe_message_guard()):
                 self.query_one("#form-status", Static).update(str(error) + " Refresh before retrying.")

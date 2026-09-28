@@ -16,6 +16,12 @@ VALUE_WIDGETS = {"Label", "Static", "TextArea", "Input", "Select"}
 # Exact (file, qualified function, normalized call) exceptions for static/local
 # presentation only. Each entry needs its own factual reason, not a handler-wide exemption.
 STATIC_WRITES = {
+    # Exact static widget-property assignments: fixed headings, resets and enum choices.
+    ("dashboard.py", "DashboardPanel.__init__", "self.border_title = title"): "Dashboard constructor headings come from fixed local panel definitions.",
+    ("tui.py", "FinOpsApp.on_mount", "self.query_one(f'#table-{tab}', DataTable).border_title = label if tab == 'advanced' else label[2:]"): "Initial table headings come only from the fixed TABS/EXTRA_TABS vocabulary.",
+    ("tui.py", "FinOpsApp.action_clear_filter", "self.query_one('#quick-filter', Input).value = ''"): "Explicit empty-string reset of the local filter input.",
+    ("screens.py", "MonthScreen.set_month", "self.app.query_one('#request-before', Input).value = ''"): "Explicit empty-string reset when the operator changes month.",
+    ("ui_features.py", "FeatureUI.action_request_time_usage", "self.query_one('#dimension', Select).value = 'department'"): "Fixed local dimension selection for the ledger usage action.",
     # Application shell: fixed labels/options and the local selected theme, never server facts.
     ("tui.py", "FinOpsApp.compose", "Static(COMPACT, id='brand', markup=False)"): "Fixed product heading from the local brand module.",
     ("tui.py", "FinOpsApp.compose", "Static('Signing in through Azure CLI (estimate 3-5 s)...', id='identity', markup=False)"): "Static initial sign-in progress, before backend reads.",
@@ -108,6 +114,19 @@ def sinks(source, filename, allowed=None):
                 self.visit(statement)
             self.guarded = previous
 
+        def visit_Await(self, node):
+            if self.guarded:
+                failures.append(f"{filename}:{node.lineno}:{'.'.join(self.scope)}: publication scope spans await")
+            self.generic_visit(node)
+
+        def visit_Assign(self, node):
+            if not self.guarded and any(isinstance(target, ast.Attribute) and target.attr in {
+                    "value", "text", "label", "border_title", "placeholder", "tooltip"} for target in node.targets):
+                key = (filename, ".".join(self.scope), ast.unparse(node))
+                if key not in allowed:
+                    failures.append(f"{filename}:{node.lineno}:{'.'.join(self.scope)}: {ast.unparse(node)}")
+            self.generic_visit(node)
+
         def visit_Call(self, node):
             name = node.func.attr if isinstance(node.func, ast.Attribute) else (
                 node.func.id if isinstance(node.func, ast.Name) else "")
@@ -175,7 +194,10 @@ def test_allowlist_entries_are_exact_and_explained():
     for key, reason in STATIC_WRITES.items():
         assert len(key) == 3 and len(reason.strip()) >= 20
         file, function, call = key
-        assert file in UI_FILES and function and "(" in call
+        statement = ast.parse(call).body[0]
+        assert file in UI_FILES and function
+        assert isinstance(statement, ast.Assign) or (
+            isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call))
         assert call in ast.unparse(ast.parse((ROOT / file).read_text(encoding="utf-8")))
 
 
@@ -205,3 +227,21 @@ def handler(self):
     self.backend.write('assistant_ask', {'history': self.history})
 """
     assert len(sinks(code, "example.py", {})) == 2
+
+
+def test_widget_value_assignment_is_a_publication_sink():
+    code = """
+def handler(self):
+    self.query_one('#person').value = self.cached_person
+"""
+    assert len(sinks(code, "example.py", {})) == 1
+
+
+def test_publication_scope_cannot_span_an_await():
+    code = """
+async def handler(self, origin):
+    with guarded_publish(origin):
+        await self.read_more()
+        self.query_one('#status').update(self.row)
+"""
+    assert len(sinks(code, "example.py", {})) == 1

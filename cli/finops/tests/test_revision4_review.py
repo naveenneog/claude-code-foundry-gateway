@@ -65,7 +65,7 @@ async def test_same_tab_saved_view_refreshes_real_query_and_controls():
         await settle(app, pilot)
         count = len(backend.reads)
         app.restore_view(dict(tab="usage", month="2026-08", dimension="model",
-                              filters={"department_id": "sales-apac"}))
+                              filters={"department_id": "sales-apac"}), read_guard=app.current_guard())
         await settle(app, pilot)
         calls = backend.reads[count:]
         assert any(op == "distribution" and args["month"] == "2026-08" and args["dimension"] == "model"

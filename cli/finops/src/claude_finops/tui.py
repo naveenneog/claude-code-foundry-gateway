@@ -531,6 +531,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
         prefix = "[redacted/read-only] " if self.redactor.enabled else ""
         self.query_one("#status", Static).update(self.redactor.text(prefix + path + "\n" + ", ".join(f"{k}={v}" for k, v in values.items())))
 
+    @published(lambda self: self.current_guard())
     def action_filter(self):
         field = self.query_one("#quick-filter", Input)
         field.display = True
@@ -677,7 +678,8 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
     def action_lookup(self):
         self.push_screen(LookupScreen())
 
-    def open_lookup_result(self, result):
+    @published(lambda self, result, *, read_guard: read_guard)
+    def open_lookup_result(self, result, *, read_guard):
         if result["kind"] == "team":
             self.team = result["id"]
         elif result["kind"] == "person":
