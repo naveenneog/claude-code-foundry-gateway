@@ -2,11 +2,25 @@
 
 ## P78 the test suite runs in parallel on GitHub-hosted runners, 2026-09-28
 
-**Builder acceptance passed; council and gate remain with the lead.**
+**Council round 1 passed; the local packet gate and owner approval remain pending.**
 PLAN and CONTRACT are committed in `55e1b90`.
 Work is isolated to `p78-parallel-tests`, from `main` `0345e85`.
 The owner runs the council, gate and merge. No local full suite or gate is run for this packet.
 [ADR-0039](adr/0039-test-suite-hosted-runners.md) is a draft, not a charter amendment.
+
+**Council round 1, reported 2026-09-29:** Architect, Coder, QA, UX and Security all PASS at
+`6880d29`. The council supports owner approval of ADR-0039 as written; approval has not been
+given and no proposed command, timeout or ROADMAP change is enacted.
+
+**P79 follow-up integration, 2026-09-29:** main `17e488c` adds the isolated installer-input
+copy and saved-record assertions (`tests/Test-InstallerPermutations.ps1:92`). It is merged
+into P78 without rebasing. The default registration remains 95 checks across 12 shards;
+the complete ownership plan and committed timing-table bytes equal those at `6880d29`.
+The timing table retains its recorded hosted measurements rather than guessed replacements.
+The merged tree's local sharding suite passed 79 assertions in 3.7 s and the remote contract
+suite passed 37 in 2.5 s. Encoding passed for all 295 PowerShell scripts. No long local
+test command or gate ran, and this integration did not take the shared lock. Exact-HEAD
+hosted verification follows the branch push; its receipt is recorded below when complete.
 
 Acceptance:
 
@@ -128,7 +142,57 @@ ROADMAP and charter equal the integrated main; no Azure resource was accessed by
 U50-U53 track hosted compatibility, timing, remote-run identity and detector evidence. No product architecture
 component changes; this is test execution and evidence transport, not an accelerator deployment.
 
-**Active packets (2026-09-28, run in parallel worktrees):** P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)); P78 the test suite runs in parallel on GitHub-hosted runners, P80 AUM shows every action it has, and P81 USD budgets are the primary enforcer, each on its own branch until the owner reviews it. Each has its own section on its branch; the section lands here when the packet merges. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets (2026-09-28, run in parallel worktrees):** P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)); P78 the test suite runs in parallel on GitHub-hosted runners, P80 AUM shows every action it has, and P81 USD budgets are the primary enforcer, each on its own branch until the owner reviews it. Each has its own section on its branch; the section lands here when the packet merges. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)), and its follow-up, the installer permutation check reads only its own record (`05dea1b`, [below](#p79-follow-up-the-installer-permutation-check-reads-only-its-own-record-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+
+## P79 follow-up: the installer permutation check reads only its own record, 2026-09-28
+
+The main check after the P79 merge (Test-All in the main worktree at `449489b`, 22:31-23:04,
+2,001 s) failed one check of 93, "Installer summary across permutations": 14 of its assertions,
+each with "Saved record '...\accel\onboarding\claude-gateway.json' names gateway
+'rg-contosohub/apim-claude-gw-fzgql9' ...". P79 moved the installer's saved-record comparison to
+the gateway question (`Install-ClaudeGateway.ps1:778-825`), and `tests/Test-InstallerPermutations.ps1`
+ran the installer in the checkout itself, so in a checkout whose saved record names another
+gateway every case stops there. The record is ignored by Git (`.gitignore:35`), so packet
+worktrees, where the P79 gate ran, have none. The installer does what P79 intends; the check was
+not isolated from the machine's own record. The same main check sent seven Claude Code 2.1.272
+requests through the reference gateway; all seven answered. Work is on
+`p79-followup-installer-record`, based on `main` `449489b`.
+
+- [x] RED: with the main worktree's record copied into this worktree, the check fails 14 of its 44
+      assertions in 23 s, as on main
+- [x] The cases run a copy of the installer's inputs (the root files and `analytics`, `cli`,
+      `config`, `guide`, `infra`, `onboarding`, `resolver`, `scripts`, `service` and `sync`) with no
+      `claude-gateway*.json` under `onboarding`. Three new assertions: the copy leaves out saved
+      records (a synthetic tree with three of them), the installer path is inside the copy, and the
+      checkout's own record is neither changed nor created (its hash before and after). GREEN with
+      the record present: 47 of 47 in 50 s, 103 cases on each shell (`627fc76`)
+- [x] Mutations: 3 of 3 caught (round 1; see council round 1 for five), each in its own detached worktree with a saved record, each running
+      the baseline 47 assertions: the installer run from the checkout (15 fail), no record exclusion
+      (16 fail), the checkout's record changed (1 fails) (`p79b-mutate.ps1`, 68 s)
+- [x] CHANGELOG and GUIDED-FLOW.md. Architecture: no component, data flow, identity, schedule or
+      network path changes
+- [x] Council round 1, five seats, over `449489b..ae2e76f`: Architect, Coder, UX and Security PASS;
+      QA BLOCK. The checkout's record was hashed after the copy, so a copy that deleted the records
+      it skips would have removed the operator's record first and passed. The hash is now taken
+      before anything is copied, and a new assertion requires the synthetic source records to stay
+      in place, unchanged (`3ec2dfb`). Evidence (`p79b-mutate-r2.ps1`, detached worktrees): against
+      `ae2e76f` that mutation passes 47 of 47, with and without a saved record; against `3ec2dfb`
+      it is caught with and without one, the three earlier mutations are still caught, and both
+      baselines pass 48 of 48. Architect's note: a folder the installer starts to read must be added
+      to the copy list; otherwise the check fails when that input is required, and runs without it
+      when the installer only reads it if present
+- [x] Council round 2, over `ae2e76f..31b660d`: Architect, Coder, UX and Security PASS; QA BLOCK.
+      The skipped records' content was compared with case-insensitive `-eq`, so a copy that
+      rewrote them in upper case passed in a checkout without an operator record. Each synthetic
+      file now holds its own relative path, compared with `-ceq` (`35a7d2d`). Against `31b660d`
+      that mutation passes 48 of 48; against `35a7d2d` it is caught with and without a saved
+      record, the four earlier mutations are still caught (five runs), and both baselines pass 48 of 48
+- [x] Council round 3, over `31b660d..a196d13`: all five seats PASS
+- [x] The packet gate exits 0, run with the main worktree's saved record (it names the reference
+      gateway) copied into this worktree. Gate 1, at `ae2e76f` (23:16-23:47), passed: Test-All in
+      1,823 s, 22 passed, 0 failed. Gate 3, at `a196d13` (00:12-00:40), the tree that merges,
+      passed: Test-All in 1,714 s, 22 passed, 2 warned (open unknowns), 0 failed. Gate 2, at
+      `31b660d`, was stopped when council round 2 changed the test
 
 ## P79 fixes from the owner's test on 2026-09-28
 
