@@ -40,6 +40,13 @@ class Backend(ABC):
     def read_cycle(self):
         return nullcontext()
 
+    def read_guard(self):
+        """Capture the current cycle's validation/serialization boundary for publication."""
+        return nullcontext
+
+    def identity_update(self):
+        return nullcontext()
+
     def prepare_read(self, resource):
         """Resolve address metadata needed before an identity-independent read."""
 

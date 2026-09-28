@@ -2,6 +2,8 @@
 
 import httpx
 from threading import RLock
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 from .backend import Backend
 from .config import token, token_needs_refresh
@@ -19,14 +21,49 @@ class HttpBackend(Backend):
         self._token = None
         self._credential_lock = RLock()
         self._credential_generation = 0
+        self._cycle = ContextVar("http_read_cycle", default=None)
         self._features = None
         self._etags = {}
         self._client = httpx.Client(base_url=config.url.rstrip("/"), timeout=60,
                                     follow_redirects=False, transport=transport)
 
+    @contextmanager
+    def read_cycle(self):
+        context = None
+        if self._cycle.get() is None:
+            context = self._cycle.set({})
+        guard = self.read_guard()
+        try:
+            yield
+            with guard():
+                pass
+        finally:
+            if context is not None:
+                self._cycle.reset(context)
+
+    def read_guard(self):
+        cycle = self._cycle.get()
+
+        @contextmanager
+        def publish():
+            with self._credential_lock:
+                if cycle is not None and "generation" in cycle and cycle["generation"] != self._credential_generation:
+                    raise FinOpsError("The sign-in changed during this read cycle. Refresh the current identity before publishing data.", 3)
+                yield
+
+        return publish
+
+    def identity_update(self):
+        return self._credential_lock
+
     def _request(self, method, path, params=None, body=None, extra_headers=None, optional=False):
         for attempt in range(2 if method == "GET" else 1):
             with self._credential_lock:
+                cycle = self._cycle.get()
+                if cycle is not None and path != self.identity_path:
+                    cycle.setdefault("generation", self._credential_generation)
+                with self.read_guard()():
+                    pass
                 if method == "GET" and path == self.identity_path and attempt == 0:
                     self._token = None
                 if token_needs_refresh(self._token):
