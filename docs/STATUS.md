@@ -21,31 +21,49 @@ and Premium v2 3.83562 an hour, USD 150, 700 and 2,800 a month at 730 hours; Ita
 publishes two of the three meters. `az account list-locations` returned 109 regions in 4.9 s,
 including EUAP and staging regions in the US geography group that publish no v2 price.
 
-- [ ] Asked in a terminal, the region prompt lists the default region first (the Foundry
+Found while testing: jq.exe on Windows ends its output lines with CRLF. In Git Bash, the last,
+empty field of a tab-separated option line was a carriage return, which is not empty and which
+awk reads as 0, so a tier that a region does not publish (in the test fixture, one region without Premium v2) printed
+as USD 0.00. Measured in Git Bash: command substitution drops the carriage return of the last
+line only, so a single value (a URL, a price) keeps none, and lines that `read` splits keep theirs.
+The region lines drop it before they are split, and the stub `az` and `curl` refuse any argument
+that carries one. The discovery loop that already existed (`--foundry-account` not given) reads
+`jq -r` output the same way and is not changed here.
+- [x] Asked in a terminal, the region prompt lists the default region first (the Foundry
       account's region unless `--location` names another) and then the other physical regions in
       its geography group that publish a v2 price, cheapest Basic v2 first, each with the three v2
       tiers' monthly list price for one unit at 730 hours, from one Retail Prices API call; a tier
       a region does not publish reads "not published"; the answer is a number or a region name in
       any case or spacing, and anything else is asked again
-- [ ] The tier prompt shows each tier's monthly list price in the chosen region
-- [ ] The summary prices the chosen tier in the chosen region at list price, or says the price
+- [x] The tier prompt shows each tier's monthly list price in the chosen region
+- [x] The summary prices the chosen tier in the chosen region at list price, or says the price
       could not be read and names the pricing page; it no longer names a fixed price, and the
       provisioning note is the PowerShell installer's measured figure
-- [ ] With the prices unreadable, the region and tier prompts say so with the reason, and the
+- [x] With the prices unreadable, the region and tier prompts say so with the reason, and the
       install goes on; under `--yes` there is no table and no tier list, and the summary still
       prices the choice
-- [ ] The record holds `mode`, `sku`, `location`, `foundryAccount`, `foundryResourceGroup` and
+- [x] The record holds `mode`, `sku`, `location`, `foundryAccount`, `foundryResourceGroup` and
       `requestsPerMinute`, as the PowerShell installer's record does
-- [ ] Run on its own in a terminal, it ends by offering the FinOps tool
+- [x] Run on its own in a terminal, it ends by offering the FinOps tool
       (`scripts/Select-ClaudeFinOpsTooling.ps1 -Region`, through PowerShell 7); `--choose-finops`
       opens it without asking and `--skip-finops-offer` leaves it out; without PowerShell 7, or
       under `--yes`, the command is a numbered next step
-- [ ] `tests/Test-BashInstaller.ps1` runs the installer in Git Bash from a TEMP copy, with stub
+- [x] `tests/Test-BashInstaller.ps1` runs the installer in Git Bash from a TEMP copy, with stub
       `az`, `curl` and `pwsh` and a PATH without the real Azure CLI, over a terminal run, a region
       named by name, an unknown region, unreadable prices, `--yes`, a full run to the record, the
       FinOps offer accepted, declined, skipped and forced, and no PowerShell 7; the script uses no
       construct that needs bash 4, since it states that it runs on macOS
-- [ ] SETUP.md and CHANGELOG; council, five seats; the packet gate exits 0
+- [x] SETUP.md and CHANGELOG
+Mutations, each in its own copy of the worktree, counted as caught only when the suite ran all 49
+checks and at least one failed: 24 of 24 caught, among them free-tier rows kept, the first tier
+instead of the marginal one, other geographies or unpriced regions listed, the summary pricing Basic
+v2 whatever is chosen, prices read at every use, one page read, the table under `--yes`, the
+record without the tier, the FinOps tool offered under `--yes` or with `CLAUDE_NONINTERACTIVE=1`,
+a bash 4 construct, and a carriage return in the region lines or reaching `az`. A 25th, the
+carriage return strip removed from the next-page link, survived: in Git Bash a single value keeps
+no carriage return, so that strip changed nothing, and it is removed.
+
+- [ ] Council, five seats; the packet gate exits 0
 ## P72 permutation tests of the guided flow and the installer, 2026-09-28
 
 The owner's test on 2026-09-27 found the guided flow's defects one path at a time. P72 tests the

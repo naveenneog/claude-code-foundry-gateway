@@ -180,8 +180,10 @@ not publish in a region reads as not published. These are list prices: the
 agreement's price sheet states what the organization pays, and reading it
 takes a billing role rather than a subscription role
 ([View and download your organization's Azure pricing](https://learn.microsoft.com/azure/cost-management-billing/manage/ea-pricing),
-**U31**). `install-claude-gateway.sh` asks for the region without prices
-([ROADMAP](ROADMAP.md)).
+**U31**). `install-claude-gateway.sh` lists the same regions and prices with the
+same Retail Prices API query, and its tier prompt and summary are priced the
+same way (P75). A region the subscription can use is accepted by name in any
+case or spacing, or by its number in the list.
 
 ---
 
@@ -499,6 +501,13 @@ recorded the helper script.
 ./install-claude-gateway.sh --what-if
 ./install-claude-gateway.sh --foundry-account ai-contoso --yes
 ```
+
+`install-claude-gateway.sh` ends the same way: run on its own in a terminal, it
+offers the FinOps tool through PowerShell 7 (`pwsh`), `--choose-finops` opens it
+without asking and `--skip-finops-offer` leaves it out. Under `--yes`, or
+without PowerShell 7, the command is a numbered next step instead. Its record,
+`onboarding/claude-gateway.json`, holds the tier, the region and the Foundry
+account and resource group, as the PowerShell installer's record does.
 
 ### Option B — non-interactive script
 

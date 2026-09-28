@@ -104,7 +104,7 @@ apim_prices_() {
   PRICES_READ="$(date -u '+%Y-%m-%d %H:%M') UTC"
   local filter url body pages="" page=0
   filter="serviceName eq 'API Management' and priceType eq 'Consumption' and (meterName eq 'Basic v2 Unit' or meterName eq 'Standard v2 Unit' or meterName eq 'Premium v2 Unit')"
-  url="https://prices.azure.com/api/retail/prices?\$filter=$(jq -rn --arg f "$filter" '$f | @uri' | tr -d '\r')"
+  url="https://prices.azure.com/api/retail/prices?\$filter=$(jq -rn --arg f "$filter" '$f | @uri')"
   while [ -n "$url" ] && [ "$page" -lt 20 ]; do
     if ! body="$(curl -fsS --max-time 30 "$url" 2>&1)"; then
       PRICES_UNREACHABLE="$(printf '%s\n' "$body" | head -n 1)"
@@ -116,7 +116,7 @@ apim_prices_() {
       return 1
     fi
     pages="$pages$body"$'\n'
-    url="$(printf '%s' "$body" | jq -r '.NextPageLink // empty' | tr -d '\r')"
+    url="$(printf '%s' "$body" | jq -r '.NextPageLink // empty')"
     page=$((page + 1))
   done
   # Through standard input: all pages are about 100 KB, over the 32,767 characters a Windows
@@ -131,13 +131,12 @@ apim_prices_() {
         ({"Basic v2 Unit": "BasicV2", "Standard v2 Unit": "StandardV2", "Premium v2 Unit": "PremiumV2"}[$r.meterName // ""]) as $t
         | if $t and $r.armRegionName then .[$r.armRegionName][$t] = ((($r.retailPrice * 730 * 100) + 0.5 | floor) / 100) else . end)')"
   [ -z "$PRICES_JSON" ] && PRICES_JSON="{}"
-  PRICES_CURRENCY="$(printf '%s' "$pages" | jq -rs '[ .[].Items[].currencyCode | select(. != null and . != "") ][0] // "USD"' | tr -d '\r')"
+  PRICES_CURRENCY="$(printf '%s' "$pages" | jq -rs '[ .[].Items[].currencyCode | select(. != null and . != "") ][0] // "USD"')"
   return 0
 }
 
-# The monthly list price of one tier in one region, or nothing where none is published. jq.exe on
-# Windows ends lines with CRLF, so each jq -r result used as text drops its carriage return.
-price_() { printf '%s' "$PRICES_JSON" | jq -r --arg r "$1" --arg t "$2" '.[$r][$t] // empty' | tr -d '\r'; }
+# The monthly list price of one tier in one region, or nothing where none is published.
+price_() { printf '%s' "$PRICES_JSON" | jq -r --arg r "$1" --arg t "$2" '.[$r][$t] // empty'; }
 
 # USD 2,800.00, or USD 2,800 with no decimals, as the PowerShell installer prints amounts.
 money_() {
@@ -154,7 +153,9 @@ money_() {
 
 # Numbered options, one per line: number, region, then the Basic, Standard and Premium v2 monthly
 # price. The default region first, then the other physical regions in its geography group that
-# publish a v2 price, cheapest Basic v2 first (scripts/ClaudeGatewayRegion.ps1).
+# publish a v2 price, cheapest Basic v2 first (scripts/ClaudeGatewayRegion.ps1). jq.exe on Windows
+# ends each line with CRLF: Git Bash's command substitution drops the last line's carriage return,
+# but read keeps the others' in the last field, where a price that is not published read as 0.
 region_options_() {
   local default="$1" locations="$2"
   [ -z "$PRICES_UNREACHABLE" ] || return 0
@@ -190,7 +191,7 @@ read_gateway_region_() {
   printf '%s' "$locations" | jq -e 'type == "array"' >/dev/null 2>&1 || locations="[]"
   apim_prices_ || true
   note_ "read in $((SECONDS - started)) s"
-  known="$(printf '%s' "$locations" | jq -r '.[] | select((.metadata.regionType // "") == "Physical") | .name' | tr -d '\r')"
+  known="$(printf '%s' "$locations" | jq -r '.[] | select((.metadata.regionType // "") == "Physical") | .name')"
   options="$(region_options_ "$default" "$locations")"
   if [ -n "$options" ]; then
     echo
