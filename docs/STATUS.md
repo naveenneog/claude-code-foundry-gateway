@@ -60,6 +60,13 @@ defects, each with a screenshot. Work is on `p79-owner-test-fixes`, based on `03
       need PowerShell 7 as the host, which is how Test-All runs them; their children run on both
 - [x] Council round 1, five seats, over `0345e85..5de7ba2`: Architect, Coder, QA, UX and Security
       PASS. Its one note, the stale "21 on both shells", is corrected above
+- [x] The first packet gate, at `01f9605` on 2026-09-28 (19:20), failed one check: "Test-All counts
+      every check" (`tests/Test-RunnerIntegrity.ps1`). Its `Get-Registered` reads a check name between
+      single quotes with no quote inside, so the new registration `'Decision record paths are
+      PowerShell''s'` was not read: the copied runner had no stub for `Test-RelativeRecordPath.ps1` and
+      exited 1. The check is renamed "Relative decision record paths follow the current folder", and
+      the integrity test now asserts that every `Invoke-Check` line in the registration is read,
+      naming any line that is not (it fails on `01f9605` with that line; 47 checks pass after)
 - [ ] The packet gate exits 0
 
 ## P77 a 60-minute gate budget while the exclusive checks are sharded, 2026-09-28

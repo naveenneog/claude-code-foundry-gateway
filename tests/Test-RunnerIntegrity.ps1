@@ -98,6 +98,11 @@ function Mutate([string]$Text, [string]$From, [string]$To) {
 Write-Host 'Test-All - isolated processes, complete receipts, bounded failures' -ForegroundColor Cyan
 $registered = @(Get-Registered $source)
 Assert 'at least ten offline checks are registered' ($registered.Count -ge 10)
+# Get-Registered reads a name between single quotes with no quote inside. A registration it cannot read
+# (for example an apostrophe written as '') gets no stub below, and the full run fails without naming it.
+$registrationBlock = [regex]::Match($source, '(?s)# BEGIN CHECK REGISTRATION(.*?)# END CHECK REGISTRATION').Groups[1].Value
+$unread = @($registrationBlock -split "`r?`n" | Where-Object { $_ -match '^\s*Invoke-Check\s' -and @(Get-Registered $_ -Azure).Count -ne 1 } | ForEach-Object { $_.Trim() })
+Assert 'every Invoke-Check line in the registration is read' ($registrationBlock -match 'Invoke-Check' -and $unread.Count -eq 0) "not read; a check name is single-quoted with no apostrophe: $($unread -join '; ')"
 $savedThrottle = $env:TEST_ALL_THROTTLE
 try {
     $env:TEST_ALL_THROTTLE = $null

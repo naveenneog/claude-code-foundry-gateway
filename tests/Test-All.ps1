@@ -264,7 +264,7 @@ try {
     Invoke-Check 'Guided flow contract'                      'Test-FlowContract.ps1'
     Invoke-Check 'Guided flow FinOps modules'                'Test-FlowFinOps.ps1'
     Invoke-Check 'Guided flow FinOps step runs what it plans' 'Test-FlowFinOpsApply.ps1'
-    Invoke-Check 'Decision record paths are PowerShell''s'  'Test-RelativeRecordPath.ps1'
+    Invoke-Check 'Relative decision record paths follow the current folder' 'Test-RelativeRecordPath.ps1'
     Invoke-Check 'Guided lifecycle update and change flow'    'Test-FlowLifecycle.ps1'
     Invoke-Check 'Guided flow orchestrator'                  'Test-GuidedFlow.ps1'
     Invoke-Check 'Guided flow start and installer prices'    'Test-FlowStart.ps1' -SerialLane
