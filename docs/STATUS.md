@@ -767,6 +767,28 @@ without a delegated domain; none is bought or borrowed. The lead accepted this s
 2026-09-28; the positive proof moves to P74 and is not complete. U30 covers the research;
 P69 did not need the reserved U33 identifier.
 
+### P76 ordinal-sort integration, 2026-09-28
+
+The lead merged `040ca87` (P76 and P75) as `555be85`, retaining P69's explicit Models
+decision/record results and P76's code-point assignment-key order. The focused integration
+check at that merge fails one of 35 checks: four string sorts in the network/recovery helpers
+are culture-dependent, and the numeric free-prefix sort needs its documented value-key entry.
+
+- [ ] Gateway hostname projections, network regions, subscription scopes and NSG IDs use the
+      existing `Sort-ClaudeFlowOrdinal`; each helper also loads it when used alone
+- [ ] The numeric `Last` address sort remains native and is listed with the value-key reason;
+      null/empty inputs and case-folded uniqueness retain their caller semantics
+- [ ] A hyphen-versus-letter regression passes on PowerShell 7 and Windows PowerShell 5.1;
+      restoring a string `Sort-Object` is caught with the complete selector count
+- [ ] P69 and the requested network suites pass with their scratch dependencies copied;
+      the lead runs the packet gate and council round 4, not this integration task
+
+Initial measurement: native sorting gives `eastus-b,eastusa` on PowerShell 7 and
+`eastusa,eastus-b` on Windows PowerShell 5.1. The ordinal helper gives the same order on
+both and applies its documented case-folded uniqueness. Native sorting already drops null
+pipeline items; NSG IDs additionally filter null/empty values before sorting. No null sentinel
+is needed by these four callers. No Test-All or gate is run for this request.
+
 ### Council round 3 corrections
 
 The lead's read-only review of `1345956..cabc4c4` returned the following verdicts on 2026-09-28.
