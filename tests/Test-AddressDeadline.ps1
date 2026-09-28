@@ -30,6 +30,24 @@ $scratch=Join-Path ([IO.Path]::GetTempPath()) ('address-native-'+[guid]::NewGuid
 $oldPath=$env:PATH;$oldProbe=$env:P69_DEADLINE_PROBE
 try{
     New-Item -ItemType Directory -Path $scratch|Out-Null
+    Check 'timed-out checks leave no private ARM body directory behind' {
+        $witness=Join-Path $scratch 'private-directory.txt'
+        $message=''
+        try {
+            Wait-ClaudeAddress -Condition 'private body' -About 'about 1 s' -TimeoutSeconds 3 -Arguments @($witness) -Check {
+                param($witness)
+                $dir=[IO.Path]::GetTempPath()
+                [IO.File]::WriteAllText($witness,$dir)
+                [IO.File]::WriteAllText((Join-Path $dir 'private-arm-fixture.txt'),'fixture-only')
+                Start-Sleep -Seconds 30
+                @{Done=$true}
+            } | Out-Null
+        } catch {$message=$_.Exception.Message}
+        $dir=if(Test-Path $witness){[IO.File]::ReadAllText($witness)}else{''}
+        $left=$dir -and (Test-Path -LiteralPath (Join-Path $dir 'private-arm-fixture.txt'))
+        if($left){Remove-Item -LiteralPath (Join-Path $dir 'private-arm-fixture.txt')}
+        $message -match 'timed out' -and $dir -like '*claude-address-check-*' -and -not $left -and -not (Test-Path -LiteralPath $dir)
+    }
     $probe=Join-Path $scratch 'pid.txt'
     [IO.File]::WriteAllText((Join-Path $scratch 'az.cmd'),"@echo off`r`n`"$((Get-Process -Id $PID).Path)`" -NoProfile -NonInteractive -File `"%~dp0block.ps1`"`r`n")
     [IO.File]::WriteAllText((Join-Path $scratch 'block.ps1'),'[IO.File]::WriteAllText($env:P69_DEADLINE_PROBE,[string]$PID); Start-Sleep -Seconds 30; ''{}''')

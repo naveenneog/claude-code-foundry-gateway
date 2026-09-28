@@ -41,7 +41,7 @@ function Invoke-ClaudeAddressPlan {
     $initial=[pscustomobject]@{
         subscriptionId=$sub;apimName='apim-contoso';resourceGroup='rg-contoso';gatewayUrl='https://old.contoso.test/claude'
         address=[pscustomobject]@{hostname='old.contoso.test';certificateSource='KeyVault';keyVaultCertificateId='https://kv-contoso.vault.azure.net/certificates/company';dnsMode='AzureDns';dnsZoneResourceId=$zone;certificateThumbprint='OLD-PIN'}
-        decisions=[pscustomobject]@{address=[pscustomobject]@{hostname='old.contoso.test';certificateThumbprint='OLD-PIN'}}
+        decisions=[pscustomobject]@{address=[pscustomobject]@{hostname='old.contoso.test';certificateThumbprint='OLD-PIN'};foundation=[pscustomobject]@{addressMode='custom';addressHostname='old.contoso.test'}}
     }
     $recordPath=Join-Path $scratch 'onboarding\claude-gateway.json'
     $driver=@'
@@ -113,10 +113,15 @@ catch {$failure=$_.Exception.Message}
     $after=Get-Content -Raw $recordPath|ConvertFrom-Json
     Check 'Azure transition runs the real package writer without address apply' {-not $azure.Failure -and $azure.Writes -contains 'deployment' -and $azure.Writes -notcontains 'address'}
     Check 'Azure transition clears both company metadata copies' {$after.gatewayUrl -eq 'https://apim-contoso.azure-api.net/claude' -and -not $after.address -and -not $after.decisions.address}
+    Check 'Azure transition clears inherited Foundation company inputs as well' {$after.decisions.foundation.addressMode -eq 'azure' -and -not $after.decisions.foundation.addressHostname}
     Check 'Azure transition updates existing generated settings' {[IO.File]::ReadAllText((Join-Path $scratch 'onboarding\profiles\standard\managed-settings.json')) -match 'apim-contoso.azure-api.net'}
     . (Join-Path $root 'scripts\flow\FlowContract.ps1')
     . (Join-Path $root 'scripts\flow\Foundation.ps1')
     . (Join-Path $scratch 'scripts\ClaudeGatewayAddress.ps1')
+    Check 'Foundation merge retains the address chosen by the installer rather than an old proposal' {
+        $merged=Merge-ClaudeFlowFoundationDecision -Decision ([pscustomobject]@{addressMode='custom';addressHostname='old.contoso.test'}) -Config $after
+        $merged.addressMode -eq 'azure' -and -not $merged.addressHostname
+    }
     function Get-ClaudeFlowFoundationCost {param($Sku,$Location);New-ClaudeFlowCost -Item APIM -MonthlyUsd 150 -Source fixture}
     Set-ClaudeDecision $initial foundation ([pscustomobject]@{})
     $plan=Get-ClaudeFlowStepPlan $initial ([pscustomobject]@{action='Change';attended=$false})

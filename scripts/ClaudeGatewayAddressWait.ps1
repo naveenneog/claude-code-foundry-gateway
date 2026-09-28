@@ -1,7 +1,9 @@
+if ($PSVersionTable.PSEdition -ne 'Core') { Import-Module CimCmdlets -ErrorAction Stop }
+
 function Stop-ClaudeAddressCheckProcess {
     param([Diagnostics.Process]$Process)
     if ($Process.HasExited) { return }
-    if ($PSVersionTable.PSEdition -eq 'Core') { $Process.Kill($true); return }
+    if ($PSVersionTable.PSEdition -eq 'Core') { $Process.Kill($true); if(-not $Process.WaitForExit(1000)){throw 'Address check process did not stop.'}; return }
     $ids = New-Object 'Collections.Generic.List[int]'
     $ids.Add($Process.Id)
     for ($i=0; $i -lt $ids.Count; $i++) {
@@ -20,6 +22,10 @@ function Invoke-ClaudeAddressCheck {
     param([scriptblock]$Check, [object[]]$Arguments = @(), [int]$TimeoutMilliseconds)
     if ($TimeoutMilliseconds -le 0) { throw [TimeoutException]::new('Address check deadline expired.') }
     $clock = [Diagnostics.Stopwatch]::StartNew()
+    $directory=Join-Path ([IO.Path]::GetTempPath()) ('claude-address-check-'+[guid]::NewGuid().ToString('N'))
+    $process=$null
+    try {
+    [void][IO.Directory]::CreateDirectory($directory)
     $payload = [Management.Automation.PSSerializer]::Serialize(@{
         module=(Join-Path $PSScriptRoot 'ClaudeGatewayAddress.ps1'); script=$Check.ToString(); arguments=@($Arguments)
     },100)
@@ -42,8 +48,7 @@ try {
     $start.RedirectStandardInput=$true; $start.RedirectStandardOutput=$true; $start.RedirectStandardError=$true
     $start.StandardOutputEncoding=New-Object Text.UTF8Encoding($false)
     $start.StandardErrorEncoding=New-Object Text.UTF8Encoding($false)
-    $process=$null
-    try {
+    foreach($name in 'TEMP','TMP','TMPDIR'){$start.EnvironmentVariables[$name]=$directory}
         $process=[Diagnostics.Process]::Start($start)
         $stdout=$process.StandardOutput.ReadToEndAsync(); $stderr=$process.StandardError.ReadToEndAsync()
         $write=$process.StandardInput.WriteAsync($payload)
@@ -61,7 +66,8 @@ try {
         [Management.Automation.PSSerializer]::Deserialize($stdout.Result)
     }
     finally {
-        if($process){try{Stop-ClaudeAddressCheckProcess $process}finally{$process.Dispose()}}
+        try {if($process){try{Stop-ClaudeAddressCheckProcess $process}finally{$process.Dispose()}}}
+        finally {if(Test-Path -LiteralPath $directory){Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction Stop}}
         $payload=$null
     }
 }
@@ -97,6 +103,7 @@ function Invoke-ClaudeAddressArm {
     }
     Wait-ClaudeAddress -Condition "$Method ARM resource" -About 'about 4 s' -TimeoutSeconds 45 -Arguments @($values) -Check {
         param($values)
+        if($values.ContainsKey('Body')){$values.StateDirectory=[IO.Path]::GetTempPath()}
         @{Done=$true;Value=(Invoke-ClaudeNetworkArm @values)}
     }
 }

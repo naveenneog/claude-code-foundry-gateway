@@ -361,6 +361,11 @@ function Merge-ClaudeFlowFoundationDecision {
         if ($Config.PSObject.Properties.Name -contains $name -and $Config.$name) { $merged[$name] = $Config.$name }
     }
     if ($Config.PSObject.Properties.Name -contains 'desktopSignIn' -and $Config.desktopSignIn -and $Config.desktopSignIn.kind) { $merged['desktopSignInKind'] = [string]$Config.desktopSignIn.kind }
+    $address = Resolve-ClaudeAddressInputs -Record $Config
+    foreach ($pair in (Get-ClaudeFlowFoundationInstallerMap).GetEnumerator() | Where-Object { $_.Value -like 'address*' }) {
+        if ($address.Contains($pair.Key)) { $merged[$pair.Value] = $address[$pair.Key] }
+        else { $merged.Remove($pair.Value) }
+    }
     return [pscustomobject]$merged
 }
 

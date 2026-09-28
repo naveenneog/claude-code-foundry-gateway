@@ -1653,7 +1653,12 @@ if ($addressResult) {
 }
 else {
     $config.Remove('address')
+    $config.Remove('pendingAddress')
     if ($config.Contains('decisions') -and $config.decisions) { $config.decisions.PSObject.Properties.Remove('address') }
+    if ($config.decisions -and $config.decisions.foundation) {
+        foreach ($name in @($config.decisions.foundation.PSObject.Properties.Name | Where-Object { $_ -like 'address*' })) { $config.decisions.foundation.PSObject.Properties.Remove($name) }
+        $config.decisions.foundation | Add-Member -NotePropertyName addressMode -NotePropertyValue azure
+    }
     if ($savedAddressConfig -and $savedAddressConfig.address) {
         . (Join-Path $root 'scripts\ClaudeGatewayAddress.ps1')
         Update-ClaudeAddressArtifacts -RecordPath $configPath -OldUrl $savedAddressConfig.gatewayUrl -NewUrl $gatewayUrl
