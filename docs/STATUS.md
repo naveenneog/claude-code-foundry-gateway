@@ -454,24 +454,54 @@ P69 did not need the reserved U33 identifier.
 
 The lead's five-seat review of `c82f951..1345956` (read-only, 2026-09-28) returned BLOCK.
 A1, Q1, U1 and S1 are closed by that review. P74 remains an accepted scope deferral, not done.
-The following changes are planned test-first; fixes still require a new gate and council review.
+The following corrections passed their targeted tests and mutations; the merged packet gate and
+council re-review follow. The review verdicts below are the supplied verdicts, not self-issued passes.
 
 | Seat | Verdict | Finding | Fix and regression required |
 |---|---|---|---|
-| Architect | BLOCK (A2 partial) | Only the owning decision advances; DesktopSignIn loses `deviceProfiles.regenerate` | Explicit cross-decision changes committed only after success; exercise the real step and Models |
-| Coder | BLOCK (C2 partial) | Foundation's Azure-transition result merges deletions back into old metadata | Explicit removals or snapshot replacement for both address copies |
-| Coder | BLOCK (C1 partial) | Installer omits the receipt path; legacy Foundation-only subscription fails recovery | Real installer 503 proof failure records an unverified receipt; shared subscription resolver |
-| QA | BLOCK | Single-decision fixture missed cross-decision writes and removal propagation | Executable tests and full-selector-count mutations for all round-2 paths |
-| UX | BLOCK | Status, Guide and discovery read proposed answers | Applied-only read consumers; proposals limited to selected planning/apply decisions |
+| Architect | BLOCK (A2 partial) | Only the owning decision advances; DesktopSignIn loses `deviceProfiles.regenerate` | `f3f6672`, `51ca117`: explicit cross-decision results; real DesktopSignIn and Models success/failure regressions |
+| Coder | BLOCK (C2 partial) | Foundation's Azure-transition result merges deletions back into old metadata | `f3f6672`: returned snapshots replace applied decisions; explicit property removals clear both address copies |
+| Coder | BLOCK (C1 partial) | Installer omits the receipt path; legacy Foundation-only subscription fails recovery | `6a2eee2`: real installer 503 after replacement leaves an unverified receipt; shared subscription resolver |
+| QA | BLOCK | Single-decision fixture missed cross-decision writes and removal propagation | `4d7c4d0`: 94 full-selector-count mutations on both hosts, including every new boundary |
+| UX | BLOCK | Status, Guide and discovery read proposed answers | `f3f6672`: applied-only read consumers; only selected planning/apply decisions receive proposals |
 | Security | PASS for prior S1 | Validated PFX buffer and deadline cleanup retained | Preserve the passing round-1 detectors |
 
-Integration is a normal merge of `main` (`f98f885`, including P72 and P70), not a rebase.
+Integration is normal merge `51ca117`, with parents `6a2eee2` and `f98f885` (P72 and P70), not a rebase.
 P72's refusal handling and Guide drift warning, P70's Models prepare/apply boundary, and the
 scoped address recovery exception are retained. Ledger differences against main must contain
-only P69's own contributions. Under ADR-0025, Certificate, CompanyFlow, Installer and
-MutationRunner are candidates for the parallel lane after private-scratch and mocked-service
-inspection and three runs at the suite's parallel throttle. Deadline and mutation checks remain
-exclusive unless separate load evidence supports moving them. The 1,800-second budget stands.
+only P69's own contributions: additions to CHANGELOG/STATUS/ROADMAP, and the U30 row/detail in
+UNKNOWNS. U34-U36 and P73 remain unchanged. The Models integration exposed a PowerShell 5.1
+JSON round-trip array wrapper and loss of one-element arrays; recursive value copies now retain
+their shape without sharing nested objects. Model records are published after profile generation
+succeeds, and their return values declare both profile decisions and top-level model data.
+
+Both hosts pass `Test-CompanyAddress` 79, `Test-CompanyCertificate` 31, `Test-CompanyFlow` 27,
+`Test-CompanyInstaller` 13, `Test-FlowAppliedState` 20, `Test-AddressDeadline` 6 and
+`Test-CompanyMutationRunner` 5 assertions. The real P70 lifecycle suite passes 138 assertions
+on each host; P72's complete flow and installer permutation suites pass after their shadow
+repositories gained the new helper dependency. All 94 P69 mutations are caught, each running
+the full applicable 79/31/27/13/20/6 selectors (314.3 s PS7, 526.3 s PS5.1).
+
+**Lane evidence (ADR-0025).** Certificate, CompanyFlow, Installer and MutationRunner were
+inspected for writes, ports, native tools and process-wide state. They use GUID-named private
+scratch, mocked Azure/prices and process-local helpers; they neither write tracked source nor
+use live Azure, shared configuration or listening ports. Only those four checks moved to the
+parallel lane. The mutation harness and deadline probes remain exclusive; no timing-sensitive
+check was moved or omitted.
+
+The same Test-All scheduler and four registrations ran serially once, then three times at
+parallel throttle 4, each in a fresh process. All four full suites passed in every run.
+
+| Check / wall duration, seconds | Before: serial | Parallel 1 | Parallel 2 | Parallel 3 |
+|---|---:|---:|---:|---:|
+| Certificate | 3.7 | 2.4 | 2.3 | 2.0 |
+| CompanyFlow | 3.4 | 2.5 | 2.6 | 2.1 |
+| Installer | 4.8 | 4.9 | 5.0 | 4.0 |
+| MutationRunner | 1.3 | 1.5 | 1.3 | 1.2 |
+| Four-check wall | 13.3 | 5.2 | 5.3 | 4.2 |
+
+These are the selected-check lane measurements, not whole-suite timings. The unchanged
+1,800-second full-gate budget still applies.
 
 ### Council round 1 corrections
 

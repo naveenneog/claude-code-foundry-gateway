@@ -35,6 +35,9 @@ exact streaming cache-creation detail remains **U13**.
   Checks enforce remaining deadlines and clean private worker files on cancellation. PFX uploads
   use the validated byte buffer. The positive delegated-domain TLS proof is explicitly deferred
   to P74 by the lead, not marked complete.
+  Round 2 adds explicit cross-decision results and removals, applied-only Status/Guide/discovery,
+  installer recovery receipts and legacy subscription resolution. DesktopSignIn and Models retain
+  their profile decisions, and a failed Models profile generation does not publish proposed state.
 - **Company address in the installer and guided flow (P69).** The company choice now plans
   and applies public DNS, a supplied PFX or Key Vault certificate, and a preserved APIM Proxy
   hostname, with component prices before approval. `-Change address` uses the same fingerprinted

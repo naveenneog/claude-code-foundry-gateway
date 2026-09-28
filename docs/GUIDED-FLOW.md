@@ -193,11 +193,20 @@ and does not exit its caller
 
 ## Resume after failure
 
-Questions and plans use proposed decisions in memory. Durable `decisions`
-contain only applied values; each history entry's `from` is captured before
-questions. A failed step cannot save its proposed answer with an old certificate
-pin or other applied metadata. Successful steps advance their own applied
-decisions. Unapplied answers are supplied again on a retry.
+Questions and plans use proposed decisions in memory, only for the selected
+steps. Status, Guide, discovery and drift checks read applied values. Durable
+`decisions` contain only applied values; each history entry's `from` is captured
+before questions. A failed step cannot save its proposed answer with an old
+certificate pin or other applied metadata. Successful steps explicitly return
+every decision they changed, including another decision such as profile
+regeneration. Unapplied answers are supplied again on a retry.
+
+A returned `DecisionChanges` map updates those applied decisions; `RecordChanges`
+updates top-level fields. A returned `decisions` snapshot replaces the applied
+snapshot, and `RemovedProperties` removes named top-level fields. This permits
+the installer's Azure transition to remove company-address metadata without
+the orchestrator restoring it. In-place edits to a step's private working
+record are not themselves a successful result.
 
 When an apply starts, the orchestrator writes `activeRun` with the run id,
 action, selected change, fingerprint and UTC start time. After each step applies,
@@ -318,6 +327,9 @@ recovery review: gateway, previous URL, proposed inputs and exact live hostname
 collection must match. The review has a fresh fingerprint. Neither that receipt
 nor recovery discovery labels the company URL as verified, and other actions
 still refuse drift.
+The installer also passes its onboarding record path to address apply, so an
+HTTPS failure after replacement leaves that receipt. Legacy records with the
+subscription under `decisions.foundation` use the same subscription resolver.
 
 The [live isolated run](SETUP.md#company-address) demonstrated authoritative DNS
 and Azure's public-domain ownership refusal, not a successful custom-hostname
