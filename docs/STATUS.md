@@ -76,6 +76,18 @@ defects, each with a screenshot. Work is on `p79-owner-test-fixes`, based on `03
       process id and that process's start time, and identity checks use that pair. A probe
       assertion runs one stub and checks the name; it failed on the old naming ("files:
       48620.json") and passes after; the integrity test passes 48 checks in 272 s under the same load
+- [x] Council round 2, five seats, over `01f9605..d0226dd`: all five seats PASS
+- [x] Council round 3, five seats, over `d0226dd..0e64028`: Architect, UX and Security PASS; two
+      BLOCKs on the probe, both fixed test-first. Coder: the probe wrote and read its files before
+      the `try` whose `finally` removes the scratch folder, so a failed write or unreadable record
+      left the folder behind. QA: the probe accepted any number after the process id, so a constant
+      such as `Proc = "$PID-0"`, which brings back the overwrite, passed. The probe now runs inside
+      that `try`, starts the stub with `Start-Process -PassThru`, and requires exit code 0 and a
+      record named `<id>-<start ticks>` from the started process's own id and start time. Evidence,
+      run in private copies (`p79-r3-probe.ps1`, 254 s): the fixed probe fails on `Proc = "$PID-0"`,
+      on records named by process id and on an empty `Proc`; the old probe passes on
+      `Proc = "$PID-0"`; with an unreadable record, the old test leaves its scratch folder behind
+      and the fixed test removes it; the fixed integrity test passes 48 checks
 - [ ] The packet gate exits 0
 
 ## P77 a 60-minute gate budget while the exclusive checks are sharded, 2026-09-28
