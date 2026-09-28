@@ -147,8 +147,8 @@ and progressive publication still require the same protection.
 | Coder | PASS | Round-2 implementation accepted | Retained |
 | QA | PASS | Direct stale-cycle reproductions reject with exit 3 | Retained |
 | UX | PASS | Round-2 error behavior accepted | Retained |
-| Security | BLOCK | B1: completed HTTP sources survive a principal change during aggregate assembly | Pending: pin the HTTP generation for the complete read cycle |
-| Security | BLOCK | B2: partial results reach UI cache/render before the outer cycle check | Pending: validate immediately before partial and final publication, then clear on mismatch |
+| Security | BLOCK | B1: completed HTTP sources survive a principal change during aggregate assembly | `de22369`: HTTP generation pinned through complete assembly, subsequent reads and cycle exit |
+| Security | BLOCK | B2: partial results reach UI cache/render before the outer cycle check | `739b9a7`: captured publication guard before each partial/final cache write and render; mismatch clears the refresh |
 
 Both council reproductions become failing tests before implementation. A bounded
 follow-up review covers other cache, screen and JSON publication points for
@@ -156,6 +156,27 @@ already-completed results. After the fixes, main `f98f885` is merged normally,
 P70/P72 ledger entries and U35/U36 remain alongside P71/U37, and architecture is
 regenerated. The packet gate retains its 1,800 s budget and shared lock. No
 database stop/start or history rewrite is performed.
+
+The real Engine/Turnstile reproduction failed with **2 failed, 1 passed** before
+the HTTP fix. The real Engine/Direct loader's held partial and final arrivals
+both published A-only values after B verified; that selector also reproduced
+JSON and capability-cache publication (**4 failed, 3 passed**). These cases now
+raise exit 3 before publication, not after a brief display or cache write.
+
+The additional publication review reproduced completed identity JSON, CSV,
+Turnstile feature and AUM-service catalog-cache writes (**4 failed, 7 passed**),
+then deferred lookup choices/results, detail dialogs, file exports and people
+selectors (**5 failed, 11 passed**). Optional assistant dialogs/answer state and
+membership links also failed before the same guard was applied (**4 failed,
+16 passed**). Fixes: `76dd6e7`, `f8f0270`, `841eb9f`. Tests observe actual widget
+updates, output and file creation; clearing an already-published result does not
+satisfy them. HTTP backend caches and cached redraws retain generation guards;
+publication is serialized with verification of a new identity.
+
+The final publication selector contains **20 cases**. Fourteen deliberate
+mutations cover HTTP pinning/exit, Direct publication, JSON/CSV, identity,
+capability/backend caches, five screen/export boundaries and the shared optional
+publisher. All run at the complete selector count before byte-for-byte restoration.
 
 ### Council round 2 corrections
 

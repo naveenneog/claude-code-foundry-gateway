@@ -468,6 +468,11 @@ rebind it. Catalog, tier and USD snapshots, pending budgets, and multi-source
 chargeback, lookup, trend and person-detail results are checked again before
 return. An obsolete aggregate is discarded with the existing sign-in-changed
 exit 3, and a new cycle verifies the current principal.
+HTTP cycles retain their generation through complete aggregates too. Publication
+checks occur before each progressive or final cache/render operation, not only
+at cycle exit. Capability/backend caches, deferred dialogs and selectors,
+assistant results, JSON and CSV exports use the same guard; a delayed response
+from a previous principal is not briefly displayed and then cleared.
 
 Overview displays each source as it arrives. Pending panels name their source,
 and the progress line shows an estimate and elapsed time. Estimates are not

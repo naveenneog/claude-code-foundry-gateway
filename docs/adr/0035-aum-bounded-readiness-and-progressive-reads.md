@@ -186,6 +186,12 @@ the outer cycle exit alone is too late for a progressive view. The same
 publication boundary applies to completed capability results and command output.
 A mismatch discards the result and reports sign-in changed, not success with
 data from the previous principal.
+The publication guard captures the originating cycle and serializes its
+validation and synchronous publication with identity changes. Cached redraws
+and deferred dialogs retain that guard. The follow-up review reproduced the
+same delayed-completion defect in HTTP backend caches, identity/CSV output,
+lookup/detail/export controls, assistant state and membership links; these
+surfaces keep the read cycle through publication as well.
 
 ## Consequences
 

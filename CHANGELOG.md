@@ -43,6 +43,8 @@ exact streaming cache-creation detail remains **U13**.
   and surface fatal query errors while identity/capabilities are pending.
   Read cycles pin that generation immutably and reject obsolete snapshots and
   complete multi-source aggregates after a verified principal change.
+  HTTP aggregate cycles and progressive publication now retain the same
+  generation through cache, screen and command/file output boundaries.
 - **Permutation tests of the guided flow and the installer (P72).** `tests/Test-FlowPermutations.ps1`
   runs the orchestrator over Setup, Change foundation, Guide and Status × six record states ×
   attended, `-PlanOnly` and unattended apply (76 runs, some on Windows PowerShell 5.1), a recorded
