@@ -64,5 +64,5 @@
   "ignore": [
     "onboarding/**"
   ],
-  "commandTimeoutMs": 1800000
+  "commandTimeoutMs": 3600000
 }
