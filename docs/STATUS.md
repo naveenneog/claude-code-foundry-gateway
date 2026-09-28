@@ -503,6 +503,31 @@ parallel throttle 4, each in a fresh process. All four full suites passed in eve
 These are the selected-check lane measurements, not whole-suite timings. The unchanged
 1,800-second full-gate budget still applies.
 
+**Round 2 merged-tree gate: timed out, not passed.** At `51e816e`, the gate acquired the shared
+lock immediately and ran from 2026-09-28 04:52:43 to 05:22:57 UTC. Exit 1 after 1,814.5 s:
+21 passed, 2 warned, 1 failed, 2 skipped. Test-All reached the unchanged 1,800-second command
+limit; Bicep passed in 12.5 s. The lock was released in `finally`.
+
+The owned Test-All child finished at 05:26:20 UTC, about 2,017 seconds after gate start, and
+its timings file recorded 89 checks: 87 PASS, zero FAIL, two existing missing-environment SKIPs
+(AUM service and AUM Python environments). That late completion is not a passing packet gate.
+The timings and gate receipts are retained as session artifacts. No budget, selector or detector
+was relaxed, and the late child had exited before temporary files were removed.
+
+| Slowest checks from the late timings file | Seconds | Result |
+|---|---:|---|
+| Business-unit mutations, shard 0/4 | 513.7 | PASS |
+| Business-unit mutations, shard 1/4 | 387.9 | PASS |
+| Business-unit mutations, shard 2/4 | 377.5 | PASS |
+| Business-unit mutations, shard 3/4 | 376.2 | PASS |
+| Turnstile mutations, shard 1/2 | 358.8 | PASS |
+| Turnstile mutations, shard 0/2 | 352.1 | PASS |
+| Company-address mutations, all 94 cases | 304.3 | PASS |
+
+The round-2 functional corrections, normal main merge, dual-host mutations and lane measurements
+are ready for the lead's re-review. The merged packet remains blocked on the full-gate duration.
+P69 stays unticked in ROADMAP; the accepted P74 positive TLS proof remains deferred, not done.
+
 ### Council round 1 corrections
 
 The lead's five-seat review of `aa7ed19..c82f951` (gpt-6-astra, read-only, 2026-09-28)
@@ -592,8 +617,9 @@ changing its command budget or test selectors.
       refusal were measured; all proof resources were deleted and the gateway purged below USD 5
 - [x] Redacted, inspected live terminal images numbered 40 onward are embedded in the updated
       setup/flow documentation; architecture sources, images and manifest remain current
-- [x] The locked packet gate exits 0; the branch and evidence are reported to the lead without
-      merging, pushing or ticking the roadmap entry
+- [ ] The current merged tree's locked packet gate exits 0. Round 1 passed at `215d43a`;
+      round 2 at `51e816e` timed out at the unchanged Test-All budget. The requested normal
+      merge of main is recorded; no push, rebase, history rewrite or roadmap completion occurred
 
 Implementation: `b10e945` (certificate/TLS), `99ade80` (shared script and installer/Change wiring),
 `e607df8` (unattended Foundation plan and price binding), `c6b5749` (DNS-before-binding and
