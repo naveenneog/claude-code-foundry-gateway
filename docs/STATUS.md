@@ -2,11 +2,16 @@
 
 ## P78 the test suite runs in parallel on GitHub-hosted runners, 2026-09-28
 
-**Council round 1 passed; the local packet gate and owner approval remain pending.**
+**Council round 1 passed and the local packet gate passed; owner approval of ADR-0039 remains pending.**
 PLAN and CONTRACT are committed in `55e1b90`.
 Work is isolated to `p78-parallel-tests`, from `main` `0345e85`.
-The owner runs the council, gate and merge. No local full suite or gate is run for this packet.
+The lead runs the council and gate; the owner decides the merge.
 [ADR-0039](adr/0039-test-suite-hosted-runners.md) is a draft, not a charter amendment.
+
+**Local packet gate, 2026-09-29:** `node .ironclad/gate.mjs --stage packet` passed at `fab1298`
+(main `17e488c` merged) between 01:18 and 01:46 IST: Test-All in 1,676 s, 22 passed, 2 warned
+(open unknowns), 0 failed. It ran under the shared workstation lock, with the lead raising only
+the gate's own processes to AboveNormal priority.
 
 **Council round 1, reported 2026-09-29:** Architect, Coder, QA, UX and Security all PASS at
 `6880d29`. The council supports owner approval of ADR-0039 as written; approval has not been
