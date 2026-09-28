@@ -50,7 +50,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
         Binding("e", "edit", "Edit"),
         Binding("g", "add_developer", "Add person to team", show=False),
         Binding("u", "usd_edit", "Set USD budget", show=False),
-        Binding("x", "export", "Chargeback report", show=False),
+        Binding("x", "chargeback", "Chargeback report", show=False),
         Binding("ctrl+a", "apply", "Apply"),
         Binding("n", "next_page", "Next"),
         Binding("p", "previous_page", "Previous"),
@@ -241,7 +241,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
             if isinstance(self.focused, TextArea) and not self.focused.read_only:
                 return False
             return bool(parameters) and parameters[0] in self.allowed_tabs
-        if action == "export":
+        if action in {"export", "chargeback"}:
             return "overview" in self.allowed_tabs
         if action == "add_developer":
             return self.identity.get("role") == "owner" and not self.redactor.enabled and not self.verifying_identity
@@ -475,7 +475,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
             "action-add-person": self.action_add_developer,
             "action-set-budget": self.action_edit,
             "action-set-usd-budget": self.action_usd_edit,
-            "action-chargeback": self.action_export,
+            "action-chargeback": self.action_chargeback,
         }
         if event.button.id in actions:
             actions[event.button.id]()
@@ -678,6 +678,10 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
     def action_export(self):
         if self.check_action("export", ()):
             self.push_screen(ExportScreen())
+
+    def action_chargeback(self):
+        if self.check_action("export", ()):
+            self.push_screen(ExportScreen(auto_export=True))
 
     def action_edit(self):
         if not self.check_action("edit", ()):

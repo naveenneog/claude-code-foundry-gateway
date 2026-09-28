@@ -41,6 +41,10 @@ exact streaming cache-creation detail remains **U13**.
   verification. It retains the selected profile path. The configure command
   honors explicit HTTP URL/scope, asks before attended replacement and keeps
   the unattended `--force` requirement.
+  One Chargeback report action writes the complete month CSV to the local
+  reports folder with an absolute path and non-overwrite naming. The installed
+  reconciled-report action retains its existing permissions. CLI report output
+  supports JSON path metadata and a no-file `--what-if` preview.
   [AUM](docs/AUM.md), [ADR-0038](docs/adr/0038-aum-actions-and-connection.md).
 - **AUM latency and readiness (P71).** Direct shares one named-value snapshot per
   read cycle, reuses resource tokens until near expiry and overlaps independent

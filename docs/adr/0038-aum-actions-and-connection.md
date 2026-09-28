@@ -86,6 +86,11 @@ directory scale, Azure availability or invoice reconciliation. No reference
 gateway operation is part of P80. Full suites and mutation batches run only
 under a lock created by this builder and released in `finally`.
 
+The export progress literal now includes its 3-30 s estimate. The existing
+static-write allowlist entry and its pinned hash track that exact changed
+literal and reason; the list remains 51 entries. No handler-wide exception,
+dynamic value exemption or publication-boundary relaxation is added.
+
 ## Evidence
 
 - Existing authority: [ADR-0018](0018-terminal-finops.md),

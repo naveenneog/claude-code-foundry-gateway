@@ -9,6 +9,11 @@ from .errors import FinOpsError
 from .rules import identifier, month_window, require_owner
 
 
+def report_generator(config) -> Path:
+    root = Path(config.repository) if config.repository else Path(__file__).resolve().parents[4]
+    return root / "scripts" / "New-ClaudeChargebackReport.ps1"
+
+
 def report_plan(engine, config, *, month=None, units=None, output="finops-reports",
                 formats="CSV,HTML", month_to_date=False, send=False, apply=False):
     require_owner(engine.read("whoami"))
@@ -18,8 +23,8 @@ def report_plan(engine, config, *, month=None, units=None, output="finops-report
     wanted = [part.upper() for part in formats.split(",")]
     if not wanted or any(part not in {"CSV", "HTML"} for part in wanted):
         raise FinOpsError("Report formats must be CSV, HTML or CSV,HTML.")
-    root = Path(config.repository) if config.repository else Path(__file__).resolve().parents[4]
-    script = root / "scripts" / "New-ClaudeChargebackReport.ps1"
+    script = report_generator(config)
+    root = script.parent.parent
     plan = dict(preview=not apply, action="Generate reconciled P50 chargeback report",
                 available=script.exists(), month=period, units=units, output=output,
                 formats=wanted, month_to_date=month_to_date, send=send,

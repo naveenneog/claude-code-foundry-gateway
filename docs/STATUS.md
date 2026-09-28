@@ -6,7 +6,7 @@ Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM 
 
 ### PLAN
 
-1. Keep P71's publication rule: every backend-derived widget/status/clipboard/export/assistant publication uses `guarded_publish(origin)` or `guarded_deferred(origin, ...)`; any new static label gets an exact structural-test exception and reason.
+1. Keep P71's publication rule: every backend-derived widget/status/clipboard/export/assistant publication uses `guarded_publish(origin)` or `guarded_deferred(origin, ...)`. New labels and progress text stay inside the guarded boundary. The existing export-progress exception tracks its new estimated literal and reason; the pinned allowlist stays at 51 entries, with no broader exception ([ADR-0038](adr/0038-aum-actions-and-connection.md)).
 2. Add RED pilot/unit coverage for: Add person opened from People with no Budgets visit; owner and non-owner empty People search; visible People/Budgets action bar and help/footer keys; unavailable USD explanation; one chargeback action with non-overwrite default export path; one-step connection preview/save/rollback; attended `aum configure --save` backup/overwrite; guide order and cross-doc links.
 3. GREEN by reusing the existing preview-first forms and command actions. The new buttons and keyboard shortcuts only open existing preview screens or safe local profile/export flows; no Turnstile USD writer or governance-authority rule changes are made in P80.
 4. REFACTOR only to share local helpers for catalog-on-demand, report path selection, connection backup/rollback and action labels. Do not edit `ROADMAP.md`, `main` or `accel-p71`.
@@ -35,6 +35,7 @@ research register; no other packet's unknowns are edited.
 |---|---|---|---|
 | Visible actions and guarded add form | Initial selector: 9 failed, 10 passed, 32.87 s. After the test waited for the existing 350 ms directory debounce, the catalog selector showed 2 failures and 1 pass in 9.80 s: an unhandled catalog error and a stale directory result opening a form. | 76 passed in 104.67 s | `test_p80_usability.py`, `test_publication_structure.py`, `test_developers.py`, `test_usd_budgets.py`, `test_tui.py`. Captures are regenerated after the remaining UI work. |
 | Local connection transaction | 8 failed, 2 passed, 15.99 s: explicit HTTP options were ignored, replacement was not atomic, and the terminal form had only backend/path fields. Exact-byte and selected-profile regressions: 3 failed in 1.85 s. | 91 passed in 79.16 s | `test_p80_connection.py`, `test_discovery.py`, `test_publication_structure.py`, `test_backends.py`, `test_revision4_navigation.py`, `test_p80_usability.py`. No Azure calls; identity and discovery are fixtures. |
+| Complete one-action reports | 8 failed, 3 passed, 10.08 s: no file after the named action, ignored custom name/JSON output, no reconciler offer and a filename-race refusal. | 40 passed in 16.10 s | `test_p80_reports.py` and `test_publication_structure.py`; a prior wider selector passed its other 91 tests while detecting the changed static-literal pin, corrected without broadening its 51 entries. |
 
 The action regressions observed truncated labels (10 cells for an 18-cell
 label), no Add action on Budgets, no `via ...` header and a budget button that
@@ -51,6 +52,13 @@ and restores the original file or removes a newly created one. A changed
 profile invalidates the preview. Explicit `--config` and `AUM_CONFIG` remain
 the selected save target. `aum configure` honors explicit HTTP URL/scope and
 does not discover Azure for that address-only case.
+
+One Chargeback report click now saves the complete current-month CSV and shows
+its absolute path. Tests exercise 137 source rows, an existing file and a file
+created between name selection and exclusive creation. Explicit filenames
+remain supported. The installed P50 action retains its owner restriction and
+preview. `--json --output` writes the CSV and returns its path; `--what-if`
+creates no report folder.
 
 ### CONTRACT / acceptance
 

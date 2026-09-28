@@ -24,7 +24,7 @@ class FinOpsCommands(Provider):
             ("Remove saved view", self.app.action_remove_view, "Only this identity/profile"),
             ("Budget audit history", self.app.action_budget_history, "Server-scoped changes and actors"),
             ("Compare trend periods", self.app.action_compare, "Compare actual month buckets"),
-            ("Switch profile or backend", self.app.action_profile, "Verify the new identity before switching"),
+            ("Change connection", self.app.action_profile, "Preview, back up the local profile and verify the new identity"),
             ("Sign out", self.app.action_sign_out, "Preview clearing the Azure CLI session"),
         ]
         if self.app.active == "people" and not self.app.redactor.enabled:
@@ -40,6 +40,7 @@ class FinOpsCommands(Provider):
             for dimension in ("organization", "department", "user", "model", "runtime", "tier"):
                 commands.append((f"Overview ranking: {dimension}", partial(self.app.action_overview_rank, dimension), "Scoped server ranking"))
         if self.app.check_action("export", ()):
+            commands.append(("Chargeback report", self.app.action_chargeback, "Save the complete month CSV without overwriting"))
             commands.append(("Export complete chargeback CSV", self.app.action_export, "All managed scopes, not the top 100"))
         if self.app.identity.get("role") == "owner" and not self.app.redactor.enabled:
             commands += [

@@ -63,7 +63,7 @@ STATIC_WRITES = {
     ("screens.py", "ChangeScreen.apply_change", "self.query_one('#form-status', Static).update('Saved. Following gateway apply; usually about two minutes...')"): "Fixed apply-wait progress message, no response payload.",
     ("screens.py", "ChangeScreen.action_cancel", "self.query_one('#form-status', Static).update('A write is in progress. Wait for its result before closing.')"): "Fixed cancellation refusal while a write is active.",
     ("screens.py", "ExportScreen.export", "self.query_one('#export-status', Static).update('Use a CSV filename, without directory separators.')"): "Fixed filename-validation refusal.",
-    ("screens.py", "ExportScreen.export", "self.query_one('#export-status', Static).update('Reading every catalog scope, not just the top ranking...')"): "Fixed export progress, not scope names or results.",
+    ("screens.py", "ExportScreen.export", "self.query_one('#export-status', Static).update('Reading every catalog scope (estimate 3-30 s); not just the top ranking...')"): "Fixed estimated export progress, not scope names or results.",
     ("feature_screens.py", "ActionForm.apply_action", "self.query_one('#action-status', Static).update('Saved; following apply status...')"): "Fixed pending-apply message.",
     ("feature_screens.py", "TourScreen.compose", "Label('Welcome to AUM — one engine, terminal and commands')"): "Fixed first-run tour heading.",
     ("feature_screens.py", "TourScreen.compose", "Static('1-8 / 0 open views; 9 Approvals and a Ask appear only when permitted.\\n\\nTab moves between panels. Enter opens exact values. Esc returns.\\n\\n/ finds units, teams, people, models and request ids. f edits server filters.\\nCtrl+F filters visible rows. : finds every permitted action by name.\\n\\nBudget edits preview first, check parent headroom and require Apply.\\nRemoving or lowering below spend requires the scope name.\\n\\nSettings switches profile/backend and explains sign-out.\\nUse --plain or --screen-reader for linear output; ? shows current keys.', markup=False)"): "Fixed tour instructions with no interpolated backend fields.",
@@ -267,7 +267,7 @@ def test_allowlist_entries_are_exact_and_explained():
     encoded = json.dumps(sorted((list(key), value) for key, value in STATIC_WRITES.items()),
                          ensure_ascii=True, separators=(",", ":")).encode()
     assert len(STATIC_WRITES) == 51
-    assert hashlib.sha256(encoded).hexdigest() == "84a98a03af7f26a8d2a2fd8cf60a4bbc6d374961c03d7df60821910ade3d7230"
+    assert hashlib.sha256(encoded).hexdigest() == "64449781c059924cfb7bfbdc35866b4be7e3baa864761f8e070cfb11640911df"
     for key, reason in STATIC_WRITES.items():
         assert len(key) == 3 and len(reason.strip()) >= 20
         file, function, call = key
