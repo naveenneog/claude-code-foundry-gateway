@@ -119,14 +119,14 @@ try {
     $probeTo = Join-Path $scratch 'probe-to'
     foreach ($dir in 'onboarding\profiles\standard', 'onboarding\support', 'scripts', 'docs') { New-Item -ItemType Directory -Path (Join-Path $probeFrom $dir) -Force | Out-Null }
     foreach ($file in 'Install-ClaudeGateway.ps1', 'scripts\A.ps1', 'onboarding\README.md', 'onboarding\profiles\standard\managed-settings.json', 'onboarding\claude-gateway.json', 'onboarding\claude-gateway.rg-a-apim-a.json', 'onboarding\support\claude-gateway.json', 'docs\guide.png') {
-        [IO.File]::WriteAllText((Join-Path $probeFrom $file), 'x')
+        [IO.File]::WriteAllText((Join-Path $probeFrom $file), $file)
     }
     Copy-InstallerCheckout $probeFrom $probeTo
     $copied = @(Get-ChildItem -LiteralPath $probeTo -Recurse -File | ForEach-Object { $_.FullName.Substring($probeTo.Length + 1) } | Sort-Object)
     $wanted = @('Install-ClaudeGateway.ps1', 'onboarding\profiles\standard\managed-settings.json', 'onboarding\README.md', 'scripts\A.ps1') | Sort-Object
     Assert 'the installer inputs are copied without any saved gateway record' (($copied -join '|') -eq ($wanted -join '|')) "copied: $($copied -join ', ')"
     $sourceRecords = @('onboarding\claude-gateway.json', 'onboarding\claude-gateway.rg-a-apim-a.json', 'onboarding\support\claude-gateway.json')
-    $keptRecords = @($sourceRecords | Where-Object { (Test-Path -LiteralPath (Join-Path $probeFrom $_)) -and [IO.File]::ReadAllText((Join-Path $probeFrom $_)) -eq 'x' })
+    $keptRecords = @($sourceRecords | Where-Object { (Test-Path -LiteralPath (Join-Path $probeFrom $_)) -and [IO.File]::ReadAllText((Join-Path $probeFrom $_)) -ceq $_ })
     Assert 'the copy leaves the saved records it skips in place, unchanged' ($keptRecords.Count -eq $sourceRecords.Count) "unchanged: $($keptRecords -join ', ')"
 
     $checkout = Join-Path $scratch 'checkout'
