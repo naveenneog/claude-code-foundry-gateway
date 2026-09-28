@@ -53,6 +53,15 @@ keyboard-scrollable container; failed connections focus it and do not cover it
 with a duplicate error toast. The old UI remains untouched on the reviewed
 file-validation failure. Negative proofs and final regression results follow.
 
+The first negative sweep caught **6 of 7** probes in **71.219 s**. Reintroducing
+the duplicate transient notification survived the viewport checks: those
+checks proved the text remained reachable but did not observe notification
+side effects. The regression now also records actual notification calls and
+requires none when the persistent recovery form owns the error. All **3**
+recovery cases pass in **7.04 s** with that additional assertion. The original
+identity, form, viewport and persistent-handle assertions are unchanged; the
+first sweep's receipt is retained rather than replaced by a pass claim.
+
 ### Council round 1 corrections
 
 | Seat | Round 1 verdict | Required correction |

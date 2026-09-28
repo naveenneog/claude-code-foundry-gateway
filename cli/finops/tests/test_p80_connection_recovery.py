@@ -24,8 +24,9 @@ async def verified_then_locked(tmp_path, monkeypatch):
     app = make_app(path)
     old_engine = app.engine
     held = []
-    events = {"verified": [], "denied_reads": 0, "adoptions": [], "closed": []}
+    events = {"verified": [], "denied_reads": 0, "adoptions": [], "closed": [], "notifications": []}
     original_read, original_bind = Path.read_bytes, app._bind_engine
+    original_notify = app.notify
 
     class VerifiedButLocked(FakeBackend):
         def read(self, resource, **params):
@@ -55,9 +56,14 @@ async def verified_then_locked(tmp_path, monkeypatch):
             events["adoptions"].append(engine)
         return original_bind(engine)
 
+    def notify(message, *args, **kwargs):
+        events["notifications"].append(message)
+        return original_notify(message, *args, **kwargs)
+
     monkeypatch.setattr(ui_features, "connect", lambda config: VerifiedButLocked())
     monkeypatch.setattr(Path, "read_bytes", read)
     monkeypatch.setattr(app, "_bind_engine", bind)
+    monkeypatch.setattr(app, "notify", notify)
     monkeypatch.setattr(old_engine.backend, "close", lambda: events["closed"].append("previous"))
     try:
         async with app.run_test(size=(80, 24)) as pilot:
@@ -111,6 +117,7 @@ async def test_locked_recovery_path_and_every_instruction_are_keyboard_readable_
         assert "Recovery: Close the application holding the profile" in text
         assert "copy the backup" in text and "verify whoami" in text
         assert feedback.can_focus and app.focused is feedback
+        assert events["notifications"] == [], "The retained recovery form must not also emit a transient error toast"
         assert feedback.region.right <= 80 and feedback.region.bottom <= 24
         assert feedback.max_scroll_y > 0
 
