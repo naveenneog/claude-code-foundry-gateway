@@ -58,7 +58,9 @@ defects, each with a screenshot. Work is on `p79-owner-test-fixes`, based on `03
       Windows PowerShell 5.1 as the host. Suites that start child shells through
       `ProcessStartInfo.ArgumentList` (RelativeRecordPath, FlowStart, FlowPermutations, Test-All)
       need PowerShell 7 as the host, which is how Test-All runs them; their children run on both
-- [ ] Council, five seats; the packet gate exits 0
+- [x] Council round 1, five seats, over `0345e85..5de7ba2`: Architect, Coder, QA, UX and Security
+      PASS. Its one note, the stale "21 on both shells", is corrected above
+- [ ] The packet gate exits 0
 
 ## P77 a 60-minute gate budget while the exclusive checks are sharded, 2026-09-28
 
