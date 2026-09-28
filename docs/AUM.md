@@ -129,7 +129,8 @@ Current P80 layout examples use explicit Example data, not a live deployment:
 [Budgets, 160x48](../cli/finops/tests/snapshots/svg/budgets-160x48.svg) and
 [Settings, 80x24](../cli/finops/tests/snapshots/svg/settings-80x24.svg).
 The [snapshot manifest](../cli/finops/tests/snapshots/manifest.json) records
-source and output hashes for all 24 screen images.
+source and output hashes for all 24 screen images. Text hashes normalize
+Windows CRLF and Unix LF line endings to the same UTF-8/LF representation.
 
 ## How-to
 

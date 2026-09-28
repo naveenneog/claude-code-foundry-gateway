@@ -53,10 +53,10 @@ async def capture():
                                                if path.suffix in {".py", ".json", ".tcss"})]
 
     def hashes(paths):
-        return {path.relative_to(ROOT).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        return {path.relative_to(ROOT).as_posix(): hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
                 for path in sorted(paths)}
 
-    manifest = dict(version=1, backend="Example", live=False,
+    manifest = dict(version=1, backend="Example", live=False, hash_format="utf8-lf-sha256",
                     captured_at_utc=datetime.now(timezone.utc).isoformat(),
                     sizes=[[80, 24], [160, 48]], sources=hashes(sources), outputs=hashes(written))
     (snapshots / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
