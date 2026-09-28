@@ -19,8 +19,10 @@ try {
     $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'scripts\ClaudeGatewayAddress.ps1'),[ref]$tokens,[ref]$errors)
     $artifacts=$ast.Find({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Update-ClaudeAddressArtifacts'},$true).Extent.Text
     $stub=@'
-. (Join-Path $PSScriptRoot 'flow\FlowContract.ps1')
-if (Test-Path (Join-Path $PSScriptRoot 'ClaudeGatewayAddressInput.ps1')) { . (Join-Path $PSScriptRoot 'ClaudeGatewayAddressInput.ps1') }
+# This text is emitted inside scripts/, not executed from the tests/ source directory.
+$emittedScriptDirectory=$PSScriptRoot
+. (Join-Path $emittedScriptDirectory 'flow\FlowContract.ps1')
+if (Test-Path (Join-Path $emittedScriptDirectory 'ClaudeGatewayAddressInput.ps1')) { . (Join-Path $emittedScriptDirectory 'ClaudeGatewayAddressInput.ps1') }
 function Get-ClaudeAddressPlan {
     param($SubscriptionId,$ResourceGroup,$ApimName,$Hostname,$CertificateSource,$KeyVaultCertificateId,$PfxPath,$CertificatePassword,$DnsZoneResourceId,$ReplaceHostname,$Gateway)
     $global:P69InstallPlanned = @{ Hostname=$Hostname; CertificateSource=$CertificateSource; KeyVaultCertificateId=$KeyVaultCertificateId; DnsZoneResourceId=$DnsZoneResourceId }

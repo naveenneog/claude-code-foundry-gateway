@@ -57,6 +57,18 @@ P72 merge boundary: the trap, Show-Status, main drift call and cancellation catc
 not rewritten. Shared changes are the applied-decision snapshot/serializer, history capture and
 the narrowly scoped recovery branch inside `Assert-RecordMatchesLive`.
 
+The first round-1 locked gate at `1adb5c6` completed Test-All in 1,226.3 s, below the unchanged
+1,800-second budget, but failed two checks (81 passed, 2 failed, 2 skipped). The format scanner
+found a regex fixture that resembled an invalid format alignment and emitted-script paths that
+were relative to the test source rather than its generated location. Both fixtures were corrected
+without changing either detector. The mutation baseline failed only under Test-All's nested
+temporary paths: Windows returned the user directory instead of an overlong worker TEMP path,
+and could not start its deeply nested `az.cmd` fixture. Workers and mutation copies now use
+short, unique per-user temporary directories; workers verify that the runtime directory matches
+their parent's owned path before executing. The nested-path reproduction passes. Final counts:
+82/82 mutations on both hosts, with full 78/31/27/11/9/6 assertions; `Test-AddressDeadline` is 6/6.
+The final packet gate follows this correction; the earlier failing result is not counted as pass.
+
 - [x] U30 is closed with dated Microsoft Learn and Azure Retail Prices API evidence for every
       v2 tier, certificate source, DNS record, update wait and component price; ADR-0033 records
       the design before production code

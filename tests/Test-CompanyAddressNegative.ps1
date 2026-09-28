@@ -1,8 +1,10 @@
 # Every mutation runs the complete original assertion count in a private copy.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-$scratch = Join-Path ([IO.Path]::GetTempPath()) ('company-mutations-' + [guid]::NewGuid().ToString('N'))
+$temporaryRoot=Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) 'Temp'
+$scratch = Join-Path $temporaryRoot ('company-mutations-' + [guid]::NewGuid().ToString('N'))
 $cases = @(
+    @('wait','if\(\[IO.Path\]::GetTempPath\(\).TrimEnd\(''\\'',''/''\) -ne \$ExpectedDirectory.TrimEnd\(''\\'',''/''\)\)','if ($false)','a redirected temporary directory is refused before executing a check','U1 private temporary directory ownership','Test-AddressDeadline.ps1'),
     @('installer','(?m)^    if \(\$AddressApprovedPlanFingerprint -and.*\{$','    if ($false) {','real installer fingerprint mismatch rejects every resource write','Q1 executable fingerprint guard','Test-CompanyInstaller.ps1'),
     @('installer','(?m)^if \(-not \(Read-YesNo.*\{$','if ($false) {','real declined custom confirmation creates nothing','Q1 executable decline guard','Test-CompanyInstaller.ps1'),
     @('installer','(?m)^if \(\$WhatIfPreference\) \{ Write-Warn2 ''WhatIf - stopping before any change\.''; return \}$','if ($false) { return }','custom WhatIf creates no deployment or address','Q1 executable WhatIf guard','Test-CompanyInstaller.ps1'),
@@ -65,7 +67,7 @@ $cases = @(
     @('certificate','if \(-not \$covered\)','if ($false)','an unrelated certificate hostname fails','certificate hostname detector'),
     @('certificate','if \(-not \$san.Count\)','if ($true)','a SAN overrides the subject common name','SAN precedence'),
     @('certificate','if \(\$Hostname.Substring\(\$Hostname.IndexOf\(''\.''\) \+ 1\) -ieq \$name.Substring\(2\)\)','if ($true)','a wildcard certificate cannot match two labels','one-label wildcard'),
-    @('certificate','\^https://\(\[a-zA-Z0-9-\]\{3,24\}\)','^https?://([a-zA-Z0-9-]{3,24})','untrusted certificate reference is refused: http://kv-contoso.vault.azure.net/secrets/company','HTTPS Key Vault reference'),
+    @('certificate','if \(\$KeyVaultCertificateId -notmatch ''\^https://','if ($KeyVaultCertificateId -notmatch ''^https?://','untrusted certificate reference is refused: http://kv-contoso.vault.azure.net/secrets/company','HTTPS Key Vault reference'),
     @('certificate','if \(-not \$metadata.attributes.enabled\)','if ($false)','a disabled Key Vault certificate is refused','certificate enabled state'),
     @('certificate','if \(-not \$metadata.policy.keyProperties.exportable -or \$metadata.policy.secretProperties.contentType -ne ''application/x-pkcs12''\)','if ($false)','a nonexportable Key Vault key is refused','Key Vault exportability'),
     @('certificate','if \(-not \$Thumbprint -or \$Thumbprint -ine \$ExpectedThumbprint\)','if ($false)','trusted TLS with another certificate is refused','TLS exact pin'),

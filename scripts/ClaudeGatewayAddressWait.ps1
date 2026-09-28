@@ -1,5 +1,12 @@
 if ($PSVersionTable.PSEdition -ne 'Core') { Import-Module CimCmdlets -ErrorAction Stop }
 
+function Assert-ClaudeAddressCheckDirectory {
+    param([string]$ExpectedDirectory)
+    if([IO.Path]::GetTempPath().TrimEnd('\','/') -ne $ExpectedDirectory.TrimEnd('\','/')){
+        throw 'The check temporary directory differs from its parent-owned directory; no check was started.'
+    }
+}
+
 function Stop-ClaudeAddressCheckProcess {
     param([Diagnostics.Process]$Process)
     if ($Process.HasExited) { return }
@@ -22,12 +29,14 @@ function Invoke-ClaudeAddressCheck {
     param([scriptblock]$Check, [object[]]$Arguments = @(), [int]$TimeoutMilliseconds)
     if ($TimeoutMilliseconds -le 0) { throw [TimeoutException]::new('Address check deadline expired.') }
     $clock = [Diagnostics.Stopwatch]::StartNew()
-    $directory=Join-Path ([IO.Path]::GetTempPath()) ('claude-address-check-'+[guid]::NewGuid().ToString('N'))
+    $temporaryRoot=[Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
+    if(-not $temporaryRoot){throw 'A per-user application-data directory is required for bounded address checks.'}
+    $directory=Join-Path (Join-Path $temporaryRoot 'Temp') ('claude-address-check-'+[guid]::NewGuid().ToString('N'))
     $process=$null
     try {
     [void][IO.Directory]::CreateDirectory($directory)
     $payload = [Management.Automation.PSSerializer]::Serialize(@{
-        module=(Join-Path $PSScriptRoot 'ClaudeGatewayAddress.ps1'); script=$Check.ToString(); arguments=@($Arguments)
+        module=(Join-Path $PSScriptRoot 'ClaudeGatewayAddress.ps1'); script=$Check.ToString(); arguments=@($Arguments); directory=$directory
     },100)
     $program = @'
 $ErrorActionPreference='Stop'
@@ -35,6 +44,7 @@ $ErrorActionPreference='Stop'
 try {
     $request=[Management.Automation.PSSerializer]::Deserialize([Console]::In.ReadToEnd())
     . $request.module
+    Assert-ClaudeAddressCheckDirectory -ExpectedDirectory $request.directory
     $arguments=@($request.arguments)
     $state=& ([scriptblock]::Create($request.script)) @arguments
     [Console]::Out.Write([Management.Automation.PSSerializer]::Serialize($state,100))

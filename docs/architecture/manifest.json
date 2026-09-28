@@ -426,7 +426,7 @@
         "scripts/ClaudeGatewayAddress.ps1": "e2023710fc9b04b3ba4885289f418f5ca389e0714baac373fe706d54b4a073a0",
         "scripts/ClaudeGatewayAddressInput.ps1": "83920645e951ff5a4da3ab7f42bc629cc51bec119dbeedc4ff1f2e5df73d7ba5",
         "scripts/ClaudeGatewayAddressRecovery.ps1": "23f37a5ab85f76540f186db0e5c389a2a117d4d58d0d801a28e6053d46414c1f",
-        "scripts/ClaudeGatewayAddressWait.ps1": "6b0eff70801a641951d597e43fa2e39e728d4d6b69fa5ac652e708b9f7fc09f4",
+        "scripts/ClaudeGatewayAddressWait.ps1": "91e6068bdc6bfff9f99731547b77c8ba1b516b9ebb66af9d51fec896b31309c1",
         "scripts/ClaudeGatewayCertificate.ps1": "eb3895a08d7ad19d1d307f4116d6ec80260629402c253cf98219bc0508566d98",
         "scripts/ClaudeNetwork.ps1": "13abb320bfc60a2810acd58a8481bb718588f39385908dc42387d393669382b5",
         "scripts/flow/Address.ps1": "1585b6828f72ed723a6bfb3dd4f1ffcd23f916abda98447f11d9080d4be3efe5",
