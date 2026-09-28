@@ -50,6 +50,24 @@ failure, and retain durable recovery steps when restoring/removing fails.
 The profile form remains open on failure; no stale connection is activated.
 Mutation evidence and the final restored suite follow after the UX correction.
 
+#### Settings and membership correction evidence
+
+RED: **8 failed in 10.35 s** in `test_p80_council_ui.py`. The viewport
+regressions force the Settings table to 7/6-column widths, reproducing a
+missing address even after another 500 ms. The other cases expose the absent
+wrapping label, enabled service membership control/shortcut/palette, incorrect
+empty-result offer and false guide claim.
+
+GREEN: the council UI suite, existing usability suite, publication structure
+and redaction suite passed **74 tests in 56.58 s**. The original
+`test_settings_connection_is_the_first_visible_fact` is unchanged. The new
+long-address case reconstructs the wrapped label's visible cells and asserts
+the complete address, rather than requiring one substring to stay on one line.
+The Settings label uses the current settings publication guard and participates
+in principal-clearing context. AUM-service membership is disabled with a
+visible explanation; the bridge and its writer restrictions are unchanged.
+Ten consecutive runs and negative proofs are still pending at this green.
+
 ### PLAN
 
 1. Keep P71's publication rule: every backend-derived widget/status/clipboard/export/assistant publication uses `guarded_publish(origin)` or `guarded_deferred(origin, ...)`. New labels and progress text stay inside the guarded boundary. The existing export-progress exception tracks its new estimated literal and reason; the pinned allowlist stays at 51 entries, with no broader exception ([ADR-0038](adr/0038-aum-actions-and-connection.md)).

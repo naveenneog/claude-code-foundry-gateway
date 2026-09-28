@@ -81,7 +81,7 @@ rules in [ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md).
 | Backend | Token budgets | USD budgets | Add a person | Chargeback | Managers | Cost and where it runs |
 |---|---|---|---|---|---|---|
 | Direct | Yes, through repository scripts and gateway named values | Yes when the gateway owns USD budgets | Yes, with the signed-in admin's delegated Graph rights | Yes, local CSV; reconciled P50 report when installed | No unit-scoped boundary; Azure RBAC is administrative | No AUM server. Runs on the operator workstation; existing gateway and Log Analytics costs remain |
-| AUM service | Yes, through the service's revisioned API | Yes when advertised by capabilities | Yes when the service and Graph path authorize it | Yes; service-scoped data plus local report generation | Yes, through `AUM.Manager` and manager groups | Azure Functions and Storage, plus selected monitoring/network resources |
+| AUM service | Yes, through the service's revisioned API | Yes when advertised by capabilities | Unavailable; this backend has no membership writer | Yes; service-scoped data plus local report generation | Yes, through `AUM.Manager` and manager groups | Azure Functions and Storage, plus selected monitoring/network resources |
 | Turnstile | Yes, through Turnstile's API and apply job | Unavailable; no USD writer is added in P80 | Directory membership remains the AUM/script/portal path | Yes for authorized Turnstile data | Yes, through Turnstile roles and manager groups | Existing Turnstile App Service, PostgreSQL and jobs; the AUM client adds no server |
 | Example | Demonstration data only | Demonstration data only when tests enable it | No production directory | Demonstration CSV | No production role | Local tests only |
 
@@ -150,12 +150,19 @@ Windows CRLF and Unix LF line endings to the same UTF-8/LF representation.
 ### Add a person to a team
 
 In **People**, the team selector and email/UPN search identify the intended
-scope. **Add person to team** (`g`) is available to owners. If the search has no result and the caller is an owner,
+scope. **Add person to team** (`g`) is available to owners through Direct and
+Turnstile-backed gateway configurations. If the search has no result and the
+caller has that action,
 the empty state offers `Add <email> to <team>`. The form searches Entra, loads
 the team/unit catalog on demand, previews tier and group membership changes, and
 then applies only after confirmation. The selected email and team are filled
 in the add flow. No prior visit to Budgets is required. Non-owners see a plain
 explanation rather than an add offer.
+The AUM-service backend does not support this membership flow:
+[`developer_actions.py`](../cli/finops/src/claude_finops/developer_actions.py)
+accepts only Direct and Turnstile-backed gateway configurations. People and
+Budgets disable **Add person to team** with that explanation on AUM service;
+neither its shortcut nor its command-palette entry opens a membership writer.
 
 CLI:
 
@@ -1154,6 +1161,8 @@ advertises the corresponding scoped API.
 #### Settings
 
 Settings shows identity, role, managed scope, connection and configuration.
+The connection kind and address appear in a wrapping guarded label separate
+from the table, including at 80x24; cached table widths do not determine their visibility.
 It offers a session theme, **Change connection** and a **Sign out** preview.
 The connection form's local backup and rollback are described in
 [Connect](#connect). A replacement identity is verified before the working

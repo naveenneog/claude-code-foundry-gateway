@@ -34,6 +34,7 @@ DataTable { height: 1fr; }
 #dash-right { width: 1fr; min-width: 25; }
 #dash-trend, #dash-rank, #dash-risks, #dash-anomalies { height: 1fr; min-height: 4; }
 .context { height: 2; color: $foreground; }
+#settings-connection { height: auto; width: 100%; }
 .toolbar { height: 3; }
 .toolbar Select { width: 25; }
 .toolbar Input { width: 1fr; }

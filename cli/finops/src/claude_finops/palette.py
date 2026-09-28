@@ -45,9 +45,10 @@ class FinOpsCommands(Provider):
         if self.app.identity.get("role") == "owner" and not self.app.redactor.enabled:
             commands += [
                 ("Find or create Entra security group", self.app.action_group_lookup, "Owned by this sign-in; no consent grants"),
-                ("Add developer", self.app.action_add_developer, "Find an Entra user, preview tier/unit group writes, then publish"),
                 ("Probe gateway budget enforcement", self.app.action_gateway_probe, "One tiny real model request after Preview/Apply"),
             ]
+        if self.app.check_action("add_developer", ()):
+            commands.append(("Add developer", self.app.action_add_developer, "Find an Entra user, preview tier/unit group writes, then publish"))
         if self.app.editable:
             commands += [
                 ("Edit selected budget or governance row", self.app.action_edit, "Preview, then apply"),

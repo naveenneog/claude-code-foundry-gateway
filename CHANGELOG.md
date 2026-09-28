@@ -45,6 +45,9 @@ exact streaming cache-creation detail remains **U13**.
   through commit, serialize profile writers and protect post-replacement
   failures. Failed rollback keeps the old live connection and displays the
   backup path and recovery steps instead of claiming restoration.
+  Settings now has a wrapping, guarded connection label independent of table
+  width caches. AUM-service membership is explicitly unavailable in the
+  controls, shortcut, command palette and guide; no membership writer is added.
   One Chargeback report action writes the complete month CSV to the local
   reports folder with an absolute path and non-overwrite naming. The installed
   reconciled-report action retains its existing permissions. CLI report output

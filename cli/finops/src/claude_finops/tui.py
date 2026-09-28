@@ -156,6 +156,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
                             yield Button("Change connection", id="settings-profile")
                             yield Button("Sign out", id="settings-signout")
                             yield Button("Tour", id="settings-tour")
+                        yield Static("", id="settings-connection", classes="context connection-summary", markup=False)
                     yield Static("Loading...", id=f"note-{tab}", classes="context", markup=False)
                     if tab == "overview":
                         yield Dashboard(id="dashboard")
@@ -183,7 +184,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
         keys = [] if actions_visible else ["/ Find", ": Command", "f Filters", "m Month"]
         if actions_visible:
             if self.identity.get("role") == "owner" and not self.redactor.enabled:
-                keys.append("g Add person to team")
+                keys.append("g Add person to team" if self.check_action("add_developer", ()) else "Add person to team")
             keys.extend(["e Set budget", "u Set USD budget", "x Chargeback report"])
         elif self.check_action("edit", ()):
             keys.append("e Edit")
@@ -251,7 +252,8 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
         if action in {"export", "chargeback"}:
             return "overview" in self.allowed_tabs
         if action == "add_developer":
-            return self.identity.get("role") == "owner" and not self.redactor.enabled and not self.verifying_identity
+            return (self.config.backend != "aum-service" and self.identity.get("role") == "owner"
+                    and not self.redactor.enabled and not self.verifying_identity)
         if action == "usd_edit":
             if (self.active not in {"people", "budgets"} or self.redactor.enabled
                     or not enabled(self.feature_caps, "usd_budgets", "write")):
@@ -332,11 +334,12 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
             return
         selected = self.active in {"people", "budgets"} and bool(self.selected())
         can_usd = enabled(self.feature_caps, "usd_budgets", "write")
-        owner = self.identity.get("role") == "owner" and not self.redactor.enabled
+        can_add = self.check_action("add_developer", ())
         for button in self.query(Button):
             if button.id == "action-add-person":
-                button.disabled = not owner
-                button.tooltip = "" if owner else "Only owners can add people to teams."
+                button.disabled = not can_add
+                button.tooltip = (self.membership_unavailable_text() if self.config.backend == "aum-service" else
+                                  "" if can_add else "Only owners can add people to teams.")
             elif button.id == "action-set-budget":
                 button.disabled = not selected or not self.check_action("edit", ())
                 button.tooltip = "" if selected else "Select a person or scope first."
@@ -430,6 +433,9 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
     @published(lambda self, tab, data: self.cached_guard(tab) if tab in self._data_guards else self.current_guard())
     def _render_tab(self, tab, data):
         utc = self.engine.backend.name == "Example"
+        if tab == "settings":
+            self.query_one("#settings-connection", Static).update(
+                safe_text(self.present(data).get("connection", "Connection details unavailable; refresh Settings.")))
         _, _, records, _ = view_rows(tab, data, ascii_only=self.config.ascii, utc=utc)
         columns, rows, _, note = view_rows(tab, self.present(data), ascii_only=self.config.ascii, utc=utc)
         query = self.filters.get(tab, "")
@@ -443,13 +449,15 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
             label = "Filter applied" if self.redactor.enabled else f"Filter: {query}"
             note = f"{label} | {len(rows)} visible matches | Esc clears"
         if tab == "people" and self.people_query and not data.get("items"):
-            if self.identity.get("role") == "owner" and "@" in self.people_query and self.team:
+            if self.check_action("add_developer", ()) and "@" in self.people_query and self.team:
                 note = f"No matching person in this team. Add {safe_text(self.people_query)} to {safe_text(self.team)}."
             else:
                 note = "No matching person in this team. Owners can add people after a directory search."
         if tab in {"people", "budgets"} and not enabled(self.feature_caps, "usd_budgets", "write"):
             note = (self.usd_unavailable_text() + " " + note if tab == "budgets" else
                     (note + " " if note else "") + self.usd_unavailable_text())
+        if tab in {"people", "budgets"} and self.config.backend == "aum-service":
+            note = self.membership_unavailable_text() + " " + note
         self.records[tab] = records
         table = self.query_one(f"#table-{tab}", DataTable)
         table.clear(columns=True)
@@ -480,6 +488,10 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
     @staticmethod
     def usd_unavailable_text():
         return "USD budget writes need Direct or the AUM service. P81 brings USD to Turnstile."
+
+    @staticmethod
+    def membership_unavailable_text():
+        return "Add person unavailable on AUM service: no membership writer."
 
     @on(Button.Pressed)
     def extra_button(self, event):
@@ -803,6 +815,10 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
         keys["actions"] = ("g Add person to team (owners); e Set budget; "
                            "u Set USD budget (when permitted); x Chargeback report. "
                            "People and Budgets show the same actions. Settings: Change connection.")
+        if self.config.backend == "aum-service":
+            keys["actions"] = ("Add person to team unavailable; e Set budget; "
+                               "u Set USD budget (when permitted); x Chargeback report. Settings: Change connection.")
+            keys["membership_availability"] = self.membership_unavailable_text()
         if not enabled(self.feature_caps, "usd_budgets", "write"):
             keys["usd_availability"] = self.usd_unavailable_text()
         if self.editable:
