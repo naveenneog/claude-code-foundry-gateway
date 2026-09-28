@@ -36,8 +36,7 @@ function az {
     $global:LASTEXITCODE = 0
     ConvertTo-Json -InputObject $global:P71BatchValues -Depth 10 -Compress
 }
-$folder = Join-Path $root '.finops-evidence'
-New-Item -ItemType Directory -Path $folder -Force | Out-Null
+$folder = [IO.Path]::GetTempPath()
 $inputFile = Join-Path $folder ("p71-batch-test-" + [guid]::NewGuid().ToString('N') + '.json')
 function Read-Bridge([string]$Action, [bool]$Snapshot) {
     @{action=$Action; parameters=@{snapshot=$Snapshot}} | ConvertTo-Json -Compress |

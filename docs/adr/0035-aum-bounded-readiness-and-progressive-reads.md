@@ -125,7 +125,7 @@ Cancelled or superseded refreshes cannot publish stale data into a newer view.
   [az postgres flexible-server start](https://learn.microsoft.com/cli/azure/postgres/flexible-server#az-postgres-flexible-server-start).
 - [HTTPX timeouts](https://www.python-httpx.org/advanced/timeouts/) distinguish
   connect, read, write and pool timeouts; they are not a whole-operation SLA.
-- Sources were retrieved 2026-09-27 UTC. U35 records the deployment-inventory
+- Sources were retrieved 2026-09-27 UTC. U37 records the deployment-inventory
   assumption and its fail-closed negative cases before implementation.
 
 ## Council round 1 amendment, 2026-09-28

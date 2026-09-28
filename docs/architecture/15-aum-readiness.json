@@ -39,5 +39,5 @@
     {"from": "probe", "to": "diagnose", "kind": "control", "points": [[970, 222], [970, 298]]},
     {"from": "diagnose", "to": "result", "kind": "data", "points": [[970, 518], [970, 594]]}
   ],
-  "notice": "Server state is a read-time observation. A single-server group is the recorded U35 deployment assumption, not a verified connection-string association. Token expiry, read snapshots, authorization, ingestion and gateway enforcement are separate facts."
+  "notice": "Server state is a read-time observation. A single-server group is the recorded U37 deployment assumption, not a verified connection-string association. Token expiry, read snapshots, authorization, ingestion and gateway enforcement are separate facts."
 }

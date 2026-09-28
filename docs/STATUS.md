@@ -13,12 +13,12 @@ historical evidence, not acceptance of these findings.
 
 | Seat | Round 1 verdict | Finding | Fix |
 |---|---|---|---|
-| Architect | BLOCK | A1: lock waiting and token acquisition each receive the whole deadline | One monotonic deadline and only the remaining acquisition time; pending |
-| Coder | BLOCK | C1: a wrapper can spawn children before job assignment | Suspended creation, job assignment, then resume; assignment-failure cleanup; pending |
-| QA | BLOCK | Q1: the deadline test can pass on an immediate launch failure | Prove process/descendant startup and termination; distinguish launch failure from timeout; pending |
-| UX | BLOCK | U1: a fatal Direct data result waits behind identity/capabilities | Observe fatal data completion concurrently and discard partial panels immediately; pending |
-| Security | BLOCK | S1: resource credentials survive a principal change | Bind reuse to verified principal/session; invalidate before independent reads; pending |
-| Security | BLOCK | S2: changed public text contains deployment identifiers | Use the existing capture aliases consistently in P71 text and U32; pending |
+| Architect | BLOCK | A1: lock waiting and token acquisition each receive the whole deadline | `9653ffc`: one monotonic deadline; only remaining time reaches acquisition; two mutations caught at all 11 token cases |
+| Coder | BLOCK | C1: a wrapper can spawn children before job assignment | `12b5c38`: suspended creation, job assignment, Toolhelp resume; assignment failure executes no child code |
+| QA | BLOCK | Q1: the deadline test can pass on an immediate launch failure | `12b5c38`: real process creation plus child/grandchild markers and PID exit checks; original 150 ms bound retained; five C1/Q1 mutations caught at all seven cases |
+| UX | BLOCK | U1: a fatal Direct data result waits behind identity/capabilities | `16fc0a7`: fatal completion is observed alongside either metadata stage; partial data clears and edits disable immediately; two mutations caught at all 17 UI cases |
+| Security | BLOCK | S1: resource credentials survive a principal change | `3176bd3`: verified principal/session generations bind reuse; Direct verifies one account per cycle, rejects stale sends/results; HTTP identity credentials refresh and old responses are rejected; nine mutations caught at all 23 credential cases |
+| Security | BLOCK | S2: changed public text contains deployment identifiers | P71 and the U32 row/section use the same synthetic server/group aliases as capture 60; a public-evidence detector checks both |
 
 Related corrections: the P71 single-server assumption moves from U35 to U37
 (P70 owns U35; P72 owns U36); batch-read fixtures move to TEMP; the Direct
@@ -27,12 +27,31 @@ Related corrections: the P71 single-server assumption moves from U35 to U37
 and the merged packet gate runs under the shared lock without changing its
 1,800 s limit. This correction round performs no database stop or start.
 
+The cache tests retain their reuse/expiry counts with explicit verified
+principal fixtures. The Direct independence tests now require exactly one
+account read and still prohibit an RBAC permission lookup before data. This
+is the security correction in S1, not removal of the data-arrival requirement.
+The batch-fixture test intercepts its actual writes on both PowerShell hosts,
+requires TEMP containment and verifies the JSON files were removed.
+
+The `whoami` investigation alternated three before/after pairs against the same
+read-only reference target, using the `aa7ed19` Azure CLI runner and the corrected
+runner with identical account/permission requests. In-process medians were
+**5.172 s before / 4.646 s after**. Account-call medians were **1.652 / 1.594 s**;
+permission-call medians **3.520 / 3.054 s**. Permission calls ranged **2.758-4.097 s**;
+parent Python CPU was **0-0.016 s** per operation. The external account/permission
+calls account for the measured latency and variability; the original
+4.254-to-5.187 s sample's increase was not reproduced in these paired runs.
+No phase timings were retained for that historical sample, so its specific
+cause is not established retrospectively. Evidence: private
+`p71-r1-whoami-phases.json`; no identities or token bodies were recorded.
+
 Implementation is on `p71-aum-speed`, based on `aa7ed19`. The packet gate passed
 at `84bddeb`; the lead owns the council review and merge. The ROADMAP box remains
 open until that merge. The owner's 2026-09-27 investigation measured Turnstile reads
 at 33-36 s followed by exit 7, despite a healthy liveness endpoint. Direct reads
 paid repeatedly for Azure CLI tokens and PowerShell bridge processes. Research:
-**U20**, **U26**, **U32**, **U35**, [ADR-0018](adr/0018-terminal-finops.md) and
+**U20**, **U26**, **U32**, **U37**, [ADR-0018](adr/0018-terminal-finops.md) and
 [ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md).
 
 - [x] A stopped Turnstile database produces an actionable command/UI failure in
@@ -59,7 +78,8 @@ paid repeatedly for Azure CLI tokens and PowerShell bridge processes. Research:
       `node .ironclad/gate.mjs --stage packet` passes with that AUM check included
 
 Initial observation, 2026-09-27 **20:13:35Z**: PostgreSQL
-`pg-tsclaude-zpk4sh4prbsls` in `rg-turnstile-claudegw` was `Stopped`. Its activity
+`contoso-e8f7782d` in `contoso-534a5930` was `Stopped` (synthetic aliases matching
+capture 60). Its activity
 log records tonight's stop starting at **19:05:18Z** and succeeding at
 **19:07:19Z**. The authorized start was requested at **22:23:22Z**, and `Ready`
 was verified at **22:25:35Z**; the database was left running. No gateway named
@@ -157,7 +177,7 @@ Ordered commits: plan `183b3e4`; ADR/unknowns `8932e26`; initial readiness
 `d121598`; progressive terminal `1f4f5fd`; Windows deadline `a44e239`;
 credential timeout `d6f0021`; lookup event origin `bdbf654`; complete inventory
 `f2e2514`. Every green implementation cycle was committed without rewriting
-history. Council remains with the lead; U32 external automation and U35's
+history. Council remains with the lead; U32 external automation and U37's
 single-server deployment association remain explicit. U20's unavailable AUM
 service and large-directory limits are unchanged.
 

@@ -447,10 +447,15 @@ Azure CLI session, not only AUM.
 
 ### Read latency and progress
 
-Direct reuses resource tokens within the process until two minutes before known
-expiry. Opaque tokens have a five-minute reuse limit. Concurrent reads share
-acquisition; different resources and selected Azure contexts do not share tokens.
-Tokens stay in memory and explicit sign-out clears the cache.
+Direct reuses resource tokens for a verified principal and Azure CLI session
+until two minutes before known expiry. Opaque tokens have a five-minute reuse
+limit. Each read cycle verifies the current account once; concurrent queries
+share that result and token acquisition without waiting for the RBAC permission
+label. Different resources, principals and sessions do not share credentials.
+An unverified caller obtains a fresh token rather than borrowing the cache.
+Tokens stay in memory; principal changes and explicit sign-out invalidate them.
+Obsolete in-flight results are not returned after a verified identity change.
+HTTP identity reads obtain current CLI credentials before identifying the caller.
 
 Each Direct refresh shares one gateway snapshot, obtained through one PowerShell
 bridge process and one named-value listing. Catalog, tiers, token limits and the
@@ -470,6 +475,8 @@ remain disabled during identity verification. Scoped HTTP data still follows the
 current identity/scope check. A 401 or 403 clears partial protected data rather
 than preserving a previously wider view. Superseded refreshes cannot repaint the
 new view.
+Fatal data failures are observed while identity or capabilities are still
+pending; the denial is displayed immediately rather than waiting for metadata.
 
 The P71 live measurements and their method are in
 [STATUS](STATUS.md#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28).
@@ -502,7 +509,7 @@ fallback changes the selected authority. A profile with no Azure subscription,
 denied metadata reads, an ambiguous inventory or another server state retains
 exit 7 with the diagnostic limit stated. Authentication and scope denials retain
 their own codes. The single-server association is the explicit assumption
-recorded as **U35** in [UNKNOWNS](UNKNOWNS.md), not a connection-string match.
+recorded as **U37** in [UNKNOWNS](UNKNOWNS.md), not a connection-string match.
 
 ![Live stopped-database failure with the manual start command visible at 80 columns.](guide/aum-60-turnstile-stopped.png)
 
