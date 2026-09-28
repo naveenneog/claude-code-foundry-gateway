@@ -4,10 +4,10 @@
 
 ## P70 newly deployed models reach the tiers and the workstations, 2026-09-28
 
-Council round 1 remediation is in progress on `p70-model-lifecycle`, starting from `a017814`.
-The earlier packet gate passed on `9447488`; that result does not close the findings below.
-The lead runs the council and merges. No Azure or workstation writes are planned in this
-remediation; the reference gateway remains unchanged.
+Council round 1 remediation is ready for the lead's re-review on `p70-model-lifecycle`.
+All five BLOCK findings and three should-fixes were implemented after `a017814`; the packet
+gate passed on `e6566cc`. The lead runs the council and merges. No Azure or real workstation
+writes were made in this remediation; the reference gateway remains unchanged.
 
 ### Council round 1, 2026-09-28
 
@@ -59,7 +59,18 @@ GuidedFlow 44 and Architecture 36 assertions, plus Azure CLI argument checks, do
 references, named-value guards, script encoding and Test-All runner integrity. The 15-spec
 architecture was regenerated and its changed model-lifecycle image inspected. The added
 workstation suite takes about 2 seconds per run; no new long-running suite is registered.
-The packet gate, under the unchanged timeout and shared lock, is the remaining step.
+The packet gate passed at `e6566cc` on 2026-09-28, 00:55:24-01:15:44 UTC:
+22 passed, 2 existing warnings, 0 failed, 2 skipped. Test-All took 1,210.9 s,
+within the unchanged 1,800,000 ms budget; Bicep passed in 7.3 s. Total gate time
+was 1,219.5 s. The shared lock was acquired immediately and released in `finally`.
+The warnings remain the eight oversized files and 21 unrelated open unknowns;
+no test, detector, timeout or charter constraint was relaxed.
+
+Remediation commits: plan `e32b671`; raw discovery and initial tiers `fac106d`;
+renderer/alias/history/scoping fixes `749b9c4`; unattributed-change guard `2983b8d`;
+mutation proof and architecture `e6566cc`. The final ledger-only commit records this gate.
+No requested finding remains unfixed. Council re-review and merge remain with the lead;
+ROADMAP P70 is still unticked, and no merge, push or history rewrite was performed.
 
 Acceptance criteria:
 
