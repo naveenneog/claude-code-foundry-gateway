@@ -192,3 +192,34 @@ def test_direct_queries_share_one_http_client_and_close_it(monkeypatch):
     assert len(clients) == 1 and not clients[0].is_closed
     backend.close()
     assert clients[0].is_closed
+
+
+@pytest.mark.parametrize("lock_seconds", [.08, .1])
+def test_lock_and_acquisition_share_one_monotonic_deadline(monkeypatch, lock_seconds):
+    clock, requested = [1000.0], []
+
+    class DelayedLock:
+        def acquire(self, *, timeout):
+            assert timeout == pytest.approx(.1)
+            clock[0] += lock_seconds
+            return True
+
+        def release(self):
+            pass
+
+    def acquire(*args, timeout, **kwargs):
+        requested.append(timeout)
+        clock[0] += min(.08, timeout)
+        if timeout < .08:
+            raise FinOpsError("Azure token acquisition timed out.", 7)
+        return jwt(time.time() + 3600)
+
+    monkeypatch.setattr(config, "_resource_token_lock", DelayedLock())
+    monkeypatch.setattr(config.time, "monotonic", lambda: clock[0])
+    with pytest.raises(FinOpsError, match="timed out"):
+        config.resource_token(RESOURCE, SUB, runner=acquire, timeout=.1)
+    assert clock[0] - 1000 <= .100001
+    if lock_seconds < .1:
+        assert requested == [pytest.approx(.02)]
+    else:
+        assert requested == [], "An exhausted deadline must not launch Azure CLI."
