@@ -1,7 +1,51 @@
 # Status
 
-**Active packets (2026-09-28, run in parallel worktrees):** P69 the company address in the flow, P70 newly deployed models reach the tiers and the workstations, P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets (2026-09-28, run in parallel worktrees):** P69 the company address in the flow, P70 newly deployed models reach the tiers and the workstations, P71 AUM answers fast and says why it cannot, P75 the macOS/Linux installer prices its choices ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
+## P75 the macOS/Linux installer prices its choices, 2026-09-28
+
+`install-claude-gateway.sh` is the macOS and Linux installer. It asks for the region with no
+price, asks for the tier with no price, and its summary, which is the approval, says "BasicV2 is
+about $150/month at list price" whatever tier and region were chosen, and "Provisioning takes
+30-45 minutes". `Install-ClaudeGateway.ps1` stopped printing both before P68 (CHANGELOG: a Premium
+v2 install was approved against the fixed figure at $2,800/month, and the whole install took
+5 minutes 23 seconds), and prices its region and tier prompts since P68
+([ADR-0032](adr/0032-guided-flow-starts-at-once.md)). The bash installer's record also lacks the
+tier, the region and the Foundry account, and it does not offer the FinOps tool. Work is isolated
+to `p75-bash-installer-prices`, based on `38ad175`.
+
+Measured at 01:30 UTC on 2026-09-28: the Azure Retail Prices API query the PowerShell installer
+uses (`serviceName eq 'API Management' and priceType eq 'Consumption'` and the three v2 unit
+meters) returned 182 rows on one page in 0.6 s; in eastus2, Basic v2 0.20548, Standard v2 0.9589
+and Premium v2 3.83562 an hour, USD 150, 700 and 2,800 a month at 730 hours; Italy North
+publishes two of the three meters. `az account list-locations` returned 109 regions in 4.9 s,
+including EUAP and staging regions in the US geography group that publish no v2 price.
+
+- [ ] Asked in a terminal, the region prompt lists the default region first (the Foundry
+      account's region unless `--location` names another) and then the other physical regions in
+      its geography group that publish a v2 price, cheapest Basic v2 first, each with the three v2
+      tiers' monthly list price for one unit at 730 hours, from one Retail Prices API call; a tier
+      a region does not publish reads "not published"; the answer is a number or a region name in
+      any case or spacing, and anything else is asked again
+- [ ] The tier prompt shows each tier's monthly list price in the chosen region
+- [ ] The summary prices the chosen tier in the chosen region at list price, or says the price
+      could not be read and names the pricing page; it no longer names a fixed price, and the
+      provisioning note is the PowerShell installer's measured figure
+- [ ] With the prices unreadable, the region and tier prompts say so with the reason, and the
+      install goes on; under `--yes` there is no table and no tier list, and the summary still
+      prices the choice
+- [ ] The record holds `mode`, `sku`, `location`, `foundryAccount`, `foundryResourceGroup` and
+      `requestsPerMinute`, as the PowerShell installer's record does
+- [ ] Run on its own in a terminal, it ends by offering the FinOps tool
+      (`scripts/Select-ClaudeFinOpsTooling.ps1 -Region`, through PowerShell 7); `--choose-finops`
+      opens it without asking and `--skip-finops-offer` leaves it out; without PowerShell 7, or
+      under `--yes`, the command is a numbered next step
+- [ ] `tests/Test-BashInstaller.ps1` runs the installer in Git Bash from a TEMP copy, with stub
+      `az`, `curl` and `pwsh` and a PATH without the real Azure CLI, over a terminal run, a region
+      named by name, an unknown region, unreadable prices, `--yes`, a full run to the record, the
+      FinOps offer accepted, declined, skipped and forced, and no PowerShell 7; the script uses no
+      construct that needs bash 4, since it states that it runs on macOS
+- [ ] SETUP.md and CHANGELOG; council, five seats; the packet gate exits 0
 ## P72 permutation tests of the guided flow and the installer, 2026-09-28
 
 The owner's test on 2026-09-27 found the guided flow's defects one path at a time. P72 tests the
