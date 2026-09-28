@@ -219,8 +219,8 @@ $deployable = @(Get-DeployableClaudeModel -Account 'ai-p76' -ResourceGroup 'rg-p
         Assert "PowerShell ${shell}: regions at one price are listed by code point after the Foundry region" (-not $l.Failed -and (@($l.regions) -join ',') -ceq 'eastus2,centralus,us-b,usa') $(if ($l.Failed) { $tail } else { @($l.regions) -join ',' })
         Assert "PowerShell ${shell}: deployable models are listed newest first by descending code point" (-not $l.Failed -and (@($l.deployable) -join ',') -ceq 'claude-opus-5a,claude-opus-5-x') $(if ($l.Failed) { $tail } else { @($l.deployable) -join ',' })
     }
-    if ($libs.Contains('5.1') -and -not $libs['7'].Failed -and -not $libs['5.1'].Failed) {
-        Assert 'the model change plan has one fingerprint on both shells' ($libs['7'].fingerprint -and $libs['7'].fingerprint -ceq $libs['5.1'].fingerprint) "7=$($libs['7'].fingerprint) 5.1=$($libs['5.1'].fingerprint)"
+    if ($libs.Contains('5.1')) {
+        Assert 'the model change plan has one fingerprint on both shells' (-not $libs['7'].Failed -and -not $libs['5.1'].Failed -and $libs['7'].fingerprint -and $libs['7'].fingerprint -ceq $libs['5.1'].fingerprint) "7=$($libs['7'].fingerprint) 5.1=$($libs['5.1'].fingerprint)"
     }
 
     if ($shells.Contains('5.1')) {
@@ -267,20 +267,22 @@ $migration = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomob
         foreach ($shell in $shells.Keys) { $by[$shell] = Invoke-Probe $shell $stepProbe @('-Root', $root, '-RecordPath', $record, '-AnswersPath', $answers) }
         $p7 = $by['7']; $p5 = $by['5.1']
         Assert 'both shells plan every shipped Setup step offline from the record' (-not $p7.Failed -and -not $p5.Failed -and @($p7.steps.PSObject.Properties).Count -ge 5) ("7: " + $(if ($p7.Failed) { Get-Tail $p7.Output } else { @($p7.steps.PSObject.Properties.Name) -join ',' }) + " / 5.1: " + $(if ($p5.Failed) { Get-Tail $p5.Output } else { @($p5.steps.PSObject.Properties.Name) -join ',' }))
-        if (-not $p7.Failed -and -not $p5.Failed) {
-            $names7 = @($p7.steps.PSObject.Properties.Name); $names5 = @($p5.steps.PSObject.Properties.Name)
-            Assert 'both shells plan the same steps in the same order' (($names7 -join ',') -ceq ($names5 -join ',')) "7=$($names7 -join ',') 5.1=$($names5 -join ',')"
-            $differ = @(foreach ($n in $names7) {
-                $a = [string]$p7.steps.$n; $b = [string]$p5.steps.$n
-                if ($a -cne $b) { $i = 0; while ($i -lt [Math]::Min($a.Length, $b.Length) -and $a[$i] -ceq $b[$i]) { $i++ }; "$n at $i" }
-            })
-            Assert 'every shipped Setup step has the same canonical text on both shells' ($differ.Count -eq 0) ($differ -join '; ')
-            Assert 'the Setup plan has one fingerprint on both shells' ($p7.fingerprint -and $p7.fingerprint -ceq $p5.fingerprint) "7=$($p7.fingerprint) 5.1=$($p5.fingerprint)"
-            Assert 'the monitoring plan lists the workbooks in code-point order on both shells' ([string]$p7.steps.Monitoring -cmatch 'workbook-chargeback\.json.*workbook\.json' -and [string]$p5.steps.Monitoring -cmatch 'workbook-chargeback\.json.*workbook\.json') ''
-            $r7 = @($p7.references); $r5 = @($p5.references)
-            Assert 'the Update migration reads each of the policy''s named values once, in one order on both shells' ($r7.Count -gt 5 -and ($r7 -join ',') -ceq ($r5 -join ',') -and -not @($r7 | Group-Object | Where-Object { $_.Count -gt 1 }).Count) "7=$($r7 -join ',') 5.1=$($r5 -join ',')"
-            Assert 'the Update migration''s plan has the same canonical text on both shells' ($p7.migration -and $p7.migration -ceq $p5.migration) ''
-        }
+        # Each check below is made whether or not a probe ran, so the suite always makes the same
+        # number of checks: a probe that fails fails its checks rather than removing them.
+        $ran = -not $p7.Failed -and -not $p5.Failed
+        $names7 = if ($ran) { @($p7.steps.PSObject.Properties.Name) } else { @() }
+        $names5 = if ($ran) { @($p5.steps.PSObject.Properties.Name) } else { @() }
+        Assert 'both shells plan the same steps in the same order' ($ran -and ($names7 -join ',') -ceq ($names5 -join ',')) "7=$($names7 -join ',') 5.1=$($names5 -join ',')"
+        $differ = @(foreach ($n in $names7) {
+            $a = [string]$p7.steps.$n; $b = [string]$p5.steps.$n
+            if ($a -cne $b) { $i = 0; while ($i -lt [Math]::Min($a.Length, $b.Length) -and $a[$i] -ceq $b[$i]) { $i++ }; "$n at $i" }
+        })
+        Assert 'every shipped Setup step has the same canonical text on both shells' ($ran -and $differ.Count -eq 0) ($differ -join '; ')
+        Assert 'the Setup plan has one fingerprint on both shells' ($ran -and $p7.fingerprint -and $p7.fingerprint -ceq $p5.fingerprint) "7=$($p7.fingerprint) 5.1=$($p5.fingerprint)"
+        Assert 'the monitoring plan lists the workbooks in code-point order on both shells' ($ran -and [string]$p7.steps.Monitoring -cmatch 'workbook-chargeback\.json.*workbook\.json' -and [string]$p5.steps.Monitoring -cmatch 'workbook-chargeback\.json.*workbook\.json') ''
+        $r7 = if ($ran) { @($p7.references) } else { @() }; $r5 = if ($ran) { @($p5.references) } else { @() }
+        Assert 'the Update migration reads each of the policy''s named values once, in one order on both shells' ($ran -and $r7.Count -gt 5 -and ($r7 -join ',') -ceq ($r5 -join ',') -and -not @($r7 | Group-Object | Where-Object { $_.Count -gt 1 }).Count) "7=$($r7 -join ',') 5.1=$($r5 -join ',')"
+        Assert 'the Update migration''s plan has the same canonical text on both shells' ($ran -and $p7.migration -and $p7.migration -ceq $p5.migration) ''
     }
 }
 finally {
