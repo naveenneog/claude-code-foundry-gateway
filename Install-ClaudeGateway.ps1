@@ -1005,10 +1005,17 @@ $addressResult = $null
 $savedAddressConfig = $null
 $savedAddressPath = Join-Path $root 'onboarding\claude-gateway.json'
 $addressApimName = if ($ExistingApim) { $ExistingApim } else { "apim-$NamePrefix" }
+. (Join-Path $root 'scripts\flow\FlowContract.ps1')
 if (Test-Path -LiteralPath $savedAddressPath) {
-    $saved = Get-Content -LiteralPath $savedAddressPath -Raw | ConvertFrom-Json
-    if ($saved.apimName -eq $addressApimName -and $saved.resourceGroup -eq $ResourceGroup -and
-        (-not $saved.subscriptionId -or $saved.subscriptionId -eq $SubscriptionId)) { $savedAddressConfig = $saved }
+    $saved = Read-ClaudeDecisionRecord -Path $savedAddressPath
+    $savedSubscription = Get-ClaudeFlowRecordSubscription -Record $saved
+    $recordedGateway = "$([string]$saved.resourceGroup)/$([string]$saved.apimName)"
+    $selectedGateway = "$ResourceGroup/$addressApimName"
+    if ($recordedGateway -ine $selectedGateway -or ($savedSubscription -and $savedSubscription -ine $SubscriptionId)) {
+        $recordedScope = if ($savedSubscription) { $savedSubscription } else { 'not recorded' }
+        throw "Saved record '$savedAddressPath' names gateway '$recordedGateway' (subscription $recordedScope), but the selected gateway is '$selectedGateway' (subscription $SubscriptionId). No resources were created. Use a separate checkout for the selected gateway, or back up and move this record before rerunning."
+    }
+    $savedAddressConfig = $saved
 }
 . (Join-Path $root 'scripts\ClaudeGatewayAddressInput.ps1')
 $addressValues = @{}

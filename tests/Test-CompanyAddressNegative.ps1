@@ -4,6 +4,8 @@ $root = Split-Path $PSScriptRoot -Parent
 $temporaryRoot=Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) 'Temp'
 $scratch = Join-Path $temporaryRoot ('company-mutations-' + [guid]::NewGuid().ToString('N'))
 $cases = @(
+    @('installer','if \(\$recordedGateway -ine \$selectedGateway -or \(\$savedSubscription -and \$savedSubscription -ine \$SubscriptionId\)\)','if ($false)','a saved record for another gateway is refused before approval and deployment','R3 saved-record target checked before deployment','Test-CompanyInstaller.ps1'),
+    @('installer',' -or \(\$savedSubscription -and \$savedSubscription -ine \$SubscriptionId\)','','a conflicting legacy record subscription is refused before deployment','R3 saved-record subscription checked before deployment','Test-CompanyInstaller.ps1'),
     @('start','if \(\$changes.ContainsKey\(''DecisionChanges''\)\)','if ($false)','real DesktopSignIn commits its cross-decision change only after success (False)','R2 A2 explicit cross-decision commit','Test-FlowAppliedState.ps1'),
     @('desktop','DecisionChanges = @\{ deviceProfiles =','IgnoredDecisionChanges = @{ deviceProfiles =','real DesktopSignIn commits its cross-decision change only after success (False)','R2 A2 real Desktop result declares all changes','Test-FlowAppliedState.ps1'),
     @('start','if \(\$changes.ContainsKey\(''RecordChanges''\)\)','if ($false)','real Models step preserves applied-only decisions on success and failure (False)','R2 A2 model record changes retained','Test-FlowAppliedState.ps1'),

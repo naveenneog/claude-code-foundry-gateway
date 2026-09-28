@@ -470,6 +470,15 @@ declining or using `-WhatIf` makes no address change.
 The prompt calls the address "expensive to change afterwards" because deployed
 workstations need redistributed settings when the URL changes.
 
+The installer checks an existing `onboarding/claude-gateway.json` against the
+selected gateway before its summary and before creating resources. A different
+gateway, resource group or recorded subscription stops the run and leaves the
+record unchanged. The refusal names both gateways and the record path; the
+selected gateway needs its own checkout/record, or the previous record can be
+backed up and moved elsewhere before another installation. This check applies
+to both Azure and company-address choices and includes legacy subscriptions
+recorded under the Foundation decision.
+
 All three v2 tiers support an uploaded PFX or a Key Vault certificate. None
 supports a free API Management managed certificate. Basic v2 and Standard v2
 allow one custom gateway hostname; Premium v2 allows multiple

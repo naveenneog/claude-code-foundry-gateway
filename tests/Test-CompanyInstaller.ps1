@@ -92,8 +92,8 @@ try { & (Join-Path $Root 'Install-ClaudeGateway.ps1') @Values *>&1 | ForEach-Obj
 catch {$failure=$_.Exception.Message}
 [pscustomobject]@{Text=$lines -join "`n";Failure=$failure;Writes=@($global:P69InstallWrites);Unexpected=@($global:P69InstallUnexpected);Planned=$global:P69InstallPlanned;Gateway=$global:P69ReceiptGateway}
 '@
-    function Invoke-Installer([hashtable]$Overrides=@{},[bool]$Decline=$false){
-        [IO.File]::WriteAllText($recordPath,($initial|ConvertTo-Json -Depth 15))
+    function Invoke-Installer([hashtable]$Overrides=@{},[bool]$Decline=$false,$SavedRecord=$initial){
+        [IO.File]::WriteAllText($recordPath,($SavedRecord|ConvertTo-Json -Depth 15))
         [IO.File]::WriteAllText((Join-Path $scratch 'onboarding\profiles\standard\managed-settings.json'),'{"gatewayUrl":"https://old.contoso.test/claude"}')
         $values=@{SubscriptionId=$sub;FoundryAccount='ai-contoso';FoundryResourceGroup='rg-contoso';ResourceGroup='rg-contoso';ExistingApimName='apim-contoso';Location='eastus2';Sku='BasicV2';AuthMode='interactive';EntitlementStore='named-value';SkipFinOpsOffer=$true;Yes=$true}
         foreach($k in $Overrides.Keys){$values[$k]=$Overrides[$k]}
@@ -183,6 +183,30 @@ function Invoke-ClaudeAddressHttps {param($Hostname,$Thumbprint,$ConnectAddress,
     . (Join-Path $root 'scripts\ClaudeGatewayAddressRecovery.ps1')
     Check 'the installer failure receipt permits only its unverified matching recovery' {
         (Get-ClaudeAddressRecovery -Record $failedRecord -Gateway $replacement.Gateway).Allowed
+    }
+    $foreign=Copy-ClaudeFlowValue $initial
+    $foreign.apimName='apim-saved'
+    $foreign.resourceGroup='rg-saved'
+    $foreign.gatewayUrl='https://apim-saved.azure-api.net/claude'
+    $choice=@{AddressMode='custom';AddressHostname='new.contoso.test';AddressCertificateSource='KeyVault';AddressKeyVaultCertificateId=$initial.address.keyVaultCertificateId;AddressDnsZoneResourceId=$zone;AddressReplaceHostname='old.contoso.test'}
+    $conflict=Invoke-Installer $choice $false $foreign
+    Check 'a saved record for another gateway is refused before approval and deployment' {
+        $conflict.Writes.Count -eq 0 -and $conflict.Text -notmatch '(?m)^\s*Summary\s*$' -and
+            $conflict.Failure -match 'rg-saved/apim-saved' -and $conflict.Failure -match 'rg-contoso/apim-contoso' -and
+            $conflict.Failure -match [regex]::Escape($recordPath) -and $conflict.Failure -match 'separate checkout|back up'
+    }
+    Check 'a conflicting gateway record is preserved without a pending receipt' {
+        $saved=Get-Content -Raw $recordPath|ConvertFrom-Json
+        $saved.apimName -eq 'apim-saved' -and $saved.resourceGroup -eq 'rg-saved' -and
+            $saved.gatewayUrl -eq $foreign.gatewayUrl -and -not $saved.pendingAddress
+    }
+    $legacyConflict=Copy-ClaudeFlowValue $initial
+    $legacyConflict.PSObject.Properties.Remove('subscriptionId')
+    Set-ClaudeDecision $legacyConflict foundation ([pscustomobject]@{subscriptionId='00000000-0000-0000-0000-000000000099'})
+    $scopeConflict=Invoke-Installer $choice $false $legacyConflict
+    Check 'a conflicting legacy record subscription is refused before deployment' {
+        $scopeConflict.Writes.Count -eq 0 -and $scopeConflict.Failure -match '00000000-0000-0000-0000-000000000099' -and
+            $scopeConflict.Failure -match [regex]::Escape($sub)
     }
 }
 finally {if(Test-Path $scratch){Remove-Item -LiteralPath $scratch -Recurse -Force}}
