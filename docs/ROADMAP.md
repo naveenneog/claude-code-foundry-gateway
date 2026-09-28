@@ -473,6 +473,21 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       invariants; the installer's summary reflects every combination of tier, entitlement store,
       developer sign-in, Desktop sign-in and address under `-WhatIf`, on PowerShell 7 and 5.1; each
       failure found is fixed test-first
+- [ ] P73 an installer re-run offers the gateway's live values — acceptance: over an existing
+      gateway (`-ExistingApimName`, the reuse menu or `-Change foundation` in a console), the budget,
+      request ceiling, tier group and Choices prompts default to the gateway's live named values and
+      the recorded choices, the way the revocation window does since 2026-09-23; found in P72:
+      `Install-ClaudeGateway.ps1` reads only `entitlement-cache-seconds` from the gateway, so pressing
+      Enter through an attended re-run resets custom budgets and groups to the installer's defaults;
+      `tests/Test-InstallerPermutations.ps1` gains the developer address dimension once P69's
+      address parameter is merged
+- [ ] P74 positive company-address TLS proof on an owned, delegated domain — acceptance: the
+      administrator supplies an owned, publicly delegated DNS name and its trusted certificate;
+      the priced, fingerprinted address flow creates the CNAME and gateway binding, then proves
+      trusted HTTPS with the company SNI/Host and matching certificate, obtains a gateway 401 or
+      governed response, and only then publishes the developer URL. The proof records timings,
+      certificate/DNS behavior and cleanup or restoration without altering unrelated resources.
+      P69's authoritative-only `.test` run is not this proof ([ADR-0033](adr/0033-company-address.md))
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so

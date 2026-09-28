@@ -112,9 +112,48 @@ adding a company address does not itself create drift, and a removed binding sti
 nameserver and connect IP. It permits a self-signed chain only with an exact certificate pin,
 never a hostname mismatch. It does not publish a production decision record. The transcript
 states that authoritative DNS and SNI were measured, not public delegation or public trust.
-Resources live in `rg-p69-address`, tagged `purpose=p69-proof`, stay below USD 5, and are deleted;
+Resources live in an isolated proof resource group, tagged `purpose=p69-proof`, stay below USD 5, and are deleted;
 the soft-deleted API Management instance is purged. No shared Foundry role or Entra group is
 needed for an unauthenticated gateway response.
+
+### Accepted scope deferral, 2026-09-28
+
+The lead accepted deferral of the positive company-address TLS proof to P74. This environment
+has no owned, publicly delegated domain, and purchasing or borrowing one is outside the approved
+proof scope. Two Basic v2 uploaded-PFX attempts returned `CustomHostnameOwnershipCheckFailed`,
+including the attempt after its Azure DNS CNAME answered authoritatively (15.1 seconds to readiness,
+0.576 seconds for a separate direct query). The company SNI request failed its handshake, exit 35.
+The default Azure endpoint returned the governed 401; the pinned HTTPS transport also ran
+read-only on PowerShell 7 and 5.1. All created Azure resources were deleted and APIM purged.
+
+This proves the authoritative CNAME, the ownership refusal, cleanup and default-host transport.
+It does not prove a successful custom-hostname binding, trusted company-hostname TLS, public DNS
+delegation, certificate renewal or developer publication through that live company address.
+The positive criterion stays deferred, not done. P74 requires an owned delegated domain and
+trusted certificate, the real priced/fingerprinted flow, and publication only after proof.
+
+### Council round 1 contract corrections
+
+An unattended Foundation resolves the effective address from the applied record and explicit
+overrides before pricing. It passes the entire resolved selection, including an explicit Azure
+choice, so the installer cannot inherit a different unreviewed address from another local record.
+
+Proposed decisions and applied decisions are separate. Questions and plans use the proposed
+record; durable `decisions` and each history entry's `from` come from the applied snapshot before
+questions. A successful step advances its own applied decision; failure does not publish the
+proposal. This rule applies to every step, not just Address.
+
+An address apply can persist an explicitly unverified recovery receipt separately from applied
+decisions before it changes Azure. Recovery is limited to that receipt's gateway, previous URL,
+desired certificate/hostname and expected live hostname collection. It permits only a new
+address review and fingerprint; it never marks the new URL verified or permits unrelated drift.
+Returning to the Azure URL clears company metadata and updates the generated handover.
+
+Each wait has a remaining deadline. Its check runs in a cancellable process, with arguments
+transferred over standard input rather than native command-line interpolation. The process tree,
+including native Azure reads, is stopped at timeout; a result arriving late is not success.
+The PFX is read once per planning/apply validation: that buffer is validated and hashed, and the
+apply uploads the same buffer after DNS waits, without reopening the path.
 
 ## Consequences
 

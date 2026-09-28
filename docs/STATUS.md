@@ -11,10 +11,28 @@ and merging belong to the lead. The reference gateway and other existing service
 
 Live finding, 2026-09-27 20:44 UTC (2026-09-28 locally): the isolated Basic v2 instance deployed in
 148.0 s, but its uploaded-PFX hostname PATCH returned `CustomHostnameOwnershipCheckFailed` for
-`claude.p69-company-address.test`. Azure requires public CNAME ownership even on Basic v2; a zone
+`<company-host>.test`. Azure requires public CNAME ownership even on Basic v2; a zone
 that answers only when queried at its Azure name servers does not satisfy that requirement.
 The sequence is corrected to DNS before binding. Positive company-hostname TLS proof is blocked
-without a delegated domain; none is bought or borrowed. U30 and ADR-0033 record the limitation.
+without a delegated domain; none is bought or borrowed. The lead accepted this scope deferral on
+2026-09-28; the positive proof moves to P74 and is not complete. U30 covers the research;
+P69 did not need the reserved U33 identifier.
+
+### Council round 1 corrections
+
+The lead's five-seat review of `aa7ed19..c82f951` (gpt-6-astra, read-only, 2026-09-28)
+returned BLOCK. The following corrections are in progress; a passing targeted test is not a
+council re-review verdict.
+
+| ID | Seat | Finding | Required evidence |
+|---|---|---|---|
+| A1 | Architect | Inherited custom address writes escaped Foundation pricing and fingerprinting | The effective inherited inputs are passed exactly, costed and fingerprinted |
+| A2 | Architect | Proposed answers were saved as applied decisions and as history's previous value | Any failed step retains applied decisions; history starts at the pre-question value |
+| C1 | Coder | Replacing the old hostname then failing proof made Change reject recovery as drift | Only the recorded unverified replacement can be recovered, with fresh approval |
+| C2 | Coder | Returning to Azure retained company metadata and old generated settings | Metadata and generated artifacts agree with the Azure URL |
+| Q1 | QA | Source-position assertions did not execute installer approval guards | Real installer with mocked Azure: inherited custom, mismatch, decline and WhatIf |
+| U1 | UX | A slow check could succeed after its advertised deadline | Checks and native reads stop at the remaining deadline; late success is rejected |
+| S1 | Security | PFX bytes were reread after hash approval | The validated and hashed byte buffer is the buffer uploaded |
 
 - [x] U30 is closed with dated Microsoft Learn and Azure Retail Prices API evidence for every
       v2 tier, certificate source, DNS record, update wait and component price; ADR-0033 records
@@ -31,9 +49,9 @@ without a delegated domain; none is bought or borrowed. U30 and ADR-0033 record 
       a successful HTTPS proof updates the onboarding address and developer-facing artifacts
 - [x] Offline tests run on PowerShell 7 and Windows PowerShell 5.1; every new detector is
       negative-tested with the complete assertion count; each green is committed
-- [ ] An isolated Basic v2 gateway proves an authoritative Azure DNS CNAME and an HTTPS request
-      with the company SNI/Host and certificate, with spend below USD 5; all created resources,
-      assignments and groups are deleted and the soft-deleted gateway is purged
+- [ ] **Deferred to P74, not done:** positive HTTPS through an owned, publicly delegated company
+      hostname with its matching certificate. The isolated authoritative CNAME and ownership
+      refusal were measured; all proof resources were deleted and the gateway purged below USD 5
 - [x] Redacted, inspected live terminal images numbered 40 onward are embedded in the updated
       setup/flow documentation; architecture sources, images and manifest remain current
 - [ ] The locked packet gate exits 0; the branch and evidence are reported to the lead without
@@ -75,10 +93,10 @@ group was written. The existing Foundry account was only referenced by the templ
 
 | Created | Time / scope | Deleted or purged |
 |---|---|---|
-| `rg-p69-address`, tag `purpose=p69-proof` | 20:38:41.905 | Delete requested 20:52:14.326; confirmed absent 20:55:00.080 (165.7 s) |
-| Azure DNS `p69-company-address.test` | 20:38:49.248, in the proof group | With the group |
-| Basic v2 `apim-p69-address-0927` | Template deployment finished 20:41:14.822; 148.0 s including final read | With the group; `az apim deletedservice purge` finished 20:56:31.515 (91.4 s); absence confirmed |
-| `log-p69-address-0927`, `appi-p69-address-0927`, and its Failure Anomalies smart-detector rule | Same template deployment, in the proof group | With the group |
+| `<proof-resource-group>`, tag `purpose=p69-proof` | 20:38:41.905 | Delete requested 20:52:14.326; confirmed absent 20:55:00.080 (165.7 s) |
+| Azure DNS `<proof-zone>.test` | 20:38:49.248, in the proof group | With the group |
+| Basic v2 `<proof-apim>` | Template deployment finished 20:41:14.822; 148.0 s including final read | With the group; `az apim deletedservice purge` finished 20:56:31.515 (91.4 s); absence confirmed |
+| `<proof-workspace>`, `<proof-application-insights>`, and its Failure Anomalies smart-detector rule | Same template deployment, in the proof group | With the group |
 | Local, self-signed RSA PFX for the reserved test hostname | Supplied to APIM; never imported into a certificate store | Temporary PFX and public PEM removed after capture |
 
 The authoritative CNAME resolved after 15.1 s in the retry, and a separate
@@ -88,7 +106,7 @@ target and TTL 300 in 0.576 s. Both PFX hostname PATCHes failed
 `curl.exe --resolve <company-host>:443:<gateway-IP> --cacert <proof-public-certificate>` then
 failed the handshake, exit 35 (0.472 s). The isolated Azure hostname returned the policy's
 `401 A Microsoft Entra ID token is required`, TLS verification 0, in 6.770 s.
-**The positive company-hostname TLS acceptance remains blocked**, not passed, without an
+**The positive company-hostname TLS acceptance is deferred to P74**, not passed, without an
 administrator-owned public domain. No ownership validation was bypassed and no domain was
 bought or borrowed.
 
