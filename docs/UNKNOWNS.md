@@ -43,6 +43,14 @@ fails the release stage while any remain. Detail for each one follows below.
 
 ---
 
+## P78 research before implementation
+
+| ID | State | Question | Blocks |
+|---|---|---|---|
+| U50 | ASSUMED | Can the complete default registration run on hosted Windows without Azure credentials? Most checks already use mocks; the PS 5.1 wizard currently reads a live account. P78 will retain its native cmd.exe boundary with an isolated fixture. Detector: the full hosted suite, both Python environments required, no unexplained SKIP and exact coverage. | P78 hosted compatibility |
+| U51 | ASSUMED | How long do whole-check LPT shards take on hosted Windows? Local durations are seed weights, not a hosted performance claim. Detector: queue-to-merge and every shard measured on GitHub; update the committed table from the observed receipts. | P78 timing evidence |
+| U52 | CLOSED | Can remote evidence be bound to the requested source without trusting a branch name? GitHub workflow runs expose head_sha, run_attempt, status and conclusion; jobs and artifacts are run-scoped. Check out github.sha, record git HEAD and HEAD tree, require a clean pushed HEAD, then revalidate the downloaded coverage locally. Workflow dispatch requires the workflow on the default branch; before merge, the packet's push trigger supplies the run. Researched 2026-09-28: [workflow runs API](https://docs.github.com/en/rest/actions/workflow-runs), [workflow dispatch](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch). | P78 remote contract defined |
+
 ## P70 research before implementation
 
 | ID | State | Question | Blocks |

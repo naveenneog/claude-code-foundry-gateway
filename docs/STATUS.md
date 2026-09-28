@@ -1,5 +1,42 @@
 # Status
 
+## P78 the test suite runs in parallel on GitHub-hosted runners, 2026-09-28
+
+**PLAN / CONTRACT.** Work is isolated to `p78-parallel-tests`, from `main` `0345e85`.
+The owner runs the council, gate and merge. No local full suite or gate is run for this packet.
+[ADR-0039](adr/0039-test-suite-hosted-runners.md) is a draft, not a charter amendment.
+
+Acceptance:
+
+- [ ] Opt-in Test-All shards use deterministic longest-processing-time assignment from a
+      committed timing table, preserve process isolation, exclusive lanes and deadlines, and
+      record their complete ownership, results, commit and tree. The default invocation is unchanged.
+- [ ] The receipt merger rejects missing, duplicate, failed, foreign-SHA/tree and unregistered
+      results; only a registered prerequisite reason permits SKIP. CI plus any explicitly listed
+      local-only evidence covers exactly the default registration, in registration order.
+- [ ] A read-only-permissions, SHA-pinned Windows workflow runs all shards and a coverage merge;
+      both Python environments, Node dependencies and Bicep are installed without Azure sign-in.
+- [ ] A clean, pushed exact HEAD can be verified remotely through `gh`, with progress and an
+      estimate; dirty/unpushed heads and incomplete or mismatched runs fail.
+- [ ] Fast infrastructure tests and RunnerIntegrity pass under the shared workstation lock;
+      GitHub produces a green full-suite run and recorded queue-to-merge and per-shard timings.
+      Missing, duplicate, foreign-SHA and deliberately failing-check experiments all fail.
+- [ ] Merge `main` before handoff. STATUS, CHANGELOG, tests README and ADR record evidence and
+      limitations. Product scripts, policies, ROADMAP and the charter are unchanged.
+
+**Proposed replacement ROADMAP P78 acceptance (owner approval required):** The default Test-All
+registration runs as coverage-proven, deterministic shards on GitHub-hosted Windows runners,
+with no check or mutation removed, machine-exclusive checks still exclusive, both AUM environments
+installed, and complete exact-SHA/tree evidence. The remote helper fails closed on dirty/unpushed
+source, failed/missing shards or invalid coverage. Record hosted wall time, shard times and the
+local baseline. Propose the gate's test command and 30-minute budget in ADR-0039; the owner decides
+whether to amend the charter. Hosted job cancellation bounds its process tree; the existing local
+gate-shell timeout limitation is not represented as fixed.
+
+**Results:** not yet measured. PLAN and CONTRACT precede infrastructure RED tests.
+U50-U52 track hosted compatibility, timing and remote-run identity. No product architecture
+component changes; this is test execution and evidence transport, not an accelerator deployment.
+
 **Active packets (2026-09-28, run in parallel worktrees):** P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P77 a 60-minute gate budget while the exclusive checks are sharded, 2026-09-28
