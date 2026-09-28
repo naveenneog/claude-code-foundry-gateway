@@ -113,6 +113,10 @@ $preflight = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Test-PreflightBoth
 Assert 'both-host preflight uses the same offline native and HTTP boundary' (
     $preflight.Contains('TestAzureFixture.ps1') -and $nativeFixture.Contains('function Invoke-WebRequest') -and
     $nativeFixture.Contains('function Invoke-RestMethod'))
+$projection = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'Test-ProjectionNegative.ps1'))
+Assert 'a failed projection baseline preserves the diagnostic instead of suppressing the cause' (
+    $projection -match '(?s)if \(\(Run-Suite \$suite\) -ne 0\) \{\s+Get-Content -LiteralPath \$suiteLog \| Write-Host\s+throw' -and
+    $projection -match 'node --test --test-timeout=1500 --test-reporter=tap .+>\s*\$suiteLog')
 
 $workflowPath = Join-Path (Split-Path $PSScriptRoot -Parent) '.github\workflows\test-all.yml'
 Assert 'the hosted workflow exists' (Test-Path -LiteralPath $workflowPath)
@@ -121,6 +125,8 @@ if (Test-Path -LiteralPath $workflowPath) {
     $uses = @([regex]::Matches($workflow, '(?m)^\s*-?\s*uses:\s*(\S+)'))
     Assert 'all Actions references are pinned to full commit SHAs' (
         $uses.Count -ge 5 -and @($uses | Where-Object { $_.Groups[1].Value -cnotmatch '^[\w/-]+@[a-f0-9]{40}$' }).Count -eq 0)
+    Assert 'the tested checkout retains release tags and their reachable history' (
+        $workflow -match '(?s)ref: \$\{\{ github\.sha \}\}\s+fetch-depth: 0\s+persist-credentials: false')
     Assert 'workflow tokens are read-only and no secret or privileged PR context is used' (
         $workflow -match '(?m)^permissions:\s*\r?\n\s+contents: read\s*$' -and
         $workflow -notmatch 'secrets\.|pull_request_target|azure/login|contents: write|actions: write')

@@ -70,6 +70,7 @@ try {
         'tests\test-all-durations.json', 'tests\test-all-local-only.json',
         'tests\requirements-finops.lock', 'tests\requirements-aum-service.lock',
         'tests\Test-On-PS51.ps1', 'tests\Test-PreflightBothHosts.ps1', 'tests\TestAzureFixture.ps1',
+        'tests\Test-ProjectionNegative.ps1',
         '.github\workflows\test-all.yml', 'cli\finops\pyproject.toml', 'service\aum\requirements.txt', 'package-lock.json'
     )
     foreach ($file in $files) {
@@ -138,6 +139,7 @@ try {
         $workflow = '.github\workflows\test-all.yml'
         Add-Case 'pin every action' $workflow 'actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97' 'actions/setup-python@v7' $suite
         Add-Case 'read-only token' $workflow 'contents: read' 'contents: write' $suite
+        Add-Case 'release tags and history' $workflow 'fetch-depth: 0' 'fetch-depth: 1' $suite
         Add-Case 'hosted Windows only' $workflow "runs-on: windows-latest`n    timeout-minutes: 20" "runs-on: self-hosted`n    timeout-minutes: 20" $suite
         Add-Case 'no fail-fast' $workflow 'fail-fast: false' 'fail-fast: true' $suite
         Add-Case 'always evaluate merge' $workflow "`n    if: `${{ always() }}" "`n    if: `${{ success() }}" $suite
@@ -150,6 +152,7 @@ try {
         Add-Case 'existing setup manifests' $workflow 'tests/requirements-finops.lock' 'tests/missing-finops.lock' $suite
         Add-Case 'wizard uses offline native fixture' 'tests\Test-On-PS51.ps1' 'TestAzureFixture.ps1' 'MissingAzureFixture.ps1' $suite
         Add-Case 'preflight uses offline native fixture' 'tests\Test-PreflightBothHosts.ps1' 'TestAzureFixture.ps1' 'MissingAzureFixture.ps1' $suite
+        Add-Case 'projection baseline diagnostic' 'tests\Test-ProjectionNegative.ps1' 'Get-Content -LiteralPath $suiteLog | Write-Host' '$null = "suppressed baseline output"' $suite
         Add-Case 'all hosted proof groups' $workflow "@('Core', 'Runner', 'Wizard')" "@('Core', 'Core', 'Wizard')" $suite
     }
     elseif ($Mode -eq 'Runner') {

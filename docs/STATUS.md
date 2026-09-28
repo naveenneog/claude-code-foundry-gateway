@@ -57,6 +57,12 @@ on `aee8fda`, found missing Playwright Chromium executables in the screenshot/re
 and one uncaught core mutation: a removed declaration guard was hidden by an overly broad
 expected error pattern matching a later exception. Setup now installs Chromium explicitly and
 the declaration assertion matches the intended diagnostic. These failures are not green evidence.
+The completed attempt also exposed a shallow checkout with no release tags, and an unmutated
+projection Node baseline failure whose harness discarded its diagnostic. The hosted checkout
+now retains history/tags; the projection harness preserves failed-baseline output without
+changing its mutations or timeout. The same 46-test Node baseline passes locally on Node 26.1.0;
+the hosted Node 22 difference remains under investigation. Wizard/preflight proofs caught 9/9
+mutations and runner proofs caught 12/12, with their complete 4/2 and 20-assertion baselines.
 
 U50-U53 track hosted compatibility, timing, remote-run identity and detector evidence. No product architecture
 component changes; this is test execution and evidence transport, not an accelerator deployment.
