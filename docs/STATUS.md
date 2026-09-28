@@ -157,6 +157,14 @@ in `finally`; single files and the publication selector remain the initial
 work. U26 records the bounded navigation-flake attempt. This round runs no
 Test-FinOps, Test-All, packet gate, main merge or push.
 
+The initial structural run on the reviewed detector reported **13 failed,
+10 passed**: the four B6 forms, eight scheduler variants and computed
+`getattr` were accepted. The extended detector reports **27 passed**,
+including explicit deferral and callback-alias controls. The exact 51-entry
+static registry is pinned by a digest. The initial real-Textual runtime
+reproductions reported **11 failed**, all from a missing sink refusal;
+runtime implementation and mutation receipts follow separately.
+
 ### Council round 5 corrections
 
 The fifth review closed B3 and retained Architect/Coder/QA/UX PASS. Security

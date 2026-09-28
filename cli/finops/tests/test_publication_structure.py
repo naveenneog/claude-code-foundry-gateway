@@ -1,7 +1,10 @@
 """Backend-derived presentation sinks must execute through guarded_publish."""
 
 import ast
+import hashlib
+import json
 from pathlib import Path
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1] / "src" / "claude_finops"
@@ -12,6 +15,9 @@ UI_FILES = tuple(sorted(path.name for path in ROOT.glob("*.py") if path.name in 
 SINKS = {"update", "load_text", "add_row", "set_options", "copy_to_clipboard",
          "open_url", "write", "write_text", "display", "render", "print", "echo", "ask"}
 VALUE_WIDGETS = {"Label", "Static", "TextArea", "Input", "Select"}
+SINK_PROPERTIES = {"value", "text", "label", "border_title", "placeholder", "tooltip"}
+SCHEDULERS = {"call_later", "call_after_refresh", "set_timer", "set_interval",
+              "run_worker", "post_message", "create_task", "call_soon"}
 
 # Exact (file, qualified function, normalized call) exceptions for static/local
 # presentation only. Each entry needs its own factual reason, not a handler-wide exemption.
@@ -74,6 +80,24 @@ STATIC_WRITES = {
     ("cli.py", "legacy_main", "typer.echo('Deprecated: claude-finops is now aum (AUM - Azure Usage Management); this alias remains for one release.', err=True)"): "Fixed legacy-entry-point deprecation notice.",
 }
 
+# The principal reset iterates a fixed tuple of cache field names, never widget
+# methods. This is not an exception for a computed sink or arbitrary reflection.
+DYNAMIC_ACCESSES = {
+    ("principal_ui.py", "PrincipalUI._clear_principal_state", "getattr(screen, name)"):
+        "Reads the fixed local cache-field tuple solely to avoid replacing callable methods during clearing.",
+}
+
+
+def call_name(node):
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    if isinstance(node, ast.Call) and call_name(node.func) == "getattr":
+        if len(node.args) > 1 and isinstance(node.args[1], ast.Constant):
+            return node.args[1].value
+    return ""
+
 
 def sinks(source, filename, allowed=None):
     allowed = STATIC_WRITES if allowed is None else allowed
@@ -84,6 +108,26 @@ def sinks(source, filename, allowed=None):
         def __init__(self):
             self.scope = []
             self.guarded = False
+            self.callbacks = set()
+            self.deferred = False
+
+        def report(self, node, detail=None):
+            key = (filename, ".".join(self.scope), ast.unparse(node))
+            if key not in allowed:
+                failures.append(f"{filename}:{node.lineno}:{'.'.join(self.scope)}: {detail or ast.unparse(node)}")
+
+        def escaping(self, node):
+            if isinstance(node, ast.Call) and call_name(node.func) == "guarded_deferred":
+                return False
+            if isinstance(node, ast.Lambda):
+                return True
+            if isinstance(node, ast.Call) and call_name(node.func) == "partial":
+                return True
+            if ast.unparse(node) in self.callbacks:
+                return True
+            if isinstance(node, ast.Call):
+                return self.escaping(node.func)
+            return False
 
         def visit_ClassDef(self, node):
             self.scope.append(node.name)
@@ -91,16 +135,28 @@ def sinks(source, filename, allowed=None):
             self.scope.pop()
 
         def visit_FunctionDef(self, node):
+            if self.guarded:
+                self.callbacks.add(node.name)
             previous = self.guarded
-            self.guarded = any(isinstance(item, ast.Call) and isinstance(item.func, ast.Name)
-                               and item.func.id == "published" and item.args for item in node.decorator_list)
+            callbacks = self.callbacks.copy()
+            self.guarded = any(
+                isinstance(item, ast.Call) and call_name(item.func) == "published" and item.args
+                or isinstance(item, ast.Name) and item.id == "publication_sink"
+                for item in node.decorator_list)
             self.scope.append(node.name)
             for statement in node.body:
                 self.visit(statement)
             self.scope.pop()
             self.guarded = previous
+            self.callbacks = callbacks
 
         visit_AsyncFunctionDef = visit_FunctionDef
+
+        def visit_Lambda(self, node):
+            previous = self.guarded
+            self.guarded = self.deferred
+            self.visit(node.body)
+            self.guarded = previous
 
         def visit_With(self, node):
             previous = self.guarded
@@ -120,16 +176,34 @@ def sinks(source, filename, allowed=None):
             self.generic_visit(node)
 
         def visit_Assign(self, node):
+            if self.escaping(node.value):
+                self.callbacks.update(ast.unparse(target) for target in node.targets)
             if not self.guarded and any(isinstance(target, ast.Attribute) and target.attr in {
                     "value", "text", "label", "border_title", "placeholder", "tooltip"} for target in node.targets):
-                key = (filename, ".".join(self.scope), ast.unparse(node))
-                if key not in allowed:
-                    failures.append(f"{filename}:{node.lineno}:{'.'.join(self.scope)}: {ast.unparse(node)}")
+                self.report(node)
             self.generic_visit(node)
 
         def visit_Call(self, node):
-            name = node.func.attr if isinstance(node.func, ast.Attribute) else (
-                node.func.id if isinstance(node.func, ast.Name) else "")
+            name = call_name(node.func)
+            if name == "guarded_deferred":
+                previous, deferred = self.guarded, self.deferred
+                self.guarded = self.deferred = True
+                for argument in node.args:
+                    self.visit(argument)
+                self.guarded, self.deferred = previous, deferred
+                return
+            if name in SCHEDULERS and any(self.escaping(argument) for argument in node.args):
+                self.report(node, "deferred callback requires guarded_deferred")
+            if name == "getattr" and len(node.args) > 1 and not isinstance(node.args[1], ast.Constant):
+                key = (filename, ".".join(self.scope), ast.unparse(node))
+                if key not in DYNAMIC_ACCESSES:
+                    self.report(node, "computed getattr can select a presentation sink")
+            if name == "setattr" and len(node.args) > 1:
+                attribute = node.args[1]
+                if (not isinstance(attribute, ast.Constant) or attribute.value in SINK_PROPERTIES) and not self.guarded:
+                    self.report(node)
+            if name == "partial" and node.args and call_name(node.args[0]) in SINKS and not self.deferred:
+                self.report(node, "partial of a sink requires guarded_deferred")
             sink = name in SINKS or (name in VALUE_WIDGETS and bool(node.args))
             if name == "run" and any(keyword.arg == "input" for keyword in node.keywords):
                 sink = True
@@ -139,9 +213,7 @@ def sinks(source, filename, allowed=None):
                                       ast.unparse(node.func.value).endswith("engine")):
                 sink = False
             if sink and not self.guarded:
-                key = (filename, ".".join(self.scope), ast.unparse(node))
-                if key not in allowed:
-                    failures.append(f"{filename}:{node.lineno}:{'.'.join(self.scope)}: {ast.unparse(node)}")
+                self.report(node)
             self.generic_visit(node)
 
     Check().visit(tree)
@@ -191,6 +263,10 @@ def handler(self, origin):
 
 
 def test_allowlist_entries_are_exact_and_explained():
+    encoded = json.dumps(sorted((list(key), value) for key, value in STATIC_WRITES.items()),
+                         ensure_ascii=True, separators=(",", ":")).encode()
+    assert len(STATIC_WRITES) == 51
+    assert hashlib.sha256(encoded).hexdigest() == "84a98a03af7f26a8d2a2fd8cf60a4bbc6d374961c03d7df60821910ade3d7230"
     for key, reason in STATIC_WRITES.items():
         assert len(key) == 3 and len(reason.strip()) >= 20
         file, function, call = key
@@ -245,3 +321,58 @@ async def handler(self, origin):
         self.query_one('#status').update(self.row)
 """
     assert len(sinks(code, "example.py", {})) == 1
+
+
+@pytest.mark.parametrize("body", [
+    "with guarded_publish(origin):\n        callback = lambda: widget.update(self.cached_row)\n        self.call_later(callback)",
+    "getattr(widget, 'update')(self.cached_row)",
+    "setattr(widget, 'value', self.cached_row)",
+    "with guarded_publish(origin):\n        callback = functools.partial(widget.update, self.cached_row)\n        self.call_later(callback)",
+])
+def test_round_six_indirect_and_deferred_probes_are_rejected(body):
+    source = "def handler(self, widget, origin):\n    " + body + "\n"
+    assert sinks(source, "example.py", {}), source
+
+
+@pytest.mark.parametrize("scheduler", [
+    "self.call_later", "self.call_after_refresh", "self.set_timer", "self.set_interval",
+    "self.run_worker", "self.post_message", "asyncio.create_task", "loop.call_soon",
+])
+def test_nested_callback_created_under_guard_cannot_escape_to_scheduler(scheduler):
+    source = f"""
+def handler(self, origin):
+    with guarded_publish(origin):
+        def callback():
+            return self.render_private_row(self.cached_row)
+        {scheduler}(callback)
+"""
+    assert sinks(source, "example.py", {}), scheduler
+
+
+def test_computed_getattr_in_presentation_code_is_not_silently_trusted():
+    assert sinks("def handler(widget, method, value):\n    getattr(widget, method)(value)\n", "example.py", {})
+
+
+@pytest.mark.parametrize("callback", [
+    "lambda: widget.update(self.cached_row)",
+    "partial(widget.update, self.cached_row)",
+    "functools.partial(getattr(widget, 'update'), self.cached_row)",
+])
+def test_explicit_deferred_wrapper_is_the_only_callback_escape(callback):
+    source = f"""
+def handler(self, widget, origin):
+    self.call_later(guarded_deferred(origin, {callback}))
+"""
+    assert sinks(source, "example.py", {}) == []
+
+
+def test_callback_alias_does_not_erase_its_deferred_origin_requirement():
+    source = """
+def handler(self, origin):
+    with guarded_publish(origin):
+        def callback():
+            return self.render_private_row(self.cached_row)
+        alias = callback
+    self.call_after_refresh(alias)
+"""
+    assert sinks(source, "example.py", {})
