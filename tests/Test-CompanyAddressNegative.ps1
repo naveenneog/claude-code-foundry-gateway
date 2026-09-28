@@ -4,6 +4,9 @@ $root = Split-Path $PSScriptRoot -Parent
 $temporaryRoot=Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) 'Temp'
 $scratch = Join-Path $temporaryRoot ('company-mutations-' + [guid]::NewGuid().ToString('N'))
 $cases = @(
+    @('transport','return ,@\(Sort-ClaudeFlowOrdinal -InputObject \$locations -Unique\)','return ,@($locations | Sort-Object -Unique)','network region order is ordinal across hyphens and case-folded duplicates','P76 restored culture region sort','Test-CompanyFlow.ps1'),
+    @('transport','(?m)^if \(-not \(Get-Command Sort-ClaudeFlowOrdinal -ErrorAction SilentlyContinue\)\).*FlowContract\.ps1.*$','if ($false) { }','standalone network and recovery helpers load the shared ordinal sorter','P76 standalone network sorter import','Test-CompanyFlow.ps1'),
+    @('recovery','(?m)^if \(-not \(Get-Command Sort-ClaudeFlowOrdinal -ErrorAction SilentlyContinue\)\).*FlowContract\.ps1.*$','if ($false) { }','standalone network and recovery helpers load the shared ordinal sorter','P76 standalone recovery sorter import','Test-CompanyFlow.ps1'),
     @('inputs','return \[bool\]\(\$Record -and \$Record.schemaVersion','return [bool]($false -and $Record -and $Record.schemaVersion','a first Setup journal is bound to the selected gateway and keeps failed proof unverified','R3 first-Setup journal recognized','Test-CompanyInstaller.ps1'),
     @('inputs',' -and -not \$Record.apimName -and -not \$Record.resourceGroup','','bound or unrelated records cannot be initialized as Setup drafts','R3 draft cannot override a bound gateway','Test-CompanyFlow.ps1'),
     @('inputs','\(-not \$Record.mode -or \$Record.mode -eq ''gateway''\)','$true','bound or unrelated records cannot be initialized as Setup drafts','R3 draft is gateway mode only','Test-CompanyFlow.ps1'),

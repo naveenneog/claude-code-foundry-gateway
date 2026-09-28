@@ -1,7 +1,9 @@
+if (-not (Get-Command Sort-ClaudeFlowOrdinal -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot 'flow\FlowContract.ps1') }
+
 function Get-ClaudeAddressRecoveryHosts {
     param($Gateway)
     $hosts = if ($Gateway.properties) { $Gateway.properties.hostnameConfigurations } else { $Gateway.hostnameConfigurations }
-    @($hosts | Where-Object { $_.certificateSource -ne 'BuiltIn' } | Sort-Object type,hostName | ForEach-Object {
+    @(Sort-ClaudeFlowOrdinal -InputObject @($hosts | Where-Object { $_.certificateSource -ne 'BuiltIn' }) -Key type,hostName | ForEach-Object {
         [ordered]@{
             type=[string]$_.type; hostname=([string]$_.hostName).ToLowerInvariant(); certificateSource=[string]$_.certificateSource
             thumbprint=[string]$_.certificate.thumbprint; keyVaultId=[string]$_.keyVaultId; identityClientId=[string]$_.identityClientId

@@ -15,8 +15,9 @@ $mutations=@(
     @('ClaudeNetworkImpact.ps1','$pathStatus=''Unknown''','$pathStatus=''Inside''','Test-NetworkImpact.ps1','missing/masked client IP is uncertainty, not a safe private route')
 )
 try {
-    New-Item -ItemType Directory -Path (Join-Path $sandbox 'scripts'),(Join-Path $sandbox 'tests') -Force|Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $sandbox 'scripts\flow'),(Join-Path $sandbox 'tests') -Force|Out-Null
     Copy-Item (Join-Path $root 'scripts\*.ps1') (Join-Path $sandbox 'scripts')
+    Copy-Item -LiteralPath (Join-Path $root 'scripts\flow\FlowContract.ps1') -Destination (Join-Path $sandbox 'scripts\flow\FlowContract.ps1')
     foreach($test in @('Test-NetworkApproval.ps1','Test-NetworkDecisions.ps1','Test-NetworkImpact.ps1')){
         Copy-Item (Join-Path $PSScriptRoot $test) (Join-Path $sandbox 'tests')
         $output=& $engine -NoProfile -NonInteractive -File (Join-Path $sandbox ('tests\'+$test)) 2>&1

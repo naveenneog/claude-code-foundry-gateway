@@ -774,11 +774,11 @@ decision/record results and P76's code-point assignment-key order. The focused i
 check at that merge fails one of 35 checks: four string sorts in the network/recovery helpers
 are culture-dependent, and the numeric free-prefix sort needs its documented value-key entry.
 
-- [ ] Gateway hostname projections, network regions, subscription scopes and NSG IDs use the
+- [x] Gateway hostname projections, network regions, subscription scopes and NSG IDs use the
       existing `Sort-ClaudeFlowOrdinal`; each helper also loads it when used alone
-- [ ] The numeric `Last` address sort remains native and is listed with the value-key reason;
+- [x] The numeric `Last` address sort remains native and is listed with the value-key reason;
       null/empty inputs and case-folded uniqueness retain their caller semantics
-- [ ] A hyphen-versus-letter regression passes on PowerShell 7 and Windows PowerShell 5.1;
+- [x] A hyphen-versus-letter regression passes on PowerShell 7 and Windows PowerShell 5.1;
       restoring a string `Sort-Object` is caught with the complete selector count
 - [ ] P69 and the requested network suites pass with their scratch dependencies copied;
       the lead runs the packet gate and council round 4, not this integration task
@@ -787,7 +787,17 @@ Initial measurement: native sorting gives `eastus-b,eastusa` on PowerShell 7 and
 `eastusa,eastus-b` on Windows PowerShell 5.1. The ordinal helper gives the same order on
 both and applies its documented case-folded uniqueness. Native sorting already drops null
 pipeline items; NSG IDs additionally filter null/empty values before sorting. No null sentinel
-is needed by these four callers. No Test-All or gate is run for this request.
+is needed by these four callers. A null element in the typed discovery-subscription argument
+becomes an empty string and remains refused rather than silently omitted. No Test-All or gate
+is run for this request.
+
+`Test-CompanyFlow` now has 34 assertions on each host, including ordinal hyphen/letter order,
+case-folded region duplicates, null/empty lists, scoped ID ordering and fresh standalone imports.
+P76's strict entry-point scan uses the same exact exception signatures as its transitive scan:
+loading FlowContract directly must not reject the explicitly allowed numeric `Last` sort.
+The numeric line still has to exist unchanged, and no string sort was added to the exception
+table. P69's installer and mutation sandboxes already copy FlowContract; the network review
+mutation sandbox now copies it into its `scripts\flow` directory too.
 
 ### Council round 3 corrections
 

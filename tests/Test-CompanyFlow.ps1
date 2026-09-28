@@ -222,5 +222,83 @@ Check 'real ARM transport sends conditional DNS headers and removes the body fil
     }
     finally { Remove-Item -LiteralPath $scratch -Recurse -Force }
 }
+Check 'network region order is ordinal across hyphens and case-folded duplicates' {
+    . (Join-Path $root 'scripts\ClaudeNetwork.ps1')
+    $regions=Get-ClaudeNetworkSkuLocation -Sku BasicV2 -Skus @(
+        [pscustomobject]@{name='BasicV2';locations=@('eastusa','eastus-b','EASTUS-B');restrictions=@()}
+    )
+    (@($regions) -join ',') -ceq 'EASTUS-B,eastusa'
+}
+Check 'network region null and empty lists remain empty rather than selectable choices' {
+    . (Join-Path $root 'scripts\ClaudeNetwork.ps1')
+    $empty=Get-ClaudeNetworkSkuLocation -Sku BasicV2 -Skus @()
+    $mixed=Get-ClaudeNetworkSkuLocation -Sku BasicV2 -Skus @(
+        [pscustomobject]@{name='BasicV2';locations=@($null,'eastus-b',$null);restrictions=@()}
+    )
+    @($empty).Count -eq 0 -and @($mixed).Count -eq 1 -and $mixed[0] -eq 'eastus-b'
+}
+Check 'recovery host projection orders type then hostname by code point and drops null rows' {
+    . (Join-Path $root 'scripts\ClaudeGatewayAddressRecovery.ps1')
+    $gateway=[pscustomobject]@{properties=@{hostnameConfigurations=@(
+        @{type='Proxy';hostName='eastusa.contoso.test';certificateSource='Custom'}
+        $null
+        @{type='DeveloperPortal';hostName='z.contoso.test';certificateSource='Custom'}
+        @{type='Proxy';hostName='eastus-b.contoso.test';certificateSource='Custom'}
+        @{type='Proxy';hostName='built-in.azure-api.net';certificateSource='BuiltIn'}
+    )}}
+    $hosts=@(Get-ClaudeAddressRecoveryHosts $gateway)
+    $empty=@(Get-ClaudeAddressRecoveryHosts ([pscustomobject]@{properties=@{hostnameConfigurations=$null}}))
+    (@($hosts|ForEach-Object { "$($_.type):$($_.hostname)" }) -join ',') -ceq 'DeveloperPortal:z.contoso.test,Proxy:eastus-b.contoso.test,Proxy:eastusa.contoso.test' -and $empty.Count -eq 0
+}
+Check 'network subscription discovery sorts unique scopes and still refuses an empty scope' {
+    . (Join-Path $root 'scripts\ClaudeNetwork.ps1')
+    $first='00000000-0000-0000-0000-000000000001'
+    $second='00000000-0000-0000-0000-000000000002'
+    $script:scopeReads=@()
+    function Invoke-ClaudeNetworkAz {
+        param($Arguments)
+        @([pscustomobject]@{id=$first;state='Enabled'},[pscustomobject]@{id=$second;state='Enabled'})
+    }
+    function Get-ClaudeNetworkPages {
+        param($Url)
+        if($Url -match '/subscriptions/([^/]+)/resources\?'){$script:scopeReads+=$Matches[1]}
+        return ,@()
+    }
+    function Invoke-ClaudeNetworkArm {param($Url);[pscustomobject]@{resourceTypes=@();properties=@{state='Registered'}}}
+    Get-ClaudeNetworkInventory -SubscriptionId $second -DiscoverySubscriptionId @($first,$second) | Out-Null
+    $ordered=($script:scopeReads -join ',') -ceq "$first,$second"
+    $ordered -and (Reject { Get-ClaudeNetworkInventory -SubscriptionId $second -DiscoverySubscriptionId @($null) } 'not an enabled visible subscription')
+}
+Check 'network NSG identifiers use ordinal order and exclude empty subnet references' {
+    . (Join-Path $root 'scripts\ClaudeNetwork.ps1')
+    $rg='/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/rg-contoso'
+    $prefix="$rg/providers/Microsoft.Network/networkSecurityGroups/"
+    function Invoke-ClaudeNetworkArm {
+        param($Url,[switch]$AllowNotFound)
+        if($Url -match '/virtualNetworks/'){
+            return [pscustomobject]@{properties=@{subnets=@(
+                @{properties=@{networkSecurityGroup=@{id="${prefix}nsga"}}}
+                @{properties=@{networkSecurityGroup=@{id="${prefix}nsg-b"}}}
+                @{properties=@{networkSecurityGroup=$null}}
+                @{properties=@{networkSecurityGroup=@{id="${prefix}nsg-b"}}}
+            )}}
+        }
+        [pscustomobject]@{tags=@{'claude-network-owner'='fixture'}}
+    }
+    $nsgs=Get-ClaudeNetworkOwnedNsgs -VnetId "$rg/providers/Microsoft.Network/virtualNetworks/fixture" -ResourceGroupId $rg -OwnerId fixture
+    (@($nsgs|ForEach-Object id) -join ',') -ceq "${prefix}nsg-b,${prefix}nsga"
+}
+Check 'standalone network and recovery helpers load the shared ordinal sorter' {
+    $loaded=$true
+    foreach($library in 'scripts\ClaudeNetwork.ps1','scripts\ClaudeGatewayAddressRecovery.ps1'){
+        $probe=[powershell]::Create()
+        try{
+            $null=$probe.AddScript('param($path) . $path; [bool](Get-Command Sort-ClaudeFlowOrdinal -ErrorAction SilentlyContinue)').AddArgument((Join-Path $root $library))
+            $result=@($probe.Invoke())
+            if($probe.HadErrors -or $result.Count -ne 1 -or $result[0] -ne $true){$loaded=$false}
+        }finally{$probe.Dispose()}
+    }
+    $loaded
+}
 Write-Host ("Company flow: {0} assertions, {1} passed, {2} failed." -f $script:assertions, ($script:assertions - $script:failed), $script:failed)
 if ($script:failed) { exit 1 }
