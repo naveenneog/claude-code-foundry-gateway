@@ -244,10 +244,13 @@ function Assert-ClaudeGatewayOwnsGovernance {
     param(
         [Parameter(Mandatory = $true)][string]$ResourceGroup,
         [Parameter(Mandatory = $true)][string]$ApimName,
-        [Parameter(Mandatory = $true)][ValidateSet('BusinessUnits', 'Budgets', 'UsdBudgets', 'Tiers')][string[]]$Write
+        [Parameter(Mandatory = $true)][ValidateSet('BusinessUnits', 'Budgets', 'UsdBudgets', 'Tiers')][string[]]$Write,
+        [string]$SubscriptionId
     )
+    $scope = @{}
+    if ($SubscriptionId) { $scope.SubscriptionId = $SubscriptionId }
     try {
-        $raw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $script:TurnstileIntegrationNamedValue -FailOnError
+        $raw = Get-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id $script:TurnstileIntegrationNamedValue -FailOnError @scope
     }
     catch {
         throw ("Cannot verify governance authority: 'turnstile-integration' could not be read on '$ApimName'. " +

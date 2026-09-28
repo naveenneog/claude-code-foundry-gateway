@@ -55,7 +55,9 @@ $ErrorActionPreference = 'Stop'
 $SCHEMA = 1
 
 function Get-Token {
-    $t = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv 2>$null
+    $scope = @()
+    if ($SubscriptionId) { $scope = @('--subscription', $SubscriptionId) }
+    $t = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv @scope 2>$null
     if (-not $t) { throw "Could not acquire an Azure Resource Manager token. Run: az login" }
     return $t.Trim()
 }

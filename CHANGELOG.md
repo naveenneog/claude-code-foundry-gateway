@@ -29,6 +29,22 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Reviewed model lifecycle (P70).** `-Action Change -Change models` and
+  `scripts/Sync-ClaudeModels.ps1` discover the selected Foundry account, show deployment
+  model/version/SKU/capacity and price status, accept per-deployment tier choices, snapshot
+  before writes, update only the model named values, and regenerate the record and both
+  tiers' MDM/workstation handovers. Stale plans, Turnstile-owned tiers, malformed discovery
+  and last-entry allow-all removal are refused. Dated unambiguous price mappings preserve
+  history; Opus 5.5 stays explicitly unpriced because the current financial readers do not
+  represent its published cache-read multiplier. The installer gains `-StandardModels` and
+  `-PremiumModels` for an unattended initial subset. [Model guide](docs/MODELS.md),
+  [ADR-0034](docs/adr/0034-model-lifecycle.md).
+- **P70 council fixes.** Model fingerprints now bind renderer helpers as well as the
+  generator. Raw deployment identities and empty installer selections fail closed;
+  initial tier restrictions reach profiles. Bash removes retired aliases consistently
+  with Windows. Standalone history includes the prior decision and principal, empty
+  named-value writes use a subscription-bound token, and nested generated onboarding
+  records/profiles/snapshots remain git-ignored.
 - **Permutation tests of the guided flow and the installer (P72).** `tests/Test-FlowPermutations.ps1`
   runs the orchestrator over Setup, Change foundation, Guide and Status × six record states ×
   attended, `-PlanOnly` and unattended apply (76 runs, some on Windows PowerShell 5.1), a recorded
