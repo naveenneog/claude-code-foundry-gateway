@@ -144,9 +144,9 @@ remains unticked. No Azure or real workstation writes are planned.
 
 | Seat | Verdict supplied | Evidence / remaining integration work |
 |---|---|---|
-| Architect | PASS | Round-1 dependency fingerprints verified; A2 should-fix adds AST-derived transitive import coverage so a new helper cannot evade both handwritten lists |
+| Architect | PASS | Round-1 dependency fingerprints verified; A2 now has AST-derived transitive import coverage and a caught added-import mutation |
 | Coder | PASS | Initial Sonnet-only allowlist and picker agree; all round-1 fixes verified |
-| QA | PASS | Round-1 regressions verified; P72 installer/flow permutations will run on the merged tree |
+| QA | PASS | Round-1 regressions verified; P72 installer/flow permutations passed on the merged tree without assertion changes |
 | UX | PASS | No BLOCK or additional UX finding supplied |
 | Security | PASS | Every S1 refusal made zero Azure resource writes; no tracked ignored generated files were found |
 
@@ -171,6 +171,22 @@ manifest was regenerated from the merged sources (15 specifications, 17 PNGs).
 The ledger comparison against `main` contains only P70 additions: no removed lines
 in CHANGELOG, STATUS or UNKNOWNS, and no ROADMAP difference. The P72 permutation
 suites and locked packet gate are the remaining integration checks.
+
+Normal merge commit: `5d4353e`, parents `d2b063e` and `38ad175`. The requested merged-tree
+suites all passed on this machine:
+
+| Suite | Checks | Coverage / duration |
+|---|---|---|
+| `Test-InstallerPermutations.ps1` | 44 | 103 cases on each of PowerShell 7 and 5.1: 96 combinations, six refusals and one reused gateway; 96.3 s |
+| `Test-FlowPermutations.ps1` | 43 | 77 base runs plus boundary/store/round-trip cases and 432 Foundation plans; 130.0 s |
+| `Test-FlowStart.ps1` | 114 | Startup, installer handover, fingerprint and resume checks; 133.3 s |
+| `Test-ModelLifecycle.ps1` | 138 per host | Passed on PowerShell 7 and 5.1 after the merge |
+
+No installer-driver stub extension was needed. No P72 assertion or behavior requirement was
+changed. `git diff main HEAD -- CHANGELOG.md docs/STATUS.md docs/UNKNOWNS.md docs/ROADMAP.md`
+contains only P70 additions and no removed lines; ROADMAP matches main. The regenerated
+architecture check passes, and `git ls-files -ci --exclude-standard` lists zero files.
+The locked packet gate is the remaining integration step.
 
 ### Council round 1, 2026-09-28
 
