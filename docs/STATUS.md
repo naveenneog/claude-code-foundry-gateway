@@ -186,6 +186,17 @@ existing publication selection passed **113 cases in 85.92 s** (88.24 s wall),
 including B4/B5 and all seven round 7 scheduler routes. The closed source
 contract and its exact import/exception controls follow separately.
 
+The retained-widget correction is committed as `970cd88`. Preparation for
+the import boundary moves console creation, prompting and profile/report
+filesystem effects behind the existing protected output module. Its readers
+return text/path values rather than stream or writer handles; configuration
+loading accepts path text without requiring presentation code to import
+`pathlib.Path`. The new interface tests reported **9 failed, 1 passed in
+0.46 s** before implementation, then the IO/runtime/CLI/structure selection
+passed **140 cases in 25.63 s** (26.94 s wall). Profile replacement still
+requires the explicit `force` choice, and stale origins create no directory,
+file or prompt.
+
 ### Council round 7 corrections
 
 The seventh review of `9fabf42` returned Architect PASS and Coder, QA, UX and
