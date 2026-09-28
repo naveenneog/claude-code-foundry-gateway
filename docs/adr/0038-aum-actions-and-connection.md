@@ -100,3 +100,18 @@ dynamic value exemption or publication-boundary relaxation is added.
 - Local contracts and investigation: [U38-U41](../UNKNOWNS.md#p80-research-before-resumed-implementation).
 - Measured tests, reversion probes, captures and handoff state:
   [P80 STATUS](../STATUS.md#p80-aum-shows-every-action-it-has-connects-in-one-step-and-its-guide-starts-with-installation-2026-09-28).
+
+## Builder validation, 2026-09-28
+
+The full Windows AUM suite passed 614 tests in 486.25 s at `2d41f69`.
+All 49 isolated reversion probes were caught, retaining each baseline
+selector's exact test-case IDs/count and producing failures rather than
+collection errors. The harness, including clean baselines and restoration,
+took 472.875 s. Restored P80/manifest tests passed 55 cases; a separate LF
+checkout simulation passed the normalized-text manifest check.
+
+The owned lock interval was 22:16:30-22:32:54 IST. Architecture and all 42
+guide references passed under that lock. The no-run gate passed with the
+file-size and unrelated-open-unknown warnings; it did not execute Test-All
+or the build. Council, the full packet gate and post-deployment owner review
+remain pending. No live Azure, directory or model evidence is claimed.

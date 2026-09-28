@@ -4,6 +4,11 @@
 
 Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM guide set. Worktree: `accel-p80`, branch `p80-aum-usability`, based on P71 commit `bcf8554`. Later P71 work remains separate. This packet stays local until the owner reviews it after the 2026-09-29 deployment; no merge, push or history rewrite is authorized.
 
+**Builder handoff:** all eight acceptance items below are met. The verified
+implementation is `2d41f69`; subsequent handoff changes are ledger-only.
+Council and the subsequent full packet gate remain pending with the lead.
+This is not a merge-ready or packet-gate-passed claim.
+
 ### PLAN
 
 1. Keep P71's publication rule: every backend-derived widget/status/clipboard/export/assistant publication uses `guarded_publish(origin)` or `guarded_deferred(origin, ...)`. New labels and progress text stay inside the guarded boundary. The existing export-progress exception tracks its new estimated literal and reason; the pinned allowlist stays at 51 entries, with no broader exception ([ADR-0038](adr/0038-aum-actions-and-connection.md)).
@@ -18,10 +23,10 @@ The resumed builder read `AGENTS.md` before work. `b1dfcd4` was clean on the
 assigned branch. The existing P80 and publication-structure suites passed:
 37 tests in 20.78 s. The shared main-worktree Python was used with
 `PYTHONPATH` set to this worktree's `cli/finops/src`; `claude_finops.__file__`
-resolved under `accel-p80`. The initial no-run gate is deferred while P79 owns
-the lock.
+resolved under `accel-p80`. The initial no-run gate was deferred while another
+operator owned the lock; it passed during the owned validation interval below.
 
-The baseline has no recorded RED results. Reversion probes will distinguish
+The baseline has no recorded RED results. The reversion probes below distinguish
 retrospective regression evidence from tests written before a new fix.
 Missing behavior at resume: a connection editor without a prerequisite JSON
 file and with persisted rollback; consistent header/help/action labels;
@@ -67,7 +72,8 @@ creates no report folder.
 Additional P80 regressions cover catalog changes during the read and cached
 catalog rejection, disabled Turnstile USD, an estimated connection wait and a
 concurrent profile save during verification. All 51 P80-specific tests passed
-in 113.74 s before the locked full-suite run.
+in 113.74 s before the compact-visibility and independent-USD additions. The
+final full suite includes 54 P80-specific tests.
 
 ### Architecture and guide evidence
 
@@ -96,18 +102,146 @@ Process exception: the short `Test-DocReferences.ps1` run at 21:52 IST included
 its built-in negative self-checks while the shared lock still existed. This
 was a builder scheduling error; the wrapper had not been inspected before
 execution. It made no Azure calls and passed its 42-guide check. Subsequent
-negative batches and the full AUM suite wait for a builder-owned lock.
+negative batches and the full AUM suite ran under a builder-owned lock.
+
+### Locked validation, 2026-09-28
+
+This builder atomically acquired `.gate-lock` at **22:16:30 IST** and released
+only its own lock in `finally` at **22:32:54 IST**. No other process was stopped
+or reprioritized. Earlier queued P80 waiters were stopped before acquiring a
+lock so the compact-visibility and portability corrections could finish.
+
+| Check | Result | Seconds |
+|---|---|---:|
+| Full AUM suite, `python -B -m pytest cli\finops\tests -q --tb=short` | **614 passed**, no failures or skips; 54 are P80-specific | **486.25** pytest; 489.795 wall |
+| P80 mutations, including selector baselines and restoration | **49 of 49 caught**; every mutant retained exactly the baseline test-case IDs/count and had at least one assertion failure, with no collection errors or skipped tests | **472.875** harness; 474.370 process wall |
+| Mutant executions alone | 66 test-case executions, 62 expected failures across 49 probes | 212.905 |
+| Unmodified selector baselines | 37 selector suites, 48 test-case executions, all passed | 161.061 |
+| Restored isolated P80 + manifest suite | 55 passed; the mutation fixture was then removed | 89.279 pytest; 91.813 wall |
+| LF-checkout manifest check | 1 passed after normalizing copied source and output files to LF | 3.319 pytest; 5.922 wall |
+| `Test-DocReferences.ps1` under the lock | 42 guides; all 10 built-in negative cases caught | 12.866 |
+| `Test-Architecture.ps1 -CheckOnly` | 19 Node tests plus the source/image/reference checks passed | 3.289 |
+| `node .ironclad\gate.mjs --stage packet --no-run --verbose` | 20 passed, 2 warnings, 0 failed, 4 skipped; **audit only**, no Test-All or build execution | 3.632 |
+
+The two audit warnings are file size and 21 unrelated open unknowns. The
+touched `tui.py` and `ui_features.py` are above the 700-line source budget
+(811 and 721 lines); no budget, exception or charter was relaxed. U38-U41
+are closed; the other packets' unknowns and ROADMAP were not edited.
+
+The shared interpreter was
+`C:\Users\navg\DailyApps\work\CLAUDE\accel\.venv-finops\Scripts\python.exe`.
+Every original-worktree run set `PYTHONPATH` to
+`C:\Users\navg\DailyApps\work\CLAUDE\accel-p80\cli\finops\src`;
+`claude_finops.__file__` was printed and asserted before the full run.
+Mutation runs used a separate copied package and tests, with that copy first
+on `PYTHONPATH` and bytecode caching disabled. They never edited the live
+worktree. These are Windows offline measurements; the LF check is not a
+native Linux or macOS application run.
+
+Persistent receipts, commands, stdout and JUnit XML are in this session's
+`files\p80-resume`: `full-aum.xml`, `full-aum.log`, `mutation-results.json`,
+`mutation-*.xml`, `mutation-*.log`, `locked-results.json`,
+`doc-references-locked.log`, `architecture-locked.log`, `gate-no-run.log`.
+`mutate_p80.py` records the exact replacements and selectors;
+`validate_locked.ps1` records lock acquisition and release. No Azure API,
+reference gateway, directory or model call was part of these runs.
+
+### Mutation table
+
+All rows are **caught**, with the baseline and mutant executing the same
+selected test cases. These are retrospective reversion proofs for behavior
+without an earlier RED record, and additional negative proofs for the new
+regressions. They do not relabel the earlier commits as test-first.
+
+| Probe | Baseline / mutant cases | Failed | Seconds |
+|---|---:|---:|---:|
+| catalog-on-demand | 1 / 1 | 1 | 6.750 |
+| owner-entry-check | 2 / 2 | 2 | 10.390 |
+| empty-owner-offer | 1 / 1 | 1 | 5.593 |
+| prefilled-person | 1 / 1 | 1 | 5.813 |
+| prefilled-team | 1 / 1 | 1 | 6.656 |
+| directory-provenance | 2 / 2 | 2 | 9.343 |
+| cached-catalog-provenance | 1 / 1 | 1 | 7.454 |
+| catalog-error-visible | 1 / 1 | 1 | 5.125 |
+| compact-action-width | 2 / 2 | 2 | 5.906 |
+| help-actions | 2 / 2 | 2 | 6.015 |
+| footer-actions | 2 / 2 | 2 | 6.188 |
+| selected-person-button | 1 / 1 | 1 | 4.609 |
+| connection-header | 3 / 3 | 3 | 5.688 |
+| disabled-usd-explanation | 1 / 1 | 1 | 4.719 |
+| independent-usd-capability | 1 / 1 | 1 | 3.984 |
+| compact-footer-height | 2 / 2 | 2 | 6.531 |
+| usd-explanation-visibility | 1 / 1 | 1 | 4.547 |
+| connection-fact-priority | 1 / 1 | 1 | 4.171 |
+| non-overwrite-naming | 1 / 1 | 1 | 2.640 |
+| exclusive-output-race | 1 / 1 | 1 | 3.047 |
+| complete-csv-not-top-100 | 2 / 2 | 2 | 6.672 |
+| one-action-save | 2 / 2 | 2 | 7.047 |
+| custom-export-name | 1 / 1 | 1 | 5.578 |
+| installed-reconciler-offer | 3 / 3 | 2 | 6.234 |
+| reconciler-owner-check | 3 / 3 | 1 | 6.265 |
+| json-output-file | 1 / 1 | 1 | 2.563 |
+| report-preview-no-write | 1 / 1 | 1 | 2.453 |
+| configure-backup | 1 / 1 | 1 | 2.437 |
+| exact-backup-bytes | 1 / 1 | 1 | 2.531 |
+| unattended-force-required | 1 / 1 | 1 | 2.359 |
+| attended-confirmation | 1 / 1 | 1 | 2.375 |
+| explicit-http-options | 2 / 2 | 2 | 2.625 |
+| atomic-profile-replacement | 1 / 1 | 1 | 2.250 |
+| half-switch-disk-rollback | 2 / 2 | 2 | 7.532 |
+| verify-before-live-switch | 1 / 1 | 1 | 5.110 |
+| selected-profile-path | 2 / 2 | 1 | 2.344 |
+| profile-preview-conflict | 1 / 1 | 1 | 4.844 |
+| connection-wait-estimate | 1 / 1 | 1 | 4.515 |
+| late-profile-conflict | 1 / 1 | 1 | 5.266 |
+| guide-section-order | 1 / 1 | 1 | 1.313 |
+| guide-factual-prose | 1 / 1 | 1 | 1.313 |
+| guide-retained-evidence | 1 / 1 | 1 | 1.219 |
+| guide-connection-link | 1 / 1 | 1 | 1.172 |
+| duplicate-connection-instructions | 1 / 1 | 1 | 1.172 |
+| snapshot-source-drift | 1 / 1 | 1 | 2.109 |
+| snapshot-image-drift | 1 / 1 | 1 | 2.000 |
+| snapshot-grid-drift | 1 / 1 | 1 | 1.968 |
+| snapshot-output-inventory | 1 / 1 | 1 | 2.188 |
+| snapshot-hash-format | 1 / 1 | 1 | 2.282 |
 
 ### CONTRACT / acceptance
 
-- [ ] People and Budgets show visible actions: Add person to team for owners, Set budget, Set USD budget or a disabled USD explanation, and Chargeback report. Footer and Help list the same actions. All write paths remain preview-first.
-- [ ] Add person loads the team/unit catalog on demand through the guarded path when opened from People before Budgets.
-- [ ] Empty People search offers owners "Add `<email>` to `<team>`" and opens the add form with email and team filled. Non-owners see a plain explanation.
-- [ ] One chargeback action writes the complete month CSV to a default reports folder without overwriting, shows the full path, and offers the reconciled P50 report when installed. CLI keeps or adds `aum report chargeback --month YYYY-MM`.
-- [ ] Settings explains the current connection kind and address, "Change connection" previews Direct / AUM service / Turnstile, saves with a timestamped backup, reconnects and verifies `whoami`, and rolls back on failure. Header names the connection as "via ...". Attended `aum configure --save` over an existing profile asks before replacing and keeps a backup; unattended still refuses unless `--force`.
-- [ ] `docs/AUM.md` starts with Install, then Connect, First run and screen tour, task how-to sections, Reference and Troubleshooting. Existing facts/evidence are moved or linked, not dropped. `FINOPS-TOOLS.md`, `FINOPS.md` and `CLI-FINOPS.md` point to the AUM sections instead of repeating steps. Images and manifest are regenerated if screen inputs change.
-- [ ] Tests and mutation probes cover: on-demand catalog load, owner check, non-overwrite naming, configure backup, half-switch rollback.
-- [ ] STATUS records RED/GREEN counts, mutation table, full AUM suite count/seconds and U38-U41 only for P80 unknowns; CHANGELOG is updated.
+- [x] People and Budgets show visible actions: Add person to team for owners, Set budget, Set USD budget or a disabled USD explanation, and Chargeback report. Footer and Help list the same actions. All write paths remain preview-first. Evidence: `test_p80_usability.py` verifies button geometry, compositor text, two-line hints, Help, selected-person preview, non-owner refusal and independent USD capability; `8dd9eff`, `34852af`, `e3c2791`.
+- [x] Add person loads the team/unit catalog on demand through the guarded path when opened from People before Budgets. Evidence: on-demand selection with no Budgets cache, visible catalog failure, directory changes before/during the read and cached-catalog rejection; corresponding mutation rows all caught; `8dd9eff`.
+- [x] Empty People search offers owners "Add `<email>` to `<team>`" and opens the add form with email and team filled. Non-owners see a plain explanation. Evidence: owner/non-owner empty-result tests and real button-to-picker-to-form path in `test_p80_usability.py`; prefilled-person/team and owner-offer probes caught.
+- [x] One chargeback action writes the complete month CSV to a default reports folder without overwriting, shows the full path, and offers the reconciled P50 report when installed. CLI keeps or adds `aum report chargeback --month YYYY-MM`. Evidence: `test_p80_reports.py` verifies one click, 137 rows, platform folders, exact absolute path, existing/racing files, installed/absent generator, owner restrictions, JSON output and no-file preview; `9134110`.
+- [x] Settings explains the current connection kind and address, "Change connection" previews Direct / AUM service / Turnstile, saves with a timestamped backup, reconnects and verifies `whoami`, and rolls back on failure. Header names the connection as "via ...". Attended `aum configure --save` over an existing profile asks before replacing and keeps a backup; unattended still refuses unless `--force`. Evidence: `test_p80_connection.py` and the three connection-label cases; exact-byte backups, original/missing-profile rollback, backup/replace failure, earlier/later profile conflicts, old-engine retention and selected-profile-path checks; `d0c48a0`, `34852af`.
+- [x] `docs/AUM.md` starts with Install, then Connect, First run and screen tour, task how-to sections, Reference and Troubleshooting. Existing facts/evidence are moved or linked, not dropped. `FINOPS-TOOLS.md`, `FINOPS.md` and `CLI-FINOPS.md` point to the AUM sections instead of repeating steps. Images and manifest are regenerated if screen inputs change. Evidence: six ordered top-level sections, 146 retained link targets, all 42 guide references passing, 24 regenerated Example SVGs/four grids with portable hashes, and architecture checks; `dee0d01`, `34852af`, `2d41f69`.
+- [x] Tests and mutation probes cover: on-demand catalog load, owner check, non-overwrite naming, configure backup, half-switch rollback. Evidence: all five named probes caught, plus 44 related probes, with identical baseline/mutant test IDs/counts and no collection errors; 614-test full AUM suite passed.
+- [x] STATUS records RED/GREEN counts, mutation table, full AUM suite count/seconds and U38-U41 only for P80 unknowns; CHANGELOG is updated. Evidence: the tables above, four closed P80 unknowns, ADR-0038, CHANGELOG and README; no other unknown IDs or ROADMAP changes.
+
+### Local commits and remaining review
+
+The earlier commits remain unchanged: `cd92f47` (contract), `450e817` (People
+actions), `2043448` (CLI chargeback), `be12957` (guide start) and `b1dfcd4`
+(snapshots/guarded test inputs). The resumed green commits are:
+
+| Commit | Subject |
+|---|---|
+| `8dd9eff` | `fix(p80): complete visible actions and guarded people entry` |
+| `d0c48a0` | `feat(p80): save and verify connections with local rollback` |
+| `9134110` | `fix(p80): save complete chargeback from one terminal action` |
+| `dee0d01` | `docs(p80): preserve installation-first guide and capture provenance` |
+| `34852af` | `fix(p80): keep action context visible at 80 columns` |
+| `e3c2791` | `fix(p80): preserve independent usd budget capability` |
+| `2d41f69` | `fix(p80): normalize capture hashes across checkouts` |
+
+| Remaining step | State |
+|---|---|
+| Architect, Coder, QA, UX and Security council seats | Pending; the lead runs the council |
+| Full packet gate, including Test-All/build | Pending after council; the no-run audit is not a substitute |
+| Owner review and merge authorization | Held until after the 2026-09-29 customer deployment |
+| Live customer, reference gateway or directory validation | Not run; no Azure operations authorized in P80 |
+
+No push, merge, force-push, history rewrite, authority-rule change or Turnstile
+USD writer is included. Token forms keep their existing defaults. P80 has no
+blocking question for the owner; the later owner review is still required.
 
 **Active packets (2026-09-28, run in parallel worktrees):** P69 the company address in the flow, P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
