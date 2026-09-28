@@ -118,26 +118,41 @@ function Get-ClaudeFlowDiscovery {
         elseif ($read) {
             $live = $read.Value
             $gateway = [pscustomobject]@{
+                id = [string]$live.id
                 name = [string]$live.name
                 resourceGroup = $recordGroup
                 location = ConvertTo-ClaudeArmRegionName ([string]$live.location)
                 sku = if ($live.sku) { [string]$live.sku.name } else { '' }
                 publisherEmail = [string]$live.publisherEmail
                 gatewayUrl = [string]$live.gatewayUrl
+                hostnameConfigurations = @($live.hostnameConfigurations)
             }
             $recordUrl = if ($Record.gatewayUrl) { ([string]$Record.gatewayUrl).TrimEnd('/') } else { '' }
             $liveUrl = $gateway.gatewayUrl.TrimEnd('/')
-            if ($recordUrl -and $liveUrl -and -not ($recordUrl -eq $liveUrl -or $recordUrl.StartsWith($liveUrl + '/', [StringComparison]::OrdinalIgnoreCase))) {
+            $companyMatch = $false
+            $parsedUrl = $null
+            if ([uri]::TryCreate($recordUrl, [UriKind]::Absolute, [ref]$parsedUrl) -and $parsedUrl.Scheme -eq 'https' -and
+                $parsedUrl.Port -eq 443 -and -not $parsedUrl.UserInfo -and -not $parsedUrl.Query -and -not $parsedUrl.Fragment) {
+                $companyMatch = @($live.hostnameConfigurations | Where-Object { $_.type -eq 'Proxy' -and $_.hostName -ieq $parsedUrl.DnsSafeHost }).Count -eq 1
+            }
+            if ($recordUrl -and $liveUrl -and -not ($recordUrl -eq $liveUrl -or $recordUrl.StartsWith($liveUrl + '/', [StringComparison]::OrdinalIgnoreCase) -or $companyMatch)) {
                 $differences.Add("record gatewayUrl '$($Record.gatewayUrl)' differs from live '$($gateway.gatewayUrl)'")
             }
         }
     }
 
     if ($differences.Count) { $status = 'drift' }
+    $recovery = $null
+    if ($gateway -and $Record.pendingAddress -and $differences.Count -eq 1) {
+        . (Join-Path $PSScriptRoot 'FlowContract.ps1')
+        . (Join-Path (Split-Path $PSScriptRoot -Parent) 'ClaudeGatewayAddressRecovery.ps1')
+        $recovery = Get-ClaudeAddressRecovery -Record $Record -Gateway $gateway
+    }
     $region = if ($gateway -and $gateway.location) { $gateway.location } else { ConvertTo-ClaudeArmRegionName $recordedRegion }
     [pscustomobject][ordered]@{
         record = $Record
         gateway = $gateway
+        addressRecovery = $recovery
         Region = $(if ($region) { $region } else { $null })
         comparison = [pscustomobject]@{ status = $status; differences = @($differences); reason = $reason }
     }

@@ -123,7 +123,7 @@ try {
     $shadow = Join-Path $scratch 'shadow'
     foreach ($d in 'scripts\flow\lib', 'onboarding') { New-Item -ItemType Directory -Force -Path (Join-Path $shadow $d) | Out-Null }
     Copy-Item -LiteralPath (Join-Path $root 'Start-ClaudeGateway.ps1') -Destination $shadow
-    foreach ($f in 'scripts\ClaudeChoice.ps1', 'scripts\AzureRetailPrice.ps1', 'scripts\ClaudeGatewayRegion.ps1', 'scripts\flow\FlowContract.ps1', 'scripts\flow\Discovery.ps1', 'scripts\flow\Foundation.ps1', 'scripts\flow\lib\LifecycleCommon.ps1') {
+    foreach ($f in 'scripts\ClaudeChoice.ps1', 'scripts\ClaudeGatewayAddressInput.ps1', 'scripts\AzureRetailPrice.ps1', 'scripts\ClaudeGatewayRegion.ps1', 'scripts\flow\FlowContract.ps1', 'scripts\flow\Discovery.ps1', 'scripts\flow\Foundation.ps1', 'scripts\flow\lib\LifecycleCommon.ps1') {
         if (Test-Path -LiteralPath (Join-Path $root $f)) { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $shadow $f) }
     }
     # Offline and deterministic: the shadow prices API Management from fixed rates, not the Retail Prices API.
@@ -139,7 +139,7 @@ function Get-AzureRetailPrice {
 function Get-AzureRetailPriceUnavailableReason { '' }
 function ConvertTo-MonthlyPrice { param([decimal]$HourlyPrice, [int]$Units = 1) [math]::Round($HourlyPrice * 730 * $Units, 2) }
 '@
-    $installerParams = @('SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'ExistingApimName', 'EntitlementStore', 'AuthMode', 'DesktopSignInKind', 'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience', 'DesktopEntraResource', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode', 'TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup')
+    $installerParams = @('SubscriptionId', 'FoundryAccount', 'FoundryResourceGroup', 'ResourceGroup', 'Location', 'NamePrefix', 'PublisherEmail', 'Sku', 'ExistingApimName', 'EntitlementStore', 'AuthMode', 'DesktopSignInKind', 'DesktopEntraClientId', 'DesktopEntraIssuer', 'DesktopEntraScopes', 'DesktopEntraAudience', 'DesktopEntraResource', 'ModelOrganizationName', 'ModelIndustry', 'ModelCountryCode', 'TpmStandard', 'QuotaStandard', 'TpmPremium', 'QuotaPremium', 'QuotaOrg', 'CallsPerMinute', 'StandardGroup', 'PremiumGroup', 'AddressMode')
     $stubInstaller = @(
         '[CmdletBinding(SupportsShouldProcess)]'
         'param('
@@ -484,6 +484,7 @@ function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Budgets
         'Where to put the gateway' = 'region'; 'Choices' = 'entitlement store'; 'Budgets' = 'token budgets'; 'Standard tier' = 'token budgets for each tier'
         'Premium tier' = 'token budgets for each tier'; 'Organisation ceiling' = 'organisation ceiling'; 'Safety valve' = 'request ceiling'
         'Entitlement groups' = 'Entra groups'; 'Business units (optional)' = 'business units'
+        'Company address, certificate and DNS' = 'certificate source and DNS hosting'
     }
     $headings = @([regex]::Matches($installerText, "(?m)Write-(?:Step|Head)\s+'([^']+)'") | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
     $unnamed = @($headings | Where-Object { $_ -notin $asksNothing -and -not $named.Contains($_) })

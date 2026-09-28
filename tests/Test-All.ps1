@@ -219,6 +219,14 @@ try {
     Invoke-Check 'Secure projection and the migration'     'Test-SecureProjection.ps1' -SerialLane
     Invoke-Check 'Enterprise network edge contract'         'Test-NetworkEdge.ps1' -SerialLane
     Invoke-Check 'Network ARM transport and ownership'       'Test-NetworkTransport.ps1'
+    Invoke-Check 'Company address plan, apply and publication' 'Test-CompanyAddress.ps1' -SerialLane
+    Invoke-Check 'Company certificate and TLS boundaries'    'Test-CompanyCertificate.ps1'
+    Invoke-Check 'Company address guided-flow integration'   'Test-CompanyFlow.ps1'
+    Invoke-Check 'Company address detectors reject mutations' 'Test-CompanyAddressNegative.ps1' -SerialLane -TimeoutSeconds 900
+    Invoke-Check 'Company mutation runner retains isolation' 'Test-CompanyMutationRunner.ps1'
+    Invoke-Check 'Flow proposals remain separate from applied decisions' 'Test-FlowAppliedState.ps1'
+    Invoke-Check 'Company installer executes approval boundaries' 'Test-CompanyInstaller.ps1'
+    Invoke-Check 'Address checks enforce their remaining deadline' 'Test-AddressDeadline.ps1' -SerialLane
     Invoke-Check 'Network access impact and uncertainty'     'Test-NetworkImpact.ps1'
     Invoke-Check 'Network decisions and cost deltas'         'Test-NetworkDecisions.ps1'
     Invoke-Check 'Network explicit change approval'          'Test-NetworkApproval.ps1'

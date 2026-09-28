@@ -37,6 +37,7 @@ Start with [Setup](docs/SETUP.md) for deployment or
 | Let one guided flow set up, update, change, diagnose and generate the handover guide | [Guided flow](docs/GUIDED-FLOW.md) — `Start-ClaudeGateway.ps1`, review fingerprint, resume and manual equivalents |
 | Use the CLI, VS Code or Desktop on Windows/macOS | [Developer setup](DEVELOPER.md) — prerequisites, setup, verification and fixes |
 | Stand up a gateway | [Setup](docs/SETUP.md) — required roles, installer and portal deployment |
+| Give developers a company gateway address | [Company address](docs/SETUP.md#company-address) — supplied certificate, DNS, component prices and proof before publishing the URL |
 | Update an older gateway or change tier, entitlement, network or Desktop sign-in | [Update and change](docs/UPDATE-AND-CHANGE.md) — fingerprinted plans, snapshots and rollback |
 | Operate people, tiers, teams, budgets or models | [Operations](docs/OPERATIONS.md) — task router and portal paths |
 | Make new Foundry deployments available to tiers and clients | [Models](docs/MODELS.md) — `-Action Change -Change models`, reviewed lists, prices and tier-specific workstation records |

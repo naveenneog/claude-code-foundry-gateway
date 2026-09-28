@@ -25,8 +25,12 @@ $entryPoints = @(@(Get-ChildItem -LiteralPath $root -Filter '*.ps1' -File) + @(G
 $flowScripts = @(@(Get-ChildItem -LiteralPath (Join-Path $root 'scripts\flow') -Recurse -Filter '*.ps1' -File) + $entryPoints)
 $hits = foreach ($f in $flowScripts) {
     $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
+    $lines = [IO.File]::ReadAllLines($f.FullName)
     foreach ($c in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -in 'Sort-Object', 'sort' }, $true)) {
-        '{0}:{1}' -f $f.FullName.Substring($root.Length + 1), $c.Extent.StartLineNumber
+        [pscustomobject]@{
+            Location = '{0}:{1}' -f $f.FullName.Substring($root.Length + 1), $c.Extent.StartLineNumber
+            Signature = $f.FullName.Substring($root.Length + 1) + '|' + $lines[$c.Extent.StartLineNumber - 1].Trim()
+        }
     }
 }
 $entryNames = @($entryPoints | ForEach-Object { $_.FullName.Substring($root.Length + 1) })
@@ -34,7 +38,6 @@ $mustLoad = @('Start-ClaudeGateway.ps1', 'scripts\Update-ClaudeGateway.ps1', 'In
     'scripts\ClaudeModelPrices.ps1', 'scripts\ClaudeModelDeployment.ps1', 'scripts\ClaudeGatewayRegion.ps1')
 $missing = @($mustLoad | Where-Object { $entryNames -notcontains $_ })
 Assert 'the scan covers the scripts that load FlowContract.ps1: the orchestrator, the Update, the installer, the model lifecycle, prices, deployments and regions' (-not $missing.Count) ("missing: " + ($missing -join ', '))
-Assert 'the flow''s scripts hold no Sort-Object: every sort uses Sort-ClaudeFlowOrdinal' (@($hits).Count -eq 0) (@($hits) -join ', ')
 
 # ------------------------------------------------------------------ every sort the plans can reach
 # The scripts that the fingerprinted plans load: Start-ClaudeGateway.ps1 and every step module, the
@@ -48,6 +51,7 @@ Assert 'the flow''s scripts hold no Sort-Object: every sort uses Sort-ClaudeFlow
 # A listed sort that is gone or changed fails too, so the list is read again when its code changes.
 $valueKey = 'value key: numbers, times and versions compare by value on both shells'
 $allowed = @(
+    @{ File = 'scripts\ClaudeNetwork.ps1'; Line = '$overlap = @($used | Where-Object { $_.First -le $cursor+$step-1 -and $_.Last -ge $cursor } | Sort-Object Last)'; Reason = $valueKey }
     @{ File = 'scripts\AzureRetailPrice.ps1'; Line = '@($rows | Sort-Object { [decimal]$_.tierMinimumUnits })[0]'; Reason = $valueKey }
     @{ File = 'scripts\AzureRetailPrice.ps1'; Line = '@($rows | Sort-Object { [decimal]$_.tierMinimumUnits })[-1]'; Reason = $valueKey }
     @{ File = 'scripts\AzureRetailPrice.ps1'; Line = '$pick = @($_.Group | Sort-Object { [decimal]$_.tierMinimumUnits })[-1]'; Reason = $valueKey }
@@ -66,6 +70,9 @@ $allowed = @(
     @{ File = 'scripts\ClaudeTurnstileApply.ps1'; Line = 'foreach ($item in @($Snapshot.BudgetItems | Where-Object { $_.scope_type -in ''organization'', ''department'' } | Sort-Object scope_type, scope_id)) {'; Reason = 'in-process: revisions compared key by key; their order reaches only the apply report' }
     @{ File = 'scripts\ClaudeTurnstileApply.ps1'; Line = '$keys = @(@($revisions.Keys) + @($latest.Keys) | Sort-Object -Unique)'; Reason = 'in-process: a set of keys, each compared on its own' }
 )
+$allowedSignatures = @($allowed | ForEach-Object { $_.File + '|' + $_.Line })
+$unlistedEntries = @($hits | Where-Object { $_.Signature -notin $allowedSignatures })
+Assert 'the flow''s scripts use ordinal sorting or an exact documented exception' ($unlistedEntries.Count -eq 0) (@($unlistedEntries | ForEach-Object Location) -join ', ')
 $repoScripts = @(Get-ChildItem -LiteralPath $root -Recurse -Filter '*.ps1' -File | Where-Object { $_.FullName.Substring($root.Length + 1) -notmatch '^(tests|node_modules|\.git)\\' })
 $closureRoots = @(@('Start-ClaudeGateway.ps1', 'scripts\Update-ClaudeGateway.ps1', 'scripts\Sync-ClaudeModels.ps1', 'Install-ClaudeGateway.ps1' | ForEach-Object { Join-Path $root $_ }) +
     @(Get-ChildItem -LiteralPath (Join-Path $root 'scripts\flow') -Recurse -Filter '*.ps1' -File | ForEach-Object { $_.FullName }))

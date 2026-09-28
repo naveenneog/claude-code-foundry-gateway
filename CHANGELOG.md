@@ -29,6 +29,23 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P69 council corrections.** Inherited addresses are resolved before Foundation approval;
+  proposed decisions no longer overwrite applied state or history; failed replacements have a
+  narrowly scoped recovery review; Azure transitions reconcile metadata and generated settings.
+  Checks enforce remaining deadlines and clean private worker files on cancellation. PFX uploads
+  use the validated byte buffer. The positive delegated-domain TLS proof is explicitly deferred
+  to P74 by the lead, not marked complete.
+  Round 2 adds explicit cross-decision results and removals, applied-only Status/Guide/discovery,
+  installer recovery receipts and legacy subscription resolution. DesktopSignIn and Models retain
+  their profile decisions, and a failed Models profile generation does not publish proposed state.
+- **Company address in the installer and guided flow (P69).** The company choice now plans
+  and applies public DNS, a supplied PFX or Key Vault certificate, and a preserved APIM Proxy
+  hostname, with component prices before approval. `-Change address` uses the same fingerprinted
+  plan. A trusted, pinned HTTPS gateway response precedes publication to developer settings.
+  The isolated Basic v2 proof established authoritative DNS but could not bind its undelegated
+  `.test` name: Azure requires public CNAME ownership. No free managed certificate is available
+  on v2; the positive company TLS proof remains blocked without a delegated domain
+  ([Setup](docs/SETUP.md#company-address), [ADR-0033](docs/adr/0033-company-address.md)).
 - **Reviewed model lifecycle (P70).** `-Action Change -Change models` and
   `scripts/Sync-ClaudeModels.ps1` discover the selected Foundry account, show deployment
   model/version/SKU/capacity and price status, accept per-deployment tier choices, snapshot

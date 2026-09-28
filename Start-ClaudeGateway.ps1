@@ -13,7 +13,8 @@ param(
     [string]$FlowModulePath,
     [hashtable]$NonInteractiveAnswers,
     [string]$AnswersPath,
-    [switch]$SupportBundle
+    [switch]$SupportBundle,
+    [securestring]$AddressCertificatePassword
 )
 
 $ErrorActionPreference = 'Stop'
@@ -40,7 +41,7 @@ $discoveryScript = Join-Path $root 'scripts\flow\Discovery.ps1'
 if (Test-Path -LiteralPath $discoveryScript) { . $discoveryScript }
 
 $script:ExpectedFlowSteps = @(
-    'Foundation', 'Tier', 'Entitlement', 'Network', 'DesktopSignIn', 'Models',
+    'Foundation', 'Tier', 'Entitlement', 'Network', 'DesktopSignIn', 'Address', 'Models',
     'FinOps', 'Budgets', 'Monitoring', 'Reports', 'DeviceProfiles', 'Verify', 'Guide'
 )
 
@@ -92,11 +93,12 @@ function Get-FlowDecisionPath {
 
 function Write-FlowDecisionRecord {
     param($Record, [string]$Path)
-    $hadPath = $Record.PSObject.Properties.Name -contains '__recordPath'
-    $oldPath = if ($hadPath) { $Record.__recordPath } else { $null }
-    if ($hadPath) { $Record.PSObject.Properties.Remove('__recordPath') }
-    try { Write-ClaudeDecisionRecord -Record $Record -Path $Path }
-    finally { if ($hadPath) { Set-FlowRecordProperty $Record '__recordPath' $oldPath } }
+    $persisted = Copy-ClaudeFlowValue $Record
+    $persisted.PSObject.Properties.Remove('__recordPath')
+    if ($null -ne $script:FlowAppliedDecisions) {
+        Set-FlowRecordProperty $persisted 'decisions' (Copy-ClaudeFlowValue $script:FlowAppliedDecisions)
+    }
+    Write-ClaudeDecisionRecord -Record $persisted -Path $Path
 }
 
 function Remove-FlowRecordProperty {
@@ -116,14 +118,19 @@ function Read-FlowAnswers {
     if ($InlineAnswers) {
         foreach ($key in $InlineAnswers.Keys) { $answers[$key] = $InlineAnswers[$key] }
     }
+    foreach ($key in $answers.Keys) {
+        if ($key -match '^(address|foundation)\..*(password|encodedCertificate)$') { throw 'Certificate passwords and bytes cannot be stored in answers. Use the transient -AddressCertificatePassword SecureString parameter.' }
+    }
     return $answers
 }
 
 function Set-FlowAnswersOnRecord {
-    param($Record, [hashtable]$Answers)
+    param($Record, [hashtable]$Answers, [string[]]$DecisionKeys)
     if (-not $Answers) { return }
     foreach ($key in $Answers.Keys) {
-        if ([string]$key -match '\.') { Set-FlowDecisionPath -Record $Record -Path ([string]$key) -Value $Answers[$key] }
+        if ([string]$key -match '\.' -and ([string]$key -split '\.',2)[0] -in $DecisionKeys) {
+            Set-FlowDecisionPath -Record $Record -Path ([string]$key) -Value $Answers[$key]
+        }
     }
 }
 
@@ -204,6 +211,10 @@ function Assert-RecordMatchesLive {
         $diffs = @($Discovery.comparison.differences | Where-Object { $_ })
     }
     if ($diffs.Count) {
+        if ($Action -eq 'Change' -and $Change -eq 'address' -and $Discovery.addressRecovery -and $Discovery.addressRecovery.Allowed) {
+            Write-Host 'The prior address change is unverified. Only its matching recovery can be reviewed; a new fingerprint is required.' -ForegroundColor Yellow
+            return
+        }
         throw ("The decision record does not match live state; refusing to apply over drift.`n - " + ($diffs -join "`n - "))
     }
 }
@@ -233,7 +244,20 @@ function Invoke-Questions {
         $questions = @(& $step.Questions -Record $Record -Discovery $Discovery)
         foreach ($q in $questions) {
             if (-not $q.Key) { throw "Step '$($step.Info.Name)' returned a question without a key." }
+            if ($q.PSObject.Properties.Name -contains 'When' -and -not (& $q.When $Record)) { continue }
             $existing = Get-FlowDecisionPath -Record $Record -Path ('decisions.' + $q.Key)
+            if ($q.PSObject.Properties.Name -contains 'Type' -and $q.Type -eq 'Text') {
+                if ($script:FlowAnswers.ContainsKey($q.Key)) { $value = $script:FlowAnswers[$q.Key] }
+                elseif (Test-ClaudeInteractive) {
+                    $value = Read-Host "$($q.Question)$(if ($existing) { " [$existing]" })"
+                    if (-not $value) { $value = $existing }
+                }
+                else { $value = $existing }
+                if ($null -ne $value -and $value -isnot [string]) { throw "Answer '$($q.Key)' must be text, not a list or object." }
+                if (-not $q.Optional -and [string]::IsNullOrWhiteSpace($value)) { throw "Answer '$($q.Key)' is required in -AnswersPath or -NonInteractiveAnswers." }
+                Set-FlowDecisionPath -Record $Record -Path $q.Key -Value ([string]$value)
+                continue
+            }
             if ($CurrentAction -ne 'Change' -and $null -ne $existing -and "$existing" -ne '') { continue }
             if ($CurrentAction -eq 'Change' -and $null -ne $existing -and "$existing" -ne '') {
                 $q.Options = @(Set-CurrentOptionRecommended -Options @($q.Options) -Current $existing)
@@ -306,6 +330,8 @@ function Invoke-ApplySteps {
     param($Steps, $Plans, $Record, [string]$Path, [string]$CurrentAction, [string]$RunId)
     # Read after the first step runs, so no Azure call waits in front of the installer (ADR-0032).
     $principal = $null
+    if ($null -eq $script:FlowAppliedDecisions) { $script:FlowAppliedDecisions = Copy-ClaudeFlowValue $Record.decisions }
+    $proposals = Copy-ClaudeFlowValue $Record.decisions
     $release = Get-ClaudeFlowReleaseInfo -Repo $root
     for ($i = 0; $i -lt $Steps.Count; $i++) {
         $step = $Steps[$i]
@@ -314,17 +340,36 @@ function Invoke-ApplySteps {
             Write-Host "Skipping completed step: $($step.Info.Name)" -ForegroundColor DarkGray
             continue
         }
-        $before = if ($step.Info.DecisionKey) { Get-ClaudeDecision -Record $Record -Key $step.Info.DecisionKey } else { $null }
+        $before = if ($step.Info.DecisionKey) { Copy-ClaudeFlowValue $script:FlowAppliedDecisions.PSObject.Properties[$step.Info.DecisionKey].Value } else { $null }
         Write-Host "Applying $($step.Info.Name)..." -ForegroundColor Cyan
-        $changes = & $step.Invoke -Record $Record -Plan $plan
-        if ($null -eq $principal) { $principal = Get-FlowPrincipal }
-        foreach ($key in @($changes.Keys)) {
-            if ($key -eq $step.Info.DecisionKey) { Set-ClaudeDecision -Record $Record -Key $key -Value $changes[$key] }
-            else { Set-FlowRecordProperty $Record $key $changes[$key] }
+        $stepRecord = Copy-ClaudeFlowValue $Record
+        Set-FlowRecordProperty $stepRecord decisions (Copy-ClaudeFlowValue $script:FlowAppliedDecisions)
+        if ($step.Info.DecisionKey -and $proposals.PSObject.Properties.Name -contains $step.Info.DecisionKey) {
+            Set-ClaudeDecision $stepRecord $step.Info.DecisionKey (Copy-ClaudeFlowValue $proposals.($step.Info.DecisionKey))
         }
-        if ($changes.ContainsKey($step.Info.DecisionKey) -eq $false -and $step.Info.DecisionKey) {
-            $afterDecision = Get-ClaudeDecision -Record $Record -Key $step.Info.DecisionKey
-        } else { $afterDecision = $changes[$step.Info.DecisionKey] }
+        $invokeArgs = @{ Record = $stepRecord; Plan = $plan }
+        if ($step.Info.Name -eq 'Address' -or ($step.Info.Name -eq 'Foundation' -and $AddressCertificatePassword)) { $invokeArgs.CertificatePassword = $AddressCertificatePassword }
+        $changes = & $step.Invoke @invokeArgs
+        if ($null -eq $principal) { $principal = Get-FlowPrincipal }
+        if ($changes.ContainsKey('decisions')) {
+            $script:FlowAppliedDecisions = if ($null -eq $changes.decisions) { [pscustomobject]@{} } else { Copy-ClaudeFlowValue $changes.decisions }
+        }
+        if ($changes.ContainsKey('DecisionChanges')) {
+            $explicitDecisions = Copy-ClaudeFlowValue $changes.DecisionChanges
+            foreach ($p in $explicitDecisions.PSObject.Properties) { Set-FlowRecordProperty $script:FlowAppliedDecisions $p.Name (Copy-ClaudeFlowValue $p.Value) }
+        }
+        foreach ($key in @($changes.Keys)) {
+            if ($key -in @('decisions','DecisionChanges','RecordChanges','RemovedProperties')) { continue }
+            if ($key -eq $step.Info.DecisionKey) { Set-FlowRecordProperty $script:FlowAppliedDecisions $key (Copy-ClaudeFlowValue $changes[$key]) }
+            else { Set-FlowRecordProperty $Record $key (Copy-ClaudeFlowValue $changes[$key]) }
+        }
+        if ($changes.ContainsKey('RecordChanges')) {
+            $explicitProperties = Copy-ClaudeFlowValue $changes.RecordChanges
+            foreach ($p in $explicitProperties.PSObject.Properties) { Set-FlowRecordProperty $Record $p.Name (Copy-ClaudeFlowValue $p.Value) }
+        }
+        foreach ($name in @($changes.RemovedProperties)) { if ($name) { Remove-FlowRecordProperty $Record $name } }
+        Set-FlowRecordProperty $Record decisions (Copy-ClaudeFlowValue $script:FlowAppliedDecisions)
+        $afterDecision = if ($step.Info.DecisionKey) { Get-ClaudeDecision $Record $step.Info.DecisionKey } else { $null }
         Add-ClaudeDecisionHistory -Record $Record -Action $CurrentAction -Decision $(if ($step.Info.DecisionKey) { $step.Info.DecisionKey } else { $step.Info.Name }) -From $before -To $afterDecision -Principal $principal -Commit $release.commit
         $last = @($Record.history)[@($Record.history).Count - 1]
         Set-FlowRecordProperty $last 'runId' $RunId
@@ -408,7 +453,9 @@ function Get-FlowAttendedLead {
 
 function Get-FlowDiscoveryForSteps {
     param($Record, [string]$CurrentAction, [bool]$Attended)
-    $found = Get-FlowDiscovery -Record $Record
+    $applied = Copy-ClaudeFlowValue $Record
+    if ($null -ne $script:FlowAppliedDecisions) { Set-FlowRecordProperty $applied decisions (Copy-ClaudeFlowValue $script:FlowAppliedDecisions) }
+    $found = Get-FlowDiscovery -Record $applied
     Set-FlowRecordProperty $found 'action' $CurrentAction
     Set-FlowRecordProperty $found 'attended' $Attended
     return $found
@@ -429,10 +476,11 @@ if (-not $Action) {
 
 $RecordPath = Resolve-FlowPath $RecordPath
 $script:FlowAnswers = Read-FlowAnswers -Path $AnswersPath -InlineAnswers $NonInteractiveAnswers
+if ($Action -notin @('Setup','Change')) { $script:FlowAnswers = @{} }
 $record = Read-ClaudeDecisionRecord -Path $RecordPath
 if (-not $record) { $record = New-EmptyDecisionRecord }
+$script:FlowAppliedDecisions = if ($record.decisions) { Copy-ClaudeFlowValue $record.decisions } else { [pscustomobject]@{} }
 Set-FlowRecordProperty $record '__recordPath' $RecordPath
-Set-FlowAnswersOnRecord -Record $record -Answers $script:FlowAnswers
 
 if ($Action -eq 'Update') {
     $update = Join-Path $root 'scripts\Update-ClaudeGateway.ps1'
@@ -489,6 +537,7 @@ if ($Change) {
     $steps = @($steps | Where-Object { $_.Info.DecisionKey -eq $Change -or $_.Info.Name -eq $Change })
     if (-not $steps.Count) { throw "No present guided flow step owns change '$Change'." }
 }
+Set-FlowAnswersOnRecord -Record $record -Answers $script:FlowAnswers -DecisionKeys @($steps | ForEach-Object { $_.Info.DecisionKey })
 
 # A retry of an interrupted second phase plans the same steps, so its fingerprint can match and the
 # steps that run completed are skipped (ADR-0032).
@@ -538,6 +587,7 @@ if ($attended -and -not $afterLead) {
     }
 }
 
+Set-FlowAnswersOnRecord -Record $record -Answers $script:FlowAnswers -DecisionKeys @($steps | ForEach-Object { $_.Info.DecisionKey })
 Invoke-Questions -Steps @($steps | Where-Object { $_.Info.Name -notin $askedFirst }) -Record $record -Discovery $discovery -CurrentAction $Action
 $plans = foreach ($step in $steps) { & $step.Plan -Record $record -Discovery $discovery }
 $review = Format-ClaudeFlowReview -Plans $plans

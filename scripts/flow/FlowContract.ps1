@@ -237,6 +237,27 @@ function Read-ClaudeDecisionRecord {
     catch { throw "The decision record '$Path' is not valid JSON; fix or restore it before running the flow: $($_.Exception.Message)" }
 }
 
+function Copy-ClaudeFlowValue {
+    param($Value)
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [System.Collections.IDictionary]) {
+        $copy=[ordered]@{}
+        foreach($key in $Value.Keys){$copy[[string]$key]=Copy-ClaudeFlowValue $Value[$key]}
+        return [pscustomobject]$copy
+    }
+    if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) {
+        $items=New-Object 'Collections.Generic.List[object]'
+        foreach($item in $Value){$items.Add((Copy-ClaudeFlowValue $item))}
+        return ,$items.ToArray()
+    }
+    if ($Value -is [pscustomobject]) {
+        $copy=[ordered]@{}
+        foreach($p in $Value.PSObject.Properties){$copy[$p.Name]=Copy-ClaudeFlowValue $p.Value}
+        return [pscustomobject]$copy
+    }
+    return $Value
+}
+
 function Get-ClaudeDecisionRecordVersion {
     param([Parameter(Mandatory = $true)]$Record)
     if ($Record.PSObject.Properties.Name -contains 'schemaVersion') { return [int]$Record.schemaVersion }

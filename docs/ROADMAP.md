@@ -498,6 +498,13 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       Enter through an attended re-run resets custom budgets and groups to the installer's defaults;
       `tests/Test-InstallerPermutations.ps1` gains the developer address dimension once P69's
       address parameter is merged
+- [ ] P74 positive company-address TLS proof on an owned, delegated domain — acceptance: the
+      administrator supplies an owned, publicly delegated DNS name and its trusted certificate;
+      the priced, fingerprinted address flow creates the CNAME and gateway binding, then proves
+      trusted HTTPS with the company SNI/Host and matching certificate, obtains a gateway 401 or
+      governed response, and only then publishes the developer URL. The proof records timings,
+      certificate/DNS behavior and cleanup or restoration without altering unrelated resources.
+      P69's authoritative-only `.test` run is not this proof ([ADR-0033](adr/0033-company-address.md))
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so
