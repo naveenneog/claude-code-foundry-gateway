@@ -24,6 +24,15 @@ The lead's five-seat review of `aa7ed19..c82f951` (gpt-6-astra, read-only, 2026-
 returned BLOCK. The following corrections are implemented and targeted checks pass; a passing targeted test is not a
 council re-review verdict.
 
+**Round 1 correction gate: PASS** at `215d43a`, 2026-09-28 02:57:55-03:26:09 UTC.
+The lock was acquired after 840.4 s of 60-second retries and released in `finally`.
+`node .ironclad/gate.mjs --stage packet` exited 0 in 1,694.4 s: 22 passed, 2 warned,
+zero failed, 2 skipped. Test-All completed in 1,684.1 s with 85 registered checks:
+83 PASS, zero FAIL, two existing missing-environment SKIPs (AUM service and AUM Python environments).
+The 1,800-second budget is unchanged; Bicep passed in 8.6 s. The complete 82-mutation check
+passed in 213.5 s in this gate. The branch is ready for the lead's council re-review, not a
+claim that the deferred P74 live criterion is done.
+
 | ID | Seat | Finding | Required evidence |
 |---|---|---|---|
 | A1 | Architect | Inherited custom address writes escaped Foundation pricing and fingerprinting | `d2a61d5`: effective inputs are resolved once, passed exactly and fingerprinted; executable installer/Foundation mutations |
@@ -43,9 +52,9 @@ Round 1 correction evidence, both PowerShell 7 and Windows PowerShell 5.1:
 | `Test-CompanyFlow.ps1` | 27/27 |
 | `Test-CompanyInstaller.ps1` | 11/11, executing the real installer with external services stubbed |
 | `Test-FlowAppliedState.ps1` | 9/9, executing the real orchestrator for an arbitrary step |
-| `Test-AddressDeadline.ps1` | 5/5, including real child-process timeouts and native Azure-command stubs |
+| `Test-AddressDeadline.ps1` | 6/6, including real child-process timeouts, native Azure-command stubs and private-directory ownership |
 | `Test-CompanyMutationRunner.ps1` | 5/5 |
-| `Test-CompanyAddressNegative.ps1` | 81/81; every case runs the full applicable 78/31/27/11/9/5 assertions |
+| `Test-CompanyAddressNegative.ps1` | 82/82; every case runs the full applicable 78/31/27/11/9/6 assertions |
 
 The 81 mutations took 257.1 s on PowerShell 7 and 437.6 s on Windows PowerShell 5.1.
 Each suite owns a temporary directory, including deliberately broken cleanup cases; no assertion
@@ -98,7 +107,7 @@ changing its command budget or test selectors.
       refusal were measured; all proof resources were deleted and the gateway purged below USD 5
 - [x] Redacted, inspected live terminal images numbered 40 onward are embedded in the updated
       setup/flow documentation; architecture sources, images and manifest remain current
-- [ ] The locked packet gate exits 0; the branch and evidence are reported to the lead without
+- [x] The locked packet gate exits 0; the branch and evidence are reported to the lead without
       merging, pushing or ticking the roadmap entry
 
 Implementation: `b10e945` (certificate/TLS), `99ade80` (shared script and installer/Change wiring),
