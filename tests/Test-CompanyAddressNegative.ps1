@@ -4,6 +4,18 @@ $root = Split-Path $PSScriptRoot -Parent
 $temporaryRoot=Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) 'Temp'
 $scratch = Join-Path $temporaryRoot ('company-mutations-' + [guid]::NewGuid().ToString('N'))
 $cases = @(
+    @('start','if \(\$changes.ContainsKey\(''DecisionChanges''\)\)','if ($false)','real DesktopSignIn commits its cross-decision change only after success (False)','R2 A2 explicit cross-decision commit','Test-FlowAppliedState.ps1'),
+    @('desktop','DecisionChanges = @\{ deviceProfiles =','IgnoredDecisionChanges = @{ deviceProfiles =','real DesktopSignIn commits its cross-decision change only after success (False)','R2 A2 real Desktop result declares all changes','Test-FlowAppliedState.ps1'),
+    @('start','if \(\$changes.ContainsKey\(''RecordChanges''\)\)','if ($false)','real Models step preserves applied-only decisions on success and failure (False)','R2 A2 model record changes retained','Test-FlowAppliedState.ps1'),
+    @('start','(?m)^            \$script:FlowAppliedDecisions = if \(\$null -eq \$changes.decisions\).*$','            foreach($p in $changes.decisions.PSObject.Properties){Set-FlowRecordProperty $script:FlowAppliedDecisions $p.Name $p.Value}','Foundation Azure transition removes both company metadata copies through the orchestrator','R2 C2 explicit snapshot replacement','Test-FlowAppliedState.ps1'),
+    @('start','foreach \(\$name in @\(\$changes.RemovedProperties\)\)','foreach ($name in @())','Foundation Azure transition removes both company metadata copies through the orchestrator','R2 C2 explicit property removals','Test-FlowAppliedState.ps1'),
+    @('installer',' -RecordPath \$savedAddressPath','','real installer persists an unverified receipt when replacement HTTPS returns 503','R2 C1 installer receipt path','Test-CompanyInstaller.ps1'),
+    @('recovery','\$subscription=Get-ClaudeFlowRecordSubscription -Record \$Record','$subscription=[string]$Record.subscriptionId','legacy recovery resolves its subscription from the Foundation decision','R2 C1 legacy subscription resolver','Test-CompanyAddress.ps1'),
+    @('start','if \(\$Action -notin @\(''Setup'',''Change''\)\)','if ($false)','Guide plans from applied state and ignores proposed answers','R2 UX Guide ignores proposed answers','Test-FlowAppliedState.ps1'),
+    @('start','(?m)^\$record = Read-ClaudeDecisionRecord -Path \$RecordPath$',('$record = Read-ClaudeDecisionRecord -Path $RecordPath'+"`n"+'if ($record) { Set-FlowAnswersOnRecord -Record $record -Answers $NonInteractiveAnswers -DecisionKeys @(''choice'',''finops'') }'),'Status displays applied decisions rather than unselected proposed answers','R2 UX Status reads the applied record','Test-FlowAppliedState.ps1'),
+    @('contract','return ,\$items.ToArray\(\)','return $items.ToArray()','decision copies retain one-element and multi-element arrays as arrays','R2 copy preserves array shape','Test-FlowAppliedState.ps1'),
+    @('models','DecisionChanges = @\{ deviceProfiles = \$profiles \}','DecisionChanges = @{}','real Models step preserves applied-only decisions on success and failure (False)','R2 Models declares generated-profile decision','Test-FlowAppliedState.ps1'),
+    @('models','(?m)^        \$profiles = Invoke-ClaudeModelWait',( '        Write-ClaudeModelRecord -Record $Record -Path $d.RecordPath'+"`n"+'        $profiles = Invoke-ClaudeModelWait'),'real Models step preserves applied-only decisions on success and failure (True)','R2 Models failed apply cannot publish a proposal','Test-FlowAppliedState.ps1'),
     @('wait','if\(\[IO.Path\]::GetTempPath\(\).TrimEnd\(''\\'',''/''\) -ne \$ExpectedDirectory.TrimEnd\(''\\'',''/''\)\)','if ($false)','a redirected temporary directory is refused before executing a check','U1 private temporary directory ownership','Test-AddressDeadline.ps1'),
     @('installer','(?m)^    if \(\$AddressApprovedPlanFingerprint -and.*\{$','    if ($false) {','real installer fingerprint mismatch rejects every resource write','Q1 executable fingerprint guard','Test-CompanyInstaller.ps1'),
     @('installer','(?m)^if \(-not \(Read-YesNo.*\{$','if ($false) {','real declined custom confirmation creates nothing','Q1 executable decline guard','Test-CompanyInstaller.ps1'),
@@ -93,6 +105,7 @@ $paths = @{
     start = 'Start-ClaudeGateway.ps1'; transport = 'scripts\ClaudeNetwork.ps1'
     installer = 'Install-ClaudeGateway.ps1'; foundation = 'scripts\flow\Foundation.ps1'
     recovery = 'scripts\ClaudeGatewayAddressRecovery.ps1'; wait = 'scripts\ClaudeGatewayAddressWait.ps1'
+    desktop = 'scripts\flow\DesktopSignIn.ps1'; contract = 'scripts\flow\FlowContract.ps1'; models = 'scripts\ClaudeModelLifecycle.ps1'
 }
 function Run-Suite([string]$Test) {
     $pipeline = [powershell]::Create()
@@ -130,7 +143,8 @@ try {
         'scripts\flow\lib\LifecycleCommon.ps1','Install-ClaudeGateway.ps1','Start-ClaudeGateway.ps1','infra\main.bicep',
         'tests\Test-CompanyAddress.ps1','tests\Test-CompanyCertificate.ps1','tests\Test-CompanyFlow.ps1',
         'tests\Test-CompanyInstaller.ps1','tests\Test-FlowAppliedState.ps1','tests\Test-AddressDeadline.ps1',
-        'scripts\Show-Banner.ps1','scripts\Test-Prerequisites.ps1','scripts\ClaudeModelDeployment.ps1','scripts\ClaudeDesktopSignIn.ps1'
+        'scripts\Show-Banner.ps1','scripts\Test-Prerequisites.ps1','scripts\ClaudeModelDeployment.ps1','scripts\ClaudeDesktopSignIn.ps1',
+        'scripts\flow\DesktopSignIn.ps1','scripts\flow\Models.ps1','scripts\ClaudeModelLifecycle.ps1'
     )
     foreach ($file in $files) {
         $to = Join-Path $scratch $file
