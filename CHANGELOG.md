@@ -41,6 +41,8 @@ exact streaming cache-creation detail remains **U13**.
   Council fixes bind credential reuse to verified principal/session generations,
   contain wrappers before execution, share one monotonic credential deadline,
   and surface fatal query errors while identity/capabilities are pending.
+  Read cycles pin that generation immutably and reject obsolete snapshots and
+  complete multi-source aggregates after a verified principal change.
 - **Permutation tests of the guided flow and the installer (P72).** `tests/Test-FlowPermutations.ps1`
   runs the orchestrator over Setup, Change foundation, Guide and Status × six record states ×
   attended, `-PlanOnly` and unattended apply (76 runs, some on Windows PowerShell 5.1), a recorded

@@ -462,6 +462,12 @@ bridge process and one named-value listing. Catalog, tiers, token limits and the
 existing USD converters read that snapshot. Independent Log Analytics queries
 overlap and reuse their HTTP client. A new refresh or any write invalidates the
 snapshot; write preflight, read-back and compensation still use current values.
+The cycle pins an immutable credential generation. A verified principal change
+invalidates every cycle holding the old generation; a cached account cannot
+rebind it. Catalog, tier and USD snapshots, pending budgets, and multi-source
+chargeback, lookup, trend and person-detail results are checked again before
+return. An obsolete aggregate is discarded with the existing sign-in-changed
+exit 3, and a new cycle verifies the current principal.
 
 Overview displays each source as it arrives. Pending panels name their source,
 and the progress line shows an estimate and elapsed time. Estimates are not

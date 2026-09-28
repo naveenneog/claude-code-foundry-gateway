@@ -7,7 +7,7 @@
   "width": 1280,
   "height": 900,
   "outputs": ["docs/images/architecture/aum-readiness.png"],
-  "sources": ["cli/finops/src/claude_finops/backend.py", "cli/finops/src/claude_finops/engine.py", "cli/finops/src/claude_finops/config.py", "cli/finops/src/claude_finops/progressive.py", "cli/finops/src/claude_finops/dashboard.py", "cli/finops/src/claude_finops/http_backend.py", "cli/finops/src/claude_finops/turnstile.py", "cli/finops/src/claude_finops/readiness.py", "cli/finops/src/claude_finops/windows_process.py", "scripts/Invoke-ClaudeFinOps.ps1"],
+  "sources": ["cli/finops/src/claude_finops/backend.py", "cli/finops/src/claude_finops/direct.py", "cli/finops/src/claude_finops/engine.py", "cli/finops/src/claude_finops/feature_engine.py", "cli/finops/src/claude_finops/config.py", "cli/finops/src/claude_finops/progressive.py", "cli/finops/src/claude_finops/dashboard.py", "cli/finops/src/claude_finops/http_backend.py", "cli/finops/src/claude_finops/turnstile.py", "cli/finops/src/claude_finops/readiness.py", "cli/finops/src/claude_finops/windows_process.py", "scripts/Invoke-ClaudeFinOps.ps1"],
   "identifiers": {
     "progress": {"label": "ProgressiveRefresh", "source": "cli/finops/src/claude_finops/progressive.py", "match": "class ProgressiveRefresh:"},
     "diagnose": {"label": "database_failure", "source": "cli/finops/src/claude_finops/readiness.py", "match": "def database_failure("},
@@ -21,9 +21,9 @@
   ],
   "nodes": [
     {"id": "direct", "x": 20, "y": 62, "w": 580, "h": 160, "tone": "blue", "title": "One read cycle",
-     "lines": ["[[tokens]]: verified principal/session and one deadline", "One account check and bridge snapshot per read cycle", "Independent telemetry queries overlap; RBAC label can follow"]},
+     "lines": ["[[tokens]]: verified principal/session and one deadline", "One account check; immutable cycle credential generation", "Independent telemetry queries overlap; RBAC label can follow"]},
     {"id": "sources", "x": 20, "y": 298, "w": 580, "h": 220, "tone": "blue", "title": "Existing sources, unchanged accounting",
-     "lines": ["[[bridge]] lists nonsecret named values once", "Shared catalog, tiers and token/USD converters", "Log Analytics: request-time ledger and priced workspace facts", "A new cycle or any write invalidates the snapshot"]},
+     "lines": ["[[bridge]] lists nonsecret named values once", "Shared catalog, tiers and token/USD converters", "Snapshots and complete aggregates validate their generation", "An obsolete cycle cannot rebind its cached account"]},
     {"id": "panels", "x": 20, "y": 594, "w": 580, "h": 230, "tone": "teal", "title": "Current data, source by source",
      "lines": ["[[progress]] paints each completed source", "Fatal data errors interrupt pending identity/capability waits", "Named waits and estimates; optional failures remain visible", "Changed principals invalidate credentials and old results"]},
     {"id": "probe", "x": 680, "y": 62, "w": 580, "h": 160, "tone": "purple", "title": "Authenticated identity is readiness",

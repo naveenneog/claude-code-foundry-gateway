@@ -148,7 +148,7 @@ outlive the change.
 | Coder | PASS | C1 closed | Suspended wrapper/job assignment retained |
 | QA | PASS | Q1 closed | Process-start and descendant-termination evidence retained |
 | UX | PASS | U1 closed | Fatal data errors interrupt metadata waits |
-| Security | BLOCK | S1: obsolete cycle accounts, snapshots and aggregates remain returnable | Pending: immutable cycle credential generation; reject stale account reuse and validate snapshots/aggregate completion |
+| Security | BLOCK | S1: obsolete cycle accounts, snapshots and aggregates remain returnable | `d6e239c`: immutable cycle generation, no cached-account rebinding, snapshot/read/cycle-completion checks; `2c2eb8f`: one cycle through multi-source assembly |
 
 The two reported A-to-B principal transitions are reproduced offline before the
 fix. The cycle's verified generation is pinned once, not rebound from cached
@@ -157,6 +157,32 @@ generation. A replacement principal needs a new read cycle. Main remains
 `38ad175`, already merged; this round makes no database changes and no new merge.
 The affected pytest selectors, full AUM runner and unchanged locked packet gate
 are rerun after deliberate full-selector mutations.
+
+Both council reproductions failed before the fix: the old catalog remained
+readable after B verification, and A's pending budget returned after A's usage
+query had already completed and B was verified. The first selector reported
+**8 failed, 12 passed**, including cached catalog/tiers/USD variants, bridge and
+assembly delays, and a completed-cycle aggregate. Fresh B reads in that fixture
+remain denied; an obsolete cycle neither returns A's data nor performs a new
+bridge read.
+
+Four further tests showed chargeback, lookup, trend comparison and person detail
+combining completed A data with subsequent B reads (**4 failed, 20 passed**).
+Those pure multi-source operations now keep the same cycle open through
+assembly, matching the existing status/governance cycle boundary. Fresh account
+verification is serialized, so a delayed older account acquisition cannot
+overwrite a newer verified generation.
+
+**Seven round-2 mutations caught**, repeated against the final full **24-case**
+principal selector: disabling the generation check failed 12/24 cases;
+restoring cached-account rebinding failed 9/24; removing final aggregate
+validation failed 1/24. Removing each of the four multi-source cycle boundaries
+failed 1/24. Every mutation ran the entire selector before restoring exact
+source bytes. The restored affected selection passed **83 tests**;
+`Test-FinOps.ps1` executed pytest, not SKIP: **448 passed in 242.17 s**.
+The prior 83 mutation receipts remain historical evidence (90 cumulative).
+The terminal layout is unchanged; the architecture source/image and its
+fingerprints are regenerated for the added cycle boundary.
 
 ### Council round 1 corrections
 

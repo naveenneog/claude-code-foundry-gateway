@@ -498,6 +498,9 @@ concurrently, but no healthy-path database inventory or automatic start is added
 Council round 1 binds resource reuse to a verified principal/session, checks the
 Direct account once per read cycle, and rejects obsolete in-flight results.
 Fatal data errors are observed concurrently with identity and capability reads.
+Council round 2 pins that verified generation immutably to each Direct cycle.
+Snapshot completion and complete multi-source aggregates validate the same
+generation; cached account metadata cannot revive an invalidated cycle.
 
 ![AUM readiness uses bounded authenticated HTTP and read-only Azure diagnosis; Direct shares a snapshot and returns independent sources progressively.](images/architecture/aum-readiness.png)
 
