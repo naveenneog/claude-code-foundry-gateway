@@ -208,6 +208,23 @@ Capture 60 (stopped) and 63 (running Turnstile) remain dated original-packet
 evidence; this round did not recreate either resource state. Updated captures
 61/62 and the U37/principal-bound architecture image were inspected.
 
+**Integrated round-1 gate: PASS, exit 0**, at **`b0e7000`**, on
+2026-09-28 **02:33:58-02:57:38Z**. Test-All completed in **1,408.8 s**, below the
+unchanged 1,800 s budget; build passed in **9.6 s**. Scorecard: 22 passed,
+2 existing warnings, 0 failures; lint/typecheck remain unconfigured. Test-All
+ran **79 checks: 78 PASS, 1 SKIP** (the separate optional AUM service venv).
+The AUM check ran **436 pytest cases, all passed in 224.22 s**, with 227.8 s
+for the enclosing check. The shared lock was obtained after 14 one-minute
+waits and removed in `finally`.
+
+The retained timings file's five slowest checks were business-unit mutation
+shards 0/4 **396.4 s**, 3/4 **301.5 s**, 1/4 **298.6 s**, 2/4 **281.3 s**, and
+Turnstile mutation shard 1/2 **274.5 s**; all passed. Full Test-All output,
+gate receipt and copied timings remain under `.finops-evidence`. No deadline,
+assertion or command was weakened. Only this final ledger update follows the
+passing gate. Council re-review and merge into main remain with the lead;
+ROADMAP P71 remains unticked, and this branch was not pushed.
+
 Implementation is on `p71-aum-speed`, based on `aa7ed19`. The packet gate passed
 at `84bddeb`; the lead owns the council review and merge. The ROADMAP box remains
 open until that merge. The owner's 2026-09-27 investigation measured Turnstile reads
