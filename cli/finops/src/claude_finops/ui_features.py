@@ -109,7 +109,12 @@ class FeatureUI:
                 yield Button("Open", id="advanced-load")
 
     async def refresh_features(self):
-        self.feature_caps = await asyncio.to_thread(self.engine.capabilities, refresh=self.config.backend in {"direct", "aum-service"})
+        features = await asyncio.to_thread(self.engine.capabilities, refresh=self.config.backend in {"direct", "aum-service"})
+        with self.engine.backend.read_guard()():
+            self._apply_features(features)
+
+    def _apply_features(self, features):
+        self.feature_caps = features
         supported = self.feature_caps.get("features", {}).get("supported_views")
         if supported:
             self.allowed_tabs &= set(supported["actions"]) | {key for key, _ in EXTRA_TABS}

@@ -22,6 +22,7 @@ class Engine(FeatureEngine):
         self.month = month or datetime.now(timezone.utc).strftime("%Y-%m")
         self._identity = None
         self._capabilities = None
+        self._capabilities_guard = None
         self._identity_lock = RLock()
         self._capabilities_lock = RLock()
         self.change_reason = ""
@@ -42,13 +43,16 @@ class Engine(FeatureEngine):
     def _read(self, resource, **params):
         if resource == "whoami":
             with self._identity_lock:
-                previous = self._identity
-                self._identity = self.backend.read(resource, month=self.month, **params)
-                identity_keys = ("id", "email", "tenant", "role", "manager_scope")
-                if previous and tuple(previous.get(k) for k in identity_keys) != tuple(self._identity.get(k) for k in identity_keys):
-                    self._capabilities = None
-                    self.backend.invalidate_credentials()
-                return self._identity
+                identity = self.backend.read(resource, month=self.month, **params)
+                with self.backend.identity_update():
+                    previous = self._identity
+                    identity_keys = ("id", "email", "tenant", "role", "manager_scope")
+                    if previous and tuple(previous.get(k) for k in identity_keys) != tuple(identity.get(k) for k in identity_keys):
+                        self._capabilities = None
+                        self._capabilities_guard = None
+                        self.backend.invalidate_credentials()
+                    self._identity = identity
+                    return self._identity
         if resource in self.backend.identity_independent_reads and not params.get("cursor"):
             self.backend.prepare_read(resource)
             return self.backend.read(resource, month=self.month, **params)

@@ -61,12 +61,15 @@ for noun in ("budget", "usd", "people", "developer", "governance", "tier", "requ
 def emit(ctx, operation, *, mutation=False):
     state = ctx.obj
     try:
-        result = operation(state["engine"])
-        if mutation and not result.get("preview", True) and result.get("requested_at"):
-            if result.get("scope_type") != "user" and not state["engine"].backend.immediate_writes:
-                result["apply_status"] = state["engine"].wait_for_apply(result["requested_at"])
-        display(state["redactor"].present(result), as_json=state["json"], plain=state["plain"], no_color=state["no_color"])
-        return result
+        with state["engine"].backend.read_cycle():
+            result = operation(state["engine"])
+            if mutation and not result.get("preview", True) and result.get("requested_at"):
+                if result.get("scope_type") != "user" and not state["engine"].backend.immediate_writes:
+                    result["apply_status"] = state["engine"].wait_for_apply(result["requested_at"])
+            shown = state["redactor"].present(result)
+            with state["engine"].backend.read_guard()():
+                display(shown, as_json=state["json"], plain=state["plain"], no_color=state["no_color"])
+            return result
     except FinOpsError as error:
         state["redactor"].present(error.details)
         display(state["redactor"].present(dict(error=str(error), exit_code=error.code)),

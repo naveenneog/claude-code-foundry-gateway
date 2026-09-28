@@ -73,6 +73,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
         self.dimension = "organization"
         self.interval = "day"
         self.data = {}
+        self._data_guards = {}
         self.records = {}
         self.pending_selection = None
         self.filters = {}
@@ -347,6 +348,17 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
                     accessibility="--plain, --no-color, --ascii; Tab/Shift+Tab; all states have words")
 
     def render_tab(self, tab, data):
+        previous = self._data_guards.get(tab)
+        if previous is not None and previous[0] is not data:
+            return
+        guard = previous[1] if previous is not None else self.engine.backend.read_guard()
+        try:
+            with guard():
+                self._render_tab(tab, data)
+        except FinOpsError as error:
+            self._show_read_error(tab, error)
+
+    def _render_tab(self, tab, data):
         utc = self.engine.backend.name == "Example"
         _, _, records, _ = view_rows(tab, data, ascii_only=self.config.ascii, utc=utc)
         columns, rows, _, note = view_rows(tab, self.present(data), ascii_only=self.config.ascii, utc=utc)

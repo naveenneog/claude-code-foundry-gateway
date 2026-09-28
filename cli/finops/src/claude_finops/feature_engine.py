@@ -42,11 +42,18 @@ class FeatureEngine:
                     basis="Latest request in the selected month; no all-time last-seen value is guessed.")
 
     def capabilities(self, refresh=False):
-        with self._capabilities_lock:
+        with self.backend.read_cycle(), self._capabilities_lock:
             if self._identity is None:
                 self.read("whoami")
             if refresh or self._capabilities is None:
-                self._capabilities = self.backend.read("capabilities", identity=self._identity)
+                result = self.backend.read("capabilities", identity=self._identity)
+                guard = self.backend.read_guard()
+                with guard():
+                    self._capabilities = result
+                    self._capabilities_guard = guard
+            if self._capabilities_guard is not None:
+                with self._capabilities_guard():
+                    return self._capabilities
             return self._capabilities
 
     def has_feature(self, name, action="read"):

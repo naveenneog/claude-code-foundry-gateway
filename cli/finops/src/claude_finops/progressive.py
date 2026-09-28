@@ -27,6 +27,13 @@ SOURCES = {
 
 
 class ProgressiveRefresh:
+    def publish_tab(self, tab, data):
+        guard = self.engine.backend.read_guard()
+        with guard():
+            self.data[tab] = data
+            self._data_guards[tab] = (data, guard)
+            self.render_tab(tab, data)
+
     def _current_refresh(self, serial, tab):
         return (self.is_running and self._refresh_serial == serial
                 and bool(self.query("#main-tabs")) and self.active == tab)
@@ -156,8 +163,9 @@ class ProgressiveRefresh:
                 else:
                     if not self._current_refresh(serial, tab):
                         return
-                    self.update_access(identity, preserve_current=independent and not self.identity)
-                    self._show_identity()
+                    with self.engine.backend.read_guard()():
+                        self.update_access(identity, preserve_current=independent and not self.identity)
+                        self._show_identity()
                     if tab not in self.allowed_tabs:
                         return
                     await self._metadata_or_data_error(
@@ -170,8 +178,7 @@ class ProgressiveRefresh:
                 data = await self._tracked_read(tab + "_view", data_task, serial, tab)
                 if not self._current_refresh(serial, tab):
                     return
-                self.data[tab] = data
-                self.render_tab(tab, data)
+                self.publish_tab(tab, data)
                 mode = "[redacted/read-only] " if self.redactor.enabled else ""
                 if identity_error:
                     status = identity_error + " | Current data is Azure-authorized; edits are disabled."
@@ -236,8 +243,7 @@ class ProgressiveRefresh:
                 else:
                     data[key] = result
                 if self._current_refresh(serial, tab):
-                    self.data[tab] = data
-                    self.render_tab(tab, data)
+                    self.publish_tab(tab, data)
                     self._show_wait()
             data.pop("_pending")
             if not data["_errors"]:

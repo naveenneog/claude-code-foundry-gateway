@@ -6,6 +6,7 @@ import subprocess
 import base64
 import time
 from threading import RLock
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -62,6 +63,13 @@ def validate_resource_principal(credential: CredentialContext):
     with _resource_token_lock:
         if _credential_contexts.get(credential.session) != credential:
             raise FinOpsError("Azure sign-in changed. Refresh the current principal before reading data.", 3)
+
+
+@contextmanager
+def resource_principal_guard(credential: CredentialContext):
+    with _resource_token_lock:
+        validate_resource_principal(credential)
+        yield
 
 
 def resource_token(resource, subscription="", tenant_id="", *, force=False, timeout=120, runner=None,

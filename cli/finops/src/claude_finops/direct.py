@@ -15,7 +15,7 @@ import httpx
 
 from .backend import Backend
 from .config import (az, resource_token, bind_resource_principal,
-                     invalidate_resource_principal, validate_resource_principal)
+                     invalidate_resource_principal, validate_resource_principal, resource_principal_guard)
 from .errors import FinOpsError, http_error
 from .rules import identifier, month_window, query_window
 from .capabilities import current_capabilities
@@ -71,6 +71,27 @@ class DirectBackend(Backend):
             if credential is None:
                 raise FinOpsError("Azure sign-in changed. Start a new read cycle for the current principal.", 3)
             self._check_credential(credential)
+
+    def read_guard(self):
+        cycle = self._cycle.get()
+
+        @contextmanager
+        def publish():
+            with self._prepare_lock:
+                credential = cycle.get("credential") if cycle is not None else None
+                if credential is not None:
+                    with resource_principal_guard(credential):
+                        self._check_credential(credential)
+                        yield
+                elif cycle is not None and cycle.get("has_data"):
+                    raise FinOpsError("Azure sign-in changed. Start a new read cycle before publishing data.", 3)
+                else:
+                    yield
+
+        return publish
+
+    def identity_update(self):
+        return self._prepare_lock
 
     def _snapshot(self, resource="read"):
         cycle = self._cycle.get()
