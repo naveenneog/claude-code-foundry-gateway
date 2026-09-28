@@ -476,6 +476,12 @@ try {
         $r.pendingAddress.fingerprint='wrong'
         -not (Get-ClaudeAddressRecovery -Record $r -Gateway $script:live).Allowed
     }
+    Check 'a receipt for another gateway never permits recovery' {
+        $r=Copy-Object $script:recoveryRecord
+        $r.pendingAddress.data.gatewayId=$apimId.Replace('apim-contoso','other-gateway')
+        $r.pendingAddress.fingerprint=Get-ClaudeFlowFingerprint @($r.pendingAddress.data)
+        -not (Get-ClaudeAddressRecovery -Record $r -Gateway $script:live).Allowed
+    }
     Check 'unrelated live hostname drift cannot use address recovery' {
         $g=Copy-Object $script:live
         $g.properties.hostnameConfigurations[1].hostName='changed-portal.contoso.test'

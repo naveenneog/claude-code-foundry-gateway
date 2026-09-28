@@ -127,6 +127,7 @@ catch {$failure=$_.Exception.Message}
     $plan=Get-ClaudeFlowStepPlan $initial ([pscustomobject]@{action='Change';attended=$false})
     Check 'Foundation fingerprints and prices inherited company address inputs' {
         $plan.Data.addressPlan -and $plan.Data.installerArgs.AddressApprovedPlanFingerprint -eq (Get-ClaudeFlowFingerprint @($plan.Data.addressPlan)) -and
+            $plan.Data.addressPlan.Data.Hostname -eq 'old.contoso.test' -and $plan.Data.addressPlan.Data.DnsZoneResourceId -eq $zone -and
             $plan.Data.installerArgs.AddressHostname -eq 'old.contoso.test' -and $plan.Data.installerArgs.AddressDnsZoneResourceId -eq $zone -and @($plan.Costs|Where-Object Item -eq 'Company DNS fixture').Count -eq 1
     }
     $without=[pscustomobject]@{subscriptionId=$sub;apimName='apim-contoso';resourceGroup='rg-contoso';decisions=[pscustomobject]@{foundation=[pscustomobject]@{}}}

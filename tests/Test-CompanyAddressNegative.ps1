@@ -3,6 +3,26 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $scratch = Join-Path ([IO.Path]::GetTempPath()) ('company-mutations-' + [guid]::NewGuid().ToString('N'))
 $cases = @(
+    @('installer','(?m)^    if \(\$AddressApprovedPlanFingerprint -and.*\{$','    if ($false) {','real installer fingerprint mismatch rejects every resource write','Q1 executable fingerprint guard','Test-CompanyInstaller.ps1'),
+    @('installer','(?m)^if \(-not \(Read-YesNo.*\{$','if ($false) {','real declined custom confirmation creates nothing','Q1 executable decline guard','Test-CompanyInstaller.ps1'),
+    @('installer','(?m)^if \(\$WhatIfPreference\) \{ Write-Warn2 ''WhatIf - stopping before any change\.''; return \}$','if ($false) { return }','custom WhatIf creates no deployment or address','Q1 executable WhatIf guard','Test-CompanyInstaller.ps1'),
+    @('installer','(?m)^    \$config.Remove\(''address''\)$','    $null = $config','Azure transition clears both company metadata copies','C2 company metadata cleared','Test-CompanyInstaller.ps1'),
+    @('installer','(?m)^    if \(\$config.Contains\(''decisions''\).*Remove\(''address''\).*$','    $null = $config','Azure transition clears both company metadata copies','C2 applied address cleared','Test-CompanyInstaller.ps1'),
+    @('installer','(?m)^        Update-ClaudeAddressArtifacts -RecordPath \$configPath.*$','        $null = $configPath','Azure transition updates existing generated settings','C2 generated settings updated','Test-CompanyInstaller.ps1'),
+    @('foundation','(?m)^    if \(-not \$Attended\) \{$','    if ($false) {','Foundation fingerprints and prices inherited company address inputs','A1 inherited inputs resolved','Test-CompanyInstaller.ps1'),
+    @('foundation','if \(\$installerArgs.AddressMode -eq ''custom''\)','if ($false)','Foundation fingerprints and prices inherited company address inputs','A1 inherited plan fingerprinted','Test-CompanyInstaller.ps1'),
+    @('foundation','Hostname = \$installerArgs.AddressHostname','Hostname = $d.addressHostname','Foundation fingerprints and prices inherited company address inputs','A1 planned inputs equal passed inputs','Test-CompanyInstaller.ps1'),
+    @('foundation','(?m)^        if \(\$address.Contains\(\$pair.Key\)\).*$','        $null = $address','Foundation merge retains the address chosen by the installer rather than an old proposal','C2 applied Foundation address','Test-CompanyInstaller.ps1'),
+    @('start','if \(\$null -ne \$script:FlowAppliedDecisions\)','if ($false)','step receives proposed choices but durable state is still applied (False)','A2 proposals are not persisted','Test-FlowAppliedState.ps1'),
+    @('start','Copy-ClaudeFlowValue \$script:FlowAppliedDecisions.PSObject.Properties\[\$step.Info.DecisionKey\].Value','Get-ClaudeDecision -Record $Record -Key $step.Info.DecisionKey','successful history starts before questions, not at the proposed value','A2 history begins at applied value','Test-FlowAppliedState.ps1'),
+    @('recovery','\$receipt.fingerprint -eq \(Get-ClaudeFlowFingerprint @\(\$d\)\)','${true}','a tampered recovery receipt cannot bypass drift','C1 receipt integrity','Test-CompanyAddress.ps1'),
+    @('recovery','\$d.gatewayId -ieq \$expectedId','${true}','a receipt for another gateway never permits recovery','C1 recovery gateway scope','Test-CompanyAddress.ps1'),
+    @('recovery','\(ConvertTo-ClaudeFlowCanonical @\(Get-ClaudeAddressRecoveryHosts \$Gateway\)\) -ceq \(ConvertTo-ClaudeFlowCanonical @\(\$d.expectedHosts\)\)','${true}','unrelated live hostname drift cannot use address recovery','C1 exact recovered host collection','Test-CompanyAddress.ps1'),
+    @('start','(?m)^        if \(\$Action -eq ''Change'' -and \$Change -eq ''address''','        if ($true -and $Change -eq ''address''','address recovery cannot bypass drift for another action or decision','C1 recovery action scope','Test-CompanyFlow.ps1'),
+    @('start','(?m)^        if \(\$Action -eq ''Change'' -and \$Change -eq ''address''','        if ($Action -eq ''Change'' -and $true','address recovery cannot bypass drift for another action or decision','C1 recovery decision scope','Test-CompanyFlow.ps1'),
+    @('flowstep','(?m)^    if \(\$recovery -and \$recovery.Allowed -and.*\{$','    if ($false) {','recovery planning refuses a different proposed hostname','C1 recovery proposed-input scope','Test-CompanyFlow.ps1'),
+    @('wait','\$TimeoutSeconds\*1000-\$watch.Elapsed.TotalMilliseconds','$TimeoutSeconds*100000-$watch.Elapsed.TotalMilliseconds','native Azure reads are bounded and their child process is stopped','U1 remaining deadline','Test-AddressDeadline.ps1'),
+    @('wait','if\(Test-Path -LiteralPath \$directory\)\{Remove-Item -LiteralPath \$directory -Recurse -Force -ErrorAction Stop\}','if ($false) { }','timed-out checks leave no private ARM body directory behind','U1 cancelled private-body cleanup','Test-AddressDeadline.ps1'),
     @('address','\[Convert\]::ToBase64String\(\$pfxBytes\)','[Convert]::ToBase64String([IO.File]::ReadAllBytes($d.PfxPath))','the uploaded PFX is the approved buffer even if DNS waiting replaces its file','S1 immutable upload buffer'),
     @('certificate','\$sha.ComputeHash\(\$PfxBytes\)','$sha.ComputeHash([IO.File]::ReadAllBytes($PfxPath))','PFX validation and hash use the supplied buffer even when its path is replaced','S1 validation and hash buffer'),
     @('address','(?m)^    if \(-not \(Test-ClaudeFlowSubscriptionId \$SubscriptionId\)\).*$', '    if ($false) { throw ''subscription'' }','subscription ID is required','invalid subscription'),
@@ -69,9 +89,15 @@ $paths = @{
     address = 'scripts\ClaudeGatewayAddress.ps1'; certificate = 'scripts\ClaudeGatewayCertificate.ps1'
     discovery = 'scripts\flow\Discovery.ps1'; flowstep = 'scripts\flow\Address.ps1'
     start = 'Start-ClaudeGateway.ps1'; transport = 'scripts\ClaudeNetwork.ps1'
+    installer = 'Install-ClaudeGateway.ps1'; foundation = 'scripts\flow\Foundation.ps1'
+    recovery = 'scripts\ClaudeGatewayAddressRecovery.ps1'; wait = 'scripts\ClaudeGatewayAddressWait.ps1'
 }
 function Run-Suite([string]$Test) {
     $pipeline = [powershell]::Create()
+    $temp=Join-Path $scratch ('suite-temp-'+[guid]::NewGuid().ToString('N'))
+    [void][IO.Directory]::CreateDirectory($temp)
+    $environment=@{}
+    foreach($name in 'TEMP','TMP','TMPDIR'){$environment[$name]=[Environment]::GetEnvironmentVariable($name);[Environment]::SetEnvironmentVariable($name,$temp)}
     try {
         $null = $pipeline.AddScript(@'
 param($Path)
@@ -85,8 +111,12 @@ $global:LASTEXITCODE = 0
         $code = if ($exit.Count -eq 1) { [int]$exit[0].P69SuiteExit } else { -1 }
         $text = (@($output | Where-Object { $_.PSObject.Properties.Name -notcontains 'P69SuiteExit' }) -join "`n") + "`n" + ($pipeline.Streams.Error -join "`n")
     }
-    finally { $pipeline.Dispose() }
-    $count = [regex]::Match($text, 'Company (?:address|certificate|flow): (\d+) assertions, \d+ passed, (\d+) failed\.')
+    finally {
+        $pipeline.Dispose()
+        foreach($name in $environment.Keys){[Environment]::SetEnvironmentVariable($name,$environment[$name])}
+        if(Test-Path -LiteralPath $temp){Remove-Item -LiteralPath $temp -Recurse -Force}
+    }
+    $count = [regex]::Match($text, '(?:Company (?:address|certificate|flow|installer)|Applied flow state|Address deadline): (\d+) assertions, \d+ passed, (\d+) failed\.')
     if (-not $count.Success -or $code -eq -1) { throw "Suite did not reach its full summary: $Test`n$text" }
     [pscustomobject]@{ Code = $code; Text = $text; Count = [int]$count.Groups[1].Value }
 }
@@ -96,7 +126,9 @@ try {
         'scripts\ClaudeNetwork.ps1','scripts\AzureRetailPrice.ps1','scripts\ClaudeChoice.ps1','scripts\ClaudeGatewayRegion.ps1','scripts\ClaudeGatewayAddressInput.ps1',
         'scripts\flow\FlowContract.ps1','scripts\flow\Discovery.ps1','scripts\flow\Address.ps1','scripts\flow\Foundation.ps1',
         'scripts\flow\lib\LifecycleCommon.ps1','Install-ClaudeGateway.ps1','Start-ClaudeGateway.ps1','infra\main.bicep',
-        'tests\Test-CompanyAddress.ps1','tests\Test-CompanyCertificate.ps1','tests\Test-CompanyFlow.ps1'
+        'tests\Test-CompanyAddress.ps1','tests\Test-CompanyCertificate.ps1','tests\Test-CompanyFlow.ps1',
+        'tests\Test-CompanyInstaller.ps1','tests\Test-FlowAppliedState.ps1','tests\Test-AddressDeadline.ps1',
+        'scripts\Show-Banner.ps1','scripts\Test-Prerequisites.ps1','scripts\ClaudeModelDeployment.ps1','scripts\ClaudeDesktopSignIn.ps1'
     )
     foreach ($file in $files) {
         $to = Join-Path $scratch $file
@@ -104,7 +136,7 @@ try {
         Copy-Item -LiteralPath (Join-Path $root $file) -Destination $to
     }
     $counts = @{}
-    foreach ($suite in 'Test-CompanyAddress.ps1','Test-CompanyCertificate.ps1','Test-CompanyFlow.ps1') {
+    foreach ($suite in 'Test-CompanyAddress.ps1','Test-CompanyCertificate.ps1','Test-CompanyFlow.ps1','Test-CompanyInstaller.ps1','Test-FlowAppliedState.ps1','Test-AddressDeadline.ps1') {
         $base = Run-Suite $suite
         if ($base.Code -ne 0) { throw "Baseline $suite failed.`n$($base.Text)" }
         $counts[$suite] = $base.Count
@@ -113,7 +145,7 @@ try {
     $escaped = @()
     foreach ($case in $cases) {
         $file = Join-Path $scratch $paths[$case[0]]
-        $suite = if ($case[0] -eq 'certificate') { 'Test-CompanyCertificate.ps1' } elseif ($case[0] -eq 'address') { 'Test-CompanyAddress.ps1' } else { 'Test-CompanyFlow.ps1' }
+        $suite = if ($case.Count -gt 5) { $case[5] } elseif ($case[0] -eq 'certificate') { 'Test-CompanyCertificate.ps1' } elseif ($case[0] -eq 'address') { 'Test-CompanyAddress.ps1' } else { 'Test-CompanyFlow.ps1' }
         $before = [IO.File]::ReadAllText($file)
         $source = $before.Replace("`r`n", "`n")
         $after = [regex]::Replace($source, $case[1], [Text.RegularExpressions.MatchEvaluator]{ param($m) $case[2] })

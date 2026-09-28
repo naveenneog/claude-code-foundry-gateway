@@ -176,10 +176,17 @@ Check 'only Change address can review a validated unverified address recovery' {
 }
 Check 'address recovery cannot bypass drift for another action or decision' {
     $d=[pscustomobject]@{comparison=@{differences=@('old gateway URL no longer bound')};addressRecovery=@{Allowed=$true}}
-    $Action='Setup';$Change=''
+    $Action='Setup';$Change='address'
     $setup=Reject {Assert-RecordMatchesLive $d} 'drift'
     $Action='Change';$Change='foundation'
     $setup -and (Reject {Assert-RecordMatchesLive $d} 'drift')
+}
+Check 'recovery planning refuses a different proposed hostname' {
+    . (Join-Path $root 'scripts\flow\Address.ps1')
+    $choice=[pscustomobject]@{hostname='other.contoso.test';certificateSource='KeyVault';dnsMode='External'}
+    $expected=[pscustomobject]@{hostname='claude.contoso.test';certificateSource='KeyVault';dnsMode='External'}
+    $r=[pscustomobject]@{subscriptionId=$sub;apimName='apim-contoso';resourceGroup='rg-contoso';decisions=[pscustomobject]@{address=$choice}}
+    Reject {Get-ClaudeFlowStepPlan $r ([pscustomobject]@{addressRecovery=@{Allowed=$true;Decision=$expected;Fingerprint='receipt'}})} 'recovery must retain'
 }
 Check 'real ARM transport sends conditional DNS headers and removes the body file' {
     . (Join-Path $root 'scripts\ClaudeNetwork.ps1')
