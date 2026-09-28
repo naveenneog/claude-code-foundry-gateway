@@ -775,6 +775,14 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Changed
 
+- **The gate's command budget is 60 minutes until the exclusive checks are sharded (P77).**
+  `.ironclad/charter.json` gave every gate command 1,800 seconds (ADR-0025). On 2026-09-28 four packet
+  gates passed in 1,368 to 1,688 seconds and three timed out at 1,800, the last at the default
+  throttle with no other gate or review running; throttle 8 was slower, with per-check timeouts.
+  A timeout ends only the gate's shell, and `Test-All` kept running for ten minutes after one.
+  `commandTimeoutMs` is 3,600,000; no check, mutation, throttle or per-check timeout changes. P78
+  shards the long exclusive checks and returns the budget to 1,800 seconds
+  ([ADR-0036](docs/adr/0036-gate-budget-until-sharded.md)).
 - **The guided flow starts at once (P68).** `Start-ClaudeGateway.ps1` listed every subscription,
   API Management instance, Foundry account, workspace and deployment before its first line, 66 s on
   the reference subscription, for lists no step read. Discovery now reads only the gateway the

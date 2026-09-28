@@ -478,6 +478,18 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       and Windows PowerShell 5.1, and a check follows every script those load and lists each remaining
       `Sort-Object` with its reason; every step of Setup with the shipped modules, the Update migrations
       and a model change plan the same canonical text on both shells, tested
+- [ ] P77 a 60-minute gate budget while the exclusive checks are sharded — acceptance:
+      `.ironclad/charter.json` gives every gate command 3,600,000 ms; ADR-0036 records the measured
+      gates of 2026-09-28 (four passes between 1,368 and 1,688 s, three timeouts at 1,800 s, throttle
+      8 slower with per-check timeouts) and the load; no check, mutation, throttle or per-check
+      timeout changes; the next packet gate on main passes within the new budget
+- [ ] P78 the packet gate returns to 30 minutes — acceptance: the exclusive lane's long checks (the
+      company-address mutations, the workstation clients, the guided flow's permutations and start,
+      the diagnostics and the Windows PowerShell 5.1 wizard) run as coverage-proven shards or in the
+      parallel lane under ADR-0025's isolation rules, with no check or mutation removed; a gate
+      command that times out stops its whole process tree; Test-All on main, with the AUM
+      environments, is under 20 minutes on a busy machine in three runs; a new ADR returns
+      `commandTimeoutMs` to 1,800,000
 - [ ] P73 an installer re-run offers the gateway's live values — acceptance: over an existing
       gateway (`-ExistingApimName`, the reuse menu or `-Change foundation` in a console), the budget,
       request ceiling, tier group and Choices prompts default to the gateway's live named values and
