@@ -1,7 +1,5 @@
 """The local configuration wizard; Azure discovery is read-only."""
 
-import json
-from pathlib import Path
 from contextlib import nullcontext
 
 import typer
@@ -10,6 +8,7 @@ from .discovery import discover
 from .errors import FinOpsError
 from .output import display
 from .guarded_publication import guarded_publish
+from .publication_output import profile_path, prompt_number, write_profile, write_text
 
 
 def configure(ctx: typer.Context, workspace: str | None = None, save: bool = False,
@@ -20,27 +19,26 @@ def configure(ctx: typer.Context, workspace: str | None = None, save: bool = Fal
     interactive = state["tty"] and not (no_prompt or state["json"] or state["plain"])
 
     def pick(label, rows, default):
-        typer.echo(f"\nChoose {label}:")
-        for index, row in enumerate(rows):
-            shown = state["redactor"].present(row)
-            extra = f" ({shown.get('location', '')}; {shown.get('sku', {}).get('name', '')})" if row.get("sku") else ""
-            typer.echo(f"  {index + 1}. {shown.get('name', shown['id'])}{extra}")
-        choice = typer.prompt("Number", default=default + 1, type=int)
+        with guarded_publish(nullcontext):
+            write_text(f"\nChoose {label}:")
+            for index, row in enumerate(rows):
+                shown = state["redactor"].present(row)
+                extra = f" ({shown.get('location', '')}; {shown.get('sku', {}).get('name', '')})" if row.get("sku") else ""
+                write_text(f"  {index + 1}. {shown.get('name', shown['id'])}{extra}")
+            choice = prompt_number("Number", default=default + 1)
         return choice - 1
 
     try:
         result = discover(backend=options["backend"], subscription=options["subscription"],
                           resource_group=options["resource_group"], apim_name=options["apim_name"],
                           workspace=workspace, service_app=service_app, interactive=interactive, picker=pick)
-        output = options["path"] or Path.home() / ".aum" / "config.json"
+        output = profile_path(options["path"])
         saved = False
         if save and not state["what_if"]:
-            if output.exists() and not force:
-                raise FinOpsError("Profile exists. Choose another --config path, or use --force to replace it.", 6)
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(json.dumps(result["config"], indent=2) + "\n", encoding="utf-8")
+            with guarded_publish(nullcontext):
+                write_profile(output, result["config"], force=force)
             saved = True
-        result.update(saved=saved, profile=str(output),
+        result = dict(result, saved=saved, profile=output,
                       note="No Azure resource was changed. Use --save to write this local profile." if not saved
                       else "Saved addresses only. Run aum --config with this profile to verify whoami.")
         # Discovery publishes address metadata before any backend session exists.

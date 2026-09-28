@@ -3,7 +3,7 @@
   "id": "aum-readiness",
   "kind": "flow",
   "title": "AUM: fast facts and bounded readiness",
-  "subtitle": "P71: Direct and HTTP pin complete reads to one identity generation. Runtime sinks check active origins; deferred work rechecks on execution.",
+  "subtitle": "P71: Complete reads and widget reuse retain their identity generation. Presentation imports and metaprogramming have a closed source contract.",
   "width": 1280,
   "height": 900,
   "outputs": ["docs/images/architecture/aum-readiness.png"],

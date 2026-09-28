@@ -1,7 +1,5 @@
 from textual import on
-from textual.containers import Vertical
-from textual.screen import ModalScreen
-from .publication_widgets import Button, DataTable, Label
+from .publication_widgets import Button, DataTable, Label, ModalScreen, Vertical
 
 from .screens import DetailScreen
 from .errors import FinOpsError
@@ -11,6 +9,7 @@ from .guarded_publication import guarded_publish, published, guarded_deferred
 class DashboardRows(ModalScreen):
     BINDINGS = [("escape", "dismiss", "Back"), ("d", "detail", "Exact row")]
 
+    @published(lambda self, panel: panel.read_guard)
     def __init__(self, panel):
         super().__init__()
         self.heading = str(panel.border_title)

@@ -541,6 +541,10 @@ the safe error, not callback arguments or traceback locals.
 Round 8 validates retained widget subtrees before registration inserts them
 into the DOM. Copied widgets keep their original source; a new caller scope
 does not reauthorize that data. Protected instances cannot change class.
+The source detector uses an explicit import/member allowlist and module
+classification. Native output and widget capabilities are confined to the
+reviewed, fingerprinted boundary modules. Exact metaprogramming exceptions
+also pin the function body on which their justification depends.
 
 ![AUM readiness uses bounded authenticated HTTP and read-only Azure diagnosis; Direct shares a snapshot and returns independent sources progressively.](images/architecture/aum-readiness.png)
 

@@ -1,9 +1,8 @@
 import asyncio
 import json
-from pathlib import Path
 
-from textual.containers import Horizontal
-from .publication_widgets import Button, Input, Select, Static, TextArea, DataTable
+from .publication_widgets import Button, Horizontal, Input, Select, Static, TextArea, DataTable
+from .publication_output import profile_path
 
 from .backend import connect
 from .bulk import budget_csv_plan
@@ -404,12 +403,12 @@ class FeatureUI:
 
     def action_profile(self):
         def run(values, apply):
-            config = load_config(Path(values["path"]), backend=values["backend"] or None)
+            config = load_config(values["path"], backend=values["backend"] or None)
             if apply:
                 return dict(ui_action="profile", config=config)
             return dict(preview=not apply, action="Switch profile/backend", after=config.public())
         self.push_screen(ActionForm("Switch profile or backend", [
-            ("path", "Profile JSON path", str(Path.home() / ".aum" / "config.json"), None),
+            ("path", "Profile JSON path", profile_path(), None),
             ("backend", "Backend", self.config.backend, [(b, b.title()) for b in ("direct", "aum-service", "turnstile", "fake")])],
             run, mutation=False))
 

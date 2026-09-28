@@ -327,6 +327,24 @@ access to the process can bypass an in-process check. The source contract
 prevents unsupported operations in maintained presentation code; it is not
 a sandbox or a claim that arbitrary Python reflection is contained.
 
+The maintained policy explicitly classifies all package source modules and
+approves named imports and member interfaces. Importing an approved module
+does not expose every member or permit passing the module object elsewhere.
+Raw implementation imports exist only in `publication_output.py` and
+`publication_widgets.py`; reviewed AST fingerprints bind those exceptions to
+their implementation, not just their filenames. Exact metaprogramming
+exceptions also bind the enclosing function's AST, including the fixed
+cache-field tuple and framework input checks on which their reasons depend.
+
+Layout containers, tabs and the application now come from the protected
+widget module too. An empty modal shell has a local-message origin when no
+publication is active. Data-bearing dialog constructors enter their explicit
+retained guard first, so that fallback does not replace the source of their
+cached facts; their children keep the same source. Terminal console creation,
+CLI prompting and profile/report writes stay inside the protected output
+module. Presentation passes path strings and receives values, not raw
+filesystem or stream capabilities.
+
 The installed Textual 6.12.0 `_register_child` implementation inserts into
 the parent's nodes and application registry before `_attach`. Prevalidation
 therefore occurs at the application's registration boundary. Checking only

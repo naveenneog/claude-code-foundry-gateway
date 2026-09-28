@@ -1,7 +1,6 @@
 """A monitoring dashboard: scoped facts, compact gauges, and focusable detail panels."""
 
-from textual.containers import Horizontal, Vertical
-from .publication_widgets import Static
+from .publication_widgets import Horizontal, Static, Vertical
 from datetime import datetime, timezone
 
 from .rules import human

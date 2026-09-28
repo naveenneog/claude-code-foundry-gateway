@@ -1,11 +1,8 @@
 import asyncio
 import json
-from pathlib import Path
 
 from textual import on, work
-from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.screen import ModalScreen
-from .publication_widgets import Button, Input, Label, Select, Static
+from .publication_widgets import Button, Horizontal, Input, Label, ModalScreen, Select, Static, Vertical, VerticalScroll
 
 from .errors import FinOpsError
 from .guarded_publication import guarded_publish, published
@@ -24,6 +21,8 @@ class FilterChips(Static, can_focus=True):
 class ActionForm(ModalScreen):
     BINDINGS = [("escape", "cancel", "Cancel")]
 
+    @published(lambda self, title, fields, operation, *, mutation=True, read_guard=None:
+               read_guard if read_guard is not None else self.app.current_guard())
     def __init__(self, title, fields, operation, *, mutation=True, read_guard=None):
         super().__init__()
         self.heading, self.fields, self.operation = title, fields, operation

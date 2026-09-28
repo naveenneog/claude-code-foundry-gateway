@@ -5,13 +5,11 @@ import hashlib
 import json
 from pathlib import Path
 import pytest
+from publication_policy import PRESENTATION, inventory_failures, violations
 
 
 ROOT = Path(__file__).resolve().parents[1] / "src" / "claude_finops"
-UI_FILES = tuple(sorted(path.name for path in ROOT.glob("*.py") if path.name in {
-    "cli.py", "commands_local.py", "output.py", "feature_engine.py", "publication_output.py",
-} or any(isinstance(node, ast.ImportFrom) and (node.module or "").startswith("textual")
-         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))))))
+UI_FILES = tuple(sorted(PRESENTATION))
 SINKS = {"update", "load_text", "add_row", "set_options", "copy_to_clipboard",
          "open_url", "write", "write_text", "display", "render", "print", "echo", "ask",
          "write_export", "write_renderable", "copy_with_helper"}
@@ -78,10 +76,10 @@ STATIC_WRITES = {
     ("developer_screens.py", "DeveloperPicker.compose", "Label('Add developer from Microsoft Entra directory', markup=False)"): "Fixed developer-picker heading.",
     ("developer_screens.py", "DeveloperPicker.compose", "Static('Bounded delegated directory search. Preview before any group membership write.', id='developer-status', markup=False)"): "Fixed directory-search and preview instruction.",
     # Command metadata exits never connect to a backend.
-    ("cli.py", "root", "typer.echo(BANNER)"): "Fixed product banner before connecting.",
+    ("cli.py", "root", "write_text(BANNER)"): "Fixed product banner before connecting.",
     ("cli.py", "root", "display(dict(product=PRODUCT, version=__version__), as_json=True)"): "Local package product/version metadata only.",
-    ("cli.py", "root", "typer.echo(f'{PRODUCT} {__version__}')"): "Local package product/version metadata only.",
-    ("cli.py", "legacy_main", "typer.echo('Deprecated: claude-finops is now aum (AUM - Azure Usage Management); this alias remains for one release.', err=True)"): "Fixed legacy-entry-point deprecation notice.",
+    ("cli.py", "root", "write_text(f'{PRODUCT} {__version__}')"): "Local package product/version metadata only.",
+    ("cli.py", "legacy_main", "write_text('Deprecated: claude-finops is now aum (AUM - Azure Usage Management); this alias remains for one release.', err=True)"): "Fixed legacy-entry-point deprecation notice.",
 }
 
 # The principal reset iterates a fixed tuple of cache field names, never widget
@@ -115,8 +113,8 @@ def call_name(node):
 
 def sinks(source, filename, allowed=None):
     allowed = STATIC_WRITES if allowed is None else allowed
-    failures = []
     tree = ast.parse(source)
+    failures = violations(tree, filename)
 
     class Check(ast.NodeVisitor):
         def __init__(self):
@@ -265,7 +263,7 @@ def sinks(source, filename, allowed=None):
 
 
 def test_all_presentation_modules_use_the_choke_point():
-    violations = []
+    violations = inventory_failures(ROOT)
     for name in UI_FILES:
         violations.extend(sinks((ROOT / name).read_text(encoding="utf-8"), name))
     assert not violations, "\n".join(violations)
@@ -310,7 +308,7 @@ def test_allowlist_entries_are_exact_and_explained():
     encoded = json.dumps(sorted((list(key), value) for key, value in STATIC_WRITES.items()),
                          ensure_ascii=True, separators=(",", ":")).encode()
     assert len(STATIC_WRITES) == 51
-    assert hashlib.sha256(encoded).hexdigest() == "84a98a03af7f26a8d2a2fd8cf60a4bbc6d374961c03d7df60821910ade3d7230"
+    assert hashlib.sha256(encoded).hexdigest() == "4de2a45f9e6babe7b8eca411bb7973058ac7c2d176ac4069068f50f2093b2309"
     for key, reason in STATIC_WRITES.items():
         assert len(key) == 3 and len(reason.strip()) >= 20
         file, function, call = key

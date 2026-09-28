@@ -519,6 +519,14 @@ including shallow copies, composed children, reparenting and cached subtrees.
 The caller's current scope does not replace the widget's source. Protected
 instances refuse class replacement; current-origin writes and attachments
 retain their normal behavior.
+The source contract approves presentation imports and their member
+interfaces by name; aliases do not expand them. Raw consoles, streams,
+filesystem writers and framework widgets remain in the protected boundary
+modules. Computed reflection and other metaprogramming require exact,
+justified entries tied to the reviewed function body. New source modules
+need an explicit classification. This is a contract for maintained
+presentation code, not a sandbox for malicious code in the Python process
+([ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md)).
 
 Overview displays each source as it arrives. Pending panels name their source,
 and the progress line shows an estimate and elapsed time. Estimates are not

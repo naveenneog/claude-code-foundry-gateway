@@ -62,7 +62,10 @@ exact streaming cache-creation detail remains **U13**.
   without rendering callback arguments or traceback locals.
   Round-eight attachment validates retained widget origins before DOM
   insertion, including copied and composed subtrees; protected instances
-  refuse class replacement.
+  refuse class replacement. The structural contract now uses an explicit
+  import/member allowlist and checked metaprogramming exceptions instead of
+  trusting unrecognized spellings. Console, file and framework capabilities
+  remain inside the protected boundary modules.
 - **Reviewed model lifecycle (P70).** `-Action Change -Change models` and
   `scripts/Sync-ClaudeModels.ps1` discover the selected Foundry account, show deployment
   model/version/SKU/capacity and price status, accept per-deployment tier choices, snapshot

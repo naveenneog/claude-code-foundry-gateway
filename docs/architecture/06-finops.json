@@ -16,7 +16,7 @@
     "excerpt": "[project.scripts]\naum = \"claude_finops.cli:main\"\nclaude-finops = \"claude_finops.cli:legacy_main\""
   },
   "identifiers": {
-    "app": { "label": "FinOpsApp", "source": "cli/finops/src/claude_finops/tui.py", "match": "class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App):" },
+    "app": { "label": "FinOpsApp", "source": "cli/finops/src/claude_finops/tui.py", "match": "class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):" },
     "engine": { "label": "Engine", "source": "cli/finops/src/claude_finops/engine.py", "match": "class Engine(FeatureEngine):" },
     "turnstile": { "label": "TurnstileBackend", "source": "cli/finops/src/claude_finops/turnstile.py", "match": "class TurnstileBackend(HttpBackend):" },
     "aum": { "label": "AumServiceBackend", "source": "cli/finops/src/claude_finops/aum_service.py", "match": "class AumServiceBackend(HttpBackend):" },

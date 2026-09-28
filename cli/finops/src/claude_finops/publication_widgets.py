@@ -9,16 +9,21 @@ import inspect
 
 from textual import events
 from textual._context import active_app
+from textual.app import App as TextualApp
+from textual.containers import (
+    Horizontal as TextualHorizontal, Vertical as TextualVertical, VerticalScroll as TextualVerticalScroll,
+)
+from textual.screen import ModalScreen as TextualModalScreen
 from textual.widget import Widget as TextualWidget
 from textual.widgets import (
     Button as TextualButton, DataTable as TextualDataTable, Input as TextualInput,
     Label as TextualLabel, Select as TextualSelect, Static as TextualStatic,
-    TextArea as TextualTextArea,
+    TabbedContent as TextualTabbedContent, TabPane as TextualTabPane, TextArea as TextualTextArea,
 )
 
 from .errors import FinOpsError
 from .guarded_publication import (
-    PublicationOrigin, guarded_deferred, guarded_publish, publication_origin, publication_sink,
+    PublicationOrigin, guarded_deferred, guarded_publish, publication_active, publication_origin, publication_sink,
 )
 
 # Only these framework handlers copy keyboard/picker input into content. Layout,
@@ -128,7 +133,7 @@ class PublicationWidget(PublicationDispatch):
         return run
 
 
-class PublicationApp(PublicationDispatch):
+class PublicationApp(PublicationDispatch, TextualApp):
     def _register(self, parent, *widgets, **kwargs):
         with ExitStack() as guards:
             pending, seen = list(widgets), set()
@@ -227,3 +232,34 @@ class DataTable(PublicationWidget, TextualDataTable):
     add_column = widget_sink(TextualDataTable.add_column)
     update_cell = widget_sink(TextualDataTable.update_cell)
     update_cell_at = widget_sink(TextualDataTable.update_cell_at)
+
+
+class Widget(PublicationWidget, TextualWidget):
+    pass
+
+
+class Horizontal(PublicationWidget, TextualHorizontal):
+    pass
+
+
+class Vertical(PublicationWidget, TextualVertical):
+    pass
+
+
+class VerticalScroll(PublicationWidget, TextualVerticalScroll):
+    pass
+
+
+class TabbedContent(PublicationWidget, TextualTabbedContent):
+    pass
+
+
+class TabPane(PublicationWidget, TextualTabPane):
+    pass
+
+
+class ModalScreen(PublicationWidget, TextualModalScreen):
+    def __init__(self, *args, **kwargs):
+        source = publication_origin() if publication_active() else self.app.safe_message_guard()
+        with guarded_publish(source):
+            super().__init__(*args, **kwargs)

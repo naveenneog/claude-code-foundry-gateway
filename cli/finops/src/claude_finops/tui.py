@@ -2,12 +2,12 @@ import asyncio
 
 from rich.text import Text
 from textual import on, work
-from textual.app import App, ComposeResult
+from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal
 from textual.theme import Theme
-from textual.widgets import TabbedContent, TabPane
-from .publication_widgets import Button, DataTable, Input, Select, Static, TextArea, PublicationApp
+from .publication_widgets import (
+    Button, DataTable, Horizontal, Input, Select, Static, TabbedContent, TabPane, TextArea, PublicationApp,
+)
 
 from .errors import FinOpsError
 from .accessibility import AsciiFilter
@@ -28,7 +28,7 @@ from .guarded_publication import guarded_publish, published, guarded_deferred
 from .principal_ui import PrincipalUI
 
 
-class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App):
+class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
     TITLE = PRODUCT
     CSS_PATH = "terminal.tcss"
     COMMANDS = {FinOpsCommands}

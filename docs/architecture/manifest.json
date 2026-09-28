@@ -158,7 +158,7 @@
         "analytics/chargeback-ledger.kql": "3924ba7e4edb21d761b16254452c0509a2a9d27558033d7a980c5e201e22b2f5",
         "cli/finops/pyproject.toml": "c6ac8f96fc0bf917f3f5aa4366af93b0f1cf517795bc1de60f19fa9187bb9321",
         "cli/finops/src/claude_finops/aum_service.py": "85d16fdc536ab57d2faff3e2123cd233b58bc3f22297cb5acf4e341715860418",
-        "cli/finops/src/claude_finops/cli.py": "6346f7d07576d86c4c9abbc1e71601e2b3e5296fd863e47785181e86cd03d783",
+        "cli/finops/src/claude_finops/cli.py": "02d5f92b7887f849de0859bba757f583b82e9179e27245dd75f691583106c1bb",
         "cli/finops/src/claude_finops/commands_groups.py": "420d39ed6540deec0607f649d478046a868e675ce4f3c78e4503d9d9d9c87294",
         "cli/finops/src/claude_finops/config.py": "292d7e33e58436056fd8fa4b2c415226a5db12c85e2a0c496e067f29964e1af1",
         "cli/finops/src/claude_finops/developer_actions.py": "59b675db2f55ecf1c2df0029cd73cad4842452481762e1283cea7e2c58432127",
@@ -174,10 +174,10 @@
         "cli/finops/src/claude_finops/scope.py": "9e17c5590ba07b3ad72f384cd544f68a5eee5ef5cee39fb02e188419231b1e19",
         "cli/finops/src/claude_finops/service_models.py": "45a916f3d626b5937c3eed95ade666e1efb59e9aa03d678c520e23aa8be110aa",
         "cli/finops/src/claude_finops/service_writes.py": "fe3e703b2738f80289d6a5831b5383f11cc7c037f2157ff69b67df45facbc5b9",
-        "cli/finops/src/claude_finops/tui.py": "03d075732e595d2731fbed3ba2a4a1c723377fbd757dc7eb1cd7b21c89757b92",
+        "cli/finops/src/claude_finops/tui.py": "9833bae2277545052efe7a6ad5000b78493fded58d92259e10d40825e52023de",
         "cli/finops/src/claude_finops/turnstile.py": "17175ec955fdbd537d12ea883ae66574812f73f4e9b107e533aef0e78f8a0dc9",
-        "cli/finops/src/claude_finops/ui_features.py": "673eaf51eef72f7d9a34d9d546d97a14ccc7b1e5c97ce939ae324db7e05748ba",
-        "docs/architecture/06-finops.json": "88f25a764f53acf09f6e725f93a3447f10ba2c249e2caf83859c804347157ecd",
+        "cli/finops/src/claude_finops/ui_features.py": "4f694b2ba4012ad60a2bf763bc92c5825c028cc1159981fada7c88d27930c6ab",
+        "docs/architecture/06-finops.json": "feea563206a9c839355c11f2e8622bd26cfc7d349953b0be82881b99c0107be8",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -416,9 +416,9 @@
       "inputs": {
         "cli/finops/src/claude_finops/aum_service.py": "85d16fdc536ab57d2faff3e2123cd233b58bc3f22297cb5acf4e341715860418",
         "cli/finops/src/claude_finops/backend.py": "6dd380ba98996429c770f9c574d19d47c4d754bf70722f98c451d5febfaee6bd",
-        "cli/finops/src/claude_finops/cli.py": "6346f7d07576d86c4c9abbc1e71601e2b3e5296fd863e47785181e86cd03d783",
+        "cli/finops/src/claude_finops/cli.py": "02d5f92b7887f849de0859bba757f583b82e9179e27245dd75f691583106c1bb",
         "cli/finops/src/claude_finops/config.py": "292d7e33e58436056fd8fa4b2c415226a5db12c85e2a0c496e067f29964e1af1",
-        "cli/finops/src/claude_finops/dashboard.py": "d2ce236358644235deeb2a7b4933b469a3296bcce3f1f481f04c3cc07fba80c5",
+        "cli/finops/src/claude_finops/dashboard.py": "ef4467052f50850332d5ab5e1e3f73923b652a20517564d9882f6507caba1e62",
         "cli/finops/src/claude_finops/direct.py": "60bdbdf6b12007a4cc65fd245dd6a1db93d4c34dbee582436fde0020c314323c",
         "cli/finops/src/claude_finops/engine.py": "69341f446f4d25b8a414f4819f296d830bbc916d3f48bcee91dc45d5a9484962",
         "cli/finops/src/claude_finops/feature_engine.py": "ed3cabfa8efb02f17aae5a54791da09e7f88ed2b0b3a168afdca245bb49933ca",
@@ -427,13 +427,13 @@
         "cli/finops/src/claude_finops/principal_ui.py": "43ad052d84d3220db65a20738fa7d7135239e8f08695e01327bea2fb8a8fd043",
         "cli/finops/src/claude_finops/progressive.py": "8e3b8bab364df999ef118fa38ce607f699d42883e48760df87adf507da7c8359",
         "cli/finops/src/claude_finops/publication_output.py": "55ad738d6cecfa265ce6f6b5639fae1ef1b949cec831a5b3702e5228e504f2b1",
-        "cli/finops/src/claude_finops/publication_widgets.py": "7cfd4740acc04e10c79894a83c84e4117812ecbc6c0a1d4da6b903a8ee55da5f",
+        "cli/finops/src/claude_finops/publication_widgets.py": "344e6dd17637d1e08a0b79ba6a153cc425e1cebda92e8e6d86487457b69861d1",
         "cli/finops/src/claude_finops/readiness.py": "563f6642c2a2b1307c239dc00cbe51cb6d18227cc290bef00b3fedb520017449",
-        "cli/finops/src/claude_finops/screens.py": "99f18e7e7f0a7b2792fcb80a78cd4edaa8c096a8e4a41dedc0876021781794fc",
+        "cli/finops/src/claude_finops/screens.py": "9bd786fe41ca2cf6beacf68a3544277d05a6a16c2b92e8f6a6f40d7e7da51929",
         "cli/finops/src/claude_finops/turnstile.py": "17175ec955fdbd537d12ea883ae66574812f73f4e9b107e533aef0e78f8a0dc9",
-        "cli/finops/src/claude_finops/ui_features.py": "673eaf51eef72f7d9a34d9d546d97a14ccc7b1e5c97ce939ae324db7e05748ba",
+        "cli/finops/src/claude_finops/ui_features.py": "4f694b2ba4012ad60a2bf763bc92c5825c028cc1159981fada7c88d27930c6ab",
         "cli/finops/src/claude_finops/windows_process.py": "715ae99c16240a107aba89d6a6b7c35996c2d96a39d52a3d724febd81e0122e6",
-        "docs/architecture/15-aum-readiness.json": "1b9f8a5c3c2f1fda05281e5fdb8f725c91418e11b68bf48396148b5ac03f3691",
+        "docs/architecture/15-aum-readiness.json": "3ec26558f641312b1341df0c1771541f3df926d70f58216e7f3bf881266ed1a1",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -443,7 +443,7 @@
       "outputs": [
         {
           "path": "docs/images/architecture/aum-readiness.png",
-          "sha256": "e6d07d390ab51ab657aff2212607cfaa13c531a1690cf46b0920aff849a94f8c"
+          "sha256": "515936280ad5eb9798d8ad5ed233e23afc0a3b13e5704b299f74f5aa7f822c93"
         }
       ]
     },

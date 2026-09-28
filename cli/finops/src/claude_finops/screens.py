@@ -1,13 +1,12 @@
 import asyncio
 import json
-from pathlib import Path
 import re
 from functools import partial
 
 from textual import on, work
-from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.screen import ModalScreen
-from .publication_widgets import Button, DataTable, Input, Label, Select, Static, TextArea
+from .publication_widgets import (
+    Button, DataTable, Horizontal, Input, Label, ModalScreen, Select, Static, TextArea, Vertical, VerticalScroll,
+)
 
 from .errors import FinOpsError
 from .output import chargeback_csv, safe_text
@@ -19,6 +18,8 @@ from .publication_output import write_export
 class DetailScreen(ModalScreen):
     BINDINGS = [("escape", "dismiss", "Back")]
 
+    @published(lambda self, title, data, read_guard=None:
+               read_guard if read_guard is not None else self.app.current_guard())
     def __init__(self, title, data, read_guard=None):
         super().__init__()
         self.heading, self.data = title, data
@@ -165,6 +166,8 @@ class ChangeScreen(ModalScreen):
 
     BINDINGS = [("escape", "cancel", "Cancel")]
 
+    @published(lambda self, engine, kind, row=None, rows=None, remove=False, *, read_guard=None:
+               read_guard if read_guard is not None else self.app.current_guard())
     def __init__(self, engine, kind, row=None, rows=None, remove=False, *, read_guard=None):
         super().__init__()
         self.engine, self.kind, self.row = engine, kind, row or {}
@@ -405,9 +408,7 @@ class ExportScreen(ModalScreen):
                 result = await asyncio.to_thread(self.app.engine.chargeback)
                 content = chargeback_csv(self.app.present(result["items"]), self.app.engine.month)
                 with guarded_publish(self.app.current_guard()):
-                    folder = Path.cwd() / "finops-reports"
-                    folder.mkdir(exist_ok=True)
-                    write_export(folder / name, content)
+                    write_export(name, content, directory="finops-reports")
                     self.query_one("#export-status", Static).update(
                         self.app.redactor.text(f"Exported {len(result['items'])} scopes to finops-reports\\{name}."))
         except (OSError, FinOpsError) as error:

@@ -197,6 +197,34 @@ passed **140 cases in 25.63 s** (26.94 s wall). Profile replacement still
 requires the explicit `force` choice, and stale origins create no directory,
 file or prompt.
 
+The IO adapters are committed as `e52d42a`. The closed-contract RED run
+reported **47 failed, 7 passed in 2.33 s**. It reproduced the module-level
+`typer.echo` alias printing A's value after B verification and class mutation
+putting the same value in B's screenshot. Unknown imports, raw IO classes,
+module escape, computed reflection, class mutation and dynamic code were
+accepted by the previous structural contract.
+
+`publication_policy.py` now declares all 59 source modules: 24 presentation
+modules and 35 explicitly classified non-presentation modules. Presentation
+imports and imported-member access are approved by name, independently of
+local aliases. The two native boundary modules have reviewed AST fingerprints;
+their filenames alone grant no exception. Metaprogramming exceptions name an
+exact expression, its reason and the fingerprint of its enclosing function.
+Changing the fixed cache-field tuple therefore invalidates its reflection
+exception. The 51 static presentation entries keep their scope; only the
+three command metadata writes changed from `typer.echo` to protected
+`write_text`, with the registry fingerprint updated.
+
+The source-policy selection passed **132 cases in 4.63 s**. Protected-widget
+and CLI rewiring passed **42 cases in 12.54 s**. The combined publication,
+snapshot and terminal selection reported **275 passed, 1 failed in
+138.82 s** (141.85 s wall): the previously recorded U26 pin-chart setup
+`KeyError: 'ask'`, before its stale-origin assertions. A bounded follow-up of
+that unchanged publication file passed **40 cases in 31.42 s**. No assertion,
+deadline or synchronization was changed, and this is not a cause diagnosis.
+The new B8 counterexamples, round 7 scheduler/output checks and settled
+snapshots passed in the combined run.
+
 ### Council round 7 corrections
 
 The seventh review of `9fabf42` returned Architect PASS and Coder, QA, UX and
