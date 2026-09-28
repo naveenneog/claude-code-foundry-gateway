@@ -82,10 +82,6 @@ jobs:
       - name: Prove infrastructure failure paths
         if: ${{ matrix.shard < 3 }}
         run: |
-          if (${{ matrix.shard }} -eq 1) {
-            git fetch --no-tags --depth=1 origin 0345e85020b25d2f3595832b9453a174f253be64
-            if ($LASTEXITCODE) { throw 'The pre-P78 regression baseline could not be fetched.' }
-          }
           $modes = @('Core', 'Runner', 'Wizard')
           $evidence = Join-Path $env:RUNNER_TEMP 'test-all-evidence'
           New-Item -ItemType Directory -Path $evidence -Force | Out-Null

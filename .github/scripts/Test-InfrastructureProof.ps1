@@ -140,6 +140,7 @@ try {
         Add-Case 'pin every action' $workflow 'actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97' 'actions/setup-python@v7' $suite
         Add-Case 'read-only token' $workflow 'contents: read' 'contents: write' $suite
         Add-Case 'release tags and history' $workflow 'fetch-depth: 0' 'fetch-depth: 1' $suite
+        Add-Case 'no later shallow fetch' $workflow '$modes = @(' "git fetch --depth=1 origin main`n          `$modes = @(" $suite
         Add-Case 'hosted Windows only' $workflow "runs-on: windows-latest`n    timeout-minutes: 20" "runs-on: self-hosted`n    timeout-minutes: 20" $suite
         Add-Case 'no fail-fast' $workflow 'fail-fast: false' 'fail-fast: true' $suite
         Add-Case 'always evaluate merge' $workflow "`n    if: `${{ always() }}" "`n    if: `${{ success() }}" $suite

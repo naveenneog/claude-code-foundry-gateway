@@ -69,6 +69,14 @@ changing its mutations or timeout. The same 46-test Node baseline passes locally
 the hosted Node 22 difference remains under investigation. Wizard/preflight proofs caught 9/9
 mutations and runner proofs caught 12/12, with their complete 4/2 and 20-assertion baselines.
 
+Run [36455666772](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36455666772)
+on `a9ebfd1` passed every product check except release ancestry: the later proof-baseline fetch
+with `--depth=1` made the otherwise full checkout shallow again. That redundant fetch is removed;
+the frozen baseline already exists in full history. The projection baseline and every mutation
+passed on Node 22 in that run, so the earlier failure's cause remains unproven rather than
+classified as a Node incompatibility. Its future diagnostic is retained. Core proofs passed
+73/73 locally under the shared lock at full 79/37 assertion counts; all restored suites passed.
+
 U50-U53 track hosted compatibility, timing, remote-run identity and detector evidence. No product architecture
 component changes; this is test execution and evidence transport, not an accelerator deployment.
 

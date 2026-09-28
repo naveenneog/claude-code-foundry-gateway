@@ -126,7 +126,8 @@ if (Test-Path -LiteralPath $workflowPath) {
     Assert 'all Actions references are pinned to full commit SHAs' (
         $uses.Count -ge 5 -and @($uses | Where-Object { $_.Groups[1].Value -cnotmatch '^[\w/-]+@[a-f0-9]{40}$' }).Count -eq 0)
     Assert 'the tested checkout retains release tags and their reachable history' (
-        $workflow -match '(?s)ref: \$\{\{ github\.sha \}\}\s+fetch-depth: 0\s+persist-credentials: false')
+        $workflow -match '(?s)ref: \$\{\{ github\.sha \}\}\s+fetch-depth: 0\s+persist-credentials: false' -and
+        $workflow -notmatch 'git fetch[^\r\n]*--depth')
     Assert 'workflow tokens are read-only and no secret or privileged PR context is used' (
         $workflow -match '(?m)^permissions:\s*\r?\n\s+contents: read\s*$' -and
         $workflow -notmatch 'secrets\.|pull_request_target|azure/login|contents: write|actions: write')
