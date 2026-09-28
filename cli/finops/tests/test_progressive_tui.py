@@ -248,3 +248,25 @@ async def test_worker_completion_cannot_queue_focus_past_its_generation(monkeypa
         await settle(app, pilot)
         assert queued == [], "Worker completion must set focus now, not enqueue an old-pane callback."
         assert app.focused.id == "dash-kpis"
+
+
+@pytest.mark.parametrize("metadata", ["whoami", "capabilities"])
+async def test_fatal_data_failure_is_rendered_before_pending_metadata_finishes(metadata):
+    backend = DelayedBackend(direct=True, blocked=(metadata, "trends"))
+    app = FinOpsApp(Engine(backend, "2026-09"), Config(backend="fake"), first_run=False)
+    async with app.run_test(size=(100, 30)) as pilot:
+        try:
+            await until(lambda: backend.started[metadata].is_set()
+                        and bool(app.data.get("overview", {}).get("overview")), pilot)
+            backend.failures["trends"] = http_error(403)
+            backend.blocked["trends"].set()
+            await until(lambda: "Not in your scope" in str(app.query_one("#note-overview", Static).render()), pilot)
+            assert not backend.blocked[metadata].is_set(), "A fatal data error cannot wait for metadata."
+            assert "overview" not in app.data
+            assert app.query_one("#table-overview", DataTable).row_count == 0
+            assert "Waiting" not in str(app.query_one("#status", Static).render())
+            assert not app.editable
+        finally:
+            backend.release()
+        await settle(app, pilot)
+        assert "overview" not in app.data

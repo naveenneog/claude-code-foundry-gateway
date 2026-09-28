@@ -54,6 +54,19 @@ class ProgressiveRefresh:
                 self._waiting.discard(key)
                 self._show_wait()
 
+    async def _metadata_or_data_error(self, operation, data_task):
+        metadata = asyncio.create_task(operation)
+        try:
+            if data_task is not None:
+                completed, _ = await asyncio.wait((metadata, data_task), return_when=asyncio.FIRST_COMPLETED)
+                if data_task in completed:
+                    data_task.result()
+            return await metadata
+        finally:
+            if not metadata.done():
+                metadata.cancel()
+            await asyncio.gather(metadata, return_exceptions=True)
+
     def _error_text(self, error):
         self.present(getattr(error, "details", {}))
         return safe_text(self.redactor.text(str(error)))
@@ -76,6 +89,7 @@ class ProgressiveRefresh:
         self.update_brand()
 
     def _show_read_error(self, tab, error):
+        self.editable = False
         self.data.pop(tab, None)
         self.records.pop(tab, None)
         self.query_one(f"#table-{tab}", DataTable).clear(columns=True)
@@ -124,9 +138,11 @@ class ProgressiveRefresh:
                 if independent and tab not in {"settings", "ask", "approvals", "advanced"}:
                     data_task = asyncio.create_task(self.load_tab(tab))
                 try:
-                    identity = await self._tracked_read(
-                        "identity", asyncio.to_thread(self.engine.read, "whoami"), serial, tab)
+                    identity = await self._metadata_or_data_error(self._tracked_read(
+                        "identity", asyncio.to_thread(self.engine.read, "whoami"), serial, tab), data_task)
                 except FinOpsError as error:
+                    if data_task is not None and data_task.done():
+                        data_task.result()
                     if not independent or data_task is None:
                         raise
                     identity_error = self._error_text(error)
@@ -141,7 +157,8 @@ class ProgressiveRefresh:
                     self._show_identity()
                     if tab not in self.allowed_tabs:
                         return
-                    await self._tracked_read("capabilities", self.refresh_features(), serial, tab)
+                    await self._metadata_or_data_error(
+                        self._tracked_read("capabilities", self.refresh_features(), serial, tab), data_task)
                 if not self._current_refresh(serial, tab):
                     return
                 self.verifying_identity = False
@@ -169,8 +186,9 @@ class ProgressiveRefresh:
                 self._show_read_error(tab, error)
         finally:
             timer.stop()
-            if data_task is not None and not data_task.done():
-                data_task.cancel()
+            if data_task is not None:
+                if not data_task.done():
+                    data_task.cancel()
                 await asyncio.gather(data_task, return_exceptions=True)
             if self._refresh_serial == serial:
                 self._waiting.clear()
