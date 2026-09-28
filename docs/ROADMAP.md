@@ -443,7 +443,9 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       numbered next steps are numbered. [ADR-0032](adr/0032-guided-flow-starts-at-once.md)
 - [ ] P69 the company address in the flow — acceptance: choosing a company address creates the
       custom hostname, certificate and DNS record, states their cost before creating them, and
-      proves a request through the new address (**U30**)
+      proves a request through the new address (**U30**). Merged as `69db07a` on 2026-09-28
+      without the last clause: Azure checks that the hostname's domain is publicly delegated, so
+      the proof needs an owned domain and is P74 ([ADR-0033](adr/0033-company-address.md))
 - [ ] The agreement's price sheet at each choice — acceptance: when the administrator holds a
       billing role that can read the agreement's price sheet, the flow and the installer show the
       agreement's prices and name the billing scope they came from; without the role they show
@@ -478,7 +480,7 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       and Windows PowerShell 5.1, and a check follows every script those load and lists each remaining
       `Sort-Object` with its reason; every step of Setup with the shipped modules, the Update migrations
       and a model change plan the same canonical text on both shells, tested
-- [ ] P77 a 60-minute gate budget while the exclusive checks are sharded — acceptance:
+- [x] P77 a 60-minute gate budget while the exclusive checks are sharded — acceptance:
       `.ironclad/charter.json` gives every gate command 3,600,000 ms; ADR-0036 records the measured
       gates of 2026-09-28 (four passes between 1,368 and 1,688 s, three timeouts at 1,800 s, throttle
       8 slower with per-check timeouts) and the load; no check, mutation, throttle or per-check
