@@ -123,7 +123,9 @@ the network edge review, hashes the stored text of its review file on apply
 approved. The check's comment and this section state the boundary: the scripts the plans load, not
 the scripts their steps run.
 
-- [ ] Council, five seats; the packet gate exits 0
+- [x] Council, five seats (round 2, all PASS); the packet gate exits 0: `node .ironclad/gate.mjs --stage packet`
+      at `ffa7000`, 2026-09-28 11:48:23-12:11:20 IST under the shared lock: 22 passed, 2 warned, 0 failed,
+      2 skipped; Test-All passed in 1,368.1 s of its 1,800 s budget, the Bicep build in 7.3 s
 
 ## P72 permutation tests of the guided flow and the installer, 2026-09-28
 
