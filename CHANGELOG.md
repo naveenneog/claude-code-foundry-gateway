@@ -29,6 +29,16 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P78 hosted test infrastructure (proposal).** Opt-in deterministic Test-All shards retain
+  isolated processes, exclusive checks and deadlines, with commit/tree-bound receipts and an
+  ordered, fail-closed coverage merge. A SHA-pinned, read-only GitHub workflow installs both AUM
+  Python environments and offline prerequisites. The remote helper validates exact-source jobs
+  and artifacts rather than a workflow badge. The wizard and preflight retain native Windows
+  boundaries through isolated fixtures instead of an operator's Azure session.
+  [Test execution](tests/README.md), [P78 evidence](docs/STATUS.md),
+  [draft ADR-0039](docs/adr/0039-test-suite-hosted-runners.md).
+  The charter, product scripts and deployed resources are unchanged.
+
 - **P69 council corrections.** Inherited addresses are resolved before Foundation approval;
   proposed decisions no longer overwrite applied state or history; failed replacements have a
   narrowly scoped recovery review; Azure transitions reconcile metadata and generated settings.
