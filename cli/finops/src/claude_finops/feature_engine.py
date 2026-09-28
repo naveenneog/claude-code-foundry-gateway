@@ -2,6 +2,7 @@ from copy import deepcopy
 from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 
+from .backend import in_read_cycle
 from . import capabilities as cap
 from .errors import FinOpsError
 from .rules import identifier, month_window, parse_tokens, require_owner, scope_type
@@ -28,6 +29,7 @@ class FeatureEngine:
         prefix = f"@{tenant}/" if tenant else ""
         return "https://portal.azure.com/#" + prefix + "view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Members/groupId/" + group_id
 
+    @in_read_cycle
     def person_detail(self, person, team):
         people = self.read("people", **self.backend.people_filter(identifier(team) if team else ""), query=identifier(person), offset=0, limit=50)
         row = next((item for item in people["items"] if item["scope_id"] == person), None)
@@ -93,6 +95,7 @@ class FeatureEngine:
                 plan["result"] = self.backend.write("catalog", body, **metadata)
         return plan
 
+    @in_read_cycle
     def compare_trends(self, comparison, interval="day", group_by="none", **filters):
         month_window(comparison)
         current = self.read("trends", interval=interval, group_by=group_by, **filters)

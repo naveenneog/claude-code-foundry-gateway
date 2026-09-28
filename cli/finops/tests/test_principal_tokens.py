@@ -356,3 +356,58 @@ def test_completed_cycle_rejects_an_aggregate_built_before_principal_change(esta
 
     with pytest.raises(FinOpsError, match="sign-in changed"):
         aggregate()
+
+
+@pytest.mark.parametrize("operation", ["chargeback", "lookup", "compare_trends", "person_detail"])
+def test_multi_source_engine_reads_cannot_combine_a_data_with_a_verified_b_session(estate, operation):
+    backend, state, _, _, _ = estate
+    engine = Engine(backend, "2026-09")
+    person = "00000000-0000-0000-0000-00000000000a"
+
+    def bridge(action, **params):
+        snapshot = a_only_snapshot()
+        snapshot["tiers"] = [{"id": "standard", "tokens_per_day": 100, "models": []}]
+        if state["principal"] != "a@contoso.com":
+            snapshot["catalog"]["organizations"] = []
+        return snapshot
+
+    def respond(request):
+        kql = json.loads(request.content)["query"]
+        if "by bucket_start" in kql:
+            rows = [{"bucket_start": "2026-09-01T00:00:00Z", "total_tokens": 7}]
+        elif "person_id" in kql:
+            rows = [{"person_id": person, "user_id": person, "actor": "a@contoso.com",
+                     "tier": "standard", "used_tokens": 7, "window_tokens": 7}]
+        elif "summarize" in kql and "by id=" not in kql:
+            rows = [{"total_tokens": 7, "estimated_cost": None}]
+        else:
+            rows = []
+        columns = list(rows[0]) if rows else []
+        return httpx.Response(200, json={"tables": [
+            {"columns": [{"name": name} for name in columns],
+             "rows": [[row[name] for name in columns] for row in rows]}]})
+
+    backend._bridge = bridge
+    backend._client = httpx.Client(transport=httpx.MockTransport(respond))
+    engine.read("whoami")
+    original = engine.read
+    switch_after = {"chargeback": "catalog", "lookup": "catalog",
+                    "compare_trends": "trends", "person_detail": "people"}[operation]
+
+    def switch_after_read(resource, **params):
+        result = original(resource, **params)
+        if resource == switch_after and state["principal"] == "a@contoso.com":
+            state["principal"] = "b@contoso.com"
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                assert pool.submit(original, "whoami").result(timeout=5)["email"] == "b@contoso.com"
+        return result
+
+    engine.read = switch_after_read
+    actions = {
+        "chargeback": lambda: engine.chargeback(),
+        "lookup": lambda: engine.lookup("only-a"),
+        "compare_trends": lambda: engine.compare_trends("2026-08"),
+        "person_detail": lambda: engine.person_detail(person, "only-a"),
+    }
+    with pytest.raises(FinOpsError, match="sign-in changed"):
+        actions[operation]()

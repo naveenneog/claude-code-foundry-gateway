@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from threading import RLock
 
+from .backend import in_read_cycle
 from .errors import FinOpsError
 from .rules import (allocation_left, apply_state, identifier, month_window, parse_tokens,
                     require_owner, require_budget_write, scope_type, validate_budget)
@@ -88,6 +89,7 @@ class Engine(FeatureEngine):
         with self.backend.read_cycle():
             return dict(catalog=self.read("catalog"), tiers=self.read("tiers"), apply=self.read("apply"))
 
+    @in_read_cycle
     def chargeback(self, dimension="organization"):
         if dimension not in {"organization", "department"}:
             raise FinOpsError("Complete chargeback supports organization or department. Use usage show for top-100 model/person rankings.")
@@ -356,6 +358,7 @@ class Engine(FeatureEngine):
             plan["result"] = self.backend.write(resource, body, **metadata)
         return plan
 
+    @in_read_cycle
     def lookup(self, text, department_id=None):
         text = text.strip()[:200]
         if not text:

@@ -1,6 +1,15 @@
 from abc import ABC, abstractmethod
 from contextlib import nullcontext
+from functools import wraps
 from typing import Any
+
+
+def in_read_cycle(operation):
+    @wraps(operation)
+    def read(self, *args, **kwargs):
+        with self.backend.read_cycle():
+            return operation(self, *args, **kwargs)
+    return read
 
 
 class Backend(ABC):

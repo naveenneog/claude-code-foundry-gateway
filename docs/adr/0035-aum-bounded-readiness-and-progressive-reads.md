@@ -171,6 +171,10 @@ or newly completed snapshot and each completed aggregate checks the same
 generation before returning data. Invalidating credentials makes every cycle
 holding that generation obsolete, not only the calling cycle. Obsolete cycles
 fail with a sign-in-changed error; a new cycle performs fresh verification.
+Multi-source chargeback, lookup, trend comparison and person-detail reads keep
+that cycle open through assembly, as status and governance already do. This
+prevents an aggregate from combining a completed A-only source with later reads
+after a verified B sign-in.
 
 ## Consequences
 
