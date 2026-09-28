@@ -199,6 +199,16 @@ requested values are unchanged. The architecture renderer verified 16 specs
 and 18 images; the changed AUM readiness image was inspected and contains
 generic component names, not deployment identifiers.
 
+The locked affected run on `3ceaa9f` passed **319 tests in 324.72 s** (328.95 s
+wall), 14:43:48Z-14:49:17Z. No full-suite runner or gate was invoked.
+A subsequent longer-input probe found that repeatedly wrapping a widget's
+previous input origin built a recursive guard chain: **1 failed, 2 passed**,
+with `RecursionError` during 1,024 ordinary edits. Input now retains one
+immutable content origin and replaces only the current-input check. The
+three lifecycle cases and all **37 runtime sink cases** pass; a separate
+control proves credential invalidation still rejects that original content
+even without an identity-revision change. Final combined proof follows below.
+
 ### Council round 5 corrections
 
 The fifth review closed B3 and retained Architect/Coder/QA/UX PASS. Security

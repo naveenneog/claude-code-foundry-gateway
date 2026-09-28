@@ -252,6 +252,9 @@ and framework input actions use retained provenance; application handlers and
 layout/idle dispatch do not gain implicit authority. A refused scheduled write
 is handled before Textual abandons its message loop, clearing the view and
 retaining the explicit exit-3 explanation.
+Repeated input edits retain one immutable content origin rather than nesting
+the previous keystroke's wrapper. This bounds guard depth without replacing
+the original credential generation with an unpinned current-identity guard.
 
 The reported navigation cancellation is investigated with a bounded repeated
 test/file run under the shared lock. No timeout, assertion or suite budget is

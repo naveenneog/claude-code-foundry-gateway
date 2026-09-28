@@ -1,6 +1,8 @@
 """Textual presentation sinks; framework input retains the widget's provenance."""
 
-from contextlib import contextmanager
+from collections.abc import Callable
+from contextlib import AbstractContextManager, contextmanager
+from dataclasses import dataclass
 from functools import wraps
 import inspect
 
@@ -23,6 +25,11 @@ FRAMEWORK_INPUT_HANDLERS = {
     (TextualTextArea, "_on_key"), (TextualTextArea, "_on_paste"),
     (TextualSelect, "_on_mount"), (TextualSelect, "_update_selection"),
 }
+
+
+@dataclass(frozen=True)
+class _InputOrigin(PublicationOrigin):
+    content_origin: Callable[[], AbstractContextManager]
 
 
 def widget_sink(operation):
@@ -67,13 +74,15 @@ class PublicationWidget(PublicationDispatch):
 
     def input_origin(self):
         source = self._publication_origin
+        if isinstance(source, _InputOrigin):
+            source = source.content_origin
         current = self.app.current_guard()
 
         @contextmanager
         def guard():
             with source(), current():
                 yield
-        return PublicationOrigin(guard, self._publication_rejected)
+        return _InputOrigin(guard, self._publication_rejected, source)
 
     def _get_dispatch_methods(self, method_name, message):
         for cls, operation in super()._get_dispatch_methods(method_name, message):
