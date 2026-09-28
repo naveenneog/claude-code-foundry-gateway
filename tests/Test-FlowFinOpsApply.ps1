@@ -35,6 +35,8 @@ if ($Child) {
         try {
             # No region: the choices are built without reading the Retail Prices API.
             $plan = Get-ClaudeFlowStepPlan -Record $record -Discovery @{}
+            # A native command's exit code from before the step is not the step's.
+            $global:LASTEXITCODE = 1
             $out = @(Invoke-ClaudeFlowStep -Record $record -Plan $plan)
             $result.returned = if ($out.Count -eq 1 -and $out[0] -is [System.Collections.IDictionary]) { 'one change set: ' + (@($out[0].Keys) -join ',') } else { "$($out.Count) objects" }
         }

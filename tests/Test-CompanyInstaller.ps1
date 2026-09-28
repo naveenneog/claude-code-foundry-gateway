@@ -224,6 +224,12 @@ function Invoke-ClaudeAddressHttps {param($Hostname,$Thumbprint,$ConnectAddress,
             $new.apimName -eq 'apim-contoso' -and $archived.Writes -contains 'deployment'
     }
     & $clearArchives
+    $archivePreview=Invoke-Installer @{ArchiveSavedRecord=$true;AddressMode='azure';WhatIf=$true} $false $foreign
+    Check 'under -WhatIf, -ArchiveSavedRecord says what it would keep and moves nothing' {
+        -not $archivePreview.Failure -and $archivePreview.Text -match 'WhatIf: would keep the record for rg-saved/apim-saved' -and
+            (& $archiveOf).Count -eq 0 -and (Get-Content -Raw $recordPath|ConvertFrom-Json).apimName -eq 'apim-saved' -and $archivePreview.Writes.Count -eq 0
+    }
+    & $clearArchives
     $attendedYes=Invoke-Installer @{Yes=$false;AddressMode='azure'} $false $foreign
     Check 'in a console, yes (the default) keeps the other record and goes on' {
         $kept=& $archiveOf
