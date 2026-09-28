@@ -136,9 +136,10 @@ apim_prices_() {
   # not depend on the price's size, its trailing zeros or an exponent. Windows PowerShell 5.1 reads
   # a price written without an exponent as an exact decimal, so for a price with more than 15
   # significant digits the two PowerShell hosts can differ by a cent; this installer gives
-  # PowerShell 7's cent. jq 1.7 and later round a price written with more than 17 significant
-  # digits to 17 before converting it; the API writes API Management v2 prices with at most 7
-  # (measured 2026-09-28).
+  # PowerShell 7's cent. jq 1.7.0 converts a number through a 16-digit decimal, so a price written
+  # with 17 significant digits can differ by a cent (the preflight warns); jq 1.7.1 and later round
+  # a price written with more than 17 significant digits to 17 before converting it. The API writes
+  # API Management v2 prices with at most 7 significant digits (measured 2026-09-28).
   local transformed
   if ! transformed="$(printf '%s' "$pages" | jq -cs '
     def digits_num: explode | reduce .[] as $c (0; . * 10 + $c - 48);

@@ -125,11 +125,12 @@ differences from PowerShell 7; over 3,000 of them through the whole transform: 0
 
 Two limits, stated in the installer: Windows PowerShell 5.1 reads a price written without an
 exponent as an exact decimal, so above 15 significant digits the two PowerShell hosts can differ by
-a cent, and this installer gives PowerShell 7's; jq 1.7 and later round a price written with more
+a cent, and this installer gives PowerShell 7's; jq 1.7.1 and later round a price written with more
 than 17 significant digits to 17 before converting it (0.0105000000000000501 becomes
 0.01050000000000005, where .NET reads 0.010500000000000051), so such a price can differ by a cent.
-Every one of the 43 differences in a set of 132,993 had 18 significant digits. The Retail Prices
-API wrote the 182 API Management v2 prices with at most 7 significant digits (read 2026-09-28).
+Every one of the 43 differences in a set of 132,993 had 18 significant digits, measured with jq 1.8.2.
+The Retail Prices API wrote the 182 API Management v2 prices with at most 7 significant digits (read
+2026-09-28). jq 1.7.0 differs more: see council round 3 below.
 
 The parity fixture has ten written prices: B1's three, 6.25E-2, 0.2214999999999999, 1.25e-05, and
 four 17-digit prices a hair from a half-cent month (PowerShell 7: 5.48, 147.10, 752.27 and 2918.90).
@@ -141,7 +142,33 @@ Mutations, the same rule, at 62 checks: 36 of 36 caught. The two that changed th
 their place: cents rounded half up on the digit string, the 15-digit conversion rounding half up,
 and the 15-digit conversion truncating.
 
+Council round 3 (gpt-6-astra, five seats, read-only, over `2cb7c7a..dcca62c`): BLOCK. B1 is closed:
+its three prices and the four near-ties match PowerShell 7, and 11,705 more inputs (zero, exponent
+forms, 0.0001 to 100,000) differed on none of jq 1.5, 1.6 and 1.8.2.
+
+| Seat | Verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | PASS | B1 closed | none needed |
+| Coder | BLOCK | B2: jq 1.7.0 converts a number literal through a 16-digit decimal (decimal64), so 0.010500000000000051 gives 7.66 a month where PowerShell 7 gives 7.67; 18 of the 11,705 inputs differed on jq 1.7.0. `scripts/preflight.sh` accepts that release | the preflight warns, below |
+| QA | PASS | the literal-preserving fixtures exercise B1 | none needed |
+| UX | BLOCK | B2 in the text: "jq 1.7 and later" is wrong for 1.7.0 | the installer's comment and this section name 1.7.0 and 1.7.1 apart |
+| Security | PASS | the new arithmetic runs no command and reads no path | none needed |
+
+Measured after the review, with the official release binaries of jq 1.5, 1.6, 1.7 (which names
+itself `jq-1.7-dirty` on Windows) and 1.7.1, over the 124,993 prices of at most 17 significant
+digits: jq 1.7.0 differed from PowerShell 7 on 8,686, every one of them written with 17 significant
+digits; jq 1.5, 1.6 and 1.7.1 on none. The jq 1.7.1 release notes name the change: the conversion
+through decimal64 was replaced ([NEWS](https://github.com/jqlang/jq/blob/jq-1.7.1/NEWS.md)). The API
+writes these prices with at most 7 significant digits, so with jq 1.7.0 every published price matches
+PowerShell 7's cent; a refusal of jq 1.7.0 would stop an install over a price form the API does not
+use. The admin preflight warns instead: "jq 1.7.0: a price written with 17 significant digits can be a
+cent off; jq 1.7.1 or later matches the PowerShell installer", with how to upgrade. The developer
+setup computes no price and is not warned. `tests/Test-BashInstaller.ps1` has two more runs, with jq
+reporting `jq-1.7-dirty` and `jq-1.7.1`: the first is warned and installs, the second is not warned,
+and neither is the jq on the machine (66 checks, in 43 s).
+
 - [ ] Council, five seats; the packet gate exits 0
+
 ## P72 permutation tests of the guided flow and the installer, 2026-09-28
 
 The owner's test on 2026-09-27 found the guided flow's defects one path at a time. P72 tests the
