@@ -780,7 +780,7 @@ are culture-dependent, and the numeric free-prefix sort needs its documented val
       null/empty inputs and case-folded uniqueness retain their caller semantics
 - [x] A hyphen-versus-letter regression passes on PowerShell 7 and Windows PowerShell 5.1;
       restoring a string `Sort-Object` is caught with the complete selector count
-- [ ] P69 and the requested network suites pass with their scratch dependencies copied;
+- [x] P69 and the requested network suites pass with their scratch dependencies copied;
       the lead runs the packet gate and council round 4, not this integration task
 
 Initial measurement: native sorting gives `eastus-b,eastusa` on PowerShell 7 and
@@ -798,6 +798,21 @@ loading FlowContract directly must not reject the explicitly allowed numeric `La
 The numeric line still has to exist unchanged, and no string sort was added to the exception
 table. P69's installer and mutation sandboxes already copy FlowContract; the network review
 mutation sandbox now copies it into its `scripts\flow` directory too.
+
+Implemented in `73ce7c0`. Focused validation on PowerShell 7 and Windows PowerShell 5.1:
+CompanyAddress 79/79, CompanyCertificate 31/31, CompanyFlow 34/34, CompanyInstaller 17/17,
+FlowAppliedState 20/20, CompanyMutationRunner 5/5 and AddressDeadline 6/6. The full P69
+mutation harness catches 105/105 cases with complete 79/31/34/17/20/6 selector counts
+(330.2 s PS7, 597.2 s PS5.1). Three new mutations restore the native region sort or remove
+one standalone ordinal import; each is caught by CompanyFlow at its full 34 assertions.
+
+`Test-FlowOrdinalOrder` passes all 35 checks, including its cross-host probes. The requested
+network suites pass on both hosts: NetworkEdge 67/67, NetworkImpact 26/26,
+NetworkReviewNegative 10/10 mutations, NetworkEdgeNegative 14/14 mutations. One concurrent
+validation run hit existing timing-sensitive PS5.1 address/deadline checks while the network
+tests ran; both passed in isolation, then the two full mutation harnesses ran sequentially.
+No bound, selector or assertion was changed to pass those checks. The numeric free-prefix loop
+is unchanged. No Test-All or packet gate was run; the lead owns the gate and council round 4.
 
 ### Council round 3 corrections
 

@@ -182,6 +182,12 @@ including native Azure reads, is stopped at timeout; a result arriving late is n
 The PFX is read once per planning/apply validation: that buffer is validated and hashed, and the
 apply uploads the same buffer after DNS waits, without reopening the path.
 
+The P76 integration uses `Sort-ClaudeFlowOrdinal` for hostname projections and the network
+region, subscription and NSG identifier lists reached by plans. The helpers load the shared
+flow contract when used alone; scratch copies carry the same dependency. The network free-prefix
+loop retains its native sort on the integer address key `Last`, with a value-key exception in
+the ordinal-order test. That numeric comparison is independent of culture; string order is not.
+
 ## Consequences
 
 The company choice configures what it promises, and the record changes only after the address
