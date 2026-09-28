@@ -177,6 +177,14 @@ Deferred async callbacks hold no identity lock across an await. U26 records
 30 passing baseline navigation repetitions and the 20-case file run without
 claiming a reproduction or fix for the reported cancellation.
 
+Terminal text/rich output, CSV file creation and command clipboard subprocesses
+now use sink wrappers too. Their RED run reported **12 failed, 25 passed**;
+the complete runtime file then passed **37 cases**, covering expired,
+obsolete-active and current origins at every output sink. Structure coverage
+passes **29 cases**, including isolated lambda and partial rules independent
+of scheduler detection. The application-level sinks live beside the protected
+widgets, and the main UI source remains within its 700-line budget.
+
 ### Council round 5 corrections
 
 The fifth review closed B3 and retained Architect/Coder/QA/UX PASS. Security

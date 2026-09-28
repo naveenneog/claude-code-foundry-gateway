@@ -18,6 +18,7 @@ from .brand import BANNER, PRODUCT, show_banner
 from . import __version__
 from .redaction import Redactor
 from .guarded_publication import guarded_publish
+from .publication_output import write_text
 from contextlib import nullcontext
 
 
@@ -376,10 +377,10 @@ def report_chargeback(ctx: typer.Context, csv: Annotated[bool, typer.Option("--c
                 rows = ctx.obj["engine"].chargeback(dimension)["items"]
                 output = chargeback_csv(ctx.obj["redactor"].present(rows), ctx.obj["engine"].month)
                 with guarded_publish(ctx.obj["engine"].backend.read_guard()):
-                    typer.echo(output, nl=False)
+                    write_text(output, nl=False)
         except FinOpsError as error:
             with guarded_publish(nullcontext):
-                typer.echo(str(error), err=True)
+                write_text(str(error), err=True)
             raise typer.Exit(error.code) from None
     else:
         emit(ctx, lambda e: e.chargeback(dimension))

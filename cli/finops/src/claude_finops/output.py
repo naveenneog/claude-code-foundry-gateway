@@ -6,6 +6,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 from .guarded_publication import published, enclosing_publication
+from .publication_output import write_text, write_renderable
 
 
 def safe_text(value):
@@ -29,10 +30,10 @@ def linear(value, prefix=""):
 @published(lambda *args, **kwargs: enclosing_publication())
 def display(value, *, as_json=False, plain=False, no_color=False):
     if as_json:
-        print(json.dumps(value, indent=2, ensure_ascii=True, default=str))
+        write_text(json.dumps(value, indent=2, ensure_ascii=True, default=str))
         return
     if plain:
-        print("\n".join(linear(value)))
+        write_text("\n".join(linear(value)))
         return
     console = Console(no_color=no_color, highlight=False)
     render(console, value)
@@ -48,7 +49,7 @@ def render(console, value, title=""):
             table.add_column()
             for key, item in simple.items():
                 table.add_row(Text(key.replace("_", " ")), Text(safe_text(item) if item is not None else "unknown"))
-            console.print(table)
+            write_renderable(console, table)
         for key, item in value.items():
             if isinstance(item, (dict, list)):
                 render(console, item, key.replace("_", " "))
@@ -62,11 +63,11 @@ def render(console, value, title=""):
                 table.add_column(key.replace("_", " "))
             for row in value:
                 table.add_row(*(Text(safe_text(row.get(key)) if row.get(key) is not None else "unknown") for key in keys))
-            console.print(table)
+            write_renderable(console, table)
         else:
-            console.print(Text(f"{title}: " + ", ".join(map(safe_text, value))))
+            write_renderable(console, Text(f"{title}: " + ", ".join(map(safe_text, value))))
     else:
-        console.print(Text(safe_text(value)))
+        write_renderable(console, Text(safe_text(value)))
 
 
 def chargeback_csv(rows, month):

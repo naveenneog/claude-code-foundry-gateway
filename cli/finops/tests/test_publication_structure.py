@@ -9,11 +9,12 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1] / "src" / "claude_finops"
 UI_FILES = tuple(sorted(path.name for path in ROOT.glob("*.py") if path.name in {
-    "cli.py", "commands_local.py", "output.py", "feature_engine.py",
+    "cli.py", "commands_local.py", "output.py", "feature_engine.py", "publication_output.py",
 } or any(isinstance(node, ast.ImportFrom) and (node.module or "").startswith("textual")
          for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))))))
 SINKS = {"update", "load_text", "add_row", "set_options", "copy_to_clipboard",
-         "open_url", "write", "write_text", "display", "render", "print", "echo", "ask"}
+         "open_url", "write", "write_text", "display", "render", "print", "echo", "ask",
+         "write_export", "write_renderable", "copy_with_helper"}
 VALUE_WIDGETS = {"Label", "Static", "TextArea", "Input", "Select"}
 SINK_PROPERTIES = {"value", "text", "label", "border_title", "placeholder", "tooltip"}
 SCHEDULERS = {"call_later", "call_after_refresh", "set_timer", "set_interval",
@@ -374,5 +375,23 @@ def handler(self, origin):
             return self.render_private_row(self.cached_row)
         alias = callback
     self.call_after_refresh(alias)
+"""
+    assert sinks(source, "example.py", {})
+
+
+def test_lambda_body_never_inherits_the_creation_scope():
+    source = """
+def handler(self, widget, origin):
+    with guarded_publish(origin):
+        self.callback = lambda: widget.update(self.cached_row)
+"""
+    assert sinks(source, "example.py", {})
+
+
+def test_partial_sink_reference_requires_explicit_deferral_without_a_scheduler():
+    source = """
+def handler(self, widget, origin):
+    with guarded_publish(origin):
+        self.callback = partial(widget.update, self.cached_row)
 """
     assert sinks(source, "example.py", {})

@@ -13,6 +13,7 @@ from .errors import FinOpsError
 from .output import chargeback_csv, safe_text
 from .rules import allocation_left, apply_state, human, month_window, parse_tokens
 from .guarded_publication import guarded_publish, published
+from .publication_output import write_export
 
 
 class DetailScreen(ModalScreen):
@@ -406,8 +407,7 @@ class ExportScreen(ModalScreen):
                 with guarded_publish(self.app.current_guard()):
                     folder = Path.cwd() / "finops-reports"
                     folder.mkdir(exist_ok=True)
-                    with (folder / name).open("x", encoding="utf-8", newline="") as output:
-                        output.write(content)
+                    write_export(folder / name, content)
                     self.query_one("#export-status", Static).update(
                         self.app.redactor.text(f"Exported {len(result['items'])} scopes to finops-reports\\{name}."))
         except (OSError, FinOpsError) as error:

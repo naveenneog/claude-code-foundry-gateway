@@ -1,7 +1,10 @@
 import asyncio
 from functools import partial
+import io
+from types import SimpleNamespace
 
 import pytest
+from rich.console import Console
 from textual.app import App
 from textual.widgets import Button, DataTable, Input, Static, TextArea
 
@@ -186,3 +189,43 @@ async def test_async_deferral_rechecks_sinks_after_await_without_blocking_identi
             release.set()
             await asyncio.gather(task, return_exceptions=True)
         assert value not in str(app.query_one("#status", Static).render())
+
+
+@pytest.mark.parametrize("sink", ["export", "text", "renderable", "clipboard"])
+@pytest.mark.parametrize("state", ["expired", "obsolete", "current"])
+def test_output_sinks_check_the_origin_at_the_write(bearer_tui_estate, tmp_path, capsys, monkeypatch, sink, state):
+    from claude_finops import publication_output
+    engine, _ = bearer_tui_estate
+    with engine.backend.read_cycle():
+        value = engine.read("budgets")["items"][0]["scope_name"]
+        origin = engine.backend.read_guard()
+    target = tmp_path / "usage.csv"
+    rich_output, clipboard = io.StringIO(), []
+    def copy(command, **kwargs):
+        clipboard.append(kwargs["input"])
+        return SimpleNamespace(returncode=0)
+    monkeypatch.setattr(publication_output.subprocess, "run", copy)
+    operations = {
+        "export": partial(publication_output.write_export, target, value),
+        "text": partial(publication_output.write_text, value),
+        "renderable": partial(publication_output.write_renderable, Console(file=rich_output), value),
+        "clipboard": partial(publication_output.copy_with_helper, ["synthetic-clipboard"], value),
+    }
+    if state == "current":
+        with guarded_publish(origin):
+            operations[sink]()
+    elif state == "obsolete":
+        with guarded_publish(origin):
+            engine.backend.invalidate_credentials()
+            with pytest.raises(FinOpsError, match="sign-in changed"):
+                operations[sink]()
+    else:
+        with guarded_publish(origin):
+            callback = operations[sink]
+        with pytest.raises(FinOpsError, match="publication|unguarded"):
+            callback()
+    actual = capsys.readouterr().out + rich_output.getvalue() + str(clipboard)
+    if target.exists():
+        actual += target.read_text()
+    assert (value in actual) is (state == "current")
+    assert target.exists() is (state == "current" and sink == "export")

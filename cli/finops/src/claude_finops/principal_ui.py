@@ -12,6 +12,9 @@ from .screens import ChangeScreen
 
 
 class PrincipalUI:
+    def present(self, value):
+        return self.redactor.present(value)
+
     def cached_guard(self, tab=None):
         cached = self._data_guards.get(tab or self.active)
         if cached is None:

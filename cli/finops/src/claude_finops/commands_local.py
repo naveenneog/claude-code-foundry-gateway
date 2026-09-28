@@ -1,12 +1,12 @@
 from pathlib import Path
 import shutil
-import subprocess
 import typer
 
 from .config import az
 from .errors import FinOpsError
 from .preferences import Preferences
 from .guarded_publication import guarded_publish
+from .publication_output import copy_with_helper
 
 
 def register(app, groups, emit):
@@ -106,7 +106,7 @@ def register(app, groups, emit):
             else:
                 raise FinOpsError("No clipboard helper is available. Use requests show --json and copy request_id.")
             with guarded_publish(engine.backend.read_guard()):
-                result = subprocess.run(command, input=key, text=True, capture_output=True, timeout=20)
+                result = copy_with_helper(command, key)
             if result.returncode:
                 raise FinOpsError("Clipboard copy failed. Use requests show --json.", 7)
             return dict(copied=True, request_id=key)

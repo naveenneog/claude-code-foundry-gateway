@@ -94,6 +94,33 @@ class PublicationWidget:
         return run
 
 
+class PublicationApp:
+    @publication_sink
+    def copy_to_clipboard(self, text):
+        return super().copy_to_clipboard(text)
+
+    @publication_sink
+    def open_url(self, url, *, new_tab=True):
+        return super().open_url(url, new_tab=new_tab)
+
+    def _publication_rejected(self, error):
+        self._reject_publication(error)
+
+    async def _dispatch_action(self, namespace, action_name, params):
+        if isinstance(namespace, PublicationWidget):
+            for cls in type(namespace).__mro__:
+                method = cls.__dict__.get("action_" + action_name)
+                if method is not None:
+                    if cls.__module__.startswith("textual.widgets."):
+                        callback = namespace._framework_callback(namespace.input_origin(), method.__get__(namespace, cls))
+                        result = callback(*params)
+                        if inspect.isawaitable(result):
+                            await result
+                        return True
+                    break
+        return await super()._dispatch_action(namespace, action_name, params)
+
+
 class Static(PublicationWidget, TextualStatic):
     update = widget_sink(TextualStatic.update)
 
