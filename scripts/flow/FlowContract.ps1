@@ -229,8 +229,16 @@ function Get-ClaudeFlowFingerprint {
     return (-join ($bytes | ForEach-Object { $_.ToString('x2') }))
 }
 
+function Resolve-ClaudeFlowFilePath {
+    # .NET file methods resolve a relative path against the process's start directory, which `cd` in
+    # PowerShell does not change (P79): a relative path here means PowerShell's current folder.
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+}
+
 function Read-ClaudeDecisionRecord {
     param([Parameter(Mandatory = $true)][string]$Path)
+    $Path = Resolve-ClaudeFlowFilePath $Path
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
     $text = [IO.File]::ReadAllText($Path)
     try { return ($text | ConvertFrom-Json) }
@@ -324,6 +332,7 @@ function Write-ClaudeDecisionRecord {
     # Written beside the target and moved over it, so an interrupted write never leaves a half
     # record behind.
     param([Parameter(Mandatory = $true)]$Record, [Parameter(Mandatory = $true)][string]$Path)
+    $Path = Resolve-ClaudeFlowFilePath $Path
     $dir = Split-Path -Parent $Path
     if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     $temp = "$Path.tmp-$([guid]::NewGuid().ToString('N'))"
