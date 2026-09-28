@@ -7,7 +7,7 @@
   "width": 1280,
   "height": 924,
   "outputs": ["docs/images/architecture/company-address.png"],
-  "sources": ["Install-ClaudeGateway.ps1", "Start-ClaudeGateway.ps1", "scripts/flow/Address.ps1", "scripts/flow/Foundation.ps1", "scripts/flow/Discovery.ps1", "scripts/ClaudeGatewayAddress.ps1", "scripts/ClaudeGatewayCertificate.ps1", "scripts/ClaudeNetwork.ps1", "scripts/AzureRetailPrice.ps1", "infra/main.bicep"],
+  "sources": ["Install-ClaudeGateway.ps1", "Start-ClaudeGateway.ps1", "scripts/flow/Address.ps1", "scripts/flow/Foundation.ps1", "scripts/flow/Discovery.ps1", "scripts/flow/FlowContract.ps1", "scripts/ClaudeGatewayAddress.ps1", "scripts/ClaudeGatewayAddressInput.ps1", "scripts/ClaudeGatewayAddressRecovery.ps1", "scripts/ClaudeGatewayAddressWait.ps1", "scripts/ClaudeGatewayCertificate.ps1", "scripts/ClaudeNetwork.ps1", "scripts/AzureRetailPrice.ps1", "infra/main.bicep"],
   "identifiers": {
     "plan": {"label": "Get-ClaudeAddressPlan", "source": "scripts/ClaudeGatewayAddress.ps1", "match": "function Get-ClaudeAddressPlan"},
     "change": {"label": "Address step", "source": "scripts/flow/Address.ps1", "match": "DecisionKey = 'address'"},
@@ -27,7 +27,7 @@
     {"id": "review", "x": 18, "y": 56, "w": 1244, "h": 158, "tone": "purple", "title": "1 - One costed address plan", "lines": [
       "Installer company choice or [[change]] calls [[plan]].",
       "DNS and Key Vault retail rates; issuer/provider charges remain separate and unknown when unpriced.",
-      "Installer summary or [[fingerprint]] approves explicit targets, certificate and live-state baseline."
+      "Installer summary or [[fingerprint]] approves effective inherited inputs; proposed decisions remain separate from applied state."
     ]},
     {"id": "dns", "x": 18, "y": 332, "w": 385, "h": 260, "tone": "blue", "title": "2 - Establish DNS ownership", "lines": [
       "[[dns]] to <apim>.azure-api.net",
@@ -42,7 +42,7 @@
     {"id": "binding", "x": 876, "y": 332, "w": 385, "h": 260, "tone": "blue", "title": "4 - Patch the gateway binding", "lines": [
       "Proxy [[patch]] only; retain other entries and all service/network properties.",
       "Basic/Standard: explicit old-host replacement. Premium: additional hosts.",
-      "Progress, estimate and bounded update wait."
+      "Bounded update; scoped recovery before proof."
     ]},
     {"id": "proof", "x": 18, "y": 710, "w": 600, "h": 142, "tone": "teal", "compact": true, "title": "5 - Prove the new address", "lines": [
       "[[proof]] uses company SNI and Host.",
@@ -62,5 +62,5 @@
     {"from": "binding", "to": "proof", "kind": "control", "points": [[1068, 592], [1068, 634], [318, 634], [318, 710]]},
     {"from": "proof", "to": "publish", "kind": "control", "points": [[618, 780], [662, 780]]}
   ],
-  "notice": "Live limit: Basic v2 rejected the undelegated .test hostname with CustomHostnameOwnershipCheckFailed even after its Azure DNS CNAME answered authoritatively. No positive company-hostname TLS proof is claimed."
+  "notice": "Accepted deferral to P74, not done: Basic v2 rejected the undelegated .test hostname with CustomHostnameOwnershipCheckFailed after authoritative DNS succeeded. Positive company-hostname TLS requires an owned, delegated domain."
 }

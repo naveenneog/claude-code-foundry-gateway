@@ -163,6 +163,12 @@ eight characters. `-WhatIf` prints the same review and writes nothing.
 
 ## Resume after failure
 
+Questions and plans use proposed decisions in memory. Durable `decisions`
+contain only applied values; each history entry's `from` is captured before
+questions. A failed step cannot save its proposed answer with an old certificate
+pin or other applied metadata. Successful steps advance their own applied
+decisions. Unapplied answers are supplied again on a retry.
+
 When an apply starts, the orchestrator writes `activeRun` with the run id,
 action, selected change, fingerprint and UTC start time. After each step applies,
 it writes the decision record and appends one history entry with that `runId`,
@@ -267,16 +273,26 @@ reused on a subsequent review after a DNS or TLS problem is resolved.
 For unattended Setup, the `foundation.addressMode`,
 `foundation.addressHostname`, `foundation.addressCertificateSource`,
 `foundation.addressKeyVaultCertificateId`, `foundation.addressPfxPath` and
-`foundation.addressDnsZoneResourceId` inputs reach the installer. Its nested
+`foundation.addressDnsZoneResourceId` / `foundation.addressDnsMode` inputs reach the installer. Its nested
 address plan and costs are fingerprinted, and a changed nested plan is refused
 before installer writes. Attended Setup continues to use the installer's own
 choices and summary confirmation.
+When those inputs are omitted, unattended Foundation resolves them from the
+applied address first and passes the exact resolved choice. No recorded address
+means an explicit Azure choice, not an unreviewed installer default.
+
+A failed replacement can leave the old recorded hostname absent from Azure.
+The unverified `pendingAddress` receipt allows only a matching `Change address`
+recovery review: gateway, previous URL, proposed inputs and exact live hostname
+collection must match. The review has a fresh fingerprint. Neither that receipt
+nor recovery discovery labels the company URL as verified, and other actions
+still refuse drift.
 
 The [live isolated run](SETUP.md#company-address) demonstrated authoritative DNS
 and Azure's public-domain ownership refusal, not a successful custom-hostname
 binding. The Basic v2 `.test` name could not pass that public validation. The
-positive company TLS proof remains blocked until an administrator supplies a
-delegated domain; the default gateway transport was also checked read-only on
+positive company TLS proof is an accepted deferral to P74, not done; it requires
+an owned, delegated domain. The default gateway transport was also checked read-only on
 PowerShell 7 and 5.1, with HTTP 401 and the expected trusted certificate.
 
 ![Live company-address review with explicit component costs and supplied-certificate constraints; public hostname ownership remains a prerequisite.](guide/40-company-address-review.png)

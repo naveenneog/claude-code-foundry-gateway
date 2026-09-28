@@ -21,18 +21,41 @@ P69 did not need the reserved U33 identifier.
 ### Council round 1 corrections
 
 The lead's five-seat review of `aa7ed19..c82f951` (gpt-6-astra, read-only, 2026-09-28)
-returned BLOCK. The following corrections are in progress; a passing targeted test is not a
+returned BLOCK. The following corrections are implemented and targeted checks pass; a passing targeted test is not a
 council re-review verdict.
 
 | ID | Seat | Finding | Required evidence |
 |---|---|---|---|
-| A1 | Architect | Inherited custom address writes escaped Foundation pricing and fingerprinting | The effective inherited inputs are passed exactly, costed and fingerprinted |
-| A2 | Architect | Proposed answers were saved as applied decisions and as history's previous value | Any failed step retains applied decisions; history starts at the pre-question value |
-| C1 | Coder | Replacing the old hostname then failing proof made Change reject recovery as drift | Only the recorded unverified replacement can be recovered, with fresh approval |
-| C2 | Coder | Returning to Azure retained company metadata and old generated settings | Metadata and generated artifacts agree with the Azure URL |
-| Q1 | QA | Source-position assertions did not execute installer approval guards | Real installer with mocked Azure: inherited custom, mismatch, decline and WhatIf |
-| U1 | UX | A slow check could succeed after its advertised deadline | Checks and native reads stop at the remaining deadline; late success is rejected |
-| S1 | Security | PFX bytes were reread after hash approval | The validated and hashed byte buffer is the buffer uploaded |
+| A1 | Architect | Inherited custom address writes escaped Foundation pricing and fingerprinting | `d2a61d5`: effective inputs are resolved once, passed exactly and fingerprinted; executable installer/Foundation mutations |
+| A2 | Architect | Proposed answers were saved as applied decisions and as history's previous value | `f469bbc`: generic real-orchestrator tests preserve pre-question history and applied state on failure |
+| C1 | Coder | Replacing the old hostname then failing proof made Change reject recovery as drift | `e030301`: integrity-checked unverified receipt; only matching Change address recovery, with fresh approval |
+| C2 | Coder | Returning to Azure retained company metadata and old generated settings | `d2a61d5`, `74fab21`: metadata, Foundation inputs and generated artifacts agree with the Azure URL |
+| Q1 | QA | Source-position assertions did not execute installer approval guards | `d2a61d5`, `387f2fd`: real installer with mocked Azure; deleting its fingerprint, decline or WhatIf guard fails the named test |
+| U1 | UX | A slow check could succeed after its advertised deadline | `a6b9d21`, `74fab21`: cancellable checks, bounded native reads, late-result refusal and parent-owned private-file cleanup |
+| S1 | Security | PFX bytes were reread after hash approval | `5128a28`: one validated/hashed buffer is uploaded despite file replacement during DNS waiting |
+
+Round 1 correction evidence, both PowerShell 7 and Windows PowerShell 5.1:
+
+| Test | Assertions or mutations |
+|---|---|
+| `Test-CompanyAddress.ps1` | 78/78 |
+| `Test-CompanyCertificate.ps1` | 31/31 |
+| `Test-CompanyFlow.ps1` | 27/27 |
+| `Test-CompanyInstaller.ps1` | 11/11, executing the real installer with external services stubbed |
+| `Test-FlowAppliedState.ps1` | 9/9, executing the real orchestrator for an arbitrary step |
+| `Test-AddressDeadline.ps1` | 5/5, including real child-process timeouts and native Azure-command stubs |
+| `Test-CompanyMutationRunner.ps1` | 5/5 |
+| `Test-CompanyAddressNegative.ps1` | 81/81; every case runs the full applicable 78/31/27/11/9/5 assertions |
+
+The 81 mutations took 257.1 s on PowerShell 7 and 437.6 s on Windows PowerShell 5.1.
+Each suite owns a temporary directory, including deliberately broken cleanup cases; no assertion
+or mutation is skipped. Native timeout checks include termination/cleanup time in the reported
+elapsed duration. Structured values, secure strings and PFX byte arrays also passed through the
+real worker transport on both hosts without being placed on a native command line.
+
+P72 merge boundary: the trap, Show-Status, main drift call and cancellation catch blocks were
+not rewritten. Shared changes are the applied-decision snapshot/serializer, history capture and
+the narrowly scoped recovery branch inside `Assert-RecordMatchesLive`.
 
 - [x] U30 is closed with dated Microsoft Learn and Azure Retail Prices API evidence for every
       v2 tier, certificate source, DNS record, update wait and component price; ADR-0033 records
@@ -129,7 +152,7 @@ for each case. Dedicated runner tests cover exit codes, output, missing summarie
 All 59 cases then passed in 82.9 s on PowerShell 7 and 164.8 s on Windows PowerShell 5.1, with
 the same 71/30/24 full assertion counts. The charter budget is not increased.
 
-**Handoff state: blocked, not packet-complete.** At `81508b1`, the corrected gate attempt retried
+**Prior handoff at c82f951: blocked, not packet-complete.** At `81508b1`, the corrected gate attempt retried
 the shared `.gate-lock` every 60 seconds for the full permitted 60 minutes. Another run retained
 the lock, so this attempt never started the packet gate and exited 1. That lock was not removed.
 The last executed packet gate therefore remains the timeout above: 21 passed, 2 warned, 1 failed,

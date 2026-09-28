@@ -29,6 +29,12 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P69 council corrections.** Inherited addresses are resolved before Foundation approval;
+  proposed decisions no longer overwrite applied state or history; failed replacements have a
+  narrowly scoped recovery review; Azure transitions reconcile metadata and generated settings.
+  Checks enforce remaining deadlines and clean private worker files on cancellation. PFX uploads
+  use the validated byte buffer. The positive delegated-domain TLS proof is explicitly deferred
+  to P74 by the lead, not marked complete.
 - **Company address in the installer and guided flow (P69).** The company choice now plans
   and applies public DNS, a supplied PFX or Key Vault certificate, and a preserved APIM Proxy
   hostname, with component prices before approval. `-Change address` uses the same fingerprinted

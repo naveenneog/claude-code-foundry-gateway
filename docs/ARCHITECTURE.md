@@ -64,6 +64,10 @@ bindings and service/network properties. The decision record and generated
 handover artifacts change only after a DNS/TLS gateway proof. Public DNS
 ownership remains required; an authoritative-only `.test` zone was rejected
 on the isolated Basic v2 gateway ([U30](UNKNOWNS.md#u30--the-company-address--closed-2026-09-28)).
+The lead deferred the positive delegated-domain proof to P74. Proposed decisions
+are separate from applied state; a failed replacement has a separately recorded,
+unverified receipt for a new scoped recovery review. Deadline-bound workers
+include native reads and clean their private files when cancelled.
 
 ## Request path
 

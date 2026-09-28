@@ -460,6 +460,8 @@ entitlement, verifies the controls, and writes `onboarding/claude-gateway.json`
 end. The installer asks for the hostname, certificate source and DNS hosting
 with its other choices. The address review appears before the final summary;
 declining or using `-WhatIf` makes no address change.
+The prompt calls the address "expensive to change afterwards" because deployed
+workstations need redistributed settings when the URL changes.
 
 All three v2 tiers support an uploaded PFX or a Key Vault certificate. None
 supports a free API Management managed certificate. Basic v2 and Standard v2
@@ -511,6 +513,14 @@ custom hostname on Basic v2 or Standard v2 requires an explicit
 `-AddressReplaceHostname`; the review names the old hostname whose callers
 will need new settings.
 
+Unattended Foundation resolves inherited company-address inputs before pricing
+and passes that exact selection, including `-AddressDnsMode`. An explicit Azure
+selection cannot inherit a company address from another local record. Returning
+to Azure removes both address metadata copies and stale Foundation address
+inputs, and updates generated profiles and onboarding mail to the Azure URL.
+PFX validation and hashing use one byte buffer; apply uploads those same bytes
+after waiting for DNS, even if the original path has been replaced.
+
 After deployment, DNS is configured and verified, the certificate and Proxy
 hostname are applied with an ARM PATCH, and a request uses the company hostname
 for SNI and Host. Publication requires a matching, trusted certificate and the
@@ -527,6 +537,17 @@ leaves the previous developer URL recorded. The default Azure gateway endpoint
 remains available
 ([update duration and default endpoint](https://learn.microsoft.com/azure/api-management/configure-custom-domain)).
 
+Checks run in deadline-bound worker processes, including native Azure reads.
+Expiry stops their process trees and removes their private temporary body
+directories. Reported elapsed time includes cancellation and cleanup; a late
+result cannot count as successful.
+
+If a replacement removed the old hostname before proof failed, a separate
+`pendingAddress` receipt records the unverified operation. `-Change address`
+can review recovery only when the receipt, gateway, old recorded URL and exact
+live hostname collection match. It requires a new fingerprint and publishes
+nothing until proof succeeds; unrelated drift still stops the flow.
+
 **Isolated proof, 2026-09-28.** A Basic v2 gateway deployed from `infra/main.bicep`
 in 148.0 seconds. The reserved `.test` zone's CNAME answered directly at Azure
 DNS in 0.576 seconds. Both uploaded-PFX binding attempts returned
@@ -536,6 +557,9 @@ company-address proof. The isolated Azure endpoint returned its governed 401.
 No public domain was available or purchased. All proof resources were deleted
 and the soft-deleted APIM instance was purged
 ([STATUS](STATUS.md#p69-the-company-address-in-the-flow-2026-09-28)).
+The lead accepted the positive company-hostname proof as a scope deferral to
+P74, not a completed acceptance criterion
+([ADR-0033](adr/0033-company-address.md#accepted-scope-deferral-2026-09-28)).
 
 ![Live Basic v2 company-address review showing the supplied PFX, exact CNAME, Azure retail DNS rates and no public certificate issuance.](guide/40-company-address-review.png)
 
