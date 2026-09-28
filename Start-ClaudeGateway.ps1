@@ -40,7 +40,7 @@ $discoveryScript = Join-Path $root 'scripts\flow\Discovery.ps1'
 if (Test-Path -LiteralPath $discoveryScript) { . $discoveryScript }
 
 $script:ExpectedFlowSteps = @(
-    'Foundation', 'Tier', 'Entitlement', 'Network', 'DesktopSignIn',
+    'Foundation', 'Tier', 'Entitlement', 'Network', 'DesktopSignIn', 'Models',
     'FinOps', 'Budgets', 'Monitoring', 'Reports', 'DeviceProfiles', 'Verify', 'Guide'
 )
 
@@ -144,7 +144,7 @@ function Get-FlowModules {
         # Code-point order: the steps' order feeds the plan's fingerprint (P76).
         foreach ($file in @(Sort-ClaudeFlowOrdinal -InputObject @(Get-ChildItem -LiteralPath $ModulePath -Filter '*.ps1' -File) -Key { $_.Name })) {
             if ($file.Name -in @('FlowContract.ps1', 'Discovery.ps1')) { continue }
-            foreach ($name in 'Get-ClaudeFlowStepInfo','Get-ClaudeFlowStepQuestions','Get-ClaudeFlowStepPlan','Invoke-ClaudeFlowStep','Test-ClaudeFlowStep') {
+            foreach ($name in 'Get-ClaudeFlowStepInfo','Get-ClaudeFlowStepQuestions','Get-ClaudeFlowStepPlan','Initialize-ClaudeFlowStep','Invoke-ClaudeFlowStep','Test-ClaudeFlowStep') {
                 if (Get-Command $name -ErrorAction SilentlyContinue) { Remove-Item "function:\$name" -Force -ErrorAction SilentlyContinue -WhatIf:$false }
             }
             $functionsBefore = @{}
@@ -166,6 +166,7 @@ function Get-FlowModules {
                 Info = $info
                 Questions = (Get-Command Get-ClaudeFlowStepQuestions -ErrorAction Stop).ScriptBlock
                 Plan = (Get-Command Get-ClaudeFlowStepPlan -ErrorAction Stop).ScriptBlock
+                Prepare = $(if (Get-Command Initialize-ClaudeFlowStep -ErrorAction SilentlyContinue) { (Get-Command Initialize-ClaudeFlowStep).ScriptBlock } else { $null })
                 Invoke = (Get-Command Invoke-ClaudeFlowStep -ErrorAction Stop).ScriptBlock
                 Test = (Get-Command Test-ClaudeFlowStep -ErrorAction Stop).ScriptBlock
                 Path = $file.FullName
@@ -329,6 +330,13 @@ function Invoke-ApplySteps {
         Set-FlowRecordProperty $last 'runId' $RunId
         Set-ClaudeDecisionRelease -Record $Record -Version $release.version -Commit $release.commit
         Write-FlowDecisionRecord -Record $Record -Path $Path
+    }
+}
+
+function Initialize-FlowSteps {
+    param($Steps, $Plans, $Record)
+    for ($i = 0; $i -lt $Steps.Count; $i++) {
+        if ($Steps[$i].Prepare) { & $Steps[$i].Prepare -Record $Record -Plan $Plans[$i] | Out-Null }
     }
 }
 
@@ -562,6 +570,7 @@ if ($ApprovedPlanFingerprint) {
 }
 
 if ($PSCmdlet.ShouldProcess($RecordPath, "Apply guided flow action $Action")) {
+    Initialize-FlowSteps -Steps $steps -Plans @($plans) -Record $record
     $runId = Start-FlowRun -Record $record -Path $RecordPath -CurrentAction $Action -CurrentChange $Change -Fingerprint $fingerprint -Phase $(if ($afterLead) { 'after-lead' } else { '' }) -StepNames @($steps | ForEach-Object { $_.Info.Name })
     Invoke-ApplySteps -Steps $steps -Plans @($plans) -Record $record -Path $RecordPath -CurrentAction $Action -RunId $runId
     Invoke-VerifySteps -Steps $steps -Record $record

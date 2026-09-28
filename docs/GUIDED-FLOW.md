@@ -249,7 +249,28 @@ cost and caller impact before applying.
 | `entitlementStore` | `Entitlement.ps1` | Named values to the Cosmos projection and back, after a clean comparison | [Entitlement](UPDATE-AND-CHANGE.md#3-move-entitlement-between-named-values-and-the-projection) |
 | `network` | `Network.ps1` | Enterprise network edge, through its own fingerprinted review | [Network](UPDATE-AND-CHANGE.md#4-change-the-enterprise-network-edge) |
 | `desktopSignIn` | `DesktopSignIn.ps1` | Claude Desktop sign-in kind and gateway audience | [Desktop sign-in](UPDATE-AND-CHANGE.md#5-change-claude-desktop-sign-in) |
+| `models` | `Models.ps1` | Existing Foundry deployments, per-tier allowlists, dated price mappings, deployment records and tier-specific MDM/workstation profiles; snapshot and drift check before any write | [Models](MODELS.md) |
 | `deviceProfiles` | `DeviceProfiles.ps1` | Per-tier MDM payloads | [MDM](MDM.md) |
+
+The model change is Change-only. It asks `models.tiers.<deployment>` with
+`standard`, `premium`, `both` or `none` for a live deployment and `keep` or
+`drop` for a missing one. Periods in a deployment name use `~` in the answer
+key. The questions show model/version, SKU/capacity and price status.
+`models.priceBookPath` selects a dated private book when needed.
+
+```powershell
+.\Start-ClaudeGateway.ps1 -Action Change -Change models `
+    -AnswersPath .\model-answers.json -PlanOnly
+```
+
+The model step prepares its non-secret gateway snapshot after fingerprint
+approval and before the flow writes `activeRun`. Apply changes only the two
+model named values in Azure and generates both tiers' client files locally.
+Turnstile-owned tiers are visible in the preview but cannot be changed by this
+step. The detailed [model handover](MODELS.md#what-developers-change) distinguishes
+local generation from MDM distribution and a developer rerunning setup.
+
+![The live Change models preview shows each deployment's model, version, SKU, capacity, record status and price status before its fingerprint.](guide/50-model-change-plan.png)
 
 ## Diagnose
 

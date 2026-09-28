@@ -196,6 +196,7 @@ try {
     Invoke-Check 'Business unit chargeback'                'Test-BusinessUnits.ps1'
     Invoke-Check 'Teams and the budget cascade'            'Test-Teams.ps1'
     Invoke-Check 'Model discovery and deployment'          'Test-ModelDeployment.ps1'
+    Invoke-Check 'Model lifecycle and tier client handover' 'Test-ModelLifecycle.ps1'
     Invoke-Check 'Client attribution and the workbook'     'Test-Observability.ps1'
     Invoke-Check 'Scripts ask for what they were not given' 'Test-ClaudeChoice.ps1'
     Invoke-Check 'USD budget scripts and gateway contracts' 'Test-UsdBudgets.ps1'
@@ -222,6 +223,7 @@ try {
     Invoke-Check 'Projection checks detect breakage'        'Test-ProjectionNegative.ps1'
     Invoke-Check 'Claude Desktop sign-in choice'             'Test-DesktopSignIn.ps1'
     Invoke-Check 'Workstation clients read what setup writes' 'Test-WorkstationClients.ps1' -SerialLane
+    Invoke-Check 'Workstation model retirement agrees across shells' 'Test-WorkstationModels.ps1'
     Invoke-Check 'Adding models, and plugin governance'    'Test-ModelsAndPlugins.ps1'
     Invoke-Check 'Backup and restore'                      'Test-Backup.ps1'
     Invoke-Check 'Turnstile - usage mapping and its rules' 'Test-Turnstile.ps1'
