@@ -12,6 +12,14 @@ a new preview and save succeeded and dismissed the form. At 80x24 the recovery f
 keyboard focus and scrolls to the complete backup path and the final `whoami` instruction.
 42 targeted tests passed in 24.27 s with imports from this worktree.
 
+**Packet gate, 2026-09-29:** `node .ironclad/gate.mjs --stage packet` passed at `5e31cd3` between
+02:46 and 03:09 IST: Test-All in 1,396 s, all 81 checks PASS and none skipped, 22 gate checks
+passed, 2 warned (open unknowns), 0 failed. The worktree's `.venv-finops` imports
+`claude_finops` from this worktree's `cli\finops\src`, and `.venv-aum-service` imports
+`aum_service` from this worktree through `PYTHONPATH`, so the four AUM checks tested this
+branch's code: the AUM suite passed in 345.5 s. The branch is based on P71 commit `bcf8554`; the
+gate for the merge runs again after P71's final state and `main` are merged in.
+
 **Council round 2:** Architect and Security PASS; Coder, QA and UX BLOCK at
 `3ace1f7` on UI adoption before the final saved-revision check. Transaction-level
 round-1 probes pass, but did not establish recovery after successful `whoami`
