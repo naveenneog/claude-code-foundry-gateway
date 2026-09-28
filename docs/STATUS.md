@@ -88,7 +88,13 @@ defects, each with a screenshot. Work is on `p79-owner-test-fixes`, based on `03
       on records named by process id and on an empty `Proc`; the old probe passes on
       `Proc = "$PID-0"`; with an unreadable record, the old test leaves its scratch folder behind
       and the fixed test removes it; the fixed integrity test passes 48 checks
-- [ ] The packet gate exits 0
+- [x] Council round 4, five seats, over `0e64028..96bee6a`: all five seats PASS
+- [x] The packet gate exits 0. Gate 3, at `0e64028` (20:47-21:24), passed: Test-All in 2,216 s,
+      22 passed, 2 warned (open unknowns), 0 failed. Gate 4, at `96bee6a` (21:44-22:28), the tree
+      that merges, passed: Test-All in 2,666 s, 22 passed, 2 warned, 0 failed. Both ran while other
+      sessions held the machine at 88-100% CPU; the lead raised only the gate's own processes to
+      AboveNormal priority. Gate 4 ran without the shared lock, which the P71 agent held from 21:25
+      for its mutation and full-suite runs
 
 ## P77 a 60-minute gate budget while the exclusive checks are sharded, 2026-09-28
 
