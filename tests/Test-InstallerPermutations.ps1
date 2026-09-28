@@ -112,6 +112,9 @@ function Copy-InstallerCheckout([string]$From, [string]$To) {
 $scratch = Join-Path ([IO.Path]::GetTempPath()) ('installer-permutations-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $scratch -Force | Out-Null
 try {
+    # The checkout's own record is read before anything is copied, so a copy that moves or deletes it is caught.
+    $ownRecord = Join-Path $root 'onboarding\claude-gateway.json'
+    $ownRecordHash = if (Test-Path -LiteralPath $ownRecord) { (Get-FileHash -LiteralPath $ownRecord).Hash }
     $probeFrom = Join-Path $scratch 'probe-from'
     $probeTo = Join-Path $scratch 'probe-to'
     foreach ($dir in 'onboarding\profiles\standard', 'onboarding\support', 'scripts', 'docs') { New-Item -ItemType Directory -Path (Join-Path $probeFrom $dir) -Force | Out-Null }
@@ -122,11 +125,12 @@ try {
     $copied = @(Get-ChildItem -LiteralPath $probeTo -Recurse -File | ForEach-Object { $_.FullName.Substring($probeTo.Length + 1) } | Sort-Object)
     $wanted = @('Install-ClaudeGateway.ps1', 'onboarding\profiles\standard\managed-settings.json', 'onboarding\README.md', 'scripts\A.ps1') | Sort-Object
     Assert 'the installer inputs are copied without any saved gateway record' (($copied -join '|') -eq ($wanted -join '|')) "copied: $($copied -join ', ')"
+    $sourceRecords = @('onboarding\claude-gateway.json', 'onboarding\claude-gateway.rg-a-apim-a.json', 'onboarding\support\claude-gateway.json')
+    $keptRecords = @($sourceRecords | Where-Object { (Test-Path -LiteralPath (Join-Path $probeFrom $_)) -and [IO.File]::ReadAllText((Join-Path $probeFrom $_)) -eq 'x' })
+    Assert 'the copy leaves the saved records it skips in place, unchanged' ($keptRecords.Count -eq $sourceRecords.Count) "unchanged: $($keptRecords -join ', ')"
 
     $checkout = Join-Path $scratch 'checkout'
     Copy-InstallerCheckout $root $checkout
-    $ownRecord = Join-Path $root 'onboarding\claude-gateway.json'
-    $ownRecordHash = if (Test-Path -LiteralPath $ownRecord) { (Get-FileHash -LiteralPath $ownRecord).Hash }
     $installer = Join-Path $checkout 'Install-ClaudeGateway.ps1'
     Assert 'the cases run a copy of the installer, not the checkout itself' ($installer.StartsWith($scratch) -and -not @(Get-ChildItem -LiteralPath (Join-Path $checkout 'onboarding') -Recurse -File -Filter 'claude-gateway*.json').Count)
     $driver = Join-Path $PSScriptRoot 'InstallerPermutationDriver.ps1'
