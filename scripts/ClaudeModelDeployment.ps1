@@ -31,6 +31,28 @@
 $script:ClaudeModelPattern = 'claude'
 $script:ClaudeFormat = 'Anthropic'
 
+function Assert-ClaudeDeploymentIdentities {
+    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][AllowNull()][object[]]$Deployments)
+    foreach ($row in $Deployments) {
+        foreach ($part in @($row, $row.properties, $row.properties.model)) {
+            if ($null -eq $part -or ($part -isnot [System.Collections.IDictionary] -and
+                    $part.GetType().FullName -ne 'System.Management.Automation.PSCustomObject')) {
+                throw 'Invalid deployment identity: every row needs properties.model objects before publisher filtering.'
+            }
+        }
+        foreach ($field in @(
+            @{ Name = 'name'; Value = $row.name },
+            @{ Name = 'model.name'; Value = $row.properties.model.name },
+            @{ Name = 'model.format'; Value = $row.properties.model.format },
+            @{ Name = 'model.version'; Value = $row.properties.model.version }
+        )) {
+            if ($field.Value -isnot [string] -or [string]::IsNullOrWhiteSpace($field.Value)) {
+                throw "Invalid deployment identity: $($field.Name) must be a nonempty string."
+            }
+        }
+    }
+}
+
 function ConvertTo-FlatDeployment {
     <#
     .SYNOPSIS
@@ -107,12 +129,19 @@ function Get-ClaudeDeployment {
 
     # No --query: a JMESPath with parentheses reaches cmd.exe bare through the
     # az .cmd shim on Windows PowerShell and dies there. Filter in PowerShell.
-    $raw = az cognitiveservices account deployment list -n $Account -g $ResourceGroup -o json 2>$null
-    if (-not $raw) { return @() }
-
-    $parsed = try { $raw | ConvertFrom-Json } catch { $null }
-    if (-not $parsed) { return @() }
-
+    $saved = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $global:LASTEXITCODE = 0
+        $output = @(az cognitiveservices account deployment list -n $Account -g $ResourceGroup -o json --only-show-errors 2>&1)
+        $code = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $saved }
+    if ($code -ne 0) { throw "Reading deployments on '$Account' failed (az exit $code). No empty account or unrestricted tier is assumed." }
+    $raw = ($output -join "`n").Trim()
+    if (-not $raw.StartsWith('[')) { throw "Deployment discovery on '$Account' did not return a JSON array." }
+    $parsed = $raw | ConvertFrom-Json
+    Assert-ClaudeDeploymentIdentities -Deployments @($parsed)
     return @(Select-ClaudeDeployment (@($parsed) | ConvertTo-FlatDeployment))
 }
 

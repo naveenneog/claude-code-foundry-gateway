@@ -19,10 +19,10 @@ count. The gate keeps its 1,800,000 ms command budget and uses the shared lock.
 | Seat | Verdict supplied | Finding | Fix / evidence |
 |---|---|---|---|
 | Architect | BLOCK | A1: helper changes can alter generated capabilities without changing the plan fingerprint | Pending: fingerprint and recheck all output dependencies, including presence changes |
-| Coder | BLOCK | C1: the installer records the deployment union but not each tier's selections; a Sonnet-only premium tier gets an Opus picker entry | Pending: persist normalized tier models and model allowlists; restrict the config edit to its tier entries |
+| Coder | BLOCK | C1: the installer records the deployment union but not each tier's selections; a Sonnet-only premium tier gets an Opus picker entry | Fixed: tier entries persist normalized models and exact allowlists; real generated standard/premium profiles match a Sonnet-only initial install |
 | Coder | BLOCK | C2: bash setup retains an alias whose model family disappeared | Pending: remove absent owned aliases; compare Windows and bash retirement behavior |
-| QA | BLOCK | Q1: filtering hides malformed raw deployment rows and turns them into apparent removals | Pending: validate raw identities before Claude filtering, including mixed arrays |
-| Security | BLOCK | S1: failed/empty discovery or whitespace/comma-only explicit selections can create allow-all lists | Pending: reject unreadable discovery and empty normalized restrictions before provisioning |
+| QA | BLOCK | Q1: filtering hides malformed raw deployment rows and turns them into apparent removals | Fixed: shared raw identity validation runs before filtering, covering ten mixed valid/malformed array shapes |
+| Security | BLOCK | S1: failed/empty discovery or whitespace/comma-only explicit selections can create allow-all lists | Fixed: failed/malformed discovery and empty normalized tier selections stop before provisioning; zero Claude deployments cannot discard supplied restrictions |
 | Architect | Should-fix | A2: standalone history omits the prior decision and principal | Pending: record both without an extra write before approval |
 | Coder | Should-fix | C3: the empty named-value REST write scopes its URI but not its token | Pending: use the same subscription for both |
 | Security | Should-fix | S2: nested reference records and snapshots are not git-ignored | Pending: ignore the documented generated paths at every onboarding depth |
@@ -31,6 +31,11 @@ count. The gate keeps its 1,800,000 ms command budget and uses the shared lock.
 Completion criteria: all eight findings addressed, no relaxed detector or timeout, directly
 related docs/ADR and architecture hashes updated, and the packet gate exits 0 under the shared
 lock. ROADMAP P70 stays unticked for the lead.
+
+First remediation green: Q1/S1/C1 reproduced as 24 failures at 108 assertions on each
+PowerShell host, then all 108 passed on each host. Existing ModelDeployment checks passed.
+The installer config edit changes only the two tier entries; P72's organisation/request
+fields and summary rows are untouched. Detector mutations follow after the remaining fixes.
 
 Acceptance criteria:
 

@@ -166,13 +166,23 @@ function Installer-Models($Standard, $Premium) {
     $source = Get-Content (Join-Path $root 'Install-ClaudeGateway.ps1') -Raw
     $from = $source.IndexOf('$deployed = @(Get-ClaudeDeployment')
     $to = $source.IndexOf('# ------------------------------------------------------------- 2. placement', $from)
+    $ast = [Management.Automation.Language.Parser]::ParseInput($source, [ref]$null, [ref]$null)
+    $configAssignment = @($ast.FindAll({ param($n)
+        $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$config'
+    }, $true))[0].Extent.Text
     $body = '[CmdletBinding()]param([string[]]$StandardModels,[string[]]$PremiumModels)' + "`n" +
-        $source.Substring($from, $to - $from) + "`n" +
-        '[pscustomobject]@{ Standard=$modelsStd; Premium=$modelsPrm; Deployments=@($recordedDeployments) }'
+        $source.Substring($from, $to - $from) + "`n" + $configAssignment + "`n" +
+        '[pscustomobject]@{ Standard=$modelsStd; Premium=$modelsPrm; Deployments=@($recordedDeployments); Config=$config }'
     function Write-Step { param($Text) }
     function Write-Ok { param($Text) }
+    function Write-Note { param($Text) }
     function Read-Default { param($Prompt,$Default,$Help) $Default }
+    function ConvertTo-ClaudeArmRegionName { param($Region) $Region }
     $FoundryAccount = 'ai-models'; $FoundryResourceGroup = 'rg-foundry'; $pendingDeployment = $null
+    $gatewayUrl = 'https://apim-models.azure-api.net/claude'
+    $acct = [pscustomobject]@{ tenantId = '00000000-0000-0000-0000-000000000001' }
+    $desktopSignInRecord = @{ kind = 'helper-script' }
+    $TpmStandard = 20000; $QuotaStandard = 500000; $TpmPremium = 80000; $QuotaPremium = 5000000
     & ([scriptblock]::Create($body)) -StandardModels $Standard -PremiumModels $Premium
 }
 
@@ -518,6 +528,75 @@ try {
         & (Join-Path $root 'Start-ClaudeGateway.ps1') -Action Change -Change models -RecordPath $global:P70recordPath -AnswersPath $answers -ApprovedPlanFingerprint $fp | Out-Null
         $r = Json $global:P70recordPath
         @($r.models).Count -eq 4 -and @($r.history | Where-Object decision -eq models).Count -eq 1 -and 'activeRun' -notin $r.PSObject.Properties.Name
+    }
+    $malformedRows = @(
+        @{ Name = 'null model'; Break = { $global:P70rawDeployments[0].properties.model = $null } }
+        @{ Name = 'missing model name'; Break = { $global:P70rawDeployments[0].properties.model.PSObject.Properties.Remove('name') } }
+        @{ Name = 'empty publisher'; Break = { $global:P70rawDeployments[0].properties.model.format = '' } }
+        @{ Name = 'array model name'; Break = { $global:P70rawDeployments[0].properties.model.name = @('claude-sonnet-5') } }
+        @{ Name = 'object version'; Break = { $global:P70rawDeployments[0].properties.model.version = [pscustomobject]@{ value = '2' } } }
+        @{ Name = 'null deployment'; Break = { $global:P70rawDeployments[0] = $null } }
+        @{ Name = 'scalar deployment'; Break = { $global:P70rawDeployments[0] = 'sonnet' } }
+        @{ Name = 'array properties'; Break = { $global:P70rawDeployments[0].properties = @($global:P70rawDeployments[0].properties) } }
+        @{ Name = 'array model'; Break = { $global:P70rawDeployments[0].properties.model = @($global:P70rawDeployments[0].properties.model) } }
+        @{ Name = 'malformed non-Claude row'; Break = { $global:P70rawDeployments[4].properties.model = $null } }
+    )
+    foreach ($case in $malformedRows) {
+        Check "Q1 mixed discovery refuses $($case.Name) before Claude filtering" {
+            Reset-State; & $case.Break
+            (Reject { Plan } 'deployment identity') -and -not $global:P70backupRead -and $global:P70writes.Count -eq 0
+        }
+    }
+    foreach ($tier in 'standard','premium') {
+        foreach ($empty in @('   ', ',,', ' , , ')) {
+            Check "S1 $tier rejects a restriction containing only '$empty'" {
+                Reset-State
+                $standard = @('sonnet'); $premium = @('sonnet')
+                if ($tier -eq 'standard') { $standard = @($empty) } else { $premium = @($empty) }
+                Reject { Installer-Models $standard $premium } 'empty|at least one'
+            }
+        }
+    }
+    Check 'S1 failed installer discovery is not an unrestricted model list' {
+        Reset-State; $global:P70azFailure = 'cognitiveservices account deployment list'; $global:P70failureJson = '[]'
+        Reject { Installer-Models @('sonnet') @('sonnet') } 'az exit 3'
+    }
+    Check 'S1 malformed installer discovery is refused' {
+        Reset-State; $global:P70badDeployments = 'not json'
+        Reject { Installer-Models @('sonnet') @('sonnet') } 'JSON|array'
+    }
+    Check 'S1 malformed mixed installer rows are not silently dropped' {
+        Reset-State; $global:P70rawDeployments[0].properties.model = $null
+        Reject { Installer-Models @('opus') @('opus') } 'deployment identity'
+    }
+    Check 'S1 empty installer discovery cannot discard explicit restrictions' {
+        Reset-State; $global:P70rawDeployments = @()
+        Reject { Installer-Models @('sonnet') @('sonnet') } 'No Claude deployment|not deployed'
+    }
+    Check 'S1 a non-Claude-only account cannot create unrestricted Claude tiers' {
+        Reset-State; $global:P70rawDeployments = @($global:P70rawDeployments[4])
+        Reject { Installer-Models @('sonnet') @('sonnet') } 'No Claude deployment|not deployed'
+    }
+    Check 'C1 installer records normalized per-tier models and exact sentinel lists' {
+        Reset-State
+        $selected = Installer-Models @(' sonnet, sonnet ') @('opus', ' sonnet ')
+        $cfg = Clone $selected.Config
+        ($cfg.tiers.standard.models -join ',') -eq 'sonnet' -and $cfg.tiers.standard.modelAllowList -eq ',sonnet,' -and
+            ($cfg.tiers.premium.models -join ',') -eq 'opus,sonnet' -and $cfg.tiers.premium.modelAllowList -eq ',opus,sonnet,' -and
+            $cfg.tiers.standard.tokensPerMinute -eq 20000 -and $cfg.tiers.premium.tokensPerDay -eq 5000000
+    }
+    foreach ($tier in 'standard','premium') {
+        Check "C1 an initial Sonnet-only $tier profile never offers excluded Opus" {
+            Reset-State; $selected = Installer-Models @('sonnet') @('sonnet')
+            $path = Join-Path $scratch "installer-$tier.json"; Save $path $selected.Config
+            $out = Join-Path $scratch "installer-$tier"
+            & (Join-Path $root 'scripts\New-ClaudeCodePolicy.ps1') -ConfigPath $path -Tier $tier -OutputPath $out | Out-Null
+            $code = Json (Join-Path $out 'claude-code.managed-settings.json')
+            $desktop = Json (Join-Path $out 'claude-desktop.managed-settings.json')
+            $selected.Standard -eq ',sonnet,' -and $selected.Premium -eq ',sonnet,' -and
+                ($code.availableModels -join ',') -eq 'sonnet' -and (@($desktop.inferenceModels.name) -join ',') -eq 'sonnet' -and
+                $code.env.ANTHROPIC_DEFAULT_OPUS_MODEL -eq 'sonnet'
+        }
     }
 }
 finally {

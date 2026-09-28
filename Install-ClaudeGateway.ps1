@@ -516,12 +516,15 @@ if ($deployed.Count) {
     $prmPick = if ($PSBoundParameters.ContainsKey('PremiumModels')) { $PremiumModels -join ',' } else {
         Read-Default -Prompt 'Models for the premium tier' -Default ($all -join ',') -Help 'Comma-separated deployment names.'
     }
-    foreach ($selected in @(($stdPick + ',' + $prmPick) -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+    $standardModelNames = @($stdPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
+    $premiumModelNames = @($prmPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
+    if (-not $standardModelNames.Count -or -not $premiumModelNames.Count) { throw 'Each tier needs at least one deployment. An empty model list means allow all and is not an explicit restriction.' }
+    foreach ($selected in @($standardModelNames + $premiumModelNames)) {
         if ($selected -notin $all) { throw "Model '$selected' is not deployed on the selected Foundry account." }
     }
 
-    $modelsStd = ',' + (($stdPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ',') + ','
-    $modelsPrm = ',' + (($prmPick -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ',') + ','
+    $modelsStd = ',' + ($standardModelNames -join ',') + ','
+    $modelsPrm = ',' + ($premiumModelNames -join ',') + ','
     Write-Ok "standard $modelsStd  premium $modelsPrm"
     # Recorded with the model behind each name, because a deployment may be named anything and the
     # clients configure capabilities by model (ADR-0031).
@@ -531,7 +534,7 @@ if ($deployed.Count) {
     })
 }
 else {
-    Write-Note "no Claude deployment visible on $FoundryAccount - leaving both tier model lists empty"
+    throw "No Claude deployment is available on '$FoundryAccount'. No tier restrictions were discarded; no gateway will be provisioned."
 }
 
 # ------------------------------------------------------------- 2. placement
@@ -1566,8 +1569,8 @@ $config = [ordered]@{
     deployments = @($recordedDeployments | ForEach-Object { $_ })
     models = @($recordedDeployments | ForEach-Object { $_.name })
     tiers = @{
-        standard = @{ tokensPerMinute = $TpmStandard; tokensPerDay = $QuotaStandard }
-        premium  = @{ tokensPerMinute = $TpmPremium;  tokensPerDay = $QuotaPremium }
+        standard = @{ tokensPerMinute = $TpmStandard; tokensPerDay = $QuotaStandard; models = @($standardModelNames); modelAllowList = $modelsStd }
+        premium  = @{ tokensPerMinute = $TpmPremium;  tokensPerDay = $QuotaPremium; models = @($premiumModelNames); modelAllowList = $modelsPrm }
     }
     organisation = @{ tokensPerMonth = $QuotaOrg; shared = $true; softCap = $true }
     generated = (Get-Date -Format 'yyyy-MM-dd HH:mm')

@@ -81,6 +81,7 @@ function Get-ClaudeModelDiscovery {
     if (-not $expected -or ([string]$api.serviceUrl).TrimEnd('/') -ne $expected) { throw 'The gateway backend does not match the selected Foundry account. The account and gateway must describe the same deployment path.' }
     if (-not $gateway.id -or -not $gateway.gatewayUrl) { throw 'Gateway discovery returned no resource id or gateway URL.' }
     $raw = Invoke-ClaudeModelAz @scope -Arguments @('cognitiveservices','account','deployment','list','-n',$Target.foundryAccount,'-g',$Target.foundryResourceGroup) -What 'Reading Foundry Claude deployments' -Array
+    Assert-ClaudeDeploymentIdentities -Deployments @($raw)
     $deployments = @(Select-ClaudeDeployment (@($raw) | ConvertTo-FlatDeployment) | Sort-Object name)
     $seen = @{}
     foreach ($d in $deployments) {

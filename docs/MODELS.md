@@ -36,6 +36,8 @@ and model account in different groups.
 The deployment name is the value in requests and allowlists; it can differ
 from the catalogue model name. The sync checks that the selected account is
 the gateway's backend. Failed discovery is an error, not an empty account.
+Every raw deployment identity is validated before Claude filtering, including
+rows from other publishers. A malformed row cannot appear as a retired model.
 
 The Azure portal account view links to the Foundry portal for deployments.
 The model view exposes the actual deployment name, model, version, SKU/capacity
@@ -203,7 +205,10 @@ exports and price snapshot retained ([FinOps](FINOPS.md),
 
 The administrator record contains the allowed live union in `models`, and
 `deployments` includes each deployment's model/version and existing client
-overrides. Each tier has its own recorded models. The sync generates:
+overrides. The installer and later model changes both record each tier's
+normalized `models` and `modelAllowList`, so initial profiles have the same
+restrictions before any model sync. An installer selection that normalizes to
+empty is refused rather than converted to an unrestricted list. The sync generates:
 
 ```text
 onboarding\profiles\standard\claude-gateway.json

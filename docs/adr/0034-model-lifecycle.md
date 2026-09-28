@@ -3,6 +3,8 @@
 ## Status
 
 Accepted for implementation in P70, 2026-09-28. The lead owns council review and merge.
+Amended for the first council review on 2026-09-28: complete renderer inputs, raw deployment
+validation, persisted initial tier selections and retirement cleanup.
 Extends [ADR-0030](0030-guided-flow.md); preserves the client rules in
 [ADR-0031](0031-client-keys-every-release-reads.md).
 
@@ -38,6 +40,13 @@ The target contains the subscription, API Management name/group and Foundry name
 Every Azure call carries an explicit subscription; names passed to `az.cmd` are validated.
 The API backend must match the selected Foundry account. Failed or malformed discovery is an
 error, not an empty deployment list or permission to remove a deployment.
+Raw deployment rows are validated before publisher filtering: each has an object identity
+with a nonempty string deployment name, model name, publisher format and version. A malformed
+row, even beside valid rows or from another publisher, makes the inventory unreadable.
+The installer uses the same validation and reports a failed Azure command rather than
+interpreting its result as an empty account. With no existing or explicitly pending Claude
+deployment, it stops. A tier selection that normalizes to no deployment names also stops
+before provisioning; it cannot become an implicit unrestricted list.
 
 Discovery uses the existing Claude deployment normaliser and filter, then shows name, model,
 version, SKU, capacity, provisioning state, current tiers, record presence and price status.
@@ -65,6 +74,11 @@ The canonical flow fingerprint binds the target, discovery, assignments, record 
 book and output locations. Monthly inference cost is unknown without token volume; the
 review shows dated per-million input/output rates separately. Unpriced is never zero.
 `-PlanOnly` and `-WhatIf` read only and do not create a backup, price book, record or profile.
+The renderer stamp covers the lifecycle/profile writers, the profile generator, its Claude
+Code, Desktop and banner helpers, and the flow record serializer. Every file's presence and
+content participates in the stamp, at planning and before apply. A helper change therefore
+requires a new review just as a generator change does; the dependency list is covered by
+source-copy mutation tests.
 
 An optional step preparation hook runs after approval and before the flow writes its local
 run journal. Models uses it to recheck discovery and take `Backup-ClaudeGateway.ps1`'s
@@ -106,6 +120,8 @@ The administrator record's `models` is the union of permitted existing deploymen
 `deployments` records their live model/version and preserves existing client overrides and
 unknown fields. Each tier also records its own model list. Missing deployments retained in
 the gateway lists are reported as unavailable and excluded from the client selection.
+The initial installer record has the same per-tier `models` and `modelAllowList` fields,
+so profiles generated before the first model Change use the original tier restrictions.
 
 The change regenerates both device profiles with `New-ClaudeCodePolicy.ps1`, using only
 that tier's deployments and safe alias fallbacks. Each profile directory also contains a
@@ -119,6 +135,13 @@ capability declarations, VS Code model environment and Desktop `inferenceModels`
 unrelated user settings. It does not change entitlement. MDM assignment and workstation
 execution remain explicit administrator/developer actions; this command does not remotely
 modify devices.
+Both workstation implementations remove an owned alias and its capability declaration when
+that family is no longer selected, then populate the remaining aliases. The Sonnet fallback
+for Haiku is unchanged; unrelated environment variables remain.
+
+Standalone history records the prior model decision and the signed-in principal. Nested
+records, profiles and snapshots under `onboarding` are git-ignored just like the top-level
+generated files. An explicit subscription scopes both the ARM URI and its access token.
 
 ### Progress and propagation
 
