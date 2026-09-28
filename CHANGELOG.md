@@ -821,12 +821,15 @@ exact streaming cache-creation detail remains **U13**.
   takes 30-45 minutes" whatever tier and region were chosen; `Install-ClaudeGateway.ps1` stopped
   printing both before P68. It now lists the default region and the other regions in its
   geography that publish an API Management v2 price, cheapest Basic v2 first, each with the three
-  tiers' monthly list price for one unit at 730 hours, from one Retail Prices API call; prices the
-  tier prompt and the summary; and says so, with the reason, when the prices cannot be read. Its
+  tiers' monthly list price for one unit at 730 hours, from one Retail Prices API call and rounded
+  to the cent as the PowerShell installer rounds it; prices the tier prompt and the summary; and
+  says so, with the reason, when the prices cannot be read or are not in the form the API
+  publishes. It reads a next page of the price list only on `https://prices.azure.com`. Its
   record gains `mode`, `sku`, `location`, `foundryAccount`, `foundryResourceGroup` and
   `requestsPerMinute`, and, run on its own in a terminal, it offers the FinOps tool
-  (`--choose-finops`, `--skip-finops-offer`). `tests/Test-BashInstaller.ps1` runs 14 installs in
-  Git Bash with stub `az`, `curl` and `pwsh`.
+  (`--choose-finops`, `--skip-finops-offer`). `tests/Test-BashInstaller.ps1` runs 19 installs in
+  Git Bash with stub `az`, `curl` and `pwsh`, and compares the region table with the one
+  `Install-ClaudeGateway.ps1` prints for the same list, over 160 prices.
 - **jq.exe on Windows ends lines with CRLF (P75).** In Git Bash, command substitution drops the
   carriage return of the last line only, so the last field of every other region line kept one,
   and a price the region does not publish printed as USD 0.00. The region lines drop it before

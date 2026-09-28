@@ -63,6 +63,40 @@ a bash 4 construct, and a carriage return in the region lines or reaching `az`. 
 carriage return strip removed from the next-page link, survived: in Git Bash a single value keeps
 no carriage return, so that strip changed nothing, and it is removed.
 
+Council round 1 (gpt-6-astra, five seats, read-only, over `38ad175..426b132`): BLOCK.
+
+| Seat | Verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | PASS | Should-fix: the cent was rounded half up. `ConvertTo-MonthlyPrice` rounds a `[decimal]` half to even, so 0.2005 an hour was 146.37 a month in bash and 146.36 in PowerShell | The monthly figure is computed on whole billionths of the price as written and rounded half to even. It equals `[math]::Round([decimal]$p * 730, 2)` over the parity run's 160 prices and, in a one-off run, over 3,207 prices, 200 of them half-cent months |
+| Coder | BLOCK | `read` with a tab IFS joins empty fields: with Standard v2 missing, the Premium v2 price printed under Standard v2 | A price that is not published is written `null`, which `money_` prints as not published |
+| Coder | BLOCK | An `az account list-locations` entry that is not a region object stopped both jq reads, and any region name was then taken | Entries that are not objects with a string `name` and an object `metadata` are skipped, as `Read-GatewayRegion` skips them |
+| QA | BLOCK | Without jq the suite printed SKIP and exited 0 with no check | The suite fails without bash or jq; Test-All skips it with the reason |
+| QA | BLOCK | The offer-order check passed when the next step it compares with was absent | Both positions must be found |
+| UX | BLOCK | A price list jq could not transform read as prices that are not published, with no reason | The transform's exit status is checked, a price that is not a number fails it, and the prompts give the reason |
+| Security | BLOCK | `NextPageLink` reached curl unchecked, a `file://` link included | Only a next page on `https://prices.azure.com`, with or without `:443`, is read, and curl runs with `--proto '=https'`. The URL always starts with `https://`, so no argument reads as an option |
+| Security | should-fix | jq's directory and `/usr/bin` can hold a real `pwsh` or `az` | The runs call jq through a stub that names its absolute path; their PATH is the stubs, `/usr/bin` and `/bin`, and the run without PowerShell 7 reports SKIP when `/usr/bin` or `/bin` holds a `pwsh` |
+
+Found while fixing:
+- The API writes its next page as `https://prices.azure.com:443/api/retail/prices?...&$skip=1000`
+  (read 2026-09-28 from a query of more than 1,000 rows). A check for `https://prices.azure.com/`
+  alone would have refused every second page.
+- In bash, `"${x:-{}}"` with `x` set expands to `$x` followed by `}`: the parser ends the expansion
+  at the first `}`. The default is assigned on its own line.
+- In PowerShell, a cast of an empty pipeline, `[string](@() | Select-Object -First 1)`, is `$null`,
+  not `''`, so the suite's missing-jq branch would have thrown. It uses `"$(...)"`.
+
+`tests/Test-BashInstaller.ps1` now holds 62 checks over 19 runs, in about 30 s. The new runs: a
+missing first and middle price, region entries that are not regions, a price written as a string,
+a next page off the host and one over `http://`, and a parity run over 160 prices in 61 regions,
+72 of them half-cent months. In the terminal run and the parity run, the region table must equal
+the one `Format-ClaudeGatewayRegionTable` prints from the same files through
+`Get-ClaudeApimV2Prices`. Against `426b132`'s installer, 8 of the new checks fail. 12 new
+mutations, 12 caught at 62 checks: the order check with its anchor renamed, an empty field for an
+unpublished price, the type checks removed from either region read, the transform's status
+ignored, a price written as a string taken, any next page followed, the API's own next-page form
+refused, a half cent rounded up, every price rounded as a double, and the price map defaulted with
+the stray brace.
+
 - [ ] Council, five seats; the packet gate exits 0
 ## P72 permutation tests of the guided flow and the installer, 2026-09-28
 
