@@ -79,6 +79,30 @@ function Get-ClaudeFlowTotalMonthlyUsd {
     [pscustomobject]@{ KnownMonthlyUsd = $known; Unknown = @($unknown) }
 }
 
+function Sort-ClaudeFlowOrdinal {
+    # Code-point order, ignoring case as Sort-Object does, the same on Windows PowerShell 5.1 and
+    # PowerShell 7. Sort-Object compares by culture, and .NET Framework (NLS) and .NET (ICU) weigh a
+    # hyphen differently, so one list had two orders and one plan two fingerprints (P76). Keys that
+    # differ only in case are ordered by code point, so the order never depends on the sort algorithm.
+    # -Unique keeps the first of each key ignoring case.
+    param([object[]]$InputObject = @(), [scriptblock]$Key = { [string]$_ }, [switch]$Unique)
+    $items = @($InputObject | Where-Object { $null -ne $_ })
+    if (-not $items.Count) { return }
+    [string[]]$keys = @(foreach ($item in $items) { $k = [string]($item | ForEach-Object $Key); $k.ToUpperInvariant() + [char]0 + $k })
+    [object[]]$sorted = @($items)
+    # The casts select Sort(Array, Array, IComparer): without them PowerShell binds the generic
+    # overload and passes it a converted copy of the items, so only the keys are sorted.
+    [Array]::Sort([Array]$keys, [Array]$sorted, [System.Collections.IComparer][StringComparer]::Ordinal)
+    if (-not $Unique) { return $sorted }
+    $kept = [System.Collections.Generic.List[object]]::new()
+    $previous = $null
+    for ($i = 0; $i -lt $sorted.Count; $i++) {
+        $folded = $keys[$i].Substring(0, $keys[$i].IndexOf([char]0))
+        if ($null -eq $previous -or $folded -ne $previous) { $kept.Add($sorted[$i]); $previous = $folded }
+    }
+    return $kept.ToArray()
+}
+
 function ConvertTo-ClaudeFlowJsonString {
     # A JSON string written the same way on every shell. ConvertTo-Json escapes ' < > & as \u0027 on
     # Windows PowerShell 5.1 and not on PowerShell 7, which gave one plan two fingerprints (P72).

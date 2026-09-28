@@ -18,13 +18,22 @@ lists (`Monitoring.ps1`), the priced model list (`Budgets.ps1`), and the named v
 policy references (`lib/LifecycleCommon.ps1`), which the Update migration `0002` carries in its
 plan and creates in that order. Work is isolated to `p76-ordinal-order`, based on `38ad175`.
 
-- [ ] `Sort-ClaudeFlowOrdinal` in `scripts/flow/FlowContract.ps1` orders by code point, ignoring
+- [x] `Sort-ClaudeFlowOrdinal` in `scripts/flow/FlowContract.ps1` orders by code point, ignoring
       case as `Sort-Object` does, with `-Unique`; the same list gives the same order on both shells
-- [ ] The four sorts use it, so no `Sort-Object` remains in `scripts/flow`; a check refuses a new one
-- [ ] `tests/Test-FlowOrdinalOrder.ps1`: every step of Setup with the shipped modules, planned
+- [x] The four sorts use it, so no `Sort-Object` remains in `scripts/flow`; a check refuses a new one
+- [x] `tests/Test-FlowOrdinalOrder.ps1`: every step of Setup with the shipped modules, planned
       offline from one record on both shells, has the same canonical text and the same fingerprint;
       the Update migration's named values are the same list in the same order on both shells
-- [ ] GUIDED-FLOW and CHANGELOG; council, five seats; the packet gate exits 0
+- [x] GUIDED-FLOW and CHANGELOG
+Measured after the fix: PowerShell 7's culture order already matched code-point order for the
+shipped workbook list and the policy's 24 named values, so its plans keep their fingerprints;
+on Windows PowerShell 5.1 the Monitoring and Update plans have new ones. Found while testing:
+`[Array]::Sort($keys, $items, [StringComparer]::Ordinal)` in PowerShell binds the generic overload
+and passes it a converted copy of the items, so only the keys were sorted; the plan comparisons
+still passed, because NTFS and the policy file already listed both in one order, and the checks of
+the helper's own output failed. Casts select the overload that sorts both.
+
+- [ ] Council, five seats; the packet gate exits 0
 ## P72 permutation tests of the guided flow and the installer, 2026-09-28
 
 The owner's test on 2026-09-27 found the guided flow's defects one path at a time. P72 tests the

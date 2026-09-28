@@ -177,10 +177,14 @@ The fingerprint is the same on PowerShell 7 and Windows PowerShell 5.1, so a
 plan reviewed on one can be applied on the other. The flow writes the plan's
 canonical text itself: `ConvertTo-Json` escapes `'`, `<`, `>` and `&` on
 Windows PowerShell 5.1 only, and until P72 the same plan had a different
-fingerprint on each shell. The canonical text changed with P72, so a fingerprint
-printed by an earlier release may no longer match its plan, depending on the
-shell that printed it and the plan's text; when one is refused, run `-PlanOnly`
-again.
+fingerprint on each shell. Every list a plan holds is also in code-point order
+(`Sort-ClaudeFlowOrdinal` in `scripts/flow/FlowContract.ps1`) since P76:
+`Sort-Object` compares by culture, and .NET Framework and .NET weigh a hyphen
+differently, so until then the Monitoring and Update plans listed their files
+and named values in a different order on each shell. The canonical text changed
+with P72 and P76, so a fingerprint printed by an earlier release may no longer
+match its plan, depending on the shell that printed it and the plan's text; when
+one is refused, run `-PlanOnly` again.
 
 A refusal (drift, a fingerprint that does not match, a missing answer) and a
 cancel (the installer cancelled at its summary, a mistyped confirmation) print
@@ -298,6 +302,7 @@ planning and names `-Action Setup`.
 |---|---|---|
 | `tests/Test-FlowStart.ps1` | The orchestrator, discovery and Foundation step in a copy of the repository, with a stub installer, Azure CLI and prices; attended runs through standard input | The first line and the recorded gateway's read are timed; the installer asks its own questions in a console; the FinOps question follows the installer; a failed second phase resumes |
 | `tests/Test-FlowPermutations.ps1` | The same copy over Setup, Change foundation, Guide and Status × no record, a matching gateway, another gateway URL, a missing gateway, signed out and no Azure CLI × attended, `-PlanOnly` and unattended apply, then `-WhatIf`, Update with no record, and cancels through callers that use `&` or dot-source it, on both shells; the stub installer takes the real installer's parameter block; Foundation's installer arguments over 432 combinations in process | The installer runs only for Change foundation or a Setup with no gateway recorded; `-Yes` exactly when unattended; `-DeployProjection` exactly when unattended with the projection store; drift stops Setup and Change; a failed read is not drift; `-PlanOnly` and Status write nothing; a refusal has no code excerpt, and a caller receives it as an exception; each argument is valid for its installer parameter; a recorded foundation comes back unchanged through an unattended Change; one plan has one fingerprint on both shells |
+| `tests/Test-FlowOrdinalOrder.ps1` | Every shipped Setup step and the Update migration `0002`, planned offline from one record on PowerShell 7 and Windows PowerShell 5.1; `Sort-ClaudeFlowOrdinal` on both shells | Each step has the same canonical text and the Setup plan one fingerprint on both shells; no `Sort-Object` remains in `scripts/flow` |
 | `tests/Test-InstallerPermutations.ps1` | The real installer under `-WhatIf -Yes`, in process, with the Azure CLI and the Retail Prices API stubbed, on PowerShell 7 and Windows PowerShell 5.1: every combination of tier × entitlement store × developer sign-in × Desktop sign-in (96 cases), six refusals and a reused gateway; `-Live` and `-Pairs` run 16 cases that cover every pair of levels | The summary names each choice; an external IdP Desktop sign-in derives its gateway audience with or without `-AuthMode`; each refusal comes before the summary, names what to pass and says that nothing was created; both shells print the same summary |
 
 `tests/Test-InstallerPermutations.ps1 -Live -FoundryAccount <account>
