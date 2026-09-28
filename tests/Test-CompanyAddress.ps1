@@ -95,6 +95,9 @@ function Invoke-ClaudeNetworkArm {
             if ($script:requireDnsFirst -and -not $script:dnsRecord) { throw 'CustomHostnameOwnershipCheckFailed: CNAME must exist before binding.' }
             if ($Body.properties -and $Body.properties.hostnameConfigurations) {
                 $script:live.properties.hostnameConfigurations = Copy-Object $Body.properties.hostnameConfigurations
+                foreach ($hostEntry in @($script:live.properties.hostnameConfigurations | Where-Object hostName -eq 'claude.contoso.test')) {
+                    $hostEntry | Add-Member -NotePropertyName certificate -NotePropertyValue @{ thumbprint=$script:tlsThumbprint } -Force
+                }
             }
             if ($Body.identity) { $script:live.identity = Copy-Object $Body.identity; $script:live.identity | Add-Member principalId '00000000-0000-0000-0000-000000000002' -Force }
             $script:live.properties.provisioningState = $script:patchState
@@ -447,6 +450,41 @@ try {
     Check 'a timed wait says condition, estimate and elapsed time' {
         $log = @(Wait-ClaudeAddress -Condition 'DNS test' -About 'about 1 minute' -TimeoutSeconds 0 -PollSeconds 0 -Check { @{ Done = $true; Value = 'ready'; Status = 'ready' } } 6>&1) -join "`n"
         $log -match 'DNS test' -and $log -match 'about 1 minute' -and $log -match 'in [0-9.,]+ s'
+    }
+    Reset-State
+    Check 'a failed replacement persists only an unverified recovery receipt' {
+        $script:live.properties.hostnameConfigurations += @{type='Proxy';hostName='old.contoso.test';certificateSource='Custom';certificate=@{thumbprint='OLD'}}
+        $script:record.gatewayUrl='https://old.contoso.test/claude'
+        Set-ClaudeDecision $script:record address ([pscustomobject]@{hostname='old.contoso.test';certificateThumbprint='OLD'})
+        Write-ClaudeDecisionRecord $script:record $recordPath
+        $p=New-Plan @{ReplaceHostname='old.contoso.test'}
+        $script:tlsStatus=503
+        $refused=Reject {Apply-Plan $p} 'HTTPS'
+        $script:recoveryRecord=Read-ClaudeDecisionRecord $recordPath
+        $refused -and $script:recoveryRecord.pendingAddress -and $script:recoveryRecord.gatewayUrl -eq 'https://old.contoso.test/claude' -and $script:recoveryRecord.decisions.address.hostname -eq 'old.contoso.test'
+    }
+    Check 'recovery matches only the receipt gateway and exact resulting host collection' {
+        $r=Get-ClaudeAddressRecovery -Record $script:recoveryRecord -Gateway $script:live
+        $r.Allowed -and $r.Decision.hostname -eq 'claude.contoso.test' -and -not $r.Decision.replaceHostname
+    }
+    Check 'a tampered recovery receipt cannot bypass drift' {
+        $r=Copy-Object $script:recoveryRecord
+        $r.pendingAddress.fingerprint='wrong'
+        -not (Get-ClaudeAddressRecovery -Record $r -Gateway $script:live).Allowed
+    }
+    Check 'unrelated live hostname drift cannot use address recovery' {
+        $g=Copy-Object $script:live
+        $g.properties.hostnameConfigurations[1].hostName='changed-portal.contoso.test'
+        -not (Get-ClaudeAddressRecovery -Record $script:recoveryRecord -Gateway $g).Allowed
+    }
+    Check 'the recovery decision can be freshly planned and publishes only after a new proof' {
+        $recovery=Get-ClaudeAddressRecovery -Record $script:recoveryRecord -Gateway $script:live
+        if(-not $recovery.Allowed){throw 'No valid recovery'}
+        $script:tlsStatus=401
+        $p=New-Plan @{ReplaceHostname=''}
+        Apply-Plan $p|Out-Null
+        $after=Read-ClaudeDecisionRecord $recordPath
+        $after.gatewayUrl -eq 'https://claude.contoso.test/claude' -and -not $after.pendingAddress
     }
     Check 'a timeout says how long it waited and never returns a success value' {
         Reject { Wait-ClaudeAddress -Condition 'DNS test' -About 'about 1 minute' -TimeoutSeconds 0 -PollSeconds 0 -Check { @{ Done = $false; Status = 'not yet' } } } 'DNS test.*timed out after'

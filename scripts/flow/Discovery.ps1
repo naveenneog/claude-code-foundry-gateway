@@ -118,6 +118,7 @@ function Get-ClaudeFlowDiscovery {
         elseif ($read) {
             $live = $read.Value
             $gateway = [pscustomobject]@{
+                id = [string]$live.id
                 name = [string]$live.name
                 resourceGroup = $recordGroup
                 location = ConvertTo-ClaudeArmRegionName ([string]$live.location)
@@ -141,10 +142,17 @@ function Get-ClaudeFlowDiscovery {
     }
 
     if ($differences.Count) { $status = 'drift' }
+    $recovery = $null
+    if ($gateway -and $Record.pendingAddress -and $differences.Count -eq 1) {
+        . (Join-Path $PSScriptRoot 'FlowContract.ps1')
+        . (Join-Path (Split-Path $PSScriptRoot -Parent) 'ClaudeGatewayAddressRecovery.ps1')
+        $recovery = Get-ClaudeAddressRecovery -Record $Record -Gateway $gateway
+    }
     $region = if ($gateway -and $gateway.location) { $gateway.location } else { ConvertTo-ClaudeArmRegionName $recordedRegion }
     [pscustomobject][ordered]@{
         record = $Record
         gateway = $gateway
+        addressRecovery = $recovery
         Region = $(if ($region) { $region } else { $null })
         comparison = [pscustomobject]@{ status = $status; differences = @($differences); reason = $reason }
     }

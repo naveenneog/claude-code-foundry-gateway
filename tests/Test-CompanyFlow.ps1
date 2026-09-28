@@ -167,6 +167,20 @@ Check 'live step verification does not report a generic 404 as success' {
     $r = [pscustomobject]@{ gatewayUrl = 'https://claude.contoso.test/claude'; decisions = [pscustomobject]@{ address = [pscustomobject]@{ hostname = 'claude.contoso.test'; certificateThumbprint = 'ABC' } } }
     -not (Test-ClaudeFlowStep $r).Passed
 }
+Import-Function $start 'Assert-RecordMatchesLive'
+Check 'only Change address can review a validated unverified address recovery' {
+    $Action='Change';$Change='address'
+    $d=[pscustomobject]@{comparison=@{differences=@('old gateway URL no longer bound')};addressRecovery=@{Allowed=$true}}
+    Assert-RecordMatchesLive $d
+    $true
+}
+Check 'address recovery cannot bypass drift for another action or decision' {
+    $d=[pscustomobject]@{comparison=@{differences=@('old gateway URL no longer bound')};addressRecovery=@{Allowed=$true}}
+    $Action='Setup';$Change=''
+    $setup=Reject {Assert-RecordMatchesLive $d} 'drift'
+    $Action='Change';$Change='foundation'
+    $setup -and (Reject {Assert-RecordMatchesLive $d} 'drift')
+}
 Check 'real ARM transport sends conditional DNS headers and removes the body file' {
     . (Join-Path $root 'scripts\ClaudeNetwork.ps1')
     function Invoke-ClaudeNetworkAz { [pscustomobject]@{ accessToken = 'fixture-token-not-a-credential' } }

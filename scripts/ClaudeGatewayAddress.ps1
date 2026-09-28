@@ -3,6 +3,7 @@
 . (Join-Path $PSScriptRoot 'ClaudeNetwork.ps1')
 . (Join-Path $PSScriptRoot 'AzureRetailPrice.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeGatewayCertificate.ps1')
+. (Join-Path $PSScriptRoot 'ClaudeGatewayAddressRecovery.ps1')
 
 function Wait-ClaudeAddress {
     param([string]$Condition, [string]$About, [int]$TimeoutSeconds = 2700, [int]$PollSeconds = 15, [scriptblock]$Check)
@@ -251,6 +252,10 @@ function Invoke-ClaudeAddressPlan {
         $currentDns = Invoke-ClaudeNetworkArm $dnsUri -AllowNotFound
         if ((ConvertTo-ClaudeFlowCanonical $currentDns) -ne (ConvertTo-ClaudeFlowCanonical $d.DnsRecord.Before)) { throw 'DNS record changed since review; no write was made.' }
     }
+    if ($record -and -not $d.IsolatedProof) {
+        Set-ClaudeRecordProperty $record pendingAddress (New-ClaudeAddressRecoveryReceipt -Record $record -Gateway $gateway -Plan $Plan)
+        Write-ClaudeDecisionRecord -Record $record -Path $RecordPath
+    }
     if ($dnsUri) {
         $properties = @{ TTL = 300; CNAMERecord = @{ cname = $d.DnsRecord.Target } }
         $condition = @{ IfNoneMatch = $true }
@@ -338,6 +343,7 @@ function Invoke-ClaudeAddressPlan {
         Set-ClaudeRecordProperty $record gatewayUrl $url
         Set-ClaudeRecordProperty $record address $address
         Set-ClaudeDecision -Record $record -Key address -Value $address
+        $record.PSObject.Properties.Remove('pendingAddress')
         Write-ClaudeDecisionRecord -Record $record -Path $RecordPath
         Write-Host '  Developer record published. Already-configured workstations need the redistributed settings.'
     }

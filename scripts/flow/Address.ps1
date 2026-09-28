@@ -8,6 +8,9 @@ function Get-ClaudeFlowStepInfo {
 
 function Get-ClaudeFlowStepQuestions {
     param($Record, $Discovery)
+    if ($Discovery -and $Discovery.addressRecovery -and $Discovery.addressRecovery.Allowed) {
+        Set-ClaudeDecision $Record address (Copy-ClaudeFlowValue $Discovery.addressRecovery.Decision)
+    }
     @(
         [pscustomobject]@{ Key = 'address.hostname'; Type = 'Text'; Question = 'Company DNS hostname (not a URL)'; Optional = $false }
         [pscustomobject]@{
@@ -40,16 +43,26 @@ function Get-ClaudeFlowStepPlan {
     $subscription = Get-ClaudeFlowRecordSubscription $Record
     if (-not $subscription) { $subscription = (Invoke-ClaudeNetworkAz @('account','show')).id }
     $password = if (Get-Variable AddressCertificatePassword -ErrorAction SilentlyContinue) { Get-Variable AddressCertificatePassword -ValueOnly } else { $null }
-    Get-ClaudeAddressPlan -SubscriptionId $subscription -ResourceGroup $Record.resourceGroup -ApimName $Record.apimName `
+    $recovery = if ($Discovery) { $Discovery.addressRecovery } else { $null }
+    if ($recovery -and $recovery.Allowed -and (ConvertTo-ClaudeFlowCanonical $d) -cne (ConvertTo-ClaudeFlowCanonical $recovery.Decision)) {
+        throw 'Address recovery must retain the pending hostname, certificate and DNS choice. Complete or restore that operation before another change.'
+    }
+    $plan = Get-ClaudeAddressPlan -SubscriptionId $subscription -ResourceGroup $Record.resourceGroup -ApimName $Record.apimName `
         -Hostname $d.hostname -CertificateSource $d.certificateSource -KeyVaultCertificateId $d.keyVaultCertificateId `
         -PfxPath $d.pfxPath -CertificatePassword $password -ReplaceHostname $d.replaceHostname `
         -DnsZoneResourceId $(if ($d.dnsMode -eq 'AzureDns') { $d.dnsZoneResourceId } else { '' })
+    if ($recovery -and $recovery.Allowed) {
+        $plan.Data.RecoveryFingerprint = $recovery.Fingerprint
+        $plan.Summary = "Recover the unverified address $($d.hostname); publish only after proof."
+    }
+    return $plan
 }
 
 function Invoke-ClaudeFlowStep {
     param($Record, $Plan, [securestring]$CertificatePassword)
     $result = Invoke-ClaudeAddressPlan -Plan $Plan -CertificatePassword $CertificatePassword -RecordPath $Record.__recordPath
     Set-ClaudeRecordProperty $Record address $result.Address
+    $Record.PSObject.Properties.Remove('pendingAddress')
     @{ gatewayUrl = $result.GatewayUrl; address = $result.Address }
 }
 

@@ -192,6 +192,10 @@ function Assert-RecordMatchesLive {
         $diffs = @($Discovery.comparison.differences | Where-Object { $_ })
     }
     if ($diffs.Count) {
+        if ($Action -eq 'Change' -and $Change -eq 'address' -and $Discovery.addressRecovery -and $Discovery.addressRecovery.Allowed) {
+            Write-Host 'The prior address change is unverified. Only its matching recovery can be reviewed; a new fingerprint is required.' -ForegroundColor Yellow
+            return
+        }
         throw ("The decision record does not match live state; refusing to apply over drift.`n - " + ($diffs -join "`n - "))
     }
 }
