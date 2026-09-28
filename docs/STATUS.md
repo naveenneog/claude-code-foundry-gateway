@@ -4,10 +4,26 @@
 
 ## P70 newly deployed models reach the tiers and the workstations, 2026-09-28
 
-Council round 1 remediation is ready for the lead's re-review on `p70-model-lifecycle`.
-All five BLOCK findings and three should-fixes were implemented after `a017814`; the packet
-gate passed on `e6566cc`. The lead runs the council and merges. No Azure or real workstation
-writes were made in this remediation; the reference gateway remains unchanged.
+Council round 2 passed all five seats. Integration is in progress on `p70-model-lifecycle`:
+an AST-derived renderer import guard, a normal merge of `main` (`38ad175`, including P72),
+the requested P72 permutation suites, and a packet gate under the shared lock. ROADMAP P70
+remains unticked. No Azure or real workstation writes are planned.
+
+### Council round 2, 2026-09-28
+
+| Seat | Verdict supplied | Evidence / remaining integration work |
+|---|---|---|
+| Architect | PASS | Round-1 dependency fingerprints verified; A2 should-fix adds AST-derived transitive import coverage so a new helper cannot evade both handwritten lists |
+| Coder | PASS | Initial Sonnet-only allowlist and picker agree; all round-1 fixes verified |
+| QA | PASS | Round-1 regressions verified; P72 installer/flow permutations will run on the merged tree |
+| UX | PASS | No BLOCK or additional UX finding supplied |
+| Security | PASS | Every S1 refusal made zero Azure resource writes; no tracked ignored generated files were found |
+
+Acceptance for this integration: the new import detector catches an added renderer
+dot-source with the complete assertion count and passes after restoration; the normal
+merge retains every `main` ledger entry; the specified P72 suites pass without weakening
+their assertions; the unchanged packet gate exits 0. A P70/P72 behavior contradiction
+is reported rather than resolved by changing an assertion.
 
 ### Council round 1, 2026-09-28
 
