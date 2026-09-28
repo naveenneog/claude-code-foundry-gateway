@@ -7,7 +7,8 @@ from typing import Any
 def in_read_cycle(operation):
     @wraps(operation)
     def read(self, *args, **kwargs):
-        with self.backend.read_cycle():
+        backend = self if isinstance(self, Backend) else self.backend
+        with backend.read_cycle():
             return operation(self, *args, **kwargs)
     return read
 
@@ -46,6 +47,9 @@ class Backend(ABC):
 
     def identity_update(self):
         return nullcontext()
+
+    def pin_read_cycle(self):
+        """Bind a completed identity or cached result to the current cycle."""
 
     def prepare_read(self, resource):
         """Resolve address metadata needed before an identity-independent read."""

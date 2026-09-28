@@ -367,8 +367,11 @@ def report_chargeback(ctx: typer.Context, csv: Annotated[bool, typer.Option("--c
     """Export estimated cost, tokens and cache. Not an Azure invoice."""
     if csv and not ctx.obj["json"]:
         try:
-            rows = ctx.obj["engine"].chargeback(dimension)["items"]
-            typer.echo(chargeback_csv(ctx.obj["redactor"].present(rows), ctx.obj["engine"].month), nl=False)
+            with ctx.obj["engine"].backend.read_cycle():
+                rows = ctx.obj["engine"].chargeback(dimension)["items"]
+                output = chargeback_csv(ctx.obj["redactor"].present(rows), ctx.obj["engine"].month)
+                with ctx.obj["engine"].backend.read_guard()():
+                    typer.echo(output, nl=False)
         except FinOpsError as error:
             typer.echo(str(error), err=True)
             raise typer.Exit(error.code) from None

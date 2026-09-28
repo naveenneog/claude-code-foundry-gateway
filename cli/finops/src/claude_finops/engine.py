@@ -52,6 +52,7 @@ class Engine(FeatureEngine):
                         self._capabilities_guard = None
                         self.backend.invalidate_credentials()
                     self._identity = identity
+                    self.backend.pin_read_cycle()
                     return self._identity
         if resource in self.backend.identity_independent_reads and not params.get("cursor"):
             self.backend.prepare_read(resource)

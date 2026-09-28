@@ -53,6 +53,7 @@ class FeatureEngine:
                     self._capabilities_guard = guard
             if self._capabilities_guard is not None:
                 with self._capabilities_guard():
+                    self.backend.pin_read_cycle()
                     return self._capabilities
             return self._capabilities
 

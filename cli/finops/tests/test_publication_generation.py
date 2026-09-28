@@ -9,7 +9,7 @@ from textual.widgets import Static
 from types import SimpleNamespace
 import typer
 
-from claude_finops.cli import emit
+from claude_finops.cli import emit, report_chargeback
 from claude_finops.config import Config
 from claude_finops.engine import Engine
 from claude_finops.errors import FinOpsError
@@ -192,3 +192,84 @@ def test_completed_capabilities_are_not_cached_after_b_verifies(http_estate):
     with pytest.raises(FinOpsError, match="sign-in changed"):
         engine.capabilities(refresh=True)
     assert engine._capabilities is None
+
+
+def test_completed_http_identity_cannot_reach_json_after_new_identity_verifies(http_estate, capsys):
+    engine, principal, _ = http_estate
+    ctx = SimpleNamespace(obj={"engine": engine, "redactor": Redactor(), "json": True,
+                               "plain": True, "no_color": True})
+
+    def completed(engine):
+        result = engine.read("whoami")
+        verify_b(engine, principal)
+        return result
+
+    with pytest.raises(typer.Exit) as failure:
+        emit(ctx, completed)
+    assert failure.value.exit_code == 3
+    output = json.loads(capsys.readouterr().out)
+    assert output["exit_code"] == 3 and "a@contoso.com" not in str(output)
+
+
+def test_completed_chargeback_cannot_reach_csv_after_b_verifies(http_estate, capsys):
+    engine, principal, _ = http_estate
+    ctx = SimpleNamespace(obj={"engine": engine, "redactor": Redactor(), "json": False})
+
+    def chargeback(dimension):
+        source = engine.read("trends")
+        verify_b(engine, principal)
+        return {"items": [{"id": source["source"], "total_tokens": 7}]}
+
+    engine.chargeback = chargeback
+    with pytest.raises(typer.Exit) as failure:
+        report_chargeback(ctx, csv=True)
+    assert failure.value.exit_code == 3
+    assert capsys.readouterr().out == ""
+
+
+def test_turnstile_completed_feature_document_is_not_cached_after_b_verifies(http_estate):
+    engine, principal, _ = http_estate
+    original = engine.backend._request
+
+    def after_response(method, path, *args, **kwargs):
+        result = original(method, path, *args, **kwargs)
+        if path.endswith("/model-management"):
+            verify_b(engine, principal)
+        return result
+
+    engine.backend._request = after_response
+    with pytest.raises(FinOpsError, match="sign-in changed"):
+        engine.capabilities(refresh=True)
+    assert engine.backend._features is None
+
+
+def test_aum_service_completed_catalog_is_not_cached_after_identity_change():
+    from claude_finops.aum_service import AumServiceBackend
+    principal = ["a"]
+
+    def respond(request):
+        if request.url.path.endswith("/me"):
+            return httpx.Response(200, json={"id": principal[0], "role": "owner"})
+        return httpx.Response(200, json={"revision": "one", "organizations": [
+            {"id": principal[0] + "-only", "name": principal[0]}], "departments": []})
+
+    backend = AumServiceBackend(Config(backend="aum-service", url="https://aum.contoso.com",
+                                      scope="api://contoso/AUM.Access"), token_provider=lambda: "test-only",
+                                transport=httpx.MockTransport(respond))
+    engine = Engine(backend, "2026-09")
+    engine.read("whoami")
+    original = backend._get
+
+    def after_get(path, *args, **kwargs):
+        result = original(path, *args, **kwargs)
+        if path == "catalog":
+            verify_b(engine, principal)
+        return result
+
+    backend._get = after_get
+    try:
+        with pytest.raises(FinOpsError, match="sign-in changed"):
+            engine.read("catalog")
+        assert backend._catalog is None
+    finally:
+        backend.close()

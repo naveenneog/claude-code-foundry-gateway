@@ -56,6 +56,19 @@ class HttpBackend(Backend):
     def identity_update(self):
         return self._credential_lock
 
+    def pin_read_cycle(self):
+        with self._credential_lock:
+            cycle = self._cycle.get()
+            if cycle is not None:
+                cycle.setdefault("generation", self._credential_generation)
+            with self.read_guard()():
+                pass
+
+    def cache_read(self, **values):
+        with self.read_guard()():
+            for name, value in values.items():
+                setattr(self, name, value)
+
     def _request(self, method, path, params=None, body=None, extra_headers=None, optional=False):
         for attempt in range(2 if method == "GET" else 1):
             with self._credential_lock:
@@ -96,7 +109,8 @@ class HttpBackend(Backend):
             if response.status_code == 204:
                 return {"deleted": True}
             if response.headers.get("ETag"):
-                self._etags[path] = response.headers["ETag"]
+                with self.read_guard()():
+                    self._etags[path] = response.headers["ETag"]
             try:
                 payload = response.json()
                 if not isinstance(payload, dict):
