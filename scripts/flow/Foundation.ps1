@@ -115,8 +115,10 @@ function Get-ClaudeFlowFoundationInstallerMap {
         PublisherEmail = 'publisherEmail'
         Sku = 'sku'
         EntitlementStore = 'entitlementStore'
+        ResolverInboundAccess = 'resolverInboundAccess'
         AuthMode = 'authMode'
         DesktopSignInKind = 'desktopSignInKind'
+        DesktopBearerTokenType = 'desktopBearerTokenType'
         DesktopEntraClientId = 'desktopEntraClientId'
         DesktopEntraIssuer = 'desktopEntraIssuer'
         DesktopEntraScopes = 'desktopEntraScopes'
@@ -216,6 +218,22 @@ function Get-ClaudeFlowFoundationInstallerArgs {
     }
     # Unattended, the installer refuses the projection without its deployer.
     if (-not $Attended -and [string]$installerArgs['EntitlementStore'] -eq 'projection') { $installerArgs['DeployProjection'] = $true }
+    # Without a console the installer cannot ask for the Desktop app, so the plan names what is missing
+    # before it is approved, instead of the installer after.
+    if (-not $Attended -and [string]$installerArgs['DesktopSignInKind'] -like 'external-idp-*') {
+        $kind = [string]$installerArgs['DesktopSignInKind']
+        $client = [string]$installerArgs['DesktopEntraClientId']
+        if ($client -notmatch '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$') {
+            $not = if ($client) { " ('$client' is not an application id)" } else { '' }
+            throw "Claude Desktop sign-in $kind needs foundation.desktopEntraClientId, the id of the Desktop public-client app$not, in the answers file or the decision record: without a console, Install-ClaudeGateway.ps1 cannot ask for it. scripts/New-ClaudeDesktopEntraApp.ps1 creates the app."
+        }
+        if ([string]$installerArgs['DesktopBearerTokenType'] -eq 'access_token') {
+            $missing = @()
+            if (-not $installerArgs['DesktopEntraScopes']) { $missing += 'foundation.desktopEntraScopes' }
+            if (-not $installerArgs['DesktopEntraAudience']) { $missing += 'foundation.desktopEntraAudience' }
+            if ($missing.Count) { throw "Claude Desktop sign-in $kind with access_token needs $($missing -join ' and ') in the answers file or the decision record." }
+        }
+    }
     Assert-ClaudeFlowInstallerArgsSafe -InstallerArgs $installerArgs
     return $installerArgs
 }
@@ -228,6 +246,10 @@ function Get-ClaudeFlowStepPlan {
     $sku = if ($d.sku) { [string]$d.sku } else { 'BasicV2' }
     $inputs = Get-ClaudeFlowFoundationInputs -Decision $d
     $existing = [bool]($Record.apimName -and $Record.resourceGroup)
+    # The guide is written from the recorded gateway's names; with none recorded it would hold placeholders.
+    if ($context.Action -eq 'Guide' -and -not $existing) {
+        throw 'No gateway is recorded, so there is no deployment to write a guide for: Guide writes the recorded gateway''s names. Run .\Start-ClaudeGateway.ps1 -Action Setup first.'
+    }
     $location = if ($inputs.Contains('location')) { [string]$inputs['location'] } else { '' }
     $requires = @('Azure Contributor on the gateway resource group', 'User Access Administrator or Owner on the Foundry account for the managed identity grant')
     $rollback = 'Delete or restore the resource group after taking a gateway backup'
@@ -315,14 +337,44 @@ function Get-ClaudeFlowFileStamp {
 }
 
 function Merge-ClaudeFlowFoundationDecision {
-    # The foundation decision after the installer: what it created overrides what was asked for.
+    # The foundation decision after the installer: what it created overrides what was asked for, in
+    # the installer's own parameter values, so an unattended Change gives the installer back the same
+    # choices (tests/Test-FlowPermutations.ps1).
     param($Decision, $Config)
     $merged = [ordered]@{}
     if ($Decision) { foreach ($p in $Decision.PSObject.Properties) { $merged[$p.Name] = $p.Value } }
-    foreach ($name in 'sku', 'location', 'foundryAccount', 'foundryResourceGroup', 'resourceGroup', 'entitlementStore', 'authMode') {
-        if ($Config.PSObject.Properties.Name -contains $name -and $Config.$name) { $merged[$name] = $Config.$name }
+    $names = @($Config.PSObject.Properties.Name)
+    foreach ($name in 'sku', 'location', 'foundryAccount', 'foundryResourceGroup', 'resourceGroup', 'entitlementStore', 'authMode', 'standardGroup', 'premiumGroup') {
+        if ($names -contains $name -and $Config.$name) { $merged[$name] = $Config.$name }
     }
-    if ($Config.PSObject.Properties.Name -contains 'desktopSignIn' -and $Config.desktopSignIn -and $Config.desktopSignIn.kind) { $merged['desktopSignInKind'] = [string]$Config.desktopSignIn.kind }
+    # The installer records a resolver access for every store; it means something only for the
+    # projection. Kept for a named-value store, it would stop a later switch to the projection on
+    # Basic v2, which has no private resolver.
+    if ([string]$merged['entitlementStore'] -eq 'projection' -and $names -contains 'resolverInboundAccess' -and $Config.resolverInboundAccess) { $merged['resolverInboundAccess'] = $Config.resolverInboundAccess }
+    elseif ($merged.Contains('resolverInboundAccess')) { $merged.Remove('resolverInboundAccess') }
+    $from = { param($object, [string]$property) if ($object -and @($object.PSObject.Properties.Name) -contains $property) { $object.$property } else { $null } }
+    $tiers = & $from $Config 'tiers'
+    foreach ($pair in @(@('standard', 'tokensPerMinute', 'tpmStandard'), @('standard', 'tokensPerDay', 'quotaStandard'), @('premium', 'tokensPerMinute', 'tpmPremium'), @('premium', 'tokensPerDay', 'quotaPremium'))) {
+        $value = & $from (& $from $tiers $pair[0]) $pair[1]
+        if ($value) { $merged[$pair[2]] = $value }
+    }
+    $org = & $from (& $from $Config 'organisation') 'tokensPerMonth'
+    if ($org) { $merged['quotaOrg'] = $org }
+    $rpm = & $from $Config 'requestsPerMinute'
+    if ($rpm) { $merged['callsPerMinute'] = $rpm }
+    $desktop = & $from $Config 'desktopSignIn'
+    if ($desktop -and $desktop.kind) {
+        # The installer records external-idp with its flow; its -DesktopSignInKind takes the pair as one value.
+        $kind = [string]$desktop.kind
+        if ($kind -eq 'external-idp') { $kind = if ([string](& $from $desktop 'flow') -eq 'broker') { 'external-idp-broker' } else { 'external-idp-browser' } }
+        $merged['desktopSignInKind'] = $kind
+        $fields = [ordered]@{ clientId = 'desktopEntraClientId'; issuer = 'desktopEntraIssuer'; scopes = 'desktopEntraScopes'; audience = 'desktopEntraAudience'; resource = 'desktopEntraResource'; bearerTokenType = 'desktopBearerTokenType' }
+        foreach ($field in $fields.Keys) {
+            $value = & $from $desktop $field
+            if ($kind -ne 'helper-script' -and $value) { $merged[$fields[$field]] = [string]$value }
+            elseif ($merged.Contains($fields[$field])) { $merged.Remove($fields[$field]) }
+        }
+    }
     return [pscustomobject]$merged
 }
 

@@ -39,6 +39,7 @@ fails the release stage while any remain. Detail for each one follows below.
 | U30 | OPEN | Can the guided flow create the company address itself: an API Management custom hostname with a certificate and a DNS record, on each v2 tier, and at what cost? Not researched yet | P69 |
 | U31 | CLOSED | Can the flow show the customer's own prices (an agreement's price sheet) instead of Azure retail list prices, and with what role? Researched 2026-09-27: the price sheet of an Enterprise Agreement, Microsoft Customer Agreement or Microsoft Partner Agreement is readable only with a billing role (for MCA: billing profile owner, contributor, reader or invoice manager; for EA: as the Enterprise Admin's policy allows), not with a subscription role, and the API downloads the whole sheet as a file. The flow shows Azure Retail Prices API list prices, named as list prices, and names the price sheet as the authority ([detail](#u31--customer-prices--closed-2026-09-27)) | P68, [ADR-0032](adr/0032-guided-flow-starts-at-once.md) |
 | U32 | OPEN | What stops the reference Turnstile database every evening? Measured 2026-09-27 from the activity log: `pg-tsclaude-zpk4sh4prbsls` (rg-turnstile-claudegw) was stopped at 19:05Z on 09-23, 09-24 and 09-25 by an application whose token was issued by a tenant other than the subscription's. While stopped, Turnstile's `auth/me` waits about 30 s and returns 500, which AUM reports as `Read failed (exit 7)` ([detail](#u32--the-turnstile-database-stops-every-evening--open)) | f10, f11 |
+| U36 | CLOSED | Can `Start-ClaudeGateway.ps1` tell a top-level run from a call by another script, on both shells? Measured 2026-09-28: `$MyInvocation.PSCommandPath` is empty at top level and names the calling script otherwise, on PowerShell 7 and 5.1 | P72 unblocked |
 
 ---
 
@@ -730,6 +731,45 @@ events.
 is expected to stop again at about 19:05Z. The product side is queued as f10 and f11: a Turnstile
 readiness endpoint that answers 503 at once when the database is unavailable, and an AUM
 preflight that names the stopped database instead of `exit 7`.
+
+## U36 — A top-level run and an in-process call — CLOSED 2026-09-28
+
+**Question.** P72 prints a refusal of `Start-ClaudeGateway.ps1` as its reason, without
+PowerShell's code excerpt (`Line |` on PowerShell 7, `CategoryInfo` on Windows PowerShell 5.1).
+`tests/Test-GuidedFlow.ps1` calls the script in process and expects the refusal as an exception.
+Can the script tell a top-level run from a call by another script, on both shells?
+
+**Measured 2026-09-28** with a script that prints `$MyInvocation.PSCommandPath` and
+`$MyInvocation.CommandOrigin`, on PowerShell 7 (`pwsh`) and Windows PowerShell 5.1
+(`powershell.exe`):
+
+| Invocation | `PSCommandPath` | `CommandOrigin` |
+|---|---|---|
+| `-File script.ps1` | empty | `Runspace` |
+| `-Command "& script.ps1"` (as from a prompt) | empty | `Runspace` |
+| `& script.ps1` from another script | the calling script's path | `Internal` |
+
+Both shells gave the same results. The [about_Automatic_Variables][u36-auto] reference documents
+`$MyInvocation.PSCommandPath` as the path of the script that invoked the current command. A
+top-level run therefore prints the reason and exits 1; a call from another script still receives
+the exception. `tests/Test-FlowPermutations.ps1` checks both.
+
+**Measured again 2026-09-28, after council round 1 of P72**, on both shells:
+
+| Invocation or error | Observed |
+|---|---|
+| `. script.ps1` from another script | `InvocationName` is `.`; `PSCommandPath` is the calling script |
+| `. script.ps1` at a prompt (`-Command`) | `InvocationName` is `.`; `PSCommandPath` is empty |
+| `throw 'text'` | `RuntimeException`; `FullyQualifiedErrorId` equals the message |
+| `$null.Method()` | `RuntimeException`; `FullyQualifiedErrorId` is `InvokeMethodOnNull` |
+| a cmdlet error under `-ErrorAction Stop` | its own exception type, such as `DriveNotFoundException` |
+
+A dot-sourced run shares its caller's scope, and at a prompt that is the console's global scope,
+where `exit` closes the console. The flow therefore treats a dot-sourced run as a call and raises
+the exception. The flow refuses by throwing its reason, so an error whose id is its own message
+is a refusal, printed without the debugging hint; any other error prints the hint.
+
+[u36-auto]: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_automatic_variables#myinvocation
 
 ---
 
