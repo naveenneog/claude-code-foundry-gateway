@@ -171,3 +171,13 @@ at 80x24 instead of relying on the two-line application status. The regression
 holds its real Windows handle through successful identity verification, final
 validation, rollback failure and UI inspection. This changes no Azure component,
 identity, network path, membership writer or gateway authority.
+
+Round-2 evidence on 2026-09-29: three new end-to-end regressions first failed
+with the cleared identity, missing form and early adoption. The focused
+connection/transaction/publication run then passed 56 tests in 52.56 s.
+The final AUM regression union passed all 635 cases across separately locked
+commands (331.30 s pytest time). All seven negative probes were caught after
+the first sweep's notification survivor led to an additional notification
+assertion; the original state and viewport assertions were not relaxed.
+The Windows handle remained held through verification, both denied reads and
+the complete keyboard-scrolled recovery inspection. Round 3 is lead-owned.

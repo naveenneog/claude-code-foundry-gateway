@@ -7,7 +7,9 @@ Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM 
 **Council round 2:** Architect and Security PASS; Coder, QA and UX BLOCK at
 `3ace1f7` on UI adoption before the final saved-revision check. Transaction-level
 round-1 probes pass, but did not establish recovery after successful `whoami`
-with a persistent read lock. This path is reopened below. The lead runs round 3.
+with a persistent read lock. The correction and its strengthened detector are
+verified through `36bbaf4`; the final evidence change is ledger-only.
+The lead runs round 3; no new council verdict is claimed.
 
 ### Council round 2 corrections
 
@@ -27,8 +29,8 @@ exit; failure does not clear or dismiss the previous UI. The existing scrollable
 container is reused rather than a new backend or recovery service. U40 and U41
 are reopened before the correction.
 
-RED, GREEN, negative probes and the correction commit are recorded here as
-they complete. Each long command owns and releases its own `.gate-lock`
+RED, GREEN, negative probes and the correction commits are recorded below.
+Each long command owns and releases its own `.gate-lock`
 within one synchronous invocation. No push, merge, Azure write, writer-authority
 change or council rerun is authorized.
 
@@ -61,6 +63,86 @@ requires none when the persistent recovery form owns the error. All **3**
 recovery cases pass in **7.04 s** with that additional assertion. The original
 identity, form, viewport and persistent-handle assertions are unchanged; the
 first sweep's receipt is retained rather than replaced by a pass claim.
+
+#### Final round 2 correction evidence, 2026-09-29
+
+The final negative sweep caught **7/7** probes in **70.313 s**, including clean
+selector baselines and restoration. Every mutant loaded exactly its baseline
+test-case identities/counts, with failures rather than collection errors or
+skips. Reverting adoption order fails all three new cases; removing the final
+file check, clearing the old UI, dismissing recovery, clipping the feedback,
+removing keyboard focus and duplicating the transient notification are each
+caught. The restored recovery/transaction suites passed **13 tests in
+19.157 s** wall time. The first 6/7 result remains in
+`mutation-results-first.json`.
+
+| Probe | Baseline / mutant cases | Failed | Seconds |
+|---|---:|---:|---:|
+| adoption-before-final-check | 3 / 3 | 3 | 8.141 |
+| missing-final-revision-check | 1 / 1 | 1 | 4.062 |
+| cleared-previous-ui | 1 / 1 | 1 | 3.875 |
+| dismissed-recovery-form | 1 / 1 | 1 | 3.750 |
+| clipped-recovery-content | 1 / 1 | 1 | 3.750 |
+| missing-recovery-focus | 1 / 1 | 1 | 3.719 |
+| duplicate-error-toast | 1 / 1 | 1 | 3.797 |
+
+Mutant executions took 31.094 s; clean selector baselines took 19.625 s.
+The three AUM regression commands cover every one of the 57 test files.
+Their JUnit union contains **635 unique cases**, with no duplicates, failures
+or skips. These are separately locked commands, not one lock held across
+tool calls.
+
+| Command | Owned lock, IST | Result | Seconds |
+|---|---|---|---:|
+| First mutation sweep | 01:55:53-01:57:04 | 6/7 caught; notification survivor recorded | 71.219 harness; 71.547 wall |
+| Final mutation sweep | 02:07:13-02:08:24 | 7/7 caught | 70.313 harness; 70.625 wall |
+| AUM shard 1/3 | 02:14:25-02:16:50 | 297 passed | 143.10 pytest; 145.156 wall |
+| AUM shard 2/3 | 02:17:04-02:19:11 | 216 passed | 125.56 pytest; 127.484 wall |
+| AUM shard 3/3 | 02:21:26-02:22:31 | 122 passed | 62.64 pytest; 64.516 wall |
+| **Full AUM union** | Separate locks above | **635 passed** | **331.30 pytest; 337.156 wall**, excluding waits |
+| Audit-only gate | 02:23:03-02:23:05 | 20 passed, 2 warnings, 0 failed, 4 skipped; no Test-All/build run | 1.609 wall |
+| All-guide reference wrapper | 02:23:18-02:23:27 | 42 guides and all 10 built-in negative cases passed | 8.781 wall |
+| Architecture check-only wrapper | 02:27:41-02:27:43 | 19 Node tests and source/image/reference checks passed | 1.750 wall |
+
+The audit warnings remain file size and open unknowns. U40/U41 were still
+reopened at that audit and are closed by this evidence record; unrelated
+unknowns and all charter limits are unchanged. Before the lock became
+available, the additional bounded form regression passed **27 tests in
+72.36 s**, and regenerated guide/snapshot checks passed **9 tests in 19.99 s**.
+No full or mutation run was started while another operator owned the lock.
+Every owned lock was removed in the same command's `finally`, before its
+tool invocation returned.
+
+Every original-worktree command printed/asserted the `accel-p80` import path.
+The shared interpreter did not import main's editable package. Mutations used
+isolated copies with bytecode caching disabled; those copies were removed
+after restoration. The tests held the Windows handle until all state and
+viewport assertions completed. The successful-save control separately proves
+the final saved-revision check precedes adoption and form dismissal.
+
+The architecture remains the existing local client/profile flow, with no
+new component, identity, network path or writer. Documentation records the
+adoption boundary and keyboard scrolling; source-bound screen and architecture
+manifests were regenerated. Offline 80x24 recovery captures at both scroll
+ends were inspected while the same real handle was still held. They are
+fixture evidence, not a live backend or reference-gateway claim.
+
+Receipts are in this session's `files\p80-r2`: RED/GREEN JUnit and logs,
+`mutation-results-first.json`, `mutation-results.json`, `mutation-*.xml`,
+`full-aum-{1,2,3}.xml`, `full-aum-*-receipt.json`, `full-aum-files.json`,
+`gate-no-run.log`, `doc-references.log`, `architecture.log`, and the
+`recovery-top` / `recovery-bottom` SVG/PNG captures.
+
+| Correction commit | Subject |
+|---|---|
+| `f7ee9a7` | `fix(p80): validate saved profiles before adopting the ui` |
+| `36bbaf4` | `test(p80): observe duplicate recovery notifications` |
+
+The Coder, QA and UX implementation findings are addressed for the lead's
+round 3. The writer transaction itself, authority rules and gateway code are
+unchanged in this correction. No push, merge, history rewrite, Azure operation
+or resource/process ownership change was performed. The full packet gate and
+post-deployment owner review remain pending.
 
 ### Council round 1 corrections
 
