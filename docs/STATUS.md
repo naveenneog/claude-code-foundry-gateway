@@ -498,6 +498,10 @@ the selected identity after approval and retains an unverified receipt on the in
 bound, partial, direct-Foundry and unrelated-action records cannot use this path. Targeted totals
 are now 17 installer, 28 flow and 79 address assertions on both hosts. The final gate follows
 this compatibility correction; the intermediate gate does not certify the later tree.
+All 102 mutations now pass on both hosts with full 79/31/28/17/20/6 selector counts. The
+additional draft mutations prove recognition, reject bound or unrelated records, and require
+the approved identity to be retained in the failure receipt. Installer permutations and
+documentation/source checks pass, and the architecture manifest is current.
 
 ### Council round 2 corrections
 
