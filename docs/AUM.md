@@ -473,6 +473,12 @@ checks occur before each progressive or final cache/render operation, not only
 at cycle exit. Capability/backend caches, deferred dialogs and selectors,
 assistant results, JSON and CSV exports use the same guard; a delayed response
 from a previous principal is not briefly displayed and then cleared.
+Cached details retain the original row's guard through deferred dialog
+composition. A new cycle that read no data does not supply a replacement.
+Dashboard dialogs, prefilled edit/request forms, chart pins and cached request
+copy/ledger actions follow the same rule; closing their source connection
+invalidates the retained guard. A stale dialog explains the sign-in change
+without displaying the previous principal's row or defaults.
 
 Overview displays each source as it arrives. Pending panels name their source,
 and the progress line shows an estimate and elapsed time. Estimates are not

@@ -201,6 +201,12 @@ read cannot replace that guard. Freshly re-read details use their new read's
 guard; cached details retain the prior source guard through dialog composition.
 The lead explicitly owns integration and full-suite/gate execution for this
 round; targeted pytest and mutation evidence are the branch handoff.
+The same source guard accompanies dashboard rows, cached edit/prefill defaults,
+assistant chart pins and request copy/ledger actions. Chaining one cached form
+into another retains the parent's guard. Closing the source HTTP or Direct
+connection invalidates retained guards rather than leaving deferred items
+authorized indefinitely. No new component, endpoint or authorization authority
+is introduced by these guard-lifetime corrections.
 
 ## Consequences
 

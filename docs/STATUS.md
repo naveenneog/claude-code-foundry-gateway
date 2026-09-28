@@ -147,12 +147,44 @@ handoffs remain the Security finding.
 | Coder | PASS | Round-3 implementation accepted | Retained |
 | QA | PASS | B1/B2 replays reject with exit 3 before cache or render | Retained |
 | UX | PASS | Publication failures are explained without stale output | Retained |
-| Security | BLOCK | B3: cached detail replaces its originating guard with an unpinned new-cycle guard | Pending: retain the cached item's guard through deferred composition and check other cached guard handoffs |
+| Security | BLOCK | B3: cached detail replaces its originating guard with an unpinned new-cycle guard | `3188a20`: capture the source guard when scheduling and retain it through cached detail composition; `f80808f`: propagate cached guards through other dialogs/actions and connection closure |
 
 The real Engine/Turnstile/Textual reproduction is tested before the fix. This
 round runs only the publication selector and affected pytest files; the lead
 owns main integration, Test-FinOps, Test-All and the packet gate. No new merge,
 gate, database operation or history rewrite is part of this correction.
+
+The bearer-aware real Engine/Turnstile/Textual replay failed before the fix:
+**1 failed, 21 passed**. After scoped B verified, A's cache was cleared and its
+origin guard returned exit 3, but the deferred budget dialog's guard returned
+0. The fresh-request control already rejected the stale result. Cached details
+now retain their original guard; only a real new read supplies a replacement.
+The worker captures its source before scheduling rather than looking up a
+possibly replaced active-view guard later.
+
+The cached-item audit additionally reproduced missing guards in dashboard
+panel/list/row dialogs, budget edits, chart pinning and request copy/ledger
+actions (**7 failed, 22 passed**); prefilled mode/request forms (**2 failed,
+29 passed**); and guards surviving HTTP/Direct connection closure (**2 failed,
+31 passed**). These handoffs now retain the source guard, including chained
+forms, and closing the source invalidates retained guards. Fresh exports,
+membership reads and optional detail reads already kept their actual read-cycle
+guard and do not substitute a new empty cycle.
+
+Targeted verification only: **157 affected pytest tests passed in 218.31 s**,
+including the complete **33-case publication selector**, navigation, snapshots,
+forms, groups, tokens and both HTTP backends. **11 mutations caught**, each
+running all 33 publication cases before exact restoration: B3, panel detail,
+dashboard list, dashboard row, budget edit, chart pin, request copy, ledger link,
+prefilled form, HTTP close and Direct close. The B3 regression alone fails
+1/33 while the fresh-request control still passes; the list and prefilled-form
+mutations each fail 2/33 and the other mutations fail 1/33.
+
+No Test-FinOps, Test-All, packet gate or main merge was run in round 4. Those
+remain the lead's integration work; ROADMAP P71 remains unticked. There is no
+new component or endpoint: the correction preserves the originating guard at
+existing UI handoffs. Full-suite and gate results from earlier rounds remain
+historical evidence, not round-4 acceptance.
 
 ### Council round 3 corrections
 
