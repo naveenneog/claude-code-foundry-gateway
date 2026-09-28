@@ -1,6 +1,131 @@
 # Status
 
-**Active packets (2026-09-28, run in parallel worktrees):** P69 the company address in the flow, P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets (2026-09-28, run in parallel worktrees):** P69 the company address in the flow, P71 AUM answers fast and says why it cannot, P75 the macOS/Linux installer prices its choices, P76 one plan, one order on both shells ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+
+## P76 one plan, one order on both shells, 2026-09-28
+
+P72 made the guided flow write its canonical text itself, so that one plan has one fingerprint
+on PowerShell 7 and Windows PowerShell 5.1, and documented that
+([GUIDED-FLOW](GUIDED-FLOW.md#review-and-fingerprint)). A live, read-only
+`Start-ClaudeGateway.ps1 -Action Setup -PlanOnly` over the reference record on 2026-09-28 at
+02:50 UTC printed the same review on both shells and two fingerprints (`9ec3475f...` on 7,
+`1cd0781d...` on 5.1). Each step's canonical text, dumped on both shells, differed in one step:
+Monitoring lists `infra\workbook-chargeback.json` before `infra\workbook.json` on PowerShell 7 and
+after it on 5.1. `Sort-Object` compares by culture, and .NET Framework (NLS) gives a hyphen almost
+no weight where .NET's ICU does not. P72's suite compared fingerprints over the Foundation step
+and stub steps only, so it passed. Four sorts in `scripts/flow` feed plans: the workbook and KQL
+lists (`Monitoring.ps1`), the priced model list (`Budgets.ps1`), and the named values that the
+policy references (`lib/LifecycleCommon.ps1`), which the Update migration `0002` carries in its
+plan and creates in that order. Work is isolated to `p76-ordinal-order`, based on `38ad175`.
+
+- [x] `Sort-ClaudeFlowOrdinal` in `scripts/flow/FlowContract.ps1` orders by code point, ignoring
+      case as `Sort-Object` does, with `-Unique`; the same list gives the same order on both shells
+- [x] The four sorts use it, so no `Sort-Object` remains in `scripts/flow`; a check refuses a new one
+- [x] `tests/Test-FlowOrdinalOrder.ps1`: every step of Setup with the shipped modules, planned
+      offline from one record on both shells, has the same canonical text and the same fingerprint;
+      the Update migration's named values are the same list in the same order on both shells
+- [x] GUIDED-FLOW and CHANGELOG
+
+Measured after the fix: PowerShell 7's culture order already matched code-point order for the
+shipped workbook list and the policy's 24 named values, so its plans keep their fingerprints;
+on Windows PowerShell 5.1 the Monitoring and Update plans have new ones. Found while testing:
+`[Array]::Sort($keys, $items, [StringComparer]::Ordinal)` in PowerShell binds the generic overload
+and passes it a converted copy of the items, so only the keys were sorted; the plan comparisons
+still passed, because NTFS and the policy file already listed both in one order, and the checks of
+the helper's own output failed. Casts select the overload that sorts both.
+
+Mutations, each in its own copy of the worktree, counted as caught only when a suite ran its
+baseline number of checks (Test-FlowOrdinalOrder 14, Test-FlowFinOps 33, Test-FlowLifecycle 33)
+and at least one failed: 10 of 10 caught. They are the casts removed, a culture comparer in the
+helper, `Sort-Object` back in Monitoring and in `lib/LifecycleCommon.ps1`, the `sort` alias, `-Unique`
+dropped from the price book and from the named values, `-Unique` keeping every item, case not
+ignored, and no code-point tie-break after the folded key. The last one survived at first: the
+suite compared the orders with `-eq`, which ignores case, so `b,B` equalled `B,b`. Every string
+comparison in the suite is now case-sensitive, and two checks were added that no suite had: the
+Budgets price book lists each unpriced model once, and the Update migration reads each named value
+once (the policy holds 39 references to 24 named values).
+
+Found after that, by reading the call sites the flow shares: three more culture sorts sat outside
+`scripts/flow`. `Start-ClaudeGateway.ps1` ordered the step modules by file name with `Sort-Object`,
+and `scripts/Update-ClaudeGateway.ps1` the migrations; both orders set the order of the plans that
+the fingerprint covers. A third, the resume check in `Start-ClaudeGateway.ps1`, compares two sorted
+lists on one host. All three use `Sort-ClaudeFlowOrdinal`, and the scan now covers every script at
+the root or in `scripts/` that loads `FlowContract.ps1`, besides `scripts/flow`; a check names the two
+entry points, so a scan that found neither fails. The shipped module and migration names hold no
+hyphen or underscore at a position where culture and code-point order differ, so no plan's
+fingerprint changes with this. The helper also compared keys joined as `folded` + U+0000 + `key`: a
+key holding U+0000 moved another key out of place, so `a` sorted after `a<U+0000>A` and
+`a<U+0000>b`. It now compares the folded keys, then the keys, then the input positions, with
+`[string]::CompareOrdinal`.
+
+Mutations after that, the same rule: 13 of 13 caught at 17, 33 and 33 checks, the 10 above
+rewritten for the new comparer, the keys joined by a separator again, and `Sort-Object` back in the
+module and migration orders and in the resume check.
+
+Council round 1 (gpt-6-astra, five seats, read-only, over `38ad175..893c354`): BLOCK.
+
+| Seat | Verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | BLOCK | Two culture sorts outside `scripts/flow` set the order of fingerprinted plans: the step modules (`Start-ClaudeGateway.ps1:144`) and the migrations (`scripts/Update-ClaudeGateway.ps1:38`); `Sort-Object Name` put hyphenated names first on 7 and last on 5.1 | `5019cdb` (found in parallel before the report arrived), and the scan below |
+| Coder | PASS | should-fix: a key holding U+0000 moved another key, because the helper joined keys with it | `5019cdb`: keys compared as values |
+| QA | PASS | two temporary mutations caught; the checks did not cover the sorts outside `scripts/flow` | the scan below |
+| UX | PASS | GUIDED-FLOW and CHANGELOG state the fingerprint change and what to do | none needed |
+| Security | PASS | should-fix: the same U+0000 order | `5019cdb` |
+
+Merging main (`f98f885`, P70) into this branch (`00b8376`) failed the scan: P70's model lifecycle
+(`scripts/ClaudeModelLifecycle.ps1`, which loads `FlowContract.ps1`) sorted its deployments, tier
+lists, questions and assignments with `Sort-Object`. The flow's plans also run code that loads
+neither: the price book (`scripts/ClaudeModelPrices.ps1`), the deployment list
+(`scripts/ClaudeModelDeployment.ps1`), the region choice (`scripts/ClaudeGatewayRegion.ps1`) and
+the installer's default tier model lists (`Install-ClaudeGateway.ps1`). Measured on Windows
+PowerShell 5.1 at `00b8376`, with names whose culture order differs between the shells: a model
+change over tier lists already in code-point order proposed `Update models-standard` and
+`Update models-premium` to write the same members in another order, and its fingerprint differed
+from PowerShell 7's; a deployment whose model matched two price-book spellings took
+`claude-x-1.5` on 5.1 and `claude-x-1-5` on 7; regions at one price were listed `usa, us-b` on 5.1
+and `us-b, usa` on 7; the deployable models were listed in reverse.
+
+All 14 of those sorts use `Sort-ClaudeFlowOrdinal`, which now takes keys as `Sort-Object`'s
+`-Property` does (script blocks, property names, hashtables with `Expression` and `Descending`),
+compares numbers, times and versions by value, and has `-Descending`. The three libraries load
+`FlowContract.ps1` only when the helper is not already defined, and the installer loads it.
+`tests/Test-FlowOrdinalOrder.ps1` follows every script the fingerprinted plans load (the
+orchestrator and every step module, the Update, the model sync and the installer, and what they
+dot-source, 43 scripts, read from the syntax tree) and lists the 17 `Sort-Object` calls left in them,
+each with its reason: a value key (prices, integers, versions), an order that reaches only the
+console (menus, an error), or an order used inside one process (a cache key, set comparisons). A
+listed call that is gone or changed fails the check. `scripts/ClaudeClientSupport.ps1` keeps its
+three: the workstation bundle fetches only the files `Setup-ClaudeWorkstation.ps1` names, so it
+loads nothing more. Against `00b8376`, 22 of the 35 checks fail, on 5.1 each of the four cases above;
+after the fix all 35 pass (`d723f90`).
+
+Mutations after that, the same rule, at 35, 33 and 33 checks: 25 of 25 caught. The ten helper
+mutations above rewritten for the new comparer, the three outside `scripts/flow`, and twelve new:
+`-Descending` ignored, a key hashtable's `Descending` ignored, numbers compared as strings, only
+the first key used, `Sort-Object` back in the tier lists, the model-list reader, the price-book
+entry and the installer's tier lists, the regions at one price in arrival order, the deployable
+models ascending, the price book no longer loading the helper, and a listed sort changed. `-Unique`
+keeping every item first counted as broken, not caught: the probe of the Setup steps failed, and
+the seven checks that read it were skipped, so the suite made 34 checks. Those checks are now made
+whether or not the probe ran, and the mutation is caught at 35. The 15 suites that load the changed
+scripts pass, among them P70's lifecycle mutations (62 of 62 caught at 138 checks), the installer
+permutations and the guided flow.
+
+Council round 2 (gpt-6-astra, five seats, read-only, over `893c354..48dd68a`): all five seats PASS;
+the round-1 Architect BLOCK and the U+0000 should-fix are closed. Should-fix (Architect): the check
+follows dot-sources only, so a script a step runs as a separate command is not read;
+`scripts/flow/Monitoring.ps1:76-80` runs `Publish-ClaudeWorkbook.ps1` with `&`, and its `Sort-Object`
+at line 207 is not listed. Read after the review: that sort orders the names in an error message
+only. Following every `.ps1` name written in the flow's scripts reaches 123 scripts, most of them
+named in the Guide's text or run as their own tools. The one among them with its own fingerprint,
+the network edge review, hashes the stored text of its review file on apply
+(`scripts/ClaudeNetworkReview.ps1:39`), so the shell that applies it does not change what was
+approved. The check's comment and this section state the boundary: the scripts the plans load, not
+the scripts their steps run.
+
+- [x] Council, five seats (round 2, all PASS); the packet gate exits 0: `node .ironclad/gate.mjs --stage packet`
+      at `ffa7000`, 2026-09-28 11:48:23-12:11:20 IST under the shared lock: 22 passed, 2 warned, 0 failed,
+      2 skipped; Test-All passed in 1,368.1 s of its 1,800 s budget, the Bicep build in 7.3 s
 
 ## P72 permutation tests of the guided flow and the installer, 2026-09-28
 
