@@ -4,12 +4,19 @@
 
 Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM guide set. Worktree: `accel-p80`, branch `p80-aum-usability`, based on P71 commit `bcf8554`. Later P71 work remains separate. This packet stays local until the owner reviews it after the 2026-09-29 deployment; no merge, push or history rewrite is authorized.
 
+**Council round 3, over `3ace1f7..80e7d4e`: all five seats PASS.** The council re-ran its
+round-2 probe with a real Windows read-denying handle held through a successful `whoami`, the
+final validation, the failed restore and the UI inspection: the previous engine, configuration,
+identity and cached data stayed intact and the form stayed open; after the handle was released,
+a new preview and save succeeded and dismissed the form. At 80x24 the recovery feedback takes
+keyboard focus and scrolls to the complete backup path and the final `whoami` instruction.
+42 targeted tests passed in 24.27 s with imports from this worktree.
+
 **Council round 2:** Architect and Security PASS; Coder, QA and UX BLOCK at
 `3ace1f7` on UI adoption before the final saved-revision check. Transaction-level
 round-1 probes pass, but did not establish recovery after successful `whoami`
 with a persistent read lock. The correction and its strengthened detector are
 verified through `36bbaf4`; the final evidence change is ledger-only.
-The lead runs round 3; no new council verdict is claimed.
 
 ### Council round 2 corrections
 
