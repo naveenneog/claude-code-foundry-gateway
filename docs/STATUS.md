@@ -140,19 +140,19 @@ Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
 The seventh review of `9fabf42` returned Architect PASS and Coder, QA, UX and
 Security BLOCK. The existing B4/B5 and round 6 protections remain required.
 
-| Seat | Finding | Correction contract |
-|---|---|---|
-| Architect | PASS | The existing publication component and source-guard boundary remain. |
-| Coder | B7a: `Static.content` writes bypass runtime and AST enforcement; descriptor/raw-state and additional deferred/dynamic spellings escape the detector | `content` writes validate and retain their source. The structural contract rejects unchecked descriptor setters, raw widget state, dynamic code, added scheduler spellings and partial methods. |
-| QA | Only `call_later` exercised refusal liveness | Actual `call_later`, `set_timer`, `call_after_refresh`, `call_next`, event-loop `call_soon` and `call_at` executions retain responsive input and emit no payload. |
-| UX | Timer and screen callbacks report exit 3, then terminate Textual | The application exception boundary recognizes direct and wrapped publication refusals before fatal handling. Unrelated exceptions retain their normal handling. |
-| Security | B7b: a refused Overview callback exposes its data arguments through error rendering | No rejected callback representation or traceback locals reach output. Only the safe refusal explanation is presented. |
+| Seat | Round 7 verdict | Finding | Correction |
+|---|---|---|---|
+| Architect | PASS | Existing publication structure accepted | The component and source-guard boundary remain. |
+| Coder | BLOCK | B7a: `Static.content` writes bypass runtime and AST enforcement; descriptor/raw-state and additional deferred/dynamic spellings escape the detector | `bee62d2`: `content` validates and retains its source; the structural contract rejects unchecked descriptor setters, raw widget state, dynamic code, added scheduler spellings and partial methods. |
+| QA | BLOCK | Only `call_later` exercised refusal liveness | `95a6475`: seven actual scheduler routes retain responsive input and emit no payload. `530a8dd` adds finite cycle-removal probes and stopped-app loop ownership. |
+| UX | BLOCK | Timer and screen callbacks report exit 3, then terminate Textual | `95a6475`: shared application handling recognizes direct and wrapped refusals before fatal rendering; message dispatch and the owned loop preserve liveness. Unrelated errors retain their handling. |
+| Security | BLOCK | B7b: a refused Overview callback exposes its data arguments through error rendering | `95a6475`: only the safe underlying refusal is presented, never wrapper text, callback arguments or traceback locals. The real Overview replay makes zero renderer calls and emits no sentinel. |
 
 Each correction starts with failing behavior/structural cases. Each new rule
 has a removal probe that retains the baseline test identities, executes the
 suite and fails at least one test. Every green implementation is committed
 locally. The shared lock covers one long command at a time and is released in
-that command's `finally`, never held across tool calls. One final full
+that command's `finally`, never reserved between validation commands. One final full
 AUM/FinOps Python run follows the fixes. Council round 8 and the packet gate
 remain with the lead; no push, merge, Azure read or Azure write is part of
 this correction.
@@ -202,7 +202,108 @@ removed cycle detector produces a failing test rather than hanging collection
 or the test process. The final pre-mutation baseline passed **177 cases in
 79.05 s** (80.99 s wall). Its command waited in one-minute intervals for the
 shared lock, then released the lock in `finally` before returning. The 27
-removal probes each run that same complete selector in a separate command.
+removal probes each ran that same complete selector in a separate command.
+
+#### Final round 7 proof on `530a8dd`
+
+**27/27 removal probes were caught.** Each executed the same **177 test
+identities** as the green baseline, exited 1 with at least one intended
+failing test, and had zero pytest error or skip results. Every mutation was
+syntax-checked before execution and restored byte-for-byte in `finally`;
+the final source SHA-256 values match the recorded originals.
+
+| Removed or broken rule | Intended failures / 177 | Other setup failures | Pytest seconds |
+|---|---|---|---|
+| `content` runtime check | 3 | 0 | 92.65 |
+| `content` origin retention | 1 | 0 | 86.85 |
+| `content` structural check | 4 | 1 | 87.01 |
+| Annotated and augmented assignment check | 2 | 0 | 73.24 |
+| Descriptor/raw attribute check | 15 | 1 | 72.80 |
+| Raw-state/dynamic-code name check | 8 | 0 | 73.64 |
+| Imported dynamic-code alias check | 2 | 0 | 73.78 |
+| Indirect raw-state access check | 5 | 0 | 72.68 |
+| Raw-access rejection inside a guard | 8 | 0 | 73.26 |
+| Exact internal-expression boundary | 1 | 0 | 73.48 |
+| `call_next` scheduler check | 1 | 1 | 71.63 |
+| `call_at` scheduler check | 1 | 0 | 72.37 |
+| `threading.Timer` scheduler check | 2 | 0 | 72.16 |
+| Keyword callback check | 2 | 0 | 73.07 |
+| `partialmethod` check | 2 | 0 | 72.59 |
+| Shared application refusal boundary | 11 | 0 | 73.07 |
+| Safe underlying error text | 2 | 0 | 73.59 |
+| Explicit-cause unwrapping | 1 | 1 | 72.71 |
+| Implicit-context unwrapping | 2 | 1 | 73.37 |
+| Exception-cycle detection | 2 | 0 | 74.70 |
+| Wrapped-message dispatch recovery | 1 | 1 | 74.08 |
+| Loop-refusal routing | 2 | 1 | 75.24 |
+| Foreign-app loop ownership | 1 | 0 | 74.80 |
+| Stopped-app loop ownership | 1 | 1 | 74.06 |
+| Previous loop-handler restoration | 3 | 0 | 73.31 |
+| Newer loop-handler ownership | 1 | 0 | 75.93 |
+| Unrelated exception forwarding | 3 | 0 | 74.82 |
+
+The probes took **2,030.89 s** in pytest (**2,077.67 s wall**), excluding
+lock waits. The eight additional setup failures all name
+`test_cached_dialog_handoffs_retain_origin_during_deferred_composition[pin-chart]`:
+`KeyError: 'ask'` at the precondition reading `app._data_guards[app.active]`,
+before that test's stale-origin assertions. They are not credited as mutation
+catches. This case passed in both the restored selector and the full suite;
+its intermittent setup failure remains recorded under U26, without a claimed
+cause or a changed assertion.
+
+| Scope | Result | Pytest seconds | Wall seconds |
+|---|---|---|---|
+| B7a structure/runtime GREEN | 110 passed | 45.20 | 47.15 |
+| Initial refusal/structure GREEN | 89 passed | 21.31 | 22.78 |
+| Complete publication GREEN before final fixture controls | 176 passed | 81.48 | 83.42 |
+| Final pre-mutation baseline | 177 passed | 79.05 | 80.99 |
+| Restored complete publication selector | 177 passed | 73.71 | 75.52 |
+| Full AUM/FinOps Python suite, run once | **625 passed**, zero failures/errors/skips | **247.21** | **248.95** |
+
+The final full run acquired its own lock at **2026-09-28 21:07:43Z
+(2026-09-29 02:37:43 IST)** and released it at **21:11:52Z
+(02:41:52 IST)**, in the same command's `finally`. Baseline, every mutation,
+restored selection and full run have separate acquisition/release receipts;
+the lock was never reserved between commands. Other owners' gate windows
+were left untouched, with retries every 60 s. No process priority was changed.
+
+All 177 publication cases were included and passed in the full run, including
+B4's pre-input clearing and B5's outgoing assistant-context protection.
+The regression references are:
+
+- [`test_runtime_publication_sinks.py`](../cli/finops/tests/test_runtime_publication_sinks.py):
+  `test_content_property_refuses_a_scheduled_old_principal_value` executes
+  the A-to-B `call_soon` reproduction; `test_content_assignment_replaces_and_retains_its_actual_source`
+  proves replacement of the previous origin and later invalidation of the
+  actual content origin.
+- [`test_publication_structure.py`](../cli/finops/tests/test_publication_structure.py):
+  content assignments, descriptor/raw-state operations both inside and outside
+  a guard, `exec`/`eval` aliases, new schedulers, keyword callbacks,
+  `partialmethod` and exact internal expressions each have failing-removal cases.
+- [`test_publication_widgets.py`](../cli/finops/tests/test_publication_widgets.py):
+  `test_rejected_raw_scheduled_publication_keeps_the_app_open_and_explains`
+  runs `call_later`, `set_timer`, `call_after_refresh`, `call_next`,
+  `loop.call_soon`, `loop.call_at` and a real wrapped timer event. Each case
+  observes callback execution, types into the terminal afterward and rejects
+  the sentinel in terminal/error consoles, captured stdout/stderr, logging and
+  the screen. `test_refused_overview_screen_callback_never_renders_its_arguments`
+  uses the real `on_resize`/screen-refresh path and requires zero renderer calls.
+
+Every run used `accel\.venv-finops\Scripts\python.exe` with
+`PYTHONPATH=accel-p71\cli\finops\src`; the runner asserted the imported
+`claude_finops.__file__` before executing pytest. The complete selector consists
+of `test_publication_generation.py`, `test_publication_structure.py`,
+`test_guarded_publication.py`, `test_runtime_publication_sinks.py` and
+`test_publication_widgets.py`. The full command was `-m pytest
+cli\finops\tests -q -p no:cacheprovider --tb=short`, with a JUnit receipt;
+it did not use the worktree-venv wrapper that would skip.
+
+Private stdout, JUnit, per-rule test identities, source hashes and individual
+lock receipts persist in `.finops-evidence\p71-r7`. U26 remains open: the
+passing full run does not establish the cause of the earlier failures.
+Only this ledger update follows the final full run. No push, merge,
+Test-All, packet gate, council invocation or Azure operation occurred.
+Round 8 remains with the lead, and ROADMAP P71 remains unticked.
 
 ### Council round 6 corrections
 

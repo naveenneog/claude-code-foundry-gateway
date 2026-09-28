@@ -136,6 +136,25 @@ overlapped its P79 gate, which ran at AboveNormal priority from **21:44 to
 reproduction of the cause. Round 7 leaves the assertions and deadlines
 unchanged and retains U26 as open after its requested final full-suite run.
 
+Round 7's restored publication selection passed **177 cases in 73.71 s**,
+then its one full AUM/FinOps Python run on `530a8dd` passed **625 cases in
+247.21 s** (248.95 s wall), from **21:07:43Z to 21:11:52Z on 2026-09-28**
+(**02:37:43-02:41:52 IST on 2026-09-29**). Each validation command acquired
+and released its own lock. This passing run is not a controlled proof that
+the earlier scheduling overlap caused the three failures.
+
+Eight of the 27 round 7 mutation runs also observed
+`test_cached_dialog_handoffs_retain_origin_during_deferred_composition[pin-chart]`
+raise `KeyError: 'ask'` at the precondition reading
+`app._data_guards[app.active]`. This was before the stale-origin assertions
+and was observed with several different removals, including AST-only changes.
+Each mutation also failed its intended detector case at the full 177-test
+count; the setup failures are excluded from the claimed mutation catches.
+The pin-chart case passed in the restored selector and full suite. Its cause
+is not established; no assertion, deadline or synchronization was changed.
+[STATUS](STATUS.md#final-round-7-proof-on-530a8dd) records the individual
+receipts and timings. U26 remains open.
+
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 
 **Answer: yes.** A constant `counter-key` is a single counter shared by every caller. P11 can
