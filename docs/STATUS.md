@@ -178,6 +178,32 @@ mutations cover HTTP pinning/exit, Direct publication, JSON/CSV, identity,
 capability/backend caches, five screen/export boundaries and the shared optional
 publisher. All run at the complete selector count before byte-for-byte restoration.
 
+The final repeated mutation run caught **14/14**, each with **20 cases**:
+HTTP pinning 15 failures, HTTP exit 1, Direct publication 2, JSON 2,
+capabilities 1, identity output 1, CSV 1, backend caches 2, each of the five
+screen/export boundaries 1, and the shared optional publisher 4. The restored
+affected selection passed **108 tests**.
+
+Normal merge **`b6d64b5`** incorporates main **`f98f885`** (P70 on P72).
+CHANGELOG and STATUS conflicts retain both sections; UNKNOWNS merged with
+U35/P70, U36/P72 and U37/P71 intact. The architecture manifest was regenerated
+from both source sets (16 diagrams, 18 PNGs), and the changed AUM image inspected.
+The diff against main contains only P71 ledger additions/owned edits; removing
+P71's section and changelog item leaves main's content unchanged, and ROADMAP
+is identical to main with P71 unticked.
+
+The first integrated AUM run reported **466 passed, 2 failed**: the two Windows
+child/grandchild marker tests, not publication tests. Direct reproduction found
+the Windows venv redirector's fixture startup taking **0.596-1.114 s**, exceeding
+the unchanged 0.75 s deadline. The same imports through the base interpreter
+took **0.161-0.207 s**, or **0.109-0.142 s** without site imports. The fixture
+now invokes the base interpreter with `-S`; all startup markers, PID-termination
+assertions and timing limits are unchanged, including the original 150 ms test.
+The five existing C1/Q1 mutations were reconfirmed at their full seven cases.
+The restored integrated `Test-FinOps.ps1` then ran **468 tests, all passed in
+197.89 s**, with no warnings. The failed run remains recorded, not erased.
+The 14 new publication mutations bring distinct historical receipts to 104.
+
 ### Council round 2 corrections
 
 The lead's second review closed A1, C1, Q1, U1 and S2. S1 remains blocked:

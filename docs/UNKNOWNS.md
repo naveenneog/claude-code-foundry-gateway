@@ -94,6 +94,13 @@ That second gate passed at `84bddeb` on 2026-09-28 00:22:51Z, with complete
 output proving 408 AUM tests passed (192.82 s), and the guided-flow check passed.
 U26 remains open for the earlier unrecorded failures; the retry is not a
 retrospective explanation for them.
+P71 round 3's first integrated run identified two Windows descendant-fixture
+marker failures while 466 other cases passed. A direct probe measured venv
+interpreter startup above the fixed deadline; the fixture now uses the base
+interpreter without site imports, retaining all deadline, marker and process-exit
+assertions. All five original containment mutations were reconfirmed at seven
+cases each; the next full AUM run passed 468 tests. Exact timings and the failed
+run are in P71's STATUS section and private evidence.
 
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 
