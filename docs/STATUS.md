@@ -4,6 +4,29 @@
 
 ## P71 AUM answers fast and says why it cannot, 2026-09-28
 
+### Council round 1 corrections
+
+The lead's read-only council over `aa7ed19..aa9070c` returned **BLOCK** on
+2026-09-28. It confirmed 408 pytest cases, both 14/14 PowerShell batch runs,
+59 mutation receipts and the recorded timing medians. The previous gate is
+historical evidence, not acceptance of these findings.
+
+| Seat | Round 1 verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | BLOCK | A1: lock waiting and token acquisition each receive the whole deadline | One monotonic deadline and only the remaining acquisition time; pending |
+| Coder | BLOCK | C1: a wrapper can spawn children before job assignment | Suspended creation, job assignment, then resume; assignment-failure cleanup; pending |
+| QA | BLOCK | Q1: the deadline test can pass on an immediate launch failure | Prove process/descendant startup and termination; distinguish launch failure from timeout; pending |
+| UX | BLOCK | U1: a fatal Direct data result waits behind identity/capabilities | Observe fatal data completion concurrently and discard partial panels immediately; pending |
+| Security | BLOCK | S1: resource credentials survive a principal change | Bind reuse to verified principal/session; invalidate before independent reads; pending |
+| Security | BLOCK | S2: changed public text contains deployment identifiers | Use the existing capture aliases consistently in P71 text and U32; pending |
+
+Related corrections: the P71 single-server assumption moves from U35 to U37
+(P70 owns U35; P72 owns U36); batch-read fixtures move to TEMP; the Direct
+`whoami` regression receives a measured phase investigation. After the fixes,
+`main` is merged normally, both ledgers are retained, architecture is regenerated,
+and the merged packet gate runs under the shared lock without changing its
+1,800 s limit. This correction round performs no database stop or start.
+
 Implementation is on `p71-aum-speed`, based on `aa7ed19`. The packet gate passed
 at `84bddeb`; the lead owns the council review and merge. The ROADMAP box remains
 open until that merge. The owner's 2026-09-27 investigation measured Turnstile reads
