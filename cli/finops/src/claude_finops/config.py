@@ -85,8 +85,10 @@ def az(*args: str, timeout: float = 120) -> str:
         else:
             result = subprocess.run(command, capture_output=True, text=True,
                                     encoding="utf-8", timeout=timeout, check=False, env=environment)
-    except (OSError, subprocess.TimeoutExpired):
-        raise FinOpsError("Azure CLI did not finish. Check az account show and network access.", 7) from None
+    except subprocess.TimeoutExpired:
+        raise FinOpsError("Azure CLI did not finish before its deadline. Check az account show and network access.", 7) from None
+    except OSError:
+        raise FinOpsError("Azure CLI could not start or contain its process. Check the installation and local process permissions.", 7) from None
     if result.returncode:
         if "AADSTS50105" in result.stderr:
             raise FinOpsError("AADSTS50105: no app role for the selected backend. Check the existing AUM or Turnstile app assignment; Azure administrators can choose Direct with existing RBAC.", 4)

@@ -128,6 +128,23 @@ Cancelled or superseded refreshes cannot publish stale data into a newer view.
 - Sources were retrieved 2026-09-27 UTC. U35 records the deployment-inventory
   assumption and its fail-closed negative cases before implementation.
 
+## Council round 1 amendment, 2026-09-28
+
+A caller's token deadline covers both the cache-lock wait and acquisition; the
+acquirer receives only the remaining monotonic budget. A Windows command wrapper
+is created with `CREATE_SUSPENDED`, assigned to its job, and only then resumed.
+CPython closes the primary thread handle, so AUM locates its own suspended
+thread using [Thread32First](https://learn.microsoft.com/windows/win32/api/tlhelp32/nf-tlhelp32-thread32first)
+and resumes it with [ResumeThread](https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-resumethread)
+(sources retrieved 2026-09-28). Assignment failure kills the suspended wrapper
+without executing its child program.
+
+The existing 150 ms timeout / one-second completion assertion is retained and
+now requires evidence of a real process creation. A separate, longer startup
+window proves the child and grandchild both executed, then verifies their PIDs
+are terminated. This distinguishes an enforced deadline from a launch failure
+and covers a 350 ms scheduling delay before assignment.
+
 ## Consequences
 
 No server deployment, account switch, consent, resource grant or authority
