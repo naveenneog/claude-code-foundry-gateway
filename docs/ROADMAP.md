@@ -485,6 +485,13 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       gates of 2026-09-28 (four passes between 1,368 and 1,688 s, three timeouts at 1,800 s, throttle
       8 slower with per-check timeouts) and the load; no check, mutation, throttle or per-check
       timeout changes; the next packet gate on main passes within the new budget
+- [x] P79 fixes from the owner's test on 2026-09-28 — acceptance: each FinOps choice in the guided
+      flow applies its commands with the parameters it plans, on both shells, and the step returns
+      only its change set; a decision record path given relative to PowerShell's current folder is
+      read and written there; the installer compares a saved record with the chosen gateway as soon
+      as the gateway is chosen, offers to archive it when attended and refuses without
+      `-ArchiveSavedRecord` when unattended; the developer count asks nothing about the entitlement
+      store, and the store's capacity is stated after the store is chosen; each fixed test-first
 - [ ] P78 the packet gate returns to 30 minutes — acceptance: the exclusive lane's long checks (the
       company-address mutations, the workstation clients, the guided flow's permutations and start,
       the diagnostics and the Windows PowerShell 5.1 wizard) run as coverage-proven shards or in the
