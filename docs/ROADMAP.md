@@ -473,6 +473,9 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       invariants; the installer's summary reflects every combination of tier, entitlement store,
       developer sign-in, Desktop sign-in and address under `-WhatIf`, on PowerShell 7 and 5.1; each
       failure found is fixed test-first
+- [ ] P76 one plan, one order on both shells — acceptance: every sort in `scripts/flow` that feeds a
+      plan orders by code point on PowerShell 7 and Windows PowerShell 5.1; every step of Setup with the
+      shipped modules and the Update migrations plan the same canonical text on both shells, tested
 - [ ] P73 an installer re-run offers the gateway's live values — acceptance: over an existing
       gateway (`-ExistingApimName`, the reuse menu or `-Change foundation` in a console), the budget,
       request ceiling, tier group and Choices prompts default to the gateway's live named values and
