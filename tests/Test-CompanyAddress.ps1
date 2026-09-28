@@ -145,7 +145,7 @@ function New-Plan([hashtable]$Overrides = @{}) {
     Get-ClaudeAddressPlan @p
 }
 function Apply-Plan($Plan) {
-    Invoke-ClaudeAddressPlan -Plan $Plan -RecordPath $recordPath -TimeoutSeconds 0.2 -DnsTimeoutSeconds 0.2 -PollSeconds 0.05
+    Invoke-ClaudeAddressPlan -Plan $Plan -RecordPath $recordPath -TimeoutSeconds 0.1 -DnsTimeoutSeconds 0.1 -PollSeconds 0.025
 }
 try {
     Reset-State

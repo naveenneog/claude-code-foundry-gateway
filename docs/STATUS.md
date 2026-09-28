@@ -69,6 +69,15 @@ their parent's owned path before executing. The nested-path reproduction passes.
 82/82 mutations on both hosts, with full 78/31/27/11/9/6 assertions; `Test-AddressDeadline` is 6/6.
 The final packet gate follows this correction; the earlier failing result is not counted as pass.
 
+The next locked gate at `386bb22` hit the unchanged 1,800-second command deadline. Its child
+Test-All finished just after the gate timeout with 83 PASS, zero FAIL and two dependency SKIPs;
+that late completion is not a passing gate. The new mutation check passed in 222.1 s. The
+deadline probes were shortened without reducing coverage: the simulated blocked native command
+lasts 8 rather than 30 seconds, its required return bound is stricter (6 rather than 8 seconds),
+and the deadline mutation doubles rather than multiplies the wait by 100. All 82 mutations
+remain caught with full assertion counts (195.8 s PS7, 372.0 s PS5.1). The gate is rerun without
+changing its command budget or test selectors.
+
 - [x] U30 is closed with dated Microsoft Learn and Azure Retail Prices API evidence for every
       v2 tier, certificate source, DNS record, update wait and component price; ADR-0033 records
       the design before production code

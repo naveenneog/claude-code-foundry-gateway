@@ -45,7 +45,7 @@ try{
                 $dir=[IO.Path]::GetTempPath()
                 [IO.File]::WriteAllText($witness,$dir)
                 [IO.File]::WriteAllText((Join-Path $dir 'private-arm-fixture.txt'),'fixture-only')
-                Start-Sleep -Seconds 30
+                Start-Sleep -Seconds 8
                 @{Done=$true}
             } | Out-Null
         } catch {$message=$_.Exception.Message}
@@ -59,16 +59,16 @@ try{
     }
     $probe=Join-Path $scratch 'pid.txt'
     [IO.File]::WriteAllText((Join-Path $scratch 'az.cmd'),"@echo off`r`n`"$((Get-Process -Id $PID).Path)`" -NoProfile -NonInteractive -File `"%~dp0block.ps1`"`r`n")
-    [IO.File]::WriteAllText((Join-Path $scratch 'block.ps1'),'[IO.File]::WriteAllText($env:P69_DEADLINE_PROBE,[string]$PID); Start-Sleep -Seconds 30; ''{}''')
+    [IO.File]::WriteAllText((Join-Path $scratch 'block.ps1'),'[IO.File]::WriteAllText($env:P69_DEADLINE_PROBE,[string]$PID); Start-Sleep -Seconds 8; ''{}''')
     $env:PATH=$scratch+[IO.Path]::PathSeparator+$oldPath;$env:P69_DEADLINE_PROBE=$probe
     Check 'native Azure reads are bounded and their child process is stopped' {
         $watch=[Diagnostics.Stopwatch]::StartNew();$message=''
-        try{Wait-ClaudeAddress -Condition 'native Azure read' -About 'about 1 s' -TimeoutSeconds 4 -Check {Invoke-ClaudeNetworkAz @('account','show')|Out-Null;@{Done=$true}}|Out-Null}
+        try{Wait-ClaudeAddress -Condition 'native Azure read' -About 'about 1 s' -TimeoutSeconds 3 -Check {Invoke-ClaudeNetworkAz @('account','show')|Out-Null;@{Done=$true}}|Out-Null}
         catch{$message=$_.Exception.Message}
         $nativeId=if(Test-Path $probe){[int][IO.File]::ReadAllText($probe)}else{0}
         $alive=$nativeId -and (Get-Process -Id $nativeId -ErrorAction SilentlyContinue)
         if($alive){Stop-Process -Id $nativeId -Force}
-        if(-not ($message -match 'timed out' -and $watch.Elapsed.TotalSeconds -lt 8 -and $nativeId -gt 0 -and -not $alive)){
+        if(-not ($message -match 'timed out' -and $watch.Elapsed.TotalSeconds -lt 6 -and $nativeId -gt 0 -and -not $alive)){
             throw "Native deadline check: message=$message; child=$nativeId; alive=$alive; elapsed=$($watch.Elapsed.TotalSeconds)"
         }
         $true
