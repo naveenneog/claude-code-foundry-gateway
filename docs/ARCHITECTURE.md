@@ -60,6 +60,11 @@ Turnstile-owned tiers. Client-file generation is separate from MDM assignment
 and a developer rerunning setup. Unpriced models remain visible; publication
 of a changed tariff to reporting and scheduled reconcilers is a separate
 financial operation.
+Raw deployment identities are validated before publisher filtering. The
+review fingerprint includes all current profile/record renderer dependencies,
+not just the top-level generator. The installer persists the same per-tier
+lists that later model changes use, and both workstation setup implementations
+remove aliases for families that are no longer selected.
 
 ## Request path
 

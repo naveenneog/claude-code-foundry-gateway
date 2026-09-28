@@ -12,7 +12,8 @@
     "scripts/ClaudeModelPrices.ps1", "scripts/ClaudeModelProfiles.ps1", "scripts/Sync-ClaudeModels.ps1",
     "scripts/ClaudeModelDeployment.ps1", "scripts/ApimNamedValue.ps1", "scripts/Backup-ClaudeGateway.ps1",
     "scripts/ClaudeTurnstileGovernance.ps1", "scripts/New-ClaudeCodePolicy.ps1",
-    "scripts/ClaudeClientSupport.ps1", "scripts/flow/DeviceProfiles.ps1", "infra/policy.xml"
+    "scripts/ClaudeClientSupport.ps1", "scripts/ClaudeDesktopSignIn.ps1", "scripts/Show-Banner.ps1",
+    "scripts/flow/FlowContract.ps1", "scripts/setup-claude-workstation.sh", "scripts/flow/DeviceProfiles.ps1", "infra/policy.xml"
   ],
   "identifiers": {
     "flow": { "label": "Change models", "source": "scripts/flow/Models.ps1", "match": "DecisionKey = 'models'" },
@@ -30,7 +31,7 @@
   "groups": [],
   "nodes": [
     { "id": "sources", "x": 0, "y": 0, "w": 390, "h": 225, "tone": "teal", "title": "1 - Read the selected estate", "lines": [
-      "Foundry deployments: name, model, version, SKU, capacity and state.",
+      "Raw deployment identities validated before publisher filtering.",
       "Gateway backend and model lists; governance ownership.",
       "Existing record and dated private price book."
     ] },
@@ -38,7 +39,7 @@
       "[[flow]] or [[sync]]",
       "[[plan]]",
       "Per-deployment tier choices; missing keep/drop.",
-      "Fingerprint binds state, prices and outputs."
+      "Fingerprint includes renderer dependencies."
     ] },
     { "id": "backup", "x": 890, "y": 0, "w": 390, "h": 225, "tone": "purple", "title": "3 - Recheck before writing", "lines": [
       "[[ownership]]",
@@ -55,7 +56,7 @@
     ] },
     { "id": "record", "x": 445, "y": 310, "w": 390, "h": 265, "tone": "teal", "title": "5 - Record and prices", "lines": [
       "Allowed live deployment union; actual model/version.",
-      "Per-tier lists; client overrides preserved.",
+      "Initial and updated per-tier lists; overrides preserved.",
       "[[prices]]",
       "Dated exact mappings; historical prices stay.",
       "Unknown rate is unpriced, never free."
@@ -70,7 +71,7 @@
     { "id": "distribution", "x": 0, "y": 665, "w": 610, "h": 215, "tone": "slate", "title": "Existing fleet and developer routes", "lines": [
       "Administrator assigns Intune, Jamf or Group Policy payloads.",
       "Developer reruns the existing setup with the tier record.",
-      "User settings and VS Code model variables are refreshed.",
+      "Removed families lose their aliases; user settings remain.",
       "The record itself grants no entitlement."
     ] },
     { "id": "limits", "x": 670, "y": 665, "w": 610, "h": 215, "tone": "slate", "title": "Explicit boundaries", "lines": [

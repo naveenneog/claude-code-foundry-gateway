@@ -88,7 +88,7 @@
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/turnstile-schedule.bicep": "54d4b2d5897a14fd580887113f697fafc3cb2993b70b5cf7368adead956a9e36",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "scripts/ApimNamedValue.ps1": "65b41b3b4220ef78b802fa2226cd94f408f58926b9d16b8caa9b5d4852d6b306",
+        "scripts/ApimNamedValue.ps1": "64915bd48b8f7f1e8f650da13279d6c9f2ec45e1b2e8c85521eb47f00237f4aa",
         "scripts/ClaudeTurnstileApply.ps1": "f5b47f344eacd8c8a7a4e5d73e9641c1eefedf61436093c6e5ec6f7fcced1b84",
         "scripts/Connect-ClaudeTurnstile.ps1": "cc4e2c094aaab8ce75856a3ba770d844bd32333d4f8b42f53f91cabdd1129201",
         "scripts/Grant-ClaudeGovernanceGraphAccess.ps1": "2313313010eef6867f730bbb1803b7a0a68113a3ad961f798627e274aff56b1a",
@@ -182,7 +182,7 @@
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "scripts/ApimNamedValue.ps1": "65b41b3b4220ef78b802fa2226cd94f408f58926b9d16b8caa9b5d4852d6b306",
+        "scripts/ApimNamedValue.ps1": "64915bd48b8f7f1e8f650da13279d6c9f2ec45e1b2e8c85521eb47f00237f4aa",
         "scripts/ClaudeAumDirectWrites.ps1": "e9a53602c29420aa89c1809bbbd09e8fa68dce16637d2e21e61bf22d7c54300f",
         "scripts/Invoke-ClaudeFinOps.ps1": "4c7b4a75bce18675ba467e22353e9e0cff379cf2516a5a0be0a7847cb93e946f",
         "scripts/New-ClaudeAumEntraApp.ps1": "489aa5051af325ca4d96e5b9123d29577195f08318976898a8a592aeea2a05fe",
@@ -415,29 +415,33 @@
       "source": "docs/architecture/15-model-lifecycle.json",
       "inputs": {
         "Start-ClaudeGateway.ps1": "e929a9e7217b56794bbc35dd7b858a409f87d3d5f9b55eea595d9be4d29d4907",
-        "docs/architecture/15-model-lifecycle.json": "fb9a697f0a8fbb343466ac56d95ae0b88d47bf5d51efda1219d1223cc25f7742",
+        "docs/architecture/15-model-lifecycle.json": "53b9396e65ec695f644d7e702ce01f44c06043d62c9f97ff13d2297024e1262b",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
         "infra/policy.xml": "afa3bf916dd99e837d0ac190aa7e2f4cdccb08877221f44f853ce1885e257105",
         "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
-        "scripts/ApimNamedValue.ps1": "65b41b3b4220ef78b802fa2226cd94f408f58926b9d16b8caa9b5d4852d6b306",
+        "scripts/ApimNamedValue.ps1": "64915bd48b8f7f1e8f650da13279d6c9f2ec45e1b2e8c85521eb47f00237f4aa",
         "scripts/Backup-ClaudeGateway.ps1": "a3e91db51f0f6437d0a729e59931904b130e3819f19333a46b9784c4ade28678",
         "scripts/ClaudeClientSupport.ps1": "613e284befc7d50931ba349670870b2a02477fbda3c5f8f6c445c6b824fe932e",
-        "scripts/ClaudeModelDeployment.ps1": "832a21b160d67ac5dc0358d742164a28903b76af15919fb9237ae75575378a08",
-        "scripts/ClaudeModelLifecycle.ps1": "7eedf3f70b59896f60371dbd30a1e32c9af9baf7d27834befdfcde95498bbc93",
+        "scripts/ClaudeDesktopSignIn.ps1": "00f6f2b38f15b589d47ec8cb048391910fed44131085fa4a865e0e802df7fe3e",
+        "scripts/ClaudeModelDeployment.ps1": "c4b1e933a9c12c19fb1790e4e128aec72245374dafb135150b8536ab1522dc82",
+        "scripts/ClaudeModelLifecycle.ps1": "0b3107a0ee6d74534743b4b26f9153bad9f837e83582d56fa8e394cee16c0235",
         "scripts/ClaudeModelPrices.ps1": "62eb96ddc002eab5065f8eb8f906448d3fd7d8fae4a9f4608e78a2c3b3a25dd4",
         "scripts/ClaudeModelProfiles.ps1": "4a032924987f56f118e2deefe21673bfa5583c06dd56164a753b151c9d2a1549",
         "scripts/ClaudeTurnstileGovernance.ps1": "cfb6d0022abcb1c601cae573e6dc1dd9033d95b2585512e2675d1a7bbd876916",
         "scripts/New-ClaudeCodePolicy.ps1": "28caaf2a489f4645ff0f7f9e883dddc695e4695c5bd9161143daa51fd655f004",
-        "scripts/Sync-ClaudeModels.ps1": "3369f51ddd702be3100bc636d043b2762a662b367d4623fdc4a59a429cdb4a5c",
+        "scripts/Show-Banner.ps1": "03aa9c855b2aade332ba6810887c86700fa39dfc6bf04dfc8bc4057a4ad5db41",
+        "scripts/Sync-ClaudeModels.ps1": "1afdc91387e87f10388e088060d530f5cca37ffb9c8a4d7ff97b82e9b7b73510",
         "scripts/flow/DeviceProfiles.ps1": "7f3925af5eab6f23599031b118834d1faeb657a960b20af505788ceb6097fbc4",
-        "scripts/flow/Models.ps1": "25d480b8b0c4d48e22fb5e1f2f7f273aa3aa735b4dafe8db60a35d7f6e6d6503"
+        "scripts/flow/FlowContract.ps1": "ff91ba75c8f8779f1d104a05fe60781436be837bbea9f00d030b35216ef53a42",
+        "scripts/flow/Models.ps1": "25d480b8b0c4d48e22fb5e1f2f7f273aa3aa735b4dafe8db60a35d7f6e6d6503",
+        "scripts/setup-claude-workstation.sh": "1956dd1986603ad1399e92a44aac5562b3c2baee5fb9af17fb1bbb1cf8ffa6b7"
       },
       "outputs": [
         {
           "path": "docs/images/architecture/model-lifecycle.png",
-          "sha256": "7b2f8dbcceda8b3dc31bcc4638ff428daf3f0926c662b666208a4685e975eb31"
+          "sha256": "395f296ab8e5440a0984fa406d1f05ac6f426e29b996e47e1c83615eae2e6ea5"
         }
       ]
     }

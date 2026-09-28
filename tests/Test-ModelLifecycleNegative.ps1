@@ -3,7 +3,9 @@ param(
     [string]$HostExecutable = (Get-Process -Id $PID).Path,
     [string]$OutputPath,
     [switch]$ValidateOnly,
-    [string[]]$CaseNames
+    [string[]]$CaseNames,
+    [switch]$CouncilOnly,
+    [ValidateSet('Lifecycle','WorkstationModels')][string]$Suite = 'Lifecycle'
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
@@ -57,6 +59,35 @@ Mutation 'record-drift-shown-in-review' $life '; record: $recordState; tiers' ';
 Mutation 'snapshot-token-uses-target-tenant' 'scripts\Backup-ClaudeGateway.ps1' '--query accessToken -o tsv @scope' '--query accessToken -o tsv'
 Mutation 'fresh-installer-record-normalization' $life 'if (-not $copy.decisions -or @($copy.decisions.PSObject.Properties).Count -eq 0) { $copy.PSObject.Properties.Remove(''decisions'') }' '$null = $copy.decisions'
 
+Mutation 'r1-raw-lifecycle-validation' $life 'Assert-ClaudeDeploymentIdentities -Deployments @($raw)' '$null = $raw'
+Mutation 'r1-raw-installer-validation' 'scripts\ClaudeModelDeployment.ps1' 'Assert-ClaudeDeploymentIdentities -Deployments @($parsed)' '$null = $parsed'
+Mutation 'r1-raw-identity-shape' 'scripts\ClaudeModelDeployment.ps1' 'foreach ($part in @($row, $row.properties, $row.properties.model))' 'foreach ($part in @())'
+Mutation 'r1-raw-identity-string-fields' 'scripts\ClaudeModelDeployment.ps1' '$field.Value -isnot [string] -or [string]::IsNullOrWhiteSpace($field.Value)' '$false'
+Mutation 'r1-installer-discovery-exit' 'scripts\ClaudeModelDeployment.ps1' 'if ($code -ne 0) { throw "Reading deployments' 'if ($false) { throw "Reading deployments'
+Mutation 'r1-installer-discovery-array' 'scripts\ClaudeModelDeployment.ps1' '-not $raw.StartsWith(''['')' '$false'
+Mutation 'r1-installer-no-deployments' 'Install-ClaudeGateway.ps1' 'throw "No Claude deployment is available' 'Write-Note "No Claude deployment is available'
+Mutation 'r1-installer-empty-restrictions' 'Install-ClaudeGateway.ps1' '-not $standardModelNames.Count -or -not $premiumModelNames.Count' '$false'
+Mutation 'r1-installer-normalization' 'Install-ClaudeGateway.ps1' '$standardModelNames = @($stdPick -split '','' | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)' '$standardModelNames = @($stdPick -split '','' | ForEach-Object { $_.Trim() } | Where-Object { $_ })'
+Mutation 'r1-initial-standard-record' 'Install-ClaudeGateway.ps1' '; models = @($standardModelNames); modelAllowList = $modelsStd' ''
+Mutation 'r1-initial-premium-record' 'Install-ClaudeGateway.ps1' '; models = @($premiumModelNames); modelAllowList = $modelsPrm' ''
+Mutation 'r1-renderer-dependency-stamp' $life 'return Get-ClaudeFlowLifecycleStringHash (ConvertTo-ClaudeFlowCanonical $stamps)' 'return Get-ClaudeModelFileStamp (Join-Path $PSScriptRoot ''New-ClaudeCodePolicy.ps1'')'
+Mutation 'r1-renderer-dependency-recheck' $life '(Get-ClaudeModelRendererStamp) -cne $d.RendererStamp' '$false'
+Mutation 'r1-history-previous-decision' 'scripts\Sync-ClaudeModels.ps1' '-From $decision -To $changes.models' '-To $changes.models'
+Mutation 'r1-history-principal' 'scripts\Sync-ClaudeModels.ps1' '-Principal $principal.user.name' ''
+Mutation 'r1-history-missing-principal' 'scripts\Sync-ClaudeModels.ps1' '$principal.user.name -isnot [string] -or [string]::IsNullOrWhiteSpace($principal.user.name)' '$false'
+Mutation 'r1-empty-write-token-subscription' 'scripts\ApimNamedValue.ps1' '--query accessToken -o tsv @subscriptionArgs' '--query accessToken -o tsv'
+Mutation 'r1-nested-generated-artifacts' '.gitignore' "onboarding/**/claude-gateway.json`nonboarding/**/profiles/`nonboarding/**/model-snapshots/" ''
+if ($Suite -eq 'WorkstationModels') {
+    $cases.Clear()
+    foreach ($alias in 'OPUS','SONNET','HAIKU') {
+        Mutation "r1-retired-$($alias.ToLowerInvariant())-alias" 'scripts\setup-claude-workstation.sh' "else del(.env.ANTHROPIC_DEFAULT_${alias}_MODEL) end" 'else . end'
+    }
+}
+if ($CouncilOnly) {
+    $selected = @($cases | Where-Object { $_.Name.StartsWith('r1-') })
+    $cases.Clear()
+    foreach ($case in $selected) { $cases.Add($case) }
+}
 if ($CaseNames) {
     foreach ($name in $CaseNames) { if ($name -notin @($cases.Name)) { throw "Unknown requested mutation '$name'." } }
     $selected = @($cases | Where-Object { $_.Name -in $CaseNames })
@@ -74,14 +105,15 @@ $scratch = Join-Path ([IO.Path]::GetTempPath()) ('p70-mutations-' + [guid]::NewG
 $shadow = Join-Path $scratch 'source'
 $results = [Collections.Generic.List[object]]::new()
 $failed = 0
-$suite = Join-Path $shadow 'tests\Test-ModelLifecycle.ps1'
+$suiteFile = if ($Suite -eq 'WorkstationModels') { 'Test-WorkstationModels.ps1' } else { 'Test-ModelLifecycle.ps1' }
+$suitePath = Join-Path $shadow "tests\$suiteFile"
 function Run-Suite([string]$Name) {
     $log = Join-Path $scratch ($Name + '.log')
     $watch = [Diagnostics.Stopwatch]::StartNew()
-    & $HostExecutable -NoProfile -ExecutionPolicy Bypass -File $suite -RepoRoot $shadow *> $log
+    & $HostExecutable -NoProfile -ExecutionPolicy Bypass -File $suitePath -RepoRoot $shadow *> $log
     $code = $LASTEXITCODE
     $text = Get-Content -LiteralPath $log -Raw
-    $match = [regex]::Match($text, 'Model lifecycle: (\d+) assertions, (\d+) failed\.')
+    $match = [regex]::Match($text, '(?:Model lifecycle|Workstation models): (\d+) assertions, (\d+) failed\.')
     [pscustomobject]@{
         Name = $Name; ExitCode = $code; Assertions = $(if ($match.Success) { [int]$match.Groups[1].Value } else { 0 })
         Failures = $(if ($match.Success) { [int]$match.Groups[2].Value } else { 0 })
@@ -92,9 +124,9 @@ function Run-Suite([string]$Name) {
 try {
     New-Item -ItemType Directory -Path $shadow | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $shadow 'tests') | Out-Null
-    Copy-Item -LiteralPath (Join-Path $root 'tests\Test-ModelLifecycle.ps1') -Destination $suite
+    Copy-Item -LiteralPath (Join-Path $root "tests\$suiteFile") -Destination $suitePath
     Copy-Item -LiteralPath (Join-Path $root 'scripts') -Destination $shadow -Recurse
-    foreach ($file in 'Start-ClaudeGateway.ps1','Install-ClaudeGateway.ps1') { Copy-Item -LiteralPath (Join-Path $root $file) -Destination $shadow }
+    foreach ($file in 'Start-ClaudeGateway.ps1','Install-ClaudeGateway.ps1','.gitignore') { Copy-Item -LiteralPath (Join-Path $root $file) -Destination $shadow }
     & git -C $shadow init --quiet
     if ($LASTEXITCODE) { throw 'Cannot initialise the private mutation source repository.' }
     $head = (& git -C $root rev-parse HEAD).Trim()
@@ -104,7 +136,8 @@ try {
     if ($LASTEXITCODE) { throw 'Cannot set the private mutation source release identity.' }
     $baseline = Run-Suite 'baseline'
     $results.Add($baseline)
-    if ($baseline.ExitCode -ne 0 -or $baseline.Assertions -lt 80) {
+    $minimumAssertions = if ($Suite -eq 'WorkstationModels') { 13 } else { 135 }
+    if ($baseline.ExitCode -ne 0 -or $baseline.Assertions -lt $minimumAssertions) {
         $failed++
         $baseline | Format-List
         throw 'The unmodified lifecycle suite did not pass every expected assertion in the private source copy.'

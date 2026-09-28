@@ -46,6 +46,21 @@ Final lifecycle assertions: 135 on each host, all passing. A valid single-deploy
 object cannot substitute for an inventory array. A missing principal now stops before
 the snapshot or any model write; its regression failed on both hosts before the guard.
 
+Negative verification completed: 21 mutations caught on each host, with no incomplete
+run. The 18 lifecycle mutations each ran all 135 assertions; the three alias mutations
+each ran all 13 workstation-model assertions. Baseline and restored runs passed on
+PowerShell 7 and 5.1. The matrix covers raw identity shape/fields and both callers,
+native discovery failure and array shape, empty/normalized selections, both initial tier
+records, renderer stamps and rechecks, history fields, missing principal, token scoping,
+nested generated paths and each removed model-family alias.
+
+Related regressions passed: ModelDeployment 46, ModelsAndPlugins 92, FlowContract 29,
+GuidedFlow 44 and Architecture 36 assertions, plus Azure CLI argument checks, documentation
+references, named-value guards, script encoding and Test-All runner integrity. The 15-spec
+architecture was regenerated and its changed model-lifecycle image inspected. The added
+workstation suite takes about 2 seconds per run; no new long-running suite is registered.
+The packet gate, under the unchanged timeout and shared lock, is the remaining step.
+
 Acceptance criteria:
 
 - [x] A Change-only `models` step and a standalone model-sync command discover the chosen
