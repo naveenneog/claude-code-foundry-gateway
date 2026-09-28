@@ -115,3 +115,35 @@ guide references passed under that lock. The no-run gate passed with the
 file-size and unrelated-open-unknown warnings; it did not execute Test-All
 or the build. Council, the full packet gate and post-deployment owner review
 remain pending. No live Azure, directory or model evidence is claimed.
+
+## Council round 1 amendment
+
+The 2026-09-28 review found two windows not held by the initial tests. Apply
+recomputed the candidate and profile revision after its comparison. A failed
+read immediately after atomic replacement also happened before the rollback
+region. The replacement contract now requires the reviewed candidate bytes and
+previous profile snapshot to remain immutable through commit. Expected written
+revision is derived from those candidate bytes, not a post-save file read.
+
+All AUM profile writers serialize comparison, backup, replacement and verification
+with an OS-held lock on a persistent sibling file. Nonblocking acquisition
+refuses another active writer rather than waiting without a deadline. The
+OS releases the lock when the handle/process closes; the sibling file is not
+deleted, avoiding a second lock identity. Windows uses
+[`msvcrt.locking`](https://docs.python.org/3.12/library/msvcrt.html#msvcrt.locking);
+Unix uses [`fcntl.flock`](https://docs.python.org/3.12/library/fcntl.html#fcntl.flock)
+(documentation retrieved 2026-09-28). The lock coordinates AUM writers, not
+arbitrary editors that do not participate. A changed profile before replacement
+or after verification is refused; a detected newer file is not overwritten.
+
+Failure after replacement retains the old live engine and attempts guarded
+restoration. An unreadable file or failed restore is not reported as a restored
+profile: the durable error names the backup and the manual recovery steps.
+Conflict messages name changed address fields and revisions, not arbitrary
+file contents or credentials.
+
+Settings shows the connection in a guarded, wrapping label independent of
+DataTable width caches. AUM-service membership is unavailable in the current
+bridge; its control and explanation reflect that existing limit without
+adding a writer. These are corrections within the existing local client/file
+boundary, with no new Azure component, identity, network path or authority.

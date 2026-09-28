@@ -25,12 +25,13 @@ class ActionForm(ModalScreen):
     BINDINGS = [("escape", "cancel", "Cancel")]
 
     def __init__(self, title, fields, operation, *, mutation=True, read_guard=None, local_write=False,
-                 apply_label=None):
+                 apply_label=None, commit_preview=False):
         super().__init__()
         self.heading, self.fields, self.operation = title, fields, operation
         self.mutation = mutation
         self.local_write = local_write
         self.apply_label = apply_label
+        self.commit_preview = commit_preview
         self.read_guard = read_guard if read_guard is not None else self.app.current_guard()
         self.preview = None
         self.busy = False
@@ -119,16 +120,17 @@ class ActionForm(ModalScreen):
                 from .bulk import apply_budget_plan
                 result = dict(latest, preview=False, results=await asyncio.to_thread(apply_budget_plan, self.app.engine, latest))
             else:
-                result = await asyncio.to_thread(self.operation, self.values(), True)
+                result = await asyncio.to_thread(self.operation, self.preview if self.commit_preview else self.values(), True)
             if result.get("ui_action"):
+                if result["ui_action"] == "profile":
+                    await self.app.activate_profile(result["config"], profile=Path(result["profile"]),
+                                                    revision=result["profile_revision"], reviewed=result["profile_change"])
+                    return
                 self.dismiss()
                 if result["ui_action"] == "view":
                     self.app.restore_view(result["view"], read_guard=self.read_guard)
                 elif result["ui_action"] == "compare":
                     self.app.set_comparison(result["month"])
-                elif result["ui_action"] == "profile":
-                    self.app.run_worker(self.app.activate_profile(result["config"], profile=Path(result["profile"]),
-                                        revision=result["profile_revision"]), group="profile", exclusive=True)
                 elif result["ui_action"] == "signout":
                     self.app.exit()
                 return

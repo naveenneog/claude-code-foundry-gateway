@@ -99,8 +99,21 @@ names the current backend as `via Direct`, `via AUM service` or `via Turnstile`.
 A preview shows the current and proposed profile. **Save and connect** keeps
 an exact-byte timestamped backup, replaces the selected local profile atomically
 and verifies `whoami` before adopting the connection. A failed verification
-restores the prior file and live connection; a failed first save removes the
-new file. A profile changed since preview requires another preview.
+keeps the prior live connection and attempts to restore its file; with no prior
+profile, recovery removes the new file. A failed restore remains an error in
+the form, with the backup path and steps to release the file lock and restore
+the old file or remove an unverified first profile.
+
+The reviewed candidate bytes and prior revision remain unchanged through
+Apply. AUM writers share an OS-held lock on a sibling `.config.json.lock`
+file for comparison, backup, replacement and verification. The lock is released
+when its handle closes; the empty sibling file remains. Another active AUM
+writer is refused rather than retried. Changed address-field names and both
+revisions appear in a conflict message; a detected newer file is not overwritten.
+The expected saved revision comes from the written bytes, so a post-save read
+failure stays inside rollback protection. This lock coordinates AUM writers,
+not external editors that ignore it
+([ADR-0038](adr/0038-aum-actions-and-connection.md#council-round-1-amendment)).
 The normal discovery-preview estimate is 3-30 s; identity verification shows
 a 3-10 s estimate. These are progress estimates, not availability guarantees.
 

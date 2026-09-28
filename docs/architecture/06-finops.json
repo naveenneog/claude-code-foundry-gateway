@@ -47,8 +47,8 @@
       "The gateway or selected server remains the authorization boundary."
     ] },
     { "id": "local-files", "x": 1048, "y": 272, "w": 216, "h": 202, "compact": true, "tone": "slate", "title": "Local files", "lines": [
-      "Profile + backup; [[profile]]",
-      "[[csv]]; unique files",
+      "Locked profile + backup",
+      "[[profile]]; [[csv]]",
       "No stored tokens"
     ] },
     { "id": "direct", "x": 0, "y": 558, "w": 302, "h": 278, "compact": true, "tone": "blue", "title": "Direct · default", "lines": [

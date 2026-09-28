@@ -510,8 +510,11 @@ P80 changes local interaction and file flows, not Azure architecture. The
 People/Budgets controls retain existing authorization and preview-first writers.
 Directory and catalog results keep their publication guards through the add
 form. Connection settings use an address-only local profile, a timestamped
-backup and atomic replacement; failed `whoami` restores the prior profile and
-keeps the previous engine. Complete chargeback CSVs use exclusive file creation
+backup and atomic replacement. An OS-held sibling-file lock serializes AUM
+profile writers; the reviewed candidate/revision is not rediscovered at commit.
+Failed `whoami` keeps the previous engine and attempts profile restoration,
+with durable backup/recovery instructions if restoration fails.
+Complete chargeback CSVs use exclusive file creation
 with numbered collision handling. No Azure component, identity, schedule,
 network destination or write authority is added. The diagram's local-files
 node records these paths; Turnstile still has no USD writer.

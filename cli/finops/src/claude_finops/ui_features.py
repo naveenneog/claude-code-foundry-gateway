@@ -405,9 +405,13 @@ class FeatureUI:
                 self.notify(str(error), severity="error")
 
     def action_profile(self):
-        from .configure import connection_config, profile_revision
+        from .configure import ProfileChange, connection_config, profile_bytes, read_profile
 
         def run(values, apply):
+            if apply:
+                reviewed = values["profile_change"]
+                return dict(ui_action="profile", config=reviewed.configuration(), profile=str(reviewed.path),
+                            profile_revision=reviewed.revision, profile_change=reviewed)
             path = Path(values["path"]).expanduser().resolve()
             fields = {key: values[key].strip() for key in
                       ("backend", "url", "scope", "subscription", "resource_group", "apim_name", "tenant_id",
@@ -417,12 +421,11 @@ class FeatureUI:
             if fields["url"] != self.config.url or fields["backend"] != self.config.backend:
                 fields["turnstile_resource_group"] = ""
             config = connection_config(replace(self.config, **fields))
-            revision = profile_revision(path)
-            if apply:
-                return dict(ui_action="profile", config=config, profile=str(path), profile_revision=revision)
+            reviewed = ProfileChange(path, read_profile(path), profile_bytes(config))
             return dict(preview=True, action="Change connection",
-                        before=dict(connection=self.config.public(), profile_revision=revision),
+                        before=dict(connection=self.config.public(), profile_revision=reviewed.revision),
                         after=dict(connection=config.public(), profile=str(path)),
+                        profile_change=reviewed,
                         note="Address-only profile; timestamped backup before saving. Failed whoami restores the previous profile and connection. Gateway authority does not change.")
         choices = [("direct", "Direct"), ("aum-service", "AUM service"), ("turnstile", "Turnstile")]
         if self.config.backend == "fake":
@@ -437,9 +440,9 @@ class FeatureUI:
             ("tenant_id", "Tenant id (blank uses the CLI session)", self.config.tenant_id, None),
             ("workspace_resource_id", "Log Analytics resource id (blank discovers from gateway)", self.config.workspace_resource_id, None),
             ("path", "Local profile path", str(self.profile_path), None)],
-            run, mutation=False, local_write=True, apply_label="Save and connect"))
+            run, mutation=False, local_write=True, apply_label="Save and connect", commit_preview=True))
 
-    async def activate_profile(self, config, *, profile=None, revision=""):
+    async def activate_profile(self, config, *, profile=None, revision="", reviewed=None):
         from .configure import profile_transaction
 
         backend = None
@@ -448,7 +451,7 @@ class FeatureUI:
         with guarded_publish(self.safe_message_guard()):
             self.query_one("#status", Static).update("Verifying the new connection with whoami (estimate 3-10 s)...")
         try:
-            transaction = profile_transaction(profile, config, revision) if profile is not None else nullcontext()
+            transaction = profile_transaction(profile, config, revision, reviewed=reviewed) if profile is not None else nullcontext()
             with transaction:
                 backend = connect(config)
                 engine = Engine(backend, self.engine.month)
@@ -480,6 +483,8 @@ class FeatureUI:
                     self.config, self.profile_path = previous_config, previous_path
                     self._clear_principal_state({})
                 self.query_one("#status", Static).update(f"{reason} The previous connection remains active.")
+                if self.screen.query("#action-status"):
+                    self.screen.query_one("#action-status", Static).update(f"{reason} The previous connection remains active.")
             self.notify(reason, severity="error")
         finally:
             if backend is not None and not switched:

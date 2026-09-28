@@ -41,6 +41,10 @@ exact streaming cache-creation detail remains **U13**.
   verification. It retains the selected profile path. The configure command
   honors explicit HTTP URL/scope, asks before attended replacement and keeps
   the unattended `--force` requirement.
+  Council round 1 corrections preserve the reviewed candidate and revision
+  through commit, serialize profile writers and protect post-replacement
+  failures. Failed rollback keeps the old live connection and displays the
+  backup path and recovery steps instead of claiming restoration.
   One Chargeback report action writes the complete month CSV to the local
   reports folder with an absolute path and non-overwrite naming. The installed
   reconciled-report action retains its existing permissions. CLI report output

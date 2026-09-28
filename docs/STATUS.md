@@ -4,10 +4,51 @@
 
 Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM guide set. Worktree: `accel-p80`, branch `p80-aum-usability`, based on P71 commit `bcf8554`. Later P71 work remains separate. This packet stays local until the owner reviews it after the 2026-09-29 deployment; no merge, push or history rewrite is authorized.
 
-**Builder handoff:** all eight acceptance items below are met. The verified
-implementation is `2d41f69`; subsequent handoff changes are ledger-only.
-Council and the subsequent full packet gate remain pending with the lead.
-This is not a merge-ready or packet-gate-passed claim.
+**Council round 1:** Architect and Security PASS; Coder, QA and UX BLOCK at
+`fb8f849`. The earlier builder results remain below as historical evidence,
+not proof that the council's missed windows or viewport defect were covered.
+Corrections are in progress locally. The lead runs round 2.
+
+### Council round 1 corrections
+
+| Seat | Round 1 verdict | Required correction |
+|---|---|---|
+| Architect | PASS | Local profile/report flows fit the existing boundary |
+| Security | PASS | No new authority or writer is authorized |
+| Coder | BLOCK | The Apply path accepts a newly recomputed profile revision after the final comparison; the reviewed configuration/revision must reach a serialized commit unchanged |
+| Coder | BLOCK | A post-replacement Windows read lock raises before rollback protection; every subsequent operation needs recovery handling and the expected revision must come from written bytes |
+| QA | BLOCK | Existing tests miss the preview-to-commit window, post-save read denial and failing rollback; the Settings address assertion failed intermittently (13 passed, 1 failed in 30.38 s) |
+| UX | BLOCK | Settings can retain cached narrow table widths; the connection needs an independent guarded wrapping label. AUM-service membership is unavailable, despite the guide and enabled control |
+
+The correction sequence is deterministic RED regressions, minimal production
+fixes, GREEN commits, negative probes with unchanged baseline case counts,
+and ten consecutive Settings visibility runs without relaxing its original
+address assertion. U40 and U41 are reopened below before these changes.
+One long command owns `.gate-lock` at a time, with release in that same
+command's `finally`; no lock is retained across tool invocations. The earlier
+multi-command validation wrapper is not reused for this review.
+
+No push, merge, later-P71 merge, Azure write or new membership writer is
+authorized. Round 2, the full packet gate and post-deployment owner review
+remain with the lead.
+
+#### Connection correction evidence
+
+The new transaction suite first failed **9 of 9** cases in **14.85 s**.
+Its rediscovery hook initially patched a name after the closure had captured
+it; correcting that test setup reproduced the actual third discovery call
+as a separate RED failure in **4.20 s**. No production behavior was changed
+before those failures.
+
+GREEN: `test_p80_profile_transaction.py`, `test_p80_connection.py`,
+`test_discovery.py` and `test_publication_structure.py`: **62 passed in
+32.51 s**. The new cases preserve an edit after the last comparison, keep the
+reviewed candidate instead of rediscovering it, refuse a changed backup source,
+serialize both thread and process writers, exercise a real Windows exclusive
+read handle immediately after replacement, restore after a one-shot read
+failure, and retain durable recovery steps when restoring/removing fails.
+The profile form remains open on failure; no stale connection is activated.
+Mutation evidence and the final restored suite follow after the UX correction.
 
 ### PLAN
 
