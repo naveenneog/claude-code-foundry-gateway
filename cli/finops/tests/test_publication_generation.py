@@ -5,7 +5,7 @@ import json
 
 import httpx
 import pytest
-from textual.widgets import Static, Input, DataTable, Select
+from textual.widgets import Static, Input, DataTable, Select, TextArea
 from types import SimpleNamespace
 import typer
 
@@ -279,14 +279,24 @@ def test_aum_service_completed_catalog_is_not_cached_after_identity_change():
         backend.close()
 
 
-@pytest.mark.parametrize("surface", ["lookup-catalog", "lookup-results", "detail", "export", "people-selector"])
+@pytest.mark.parametrize("surface", ["lookup-catalog", "lookup-results", "detail", "export", "people-selector",
+                                    "assistant-history", "assistant-settings", "assistant-answer", "membership"])
 async def test_delayed_screen_or_export_read_cannot_publish_after_identity_change(http_estate, monkeypatch, tmp_path, surface):
     engine, principal, _ = http_estate
     app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
     original_to_thread = asyncio.to_thread
     fired = []
     published = []
+    notices, opened = [], []
+    monkeypatch.setattr(app, "notify", lambda message, **kwargs: notices.append(str(message)))
+    monkeypatch.setattr(app, "open_url", lambda url: opened.append(url))
     original_row, original_options = DataTable.add_row, Select.set_options
+    original_text = TextArea.load_text
+
+    def load_text(widget, text):
+        if principal[0] == "b" and "A_ONLY" in text:
+            published.append(text)
+        return original_text(widget, text)
 
     def add_row(widget, *values, **kwargs):
         if principal[0] == "b" and "A_ONLY" in str(values):
@@ -301,6 +311,7 @@ async def test_delayed_screen_or_export_read_cannot_publish_after_identity_chang
 
     monkeypatch.setattr(DataTable, "add_row", add_row)
     monkeypatch.setattr(Select, "set_options", set_options)
+    monkeypatch.setattr(TextArea, "load_text", load_text)
     target_resource = "catalog"
     original_read = engine.read
 
@@ -316,20 +327,33 @@ async def test_delayed_screen_or_export_read_cannot_publish_after_identity_chang
         engine.chargeback = chargeback
         target = chargeback
         monkeypatch.chdir(tmp_path)
-    elif surface == "detail":
+    elif surface in {"detail", "assistant-history", "assistant-settings"}:
+        target_resource = {"detail": "request", "assistant-history": "conversations",
+                           "assistant-settings": "assistant_settings"}[surface]
         def read(resource, **params):
-            if resource == "request":
-                return {"request_id": original_read("trends")["source"], "marker": "A_ONLY_RESULT"}
+            if resource == target_resource:
+                return {"request_id": original_read("trends")["source"], "marker": "A_ONLY_RESULT",
+                        "items": [], "available_models": []}
             return original_read(resource, **params)
         engine.read = read
-        target, target_resource = read, "request"
+        target = read
+    elif surface == "assistant-answer":
+        def ask(*args):
+            return {"conversation_id": original_read("trends")["source"], "message": "A_ONLY_RESULT", "charts": []}
+        engine.ask = ask
+        target = ask
+    elif surface == "membership":
+        def membership(*args):
+            return "https://portal.contoso.com/" + original_read("trends")["source"]
+        engine.membership_url = membership
+        target = membership
     else:
         target = engine.read
 
     async def after_completion(operation, *args, **kwargs):
         result = await original_to_thread(operation, *args, **kwargs)
         if not fired and operation == target and (
-                surface in {"lookup-results", "export"} or args[:1] == (target_resource,)):
+                surface in {"lookup-results", "export", "assistant-answer", "membership"} or args[:1] == (target_resource,)):
             verify_b(engine, principal)
             fired.append(True)
         return result
@@ -337,7 +361,7 @@ async def test_delayed_screen_or_export_read_cannot_publish_after_identity_chang
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
         await app.workers.wait_for_complete()
-        if surface in {"detail", "people-selector"}:
+        if surface in {"detail", "people-selector", "membership"}:
             app.action_tab("requests" if surface == "detail" else "people")
             await pilot.pause()
             await app.workers.wait_for_complete()
@@ -357,6 +381,16 @@ async def test_delayed_screen_or_export_read_cannot_publish_after_identity_chang
             app.action_export()
             await pilot.pause()
             app.screen.export()
+        elif surface == "assistant-history":
+            app.action_assistant_history()
+        elif surface == "assistant-settings":
+            app.action_assistant_configure()
+        elif surface == "assistant-answer":
+            app.query_one("#ask-question", Input).value = "Show usage"
+            app.run_worker(app.ask_current())
+        elif surface == "membership":
+            app.team = "a-only"
+            app.action_membership()
         else:
             app.action_refresh()
         await pilot.pause()
@@ -373,6 +407,13 @@ async def test_delayed_screen_or_export_read_cannot_publish_after_identity_chang
         elif surface == "export":
             assert "sign-in changed" in str(app.screen.query_one("#export-status", Static).render())
             assert not list(tmp_path.glob("finops-reports\\*.csv"))
+        elif surface in {"assistant-history", "assistant-settings", "membership"}:
+            assert len(app.screen_stack) == 1
+            assert any("sign-in changed" in note for note in notices)
+            assert not opened
+        elif surface == "assistant-answer":
+            assert app.ask_reply is None and app.ask_conversation is None and app.ask_history == []
+            assert "sign-in changed" in app.query_one("#ask-answer").text
         else:
             assert "A_ONLY_CATALOG" not in str(app.query_one("#people-team", Select)._options)
             assert "sign-in changed" in str(app.query_one("#note-people", Static).render())
