@@ -106,7 +106,7 @@ apim_prices_() {
   filter="serviceName eq 'API Management' and priceType eq 'Consumption' and (meterName eq 'Basic v2 Unit' or meterName eq 'Standard v2 Unit' or meterName eq 'Premium v2 Unit')"
   url="https://prices.azure.com/api/retail/prices?\$filter=$(jq -rn --arg f "$filter" '$f | @uri')"
   while [ -n "$url" ] && [ "$page" -lt 20 ]; do
-    if ! body="$(curl -fsS --max-time 30 "$url" 2>&1)"; then
+    if ! body="$(curl -fsS --proto '=https' --max-time 30 "$url" 2>&1)"; then
       PRICES_UNREACHABLE="$(printf '%s\n' "$body" | head -n 1)"
       [ -z "$PRICES_UNREACHABLE" ] && PRICES_UNREACHABLE="curl failed without a message"
       return 1
@@ -117,19 +117,45 @@ apim_prices_() {
     fi
     pages="$pages$body"$'\n'
     url="$(printf '%s' "$body" | jq -r '.NextPageLink // empty')"
+    # The API names its next page https://prices.azure.com:443/api/retail/prices?...&$skip=1000
+    # (read 2026-09-28). A link anywhere else is not followed.
+    case "$url" in
+      ''|https://prices.azure.com/*|https://prices.azure.com:443/*) ;;
+      *) PRICES_UNREACHABLE="the next page of the price list is not on https://prices.azure.com"; return 1 ;;
+    esac
     page=$((page + 1))
   done
   # Through standard input: all pages are about 100 KB, over the 32,767 characters a Windows
   # command line holds. Consumption rows only, free tiers dropped, the marginal row of a tiered
-  # meter, one unit at 730 hours to the cent, as Get-AzureRetailPriceAcrossRegions and
-  # Get-ClaudeApimV2Prices do.
-  PRICES_JSON="$(printf '%s' "$pages" | jq -cs '
+  # meter, as Get-AzureRetailPriceAcrossRegions does. One unit at 730 hours to the cent, rounded
+  # half to even, as [math]::Round does on the [decimal] price in ConvertTo-MonthlyPrice: 0.2005 an
+  # hour is 146.36 a month in both installers. The arithmetic is on whole billionths of the price as
+  # written, exact for up to nine decimal places. A longer price is rounded as a double: it cannot
+  # fall on a half cent, which only a price of at most four decimal places does (price x 73000 =
+  # c + 0.5 makes the price (2c + 1)/146000, and 146000 = 2^4 x 5^3 x 73).
+  local transformed
+  if ! transformed="$(printf '%s' "$pages" | jq -cs '
+    def monthly:
+      tostring as $s
+      | if ($s | test("^[0-9]{1,4}([.][0-9]{1,9})?$")) then
+          ($s | split(".")) as $p
+          | (($p[0] + ((($p[1] // "") + "000000000")[0:9])) | explode | reduce .[] as $d (0; . * 10 + $d - 48)) * 730
+          | (. / 10000000 | floor) as $q | (. - $q * 10000000) as $r
+          | (if $r < 0 then [$q - 1, $r + 10000000] elif $r >= 10000000 then [$q + 1, $r - 10000000] else [$q, $r] end) as [$c, $rest]
+          | if $rest > 5000000 then $c + 1 elif $rest < 5000000 then $c elif ($c / 2 | floor) * 2 == $c then $c else $c + 1 end
+        else (. * 73000 + 0.5 | floor) end
+      | . / 100;
     [ .[].Items[] | select(.type == "Consumption" and .retailPrice != null
         and ((.skuName // "") | test("free"; "i") | not) and ((.productName // "") | test("free"; "i") | not)) ]
+    | if any(.[]; (.retailPrice | type) != "number") then error("a retailPrice is not a number") else . end
     | group_by((.armRegionName // "") + "|" + (.meterName // "")) | map(max_by(.tierMinimumUnits // 0))
     | reduce .[] as $r ({};
         ({"Basic v2 Unit": "BasicV2", "Standard v2 Unit": "StandardV2", "Premium v2 Unit": "PremiumV2"}[$r.meterName // ""]) as $t
-        | if $t and $r.armRegionName then .[$r.armRegionName][$t] = ((($r.retailPrice * 730 * 100) + 0.5 | floor) / 100) else . end)')"
+        | if $t and $r.armRegionName then .[$r.armRegionName][$t] = ($r.retailPrice | monthly) else . end)' 2>&1)"; then
+    PRICES_UNREACHABLE="the price list is not in the expected form: $(printf '%s\n' "$transformed" | head -n 1)"
+    return 1
+  fi
+  PRICES_JSON="$transformed"
   [ -z "$PRICES_JSON" ] && PRICES_JSON="{}"
   PRICES_CURRENCY="$(printf '%s' "$pages" | jq -rs '[ .[].Items[].currencyCode | select(. != null and . != "") ][0] // "USD"')"
   return 0
@@ -152,20 +178,23 @@ money_() {
 }
 
 # Numbered options, one per line: number, region, then the Basic, Standard and Premium v2 monthly
-# price. The default region first, then the other physical regions in its geography group that
-# publish a v2 price, cheapest Basic v2 first (scripts/ClaudeGatewayRegion.ps1). jq.exe on Windows
-# ends each line with CRLF: Git Bash's command substitution drops the last line's carriage return,
-# but read keeps the others' in the last field, where a price that is not published read as 0.
+# price, or null where none is published: read with a tab IFS joins empty fields, which moved the
+# next price into the empty column. The default region first, then the other physical regions in
+# its geography group that publish a v2 price, cheapest Basic v2 first
+# (scripts/ClaudeGatewayRegion.ps1). An entry that is not a region object is skipped, as
+# Read-GatewayRegion skips it. jq.exe on Windows ends each line with CRLF: Git Bash's command
+# substitution drops the last line's carriage return, but read keeps the others' in the last field.
 region_options_() {
   local default="$1" locations="$2"
   [ -z "$PRICES_UNREACHABLE" ] || return 0
-  printf '%s' "$locations" | jq -r --arg d "$default" --argjson p "$PRICES_JSON" '
-    [ .[] | select((.metadata.regionType // "") == "Physical") ] as $phys
+  printf '%s\n%s' "$PRICES_JSON" "$locations" | jq -rs --arg d "$default" '
+    .[0] as $p
+    | [ .[1][] | objects | select((.name | type) == "string" and (.metadata | type) == "object" and (.metadata.regionType // "") == "Physical") ] as $phys
     | ([ $phys[] | select(.name == $d) ][0].metadata.geographyGroup // "") as $g
     | ([ $d ] + ([ $phys[] | select($g != "" and .name != $d and (.metadata.geographyGroup // "") == $g and $p[.name] != null) | .name ]
           | sort_by([ ($p[.].BasicV2 // 1e18), . ])))
     | to_entries[]
-    | [ (.key + 1), .value, ($p[.value].BasicV2 // ""), ($p[.value].StandardV2 // ""), ($p[.value].PremiumV2 // "") ] | @tsv' 2>/dev/null | tr -d '\r'
+    | [ (.key + 1), .value, ($p[.value].BasicV2 // "null"), ($p[.value].StandardV2 // "null"), ($p[.value].PremiumV2 // "null") ] | @tsv' 2>/dev/null | tr -d '\r'
 }
 
 # The region an answer names: a number from the options, or a region name in any case or spacing
@@ -191,7 +220,7 @@ read_gateway_region_() {
   printf '%s' "$locations" | jq -e 'type == "array"' >/dev/null 2>&1 || locations="[]"
   apim_prices_ || true
   note_ "read in $((SECONDS - started)) s"
-  known="$(printf '%s' "$locations" | jq -r '.[] | select((.metadata.regionType // "") == "Physical") | .name')"
+  known="$(printf '%s' "$locations" | jq -r '.[] | objects | select((.name | type) == "string" and (.metadata | type) == "object" and (.metadata.regionType // "") == "Physical") | .name')"
   options="$(region_options_ "$default" "$locations")"
   if [ -n "$options" ]; then
     echo

@@ -174,8 +174,10 @@ try {
     Invoke-Check 'Release log hygiene'                     'Test-ReleaseLog.ps1'
     Invoke-Check 'Azure CLI arguments vs cmd.exe'          'Test-AzArguments.ps1' -SerialLane
     Invoke-Check 'Shell scripts - syntax and banner'       'Test-ShellScripts.ps1' -SerialLane
-    # Stub az, curl and pwsh in TEMP: nothing shared, so it runs in parallel. Needs Git Bash on Windows.
-    $bashInstallerSkip = if (($IsWindows -or $env:OS -eq 'Windows_NT') -and -not @(@('C:\Program Files\Git\bin\bash.exe', 'C:\Program Files\Git\usr\bin\bash.exe', (Join-Path "$env:LOCALAPPDATA" 'Programs\Git\bin\bash.exe')) | Where-Object { Test-Path -LiteralPath $_ }).Count) { 'macOS/Linux installer: Git Bash is not installed on this Windows machine.' } else { '' }
+    # Stub az, curl and pwsh in TEMP: nothing shared, so it runs in parallel. It needs bash (Git
+    # Bash on Windows) with jq on its PATH, as the installer does, and fails without them.
+    $installerBash = if ($IsWindows -or $env:OS -eq 'Windows_NT') { @(@('C:\Program Files\Git\bin\bash.exe', 'C:\Program Files\Git\usr\bin\bash.exe', (Join-Path "$env:LOCALAPPDATA" 'Programs\Git\bin\bash.exe')) | Where-Object { Test-Path -LiteralPath $_ }) | Select-Object -First 1 } else { (Get-Command bash -ErrorAction SilentlyContinue | Select-Object -First 1).Source }
+    $bashInstallerSkip = if (-not $installerBash) { 'macOS/Linux installer: no Git Bash (Windows) or bash on this machine.' } elseif (-not (& $installerBash -c 'command -v jq' 2>$null)) { 'macOS/Linux installer: jq is not on the bash PATH; the installer needs it.' } else { '' }
     Invoke-Check 'macOS/Linux installer prices and record'  'Test-BashInstaller.ps1' -SkipReason $bashInstallerSkip
     Invoke-Check 'Preflight on both PowerShell hosts'      'Test-PreflightBothHosts.ps1' -SerialLane
     Invoke-Check 'Guided diagnostics and support bundles'  'Test-Diagnose.ps1' -SerialLane
