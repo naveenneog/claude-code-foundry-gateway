@@ -2,7 +2,7 @@
 
 ## P80 AUM shows every action it has, connects in one step, and its guide starts with installation, 2026-09-28
 
-Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM guide set. Worktree: `accel-p80`, branch `p80-aum-usability`, after merging `p71-aum-speed` (already present at start).
+Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM guide set. Worktree: `accel-p80`, branch `p80-aum-usability`, based on P71 commit `bcf8554`. Later P71 work remains separate. This packet stays local until the owner reviews it after the 2026-09-29 deployment; no merge, push or history rewrite is authorized.
 
 ### PLAN
 
@@ -10,7 +10,38 @@ Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM 
 2. Add RED pilot/unit coverage for: Add person opened from People with no Budgets visit; owner and non-owner empty People search; visible People/Budgets action bar and help/footer keys; unavailable USD explanation; one chargeback action with non-overwrite default export path; one-step connection preview/save/rollback; attended `aum configure --save` backup/overwrite; guide order and cross-doc links.
 3. GREEN by reusing the existing preview-first forms and command actions. The new buttons and keyboard shortcuts only open existing preview screens or safe local profile/export flows; no Turnstile USD writer or governance-authority rule changes are made in P80.
 4. REFACTOR only to share local helpers for catalog-on-demand, report path selection, connection backup/rollback and action labels. Do not edit `ROADMAP.md`, `main` or `accel-p71`.
-5. Validate with targeted pytest after each green, mutation probes for the five named detectors, a locked full FinOps suite, screen capture regeneration, docs checks, then merge `p71-aum-speed` again before handoff.
+5. Validate with targeted pytest after each green, mutation probes for the named detectors, a locked full FinOps suite, screen capture regeneration and documentation checks. The lead runs the council. The shared gate lock excludes full-suite, mutation and gate runs while another operator owns it. [ADR-0038](adr/0038-aum-actions-and-connection.md) records this correction to the earlier merge instruction.
+
+### Resume baseline
+
+The resumed builder read `AGENTS.md` before work. `b1dfcd4` was clean on the
+assigned branch. The existing P80 and publication-structure suites passed:
+37 tests in 20.78 s. The shared main-worktree Python was used with
+`PYTHONPATH` set to this worktree's `cli/finops/src`; `claude_finops.__file__`
+resolved under `accel-p80`. The initial no-run gate is deferred while P79 owns
+the lock.
+
+The baseline has no recorded RED results. Reversion probes will distinguish
+retrospective regression evidence from tests written before a new fix.
+Missing behavior at resume: a connection editor without a prerequisite JSON
+file and with persisted rollback; consistent header/help/action labels;
+one-action report saving and its reconciled-report offer; readable action
+buttons; and factual rather than imperative guide prose. U38-U41 are the P80
+research register; no other packet's unknowns are edited.
+
+### RED / GREEN
+
+| Cycle | RED | GREEN | Scope |
+|---|---|---|---|
+| Visible actions and guarded add form | Initial selector: 9 failed, 10 passed, 32.87 s. After the test waited for the existing 350 ms directory debounce, the catalog selector showed 2 failures and 1 pass in 9.80 s: an unhandled catalog error and a stale directory result opening a form. | 76 passed in 104.67 s | `test_p80_usability.py`, `test_publication_structure.py`, `test_developers.py`, `test_usd_budgets.py`, `test_tui.py`. Captures are regenerated after the remaining UI work. |
+
+The action regressions observed truncated labels (10 cells for an 18-cell
+label), no Add action on Budgets, no `via ...` header and a budget button that
+remained disabled after selecting a writable person. The controls now fit an
+80-column terminal, Help and the footer name their shortcuts, and selection
+updates the action state. Add-person catalog reads run off the UI thread and
+retain both source guards. Test-only HTTP/Direct labels use a fake backend
+with the unrelated first-run tour disabled.
 
 ### CONTRACT / acceptance
 

@@ -44,6 +44,19 @@ fails the release stage while any remain. Detail for each one follows below.
 
 ---
 
+## P80 research before resumed implementation
+
+These four entries were recorded at resume on 2026-09-28, before corrections
+to the earlier P80 implementation. They do not retrospectively claim research
+or RED evidence for the five existing P80 commits.
+
+| ID | State | Question | Blocks |
+|---|---|---|---|
+| U38 | CLOSED | People uses the existing `Engine.read("budgets")` catalog on demand. `DeveloperPicker.open_add_form` retains the directory and catalog guards through `ActionForm`; owner restrictions and preview-first membership remain. Offline tests on 2026-09-28 cover owner/non-owner entry, filled email/team, visible catalog errors and refusal of a stale directory result. [Source](../cli/finops/src/claude_finops/developer_screens.py), [tests](../cli/finops/tests/test_p80_usability.py), [ADR-0038](adr/0038-aum-actions-and-connection.md). This does not establish live directory-scale latency. | P80 add-person flow resolved |
+| U39 | OPEN | Does one terminal action export every month scope without overwriting, and offer the installed P50 report without changing its permissions? The initial action opens another export step and ignores the filename field. | P80 chargeback flow |
+| U40 | OPEN | Can a previewed connection replace the selected local profile, preserve a timestamped exact-byte backup, verify whoami and restore both disk and live connection on failure? The initial terminal form only loads an existing JSON file. | P80 connection flow |
+| U41 | OPEN | Can the installation-first guide retain all earlier facts and evidence, remove duplicated connection steps, and keep generated terminal/architecture evidence current? The initial guide prepends imperative instructions; its screen and source manifests need checking. | P80 documentation and architecture |
+
 ## P70 research before implementation
 
 | ID | State | Question | Blocks |

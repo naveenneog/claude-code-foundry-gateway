@@ -1,20 +1,25 @@
 import json
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
-from textual.widgets import Button, DataTable, Input, Select, Static, TabbedContent
+from rich.cells import cell_len
+from textual.widgets import Button, DataTable, Input, Select, Static, TabbedContent, TabPane
 from typer.testing import CliRunner
 
 from claude_finops.cli import app
 from claude_finops.config import Config
 from claude_finops.engine import Engine
+from claude_finops.errors import FinOpsError
 from claude_finops.fake import FakeBackend
+from claude_finops.feature_screens import ActionForm
 from claude_finops.guarded_publication import guarded_publish
 from claude_finops.tui import FinOpsApp
 
 
 def example(role="owner", *, backend=None, config=None):
-    return FinOpsApp(Engine(backend or FakeBackend(role), "2026-09"), config or Config(backend="fake"))
+    return FinOpsApp(Engine(backend or FakeBackend(role), "2026-09"), config or Config(backend="fake"),
+                     first_run=False)
 
 
 async def settle(app, pilot):
@@ -188,3 +193,157 @@ async def test_settings_names_connection_and_rolls_back_failed_switch(monkeypatc
         await settle(app, pilot)
         assert app.engine.backend is old_backend
         assert app.config.backend == "turnstile"
+
+
+@pytest.mark.parametrize("tab", ["people", "budgets"])
+async def test_actions_fit_compact_terminal_and_help_matches_footer(tab):
+    app = example()
+    async with app.run_test(size=(80, 24)) as pilot:
+        await settle(app, pilot)
+        app.action_tab(tab)
+        await settle(app, pilot)
+        pane = app.query_one(f"#{tab}", TabPane)
+        labels = ["Add person to team", "Set budget", "Set USD budget", "Chargeback report"]
+        buttons = {str(button.label): button for button in pane.query(Button)}
+        for label in labels:
+            assert label in buttons
+            button = buttons[label]
+            assert button.content_size.width >= cell_len(label), label
+            assert button.region.right <= pane.region.right, label
+        hints = str(app.query_one("#key-hints", Static).render())
+        for label in labels:
+            assert label in hints
+        await pilot.press("?")
+        await pilot.pause()
+        help_text = str(app.screen.data)
+        for label in labels:
+            assert label in help_text
+        assert not app.engine.backend.writes
+
+
+@pytest.mark.parametrize("kind,label", [
+    ("direct", "Direct"), ("aum-service", "AUM service"), ("turnstile", "Turnstile"),
+])
+async def test_header_names_selected_connection(kind, label):
+    app = example(config=Config(backend=kind, url="https://selected.contoso.com"))
+    async with app.run_test(size=(100, 30)) as pilot:
+        await settle(app, pilot)
+        assert f"via {label}" in str(app.query_one("#identity", Static).render())
+        app.action_tab("settings")
+        await settle(app, pilot)
+        assert "selected.contoso.com" in str(app.records["settings"]) or kind == "direct"
+
+
+async def test_set_budget_button_tracks_selected_writable_person():
+    backend = FakeBackend()
+    app = example(backend=backend)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await settle(app, pilot)
+        app.action_tab("people")
+        await settle(app, pilot)
+        app.records["people"][0]["writable"] = False
+        app.update_action_buttons()
+        button = app.query_one("#people #action-set-budget", Button)
+        assert button.disabled
+        app.query_one("#table-people", DataTable).move_cursor(row=1)
+        await pilot.pause()
+        assert not button.disabled
+        await pilot.click(button)
+        await pilot.pause()
+        assert app.screen.kind == "budget"
+        assert app.screen.row["scope_id"] == app.records["people"][1]["scope_id"]
+        assert not backend.writes
+
+
+@pytest.mark.parametrize("role", ["member", "viewer"])
+async def test_non_owner_cannot_open_add_person_from_button_or_shortcut(role):
+    app = example(role)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await settle(app, pilot)
+        app.action_tab("people")
+        await settle(app, pilot)
+        assert app.query_one("#people #action-add-person", Button).disabled
+        app.action_add_developer()
+        await pilot.press("g")
+        await pilot.pause()
+        assert len(app.screen_stack) == 1
+        assert not app.engine.backend.writes
+
+
+@pytest.fixture
+def directory_person(monkeypatch):
+    from claude_finops import developer_screens
+
+    person = dict(id="00000000-0000-0000-0000-000000000090", display_name="Example Person",
+                  user_principal_name="person@contoso.com", mail="person@contoso.com",
+                  user_type="Member", current_tier="", current_unit="")
+    monkeypatch.setattr(developer_screens, "developer_find",
+                        lambda *args, **kwargs: dict(items=[person], next_cursor=None))
+    return person
+
+
+async def open_empty_search_add(app, pilot):
+    await settle(app, pilot)
+    app.action_tab("people")
+    await settle(app, pilot)
+    with guarded_publish(app.current_guard()):
+        app.query_one("#people-query", Input).value = "person@contoso.com"
+    app.find_people()
+    await settle(app, pilot)
+    await pilot.click("#people #action-add-person")
+    await pilot.pause(0.4)
+    await settle(app, pilot)
+    assert app.screen.query_one("#developer-search", Input).value == "person@contoso.com"
+    assert app.screen.query_one("#developer-results", DataTable).row_count == 1
+    return app.screen
+
+
+async def test_empty_search_button_prefills_person_and_selected_team(directory_person):
+    app = example()
+    async with app.run_test(size=(100, 30)) as pilot:
+        picker = await open_empty_search_add(app, pilot)
+        assert "budgets" not in app.data
+        await pilot.press("enter")
+        await settle(app, pilot)
+        assert isinstance(app.screen, ActionForm)
+        assert app.screen.query_one("#field-user", Input).value == directory_person["user_principal_name"]
+        assert app.screen.query_one("#field-unit", Select).value == app.team
+        assert app.screen.preview is None
+        assert not app.engine.backend.writes
+
+
+async def test_catalog_failure_stays_in_picker_with_visible_error(directory_person, monkeypatch):
+    app = example()
+    async with app.run_test(size=(100, 30)) as pilot:
+        picker = await open_empty_search_add(app, pilot)
+        original = app.engine.read
+
+        def read(resource, **kwargs):
+            if resource == "budgets":
+                raise FinOpsError("Catalog is unavailable. Retry the directory selection.", 7)
+            return original(resource, **kwargs)
+
+        monkeypatch.setattr(app.engine, "read", read)
+        await pilot.press("enter")
+        await settle(app, pilot)
+        assert app.screen is picker
+        assert "Catalog is unavailable" in str(picker.query_one("#developer-status", Static).render())
+        assert not app.engine.backend.writes
+
+
+async def test_on_demand_catalog_cannot_replace_a_stale_directory_guard(directory_person):
+    app = example()
+    async with app.run_test(size=(100, 30)) as pilot:
+        picker = await open_empty_search_add(app, pilot)
+
+        @contextmanager
+        def stale_directory():
+            raise FinOpsError("Directory sign-in changed. Search again.", 3)
+            yield
+
+        picker.read_guard = stale_directory
+        await pilot.press("enter")
+        await settle(app, pilot)
+        assert app.screen is picker
+        assert "sign-in changed" in str(picker.query_one("#developer-status", Static).render())
+        assert not app.engine.backend.writes

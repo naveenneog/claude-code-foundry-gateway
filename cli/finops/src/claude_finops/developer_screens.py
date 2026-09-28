@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import contextmanager
 
 from textual import on, work
 from textual.containers import Horizontal, Vertical
@@ -50,12 +51,16 @@ class DeveloperPicker(ModalScreen):
 
     @on(Input.Submitted, "#developer-search")
     def search(self):
+        if self.debounce:
+            self.debounce.stop()
         self.search_text = self.query_one("#developer-search", Input).value
         self.cursor = None
         self.load_developers()
 
     @work(exclusive=True)
     async def load_developers(self):
+        with guarded_publish(self.app.safe_message_guard()):
+            self.query_one("#developer-status", Static).update("Searching Entra (estimate 3-10 s)...")
         try:
             with self.app.engine.backend.read_cycle():
                 result = await asyncio.to_thread(developer_find, self.app.engine, self.app.config, self.search_text, cursor=self.cursor)
@@ -91,28 +96,51 @@ class DeveloperPicker(ModalScreen):
         event.stop()
         if event.cursor_row >= len(self.rows):
             return
-        row = self.rows[event.cursor_row]
-        catalog = self.app.data.get("budgets", {}).get("items", [])
-        guard = self.read_guard
-        if not catalog:
-            with self.app.engine.backend.read_cycle():
-                budgets = self.app.engine.read("budgets")
-                guard = self.app.current_guard()
-            with guarded_publish(guard):
-                self.app.data["budgets"] = budgets
-                self.app._data_guards["budgets"] = (budgets, guard)
-                catalog = budgets.get("items", [])
-        units = [(item["scope_id"], item["scope_name"]) for item in catalog if item.get("scope_type") in {"organization", "department"}]
-        default_unit = self.prefill_unit if self.prefill_unit in {unit for unit, _ in units} else ""
-        fields = [
-            ("user", "Resolved UPN or object id", row["user_principal_name"] or row["id"], None),
-            ("tier", "Tier", "standard", [("standard", "standard"), ("premium", "premium")]),
-            ("unit", "Unit/team id (blank for tier only)", default_unit, [("", "none"), *units]),
-        ]
+        self.open_add_form(self.rows[event.cursor_row], self.read_guard)
 
-        def operation(values, apply):
-            return developer_change(self.app.engine, self.app.config, values["user"], tier=values["tier"],
-                                    unit=values["unit"] or None, apply=apply)
+    @work(exclusive=True, group="developer-catalog")
+    async def open_add_form(self, row, directory_guard):
+        try:
+            with directory_guard():
+                pass
+            if not self.app.check_action("add_developer", ()):
+                raise FinOpsError("Only owners can add people to teams.", 4)
+            if "budgets" not in self.app.data:
+                with guarded_publish(self.app.safe_message_guard()):
+                    self.query_one("#developer-status", Static).update("Loading teams and units (estimate 3-10 s)...")
+                with self.app.engine.backend.read_cycle():
+                    catalog_guard = self.app.current_guard()
+                    budgets = await asyncio.to_thread(self.app.engine.read, "budgets")
+                    with guarded_publish(catalog_guard):
+                        self.app.data["budgets"] = budgets
+                        self.app._data_guards["budgets"] = (budgets, catalog_guard)
+            else:
+                budgets = self.app.data["budgets"]
+                catalog_guard = self.app.cached_guard("budgets")
 
-        with guarded_publish(guard):
-            self.app.push_screen(ActionForm("Add developer", fields, operation, read_guard=guard))
+            @contextmanager
+            def form_guard():
+                with directory_guard(), catalog_guard():
+                    yield
+
+            units = [(item["scope_id"], item["scope_name"]) for item in budgets.get("items", [])
+                     if item.get("scope_type") in {"organization", "department"}]
+            default_unit = self.prefill_unit if self.prefill_unit in {unit for unit, _ in units} else ""
+            fields = [
+                ("user", "Resolved UPN or object id", row["user_principal_name"] or row["id"], None),
+                ("tier", "Tier", "standard", [("standard", "standard"), ("premium", "premium")]),
+                ("unit", "Unit/team id (blank for tier only)", default_unit, [("", "none"), *units]),
+            ]
+
+            def operation(values, apply):
+                return developer_change(self.app.engine, self.app.config, values["user"], tier=values["tier"],
+                                        unit=values["unit"] or None, apply=apply)
+
+            with guarded_publish(form_guard):
+                self.app.push_screen(ActionForm("Add developer", fields, operation, read_guard=form_guard))
+        except FinOpsError as error:
+            with guarded_publish(self.app.safe_message_guard()):
+                if self.query("#developer-status"):
+                    self.query_one("#developer-status", Static).update(self.app._error_text(error))
+                else:
+                    self.app.notify(self.app._error_text(error), severity="error")

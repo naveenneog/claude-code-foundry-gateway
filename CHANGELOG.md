@@ -29,6 +29,14 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **AUM action discovery (P80, awaiting owner review).** People and Budgets show
+  Add person to team, Set budget, Set USD budget and Chargeback report, with
+  matching Help and keyboard hints. The selected connection appears as
+  `via Direct`, `via AUM service` or `via Turnstile`. Add person loads the
+  catalog without a Budgets visit, keeps directory/catalog publication guards
+  and shows read errors. The existing authority rules and preview-first
+  writers remain; Turnstile has no USD writer.
+  [AUM](docs/AUM.md), [ADR-0038](docs/adr/0038-aum-actions-and-connection.md).
 - **AUM latency and readiness (P71).** Direct shares one named-value snapshot per
   read cycle, reuses resource tokens until near expiry and overlaps independent
   telemetry reads. The terminal displays arriving panels with named, estimated
