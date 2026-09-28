@@ -43,7 +43,8 @@ function Get-Tail([string]$Text) { (@($Text -split "`r?`n" | Where-Object { $_.T
 
 try {
     # ------------------------------------------------------------------ the helper
-    # Words whose culture order differs between NLS and ICU: a hyphen, an underscore, a prefix.
+    # Words whose culture order differs between NLS and ICU: a hyphen, an underscore, a prefix. Every
+    # comparison below is case-sensitive: -eq ignores case, and the order of 'B' and 'b' is part of it.
     $helperProbe = Join-Path $scratch 'helper.ps1'
     Set-Content -LiteralPath $helperProbe -Encoding UTF8 -Value @'
 param([string]$Root)
@@ -51,19 +52,23 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $Root 'scripts\flow\FlowContract.ps1')
 $words = @('workbook.json', 'workbook-chargeback.json', 'budgets', 'bu-members', 'Models-Standard', 'models-premium', 'claude-opus-5-5', 'claude-opus-5', 'coop', 'co-op', 'b', 'B', 'a_b', 'a-b')
 $files = @([pscustomobject]@{ Name = 'workbook.json' }, [pscustomobject]@{ Name = 'workbook-chargeback.json' })
+. (Join-Path $Root 'scripts\flow\Budgets.ps1')
+$book = Get-BudgetsFlowPriceBook -Models @('zeta-model', 'claude-sonnet-5', 'Alpha-Model', 'alpha-model', 'zeta-model') -Path (Join-Path $Root 'config\price-book.example.json')
 $result = [ordered]@{
     sorted = @(Sort-ClaudeFlowOrdinal -InputObject $words)
     unique = @(Sort-ClaudeFlowOrdinal -InputObject @('b', 'B', 'a', 'b') -Unique)
     files = @(Sort-ClaudeFlowOrdinal -InputObject $files -Key { $_.Name } | ForEach-Object { $_.Name })
     empty = @(Sort-ClaudeFlowOrdinal -InputObject @()).Count
+    unpriced = @($book.unknownModels)
 }
 'P76JSON ' + ($result | ConvertTo-Json -Compress)
 '@
     $expected = @('a-b', 'a_b', 'B', 'b', 'bu-members', 'budgets', 'claude-opus-5', 'claude-opus-5-5', 'co-op', 'coop', 'models-premium', 'Models-Standard', 'workbook-chargeback.json', 'workbook.json')
     foreach ($shell in $shells.Keys) {
         $h = Invoke-Probe $shell $helperProbe @('-Root', $root)
-        Assert "PowerShell ${shell}: Sort-ClaudeFlowOrdinal orders by code point, ignoring case, with a code-point tie-break" (-not $h.Failed -and (@($h.sorted) -join ',') -eq ($expected -join ',')) $(if ($h.Failed) { Get-Tail $h.Output } else { @($h.sorted) -join ',' })
-        Assert "PowerShell ${shell}: -Unique keeps one of each ignoring case, and -Key sorts objects; an empty list is empty" (-not $h.Failed -and (@($h.unique) -join ',') -eq 'a,B' -and (@($h.files) -join ',') -eq 'workbook-chargeback.json,workbook.json' -and $h.empty -eq 0) $(if (-not $h.Failed) { "unique=$(@($h.unique) -join ',') files=$(@($h.files) -join ',') empty=$($h.empty)" })
+        Assert "PowerShell ${shell}: Sort-ClaudeFlowOrdinal orders by code point, ignoring case, with a code-point tie-break" (-not $h.Failed -and (@($h.sorted) -join ',') -ceq ($expected -join ',')) $(if ($h.Failed) { Get-Tail $h.Output } else { @($h.sorted) -join ',' })
+        Assert "PowerShell ${shell}: -Unique keeps one of each ignoring case, and -Key sorts objects; an empty list is empty" (-not $h.Failed -and (@($h.unique) -join ',') -ceq 'a,B' -and (@($h.files) -join ',') -ceq 'workbook-chargeback.json,workbook.json' -and $h.empty -eq 0) $(if (-not $h.Failed) { "unique=$(@($h.unique) -join ',') files=$(@($h.files) -join ',') empty=$($h.empty)" })
+        Assert "PowerShell ${shell}: the Budgets price book lists each unpriced model once, in code-point order" (-not $h.Failed -and (@($h.unpriced) -join ',') -ceq 'Alpha-Model,zeta-model') $(if (-not $h.Failed) { "unpriced=$(@($h.unpriced) -join ',')" })
     }
 
     if ($shells.Contains('5.1')) {
@@ -112,17 +117,17 @@ $migration = Get-ClaudeFlowMigrationPlan -Record $record -Discovery ([pscustomob
         Assert 'both shells plan every shipped Setup step offline from the record' (-not $p7.Failed -and -not $p5.Failed -and @($p7.steps.PSObject.Properties).Count -ge 5) ("7: " + $(if ($p7.Failed) { Get-Tail $p7.Output } else { @($p7.steps.PSObject.Properties.Name) -join ',' }) + " / 5.1: " + $(if ($p5.Failed) { Get-Tail $p5.Output } else { @($p5.steps.PSObject.Properties.Name) -join ',' }))
         if (-not $p7.Failed -and -not $p5.Failed) {
             $names7 = @($p7.steps.PSObject.Properties.Name); $names5 = @($p5.steps.PSObject.Properties.Name)
-            Assert 'both shells plan the same steps in the same order' (($names7 -join ',') -eq ($names5 -join ',')) "7=$($names7 -join ',') 5.1=$($names5 -join ',')"
+            Assert 'both shells plan the same steps in the same order' (($names7 -join ',') -ceq ($names5 -join ',')) "7=$($names7 -join ',') 5.1=$($names5 -join ',')"
             $differ = @(foreach ($n in $names7) {
                 $a = [string]$p7.steps.$n; $b = [string]$p5.steps.$n
-                if ($a -ne $b) { $i = 0; while ($i -lt [Math]::Min($a.Length, $b.Length) -and $a[$i] -eq $b[$i]) { $i++ }; "$n at $i" }
+                if ($a -cne $b) { $i = 0; while ($i -lt [Math]::Min($a.Length, $b.Length) -and $a[$i] -ceq $b[$i]) { $i++ }; "$n at $i" }
             })
             Assert 'every shipped Setup step has the same canonical text on both shells' ($differ.Count -eq 0) ($differ -join '; ')
-            Assert 'the Setup plan has one fingerprint on both shells' ($p7.fingerprint -and $p7.fingerprint -eq $p5.fingerprint) "7=$($p7.fingerprint) 5.1=$($p5.fingerprint)"
-            Assert 'the monitoring plan lists the workbooks in code-point order on both shells' ([string]$p7.steps.Monitoring -match 'workbook-chargeback\.json.*workbook\.json' -and [string]$p5.steps.Monitoring -match 'workbook-chargeback\.json.*workbook\.json') ''
+            Assert 'the Setup plan has one fingerprint on both shells' ($p7.fingerprint -and $p7.fingerprint -ceq $p5.fingerprint) "7=$($p7.fingerprint) 5.1=$($p5.fingerprint)"
+            Assert 'the monitoring plan lists the workbooks in code-point order on both shells' ([string]$p7.steps.Monitoring -cmatch 'workbook-chargeback\.json.*workbook\.json' -and [string]$p5.steps.Monitoring -cmatch 'workbook-chargeback\.json.*workbook\.json') ''
             $r7 = @($p7.references); $r5 = @($p5.references)
-            Assert 'the Update migration reads the policy''s named values in one order on both shells' ($r7.Count -gt 5 -and ($r7 -join ',') -eq ($r5 -join ',')) "7=$($r7 -join ',') 5.1=$($r5 -join ',')"
-            Assert 'the Update migration''s plan has the same canonical text on both shells' ($p7.migration -and $p7.migration -eq $p5.migration) ''
+            Assert 'the Update migration reads each of the policy''s named values once, in one order on both shells' ($r7.Count -gt 5 -and ($r7 -join ',') -ceq ($r5 -join ',') -and -not @($r7 | Group-Object | Where-Object { $_.Count -gt 1 }).Count) "7=$($r7 -join ',') 5.1=$($r5 -join ',')"
+            Assert 'the Update migration''s plan has the same canonical text on both shells' ($p7.migration -and $p7.migration -ceq $p5.migration) ''
         }
     }
 }

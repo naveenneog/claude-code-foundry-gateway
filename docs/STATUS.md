@@ -33,6 +33,17 @@ and passes it a converted copy of the items, so only the keys were sorted; the p
 still passed, because NTFS and the policy file already listed both in one order, and the checks of
 the helper's own output failed. Casts select the overload that sorts both.
 
+Mutations, each in its own copy of the worktree, counted as caught only when a suite ran its
+baseline number of checks (Test-FlowOrdinalOrder 14, Test-FlowFinOps 33, Test-FlowLifecycle 33)
+and at least one failed: 10 of 10 caught. They are the casts removed, a culture comparer in the
+helper, `Sort-Object` back in Monitoring and in `lib/LifecycleCommon.ps1`, the `sort` alias, `-Unique`
+dropped from the price book and from the named values, `-Unique` keeping every item, case not
+ignored, and no code-point tie-break after the folded key. The last one survived at first: the
+suite compared the orders with `-eq`, which ignores case, so `b,B` equalled `B,b`. Every string
+comparison in the suite is now case-sensitive, and two checks were added that no suite had: the
+Budgets price book lists each unpriced model once, and the Update migration reads each named value
+once (the policy holds 39 references to 24 named values).
+
 - [ ] Council, five seats; the packet gate exits 0
 ## P72 permutation tests of the guided flow and the installer, 2026-09-28
 
