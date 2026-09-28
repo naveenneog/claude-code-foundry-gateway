@@ -471,6 +471,12 @@ try {
         $r=Get-ClaudeAddressRecovery -Record $script:recoveryRecord -Gateway $script:live
         $r.Allowed -and $r.Decision.hostname -eq 'claude.contoso.test' -and -not $r.Decision.replaceHostname
     }
+    Check 'legacy recovery resolves its subscription from the Foundation decision' {
+        $r=Copy-Object $script:recoveryRecord
+        $r.PSObject.Properties.Remove('subscriptionId')
+        Set-ClaudeDecision $r foundation ([pscustomobject]@{subscriptionId=$sub})
+        (Get-ClaudeAddressRecovery -Record $r -Gateway $script:live).Allowed
+    }
     Check 'a tampered recovery receipt cannot bypass drift' {
         $r=Copy-Object $script:recoveryRecord
         $r.pendingAddress.fingerprint='wrong'

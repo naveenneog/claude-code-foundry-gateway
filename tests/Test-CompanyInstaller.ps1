@@ -90,7 +90,7 @@ $lines=New-Object 'Collections.Generic.List[string]'
 $failure=''
 try { & (Join-Path $Root 'Install-ClaudeGateway.ps1') @Values *>&1 | ForEach-Object {$lines.Add([string]$_)} }
 catch {$failure=$_.Exception.Message}
-[pscustomobject]@{Text=$lines -join "`n";Failure=$failure;Writes=@($global:P69InstallWrites);Unexpected=@($global:P69InstallUnexpected);Planned=$global:P69InstallPlanned}
+[pscustomobject]@{Text=$lines -join "`n";Failure=$failure;Writes=@($global:P69InstallWrites);Unexpected=@($global:P69InstallUnexpected);Planned=$global:P69InstallPlanned;Gateway=$global:P69ReceiptGateway}
 '@
     function Invoke-Installer([hashtable]$Overrides=@{},[bool]$Decline=$false){
         [IO.File]::WriteAllText($recordPath,($initial|ConvertTo-Json -Depth 15))
@@ -135,6 +135,55 @@ catch {$failure=$_.Exception.Message}
     $without=[pscustomobject]@{subscriptionId=$sub;apimName='apim-contoso';resourceGroup='rg-contoso';decisions=[pscustomobject]@{foundation=[pscustomobject]@{}}}
     $noAddress=Get-ClaudeFlowStepPlan $without ([pscustomobject]@{action='Change';attended=$false})
     Check 'Foundation passes explicit Azure mode when nothing is recorded, preventing other-file inheritance' {$noAddress.Data.installerArgs.AddressMode -eq 'azure'}
+    foreach($file in 'ClaudeGatewayAddress.ps1','ClaudeGatewayAddressRecovery.ps1','ClaudeGatewayAddressWait.ps1','ClaudeGatewayCertificate.ps1','ClaudeNetwork.ps1'){
+        Copy-Item -LiteralPath (Join-Path $root "scripts\$file") -Destination (Join-Path $scratch "scripts\$file")
+    }
+    $transport=@'
+$global:P69ReceiptGateway=[pscustomobject]@{
+    id='/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/rg-contoso/providers/Microsoft.ApiManagement/service/apim-contoso'
+    sku=@{name='BasicV2'};location='eastus2';properties=[pscustomobject]@{provisioningState='Succeeded';hostnameConfigurations=@(
+        @{type='Proxy';hostName='apim-contoso.azure-api.net';certificateSource='BuiltIn'}
+        @{type='Proxy';hostName='old.contoso.test';certificateSource='Custom';certificate=@{thumbprint='OLD-PIN'}}
+    )}
+}
+$global:P69ReceiptDns=$null
+function Invoke-ClaudeAddressCheck {param($Check,$Arguments,$TimeoutMilliseconds); & $Check @Arguments}
+function Invoke-ClaudeNetworkArm {
+    param($Url,$Method='get',$Body,$StateDirectory,[switch]$AllowNotFound,$IfMatch,[switch]$IfNoneMatch)
+    if($Url -match '/Microsoft.ApiManagement/service/'){
+        if($Method -eq 'patch'){
+            $global:P69ReceiptGateway.properties.hostnameConfigurations=$Body.properties.hostnameConfigurations
+            $global:P69ReceiptGateway.properties.hostnameConfigurations[-1].certificate=@{thumbprint='NEW-PIN'}
+        }
+        return $global:P69ReceiptGateway
+    }
+    if($Url -match '/CNAME/'){
+        if($Method -eq 'put'){$global:P69ReceiptDns=[pscustomobject]@{etag='fixture';properties=$Body.properties}}
+        return $global:P69ReceiptDns
+    }
+    if($Url -match '/dnsZones/'){return [pscustomobject]@{id=($Url -replace '^https://management.azure.com','' -replace '\?.*$','')}}
+    throw "Unexpected address ARM request: $Url"
+}
+function Read-ClaudeAddressCertificate {
+    param($CertificateSource,$KeyVaultCertificateId,$PfxPath,$PfxBytes,$CertificatePassword,$Hostname,$SubscriptionId)
+    [pscustomobject]@{Thumbprint='NEW-PIN';PfxSha256='';SecretId='https://kv-contoso.vault.azure.net/secrets/company';VaultId='/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/rg-contoso/providers/Microsoft.KeyVault/vaults/kv-contoso';Rbac=$true}
+}
+function Get-AzureRetailPrice {param($ServiceName,$Region,$MeterName,$SkuName,$ProductName,$Tier);[pscustomobject]@{UnitPrice=0.50;UnitOfMeasure='1';Currency='USD';RetrievedUtc='2026-09-28T00:00:00Z'}}
+function Grant-ClaudeAddressCertificateRead {param($Gateway,$Plan,$TimeoutSeconds,$PollSeconds);$Gateway}
+function Resolve-DnsName {param($Name,$Type,$Server,[switch]$DnsOnly,[switch]$NoHostsFile,[switch]$QuickTimeout,$ErrorAction);[pscustomobject]@{Name=$Name;NameHost='apim-contoso.azure-api.net.'}}
+function Invoke-ClaudeAddressHttps {param($Hostname,$Thumbprint,$ConnectAddress,[switch]$IsolatedProof);[pscustomobject]@{StatusCode=503;Hostname=$Hostname;Thumbprint=$Thumbprint;Trusted=$true}}
+'@
+    [IO.File]::AppendAllText((Join-Path $scratch 'scripts\ClaudeGatewayAddress.ps1'),"`n"+$transport)
+    $replacement=Invoke-Installer @{AddressHostname='new.contoso.test';AddressReplaceHostname='old.contoso.test'}
+    $failedRecord=Get-Content -Raw $recordPath|ConvertFrom-Json
+    Check 'real installer persists an unverified receipt when replacement HTTPS returns 503' {
+        $replacement.Failure -match 'HTTPS returned 503' -and $failedRecord.pendingAddress -and
+            $failedRecord.gatewayUrl -eq 'https://old.contoso.test/claude' -and $failedRecord.decisions.address.hostname -eq 'old.contoso.test'
+    }
+    . (Join-Path $root 'scripts\ClaudeGatewayAddressRecovery.ps1')
+    Check 'the installer failure receipt permits only its unverified matching recovery' {
+        (Get-ClaudeAddressRecovery -Record $failedRecord -Gateway $replacement.Gateway).Allowed
+    }
 }
 finally {if(Test-Path $scratch){Remove-Item -LiteralPath $scratch -Recurse -Force}}
 Write-Host "Company installer: $count assertions, $($count-$failed) passed, $failed failed."

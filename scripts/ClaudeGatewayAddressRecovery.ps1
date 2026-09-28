@@ -37,7 +37,8 @@ function Get-ClaudeAddressRecovery {
     $receipt=$Record.pendingAddress
     if(-not $receipt -or -not $receipt.data){return [pscustomobject]@{Allowed=$false;Reason='No pending address receipt.'}}
     $d=$receipt.data
-    $expectedId="/subscriptions/$($Record.subscriptionId)/resourceGroups/$($Record.resourceGroup)/providers/Microsoft.ApiManagement/service/$($Record.apimName)"
+    $subscription=Get-ClaudeFlowRecordSubscription -Record $Record
+    $expectedId="/subscriptions/$subscription/resourceGroups/$($Record.resourceGroup)/providers/Microsoft.ApiManagement/service/$($Record.apimName)"
     $valid=$receipt.fingerprint -eq (Get-ClaudeFlowFingerprint @($d)) -and
         $d.gatewayId -ieq $expectedId -and $Gateway.id -ieq $expectedId -and
         $Record.gatewayUrl -ceq $d.previousGatewayUrl -and

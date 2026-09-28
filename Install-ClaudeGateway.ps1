@@ -1501,7 +1501,7 @@ $gatewayUrl = az deployment group show -g $ResourceGroup -n $deployName --query 
 if (-not $gatewayUrl) { $gatewayUrl = "https://$apimName.azure-api.net/claude" }
 if ($addressPlan) {
     Write-Step 'Company address, certificate and DNS'
-    $addressResult = Invoke-ClaudeAddressPlan -Plan $addressPlan -CertificatePassword $AddressCertificatePassword
+    $addressResult = Invoke-ClaudeAddressPlan -Plan $addressPlan -CertificatePassword $AddressCertificatePassword -RecordPath $savedAddressPath
     $gatewayUrl = $addressResult.GatewayUrl
 }
 
