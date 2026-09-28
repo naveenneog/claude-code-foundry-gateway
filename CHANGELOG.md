@@ -29,7 +29,7 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
-- **P78 hosted test infrastructure (proposal).** Opt-in deterministic Test-All shards retain
+- **P78 parallel hosted checks.** Opt-in deterministic Test-All shards retain
   isolated processes, exclusive checks and deadlines, with commit/tree-bound receipts and an
   ordered, fail-closed coverage merge. A SHA-pinned, read-only GitHub workflow installs both AUM
   Python environments and offline prerequisites. The remote helper validates exact-source jobs
@@ -41,6 +41,11 @@ exact streaming cache-creation detail remains **U13**.
   The first hosted attempt exposed missing Chromium installation and an error-pattern assertion
   that accepted the wrong exception; both have targeted regression coverage
   (`tests/Test-RemoteTestAll.ps1`, `tests/Test-TestAllSharding.ps1`).
+  After P79 integration, [run 36457223984](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36457223984)
+  on exact `f829812` passed 95/95 registrations with 0 SKIP in 638 s queue-to-merge, including
+  both Python environments and 95 count-preserving infrastructure mutations (74 Core, 12 Runner,
+  nine Wizard). The timing table records its 95 passing durations. Evidence was accessed
+  2026-09-28. Council, gate and the proposed charter adoption remain with the lead and owner.
 
 - **P69 council corrections.** Inherited addresses are resolved before Foundation approval;
   proposed decisions no longer overwrite applied state or history; failed replacements have a

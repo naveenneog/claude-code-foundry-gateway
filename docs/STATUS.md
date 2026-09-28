@@ -2,27 +2,28 @@
 
 ## P78 the test suite runs in parallel on GitHub-hosted runners, 2026-09-28
 
-**RED / GREEN in progress.** PLAN and CONTRACT are committed in `55e1b90`.
+**Builder acceptance passed; council and gate remain with the lead.**
+PLAN and CONTRACT are committed in `55e1b90`.
 Work is isolated to `p78-parallel-tests`, from `main` `0345e85`.
 The owner runs the council, gate and merge. No local full suite or gate is run for this packet.
 [ADR-0039](adr/0039-test-suite-hosted-runners.md) is a draft, not a charter amendment.
 
 Acceptance:
 
-- [ ] Opt-in Test-All shards use deterministic longest-processing-time assignment from a
+- [x] Opt-in Test-All shards use deterministic longest-processing-time assignment from a
       committed timing table, preserve process isolation, exclusive lanes and deadlines, and
       record their complete ownership, results, commit and tree. The default invocation is unchanged.
-- [ ] The receipt merger rejects missing, duplicate, failed, foreign-SHA/tree and unregistered
+- [x] The receipt merger rejects missing, duplicate, failed, foreign-SHA/tree and unregistered
       results; only a registered prerequisite reason permits SKIP. CI plus any explicitly listed
       local-only evidence covers exactly the default registration, in registration order.
-- [ ] A read-only-permissions, SHA-pinned Windows workflow runs all shards and a coverage merge;
+- [x] A read-only-permissions, SHA-pinned Windows workflow runs all shards and a coverage merge;
       both Python environments, Node dependencies and Bicep are installed without Azure sign-in.
-- [ ] A clean, pushed exact HEAD can be verified remotely through `gh`, with progress and an
+- [x] A clean, pushed exact HEAD can be verified remotely through `gh`, with progress and an
       estimate; dirty/unpushed heads and incomplete or mismatched runs fail.
-- [ ] Fast infrastructure tests and RunnerIntegrity pass under the shared workstation lock;
+- [x] Fast infrastructure tests and RunnerIntegrity pass under the shared workstation lock;
       GitHub produces a green full-suite run and recorded queue-to-merge and per-shard timings.
       Missing, duplicate, foreign-SHA and deliberately failing-check experiments all fail.
-- [ ] Merge `main` before handoff. STATUS, CHANGELOG, tests README and ADR record evidence and
+- [x] Merge `main` before handoff. STATUS, CHANGELOG, tests README and ADR record evidence and
       limitations. Product scripts, policies, ROADMAP and the charter are unchanged.
 
 **Proposed replacement ROADMAP P78 acceptance (owner approval required):** The default Test-All
@@ -34,11 +35,11 @@ local baseline. Propose the gate's test command and 30-minute budget in ADR-0039
 whether to amend the charter. Hosted job cancellation bounds its process tree; the existing local
 gate-shell timeout limitation is not represented as fixed.
 
-**Results:** hosted timing is not yet measured. The resumed draft initially passed 49 sharding
+**Validation history:** the resumed draft initially passed 49 sharding
 and 24 remote assertions, despite two absent dependency snapshots and live wizard/preflight
 boundaries. Added receipt-type/run-identity cases failed 8 of 65 assertions; corrected workflow
 setup failed 3 of 25, and offline-boundary cases failed 2 of 27 before their implementations.
-Current targeted suites pass 79 sharding and 34 remote assertions. The real wizard passes its
+Targeted suites now pass 79 sharding and 37 remote assertions. The real wizard passes its
 four offline native-boundary assertions; preflight returns through the same fixtures on both
 PowerShell 7 and 5.1. Twenty isolated runner scenarios pass. Their local-only case first failed
 because the draft assigned -1 to the range-validated public `ShardIndex` variable; the internal
@@ -55,7 +56,7 @@ contracts 37 in 1.0 s and full RunnerIntegrity 68 in 214.0 s; the lock was remov
 With the shared lock previously occupied after its
 estimated release, the workflow also runs count-preserving Core, Runner and Wizard negative
 proofs on three of its existing VMs. Baseline-only diagnostics do not count as negative proofs.
-Green hosted measurements remain pending.
+Hosted measurements follow below.
 
 The first hosted attempt, [36454004081](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36454004081)
 on `aee8fda`, found missing Playwright Chromium executables in the screenshot/redaction checks,
@@ -76,6 +77,53 @@ the frozen baseline already exists in full history. The projection baseline and 
 passed on Node 22 in that run, so the earlier failure's cause remains unproven rather than
 classified as a Node incompatibility. Its future diagnostic is retained. Core proofs passed
 73/73 locally under the shared lock at full 79/37 assertion counts; all restored suites passed.
+
+**Green hosted evidence:** [run 36457223984, attempt 1](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36457223984),
+accessed 2026-09-28, verified by the real `Invoke-RemoteTestAll.ps1` on the clean pushed HEAD
+`f82981270702f0af5eeceb41a4e8d776524acf28`, tree
+`aaac14f39655051693c3c51929f9841faec094af`. The downloaded receipt union passed **95/95
+registrations, 0 FAIL, 0 SKIP** in registration order, with no local-only exclusions.
+Queue-to-merge wall time was **638 s (10 min 38 s)**, from 17:18:45Z to 17:29:23Z.
+The merge job took 23 s. Setup before checks, excluding infrastructure proofs, ranged from
+87 to 212 s. Core, Runner and Wizard proof steps took 96, 282 and 60 s respectively.
+
+| Shard | Entire job, seconds | Test-All receipt, seconds |
+|---|---:|---:|
+| 0 | 459 | 232.4 |
+| 1 | 608 | 199.9 |
+| 2 | 391 | 226.8 |
+| 3 | 443 | 224.5 |
+| 4 | 289 | 191.2 |
+| 5 | 232 | 139.6 |
+| 6 | 390 | 240.1 |
+| 7 | 292 | 193.6 |
+| 8 | 312 | 211.0 |
+| 9 | 153 | 55.5 |
+| 10 | 340 | 232.4 |
+| 11 | 390 | 287.4 |
+
+The hosted run includes **74/74 Core, 12/12 Runner and 9/9 Wizard mutations caught** with
+baseline counts 79/37, 20 and 4/2 respectively; every restored suite passed. The real
+exit-9 check fails its shard and the merger. Missing/duplicate results and foreign SHA/tree
+receipts are rejected in the synthetic suite. The actual remote entry point also rejected a
+dirty worktree and a clean unpushed HEAD, and rejected failed hosted run 36454004081.
+The complete hosted suite includes 320 FinOps pytest tests, 127 AUM service unit tests and
+five service mutations, 512 business-unit mutations, 108 Turnstile mutations, 105 company-address
+mutations and 57 projection mutations; none was removed for CI.
+
+Compared with the approximately 44-minute loaded-workstation baseline (P79's passing gate
+records 2,666 s in Test-All below), the hosted end-to-end interval is 10 min 38 s. This is not
+a controlled same-machine benchmark: runner hardware, load, setup, Python-environment presence
+and infrastructure proof work differ. `tests/test-all-durations.json:1` now records all 95
+observed passing durations as future LPT weights; the default for a new check remains 60 s.
+
+**Limits and approval:** artifact retention is 14 days; Python snapshots pin versions rather
+than artifact hashes; GitHub queues and hosted images can change. The isolated unmutated
+projection failure in the first run has no recovered cause; two later hosted runs passed it,
+and the harness now preserves failure output. No local gate-shell process-tree fix or charter
+change is claimed. ADR-0039 remains a draft for owner approval, including the proposed remote
+test command, 30-minute budget and replacement ROADMAP acceptance. Product scripts, policies,
+ROADMAP and charter equal the integrated main; no Azure resource was accessed by P78.
 
 U50-U53 track hosted compatibility, timing, remote-run identity and detector evidence. No product architecture
 component changes; this is test execution and evidence transport, not an accelerator deployment.

@@ -24,9 +24,25 @@ Sources, read 2026-09-28:
 [hosted runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners),
 [Actions limits](https://docs.github.com/en/actions/reference/limits).
 
-**Hosted measurements:** pending the P78 workflow. Local durations seed the table; they do not
-establish a hosted speedup. The approval evidence consists of queue-to-merge wall time, setup
-time, every shard's duration and complete exact-source coverage.
+**Hosted measurements:** [run 36457223984, attempt 1](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36457223984),
+accessed 2026-09-28, passed **95/95 registrations with 0 FAIL and 0 SKIP**, including both
+Python environments, at exact commit `f82981270702f0af5eeceb41a4e8d776524acf28`,
+tree `aaac14f39655051693c3c51929f9841faec094af`.
+The actual remote helper downloaded and revalidated the complete receipt set.
+Queue-to-merge took **638 s (10 min 38 s)**; the merge job took 23 s.
+
+For shards 0 through 11, entire-job seconds were
+`459, 608, 391, 443, 289, 232, 390, 292, 312, 153, 340, 390`;
+Test-All receipt seconds were
+`232.4, 199.9, 226.8, 224.5, 191.2, 139.6, 240.1, 193.6, 211.0, 55.5, 232.4, 287.4`.
+Setup excluding proofs took 87-212 s; Core, Runner and Wizard proofs took 96, 282 and 60 s.
+The [P78 STATUS section](../STATUS.md) holds the per-shard table and failed-attempt history.
+The committed timing table now uses all 95 measured passing check durations
+(`tests/test-all-durations.json:1`); a new check still receives the positive 60-second default.
+
+The approximately 44-minute loaded-workstation baseline is contextual, not a controlled
+same-machine comparison. Hardware, load, Python environments, setup and extra proof work differ.
+A single hosted measurement does not establish a queue SLA.
 
 ## Contract
 
@@ -52,7 +68,7 @@ The workflow uses `windows-latest`, 12 shards and one always-evaluated merge job
 `contents: read`, ref-scoped cancellation, no secrets, no Azure login and no `pull_request_target`.
 Setup installs both checkout-local Python environments, Node dependencies and Bicep. Receipts
 and console logs are retained even on failure. Job timeout/cancellation contains the hosted process tree
-(`.github/workflows/test-all.yml:14`, `:26`, `:63`, `:96`).
+(`.github/workflows/test-all.yml:14`, `:26`, `:64`, `:108`).
 
 The wizard and both-host preflight no longer read an operator's Azure session or issue live
 HTTP probes. The shared fixture retains a native `az.cmd` boundary, per-run Azure configuration,
@@ -73,14 +89,18 @@ On 2026-09-28, `accel`'s two test interpreters reported Python 3.12.10. Their
 `tests/requirements-aum-service.lock`. These are version snapshots, not artifact-hash locks.
 The service requirements and FinOps project/test extras are still installed alongside them.
 The installed standalone Bicep compiler reported 0.46.1; the workflow reproduces that version.
-Node 22 compatibility remains part of the hosted run, rather than a claim based on the local
-Node 26.1.0 runtime.
+Node 22 ran the complete hosted suite; the local runtime was Node 26.1.0.
 The first hosted attempt (`aee8fda`, run 36454004081) reached the browser checks but failed
 because npm dependencies do not include the Chromium executable. Setup now runs the checkout's
 Playwright installer explicitly; no browser check is removed or skipped.
+The release check also required full tags and ancestry, and a later `--depth=1` baseline fetch
+made that full checkout shallow again. The redundant fetch is removed. The first run's
+unmutated projection failure has no recovered diagnostic; subsequent hosted runs passed on
+Node 22, and the harness now retains failure output. No root-cause fix for that isolated failure
+is claimed.
 
 The GitHub API's current release tags and commit endpoints returned these pins on 2026-09-28
-(`.github/workflows/test-all.yml:39`, `:49`, `:58`, `:89`, `:107`):
+(`.github/workflows/test-all.yml:39`, `:50`, `:59`, `:101`, `:119`):
 
 | Action | Release | Full commit |
 |---|---|---|
@@ -140,6 +160,14 @@ Baseline-only diagnostics are not negative-proof evidence. They exposed the draf
 `-LocalOnly` reassignment of the range-validated public `ShardIndex` parameter: one of 20
 runner assertions failed for that reason, then all 20 passed with a separate internal index.
 The public shard-coordinate bounds remain unchanged.
+
+The green hosted run caught **74/74 Core, 12/12 Runner and 9/9 Wizard mutations**, with baseline
+counts 79/37, 20 and 4/2 and green restored suites. The actual exit-9 receipt fails the merger;
+missing and duplicate coverage, wrong SHA/tree, dirty/unpushed source and failed remote runs
+also fail. Main `449489b` (P79) was merged into P78 as `d11dd93`, retaining its final
+process-start probe and registrations. Under P78's owned shared lock, the integration passed
+79 sharding, 37 remote and 68 full RunnerIntegrity assertions in 2.2, 1.0 and 214.0 s.
+Council and packet gate remain the lead's work; this evidence is not a charter amendment.
 
 ## Rejected alternatives and consequences
 

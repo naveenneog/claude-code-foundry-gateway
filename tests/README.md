@@ -3,7 +3,7 @@
 `Test-All.ps1` is the offline suite entry point on PowerShell 7. Its default invocation retains
 the isolated processes, exclusive lane, ordered summary, prerequisite SKIPs and per-check
 deadlines described in [ADR-0025](../docs/adr/0025-parallel-test-suite.md).
-The optional Azure registrations remain outside the default suite (`tests/Test-All.ps1:188`).
+The optional Azure registrations remain outside the default suite (`tests/Test-All.ps1:189`).
 
 ```powershell
 pwsh -NoProfile -File .\tests\Test-All.ps1
@@ -29,7 +29,7 @@ pwsh -NoProfile -File .\tests\Test-All.ps1 -ShardIndex 0 -ShardCount 12
 
 Shard coordinates are zero-based and supplied together. A shard requires a clean committed
 checkout, preserves complete registered checks rather than partitioning their internals, and
-retains the existing process scheduler and deadlines (`tests/Test-All.ps1:5`, `:313`).
+retains the existing process scheduler and deadlines (`tests/Test-All.ps1:5`, `:316`).
 The machine-exclusive lane remains exclusive within each runner; each hosted shard has a
 separate Windows VM. It is not a distributed lock against an operator's local test run.
 
@@ -43,7 +43,7 @@ when it is nonempty. `-IncludeAzure` cannot be combined with sharding or local-o
 A shard writes a versioned receipt with its exact Git commit and tree, coordinates, ordered
 ownership, results, completion state, workflow run/attempt and timings. A source change during
 execution invalidates completion. The legacy timing array remains available
-(`tests/Test-All.ps1:387`).
+(`tests/Test-All.ps1:390`).
 
 `Merge-TestAllReceipts.ps1` reads the registration and assignment from a clean matching checkout.
 It rejects missing or duplicate shards/results, unknown checks, foreign commits/trees, mixed
@@ -65,12 +65,13 @@ but are not a substitute for the hosted jobs and run-scoped artifacts the remote
 branches, pull requests and manual dispatch. Its token has only `contents: read`; it uses no
 secrets, Azure sign-in or privileged pull-request trigger. Actions are pinned by full commit SHA
 (`.github/workflows/test-all.yml:14`, `:39`). Failed shards do not cancel sibling coverage.
-The merge and artifact-upload paths also evaluate failures (`.github/workflows/test-all.yml:88`).
+The merge and artifact-upload paths also evaluate failures (`.github/workflows/test-all.yml:100`).
 
 Setup installs Python 3.12.10, both checkout-local Python environments, Node dependencies and
-Bicep 0.46.1. The Python dependency snapshots came from `accel`'s two isolated environments on
+Bicep 0.46.1, with the actual Playwright Chromium executable and full Git release history.
+The Python dependency snapshots came from `accel`'s two isolated environments on
 2026-09-28; the application manifests remain authoritative alongside those snapshots.
-Pip/npm cache keys include the dependency files (`.github/workflows/test-all.yml:49`).
+Pip/npm cache keys include the dependency files (`.github/workflows/test-all.yml:50`).
 
 The wizard and both-host preflight use a native `az.cmd` fixture, an isolated Azure configuration
 directory and recorded HTTP fixtures. The wizard still exercises discovery queries and the
@@ -107,7 +108,7 @@ pwsh -NoProfile -File .\tests\Test-RunnerIntegrity.ps1
 The fast suites use synthetic invalid receipts and workflow records. RunnerIntegrity uses
 isolated stub processes, including failing and source-changing shards; its receipt assertions
 compare the actual fixture commit/tree and original registration IDs, not just hash shapes
-(`tests/Test-RunnerIntegrity.ps1`).
+(`tests/Test-RunnerIntegrity.ps1:207`).
 
 The workflow runs Core, Runner and Wizard negative-proof groups on three of the existing shard
 VMs before their owned checks. `Test-InfrastructureProof.ps1` changes isolated copies only.
@@ -124,6 +125,15 @@ pwsh -NoProfile -File .\.github\scripts\Test-InfrastructureProof.ps1 -Mode Runne
 `-BaselineOnly` runs short diagnostics without mutations and is forbidden in the CI workflow.
 Full local proof runs acquire the sibling `.gate-lock`, retry every 60 seconds and remove only
 their own lock in `finally`. Isolated GitHub-hosted VMs do not use the workstation lock.
+
+The first complete P79-integrated hosted proof was
+[run 36457223984](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36457223984),
+accessed 2026-09-28: exact commit `f829812`, 95/95 registered checks, 0 FAIL and 0 SKIP,
+including both Python environments. Queue-to-merge took 638 s (10 min 38 s); individual jobs
+took 153-608 s, including setup, artifact handling and the three proof groups. Those groups
+caught 74/74, 12/12 and 9/9 mutations with full baseline counts and restored green suites.
+The approximately 44-minute loaded-workstation reference is not a controlled comparison.
+The committed timing table uses that run's 95 passing check durations, not job/setup durations.
 
 [STATUS](../docs/STATUS.md) records measured runs and negative-proof counts.
 [ADR-0039](../docs/adr/0039-test-suite-hosted-runners.md) remains a draft proposal.
