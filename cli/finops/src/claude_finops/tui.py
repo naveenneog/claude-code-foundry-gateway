@@ -109,11 +109,21 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
                 with TabPane(title, id=tab):
                     if tab in {"ask", "approvals", "advanced"}:
                         yield from self.compose_feature(tab)
+                    if tab == "budgets":
+                        with Horizontal(classes="toolbar"):
+                            yield Button("Set budget", id="action-set-budget")
+                            yield Button("Set USD budget", id="action-set-usd-budget")
+                            yield Button("Chargeback report", id="action-chargeback")
                     if tab == "people":
                         with Horizontal(classes="toolbar"):
                             yield Select([], id="people-team", prompt="Choose a team")
                             yield Input(placeholder="Search people; Enter", id="people-query", password=self.redactor.enabled)
                             yield Button("Find", id="find-people")
+                        with Horizontal(classes="toolbar"):
+                            yield Button("Add person to team", id="action-add-person")
+                            yield Button("Set budget", id="action-set-budget")
+                            yield Button("Set USD budget", id="action-set-usd-budget")
+                            yield Button("Chargeback report", id="action-chargeback")
                     elif tab == "usage":
                         with Horizontal(classes="toolbar"):
                             yield Select(DIMENSIONS, value="organization", allow_blank=False, id="dimension")
@@ -135,7 +145,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
                                          value=self.theme, id="theme-choice", allow_blank=False)
                             yield Static("Use --plain for a linear screen-reader view", classes="toolbar-note")
                         with Horizontal(classes="toolbar"):
-                            yield Button("Profile / backend", id="settings-profile")
+                            yield Button("Change connection", id="settings-profile")
                             yield Button("Sign out", id="settings-signout")
                             yield Button("Tour", id="settings-tour")
                     yield Static("Loading...", id=f"note-{tab}", classes="context", markup=False)
@@ -162,6 +172,10 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
         if not self.query("#key-hints"):
             return
         keys = ["/ Find", ": Command", "f Filters", "m Month"]
+        if self.active in {"people", "budgets"}:
+            if self.identity.get("role") == "owner" and not self.redactor.enabled:
+                keys.append("Add person")
+            keys.extend(["Set budget", "USD info", "Chargeback"])
         if self.check_action("edit", ()):
             keys.append("e Edit")
         if self.check_action("apply", ()):
@@ -267,6 +281,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
         self.identity = identity
         self.editable = can_edit(identity) and not self.redactor.enabled
         if before == after:
+            self.update_action_buttons()
             return
         self.allowed_tabs = visible_tabs(identity)
         if before != after and not preserve_current:
@@ -287,6 +302,27 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
                 tabs.hide_tab(tab)
         self.refresh_bindings()
         self.update_key_hints()
+        self.update_action_buttons()
+
+    @published(lambda self: self.safe_message_guard())
+    def update_action_buttons(self):
+        if not self.query(Button):
+            return
+        selected = self.active in {"people", "budgets"} and bool(self.selected())
+        can_usd = enabled(self.feature_caps, "usd_budgets", "write")
+        owner = self.identity.get("role") == "owner" and not self.redactor.enabled
+        for button in self.query(Button):
+            if button.id == "action-add-person":
+                button.disabled = not owner
+                button.tooltip = "" if owner else "Only owners can add people to teams."
+            elif button.id == "action-set-budget":
+                button.disabled = not selected or not self.check_action("edit", ())
+                button.tooltip = "" if selected else "Select a person or scope first."
+            elif button.id == "action-set-usd-budget":
+                button.disabled = not selected or not can_usd
+                button.tooltip = "" if can_usd else self.usd_unavailable_text()
+            elif button.id == "action-chargeback":
+                button.disabled = not self.check_action("export", ())
 
     async def load_tab(self, tab):
         read = self.engine.read
@@ -347,6 +383,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
         if tab == "anomalies":
             return await asyncio.to_thread(read, "anomalies", limit=100, **self.scope_filters)
         return dict(**self.identity, backend=self.engine.backend.name, month=self.engine.month,
+                    connection=self.connection_label(),
                     **({"access_note": "Direct: Azure RBAC administrator access, not unit-scoped.\nManagers/viewers: AUM service or Turnstile.",
                         "governance_authority": self.feature_caps.get("authority", "Gateway")}
                        if self.config.backend == "direct" else {"access_note": "AUM service enforces its own app roles and scoped authority; no Turnstile dependency."}
@@ -383,6 +420,13 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
             rows, records = [row for row, _ in matches], [record for _, record in matches]
             label = "Filter applied" if self.redactor.enabled else f"Filter: {query}"
             note = f"{label} | {len(rows)} visible matches | Esc clears"
+        if tab == "people" and self.people_query and not data.get("items"):
+            if self.identity.get("role") == "owner" and "@" in self.people_query and self.team:
+                note = f"No matching person in this team. Add {safe_text(self.people_query)} to {safe_text(self.team)}."
+            else:
+                note = "No matching person in this team. Owners can add people after a directory search."
+        if tab in {"people", "budgets"} and not enabled(self.feature_caps, "usd_budgets", "write"):
+            note = (note + " " if note else "") + self.usd_unavailable_text()
         self.records[tab] = records
         table = self.query_one(f"#table-{tab}", DataTable)
         table.clear(columns=True)
@@ -396,9 +440,29 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
                     table.move_cursor(row=index)
                     break
             self.pending_selection = None
+        self.update_action_buttons()
+
+    def connection_label(self):
+        kind = {"direct": "Direct", "aum-service": "AUM service", "turnstile": "Turnstile", "fake": "Example"}.get(self.config.backend, self.config.backend)
+        address = "Azure CLI and APIM" if self.config.backend == "direct" else self.config.url or "not configured"
+        return f"via {kind}: {address}"
+
+    @staticmethod
+    def usd_unavailable_text():
+        return "USD budget writes need Direct or the AUM service. P81 brings USD to Turnstile."
 
     @on(Button.Pressed)
     def extra_button(self, event):
+        actions = {
+            "action-add-person": lambda: self.action_add_developer(prefill_user=self.people_query, prefill_unit=self.team),
+            "action-set-budget": self.action_edit,
+            "action-set-usd-budget": self.action_usd_edit,
+            "action-chargeback": self.action_export,
+        }
+        if event.button.id in actions:
+            actions[event.button.id]()
+            event.stop()
+            return
         if self.feature_button(event.button.id):
             event.stop()
 
@@ -631,10 +695,10 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
             from .group_screens import GroupPicker
             self.push_screen(GroupPicker())
 
-    def action_add_developer(self):
+    def action_add_developer(self, prefill_user="", prefill_unit=""):
         if self.identity.get("role") == "owner" and not self.redactor.enabled:
             from .developer_screens import DeveloperPicker
-            self.push_screen(DeveloperPicker())
+            self.push_screen(DeveloperPicker(prefill_user=prefill_user, prefill_unit=prefill_unit))
 
     def action_apply(self):
         if self.editable and not self.engine.backend.immediate_writes:

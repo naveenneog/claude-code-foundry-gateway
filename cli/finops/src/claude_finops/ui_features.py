@@ -419,7 +419,7 @@ class FeatureUI:
             backend = connect(config)
             engine = Engine(backend, self.engine.month)
             identity = await asyncio.to_thread(engine.read, "whoami")
-        except (FinOpsError, OSError, ValueError) as error:
+        except (FinOpsError, OSError, ValueError, RuntimeError) as error:
             if backend is not None:
                 backend.close()
             self.notify(self._error_text(error), severity="error")

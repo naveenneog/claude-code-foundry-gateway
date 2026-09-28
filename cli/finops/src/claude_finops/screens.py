@@ -14,6 +14,7 @@ from .output import chargeback_csv, safe_text
 from .rules import allocation_left, apply_state, human, month_window, parse_tokens
 from .guarded_publication import guarded_publish, published
 from .publication_output import write_export
+from .reports import chargeback_export_path
 
 
 class DetailScreen(ModalScreen):
@@ -382,7 +383,7 @@ class ExportScreen(ModalScreen):
         with Vertical(id="month-dialog"):
             yield Label("Export complete chargeback (managed scopes only)")
             yield Input(f"chargeback-{self.app.engine.month}.csv", id="export-name", password=self.app.redactor.enabled)
-            yield Static("Saved under finops-reports in the current folder. Existing files are never overwritten.",
+            yield Static(f"Saved under {chargeback_export_path(self.app.engine.month).parent}. Existing files are never overwritten.",
                          id="export-status", markup=False)
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel-export")
@@ -405,11 +406,12 @@ class ExportScreen(ModalScreen):
                 result = await asyncio.to_thread(self.app.engine.chargeback)
                 content = chargeback_csv(self.app.present(result["items"]), self.app.engine.month)
                 with guarded_publish(self.app.current_guard()):
-                    folder = Path.cwd() / "finops-reports"
-                    folder.mkdir(exist_ok=True)
-                    write_export(folder / name, content)
+                    folder = chargeback_export_path(self.app.engine.month).parent
+                    folder.mkdir(parents=True, exist_ok=True)
+                    path = chargeback_export_path(self.app.engine.month, folder)
+                    write_export(path, content)
                     self.query_one("#export-status", Static).update(
-                        self.app.redactor.text(f"Exported {len(result['items'])} scopes to finops-reports\\{name}."))
+                        self.app.redactor.text(f"Exported {len(result['items'])} scopes to {path}."))
         except (OSError, FinOpsError) as error:
             message = str(error) if isinstance(error, FinOpsError) else "Cannot create that file. Choose a new name and a writable current folder."
             with guarded_publish(self.app.safe_message_guard()):

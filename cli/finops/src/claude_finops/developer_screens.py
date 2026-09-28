@@ -14,8 +14,10 @@ from .guarded_publication import guarded_publish, published, guarded_deferred
 class DeveloperPicker(ModalScreen):
     BINDINGS = [("escape", "dismiss", "Back")]
 
-    def __init__(self):
+    def __init__(self, prefill_user="", prefill_unit=""):
         super().__init__()
+        self.prefill_user = prefill_user
+        self.prefill_unit = prefill_unit
         self.rows, self.cursor, self.search_text = [], None, ""
         self.debounce = None
 
@@ -31,6 +33,11 @@ class DeveloperPicker(ModalScreen):
             with Horizontal(classes="buttons"):
                 yield Button("Back", id="developer-back")
                 yield Button("Next page", id="developer-next", disabled=True)
+
+    @published(lambda self: self.app.safe_message_guard())
+    def on_mount(self):
+        if self.prefill_user:
+            self.query_one("#developer-search", Input).value = self.prefill_user
 
     @on(Input.Changed, "#developer-search")
     def changed(self):
@@ -86,16 +93,26 @@ class DeveloperPicker(ModalScreen):
             return
         row = self.rows[event.cursor_row]
         catalog = self.app.data.get("budgets", {}).get("items", [])
+        guard = self.read_guard
+        if not catalog:
+            with self.app.engine.backend.read_cycle():
+                budgets = self.app.engine.read("budgets")
+                guard = self.app.current_guard()
+            with guarded_publish(guard):
+                self.app.data["budgets"] = budgets
+                self.app._data_guards["budgets"] = (budgets, guard)
+                catalog = budgets.get("items", [])
         units = [(item["scope_id"], item["scope_name"]) for item in catalog if item.get("scope_type") in {"organization", "department"}]
+        default_unit = self.prefill_unit if self.prefill_unit in {unit for unit, _ in units} else ""
         fields = [
             ("user", "Resolved UPN or object id", row["user_principal_name"] or row["id"], None),
             ("tier", "Tier", "standard", [("standard", "standard"), ("premium", "premium")]),
-            ("unit", "Unit/team id (blank for tier only)", "", [("", "none"), *units]),
+            ("unit", "Unit/team id (blank for tier only)", default_unit, [("", "none"), *units]),
         ]
 
         def operation(values, apply):
             return developer_change(self.app.engine, self.app.config, values["user"], tier=values["tier"],
                                     unit=values["unit"] or None, apply=apply)
 
-        with guarded_publish(self.read_guard):
-            self.app.push_screen(ActionForm("Add developer", fields, operation, read_guard=self.read_guard))
+        with guarded_publish(guard):
+            self.app.push_screen(ActionForm("Add developer", fields, operation, read_guard=guard))
