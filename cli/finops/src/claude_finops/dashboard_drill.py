@@ -5,6 +5,7 @@ from textual.widgets import Button, DataTable, Label
 
 from .screens import DetailScreen
 from .errors import FinOpsError
+from .guarded_publication import guarded_publish, published
 
 
 class DashboardRows(ModalScreen):
@@ -29,6 +30,19 @@ class DashboardRows(ModalScreen):
             self.rows = [("anomaly", row) for row in panel.detail.get("items", [])]
 
     def compose(self):
+        try:
+            with guarded_publish(self.read_guard):
+                yield from self.rows_widgets()
+        except FinOpsError as error:
+            self.rows = []
+            with guarded_publish(self.app.safe_message_guard()):
+                with Vertical(id="detail-dialog"):
+                    yield Label(self.app._error_text(error), markup=False)
+                    yield DataTable(id="dashboard-rows", cursor_type="row")
+                    yield Button("Back", id="dashboard-back")
+
+    @published(lambda self: self.read_guard)
+    def rows_widgets(self):
         with Vertical(id="detail-dialog"):
             yield Label(self.heading + " | Enter opens row; d exact values; Esc back", markup=False)
             yield DataTable(id="dashboard-rows", cursor_type="row", zebra_stripes=True)
@@ -36,12 +50,14 @@ class DashboardRows(ModalScreen):
 
     def on_mount(self):
         try:
-            with self.read_guard():
+            with guarded_publish(self.read_guard):
                 self.populate_rows()
         except FinOpsError as error:
             self.rows = []
-            self.query_one(Label).update(self.app._error_text(error))
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one(Label).update(self.app._error_text(error))
 
+    @published(lambda self: self.read_guard)
     def populate_rows(self):
         table = self.query_one(DataTable)
         table.add_columns("Kind", "Scope / finding", "Exact tokens", "Status")
@@ -66,7 +82,7 @@ class DashboardRows(ModalScreen):
         selected = self.selected()
         if selected:
             try:
-                with self.read_guard():
+                with guarded_publish(self.read_guard):
                     self.app.push_screen(DetailScreen("Exact source row", selected[1], read_guard=self.read_guard))
             except FinOpsError as error:
                 self.app.notify(self.app._error_text(error), severity="error")
@@ -79,12 +95,13 @@ class DashboardRows(ModalScreen):
     def open_row(self, event):
         event.stop()
         try:
-            with self.read_guard():
+            with guarded_publish(self.read_guard):
                 self.open_current_row()
         except FinOpsError as error:
             self.rows = []
             self.query_one(DataTable).clear()
-            self.query_one(Label).update(self.app._error_text(error))
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one(Label).update(self.app._error_text(error))
 
     def open_current_row(self):
         selected = self.selected()
@@ -101,7 +118,7 @@ class DashboardRows(ModalScreen):
 
     def open_selected(self, kind, row):
         try:
-            with self.read_guard():
+            with guarded_publish(self.read_guard):
                 self.navigate_selected(kind, row)
         except FinOpsError as error:
             self.app.notify(self.app._error_text(error), severity="error")

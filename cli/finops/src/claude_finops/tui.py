@@ -1,7 +1,8 @@
 import asyncio
+from contextlib import nullcontext
 
 from rich.text import Text
-from textual import on, work
+from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
@@ -23,6 +24,7 @@ from .ui_features import FeatureUI, EXTRA_TABS
 from .capabilities import enabled
 from .feature_screens import FilterChips
 from .progressive import ProgressiveRefresh
+from .guarded_publication import guarded_publish, published
 
 
 class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
@@ -56,6 +58,11 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
         super().__init__()
         self.animation_level = "none"
         self.engine, self.config = engine, config
+        self._principal_revision = engine.identity_revision
+        self._pending_principal = None
+        self._clearing_principal = False
+        self._principal_notice = False
+        engine.identity_listeners.append(self._principal_verified)
         self.preview_only = preview_only
         self.redactor = Redactor(redact)
         self.identity = {}
@@ -149,6 +156,72 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
         for tab, _ in EXTRA_TABS:
             self.query_one("#main-tabs").hide_tab(tab)
 
+    def _principal_verified(self, engine, identity, revision):
+        if engine is self.engine and revision != self._principal_revision:
+            self._pending_principal = (dict(identity), revision)
+            if self.is_running:
+                self.call_later(self._synchronize_principal)
+
+    def _synchronize_principal(self):
+        if self._clearing_principal or not self.is_running or not self.query("#main-tabs"):
+            return
+        pending = self._pending_principal
+        if pending is None and self.engine.identity_revision != self._principal_revision:
+            pending = (dict(self.engine._identity or {}), self.engine.identity_revision)
+        if pending is None:
+            return
+        identity, revision = pending
+        self._pending_principal = None
+        self._principal_revision = revision
+        self._principal_notice = True
+        self._clear_principal_state(identity)
+
+    @published(lambda self, identity: self.safe_message_guard())
+    def _clear_principal_state(self, identity):
+        self._clearing_principal = True
+        try:
+            self._refresh_serial += 1
+            self.data.clear()
+            self.records.clear()
+            self._data_guards.clear()
+            self.pending_selection = None
+            self.feature_caps = {}
+            self.preferences = None
+            self.editable = False
+            self.clear_query_context()
+            for table in self.query(DataTable):
+                table.clear(columns=True)
+            for field in self.query(Input):
+                field.value = ""
+            for text in self.query(TextArea):
+                with guarded_publish(self.engine.backend.read_guard()):
+                    text.load_text("The sign-in changed. Previous data was cleared.")
+            for screen in list(self.screen_stack)[1:]:
+                for name, empty in (("data", {}), ("row", {}), ("rows", []), ("results", []),
+                                    ("fields", []), ("preview", None), ("preview_plan", None)):
+                    if hasattr(screen, name) and not callable(getattr(screen, name)):
+                        setattr(screen, name, empty)
+            while len(self.screen_stack) > 1:
+                self.pop_screen()
+            self.query_one(Dashboard).clear()
+            self.identity = identity
+            self.allowed_tabs = visible_tabs(identity)
+            self._show_read_error(self.active, FinOpsError("The sign-in changed. Previous data was cleared; refresh for this identity.", 3))
+            self.query_one("#status", Static).update("The sign-in changed. Previous data was cleared; r refreshes.")
+        finally:
+            self._clearing_principal = False
+
+    async def on_event(self, event):
+        if isinstance(event, events.InputEvent):
+            self._synchronize_principal()
+            self._principal_notice = False
+        await super().on_event(event)
+
+    @staticmethod
+    def safe_message_guard():
+        return nullcontext
+
+    @published(lambda self: self.safe_message_guard())
     def update_key_hints(self):
         if not self.query("#key-hints"):
             return
@@ -162,6 +235,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
         keys.extend(["? Help", "q Quit"])
         self.query_one("#key-hints", Static).update("  ".join(f"<{key}>" for key in keys))
 
+    @published(lambda self: self.safe_message_guard())
     def update_brand(self):
         if not self.query("#brand") or not self.query("#main-tabs"):
             return
@@ -244,7 +318,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
 
     @on(TabbedContent.TabActivated)
     def switched(self, event):
-        if event.pane.id != self.active:
+        if event.pane.id != self.active or self._principal_notice:
             return
         self.update_brand()
         self.update_key_hints()
@@ -303,7 +377,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
                 self.team = ""
             if not self.team and departments:
                 self.team = departments[0]["id"]
-            with self.engine.backend.read_guard()(), select.prevent(Select.Changed):
+            with guarded_publish(self.engine.backend.read_guard()), select.prevent(Select.Changed):
                 select.set_options([(label["name"], row["id"]) for row, label in zip(departments, labels)])
                 if self.team:
                     select.value = self.team
@@ -353,11 +427,12 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
             return
         guard = previous[1] if previous is not None else self.engine.backend.read_guard()
         try:
-            with guard():
+            with guarded_publish(guard, on_rejected=lambda error: self._show_read_error(tab, error)):
                 self._render_tab(tab, data)
         except FinOpsError as error:
             self._show_read_error(tab, error)
 
+    @published(lambda self, tab, data: self.cached_guard(tab) if tab in self._data_guards else self.engine.backend.read_guard())
     def _render_tab(self, tab, data):
         utc = self.engine.backend.name == "Example"
         _, _, records, _ = view_rows(tab, data, ascii_only=self.config.ascii, utc=utc)
@@ -402,9 +477,20 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
 
     @on(DataTable.RowHighlighted)
     def exact_on_focus(self, event):
+        self._synchronize_principal()
         if len(self.screen_stack) != 1 or not event.data_table.display or event.data_table.id != f"table-{self.active}":
             return
         row = self.selected()
+        if not row:
+            return
+        try:
+            with guarded_publish(self.cached_guard(), on_rejected=lambda error: self._show_read_error(self.active, error)):
+                self._publish_highlight(row)
+        except FinOpsError:
+            return
+
+    @published(lambda self, row: self.cached_guard())
+    def _publish_highlight(self, row):
         key = row.get("scope_id", row.get("request_id", row.get("id", "")))
         parent = row.get("parent_scope_id")
         path = f"AUM / {self.active}" + (f" / {parent}" if parent else "") + (f" / {key}" if key else "")
@@ -482,6 +568,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
         self.action_refresh()
 
     def selected(self):
+        self._synchronize_principal()
         table = self.query_one(f"#table-{self.active}", DataTable)
         rows = self.records.get(self.active, [])
         return rows[table.cursor_row] if rows and table.cursor_row < len(rows) else {}
@@ -495,7 +582,7 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
     def open_cached_change(self, kind, row, *, rows=None, remove=False):
         try:
             guard = self.cached_guard()
-            with guard():
+            with guarded_publish(guard):
                 self.push_screen(ChangeScreen(self.engine, kind, row, rows, remove=remove, read_guard=guard))
         except FinOpsError as error:
             self.notify(self._error_text(error), severity="error")
@@ -548,10 +635,11 @@ class FinOpsApp(ProgressiveRefresh, FeatureUI, App):
                     guard = self.engine.backend.read_guard()
                 if guard is None:
                     raise FinOpsError("Current detail has no verified source. Refresh before opening it.", 3)
-                with guard():
+                with guarded_publish(guard):
                     self.push_screen(DetailScreen("Exact values | Esc returns", row, read_guard=guard))
         except FinOpsError as error:
-            self.query_one("#status", Static).update(str(error))
+            with guarded_publish(self.safe_message_guard()):
+                self.query_one("#status", Static).update(str(error))
 
     def action_lookup(self):
         self.push_screen(LookupScreen())

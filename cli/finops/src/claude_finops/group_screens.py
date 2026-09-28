@@ -9,6 +9,7 @@ from .errors import FinOpsError
 from .feature_screens import ActionForm
 from .group_actions import group_call, membership_refresh
 from .screens import ChangeScreen
+from .guarded_publication import guarded_publish, published
 
 
 class GroupPicker(ModalScreen):
@@ -41,7 +42,16 @@ class GroupPicker(ModalScreen):
     @work(exclusive=True)
     async def load_groups(self):
         try:
-            result = await asyncio.to_thread(group_call, self.app.engine, "search", self.search_text, cursor=self.cursor)
+            with self.app.engine.backend.read_cycle():
+                result = await asyncio.to_thread(group_call, self.app.engine, "search", self.search_text, cursor=self.cursor)
+                self.read_guard = self.app.engine.backend.read_guard()
+                self.publish_groups(result)
+        except FinOpsError as error:
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one("#group-status", Static).update(self.app.redactor.text(str(error)))
+
+    @published(lambda self, result: self.read_guard)
+    def publish_groups(self, result):
             self.rows, self.cursor = result["items"], result["next_cursor"]
             table = self.query_one("#group-results", DataTable)
             table.clear(columns=True)
@@ -51,8 +61,6 @@ class GroupPicker(ModalScreen):
             self.query_one("#group-next", Button).disabled = not self.cursor
             self.query_one("#group-status", Static).update(f"{len(self.rows)} groups. Enter selects; existing ownership is unchanged.")
             table.focus()
-        except FinOpsError as error:
-            self.query_one("#group-status", Static).update(self.app.redactor.text(str(error)))
 
     @on(Button.Pressed, "#group-next")
     def next_page(self):
@@ -72,8 +80,10 @@ class GroupPicker(ModalScreen):
             self.query_one("#group-status", Static).update("Choose an assigned-membership, non-mail-enabled security group.")
             return
         self.dismiss()
-        self.app.push_screen(ChangeScreen(self.app.engine, "catalog", row={
-            "kind": self.scope_kind, "id": "", "name": group["displayName"], "external_ref": "entra-group:" + group["id"]}))
+        with guarded_publish(self.read_guard):
+            self.app.push_screen(ChangeScreen(self.app.engine, "catalog", row={
+                "kind": self.scope_kind, "id": "", "name": group["displayName"], "external_ref": "entra-group:" + group["id"]},
+                read_guard=self.read_guard))
 
     @on(Button.Pressed, "#group-create")
     def create(self):

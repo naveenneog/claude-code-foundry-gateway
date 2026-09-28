@@ -8,6 +8,7 @@ from .rules import human
 from .rules import month_window
 from .views import money
 from .errors import FinOpsError
+from .guarded_publication import guarded_publish, published
 
 
 def budget_totals(rows):
@@ -74,7 +75,7 @@ class DashboardPanel(Static, can_focus=True):
             try:
                 if self.read_guard is None:
                     raise FinOpsError("This panel has no verified current data. Wait for its read or refresh.", 3)
-                with self.read_guard():
+                with guarded_publish(self.read_guard):
                     if event.key == "enter" and self.id in {"dash-rank", "dash-risks", "dash-anomalies"}:
                         from .dashboard_drill import DashboardRows
                         self.app.push_screen(DashboardRows(self))
@@ -109,6 +110,7 @@ class Dashboard(Vertical):
             panel.detail = {}
             panel.read_guard = None
 
+    @published(lambda self, data, raw=None, query="": self.app.cached_guard("overview"))
     def update_data(self, data, raw=None, query=""):
         raw = raw or data
         for panel in self.query(DashboardPanel):
@@ -154,6 +156,7 @@ class Dashboard(Vertical):
             elif len(pending) == len(sources):
                 panel.update("Loading " + ", ".join(pending) + " (estimate 3-5 s)...")
 
+    @published(lambda self, *args: self.app.cached_guard("overview"))
     def _trends(self, data, raw, ascii_only):
         panel = self.query_one("#dash-trend", DashboardPanel)
         panel.detail = {"trends": raw.get("trends"), "budgets": raw.get("budgets")}
@@ -191,6 +194,7 @@ class Dashboard(Vertical):
                 lines.append(data["trends"]["note"])
         panel.update("\n".join(lines))
 
+    @published(lambda self, *args: self.app.cached_guard("overview"))
     def _rankings(self, data, raw, query, ascii_only):
         panel = self.query_one("#dash-rank", DashboardPanel)
         panel.detail = {"units": raw.get("ranking"), "teams": raw.get("teams"), "catalog": raw.get("catalog")}
@@ -225,6 +229,7 @@ class Dashboard(Vertical):
             lines.append(line)
         panel.update("\n".join(lines) or data.get("ranking", {}).get("note") or "No ranked usage in this window.")
 
+    @published(lambda self, *args: self.app.cached_guard("overview"))
     def _risks(self, data, raw, query):
         panel = self.query_one("#dash-risks", DashboardPanel)
         budget = data.get("budgets", {})
@@ -240,6 +245,7 @@ class Dashboard(Vertical):
         empty = f"{count} risk(s) reported; details unavailable." if count else budget.get("note") or "No budget warnings returned."
         panel.update("\n".join(lines) or empty)
 
+    @published(lambda self, *args: self.app.cached_guard("overview"))
     def _anomalies(self, data, raw, query):
         panel = self.query_one("#dash-anomalies", DashboardPanel)
         response = data.get("anomalies", {})

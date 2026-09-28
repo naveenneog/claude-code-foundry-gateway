@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 
 from .backend import in_read_cycle
+from .guarded_publication import guarded_publish
 from . import capabilities as cap
 from .errors import FinOpsError
 from .rules import identifier, month_window, parse_tokens, require_owner, scope_type
@@ -205,8 +206,9 @@ class FeatureEngine:
         self.require_feature("assistant", "ask")
         if not isinstance(question, str) or not question.strip() or len(question) > 4000:
             raise FinOpsError("Ask a question of 1 to 4,000 characters.")
-        return self.backend.write("assistant_ask", dict(question=question.strip(), history=(history or [])[-20:],
-                                  conversation_id=conversation_id, timezone="UTC", locale="en"))
+        with guarded_publish(self.backend.read_guard()):
+            return self.backend.write("assistant_ask", dict(question=question.strip(), history=(history or [])[-20:],
+                                      conversation_id=conversation_id, timezone="UTC", locale="en"))
 
     def configure_assistant(self, model_id=None, auto_title=False, *, apply=False):
         self.require_feature("assistant", "configure")

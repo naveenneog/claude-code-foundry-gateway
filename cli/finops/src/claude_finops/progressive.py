@@ -11,6 +11,7 @@ from .dashboard import Dashboard, DashboardPanel
 from .errors import FinOpsError
 from .output import safe_text
 from .scope import scope_label
+from .guarded_publication import guarded_publish, published
 
 
 SOURCES = {
@@ -29,7 +30,7 @@ SOURCES = {
 class ProgressiveRefresh:
     def publish_tab(self, tab, data):
         guard = self.engine.backend.read_guard()
-        with guard():
+        with guarded_publish(guard, on_rejected=lambda error: self._show_read_error(tab, error)):
             self.data[tab] = data
             self._data_guards[tab] = (data, guard)
             self.render_tab(tab, data)
@@ -38,6 +39,7 @@ class ProgressiveRefresh:
         return (self.is_running and self._refresh_serial == serial
                 and bool(self.query("#main-tabs")) and self.active == tab)
 
+    @published(lambda self: self.engine.backend.read_guard())
     def _show_wait(self):
         if not self._waiting or not self.is_running or not self.query("#status"):
             return
@@ -48,7 +50,8 @@ class ProgressiveRefresh:
         timing = f"Estimate ~{estimate} s; elapsed {elapsed:.1f} s"
         if elapsed > estimate:
             timing += " (longer than estimated)"
-        self.query_one("#status", Static).update(f"Waiting for {names}\n{timing}. q quits; r retries.")
+        prefix = "The sign-in changed; previous data cleared. " if self._principal_notice else ""
+        self.query_one("#status", Static).update(f"{prefix}Waiting for {names}\n{timing}. q quits; r retries.")
 
     async def _tracked_read(self, key, operation, serial, tab):
         if self._current_refresh(serial, tab):
@@ -81,6 +84,7 @@ class ProgressiveRefresh:
         self.present(getattr(error, "details", {}))
         return safe_text(self.redactor.text(str(error)))
 
+    @published(lambda self: self.engine.backend.read_guard())
     def _show_identity(self):
         stamp = ("12:00 +00:00 example" if self.engine.backend.name == "Example"
                  else datetime.now().astimezone().strftime("%H:%M:%S %z"))
@@ -98,6 +102,7 @@ class ProgressiveRefresh:
         self.query_one("#identity", Static).update(safe_text(line))
         self.update_brand()
 
+    @published(lambda self, tab, error: self.safe_message_guard())
     def _show_read_error(self, tab, error):
         self.editable = False
         self.data.pop(tab, None)
@@ -163,7 +168,7 @@ class ProgressiveRefresh:
                 else:
                     if not self._current_refresh(serial, tab):
                         return
-                    with self.engine.backend.read_guard()():
+                    with guarded_publish(self.engine.backend.read_guard()):
                         self.update_access(identity, preserve_current=independent and not self.identity)
                         self._show_identity()
                     if tab not in self.allowed_tabs:
@@ -186,7 +191,8 @@ class ProgressiveRefresh:
                     status = f"{len(data['_errors'])} panel read(s) failed; other current data is shown. r retries."
                 else:
                     status = mode + "<Enter> details <Tab> panel </> lookup <r> refresh"
-                self.query_one("#status", Static).update(status)
+                with guarded_publish(self.cached_guard(tab)):
+                    self.query_one("#status", Static).update(status)
                 if len(self.screen_stack) == 1:
                     self.set_focus(self.query_one("#dash-kpis", DashboardPanel) if tab == "overview"
                                    else self.query_one(f"#table-{tab}", DataTable))

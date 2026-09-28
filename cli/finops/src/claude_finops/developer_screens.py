@@ -8,6 +8,7 @@ from textual.widgets import Button, DataTable, Input, Label, Select, Static
 from .developer_actions import developer_change, developer_find
 from .errors import FinOpsError
 from .feature_screens import ActionForm
+from .guarded_publication import guarded_publish, published
 
 
 class DeveloperPicker(ModalScreen):
@@ -48,7 +49,16 @@ class DeveloperPicker(ModalScreen):
     @work(exclusive=True)
     async def load_developers(self):
         try:
-            result = await asyncio.to_thread(developer_find, self.app.engine, self.app.config, self.search_text, cursor=self.cursor)
+            with self.app.engine.backend.read_cycle():
+                result = await asyncio.to_thread(developer_find, self.app.engine, self.app.config, self.search_text, cursor=self.cursor)
+                self.read_guard = self.app.engine.backend.read_guard()
+                self.publish_developers(result)
+        except FinOpsError as error:
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one("#developer-status", Static).update(self.app.redactor.text(str(error)))
+
+    @published(lambda self, result: self.read_guard)
+    def publish_developers(self, result):
             self.rows, self.cursor = result["items"], result["next_cursor"]
             table = self.query_one("#developer-results", DataTable)
             table.clear(columns=True)
@@ -59,8 +69,6 @@ class DeveloperPicker(ModalScreen):
             self.query_one("#developer-next", Button).disabled = not self.cursor
             self.query_one("#developer-status", Static).update(f"{len(self.rows)} developers. Enter selects.")
             table.focus()
-        except FinOpsError as error:
-            self.query_one("#developer-status", Static).update(self.app.redactor.text(str(error)))
 
     @on(Button.Pressed, "#developer-next")
     def next_page(self):
@@ -88,4 +96,5 @@ class DeveloperPicker(ModalScreen):
             return developer_change(self.app.engine, self.app.config, values["user"], tier=values["tier"],
                                     unit=values["unit"] or None, apply=apply)
 
-        self.app.push_screen(ActionForm("Add developer", fields, operation))
+        with guarded_publish(self.read_guard):
+            self.app.push_screen(ActionForm("Add developer", fields, operation, read_guard=self.read_guard))

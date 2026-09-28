@@ -25,6 +25,8 @@ class Engine(FeatureEngine):
         self._capabilities_guard = None
         self._identity_lock = RLock()
         self._capabilities_lock = RLock()
+        self.identity_revision = 0
+        self.identity_listeners = []
         self.change_reason = ""
         month_window(self.month)
 
@@ -51,8 +53,11 @@ class Engine(FeatureEngine):
                         self._capabilities = None
                         self._capabilities_guard = None
                         self.backend.invalidate_credentials()
+                        self.identity_revision += 1
                     self._identity = identity
                     self.backend.pin_read_cycle()
+                    for listener in tuple(self.identity_listeners):
+                        listener(self, identity, self.identity_revision)
                     return self._identity
         if resource in self.backend.identity_independent_reads and not params.get("cursor"):
             self.backend.prepare_read(resource)

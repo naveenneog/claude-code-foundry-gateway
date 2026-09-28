@@ -383,8 +383,10 @@ async def test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies(b
         assert observed["identity"] == "b" and observed["cache_cleared"]
         assert observed["origin_code"] == 3
         assert observed["detail_code"] == 3, "The deferred dialog replaced the source guard with an unpinned guard."
-        assert "A_ONLY" not in app.screen.query_one("#detail-text", TextArea).text
-        assert "sign-in changed" in app.screen.query_one("#detail-text", TextArea).text
+        # Round 5 additionally closes the obsolete dialog before another input.
+        shown = "\n".join(strip.text for strip in app.screen._compositor.render_strips())
+        assert "A_ONLY" not in shown and "only-a" not in shown
+        assert "sign-in changed" in shown
         assert all(row["scope_id"] == "only-b" for row in engine.read("budgets")["items"])
 
 
@@ -474,12 +476,14 @@ async def test_cached_request_actions_recheck_the_origin_not_an_empty_cycle(bear
         await pilot.pause()
         await app.workers.wait_for_complete()
         assert app.selected()["request_id"] == "a-request"
+        origin = app._data_guards["requests"][1]
         principal[0] = "b"
         await asyncio.to_thread(engine.read, "whoami")
-        assert guard_exit_code(app._data_guards["requests"][1]) == 3
+        assert guard_exit_code(origin) == 3
         getattr(app, action)()
         assert published == []
-        assert any("sign-in changed" in message for message in notices)
+        assert not app.records and app.identity["id"] == "b"
+        assert "sign-in changed" in str(app.query_one("#note-requests", Static).render())
 
 
 @pytest.mark.parametrize("authority", ["http", "direct"])
@@ -493,6 +497,103 @@ def test_cached_item_guards_cannot_outlive_the_source_connection(http_estate, es
     assert guard_exit_code(origin) == 0
     engine.backend.close()
     assert guard_exit_code(origin) == 3, "A deferred cached item must not retain authority after its connection closes."
+
+
+async def test_highlight_input_after_b_verifies_cannot_publish_a_row(bearer_tui_estate, monkeypatch):
+    engine, principal = bearer_tui_estate
+    original = engine.backend._client._transport
+    def respond(request):
+        response = original.handle_request(request)
+        if request.url.path.endswith("/budgets") and request.headers["Authorization"] == "Bearer token-a":
+            data = response.json()
+            data["items"].append(dict(data["items"][0], scope_id="a-second", scope_name="A_ONLY_SECOND"))
+            return httpx.Response(200, json=data)
+        return response
+    engine.backend._client._transport = httpx.MockTransport(respond)
+    app = FinOpsApp(engine, Config(backend="fake"), first_run=False)
+    leaked, observed_input = [], []
+    original_update = Static.update
+
+    def update(widget, value="", **kwargs):
+        if principal[0] == "b" and widget.id == "status" and ("a-second" in str(value) or "only-a" in str(value)):
+            leaked.append(str(value))
+        return original_update(widget, value, **kwargs)
+
+    monkeypatch.setattr(Static, "update", update)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        app.action_tab("budgets")
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        app.set_focus(app.query_one("#table-budgets", DataTable))
+        origin = app.cached_guard("budgets")
+        principal[0] = "b"
+        await asyncio.to_thread(engine.read, "whoami")
+        assert guard_exit_code(origin) == 3
+        await pilot.press("down")
+        await pilot.pause()
+        observed_input.append((app.identity.get("id"), dict(app.records), app.pending_selection))
+        assert not leaked, "A stale highlighted row reached the status widget after B verified."
+        assert observed_input[-1] == ("b", {}, None), "Old cached rows must be cleared before the next input."
+        assert all(row["scope_id"] == "only-b" for row in engine.read("budgets")["items"])
+
+
+async def test_assistant_context_is_cleared_before_b_request(bearer_tui_estate, monkeypatch):
+    engine, principal = bearer_tui_estate
+    original = engine.backend._client._transport
+    asks = []
+
+    def respond(request):
+        if request.url.path.endswith("/finops/capabilities"):
+            return httpx.Response(200, json={"schema_version": 1, "features": {
+                "assistant": {"enabled": True, "actions": ["read", "ask", "pin", "manage"]}}})
+        if request.url.path.endswith("/assistant/ask"):
+            asks.append((request.headers["Authorization"], json.loads(request.content)))
+        return original.handle_request(request)
+
+    engine.backend._client._transport = httpx.MockTransport(respond)
+    app = FinOpsApp(engine, Config(backend="fake"), first_run=False)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        app.action_tab("ask")
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        app.query_one("#ask-question", Input).value = "A question"
+        await app.ask_current()
+        assert app.ask_history and app.ask_conversation == "a-conversation"
+        old_guard = app.ask_reply_guard
+        principal[0] = "b"
+        await asyncio.to_thread(engine.read, "whoami")
+        assert guard_exit_code(old_guard) == 3
+        app.query_one("#ask-question", Input).value = "B question"
+        await app.ask_current()
+        assert len(asks) == 2 and asks[-1][0] == "Bearer token-b"
+        assert asks[-1][1]["history"] == [] and asks[-1][1]["conversation_id"] is None
+        assert "A_ONLY" not in str(app.ask_history)
+        assert app.ask_conversation == "b-conversation"
+
+
+async def test_principal_change_closes_prior_forms_and_clears_state_before_input(bearer_tui_estate):
+    engine, principal = bearer_tui_estate
+    app = FinOpsApp(engine, Config(backend="fake"), first_run=False)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        app.action_tab("budgets")
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        app.action_edit()
+        await pilot.pause()
+        assert len(app.screen_stack) == 2
+        principal[0] = "b"
+        await asyncio.to_thread(engine.read, "whoami")
+        await pilot.press("tab")
+        await pilot.pause()
+        assert len(app.screen_stack) == 1
+        assert app.identity["id"] == "b" and not app.data and not app.records
+        assert app.ask_history == [] and app.ask_conversation is None and app.preferences is None
 
 
 @pytest.mark.parametrize("surface", ["lookup-catalog", "lookup-results", "detail", "export", "people-selector",

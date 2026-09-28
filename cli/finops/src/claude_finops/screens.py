@@ -13,6 +13,7 @@ from textual.widgets import Button, DataTable, Input, Label, Select, Static, Tex
 from .errors import FinOpsError
 from .output import chargeback_csv, safe_text
 from .rules import allocation_left, apply_state, human, month_window, parse_tokens
+from .guarded_publication import guarded_publish, published
 
 
 class DetailScreen(ModalScreen):
@@ -25,13 +26,15 @@ class DetailScreen(ModalScreen):
 
     def compose(self):
         try:
-            with self.read_guard():
+            with guarded_publish(self.read_guard):
                 content = json.dumps(self.app.present(self.data), indent=2, ensure_ascii=True, default=str)
                 yield from self.detail_widgets(content)
         except FinOpsError as error:
             self.data = {}
-            yield from self.detail_widgets(self.app._error_text(error))
+            with guarded_publish(self.app.safe_message_guard()):
+                yield from self.detail_widgets(self.app._error_text(error))
 
+    @published(lambda self, content: self.read_guard if self.data else self.app.safe_message_guard())
     def detail_widgets(self, content):
         with Vertical(id="detail-dialog"):
             yield Label(self.heading, markup=False)
@@ -62,7 +65,8 @@ class MonthScreen(ModalScreen):
         try:
             month_window(value)
         except FinOpsError as error:
-            self.query_one("#month-error", Static).update(str(error))
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one("#month-error", Static).update(str(error))
             return
         self.app.engine.month = value
         self.app.reset_paging()
@@ -99,13 +103,14 @@ class LookupScreen(ModalScreen):
                 catalog = await asyncio.to_thread(self.app.engine.read, "catalog")
                 rows = catalog.get("departments", [])
                 shown = self.app.present(rows)
-                with self.app.engine.backend.read_guard()():
+                with guarded_publish(self.app.engine.backend.read_guard()):
                     selector = self.query_one("#lookup-team", Select)
                     selector.set_options([(label["name"], row["id"]) for row, label in zip(rows, shown)])
                     if self.app.team in {row["id"] for row in rows}:
                         selector.value = self.app.team
         except FinOpsError as error:
-            self.query_one("#lookup-status", Static).update(str(error))
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one("#lookup-status", Static).update(str(error))
 
     @on(Select.Changed, "#lookup-team")
     def choose_team(self, event):
@@ -121,7 +126,7 @@ class LookupScreen(ModalScreen):
             with self.app.engine.backend.read_cycle():
                 results = await asyncio.to_thread(self.app.engine.lookup, query, self.app.team)
                 self.results_guard = self.app.engine.backend.read_guard()
-                with self.results_guard():
+                with guarded_publish(self.results_guard):
                     self.results = results
                     table = self.query_one(DataTable)
                     table.clear(columns=True)
@@ -132,21 +137,23 @@ class LookupScreen(ModalScreen):
         except FinOpsError as error:
             self.results = []
             self.query_one(DataTable).clear(columns=True)
-            self.query_one("#lookup-status", Static).update(str(error))
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one("#lookup-status", Static).update(str(error))
 
     @on(DataTable.RowSelected, "#lookup-results")
     def select_result(self, event):
         if not getattr(self, "results", []):
             return
         try:
-            with self.results_guard():
+            with guarded_publish(self.results_guard):
                 result = self.results[event.cursor_row]
                 self.dismiss()
                 self.app.open_lookup_result(result)
         except FinOpsError as error:
             self.results = []
             self.query_one(DataTable).clear(columns=True)
-            self.query_one("#lookup-status", Static).update(str(error))
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one("#lookup-status", Static).update(str(error))
 
 
 class ChangeScreen(ModalScreen):
@@ -157,7 +164,7 @@ class ChangeScreen(ModalScreen):
     def __init__(self, engine, kind, row=None, rows=None, remove=False, *, read_guard=nullcontext):
         super().__init__()
         self.engine, self.kind, self.row = engine, kind, row or {}
-        self.rows, self.remove = rows or [], remove
+        self.rows, self.removing = rows or [], remove
         self.read_guard = read_guard
         self.preview_plan = None
         self.applying = False
@@ -165,40 +172,42 @@ class ChangeScreen(ModalScreen):
 
     def compose(self):
         try:
-            with self.read_guard():
+            with guarded_publish(self.read_guard):
                 yield from self.change_widgets()
         except FinOpsError as error:
             self.row, self.rows = {}, []
-            with Vertical(id="change-dialog"):
-                yield Label("Change unavailable", id="form-title", markup=False)
-                yield Static(self.app._error_text(error), id="form-status", markup=False)
-                yield Button("Cancel", id="cancel-change")
+            with guarded_publish(self.app.safe_message_guard()):
+                with Vertical(id="change-dialog"):
+                    yield Label("Change unavailable", id="form-title", markup=False)
+                    yield Static(self.app._error_text(error), id="form-status", markup=False)
+                    yield Button("Cancel", id="cancel-change")
 
+    @published(lambda self: self.read_guard)
     def change_widgets(self):
-        title = ("Remove " if self.remove else "Edit ") + self.row.get("scope_id", self.row.get("id", self.kind))
+        title = ("Remove " if self.removing else "Edit ") + self.row.get("scope_id", self.row.get("id", self.kind))
         with Vertical(id="change-dialog"):
             yield Label(title, id="form-title", markup=False)
             with VerticalScroll(id="fields"):
-                if self.kind == "budget" and not self.remove:
+                if self.kind == "budget" and not self.removing:
                     yield Label(("Daily" if self.row.get("budget_period") == "day" else "Monthly") + " tokens (1.5M or exact integer)")
                     yield Input(str(self.row.get("token_limit") or ""), id="amount")
                     yield Static("", id="headroom", markup=False)
                     if self.engine.backend.budget_warning_threshold:
                         yield Label("Warning threshold (%)")
                         yield Input(str(self.row.get("warning_threshold_percent", 80)), id="warning")
-                elif self.kind == "usd_budget" and not self.remove:
+                elif self.kind == "usd_budget" and not self.removing:
                     yield Label("Dollar budget (decimal string; zero is a real stop)")
                     yield Input(str(self.row.get("usd_budget") or ""), id="amount")
                     yield Label("Period (month for units/teams; day or month for people)")
                     yield Input(str(self.row.get("budget_period") or "month"), id="period")
                     yield Static("Saved dollar budgets show as awaiting reconciliation until the USD reconciler runs.", id="headroom", markup=False)
-                elif self.kind == "tier" and not self.remove:
+                elif self.kind == "tier" and not self.removing:
                     for key, label in (("tokens_per_minute", "Tokens per minute"), ("tokens_per_day", "Tokens per day")):
                         yield Label(label)
                         yield Input(str(self.row.get(key, "")), id=key.replace("_", "-"))
                     yield Label("Models (comma separated; empty means all)")
                     yield Input(",".join(self.row.get("models", [])), id="models")
-                elif self.kind == "catalog" and not self.remove:
+                elif self.kind == "catalog" and not self.removing:
                     yield Select([("Unit", "unit"), ("Team", "team")], value=self.row.get("kind", "team"),
                                  id="scope-kind", allow_blank=False)
                     yield Input(self.row.get("id", ""), placeholder="Stable id, for example sales-emea", id="scope-id")
@@ -233,7 +242,7 @@ class ChangeScreen(ModalScreen):
             return
         self.preview_plan = None
         self.query_one("#apply-change", Button).disabled = True
-        if self.kind == "budget" and not self.remove:
+        if self.kind == "budget" and not self.removing:
             try:
                 amount = parse_tokens(self.value("amount"))
                 left = allocation_left(self.rows, self.row, amount)
@@ -241,7 +250,8 @@ class ChangeScreen(ModalScreen):
                         if self.row.get("budget_period") == "day" else f"Parent unallocated after change: {human(left)} tokens.")
             except FinOpsError as error:
                 text = str(error)
-            self.query_one("#headroom", Static).update(text)
+            with guarded_publish(self.read_guard):
+                self.query_one("#headroom", Static).update(text)
 
     def operation(self, apply=False):
         with self.read_guard():
@@ -253,22 +263,22 @@ class ChangeScreen(ModalScreen):
             except ValueError:
                 raise FinOpsError("Warning threshold must be a whole percent.") from None
             return partial(self.engine.budget_change, self.row["scope_type"], self.row["scope_id"],
-                           self.value("amount"), remove=self.remove, apply=apply, confirm=confirm, warning=warning,
+                           self.value("amount"), remove=self.removing, apply=apply, confirm=confirm, warning=warning,
                            department_id=self.row.get("parent_scope_id"))
         if self.kind == "usd_budget":
             return partial(self.engine.usd_budget_change, self.row["scope_type"], self.row["scope_id"],
                            self.value("amount"), period=self.value("period", "month"),
-                           remove=self.remove, apply=apply, confirm=confirm)
+                           remove=self.removing, apply=apply, confirm=confirm)
         if self.kind == "tier":
             return partial(self.engine.tier_change, self.row["id"], self.value("tokens-per-minute"),
                            self.value("tokens-per-day"), self.value("models"), apply=apply)
         if self.kind == "catalog":
-            kind = self.row.get("kind") if self.remove else self.query_one("#scope-kind", Select).value
-            key = self.row.get("id") if self.remove else self.value("scope-id")
+            kind = self.row.get("kind") if self.removing else self.query_one("#scope-kind", Select).value
+            key = self.row.get("id") if self.removing else self.value("scope-id")
             return partial(self.engine.catalog_change, kind, key, name=self.value("scope-name"),
                            group=self.value("scope-group"), parent=self.value("scope-parent") or None,
                            manager_group=self.value("scope-manager") or None,
-                           remove=self.remove, confirm=confirm, apply=apply)
+                           remove=self.removing, confirm=confirm, apply=apply)
         if self.kind == "usd_reconcile":
             return partial(self.engine.usd_reconcile, apply=apply)
         return partial(self.engine.apply, apply=apply)
@@ -288,10 +298,12 @@ class ChangeScreen(ModalScreen):
             else:
                 summary = self.preview_plan["action"]
             mode = " What-if: writes are disabled." if self.app.preview_only else " Preview ready. Apply commits; Esc cancels."
-            self.query_one("#form-status", Static).update(summary + mode)
+            with guarded_publish(self.read_guard):
+                self.query_one("#form-status", Static).update(summary + mode)
             self.query_one("#apply-change", Button).disabled = self.app.preview_only
         except FinOpsError as error:
-            self.query_one("#form-status", Static).update(str(error))
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one("#form-status", Static).update(str(error))
             self.query_one("#apply-change", Button).disabled = True
             if "headroom" in str(error).lower() and self.app.engine.has_feature("approvals", "request"):
                 self.query_one("#request-difference", Button).display = True
@@ -328,17 +340,20 @@ class ChangeScreen(ModalScreen):
                 while True:
                     status = await asyncio.to_thread(self.engine.read, "apply")
                     message = apply_state(status, result["requested_at"])
-                    self.query_one("#form-status", Static).update(message)
+                    with guarded_publish(self.read_guard):
+                        self.query_one("#form-status", Static).update(message)
                     if message.startswith(("Apply succeeded", "Failed", "Not configured", "Unknown")):
                         break
                     if asyncio.get_running_loop().time() >= deadline:
                         message = "Saved; still pending. Follow Governance. Do not repeat the save."
                         break
                     await asyncio.sleep(3)
-            self.query_one("#form-status", Static).update(message)
+            with guarded_publish(self.read_guard):
+                self.query_one("#form-status", Static).update(message)
             self.query_one("#cancel-change", Button).label = "Done"
         except FinOpsError as error:
-            self.query_one("#form-status", Static).update(str(error) + " Refresh before retrying.")
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one("#form-status", Static).update(str(error) + " Refresh before retrying.")
         finally:
             self.applying = False
 
@@ -354,6 +369,7 @@ class ChangeScreen(ModalScreen):
 class ExportScreen(ModalScreen):
     BINDINGS = [("escape", "dismiss", "Back")]
 
+    @published(lambda self: self.app.safe_message_guard())
     def compose(self):
         with Vertical(id="month-dialog"):
             yield Label("Export complete chargeback (managed scopes only)")
@@ -378,7 +394,7 @@ class ExportScreen(ModalScreen):
             with self.app.engine.backend.read_cycle():
                 result = await asyncio.to_thread(self.app.engine.chargeback)
                 content = chargeback_csv(self.app.present(result["items"]), self.app.engine.month)
-                with self.app.engine.backend.read_guard()():
+                with guarded_publish(self.app.engine.backend.read_guard()):
                     folder = Path.cwd() / "finops-reports"
                     folder.mkdir(exist_ok=True)
                     with (folder / name).open("x", encoding="utf-8", newline="") as output:
@@ -387,7 +403,8 @@ class ExportScreen(ModalScreen):
                         self.app.redactor.text(f"Exported {len(result['items'])} scopes to finops-reports\\{name}."))
         except (OSError, FinOpsError) as error:
             message = str(error) if isinstance(error, FinOpsError) else "Cannot create that file. Choose a new name and a writable current folder."
-            self.query_one("#export-status", Static).update(message)
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one("#export-status", Static).update(message)
             button.disabled = False
 
     @on(Button.Pressed, "#cancel-export")

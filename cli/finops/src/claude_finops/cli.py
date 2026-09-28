@@ -17,6 +17,8 @@ from .output import chargeback_csv, display
 from .brand import BANNER, PRODUCT, show_banner
 from . import __version__
 from .redaction import Redactor
+from .guarded_publication import guarded_publish
+from contextlib import nullcontext
 
 
 def terminal_output():
@@ -67,13 +69,14 @@ def emit(ctx, operation, *, mutation=False):
                 if result.get("scope_type") != "user" and not state["engine"].backend.immediate_writes:
                     result["apply_status"] = state["engine"].wait_for_apply(result["requested_at"])
             shown = state["redactor"].present(result)
-            with state["engine"].backend.read_guard()():
+            with guarded_publish(state["engine"].backend.read_guard()):
                 display(shown, as_json=state["json"], plain=state["plain"], no_color=state["no_color"])
             return result
     except FinOpsError as error:
         state["redactor"].present(error.details)
-        display(state["redactor"].present(dict(error=str(error), exit_code=error.code)),
-                as_json=state["json"], plain=state["plain"], no_color=True)
+        with guarded_publish(nullcontext):
+            display(state["redactor"].present(dict(error=str(error), exit_code=error.code)),
+                    as_json=state["json"], plain=state["plain"], no_color=True)
         raise typer.Exit(error.code) from None
 
 
@@ -120,7 +123,8 @@ def root(ctx: typer.Context,
         engine = Engine(connect(settings), month)
         engine.change_reason = reason or ""
     except FinOpsError as error:
-        display(dict(error=str(error), exit_code=error.code), as_json=as_json, plain=plain, no_color=True)
+        with guarded_publish(nullcontext):
+            display(dict(error=str(error), exit_code=error.code), as_json=as_json, plain=plain, no_color=True)
         raise typer.Exit(error.code) from None
     ctx.obj = dict(engine=engine, config=settings, json=as_json, plain=plain, what_if=what_if, no_color=no_color,
                    redactor=Redactor(redact))
@@ -370,10 +374,11 @@ def report_chargeback(ctx: typer.Context, csv: Annotated[bool, typer.Option("--c
             with ctx.obj["engine"].backend.read_cycle():
                 rows = ctx.obj["engine"].chargeback(dimension)["items"]
                 output = chargeback_csv(ctx.obj["redactor"].present(rows), ctx.obj["engine"].month)
-                with ctx.obj["engine"].backend.read_guard()():
+                with guarded_publish(ctx.obj["engine"].backend.read_guard()):
                     typer.echo(output, nl=False)
         except FinOpsError as error:
-            typer.echo(str(error), err=True)
+            with guarded_publish(nullcontext):
+                typer.echo(str(error), err=True)
             raise typer.Exit(error.code) from None
     else:
         emit(ctx, lambda e: e.chargeback(dimension))
