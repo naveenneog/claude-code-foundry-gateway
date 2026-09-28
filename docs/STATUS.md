@@ -67,6 +67,15 @@ defects, each with a screenshot. Work is on `p79-owner-test-fixes`, based on `03
       exited 1. The check is renamed "Relative decision record paths follow the current folder", and
       the integrity test now asserts that every `Invoke-Check` line in the registration is read,
       naming any line that is not (it fails on `01f9605` with that line; 47 checks pass after)
+- [x] The second gate, at `d0226dd` (20:13), failed two checks that P79 does not change, under
+      96-100% CPU load from other sessions: "Business unit checks detect breakage [3/4]" timed out
+      at 600 s, and "Test-All counts every check" failed after 325 s. Run alone, the integrity test
+      then failed twice with "every non-skipped check runs in its own process - 90 of 91" while all
+      91 stub checks passed: each stub named its record `<process id>.json`, and Windows reuses
+      process ids, so a later stub overwrote an earlier one's record. Records are now named by
+      process id and that process's start time, and identity checks use that pair. A probe
+      assertion runs one stub and checks the name; it failed on the old naming ("files:
+      48620.json") and passes after; the integrity test passes 48 checks in 272 s under the same load
 - [ ] The packet gate exits 0
 
 ## P77 a 60-minute gate budget while the exclusive checks are sharded, 2026-09-28
