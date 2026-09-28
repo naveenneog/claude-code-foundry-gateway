@@ -243,7 +243,8 @@ function Invoke-ClaudeAddressPlan {
     $gateway = Invoke-ClaudeNetworkArm $uri
     if ($gateway.properties.provisioningState -ne 'Succeeded') { throw "Gateway provisioning is $($gateway.properties.provisioningState); review again after it completes." }
     if ((Get-ClaudeAddressHostState $gateway) -ne $d.HostnameBaseline -or $gateway.sku.name -ne $d.Sku) { throw 'Gateway hostname state or tier changed since review; no write was made.' }
-    $cert = Read-ClaudeAddressCertificate -CertificateSource $d.CertificateSource -KeyVaultCertificateId $d.KeyVaultCertificateId -PfxPath $d.PfxPath -CertificatePassword $CertificatePassword -Hostname $d.Hostname -SubscriptionId $d.SubscriptionId
+    $pfxBytes = if ($d.CertificateSource -eq 'Pfx') { [IO.File]::ReadAllBytes($d.PfxPath) } else { $null }
+    $cert = Read-ClaudeAddressCertificate -CertificateSource $d.CertificateSource -KeyVaultCertificateId $d.KeyVaultCertificateId -PfxPath $d.PfxPath -PfxBytes $pfxBytes -CertificatePassword $CertificatePassword -Hostname $d.Hostname -SubscriptionId $d.SubscriptionId
     if ($cert.Thumbprint -ne $d.Certificate.Thumbprint -or $cert.PfxSha256 -ne $d.Certificate.PfxSha256 -or $cert.SecretId -ne $d.Certificate.SecretId) { throw 'The certificate changed since review; no write was made.' }
     $dnsUri = if ($d.DnsRecord.Id) { "https://management.azure.com$($d.DnsRecord.Id)?api-version=2018-05-01" } else { '' }
     if ($dnsUri) {
@@ -285,7 +286,7 @@ function Invoke-ClaudeAddressPlan {
     if ($d.CertificateSource -eq 'KeyVault') { $binding.certificateSource = 'KeyVault'; $binding.keyVaultId = $cert.SecretId; $binding.identityClientId = $null }
     else {
         $binding.certificateSource = 'Custom'
-        $binding.encodedCertificate = [Convert]::ToBase64String([IO.File]::ReadAllBytes($d.PfxPath))
+        $binding.encodedCertificate = [Convert]::ToBase64String($pfxBytes)
         if ($CertificatePassword) { $binding.certificatePassword = (New-Object Net.NetworkCredential('', $CertificatePassword)).Password }
     }
     try {

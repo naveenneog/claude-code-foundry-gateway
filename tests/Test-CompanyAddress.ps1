@@ -255,9 +255,37 @@ try {
     }
     Reset-State
     Check 'changed PFX contents invalidate approval even when the certificate thumbprint stays' {
-        $p = New-Plan @{ CertificateSource = 'Pfx'; PfxPath = 'C:\fixture.pfx' }
+        $path = Join-Path $scratch 'changed.pfx'
+        [IO.File]::WriteAllBytes($path, [byte[]](1,2,3))
+        $p = New-Plan @{ CertificateSource = 'Pfx'; PfxPath = $path }
         $script:cert.PfxSha256 = 'changed'
         (Reject { Apply-Plan $p } 'certificate.*changed') -and $script:writes.Count -eq 0
+    }
+    Reset-State
+    Check 'the uploaded PFX is the approved buffer even if DNS waiting replaces its file' {
+        $rsa = New-Object Security.Cryptography.RSACryptoServiceProvider(2048)
+        $rsa.PersistKeyInCsp = $false
+        $request = [Security.Cryptography.X509Certificates.CertificateRequest]::new('CN=claude.contoso.test', $rsa, [Security.Cryptography.HashAlgorithmName]::SHA256, [Security.Cryptography.RSASignaturePadding]::Pkcs1)
+        $certificate = $request.CreateSelfSigned([DateTimeOffset]::UtcNow.AddDays(-1), [DateTimeOffset]::UtcNow.AddDays(2))
+        $path = Join-Path $scratch 'approved.pfx'
+        $bytes = $certificate.Export([Security.Cryptography.X509Certificates.X509ContentType]::Pfx, '')
+        [IO.File]::WriteAllBytes($path, $bytes)
+        $script:tlsThumbprint = $certificate.Thumbprint
+        function Read-ClaudeAddressCertificate {
+            param($CertificateSource,$KeyVaultCertificateId,$PfxPath,$PfxBytes,$CertificatePassword,$Hostname,$SubscriptionId)
+            & $script:certificateReader @PSBoundParameters
+        }
+        function Resolve-DnsName {
+            param($Name,$Type,$Server,[switch]$DnsOnly,[switch]$NoHostsFile,[switch]$QuickTimeout,$ErrorAction)
+            [IO.File]::WriteAllBytes($path, [byte[]](9,8,7))
+            [pscustomobject]@{ Name=$Name; NameHost='apim-contoso.azure-api.net.' }
+        }
+        try {
+            Apply-Plan (New-Plan @{ CertificateSource='Pfx'; PfxPath=$path }) | Out-Null
+            $upload = @($script:writes | Where-Object { $_.Url -match '/Microsoft.ApiManagement/service/' })[0].Body.properties.hostnameConfigurations[-1].encodedCertificate
+            $upload -eq [Convert]::ToBase64String($bytes) -and [IO.File]::ReadAllBytes($path)[0] -eq 9
+        }
+        finally { $certificate.Dispose(); $rsa.Dispose() }
     }
     Reset-State
     Check 'an APIM write failure leaves the recorded address unchanged' {

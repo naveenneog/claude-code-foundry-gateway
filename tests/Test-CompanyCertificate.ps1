@@ -63,6 +63,16 @@ try {
         $d.Thumbprint -eq $valid.Thumbprint -and $d.PfxSha256 -eq (Get-FileHash -LiteralPath $pfx -Algorithm SHA256).Hash -and
             ($d | ConvertTo-Json -Depth 6) -notmatch 'fixture-only-password|encodedCertificate'
     }
+    Check 'PFX validation and hash use the supplied buffer even when its path is replaced' {
+        $bytes = [IO.File]::ReadAllBytes($pfx)
+        $hash = (Get-FileHash -LiteralPath $pfx -Algorithm SHA256).Hash
+        try {
+            [IO.File]::WriteAllBytes($pfx, [byte[]](1,2,3))
+            $d = Read-ClaudeAddressCertificate -CertificateSource Pfx -PfxPath $pfx -PfxBytes $bytes -CertificatePassword $password -Hostname 'claude.contoso.test' -SubscriptionId $sub
+            $d.Thumbprint -eq $valid.Thumbprint -and $d.PfxSha256 -eq $hash
+        }
+        finally { [IO.File]::WriteAllBytes($pfx, $bytes) }
+    }
     Check 'a wrong PFX password is refused without echoing it' {
         try { Read-ClaudeAddressCertificate -CertificateSource Pfx -PfxPath $pfx -CertificatePassword (ConvertTo-SecureString 'wrong-fixture-value' -AsPlainText -Force) -Hostname 'claude.contoso.test' -SubscriptionId $sub; $false }
         catch { $_.Exception.Message -match 'PFX' -and $_.Exception.Message -notmatch 'wrong-fixture-value' }

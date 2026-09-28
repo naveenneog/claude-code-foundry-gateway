@@ -51,20 +51,27 @@ function Assert-ClaudeAddressCertificate {
 function Read-ClaudeAddressCertificate {
     param(
         [string]$CertificateSource, [string]$KeyVaultCertificateId, [string]$PfxPath,
-        [securestring]$CertificatePassword, [string]$Hostname, [string]$SubscriptionId
+        [securestring]$CertificatePassword, [string]$Hostname, [string]$SubscriptionId,
+        [byte[]]$PfxBytes
     )
     if ($CertificateSource -eq 'Pfx') {
-        if (-not $PfxPath -or -not (Test-Path -LiteralPath $PfxPath -PathType Leaf)) { throw 'PfxPath must name an existing PFX file.' }
+        if ($null -eq $PfxBytes) {
+            if (-not $PfxPath -or -not (Test-Path -LiteralPath $PfxPath -PathType Leaf)) { throw 'PfxPath must name an existing PFX file.' }
+            $PfxBytes = [IO.File]::ReadAllBytes($PfxPath)
+        }
         $collection = New-Object Security.Cryptography.X509Certificates.X509Certificate2Collection
         $plain = if ($CertificatePassword) { (New-Object Net.NetworkCredential('', $CertificatePassword)).Password } else { '' }
         try {
-            try { $collection.Import([IO.File]::ReadAllBytes($PfxPath), $plain, [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet) }
+            try { $collection.Import($PfxBytes, $plain, [Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet) }
             catch { throw 'The PFX could not be opened. Its format or supplied password is invalid.' }
             $leaf = @($collection | Where-Object HasPrivateKey)
             if ($leaf.Count -ne 1) { throw 'The PFX must contain exactly one certificate with a private key, plus its chain.' }
             Assert-ClaudeAddressCertificate -Certificate $leaf[0] -Hostname $Hostname -RequirePrivateKey
+            $sha = [Security.Cryptography.SHA256]::Create()
+            try { $hash = -join ($sha.ComputeHash($PfxBytes) | ForEach-Object { $_.ToString('X2') }) }
+            finally { $sha.Dispose() }
             return [pscustomobject]@{
-                Thumbprint = $leaf[0].Thumbprint; PfxSha256 = (Get-FileHash -LiteralPath $PfxPath -Algorithm SHA256).Hash
+                Thumbprint = $leaf[0].Thumbprint; PfxSha256 = $hash
                 SecretId = ''; VaultId = ''; Rbac = $false
             }
         }

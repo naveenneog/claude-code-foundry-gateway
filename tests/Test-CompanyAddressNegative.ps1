@@ -3,6 +3,8 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $scratch = Join-Path ([IO.Path]::GetTempPath()) ('company-mutations-' + [guid]::NewGuid().ToString('N'))
 $cases = @(
+    @('address','\[Convert\]::ToBase64String\(\$pfxBytes\)','[Convert]::ToBase64String([IO.File]::ReadAllBytes($d.PfxPath))','the uploaded PFX is the approved buffer even if DNS waiting replaces its file','S1 immutable upload buffer'),
+    @('certificate','\$sha.ComputeHash\(\$PfxBytes\)','$sha.ComputeHash([IO.File]::ReadAllBytes($PfxPath))','PFX validation and hash use the supplied buffer even when its path is replaced','S1 validation and hash buffer'),
     @('address','(?m)^    if \(-not \(Test-ClaudeFlowSubscriptionId \$SubscriptionId\)\).*$', '    if ($false) { throw ''subscription'' }','subscription ID is required','invalid subscription'),
     @('address','(?m)^    if \(\$ResourceGroup -notmatch.*$', '    if ($false) { throw ''resource group'' }','a CLI metacharacter cannot reach resource discovery','resource group validation'),
     @('address','(?m)^    if \(\$Hostname.Length.*\{$', '    if ($false) {','invalid hostname is refused: https://claude.contoso.test','hostname boundary'),
