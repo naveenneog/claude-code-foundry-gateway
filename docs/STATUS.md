@@ -174,6 +174,11 @@ written with 17. The Coder seat checked the pattern against `jq-1.7`, `jq-1.7-di
 carriage return and distribution suffixes (warned) and `jq-1.7.1` and `jq-1.8.2` (not warned), in
 bash 3.2 syntax; the merge of main changed only the Active packets line.
 
+After the review, under the shared lock (2026-09-28 13:03-13:05 IST): the suite against the preflight
+before the warning (`dcca62c`) fails one check, the jq 1.7.0 warning, and passes the other 65; the
+two new mutations, each in its own copy and counted at 66 checks, are caught: no warning on jq 1.7.0
+(the jq 1.7.0 check fails), and the match without its guard (the jq 1.7.1 check fails).
+
 - [x] Council, five seats (round 4, all PASS)
 - [ ] The packet gate exits 0 on the tree that merges. At `f32bcde` (P75 on `f98f885`), 2026-09-28
       12:11:23-12:34:23 IST under the shared lock: 22 passed, 2 warned, 0 failed, 2 skipped; Test-All
