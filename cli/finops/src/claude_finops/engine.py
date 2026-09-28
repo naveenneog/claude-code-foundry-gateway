@@ -35,13 +35,18 @@ class Engine(FeatureEngine):
         return {"reason": reason.strip()}
 
     def read(self, resource, **params):
+        with self.backend.read_cycle():
+            return self._read(resource, **params)
+
+    def _read(self, resource, **params):
         if resource == "whoami":
             with self._identity_lock:
                 previous = self._identity
                 self._identity = self.backend.read(resource, month=self.month, **params)
-                identity_keys = ("id", "email", "role", "manager_scope")
+                identity_keys = ("id", "email", "tenant", "role", "manager_scope")
                 if previous and tuple(previous.get(k) for k in identity_keys) != tuple(self._identity.get(k) for k in identity_keys):
                     self._capabilities = None
+                    self.backend.invalidate_credentials()
                 return self._identity
         if resource in self.backend.identity_independent_reads and not params.get("cursor"):
             self.backend.prepare_read(resource)

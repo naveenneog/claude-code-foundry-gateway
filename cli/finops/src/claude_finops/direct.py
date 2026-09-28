@@ -1,4 +1,5 @@
 import json
+import os
 from fnmatch import fnmatchcase
 import subprocess
 from datetime import datetime, timezone
@@ -13,7 +14,8 @@ from threading import RLock
 import httpx
 
 from .backend import Backend
-from .config import az, resource_token
+from .config import (az, resource_token, bind_resource_principal,
+                     invalidate_resource_principal, validate_resource_principal)
 from .errors import FinOpsError, http_error
 from .rules import identifier, month_window, query_window
 from .capabilities import current_capabilities
@@ -39,6 +41,7 @@ class DirectBackend(Backend):
         self._cycle = ContextVar("direct_read_cycle", default=None)
         self._prepare_lock = RLock()
         self._client = None
+        self._credential_context = None
         self.root = Path(config.repository) if config.repository else Path(__file__).resolve().parents[4]
         self.bridge = self.root / "scripts" / "Invoke-ClaudeFinOps.ps1"
         if not self.bridge.exists():
@@ -51,7 +54,7 @@ class DirectBackend(Backend):
         if self._cycle.get() is not None:
             yield
             return
-        context = self._cycle.set({"lock": RLock()})
+        context = self._cycle.set({"lock": RLock(), "account_lock": RLock()})
         try:
             yield
         finally:
@@ -81,15 +84,50 @@ class DirectBackend(Backend):
                 cycle.pop("value", None)
 
     def prepare_read(self, resource):
-        if resource in {"catalog", "tiers", "apply"}:
-            return
-        with self._prepare_lock:
-            if not self.config.subscription:
-                try:
-                    subscription = json.loads(self._az("account", "show", "-o", "json"))["id"]
-                    self.config.subscription = str(UUID(subscription))
-                except (ValueError, KeyError, TypeError, AttributeError):
-                    raise FinOpsError("Cannot determine the selected Azure subscription. Run aum configure before querying the gateway ledger.", 3) from None
+        self._account()
+        if not self.config.subscription:
+            raise FinOpsError("Cannot determine the selected Azure subscription. Run aum configure before querying the gateway ledger.", 3)
+        if self._credential_context is None:
+            raise FinOpsError("Cannot verify the Azure principal. Run az login before querying current data.", 3)
+
+    def _account(self):
+        cycle = self._cycle.get()
+        with cycle["account_lock"] if cycle is not None else self._prepare_lock:
+            try:
+                account = cycle.get("account") if cycle is not None else None
+                if account is None:
+                    account = json.loads(self._az("account", "show", "-o", "json"))
+                    if not isinstance(account, dict):
+                        raise ValueError()
+                    if not self.config.subscription and account.get("id"):
+                        self.config.subscription = str(UUID(account["id"]))
+                    if cycle is not None:
+                        cycle["account"] = account
+                tenant = account.get("tenantId") or self.config.tenant_id
+                person = account.get("user", {}).get("name")
+                if tenant and person:
+                    directory = Path(os.environ.get("AZURE_CONFIG_DIR", str(Path.home() / ".azure"))).resolve()
+                    session = f"{directory}|{self.config.subscription}|{self.config.tenant_id}"
+                    self._credential_context = bind_resource_principal((tenant, person), session)
+                else:
+                    self.invalidate_credentials()
+                return account
+            except (ValueError, KeyError, TypeError, AttributeError):
+                raise FinOpsError("Cannot verify the Azure account and subscription. Run aum configure before reading data.", 3) from None
+
+    def invalidate_credentials(self):
+        invalidate_resource_principal(self._credential_context)
+        self._credential_context = None
+        self._invalidate_snapshot()
+        cycle = self._cycle.get()
+        if cycle is not None:
+            with cycle["account_lock"]:
+                cycle.pop("account", None)
+
+    def _check_credential(self, credential):
+        validate_resource_principal(credential)
+        if credential != self._credential_context:
+            raise FinOpsError("Azure sign-in changed. Refresh the current principal before reading data.", 3)
 
     def close(self):
         with self._prepare_lock:
@@ -130,15 +168,21 @@ class DirectBackend(Backend):
         if not self.config.workspace:
             raise FinOpsError("Usage requires workspace in config: the Log Analytics workspace customer id. Find it in Azure Portal > Log Analytics > Overview.")
         workspace = identifier(self.config.workspace)
+        self.prepare_read("query")
+        credential = self._credential_context
+        if credential is None:
+            raise FinOpsError("Azure sign-in changed. Refresh the current principal before reading data.", 3)
         access = resource_token("https://api.loganalytics.io", self.config.subscription,
-                                self.config.tenant_id, runner=az)
+                                self.config.tenant_id, runner=az, credential=credential)
         try:
+            self._check_credential(credential)
             with self._prepare_lock:
                 if self._client is None:
                     self._client = httpx.Client(timeout=90)
                 client = self._client
             response = client.post(f"https://api.loganalytics.io/v1/workspaces/{workspace}/query",
                                    headers={"Authorization": "Bearer " + access}, json={"query": kql})
+            self._check_credential(credential)
             if not response.is_success:
                 raise http_error(response.status_code)
             payload = response.json()
@@ -186,7 +230,7 @@ class DirectBackend(Backend):
             result["features"]["usd_budgets"] = {"enabled": bool(usd_actions), "actions": usd_actions}
             return result
         if resource == "whoami":
-            account = json.loads(self._az("account", "show", "-o", "json"))
+            account = self._account()
             if not self.config.subscription and account.get("id"):
                 self.config.subscription = account["id"]
             can_write = False

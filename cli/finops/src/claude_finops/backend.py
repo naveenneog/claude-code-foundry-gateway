@@ -34,6 +34,9 @@ class Backend(ABC):
     def prepare_read(self, resource):
         """Resolve address metadata needed before an identity-independent read."""
 
+    def invalidate_credentials(self):
+        """Discard credentials when the engine verifies a different identity."""
+
     def people_filter(self, scope_id):
         return {"department_id": scope_id}
 

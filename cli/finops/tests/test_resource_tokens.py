@@ -30,12 +30,23 @@ def clear_cache():
         config.clear_resource_tokens()
 
 
+@pytest.fixture
+def credential():
+    return config.bind_resource_principal((SUB, "reader@contoso.com"), "test-session")
+
+
+def account():
+    return json.dumps({"id": SUB, "tenantId": SUB, "user": {"name": "reader@contoso.com"}})
+
+
 def test_direct_queries_reuse_token_across_backend_instances_until_near_expiry(monkeypatch):
     acquisitions = []
     clock = [1000.0]
     monkeypatch.setattr(config.time, "time", lambda: clock[0])
 
     def run(*args, **kwargs):
+        if args[:2] == ("account", "show"):
+            return account()
         assert args[:2] == ("account", "get-access-token")
         acquisitions.append(args)
         return jwt(clock[0] + 3600)
@@ -59,20 +70,20 @@ def test_direct_queries_reuse_token_across_backend_instances_until_near_expiry(m
     second.close()
 
 
-def test_resource_contexts_never_share_tokens(monkeypatch):
+def test_resource_contexts_never_share_tokens(monkeypatch, credential):
     calls = []
     monkeypatch.setattr(config, "az", lambda *args, **kwargs: calls.append(args) or jwt(time.time() + 3600))
-    config.resource_token(RESOURCE, SUB)
-    config.resource_token(RESOURCE, SUB)
-    config.resource_token("https://management.azure.com/", SUB)
-    config.resource_token(RESOURCE, "00000000-0000-0000-0000-000000000072")
-    config.resource_token(RESOURCE, SUB, tenant_id="00000000-0000-0000-0000-000000000073")
+    config.resource_token(RESOURCE, SUB, credential=credential)
+    config.resource_token(RESOURCE, SUB, credential=credential)
+    config.resource_token("https://management.azure.com/", SUB, credential=credential)
+    config.resource_token(RESOURCE, "00000000-0000-0000-0000-000000000072", credential=credential)
+    config.resource_token(RESOURCE, SUB, tenant_id="00000000-0000-0000-0000-000000000073", credential=credential)
     assert len(calls) == 4
     assert all(call[call.index("--resource") + 1] in {RESOURCE, "https://management.azure.com/"} for call in calls)
     assert "--tenant" in calls[-1] and "--subscription" not in calls[-1]
 
 
-def test_parallel_queries_acquire_only_one_token(monkeypatch):
+def test_parallel_queries_acquire_only_one_token(monkeypatch, credential):
     calls = []
     ready = threading.Barrier(8)
 
@@ -85,14 +96,14 @@ def test_parallel_queries_acquire_only_one_token(monkeypatch):
 
     def read():
         ready.wait(timeout=5)
-        return config.resource_token(RESOURCE, SUB)
+        return config.resource_token(RESOURCE, SUB, credential=credential)
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         results = list(executor.map(lambda _: read(), range(8)))
     assert len(calls) == 1 and len(set(results)) == 1
 
 
-def test_empty_failed_or_expiring_tokens_are_not_cached(monkeypatch):
+def test_empty_failed_or_expiring_tokens_are_not_cached(monkeypatch, credential):
     calls = []
     values = iter(["", FinOpsError("Sign-in refused", 3), jwt(time.time() + 60), jwt(time.time() + 3600)])
 
@@ -105,52 +116,53 @@ def test_empty_failed_or_expiring_tokens_are_not_cached(monkeypatch):
 
     monkeypatch.setattr(config, "az", run)
     with pytest.raises(FinOpsError, match="No access token"):
-        config.resource_token(RESOURCE, SUB)
+        config.resource_token(RESOURCE, SUB, credential=credential)
     with pytest.raises(FinOpsError, match="Sign-in refused"):
-        config.resource_token(RESOURCE, SUB)
-    config.resource_token(RESOURCE, SUB)
-    config.resource_token(RESOURCE, SUB)
-    config.resource_token(RESOURCE, SUB)
+        config.resource_token(RESOURCE, SUB, credential=credential)
+    config.resource_token(RESOURCE, SUB, credential=credential)
+    config.resource_token(RESOURCE, SUB, credential=credential)
+    config.resource_token(RESOURCE, SUB, credential=credential)
     assert len(calls) == 4
 
 
-def test_force_refresh_and_signout_drop_cached_credentials(monkeypatch):
+def test_force_refresh_and_signout_drop_cached_credentials(monkeypatch, credential):
     import subprocess
     calls = []
     monkeypatch.setattr(config.shutil, "which", lambda _: "az")
     monkeypatch.setattr(config.subprocess, "run", lambda args, **kwargs:
                         calls.append(args) or subprocess.CompletedProcess(args, 0, jwt(time.time() + 3600), ""))
-    config.resource_token(RESOURCE, SUB)
-    config.resource_token(RESOURCE, SUB, force=True)
+    config.resource_token(RESOURCE, SUB, credential=credential)
+    config.resource_token(RESOURCE, SUB, force=True, credential=credential)
     config.az("logout")
-    config.resource_token(RESOURCE, SUB)
+    credential = config.bind_resource_principal((SUB, "reader@contoso.com"), "test-session")
+    config.resource_token(RESOURCE, SUB, credential=credential)
     assert sum(call[1:3] == ["account", "get-access-token"] for call in calls) == 3
 
 
-def test_opaque_token_cache_has_a_bounded_lifetime(monkeypatch):
+def test_opaque_token_cache_has_a_bounded_lifetime(monkeypatch, credential):
     calls, clock = [], [1000.0]
     monkeypatch.setattr(config.time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(config, "az", lambda *args, **kwargs: calls.append(args) or "opaque-test-only")
-    config.resource_token(RESOURCE, SUB)
-    config.resource_token(RESOURCE, SUB)
+    config.resource_token(RESOURCE, SUB, credential=credential)
+    config.resource_token(RESOURCE, SUB, credential=credential)
     assert len(calls) == 1
     clock[0] += 301
-    config.resource_token(RESOURCE, SUB)
+    config.resource_token(RESOURCE, SUB, credential=credential)
     assert len(calls) == 2
 
 
-def test_known_expiry_is_reused_beyond_the_opaque_fallback_window(monkeypatch):
+def test_known_expiry_is_reused_beyond_the_opaque_fallback_window(monkeypatch, credential):
     calls, clock = [], [1000.0]
     monkeypatch.setattr(config.time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(config.time, "time", lambda: clock[0])
     monkeypatch.setattr(config, "az", lambda *args, **kwargs: calls.append(args) or jwt(clock[0] + 3600))
-    config.resource_token(RESOURCE, SUB)
+    config.resource_token(RESOURCE, SUB, credential=credential)
     clock[0] += 400
-    config.resource_token(RESOURCE, SUB)
+    config.resource_token(RESOURCE, SUB, credential=credential)
     assert len(calls) == 1
 
 
-def test_waiting_for_a_concurrent_token_obeys_the_callers_deadline(monkeypatch):
+def test_waiting_for_a_concurrent_token_obeys_the_callers_deadline(monkeypatch, credential):
     acquired, release = threading.Event(), threading.Event()
 
     def run(*args, **kwargs):
@@ -160,12 +172,12 @@ def test_waiting_for_a_concurrent_token_obeys_the_callers_deadline(monkeypatch):
 
     monkeypatch.setattr(config, "az", run)
     with ThreadPoolExecutor(max_workers=2) as pool:
-        first = pool.submit(config.resource_token, RESOURCE, SUB)
+        first = pool.submit(config.resource_token, RESOURCE, SUB, credential=credential)
         assert acquired.wait(timeout=3)
         start = time.perf_counter()
         try:
             with pytest.raises(FinOpsError, match="token.*timed out"):
-                config.resource_token(RESOURCE, SUB, timeout=.05)
+                config.resource_token(RESOURCE, SUB, timeout=.05, credential=credential)
             assert time.perf_counter() - start < .3
         finally:
             release.set()
@@ -183,7 +195,8 @@ def test_direct_queries_share_one_http_client_and_close_it(monkeypatch):
         clients.append(result)
         return result
 
-    monkeypatch.setattr("claude_finops.direct.az", lambda *args, **kwargs: jwt(time.time() + 3600))
+    monkeypatch.setattr("claude_finops.direct.az", lambda *args, **kwargs:
+                        account() if args[:2] == ("account", "show") else jwt(time.time() + 3600))
     monkeypatch.setattr(httpx, "Client", client)
     backend = DirectBackend(config.Config(backend="direct", subscription=SUB, resource_group="rg-contoso",
                                          apim_name="apim-contoso", workspace=SUB))

@@ -36,6 +36,7 @@ _readiness_credential = ContextVar("turnstile_readiness_credential", default=Non
 
 class TurnstileBackend(HttpBackend):
     name = "Turnstile"
+    identity_path = READ_ROUTES["whoami"]
 
     def _token_timeout(self):
         return 2.5

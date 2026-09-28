@@ -13,25 +13,70 @@ from urllib.parse import urlsplit
 from .errors import FinOpsError
 
 
-_resource_tokens: dict[tuple[str, tuple[str, ...]], tuple[str, float]] = {}
+@dataclass(frozen=True)
+class CredentialContext:
+    principal: tuple[str, ...]
+    session: str
+    generation: int
+
+
+_resource_tokens: dict[tuple[str, tuple[str, ...], CredentialContext], tuple[str, float]] = {}
+_credential_contexts: dict[str, CredentialContext] = {}
+_credential_generation = 0
 _resource_token_lock = RLock()
 
 
 def clear_resource_tokens():
     with _resource_token_lock:
         _resource_tokens.clear()
+        _credential_contexts.clear()
 
 
-def resource_token(resource, subscription="", tenant_id="", *, force=False, timeout=120, runner=None):
+def bind_resource_principal(principal: tuple[str, ...], session: str) -> CredentialContext:
+    global _credential_generation
+    if not session or not principal or any(not isinstance(value, str) or not value for value in principal):
+        raise FinOpsError("Cannot verify the Azure principal/session for credential reuse.", 3)
+    principal = tuple(value.casefold() for value in principal)
+    with _resource_token_lock:
+        current = _credential_contexts.get(session)
+        if current is None or current.principal != principal:
+            invalidate_resource_principal(current)
+            _credential_generation += 1
+            current = CredentialContext(principal, session, _credential_generation)
+            _credential_contexts[session] = current
+        return current
+
+
+def invalidate_resource_principal(credential: CredentialContext | None):
+    if credential is None:
+        return
+    with _resource_token_lock:
+        if _credential_contexts.get(credential.session) == credential:
+            _credential_contexts.pop(credential.session)
+        for key in list(_resource_tokens):
+            if key[2] == credential:
+                _resource_tokens.pop(key)
+
+
+def validate_resource_principal(credential: CredentialContext):
+    with _resource_token_lock:
+        if _credential_contexts.get(credential.session) != credential:
+            raise FinOpsError("Azure sign-in changed. Refresh the current principal before reading data.", 3)
+
+
+def resource_token(resource, subscription="", tenant_id="", *, force=False, timeout=120, runner=None,
+                   credential: CredentialContext | None = None):
     deadline = time.monotonic() + timeout
     selected = ("--tenant", tenant_id) if tenant_id else ("--subscription", subscription) if subscription else ()
-    key = (resource, selected)
+    key = (resource, selected, credential)
     if not _resource_token_lock.acquire(timeout=timeout):
         raise FinOpsError("Waiting for an Azure resource token timed out. Retry after the current sign-in finishes.", 7)
     try:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise FinOpsError("Waiting for an Azure resource token timed out. Retry after the current sign-in finishes.", 7)
+        if credential is not None and _credential_contexts.get(credential.session) != credential:
+            raise FinOpsError("Azure sign-in changed. Refresh the current principal before reading data.", 3)
         value, acquired = _resource_tokens.get(key, ("", 0.0))
         if (force or token_needs_refresh(value)
                 or (_token_expiry(value) is None and time.monotonic() - acquired >= 300)):
@@ -40,7 +85,8 @@ def resource_token(resource, subscription="", tenant_id="", *, force=False, time
                                    "--query", "accessToken", "-o", "tsv", *selected, timeout=remaining)
             if not value:
                 raise FinOpsError("No access token. Run az login in the selected backend's tenant.", 3)
-            _resource_tokens[key] = (value, time.monotonic())
+            if credential is not None:
+                _resource_tokens[key] = (value, time.monotonic())
         return value
     finally:
         _resource_token_lock.release()

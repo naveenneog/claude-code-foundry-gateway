@@ -120,8 +120,17 @@ def test_every_write_invalidates_snapshot_even_when_its_outcome_is_uncertain(fai
 ])
 def test_direct_read_only_facts_are_authorized_by_azure_not_blocked_by_identity_label(resource, params):
     backend, _, _, _ = direct()
-    backend._az = lambda *args: (_ for _ in ()).throw(AssertionError("Read-only data must not wait for identity."))
+    original = backend._az
+    calls = []
+
+    def account_only(*args):
+        assert args[:2] == ("account", "show"), "Read-only facts must not wait for the RBAC permission label."
+        calls.append(args)
+        return original(*args)
+
+    backend._az = account_only
     assert isinstance(Engine(backend, MONTH).read(resource, **params), dict)
+    assert calls == [("account", "show", "-o", "json")]
 
 
 def test_budget_usage_query_starts_while_gateway_read_is_pending():
@@ -155,7 +164,8 @@ def test_legacy_direct_profile_still_filters_ledger_to_the_selected_gateway():
     backend, _, _, _ = direct()
     backend.config.subscription = ""
     queries, accounts = [], []
-    backend._az = lambda *args: accounts.append(args) or json.dumps({"id": SUB})
+    backend._az = lambda *args: accounts.append(args) or json.dumps(
+        {"id": SUB, "tenantId": SUB, "user": {"name": "reader@contoso.com"}})
     backend.query = lambda kql: queries.append(kql) or []
     Engine(backend, MONTH).read("requests", limit=10)
     assert f'| where _ResourceId =~ "/subscriptions/{SUB}/resourceGroups/rg-contoso/' in queries[0]

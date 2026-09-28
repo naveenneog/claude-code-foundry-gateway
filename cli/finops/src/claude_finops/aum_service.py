@@ -12,6 +12,7 @@ from . import service_models as models
 
 class AumServiceBackend(HttpBackend):
     name = "AUM service"
+    identity_path = "/api/v1/me"
     immediate_writes = True
     native_modes = True
     requires_reason = True

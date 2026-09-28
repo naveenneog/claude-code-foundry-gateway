@@ -145,6 +145,23 @@ window proves the child and grandchild both executed, then verifies their PIDs
 are terminated. This distinguishes an enforced deadline from a launch failure
 and covers a 350 ms scheduling delay before assignment.
 
+Resource-token reuse additionally requires a verified principal and Azure CLI
+session binding. A changed binding invalidates its previous generation; an
+unbound caller obtains a fresh token rather than borrowing a previous person's
+credential. Direct verifies the account once per read cycle and shares that
+fast result across its queries and identity label. RBAC permission lookup remains
+independent of data arrival. A new cycle rechecks the account, and an identity
+change invalidates credentials and the cycle's snapshot. In-flight results from
+an obsolete credential generation are refused before they can become current
+data. This supersedes the earlier interpretation that a configured subscription
+alone was sufficient to reuse a token before identity verification.
+HTTP identity reads obtain current CLI credentials instead of using the previous
+identity's cached bearer. A verified identity change clears that backend's
+credentials and increments a response generation; an older in-flight response
+is refused. The token-cache tests now supply explicit verified contexts, and the
+Direct independence tests distinguish the required account check from the RBAC
+permission lookup they continue to forbid before data.
+
 ## Consequences
 
 No server deployment, account switch, consent, resource grant or authority
