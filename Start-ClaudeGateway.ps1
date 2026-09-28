@@ -141,7 +141,8 @@ function Get-FlowModules {
     $otherAction = [System.Collections.Generic.List[object]]::new()
     $infos = [System.Collections.Generic.List[object]]::new()
     if (Test-Path -LiteralPath $ModulePath) {
-        foreach ($file in @(Get-ChildItem -LiteralPath $ModulePath -Filter '*.ps1' -File | Sort-Object Name)) {
+        # Code-point order: the steps' order feeds the plan's fingerprint (P76).
+        foreach ($file in @(Sort-ClaudeFlowOrdinal -InputObject @(Get-ChildItem -LiteralPath $ModulePath -Filter '*.ps1' -File) -Key { $_.Name })) {
             if ($file.Name -in @('FlowContract.ps1', 'Discovery.ps1')) { continue }
             foreach ($name in 'Get-ClaudeFlowStepInfo','Get-ClaudeFlowStepQuestions','Get-ClaudeFlowStepPlan','Invoke-ClaudeFlowStep','Test-ClaudeFlowStep') {
                 if (Get-Command $name -ErrorAction SilentlyContinue) { Remove-Item "function:\$name" -Force -ErrorAction SilentlyContinue -WhatIf:$false }
@@ -490,7 +491,7 @@ if ($resumeRun) {
     # since, or a new dependency, would otherwise be left out of an incomplete plan.
     $resumeNames = @($resumeRun.steps | ForEach-Object { [string]$_ })
     $candidateNames = @($steps | Where-Object { -not ($_.Info.PSObject.Properties.Name -contains 'AttendedFirst' -and $_.Info.AttendedFirst) } | ForEach-Object { $_.Info.Name })
-    if ((@($resumeNames | Sort-Object) -join ',') -eq (@($candidateNames | Sort-Object) -join ',')) {
+    if ((@(Sort-ClaudeFlowOrdinal -InputObject $resumeNames) -join ',') -eq (@(Sort-ClaudeFlowOrdinal -InputObject $candidateNames) -join ',')) {
         $steps = @($steps | Where-Object { $_.Info.Name -in $resumeNames })
         $afterLead = $true
         Write-Host ("Resuming the {0} run started {1}: {2}. The gateway foundation was set up in that run." -f $Action, $resumeRun.startedUtc, (@($steps | ForEach-Object { $_.Info.Title }) -join ', ')) -ForegroundColor Cyan

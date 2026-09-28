@@ -14,14 +14,22 @@ function Assert($label, $condition, $detail = '') {
 Write-Host ''
 Write-Host 'Guided flow - one order and one fingerprint on both shells' -ForegroundColor Cyan
 
-# ------------------------------------------------------------------ no culture sort in scripts/flow
-$hits = foreach ($f in @(Get-ChildItem -LiteralPath (Join-Path $root 'scripts\flow') -Recurse -Filter '*.ps1' -File)) {
+# ------------------------------------------------------------------ no culture sort in the flow
+# The flow's scripts: everything under scripts/flow, and each script at the root or in scripts/
+# that loads FlowContract.ps1 (Start-ClaudeGateway.ps1 orders the step modules, and
+# Update-ClaudeGateway.ps1 the migrations, before either plan is fingerprinted).
+$entryPoints = @(@(Get-ChildItem -LiteralPath $root -Filter '*.ps1' -File) + @(Get-ChildItem -LiteralPath (Join-Path $root 'scripts') -Filter '*.ps1' -File) |
+    Where-Object { [IO.File]::ReadAllText($_.FullName) -match 'FlowContract\.ps1' })
+$flowScripts = @(@(Get-ChildItem -LiteralPath (Join-Path $root 'scripts\flow') -Recurse -Filter '*.ps1' -File) + $entryPoints)
+$hits = foreach ($f in $flowScripts) {
     $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
     foreach ($c in $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] -and $n.GetCommandName() -in 'Sort-Object', 'sort' }, $true)) {
         '{0}:{1}' -f $f.FullName.Substring($root.Length + 1), $c.Extent.StartLineNumber
     }
 }
-Assert 'scripts/flow holds no Sort-Object: every sort that feeds a plan uses Sort-ClaudeFlowOrdinal' (@($hits).Count -eq 0) (@($hits) -join ', ')
+$entryNames = @($entryPoints | ForEach-Object { $_.FullName.Substring($root.Length + 1) })
+Assert 'the scan covers the flow''s entry points: Start-ClaudeGateway.ps1 and scripts\Update-ClaudeGateway.ps1 load FlowContract.ps1' ($entryNames -contains 'Start-ClaudeGateway.ps1' -and $entryNames -contains 'scripts\Update-ClaudeGateway.ps1') ($entryNames -join ', ')
+Assert 'the flow''s scripts hold no Sort-Object: every sort uses Sort-ClaudeFlowOrdinal' (@($hits).Count -eq 0) (@($hits) -join ', ')
 
 $shells = [ordered]@{ '7' = (Get-Process -Id $PID).Path }
 $ps51 = if ($env:SystemRoot) { Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe' } else { '' }
@@ -60,6 +68,7 @@ $result = [ordered]@{
     files = @(Sort-ClaudeFlowOrdinal -InputObject $files -Key { $_.Name } | ForEach-Object { $_.Name })
     empty = @(Sort-ClaudeFlowOrdinal -InputObject @()).Count
     unpriced = @($book.unknownModels)
+    separator = @(Sort-ClaudeFlowOrdinal -InputObject @('a', "a`0A", "a`0b", 'A'))
 }
 'P76JSON ' + ($result | ConvertTo-Json -Compress)
 '@
@@ -69,6 +78,8 @@ $result = [ordered]@{
         Assert "PowerShell ${shell}: Sort-ClaudeFlowOrdinal orders by code point, ignoring case, with a code-point tie-break" (-not $h.Failed -and (@($h.sorted) -join ',') -ceq ($expected -join ',')) $(if ($h.Failed) { Get-Tail $h.Output } else { @($h.sorted) -join ',' })
         Assert "PowerShell ${shell}: -Unique keeps one of each ignoring case, and -Key sorts objects; an empty list is empty" (-not $h.Failed -and (@($h.unique) -join ',') -ceq 'a,B' -and (@($h.files) -join ',') -ceq 'workbook-chargeback.json,workbook.json' -and $h.empty -eq 0) $(if (-not $h.Failed) { "unique=$(@($h.unique) -join ',') files=$(@($h.files) -join ',') empty=$($h.empty)" })
         Assert "PowerShell ${shell}: the Budgets price book lists each unpriced model once, in code-point order" (-not $h.Failed -and (@($h.unpriced) -join ',') -ceq 'Alpha-Model,zeta-model') $(if (-not $h.Failed) { "unpriced=$(@($h.unpriced) -join ',')" })
+        # A key that holds the character a joined key would use as its separator (U+0000) keeps its place.
+        Assert "PowerShell ${shell}: a key holding U+0000 sorts by code point: A, a, a<U+0000>A, a<U+0000>b" (-not $h.Failed -and (@($h.separator) -join '|') -ceq "A|a|a`0A|a`0b") $(if (-not $h.Failed) { (@($h.separator) -join '|').Replace("`0", '<U+0000>') })
     }
 
     if ($shells.Contains('5.1')) {

@@ -5,7 +5,7 @@
       "id": "system-overview",
       "source": "docs/architecture/01-system.json",
       "inputs": {
-        "Start-ClaudeGateway.ps1": "2fd56610b090af7b06ad692705508847eb0e6c8b8f4bc0d070e872e8e792cbe6",
+        "Start-ClaudeGateway.ps1": "c9bfd20b303f5b0a216311ed6e16c8944e69725c6f2596ce521c40ecdbba8896",
         "analytics/chargeback-cost.kql": "8d8a66a8980348851f37889579bf019666b229105bb4e64caae02c474de080b1",
         "analytics/chargeback-ledger.kql": "3924ba7e4edb21d761b16254452c0509a2a9d27558033d7a980c5e201e22b2f5",
         "docs/architecture/01-system.json": "dfb279d7bec41abefa25f18d44dfef14c47435d4d45467577f02cc4ca6d8b4f3",

@@ -44,6 +44,23 @@ comparison in the suite is now case-sensitive, and two checks were added that no
 Budgets price book lists each unpriced model once, and the Update migration reads each named value
 once (the policy holds 39 references to 24 named values).
 
+Found after that, by reading the call sites the flow shares: three more culture sorts sat outside
+`scripts/flow`. `Start-ClaudeGateway.ps1` ordered the step modules by file name with `Sort-Object`,
+and `scripts/Update-ClaudeGateway.ps1` the migrations; both orders set the order of the plans that
+the fingerprint covers. A third, the resume check in `Start-ClaudeGateway.ps1`, compares two sorted
+lists on one host. All three use `Sort-ClaudeFlowOrdinal`, and the scan now covers every script at
+the root or in `scripts/` that loads `FlowContract.ps1`, besides `scripts/flow`; a check names the two
+entry points, so a scan that found neither fails. The shipped module and migration names hold no
+hyphen or underscore at a position where culture and code-point order differ, so no plan's
+fingerprint changes with this. The helper also compared keys joined as `folded` + U+0000 + `key`: a
+key holding U+0000 moved another key out of place, so `a` sorted after `a<U+0000>A` and
+`a<U+0000>b`. It now compares the folded keys, then the keys, then the input positions, with
+`[string]::CompareOrdinal`.
+
+Mutations after that, the same rule: 13 of 13 caught at 17, 33 and 33 checks, the 10 above
+rewritten for the new comparer, the keys joined by a separator again, and `Sort-Object` back in the
+module and migration orders and in the resume check.
+
 - [ ] Council, five seats; the packet gate exits 0
 ## P72 permutation tests of the guided flow and the installer, 2026-09-28
 

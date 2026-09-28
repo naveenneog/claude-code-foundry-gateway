@@ -82,23 +82,30 @@ function Get-ClaudeFlowTotalMonthlyUsd {
 function Sort-ClaudeFlowOrdinal {
     # Code-point order, ignoring case as Sort-Object does, the same on Windows PowerShell 5.1 and
     # PowerShell 7. Sort-Object compares by culture, and .NET Framework (NLS) and .NET (ICU) weigh a
-    # hyphen differently, so one list had two orders and one plan two fingerprints (P76). Keys that
-    # differ only in case are ordered by code point, so the order never depends on the sort algorithm.
-    # -Unique keeps the first of each key ignoring case.
+    # hyphen differently, so one list had two orders and one plan two fingerprints (P76). Keys equal
+    # ignoring case are ordered by code point, then by input position, so the order never depends on
+    # the sort algorithm. The keys are compared as pairs, not joined: a separator character inside a
+    # key would reorder it. -Unique keeps the first of each key ignoring case.
     param([object[]]$InputObject = @(), [scriptblock]$Key = { [string]$_ }, [switch]$Unique)
     $items = @($InputObject | Where-Object { $null -ne $_ })
     if (-not $items.Count) { return }
-    [string[]]$keys = @(foreach ($item in $items) { $k = [string]($item | ForEach-Object $Key); $k.ToUpperInvariant() + [char]0 + $k })
-    [object[]]$sorted = @($items)
-    # The casts select Sort(Array, Array, IComparer): without them PowerShell binds the generic
-    # overload and passes it a converted copy of the items, so only the keys are sorted.
-    [Array]::Sort([Array]$keys, [Array]$sorted, [System.Collections.IComparer][StringComparer]::Ordinal)
-    if (-not $Unique) { return $sorted }
+    $entries = [System.Collections.Generic.List[object]]::new()
+    for ($i = 0; $i -lt $items.Count; $i++) {
+        $k = [string]($items[$i] | ForEach-Object $Key)
+        $entries.Add([pscustomobject]@{ Folded = $k.ToUpperInvariant(); Key = $k; Index = $i; Item = $items[$i] })
+    }
+    $entries.Sort([System.Comparison[object]]{
+        param($x, $y)
+        $c = [string]::CompareOrdinal($x.Folded, $y.Folded)
+        if ($c -eq 0) { $c = [string]::CompareOrdinal($x.Key, $y.Key) }
+        if ($c -eq 0) { $c = $x.Index.CompareTo($y.Index) }
+        $c
+    })
     $kept = [System.Collections.Generic.List[object]]::new()
     $previous = $null
-    for ($i = 0; $i -lt $sorted.Count; $i++) {
-        $folded = $keys[$i].Substring(0, $keys[$i].IndexOf([char]0))
-        if ($null -eq $previous -or $folded -ne $previous) { $kept.Add($sorted[$i]); $previous = $folded }
+    foreach ($e in $entries) {
+        if (-not $Unique -or $null -eq $previous -or -not [string]::Equals($e.Folded, $previous, [StringComparison]::Ordinal)) { $kept.Add($e.Item) }
+        $previous = $e.Folded
     }
     return $kept.ToArray()
 }
