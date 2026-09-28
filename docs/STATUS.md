@@ -25,6 +25,7 @@ plan and creates in that order. Work is isolated to `p76-ordinal-order`, based o
       offline from one record on both shells, has the same canonical text and the same fingerprint;
       the Update migration's named values are the same list in the same order on both shells
 - [x] GUIDED-FLOW and CHANGELOG
+
 Measured after the fix: PowerShell 7's culture order already matched code-point order for the
 shipped workbook list and the policy's 24 named values, so its plans keep their fingerprints;
 on Windows PowerShell 5.1 the Monitoring and Update plans have new ones. Found while testing:
@@ -61,7 +62,57 @@ Mutations after that, the same rule: 13 of 13 caught at 17, 33 and 33 checks, th
 rewritten for the new comparer, the keys joined by a separator again, and `Sort-Object` back in the
 module and migration orders and in the resume check.
 
+Council round 1 (gpt-6-astra, five seats, read-only, over `38ad175..893c354`): BLOCK.
+
+| Seat | Verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | BLOCK | Two culture sorts outside `scripts/flow` set the order of fingerprinted plans: the step modules (`Start-ClaudeGateway.ps1:144`) and the migrations (`scripts/Update-ClaudeGateway.ps1:38`); `Sort-Object Name` put hyphenated names first on 7 and last on 5.1 | `5019cdb` (found in parallel before the report arrived), and the scan below |
+| Coder | PASS | should-fix: a key holding U+0000 moved another key, because the helper joined keys with it | `5019cdb`: keys compared as values |
+| QA | PASS | two temporary mutations caught; the checks did not cover the sorts outside `scripts/flow` | the scan below |
+| UX | PASS | GUIDED-FLOW and CHANGELOG state the fingerprint change and what to do | none needed |
+| Security | PASS | should-fix: the same U+0000 order | `5019cdb` |
+
+Merging main (`f98f885`, P70) into this branch (`00b8376`) failed the scan: P70's model lifecycle
+(`scripts/ClaudeModelLifecycle.ps1`, which loads `FlowContract.ps1`) sorted its deployments, tier
+lists, questions and assignments with `Sort-Object`. The flow's plans also run code that loads
+neither: the price book (`scripts/ClaudeModelPrices.ps1`), the deployment list
+(`scripts/ClaudeModelDeployment.ps1`), the region choice (`scripts/ClaudeGatewayRegion.ps1`) and
+the installer's default tier model lists (`Install-ClaudeGateway.ps1`). Measured on Windows
+PowerShell 5.1 at `00b8376`, with names whose culture order differs between the shells: a model
+change over tier lists already in code-point order proposed `Update models-standard` and
+`Update models-premium` to write the same members in another order, and its fingerprint differed
+from PowerShell 7's; a deployment whose model matched two price-book spellings took
+`claude-x-1.5` on 5.1 and `claude-x-1-5` on 7; regions at one price were listed `usa, us-b` on 5.1
+and `us-b, usa` on 7; the deployable models were listed in reverse.
+
+All 14 of those sorts use `Sort-ClaudeFlowOrdinal`, which now takes keys as `Sort-Object`'s
+`-Property` does (script blocks, property names, hashtables with `Expression` and `Descending`),
+compares numbers, times and versions by value, and has `-Descending`. The three libraries load
+`FlowContract.ps1` only when the helper is not already defined, and the installer loads it.
+`tests/Test-FlowOrdinalOrder.ps1` follows every script the fingerprinted plans run (the orchestrator
+and every step module, the Update, the model sync and the installer, and what they dot-source, 43
+scripts, read from the syntax tree) and lists the 17 `Sort-Object` calls left in them, each with
+its reason: a value key (prices, integers, versions), an order that reaches only the console (menus,
+an error), or an order used inside one process (a cache key, set comparisons). A listed call that
+is gone or changed fails the check. `scripts/ClaudeClientSupport.ps1` keeps its three: the
+workstation bundle fetches only the files `Setup-ClaudeWorkstation.ps1` names, so it loads nothing
+more. Against `00b8376`, 22 of the 35 checks fail, on 5.1 each of the four cases above; after the
+fix all 35 pass (`d723f90`).
+
+Mutations after that, the same rule, at 35, 33 and 33 checks: 25 of 25 caught. The ten helper
+mutations above rewritten for the new comparer, the three outside `scripts/flow`, and twelve new:
+`-Descending` ignored, a key hashtable's `Descending` ignored, numbers compared as strings, only
+the first key used, `Sort-Object` back in the tier lists, the model-list reader, the price-book
+entry and the installer's tier lists, the regions at one price in arrival order, the deployable
+models ascending, the price book no longer loading the helper, and a listed sort changed. `-Unique`
+keeping every item first counted as broken, not caught: the probe of the Setup steps failed, and
+the seven checks that read it were skipped, so the suite made 34 checks. Those checks are now made
+whether or not the probe ran, and the mutation is caught at 35. The 15 suites that load the changed
+scripts pass, among them P70's lifecycle mutations (62 of 62 caught at 138 checks), the installer
+permutations and the guided flow.
+
 - [ ] Council, five seats; the packet gate exits 0
+
 ## P72 permutation tests of the guided flow and the installer, 2026-09-28
 
 The owner's test on 2026-09-27 found the guided flow's defects one path at a time. P72 tests the

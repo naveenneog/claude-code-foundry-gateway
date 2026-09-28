@@ -835,11 +835,18 @@ exact streaming cache-creation detail remains **U13**.
 - **One plan still had two fingerprints on the two shells (P76).** A live `-PlanOnly` over the
   reference record printed one review and two fingerprints: Monitoring sorted its workbooks with
   `Sort-Object`, which compares by culture, and .NET Framework and .NET weigh a hyphen differently.
-  The named values of the Update migration `0002` had the same fault. Every sort in `scripts/flow`
-  now orders by code point through `Sort-ClaudeFlowOrdinal`, a check refuses a new `Sort-Object`
-  there, and `tests/Test-FlowOrdinalOrder.ps1` compares every shipped Setup step on both shells. For the
-  shipped lists, PowerShell 7's culture order was already code-point order (measured), so its plans keep
-  their fingerprints; on Windows PowerShell 5.1 the Monitoring and Update plans have new ones.
+  The named values of the Update migration `0002` had the same fault, and so did the order of the
+  step modules and of the migrations. Merged from P70 the same day, the model change sorted its
+  deployments, tier lists and questions the same way: on Windows PowerShell 5.1 a model change over
+  tier lists already in code-point order proposed rewriting both lists, and its fingerprint differed
+  from PowerShell 7's. The price-book entry a deployment takes, the region choice, the deployable
+  models and the installer's default tier lists had the same fault. All of them order by code point
+  through `Sort-ClaudeFlowOrdinal`, which now takes several keys, compares numbers, times and versions
+  by value, and has `-Descending`. `tests/Test-FlowOrdinalOrder.ps1` compares every shipped Setup step
+  and a model change on both shells, follows every script the plans run and lists each `Sort-Object`
+  left in them with its reason. For the shipped lists, PowerShell 7's culture order was already
+  code-point order (measured), so its plans keep their fingerprints; on Windows PowerShell 5.1 the
+  Monitoring and Update plans have new ones.
 - **`-AuthMode` skipped the installer's Claude Desktop sign-in section (P72).** The Desktop
   questions and the external IdP record sat inside the `else` branch that asks the developer
   sign-in, so `-AuthMode device -DesktopSignInKind external-idp-browser -DesktopEntraClientId <id>`

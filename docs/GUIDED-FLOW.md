@@ -181,7 +181,8 @@ fingerprint on each shell. Every list a plan holds is also in code-point order
 (`Sort-ClaudeFlowOrdinal` in `scripts/flow/FlowContract.ps1`) since P76:
 `Sort-Object` compares by culture, and .NET Framework and .NET weigh a hyphen
 differently, so until then the Monitoring and Update plans listed their files
-and named values in a different order on each shell. The canonical text changed
+and named values in a different order on each shell, and a model change its
+deployments and tier lists. The canonical text changed
 with P72 and P76, so a fingerprint printed by an earlier release may no longer
 match its plan, depending on the shell that printed it and the plan's text; when
 one is refused, run `-PlanOnly` again.
