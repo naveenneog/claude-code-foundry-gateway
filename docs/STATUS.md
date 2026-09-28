@@ -7,7 +7,9 @@ Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM 
 **Council round 1:** Architect and Security PASS; Coder, QA and UX BLOCK at
 `fb8f849`. The earlier builder results remain below as historical evidence,
 not proof that the council's missed windows or viewport defect were covered.
-Corrections are in progress locally. The lead runs round 2.
+Corrections are implemented and verified locally through `39d0c55`, with
+ledger-only evidence following it. The lead runs round 2; no new council
+verdict is claimed here.
 
 ### Council round 1 corrections
 
@@ -20,10 +22,11 @@ Corrections are in progress locally. The lead runs round 2.
 | QA | BLOCK | Existing tests miss the preview-to-commit window, post-save read denial and failing rollback; the Settings address assertion failed intermittently (13 passed, 1 failed in 30.38 s) |
 | UX | BLOCK | Settings can retain cached narrow table widths; the connection needs an independent guarded wrapping label. AUM-service membership is unavailable, despite the guide and enabled control |
 
-The correction sequence is deterministic RED regressions, minimal production
+The correction sequence was deterministic RED regressions, minimal production
 fixes, GREEN commits, negative probes with unchanged baseline case counts,
 and ten consecutive Settings visibility runs without relaxing its original
-address assertion. U40 and U41 are reopened below before these changes.
+address assertion. U40 and U41 were reopened before these changes and are now
+closed with the correction evidence.
 One long command owns `.gate-lock` at a time, with release in that same
 command's `finally`; no lock is retained across tool invocations. The earlier
 multi-command validation wrapper is not reused for this review.
@@ -66,7 +69,7 @@ the complete address, rather than requiring one substring to stay on one line.
 The Settings label uses the current settings publication guard and participates
 in principal-clearing context. AUM-service membership is disabled with a
 visible explanation; the bridge and its writer restrictions are unchanged.
-Ten consecutive runs and negative proofs are still pending at this green.
+The ten-run and negative results below complete the evidence after that green.
 
 The ten-run stability check subsequently passed **10 consecutive fresh pytest
 processes, 4 cases each (40 passes), in 152.750 s**. Each run includes the
@@ -82,6 +85,83 @@ the commit path, the transaction, connection and publication suites passed
 **53 tests in 52.80 s**. Both early and final-window conflicts retain the
 reviewed candidate and name the changed fields without displaying raw profile
 contents.
+
+#### Final round 1 correction evidence, 2026-09-29
+
+The shared P72/P79b lock remained owned elsewhere during the bounded targeted
+runs. This builder did not remove it or declare it stale. After it became
+free, **each command below acquired and released its own lock in the same
+synchronous invocation**. No lock crossed a tool-call boundary. The three
+regression commands are disjoint file shards so one command does not exceed
+the invocation deadline on the shared workstation; their union is every one
+of the 56 AUM test files, with **632 unique test cases and no duplicates**.
+
+| Command | Owned lock, IST | Result | Seconds |
+|---|---|---|---:|
+| Round 1 mutation command | 00:03:14-00:05:44 | **19/19 caught**, same baseline/mutant test-case IDs/counts, no collection errors or skips | 149.485 harness; 149.875 wall |
+| Full AUM shard 1/3 | 00:05:57-00:08:02 | 210 passed | 122.35 pytest; 124.469 wall |
+| Full AUM shard 2/3 | 00:08:10-00:09:45 | 161 passed | 92.97 pytest; 95.000 wall |
+| Full AUM shard 3/3 | 00:09:53-00:11:59 | 261 passed | 124.25 pytest; 126.109 wall |
+| **Full AUM union** | Separate locks as above | **632 passed**, no failures or skips | **339.57 pytest; 345.578 wall**, excluding lock waits |
+| Restored council regressions | Inside the mutation command | 18 passed after restoring every mutation | 25.141 wall |
+| Viewport stability | Bounded targeted run, 2026-09-28 | 10 consecutive processes, 40 passes, no failed iteration or retry | 152.750 wall |
+| Guide and exact snapshots | Bounded targeted run | 9 passed, including the updated source/output manifest | 18.92 pytest |
+| Architecture source/image check | Read-only targeted check | PASS; source hashes, labels and image references agree | No timing claim |
+
+The original-worktree commands printed and asserted that `claude_finops`
+resolved under `accel-p80`, using the shared interpreter only with this
+worktree's `PYTHONPATH`. Isolated mutation copies used their own package path,
+disabled bytecode caching, and were removed in `finally`. The new Python
+files remained syntactically valid in every probe; an import/collection error
+did not count as a catch.
+
+The final shared-lock attempts for a repeated all-guide reference wrapper and
+the deferred audit-only gate found another owner and ran nothing. No new
+round-1 pass is claimed for those wrappers. The final guide/snapshot tests,
+19 negative probes and entire AUM regression union did run and passed.
+The full packet gate still follows the lead's round-2 council.
+
+| Probe | Baseline / mutant cases | Failed | Seconds |
+|---|---:|---:|---:|
+| reviewed-revision | 1 / 1 | 1 | 4.750 |
+| reviewed-candidate | 1 / 1 | 1 | 4.704 |
+| preview-conflict-details | 1 / 1 | 1 | 4.250 |
+| writer-serialization | 2 / 2 | 2 | 2.234 |
+| compare-before-backup | 1 / 1 | 1 | 4.312 |
+| compare-after-backup | 1 / 1 | 1 | 2.047 |
+| post-save-windows-read | 1 / 1 | 1 | 2.110 |
+| post-save-rollback | 1 / 1 | 1 | 1.937 |
+| failed-restore-recovery | 2 / 2 | 2 | 6.969 |
+| durable-form-error | 2 / 2 | 2 | 6.985 |
+| independent-connection-label | 2 / 2 | 2 | 6.062 |
+| connection-label-wrap | 1 / 1 | 1 | 3.188 |
+| settings-origin-guard | 1 / 1 | 1 | 3.219 |
+| service-membership-button | 2 / 2 | 2 | 4.250 |
+| service-membership-action | 2 / 2 | 2 | 4.172 |
+| service-membership-explanation | 2 / 2 | 2 | 4.281 |
+| service-membership-palette | 2 / 2 | 2 | 4.750 |
+| service-empty-search | 1 / 1 | 1 | 3.516 |
+| service-membership-guide | 1 / 1 | 1 | 1.906 |
+
+Mutant executions took 75.642 s; clean selector baselines took 48.076 s.
+Receipts, full commands and JUnit case identities are in this session's
+`files\p80-r1`: `mutation-results.json`, `mutation-*.xml`,
+`full-aum-{1,2,3}.xml`, `full-aum-*-receipt.json`, `full-aum-files.json`,
+`settings-repeats.json` and the associated logs.
+
+| Correction commit | Subject |
+|---|---|
+| `2fe055d` | `fix(p80): commit reviewed profiles under a writer lock` |
+| `59e2b0e` | `fix(p80): show connection independently of table widths` |
+| `39d0c55` | `fix(p80): explain profile conflicts at every preview boundary` |
+
+All Coder, QA and UX implementation findings are addressed for round 2.
+The original Settings visibility test and membership writer module are
+unchanged from `fb8f849`; the fix is not a weaker assertion, snapshot-only
+change or added writer. The architecture remains the same local client/file
+boundary, with its serialized writer behavior recorded in ADR-0038 and the
+diagram. The corrected 80x24 Settings image was inspected. No push, merge,
+history rewrite, Azure operation or ownership change was performed.
 
 ### PLAN
 

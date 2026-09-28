@@ -147,3 +147,11 @@ DataTable width caches. AUM-service membership is unavailable in the current
 bridge; its control and explanation reflect that existing limit without
 adding a writer. These are corrections within the existing local client/file
 boundary, with no new Azure component, identity, network path or authority.
+
+Round-1 correction evidence on 2026-09-29: all 19 new negative probes were
+caught with their baseline case identities/counts preserved. The full AUM
+regression union passed 632 unique cases across three disjoint, separately
+locked commands, taking 339.57 s of pytest time. The unchanged original
+Settings assertion and deterministic narrow-table/wrapping cases passed ten
+consecutive fresh processes (40 cases, 152.750 s). The lead's round-2 council
+and subsequent packet gate remain pending.

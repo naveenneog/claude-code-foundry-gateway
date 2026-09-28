@@ -57,8 +57,10 @@ exact streaming cache-creation detail remains **U13**.
   regenerated Example screens have separate source/output hashes. Related
   FinOps guides link to the shared setup. The architecture diagram records
   local backup/report flows without adding an Azure component or authority.
-  Builder evidence is 614 offline AUM tests and 49 caught reversion probes;
-  council, the full packet gate and post-deployment owner review remain pending.
+  Initial builder evidence was 614 offline AUM tests and 49 caught reversion
+  probes. Round-1 corrections passed all 632 AUM tests, 19 additional negative
+  probes and ten consecutive Settings visibility runs. Round-2 council, the
+  full packet gate and post-deployment owner review remain pending.
   [AUM](docs/AUM.md), [ADR-0038](docs/adr/0038-aum-actions-and-connection.md).
 - **AUM latency and readiness (P71).** Direct shares one named-value snapshot per
   read cycle, reuses resource tokens until near expiry and overlaps independent
