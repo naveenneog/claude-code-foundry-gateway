@@ -24,11 +24,21 @@ requests through the reference gateway; all seven answered. Work is on
       records (a synthetic tree with three of them), the installer path is inside the copy, and the
       checkout's own record is neither changed nor created (its hash before and after). GREEN with
       the record present: 47 of 47 in 50 s, 103 cases on each shell (`627fc76`)
-- [x] Mutations: 3 of 3 caught, each in its own detached worktree with a saved record, each running
+- [x] Mutations: 3 of 3 caught (round 1; see council round 1 for five), each in its own detached worktree with a saved record, each running
       the baseline 47 assertions: the installer run from the checkout (15 fail), no record exclusion
       (16 fail), the checkout's record changed (1 fails) (`p79b-mutate.ps1`, 68 s)
 - [x] CHANGELOG and GUIDED-FLOW.md. Architecture: no component, data flow, identity, schedule or
       network path changes
+- [x] Council round 1, five seats, over `449489b..ae2e76f`: Architect, Coder, UX and Security PASS;
+      QA BLOCK. The checkout's record was hashed after the copy, so a copy that deleted the records
+      it skips would have removed the operator's record first and passed. The hash is now taken
+      before anything is copied, and a new assertion requires the synthetic source records to stay
+      in place, unchanged (`3ec2dfb`). Evidence (`p79b-mutate-r2.ps1`, detached worktrees): against
+      `ae2e76f` that mutation passes 47 of 47, with and without a saved record; against `3ec2dfb`
+      it is caught with and without one, the three earlier mutations are still caught, and both
+      baselines pass 48 of 48. Architect's note: a folder the installer starts to read must be added
+      to the copy list; otherwise the check fails when that input is required, and runs without it
+      when the installer only reads it if present
 - [ ] Council, five seats
 - [ ] The packet gate exits 0, run with a saved record for another gateway in the worktree
 
