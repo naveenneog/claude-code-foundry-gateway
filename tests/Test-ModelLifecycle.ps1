@@ -705,6 +705,37 @@ try {
             finally { [IO.File]::WriteAllBytes($file, $bytes) }
         }
     }
+    $importHelper = Join-Path $PSScriptRoot 'ScriptImportCoverage.ps1'
+    if (Test-Path -LiteralPath $importHelper) { . $importHelper }
+    Check 'A2 the fingerprint covers the renderers actual transitive dot-source imports' {
+        $covered = [Collections.Generic.List[string]]::new()
+        & {
+            function Get-ClaudeModelFileStamp {
+                param([string]$Path)
+                $covered.Add([IO.Path]::GetFullPath($Path))
+                'coverage-probe'
+            }
+            $null = Get-ClaudeModelRendererStamp
+        }
+        $imports = @(Get-ScriptDotSourceClosure -Path (Join-Path $root 'scripts\New-ClaudeCodePolicy.ps1'))
+        $missing = @($imports | Where-Object { $_ -notin $covered })
+        if ($missing.Count) { throw "Unfingerprinted renderer imports: $($missing -join ', ')" }
+        $imports.Count -gt 1
+    }
+    Check 'A2 AST import discovery follows variables and transitive imports without executing code' {
+        $dir = Join-Path $scratch 'import-fixture'
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        [IO.File]::WriteAllText((Join-Path $dir 'entry.ps1'), '$helper = Join-Path $PSScriptRoot ''first.ps1''; . $helper')
+        [IO.File]::WriteAllText((Join-Path $dir 'first.ps1'), '. (Join-Path $PSScriptRoot ''second.ps1'')')
+        [IO.File]::WriteAllText((Join-Path $dir 'second.ps1'), 'throw ''this must not run''; . (Join-Path $PSScriptRoot ''entry.ps1'')')
+        $imports = @(Get-ScriptDotSourceClosure -Path (Join-Path $dir 'entry.ps1'))
+        @($imports).Count -eq 3 -and (Join-Path $dir 'second.ps1') -in $imports
+    }
+    Check 'A2 unresolved dynamic imports fail coverage instead of silently disappearing' {
+        $file = Join-Path $scratch 'dynamic-import.ps1'
+        [IO.File]::WriteAllText($file, '. $env:EXTERNAL_RENDER_HELPER')
+        Reject { Get-ScriptDotSourceClosure -Path $file } 'Cannot resolve.*import'
+    }
 }
 finally {
     $env:CLAUDE_NONINTERACTIVE = $oldNoninteractive

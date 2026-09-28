@@ -25,6 +25,15 @@ merge retains every `main` ledger entry; the specified P72 suites pass without w
 their assertions; the unchanged packet gate exits 0. A P70/P72 behavior contradiction
 is reported rather than resolved by changing an assertion.
 
+The A2 import-coverage follow-up is green. The lifecycle suite derives the renderer's
+transitive dot-source closure from PowerShell ASTs and compares it with paths actually
+hashed by the production stamp function, rather than another handwritten list. Dynamic
+or unresolved paths fail coverage; renderers are never executed to discover imports.
+Baseline and restored runs passed all 138 assertions on PowerShell 7 and 5.1.
+Adding a dot-source to the renderer in a private copy caused exactly one coverage failure,
+with all 138 assertions still run, on both hosts. Variable-bound imports and a transitive
+cycle are covered by the detector's own fixtures.
+
 ### Council round 1, 2026-09-28
 
 The lead's five-seat review over `aa7ed19..a017814` returned BLOCK. The supplied findings

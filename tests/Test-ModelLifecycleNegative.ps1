@@ -77,6 +77,7 @@ Mutation 'r1-history-principal' 'scripts\Sync-ClaudeModels.ps1' '-Principal $pri
 Mutation 'r1-history-missing-principal' 'scripts\Sync-ClaudeModels.ps1' '$principal.user.name -isnot [string] -or [string]::IsNullOrWhiteSpace($principal.user.name)' '$false'
 Mutation 'r1-empty-write-token-subscription' 'scripts\ApimNamedValue.ps1' '--query accessToken -o tsv @subscriptionArgs' '--query accessToken -o tsv'
 Mutation 'r1-nested-generated-artifacts' '.gitignore' "onboarding/**/claude-gateway.json`nonboarding/**/profiles/`nonboarding/**/model-snapshots/" ''
+Mutation 'r2-added-renderer-import' 'scripts\New-ClaudeCodePolicy.ps1' '$clientSupport = Join-Path' ". (Join-Path `$PSScriptRoot 'ClaudeGatewayRegion.ps1')`n`$clientSupport = Join-Path"
 if ($Suite -eq 'WorkstationModels') {
     $cases.Clear()
     foreach ($alias in 'OPUS','SONNET','HAIKU') {
@@ -125,6 +126,7 @@ try {
     New-Item -ItemType Directory -Path $shadow | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $shadow 'tests') | Out-Null
     Copy-Item -LiteralPath (Join-Path $root "tests\$suiteFile") -Destination $suitePath
+    Copy-Item -LiteralPath (Join-Path $root 'tests\ScriptImportCoverage.ps1') -Destination (Join-Path $shadow 'tests')
     Copy-Item -LiteralPath (Join-Path $root 'scripts') -Destination $shadow -Recurse
     foreach ($file in 'Start-ClaudeGateway.ps1','Install-ClaudeGateway.ps1','.gitignore') { Copy-Item -LiteralPath (Join-Path $root $file) -Destination $shadow }
     & git -C $shadow init --quiet

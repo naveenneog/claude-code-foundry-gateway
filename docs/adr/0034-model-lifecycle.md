@@ -78,7 +78,10 @@ The renderer stamp covers the lifecycle/profile writers, the profile generator, 
 Code, Desktop and banner helpers, and the flow record serializer. Every file's presence and
 content participates in the stamp, at planning and before apply. A helper change therefore
 requires a new review just as a generator change does; the dependency list is covered by
-source-copy mutation tests.
+source-copy mutation tests. An AST-derived import-coverage assertion follows the profile
+generator's dot-sources transitively and compares that closure with the paths the stamp
+function actually hashes. A newly imported helper cannot escape both handwritten lists;
+unresolved dynamic imports fail coverage rather than being silently omitted.
 
 An optional step preparation hook runs after approval and before the flow writes its local
 run journal. Models uses it to recheck discovery and take `Backup-ClaudeGateway.ps1`'s
