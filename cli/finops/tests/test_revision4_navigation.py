@@ -5,6 +5,7 @@ from claude_finops.config import Config
 from claude_finops.engine import Engine
 from claude_finops.fake import FakeBackend
 from claude_finops.tui import FinOpsApp
+from claude_finops.guarded_publication import guarded_publish
 
 
 async def settle(app, pilot):
@@ -26,10 +27,12 @@ async def test_query_context_changes_discard_bound_cursor(change):
         if change == "month":
             app.action_month()
             await pilot.pause()
-            app.screen.query_one("#month-input", Input).value = "2026-08"
+            with guarded_publish(app.current_guard()):
+                app.screen.query_one("#month-input", Input).value = "2026-08"
             await pilot.click("#set-month")
         elif change == "request-filter":
-            app.query_one("#request-model", Input).value = "claude-sonnet"
+            with guarded_publish(app.current_guard()):
+                app.query_one("#request-model", Input).value = "claude-sonnet"
             app.filter_requests()
         else:
             app.scope_filters = {"organization_id": "engineering"}
