@@ -162,6 +162,16 @@ is refused. The token-cache tests now supply explicit verified contexts, and the
 Direct independence tests distinguish the required account check from the RBAC
 permission lookup they continue to forbid before data.
 
+## Council round 2 amendment, 2026-09-28
+
+The credential-generation binding also covers a read cycle's cached account,
+gateway snapshot and aggregates. The first verified principal pins that cycle's
+immutable credential generation; a cached account never rebinds it. Each cached
+or newly completed snapshot and each completed aggregate checks the same
+generation before returning data. Invalidating credentials makes every cycle
+holding that generation obsolete, not only the calling cycle. Obsolete cycles
+fail with a sign-in-changed error; a new cycle performs fresh verification.
+
 ## Consequences
 
 No server deployment, account switch, consent, resource grant or authority

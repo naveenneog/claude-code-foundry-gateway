@@ -135,6 +135,29 @@ Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
 
 ## P71 AUM answers fast and says why it cannot, 2026-09-28
 
+### Council round 2 corrections
+
+The lead's second review closed A1, C1, Q1, U1 and S2. S1 remains blocked:
+an old Direct cycle can rebind its cached account after another cycle verifies a
+different principal, and cached snapshots or pending budget aggregates can
+outlive the change.
+
+| Seat | Round 2 verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | PASS | A1 closed | One shared monotonic credential deadline retained |
+| Coder | PASS | C1 closed | Suspended wrapper/job assignment retained |
+| QA | PASS | Q1 closed | Process-start and descendant-termination evidence retained |
+| UX | PASS | U1 closed | Fatal data errors interrupt metadata waits |
+| Security | BLOCK | S1: obsolete cycle accounts, snapshots and aggregates remain returnable | Pending: immutable cycle credential generation; reject stale account reuse and validate snapshots/aggregate completion |
+
+The two reported A-to-B principal transitions are reproduced offline before the
+fix. The cycle's verified generation is pinned once, not rebound from cached
+account metadata. Snapshot reads and aggregate completion must validate that
+generation. A replacement principal needs a new read cycle. Main remains
+`38ad175`, already merged; this round makes no database changes and no new merge.
+The affected pytest selectors, full AUM runner and unchanged locked packet gate
+are rerun after deliberate full-selector mutations.
+
 ### Council round 1 corrections
 
 The lead's read-only council over `aa7ed19..aa9070c` returned **BLOCK** on
