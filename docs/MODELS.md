@@ -99,7 +99,10 @@ usable after the retired name has disappeared.
 ### Review and write boundary
 
 The fingerprint covers the target, live deployments/lists, selections,
-record inputs, price book and output locations. Apply rechecks the live state,
+record inputs, price book, output locations and the renderers' dependencies.
+Changes to a Claude Code or Desktop helper invalidate approval even when
+`New-ClaudeCodePolicy.ps1` itself is unchanged. File additions/removals
+participate in that comparison. Apply rechecks the live state,
 takes `Backup-ClaudeGateway.ps1`'s non-secret snapshot, then writes only
 `models-standard` and `models-premium` in Azure and reads them back.
 Backups and the prior record/book are under the record's
@@ -112,6 +115,9 @@ plan. A new plan reads any writes that already landed; no automatic rollback
 overwrites another administrator's work. A management readback is not a
 guarantee that every gateway has consumed the value. The real-request
 procedure is in [Governance checks](GOVERNANCE-CHECKS.md).
+Standalone history records both the preceding model decision and the signed-in
+principal. Generated reference records, profiles and snapshots stay git-ignored
+under nested `onboarding` folders as well as at the top level.
 
 Every discovery, backup, write, readback and profile-generation wait gives
 its purpose and an estimate, followed by the elapsed time.
@@ -239,6 +245,9 @@ older Claude Code may be updated by setup unless `-SkipInstall` or
 `--skip-install` is set
 ([developer setup](../DEVELOPER.md#after-a-model-change),
 [ADR-0031](adr/0031-client-keys-every-release-reads.md)).
+An alias and its capability declaration are removed when the selected models
+no longer contain its family, on both Windows and macOS/Linux. Haiku still
+falls back to Sonnet when Sonnet remains selected.
 
 The MDM files use the tier's deployments and safe alias fallbacks. A later
 DeviceProfiles/Guide run preserves that selection. Assignment through Intune,

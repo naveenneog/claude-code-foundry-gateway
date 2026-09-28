@@ -75,11 +75,12 @@ if (-not $ApprovedPlanFingerprint -or $ApprovedPlanFingerprint.Length -lt 8 -or 
     throw "ApprovedPlanFingerprint does not match $fingerprint; no changes were written."
 }
 if (-not $PSCmdlet.ShouldProcess($target.ApimName, 'Apply the reviewed model lifecycle plan')) { return }
+$principal = Invoke-ClaudeModelAz -Arguments @('account','show') -SubscriptionId $target.SubscriptionId -What 'Reading the model change principal'
 Initialize-ClaudeModelChange -Record $record -Plan $plan
 $changes = Invoke-ClaudeModelChange -Record $record -Plan $plan
 Set-ClaudeDecision -Record $record -Key models -Value $changes.models
 $release = Get-ClaudeFlowReleaseInfo -Repo $root
-Add-ClaudeDecisionHistory -Record $record -Action Change -Decision models -To $changes.models -Commit $release.commit
+Add-ClaudeDecisionHistory -Record $record -Action Change -Decision models -From $decision -To $changes.models -Principal $principal.user.name -Commit $release.commit
 Set-ClaudeDecisionRelease -Record $record -Version $release.version -Commit $release.commit
 Write-ClaudeModelRecord -Record $record -Path $RecordPath
 Write-Host 'Model lists and client files are recorded. Gateway propagation is verified with a real tier request.'

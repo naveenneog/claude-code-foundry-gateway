@@ -111,6 +111,10 @@ function global:az {
 
 function global:Invoke-RestMethod {
     param($Uri, $Headers, $Method = 'Get', $Body, $ContentType, $TimeoutSec)
+    if ($global:P70allowRestWrite -and $Method -eq 'Put') {
+        $global:P70restWrite = [pscustomobject]@{ Uri = $Uri; Body = ($Body | ConvertFrom-Json) }
+        return
+    }
     if ($Method -ne 'Get') { throw 'Unexpected REST write in model lifecycle' }
     if ([string]$Uri -like '*/namedValues?*') {
         if ($global:P70backupFails) { throw 'backup read refused' }
@@ -127,6 +131,7 @@ function Reset-State {
     $global:P70rawDeployments = Clone $global:P70originalDeployments
     $global:P70azFailure = ''; $global:P70failureJson = ''; $global:P70badDeployments = ''; $global:P70failWrite = ''
     $global:P70backupFails = $false; $global:P70backupRead = $false; $global:P70dropWrite = $false
+    $global:P70allowRestWrite = $false; $global:P70restWrite = $null
     $global:P70backend = 'https://ai-models.services.ai.azure.com/anthropic'
     $global:P70writes.Clear(); $global:P70calls.Clear()
     Save $global:P70bookPath ([ordered]@{ date = '2026-09-15'; source = 'approved test tariff'; privateNote = 'keep'; models = [ordered]@{
@@ -488,8 +493,16 @@ try {
         $preview = & $standalone -RecordPath $global:P70recordPath -AnswersPath $answers -PlanOnly *>&1 | Out-String
         $fp = [regex]::Match($preview, 'Fingerprint:\s+([a-f0-9]{64})').Groups[1].Value
         $before = $global:P70writes.Count
+        $global:P70precedingDecision = Clone (Json $global:P70recordPath).decisions.models
         & $standalone -RecordPath $global:P70recordPath -AnswersPath $answers -ApprovedPlanFingerprint $fp | Out-Null
         $global:P70writes.Count -eq $before
+    }
+    Check 'A2 standalone history includes the preceding model decision' {
+        $history = @((Json $global:P70recordPath).history)[-1]
+        (ConvertTo-ClaudeFlowCanonical $history.from) -ceq (ConvertTo-ClaudeFlowCanonical $global:P70precedingDecision)
+    }
+    Check 'A2 standalone history identifies the signed-in principal' {
+        @((Json $global:P70recordPath).history)[-1].by -eq 'operator@contoso.com'
     }
     Check 'a nonzero Azure exit carrying valid JSON is still a failed read' {
         Reset-State; $global:P70azFailure = 'cognitiveservices account deployment list'; $global:P70failureJson = '[]'
@@ -596,6 +609,86 @@ try {
             $selected.Standard -eq ',sonnet,' -and $selected.Premium -eq ',sonnet,' -and
                 ($code.availableModels -join ',') -eq 'sonnet' -and (@($desktop.inferenceModels.name) -join ',') -eq 'sonnet' -and
                 $code.env.ANTHROPIC_DEFAULT_OPUS_MODEL -eq 'sonnet'
+        }
+    }
+    Check 'C3 empty named-value writes scope both the ARM URI and token to the target subscription' {
+        Reset-State; $global:P70allowRestWrite = $true
+        Set-ApimNamedValue -ResourceGroup rg-models -ApimName apim-models -SubscriptionId $global:P70sub -Id external-idp-extra-audience -Value ''
+        $tokens = @($global:P70calls | Where-Object { ($_ -join ' ') -like 'account get-access-token*' })
+        $tokens.Count -eq 1 -and (Arg $tokens[0] '--subscription') -eq $global:P70sub -and
+            $global:P70restWrite.Uri -like "*/subscriptions/$global:P70sub/resourceGroups/*" -and
+            $global:P70restWrite.Body.properties.value -eq 'urn:disabled:claude-extra-audience'
+    }
+    foreach ($path in @(
+        'onboarding\reference\claude-gateway.json',
+        'onboarding\reference\profiles\standard\claude-gateway.json',
+        'onboarding\reference\profiles\premium\claude-code.reg',
+        'onboarding\reference\profiles\README.md',
+        'onboarding\reference\model-snapshots\example\gateway.json',
+        'onboarding\teams\reference\model-snapshots\example\record.json'
+    )) {
+        Check "S2 generated nested path is ignored: $path" {
+            & git -C $root check-ignore --no-index --quiet -- $path
+            $LASTEXITCODE -eq 0
+        }
+    }
+    Check 'S2 generated-path exclusions do not hide onboarding documentation' {
+        $codes = @(foreach ($path in 'onboarding\README.md','onboarding\reference\operator-notes.md') {
+            & git -C $root check-ignore --no-index --quiet -- $path
+            $LASTEXITCODE
+        })
+        @($codes | Where-Object { $_ -ne 1 }).Count -eq 0
+    }
+    $rendererRoot = Join-Path $scratch 'renderer-source'
+    New-Item -ItemType Directory -Path $rendererRoot | Out-Null
+    Copy-Item -LiteralPath (Join-Path $root 'scripts') -Destination $rendererRoot -Recurse
+    foreach ($dependency in @('ClaudeModelLifecycle.ps1','ClaudeModelProfiles.ps1','New-ClaudeCodePolicy.ps1',
+        'ClaudeClientSupport.ps1','ClaudeDesktopSignIn.ps1','Show-Banner.ps1','flow\FlowContract.ps1')) {
+        foreach ($operation in 'change','remove') {
+            Check "A1 $operation of $dependency changes the fingerprint and invalidates apply" {
+                Reset-State
+                & {
+                    . (Join-Path $rendererRoot 'scripts\ClaudeModelLifecycle.ps1')
+                    $args = @{ Record = $global:P70record; RecordPath = $global:P70recordPath; PriceBookPath = $global:P70bookPath
+                        TierAssignments = @{ 'next.opus' = 'premium'; 'claude-haiku-4-5' = 'both'; retired = 'drop' } }
+                    $beforePlan = New-ClaudeModelPlan @args
+                    $file = Join-Path (Join-Path $rendererRoot 'scripts') $dependency
+                    $bytes = [IO.File]::ReadAllBytes($file)
+                    try {
+                        if ($operation -eq 'remove') { Remove-Item -LiteralPath $file }
+                        else { [IO.File]::AppendAllText($file, "`n# output dependency mutation`n") }
+                        $afterPlan = New-ClaudeModelPlan @args
+                        (Get-ClaudeFlowFingerprint @($beforePlan)) -cne (Get-ClaudeFlowFingerprint @($afterPlan)) -and
+                            (Reject { Assert-ClaudeModelPlanFresh $beforePlan } 'profile renderer')
+                    }
+                    finally { [IO.File]::WriteAllBytes($file, $bytes) }
+                }
+            }
+        }
+    }
+    Check 'A1 a capability-only helper change changes generated output and cannot reuse approval' {
+        Reset-State
+        & {
+            . (Join-Path $rendererRoot 'scripts\ClaudeModelLifecycle.ps1')
+            $args = @{ Record = $global:P70record; RecordPath = $global:P70recordPath; PriceBookPath = $global:P70bookPath
+                TierAssignments = @{ 'next.opus' = 'premium'; 'claude-haiku-4-5' = 'both'; retired = 'drop' } }
+            $beforePlan = New-ClaudeModelPlan @args
+            $configPath = Join-Path $scratch 'renderer-record.json'; Save $configPath $beforePlan.Data.RecordAfter
+            $policy = Join-Path $rendererRoot 'scripts\New-ClaudeCodePolicy.ps1'; $out = Join-Path $scratch 'renderer-output'
+            & $policy -ConfigPath $configPath -Tier premium -OutputPath $out | Out-Null
+            $beforeCaps = (Json (Join-Path $out 'claude-code.managed-settings.json')).env.ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES
+            $file = Join-Path $rendererRoot 'scripts\ClaudeClientSupport.ps1'; $bytes = [IO.File]::ReadAllBytes($file)
+            try {
+                $text = [IO.File]::ReadAllText($file).Replace('effort,xhigh_effort,max_effort,thinking,adaptive_thinking,interleaved_thinking','effort,thinking')
+                [IO.File]::WriteAllText($file, $text, (New-Object Text.UTF8Encoding($true)))
+                $afterPlan = New-ClaudeModelPlan @args
+                & $policy -ConfigPath $configPath -Tier premium -OutputPath $out | Out-Null
+                $afterCaps = (Json (Join-Path $out 'claude-code.managed-settings.json')).env.ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES
+                $beforeCaps -ne $afterCaps -and
+                    (Get-ClaudeFlowFingerprint @($beforePlan)) -cne (Get-ClaudeFlowFingerprint @($afterPlan)) -and
+                    (Reject { Assert-ClaudeModelPlanFresh $beforePlan } 'profile renderer')
+            }
+            finally { [IO.File]::WriteAllBytes($file, $bytes) }
         }
     }
 }

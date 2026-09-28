@@ -136,6 +136,14 @@ function Get-ClaudeModelFileStamp {
     return 'absent'
 }
 
+function Get-ClaudeModelRendererStamp {
+    $files = @('ClaudeModelLifecycle.ps1', 'ClaudeModelProfiles.ps1', 'New-ClaudeCodePolicy.ps1',
+        'ClaudeClientSupport.ps1', 'ClaudeDesktopSignIn.ps1', 'Show-Banner.ps1', 'flow\FlowContract.ps1')
+    $stamps = [ordered]@{}
+    foreach ($file in $files) { $stamps[$file] = Get-ClaudeModelFileStamp (Join-Path $PSScriptRoot $file) }
+    return Get-ClaudeFlowLifecycleStringHash (ConvertTo-ClaudeFlowCanonical $stamps)
+}
+
 function Get-ClaudeModelAssignments {
     param($Record)
     $result = @{}
@@ -280,7 +288,7 @@ function New-ClaudeModelPlan {
             Target = $target; Discovery = $Discovery; Assignments = $choices; AfterNamedValues = $afterNamed
             RecordAfter = $recordAfter; RecordPath = $RecordPath; RecordStamp = Get-ClaudeModelRecordStamp $RecordPath
             PriceBookPath = $PriceBookPath; PriceBookAfter = $bookAfter; PriceBookStamp = Get-ClaudeModelFileStamp $PriceBookPath; PriceChanged = $priceChanged; Prices = $prices
-            ProfileRoot = $profileRoot; RendererStamp = Get-ClaudeModelFileStamp (Join-Path $PSScriptRoot 'New-ClaudeCodePolicy.ps1')
+            ProfileRoot = $profileRoot; RendererStamp = Get-ClaudeModelRendererStamp
             SnapshotDirectory = Join-Path (Split-Path $RecordPath -Parent) 'model-snapshots'; SnapshotPath = ''; SnapshotTaken = $false
         }
 }
@@ -293,7 +301,7 @@ function Assert-ClaudeModelPlanFresh {
         if ((ConvertTo-ClaudeFlowCanonical $live) -cne (ConvertTo-ClaudeFlowCanonical $d.Discovery)) { 'Azure discovery' }
         if ((Get-ClaudeModelFileStamp $d.PriceBookPath) -cne $d.PriceBookStamp) { 'price book' }
         if ((Get-ClaudeModelRecordStamp $d.RecordPath) -cne $d.RecordStamp) { 'decision record' }
-        if ((Get-ClaudeModelFileStamp (Join-Path $PSScriptRoot 'New-ClaudeCodePolicy.ps1')) -cne $d.RendererStamp) { 'profile renderer' }
+        if ((Get-ClaudeModelRendererStamp) -cne $d.RendererStamp) { 'profile renderer' }
     )
     if ($changed.Count) { throw "The model plan state changed after review: $($changed -join ', '). No further write was attempted; replan." }
 }

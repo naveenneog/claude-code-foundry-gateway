@@ -39,6 +39,12 @@ exact streaming cache-creation detail remains **U13**.
   represent its published cache-read multiplier. The installer gains `-StandardModels` and
   `-PremiumModels` for an unattended initial subset. [Model guide](docs/MODELS.md),
   [ADR-0034](docs/adr/0034-model-lifecycle.md).
+- **P70 council fixes.** Model fingerprints now bind renderer helpers as well as the
+  generator. Raw deployment identities and empty installer selections fail closed;
+  initial tier restrictions reach profiles. Bash removes retired aliases consistently
+  with Windows. Standalone history includes the prior decision and principal, empty
+  named-value writes use a subscription-bound token, and nested generated onboarding
+  records/profiles/snapshots remain git-ignored.
 - Guided-flow FinOps modules for tool selection, USD/token budgets, monitoring workbooks
   and chargeback reports, including a scheduled USD reconciler job definition for
   deployments without the AUM service.

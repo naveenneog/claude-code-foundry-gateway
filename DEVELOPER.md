@@ -129,6 +129,8 @@ For macOS/Linux, the selected record can be distributed as
 Rerunning setup refreshes Claude Code's `availableModels`, newest-per-family
 alias pins and capability declarations, the corresponding VS Code model
 variables and Desktop `inferenceModels`. Unrelated user settings remain.
+An owned alias and its capability declaration are removed when its model
+family disappears; Haiku continues to fall back to Sonnet when available.
 The gateway URL, authentication choice and Entra entitlement are unchanged.
 The record itself does not grant access.
 

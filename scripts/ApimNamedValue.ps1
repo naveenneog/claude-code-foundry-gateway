@@ -153,7 +153,7 @@ function Set-ApimNamedValue {
         $emptySentinel = if ($Id -eq 'external-idp-extra-audience') { 'urn:disabled:claude-extra-audience' } else { ' ' }
         $sub = if ($SubscriptionId) { $SubscriptionId } else { az account show --query id -o tsv }
         if (-not $sub) { throw 'Could not determine the current Azure subscription for an empty named value write.' }
-        $token = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv
+        $token = az account get-access-token --resource https://management.azure.com --query accessToken -o tsv @subscriptionArgs
         $uri = "https://management.azure.com/subscriptions/$sub/resourceGroups/$ResourceGroup/providers/Microsoft.ApiManagement/service/$ApimName/namedValues/$Id`?api-version=2024-05-01"
         $body = @{ properties = @{ displayName = $Id; value = $emptySentinel; secret = [bool]$Secret } } | ConvertTo-Json -Depth 5
         try {

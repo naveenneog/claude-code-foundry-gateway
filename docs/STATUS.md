@@ -18,14 +18,14 @@ count. The gate keeps its 1,800,000 ms command budget and uses the shared lock.
 
 | Seat | Verdict supplied | Finding | Fix / evidence |
 |---|---|---|---|
-| Architect | BLOCK | A1: helper changes can alter generated capabilities without changing the plan fingerprint | Pending: fingerprint and recheck all output dependencies, including presence changes |
+| Architect | BLOCK | A1: helper changes can alter generated capabilities without changing the plan fingerprint | Fixed: the stamp hashes seven render/serialization dependencies; change/removal tests cover each, including a real capability-output change |
 | Coder | BLOCK | C1: the installer records the deployment union but not each tier's selections; a Sonnet-only premium tier gets an Opus picker entry | Fixed: tier entries persist normalized models and exact allowlists; real generated standard/premium profiles match a Sonnet-only initial install |
-| Coder | BLOCK | C2: bash setup retains an alias whose model family disappeared | Pending: remove absent owned aliases; compare Windows and bash retirement behavior |
+| Coder | BLOCK | C2: bash setup retains an alias whose model family disappeared | Fixed: absent Opus, Sonnet and Haiku aliases are deleted; the shell's actual jq writer agrees with Windows in all three family-removal cases |
 | QA | BLOCK | Q1: filtering hides malformed raw deployment rows and turns them into apparent removals | Fixed: shared raw identity validation runs before filtering, covering ten mixed valid/malformed array shapes |
 | Security | BLOCK | S1: failed/empty discovery or whitespace/comma-only explicit selections can create allow-all lists | Fixed: failed/malformed discovery and empty normalized tier selections stop before provisioning; zero Claude deployments cannot discard supplied restrictions |
-| Architect | Should-fix | A2: standalone history omits the prior decision and principal | Pending: record both without an extra write before approval |
-| Coder | Should-fix | C3: the empty named-value REST write scopes its URI but not its token | Pending: use the same subscription for both |
-| Security | Should-fix | S2: nested reference records and snapshots are not git-ignored | Pending: ignore the documented generated paths at every onboarding depth |
+| Architect | Should-fix | A2: standalone history omits the prior decision and principal | Fixed: history records the preceding model decision and the signed-in account from the target subscription, read after approval |
+| Coder | Should-fix | C3: the empty named-value REST write scopes its URI but not its token | Fixed: the same subscription arguments reach token acquisition and the REST URI |
+| Security | Should-fix | S2: nested reference records and snapshots are not git-ignored | Fixed: nested records, profiles and snapshots are ignored; onboarding documentation remains visible |
 | UX | No separate verdict supplied | No additional finding was included in the handoff | Existing model review and error wording remain in scope |
 
 Completion criteria: all eight findings addressed, no relaxed detector or timeout, directly
@@ -36,6 +36,12 @@ First remediation green: Q1/S1/C1 reproduced as 24 failures at 108 assertions on
 PowerShell host, then all 108 passed on each host. Existing ModelDeployment checks passed.
 The installer config edit changes only the two tier entries; P72's organisation/request
 fields and summary rows are untouched. Detector mutations follow after the remaining fixes.
+Second remediation green: the remaining model regressions reproduced 22 product failures
+at 133 assertions (a two-path `git check-ignore --quiet` fixture error was corrected
+separately), then all 133 passed on each host. The fast workstation suite reproduced
+three alias-retention failures and now passes all 13 assertions on each host. It executes
+the setup's own jq writer against temporary files and compares its full model environment
+with the Windows helper, without installing clients or making Azure calls.
 
 Acceptance criteria:
 

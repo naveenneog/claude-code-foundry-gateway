@@ -388,9 +388,9 @@ if have_ jq; then
       .env = (.env // {})
       | .env.CLAUDE_CODE_USE_FOUNDRY = "1"
       | .env.ANTHROPIC_FOUNDRY_BASE_URL = $url
-      | (if $opus   != "" then .env.ANTHROPIC_DEFAULT_OPUS_MODEL   = $opus   else . end)
-      | (if $sonnet != "" then .env.ANTHROPIC_DEFAULT_SONNET_MODEL = $sonnet else . end)
-      | (if $haiku  != "" then .env.ANTHROPIC_DEFAULT_HAIKU_MODEL  = $haiku  else . end)
+      | (if $opus   != "" then .env.ANTHROPIC_DEFAULT_OPUS_MODEL   = $opus   else del(.env.ANTHROPIC_DEFAULT_OPUS_MODEL) end)
+      | (if $sonnet != "" then .env.ANTHROPIC_DEFAULT_SONNET_MODEL = $sonnet else del(.env.ANTHROPIC_DEFAULT_SONNET_MODEL) end)
+      | (if $haiku  != "" then .env.ANTHROPIC_DEFAULT_HAIKU_MODEL  = $haiku  else del(.env.ANTHROPIC_DEFAULT_HAIKU_MODEL) end)
       | (if $opusCaps   != "" then .env.ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES   = $opusCaps   else del(.env.ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES) end)
       | (if $sonnetCaps != "" then .env.ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES = $sonnetCaps else del(.env.ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES) end)
       | (if $haikuCaps  != "" then .env.ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES  = $haikuCaps  else del(.env.ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES) end)
