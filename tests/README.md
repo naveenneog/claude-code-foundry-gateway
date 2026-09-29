@@ -54,8 +54,10 @@ twice or left out.
 
 `Test-FinOpsShards.ps1` compares the registrations, the listings, the files on disk and pytest's
 own collection, and runs a synthetic suite in which each shard's passed count identifies the files
-it ran. It fails when a planned shard exceeds half the per-check timeout or a weight names a
-missing file.
+it ran. One synthetic shard runs with pytest's colour on and one with it off (`PY_COLORS`), because
+the packet gate runs Test-All with `FORCE_COLOR=0` (`.ironclad/gate.mjs:340`) and pytest colours its
+output for any non-empty `FORCE_COLOR` (`tests/Test-FinOpsShards.ps1:185`). It fails when a planned
+shard exceeds half the per-check timeout or a weight names a missing file.
 
 ```powershell
 pwsh -NoProfile -File .\tests\Test-FinOps.ps1 -Shard 1/4 -ListFiles

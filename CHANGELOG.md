@@ -33,7 +33,9 @@ exact streaming cache-creation detail remains **U13**.
   suite (871 tests, 860 s serially) exceeded Test-All's 600 s per-check
   timeout. Test-All now registers four checks, each running a longest-first
   share of the test files by committed per-file weights, and a fifth check
-  proves every file runs in exactly one shard (`tests/README.md`).
+  proves every file runs in exactly one shard (`tests/README.md`). That check
+  reads pytest's results with colour on and off, as the packet gate forces
+  colour through `FORCE_COLOR=0`.
 - **P85 council round 2: installer alias isolation.** Pip/uv processes use
   fresh explicit environments rather than relying on shell-name enumeration.
   Pip also uses isolated mode, null configuration and a confined cache.

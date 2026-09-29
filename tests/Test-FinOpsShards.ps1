@@ -11,6 +11,8 @@ function Join-Names([string[]]$Names) {
     [Array]::Sort($sorted, [StringComparer]::Ordinal)
     $sorted -join '|'
 }
+# Terminal control sequences (ECMA-48 CSI), such as pytest's colours.
+function Remove-Ansi([string]$Text) { [regex]::Replace($Text, '\x1b\[[0-9;?]*[ -/]*[@-~]', '') }
 function Read-Listing([string]$Script, [string]$Shard = '') {
     $options = @('-NoProfile', '-NonInteractive', '-File', $Script, '-ListFiles')
     if ($Shard) { $options += @('-Shard', $Shard) }
@@ -180,18 +182,38 @@ try {
         New-Item -ItemType $linkType -Path $link -Target (Split-Path (Split-Path $python -Parent) -Parent) | Out-Null
         $sandboxRunner = Join-Path $sandbox 'tests\Test-FinOps.ps1'
         $ran = 0
-        foreach ($shard in '0/2', '1/2') {
+        # The packet gate runs Test-All with FORCE_COLOR=0 (.ironclad/gate.mjs:340), and pytest colours its
+        # output for any non-empty FORCE_COLOR. PY_COLORS takes precedence, so one shard runs coloured and
+        # one plain, whatever the caller's environment.
+        $modes = @{}
+        foreach ($case in @(@{ Shard = '0/2'; Colours = '1' }, @{ Shard = '1/2'; Colours = '0' })) {
+            $shard = $case.Shard
             $rows = @(Read-Listing $sandboxRunner $shard)
             $expectedPassed = 0
             foreach ($row in $rows) { $expectedPassed += [int][math]::Pow(2, [int]($row.Name -replace '\D', '')) }
-            $out = & pwsh -NoProfile -NonInteractive -File $sandboxRunner -Shard $shard 2>&1 | Out-String
-            $exit = $LASTEXITCODE
-            $passed = if ($out -match '(?m)\b([0-9]+) passed\b') { [int]$Matches[1] } else { -1 }
+            $saved = $env:PY_COLORS
+            $env:PY_COLORS = $case.Colours
+            try {
+                $out = & pwsh -NoProfile -NonInteractive -File $sandboxRunner -Shard $shard 2>&1 | Out-String
+                $exit = $LASTEXITCODE
+            }
+            finally { $env:PY_COLORS = $saved }
+            $coloured = $out.Contains([string][char]27)
+            if ($case.Colours -eq '1') {
+                Assert "pytest colours the output of synthetic shard $shard when PY_COLORS=1" $coloured
+                if ($coloured) { $modes['coloured'] = $true }
+            }
+            else {
+                Assert "pytest writes plain output for synthetic shard $shard when PY_COLORS=0" (-not $coloured)
+                if (-not $coloured) { $modes['plain'] = $true }
+            }
+            $passed = if ((Remove-Ansi $out) -match '(?m)\b([0-9]+) passed\b') { [int]$Matches[1] } else { -1 }
             Assert "a synthetic shard $shard runs exactly the files it lists ($expectedPassed tests)" (
                 $exit -eq 0 -and $rows.Count -gt 0 -and $passed -eq $expectedPassed
             ) "exit $exit; $passed passed"
             $ran += [math]::Max(0, $passed)
         }
+        Assert 'the synthetic shards read one coloured and one plain pytest output' ($modes['coloured'] -and $modes['plain'])
         Assert 'the two synthetic shards together run all 31 tests once' ($ran -eq 31) "$ran ran"
     }
 }

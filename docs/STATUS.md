@@ -41,6 +41,48 @@ failed `Test-RunnerIntegrity.ps1`. The four shards, run at once, passed
 `Test-RunnerIntegrity.ps1`, `Test-TestAllSharding.ps1`,
 `Test-MutationShards.ps1`, the architecture check and the encoding check pass.
 
+### Delta council and packet gate 2
+
+The five-seat council reviewed `329e459..c9ae1c8` on 2026-09-29: all five
+PASS. The UX/Docs seat first blocked on `tests/Test-TestAllSharding.ps1` as a
+missing file; the file exists and is tracked, and the seat passed on
+re-verification.
+
+The packet gate on `c9ae1c8` (18:47-19:17Z) ran Test-All in 1,790.7 s:
+97 checks passed and 2 failed.
+
+"AUM shards run every test file once" failed because of the gate's
+environment. The gate runs commands with `CI=1` and `FORCE_COLOR=0`
+(`.ironclad/gate.mjs:340`). pytest colours its output for any non-empty
+`FORCE_COLOR`, so `\b([0-9]+) passed\b` found no match after the colour
+code, and both synthetic shards read -1 passed. With that environment the
+failure reproduced (3 assertions); without it the check passed. The check now
+runs one synthetic shard with `PY_COLORS=1` and one with `PY_COLORS=0`, and
+removes terminal control sequences before counting. RED: **2 of 36** failed,
+with and without the gate's variables. GREEN: **36 of 36**, then **37 of 37**
+after an assertion that one coloured and one plain output were read. That
+assertion was added because making both shards plain (M15) was first missed.
+All fifteen mutations (the twelve above, the uncoloured count, both shards
+plain, both coloured) were caught with all 37 assertions run
+(`files/p85-shard-mutations.ps1` in the lead's session).
+
+"AUM - commands, dashboard and pilot [3/4]" kept no output: gate.mjs prints
+only the tail of Test-All's output. pytest's `lastfailed` cache in
+`cli/finops/.pytest_cache`, which the four shards share, named
+`test_publication_generation.py::test_assistant_context_is_cleared_before_b_request`.
+It also held `test_remove_person_wrong_confirmation_is_refused[direct]` and
+`[turnstile]`; those ids no longer exist (the test now also takes
+`confirmation`), so they are older entries. The four shards and this check,
+started together with Test-All's per-check `TEMP` and the gate's environment,
+passed. With 16 CPU burners on 16 logical processors, the publication test
+failed **4 of 12** runs and the four removal cases passed **48 of 48**. Each
+failure was `NoMatches: No nodes match '#main-tabs'`, raised in
+`FinOpsApp.switched` (`cli/finops/src/claude_finops/tui.py:306`) through
+`active` (`:253`) and re-raised when `run_test` exits. That comparison in
+`switched` came from P71 (`89852aa`, `d7cd2f2`) and is not on main, so the
+correction belongs to P71; the lead passed the finding to the P71 builder.
+P85's next gate runs after P85 takes P71's correction through P80.
+
 ### Council round 2 corrections
 
 The lead reviewed `bbb6298` on 2026-09-29. Architect PASS; Coder, QA, UX
