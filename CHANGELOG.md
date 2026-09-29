@@ -37,6 +37,12 @@ exact streaming cache-creation detail remains **U13**.
   AUM service membership remains unavailable. Done returns from both membership
   forms to a refreshed People view. Observed usage is not a membership roster
   and can remain after access removal.
+  Complete offline pilots cover unit/team creation and removal, unit/team/person
+  token budgets, and Direct/service USD saves with actual adapter-write
+  assertions. Native synchronous receipts no longer enter Turnstile apply
+  polling. Direct person budgets retain their gateway meaning, USD results
+  state that reconciliation is pending, and the USD palette entry follows its
+  own selected-scope capability rather than catalog-write permission.
 - **AUM action discovery (P80, owner-approved for integration after P71).** People and Budgets show
   Add person to team, Set budget, Set USD budget and Chargeback report, with
   matching Help and keyboard hints. The selected connection appears as

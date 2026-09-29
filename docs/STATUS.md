@@ -61,6 +61,23 @@ refusals, stale directory/form guards and the 80x24 action layout. The new
 membership rows use compact buttons so the People table remains visible.
 No publication detector or allowlist was weakened.
 
+The first catalog/budget run passed **25 tests and failed 4 in 59.86 s**.
+Catalog creation/removal and its existing guards passed without production
+changes. New budget pilots found a Direct daily-person receipt incorrectly
+labelled Turnstile, a missing USD reconciliation reminder, the service USD
+palette entry incorrectly gated by unrelated catalog-write permission, and
+the service's synchronous write followed by a nonexistent asynchronous
+`requested_at` (`KeyError`). Corrections retain the engine's receipts and
+capability/selected-scope checks; neither USD nor membership gets a new writer.
+
+GREEN: **104 tests passed in 103.54 s**. This includes all 18 new catalog
+pilots and 12 new budget pilots, plus the existing TUI, group, USD, AUM service
+and publication-structure suites. USD saves keep the engine's awaiting-
+reconciliation result. Native synchronous receipts no longer enter Turnstile
+apply polling; Direct person budgets are no longer labelled Turnstile-only.
+The USD palette entry uses the same selected-scope capability check as its
+button and key, with a read-only-selection negative test.
+
 ## P80 AUM shows every action it has, connects in one step, and its guide starts with installation, 2026-09-28
 
 Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM guide set. Worktree: `accel-p80`, branch `p80-aum-usability`, based on P71 commit `bcf8554`. The owner approved merging P80 after P71 at 07:41 IST on 2026-09-29. The lead authorized merging pinned `origin/main` (`30cdfd0`) into this branch without rebasing; later P71 work remains separate. This builder is not authorized to push or merge to main.

@@ -20,6 +20,7 @@ from test_developers import FakeDeveloperClient, PREMIUM, STANDARD, UNIT, USER
 
 EMAIL = "dev@contoso.com"
 TEAM = "00000000-0000-0000-0000-000000000013"
+PICKED_GROUP = "00000000-0000-0000-0000-000000000095"
 GROUPS = {
     "contoso-standard": STANDARD, "contoso-premium": PREMIUM,
     "contoso-sales": UNIT, "contoso-sales-emea": TEAM,
@@ -42,7 +43,7 @@ class Directory(FakeDeveloperClient):
 
     def search(self, query, **params):
         assert query == "contoso"
-        return dict(items=[dict(id=UNIT, displayName="Contoso scope",
+        return dict(items=[dict(id=PICKED_GROUP, displayName="Contoso scope",
                                securityEnabled=True, mailEnabled=False, groupTypes=[])],
                     next_cursor=None)
 
@@ -195,3 +196,14 @@ def membership_writes(state, remove):
         groups = [STANDARD, PREMIUM, UNIT, GROUPS["contoso-engineering"], TEAM, GROUPS["contoso-sales-apac"]]
         return [(USER, group, False) for group in groups]
     return [(USER, STANDARD, True), (USER, PREMIUM, False), (USER, TEAM, True)]
+
+
+async def choose_record(app, pilot, tab, key):
+    app.action_tab(tab)
+    await settle(app, pilot)
+    row = next(index for index, item in enumerate(app.records[tab])
+               if item.get("scope_id", item.get("id")) == key)
+    table = app.query_one(f"#table-{tab}")
+    table.move_cursor(row=row)
+    table.focus()
+    await pilot.pause()

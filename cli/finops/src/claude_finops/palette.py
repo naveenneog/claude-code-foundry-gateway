@@ -52,6 +52,8 @@ class FinOpsCommands(Provider):
         if self.app.check_action("remove_developer", ()):
             commands.append(("Remove person from team", self.app.action_remove_developer,
                              "Preview all gateway tier/unit group removals, confirm the email/UPN, then publish"))
+        if self.app.check_action("usd_edit", ()):
+            commands.append(("Edit selected USD budget", self.app.action_usd_edit, "Preview, then save; reconciliation is separate"))
         if self.app.editable:
             commands += [
                 ("Edit selected budget or governance row", self.app.action_edit, "Preview, then apply"),
@@ -70,8 +72,6 @@ class FinOpsCommands(Provider):
                 commands.append(("Import person budgets from CSV", self.app.action_bulk, "Preview full parent allocation"))
             if enabled(self.app.feature_caps, "budget_modes", "write"):
                 commands.append(("Set budget enforcement mode", self.app.action_mode, "Strict, allowance or notify"))
-            if enabled(self.app.feature_caps, "usd_budgets", "write"):
-                commands.append(("Edit selected USD budget", self.app.action_usd_edit, "Preview, then save; reconciliation is separate"))
             if enabled(self.app.feature_caps, "usd_budgets", "reconcile"):
                 commands.append(("Reconcile USD budgets now", self.app.action_usd_reconcile, "Runs the advertised gateway reconciler"))
         elif self.app.check_action("edit", ()):

@@ -338,10 +338,14 @@ class ChangeScreen(ModalScreen):
                 raise FinOpsError("The server state changed since preview. Cancel, refresh and preview again.", 6)
             result = await asyncio.to_thread(self.operation(True))
             self.saved = True
-            if self.kind == "budget" and self.row.get("scope_type") == "user":
+            if self.kind == "usd_budget":
+                message = result["effect"]
+            elif self.kind == "budget" and self.row.get("scope_type") == "user" and not self.engine.backend.immediate_writes:
                 message = "Saved in Turnstile. Person budgets do not change gateway quotas."
             elif self.engine.backend.name == "Direct":
                 message = "Gateway script completed; read-back verified. Refresh to inspect current values."
+            elif self.engine.backend.immediate_writes:
+                message = "Gateway write completed; audit/revision receipt received."
             else:
                 with guarded_publish(self.app.safe_message_guard()):
                     self.query_one("#form-status", Static).update("Saved. Following gateway apply; usually about two minutes...")
