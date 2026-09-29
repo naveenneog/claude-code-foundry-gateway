@@ -36,8 +36,10 @@ exact streaming cache-creation detail remains **U13**.
   installer and guided Entitlement switches require current ARM evidence for a scheduled
   reconciler bound to this projection, as specified in proposed
   [ADR-0040](docs/adr/0040-projection-preflight-and-switch.md). No schedule or bypass is added;
-  provisioning and lease alerts are proposed P86 work. Initial offline proof:
-  `tests/Test-ProjectionPreflight.ps1:1`; [P84 status](docs/STATUS.md).
+  provisioning and lease alerts are proposed P86 work. Offline proof at `4083c8b`: 240
+  assertions and 111/111 count-preserving guard mutations, plus nine native assertions on
+  each PowerShell host (`tests/Test-ProjectionPreflight.ps1:1`,
+  `tests/Test-ProjectionPreflightNegative.ps1:1`; [P84 status](docs/STATUS.md)).
 
 - **P78 parallel hosted checks.** Opt-in deterministic Test-All shards retain
   isolated processes, exclusive checks and deadlines, with commit/tree-bound receipts and an

@@ -4,7 +4,7 @@
 
 ## P84 Projection deployment checks everything before it writes and never switches into an outage, 2026-09-29
 
-**Builder work in progress.** The owner requested P84 after a partial customer deployment on
+**Builder scope complete; lead COUNCIL/GATE and owner approval pending.** The owner requested P84 after a partial customer deployment on
 2026-09-29. The branch is `p84-projection-preflight`, based on `30cdfd0`. The lead owns COUNCIL
 and GATE; the owner owns merge approval. This packet performs no live Azure writes.
 
@@ -24,15 +24,53 @@ and GATE; the owner owns merge approval. This packet performs no live Azure writ
       only a positively empty lookup represents an absent optional group.
 - [x] D: Apply/compare parsing and `ok:false` failures show the last 40 runner-output lines.
       App creation failure never updates an empty id or reports a fictitious WhatIf failure.
-- [ ] E: A fast registered offline suite exercises A-D, with right-reason RED, passing related
+- [x] E: A fast registered offline suite exercises A-D, with right-reason RED, passing related
       projection/installer/Entitlement checks and count-preserving guard mutations.
-- [ ] F: STATUS, CHANGELOG, SECURE-PROJECTION, SCALE, UPDATE-AND-CHANGE, SETUP, GUIDED-FLOW,
+- [x] F: STATUS, CHANGELOG, SECURE-PROJECTION, SCALE, UPDATE-AND-CHANGE, SETUP, GUIDED-FLOW,
       ADR-0040, U54-U57 and ROADMAP record the behavior, evidence and remaining decisions.
 
 Architecture conclusion: no deployed component, identity, network path or schedule changes;
 only operator-side validation and switch admission change. U56 records the evidence-contract
 assumption and pending owner acceptance. The initial audit-only packet gate passed
 (20 passed, 2 warned, 0 failed, 4 command checks skipped); this is not the lead's packet gate.
+
+**Final builder receipt, 2026-09-29:** the complete proof at `4083c8b` caught **111/111**
+mutations in **1,444.66 s**, under one owned shared-workstation lock released in that command's
+`finally`. Every mutant parsed, loaded all **240** baseline assertions, failed at least one
+assertion and exited nonzero; independent receipt validation found zero invalid catches.
+Baseline: 240/240 in **14.51 s**; restored: 240/240 in **11.91 s**. Each host also executes
+nine native Graph/stderr assertions. The receipt is `$env:TEMP\p84-mutations-final.json`;
+the reproducible detector is `tests/Test-ProjectionPreflightNegative.ps1:1`.
+Receipt SHA-256: `2cf0661c7a958f428039fe33bbc0a3d43f78298b4c42aa39127a7a0899f1ecde`.
+The persistent session artifact is `files\p84-final-mutation-receipt.json`.
+
+| Final related check | Result | Seconds |
+|---|---|---|
+| InstallerPermutations | 48/48 | 62.71 |
+| FlowPermutations | 43/43 | 102.46 |
+| FlowLifecycle, including Entitlement | 33/33 | 2.87 |
+| SecureProjection | 123/123 | 14.25 |
+| Existing ProjectionNegative | 57/57 mutations | 59.20 |
+| Documentation references | 34/34 | 8.32 |
+| Windows CLI argument safety | PASS | 8.86 |
+| Script encoding | 299/299 | 6.93 |
+
+The evidence contract remains proposed in ADR-0040: an existing hourly-or-faster scheduled job,
+destination/tenant bindings, pinned current image/template, recent succeeded execution and
+remaining snapshot lease, with no override. U56 explicitly assumes that the customer-controlled
+image performs renewal; ARM exit status cannot prove its semantics or future health. P86 owns
+the tested reconciler, tenant-admin Graph grant and alerts. U54, U55 and U57 are closed; no P84
+unknown is silently treated as a live Azure proof. No Azure write, resource creation, push or
+merge was performed. The full packet gate and five council verdicts belong to the lead.
+
+Commits before the final ledger: `89d9906` PLAN/CONTRACT; `f7280e3` implementation;
+`c50c21c` API shapes and subscription pinning; `c633046` canonical names/inherited roles;
+`80a639e` mutation harness; `d3225d0` resolved installer target, binding case and runbooks;
+`4083c8b` independently observable guard probes.
+
+Commit metadata note: these earlier bodies contain both requested trailer lines, separated by
+a blank paragraph. `git interpret-trailers --parse` recognizes only the final Copilot-Session
+line. No history was rewritten; the handoff ledger commit uses adjacent trailer lines.
 
 **First RED/GREEN:** PLAN/CONTRACT is `89d9906`. The new offline check loaded 188 assertions,
 failed 165 in 12.35 s, and exposed the PS7 CAE diagnostic loss, a successful-looking nonzero
@@ -43,8 +81,8 @@ deployment and projection sync refuse 5.1 with `run in pwsh`.
 Focused existing checks passed: ProjectionInstaller 34 (0.73 s), FlowLifecycle 33 (2.48 s),
 ProjectionRules 34 (0.75 s), Teams 146 (2.25 s), SecureProjection 123 (12.45 s),
 AdminSurface 682 (4.42 s), Scale 211 (1.20 s). Encoding passed for 298 scripts.
-Installer permutations, projection negatives, additional integration proofs and mutations remain
-in progress. Evidence is offline, not a customer-tenant deployment proof.
+Installer permutations, projection negatives, additional integration proofs and mutations were
+still in progress at that first GREEN. Evidence is offline, not a customer-tenant deployment proof.
 
 **Entry-point and API-shape follow-up:** implementation GREEN is `f7280e3`. Added cases loaded
 206 assertions and failed seven in 12.58 s: six exposed optional ARM/Graph fields, an explicit
@@ -73,7 +111,7 @@ The complete offline regression check now passes 236 assertions in 13.54 s, incl
 actual switch block (zero writes on refusal; three subscription-pinned writes with source last
 on success). Each native host independently passes nine stderr/Graph assertions. The new
 mutation harness's five detector self-checks and all 108 mutation anchors/syntax checks pass;
-mutation execution is still pending. A syntax error, missing summary, lost assertion, exit-only
+mutation execution was still pending then. A syntax error, missing summary, lost assertion, exit-only
 failure or assertion failure with exit zero cannot count as a catch. Encoding passes 299 scripts.
 
 **Installer target and binding follow-up:** the first 108-probe run is isolated at `80a639e`
@@ -83,7 +121,7 @@ false refusals, and case-insensitive environment keys could attest the wrong Lin
 RED: 239 assertions, three failures, 12.50 s. The guard now follows gateway-name resolution
 before writes, resource-id/GUID values compare case-insensitively and environment names compare
 ordinally. GREEN: 239/239, 12.10 s; encoding 299/299. The earlier mutation run is not evidence
-for these later changes; final-tree probes remain required.
+for these later changes; it was followed by the final-tree proof above.
 
 **First mutation run and detector repair:** under its own shared-workstation lock,
 `80a639e` caught 99/108 probes in 1,378.02 s with all 236 assertions loaded and the restored
@@ -98,7 +136,7 @@ The current baseline is 240/240 (12.54 s); all nine former survivors plus three 
 probes are caught, **12/12**, with all 240 assertions loaded and the restored baseline green
 (176.34 s). All 111 final anchors parse. Windows CLI argument safety passes (8.86 s), docs
 references 34 (8.81 s), FlowLifecycle 33 (2.37 s), ProjectionInstaller 34 (0.67 s) and encoding
-299/299. The complete final-tree 111-probe run remains pending.
+299/299. The complete final-tree 111-probe run followed, as recorded above.
 
 ## P78 the test suite runs in parallel on GitHub-hosted runners, 2026-09-28
 

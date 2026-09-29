@@ -148,3 +148,9 @@ Provider/name inputs are `infra/projection.bicep:70`, `infra/projection-network.
 All P84 tests use offline Azure fixtures; no live availability or permissions claim follows
 from those tests. Successful preflight evidence is a point-in-time check, not a capacity or
 future availability guarantee.
+
+Offline measurement on 2026-09-29 at `4083c8b`: the complete 240-assertion suite passed, all
+111 valid-syntax mutations failed assertions without losing the baseline count, and the restored
+240 passed (`tests/Test-ProjectionPreflight.ps1:1`, `tests/Test-ProjectionPreflightNegative.ps1:1`).
+The first 99/108 proof and the detector corrections are retained in `docs/STATUS.md:5`.
+The lead's council/gate and owner acceptance remain pending; no live Azure proof was performed.

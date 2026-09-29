@@ -84,7 +84,7 @@ premise does not carry over.
 
 | Packet | State | Deliverable |
 |---|---|---|
-| P84 | Builder active; owner requested 2026-09-29 | Projection deployment checks everything before it writes and never switches into an outage. Read-only preflight, fail-closed Graph, honest runner/app failures and a verified-reconciler switch guard on deployment, installer and guided flow. Offline tests and mutations; ADR-0040. |
+| P84 | Builder scope complete; lead council/gate and owner approval pending | Projection deployment checks everything before it writes and never switches into an outage. Read-only preflight, fail-closed Graph, honest runner/app failures and a verified-reconciler switch guard on deployment, installer and guided flow. 240 offline assertions and 111 guard mutations; proposed ADR-0040. |
 | P85 | Separate builder active | AUM TUI manages people, units, teams and budgets with full tests. |
 | P86 | Proposed; owner decision pending | Scheduled projection reconciler and tenant-admin pack: managed identity with Graph `GroupMember.Read.All` granted by a tenant admin, an hourly job and lease alerts. P84 verifies evidence but creates no schedule. |
 
