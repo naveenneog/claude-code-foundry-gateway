@@ -101,6 +101,29 @@ persistence remain unverified on Cloud Shell from this machine. Private
 endpoints require an already connected VNet Cloud Shell; this packet does
 not deploy one.
 
+**Required captures and architecture:** the existing capture-source check
+failed on the changed `config.py` hash (**0.83 s**), so the existing
+Example-only capture tool was rerun. All nine guide/capture checks passed
+in **18.08 s**. Historical live images remain unchanged. The terminal
+architecture now names the Cloud Shell launcher, HOME-local runtime/cache
+and quit confirmation; it adds no Azure resource or governance writer.
+The generated terminal diagram was visually inspected. Architecture passed
+**36 assertions in 32.223 s wall time**; references passed for **42 guides**
+with all ten built-in negatives caught in **6.606 s wall time**.
+
+**Additional P71 integration list:** the read-only comparison against the
+same `860abc9` contract, relative to the initial P85 handoff, adds the imports
+`errors.READ_FAILURES`, `errors.read_error` and `feature_screens.QuitScreen`,
+plus palette references to `action_quit`, `action_clear_filter`,
+`action_next_page` and `action_previous_page`. Five existing progressive
+contexts changed: `_show_wait`, `_show_read_error`, `action_refresh`,
+`load_overview` and its nested `fetch`. Their exact, reviewed exception
+fingerprints need renewal after integration; their private attributes do
+not justify a blanket allowlist. The new quit screen still needs P71's
+protected layout/screen imports when combined with that branch. No new
+builtin allowance, raw notification or unrestricted-super call was added.
+The detailed comparison is `$env:TEMP\p85-p71-extension-delta.json`.
+
 ### Initial evidence and unknowns
 
 The inherited no-run audit passed: 20 checks passed, 2 warned, 0 failed,
@@ -260,7 +283,7 @@ records the mutation runner and strengthened retained-origin test.
 The guide and provenance commit is `58ea5ac`. Council and the packet gate
 remain lead-owned.
 
-### Final builder validation and handoff
+### Initial-scope builder validation and handoff
 
 The complete offline AUM suite at `58ea5ac` passed **682 tests in 440.85 s**
 (**442.647 s wall time**), with **0 failures, 0 errors and 0 skips**. This is
@@ -282,7 +305,7 @@ not independent wall-clock runs. The separate guide-reference check covered
 identical case identities and clean restoration. The P71 HEAD and the three
 inspected contract files were unchanged when checked again after the full run.
 
-All builder acceptance work is complete: PLAN/CONTRACT, RED/GREEN evidence,
+All initial-scope builder acceptance work is complete: PLAN/CONTRACT, RED/GREEN evidence,
 47 complete/negative pilots, mutations, task how-tos, required Example
 captures, CHANGELOG, U58-U61 and architecture/P71 conclusions. The final
 production diff was reviewed against `e630525`; no writer implementation or

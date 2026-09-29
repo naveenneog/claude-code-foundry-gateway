@@ -160,7 +160,7 @@
         "cli/finops/src/claude_finops/aum_service.py": "85d16fdc536ab57d2faff3e2123cd233b58bc3f22297cb5acf4e341715860418",
         "cli/finops/src/claude_finops/cli.py": "e85b655911a0c768d7d5d0e832b213a76510645f8770e59c34fe655cd39f32f8",
         "cli/finops/src/claude_finops/commands_groups.py": "420d39ed6540deec0607f649d478046a868e675ce4f3c78e4503d9d9d9c87294",
-        "cli/finops/src/claude_finops/config.py": "a9885ae2a565d46ec7b3ad9d897e554b6af2b1390116c1a5620a736f1e4f4e79",
+        "cli/finops/src/claude_finops/config.py": "fdd8bbbd82b01862818e8b5a66d67590ba2b75af431997aca232fb7fdcf4b2ca",
         "cli/finops/src/claude_finops/configure.py": "54a93e601392ee85ef65e9682a568b038fb767ed4554eac8c8cfd3d4bb848652",
         "cli/finops/src/claude_finops/developer_actions.py": "59b675db2f55ecf1c2df0029cd73cad4842452481762e1283cea7e2c58432127",
         "cli/finops/src/claude_finops/developers.py": "fee788c49a4b4178c1f8c6c2f3d4a6b5ddf5c2dc516b4f2416dfaa268b0f92d1",
@@ -176,10 +176,10 @@
         "cli/finops/src/claude_finops/scope.py": "9e17c5590ba07b3ad72f384cd544f68a5eee5ef5cee39fb02e188419231b1e19",
         "cli/finops/src/claude_finops/service_models.py": "45a916f3d626b5937c3eed95ade666e1efb59e9aa03d678c520e23aa8be110aa",
         "cli/finops/src/claude_finops/service_writes.py": "fe3e703b2738f80289d6a5831b5383f11cc7c037f2157ff69b67df45facbc5b9",
-        "cli/finops/src/claude_finops/tui.py": "1bfbf335187f7e412dfb657179f1f05c240d27f874dc48a9b8664badd478c726",
+        "cli/finops/src/claude_finops/tui.py": "b4f6e6cff69554a3342be5770baeefe06e5f1113a7096c6b5d633e38fc90f432",
         "cli/finops/src/claude_finops/turnstile.py": "17175ec955fdbd537d12ea883ae66574812f73f4e9b107e533aef0e78f8a0dc9",
         "cli/finops/src/claude_finops/ui_features.py": "238ad953368695e66ec99783f609a23bf14ce8664a75351ca4a71707d5862e63",
-        "docs/architecture/06-finops.json": "5a2d7a8974e3293b715c91112b9cf61997236306e892cd7df7dedd0edd627c78",
+        "docs/architecture/06-finops.json": "8a9f6922df20a4ce68aef73e6d1106ad70509ba88a24151437aee4288cfe3cf6",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -193,12 +193,13 @@
         "scripts/Set-ClaudeDeveloper.ps1": "0587578bad882f89993c347972ebf96214ef9d489dafb7e445fec1c08f30057f",
         "scripts/Set-ClaudeTier.ps1": "90d1a5eb9f9a6ec072b55187f5940a0d19d1942321a52772fe0fa627efe9da0c",
         "scripts/Sync-AumMembership.ps1": "123c7e9b2157603ce47af4002137e42e9611eb31284db691037b79f37cb596d3",
-        "scripts/Sync-ClaudeAccess.ps1": "f4f5896df08c22bbfa9702ac0afa532e4cc4c4c990a82a4d7d4676b43e8c0c84"
+        "scripts/Sync-ClaudeAccess.ps1": "f4f5896df08c22bbfa9702ac0afa532e4cc4c4c990a82a4d7d4676b43e8c0c84",
+        "scripts/aum-cloudshell.sh": "6165a2f6e955d3e49ddfb588009b118aa9885c6c19d9c70aaf4a0a057add2670"
       },
       "outputs": [
         {
           "path": "docs/images/architecture/terminal-finops.png",
-          "sha256": "5b132079a9b84dc77eb9c2dad1b2e6b3bbce899e4c511e2eb5214b0dd1f9e12c"
+          "sha256": "cb0f3355e453fffb4fc235fb8b68df211f50d3c209f066537876a504fab12de3"
         }
       ]
     },
@@ -419,7 +420,7 @@
         "cli/finops/src/claude_finops/aum_service.py": "85d16fdc536ab57d2faff3e2123cd233b58bc3f22297cb5acf4e341715860418",
         "cli/finops/src/claude_finops/backend.py": "6dd380ba98996429c770f9c574d19d47c4d754bf70722f98c451d5febfaee6bd",
         "cli/finops/src/claude_finops/cli.py": "e85b655911a0c768d7d5d0e832b213a76510645f8770e59c34fe655cd39f32f8",
-        "cli/finops/src/claude_finops/config.py": "a9885ae2a565d46ec7b3ad9d897e554b6af2b1390116c1a5620a736f1e4f4e79",
+        "cli/finops/src/claude_finops/config.py": "fdd8bbbd82b01862818e8b5a66d67590ba2b75af431997aca232fb7fdcf4b2ca",
         "cli/finops/src/claude_finops/dashboard.py": "d2ce236358644235deeb2a7b4933b469a3296bcce3f1f481f04c3cc07fba80c5",
         "cli/finops/src/claude_finops/direct.py": "60bdbdf6b12007a4cc65fd245dd6a1db93d4c34dbee582436fde0020c314323c",
         "cli/finops/src/claude_finops/engine.py": "69341f446f4d25b8a414f4819f296d830bbc916d3f48bcee91dc45d5a9484962",
@@ -427,7 +428,7 @@
         "cli/finops/src/claude_finops/guarded_publication.py": "4a1c2f03e69346831accc10a3c7bd5fea2b58bd0d6cc715dce47f9112d0123db",
         "cli/finops/src/claude_finops/http_backend.py": "80f8f3e2508e83b9544d9b17f015d7f8839fc23370f25b01047e31a9d4d1b181",
         "cli/finops/src/claude_finops/principal_ui.py": "43ad052d84d3220db65a20738fa7d7135239e8f08695e01327bea2fb8a8fd043",
-        "cli/finops/src/claude_finops/progressive.py": "9e3cc3756fc1ea426744ed570c459ccc48ed3adb31abfb79243955c802e40fb3",
+        "cli/finops/src/claude_finops/progressive.py": "a5cd9a42bfc1488f365fd01214a944ec4b082716d9e942e14cf4fa96fe62825f",
         "cli/finops/src/claude_finops/readiness.py": "563f6642c2a2b1307c239dc00cbe51cb6d18227cc290bef00b3fedb520017449",
         "cli/finops/src/claude_finops/screens.py": "36e7edfe038752ba8ddb4fc65a34136941145d4c229a5be529494022411e6b73",
         "cli/finops/src/claude_finops/turnstile.py": "17175ec955fdbd537d12ea883ae66574812f73f4e9b107e533aef0e78f8a0dc9",

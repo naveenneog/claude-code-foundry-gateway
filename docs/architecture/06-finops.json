@@ -3,7 +3,7 @@
   "id": "terminal-finops",
   "kind": "flow",
   "title": "AUM (Azure Usage Management)",
-  "subtitle": "An independent terminal FinOps tool. Textual and Typer share one engine: Direct by default, optional AUM service or Turnstile, and an explicit test backend. Never in the model inference path.",
+  "subtitle": "An independent terminal FinOps tool on a workstation or Cloud Shell. Textual and Typer share one engine: Direct by default, optional AUM service or Turnstile. Never in the model inference path.",
   "width": 1280,
   "height": 1300,
   "outputs": ["docs/images/architecture/terminal-finops.png"],
@@ -17,6 +17,7 @@
   },
   "identifiers": {
     "app": { "label": "FinOpsApp", "source": "cli/finops/src/claude_finops/tui.py", "match": "class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App):" },
+    "cloudshell": { "label": "aum-cloudshell.sh", "source": "scripts/aum-cloudshell.sh", "kind": "file" },
     "profile": { "label": "Rollback", "source": "cli/finops/src/claude_finops/configure.py", "match": "def profile_transaction(" },
     "csv": { "label": "Complete CSV", "source": "cli/finops/src/claude_finops/reports.py", "match": "def save_chargeback_csv(" },
     "engine": { "label": "Engine", "source": "cli/finops/src/claude_finops/engine.py", "match": "class Engine(FeatureEngine):" },
@@ -38,8 +39,8 @@
     { "x": 978, "y": 890, "w": 302, "h": 394, "tone": "slate", "title": "Offline test boundary" }
   ],
   "nodes": [
-    { "id": "ui", "x": 16, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Textual terminal UI", "lines": ["[[app]]: visible actions and preview-first forms", "Guarded reads; named estimated waits"] },
-    { "id": "commands", "x": 692, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Command aum · Typer", "lines": ["Scriptable nouns/verbs, JSON and complete chargeback CSV", "No silent write retry or authority fallback"] },
+    { "id": "ui", "x": 16, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Textual terminal UI", "lines": ["[[app]]: visible actions and preview-first forms", "Esc stays; quit requires confirmation"] },
+    { "id": "commands", "x": 692, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Command aum · Typer", "lines": ["[[cloudshell]]: HOME-local Python 3.12 / venv", "Existing az sign-in; JSON and complete chargeback CSV"] },
     { "id": "engine", "x": 248, "y": 272, "w": 784, "h": 202, "tone": "blue", "title": "One [[engine]]", "lines": [
       "Identity, scope and backend capability gates; explicit daily versus monthly budgets",
       "Preview first; confirm destructive changes and audit reasons where required.",
@@ -49,7 +50,8 @@
     { "id": "local-files", "x": 1048, "y": 272, "w": 216, "h": 202, "compact": true, "tone": "slate", "title": "Local files", "lines": [
       "Locked profile + backup",
       "[[profile]]; [[csv]]",
-      "No stored tokens"
+      "HOME: venv / caches",
+      "No tokens in profiles"
     ] },
     { "id": "direct", "x": 0, "y": 558, "w": 302, "h": 278, "compact": true, "tone": "blue", "title": "Direct · default", "lines": [
       "[[direct]]",
