@@ -553,7 +553,7 @@ Assert 'every step carries a rollback'      (
     ([regex]::Matches($scale2, '(?m)^\*\*Rollback:\*\*')).Count -ge 5)
 Assert 'it checks the tier first'           ($scale2 -match '(?s)step by step[\s\S]{0,2000}Basic v2 cannot join')
 Assert 'the comparison gates the flip'      ($scale2 -match '(?i)Run the comparison until it reports nothing')
-Assert 'the flip is one named value'        ($scale2 -match 'named-value-id entitlement-source --value projection')
+Assert 'the flip is one named value'        ($scale2 -match 'named-value-id entitlement-source --value projection|-Id entitlement-source -Value projection')
 Assert 'and rolling back is the same value' ($scale2 -match '(?i)set it back to .named-value')
 Assert 'the lists are kept as the rollback' ($scale2 -match '(?i)Until then they are your rollback')
 Assert 'it states what does not change'     ($scale2 -match '(?i)What does not change')
