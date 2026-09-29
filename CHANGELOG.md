@@ -68,6 +68,8 @@ exact streaming cache-creation detail remains **U13**.
   remain inside the protected boundary modules.
   Round-nine notifications retain their origin through queued delivery and
   visible/cached toast rendering; principal changes clear old notifications.
+  Presentation attribute loads and literal reflection are now default-deny,
+  with checked internal exceptions and restricted superclass forwarding.
 - **Reviewed model lifecycle (P70).** `-Action Change -Change models` and
   `scripts/Sync-ClaudeModels.ps1` discover the selected Foundry account, show deployment
   model/version/SKU/capacity and price status, accept per-deployment tier choices, snapshot

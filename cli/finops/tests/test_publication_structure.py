@@ -299,7 +299,7 @@ def test_choke_point_dominates_widget_and_assistant_sinks():
 def handler(self, origin):
     with guarded_publish(origin):
         self.query_one('#status').update(self.row)
-        self.engine.ask(self.question, self.conversation, self.history)
+        self.engine.ask(self.people_query, self.ask_conversation, self.ask_history)
 """
     assert sinks(code, "example.py", {}) == []
 
@@ -333,7 +333,7 @@ def test_alias_name_cannot_hide_a_widget_update():
     code = """
 def handler(self):
     result = self.query_one('#status')
-    result.update(self.cached_row)
+    result.update(self.row)
 """
     assert len(sinks(code, "example.py", {})) == 1
 
@@ -341,16 +341,20 @@ def handler(self):
 def test_clipboard_subprocess_and_assistant_backend_request_are_sinks():
     code = """
 def handler(self):
-    subprocess.run(['clipboard'], input=self.cached_id)
-    self.backend.write('assistant_ask', {'history': self.history})
+    subprocess.run(['clipboard'], input=self.key)
+    self.backend.write('assistant_ask', {'history': self.ask_history})
 """
-    assert len(sinks(code, "example.py", {})) == 2
+    found = sinks(code, "example.py", {})
+    assert len(found) == 3
+    assert sum("Unapproved presentation attribute: write" in failure for failure in found) == 1
+    assert sum(": subprocess.run(" in failure for failure in found) == 1
+    assert sum(": self.backend.write(" in failure for failure in found) == 1
 
 
 def test_widget_value_assignment_is_a_publication_sink():
     code = """
 def handler(self):
-    self.query_one('#person').value = self.cached_person
+    self.query_one('#person').value = self.people_query
 """
     assert len(sinks(code, "example.py", {})) == 1
 
@@ -359,17 +363,17 @@ def test_publication_scope_cannot_span_an_await():
     code = """
 async def handler(self, origin):
     with guarded_publish(origin):
-        await self.read_more()
+        await self.load_tab("budgets")
         self.query_one('#status').update(self.row)
 """
     assert len(sinks(code, "example.py", {})) == 1
 
 
 @pytest.mark.parametrize("body", [
-    "with guarded_publish(origin):\n        callback = lambda: widget.update(self.cached_row)\n        self.call_later(callback)",
-    "getattr(widget, 'update')(self.cached_row)",
-    "setattr(widget, 'value', self.cached_row)",
-    "with guarded_publish(origin):\n        callback = functools.partial(widget.update, self.cached_row)\n        self.call_later(callback)",
+    "with guarded_publish(origin):\n        callback = lambda: widget.update(self.row)\n        self.call_later(callback)",
+    "getattr(widget, 'update')(self.row)",
+    "setattr(widget, 'value', self.row)",
+    "with guarded_publish(origin):\n        callback = functools.partial(widget.update, self.row)\n        self.call_later(callback)",
 ])
 def test_round_six_indirect_and_deferred_probes_are_rejected(body):
     source = "def handler(self, widget, origin):\n    " + body + "\n"
@@ -385,7 +389,7 @@ def test_nested_callback_created_under_guard_cannot_escape_to_scheduler(schedule
 def handler(self, origin):
     with guarded_publish(origin):
         def callback():
-            return self.render_private_row(self.cached_row)
+            return self.render_tab(self.row)
         {scheduler}(callback)
 """
     assert sinks(source, "example.py", {}), scheduler
@@ -396,9 +400,9 @@ def test_computed_getattr_in_presentation_code_is_not_silently_trusted():
 
 
 @pytest.mark.parametrize("callback", [
-    "lambda: widget.update(self.cached_row)",
-    "partial(widget.update, self.cached_row)",
-    "functools.partial(getattr(widget, 'update'), self.cached_row)",
+    "lambda: widget.update(self.row)",
+    "partial(widget.update, self.row)",
+    "functools.partial(getattr(widget, 'update'), self.row)",
 ])
 def test_explicit_deferred_wrapper_is_the_only_callback_escape(callback):
     source = f"""
@@ -413,7 +417,7 @@ def test_callback_alias_does_not_erase_its_deferred_origin_requirement():
 def handler(self, origin):
     with guarded_publish(origin):
         def callback():
-            return self.render_private_row(self.cached_row)
+            return self.render_tab(self.row)
         alias = callback
     self.call_after_refresh(alias)
 """
@@ -424,7 +428,7 @@ def test_lambda_body_never_inherits_the_creation_scope():
     source = """
 def handler(self, widget, origin):
     with guarded_publish(origin):
-        self.callback = lambda: widget.update(self.cached_row)
+        self.callback = lambda: widget.update(self.row)
 """
     assert sinks(source, "example.py", {})
 
@@ -433,7 +437,7 @@ def test_partial_sink_reference_requires_explicit_deferral_without_a_scheduler()
     source = """
 def handler(self, widget, origin):
     with guarded_publish(origin):
-        self.callback = partial(widget.update, self.cached_row)
+        self.callback = partial(widget.update, self.row)
 """
     assert sinks(source, "example.py", {})
 
@@ -496,7 +500,7 @@ def test_additional_scheduler_routes_cannot_escape_the_origin(schedule):
 def handler(self, origin):
     with guarded_publish(origin):
         def callback():
-            return self.render_private_row(self.cached_row)
+            return self.render_tab(self.row)
         {schedule}
 """
     assert sinks(source, "example.py", {}), schedule
@@ -507,7 +511,7 @@ def test_partial_method_sink_cannot_escape_the_origin(factory):
     source = f"""
 def handler(self, widget, origin):
     with guarded_publish(origin):
-        self.callback = {factory}(widget.update, self.cached_row)
+        self.callback = {factory}(widget.update, self.row)
 """
     assert sinks(source, "example.py", {}), factory
 

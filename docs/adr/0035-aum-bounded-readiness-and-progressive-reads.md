@@ -361,6 +361,13 @@ interface. Raw console/stream/driver access, private and dunder members,
 set. Necessary internal operations retain exact-expression justifications
 and reviewed context fingerprints. Parameterized `super` is rejected;
 ordinary constructor/adapter forwarding uses explicit checked contexts.
+The ordinary attribute set has no private names or raw output members.
+Existing internal cache/lifecycle accesses, backend operator writes and
+native sink operations are separate exact-expression exceptions, each with
+a factual reason and its function's AST fingerprint. They do not approve a
+private name elsewhere or exempt the rest of a handler. Synthetic detector
+fixtures use reviewed public names so that the import/attribute checks do
+not accidentally substitute for the specific lexical rule under test.
 
 `publish_notification` requires the originating guard and retains it in the
 queued notification. Acceptance, toast creation and visible rendering

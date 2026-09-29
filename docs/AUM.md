@@ -504,6 +504,12 @@ Notifications use `publish_notification` with an originating guard. That
 guard survives queuing and is checked again when a toast is created and
 rendered, including cached rendering. A principal change clears old toasts.
 The raw framework `notify` path is not a presentation API.
+The same closed contract applies to object attributes and literal
+`getattr`/`hasattr` access. Console, stream, driver, private and unwrapped
+implementation capabilities are not ordinary approved members. Necessary
+internal accesses and superclass forwarding have exact, justified entries
+tied to the reviewed function body. An approved import does not grant
+unrestricted access to the objects it returns.
 The public `content` property also retains and validates its source. The
 structural contract rejects descriptor setters, raw widget-state access and
 dynamic code in presentation modules; those paths bypass provenance even

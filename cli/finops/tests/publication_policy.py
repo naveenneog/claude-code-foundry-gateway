@@ -3,6 +3,7 @@
 import ast
 import builtins
 import hashlib
+from publication_attributes import APPROVED_ATTRIBUTES, EXCLUDED_ATTRIBUTES, ATTRIBUTE_EXCEPTIONS, ATTRIBUTE_CONTEXTS
 
 
 PRESENTATION = {
@@ -202,6 +203,8 @@ META_CONTEXTS = {
     ("publication_widgets.py", "PublicationApp._dispatch_action"): "b1dadd3415f4d1237c5297abfc2002390df965668a4b2556612b26f6d97eec4d",
     ("commands_v4.py", "register"): "ea2480863f81f3dc165d61dea27046d8872a959b6dc2b4c990927707e4ed35bc",
 }
+META_EXCEPTIONS.update(ATTRIBUTE_EXCEPTIONS)
+META_CONTEXTS.update(ATTRIBUTE_CONTEXTS)
 
 
 def digest(node):
@@ -339,6 +342,10 @@ def violations(tree, filename):
                 self.report(node, "Unapproved interpreter namespace access")
             if not isinstance(node.ctx, ast.Load):
                 return
+            if self.resolved(node) == "super":
+                parent = parents.get(node)
+                if not (isinstance(parent, ast.Call) and parent.func is node):
+                    self.report(node, "The superclass builtin cannot escape a checked forwarding call")
             if node.id in vars(builtins) and node.id not in SAFE_BUILTINS:
                 self.report(node, f"Unapproved presentation builtin: {node.id}")
             if node.id in self.module_bindings:
@@ -349,6 +356,10 @@ def violations(tree, filename):
         def visit_Attribute(self, node):
             if self.exceptional(node):
                 return
+            if isinstance(node.ctx, ast.Load) and (
+                    node.attr.startswith("_") or node.attr in EXCLUDED_ATTRIBUTES
+                    or node.attr not in APPROVED_ATTRIBUTES):
+                self.report(node, f"Unapproved presentation attribute: {node.attr}")
             if node.attr.startswith("__") and node.attr.endswith("__"):
                 constructor = (node.attr == "__init__" and isinstance(node.value, ast.Call)
                                and self.resolved(node.value.func) == "super")
@@ -400,12 +411,18 @@ def violations(tree, filename):
                     self.visit(argument)
                 return
             name = self.resolved(node.func)
-            if name in {"getattr", "setattr", "delattr"}:
+            if name == "super" and (node.args or node.keywords or not trusted):
+                self.report(node, "Superclass access requires a checked zero-argument forwarding context")
+            if name in {"getattr", "hasattr", "setattr", "delattr"}:
                 attribute = node.args[1] if len(node.args) > 1 else None
                 if not isinstance(attribute, ast.Constant) or not isinstance(attribute.value, str):
                     self.report(node, "Computed reflection requires an exact checked justification")
                 elif attribute.value.startswith("__") and attribute.value.endswith("__"):
                     self.report(node, "Raw-state reflection is not a presentation API")
+                elif name in {"getattr", "hasattr"} and (
+                        attribute.value.startswith("_") or attribute.value in EXCLUDED_ATTRIBUTES
+                        or attribute.value not in APPROVED_ATTRIBUTES):
+                    self.report(node, f"Unapproved reflected presentation attribute: {attribute.value}")
                 if name in {"setattr", "delattr"} and node.args and self.class_target(node.args[0]):
                     self.report(node, "Presentation classes and imported namespaces are immutable")
                 if name == "getattr" and self.resolved(node) == "sys.modules":

@@ -187,6 +187,24 @@ lifecycle, structural and identity selection then passed **202 cases in
 relying on the headless default that hides them. Attribute enforcement
 follows as a separate correction.
 
+The notification correction is committed as `ea98113`. The attribute policy
+now approves 387 public member names and excludes console/stream/driver,
+private, raw-writer and raw-notification access by default. The reviewed
+inventory adds 190 exact internal/forwarding expressions with 103 function
+fingerprints; combined with the earlier entries there are 202 expressions
+and 106 contexts. A matching function name alone grants no exception.
+Parameterized or escaping `super` is rejected; forwarding exceptions use
+only zero-argument `super` in reviewed wrapper/adapter methods.
+
+The new attribute/source selection passed **183 cases in 8.26 s**. Synthetic
+legacy detector fixtures now use the actual approved UI member vocabulary,
+so an unrelated unknown-attribute finding cannot mask removal of the rule
+they test. The clipboard/backend fixture retains both original sink checks
+and additionally requires the new raw-`write` finding. The complete
+publication selection passed **322 cases in 100.30 s** (102.65 s wall),
+including all B9 counterexamples, notification rendering and the prior
+identity, deferred-publication and source-policy cases.
+
 ### Council round 8 corrections
 
 The eighth review of `f89e1c0` returned UX PASS and Architect, Coder, QA and
