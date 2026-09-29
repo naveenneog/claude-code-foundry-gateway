@@ -51,7 +51,7 @@ APPROVED = {
     "contextlib": approval("Explicit publication and local-message context lifetimes.",
                           "AbstractContextManager ExitStack contextmanager nullcontext"),
     "copy": approval("Deep copies preserve ordinary backend value objects, not raw widget classes.", "deepcopy"),
-    "dataclasses": approval("Immutable provenance and input-origin data records.", "dataclass"),
+    "dataclasses": approval("Immutable provenance and input-origin data records.", "dataclass field"),
     "datetime": approval("Date values, UTC metadata and local display formatting.", "datetime timezone timedelta"),
     "functools": approval("Named callback binding and wrapper metadata preserve existing callable APIs.", "partial wraps"),
     "inspect": approval("Coroutine classification and fixed CLI signature metadata, not dynamic imports.",
@@ -138,11 +138,14 @@ BOUNDARIES = {
         "pathlib": {"Path"}, "rich.console": {"Console", "RenderableType"},
         "subprocess": {"run"}, "sys": {"stdout"}, "typer": {"echo", "prompt"},
     }),
-    "publication_widgets.py": ("Native framework classes are wrapped here before presentation can import them.", "08b6f93afa9b61548fc77cd4d494e7cf49f0631ad0aba2e1dde50fa2fdcc9a96", {
+    "publication_widgets.py": ("Native framework classes are wrapped here before presentation can import them.", "500b135726d1edacbeaaad2f8908e50775f9eb4b4cdebb47fb73bfbe19d13cbc", {
         "textual._context": {"active_app"}, "textual.app": {"App"}, "textual.widget": {"Widget"},
         "textual.containers": {"Horizontal", "Vertical", "VerticalScroll"},
         "textual.screen": {"ModalScreen"},
         "textual.widgets": {"Button", "DataTable", "Input", "Label", "Select", "Static", "TabPane", "TabbedContent", "TextArea"},
+        "textual.notifications": {"Notification", "Notify"},
+        "textual.strip": {"Strip"},
+        "textual.widgets._toast": {"Toast", "ToastHolder", "ToastRack"},
     }),
 }
 
@@ -192,7 +195,7 @@ META_EXCEPTIONS = {
 }
 META_CONTEXTS = {
     ("publication_widgets.py", "_publication_refusal"): "107fdfc3030e7d9a8199aee158d31b90d86d04150748717cab1ae7e0b2479bf8",
-    ("principal_ui.py", "PrincipalUI._clear_principal_state"): "27795720505104c5a5d4b69dfadcd90f8922ad9821955f6a785ac3c8e8a4aec1",
+    ("principal_ui.py", "PrincipalUI._clear_principal_state"): "cdb93970fa0d2e3c5755b9717d1222ca8ef7a14dba27cc6ecb2d913d7c9ae585",
     ("publication_widgets.py", "PublicationWidget.__setattr__"): "42a9888f5ce632625e1ca2f6ba408bdfe127ec9fafc88614fc895c97f255b289",
     ("publication_widgets.py", "PublicationWidget._set_presentation"): "82fc2c3430ecef1cd23d1f13be6ed3de39c173aabec21d140aa74369fe90c850",
     ("publication_widgets.py", "PublicationWidget._get_dispatch_methods"): "e39aef5ed0e04460ced7564b108c2cce2651ea732b880500eec077faf96ad18d",

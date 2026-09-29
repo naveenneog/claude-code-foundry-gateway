@@ -351,6 +351,32 @@ therefore occurs at the application's registration boundary. Checking only
 `on_mount` or `render` is too late or can miss cached visuals. These native
 paths were inspected on 2026-09-29 before implementation.
 
+## Council round 9 amendment, 2026-09-29
+
+The maintained presentation contract is closed at import, attribute and
+builtin level. Every attribute load and literal `getattr`/`hasattr` member
+needs approval; approving an imported object does not approve its entire
+interface. Raw console/stream/driver access, private and dunder members,
+`write`/`writelines` and raw `notify` are excluded from the ordinary member
+set. Necessary internal operations retain exact-expression justifications
+and reviewed context fingerprints. Parameterized `super` is rejected;
+ordinary constructor/adapter forwarding uses explicit checked contexts.
+
+`publish_notification` requires the originating guard and retains it in the
+queued notification. Acceptance, toast creation and visible rendering
+validate that same source. A principal transition clears old notifications.
+The standard selector enables notifications and observes their rendered
+output; headless mode alone does not establish notification safety.
+The native Textual 6.12.0 notification queue, rack and toast lifecycle were
+inspected on 2026-09-29 before these changes.
+
+This remains a contract for maintainer-written code, not a Python sandbox.
+Approved application/backend APIs and the two reviewed boundary modules
+remain trusted implementation. The checker does not infer data provenance
+from arbitrary Python values, and deliberate in-process code can bypass
+checks. Supported presentation paths carry and validate their actual source;
+the contract rejects access to capabilities outside those paths.
+
 ## Consequences
 
 No server deployment, account switch, consent, resource grant or authority

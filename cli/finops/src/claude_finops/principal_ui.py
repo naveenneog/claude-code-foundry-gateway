@@ -27,7 +27,7 @@ class PrincipalUI:
             with guarded_publish(guard):
                 self.push_screen(ChangeScreen(self.engine, kind, row, rows, remove=remove, read_guard=guard))
         except FinOpsError as error:
-            self.notify(self._error_text(error), severity="error")
+            self.publish_notification(self._error_text(error), origin=self.safe_message_guard(), severity="error")
 
     def _principal_verified(self, engine, identity, revision):
         if engine is self.engine and revision != self._principal_revision:
@@ -79,6 +79,7 @@ class PrincipalUI:
     def _clear_principal_state(self, identity):
         self._clearing_principal = True
         try:
+            self.clear_publication_notifications()
             self._refresh_serial += 1
             self._waiting.clear()
             self.data.clear()

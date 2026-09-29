@@ -500,6 +500,10 @@ does not inherit permission from where it was created.
 The sink decorator rejects coroutine, generator and async-generator functions,
 whose bodies would execute after a creation-time check had ended
 ([ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md)).
+Notifications use `publish_notification` with an originating guard. That
+guard survives queuing and is checked again when a toast is created and
+rendered, including cached rendering. A principal change clears old toasts.
+The raw framework `notify` path is not a presentation API.
 The public `content` property also retains and validates its source. The
 structural contract rejects descriptor setters, raw widget-state access and
 dynamic code in presentation modules; those paths bypass provenance even

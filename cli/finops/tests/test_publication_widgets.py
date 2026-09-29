@@ -30,7 +30,7 @@ class BoundedContextCycle(RuntimeError):
 
 async def test_repeated_user_edits_remain_usable():
     app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
-    async with app.run_test(size=(100, 30)) as pilot:
+    async with app.run_test(size=(100, 30), notifications=True) as pilot:
         await pilot.pause()
         await app.workers.wait_for_complete()
         field = app.query_one("#people-query", Input)

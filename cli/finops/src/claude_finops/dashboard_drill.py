@@ -85,7 +85,7 @@ class DashboardRows(ModalScreen):
                 with guarded_publish(self.read_guard):
                     self.app.push_screen(DetailScreen("Exact source row", selected[1], read_guard=self.read_guard))
             except FinOpsError as error:
-                self.app.notify(self.app._error_text(error), severity="error")
+                self.app.publish_notification(self.app._error_text(error), origin=self.app.safe_message_guard(), severity="error")
 
     @on(Button.Pressed, "#dashboard-back")
     def back(self):
@@ -121,7 +121,7 @@ class DashboardRows(ModalScreen):
             with guarded_publish(self.read_guard):
                 self.navigate_selected(kind, row)
         except FinOpsError as error:
-            self.app.notify(self.app._error_text(error), severity="error")
+            self.app.publish_notification(self.app._error_text(error), origin=self.app.safe_message_guard(), severity="error")
 
     def navigate_selected(self, kind, row):
         if kind == "budget":

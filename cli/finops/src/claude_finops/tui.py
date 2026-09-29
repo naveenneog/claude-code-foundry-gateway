@@ -621,7 +621,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
             return
         row = self.selected()
         if row.get("kind") == "tier":
-            self.notify("Tier removal is not supported by the gateway policy.")
+            self.publish_notification("Tier removal is not supported by the gateway policy.", origin=self.safe_message_guard())
             return
         kind = "budget" if self.active in {"budgets", "people"} else "catalog"
         self.open_cached_change(kind, row, remove=True)
@@ -659,7 +659,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
                     self.action_refresh()
                 return
             if (self.request_page + 1) * 50 >= len(self.data.get("requests", {}).get("all_items", [])):
-                self.notify("End of server window. Set Before to see older requests.")
+                self.publish_notification("End of server window. Set Before to see older requests.", origin=self.cached_guard("requests"))
                 return
             self.request_page += 1
         self.action_refresh()

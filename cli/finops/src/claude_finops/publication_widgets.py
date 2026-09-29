@@ -3,13 +3,16 @@
 import asyncio
 from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import wraps
 import inspect
 
 from textual import events
 from textual._context import active_app
 from textual.app import App as TextualApp
+from textual.notifications import Notification, Notify
+from textual.strip import Strip
+from textual.widgets._toast import Toast as TextualToast, ToastHolder, ToastRack
 from textual.containers import (
     Horizontal as TextualHorizontal, Vertical as TextualVertical, VerticalScroll as TextualVerticalScroll,
 )
@@ -48,6 +51,11 @@ def _publication_refusal(error: BaseException | None) -> FinOpsError | None:
 @dataclass(frozen=True)
 class _InputOrigin(PublicationOrigin):
     content_origin: Callable[[], AbstractContextManager]
+
+
+@dataclass(kw_only=True)
+class _OriginNotification(Notification):
+    origin: Callable[[], AbstractContextManager] = field(repr=False, compare=False)
 
 
 def widget_sink(operation):
@@ -134,6 +142,68 @@ class PublicationWidget(PublicationDispatch):
 
 
 class PublicationApp(PublicationDispatch, TextualApp):
+    def notify(self, message, **kwargs):
+        raise FinOpsError("Notifications require publish_notification with the originating guard.", 3)
+
+    def publish_notification(self, message, *, origin, title="", severity="information", timeout=None):
+        with guarded_publish(origin):
+            notification = _OriginNotification(
+                message=message, title=title, severity=severity,
+                timeout=self.NOTIFICATION_TIMEOUT if timeout is None else timeout,
+                markup=False, origin=origin,
+            )
+            if not self.post_message(Notify(notification)):
+                raise FinOpsError("The terminal is closing; the notification was not delivered.", 7)
+
+    def _on_notify(self, event):
+        event.stop()
+        notification = event.notification
+        if not isinstance(notification, _OriginNotification):
+            raise FinOpsError("An unguarded notification was refused. Refresh the current view.", 3)
+        with guarded_publish(notification.origin):
+            self._notifications.add(notification)
+            self._refresh_notifications()
+
+    def _refresh_notifications(self):
+        if self.is_running and not self._disable_notifications:
+            self.call_later(self._deliver_notifications)
+
+    def _deliver_notifications(self):
+        if not self.screen_stack:
+            return
+        racks = self.screen.query(ToastRack)
+        if not racks:
+            return
+        rack = racks.first()
+        notifications = list(self._notifications)
+        with ExitStack() as guards:
+            for notification in notifications:
+                if not isinstance(notification, _OriginNotification):
+                    raise FinOpsError("An unguarded notification was refused. Refresh the current view.", 3)
+                guards.enter_context(guarded_publish(notification.origin))
+            current_ids = {rack._toast_id(notification) for notification in notifications}
+            for holder in rack.query(ToastHolder):
+                if holder.id not in current_ids:
+                    holder.display = False
+                    holder.remove()
+            existing_ids = {holder.id for holder in rack.query(ToastHolder)}
+            for notification in notifications:
+                identity = rack._toast_id(notification)
+                if identity not in existing_ids:
+                    with guarded_publish(notification.origin):
+                        rack.mount(ToastHolder(_PublicationToast(notification), id=identity))
+            rack.display = bool(notifications)
+            if notifications:
+                rack.call_later(rack.scroll_end, animate=False, force=True)
+
+    def clear_publication_notifications(self):
+        self._notifications.clear()
+        for screen in self.screen_stack:
+            for holder in screen.query(ToastHolder):
+                holder.display = False
+                holder.remove()
+        self._refresh_notifications()
+
     def _register(self, parent, *widgets, **kwargs):
         with ExitStack() as guards:
             pending, seen = list(widgets), set()
@@ -200,6 +270,28 @@ class PublicationApp(PublicationDispatch, TextualApp):
                         return True
                     break
         return await super()._dispatch_action(namespace, action_name, params)
+
+
+class _PublicationToast(PublicationWidget, TextualToast):
+    def _discard(self, error):
+        self.display = False
+        self.app._handle_exception(error)
+
+    def render(self):
+        try:
+            with guarded_publish(self._publication_origin):
+                return super().render()
+        except FinOpsError as error:
+            self._discard(error)
+            return ""
+
+    def render_lines(self, crop):
+        try:
+            with guarded_publish(self._publication_origin):
+                return super().render_lines(crop)
+        except FinOpsError as error:
+            self._discard(error)
+            return [Strip.blank(crop.width)] * crop.height
 
 
 class Static(PublicationWidget, TextualStatic):

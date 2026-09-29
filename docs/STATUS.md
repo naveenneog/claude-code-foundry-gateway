@@ -135,6 +135,58 @@ Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
 
 ## P71 AUM answers fast and says why it cannot, 2026-09-28
 
+### Council round 9 corrections
+
+The ninth review of `b186cf3` returned UX PASS and Architect, Coder, QA and
+Security BLOCK. Imports were closed, but objects still exposed a console
+stream (B9a), an unwrapped superclass implementation (B9b), and raw
+notifications (B9c). The earlier probes, boundary/exception fingerprints and
+711-case full run were verified by the council.
+
+This correction closes attribute loads and literal reflection with an
+explicit member allowlist. Private names, streams, drivers, raw notification
+delivery and unwrapped implementations have no ambient approval. Necessary
+internal expressions use the existing reason and context-fingerprint
+mechanism. Parameterized `super` is not a presentation API. Notifications
+carry their source through queued delivery and visible rendering.
+
+The exact counterexamples and current-origin controls precede implementation,
+with notifications enabled. Every new rule has a same-test-ID removal probe.
+Each long command owns and releases its lock in its own `finally`; one full
+Python suite follows the fixes. No push, merge, Azure operation, packet gate
+or council invocation is part of this correction. Round 10 remains with the lead.
+
+The installed Textual 6.12.0 path was inspected on 2026-09-29:
+`App.notify` queues a `Notify` message; `_on_notify` adds its record and
+`_refresh_notifications` separately schedules `ToastRack.show`. A check only
+when `notify` is called therefore does not cover actual delivery. Native
+toasts also cache renderables. The correction retains the origin through
+both queue stages and the visible toast path. The initial read-only audit
+exited 0 (20 passed, two existing warnings, four skipped commands/checks).
+
+The capability RED selection reported **46 failed, 8 passed in 8.02 s**.
+It reproduced the stream write, superclass method alias and visible raw
+notification after B verification. The expanded notification-only RED file
+reported **7 failed in 6.49 s**, including queue acceptance and cached-toast
+rendering controls.
+
+`publish_notification` now requires an origin, stores it in the queued
+record, and validates it at acceptance, toast creation and rendering.
+Protected toasts recheck cached render strips; refusal clears/hides them and
+reports the safe error. Principal clearing also clears old notifications.
+All former presentation notification calls use the new API. Static/safe
+explanations use the local-message guard; action acknowledgements retain
+their request/reply origin. Raw `notify` refuses rather than borrowing the
+current identity.
+
+Notification/liveness verification passed **28 cases in 25.15 s**. The
+existing delayed-read observers were moved to the new API while still
+calling it; no outcome assertion was removed. The combined notification,
+lifecycle, structural and identity selection then passed **202 cases in
+58.32 s**. The seven scheduler tests now render notifications instead of
+relying on the headless default that hides them. Attribute enforcement
+follows as a separate correction.
+
 ### Council round 8 corrections
 
 The eighth review of `f89e1c0` returned UX PASS and Architect, Coder, QA and
