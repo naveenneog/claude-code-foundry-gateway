@@ -9,7 +9,7 @@ import pytest
 from textual.containers import VerticalScroll
 from textual.widgets import Static
 
-from claude_finops import configure
+from claude_finops import publication_output as configure
 from claude_finops.fake import FakeBackend
 from test_p80_connection import OLD_PROFILE, make_app, preview_connection, settle
 from test_p80_profile_transaction import windows_deny_read

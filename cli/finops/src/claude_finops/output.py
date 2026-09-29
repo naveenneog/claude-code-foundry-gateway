@@ -2,7 +2,6 @@ import csv
 import io
 import json
 
-from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 from .guarded_publication import published, enclosing_publication
@@ -35,12 +34,11 @@ def display(value, *, as_json=False, plain=False, no_color=False):
     if plain:
         write_text("\n".join(linear(value)))
         return
-    console = Console(no_color=no_color, highlight=False)
-    render(console, value)
+    render(None, value, no_color=no_color)
 
 
 @published(lambda *args, **kwargs: enclosing_publication())
-def render(console, value, title=""):
+def render(console, value, title="", *, no_color=False):
     if isinstance(value, dict):
         simple = {k: v for k, v in value.items() if not isinstance(v, (dict, list))}
         if simple:
@@ -49,10 +47,10 @@ def render(console, value, title=""):
             table.add_column()
             for key, item in simple.items():
                 table.add_row(Text(key.replace("_", " ")), Text(safe_text(item) if item is not None else "unknown"))
-            write_renderable(console, table)
+            write_renderable(console, table, no_color=no_color)
         for key, item in value.items():
             if isinstance(item, (dict, list)):
-                render(console, item, key.replace("_", " "))
+                render(console, item, key.replace("_", " "), no_color=no_color)
     elif isinstance(value, list):
         if not value:
             return
@@ -63,11 +61,11 @@ def render(console, value, title=""):
                 table.add_column(key.replace("_", " "))
             for row in value:
                 table.add_row(*(Text(safe_text(row.get(key)) if row.get(key) is not None else "unknown") for key in keys))
-            write_renderable(console, table)
+            write_renderable(console, table, no_color=no_color)
         else:
-            write_renderable(console, Text(f"{title}: " + ", ".join(map(safe_text, value))))
+            write_renderable(console, Text(f"{title}: " + ", ".join(map(safe_text, value))), no_color=no_color)
     else:
-        write_renderable(console, Text(safe_text(value)))
+        write_renderable(console, Text(safe_text(value)), no_color=no_color)
 
 
 def chargeback_csv(rows, month):

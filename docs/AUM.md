@@ -746,6 +746,50 @@ widget/property/status/clipboard/export/assistant writes outside this boundary.
 Its exact, documented static-write allowlist covers local shell labels, resets
 and fixed controls, not whole handlers. JSON/linear/table formatters require an
 active guarded publication, and an async wait cannot be inside that write scope.
+The sinks also enforce this at runtime: widget updates and values, status,
+clipboard/links, final terminal/file writers and assistant HTTP egress check
+the active origin at the write. A lambda, dynamic attribute call or partial
+does not inherit permission from where it was created.
+The sink decorator rejects coroutine, generator and async-generator functions,
+whose bodies would execute after a creation-time check had ended
+([ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md)).
+Notifications use `publish_notification` with an originating guard. That
+guard survives queuing and is checked again when a toast is created and
+rendered, including cached rendering. A principal change clears old toasts.
+The raw framework `notify` path is not a presentation API.
+The same closed contract applies to object attributes and literal
+`getattr`/`hasattr` access. Console, stream, driver, private and unwrapped
+implementation capabilities are not ordinary approved members. Necessary
+internal accesses and superclass forwarding have exact, justified entries
+tied to the reviewed function body. An approved import does not grant
+unrestricted access to the objects it returns.
+The public `content` property also retains and validates its source. The
+structural contract rejects descriptor setters, raw widget-state access and
+dynamic code in presentation modules; those paths bypass provenance even
+when their surrounding function has a guard.
+`guarded_deferred(origin, callback)` checks the retained source when a callback
+runs. Async callbacks retain a scope lifetime without holding an identity lock
+across waits; each later sink checks again. The AST detector separately checks
+dynamic sink access and escaping callbacks for all supported schedulers. The
+51 exact static-write exceptions remain unchanged.
+Refused scheduled writes leave input available and report the safe underlying
+error. Application and app-owned event-loop exception handling recognize
+wrapped refusals before rendering a traceback or callback arguments. Unrelated
+errors retain their existing handling, and the event loop's previous handler
+is restored when the app closes.
+Attaching a retained widget checks its original source before DOM insertion,
+including shallow copies, composed children, reparenting and cached subtrees.
+The caller's current scope does not replace the widget's source. Protected
+instances refuse class replacement; current-origin writes and attachments
+retain their normal behavior.
+The source contract approves presentation imports and their member
+interfaces by name; aliases do not expand them. Raw consoles, streams,
+filesystem writers and framework widgets remain in the protected boundary
+modules. Computed reflection and other metaprogramming require exact,
+justified entries tied to the reviewed function body. New source modules
+need an explicit classification. This is a contract for maintained
+presentation code, not a sandbox for malicious code in the Python process
+([ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md)).
 
 Overview displays each source as it arrives. Pending panels name their source,
 and the progress line shows an estimate and elapsed time. Estimates are not

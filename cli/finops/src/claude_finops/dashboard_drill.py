@@ -1,7 +1,5 @@
 from textual import on
-from textual.containers import Vertical
-from textual.screen import ModalScreen
-from .publication_widgets import Button, DataTable, Label
+from .publication_widgets import Button, DataTable, Label, ModalScreen, Vertical
 
 from .screens import DetailScreen
 from .errors import FinOpsError
@@ -11,6 +9,7 @@ from .guarded_publication import guarded_publish, published, guarded_deferred
 class DashboardRows(ModalScreen):
     BINDINGS = [("escape", "dismiss", "Back"), ("d", "detail", "Exact row")]
 
+    @published(lambda self, panel: panel.read_guard)
     def __init__(self, panel):
         super().__init__()
         self.heading = str(panel.border_title)
@@ -86,7 +85,7 @@ class DashboardRows(ModalScreen):
                 with guarded_publish(self.read_guard):
                     self.app.push_screen(DetailScreen("Exact source row", selected[1], read_guard=self.read_guard))
             except FinOpsError as error:
-                self.app.notify(self.app._error_text(error), severity="error")
+                self.app.publish_notification(self.app._error_text(error), origin=self.app.safe_message_guard(), severity="error")
 
     @on(Button.Pressed, "#dashboard-back")
     def back(self):
@@ -122,7 +121,7 @@ class DashboardRows(ModalScreen):
             with guarded_publish(self.read_guard):
                 self.navigate_selected(kind, row)
         except FinOpsError as error:
-            self.app.notify(self.app._error_text(error), severity="error")
+            self.app.publish_notification(self.app._error_text(error), origin=self.app.safe_message_guard(), severity="error")
 
     def navigate_selected(self, kind, row):
         if kind == "budget":

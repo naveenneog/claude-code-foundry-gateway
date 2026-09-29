@@ -127,7 +127,7 @@ def test_chargeback_report_path_defaults_to_documents_and_never_overwrites(tmp_p
     folder.mkdir(parents=True)
     (folder / "chargeback-2026-09.csv").write_text("existing", encoding="utf-8")
     path = chargeback_export_path("2026-09")
-    assert path == folder / "chargeback-2026-09-1.csv"
+    assert path == str(folder / "chargeback-2026-09-1.csv")
 
 
 def test_cli_chargeback_can_save_complete_csv_without_overwriting(tmp_path):

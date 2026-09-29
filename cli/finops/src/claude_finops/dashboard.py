@@ -1,7 +1,6 @@
 """A monitoring dashboard: scoped facts, compact gauges, and focusable detail panels."""
 
-from textual.containers import Horizontal, Vertical
-from .publication_widgets import Static
+from .publication_widgets import Horizontal, Static, Vertical
 from datetime import datetime, timezone
 
 from .rules import human
@@ -83,7 +82,7 @@ class DashboardPanel(Static, can_focus=True):
                         self.app.push_screen(DetailScreen(str(self.border_title) + " | exact source values",
                                                          self.detail, read_guard=self.read_guard))
             except FinOpsError as error:
-                self.app.notify(self.app._error_text(error), severity="error")
+                self.app.publish_notification(self.app._error_text(error), origin=self.app.safe_message_guard(), severity="error")
             event.stop()
 
 

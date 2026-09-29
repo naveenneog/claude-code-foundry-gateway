@@ -181,3 +181,52 @@ the first sweep's notification survivor led to an additional notification
 assertion; the original state and viewport assertions were not relaxed.
 The Windows handle remained held through verification, both denied reads and
 the complete keyboard-scrolled recovery inspection. Round 3 is lead-owned.
+
+## P71 integration authorization, 2026-09-30
+
+The lead now requests a non-rebase merge of P71 `e1586c5` into P80, followed
+by any newer P71 tip before the single final AUM run. This supersedes the
+earlier isolation instruction only for integration into `p80-aum-usability`;
+the builder still cannot change another worktree, push or merge to main.
+The P80 acceptance above and ADR-0035's round-10 closed publication contract
+both apply. Its approval recipe governs reviewed interfaces and fingerprints;
+integration is not permission to relax a detector or add a raw output path.
+Council and packet gates remain with the lead.
+
+The integration source RED found local profile persistence in presentation
+`configure.py`, path objects escaping into terminal handlers, unclassified
+report helpers and three remaining raw notifications after the automatic
+merge. Profile persistence and confirmation move into the existing
+`publication_output.py` boundary, not a new trusted presentation module.
+Its transaction accepts the originating guard, checks entry and final
+validation without holding publication across identity verification, and
+restores only its own unchanged local address bytes on failure. Rollback
+cleanup is local-file recovery, not permission to publish an expired backend
+result. The OS writer lock remains held until validation or restoration ends.
+Presentation receives path strings and immutable preview values, never file
+handles. Report helpers remain explicit operator APIs but delegate directory
+creation and every CSV write to the protected output sink.
+
+Existing imports/member names are reused where possible. Any additional
+value-only interface, protected receiver, exact internal expression or changed
+context digest is recorded individually in the P80 STATUS review, with
+current/expired-origin controls and count-preserving removal evidence.
+The static-write list remains 51 exact entries, and raw `notify`, native
+widgets, filesystem imports and metaprogramming stay forbidden in ordinary
+presentation. These adaptations preserve P80's acceptance without changing
+ADR-0035's rules or budgets.
+
+The combined runtime controls found two integration-specific effects. A
+local profile conflict (exit 6) was being treated as a source rejection and
+closing the current form. Local profile sections now propagate their
+validation errors outside the publication-rejection callback; actual
+expired-source refusals (exit 3) still take that callback. The domain error
+is always rethrown and displayed, not suppressed.
+
+Native `scroll_home` defers work by default in Textual 6.12.0 and could expose
+expired cached recovery text. It is not approved for presentation. The
+protected `VerticalScroll.publication_scroll_home` sink instead validates
+the receiver's retained input/content origin and current app, then resets
+the viewport synchronously with animation and deferral disabled. Current
+and expired controls exercise the actual receiver. This adds no generic
+native method approval and does not relax either publication boundary.

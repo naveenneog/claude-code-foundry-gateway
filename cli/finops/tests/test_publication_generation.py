@@ -424,7 +424,8 @@ async def test_cached_dialog_handoffs_retain_origin_during_deferred_composition(
             await pilot.press("enter")
             await pilot.pause()
             assert isinstance(app.screen, DashboardRows)
-        origin = app._data_guards[app.active][1]
+        origin = app.ask_reply_guard if surface == "pin-chart" else app._data_guards[app.active][1]
+        assert origin is not None and guard_exit_code(origin) == 0
 
         def paused_compose(screen):
             principal[0] = "b"
@@ -472,7 +473,11 @@ async def test_cached_request_actions_recheck_the_origin_not_an_empty_cycle(bear
     published, notices = [], []
     monkeypatch.setattr(app, "copy_to_clipboard", lambda value: published.append(value))
     monkeypatch.setattr(app, "open_url", lambda value: published.append(value))
-    monkeypatch.setattr(app, "notify", lambda value, **kwargs: notices.append(str(value)))
+    publish_notification = app.publish_notification
+    def record_notification(value, **kwargs):
+        notices.append(str(value))
+        return publish_notification(value, **kwargs)
+    monkeypatch.setattr(app, "publish_notification", record_notification)
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
         await app.workers.wait_for_complete()
@@ -642,7 +647,11 @@ async def test_delayed_screen_or_export_read_cannot_publish_after_identity_chang
     fired = []
     published = []
     notices, opened = [], []
-    monkeypatch.setattr(app, "notify", lambda message, **kwargs: notices.append(str(message)))
+    publish_notification = app.publish_notification
+    def record_notification(message, **kwargs):
+        notices.append(str(message))
+        return publish_notification(message, **kwargs)
+    monkeypatch.setattr(app, "publish_notification", record_notification)
     monkeypatch.setattr(app, "open_url", lambda url: opened.append(url))
     original_row, original_options = DataTable.add_row, Select.set_options
     original_text = TextArea.load_text

@@ -16,8 +16,8 @@
     "excerpt": "[project.scripts]\naum = \"claude_finops.cli:main\"\nclaude-finops = \"claude_finops.cli:legacy_main\""
   },
   "identifiers": {
-    "app": { "label": "FinOpsApp", "source": "cli/finops/src/claude_finops/tui.py", "match": "class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App):" },
-    "profile": { "label": "Rollback", "source": "cli/finops/src/claude_finops/configure.py", "match": "def profile_transaction(" },
+    "app": { "label": "FinOpsApp", "source": "cli/finops/src/claude_finops/tui.py", "match": "class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):" },
+    "profile": { "label": "Rollback", "source": "cli/finops/src/claude_finops/publication_output.py", "match": "def profile_transaction(" },
     "csv": { "label": "Complete CSV", "source": "cli/finops/src/claude_finops/reports.py", "match": "def save_chargeback_csv(" },
     "engine": { "label": "Engine", "source": "cli/finops/src/claude_finops/engine.py", "match": "class Engine(FeatureEngine):" },
     "turnstile": { "label": "TurnstileBackend", "source": "cli/finops/src/claude_finops/turnstile.py", "match": "class TurnstileBackend(HttpBackend):" },

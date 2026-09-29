@@ -57,6 +57,18 @@ or RED evidence for the five existing P80 commits.
 | U40 | CLOSED | Round 2's missing path is reproduced with successful whoami and a real Windows handle held through final validation, failed restoration and UI inspection. Adoption now follows successful transaction exit. Tests retain the old engine/configuration, identity, preferences, capabilities, data, records and modal on failure; a successful-save control proves validation precedes adoption. Reverting that order fails all three new cases. Measured 2026-09-29: all 635 AUM cases passed and all seven new negative probes were caught. [Source](../cli/finops/src/claude_finops/ui_features.py), [end-to-end regressions](../cli/finops/tests/test_p80_connection_recovery.py). | P80 round 2 adoption ordering corrected; round 3 pending |
 | U41 | CLOSED | The retained form uses a focusable VerticalScroll feedback area at 80x24. The end-to-end test reconstructs every rendered recovery character using keyboard scrolling while the read-denying Windows handle remains held, including the complete backup path and final recovery step. Clipping, dismissal, missing focus and duplicate notification mutations are caught; top/bottom fixture captures were inspected. The original Settings-label and membership corrections remain. [Recovery tests](../cli/finops/tests/test_p80_connection_recovery.py), [architecture](ARCHITECTURE.md#aum-azure-usage-management---terminal-finops-console), measured 2026-09-29. | P80 round 2 recovery visibility corrected; round 3 pending |
 
+Integration research, 2026-09-30: U39's report-directory creation must be inside
+the guarded writer, not before it. U40's local revision errors must surface
+without being mistaken for an expired principal; actual exit-3 origin failures
+still reject publication. U41's native `scroll_home` defers by default, so
+recovery now uses the protected receiver's origin-checked synchronous reset.
+The RED counterexamples, current/expired controls and seven count-preserving
+removal probes are recorded in [P80 STATUS](STATUS.md#p71-closed-contract-integration-2026-09-30)
+and [ADR-0038](adr/0038-aum-actions-and-connection.md#p71-integration-authorization-2026-09-30).
+These are offline client-boundary findings, not new live Azure or directory
+claims. U38-U41 remain P80's IDs; the separate P71 timing observations are
+retained in STATUS without closing U26.
+
 ## P78 research before implementation
 
 | ID | State | Question | Blocks |
@@ -181,6 +193,110 @@ publicly delegated DNS name; no domain is purchased for P69.
 [u30-features]: https://learn.microsoft.com/azure/api-management/api-management-features
 [u30-arm]: https://learn.microsoft.com/rest/api/apimanagement/api-management-service/update?view=rest-apimanagement-2024-05-01
 [u30-retail]: https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices
+
+### U26 - P71 rounds 6-10 validation
+
+The resumed round 6 full Python run on `36f3088`, under the shared lock from
+**16:30:27Z to 16:38:50Z on 2026-09-28**, executed 563 cases:
+**560 passed, 3 failed in 498.64 s** (502.38 s wall). The two
+`test_azure_deadline.py` cases
+`test_timeout_terminates_started_children_and_grandchildren` and
+`test_scheduling_delay_before_assignment_cannot_release_uncontained_children`
+failed because their child startup markers were absent.
+`test_dashboard.py::test_redacted_queries_do_not_leak_through_input_or_filter_echo`
+raised `WorkerCancelled` at the worker wait after the lookup handoff.
+All 115 publication cases, including the B4/B5 replays, passed in that run.
+The original stdout and JUnit report remain in
+`.finops-evidence\p71-r6-resume`; [STATUS](STATUS.md#resumed-round-6-proof-on-36f3088)
+records the full selection, timings and mutation proof. No second full run,
+deadline change or assertion change replaced those failures. Their cause is
+not established by this run; U26 remains open.
+
+The round 7 council reports that these three cases passed together with pinned
+P71 imports in **4.77 s**. The lead also reports that the round 6 full run
+overlapped its P79 gate, which ran at AboveNormal priority from **21:44 to
+22:28 IST on 2026-09-28**. This is an observed overlap, not a controlled
+reproduction of the cause. Round 7 leaves the assertions and deadlines
+unchanged and retains U26 as open after its requested final full-suite run.
+
+Round 7's restored publication selection passed **177 cases in 73.71 s**,
+then its one full AUM/FinOps Python run on `530a8dd` passed **625 cases in
+247.21 s** (248.95 s wall), from **21:07:43Z to 21:11:52Z on 2026-09-28**
+(**02:37:43-02:41:52 IST on 2026-09-29**). Each validation command acquired
+and released its own lock. This passing run is not a controlled proof that
+the earlier scheduling overlap caused the three failures.
+
+Eight of the 27 round 7 mutation runs also observed
+`test_cached_dialog_handoffs_retain_origin_during_deferred_composition[pin-chart]`
+raise `KeyError: 'ask'` at the precondition reading
+`app._data_guards[app.active]`. This was before the stale-origin assertions
+and was observed with several different removals, including AST-only changes.
+Each mutation also failed its intended detector case at the full 177-test
+count; the setup failures are excluded from the claimed mutation catches.
+The pin-chart case passed in the restored selector and full suite. Its cause
+is not established; no assertion, deadline or synchronization was changed.
+[STATUS](STATUS.md#final-round-7-proof-on-530a8dd) records the individual
+receipts and timings. U26 remains open.
+
+Round 8 again observed the pin-chart `KeyError: 'ask'` before the stale-origin
+probe (275/276 and 262/263 passed). Its fixture advertises no Ask view, yet
+invokes the assistant directly. The response has `ask_reply_guard`; focusing
+its answer can activate Ask without creating a view-cache guard. The test's
+control was therefore reading the wrong cache. It now uses the completed
+reply's guard, the same one used by `action_pin_chart`, and verifies that it
+is current before the principal change. All later guard and output assertions
+are retained. The corrected 263-case selection passed in 94.00 s.
+This is a test-control correction, not a production timing fix or a diagnosis
+of the earlier Windows marker and worker-cancellation failures. U26 remains
+open, with all failing receipts retained.
+
+Following that control correction, all 26 round 8 removal probes executed
+their complete 263-case selectors without the pin-chart setup failure.
+The restored selector passed **263 in 89.18 s**, and the requested one full
+AUM/FinOps run passed **711 in 267.15 s** (269.77 s wall), under its own lock
+from **00:57:04Z to 01:01:34Z on 2026-09-29** (**06:27:04-06:31:34 IST**).
+The failing pre-correction receipts remain in `.finops-evidence\p71-r8`.
+This supports the test-control correction; it does not establish the cause
+of the older Windows marker or worker-cancellation failures. U26 remains open.
+
+Round 9's restored selector passed **322 cases in 106.32 s**. Its requested
+one full AUM/FinOps run on `125f352` passed **770 cases in 283.15 s**
+(285.94 s wall), under its own lock from **03:43:39Z to 03:48:25Z on
+2026-09-29** (**09:13:39-09:18:25 IST**). All notification and prior
+publication cases were included. No historical failure was reproduced or
+diagnosed by that passing run; U26 remains open. The receipts are in
+`.finops-evidence\p71-r9` and the [round 9 STATUS record](STATUS.md#final-round-9-proof-on-125f352).
+
+Round 10's first expanded publication selector had **358 passed, 3 failed in
+166.58 s**. The request-action case raised `WorkerCancelled`, then `NoMatches`
+during shutdown, and passed in the isolated follow-up; that pass does not
+establish its cause. The people-selector failure was reproducible and traced
+to a new native cached-paint refusal cancelling a newer source read; the native
+adapter correction separates that paint refusal from write/input rejection.
+The notification failure preceded the current-toast assertion; the positive
+control now waits for visible text instead of assuming one pause completes
+mounting. The original receipts remain in the
+[round 10 record](STATUS.md#council-round-10-corrections). U26 stays open.
+Its second expanded selector had **358 passed, 4 failed in 172.79 s**:
+`test_cached_dialog_handoffs_retain_origin_during_deferred_composition`
+(`pin-chart`, `request-form`), the delayed `people-selector` case and
+`test_guarded_deferral_reenters_at_execution_and_keeps_input_usable`.
+Each raised `WorkerCancelled` at startup or after navigation; two also raised `NoMatches` during
+shutdown. The later 48-case runtime control passed, but that pass does not
+diagnose these intermittent cancellations.
+
+The requested one full round 10 run on `70b6919` executed **810 cases:
+806 passed, 4 failed in 360.31 s** (363.59 s wall), under its own lock from
+**2026-09-29 18:22:17Z to 18:28:21Z**. Both `budgets` and `requests` variants
+of `test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies`,
+`test_principal_change_closes_prior_forms_and_clears_state_before_input` and
+`test_approval_paging_and_queue_change_reset_cursor` raised `WorkerCancelled`
+at a worker wait. The first three also raised `NoMatches` during shutdown.
+All 40 new native/diagnostic cases passed. No timeout or assertion was relaxed,
+and no second full run replaced this result. The cause remains unproven; U26
+stays open. Full output, JUnit and the lock receipt are in
+`.finops-evidence\p71-r10-resume`; see the
+[round 10 full-run record](STATUS.md#final-round-10-full-aum-run-on-70b6919).
 
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 
