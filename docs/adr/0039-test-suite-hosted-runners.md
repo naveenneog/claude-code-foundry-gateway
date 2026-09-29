@@ -1,6 +1,6 @@
 # ADR-0039: The test suite runs on hosted runners
 
-- **Status:** Draft for @naveenneog; no charter change is made by P78
+- **Status:** Proposed. @naveenneog approved merging P78 on 2026-09-29; the charter change this ADR proposes (the gate's test command and budget) is not enacted and needs a separate decision
 - **Date:** 2026-09-28
 - **Packet:** P78
 - **Related:** [ADR-0024](0024-test-suite-time-budget.md),

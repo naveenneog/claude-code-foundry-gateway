@@ -492,13 +492,16 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       as the gateway is chosen, offers to archive it when attended and refuses without
       `-ArchiveSavedRecord` when unattended; the developer count asks nothing about the entitlement
       store, and the store's capacity is stated after the store is chosen; each fixed test-first
-- [ ] P78 the packet gate returns to 30 minutes — acceptance: the exclusive lane's long checks (the
-      company-address mutations, the workstation clients, the guided flow's permutations and start,
-      the diagnostics and the Windows PowerShell 5.1 wizard) run as coverage-proven shards or in the
-      parallel lane under ADR-0025's isolation rules, with no check or mutation removed; a gate
-      command that times out stops its whole process tree; Test-All on main, with the AUM
-      environments, is under 20 minutes on a busy machine in three runs; a new ADR returns
-      `commandTimeoutMs` to 1,800,000
+- [x] P78 the test suite runs in parallel on GitHub-hosted runners — acceptance (replaced with the
+      owner's approval on 2026-09-29; the earlier acceptance was "the packet gate returns to 30
+      minutes"): the default Test-All registration runs as coverage-proven, deterministic shards on
+      GitHub-hosted Windows runners, with no check or mutation removed, machine-exclusive checks
+      still exclusive, both AUM environments installed, and complete exact-SHA/tree evidence; the
+      remote helper fails closed on dirty/unpushed source, failed/missing shards or invalid
+      coverage; hosted wall time, shard times and the local baseline are recorded; ADR-0039
+      proposes the gate's test command and 30-minute budget, and the owner decides whether to amend
+      the charter; hosted job cancellation bounds its process tree, and the local gate-shell timeout
+      limitation is not represented as fixed
 - [ ] P73 an installer re-run offers the gateway's live values — acceptance: over an existing
       gateway (`-ExistingApimName`, the reuse menu or `-Change foundation` in a console), the budget,
       request ceiling, tier group and Choices prompts default to the gateway's live named values and
