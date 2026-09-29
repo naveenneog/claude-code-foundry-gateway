@@ -426,6 +426,29 @@ Queued messages and notification records omit payloads from both normal and
 Rich representations before Textual logs them; this includes message/title
 and deferred callback arguments, not only the originating guard.
 
+### Diagnostic message compatibility correction, 2026-09-30
+
+Payload-free diagnostic subclasses must preserve Textual's message controls:
+an original message type passed to `prevent`, `disable_messages` or
+`enable_messages` still identifies its sealed messages, including forwarded
+instances and messages posted by adapted native descendants. Other native
+eligibility checks, dispatch handlers and payload-free representations remain
+unchanged. No publication origin or source approval is relaxed.
+
+Textual 6.12.0's `MessagePump.check_message_enabled` and
+`Widget.check_message_enabled` compare exact types, while
+`TabbedContent._watch_active` suppresses the internal `Tabs.TabActivated`
+notification before publishing its own activation. Sealing before that check
+caused duplicate activations and cancelled exclusive refreshes. The correction
+is at the diagnostic adapter, not a test sleep or a broader readiness timeout.
+Deterministic tests cover original and already-sealed messages, protected and
+adapted-native receivers, re-enabling delivery and an event-held real tab read.
+They remain in the existing standard `test_publication_diagnostics.py` selector.
+The native chrome probe additionally holds a real footer remove/remount gap,
+then awaits the native after-refresh callback and batch lock before testing the
+current receiver. Its original raw-write refusal and privacy assertions remain;
+neither worker completion nor an arbitrary pause substitutes for that lifecycle.
+
 ### Approval recipe for attributes and builtins
 
 An approval is reviewed like code. The review identifies every supported

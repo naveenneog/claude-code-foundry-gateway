@@ -139,7 +139,7 @@ BOUNDARIES = {
         "pathlib": {"Path"}, "rich.console": {"Console", "RenderableType"},
         "subprocess": {"run"}, "sys": {"stdout"}, "typer": {"echo", "prompt"},
     }),
-    "publication_widgets.py": ("Native receivers are explicitly approved, guarded before attachment and sealed before diagnostic dispatch.", "5f323961f130b0c662e4f5bf2fb9e120126b8989c54ea6dfc7b1c7e3878e92a7", {
+    "publication_widgets.py": ("Native receivers retain guarded origins; payload-free message adapters preserve original exact-type delivery controls.", "0c3e63fdb3c8decab8143f9c51672718fe9caba6de404e4c6b70ca99c60ea15f", {
         "textual._context": {"active_app"}, "textual.app": {"App"}, "textual.widget": {"Widget"},
         "textual.containers": {"Container", "HorizontalGroup", "Horizontal", "Vertical", "VerticalScroll"},
         "textual.screen": {"Screen", "ModalScreen"},

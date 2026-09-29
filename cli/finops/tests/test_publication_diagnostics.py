@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import contextmanager, nullcontext
 from functools import partial
@@ -8,11 +9,109 @@ import textwrap
 
 import pytest
 from rich.pretty import pretty_repr
-from textual.events import Callback
+from textual.events import Callback, MouseDown, MouseScrollDown
 from textual.notifications import Notify
-from textual.widgets import Input
+from textual.widgets import Input, Select as NativeSelect
 
-from claude_finops.publication_widgets import PublicationDispatch, _OriginNotification
+from claude_finops.config import Config
+from claude_finops.engine import Engine
+from claude_finops.fake import FakeBackend
+from claude_finops.guarded_publication import guarded_publish
+from claude_finops.publication_widgets import (
+    PublicationApp, PublicationDispatch, Select, _OriginNotification, _protect_native_widget,
+)
+from claude_finops.tui import FinOpsApp
+
+
+@pytest.mark.parametrize("receiver", ["protected", "native"])
+@pytest.mark.parametrize("control", ["prevent", "disable"])
+@pytest.mark.parametrize("delivery", ["new", "forwarded"])
+def test_sealed_messages_preserve_native_delivery_controls(receiver, control, delivery):
+    with guarded_publish(nullcontext):
+        selector = (Select if receiver == "protected" else NativeSelect)([("Mine", "mine")])
+    if receiver == "native":
+        _protect_native_widget(selector, nullcontext)
+    message = NativeSelect.Changed(selector, "PRIVATE_MESSAGE")
+    if delivery == "forwarded":
+        assert selector.post_message(message)
+    if control == "disable":
+        selector.disable_messages(NativeSelect.Changed)
+    try:
+        with selector.prevent(NativeSelect.Changed) if control == "prevent" else nullcontext():
+            assert not selector.post_message(message), "Diagnostic sealing bypassed a native message control."
+            assert not selector.check_message_enabled(message)
+    finally:
+        selector.enable_messages(NativeSelect.Changed)
+    assert selector.check_message_enabled(message)
+    assert selector.post_message(message), "A message must be deliverable again after suppression ends."
+    assert isinstance(message, NativeSelect.Changed)
+    assert message.value == "PRIVATE_MESSAGE"
+    assert "PRIVATE_MESSAGE" not in repr(message) + pretty_repr(message)
+
+
+@pytest.mark.parametrize("receiver", ["protected", "native"])
+@pytest.mark.parametrize("event, enabled", [(MouseDown, False), (MouseScrollDown, True)], ids=["press", "scroll"])
+def test_sealed_messages_keep_native_disabled_widget_rules(receiver, event, enabled):
+    with guarded_publish(nullcontext):
+        selector = (Select if receiver == "protected" else NativeSelect)([("Mine", "mine")], disabled=True)
+    if receiver == "native":
+        _protect_native_widget(selector, nullcontext)
+    message = event(widget=selector, x=1, y=1, delta_x=0, delta_y=1, button=1,
+                    shift=False, meta=False, ctrl=False)
+    assert selector.post_message(message) is enabled
+    selector.disabled = False
+    assert selector.post_message(message)
+
+
+@pytest.mark.parametrize("delivery", ["new", "forwarded"])
+def test_sealed_app_messages_preserve_disable_and_enable(delivery):
+    app = PublicationApp()
+    message = Callback(partial(lambda value: value, "PRIVATE_CALLBACK"))
+    if delivery == "forwarded":
+        assert app.post_message(message)
+    app.disable_messages(Callback)
+    try:
+        assert not app.post_message(message), "Diagnostic sealing bypassed the app's disabled message type."
+        assert not app.check_message_enabled(message)
+    finally:
+        app.enable_messages(Callback)
+    assert app.check_message_enabled(message) and app.post_message(message)
+    assert "PRIVATE_CALLBACK" not in repr(message) + pretty_repr(message)
+
+
+@pytest.mark.parametrize("tab", ["budgets", "requests"])
+async def test_tab_activation_keeps_the_in_flight_refresh(monkeypatch, tab):
+    app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        entered, release = asyncio.Event(), asyncio.Event()
+        workers = []
+        refresh, load = app.action_refresh, app.load_tab
+
+        def record_refresh():
+            worker = refresh()
+            workers.append(worker)
+            return worker
+
+        async def held_load(view):
+            entered.set()
+            await release.wait()
+            return await load(view)
+
+        monkeypatch.setattr(app, "action_refresh", record_refresh)
+        monkeypatch.setattr(app, "load_tab", held_load)
+        try:
+            app.action_tab(tab)
+            await entered.wait()
+            await pilot.pause()
+        finally:
+            release.set()
+        await workers[-1].wait()
+        assert len(workers) == 1, "One tab activation must not start replacement refresh workers."
+        assert not workers[0].is_cancelled
+        assert app.active == tab and tab in app.data
+        assert app.is_running and app._exception is None
 
 
 def test_notification_record_omits_payload_in_both_representations():

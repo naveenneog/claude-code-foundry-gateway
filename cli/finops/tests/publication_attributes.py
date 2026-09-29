@@ -459,6 +459,10 @@ ATTRIBUTE_EXCEPTIONS = {
         'Copies the existing handler name to the private cached adapter so dispatch remains unchanged.',
     ('publication_widgets.py', '_seal_message', 'message.__class__ = protected'):
         'Seals this queued Message before framework logging; only its payload-free adapter is assigned.',
+    ('publication_widgets.py', '_message_enabled', 'owner._disabled_messages'):
+        'Reads only the owning pump disabled-type set to preserve exact original message-type filtering after diagnostic sealing.',
+    ('publication_widgets.py', '_message_enabled', 'owner._is_prevented'):
+        'Checks the current native widget prevention context using the sealed message original type; no origin or output authority changes.',
     ('publication_widgets.py', '_retained_framework_watcher', 'callback.func'):
         'Recognizes only the exact Textual await_watcher function, not arbitrary deferred callbacks.',
     ('publication_widgets.py', '_retained_framework_watcher', 'callback.args'):
@@ -477,6 +481,8 @@ ATTRIBUTE_EXCEPTIONS = {
         'Never closes a running coroutine while disposing of a refused or abandoned watcher.',
     ('publication_widgets.py', 'PublicationDispatch.post_message', 'super().post_message(message)'):
         'Forwards the same message only after its payload-free representations have been installed.',
+    ('publication_widgets.py', 'PublicationDispatch.check_message_enabled', 'super().check_message_enabled(message)'):
+        'Preserves remaining native delivery checks on this pump after enforcing the sealed message original-type controls.',
     ('publication_widgets.py', 'PublicationWidget._get_dispatch_methods', "getattr(type(self), '_publication_native_type', None)"):
         'Recognizes an already-approved native adapter for the fixed framework lifecycle handlers.',
     ('publication_widgets.py', 'PublicationWidget._get_dispatch_methods', 'cls.__module__'):
@@ -501,6 +507,8 @@ ATTRIBUTE_EXCEPTIONS = {
         'Returns empty fixed-width strips after an explicit domain refusal, never cached content.',
     ('publication_widgets.py', '_protect_native_widget.post_message', 'original.post_message'):
         'Forwards a native receiver message only after payload-free sealing.',
+    ('publication_widgets.py', '_protect_native_widget.check_message_enabled', 'original.check_message_enabled'):
+        'Calls the exact approved native receiver eligibility check, preserving disabled-widget input rules after original-type filtering.',
     ('publication_widgets.py', '_protect_native_widget.dispatch', 'original._dispatch_message'):
         'Seals the message before entering the original native dispatch and logging path.',
     ('publication_widgets.py', '_protect_native_widget.dispatch', 'owner.app._handle_exception'):
@@ -551,6 +559,9 @@ ATTRIBUTE_EXCEPTIONS = {
         'Retains the native search source through awaits rather than authorizing later unrelated callbacks.',
 }
 ATTRIBUTE_CONTEXTS = {
+    ('publication_widgets.py', '_message_enabled'): '01d4cc1caaa7372d65df50064cba4527168da3ffba2f1870936832e17db518d1',
+    ('publication_widgets.py', 'PublicationDispatch.check_message_enabled'): 'ed16e59100f9c191039027ac761947afa3eb6f7472b1198c0c52c8ba69155b3f',
+    ('publication_widgets.py', '_protect_native_widget.check_message_enabled'): '88a9922ea440f7f626deda525881fef9988299509502f0318d6c64d8b0bb8a3f',
     ('publication_widgets.py', 'PublicationWidget._cached_publication_rejected'): '24237ea443e6c2f109ab9fa1e40ac8d5707977be96fd34f50a33e012bf4be5fc',
     ('publication_widgets.py', '_protect_native_widget.run_worker'): '269748d99db8daf61176eb72ca37aa81be93d1d336ef2591c585c4ebb24f4b5d',
     ('publication_widgets.py', 'PublicationApp.__init__'): '9701aaa1c5d249d98401fd341b50fbb0133770e1fd1e73783b31c7f8f7bc0dda',
@@ -560,7 +571,7 @@ ATTRIBUTE_CONTEXTS = {
     ('publication_widgets.py', '_PayloadFreeRepresentation.__repr__'): 'e6954331835e9a3a585c65e83a9690d25b91e96877c0bd9c1aa768e27a047958',
     ('publication_widgets.py', '_RetainedWatcher.__call__'): 'c8aff46b4df6f505e8fbdf387824c69ec90750b487aeac21864065eda5e2e816',
     ('publication_widgets.py', '_RetainedWatcher.close'): 'a39203a536255e38e7edf4c69d04702dd542f773f1928e6b14b8caf45defd376',
-    ('publication_widgets.py', '_protect_native_widget'): 'cba53a09add3fd5a5d3d7f686328302fbb7440d04920ea92c548661b1f0d8030',
+    ('publication_widgets.py', '_protect_native_widget'): 'eaf78d15a4ed9b4ee67c5ee5e54157359ce261be5d2d1c9a36a9b23fc18f0d69',
     ('publication_widgets.py', '_protect_native_widget.dispatch'): 'd19fc177e9a9bde62f7f98ea4e20dbc70f7656498e06c269328bef639860c9dd',
     ('publication_widgets.py', '_protect_native_widget.dispatch_methods'): '10b456c47e68838d2648e0fbcc036b24935be53a38c26d1a2c07a96485ef8897',
     ('publication_widgets.py', '_protect_native_widget.initialize'): '4ca3c1a9da32da47dbe3b4203c25f485a5c094dc86577e4c023735038776b093',
@@ -569,7 +580,7 @@ ATTRIBUTE_CONTEXTS = {
     ('publication_widgets.py', '_protect_native_widget.render_lines'): '23443c53b369982621aef601f7ca7bcdbdfaf405e2bdf910643fc24679fa5407',
     ('publication_widgets.py', '_protect_native_widget.set_presentation'): '6987f8ebf6c3776ddaf4a185ac5424daa4c0c0838e86b01addea5c1f21897a2b',
     ('publication_widgets.py', '_retained_framework_watcher'): '2365ea2e3c2b2ac7e9f27d554760775d3beb26a69cbf0bee1d65c1d860741eb7',
-    ('publication_widgets.py', '_seal_message'): 'e9b892df4ed328ed211200076f4e26d1fae130c4d16f57704c25e869faebfdcb',
+    ('publication_widgets.py', '_seal_message'): '59d057e1fb94be6f3bf1f2dae6333b710d8ff6acafec9ea51f2e3a222bfe3581',
     ('cli.py', 'EverywhereGroup.parse_args'): 'd10e78ca848e9299a6b3c9a6efc486a9e2fa02efb3571ec87eb43d045502f87b',
     ('dashboard.py', 'Dashboard.update_data'): 'be12412345ec48f8a805d810ed95bad3ac8e8dca6c14a7074a3adbf956ad9a95',
     ('dashboard.py', 'DashboardPanel.__init__'): '409ebef128440592c40bfb334773b9be8dbc52cd0e4fa4ce91408ac660fe9409',

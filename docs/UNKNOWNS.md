@@ -215,6 +215,30 @@ stays open. Full output, JUnit and the lock receipt are in
 `.finops-evidence\p71-r10-resume`; see the
 [round 10 full-run record](STATUS.md#final-round-10-full-aum-run-on-70b6919).
 
+The 2026-09-30 builder traced the four reported identities' first failure to
+exclusive refresh cancellation, with `NoMatches` occurring during shutdown.
+Round-10 diagnostic message subclasses evade Textual 6.12.0's exact-type
+`prevent()` and disabled-message checks. A direct prevention probe fails
+deterministically, and a single budgets navigation starts two workers and
+cancels the first. This identifies a concrete cause introduced by `f122985`.
+All 12 deterministic regressions failed before the correction; the initial
+16-case corrected selection passed. Loaded RED had 4 failures in 16 completed
+cases before another gate interrupted the harness. Loaded GREEN then passed
+30 complete iterations / 120 executions under four CPU burners with zero
+failures. The final complete AUM invocation passed all 829 cases in 585.16 s,
+including four 60-second gate pauses between tests, with no errors, skips or
+failed-test retries. Its production source matches the loaded proof; see the
+[startup correction](STATUS.md#startup-and-navigation-cancellation-correction-2026-09-30).
+The first complete corrected-source run had 828 passes and one
+`FooterKey-description` setup failure: Textual removes and asynchronously
+remounts footer keys after a binding change, outside worker completion.
+The existing privacy probe now awaits the native after-refresh callback and
+batch lock before accessing the current receiver; all original guard assertions stay.
+An event-held remove/remount gap produced 2 failures and 2 passes before that
+await; all 4 cases passed afterward, without a clock-based readiness allowance.
+It does not establish the cause of the older Windows marker, wizard,
+chargeback or unrecorded failures; U26 remains OPEN.
+
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 
 **Answer: yes.** A constant `counter-key` is a single counter shared by every caller. P11 can

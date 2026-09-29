@@ -135,6 +135,101 @@ Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
 
 ## P71 AUM answers fast and says why it cannot, 2026-09-28
 
+### Startup and navigation cancellation correction, 2026-09-30
+
+**PLAN:** Reproduce the round-10 cancellation deterministically, preserve the
+closed publication contract, and prove the four reported identities under four
+CPU burners for at least 30 iterations plus one complete AUM run. The lead owns
+council and packet gates; this builder does not push or merge.
+
+**CONTRACT / investigation:** The saved full-run traceback first raises
+`WorkerCancelled` after navigation; `NoMatches` is a secondary shutdown error
+in `FinOpsApp.switched`, not evidence of an uncomposed initial screen.
+Round-10 commit `f122985` added `_seal_message`, whose diagnostic subclasses
+change `type(message)`. Textual 6.12.0 filters disabled/prevented messages by
+exact type in `MessagePump.check_message_enabled` and
+`Widget.check_message_enabled`. Sealed `Tabs.TabActivated` and `Select.Changed`
+therefore evade the framework's suppression and start replacement exclusive
+refresh workers. A short trace on `e1586c5` observed two refresh workers for
+one budgets navigation, cancelling the first even though that run passed.
+A read-only probe also posted a supposedly prevented `Select.Changed`.
+The compatibility rule and its positive/negative tests are recorded in
+[ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md).
+
+**RED:** All **12 deterministic regressions failed in 2.70 s** on unchanged
+`e1586c5` production source: ten original/forwarded message-control cases and
+two event-held real navigation cases. Loaded RED completed **4 iterations,
+16 cases: 4 failures across 3 iterations**, with four owned CPU burners.
+The requested 20-iteration baseline stopped when another gate appeared;
+uncompleted iterations are not counted. An earlier gate-aborted load attempt
+and an aborted combined short invocation are retained but excluded from proof.
+
+**GREEN / REFACTOR:** The initial **16-case** selection (the 12 regressions and
+four reported identities) passed in **11.84 s**. Four additional native
+disabled-widget press/scroll controls passed in **0.63 s**. The adapter retains
+an exact reverse type mapping, checks original suppression/disabled types and
+still delegates every other native eligibility rule. The reverse mapping is
+initialized before its adapter can be reused by another posting thread.
+The boundary and changed exact-context fingerprints were reviewed with these
+counterexamples; no ordinary member or publication guard is newly allowed.
+The exact source-contract/default-deny selection passed **44 cases in 4.96 s**.
+
+The first complete corrected-source AUM run was retained: **828 passed,
+1 failed in 342.66 s** (345.50 s wall). The native `FooterKey-description`
+probe queried a child during Textual's post-refresh footer rebuild, before its
+guard assertion. `Footer.bindings_changed` schedules `recompose`, which removes
+then asynchronously remounts keys under `Widget.batch`'s lock; a worker wait
+does not await that lifecycle. Event-held native mounting reproduces that
+exact gap without a clock: **2 failed, 2 passed in 5.42 s** before the await.
+The probe now awaits the footer's after-refresh callback and acquires the same
+batch lock, then tests the current attached receiver. Direct recomposition
+from the app's test task was rejected by Textual's reactive binding-owner
+check; the final probe keeps the native footer callback context. Its
+refusal, payload-absence and app-liveness assertions are unchanged. No production
+change or timing allowance was needed for this additional test precondition.
+All **4 event-held chrome cases passed in 5.25 s**.
+
+**Final proof:** With the same four-burner load as RED, **30 completed
+iterations / 120 executions passed, with zero failures, errors or skips**.
+The completed batches were 7 and 23 iterations; a gate-interrupted partial
+iteration was excluded. The complete AUM invocation then passed **all 829
+cases in 585.16 s** (587.95 s wall), including four 60-second gate pauses
+between tests. Every case ran once, with zero errors or skips. Its production
+source hash matches the loaded proof. The earlier 828/829 result is retained,
+not replaced by the final pass.
+
+The deterministic regressions are in the existing standard diagnostics/native
+selectors; the three new default-deny cases stay in the existing attribute
+selector. There is no new architecture component, data flow, identity or
+network path. The existing source witness was regenerated and checked
+(16 specs / 18 PNGs); diagram images are unchanged and the AUM image was inspected.
+
+All long output stays under TEMP, with receipts and the rerunnable harness in
+`.finops-evidence\p71-startup-race`. The lock was never created or deleted;
+the stress harness also stops its own load if a new gate starts. Repeated gate
+arrivals interrupted full-suite attempts, so the final evidence-only pytest
+hook yields the machine between completed cases, polling the lock every 60 s
+before starting the next case. It does not retry, skip, change in-test timing
+or alter results; the longest case in the first complete run was 6.526 s.
+The hook was checked with a simulated lock, without changing the real lock.
+The original aborted attempts and their output remain available.
+U26 stays OPEN for historical failures outside this diagnosed regression.
+No sleep, retry, relaxed
+assertion or readiness timeout is added to application or test synchronization.
+
+Private receipts: `stress-red-v2.json`, `stress-green-total.json`,
+`full-green-batch-04.json` and `full-gate-aware.json`; their JUnit results are
+preserved alongside the harness. Reproduce from this worktree root with an
+unused label:
+
+```powershell
+& .\.venv-finops\Scripts\python.exe .\.finops-evidence\p71-startup-race\stress.py --label review-stress --iterations 30 --burners 4 *> "$env:TEMP\p71-review-stress.log"
+& .\.venv-finops\Scripts\python.exe .\.finops-evidence\p71-startup-race\stress.py --label review-full --full --iterations 1 --burners 0 *> "$env:TEMP\p71-review-full.log"
+```
+
+**Builder handoff:** Correction and proof complete; council and packet gates
+remain with the lead. ROADMAP P71 remains unticked. Nothing was pushed or merged.
+
 ### Council round 10 corrections
 
 The tenth review of `860abc9` returned UX PASS and Architect, Coder, QA and

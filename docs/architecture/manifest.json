@@ -427,7 +427,7 @@
         "cli/finops/src/claude_finops/principal_ui.py": "2241df1ce92a010cdb33bde6f7f17c70f24e806fa182e087de22b1ee37ec2f34",
         "cli/finops/src/claude_finops/progressive.py": "8e3b8bab364df999ef118fa38ce607f699d42883e48760df87adf507da7c8359",
         "cli/finops/src/claude_finops/publication_output.py": "55ad738d6cecfa265ce6f6b5639fae1ef1b949cec831a5b3702e5228e504f2b1",
-        "cli/finops/src/claude_finops/publication_widgets.py": "085274e14fff9a82f35adec015478168da43b87f633286436e3012029622f3e5",
+        "cli/finops/src/claude_finops/publication_widgets.py": "d275dca234a06fbe5b4b38b9d0d12736bd790f777116bbd1f1e8d05d7bbd1022",
         "cli/finops/src/claude_finops/readiness.py": "563f6642c2a2b1307c239dc00cbe51cb6d18227cc290bef00b3fedb520017449",
         "cli/finops/src/claude_finops/screens.py": "9bd786fe41ca2cf6beacf68a3544277d05a6a16c2b92e8f6a6f40d7e7da51929",
         "cli/finops/src/claude_finops/turnstile.py": "17175ec955fdbd537d12ea883ae66574812f73f4e9b107e533aef0e78f8a0dc9",

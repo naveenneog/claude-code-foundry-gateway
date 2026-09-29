@@ -77,6 +77,9 @@ exact streaming cache-creation detail remains **U13**.
   backend text before Textual logging. The seven scheduler cases enable visible
   notifications. [Corrections and evidence](docs/STATUS.md#council-round-10-corrections),
   [approval recipe](docs/adr/0035-aum-bounded-readiness-and-progressive-reads.md#approval-recipe-for-attributes-and-builtins).
+  Diagnostic sealing now preserves Textual's exact-type message suppression
+  and disabled-message controls, preventing duplicate tab/selector refreshes
+  from cancelling current reads without weakening provenance or payload redaction.
 - **Reviewed model lifecycle (P70).** `-Action Change -Change models` and
   `scripts/Sync-ClaudeModels.ps1` discover the selected Foundry account, show deployment
   model/version/SKU/capacity and price status, accept per-deployment tier choices, snapshot
