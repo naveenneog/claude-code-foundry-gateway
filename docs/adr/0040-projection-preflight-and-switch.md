@@ -44,6 +44,8 @@ Contributor together with User Access Administrator, inherited or direct at the 
 group, including group memberships. Conditional assignments and custom roles are not substituted
 for this sufficient proof. Azure Policy, deny assignments, regional capacity and later permission
 changes can still reject a deployment.
+Management-group assignments count only as ancestors returned by that resource-group-scoped
+`--include-inherited` query, not by an unscoped subscription-wide role listing.
 
 The prefix uses the intersection of the three templates' naming rules: 1-37 lowercase letters,
 digits and separated hyphens, starting and ending in a letter or digit. The Cosmos name is the
@@ -52,6 +54,8 @@ name is accepted only when the exact resource already belongs to the target reso
 The storage hash is evaluated locally by `az bicep build-params` with literal resource-group id
 and prefix. This preserves `resolver.bicep:112`, rather than reimplementing `uniqueString` or
 renaming existing accounts. The Web name-availability POST is a read-only query, not a deployment.
+The resource-group id comes from ARM's response, not operator casing: `uniqueString` inputs
+are case-sensitive even though ARM resource-id comparisons are not.
 
 ### Switch evidence, version 1
 

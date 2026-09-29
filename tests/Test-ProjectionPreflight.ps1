@@ -84,14 +84,16 @@ Assert 'read-only probes never create or update Azure resources' ($calls -notmat
 Assert 'RBAC includes group and inherited assignments' ($calls -match 'role assignment list.*--include-groups.*--include-inherited')
 Assert 'no Windows query metacharacters' ($calls -notmatch '--query [^\r\n]*[()|&<>^]')
 Assert 'exact storage hash is evaluated by local Bicep' ($calls -match 'bicep build-params' -and $calls -match 'storage account check-name.*stres52p2c4jfs43ig')
+Assert 'storage expression preserves the template hash inputs and prefix' ($FixtureBicepExpression.Contains("take('stres`${uniqueString('$FixtureRgId', 'p84fixture')}', 24)"))
 
 foreach ($case in @(
     @('signed-out','sign.in|signed in'), @('wrong-subscription','subscription'), @('no-identity','identity'),
-    @('wrong-sku','SKU|tier'), @('sp-error','identity|application id'),
+    @('wrong-sku','SKU|tier'), @('sp-error','identity|application id'), @('sp-empty','application id'),
+    @('wrong-tenant','tenant'), @('wrong-rg','Resource group id'), @('subscription-disabled','enabled subscription'), @('user-empty','user id'),
     @('cae','LocationConditionEvaluationSatisfied'), @('cae-second','LocationConditionEvaluationSatisfied'),
     @('token-error','Graph'), @('network','network'), @('standard-missing','claude-code-standard'),
     @('premium-missing','claude-code-premium'), @('group-error','lookup'), @('group-duplicate','ambiguous|multiple'),
-    @('group-shape','collection|value'), @('policy-false','allowedToCreateApps'), @('policy-error','Policy.Read.All'),
+    @('group-shape','collection|value'), @('group-no-id','no id'), @('duplicate-apps','ambiguous'), @('policy-false','allowedToCreateApps'), @('policy-error','Policy.Read.All'),
     @('policy-shape','allowedToCreateApps'), @('guest','member user'), @('app-list-error','registration|app'),
     @('contributor-only','Owner|User Access Administrator'), @('role-custom','Owner|User Access Administrator'),
     @('role-conditional','Owner|conditional'), @('role-child','Owner|scope'), @('role-error','role|RBAC'),
@@ -115,13 +117,13 @@ foreach ($tool in 'az','node','npm','tar','bicep') {
     Run-Preflight "tool:$tool"
     Assert "missing local tool: $tool" ($CapturedError -and $CapturedOutput -match [regex]::Escape($tool))
 }
-foreach ($case in 'existing-app','contributor-uaa','owned-names') {
+foreach ($case in 'existing-app','contributor-uaa','owned-names','role-management-group') {
     Run-Preflight $case
     Assert "idempotent/sufficient preflight: $case" (-not $CapturedError) $CapturedError
 }
 Run-Preflight 'policy-error' @{ ResolverAppId = '00000000-0000-4000-8000-000000000086' }
 Assert 'existing supplied app needs no policy read' (-not $CapturedError -and ($FixtureCalls -join "`n") -notmatch 'authorizationPolicy') $CapturedError
-foreach ($case in 'app-error','app-uri') {
+foreach ($case in 'app-error','app-uri','app-id') {
     Run-Preflight $case @{ ResolverAppId = '00000000-0000-4000-8000-000000000086' }
     Assert "supplied resolver app FAIL: $case" ($CapturedError -and $CapturedOutput -match 'resolver|Resolver')
 }
@@ -141,12 +143,19 @@ Run-Preflight 'healthy' @{ ResolverAppId = 'not-an-app-id' }
 Assert 'invalid app id never reaches CLI' ($CapturedError -and ($FixtureCalls -join "`n") -notmatch 'ad app show.*not-an-app-id')
 Run-Preflight 'healthy' @{ FlipAfterCleanCompare=$true; ReconcilerResourceId='/subscriptions/00000000-0000-4000-8000-000000000084/resourceGroups/rg-p84/providers/Microsoft.App/jobs/projection-renewal' }
 Assert 'preflight permits a switch with verified matching evidence' (-not $CapturedError) $CapturedError
+Run-Preflight 'healthy' @{ ResourceGroup='RG-P84' }
+Assert 'Bicep storage hash uses the canonical ARM group id, not user casing' (-not $CapturedError -and $FixtureBicepExpression.Contains("uniqueString('$FixtureRgId',")) $CapturedError
 
 Write-Host 'P84 Graph failure boundaries'
-foreach ($case in '401','403','cae','network','group-error','group-shape','group-duplicate','member-error','member-shape','member-nextlink') {
+foreach ($case in '401','403','cae','network','group-error','group-shape','group-duplicate','member-error','member-shape','member-no-id','member-nextlink','member-repeat') {
     Reset-ProjectionFixture $case
     Expect-Failure "Graph $case is not an empty group" { Get-GroupMemberOids -GroupName 'optional' -Token 'offline-token' } 'Graph|group|collection|membership|nextLink|ambiguous'
 }
+Reset-ProjectionFixture 'member-nextlink'
+Capture { Get-GroupMemberOids -GroupName optional -Token offline-token }
+Assert 'a foreign Graph nextLink is rejected before an HTTP call with the token' (($FixtureCalls -join "`n") -notmatch 'HTTP .*https://example.invalid')
+Reset-ProjectionFixture 'member-repeat'
+Expect-Failure 'repeated Graph nextLink stops at the production guard' { Get-GroupMemberOids -GroupName optional -Token offline-token } 'Graph membership nextLink repeated'
 Reset-ProjectionFixture 'group-missing'
 Capture { @(Get-GroupMemberOids -GroupName 'optional' -Token 'offline-token').Count }
 Assert 'positively absent optional group is empty' (-not $CapturedError -and $CapturedResult -eq 0)
@@ -194,6 +203,8 @@ foreach ($entry in @(
     @{ Name='image is only a tag'; Break={ $FixtureJob.properties.template.containers[0].image = 'example.invalid/projection:latest' }; Match='digest|SHA|image' },
     @{ Name='multiple containers'; Break={ $FixtureJob.properties.template.containers += $FixtureJob.properties.template.containers[0] }; Match='container' },
     @{ Name='init container'; Break={ $FixtureJob.properties.template.initContainers = @(@{ name='init' }) }; Match='init' },
+    @{ Name='secret environment binding'; Break={ $FixtureJob.properties.template.containers[0].env[0] | Add-Member secretRef secret }; Match='literal non-secret' },
+    @{ Name='duplicate environment binding'; Break={ $FixtureJob.properties.template.containers[0].env += $FixtureJob.properties.template.containers[0].env[0] }; Match='unique literal' },
     @{ Name='failed execution'; Break={ $FixtureExecution.properties.status = 'Failed' }; Match='succeed|Succeeded|failed' },
     @{ Name='no execution'; Break={ $global:FixtureExecutions = @() }; Match='succeed|Succeeded|execution' },
     @{ Name='old execution start'; Break={ $FixtureExecution.properties.startTime = [DateTimeOffset]::UtcNow.AddSeconds(-7201).ToString('o') }; Match='lease|fresh|execution' },
@@ -224,6 +235,11 @@ foreach ($case in 'job-error','execution-error','execution-nextlink') {
     Reset-ProjectionFixture $case
     Expect-Failure "unreadable/unsafe ARM evidence: $case" { Guard } 'ARM|execution|nextLink'
 }
+Reset-ProjectionFixture 'execution-foreign-path'
+Capture { Guard }
+Assert 'same-host foreign job pagination is rejected before HTTP' ($CapturedError -and ($FixtureCalls -join "`n") -notmatch 'HTTP .*foreign-job')
+Reset-ProjectionFixture 'execution-repeat'
+Expect-Failure 'repeated ARM pagination stops at the production guard' { Guard } 'ARM execution nextLink is foreign, repeated'
 Reset-ProjectionFixture 'execution-page'
 Capture { Guard }
 Assert 'execution pagination finds success on the second page' (-not $CapturedError -and ($FixtureCalls -join "`n") -match 'skiptoken=second') $CapturedError

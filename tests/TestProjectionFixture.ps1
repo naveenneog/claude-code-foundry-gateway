@@ -5,6 +5,7 @@ function Reset-ProjectionFixture {
     $global:FixtureCalls = [Collections.Generic.List[string]]::new()
     $global:FixtureWaits = [Collections.Generic.List[int]]::new()
     $global:FixtureProbes = 0
+    $global:FixtureBicepExpression = ''
     $script:ClaudeNetworkTokens = @{}
     $global:FixtureSubscription = '00000000-0000-4000-8000-000000000084'
     $global:FixtureTenant = '00000000-0000-4000-8000-000000000085'
@@ -56,7 +57,7 @@ function az {
     $global:LASTEXITCODE = 0
     if ($line -like 'account show*') {
         if ($FixtureCase -eq 'signed-out') { $global:LASTEXITCODE = 1; return }
-        return (@{ id = $FixtureSubscription; tenantId = $FixtureTenant; state = 'Enabled'; user = @{ type = 'user'; name = 'fixture@example.invalid' } } | ConvertTo-Json -Compress)
+        return (@{ id = $FixtureSubscription; tenantId = $FixtureTenant; state = $(if ($FixtureCase -eq 'subscription-disabled') { 'Disabled' } else { 'Enabled' }); user = @{ type = 'user'; name = 'fixture@example.invalid' } } | ConvertTo-Json -Compress)
     }
     if ($line -like 'account get-access-token*') {
         if ($FixtureCase -eq 'token-error') { $global:LASTEXITCODE = 1; return }
@@ -64,18 +65,19 @@ function az {
         return '{"accessToken":"offline-token"}'
     }
     if ($line -like 'group show*') {
-        return (@{ id = $FixtureRgId; location = 'eastus2' } | ConvertTo-Json -Compress)
+        return (@{ id = $(if ($FixtureCase -eq 'wrong-rg') { "$FixtureRgId-other" } else { $FixtureRgId }); location = 'eastus2' } | ConvertTo-Json -Compress)
     }
     if ($line -like 'apim show*') {
         $id = if ($FixtureCase -eq 'wrong-subscription') { $FixtureGatewayId.Replace($FixtureSubscription, $FixtureTenant) } else { $FixtureGatewayId }
         $identity = if ($FixtureCase -eq 'no-identity') { @{} } else { @{ principalId = $FixtureGroupId; tenantId = $FixtureTenant } }
+        if ($FixtureCase -eq 'wrong-tenant') { $identity.tenantId = $FixtureSubscription }
         $sku = if ($FixtureCase -eq 'wrong-sku') { 'PremiumV2' } else { 'BasicV2' }
         return (@{ id = $id; identity = $identity; sku = @{ name = $sku } } | ConvertTo-Json -Depth 5 -Compress)
     }
     if ($line -like 'ad sp show*') {
         if ($FixtureCase -eq 'sp-error') { $global:LASTEXITCODE = 1; return }
         if ($line -match '--query appId') { return $FixtureApp }
-        return (@{ appId = $FixtureApp } | ConvertTo-Json -Compress)
+        return (@{ appId = $(if ($FixtureCase -eq 'sp-empty') { '' } else { $FixtureApp }) } | ConvertTo-Json -Compress)
     }
     if ($line -like 'ad signed-in-user show*') { return (@{ id = $FixtureGroupId; userType = 'Member' } | ConvertTo-Json -Compress) }
     if ($line -like 'ad group show*') {
@@ -85,12 +87,13 @@ function az {
     if ($line -like 'ad app list*') {
         if ($FixtureCase -eq 'app-list-error') { $global:LASTEXITCODE = 1; return }
         if ($FixtureCase -eq 'existing-app') { return ('[{"appId":"' + $FixtureApp + '","identifierUris":["api://' + $FixtureApp + '"]}]') }
+        if ($FixtureCase -eq 'duplicate-apps') { return ('[{"appId":"' + $FixtureApp + '"},{"appId":"' + $FixtureTenant + '"}]') }
         return '[]'
     }
     if ($line -like 'ad app show*') {
         if ($FixtureCase -eq 'app-error') { $global:LASTEXITCODE = 1; return }
         $uri = if ($FixtureCase -eq 'app-uri') { 'api://wrong' } else { "api://$FixtureApp" }
-        return (@{ appId = $FixtureApp; identifierUris = @($uri) } | ConvertTo-Json -Compress)
+        return (@{ appId = $(if ($FixtureCase -eq 'app-id') { $FixtureTenant } else { $FixtureApp }); identifierUris = @($uri) } | ConvertTo-Json -Compress)
     }
     if ($line -like 'ad app create*') {
         if ($FixtureCase -eq 'app-create-denied') { $global:LASTEXITCODE = 1; return 'ERROR: Insufficient privileges to complete the operation.' }
@@ -112,7 +115,7 @@ function az {
         if ($FixtureCase -eq 'role-error') { $global:LASTEXITCODE = 1; return }
         $roles = foreach ($id in $ids) {
             @{ roleDefinitionId = "/subscriptions/$FixtureSubscription/providers/Microsoft.Authorization/roleDefinitions/$id"
-               scope = $(if ($FixtureCase -eq 'role-child') { "$FixtureRgId/providers/Microsoft.Web/sites/one-site" } else { $FixtureRgId })
+               scope = $(if ($FixtureCase -eq 'role-child') { "$FixtureRgId/providers/Microsoft.Web/sites/one-site" } elseif ($FixtureCase -eq 'role-management-group') { '/providers/Microsoft.Management/managementGroups/fixture-parent' } else { $FixtureRgId })
                condition = $(if ($FixtureCase -eq 'role-conditional') { 'conditional assignment' } else { $null })
                roleDefinitionName = 'Owner' }
         }
@@ -143,6 +146,7 @@ function az {
         return '{"bicepVersion":"0.46.1"}'
     }
     if ($line -like 'bicep build-params*') {
+        $global:FixtureBicepExpression = Get-Content -LiteralPath $words[([array]::IndexOf($words, '--file') + 1)] -Raw
         if ($FixtureCase -in @('bicep-evaluation','tool:bicep')) { $global:LASTEXITCODE = 1; return }
         if ($FixtureCase -eq 'bicep-shape') { return '{"parametersJson":"{}"}' }
         $params = @{ parameters = @{ storageName = @{ value = 'stres52p2c4jfs43ig' } } } | ConvertTo-Json -Compress -Depth 5
@@ -178,7 +182,7 @@ function Invoke-RestMethod {
         $global:FixtureProbes++
         if ($FixtureCase -eq 'cae' -or ($FixtureCase -eq 'cae-second' -and $FixtureProbes -eq 2)) { throw $FixtureCae }
         if ($FixtureCase -eq 'network') { throw 'Graph network connection failed' }
-        return [pscustomobject]@{ id = $FixtureGroupId; userType = $(if ($FixtureCase -eq 'guest') { 'Guest' } else { 'Member' }) }
+        return [pscustomobject]@{ id = $(if ($FixtureCase -eq 'user-empty') { '' } else { $FixtureGroupId }); userType = $(if ($FixtureCase -eq 'guest') { 'Guest' } else { 'Member' }) }
     }
     if ($url -like 'https://graph.microsoft.com/v1.0/policies/authorizationPolicy*') {
         if ($FixtureCase -eq 'policy-error') { throw '403 Policy.Read.All is required' }
@@ -191,6 +195,7 @@ function Invoke-RestMethod {
         if ($FixtureCase -eq 'group-missing' -or ($FixtureCase -eq 'standard-missing' -and $url -match 'claude-code-standard') -or ($FixtureCase -eq 'premium-missing' -and $url -match 'claude-code-premium')) { return [pscustomobject]@{ value = @() } }
         $groups = @([pscustomobject]@{ id = $FixtureGroupId; displayName = 'fixture' })
         if ($FixtureCase -eq 'group-duplicate') { $groups += [pscustomobject]@{ id = $FixtureApp; displayName = 'fixture' } }
+        if ($FixtureCase -eq 'group-no-id') { $groups[0].id = '' }
         if ($FixtureCase -eq 'group-null-nextlink') { return [pscustomobject]@{ value=$groups; '@odata.nextLink'=$null } }
         return [pscustomobject]@{ value = $groups }
     }
@@ -199,6 +204,11 @@ function Invoke-RestMethod {
         if ($FixtureCase -eq 'member-shape') { return [pscustomobject]@{} }
         $response = @{ value = @([pscustomobject]@{ id = $FixtureApp; userPrincipalName = 'user@example.invalid'; displayName = 'user' }) }
         if ($FixtureCase -eq 'member-nextlink') { $response['@odata.nextLink'] = 'https://example.invalid/steal-token' }
+        if ($FixtureCase -eq 'member-no-id') { $response.value[0].id = '' }
+        if ($FixtureCase -eq 'member-repeat') {
+            if (@($FixtureCalls | Where-Object { $_ -eq "HTTP Get $url" }).Count -gt 3) { throw 'Fixture stopped an unbounded Graph loop.' }
+            $response['@odata.nextLink'] = [string]$Uri
+        }
         return [pscustomobject]$response
     }
     if ($url -like 'https://management.azure.com/*/checkNameAvailability?*') {
@@ -213,6 +223,11 @@ function Invoke-RestMethod {
     if ($url -like "https://management.azure.com$FixtureJobId/executions?*") {
         if ($FixtureCase -eq 'execution-error') { throw 'ARM execution read denied' }
         if ($FixtureCase -eq 'execution-nextlink') { return [pscustomobject]@{ value = @(); nextLink = 'https://example.invalid/steal-token' } }
+        if ($FixtureCase -eq 'execution-foreign-path') { return [pscustomobject]@{ value=@(); nextLink=$url.Replace('projection-renewal','foreign-job') } }
+        if ($FixtureCase -eq 'execution-repeat') {
+            if (@($FixtureCalls | Where-Object { $_ -eq "HTTP Get $url" }).Count -gt 3) { throw 'Fixture stopped an unbounded ARM loop.' }
+            return [pscustomobject]@{ value=@(); nextLink=$url }
+        }
         if ($FixtureCase -eq 'execution-page' -and $url -notmatch 'skiptoken') {
             return [pscustomobject]@{ value = @(); nextLink = "https://management.azure.com$FixtureJobId/executions?api-version=2024-03-01&skiptoken=second" }
         }

@@ -105,6 +105,9 @@ function Invoke-ClaudeProjectionPreflight {
         $context.GatewayAppId = [string]$sp.appId
         $rg = Invoke-ClaudeNetworkAz @('group','show','-n',$ResourceGroup,'--subscription',$context.SubscriptionId)
         if ($rg.id -ne $context.ResourceGroupId) { throw 'Resource group id does not match the gateway subscription.' }
+        $context.ResourceGroupId = [string]$rg.id
+        $context.GatewayResourceId = [string]$context.Apim.id
+        $context.AccountResourceId = "$($context.ResourceGroupId)/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-$NamePrefix"
         if (-not $context.Location) { $context.Location = [string]$rg.location }
         $context.GatewayResourceId
     }
@@ -158,7 +161,12 @@ function Invoke-ClaudeProjectionPreflight {
     Check 'Resource-group RBAC' 'operator' 'An Azure access administrator grants/activates Owner, or Contributor plus User Access Administrator, on this resource group. Conditional/custom assignments are not sufficient evidence.' {
         if (-not $context.User.id -or -not $context.ResourceGroupId) { throw 'Role evidence requires verified user and resource group ids.' }
         $roles = @(Invoke-ClaudeNetworkAz @('role','assignment','list','--assignee',[string]$context.User.id,'--scope',$context.ResourceGroupId,'--include-groups','--include-inherited','--fill-principal-name','false','--fill-role-definition-name','false','--subscription',$context.SubscriptionId))
-        $ids = @($roles | Where-Object { -not $_.condition -and ($_.scope -eq $context.ResourceGroupId -or $_.scope -eq "/subscriptions/$($context.SubscriptionId)") } | ForEach-Object { ([string]$_.roleDefinitionId -split '/')[-1] })
+        # The scoped --include-inherited query supplies management-group ancestors too.
+        $ids = @($roles | Where-Object {
+            -not $_.condition -and ($_.scope -eq $context.ResourceGroupId -or
+                $_.scope -eq "/subscriptions/$($context.SubscriptionId)" -or
+                $_.scope -like '/providers/Microsoft.Management/managementGroups/*')
+        } | ForEach-Object { ([string]$_.roleDefinitionId -split '/')[-1] })
         $owner = $ids -contains '8e3af657-a8ff-443c-a75c-2fe8c4bcb635'
         $contributorAndUaa = $ids -contains 'b24988ac-6180-42a0-ab88-20f7382dd24c' -and $ids -contains '18d7d88d-d35e-4fb5-a5c3-7773c20a72d9'
         if (-not ($owner -or $contributorAndUaa)) { throw 'Owner, or Contributor plus User Access Administrator, was not proven at resource-group scope (including inherited/group roles).' }

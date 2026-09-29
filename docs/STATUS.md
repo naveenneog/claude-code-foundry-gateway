@@ -61,6 +61,13 @@ ProjectionNegative 57/57 mutations (59.88 s), FlowPermutations 43 (90.64 s).
 The new registration uses the existing positive default shard weight; the hosted timing table
 is unchanged because P84 has no hosted timing receipt.
 
+**Name and inherited-role follow-up:** `c50c21c` commits the API/entry-point fixes. Expanded
+negative cases loaded 225 assertions; two failed in 11.47 s. User casing was reaching the
+case-sensitive storage hash, and a management-group Owner returned by the scoped inherited-role
+query was being rejected. Canonical ARM ids now seed the hash, and that scoped query's
+management-group ancestors count. GREEN: 225/225 in 11.28 s; encoding remains 298/298.
+The added pagination assertions also verify that foreign HTTP calls never receive the token.
+
 ## P78 the test suite runs in parallel on GitHub-hosted runners, 2026-09-28
 
 **Merged as `2737232` on 2026-09-29 with the owner's approval. Council round 1 passed and the local packet gate passed; ADR-0039's proposed charter change is not enacted.**
