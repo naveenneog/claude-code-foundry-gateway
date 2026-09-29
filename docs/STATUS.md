@@ -41,6 +41,25 @@ bootstrap gap before implementation. RED, GREEN, exact-identity mutations and
 commits follow here. Round 2 remains lead-owned; no merge, push or Azure
 operation is authorized.
 
+RED: the standard council selectors produced **30 failures and 10 passing
+controls in 110.34 s**, with no errors or skips. The catalog-race pilot
+recorded the unreviewed group's actual Graph removal; the quit pilot found
+an enabled confirmation during a blocked real engine write; real pip, with
+`--no-index --no-deps --no-build-isolation`, created the external `PIP_LOG`
+before its expected offline package-resolution failure. The per-variable
+probe also found uncontrolled Python user-base, uv tool and XDG destinations.
+
+Removal correction: the form pins its reviewed plan and confirmation;
+`developer_change` compares all engine operation-plan fields except the
+preview flag against its own resolved write snapshot before touching Graph.
+UI-only decorations are not writer inputs. The existing CLI's explicit
+fresh-apply path remains available; no second writer is introduced.
+All **8** early/late catalog, tier and identity pilots passed in **21.27 s**.
+The first related run passed 73 cases and exposed two identity-probe timing
+errors (85.67 s): identity injection occurred before, rather than after,
+the apply re-preview's resolution. The injection was corrected while
+retaining the two-read and zero-write assertions.
+
 ### PLAN
 
 The People action bar gains Remove person from team beside Add person to team,

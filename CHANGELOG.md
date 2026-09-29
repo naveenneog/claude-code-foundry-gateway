@@ -29,6 +29,10 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P85 council round 1: removal-plan binding.** The terminal passes its
+  reviewed plan to the existing membership engine. A difference against the
+  exact resolved write snapshot is refused before Graph or publication
+  writes, including catalog changes after the form's apply-time re-preview.
 - **P85 owner additions: Escape and quit safety.** Rapid Escape remains
   navigation/cancellation through the tested main/modal/slow/error paths.
   Expected refresh transport failures no longer become fatal worker errors.

@@ -288,6 +288,11 @@ the resolved guest UPN when it differs from the searched email.
 Field edits invalidate the preview. A new Preview after the confirmation
 enables Apply; a blank or different confirmation is refused by the existing
 [`developer_change(remove=True)` engine](../cli/finops/src/claude_finops/developer_actions.py).
+Apply passes the reviewed engine plan and its typed confirmation into that
+same writer. The writer compares every operation-plan field, apart from the
+preview flag, against the resolved snapshot it then uses for group writes.
+A changed person, tier group or catalog group is refused before membership
+or publication writes, including a change after the form's last re-preview.
 Non-owners and the AUM service backend cannot open this writer. Directory and
 preview reads have a 3-10 s estimate; apply has a 3-30 s estimate. The result
 names the resolved account and publication path. Done refreshes People

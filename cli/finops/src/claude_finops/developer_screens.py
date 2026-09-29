@@ -115,8 +115,12 @@ class DeveloperPicker(ModalScreen):
                                   else "Only owners can remove people from teams.", 4)
 
             def operation(values, apply):
+                confirmation = values["confirmation"] if apply else values["confirm"]
                 result = developer_change(app.engine, app.config, row["id"], remove=True,
-                                          apply=apply, confirm=values["confirm"])
+                                          apply=apply, confirm=confirmation,
+                                          reviewed_plan=values if apply else None)
+                if not apply:
+                    result["confirmation"] = confirmation
                 result["before"] = {"id": result["developer"]["id"], "email": result["confirm_upn"]}
                 result["after"] = {
                     "allow_lists": ["allow-standard", "allow-premium"],
@@ -138,7 +142,7 @@ class DeveloperPicker(ModalScreen):
             with guarded_publish(directory_guard):
                 app.switch_screen(ActionForm("Remove person from team", [
                     ("confirm", f"Type the resolved email/UPN: {row['user_principal_name']}", "", None),
-                ], operation, read_guard=directory_guard))
+                ], operation, read_guard=directory_guard, commit_preview=True))
         except FinOpsError as error:
             with guarded_publish(app.safe_message_guard()):
                 self.query_one("#developer-status", Static).update(app._error_text(error))

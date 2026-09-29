@@ -53,7 +53,8 @@ def developer_find(engine, config, query, *, limit=50, cursor=None):
         client.close()
 
 
-def developer_change(engine, config, target, *, tier=None, unit=None, remove=False, apply=False, confirm=""):
+def developer_change(engine, config, target, *, tier=None, unit=None, remove=False, apply=False, confirm="",
+                     reviewed_plan=None):
     require_owner(engine.read("whoami"))
     state = _read_state(engine, config)
     tiers = _tier_groups(state)
@@ -88,6 +89,11 @@ def developer_change(engine, config, target, *, tier=None, unit=None, remove=Fal
                                 "publication stops new gateway requests after the allow-list refresh."))
         if not apply:
             return plan
+        if reviewed_plan is not None:
+            current = {key: value for key, value in plan.items() if key != "preview"}
+            reviewed = {key: reviewed_plan.get(key) for key in current}
+            if reviewed != current:
+                raise FinOpsError("Developer plan changed since preview. Search and preview again.", 6)
         if remove and confirm != person["user_principal_name"]:
             raise FinOpsError("Type the resolved UPN with --confirm before removing a developer.", 2)
         allow_empty_candidates = {}

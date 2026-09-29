@@ -136,15 +136,16 @@ class ActionForm(ModalScreen):
                                                (self.app.preview_only or self.app.redactor.enabled)):
             return
         self.busy = True
+        reviewed_plan = self.preview
         self.query_one("#action-apply", Button).disabled = True
         with guarded_publish(self.app.safe_message_guard()):
             self.query_one("#action-status", Static).update("Saving once (estimate 3-30 s)...")
         try:
             latest = await asyncio.to_thread(self.operation, self.values(), False)
-            if any(latest.get(key) != self.preview.get(key) for key in ("before", "after", "changes", "count")):
-                if self.commit_preview:
+            if any(latest.get(key) != reviewed_plan.get(key) for key in ("before", "after", "changes", "count")):
+                if self.commit_preview and "profile_change" in reviewed_plan and "profile_change" in latest:
                     from .configure import profile_conflict
-                    reviewed, current = self.preview["profile_change"], latest["profile_change"]
+                    reviewed, current = reviewed_plan["profile_change"], latest["profile_change"]
                     if reviewed.revision != current.revision:
                         raise profile_conflict(reviewed.path, reviewed.revision, reviewed.before, current.before)
                 raise FinOpsError("State changed since preview. Cancel and refresh.", 6)
@@ -152,7 +153,7 @@ class ActionForm(ModalScreen):
                 from .bulk import apply_budget_plan
                 result = dict(latest, preview=False, results=await asyncio.to_thread(apply_budget_plan, self.app.engine, latest))
             else:
-                result = await asyncio.to_thread(self.operation, self.preview if self.commit_preview else self.values(), True)
+                result = await asyncio.to_thread(self.operation, reviewed_plan if self.commit_preview else self.values(), True)
             if result.get("ui_action"):
                 if result["ui_action"] == "profile":
                     await self.app.activate_profile(result["config"], profile=Path(result["profile"]),
