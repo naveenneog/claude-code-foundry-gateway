@@ -17,6 +17,12 @@ membership writer. Offline Textual pilots cover complete management journeys
 and assert the writes received by the existing fake boundaries, rather than
 only rendered labels. The guide retains P80's install-first structure.
 
+The owner added items 7 and 8 at 16:04 IST on 2026-09-29, after the initial
+builder handoff at `1b07329`. The packet is reopened for Escape/quit safety
+and an offline-tested Cloud Shell bootstrap. The earlier evidence remains
+the baseline, not proof of these additions. No live Cloud Shell session is
+available from this workstation.
+
 ### CONTRACT / acceptance
 
 | Task | Observable result |
@@ -27,6 +33,19 @@ only rendered labels. The guide retains P80's install-first structure.
 | Destructive scope rule | Tests and the guide state the existing engine behavior for a unit that still has teams or members; P85 does not invent a different deletion policy. |
 | Negative probes | Remove routing, owner authorization, typed confirmation and backend refusal mutations run the same collected test IDs as their clean baselines; a catch requires a failing test, not an error or skip. |
 | Ledger and integration | Task how-tos include key, palette entry, preview contents and estimated waits. STATUS, CHANGELOG, unknowns and architecture/capture conclusions are recorded. P71's final closed-presentation contract is inspected read-only and its integration changes listed. |
+| 7. Escape and deliberate quit | Pilots first reproduce the reported exit, with 1/2/5/10 rapid Esc presses at the main screen, every modal, a slow refresh, and network/401/403/CAE failures. Esc leaves the app running. One `q` only requests confirmation; a second `q` or Enter confirms and Esc cancels. Expected backend/publication failures remain visible without a fatal exit; the CAE location challenge explains IP variation, consistent VPN use, IPv6 and administrator-managed named locations/exclusions. Programming errors are not silently swallowed. |
+| 8. Azure Cloud Shell | A small bash launcher creates/reuses a HOME-local venv, installs the checked-out package and launches AUM with the existing signed-in Azure CLI. Offline shell/fake-command tests cover dry-run, reuse, argument forwarding, failure handling and writes confined to HOME/repo. The guide cites researched networking, storage, authentication, shortcut and idle-session facts. A live owner verification remains an explicit U58-U61-range unknown, not a claimed test. |
+
+### Items 7 and 8: PLAN / CONTRACT
+
+U60 is reopened for the Escape/refresh failure mechanism before implementation.
+U61 retains its completed P71/capture research and is reopened for researched
+Cloud Shell constraints plus the unavailable live verification. Expected
+network/authentication errors and publication refusals are distinct from
+unexpected programming failures. The current writers, authority checks and
+P71 branch stay unchanged. Every new guard receives a negative test; mutation
+probes retain exact test identities and require failures rather than
+collection errors or skips. Long runs retain the one-command owned-lock rule.
 
 ### Initial evidence and unknowns
 

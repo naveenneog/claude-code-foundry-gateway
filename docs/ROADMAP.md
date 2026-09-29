@@ -475,6 +475,11 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       supported USD budgets; negative probes cover removal authorization, confirmation and
       backend limits; install-first task guides and a read-only P71 contract integration list
       accompany the builder handoff ([STATUS](STATUS.md), U58-U61)
+      Owner additions on 2026-09-29: repeated Escape preserves the running app
+      through modal/refresh/backend failures, quit requires confirmation, and
+      a HOME-local Cloud Shell launcher has offline proofs and researched
+      networking/storage/idle guidance. Live Cloud Shell verification is
+      owner-only and remains recorded separately.
 - [x] P72 permutation tests of the guided flow and the installer — acceptance: every combination of
       action (Setup, Change foundation, Guide, Status), record state (none, recorded and matching,
       recorded with another gateway URL, recorded but missing, not readable), mode (attended,
