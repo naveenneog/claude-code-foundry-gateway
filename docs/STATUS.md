@@ -184,8 +184,44 @@ Local builder commits so far: `336b683` records PLAN/CONTRACT, `7f4b427`
 implements people removal and fixes membership-form completion, `809e7c8`
 covers catalog/budget flows and fixes native receipts, and `3eab7c1`
 records the mutation runner and strengthened retained-origin test.
-The full AUM regression run and final clean-tree handoff follow the guide
-and provenance commit. Council and the packet gate remain lead-owned.
+The guide and provenance commit is `58ea5ac`. Council and the packet gate
+remain lead-owned.
+
+### Final builder validation and handoff
+
+The complete offline AUM suite at `58ea5ac` passed **682 tests in 440.85 s**
+(**442.647 s wall time**), with **0 failures, 0 errors and 0 skips**. This is
+the 635-case inherited suite plus 47 P85 pilots. The interpreter printed and
+asserted its import beneath `accel-p85\cli\finops\src`. The run acquired its
+own `.gate-lock` and released it in the same command's `finally`.
+
+| Acceptance surface | Passing cases | JUnit case seconds |
+|---|---:|---:|
+| Add/remove people, exact writes, refresh and refusals | 17 | 38.656 |
+| Unit/team creation/removal, confirmation and existing rules | 18 | 37.631 |
+| Unit/team/person token budgets; Direct/service USD and Turnstile refusal | 12 | 24.818 |
+| Install-first factual guide and required capture checks | 9 | 18.678 |
+
+These per-item seconds are summed JUnit case durations inside the full run,
+not independent wall-clock runs. The separate guide-reference check covered
+42 guides and caught all **10** built-in negative cases; architecture passed
+36 assertions as recorded above. All 12 P85 mutations were caught with
+identical case identities and clean restoration. The P71 HEAD and the three
+inspected contract files were unchanged when checked again after the full run.
+
+All builder acceptance work is complete: PLAN/CONTRACT, RED/GREEN evidence,
+47 complete/negative pilots, mutations, task how-tos, required Example
+captures, CHANGELOG, U58-U61 and architecture/P71 conclusions. The final
+production diff was reviewed against `e630525`; no writer implementation or
+policy/allowlist was replaced. The roadmap checkbox remains open for the
+lead-owned council, packet gate and integration. No council verdict or packet
+gate pass is claimed here.
+
+The full JUnit/log are `$env:TEMP\p85-full-aum.xml` and
+`$env:TEMP\p85-full-aum.log`; per-item totals are in
+`$env:TEMP\p85-final-test-summary.json`. The branch is
+`p85-aum-tui-manage` in `accel-p85`. No merge, push, history rewrite, Azure
+write, Azure resource creation or reference-gateway operation occurred.
 
 ## P80 AUM shows every action it has, connects in one step, and its guide starts with installation, 2026-09-28
 
