@@ -4,7 +4,7 @@
 
 ## P84 Projection deployment checks everything before it writes and never switches into an outage, 2026-09-29
 
-**Council round 1: all five seats BLOCK; corrections in progress.** The owner requested P84 after a partial customer deployment on
+**Council round 1 corrections complete; lead round 2 and gate pending.** All five seats blocked the earlier submission. The owner requested P84 after a partial customer deployment on
 2026-09-29. The branch is `p84-projection-preflight`, based on `30cdfd0`. The lead owns COUNCIL
 and GATE; the owner owns merge approval. This packet performs no live Azure writes.
 
@@ -26,7 +26,27 @@ anything (`sync/src/apply-projection.mjs:136`). Those receipts did not prove saf
       outage and reconciler warnings precede switching examples and replace stale setup advice.
 - [x] Security: failure output contains counts and hashed samples, no email/unit values, at most
       40 lines and 4,096 characters. A declined prerequisite aborts; check permissions are documented.
-- [ ] RED/GREEN, relevant existing checks and valid-syntax/count-preserving mutations are recorded.
+- [x] RED/GREEN, relevant existing checks and valid-syntax/count-preserving mutations are recorded.
+
+**Final correction proof, 2026-09-29:** `eca8b55` caught **95/95** current mutations in
+**1,356.35 s**, under one owned shared-workstation lock released in that command's `finally`.
+Every mutant parsed, retained its selected suite's complete assertion count, failed an assertion
+and exited nonzero. Independent receipt verification found zero invalid catches.
+
+| Proof group | Baseline | Restored |
+|---|---|---|
+| Preflight | 197/197, 14.61 s | 197/197, 16.57 s |
+| Council Core | 66/66, 3.00 s | 66/66, 2.34 s |
+| Real Graph Callers | 14/14, 15.80 s | 14/14, 16.80 s |
+
+Default council `All` also passes all 83 assertions, including complete preflight runs under
+en-US, en-GB and de-DE. It does not omit groups for the default Test-All registration.
+Receipt: `$env:TEMP\p84-r1-mutations.json`, with persistent session copy
+`files\p84-r1-mutation-receipt.json`; SHA-256
+`2c3298ab63bf4398863835360b4cbdf8cffaef135cd507ea876f6c65de2ac3c9`.
+`4156090` implements the corrections; `eca8b55` updates proof and runbooks.
+Final ledger validation: DocReferences 34/34 (9.75 s), encoding 300/300 (7.53 s).
+The main Active packets line is unchanged; tested PowerShell inputs match the proof commit.
 
 No runtime component is added. The proposed P86 reconciler and Cosmos evidence are not implemented
 by this correction. The lead owns round 2 and the packet gate.
@@ -43,7 +63,7 @@ complete-suite runs and absence/error execution of all four real Graph callers o
 hosts. The reduced preflight count reflects retirement of the rejected ARM-admission feature,
 not omitted active checks. ProjectionInstaller 34 (0.76 s), FlowLifecycle 33 (2.58 s),
 ProjectionRules 34 (0.78 s) and script encoding 300/300 pass. Changed-guard mutations and
-runbook completion are still pending.
+runbook completion followed, as recorded above.
 
 **Expanded proof and runbooks:** `4156090` commits the first correction GREEN. The council
 suite now has **83 assertions** (Core 66, real Callers 14, Cultures 3), including long structured
@@ -59,8 +79,8 @@ Current related results: InstallerPermutations 48/48 (55.96 s), FlowPermutations
 (104.63 s), ProjectionNegative 57/57 (62.34 s), SecureProjection 123/123 (11.90 s),
 DocReferences 34/34 (11.23 s) and TestAllSharding 79/79 (3.40 s).
 Runbooks now put the outage/refusal warning first, document read permissions and WARN semantics,
-and retain the explicitly unprotected manual SCALE operation. Complete current mutation proof
-remains pending.
+and retain the explicitly unprotected manual SCALE operation. The complete current mutation
+proof is recorded above.
 
 ### Historical builder submission, superseded by council round 1
 

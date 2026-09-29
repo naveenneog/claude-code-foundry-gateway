@@ -29,7 +29,7 @@ pwsh -NoProfile -File .\tests\Test-ProjectionPreflightNegative.ps1 `
 
 The preflight check takes approximately 15 seconds and the full council check approximately
 one minute on the shared workstation. The full mutation proof is separate from default Test-All
-and takes approximately 15 minutes. It mutates a unique
+and takes approximately 15-25 minutes. It mutates a unique
 temporary copy, restores the original bytes after every probe, and reruns the restored baseline.
 A catch requires valid syntax, the selected suite's full baseline assertion count, a failed
 assertion and nonzero exit. Council selectors `Core`, `Callers` and `Cultures` support bounded

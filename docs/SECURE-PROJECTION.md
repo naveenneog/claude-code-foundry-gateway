@@ -90,7 +90,7 @@ refusal ([ADR-0040](adr/0040-projection-preflight-and-switch.md)).
 `-PreflightOnly` runs the same checks as a normal deployment, with no Azure writes, and exits
 nonzero on any FAIL. The normal estimate is **30-90 seconds**, including **25 seconds**
 between two Graph reads. Slow customer networks can extend it. Local temporary files are removed
-after Bicep/name evaluation (`scripts/ClaudeProjectionChecks.ps1:41`).
+after Bicep/name evaluation (`scripts/ClaudeProjectionChecks.ps1:27`).
 
 ```powershell
 pwsh -NoProfile -File .\scripts\Deploy-ClaudeProjection.ps1 `
@@ -131,7 +131,7 @@ refuses before Azure discovery or writes, including with `-Confirm` or `-WhatIf`
 A declined deployment/population/comparison prerequisite aborts the run; it does not fall through
 to a later step. `-WhatIf` without a switch request prints the planned operations without
 writing Azure resources. It does not require creating an app merely to preview the plan
-(`scripts/Deploy-ClaudeProjection.ps1:78`).
+(`scripts/Deploy-ClaudeProjection.ps1:80`).
 
 #### Resolver registration and the customer's Entra admin
 

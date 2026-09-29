@@ -40,7 +40,9 @@ exact streaming cache-creation detail remains **U13**.
   Confirmed-absent premium passes, unproven app rights produce WARN, supplied app ids skip
   policy reads, narrow reports use stacked records, and declined prerequisites abort.
   Real-caller and locale tests cover en-GB/de-DE and supported PowerShell hosts. Earlier proof
-  receipts remain historical, not acceptance of the rejected design ([P84 status](docs/STATUS.md)).
+  receipts remain historical, not acceptance of the rejected design. Revised proof at `eca8b55`:
+  197 preflight assertions, 83 council assertions and 95/95 valid-syntax, count-preserving
+  mutations ([P84 status](docs/STATUS.md)).
 
 - **P78 parallel hosted checks.** Opt-in deterministic Test-All shards retain
   isolated processes, exclusive checks and deadlines, with commit/tree-bound receipts and an

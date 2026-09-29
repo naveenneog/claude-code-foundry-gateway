@@ -667,7 +667,7 @@ scheduled reconciler; neither installer nor deployer creates it. The read-only p
 the 25-second Graph interval. [Private projection](SECURE-PROJECTION.md#one-command-deployment)
 contains the `-PreflightOnly` command and admin registration steps; proposed
 [ADR-0040](adr/0040-projection-preflight-and-switch.md) records P84 refusal and proposed P86 evidence.
-Sources: `Install-ClaudeGateway.ps1:64`, `scripts/Deploy-ClaudeProjection.ps1:78`.
+Sources: `Install-ClaudeGateway.ps1:64`, `scripts/Deploy-ClaudeProjection.ps1:80`.
 
 ```powershell
 ./deploy.ps1 -FoundryAccount <your-foundry-account> -ResourceGroup rg-claude-gateway
