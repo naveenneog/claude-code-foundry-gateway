@@ -8,6 +8,12 @@ Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM 
 
 ### P71 closed-contract integration, 2026-09-30
 
+**Integration commit: `3454e6d`; the full AUM run is not green.** All 96 P80
+cases passed. The single full run was 904 passed / 3 failed: two of the lead's
+known P71 IDs and one additional P71 FooterKey fixture failure. The latter
+passed unchanged in a bounded follow-up, but the original full result remains
+the result. Council, gates and P71 stability remain lead-owned.
+
 **PLAN / CONTRACT:** Merge pinned P71 `e1586c5` without rebasing from clean
 P80 `e630525`, retaining ADR-0038's visible actions, complete non-overwriting
 CSV, selected-profile transaction and keyboard-readable recovery. Apply
@@ -258,6 +264,55 @@ including their ten negative cases. The generated FinOps and readiness images
 were visually inspected; their bytes match the respective P80 `e630525` and
 P71 `e1586c5` parent images. The standalone architecture check also passed
 after the ledger updates.
+
+#### Committed integration and single full AUM run
+
+The merge commit is **`3454e6d5e14dcd073694553b7e8cd4e4905fe7b9`**, with
+parents `e630525` and `e1586c5`. It contains the conflict resolutions,
+compliance fixes, reviewed approvals, counterexamples and regenerated
+artifacts. Both requested trailers are present. The branch remains
+`p80-aum-usability`; no push, main merge, history rewrite, Azure call or
+other-worktree edit was performed.
+
+The required P71 check returned
+`e1586c5bea7cd0741aead5abcf2ed4387f118e90` both before the final run and again
+**inside the acquired lock at 2026-09-30 01:47:14.859 IST**, immediately before
+pytest. No newer committed P71 tip was available to merge then. The working
+tree was asserted clean and the interpreter import was asserted under this
+worktree's `cli\finops\src`, not the P71 or main worktree.
+
+The full command, run **once**, was this worktree's
+`.venv-finops\Scripts\python.exe -B -m pytest tests -q --tb=short`, from
+`cli\finops`, with a JUnit output under TEMP. The owned lock interval was
+**01:47:14.309-01:55:06.662 IST**. It executed **907 cases: 904 passed,
+3 failed, 0 errors, 0 skips**, in **468.62 s pytest / 471.468 s process wall**.
+Every P80 case passed (**96/96**). The full log, XML and classified summary
+are `%TEMP%\p80-integration-full-aum.log`,
+`p80-integration-full-aum.xml` and `p80-integration-full-summary.json`.
+
+| The lead's four known IDs | Single full-run result |
+|---|---|
+| `test_publication_generation.py::test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies[budgets]` | PASS |
+| `test_publication_generation.py::test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies[requests]` | PASS |
+| `test_publication_generation.py::test_principal_change_closes_prior_forms_and_clears_state_before_input` | FAIL: `WorkerCancelled` at the worker wait. Not fixed or relaxed in P80. |
+| `test_revision4_tui.py::test_approval_paging_and_queue_change_reset_cursor` | FAIL: `WorkerCancelled` at the paging settle. Not fixed or relaxed in P80. |
+
+The **additional failure, outside those four IDs**, is
+`test_publication_native.py::test_native_chrome_content_requires_publication[FooterKey-key_display]`:
+`NoMatches` for `FooterKey` at line 240, after the principal transition and
+before the guarded-attribute assertion. That test file is unchanged from
+P71 `e1586c5`. One bounded follow-up ran all four native-chrome variants
+unchanged: **4 passed in 5.84 s**, under its own lock. That is evidence of the
+intermittent fixture observation, not a diagnosis, a waiver or a replacement
+for the full-suite failure. The lead/P71 review must account for this
+additional case as well as the two known failures.
+
+No second full suite was run, and no production code, test assertion, timeout
+or budget changed after the full run. This final update is the ledger only.
+The scratch source copy and temporary image previews were removed after
+inspection; the mutation logs/receipts remain under TEMP, and the dependency
+junction is absent. The historical P80 council/gate receipts in this section predate this
+integration and are not claimed for the new merge.
 
 **Council round 3, over `3ace1f7..80e7d4e`: all five seats PASS.** The council re-ran its
 round-2 probe with a real Windows read-denying handle held through a successful `whoami`, the
