@@ -2,6 +2,41 @@
 
 **Active packets (2026-09-29, run in parallel worktrees):** P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)), P80 AUM shows every action it has, and P81 USD budgets are the primary enforcer, each on its own branch. The owner approved merging P71 and P80 on 2026-09-29; each merges after its council passes and its packet gate passes on the merged tree, P80 after P71. P81 merges only with the owner's explicit approval. Each has its own section on its branch; the section lands here when the packet merges. P78 the test suite runs in parallel on GitHub-hosted runners is merged with the owner's approval (`2737232`, [below](#p78-the-test-suite-runs-in-parallel-on-github-hosted-runners-2026-09-28)); ADR-0039's proposed charter change is not enacted. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)), and its follow-up, the installer permutation check reads only its own record (`05dea1b`, [below](#p79-follow-up-the-installer-permutation-check-reads-only-its-own-record-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
+## P85 AUM's terminal UI manages people, units, teams and budgets end to end, with tests, 2026-09-29
+
+Owner: @naveenneog. Builder worktree: `accel-p85`, branch
+`p85-aum-tui-manage`, based on owner-approved P80 `e630525` (includes main
+`30cdfd0`). P85 is the active packet on this branch. Council, the packet gate
+and integration belong to the lead; no merge or push is authorized here.
+
+### PLAN
+
+The People action bar gains Remove person from team beside Add person to team,
+with a key and palette entry. The existing developer engine remains the only
+membership writer. Offline Textual pilots cover complete management journeys
+and assert the writes received by the existing fake boundaries, rather than
+only rendered labels. The guide retains P80's install-first structure.
+
+### CONTRACT / acceptance
+
+| Task | Observable result |
+|---|---|
+| Remove person | An owner selects a directory person, previews the tier and catalog-group removals and publication, types the resolved email/UPN, applies through `developer_change(remove=True)`, sees the result and refreshed People rows. |
+| Refusals | A non-owner, the AUM service backend, a wrong confirmation and a stale read cannot apply membership writes. Direct and Turnstile keep their existing authority paths and last-tier-member behavior. |
+| Complete pilots | Add/remove people, create/remove units and teams, and unit/team/person token budgets exercise preview and apply on Direct and supported Turnstile fixtures. USD edits exercise Direct and AUM service; Turnstile exposes its disabled explanation. Every flow checks actual fake writes. |
+| Destructive scope rule | Tests and the guide state the existing engine behavior for a unit that still has teams or members; P85 does not invent a different deletion policy. |
+| Negative probes | Remove routing, owner authorization, typed confirmation and backend refusal mutations run the same collected test IDs as their clean baselines; a catch requires a failing test, not an error or skip. |
+| Ledger and integration | Task how-tos include key, palette entry, preview contents and estimated waits. STATUS, CHANGELOG, unknowns and architecture/capture conclusions are recorded. P71's final closed-presentation contract is inspected read-only and its integration changes listed. |
+
+### Initial evidence and unknowns
+
+The inherited no-run audit passed: 20 checks passed, 2 warned, 0 failed,
+4 execution checks skipped by `--no-run`. This is not the packet gate.
+U58-U61 below were logged before implementation. Both Python environments are
+copied into this worktree; editable FinOps paths target this worktree.
+No live Azure reads or writes, Azure resources or reference-gateway operation
+are part of the builder's validation.
+
 ## P80 AUM shows every action it has, connects in one step, and its guide starts with installation, 2026-09-28
 
 Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM guide set. Worktree: `accel-p80`, branch `p80-aum-usability`, based on P71 commit `bcf8554`. The owner approved merging P80 after P71 at 07:41 IST on 2026-09-29. The lead authorized merging pinned `origin/main` (`30cdfd0`) into this branch without rebasing; later P71 work remains separate. This builder is not authorized to push or merge to main.

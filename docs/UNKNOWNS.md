@@ -44,6 +44,15 @@ fails the release stage while any remain. Detail for each one follows below.
 
 ---
 
+## P85 research before implementation
+
+| ID | State | Question | Blocks |
+|---|---|---|---|
+| U58 | OPEN | Which resolved identity, tier/catalog groups and allow-list publication facts does the existing remove-developer preview expose, and how does the People refresh reflect a last-tier-member removal? | P85 removal presentation and complete offline pilot |
+| U59 | OPEN | What does the existing catalog engine do when a removed unit still has teams or members, on Direct and Turnstile? | P85 destructive-scope tests and guide |
+| U60 | OPEN | Which existing fake boundaries can prove complete catalog, membership, token and USD writes without replacing the engine operations, and which backend refusals remain visible? | P85 end-to-end write assertions |
+| U61 | OPEN | Which P85 presentation additions differ from P71's final closed contract, and do the current screenshot/capture checks require regeneration? | P85 read-only integration and capture report |
+
 ## P80 research before resumed implementation
 
 These four entries were recorded at resume on 2026-09-28, before corrections

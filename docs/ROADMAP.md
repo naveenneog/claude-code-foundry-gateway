@@ -468,6 +468,13 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       each panel as its data arrives, with an estimate while it waits; Direct reuses one token per
       process and batches its gateway reads, and time-to-first-data for `whoami`, `budget list`,
       `usage show` and `status` is measured before and after on the reference estate (**U32**)
+- [ ] P85 AUM's terminal UI manages people, units, teams and budgets end to end, with tests -
+      acceptance: owners can preview and confirm removing a person from the People action bar,
+      key and palette through the existing developer engine; complete offline Textual pilots
+      assert backend writes for people, unit/team creation and removal, token budgets and
+      supported USD budgets; negative probes cover removal authorization, confirmation and
+      backend limits; install-first task guides and a read-only P71 contract integration list
+      accompany the builder handoff ([STATUS](STATUS.md), U58-U61)
 - [x] P72 permutation tests of the guided flow and the installer — acceptance: every combination of
       action (Setup, Change foundation, Guide, Status), record state (none, recorded and matching,
       recorded with another gateway URL, recorded but missing, not readable), mode (attended,
