@@ -92,6 +92,25 @@ asserts disabled keyboard confirmation issues no exit request, separately
 from the central exit guard. The new council files are ordinary `test_*.py`
 modules in the standard AUM selector, not a private reproduction harness.
 
+Provenance: the existing capture check failed on the changed membership
+engine hash (1.24 s), so the existing Example capture tool regenerated its
+manifest. No SVG or architecture PNG bytes changed. All five snapshot cases
+passed; the guide's four cases passed after a factual "Non-mutating" wording
+correction (0.09 s). Architecture passed 36 assertions in 48.829 s wall;
+references passed for 42 guides with all ten negatives caught in 10.968 s.
+The engine-plan and application-lifetime corrections add no Azure component,
+identity, network path or writer. Only existing source provenance changes.
+
+P71 remains a read-only integration target (`860abc9`). The added mutation
+lifecycle needs reviewed `asyncio.shield` / `CancelledError`, future callbacks,
+the new task/state/commit-method attributes and an exact checked
+`super().exit(...)` forwarding context. `FinOpsApp.__init__` and
+`FeatureUI.ask_current` context fingerprints change. The moved profile-conflict
+handling still carries P80's integration requirements. Orphaned unexpected
+failures must use P71's protected diagnostic path rather than a broad raw
+handler allowance. No P71 policy was edited; the precise comparison is
+`$env:TEMP\p85-p71-r1-delta.json`.
+
 ### PLAN
 
 The People action bar gains Remove person from team beside Add person to team,

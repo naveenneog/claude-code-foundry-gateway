@@ -241,7 +241,7 @@ disabled. Keyboard confirmation and direct application exit requests are
 also refused until completion. The result remains in its form; completion
 does not automatically execute an earlier quit request. Ctrl+C can still be
 consumed by native copy handling; the application's quit entry follows the
-same deferral. Read-only work does not acquire this save lifetime
+same deferral. Non-mutating work does not acquire this save lifetime
 ([quit regressions](../cli/finops/tests/test_p85_council_quit.py)).
 
 Expected refresh failures remain visible rather than terminating the terminal.
