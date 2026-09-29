@@ -32,6 +32,18 @@ if ($NativeChild) {
     Expect-Failure 'native Graph CAE remains an error' { Get-GraphToken } 'LocationConditionEvaluationSatisfied'
     Expect-Failure 'native runner nonzero remains an error' { Invoke-RunnerCommand -ResourceGroup rg-p84 -Name runner -Command 'node --version' } 'runner'
     Assert 'native runner failure shows its raw output' ($CapturedOutput -match 'runner-native-output')
+    $script:NativeGraphMode = 'absent'
+    function Invoke-RestMethod {
+        param($Uri, $Headers, $Method, $TimeoutSec, $ErrorAction)
+        if ($script:NativeGraphMode -eq 'absent') { return [pscustomobject]@{ value=@() } }
+        throw "Graph $script:NativeGraphMode"
+    }
+    Capture { @(Get-GroupMemberOids -GroupName optional -Token fixture).Count }
+    Assert 'positive optional absence is empty on this host' (-not $CapturedError -and $CapturedResult -eq 0)
+    foreach ($mode in '401','403','network failure','LocationConditionEvaluationSatisfied') {
+        $script:NativeGraphMode = $mode
+        Expect-Failure "Graph $mode fails on this host" { Get-GroupMemberOids -GroupName optional -Token fixture } ([regex]::Escape($mode))
+    }
     Write-Host "P84_NATIVE assertions=$assertions failed=$failures"
     exit ([int]($failures -gt 0))
 }
@@ -109,6 +121,10 @@ Run-Preflight 'cae-second'
 Assert 'CAE has operator, network and admin remedies, not not-found' ($CapturedOutput -match 'VPN' -and $CapturedOutput -match 'IPv6' -and $CapturedOutput -match 'named location' -and $CapturedOutput -match 'temporary exclusion' -and $CapturedOutput -match 'Cloud Shell' -and $CapturedOutput -notmatch 'not found.*empty')
 Run-Preflight 'policy-false'
 Assert 'admin remedy includes portal registration and exact CLI handoff' ($CapturedOutput -match 'entra.microsoft.com' -and $CapturedOutput -match 'App registrations' -and $CapturedOutput -match 'Expose an API' -and $CapturedOutput -match 'az ad app create' -and $CapturedOutput -match 'az ad app update' -and $CapturedOutput -match '-ResolverAppId')
+Run-Preflight 'signed-out'
+Assert 'failed subscription discovery does not issue unscoped dependent reads' (($FixtureCalls -join "`n") -notmatch 'az (provider list|role assignment list|resource list|apim show)')
+Run-Preflight 'token-error'
+Assert 'failed Graph token acquisition never sends an unauthenticated Graph request' (($FixtureCalls -join "`n") -notmatch 'HTTP .*https://graph.microsoft.com')
 foreach ($provider in 'Microsoft.App','Microsoft.DocumentDB','Microsoft.Web','Microsoft.ContainerInstance','Microsoft.Network','Microsoft.Storage','Microsoft.OperationalInsights','Microsoft.Insights','Microsoft.Authorization') {
     Run-Preflight "provider:$provider"
     Assert "provider not registered: $provider" ($CapturedError -and $CapturedOutput -match [regex]::Escape($provider))
@@ -135,6 +151,10 @@ foreach ($prefix in @('a',('a' * 37),'a-0')) {
     Run-Preflight 'healthy' @{ NamePrefix = $prefix }
     Assert "valid prefix boundary: $($prefix.Length)" (-not $CapturedError) $CapturedError
 }
+foreach ($badTarget in @(@{ ResourceGroup='bad&group' }, @{ ApimName='bad gateway' })) {
+    Run-Preflight 'healthy' $badTarget
+    Assert 'unsafe target names stop before any Azure call' ($CapturedError -and $FixtureCalls.Count -eq 0)
+}
 Run-Preflight 'healthy' @{ SubscriptionId = '00000000-0000-4000-8000-000000000099' }
 Assert 'explicit target subscription is enforced' ($CapturedError -and $CapturedOutput -match 'subscription')
 Run-Preflight 'healthy' @{ ResolverInboundAccess = 'private' }
@@ -147,6 +167,10 @@ Run-Preflight 'healthy' @{ ResourceGroup='RG-P84' }
 Assert 'Bicep storage hash uses the canonical ARM group id, not user casing' (-not $CapturedError -and $FixtureBicepExpression.Contains("uniqueString('$FixtureRgId',")) $CapturedError
 
 Write-Host 'P84 Graph failure boundaries'
+Reset-ProjectionFixture
+Expect-Failure 'empty group name is invalid before HTTP' { Get-GroupMemberOids -GroupName '' -Token fixture } 'Graph group name is required'
+Reset-ProjectionFixture 'token-empty'
+Expect-Failure 'an empty successful CLI response is not a Graph token' { Get-GraphToken } 'No Microsoft Graph access token'
 foreach ($case in '401','403','cae','network','group-error','group-shape','group-duplicate','member-error','member-shape','member-no-id','member-nextlink','member-repeat') {
     Reset-ProjectionFixture $case
     Expect-Failure "Graph $case is not an empty group" { Get-GroupMemberOids -GroupName 'optional' -Token 'offline-token' } 'Graph|group|collection|membership|nextLink|ambiguous'
@@ -200,7 +224,7 @@ foreach ($entry in @(
     @{ Name='manual trigger'; Break={ $FixtureJob.properties.configuration.triggerType = 'Manual' }; Match='Schedule|schedule' },
     @{ Name='absent timeout'; Break={ $FixtureJob.properties.configuration.replicaTimeout = $null }; Match='timeout|Timeout' },
     @{ Name='excessive timeout'; Break={ $FixtureJob.properties.configuration.replicaTimeout = 7200 }; Match='timeout|Timeout|lease' },
-    @{ Name='image is only a tag'; Break={ $FixtureJob.properties.template.containers[0].image = 'example.invalid/projection:latest' }; Match='digest|SHA|image' },
+    @{ Name='image is only a tag'; Break={ $FixtureJob.properties.template.containers[0].image = 'example.invalid/projection:latest'; $FixtureExecution.properties.template.containers[0].image = 'example.invalid/projection:latest' }; Match='digest|SHA|image' },
     @{ Name='multiple containers'; Break={ $FixtureJob.properties.template.containers += $FixtureJob.properties.template.containers[0] }; Match='container' },
     @{ Name='init container'; Break={ $FixtureJob.properties.template.initContainers = @(@{ name='init' }) }; Match='init' },
     @{ Name='secret environment binding'; Break={ $FixtureJob.properties.template.containers[0].env[0] | Add-Member secretRef secret }; Match='literal non-secret' },
@@ -231,7 +255,7 @@ foreach ($field in @('CLAUDE_PROJECTION_CONTRACT','PROJECTION_GATEWAY_RESOURCE_I
     ($FixtureExecution.properties.template.containers[0].env | Where-Object name -eq $field).value = 'wrong'
     Expect-Failure "destination/contract binding: $field" { Guard } 'binding|contract|environment'
 }
-foreach ($case in 'job-error','execution-error','execution-nextlink') {
+foreach ($case in 'job-error','execution-error','execution-shape','execution-nextlink') {
     Reset-ProjectionFixture $case
     Expect-Failure "unreadable/unsafe ARM evidence: $case" { Guard } 'ARM|execution|nextLink'
 }
@@ -248,6 +272,7 @@ Expect-Failure 'expired actual snapshot refuses' { Guard -ExpiresAt ([DateTimeOf
 Expect-Failure 'almost-expired snapshot has no runway for the next execution' { Guard -ExpiresAt ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + 60) } 'lease|remaining|runway'
 Expect-Failure 'explicit zero snapshot expiry never becomes a new estimated lease' { Guard -ExpiresAt 0 } 'actual snapshot|expiry'
 Expect-Failure 'job from another subscription refuses' { Guard -JobId $FixtureJobId.Replace($FixtureSubscription,$FixtureTenant) } 'subscription'
+Expect-Failure 'malformed job resource id fails before ARM' { Guard -JobId 'not-an-arm-id' } 'Microsoft.App/jobs ARM resource'
 Run-Preflight 'healthy' @{ FlipAfterCleanCompare = $true }
 Assert 'preflight blocks a requested flip without a reconciler before writes' ($CapturedError -and $CapturedOutput -match 'every developer.*503')
 
@@ -312,6 +337,8 @@ $entRecord = [pscustomobject]@{ schemaVersion=2; decisions=[pscustomobject]@{ en
 $entDiscovery = [pscustomobject]@{ resourceGroup='rg-p84'; apimName='apim-p84'; location='eastus2'; sku='BasicV2'; subscriptionId=$FixtureSubscription; namedValues=@{ 'entitlement-source'='named-value' }; cleanComparison=$true }
 $plan = Get-ClaudeFlowStepPlan -Record $entRecord -Discovery $entDiscovery
 Expect-Failure 'actual Entitlement refuses a clean compare with no reconciler before backup' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'every developer.*503'
+$plan.Data.CleanComparison = $false
+Expect-Failure 'actual Entitlement requires clean comparison independently of schedule' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'clean projection comparison'
 $entRecord.decisions.entitlementStore | Add-Member reconcilerResourceId $FixtureJobId
 $plan = Get-ClaudeFlowStepPlan -Record $entRecord -Discovery $entDiscovery
 Assert 'flow plan persists the selected reconciler id' ($plan.Data.ReconcilerResourceId -eq $FixtureJobId)
@@ -323,6 +350,20 @@ Expect-Failure 'actual installer guard refuses without evidence before foundatio
     if (-not $installerGuard) { throw 'The installer switch guard is missing.' }
     & ([scriptblock]::Create($installerGuard.Extent.Text))
 } 'every developer.*503'
+
+$flipBlock = $deployAst.Find({ param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Clauses[0].Item1.Extent.Text -match "ShouldProcess.+flip only projection named values" }, $true)
+$flipBody = if ($flipBlock) { [scriptblock]::Create(($flipBlock.Clauses[0].Item2.Statements | ForEach-Object { $_.Extent.Text }) -join "`n") } else { { throw 'Flip block is missing.' } }
+$script:FlipWrites = [Collections.Generic.List[object]]::new()
+function Set-ApimNamedValue { param($ResourceGroup,$ApimName,$Id,$Value,$SubscriptionId) $script:FlipWrites.Add(@{ Id=$Id; SubscriptionId=$SubscriptionId }) }
+Reset-ProjectionFixture
+$preflight = @{ GatewayResourceId=$FixtureGatewayId; AccountResourceId=$FixtureCosmosId; SubscriptionId=$FixtureSubscription }
+$apim = @{ identity=@{ tenantId=$FixtureTenant } }; $snapshotExpiry = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()+7200
+$resolverUrl = 'https://example.invalid/api'; $resolverAudience = "api://$FixtureApp"; $ReconcilerResourceId = ''
+Capture { & $flipBody }
+Assert 'actual switch block refuses before the first named-value write' ($CapturedError -and $CapturedOutput -match 'every developer.*503' -and $FlipWrites.Count -eq 0)
+$ReconcilerResourceId = $FixtureJobId
+Capture { & $flipBody }
+Assert 'actual switch block writes source last with verified subscription' (-not $CapturedError -and $FlipWrites.Count -eq 3 -and $FlipWrites[2].Id -eq 'entitlement-source' -and @($FlipWrites | Where-Object SubscriptionId -ne $FixtureSubscription).Count -eq 0) $CapturedError
 
 Reset-ProjectionFixture
 Capture { & (Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1') -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -PreflightOnly }
@@ -346,7 +387,7 @@ try {
         $log = Join-Path $scratch ([IO.Path]::GetFileName($shell) + '.log')
         & $shell -NoProfile -NonInteractive -File $PSCommandPath -NativeChild -RepositoryRoot $root *> $log
         $exitCode = $LASTEXITCODE; $text = Get-Content $log -Raw
-        Assert "native stderr boundaries: $([IO.Path]::GetFileName($shell))" ($exitCode -eq 0 -and $text -match 'P84_NATIVE assertions=4 failed=0') (($text -split "`n" | Where-Object { $_ -match '\[FAIL\]' }) -join '; ')
+        Assert "native stderr boundaries: $([IO.Path]::GetFileName($shell))" ($exitCode -eq 0 -and $text -match 'P84_NATIVE assertions=9 failed=0') (($text -split "`n" | Where-Object { $_ -match '\[FAIL\]' }) -join '; ')
         $hostLog = Join-Path $scratch ([IO.Path]::GetFileName($shell) + '-version.log')
         if ($shell -like '*\powershell.exe') {
             & $shell -NoProfile -NonInteractive -File (Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1') -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -PreflightOnly *> $hostLog

@@ -61,6 +61,7 @@ function az {
     }
     if ($line -like 'account get-access-token*') {
         if ($FixtureCase -eq 'token-error') { $global:LASTEXITCODE = 1; return }
+        if ($FixtureCase -eq 'token-empty') { return '{}' }
         if ($line -match '--query accessToken') { return 'offline-token' }
         return '{"accessToken":"offline-token"}'
     }
@@ -222,6 +223,7 @@ function Invoke-RestMethod {
     }
     if ($url -like "https://management.azure.com$FixtureJobId/executions?*") {
         if ($FixtureCase -eq 'execution-error') { throw 'ARM execution read denied' }
+        if ($FixtureCase -eq 'execution-shape') { return [pscustomobject]@{ value=$FixtureExecution; nextLink=$null } }
         if ($FixtureCase -eq 'execution-nextlink') { return [pscustomobject]@{ value = @(); nextLink = 'https://example.invalid/steal-token' } }
         if ($FixtureCase -eq 'execution-foreign-path') { return [pscustomobject]@{ value=@(); nextLink=$url.Replace('projection-renewal','foreign-job') } }
         if ($FixtureCase -eq 'execution-repeat') {

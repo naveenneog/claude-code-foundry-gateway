@@ -68,6 +68,14 @@ query was being rejected. Canonical ARM ids now seed the hash, and that scoped q
 management-group ancestors count. GREEN: 225/225 in 11.28 s; encoding remains 298/298.
 The added pagination assertions also verify that foreign HTTP calls never receive the token.
 
+**Mutation preparation:** `c633046` commits canonical naming and inherited-role handling.
+The complete offline regression check now passes 236 assertions in 13.54 s, including the
+actual switch block (zero writes on refusal; three subscription-pinned writes with source last
+on success). Each native host independently passes nine stderr/Graph assertions. The new
+mutation harness's five detector self-checks and all 108 mutation anchors/syntax checks pass;
+mutation execution is still pending. A syntax error, missing summary, lost assertion, exit-only
+failure or assertion failure with exit zero cannot count as a catch. Encoding passes 299 scripts.
+
 ## P78 the test suite runs in parallel on GitHub-hosted runners, 2026-09-28
 
 **Merged as `2737232` on 2026-09-29 with the owner's approval. Council round 1 passed and the local packet gate passed; ADR-0039's proposed charter change is not enacted.**
