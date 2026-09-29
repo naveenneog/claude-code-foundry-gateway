@@ -60,7 +60,7 @@ def saving(screen, form):
 
 @pytest.mark.parametrize("form", ["action", "change"])
 @pytest.mark.parametrize("route", ["ctrl+q", "ctrl+c", "palette", "exit"])
-async def test_all_quit_routes_wait_for_write_and_keep_receipt(form, route):
+async def test_all_quit_routes_wait_for_write_and_keep_receipt(monkeypatch, form, route):
     backend = PendingWrite()
     app = FinOpsApp(Engine(backend, "2026-09"), Config(backend="fake"), first_run=False)
     async with app.run_test(size=(80, 24)) as pilot:
@@ -81,7 +81,18 @@ async def test_all_quit_routes_wait_for_write_and_keep_receipt(form, route):
             assert app.is_running, "A quit route stopped AUM before the writer completed."
             assert app.screen.query_one("#quit-confirm", Button).disabled
             assert "Saving; wait for the result" in str(app.screen.query_one("#quit-message", Static).render())
+            rendered = "\n".join(strip.text for strip in app.screen._compositor.render_strips())
+            assert "Saving; wait for the result" in rendered
+            original_exit = app.exit
+            attempts = []
+
+            def exit_request(*args, **kwargs):
+                attempts.append(True)
+                return original_exit(*args, **kwargs)
+
+            monkeypatch.setattr(app, "exit", exit_request)
             await pilot.press("q", "enter")
+            assert attempts == [], "Disabled confirmation issued an exit request."
             app.exit()
             await pilot.pause()
             assert app.is_running and not backend.completed.is_set()

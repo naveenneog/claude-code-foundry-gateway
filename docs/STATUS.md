@@ -86,6 +86,12 @@ assertions; the corrected test retains the physical-key no-exit assertion
 and separately covers the app entry. No production escape hatch or detector
 relaxation was used.
 
+The final strengthened affected pilot selection passed **40 cases in
+109.38 s**. It reads the actually rendered saving prompt at 80x24 and
+asserts disabled keyboard confirmation issues no exit request, separately
+from the central exit guard. The new council files are ordinary `test_*.py`
+modules in the standard AUM selector, not a private reproduction harness.
+
 ### PLAN
 
 The People action bar gains Remove person from team beside Add person to team,
