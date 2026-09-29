@@ -65,22 +65,37 @@ export PYTHONPYCACHEPREFIX="$state/pycache" PIP_CONFIG_FILE=/dev/null
 export UV_CACHE_DIR="$state/cache/uv" UV_PYTHON_INSTALL_DIR="$state/python"
 mkdir -p -- "$TMPDIR" "$PIP_CACHE_DIR" "$UV_CACHE_DIR" "$PYTHONPYCACHEPREFIX" \
     "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_RUNTIME_DIR" "$PYTHONUSERBASE"
+install_env=(
+    "HOME=$HOME" "PATH=$PATH" "LANG=${LANG:-C.UTF-8}"
+    "TMPDIR=$TMPDIR" "TMP=$TMP" "TEMP=$TEMP"
+    "PIP_CONFIG_FILE=/dev/null" "PIP_CACHE_DIR=$PIP_CACHE_DIR"
+    "PYTHONUSERBASE=$PYTHONUSERBASE" "PYTHONPYCACHEPREFIX=$PYTHONPYCACHEPREFIX"
+    "UV_CACHE_DIR=$UV_CACHE_DIR" "UV_PYTHON_INSTALL_DIR=$UV_PYTHON_INSTALL_DIR"
+    "XDG_CACHE_HOME=$XDG_CACHE_HOME" "XDG_CONFIG_HOME=$XDG_CONFIG_HOME"
+    "XDG_DATA_HOME=$XDG_DATA_HOME" "XDG_STATE_HOME=$XDG_STATE_HOME"
+    "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
+)
+for variable in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy \
+                SSL_CERT_FILE SSL_CERT_DIR REQUESTS_CA_BUNDLE CURL_CA_BUNDLE; do
+    if [[ -v $variable ]]; then install_env+=("$variable=${!variable}"); fi
+done
 printf 'Preparing AUM (estimate 2-5 minutes first run; 10-60 s with cached dependencies).\n'
 
 stage='uv bootstrap'
 if [[ ! -x "$uv" ]]; then
-    python3 -I -m pip install --disable-pip-version-check --no-user --only-binary=:all: \
-        --target "$bootstrap" --upgrade uv==0.12.20
+    env -i "${install_env[@]}" python3 -I -m pip --isolated install \
+        --disable-pip-version-check --no-user --only-binary=:all: \
+        --cache-dir "$PIP_CACHE_DIR" --target "$bootstrap" --upgrade uv==0.12.20
 fi
 stage='managed Python and virtual environment'
 if [[ ! -d "$venv" ]]; then
-    "$uv" --no-config venv --python 3.12 --managed-python "$venv"
+    env -i "${install_env[@]}" "$uv" --no-config venv --python 3.12 --managed-python "$venv"
 fi
 [[ -x "$venv/bin/python" ]] || fail "The existing venv is incomplete: $venv."
-"$venv/bin/python" -I -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)' \
+env -i "${install_env[@]}" "$venv/bin/python" -I -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)' \
     || fail 'The AUM venv requires Python 3.12 or newer; the existing venv was not replaced.'
 
 stage='AUM package installation'
-"$uv" --no-config pip install --python "$venv/bin/python" --editable "$source_dir"
+env -i "${install_env[@]}" "$uv" --no-config pip install --python "$venv/bin/python" --editable "$source_dir"
 stage='AUM launch'
 exec "$venv/bin/aum" "$@"

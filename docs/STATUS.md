@@ -47,6 +47,16 @@ and waits for any other mutation; failure does not request exit. The form
 records the completed sign-out instead of stale saving progress. The same
 standard selector covers cancellation, another pending operation and failure.
 
+Installer GREEN: **51 affected launcher/environment cases passed in
+140.82 s**, including real offline pip for both `PIP_LOG` and `PIP_--log`.
+Pip and every uv invocation use fresh allowlisted environments; pip is also
+isolated with null configuration and an explicit confined cache. Tests
+capture actual child environments, prove malformed/unrelated/Azure variables
+are absent there, preserve named proxy settings, and verify AUM still
+receives the original Azure session context. Test-only controls now live in
+fixture files, not production environment exceptions. ADR-0041 records why
+this closes the alias class instead of extending a denylist.
+
 ### Council round 1 corrections
 
 The lead reviewed `f33eb0c` on 2026-09-29. Architect PASS; Coder, QA, UX and

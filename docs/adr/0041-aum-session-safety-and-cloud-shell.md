@@ -69,6 +69,22 @@ also pinned under that root. Real pip runs with explicit no-network flags in
 the regression, alongside individual destination-write probes; fake argument
 inspection alone is not evidence that pip cannot create an external log.
 
+Council round 2 found that invalid shell identifiers, including `PIP_--log`,
+survive that enumeration and are normalized by pip. Prefix removal is therefore
+not the installer-process boundary. Every pip and uv invocation now starts
+with `env -i`: HOME, PATH, locale, explicit confined destinations and named
+HTTP proxy/TLS certificate settings form the allowlist. Python runtime
+validation uses the same environment. Unrelated and Azure session variables
+do not reach these installer children; the final AUM process retains the
+existing Azure CLI context.
+
+Bootstrap pip additionally uses `--isolated`, `PIP_CONFIG_FILE=/dev/null`
+and an explicit HOME-local `--cache-dir`. This is preferred over enumerating
+more malformed aliases: unknown future aliases are absent by construction.
+The shell-level reset remains for ordinary inherited destination variables,
+but is not claimed to remove names that Bash cannot represent. Tests inspect
+the actual child environment and run real pip with networking disabled.
+
 The launcher neither signs in nor changes Azure CLI configuration. AUM uses
 the Cloud Shell session's existing identity and the same governance writers.
 Cloud Shell hosting adds no Azure component to this repository's deployment.

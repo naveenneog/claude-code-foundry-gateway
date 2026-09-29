@@ -104,13 +104,18 @@ installer. The first bootstrap has a 2-5 minute estimate; cached dependency
 setup has a 10-60 s estimate. Bootstrap requires access to PyPI and uv's Python
 download hosts as well as the application's Azure endpoints.
 
-Bootstrap removes inherited `PIP_*`, `UV_*` and `XDG_*` settings, including
-`PIP_LOG`, before supplying its own HOME-local cache/config/data/state/runtime
-paths. `PYTHONUSERBASE` is also HOME-local; `PYTHONHOME`, `PYTHONPATH` and
-`VIRTUAL_ENV` do not redirect setup. Custom pip/uv configuration is therefore
-not an alternative output destination. The real-pip regression uses explicit
-offline flags and verifies that an inherited external log is not created
-([confinement tests](../cli/finops/tests/test_p85_council_env.py)).
+Every pip and uv invocation starts in a fresh `env -i` environment containing
+only HOME, PATH, locale, explicit HOME-local destinations and named HTTP
+proxy/TLS settings. Bootstrap pip also uses `--isolated`,
+`PIP_CONFIG_FILE=/dev/null` and an explicit confined `--cache-dir`.
+Malformed inherited names such as `PIP_--log` cannot bypass this allowlist.
+Python runtime validation uses the same environment; the final AUM process
+retains the Azure CLI session context. Ordinary shell-identifier pip/uv/XDG
+settings are also reset, but enumeration alone is not the isolation boundary.
+The real-pip regressions use explicit offline flags and verify that neither
+the ordinary nor malformed inherited log name creates an external file
+([confinement tests](../cli/finops/tests/test_p85_council_env.py),
+[decision](adr/0041-aum-session-safety-and-cloud-shell.md)).
 
 The storage-specific Microsoft Learn article describes `$HOME` persisted as
 an image in the attached Azure file share; that mode retains the venv between

@@ -29,6 +29,11 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P85 council round 2: installer alias isolation.** Pip/uv processes use
+  fresh explicit environments rather than relying on shell-name enumeration.
+  Pip also uses isolated mode, null configuration and a confined cache.
+  Real offline pip and child-environment tests cover malformed aliases while
+  the final AUM process retains its Azure CLI session context.
 - **P85 council round 2: sign-out completion.** A successful sign-out exits
   from application-owned completion handling after registry release, even
   when its modal worker was cancelled. Other mutations still finish first,

@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 
 import pytest
@@ -89,16 +90,24 @@ def setup(tmp_path):
     script = repo / "scripts" / LAUNCHER.name
     shutil.copyfile(LAUNCHER, script)
     (repo / "cli" / "finops" / "pyproject.toml").write_text("[project]\nname='offline-aum'\n", encoding="utf-8")
+    controls = tools / "controls.env"
+    controls.write_text("", encoding="utf-8")
+    fixture_context = f"TOOLS={shlex.quote(shell_path(tools))}\n. {shlex.quote(shell_path(controls))}\n"
     for name, content in {"python3": PYTHON, "uv-template": UV, "runtime-template": RUNTIME,
                           "aum-template": AUM, "az": "#!/usr/bin/env bash\nexit 93\n"}.items():
         path = tools / name
-        path.write_text(content, encoding="utf-8", newline="\n")
+        path.write_text(content.replace("set -eu\n", "set -eu\n" + fixture_context, 1),
+                        encoding="utf-8", newline="\n")
         path.chmod(0o755)
     return home, repo, tools, script
 
 
 def run(layout, *args, extra=None):
     home, repo, tools, script = layout
+    controls = ("FAKE_PIP_EXIT", "FAKE_VENV_EXIT", "FAKE_INSTALL_EXIT", "FAKE_AUM_EXIT", "FAKE_OLD_RUNTIME")
+    (tools / "controls.env").write_text(
+        "".join(f"{name}={shlex.quote((extra or {}).get(name, '0'))}\n" for name in controls),
+        encoding="utf-8", newline="\n")
     env = dict(os.environ, HOME=shell_path(home), TOOLS=shell_path(tools))
     env.update(extra or {})
     return subprocess.run(
@@ -152,7 +161,8 @@ def test_cloudshell_creates_reuses_and_forwards_literal_arguments(tmp_path):
     assert len([line for line in calls if line.startswith("uv --no-config venv ")]) == 1
     assert len([line for line in calls if line.startswith("uv --no-config pip install ")]) == 2
     assert calls.count("aum") == 2
-    assert "-m pip" in calls[0] and "uv==0.12.20" in calls[0]
+    assert "-m pip --isolated install" in calls[0] and "uv==0.12.20" in calls[0]
+    assert "--cache-dir " in calls[0]
     assert "--managed-python" in calls[1] and "--python 3.12" in calls[1]
     actual = (home / "aum-arguments").read_bytes().split(b"\0")[:-1]
     assert [arg.decode() for arg in actual] == args

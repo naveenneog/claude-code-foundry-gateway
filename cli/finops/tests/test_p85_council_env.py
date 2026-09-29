@@ -1,5 +1,6 @@
 import os
 import sys
+import shlex
 
 import pytest
 
@@ -12,6 +13,35 @@ DESTINATIONS = (
     "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR",
     "XDG_CONFIG_DIRS", "XDG_DATA_DIRS", "XDG_FUTURE_DESTINATION",
 )
+
+
+@pytest.mark.parametrize("tool", ["python3", "uv-template"])
+def test_installer_child_environment_is_allowlisted_but_aum_keeps_azure_context(tmp_path, tool):
+    layout = setup(tmp_path)
+    home, _, tools, _ = layout
+    for filename in (tool, "aum-template"):
+        path = tools / filename
+        capture = f'env -0 > "$HOME/{filename}-environment"\n'
+        path.write_text(path.read_text(encoding="utf-8").replace("set -eu\n", "set -eu\n" + capture, 1),
+                        encoding="utf-8", newline="\n")
+    azure = shell_path(home / "azure-session")
+    aliases = {"PIP_--log": "outside", "UV_--cache-dir": "outside",
+               "XDG_--data-home": "outside", "UNRELATED_SECRET": "private-marker"}
+    result = run(layout, extra={**aliases, "AZURE_CONFIG_DIR": azure,
+                                "HTTPS_PROXY": "http://proxy.contoso.test:3128"})
+    assert result.returncode == 0, result.stderr
+
+    def environment(filename):
+        return dict(record.decode().split("=", 1) for record in (home / filename).read_bytes().split(b"\0") if record)
+
+    child = environment(f"{tool}-environment")
+    for name in (*aliases, "AZURE_CONFIG_DIR"):
+        assert name not in child
+    assert child["HOME"] == shell_path(home)
+    assert child["PIP_CONFIG_FILE"] == "/dev/null"
+    assert child["HTTPS_PROXY"] == "http://proxy.contoso.test:3128"
+    assert child["PIP_CACHE_DIR"].startswith(shell_path(home) + "/")
+    assert environment("aum-template-environment")["AZURE_CONFIG_DIR"] == azure
 
 
 @pytest.mark.parametrize("name", DESTINATIONS)
@@ -44,7 +74,8 @@ done
     assert (home / "aum-arguments").exists()
 
 
-def test_real_pip_offline_cannot_write_inherited_external_log(tmp_path):
+@pytest.mark.parametrize("variable", ["PIP_LOG", "PIP_--log"])
+def test_real_pip_offline_cannot_write_inherited_external_log(tmp_path, variable):
     layout = setup(tmp_path)
     home, _, tools, _ = layout
     outside = tmp_path / "outside"
@@ -65,11 +96,15 @@ export PIP_CONFIG_FILE="$REAL_DEVNULL"
 unset PIP_FIND_LINKS
 exec "$REAL_PYTHON" "$@" --no-index --no-deps --no-build-isolation
 """
-    (tools / "python3").write_text(wrapper, encoding="utf-8", newline="\n")
+    native = (
+        f"REAL_PYTHON={shlex.quote(shell_path(sys.executable))}\n"
+        f"REAL_DEVNULL={shlex.quote(os.devnull)}\n"
+        f"NATIVE_WINDOWS={'1' if os.name == 'nt' else '0'}\n"
+    )
+    (tools / "python3").write_text(wrapper.replace("set -eu\n", "set -eu\n" + native, 1),
+                                  encoding="utf-8", newline="\n")
     result = run(layout, extra={
-        "REAL_PYTHON": shell_path(sys.executable), "REAL_DEVNULL": os.devnull,
-        "NATIVE_WINDOWS": "1" if os.name == "nt" else "0",
-        "PIP_LOG": str(logfile), "PIP_NO_INDEX": "1",
+        variable: str(logfile), "PIP_NO_INDEX": "1",
     })
     assert result.returncode != 0
     assert "No matching distribution found" in result.stderr, result.stderr
