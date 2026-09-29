@@ -400,7 +400,7 @@ ATTRIBUTE_EXCEPTIONS = {
     ('tui.py', 'FinOpsApp.selected', 'self._synchronize_principal'):
         'Uses the existing principal or refresh state/helper in this exact reviewed lifecycle context, without exposing framework IO.',
     ('tui.py', 'FinOpsApp.switched', 'self._principal_notice'):
-        'Uses the existing principal or refresh state/helper in this exact reviewed lifecycle context, without exposing framework IO.',
+        'Retains the principal-change input barrier after checking main-content presence; this read grants no publication authority.',
     ('tui.py', 'FinOpsApp.update_access', 'self._data_guards'):
         'Reads the data-to-origin cache used by the existing guarded publication path; the cache is not a raw output handle.',
     ('tui.py', 'FinOpsApp.update_brand', 'self._synchronize_principal'):
@@ -667,7 +667,7 @@ ATTRIBUTE_CONTEXTS = {
     ('tui.py', 'FinOpsApp.open_detail'): '89b0f5eecb96737f7641a70282bae37c6a11b0093f95b7b3bb74e89848548139',
     ('tui.py', 'FinOpsApp.render_tab'): '5448838e8112922ee13f18c049ccb23b1db127e192ad21e4b2163525f843e301',
     ('tui.py', 'FinOpsApp.selected'): 'aaabeb7380b0aa463cad5ae649b3cb1639a7ff8d358cef8555e4ede5a75aab75',
-    ('tui.py', 'FinOpsApp.switched'): '46592e596007cb1659e07e1fe644639635f2ace4ff53b64cf59ce4926053ec4e',
+    ('tui.py', 'FinOpsApp.switched'): '4281adb59bec8d2f19a73bf4bab44f08f2dba575f4905add86447ca82eb880cc',
     ('tui.py', 'FinOpsApp.update_access'): 'c8a8240c02605aaa4683d3f73a2f6aa39f7bcbc26971857421107e8115f2365b',
     ('tui.py', 'FinOpsApp.update_brand'): '9806807c341ff6d1aee402ae1caad4c7da676c8433a8e39b90d304d4421f0b8a',
     ('ui_features.py', 'FeatureUI._show_read_detail'): 'aef63453cc8cd45ef32a54395e705da868fc900617262793672c5fa7ec57c974',

@@ -72,6 +72,21 @@ independent absence checks passed at 22:13:51Z.
 
 ### U26 - P71 observation, 2026-09-28
 
+The lead's 2026-09-30 follow-up identifies a second, independent lifecycle
+failure: the assistant-context case failed 4/12 times under 16 CPU burners
+on P85's `bcf8554` P71 base, without the later message-sealing change and
+without worker cancellation. `FinOpsApp.switched` queries `active` while
+`#main-tabs` is absent. Retained activations reproduce that exact error on
+real empty running and shut-down default screens. The new contract requires
+ignoring these stale events while preserving live activations; deterministic
+and loaded correction evidence is recorded in
+[STATUS](STATUS.md#stale-tab-activation-without-main-content-2026-09-30).
+Both deterministic cases failed before the presence check; the corrected
+targeted/contract selection passed all 14 cases. The expanded 16-burner proof
+passed 270 executions over 30 iterations, including both lifecycle cases and
+the assistant-context case. The full AUM suite passed all 831 cases.
+U26 remains OPEN for its other historical failures.
+
 During P71's refresh changes, full pytest runs identified the exact failing
 cases: `test_service_terminal_hides_unoffered_views_and_opens_real_core_tabs`,
 `test_preselected_people_team_does_not_trigger_refresh_loop`,

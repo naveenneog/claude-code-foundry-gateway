@@ -1,7 +1,7 @@
 import asyncio
 import os
 from contextlib import contextmanager, nullcontext
-from functools import partial
+from functools import partial, wraps
 from pathlib import Path
 import subprocess
 import sys
@@ -11,7 +11,7 @@ import pytest
 from rich.pretty import pretty_repr
 from textual.events import Callback, MouseDown, MouseScrollDown
 from textual.notifications import Notify
-from textual.widgets import Input, Select as NativeSelect
+from textual.widgets import Input, Select as NativeSelect, TabbedContent
 
 from claude_finops.config import Config
 from claude_finops.engine import Engine
@@ -82,9 +82,20 @@ def test_sealed_app_messages_preserve_disable_and_enable(delivery):
 @pytest.mark.parametrize("tab", ["budgets", "requests"])
 async def test_tab_activation_keeps_the_in_flight_refresh(monkeypatch, tab):
     app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
+    focused = asyncio.Event()
+    focus_pane = TabbedContent._on_tab_pane_focused
+
+    @wraps(focus_pane)
+    def initial_focus(tabs, event):
+        focus_pane(tabs, event)
+        if tabs.id == "main-tabs" and event.tab_pane.id == "overview":
+            focused.set()
+
+    monkeypatch.setattr(TabbedContent, "_on_tab_pane_focused", initial_focus)
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
         await app.workers.wait_for_complete()
+        await focused.wait()
         entered, release = asyncio.Event(), asyncio.Event()
         workers = []
         refresh, load = app.action_refresh, app.load_tab
@@ -112,6 +123,33 @@ async def test_tab_activation_keeps_the_in_flight_refresh(monkeypatch, tab):
         assert not workers[0].is_cancelled
         assert app.active == tab and tab in app.data
         assert app.is_running and app._exception is None
+
+
+@pytest.mark.parametrize("lifecycle", ["running-gap", "shutdown"])
+async def test_stale_tab_activation_is_ignored_without_main_tabs(monkeypatch, lifecycle):
+    app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
+    refreshes = []
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        tabs = app.query_one("#main-tabs", TabbedContent)
+        activation = TabbedContent.TabActivated(tabs, tabs.get_tab(tabs.active))
+        monkeypatch.setattr(app, "action_refresh", lambda: refreshes.append("refresh"))
+        app.switched(activation)
+        assert refreshes == ["refresh"], "A current activation must still refresh the live view."
+        refreshes.clear()
+        if lifecycle == "running-gap":
+            app.set_focus(None)
+            with app.batch_update():
+                await app.screen.remove_children()
+                assert app.is_running and not app.query("#main-tabs")
+                app.switched(activation)
+                assert not refreshes
+    if lifecycle == "shutdown":
+        assert not app.is_running and not app.query("#main-tabs")
+        app.switched(activation)
+    assert not refreshes, "A retained activation must not restart a read without main content."
+    assert app._exception is None
 
 
 def test_notification_record_omits_payload_in_both_representations():

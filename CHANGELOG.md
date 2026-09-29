@@ -80,6 +80,8 @@ exact streaming cache-creation detail remains **U13**.
   Diagnostic sealing now preserves Textual's exact-type message suppression
   and disabled-message controls, preventing duplicate tab/selector refreshes
   from cancelling current reads without weakening provenance or payload redaction.
+  Retained tab activations are ignored while main content is absent during
+  remount or shutdown; current activations and publication checks remain unchanged.
 - **Reviewed model lifecycle (P70).** `-Action Change -Change models` and
   `scripts/Sync-ClaudeModels.ps1` discover the selected Foundry account, show deployment
   model/version/SKU/capacity and price status, accept per-deployment tier choices, snapshot

@@ -449,6 +449,16 @@ then awaits the native after-refresh callback and batch lock before testing the
 current receiver. Its original raw-write refusal and privacy assertions remain;
 neither worker completion nor an arbitrary pause substitutes for that lifecycle.
 
+### Stale tab activation correction, 2026-09-30
+
+The terminal may receive a retained tab activation after main content has
+been removed during remount or shutdown. `switched` must check that main
+content exists before querying its active pane; an absent main view makes the
+event stale, not an error or a request to restart a read. Current activations
+retain their existing principal-notice and active-pane checks. Deterministic
+running-gap and shutdown cases include a live-activation positive control.
+This lifecycle rule does not grant a new publication capability.
+
 ### Approval recipe for attributes and builtins
 
 An approval is reviewed like code. The review identifies every supported

@@ -135,6 +135,64 @@ Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
 
 ## P71 AUM answers fast and says why it cannot, 2026-09-28
 
+### Stale tab activation without main content, 2026-09-30
+
+**PLAN / CONTRACT:** A retained `TabActivated` must be ignored when the
+default screen has no `#main-tabs`, both during a running remount gap and
+after shutdown. It must not query `active`, write presentation or start a read.
+A current activation with mounted main content must still refresh normally.
+This is a separate lifecycle correction, not a relaxation of publication guards.
+
+The lead reproduced the assistant-context case **4 times in 12 runs** on P85's
+`bcf8554` P71 base under 16 CPU burners, without `WorkerCancelled` or the
+later `f122985` sealing change. Local history shows `d7cd2f2` added the
+`event.pane.id != self.active` comparison and `89852aa` added the principal
+notice clause. The comparison dereferences main content before deciding an
+activation is stale. Two short probes reproduce the exact `NoMatches` against
+real empty default screens while running and after shutdown. The earlier
+record's secondary-error diagnosis applies to its captured cancellation
+traces, not to every missing-main-content failure.
+
+**RED:** Both deterministic lifecycle cases failed in **2.44 s** with the
+exact missing-`#main-tabs` error, without a cancelled worker.
+The new guard uses the existing approved DOM query before `active`; only the
+changed function's exact context fingerprint is renewed.
+
+An initial nine-case control had 7 passes and 2 failures in the earlier
+single-refresh detector. A message trace identified its distinct test setup
+race: worker completion precedes the initial overview `TabPane.Focused`
+message being handled, so it counted an overview refresh along with the
+requested budgets/requests refresh. That detector now awaits completion of
+the real native initial-focus handler before measuring the next activation;
+its one-worker and non-cancellation assertions are unchanged.
+
+**GREEN / REFACTOR:** All **14 targeted lifecycle, navigation, assistant and
+closed-contract cases passed in 16.93 s**. No new ordinary member, exception
+capability, sleep, retry or timeout allowance was introduced. The lifecycle
+cases join the existing standard diagnostics selector.
+
+The lead's stress harness completed **30 iterations with 16 CPU burners:
+270/270 executions passed**, with zero failures, errors, skips or identity
+mismatches. Every iteration ran the two missing-main cases, two live-navigation
+controls, the assistant-context case and the prior four identities. The full
+AUM suite then passed **all 831 cases in 350.98 s** (353.722 s wall), with no
+errors or skips. Both proofs used the same production source.
+Receipts and exact JUnit identities persist in
+`.finops-evidence\p71-stale-tabs`; long raw logs remain under TEMP.
+
+The existing architecture witness was regenerated and checked (16 specs /
+18 PNGs). Only the witnessed TUI source hash changed; there is no new component,
+data flow or diagram imagery.
+
+All long jobs now use the lead's `with-gate-lock.ps1` wrapper with owner
+`p71-r10b`; it acquires the shared lock and releases only its own token.
+This supersedes the earlier absence-only and between-test-pause protocols.
+The earlier pause plugin is not used while holding the wrapper's lock.
+The loaded run held the wrapper lock from 03:56:31 to 04:17:04 +05:30; the
+architecture/full run held it from 04:17:49 to 04:23:57 +05:30 on 2026-09-30.
+Council, packet gates and integration remain with the lead. U26 remains OPEN
+for other historical failures; no merge or push was performed.
+
 ### Startup and navigation cancellation correction, 2026-09-30
 
 **PLAN:** Reproduce the round-10 cancellation deterministically, preserve the
