@@ -192,6 +192,8 @@ The loaded run held the wrapper lock from 03:56:31 to 04:17:04 +05:30; the
 architecture/full run held it from 04:17:49 to 04:23:57 +05:30 on 2026-09-30.
 Council, packet gates and integration remain with the lead. U26 remains OPEN
 for other historical failures; no merge or push was performed.
+Implementation and recorded proof: `7a28b74`
+(`fix(aum): ignore tab activations without main content`).
 
 ### Startup and navigation cancellation correction, 2026-09-30
 
