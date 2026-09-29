@@ -56,8 +56,8 @@ writing and throws rather than discarding the exit code.
 At 100-500 developers the named-value path is already past or close to the
 business-unit membership ceiling. The installer offers the **Cosmos projection**
 as the entitlement store. `scripts/Deploy-ClaudeProjection.ps1` deploys it,
-populates it from Entra, compares it against the named-value decisions and flips
-only after a clean comparison.
+populates it from Entra and compares it against named-value decisions. P84 leaves that authority
+unchanged and refuses automated switching until the supported P86 scheduled reconciler exists.
 
 The SKU changes the resolver inbound path, not the Cosmos rule:
 
@@ -742,14 +742,30 @@ effective identity before a bulk flip.
 
 ### 5. Flip one value
 
+**Outage warning:** records expire at most **two hours from scan start**. Without continuing
+renewal, **every developer gets 503 after expiry**. A clean comparison is not renewal. P84's
+deployer, installer and guided flow refuse switching unconditionally; the supported scheduled
+reconciler, tenant-admin grant and lease alerts are proposed P86 work in [ROADMAP](ROADMAP.md).
+ARM cron, environment strings and a successful job execution cannot prove actual renewal.
+
+The following low-level manual operation remains documented for independently operated estates,
+after step 4's comparison and the resolver configuration in the
+[private deployment guide](SECURE-PROJECTION.md). It is **not P84-protected admission**, creates
+no reconciler, and can cause the outage above. The former ARM-only guard has been removed:
+
 ```powershell
-az apim nv update -g <rg> --service-name <apim> `
-  --named-value-id entitlement-source --value projection
+. .\scripts\ApimNamedValue.ps1
+Set-ApimNamedValue -ResourceGroup <gateway-rg> -ApimName <apim> `
+  -SubscriptionId <subscription-id> -Id entitlement-source -Value projection
 ```
 
-**Portal:** APIM > Named values > `entitlement-source` > `projection` > Save.
-Repeat the same action with `named-value` only under the rollback conditions
-below. Check real caller responses after propagation.
+[ADR-0040](adr/0040-projection-preflight-and-switch.md) proposes P86 admission from destination-bound
+Cosmos evidence through the runner: oldest expiry has margin, generation advanced twice in two
+hours, and newest renewal is within 60 minutes, with a tested image/entrypoint and dry-run
+overrides rejected. That machinery is not implemented in P84.
+
+**Portal verification:** APIM > Named values shows `entitlement-source`; that stored value and
+the Container Apps Jobs > Executions blade do not prove lease renewal. Rollback conditions remain below.
 
 Propagation to the running policy was measured at 9–18 seconds on Basic v2. On
 Premium v2 the write itself took 38 to 41 seconds, and the flip took effect

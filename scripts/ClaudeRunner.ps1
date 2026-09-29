@@ -39,8 +39,75 @@ function Invoke-RunnerCommand {
     )
     $arguments = @('container','exec','-g',$ResourceGroup,'-n',$Name,'--container-name',$Container,'--exec-command',$Command)
     if ($SubscriptionId) { $arguments += @('--subscription',$SubscriptionId) }
-    $out = & az @arguments 2>&1 | Out-String
+    $saved = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $out = & az @arguments 2>&1 | Out-String
+        $code = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $saved }
+    if ($code -ne 0) {
+        Write-ClaudeRunnerOutput -RawOutput $out -Step 'runner transport'
+        throw "runner transport failed (az exit $code)."
+    }
     return $out.Trim()
+}
+
+function Write-ClaudeRunnerOutput {
+    param([AllowEmptyString()][string]$RawOutput, [string]$Step)
+    # At most 40 lines and 4,096 characters in total: this heading and a truncation marker count.
+    $lines = [Collections.Generic.List[string]]::new()
+    $lines.Add("$Step sanitized runner output (at most 40 lines and 4096 characters, this line included):")
+    foreach ($line in @($RawOutput.TrimEnd("`r", "`n") -split '\r?\n' | Select-Object -Last 39)) {
+        $doc = $null
+        if ($line.TrimStart().StartsWith('{')) {
+            try { $doc = $line | ConvertFrom-Json -ErrorAction Stop }
+            catch { $doc = $null }
+        }
+        $safe = [Collections.Generic.List[string]]::new()
+        if ($doc) {
+            foreach ($field in 'ok','whatIf','expired','compared','projectionRecords','differences','resolved','existing','toWrite','toDelete','keptOrphans','unchanged','written','writeFailed','deleted','deleteFailed','seconds') {
+                $property = $doc.PSObject.Properties[$field]
+                if ($property -and ($property.Value -is [bool] -or $property.Value -is [ValueType] -and $property.Value -isnot [DateTime] -and $property.Value -isnot [DateTimeOffset])) {
+                    $safe.Add("$field=$($property.Value)")
+                }
+            }
+            $samples = $doc.PSObject.Properties['sample']
+            if ($samples) {
+                foreach ($sample in @($samples.Value | Select-Object -First 3)) {
+                    $oid = $sample.PSObject.Properties['oid']
+                    if ($oid) { $safe.Add('oid-sha256=' + (Get-ClaudeRunnerDigest ([string]$oid.Value))) }
+                }
+            }
+        }
+        if (-not $safe.Count) { $safe.Add("redacted unstructured output: chars=$($line.Length), sha256=$(Get-ClaudeRunnerDigest $line)") }
+        $lines.Add($safe -join '; ')
+    }
+    $output = $lines -join "`n"
+    if ($output.Length -gt 4096) {
+        $kept = @($output.Substring(0, 4084) -split "`n" | Select-Object -First 39)
+        $output = ($kept -join "`n") + "`n[truncated]"
+    }
+    Write-Host $output -ForegroundColor Yellow
+}
+
+function Get-ClaudeRunnerDigest {
+    param([AllowEmptyString()][string]$Text)
+    $hash = [Security.Cryptography.SHA256]::Create()
+    try { return [BitConverter]::ToString($hash.ComputeHash([Text.Encoding]::UTF8.GetBytes($Text))).Replace('-','').Substring(0,12).ToLowerInvariant() }
+    finally { $hash.Dispose() }
+}
+
+function ConvertFrom-ClaudeRunnerResult {
+    param([AllowEmptyString()][string]$RawOutput, [string]$Step)
+    try {
+        $last = $RawOutput.TrimEnd("`r", "`n") -split '\r?\n' | Select-Object -Last 1
+        $result = $last | ConvertFrom-Json -ErrorAction Stop
+        if (-not $result -or $result.ok -isnot [bool] -or -not $result.ok) { throw 'The runner summary must contain boolean ok:true.' }
+        return $result
+    } catch {
+        Write-ClaudeRunnerOutput -RawOutput $RawOutput -Step $Step
+        throw "$Step failed: runner summary is malformed or not boolean ok:true. Sanitized diagnostics are shown above."
+    }
 }
 
 function Send-RunnerFile {

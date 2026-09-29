@@ -78,6 +78,14 @@ and [ADR-0038](adr/0038-aum-actions-and-connection.md#p71-integration-authorizat
 These are offline client-boundary findings, not new live Azure or directory
 claims. U38-U41 remain P80's IDs; the separate P71 timing observations are
 retained in STATUS without closing U26.
+## P84 research before implementation
+
+| ID | State | Question | Blocks |
+|---|---|---|---|
+| U54 | CLOSED | Council correction, researched 2026-09-29: allowedToCreateApps describes the default user role, not effective delegated/custom-role permission. Policy.Read.All denial is not app-creation denial. Unreadable, false-default, guest or otherwise unproven rights produce WARN; a supplied ResolverAppId avoids that policy read. Explicit resource/creation denial still fails. Confirmed-absent optional premium is distinct from a failed Graph lookup. Sources and access date: [ADR-0040](adr/0040-projection-preflight-and-switch.md). | P84 revised contract; no live tenant permission claim |
+| U55 | CLOSED | Researched 2026-09-29 against all three Bicep templates and Microsoft naming/RBAC docs: nine providers, a 1-37 character safe prefix, and three global name checks. Local Bicep build-params evaluates the existing uniqueString storage name without a deployment; fixture result stres52p2c4jfs43ig. [ADR-0040](adr/0040-projection-preflight-and-switch.md) records API shapes and citations. | P84 contract defined; regional capacity cannot be guaranteed |
+| U56 | OPEN | Council demonstrated that ARM cron, bindings, a digest and a succeeded execution can describe a dry-run that renews nothing. ARM metadata proves neither the destination of writes nor continuing schedule activity. P84 now refuses switching unconditionally. P86 admission is proposed to read destination-bound Cosmos evidence through the runner: oldest expiry has margin, reconciliationGeneration advanced twice in two hours, newest renewal within 60 minutes, and a tested image/entrypoint with dry-run overrides rejected. [ADR-0040](adr/0040-projection-preflight-and-switch.md). | P86 renewal evidence and monitored operation; not a P84 admission assumption |
+| U57 | CLOSED | Council round 1 invalidated the earlier safety conclusion despite 240 assertions and 111 mutations. Revised offline proof at eca8b55, 2026-09-29: preflight 197; council 83 including every real Graph caller, en-US/en-GB/de-DE, 100-column output, identity-safe bounded diagnostics and declined confirmation. All 95 current mutations retained complete selected baselines (197/66/14), parsed, failed assertions and exited nonzero; restored suites passed, total 1,356.35 s. Earlier receipts remain historical in STATUS, not proof of rejected admission. | P84 correction proof complete; lead round 2 pending; no Azure writes |
 
 ## P78 research before implementation
 
@@ -115,6 +123,21 @@ independent absence checks passed at 22:13:51Z.
 ## Detail
 
 ### U26 - P71 observation, 2026-09-28
+
+The lead's 2026-09-30 follow-up identifies a second, independent lifecycle
+failure: the assistant-context case failed 4/12 times under 16 CPU burners
+on P85's `bcf8554` P71 base, without the later message-sealing change and
+without worker cancellation. `FinOpsApp.switched` queries `active` while
+`#main-tabs` is absent. Retained activations reproduce that exact error on
+real empty running and shut-down default screens. The new contract requires
+ignoring these stale events while preserving live activations; deterministic
+and loaded correction evidence is recorded in
+[STATUS](STATUS.md#stale-tab-activation-without-main-content-2026-09-30).
+Both deterministic cases failed before the presence check; the corrected
+targeted/contract selection passed all 14 cases. The expanded 16-burner proof
+passed 270 executions over 30 iterations, including both lifecycle cases and
+the assistant-context case. The full AUM suite passed all 831 cases.
+U26 remains OPEN for its other historical failures.
 
 During P71's refresh changes, full pytest runs identified the exact failing
 cases: `test_service_terminal_hides_unoffered_views_and_opens_real_core_tabs`,
@@ -307,6 +330,30 @@ and no second full run replaced this result. The cause remains unproven; U26
 stays open. Full output, JUnit and the lock receipt are in
 `.finops-evidence\p71-r10-resume`; see the
 [round 10 full-run record](STATUS.md#final-round-10-full-aum-run-on-70b6919).
+
+The 2026-09-30 builder traced the four reported identities' first failure to
+exclusive refresh cancellation, with `NoMatches` occurring during shutdown.
+Round-10 diagnostic message subclasses evade Textual 6.12.0's exact-type
+`prevent()` and disabled-message checks. A direct prevention probe fails
+deterministically, and a single budgets navigation starts two workers and
+cancels the first. This identifies a concrete cause introduced by `f122985`.
+All 12 deterministic regressions failed before the correction; the initial
+16-case corrected selection passed. Loaded RED had 4 failures in 16 completed
+cases before another gate interrupted the harness. Loaded GREEN then passed
+30 complete iterations / 120 executions under four CPU burners with zero
+failures. The final complete AUM invocation passed all 829 cases in 585.16 s,
+including four 60-second gate pauses between tests, with no errors, skips or
+failed-test retries. Its production source matches the loaded proof; see the
+[startup correction](STATUS.md#startup-and-navigation-cancellation-correction-2026-09-30).
+The first complete corrected-source run had 828 passes and one
+`FooterKey-description` setup failure: Textual removes and asynchronously
+remounts footer keys after a binding change, outside worker completion.
+The existing privacy probe now awaits the native after-refresh callback and
+batch lock before accessing the current receiver; all original guard assertions stay.
+An event-held remove/remount gap produced 2 failures and 2 passes before that
+await; all 4 cases passed afterward, without a clock-based readiness allowance.
+It does not establish the cause of the older Windows marker, wizard,
+chargeback or unrecorded failures; U26 remains OPEN.
 
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 

@@ -61,6 +61,8 @@ param(
     [string]$ResolverInboundAccess,
     [switch]$DeployProjection,
     [switch]$FlipProjectionAfterCleanCompare,
+    [string]$ProjectionReconcilerResourceId,
+    [string]$ProjectionResolverAppId,
 
     [int]$TpmStandard,
     [int]$QuotaStandard,
@@ -117,6 +119,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
+if ($FlipProjectionAfterCleanCompare) {
+    . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
+    Stop-ClaudeProjectionSwitch
+}
 $desktopSignInHelper = Join-Path $root 'scripts/ClaudeDesktopSignIn.ps1'
 if (Test-Path $desktopSignInHelper) { . $desktopSignInHelper }
 
@@ -868,8 +874,9 @@ if (-not $EntitlementStore) {
 if ($Yes -and $EntitlementStore -eq 'projection' -and -not $DeployProjection) {
     throw 'Cannot choose projection unattended with -Yes unless -DeployProjection is also passed; projection requires a compare-gated deployer run. Nothing was created.'
 }
-if ($FlipProjectionAfterCleanCompare -and -not $DeployProjection) {
-    throw '-FlipProjectionAfterCleanCompare requires -DeployProjection.'
+if ($DeployProjection -and -not $WhatIfPreference) {
+    . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
+    Assert-ClaudeProjectionPowerShell
 }
 # Named values for more developers than they hold, said where the store is chosen (P79).
 if ($EntitlementStore -eq 'named-value' -and $devCount -gt $buCeiling) {
@@ -1615,7 +1622,8 @@ if ($EntitlementStore -eq 'projection' -and $DeployProjection) {
         '-StandardGroup', $StandardGroup,
         '-PremiumGroup', $PremiumGroup
     )
-    if ($FlipProjectionAfterCleanCompare) { $projectionArgs += '-FlipAfterCleanCompare' }
+    if ($ProjectionResolverAppId) { $projectionArgs += @('-ResolverAppId', $ProjectionResolverAppId) }
+    $projectionArgs += @('-SubscriptionId', $SubscriptionId)
     if ($WhatIfPreference) { $projectionArgs += '-WhatIf' }
     & (Join-Path $root 'scripts/Deploy-ClaudeProjection.ps1') @projectionArgs
     if ($LASTEXITCODE -ne 0) { throw 'Projection deployment failed. The gateway was not flipped.' }

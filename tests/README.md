@@ -11,6 +11,36 @@ pwsh -NoProfile -File .\tests\Test-All.ps1 -Serial
 pwsh -NoProfile -File .\tests\Test-All.ps1 -ThrottleLimit 2
 ```
 
+## Projection deployment safety (P84)
+
+The default suite registers `Test-ProjectionPreflight.ps1` and `Test-ProjectionCouncil.ps1`.
+Their Azure CLI/HTTP boundaries are
+offline, including native `az.cmd` stderr under PowerShell 7 and Windows PowerShell 5.1.
+The deployer/installer/flow refusal, declined prerequisites, narrow rendering, redacted output,
+all four real Graph callers and en-US/en-GB/de-DE suites run without Azure resources.
+
+```powershell
+pwsh -NoProfile -File .\tests\Test-ProjectionPreflight.ps1
+pwsh -NoProfile -File .\tests\Test-ProjectionCouncil.ps1
+pwsh -NoProfile -File .\tests\Test-ProjectionPreflightNegative.ps1 -ValidateAnchors
+pwsh -NoProfile -File .\tests\Test-ProjectionPreflightNegative.ps1 `
+  -ReceiptPath "$env:TEMP\p84-mutation-receipt.json"
+```
+
+The preflight check takes approximately 15 seconds and the full council check approximately
+one minute on the shared workstation. The full mutation proof is separate from default Test-All
+and takes approximately 15-25 minutes. It mutates a unique
+temporary copy, restores the original bytes after every probe, and reruns the restored baseline.
+A catch requires valid syntax, the selected suite's full baseline assertion count, a failed
+assertion and nonzero exit. Council selectors `Core`, `Callers` and `Cultures` support bounded
+proof commands; the default `All` still runs every group. The receipt records each probe's suite,
+counts, timing and source commit. The removed ARM-admission probes are historical; their
+replacement proves unconditional refusal under the lead's explicit contract change.
+
+On the owner's shared workstation a single long invocation owns `<workspace>\.gate-lock`;
+creation is atomic, contention retries every 60 seconds, and only that invocation removes its
+own lock in `finally`. [P84 STATUS](../docs/STATUS.md) records the actual receipts and times.
+
 ## Deterministic shards
 
 The marked registration block is the authority. `Get-TestAllRegistration` parses its AST without

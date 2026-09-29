@@ -196,6 +196,25 @@ exact streaming cache-creation detail remains **U13**.
   backend text before Textual logging. The seven scheduler cases enable visible
   notifications. [Corrections and evidence](docs/STATUS.md#council-round-10-corrections),
   [approval recipe](docs/adr/0035-aum-bounded-readiness-and-progressive-reads.md#approval-recipe-for-attributes-and-builtins).
+  Diagnostic sealing now preserves Textual's exact-type message suppression
+  and disabled-message controls, preventing duplicate tab/selector refreshes
+  from cancelling current reads without weakening provenance or payload redaction.
+  Retained tab activations are ignored while main content is absent during
+  remount or shutdown; current activations and publication checks remain unchanged.
+- **P84 projection deployment preflight and deferred switching.** `-PreflightOnly` and normal
+  deployment share read-only prerequisite checks before Azure writes. PowerShell 7 is required
+  for deployment/projection sync. Graph errors no longer count as absent groups; runner failures
+  show sanitized counts/hashed samples from at most 40 lines and 4,096 characters; failed app
+  creation cannot update an empty id. Council round 1 rejected ARM-only admission: a successful
+  scheduled dry-run can renew nothing. Deployment, installer and guided Entitlement now refuse
+  every projection switch until P86. [ADR-0040](docs/adr/0040-projection-preflight-and-switch.md)
+  proposes destination-bound Cosmos renewal evidence for that later packet.
+  Confirmed-absent premium passes, unproven app rights produce WARN, supplied app ids skip
+  policy reads, narrow reports use stacked records, and declined prerequisites abort.
+  Real-caller and locale tests cover en-GB/de-DE and supported PowerShell hosts. Earlier proof
+  receipts remain historical, not acceptance of the rejected design. Revised proof at `eca8b55`:
+  197 preflight assertions, 83 council assertions and 95/95 valid-syntax, count-preserving
+  mutations ([P84 status](docs/STATUS.md)).
 
 - **P78 parallel hosted checks.** Opt-in deterministic Test-All shards retain
   isolated processes, exclusive checks and deadlines, with commit/tree-bound receipts and an
