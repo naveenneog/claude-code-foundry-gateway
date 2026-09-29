@@ -202,6 +202,19 @@ Each raised `WorkerCancelled` at startup or after navigation; two also raised `N
 shutdown. The later 48-case runtime control passed, but that pass does not
 diagnose these intermittent cancellations.
 
+The requested one full round 10 run on `70b6919` executed **810 cases:
+806 passed, 4 failed in 360.31 s** (363.59 s wall), under its own lock from
+**2026-09-29 18:22:17Z to 18:28:21Z**. Both `budgets` and `requests` variants
+of `test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies`,
+`test_principal_change_closes_prior_forms_and_clears_state_before_input` and
+`test_approval_paging_and_queue_change_reset_cursor` raised `WorkerCancelled`
+at a worker wait. The first three also raised `NoMatches` during shutdown.
+All 40 new native/diagnostic cases passed. No timeout or assertion was relaxed,
+and no second full run replaced this result. The cause remains unproven; U26
+stays open. Full output, JUnit and the lock receipt are in
+`.finops-evidence\p71-r10-resume`; see the
+[round 10 full-run record](STATUS.md#final-round-10-full-aum-run-on-70b6919).
+
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 
 **Answer: yes.** A constant `counter-key` is a single counter shared by every caller. P11 can

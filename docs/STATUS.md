@@ -260,6 +260,32 @@ inspected, and **36 architecture assertions** passed. The pre-commit gate
 passed with **13 passed, 2 warnings, 0 failed**. This is not a new packet-gate
 or council verdict.
 
+#### Final round 10 full AUM run on `70b6919`
+
+The requested single full AUM/FinOps run executed **810 cases: 806 passed,
+4 failed in 360.31 s** (**363.59 s wall**), with **0 errors and 0 skips**.
+The command-local lock was held from **2026-09-29 18:22:17Z to 18:28:21Z**
+(**23:52:17-23:58:21 IST**). All collected test identities ran, including all
+**40 new native/diagnostic cases**, which passed.
+
+The failures were:
+
+| File | Test identity | Observed failure |
+|---|---|---|
+| `test_publication_generation.py` | `test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies[budgets]` | `WorkerCancelled` at the worker wait, then `NoMatches` during shutdown |
+| `test_publication_generation.py` | `test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies[requests]` | `WorkerCancelled` at the worker wait, then `NoMatches` during shutdown |
+| `test_publication_generation.py` | `test_principal_change_closes_prior_forms_and_clears_state_before_input` | `WorkerCancelled` at the worker wait, then `NoMatches` during shutdown |
+| `test_revision4_tui.py` | `test_approval_paging_and_queue_change_reset_cursor` | `WorkerCancelled` while awaiting workers |
+
+The worktree's `.venv-finops` interpreter imported this worktree's package.
+From `cli\finops`, the full selector was `-m pytest tests -q
+-p no:cacheprovider --tb=short`, with the identity-recording plugin and JUnit
+receipt. The exact command, source hash, all identities, complete output and
+lock receipt persist as `full-aum.*` in `.finops-evidence\p71-r10-resume`.
+No second full run, timeout relaxation or production change follows this run.
+U26 remains open: these failures were retained, not diagnosed by a passing
+focused control. The full suite is not green and this packet is not merge-ready.
+
 The lead owns integration, the next council and the final packet gate. This
 worktree remains on `p71-aum-speed`; no merge or push is performed here.
 Each mutation and the one final full AUM run acquire and release their own
