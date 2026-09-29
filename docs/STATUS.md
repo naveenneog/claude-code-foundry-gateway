@@ -9,6 +9,38 @@ Owner: @naveenneog. Builder worktree: `accel-p85`, branch
 `30cdfd0`). P85 is the active packet on this branch. Council, the packet gate
 and integration belong to the lead; no merge or push is authorized here.
 
+### Council round 1 corrections
+
+The lead reviewed `f33eb0c` on 2026-09-29. Architect PASS; Coder, QA, UX and
+Security BLOCK. Every reported defect was reproduced by the council. The
+earlier green evidence does not establish these missing guarantees.
+
+| Seat | Verdict | Required correction |
+|---|---|---|
+| Architect | PASS | Existing writer delegation, exact expected-error types and principal guards remain. |
+| Coder | BLOCK | The removal writer can reread a changed catalog after the form's comparison; inherited quit can exit while a write finishes. |
+| QA | BLOCK | Standard selectors need the three reproductions and mutations for plan equality and quit deferral. |
+| UX | BLOCK | Pending-write quit shows ordinary wording and enables confirmation instead of explaining the save. |
+| Security | BLOCK | Inherited `PIP_LOG` directs real bootstrap pip outside HOME/repo; other write-destination variables require coverage. |
+
+PLAN / CONTRACT: the reviewed removal plan reaches the existing
+`developer_change` engine. Equality is checked against the same resolved
+snapshot whose changes are written, before any group write or publication.
+No second writer is introduced. Application-owned mutation lifetime covers
+all asynchronous apply paths through receipt presentation, independent of
+modal lifetime. Every quit route defers confirmation during that lifetime;
+the dialog states "Saving; wait for the result" with an estimate and a
+disabled confirmation. Completion retains the result and does not silently
+execute an earlier quit request.
+
+Launcher tests include real pip with networking explicitly disabled, plus
+an outside-path case for every inherited Python/pip/uv/XDG destination.
+Controlled destinations remain canonical HOME children; unnecessary inherited
+destinations are removed. U58/U60 are reopened and U61 records the additional
+bootstrap gap before implementation. RED, GREEN, exact-identity mutations and
+commits follow here. Round 2 remains lead-owned; no merge, push or Azure
+operation is authorized.
+
 ### PLAN
 
 The People action bar gains Remove person from team beside Add person to team,
