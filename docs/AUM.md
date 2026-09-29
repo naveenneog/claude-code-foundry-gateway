@@ -72,6 +72,76 @@ az login --tenant <your-tenant-id>
 The [prerequisites](#prerequisites) describe backend-specific roles. `pipx`
 is not required.
 
+### Run AUM in Azure Cloud Shell
+
+The [Cloud Shell launcher](../scripts/aum-cloudshell.sh) runs from a checkout
+of this repository in a Cloud Shell **Bash** session. It uses the session's
+already authenticated `az`; it does not run `az login`, change the selected
+Azure account, create storage or deploy an Azure resource.
+
+```bash
+bash scripts/aum-cloudshell.sh --dry-run
+bash scripts/aum-cloudshell.sh -- configure --backend direct \
+  --resource-group "$GATEWAY_RESOURCE_GROUP" --apim-name "$GATEWAY_NAME" \
+  --save --no-prompt
+bash scripts/aum-cloudshell.sh
+```
+
+`GATEWAY_RESOURCE_GROUP` and `GATEWAY_NAME` identify an existing gateway.
+The configure command discovers its connection addresses and saves the local
+profile; existing-profile replacement retains AUM's normal confirmation and
+backup rules. An existing saved profile can be used by the last command
+without another configure step. Arguments after `--` are passed literally
+to AUM, including HTTP-backend options.
+
+The launcher creates or reuses `$HOME/.aum-cloudshell/venv`. Its pinned uv
+bootstrap, managed Python 3.12, downloads, temporary files, bytecode and caches
+also stay under `$HOME/.aum-cloudshell`; editable package metadata stays in
+the checkout. The documented Cloud Shell image lists Python 3.9, which is
+below AUM's requirement, so the launcher does not assume the system Python
+can run AUM. uv comes from a pinned binary wheel, not a downloaded shell
+installer. The first bootstrap has a 2-5 minute estimate; cached dependency
+setup has a 10-60 s estimate. Bootstrap requires access to PyPI and uv's Python
+download hosts as well as the application's Azure endpoints.
+
+The storage-specific Microsoft Learn article describes `$HOME` persisted as
+an image in the attached Azure file share; that mode retains the venv between
+sessions. Ephemeral sessions without attached storage lose the venv and the
+checkout when the session ends. The current FAQ's HOME wording conflicts with
+the storage-specific article and Features page; this discrepancy and the
+unperformed live persistence check are recorded in
+[ADR-0041](adr/0041-aum-session-safety-and-cloud-shell.md) and U61 in
+[UNKNOWNS](UNKNOWNS.md). No live Cloud Shell success is claimed.
+
+Direct uses public ARM (`management.azure.com`), Log Analytics
+(`api.loganalytics.io`) and Graph (`graph.microsoft.com`) endpoints, with the
+same existing caller permissions as a workstation. An AUM service or
+Turnstile endpoint behind private networking requires Cloud Shell deployed
+into a connected Azure VNet, including the required DNS/routing. The launcher
+does not provision that VNet deployment. Conditional Access location rules
+can still apply to the Azure egress addresses used by Cloud Shell; it is not
+an exemption from the tenant's policies.
+
+Cloud Shell sessions end after about **20 minutes without interactive
+activity**. A long-running command or terminal redraw is not a persistence
+guarantee. Browser and Cloud Shell shortcuts can intercept keys; the `:`
+command palette reaches AUM's available actions without depending on those
+browser shortcuts. Native field editing and modal buttons remain accessible
+with Tab and Enter.
+
+Sources, accessed 2026-09-29:
+[Cloud Shell features/tools and automatic authentication](https://learn.microsoft.com/azure/cloud-shell/features),
+[persisted HOME and clouddrive](https://learn.microsoft.com/azure/cloud-shell/persisting-shell-storage),
+[ephemeral sessions](https://learn.microsoft.com/azure/cloud-shell/get-started/ephemeral),
+[idle timeout](https://learn.microsoft.com/azure/cloud-shell/faq-troubleshooting),
+[Deploy Azure Cloud Shell in a virtual network](https://learn.microsoft.com/azure/cloud-shell/vnet/deployment),
+[private-network reachability](https://learn.microsoft.com/azure/cloud-shell/vnet/overview),
+[terminal/browser shortcuts](https://learn.microsoft.com/azure/cloud-shell/use-the-shell-window),
+[CAE and differing IP addresses](https://learn.microsoft.com/entra/identity/conditional-access/howto-continuous-access-evaluation-troubleshoot#ip-address-configuration).
+The AUM endpoint facts come from
+[Direct](../cli/finops/src/claude_finops/direct.py) and
+[Graph](../cli/finops/src/claude_finops/groups.py).
+
 ## Connect
 
 Each gateway has one budget/governance write authority. P80 does not change the authority

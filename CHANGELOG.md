@@ -29,6 +29,12 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P85 owner additions: Cloud Shell bootstrap.** A HOME-local launcher
+  creates/reuses a managed Python 3.12 environment and installs the checked-out
+  AUM package, retaining Cloud Shell's existing Azure CLI sign-in. Dry-run,
+  canonical destination checks and offline fake-command tests cover setup,
+  reuse and failures. The guide records networking, idle and persistence
+  limits with dated sources; live Cloud Shell verification remains owner-only.
 - **AUM terminal management (P85, builder candidate; lead council/gate pending).** People exposes
   Remove person from team beside Add person to team, with `h` and a matching
   palette entry. Its preview names the resolved person, all tier/catalog group

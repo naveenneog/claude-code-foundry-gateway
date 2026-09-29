@@ -47,6 +47,31 @@ P71 branch stay unchanged. Every new guard receives a negative test; mutation
 probes retain exact test identities and require failures rather than
 collection errors or skips. Long runs retain the one-command owned-lock rule.
 
+**Item 7 RED:** the full initial burst matrix ran under an owned lock after
+contention, with **39 failures and 64 passes in 170.35 s**. All 1/2/5/10-key
+main/modal and slow-refresh controls stayed alive. Escape-triggered refresh
+allowed raw transport/I/O/HTTP-status exceptions to become fatal Textual
+worker failures; cancelling a pending change preview exposed the same refresh
+path. Wrapped 401/403 and CAE errors stayed alive but lacked the required
+plain status explanation. One `q` still exited immediately. This reproduces
+an offline exit mechanism, not a claim to possess the owner's original crash log.
+
+**Item 8 RED/GREEN:** 20 initial cases failed because the launcher did not
+exist (**0.88 s**, no collection failures). The implemented launcher and
+expanded negative cases passed **23 tests in 30.80 s**, with fake commands
+only. Shellcheck is unavailable here, so the existing Git Bash ran `bash -n`.
+Tests prove dry-run writes nothing, venv reuse, literal argument forwarding,
+stage/exit failures, old/incomplete-runtime refusal, escaped-source refusal,
+canonical HOME-bound destinations and inherited-destination isolation.
+
+Research found Cloud Shell's documented Python 3.9 below AUM's 3.12 floor.
+The HOME-local uv 0.12.20 wheel supports Python >=3.8 and provisions the
+managed 3.12 venv. Microsoft Learn also conflicts on HOME persistence:
+the storage-specific article and Features page describe an attached disk
+image, whereas the FAQ says HOME is deleted. [ADR-0041](adr/0041-aum-session-safety-and-cloud-shell.md)
+records the source conflict and the conservative live-verification boundary;
+no storage or networking resources are created by the launcher.
+
 ### Initial evidence and unknowns
 
 The inherited no-run audit passed: 20 checks passed, 2 warned, 0 failed,
