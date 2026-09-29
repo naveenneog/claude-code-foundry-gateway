@@ -150,6 +150,11 @@ Basic v2 resolver endpoint is public because Basic v2 has no outbound VNet
 integration; APIM outbound IPs are not treated as the primary control.
 Authentication is.
 
+A developer count above the named-value ceiling is noted at the count, and the
+store question then recommends the Cosmos projection. Choosing named values for
+more developers than they hold is stated after the store question, with the
+Cosmos store as the remedy, and asks "Continue with named values".
+
 ### Tooling
 
 | Tool | Version | Why |
@@ -180,8 +185,10 @@ not publish in a region reads as not published. These are list prices: the
 agreement's price sheet states what the organization pays, and reading it
 takes a billing role rather than a subscription role
 ([View and download your organization's Azure pricing](https://learn.microsoft.com/azure/cost-management-billing/manage/ea-pricing),
-**U31**). `install-claude-gateway.sh` asks for the region without prices
-([ROADMAP](ROADMAP.md)).
+**U31**). `install-claude-gateway.sh` lists the same regions and prices with the
+same Retail Prices API query, and its tier prompt and summary are priced the
+same way (P75). A region the subscription can use is accepted by name in any
+case or spacing, or by its number in the list.
 
 ---
 
@@ -415,7 +422,7 @@ where it costs money, with the figure at your stated developer count:
 | Unassigned developers | `allow` / `deny` | `deny` on day one refuses people who have done nothing wrong. Start on `allow` and switch when `Get-ClaudeBusinessUnit.ps1` reports zero unassigned. |
 | Developer sign-in | `interactive` / `device` / `helper` | How developers authenticate. Written into `claude-gateway.json` and applied by the onboarding script on each machine. |
 | Claude Desktop sign-in | `helper-script` / `external-idp-browser` / `external-idp-broker` | How Desktop obtains the bearer token it sends to the gateway. Helper-script is unchanged and needs no app registration. External IdP modes need a Desktop public-client Entra app, consent review and a gateway audience recorded in `external-idp-extra-audience`. |
-| Developer address | `azure` / `custom` | The only one that is expensive to change afterwards — the instance name is part of the address, so replacing the gateway later means reconfiguring every machine. |
+| Developer address | `azure` / `custom` | Azure keeps the default hostname. Custom asks for the company hostname, supplied certificate and DNS hosting, shows their costs, then configures and proves the address after deployment. A later address change requires redistributed workstation settings ([Company address](#company-address)). |
 
 > [!IMPORTANT]
 > **Developer sign-in is decided here, once, for everyone.** A fleet where half
@@ -461,6 +468,135 @@ role assignment, applies the policy, creates the Entra groups, syncs
 entitlement, verifies the controls, and writes `onboarding/claude-gateway.json`
 — the file your developers' setup script reads.
 
+### Company address
+
+`custom` configures a gateway hostname rather than printing manual steps at the
+end. The installer asks for the hostname, certificate source and DNS hosting
+with its other choices. The address review appears before the final summary;
+declining or using `-WhatIf` makes no address change.
+The prompt calls the address "expensive to change afterwards" because deployed
+workstations need redistributed settings when the URL changes.
+
+The installer checks an existing `onboarding/claude-gateway.json` against the
+selected gateway as soon as the gateway is chosen (after the name prefix), before
+the remaining questions and before creating resources. A different gateway,
+resource group or recorded subscription is stated with both gateways and the
+record path. In a console the installer offers to keep that record as
+`onboarding/claude-gateway.<resource group>-<instance>.json` and start a new one
+for the selected gateway (default yes); `-ArchiveSavedRecord` does the same
+unattended. Otherwise the run stops and leaves the record unchanged; the selected
+gateway then needs its own checkout, or the record can be moved first. Under
+`-WhatIf` the record is not moved. This check applies to both Azure and
+company-address choices and includes legacy subscriptions recorded under the
+Foundation decision.
+The guided flow's first Setup journal is recognized separately: it has no
+gateway identity yet. After approval, it is bound to the selected gateway for
+recovery, without publishing a URL until HTTPS proof succeeds.
+
+All three v2 tiers support an uploaded PFX or a Key Vault certificate. None
+supports a free API Management managed certificate. Basic v2 and Standard v2
+allow one custom gateway hostname; Premium v2 allows multiple
+([custom domains](https://learn.microsoft.com/azure/api-management/configure-custom-domain),
+[v2 tiers](https://learn.microsoft.com/azure/api-management/v2-service-tiers-overview),
+[U30](UNKNOWNS.md#u30--the-company-address--closed-2026-09-28)).
+
+| Choice | What the installer configures |
+|---|---|
+| `KeyVault` | An existing certificate or its backing secret URL, referenced through the gateway's system-assigned managed identity. The identity receives Key Vault Secrets User on an RBAC vault, or additive secret get/list permissions on an access-policy vault. The vault's firewall, network access and permission model stay unchanged. |
+| `Pfx` | A supplied PFX containing the hostname certificate, RSA private key of at least 2,048 bits and certificate chain. The password is a `SecureString`, never a recorded answer. Certificate issuer charges remain separate. |
+| `AzureDns` | A CNAME in the selected existing public Azure DNS zone in the same subscription. A new record has TTL 300 seconds; an existing record retains its TTL and metadata. Conditional writes reject intervening edits. No zone or domain is purchased. |
+| `External` | The complete CNAME for the DNS provider, followed by a bounded resolution wait. The record points to `<apim>.azure-api.net`. No `apimuid` TXT is required for these supplied-certificate choices. |
+
+The DNS CNAME must resolve before the hostname can be bound. Azure also checks
+public ownership: an undelegated zone that answers only at its authoritative
+servers is insufficient, including on Basic v2 as measured below. A Key Vault
+certificate uses its `application/x-pkcs12` backing secret; a versionless URL
+permits rotation, whereas a versioned URL pins that version. Automatic Key Vault
+certificate pickup can take 1-2 days
+([certificate options and synchronization](https://learn.microsoft.com/azure/api-management/configure-custom-domain)).
+
+The review distinguishes rates from monthly totals. Retail USD prices retrieved
+2026-09-28 locally were USD 0.50 per public DNS zone-month for the first 25 zones,
+USD 0.40 per million public DNS queries at the first tier, USD 0.03 per 10,000
+Key Vault operations, and USD 3 per integrated certificate-renewal request.
+An existing DNS zone has no new zone charge; its query usage is still billed.
+APIM has no separate custom-domain meter; its existing tier charge continues.
+The certificate issuer, domain registrar and external DNS provider are priced
+separately, not assumed free. Unavailable prices remain unknown
+([Retail Prices API](https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices),
+[U30 price evidence](UNKNOWNS.md#u30--the-company-address--closed-2026-09-28)).
+
+The equivalent unattended installer inputs are:
+
+```powershell
+.\Install-ClaudeGateway.ps1 -Yes `
+  -AddressMode custom -AddressHostname claude.contoso.com `
+  -AddressCertificateSource KeyVault `
+  -AddressKeyVaultCertificateId https://kv-contoso.vault.azure.net/certificates/company `
+  -AddressDnsZoneResourceId '/subscriptions/<sub>/resourceGroups/<dns-rg>/providers/Microsoft.Network/dnsZones/contoso.com'
+```
+
+The other installer inputs still select the subscription, Foundry account and
+gateway. For PFX, `-AddressPfxPath` selects the file and
+`-AddressCertificatePassword` takes a `SecureString`. A different existing
+custom hostname on Basic v2 or Standard v2 requires an explicit
+`-AddressReplaceHostname`; the review names the old hostname whose callers
+will need new settings.
+
+Unattended Foundation resolves inherited company-address inputs before pricing
+and passes that exact selection, including `-AddressDnsMode`. An explicit Azure
+selection cannot inherit a company address from another local record. Returning
+to Azure removes both address metadata copies and stale Foundation address
+inputs, and updates generated profiles and onboarding mail to the Azure URL.
+PFX validation and hashing use one byte buffer; apply uploads those same bytes
+after waiting for DNS, even if the original path has been replaced.
+
+After deployment, DNS is configured and verified, the certificate and Proxy
+hostname are applied with an ARM PATCH, and a request uses the company hostname
+for SNI and Host. Publication requires a matching, trusted certificate and the
+gateway's unauthenticated HTTP 401. This proves routing and TLS, not model
+inference or entitlement. Only then does `claude-gateway.json` receive the new
+`gatewayUrl`. Existing generated profiles, onboarding mail and copied records
+in that package are updated without replacing unrelated settings. Deployed
+workstations still need the redistributed package.
+
+DNS waits announce an estimate of 1-10 minutes and default to a 10-minute
+timeout. APIM hostname updates announce 5-15 minutes, can take longer, and have
+a 45-minute timeout. Progress and elapsed time are printed; a failed proof
+leaves the previous developer URL recorded. The default Azure gateway endpoint
+remains available
+([update duration and default endpoint](https://learn.microsoft.com/azure/api-management/configure-custom-domain)).
+
+Checks run in deadline-bound worker processes, including native Azure reads.
+Expiry stops their process trees and removes their private temporary body
+directories. Reported elapsed time includes cancellation and cleanup; a late
+result cannot count as successful.
+
+If a replacement removed the old hostname before proof failed, a separate
+`pendingAddress` receipt records the unverified operation. `-Change address`
+can review recovery only when the receipt, gateway, old recorded URL and exact
+live hostname collection match. It requires a new fingerprint and publishes
+nothing until proof succeeds; unrelated drift still stops the flow.
+
+**Isolated proof, 2026-09-28.** A Basic v2 gateway deployed from `infra/main.bicep`
+in 148.0 seconds. The reserved `.test` zone's CNAME answered directly at Azure
+DNS in 0.576 seconds. Both uploaded-PFX binding attempts returned
+`CustomHostnameOwnershipCheckFailed`, including the attempt after authoritative
+DNS became ready. The company SNI request failed TLS; it is not a successful
+company-address proof. The isolated Azure endpoint returned its governed 401.
+No public domain was available or purchased. All proof resources were deleted
+and the soft-deleted APIM instance was purged
+([STATUS](STATUS.md#p69-the-company-address-in-the-flow-2026-09-28)).
+The lead accepted the positive company-hostname proof as a scope deferral to
+P74, not a completed acceptance criterion
+([ADR-0033](adr/0033-company-address.md#accepted-scope-deferral-2026-09-28)).
+
+![Live Basic v2 company-address review showing the supplied PFX, exact CNAME, Azure retail DNS rates and no public certificate issuance.](guide/40-company-address-review.png)
+
+![Live authoritative Azure DNS CNAME result, the explicit public-ownership blocker, and failed company SNI request beside the successful default gateway HTTP 401.](guide/41-company-address-dns-and-boundary.png)
+
+![Live cleanup verification: the proof resource group is absent, no soft-deleted proof gateway remains, and UTC elapsed-time pricing is below the five-dollar ceiling.](guide/42-company-address-cleanup.png)
+
 > **That file does not exist until you deploy.** It is not in the repository,
 > because it describes your specific gateway. The `onboarding/` folder is
 > created by the wizard, and
@@ -499,6 +635,13 @@ recorded the helper script.
 ./install-claude-gateway.sh --what-if
 ./install-claude-gateway.sh --foundry-account ai-contoso --yes
 ```
+
+`install-claude-gateway.sh` ends the same way: run on its own in a terminal, it
+offers the FinOps tool through PowerShell 7 (`pwsh`), `--choose-finops` opens it
+without asking and `--skip-finops-offer` leaves it out. Under `--yes`, or
+without PowerShell 7, the command is a numbered next step instead. Its record,
+`onboarding/claude-gateway.json`, holds the tier, the region and the Foundry
+account and resource group, as the PowerShell installer's record does.
 
 ### Option B — non-interactive script
 

@@ -82,7 +82,7 @@ function Get-ClaudeModelDiscovery {
     if (-not $gateway.id -or -not $gateway.gatewayUrl) { throw 'Gateway discovery returned no resource id or gateway URL.' }
     $raw = Invoke-ClaudeModelAz @scope -Arguments @('cognitiveservices','account','deployment','list','-n',$Target.foundryAccount,'-g',$Target.foundryResourceGroup) -What 'Reading Foundry Claude deployments' -Array
     Assert-ClaudeDeploymentIdentities -Deployments @($raw)
-    $deployments = @(Select-ClaudeDeployment (@($raw) | ConvertTo-FlatDeployment) | Sort-Object name)
+    $deployments = @(Sort-ClaudeFlowOrdinal -InputObject @(Select-ClaudeDeployment (@($raw) | ConvertTo-FlatDeployment)) -Key { [string]$_.name })
     $seen = @{}
     foreach ($d in $deployments) {
         Assert-ClaudeModelName $d.name 'Deployment name'
@@ -115,7 +115,7 @@ function ConvertFrom-ClaudeModelList {
     $items = @($Value.Trim(',') -split ',' | Where-Object { $_ })
     foreach ($item in $items) { Assert-ClaudeModelName $item 'Model-list deployment name' }
     if ($Value -ne ',,' -and (',' + ($items -join ',') + ',') -ne $Value) { throw 'Model list has empty entries between comma sentinels.' }
-    return @($items | Sort-Object -Unique)
+    return @(Sort-ClaudeFlowOrdinal -InputObject $items -Unique)
 }
 
 function Get-ClaudeModelRecordStamp {
@@ -160,9 +160,9 @@ function Get-ClaudeModelQuestions {
     $questions = @()
     $prior = Get-ClaudeModelAssignments $Record
     $retired = @($prior.Keys | Where-Object { $prior[$_] -eq 'drop' })
-    $names = @(@($Discovery.Deployments.name) + @($Record.models) +
+    $names = @(Sort-ClaudeFlowOrdinal -Unique -InputObject @(@($Discovery.Deployments.name) + @($Record.models) +
         @(ConvertFrom-ClaudeModelList $Discovery.NamedValues['models-standard']) +
-        @(ConvertFrom-ClaudeModelList $Discovery.NamedValues['models-premium']) + $retired | Where-Object { $_ } | Sort-Object -Unique)
+        @(ConvertFrom-ClaudeModelList $Discovery.NamedValues['models-premium']) + $retired | Where-Object { $_ }))
     foreach ($name in $names) {
         $live = @($Discovery.Deployments | Where-Object name -eq $name)
         $allowed = @('standard','premium' | Where-Object { $Discovery.NamedValues["models-$_"] -eq ',,' -or $name -in @(ConvertFrom-ClaudeModelList $Discovery.NamedValues["models-$_"]) })
@@ -205,7 +205,7 @@ function New-ClaudeModelPlan {
     foreach ($tier in 'standard','premium') {
         $open[$tier] = $Discovery.NamedValues["models-$tier"] -eq ',,'
         $sets[$tier] = @(if ($open[$tier]) { $Discovery.Deployments.name } else { ConvertFrom-ClaudeModelList $Discovery.NamedValues["models-$tier"] })
-        $beforeSets[$tier] = @($sets[$tier] | Sort-Object -Unique)
+        $beforeSets[$tier] = @(Sort-ClaudeFlowOrdinal -InputObject $sets[$tier] -Unique)
     }
     $actions = @(); $choices = @{}
     foreach ($name in $knownNames) {
@@ -227,7 +227,7 @@ function New-ClaudeModelPlan {
     }
     $afterNamed = @{}
     foreach ($tier in 'standard','premium') {
-        $sets[$tier] = @($sets[$tier] | Sort-Object -Unique)
+        $sets[$tier] = @(Sort-ClaudeFlowOrdinal -InputObject $sets[$tier] -Unique)
         if (-not $sets[$tier].Count) { throw "The last entry of $tier would be removed: an empty list means allow all, not deny all. The change is refused." }
         $unchangedOpen = $open[$tier] -and ($sets[$tier] -join ',') -eq ($beforeSets[$tier] -join ',')
         $afterNamed["models-$tier"] = if ($unchangedOpen) { ',,' } else { ',' + ($sets[$tier] -join ',') + ',' }
@@ -349,6 +349,8 @@ function Invoke-ClaudeModelChange {
     $d = $Plan.Data
     if (-not $d.SnapshotTaken -or -not $d.SnapshotPath -or -not (Test-Path -LiteralPath $d.SnapshotPath)) { throw 'A prepared named-value snapshot is required before model writes.' }
     Assert-ClaudeModelPlanFresh $Plan
+    $working = Copy-ClaudeFlowValue $Record
+    $recordChanges = @{}
     try {
         foreach ($id in 'models-standard','models-premium') {
             if ($d.AfterNamedValues[$id] -ceq $d.Discovery.NamedValues[$id]) { continue }
@@ -364,19 +366,24 @@ function Invoke-ClaudeModelChange {
         }
         if ($d.PriceChanged) { Write-ClaudeDecisionRecord -Record $d.PriceBookAfter -Path $d.PriceBookPath }
         foreach ($key in 'mode','models','deployments','tiers','subscriptionId','tenantId','resourceGroup','apimName','foundryAccount','foundryResourceGroup','gatewayUrl') {
-            Set-ClaudeRecordProperty $Record $key $d.RecordAfter.$key
+            $recordChanges[$key] = Copy-ClaudeFlowValue $d.RecordAfter.$key
+            Set-ClaudeRecordProperty $working $key $recordChanges[$key]
         }
-        Write-ClaudeModelRecord -Record $Record -Path $d.RecordPath
         $profiles = Invoke-ClaudeModelWait -What 'Generating both tier profiles and workstation records' -AboutSeconds 3 -Run {
-            Write-ClaudeModelProfiles -Record $Record -RecordPath $d.RecordPath
+            Write-ClaudeModelProfiles -Record $working -RecordPath $d.RecordPath
         }
+        $selections = [ordered]@{}
+        foreach ($name in @(Sort-ClaudeFlowOrdinal -InputObject @($d.Assignments.Keys))) { $selections[$name.Replace('.','~')] = $d.Assignments[$name] }
+        $decision = [pscustomobject]@{ tiers = [pscustomobject]$selections; priceBookPath = $d.PriceBookPath; snapshot = $d.SnapshotPath }
+        Set-ClaudeDecision -Record $working -Key deviceProfiles -Value $profiles
+        Set-ClaudeDecision -Record $working -Key models -Value $decision
+        Write-ClaudeModelRecord -Record $working -Path $d.RecordPath
+        foreach ($key in $recordChanges.Keys) { Set-ClaudeRecordProperty $Record $key $recordChanges[$key] }
         Set-ClaudeDecision -Record $Record -Key deviceProfiles -Value $profiles
-        Write-ClaudeModelRecord -Record $Record -Path $d.RecordPath
+        Set-ClaudeDecision -Record $Record -Key models -Value $decision
         Write-Host "Developer handover: $($d.ProfileRoot)\README.md"
         Write-Host 'Rerun workstation setup with its tier record; redistribute the MDM payloads through the fleet tool.'
-        $selections = [ordered]@{}
-        foreach ($name in ($d.Assignments.Keys | Sort-Object)) { $selections[$name.Replace('.','~')] = $d.Assignments[$name] }
-        return @{ models = [pscustomobject]@{ tiers = [pscustomobject]$selections; priceBookPath = $d.PriceBookPath; snapshot = $d.SnapshotPath } }
+        return @{ models = $decision; DecisionChanges = @{ deviceProfiles = $profiles }; RecordChanges = $recordChanges }
     }
     catch { throw "Model change failed; snapshot: $($d.SnapshotPath). Partial writes may exist; replan before retrying. $($_.Exception.Message)" }
 }

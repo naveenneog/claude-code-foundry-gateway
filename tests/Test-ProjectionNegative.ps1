@@ -63,14 +63,15 @@ $mutations = @(
     @{ Name='load never confirms cardinality'; File='guide\loadtest-projection.mjs'; From='if (after[0] !== total)'; To='if (false)'; Suite=$rules }
     @{ Name='load uses a different document id'; File='guide\loadtest-projection.mjs'; From='id: oid, oid, tenantId:'; To="id: 'prefix-' + oid, oid, tenantId:"; Suite=$rules }
 )
+$suiteLog = Join-Path $sandbox 'suite-output.log'
 function Run-Suite($suite) {
     Push-Location $sandbox
     try {
         if ($suite -eq 'node') {
-            node --test --test-timeout=1500 --test-reporter=tap resolver/test/*.test.mjs sync/test/*.test.mjs *> $null
+            node --test --test-timeout=1500 --test-reporter=tap resolver/test/*.test.mjs sync/test/*.test.mjs *> $suiteLog
         } elseif ($suite -eq 'paging') {
-            pwsh -NoProfile -File tests\Test-ProjectionPaging.ps1 *> $null
-        } else { pwsh -NoProfile -File tests\Test-ProjectionRules.ps1 *> $null }
+            pwsh -NoProfile -File tests\Test-ProjectionPaging.ps1 *> $suiteLog
+        } else { pwsh -NoProfile -File tests\Test-ProjectionRules.ps1 *> $suiteLog }
         return $LASTEXITCODE
     } finally { Pop-Location }
 }
@@ -86,7 +87,10 @@ try {
             }
     }
     foreach ($suite in 'rules', 'paging', 'node') {
-        if ((Run-Suite $suite) -ne 0) { throw "Unmutated $suite failed; no mutation result is valid." }
+        if ((Run-Suite $suite) -ne 0) {
+            Get-Content -LiteralPath $suiteLog | Write-Host
+            throw "Unmutated $suite failed; no mutation result is valid."
+        }
     }
     foreach ($m in $mutations) {
         $path = Join-Path $sandbox $m.File

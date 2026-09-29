@@ -89,10 +89,50 @@ $reuseParams.EntitlementStore = 'named-value'; $reuseParams.AuthMode = 'device';
 $reuseCase = [pscustomobject]@{ id = 'reuse-recorded-gateway'; factors = $null; params = $reuseParams }
 $all = @($cases) + @($refusals) + @($reuseCase)
 
+# A checkout keeps one gateway's saved record (onboarding\claude-gateway.json, ignored by Git), and the
+# installer compares it with the chosen gateway before its first question (P79). The cases run a copy of
+# the installer's inputs without saved records, so the machine's own record cannot change their result.
+$installerInputs = @('analytics', 'cli', 'config', 'guide', 'infra', 'resolver', 'scripts', 'service', 'sync')
+function Copy-InstallerCheckout([string]$From, [string]$To) {
+    New-Item -ItemType Directory -Path (Join-Path $To 'onboarding') -Force | Out-Null
+    foreach ($item in Get-ChildItem -LiteralPath $From -Force) {
+        if (-not $item.PSIsContainer) { Copy-Item -LiteralPath $item.FullName -Destination $To }
+        elseif ($item.Name -in $installerInputs) { Copy-Item -LiteralPath $item.FullName -Destination $To -Recurse }
+        elseif ($item.Name -eq 'onboarding') {
+            foreach ($file in Get-ChildItem -LiteralPath $item.FullName -Recurse -File -Force) {
+                if ($file.Name -like 'claude-gateway*.json') { continue }
+                $target = Join-Path (Join-Path $To 'onboarding') $file.FullName.Substring($item.FullName.Length + 1)
+                New-Item -ItemType Directory -Path (Split-Path $target -Parent) -Force | Out-Null
+                Copy-Item -LiteralPath $file.FullName -Destination $target
+            }
+        }
+    }
+}
+
 $scratch = Join-Path ([IO.Path]::GetTempPath()) ('installer-permutations-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $scratch -Force | Out-Null
 try {
-    $installer = Join-Path $root 'Install-ClaudeGateway.ps1'
+    # The checkout's own record is read before anything is copied, so a copy that moves or deletes it is caught.
+    $ownRecord = Join-Path $root 'onboarding\claude-gateway.json'
+    $ownRecordHash = if (Test-Path -LiteralPath $ownRecord) { (Get-FileHash -LiteralPath $ownRecord).Hash }
+    $probeFrom = Join-Path $scratch 'probe-from'
+    $probeTo = Join-Path $scratch 'probe-to'
+    foreach ($dir in 'onboarding\profiles\standard', 'onboarding\support', 'scripts', 'docs') { New-Item -ItemType Directory -Path (Join-Path $probeFrom $dir) -Force | Out-Null }
+    foreach ($file in 'Install-ClaudeGateway.ps1', 'scripts\A.ps1', 'onboarding\README.md', 'onboarding\profiles\standard\managed-settings.json', 'onboarding\claude-gateway.json', 'onboarding\claude-gateway.rg-a-apim-a.json', 'onboarding\support\claude-gateway.json', 'docs\guide.png') {
+        [IO.File]::WriteAllText((Join-Path $probeFrom $file), $file)
+    }
+    Copy-InstallerCheckout $probeFrom $probeTo
+    $copied = @(Get-ChildItem -LiteralPath $probeTo -Recurse -File | ForEach-Object { $_.FullName.Substring($probeTo.Length + 1) } | Sort-Object)
+    $wanted = @('Install-ClaudeGateway.ps1', 'onboarding\profiles\standard\managed-settings.json', 'onboarding\README.md', 'scripts\A.ps1') | Sort-Object
+    Assert 'the installer inputs are copied without any saved gateway record' (($copied -join '|') -eq ($wanted -join '|')) "copied: $($copied -join ', ')"
+    $sourceRecords = @('onboarding\claude-gateway.json', 'onboarding\claude-gateway.rg-a-apim-a.json', 'onboarding\support\claude-gateway.json')
+    $keptRecords = @($sourceRecords | Where-Object { (Test-Path -LiteralPath (Join-Path $probeFrom $_)) -and [IO.File]::ReadAllText((Join-Path $probeFrom $_)) -ceq $_ })
+    Assert 'the copy leaves the saved records it skips in place, unchanged' ($keptRecords.Count -eq $sourceRecords.Count) "unchanged: $($keptRecords -join ', ')"
+
+    $checkout = Join-Path $scratch 'checkout'
+    Copy-InstallerCheckout $root $checkout
+    $installer = Join-Path $checkout 'Install-ClaudeGateway.ps1'
+    Assert 'the cases run a copy of the installer, not the checkout itself' ($installer.StartsWith($scratch) -and -not @(Get-ChildItem -LiteralPath (Join-Path $checkout 'onboarding') -Recurse -File -Filter 'claude-gateway*.json').Count)
     $driver = Join-Path $PSScriptRoot 'InstallerPermutationDriver.ps1'
     $shells = [ordered]@{ '7' = (Get-Process -Id $PID).Path }
     $ps51 = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
@@ -201,6 +241,8 @@ try {
         })
         Assert 'PowerShell 7 and Windows PowerShell 5.1 give the same summary, audience and refusal for every case' ($differ.Count -eq 0) ($differ -join ', ')
     }
+    $ownRecordKept = if ($ownRecordHash) { (Test-Path -LiteralPath $ownRecord) -and (Get-FileHash -LiteralPath $ownRecord).Hash -eq $ownRecordHash } else { -not (Test-Path -LiteralPath $ownRecord) }
+    Assert "the checkout's own saved record is neither changed nor created" $ownRecordKept $ownRecord
 }
 finally {
     Remove-Item -LiteralPath $scratch -Recurse -Force -ErrorAction SilentlyContinue

@@ -1,8 +1,10 @@
 # Status
 
+**Active packets (2026-09-29, run in parallel worktrees):** P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)), P80 AUM shows every action it has, and P81 USD budgets are the primary enforcer, each on its own branch. The owner approved merging P71 and P80 on 2026-09-29; each merges after its council passes and its packet gate passes on the merged tree, P80 after P71. P81 merges only with the owner's explicit approval. Each has its own section on its branch; the section lands here when the packet merges. P78 the test suite runs in parallel on GitHub-hosted runners is merged with the owner's approval (`2737232`, [below](#p78-the-test-suite-runs-in-parallel-on-github-hosted-runners-2026-09-28)); ADR-0039's proposed charter change is not enacted. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)), and its follow-up, the installer permutation check reads only its own record (`05dea1b`, [below](#p79-follow-up-the-installer-permutation-check-reads-only-its-own-record-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+
 ## P80 AUM shows every action it has, connects in one step, and its guide starts with installation, 2026-09-28
 
-Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM guide set. Worktree: `accel-p80`, branch `p80-aum-usability`, based on P71 commit `bcf8554`. Later P71 work remains separate. This packet stays local until the owner reviews it after the 2026-09-29 deployment; no merge, push or history rewrite is authorized.
+Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM guide set. Worktree: `accel-p80`, branch `p80-aum-usability`, based on P71 commit `bcf8554`. The owner approved merging P80 after P71 at 07:41 IST on 2026-09-29. The lead authorized merging pinned `origin/main` (`30cdfd0`) into this branch without rebasing; later P71 work remains separate. This builder is not authorized to push or merge to main.
 
 **Council round 3, over `3ace1f7..80e7d4e`: all five seats PASS.** The council re-ran its
 round-2 probe with a real Windows read-denying handle held through a successful `whoami`, the
@@ -19,6 +21,43 @@ passed, 2 warned (open unknowns), 0 failed. The worktree's `.venv-finops` import
 `aum_service` from this worktree through `PYTHONPATH`, so the four AUM checks tested this
 branch's code: the AUM suite passed in 345.5 s. The branch is based on P71 commit `bcf8554`; the
 gate for the merge runs again after P71's final state and `main` are merged in.
+
+### Main integration, 2026-09-29
+
+The owner approved P80 at 07:41 IST, after P71. At the lead's request,
+`origin/main` was pinned to `30cdfd082a52c010ffedab240a466415fe2baf40` and merged
+without rebasing into `p80-aum-usability`, whose first parent was `35d1387`.
+This is a branch integration only; the lead owns the later merge to main and
+no push is authorized for this builder.
+
+Both ledger sides are retained. The exact main-side Active packets line is
+directly under the title, with P80 as the first section. P78/P79 and their
+follow-up records remain alongside the P80/P71 records. The architecture
+manifest was regenerated with `node guide/render-architecture.mjs`, not
+hand-merged: 17 specifications and 19 PNGs passed source/image verification.
+The incoming workflow, Test-All sharding, timing table and runner-integrity
+changes are preserved; no CLI production or test source changed in this merge.
+
+| Requested check | Result | Seconds |
+|---|---|---:|
+| `tests\Test-DocReferences.ps1` | 42 guides; all 10 built-in negative cases caught | 8.438 wall |
+| `tests\Test-Architecture.ps1` | 36 assertions, including isolated mutations; 19 Node tests | 32.016 wall |
+| `scripts\Repair-ScriptEncoding.ps1 -Check` | 298 PowerShell scripts checked; no repair needed | 7.969 wall |
+| Full AUM suite, once | **635 passed**, no failures or skips | **330.20 pytest; 332.141 wall** |
+
+Each command acquired and released its own `.gate-lock` in the same synchronous
+invocation. The full suite used this worktree's `.venv-finops\Scripts\python.exe`,
+and its `claude_finops.__file__` was printed and asserted under
+`accel-p80\cli\finops\src`. The service venv also resolves this worktree's
+`aum_service` when using `PYTHONPATH=service\aum`, as its existing test wrapper
+does; it does not expose that package on an otherwise empty `PYTHONPATH`.
+No shared/main interpreter or editable source was used for the requested run.
+
+Receipts and the full AUM JUnit file are in this session's
+`files\p80-main-integration`. P71's moving closed-presentation contract is a
+separate read-only integration assessment; no P71 contract or presentation
+implementation was changed here. The lead's final merged-tree gate still
+follows P71 integration.
 
 **Council round 2:** Architect and Security PASS; Coder, QA and UX BLOCK at
 `3ace1f7` on UI adoption before the final saved-revision check. Transaction-level
@@ -545,7 +584,651 @@ No push, merge, force-push, history rewrite, authority-rule change or Turnstile
 USD writer is included. Token forms keep their existing defaults. P80 has no
 blocking question for the owner; the later owner review is still required.
 
-**Active packets (2026-09-28, run in parallel worktrees):** P69 the company address in the flow, P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)). Each has its own section on its branch; the section lands here when the packet merges. P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+## P78 the test suite runs in parallel on GitHub-hosted runners, 2026-09-28
+
+**Merged as `2737232` on 2026-09-29 with the owner's approval. Council round 1 passed and the local packet gate passed; ADR-0039's proposed charter change is not enacted.**
+PLAN and CONTRACT are committed in `55e1b90`.
+Work is isolated to `p78-parallel-tests`, from `main` `0345e85`.
+The lead runs the council and gate; the owner decides the merge.
+[ADR-0039](adr/0039-test-suite-hosted-runners.md) is proposed, not a charter amendment. The owner
+approved the merge and the replacement ROADMAP P78 acceptance on 2026-09-29; the charter change
+(the gate's test command and budget) needs a separate decision. The records below describe the
+state before that approval.
+
+**Local packet gate, 2026-09-29:** `node .ironclad/gate.mjs --stage packet` passed at `fab1298`
+(main `17e488c` merged) between 01:18 and 01:46 IST: Test-All in 1,676 s, 22 passed, 2 warned
+(open unknowns), 0 failed. It ran under the shared workstation lock, with the lead raising only
+the gate's own processes to AboveNormal priority.
+
+**Council round 1, reported 2026-09-29:** Architect, Coder, QA, UX and Security all PASS at
+`6880d29`. The council supports owner approval of ADR-0039 as written; approval has not been
+given and no proposed command, timeout or ROADMAP change is enacted.
+
+**P79 follow-up integration, 2026-09-29:** main `17e488c` adds the isolated installer-input
+copy and saved-record assertions (`tests/Test-InstallerPermutations.ps1:92`). It is merged
+into P78 without rebasing. The default registration remains 95 checks across 12 shards;
+the complete ownership plan and committed timing-table bytes equal those at `6880d29`.
+The timing table retains its recorded hosted measurements rather than guessed replacements.
+The merged tree's local sharding suite passed 79 assertions in 3.7 s and the remote contract
+suite passed 37 in 2.5 s. Encoding passed for all 295 PowerShell scripts. No long local
+test command or gate ran, and this integration did not take the shared lock.
+
+**Follow-up hosted receipt:** [run 36472384417, attempt 1](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36472384417),
+accessed 2026-09-29, passed on the clean pushed merge HEAD
+`202ccde6787986eb53a06a2d055c5d72a8e295f1`, tree
+`f5b6403b74fbc25ed9db9547cf52f1478850f675`. `tests/Invoke-RemoteTestAll.ps1` downloaded
+the run's artifacts and independently revalidated exact commit/tree, ownership and ordered
+coverage: **95 PASS, 0 FAIL, 0 SKIP**, across all 12 shards and the successful merge job.
+Queue-to-merge wall time was **635 s (10 min 35 s)**, from 2026-09-28T19:27:37Z to
+19:38:12Z. The updated installer-permutation check passed in 38.8 s; no registration or
+ownership adjustment was needed, and the existing recorded timing table remains unchanged.
+The subsequent receipt-recording commit changes only this STATUS section. The local packet
+gate remains with the lead; ADR-0039 approval is pending and nothing in its proposal is enacted.
+
+Acceptance:
+
+- [x] Opt-in Test-All shards use deterministic longest-processing-time assignment from a
+      committed timing table, preserve process isolation, exclusive lanes and deadlines, and
+      record their complete ownership, results, commit and tree. The default invocation is unchanged.
+- [x] The receipt merger rejects missing, duplicate, failed, foreign-SHA/tree and unregistered
+      results; only a registered prerequisite reason permits SKIP. CI plus any explicitly listed
+      local-only evidence covers exactly the default registration, in registration order.
+- [x] A read-only-permissions, SHA-pinned Windows workflow runs all shards and a coverage merge;
+      both Python environments, Node dependencies and Bicep are installed without Azure sign-in.
+- [x] A clean, pushed exact HEAD can be verified remotely through `gh`, with progress and an
+      estimate; dirty/unpushed heads and incomplete or mismatched runs fail.
+- [x] Fast infrastructure tests and RunnerIntegrity pass under the shared workstation lock;
+      GitHub produces a green full-suite run and recorded queue-to-merge and per-shard timings.
+      Missing, duplicate, foreign-SHA and deliberately failing-check experiments all fail.
+- [x] Merge `main` before handoff. STATUS, CHANGELOG, tests README and ADR record evidence and
+      limitations. Product scripts, policies, ROADMAP and the charter are unchanged.
+
+**Proposed replacement ROADMAP P78 acceptance (owner approval required):** The default Test-All
+registration runs as coverage-proven, deterministic shards on GitHub-hosted Windows runners,
+with no check or mutation removed, machine-exclusive checks still exclusive, both AUM environments
+installed, and complete exact-SHA/tree evidence. The remote helper fails closed on dirty/unpushed
+source, failed/missing shards or invalid coverage. Record hosted wall time, shard times and the
+local baseline. Propose the gate's test command and 30-minute budget in ADR-0039; the owner decides
+whether to amend the charter. Hosted job cancellation bounds its process tree; the existing local
+gate-shell timeout limitation is not represented as fixed.
+
+**Validation history:** the resumed draft initially passed 49 sharding
+and 24 remote assertions, despite two absent dependency snapshots and live wizard/preflight
+boundaries. Added receipt-type/run-identity cases failed 8 of 65 assertions; corrected workflow
+setup failed 3 of 25, and offline-boundary cases failed 2 of 27 before their implementations.
+Targeted suites now pass 79 sharding and 37 remote assertions. The real wizard passes its
+four offline native-boundary assertions; preflight returns through the same fixtures on both
+PowerShell 7 and 5.1. Twenty isolated runner scenarios pass. Their local-only case first failed
+because the draft assigned -1 to the range-validated public `ShardIndex` variable; the internal
+selection index now leaves public validation intact. The actual exit-9 receipt fails the merger
+for its failed check.
+
+`ed62bef` commits the shard/receipt contracts; `1505b2e` commits the offline native boundary;
+`f728d86` commits the runner and its scenarios, including P79's process-start identity from
+`0e64028`. Main `449489b` (P79 merge `6468235`) is integrated before handoff. The resolution retains
+P79's final probe inside `try/finally`, compares the process start time obtained from the operating
+system, and includes both new P79 registrations. The default inventory now has 95 checks.
+Under P78's own shared lock, the merged sharding suite passed 79 assertions in 2.2 s, remote
+contracts 37 in 1.0 s and full RunnerIntegrity 68 in 214.0 s; the lock was removed in `finally`.
+With the shared lock previously occupied after its
+estimated release, the workflow also runs count-preserving Core, Runner and Wizard negative
+proofs on three of its existing VMs. Baseline-only diagnostics do not count as negative proofs.
+Hosted measurements follow below.
+
+The first hosted attempt, [36454004081](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36454004081)
+on `aee8fda`, found missing Playwright Chromium executables in the screenshot/redaction checks,
+and one uncaught core mutation: a removed declaration guard was hidden by an overly broad
+expected error pattern matching a later exception. Setup now installs Chromium explicitly and
+the declaration assertion matches the intended diagnostic. These failures are not green evidence.
+The completed attempt also exposed a shallow checkout with no release tags, and an unmutated
+projection Node baseline failure whose harness discarded its diagnostic. The hosted checkout
+now retains history/tags; the projection harness preserves failed-baseline output without
+changing its mutations or timeout. The same 46-test Node baseline passes locally on Node 26.1.0;
+the hosted Node 22 difference remains under investigation. Wizard/preflight proofs caught 9/9
+mutations and runner proofs caught 12/12, with their complete 4/2 and 20-assertion baselines.
+
+Run [36455666772](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36455666772)
+on `a9ebfd1` passed every product check except release ancestry: the later proof-baseline fetch
+with `--depth=1` made the otherwise full checkout shallow again. That redundant fetch is removed;
+the frozen baseline already exists in full history. The projection baseline and every mutation
+passed on Node 22 in that run, so the earlier failure's cause remains unproven rather than
+classified as a Node incompatibility. Its future diagnostic is retained. Core proofs passed
+73/73 locally under the shared lock at full 79/37 assertion counts; all restored suites passed.
+
+**Green hosted evidence:** [run 36457223984, attempt 1](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36457223984),
+accessed 2026-09-28, verified by the real `Invoke-RemoteTestAll.ps1` on the clean pushed HEAD
+`f82981270702f0af5eeceb41a4e8d776524acf28`, tree
+`aaac14f39655051693c3c51929f9841faec094af`. The downloaded receipt union passed **95/95
+registrations, 0 FAIL, 0 SKIP** in registration order, with no local-only exclusions.
+Queue-to-merge wall time was **638 s (10 min 38 s)**, from 17:18:45Z to 17:29:23Z.
+The merge job took 23 s. Setup before checks, excluding infrastructure proofs, ranged from
+87 to 212 s. Core, Runner and Wizard proof steps took 96, 282 and 60 s respectively.
+
+| Shard | Entire job, seconds | Test-All receipt, seconds |
+|---|---:|---:|
+| 0 | 459 | 232.4 |
+| 1 | 608 | 199.9 |
+| 2 | 391 | 226.8 |
+| 3 | 443 | 224.5 |
+| 4 | 289 | 191.2 |
+| 5 | 232 | 139.6 |
+| 6 | 390 | 240.1 |
+| 7 | 292 | 193.6 |
+| 8 | 312 | 211.0 |
+| 9 | 153 | 55.5 |
+| 10 | 340 | 232.4 |
+| 11 | 390 | 287.4 |
+
+The hosted run includes **74/74 Core, 12/12 Runner and 9/9 Wizard mutations caught** with
+baseline counts 79/37, 20 and 4/2 respectively; every restored suite passed. The real
+exit-9 check fails its shard and the merger. Missing/duplicate results and foreign SHA/tree
+receipts are rejected in the synthetic suite. The actual remote entry point also rejected a
+dirty worktree and a clean unpushed HEAD, and rejected failed hosted run 36454004081.
+The complete hosted suite includes 320 FinOps pytest tests, 127 AUM service unit tests and
+five service mutations, 512 business-unit mutations, 108 Turnstile mutations, 105 company-address
+mutations and 57 projection mutations; none was removed for CI.
+
+Compared with the approximately 44-minute loaded-workstation baseline (P79's passing gate
+records 2,666 s in Test-All below), the hosted end-to-end interval is 10 min 38 s. This is not
+a controlled same-machine benchmark: runner hardware, load, setup, Python-environment presence
+and infrastructure proof work differ. `tests/test-all-durations.json:1` now records all 95
+observed passing durations as future LPT weights; the default for a new check remains 60 s.
+
+**Limits and approval:** artifact retention is 14 days; Python snapshots pin versions rather
+than artifact hashes; GitHub queues and hosted images can change. The isolated unmutated
+projection failure in the first run has no recovered cause; two later hosted runs passed it,
+and the harness now preserves failure output. No local gate-shell process-tree fix or charter
+change is claimed. ADR-0039 remains a draft for owner approval, including the proposed remote
+test command, 30-minute budget and replacement ROADMAP acceptance. Product scripts, policies,
+ROADMAP and charter equal the integrated main; no Azure resource was accessed by P78.
+
+U50-U53 track hosted compatibility, timing, remote-run identity and detector evidence. No product architecture
+component changes; this is test execution and evidence transport, not an accelerator deployment.
+
+## P79 follow-up: the installer permutation check reads only its own record, 2026-09-28
+
+The main check after the P79 merge (Test-All in the main worktree at `449489b`, 22:31-23:04,
+2,001 s) failed one check of 93, "Installer summary across permutations": 14 of its assertions,
+each with "Saved record '...\accel\onboarding\claude-gateway.json' names gateway
+'rg-contosohub/apim-claude-gw-fzgql9' ...". P79 moved the installer's saved-record comparison to
+the gateway question (`Install-ClaudeGateway.ps1:778-825`), and `tests/Test-InstallerPermutations.ps1`
+ran the installer in the checkout itself, so in a checkout whose saved record names another
+gateway every case stops there. The record is ignored by Git (`.gitignore:35`), so packet
+worktrees, where the P79 gate ran, have none. The installer does what P79 intends; the check was
+not isolated from the machine's own record. The same main check sent seven Claude Code 2.1.272
+requests through the reference gateway; all seven answered. Work is on
+`p79-followup-installer-record`, based on `main` `449489b`.
+
+- [x] RED: with the main worktree's record copied into this worktree, the check fails 14 of its 44
+      assertions in 23 s, as on main
+- [x] The cases run a copy of the installer's inputs (the root files and `analytics`, `cli`,
+      `config`, `guide`, `infra`, `onboarding`, `resolver`, `scripts`, `service` and `sync`) with no
+      `claude-gateway*.json` under `onboarding`. Three new assertions: the copy leaves out saved
+      records (a synthetic tree with three of them), the installer path is inside the copy, and the
+      checkout's own record is neither changed nor created (its hash before and after). GREEN with
+      the record present: 47 of 47 in 50 s, 103 cases on each shell (`627fc76`)
+- [x] Mutations: 3 of 3 caught (round 1; see council round 1 for five), each in its own detached worktree with a saved record, each running
+      the baseline 47 assertions: the installer run from the checkout (15 fail), no record exclusion
+      (16 fail), the checkout's record changed (1 fails) (`p79b-mutate.ps1`, 68 s)
+- [x] CHANGELOG and GUIDED-FLOW.md. Architecture: no component, data flow, identity, schedule or
+      network path changes
+- [x] Council round 1, five seats, over `449489b..ae2e76f`: Architect, Coder, UX and Security PASS;
+      QA BLOCK. The checkout's record was hashed after the copy, so a copy that deleted the records
+      it skips would have removed the operator's record first and passed. The hash is now taken
+      before anything is copied, and a new assertion requires the synthetic source records to stay
+      in place, unchanged (`3ec2dfb`). Evidence (`p79b-mutate-r2.ps1`, detached worktrees): against
+      `ae2e76f` that mutation passes 47 of 47, with and without a saved record; against `3ec2dfb`
+      it is caught with and without one, the three earlier mutations are still caught, and both
+      baselines pass 48 of 48. Architect's note: a folder the installer starts to read must be added
+      to the copy list; otherwise the check fails when that input is required, and runs without it
+      when the installer only reads it if present
+- [x] Council round 2, over `ae2e76f..31b660d`: Architect, Coder, UX and Security PASS; QA BLOCK.
+      The skipped records' content was compared with case-insensitive `-eq`, so a copy that
+      rewrote them in upper case passed in a checkout without an operator record. Each synthetic
+      file now holds its own relative path, compared with `-ceq` (`35a7d2d`). Against `31b660d`
+      that mutation passes 48 of 48; against `35a7d2d` it is caught with and without a saved
+      record, the four earlier mutations are still caught (five runs), and both baselines pass 48 of 48
+- [x] Council round 3, over `31b660d..a196d13`: all five seats PASS
+- [x] The packet gate exits 0, run with the main worktree's saved record (it names the reference
+      gateway) copied into this worktree. Gate 1, at `ae2e76f` (23:16-23:47), passed: Test-All in
+      1,823 s, 22 passed, 0 failed. Gate 3, at `a196d13` (00:12-00:40), the tree that merges,
+      passed: Test-All in 1,714 s, 22 passed, 2 warned (open unknowns), 0 failed. Gate 2, at
+      `31b660d`, was stopped when council round 2 changed the test
+
+## P79 fixes from the owner's test on 2026-09-28
+
+The owner ran `main` (`040ca87`, then `0345e85`) from his own clone on 2026-09-28 and sent four
+defects, each with a screenshot. Work is on `p79-owner-test-fixes`, based on `0345e85`.
+
+1. The guided flow's FinOps step stopped at "Applying FinOps..." with "Cannot convert value to type
+   System.String." (`scripts/flow/FinOps.ps1:157`). `& $path @($Command.arguments)` passes the
+   argument list as one array: every script the step runs is an advanced script, which refuses an
+   array for a `[string]` parameter, so every choice but None failed on both shells, whatever its
+   arguments. In a splatted array a string such as `-Accept` is a positional value to a script,
+   not a parameter name, so the AUM service and Turnstile plus AUM choices would have been wrong
+   too; and the scripts' output would have reached the step's change set.
+2. `.\Update-ClaudeGateway.ps1` from the repository root read
+   `C:\Users\nag\onboarding\claude-gateway.json`: the root shim's `-RecordPath` default is the
+   relative `onboarding/claude-gateway.json`, and `Read-ClaudeDecisionRecord` reads it with
+   `[IO.File]::ReadAllText`, which resolves a relative path against the process's start directory,
+   not PowerShell's current folder.
+3. The installer, creating a new gateway (`rg-hello-agent-dev/hocon-gateway`) in a checkout whose
+   record names another (`rg-contosohub/apim-claude-gw-fzgql9`), refused only at the address
+   question, after every other answer, and left moving the record to the administrator.
+4. After the developer count (250), the installer warned "This holds about 93 developers" and
+   asked "Continue anyway", saying the store that removes the limit "is not built yet". P61 built
+   the Cosmos entitlement store on every v2 tier; the tier and the store are chosen after this.
+
+- [x] Each FinOps choice applies its commands with the parameters it plans, on both shells, and the
+      step returns only its change set: tested with stubs that carry the real scripts' parameter
+      blocks (`tests/Test-FlowFinOpsApply.ps1`, 11 checks; against the previous `FinOps.ps1` 8 fail
+      with the owner's error; `872b88b`)
+- [x] A record path given relative to PowerShell's current folder is read and written there,
+      whatever the process's start directory; the root Update shim reads the repository's record
+      (`tests/Test-RelativeRecordPath.ps1`, 8 checks, each child started in one folder and moved to
+      another; all 8 fail before the fix with the owner's error; `cd1005b`)
+- [x] The installer compares a saved record with the chosen gateway as soon as the gateway is
+      chosen; attended, it offers to archive the saved record under its gateway's name and go on;
+      unattended, it refuses unless `-ArchiveSavedRecord`; `-WhatIf` moves nothing
+      (`tests/Test-CompanyInstaller.ps1`, 5 new checks, 22 on both shells; against the `0345e85`
+      installer the 5 fail and the other 17 pass, on both shells; `5885d4e`, `5de7ba2`)
+- [x] The developer count asks nothing about the entitlement store; after the store is chosen,
+      named values for more developers than they hold is stated with the Cosmos store as the remedy
+      (`tests/Test-AdminSurface.ps1`, 682 checks; 4 fail against the previous installer; `f14f92f`)
+- [x] SETUP.md, GUIDED-FLOW.md and CHANGELOG. Architecture: no component, data flow, identity,
+      schedule or network path changes; the manifest's source hashes are refreshed, no image changes
+- [x] Mutations: 16 of 16 caught. Each mutation ran in its own copy of the worktree; it counts as
+      caught only when a suite ran its baseline number of checks (FinOpsApply 11, RelativeRecordPath
+      8, CompanyInstaller 22, AdminSurface 682) and at least one failed. FinOps: the arguments as one
+      array, the output returned into the change set, `Confirm` dropped, `aum`'s arguments as one
+      array, no exit-code reset, `NoConfigure` dropped. Records: the read and the write resolved
+      against the process directory, the shim passing a relative path through. Installer:
+      `-ArchiveSavedRecord` ignored, no console question, the record never moved, the record moved
+      under `-WhatIf`, the comparison back at the address question, the store warning back at the
+      developer count, the Cosmos store called unbuilt
+- [x] Heavier suites once on the branch: FlowOrdinalOrder 35, GuidedFlow 44, FlowStart 114,
+      FlowPermutations 43, InstallerPermutations 44; CompanyInstaller 22 and FinOpsApply 11 with
+      Windows PowerShell 5.1 as the host. Suites that start child shells through
+      `ProcessStartInfo.ArgumentList` (RelativeRecordPath, FlowStart, FlowPermutations, Test-All)
+      need PowerShell 7 as the host, which is how Test-All runs them; their children run on both
+- [x] Council round 1, five seats, over `0345e85..5de7ba2`: Architect, Coder, QA, UX and Security
+      PASS. Its one note, the stale "21 on both shells", is corrected above
+- [x] The first packet gate, at `01f9605` on 2026-09-28 (19:20), failed one check: "Test-All counts
+      every check" (`tests/Test-RunnerIntegrity.ps1`). Its `Get-Registered` reads a check name between
+      single quotes with no quote inside, so the new registration `'Decision record paths are
+      PowerShell''s'` was not read: the copied runner had no stub for `Test-RelativeRecordPath.ps1` and
+      exited 1. The check is renamed "Relative decision record paths follow the current folder", and
+      the integrity test now asserts that every `Invoke-Check` line in the registration is read,
+      naming any line that is not (it fails on `01f9605` with that line; 47 checks pass after)
+- [x] The second gate, at `d0226dd` (20:13), failed two checks that P79 does not change, under
+      96-100% CPU load from other sessions: "Business unit checks detect breakage [3/4]" timed out
+      at 600 s, and "Test-All counts every check" failed after 325 s. Run alone, the integrity test
+      then failed twice with "every non-skipped check runs in its own process - 90 of 91" while all
+      91 stub checks passed: each stub named its record `<process id>.json`, and Windows reuses
+      process ids, so a later stub overwrote an earlier one's record. Records are now named by
+      process id and that process's start time, and identity checks use that pair. A probe
+      assertion runs one stub and checks the name; it failed on the old naming ("files:
+      48620.json") and passes after; the integrity test passes 48 checks in 272 s under the same load
+- [x] Council round 2, five seats, over `01f9605..d0226dd`: all five seats PASS
+- [x] Council round 3, five seats, over `d0226dd..0e64028`: Architect, UX and Security PASS; two
+      BLOCKs on the probe, both fixed test-first. Coder: the probe wrote and read its files before
+      the `try` whose `finally` removes the scratch folder, so a failed write or unreadable record
+      left the folder behind. QA: the probe accepted any number after the process id, so a constant
+      such as `Proc = "$PID-0"`, which brings back the overwrite, passed. The probe now runs inside
+      that `try`, starts the stub with `Start-Process -PassThru`, and requires exit code 0 and a
+      record named `<id>-<start ticks>` from the started process's own id and start time. Evidence,
+      run in private copies (`p79-r3-probe.ps1`, 254 s): the fixed probe fails on `Proc = "$PID-0"`,
+      on records named by process id and on an empty `Proc`; the old probe passes on
+      `Proc = "$PID-0"`; with an unreadable record, the old test leaves its scratch folder behind
+      and the fixed test removes it; the fixed integrity test passes 48 checks
+- [x] Council round 4, five seats, over `0e64028..96bee6a`: all five seats PASS
+- [x] The packet gate exits 0. Gate 3, at `0e64028` (20:47-21:24), passed: Test-All in 2,216 s,
+      22 passed, 2 warned (open unknowns), 0 failed. Gate 4, at `96bee6a` (21:44-22:28), the tree
+      that merges, passed: Test-All in 2,666 s, 22 passed, 2 warned, 0 failed. Both ran while other
+      sessions held the machine at 88-100% CPU; the lead raised only the gate's own processes to
+      AboveNormal priority. Gate 4 ran without the shared lock, which the P71 agent held from 21:25
+      for its mutation and full-suite runs
+
+## P77 a 60-minute gate budget while the exclusive checks are sharded, 2026-09-28
+
+Merged to `main` as `e393487` (`--no-ff`, 2026-09-28); the merge tree equals the tree of the branch
+head `dcb6593`.
+
+`.ironclad/charter.json` gives every gate command 1,800 seconds ([ADR-0025](adr/0025-parallel-test-suite.md)).
+On 2026-09-28 the packet gates ran on this repository's gate machine (16 logical CPUs) under the
+shared lock at the default throttle of four: P76 1,368.1 s and P75 1,371.1 s and 1,688.3 s passed;
+P69's own gate passed at 1,683.9 s and then timed out at 1,800 s (CPU averaged 68.4%). On `b4e970b`,
+P69 merged with `main` `040ca87`, the gate timed out at 15:10 at throttle 8 and again at 15:54 at the
+default throttle, with no other gate or review running. The measurements, the load (Defender's
+scanner used about 2.4 cores at 15:45, with 121 threads queued) and the options are in
+[ADR-0036](adr/0036-gate-budget-until-sharded.md). Work is on `p77-gate-budget`, based on `040ca87`.
+
+- [x] `commandTimeoutMs` is 3,600,000; `tests/Test-All.ps1`, its throttle, per-check timeouts and
+      shards are unchanged
+- [x] ADR-0036, CHANGELOG, and ROADMAP P78, which returns the budget to 1,800,000
+- [x] Council, five seats: round 1 BLOCK (ARCHITECTURE.md and REFERENCE.md stated the 30-minute budget
+      as current; the ADR's check counts and two agent-reported gates; fixed in `2d0fa09`), round 2 all
+      five seats PASS. No test run: the change is one charter number and documents
+- [x] The next packet gate on `main` passes within the new budget: P69's, on `d73e3fd` (P69 with `main`
+      `9635426`), 16:43:46-17:17:30 IST: 22 passed, 0 failed; Test-All 2,015.2 s, above the former
+      1,800 s and within 3,600 s
+
+## P75 the macOS/Linux installer prices its choices, 2026-09-28
+
+Merged to `main` as `5d1cd03` (`--no-ff`, 2026-09-28); the merge tree equals the tree of the branch
+head `b52e9d9`, which differs from the gated `e830a6d` only in this file.
+
+`install-claude-gateway.sh` is the macOS and Linux installer. It asks for the region with no
+price, asks for the tier with no price, and its summary, which is the approval, says "BasicV2 is
+about $150/month at list price" whatever tier and region were chosen, and "Provisioning takes
+30-45 minutes". `Install-ClaudeGateway.ps1` stopped printing both before P68 (CHANGELOG: a Premium
+v2 install was approved against the fixed figure at $2,800/month, and the whole install took
+5 minutes 23 seconds), and prices its region and tier prompts since P68
+([ADR-0032](adr/0032-guided-flow-starts-at-once.md)). The bash installer's record also lacks the
+tier, the region and the Foundry account, and it does not offer the FinOps tool. Work is isolated
+to `p75-bash-installer-prices`, based on `38ad175`.
+
+Measured at 01:30 UTC on 2026-09-28: the Azure Retail Prices API query the PowerShell installer
+uses (`serviceName eq 'API Management' and priceType eq 'Consumption'` and the three v2 unit
+meters) returned 182 rows on one page in 0.6 s; in eastus2, Basic v2 0.20548, Standard v2 0.9589
+and Premium v2 3.83562 an hour, USD 150, 700 and 2,800 a month at 730 hours; Italy North
+publishes two of the three meters. `az account list-locations` returned 109 regions in 4.9 s,
+including EUAP and staging regions in the US geography group that publish no v2 price.
+
+Found while testing: jq.exe on Windows ends its output lines with CRLF. In Git Bash, the last,
+empty field of a tab-separated option line was a carriage return, which is not empty and which
+awk reads as 0, so a tier that a region does not publish (in the test fixture, one region without Premium v2) printed
+as USD 0.00. Measured in Git Bash: command substitution drops the carriage return of the last
+line only, so a single value (a URL, a price) keeps none, and lines that `read` splits keep theirs.
+The region lines drop it before they are split, and the stub `az` and `curl` refuse any argument
+that carries one. The discovery loop that already existed (`--foundry-account` not given) reads
+`jq -r` output the same way and is not changed here.
+
+- [x] Asked in a terminal, the region prompt lists the default region first (the Foundry
+      account's region unless `--location` names another) and then the other physical regions in
+      its geography group that publish a v2 price, cheapest Basic v2 first, each with the three v2
+      tiers' monthly list price for one unit at 730 hours, from one Retail Prices API call; a tier
+      a region does not publish reads "not published"; the answer is a number or a region name in
+      any case or spacing, and anything else is asked again
+- [x] The tier prompt shows each tier's monthly list price in the chosen region
+- [x] The summary prices the chosen tier in the chosen region at list price, or says the price
+      could not be read and names the pricing page; it no longer names a fixed price, and the
+      provisioning note is the PowerShell installer's measured figure
+- [x] With the prices unreadable, the region and tier prompts say so with the reason, and the
+      install goes on; under `--yes` there is no table and no tier list, and the summary still
+      prices the choice
+- [x] The record holds `mode`, `sku`, `location`, `foundryAccount`, `foundryResourceGroup` and
+      `requestsPerMinute`, as the PowerShell installer's record does
+- [x] Run on its own in a terminal, it ends by offering the FinOps tool
+      (`scripts/Select-ClaudeFinOpsTooling.ps1 -Region`, through PowerShell 7); `--choose-finops`
+      opens it without asking and `--skip-finops-offer` leaves it out; without PowerShell 7, or
+      under `--yes`, the command is a numbered next step
+- [x] `tests/Test-BashInstaller.ps1` runs the installer in Git Bash from a TEMP copy, with stub
+      `az`, `curl` and `pwsh` and a PATH without the real Azure CLI, over a terminal run, a region
+      named by name, an unknown region, unreadable prices, `--yes`, a full run to the record, the
+      FinOps offer accepted, declined, skipped and forced, and no PowerShell 7; the script uses no
+      construct that needs bash 4, since it states that it runs on macOS
+- [x] SETUP.md and CHANGELOG
+
+Mutations, each in its own copy of the worktree, counted as caught only when the suite ran all 49
+checks and at least one failed: 24 of 24 caught, among them free-tier rows kept, the first tier
+instead of the marginal one, other geographies or unpriced regions listed, the summary pricing Basic
+v2 whatever is chosen, prices read at every use, one page read, the table under `--yes`, the
+record without the tier, the FinOps tool offered under `--yes` or with `CLAUDE_NONINTERACTIVE=1`,
+a bash 4 construct, and a carriage return in the region lines or reaching `az`. A 25th, the
+carriage return strip removed from the next-page link, survived: in Git Bash a single value keeps
+no carriage return, so that strip changed nothing, and it is removed.
+
+Council round 1 (gpt-6-astra, five seats, read-only, over `38ad175..426b132`): BLOCK.
+
+| Seat | Verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | PASS | Should-fix: the cent was rounded half up. `ConvertTo-MonthlyPrice` rounds a `[decimal]` half to even, so 0.2005 an hour was 146.37 a month in bash and 146.36 in PowerShell | The monthly figure is computed on whole billionths of the price as written and rounded half to even. It equals `[math]::Round([decimal]$p * 730, 2)` over the parity run's 160 prices and, in a one-off run, over 3,207 prices, 200 of them half-cent months |
+| Coder | BLOCK | `read` with a tab IFS joins empty fields: with Standard v2 missing, the Premium v2 price printed under Standard v2 | A price that is not published is written `null`, which `money_` prints as not published |
+| Coder | BLOCK | An `az account list-locations` entry that is not a region object stopped both jq reads, and any region name was then taken | Entries that are not objects with a string `name` and an object `metadata` are skipped, as `Read-GatewayRegion` skips them |
+| QA | BLOCK | Without jq the suite printed SKIP and exited 0 with no check | The suite fails without bash or jq; Test-All skips it with the reason |
+| QA | BLOCK | The offer-order check passed when the next step it compares with was absent | Both positions must be found |
+| UX | BLOCK | A price list jq could not transform read as prices that are not published, with no reason | The transform's exit status is checked, a price that is not a number fails it, and the prompts give the reason |
+| Security | BLOCK | `NextPageLink` reached curl unchecked, a `file://` link included | Only a next page on `https://prices.azure.com`, with or without `:443`, is read, and curl runs with `--proto '=https'`. The URL always starts with `https://`, so no argument reads as an option |
+| Security | should-fix | jq's directory and `/usr/bin` can hold a real `pwsh` or `az` | The runs call jq through a stub that names its absolute path; their PATH is the stubs, `/usr/bin` and `/bin`, and the run without PowerShell 7 reports SKIP when `/usr/bin` or `/bin` holds a `pwsh` |
+
+Found while fixing:
+- The API writes its next page as `https://prices.azure.com:443/api/retail/prices?...&$skip=1000`
+  (read 2026-09-28 from a query of more than 1,000 rows). A check for `https://prices.azure.com/`
+  alone would have refused every second page.
+- In bash, `"${x:-{}}"` with `x` set expands to `$x` followed by `}`: the parser ends the expansion
+  at the first `}`. The default is assigned on its own line.
+- In PowerShell, a cast of an empty pipeline, `[string](@() | Select-Object -First 1)`, is `$null`,
+  not `''`, so the suite's missing-jq branch would have thrown. It uses `"$(...)"`.
+
+`tests/Test-BashInstaller.ps1` now holds 62 checks over 19 runs, in about 30 s. The new runs: a
+missing first and middle price, region entries that are not regions, a price written as a string,
+a next page off the host and one over `http://`, and a parity run over 160 prices in 61 regions,
+72 of them half-cent months. In the terminal run and the parity run, the region table must equal
+the one `Format-ClaudeGatewayRegionTable` prints from the same files through
+`Get-ClaudeApimV2Prices`. Against `426b132`'s installer, 8 of the new checks fail. 12 new
+mutations, 12 caught at 62 checks: the order check with its anchor renamed, an empty field for an
+unpublished price, the type checks removed from either region read, the transform's status
+ignored, a price written as a string taken, any next page followed, the API's own next-page form
+refused, a half cent rounded up, every price rounded as a double, and the price map defaulted with
+the stray brace.
+
+Council round 2 (gpt-6-astra, five seats, read-only, over `426b132..2cb7c7a`): BLOCK. Every
+round-1 BLOCK is closed.
+
+| Seat | Verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | BLOCK | B1: one price written in different ways was rounded differently. jq 1.7 and later keep a number's literal text, so `0.2005000000` and `2.005000000e-1` took the double fallback and gave 146.37 a month where `0.2005` gave 146.36; `10000.0005` gave 7300000.37 where PowerShell gives 7300000.36. 40 of 7,420 inputs differed | `547df27` |
+| Coder | PASS | the round-1 findings 3 and 4 closed | none needed |
+| QA | PASS | findings 6 and 7 closed; add B1's literals to the parity fixture | `547df27` |
+| UX | PASS | finding 9 closed | none needed |
+| Security | PASS | finding 10 closed; no `--` before the URL is safe after the URL check | none needed |
+
+`ConvertTo-MonthlyPrice` computes `[math]::Round([decimal]$HourlyPrice * 730, 2)`. On PowerShell 7,
+ConvertFrom-Json reads the price as a double, and `[decimal]` of a double is .NET's VarDecFromR8:
+the double is scaled by a power of ten chosen from its binary exponent, in double arithmetic, and
+rounded half to even to at most 15 significant digits (measured on .NET 10.0.12: 0.0074999999999999945
+becomes 0.0075, and 3.9985000000000052 becomes 3.9985). Cutting the double's shortest decimal form to
+15 digits, tried first, gave 5.47 and 2918.91 for those two, where PowerShell 7 gives 5.48 and
+2918.90: 2,485 differences over 124,993 prices of at most 17 significant digits, 72,000 of them a
+hair from a half-cent month. The installer's `monthly` now takes the same steps as VarDecFromR8:
+the binary exponent by exact halving and doubling (jq 1.5 has no `frexp`), the same power of ten
+and scale, the same rounding, then the 730-hour product on digit strings with cents half to even.
+Over the same 124,993 prices, run through the installer's own definitions with jq 1.8.2: 0
+differences from PowerShell 7; over 3,000 of them through the whole transform: 0.
+
+Two limits, stated in the installer: Windows PowerShell 5.1 reads a price written without an
+exponent as an exact decimal, so above 15 significant digits the two PowerShell hosts can differ by
+a cent, and this installer gives PowerShell 7's; jq 1.7.1 and later round a price written with more
+than 17 significant digits to 17 before converting it (0.0105000000000000501 becomes
+0.01050000000000005, where .NET reads 0.010500000000000051), so such a price can differ by a cent.
+Every one of the 43 differences in a set of 132,993 had 18 significant digits, measured with jq 1.8.2.
+The Retail Prices API wrote the 182 API Management v2 prices with at most 7 significant digits (read
+2026-09-28). jq 1.7.0 differs more: see council round 3 below.
+
+The parity fixture has ten written prices: B1's three, 6.25E-2, 0.2214999999999999, 1.25e-05, and
+four 17-digit prices a hair from a half-cent month (PowerShell 7: 5.48, 147.10, 752.27 and 2918.90).
+Against `2cb7c7a`'s installer the parity check fails (pr67: bash 5.47, PowerShell 5.48); after the
+fix the 62 checks pass, in 50 s.
+
+Mutations, the same rule, at 62 checks: 36 of 36 caught. The two that changed the former rounding
+(a half cent rounded up, every price rounded as a double) targeted code that is gone; three take
+their place: cents rounded half up on the digit string, the 15-digit conversion rounding half up,
+and the 15-digit conversion truncating.
+
+Council round 3 (gpt-6-astra, five seats, read-only, over `2cb7c7a..dcca62c`): BLOCK. B1 is closed:
+its three prices and the four near-ties match PowerShell 7, and 11,705 more inputs (zero, exponent
+forms, 0.0001 to 100,000) differed on none of jq 1.5, 1.6 and 1.8.2.
+
+| Seat | Verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | PASS | B1 closed | none needed |
+| Coder | BLOCK | B2: jq 1.7.0 converts a number literal through a 16-digit decimal (decimal64), so 0.010500000000000051 gives 7.66 a month where PowerShell 7 gives 7.67; 18 of the 11,705 inputs differed on jq 1.7.0. `scripts/preflight.sh` accepts that release | the preflight warns, below |
+| QA | PASS | the literal-preserving fixtures exercise B1 | none needed |
+| UX | BLOCK | B2 in the text: "jq 1.7 and later" is wrong for 1.7.0 | the installer's comment and this section name 1.7.0 and 1.7.1 apart |
+| Security | PASS | the new arithmetic runs no command and reads no path | none needed |
+
+Measured after the review, with the official release binaries of jq 1.5, 1.6, 1.7 (which names
+itself `jq-1.7-dirty` on Windows) and 1.7.1, over the 124,993 prices of at most 17 significant
+digits: jq 1.7.0 differed from PowerShell 7 on 8,686, every one of them written with 17 significant
+digits; jq 1.5, 1.6 and 1.7.1 on none. The jq 1.7.1 release notes name the change: the conversion
+through decimal64 was replaced ([NEWS](https://github.com/jqlang/jq/blob/jq-1.7.1/NEWS.md)). The API
+writes these prices with at most 7 significant digits, so with jq 1.7.0 every published price matches
+PowerShell 7's cent; a refusal of jq 1.7.0 would stop an install over a price form the API does not
+use. The admin preflight warns instead: "jq 1.7.0: a price written with 17 significant digits can be a
+cent off; jq 1.7.1 or later matches the PowerShell installer", with how to upgrade. The developer
+setup computes no price and is not warned. `tests/Test-BashInstaller.ps1` has two more runs, with jq
+reporting `jq-1.7-dirty` and `jq-1.7.1`: the first is warned and installs, the second is not warned,
+and neither is the jq on the machine (66 checks, in 43 s).
+
+Council round 4 (gpt-6-astra, five seats, read-only, over `dcca62c..9cd7b77`): all five seats PASS.
+B2 is closed as a warned limit, not an arithmetic fix: the warning is proportionate for prices the
+API writes with at most 7 significant digits, and it does not make jq 1.7.0 exact for a price
+written with 17. The Coder seat checked the pattern against `jq-1.7`, `jq-1.7-dirty`, a trailing
+carriage return and distribution suffixes (warned) and `jq-1.7.1` and `jq-1.8.2` (not warned), in
+bash 3.2 syntax; the merge of main changed only the Active packets line.
+
+After the review, under the shared lock (2026-09-28 13:03-13:05 IST): the suite against the preflight
+before the warning (`dcca62c`) fails one check, the jq 1.7.0 warning, and passes the other 65; the
+two new mutations, each in its own copy and counted at 66 checks, are caught: no warning on jq 1.7.0
+(the jq 1.7.0 check fails), and the match without its guard (the jq 1.7.1 check fails).
+
+- [x] Council, five seats (round 4, all PASS)
+- [x] The packet gate exits 0 on the tree that merges: at `e830a6d` (P75 on `main` `e39c3e4`, with
+      P76), 2026-09-28 13:07:14-13:35:32 IST under the shared lock: 22 passed, 2 warned, 0 failed,
+      2 skipped; Test-All passed in 1,688.3 s of its 1,800 s budget, the Bicep build in 7.8 s. The first
+      gate, at `f32bcde` (P75 on `f98f885`), 12:11:23-12:34:23: the same counts, Test-All 1,371.1 s.
+      Other agents' reviews ran during the second gate: the serial-lane flow checks, whose code P75 does
+      not change, took twice as long (the permutations 215.2 s against 91.0 s in P76's gate and 103.2 s
+      in the first), and the checks' seconds summed to 3,756 against 3,127.
+
+## P76 one plan, one order on both shells, 2026-09-28
+
+Merged to `main` as `d731023` (`--no-ff`, 2026-09-28); the merge tree equals the tree of the branch
+head `2738cff`, which differs from the gated `ffa7000` only in this file.
+
+P72 made the guided flow write its canonical text itself, so that one plan has one fingerprint
+on PowerShell 7 and Windows PowerShell 5.1, and documented that
+([GUIDED-FLOW](GUIDED-FLOW.md#review-and-fingerprint)). A live, read-only
+`Start-ClaudeGateway.ps1 -Action Setup -PlanOnly` over the reference record on 2026-09-28 at
+02:50 UTC printed the same review on both shells and two fingerprints (`9ec3475f...` on 7,
+`1cd0781d...` on 5.1). Each step's canonical text, dumped on both shells, differed in one step:
+Monitoring lists `infra\workbook-chargeback.json` before `infra\workbook.json` on PowerShell 7 and
+after it on 5.1. `Sort-Object` compares by culture, and .NET Framework (NLS) gives a hyphen almost
+no weight where .NET's ICU does not. P72's suite compared fingerprints over the Foundation step
+and stub steps only, so it passed. Four sorts in `scripts/flow` feed plans: the workbook and KQL
+lists (`Monitoring.ps1`), the priced model list (`Budgets.ps1`), and the named values that the
+policy references (`lib/LifecycleCommon.ps1`), which the Update migration `0002` carries in its
+plan and creates in that order. Work is isolated to `p76-ordinal-order`, based on `38ad175`.
+
+- [x] `Sort-ClaudeFlowOrdinal` in `scripts/flow/FlowContract.ps1` orders by code point, ignoring
+      case as `Sort-Object` does, with `-Unique`; the same list gives the same order on both shells
+- [x] The four sorts use it, so no `Sort-Object` remains in `scripts/flow`; a check refuses a new one
+- [x] `tests/Test-FlowOrdinalOrder.ps1`: every step of Setup with the shipped modules, planned
+      offline from one record on both shells, has the same canonical text and the same fingerprint;
+      the Update migration's named values are the same list in the same order on both shells
+- [x] GUIDED-FLOW and CHANGELOG
+
+Measured after the fix: PowerShell 7's culture order already matched code-point order for the
+shipped workbook list and the policy's 24 named values, so its plans keep their fingerprints;
+on Windows PowerShell 5.1 the Monitoring and Update plans have new ones. Found while testing:
+`[Array]::Sort($keys, $items, [StringComparer]::Ordinal)` in PowerShell binds the generic overload
+and passes it a converted copy of the items, so only the keys were sorted; the plan comparisons
+still passed, because NTFS and the policy file already listed both in one order, and the checks of
+the helper's own output failed. Casts select the overload that sorts both.
+
+Mutations, each in its own copy of the worktree, counted as caught only when a suite ran its
+baseline number of checks (Test-FlowOrdinalOrder 14, Test-FlowFinOps 33, Test-FlowLifecycle 33)
+and at least one failed: 10 of 10 caught. They are the casts removed, a culture comparer in the
+helper, `Sort-Object` back in Monitoring and in `lib/LifecycleCommon.ps1`, the `sort` alias, `-Unique`
+dropped from the price book and from the named values, `-Unique` keeping every item, case not
+ignored, and no code-point tie-break after the folded key. The last one survived at first: the
+suite compared the orders with `-eq`, which ignores case, so `b,B` equalled `B,b`. Every string
+comparison in the suite is now case-sensitive, and two checks were added that no suite had: the
+Budgets price book lists each unpriced model once, and the Update migration reads each named value
+once (the policy holds 39 references to 24 named values).
+
+Found after that, by reading the call sites the flow shares: three more culture sorts sat outside
+`scripts/flow`. `Start-ClaudeGateway.ps1` ordered the step modules by file name with `Sort-Object`,
+and `scripts/Update-ClaudeGateway.ps1` the migrations; both orders set the order of the plans that
+the fingerprint covers. A third, the resume check in `Start-ClaudeGateway.ps1`, compares two sorted
+lists on one host. All three use `Sort-ClaudeFlowOrdinal`, and the scan now covers every script at
+the root or in `scripts/` that loads `FlowContract.ps1`, besides `scripts/flow`; a check names the two
+entry points, so a scan that found neither fails. The shipped module and migration names hold no
+hyphen or underscore at a position where culture and code-point order differ, so no plan's
+fingerprint changes with this. The helper also compared keys joined as `folded` + U+0000 + `key`: a
+key holding U+0000 moved another key out of place, so `a` sorted after `a<U+0000>A` and
+`a<U+0000>b`. It now compares the folded keys, then the keys, then the input positions, with
+`[string]::CompareOrdinal`.
+
+Mutations after that, the same rule: 13 of 13 caught at 17, 33 and 33 checks, the 10 above
+rewritten for the new comparer, the keys joined by a separator again, and `Sort-Object` back in the
+module and migration orders and in the resume check.
+
+Council round 1 (gpt-6-astra, five seats, read-only, over `38ad175..893c354`): BLOCK.
+
+| Seat | Verdict | Finding | Fix |
+|---|---|---|---|
+| Architect | BLOCK | Two culture sorts outside `scripts/flow` set the order of fingerprinted plans: the step modules (`Start-ClaudeGateway.ps1:144`) and the migrations (`scripts/Update-ClaudeGateway.ps1:38`); `Sort-Object Name` put hyphenated names first on 7 and last on 5.1 | `5019cdb` (found in parallel before the report arrived), and the scan below |
+| Coder | PASS | should-fix: a key holding U+0000 moved another key, because the helper joined keys with it | `5019cdb`: keys compared as values |
+| QA | PASS | two temporary mutations caught; the checks did not cover the sorts outside `scripts/flow` | the scan below |
+| UX | PASS | GUIDED-FLOW and CHANGELOG state the fingerprint change and what to do | none needed |
+| Security | PASS | should-fix: the same U+0000 order | `5019cdb` |
+
+Merging main (`f98f885`, P70) into this branch (`00b8376`) failed the scan: P70's model lifecycle
+(`scripts/ClaudeModelLifecycle.ps1`, which loads `FlowContract.ps1`) sorted its deployments, tier
+lists, questions and assignments with `Sort-Object`. The flow's plans also run code that loads
+neither: the price book (`scripts/ClaudeModelPrices.ps1`), the deployment list
+(`scripts/ClaudeModelDeployment.ps1`), the region choice (`scripts/ClaudeGatewayRegion.ps1`) and
+the installer's default tier model lists (`Install-ClaudeGateway.ps1`). Measured on Windows
+PowerShell 5.1 at `00b8376`, with names whose culture order differs between the shells: a model
+change over tier lists already in code-point order proposed `Update models-standard` and
+`Update models-premium` to write the same members in another order, and its fingerprint differed
+from PowerShell 7's; a deployment whose model matched two price-book spellings took
+`claude-x-1.5` on 5.1 and `claude-x-1-5` on 7; regions at one price were listed `usa, us-b` on 5.1
+and `us-b, usa` on 7; the deployable models were listed in reverse.
+
+All 14 of those sorts use `Sort-ClaudeFlowOrdinal`, which now takes keys as `Sort-Object`'s
+`-Property` does (script blocks, property names, hashtables with `Expression` and `Descending`),
+compares numbers, times and versions by value, and has `-Descending`. The three libraries load
+`FlowContract.ps1` only when the helper is not already defined, and the installer loads it.
+`tests/Test-FlowOrdinalOrder.ps1` follows every script the fingerprinted plans load (the
+orchestrator and every step module, the Update, the model sync and the installer, and what they
+dot-source, 43 scripts, read from the syntax tree) and lists the 17 `Sort-Object` calls left in them,
+each with its reason: a value key (prices, integers, versions), an order that reaches only the
+console (menus, an error), or an order used inside one process (a cache key, set comparisons). A
+listed call that is gone or changed fails the check. `scripts/ClaudeClientSupport.ps1` keeps its
+three: the workstation bundle fetches only the files `Setup-ClaudeWorkstation.ps1` names, so it
+loads nothing more. Against `00b8376`, 22 of the 35 checks fail, on 5.1 each of the four cases above;
+after the fix all 35 pass (`d723f90`).
+
+Mutations after that, the same rule, at 35, 33 and 33 checks: 25 of 25 caught. The ten helper
+mutations above rewritten for the new comparer, the three outside `scripts/flow`, and twelve new:
+`-Descending` ignored, a key hashtable's `Descending` ignored, numbers compared as strings, only
+the first key used, `Sort-Object` back in the tier lists, the model-list reader, the price-book
+entry and the installer's tier lists, the regions at one price in arrival order, the deployable
+models ascending, the price book no longer loading the helper, and a listed sort changed. `-Unique`
+keeping every item first counted as broken, not caught: the probe of the Setup steps failed, and
+the seven checks that read it were skipped, so the suite made 34 checks. Those checks are now made
+whether or not the probe ran, and the mutation is caught at 35. The 15 suites that load the changed
+scripts pass, among them P70's lifecycle mutations (62 of 62 caught at 138 checks), the installer
+permutations and the guided flow.
+
+Council round 2 (gpt-6-astra, five seats, read-only, over `893c354..48dd68a`): all five seats PASS;
+the round-1 Architect BLOCK and the U+0000 should-fix are closed. Should-fix (Architect): the check
+follows dot-sources only, so a script a step runs as a separate command is not read;
+`scripts/flow/Monitoring.ps1:76-80` runs `Publish-ClaudeWorkbook.ps1` with `&`, and its `Sort-Object`
+at line 207 is not listed. Read after the review: that sort orders the names in an error message
+only. Following every `.ps1` name written in the flow's scripts reaches 123 scripts, most of them
+named in the Guide's text or run as their own tools. The one among them with its own fingerprint,
+the network edge review, hashes the stored text of its review file on apply
+(`scripts/ClaudeNetworkReview.ps1:39`), so the shell that applies it does not change what was
+approved. The check's comment and this section state the boundary: the scripts the plans load, not
+the scripts their steps run.
+
+- [x] Council, five seats (round 2, all PASS); the packet gate exits 0: `node .ironclad/gate.mjs --stage packet`
+      at `ffa7000`, 2026-09-28 11:48:23-12:11:20 IST under the shared lock: 22 passed, 2 warned, 0 failed,
+      2 skipped; Test-All passed in 1,368.1 s of its 1,800 s budget, the Bicep build in 7.3 s
 
 ## P72 permutation tests of the guided flow and the installer, 2026-09-28
 
@@ -1572,6 +2255,401 @@ Read-only reference drift, 2026-09-27 20:19Z: both `models-standard` and `models
 account has all four stated Claude deployments in `Succeeded`, version 2, GlobalStandard.
 No reference write was made. The owner plan will describe the current state and refuse an
 apply over Turnstile ownership.
+
+## P69 the company address in the flow, 2026-09-28
+
+Merged to `main` as `69db07a` (`--no-ff`, 2026-09-28); the merge tree equals the tree of the branch
+head `c31d372`, which differs from the gated `d73e3fd` only in this file. The ROADMAP entry stays
+open for its last clause, a request proven through a company address, which is P74.
+
+The owner's installer run selected a company address but ended with manual hostname, certificate
+and DNS instructions. P69 makes that choice an applied, priced and verified part of installation
+and a later Change. Work is isolated to `p69-company-address`, based on `aa7ed19`; council review
+and merging belong to the lead. The reference gateway and other existing services are read-only.
+
+Live finding, 2026-09-27 20:44 UTC (2026-09-28 locally): the isolated Basic v2 instance deployed in
+148.0 s, but its uploaded-PFX hostname PATCH returned `CustomHostnameOwnershipCheckFailed` for
+`<company-host>.test`. Azure requires public CNAME ownership even on Basic v2; a zone
+that answers only when queried at its Azure name servers does not satisfy that requirement.
+The sequence is corrected to DNS before binding. Positive company-hostname TLS proof is blocked
+without a delegated domain; none is bought or borrowed. The lead accepted this scope deferral on
+2026-09-28; the positive proof moves to P74 and is not complete. U30 covers the research;
+P69 did not need the reserved U33 identifier.
+
+### P76 ordinal-sort integration, 2026-09-28
+
+The lead merged `040ca87` (P76 and P75) as `555be85`, retaining P69's explicit Models
+decision/record results and P76's code-point assignment-key order. The focused integration
+check at that merge fails one of 35 checks: four string sorts in the network/recovery helpers
+are culture-dependent, and the numeric free-prefix sort needs its documented value-key entry.
+
+- [x] Gateway hostname projections, network regions, subscription scopes and NSG IDs use the
+      existing `Sort-ClaudeFlowOrdinal`; each helper also loads it when used alone
+- [x] The numeric `Last` address sort remains native and is listed with the value-key reason;
+      null/empty inputs and case-folded uniqueness retain their caller semantics
+- [x] A hyphen-versus-letter regression passes on PowerShell 7 and Windows PowerShell 5.1;
+      restoring a string `Sort-Object` is caught with the complete selector count
+- [x] P69 and the requested network suites pass with their scratch dependencies copied;
+      the lead runs the packet gate and council round 4, not this integration task
+
+Initial measurement: native sorting gives `eastus-b,eastusa` on PowerShell 7 and
+`eastusa,eastus-b` on Windows PowerShell 5.1. The ordinal helper gives the same order on
+both and applies its documented case-folded uniqueness. Native sorting already drops null
+pipeline items; NSG IDs additionally filter null/empty values before sorting. No null sentinel
+is needed by these four callers. A null element in the typed discovery-subscription argument
+becomes an empty string and remains refused rather than silently omitted. No Test-All or gate
+is run for this request.
+
+`Test-CompanyFlow` now has 34 assertions on each host, including ordinal hyphen/letter order,
+case-folded region duplicates, null/empty lists, scoped ID ordering and fresh standalone imports.
+P76's strict entry-point scan uses the same exact exception signatures as its transitive scan:
+loading FlowContract directly must not reject the explicitly allowed numeric `Last` sort.
+The numeric line still has to exist unchanged, and no string sort was added to the exception
+table. P69's installer and mutation sandboxes already copy FlowContract; the network review
+mutation sandbox now copies it into its `scripts\flow` directory too.
+
+Implemented in `73ce7c0`. Focused validation on PowerShell 7 and Windows PowerShell 5.1:
+CompanyAddress 79/79, CompanyCertificate 31/31, CompanyFlow 34/34, CompanyInstaller 17/17,
+FlowAppliedState 20/20, CompanyMutationRunner 5/5 and AddressDeadline 6/6. The full P69
+mutation harness catches 105/105 cases with complete 79/31/34/17/20/6 selector counts
+(330.2 s PS7, 597.2 s PS5.1). Three new mutations restore the native region sort or remove
+one standalone ordinal import; each is caught by CompanyFlow at its full 34 assertions.
+
+`Test-FlowOrdinalOrder` passes all 35 checks, including its cross-host probes. The requested
+network suites pass on both hosts: NetworkEdge 67/67, NetworkImpact 26/26,
+NetworkReviewNegative 10/10 mutations, NetworkEdgeNegative 14/14 mutations. One concurrent
+validation run hit existing timing-sensitive PS5.1 address/deadline checks while the network
+tests ran; both passed in isolation, then the two full mutation harnesses ran sequentially.
+No bound, selector or assertion was changed to pass those checks. The numeric free-prefix loop
+is unchanged. No Test-All or packet gate was run; the lead owns the gate and council round 4.
+
+### Council round 3 corrections
+
+The lead's read-only review of `1345956..cabc4c4` returned the following verdicts on 2026-09-28.
+The round-2 A2, C2, C1 and UX findings are closed. The P72 merge semantics, ADR-0025 lane
+changes and main's ledger were confirmed intact. The remaining Coder finding is handled test-first.
+
+| Seat | Verdict | Finding | Fix / evidence |
+|---|---|---|---|
+| Architect | PASS | Round-2 state and integration contract accepted | No further change requested |
+| Coder | BLOCK | A saved record for gateway A is ignored for inheritance but passed to address apply for gateway B, which fails after deployment | `f015de3`: check the saved target and shared subscription resolver before approval; refuse the conflict with both gateway names, scopes, record path and a corrective action |
+| QA | PASS | Round-2 regressions accepted | Add an executable installer conflict case and a full-count mutation |
+| UX | PASS | Applied-only read consumers and P72 refusals retained | New conflict refusal names the selected and recorded gateways |
+| Security | PASS | Existing PFX, scope and deadline boundaries retained | No boundary relaxation |
+
+The requested gate at unchanged `cabc4c4` finished before this correction. It acquired the lock
+after 120.1 s, reached Test-All's unchanged 1,800-second limit, and exited 1 after 1,808.7 s.
+The late timing file contained 87 PASS, zero FAIL and two existing AUM-environment SKIPs.
+Across 31 total-machine samples (including the gate), CPU averaged 61.7%, peaked at 100%, the
+processor queue peaked at 29 on 16 logical processors, and available memory stayed above
+13,463 MB. The slowest check was business-unit mutations 0/4 at 502.0 s; P69's 94 mutations
+took 288.2 s. That run is not a passing gate; its lock was released in `finally`.
+
+- [x] An existing installer record for another gateway is refused before summary approval and
+      resource creation, without overwriting it; the refusal names both gateways and the record path
+- [x] The executable installer regression and mutation pass on both PowerShell hosts
+- [x] The corrected tree runs the packet gate under the shared lock with the unchanged budget;
+      its final timeout is recorded below, not counted as a pass
+
+The real installer regression reproduced the failure before the fix on both hosts: 16 assertions
+ran, with the different-gateway and legacy-subscription cases failing after a deployment write.
+After the fix, `Test-CompanyInstaller` passes all 16; the adjacent address and applied-flow
+suites pass 79 and 20. All 96 mutations are caught on PowerShell 7 and Windows PowerShell 5.1
+with the full applicable 79/31/27/16/20/6 selector count. The two new mutations remove the
+pre-approval record-target guard or only its subscription comparison. No check or selector is
+removed. The existing architecture boundary is unchanged; its installer source hashes were
+regenerated with all 16 diagrams.
+
+An intermediate gate at `d361d5d` passed: Test-All 1,683.9 s; gate 1,694.3 s, 22 passed,
+2 warned, zero failed, 2 skipped; 87 of 89 checks passed and the same two missing-environment
+checks skipped. The lock was acquired after 1,200.4 s and released in `finally`.
+
+A closely related compatibility case was then reproduced before handoff: first-time Setup
+writes an unbound run journal before it invokes the installer. The new refusal must not treat
+that journal as another gateway. The executable test failed, then passed after recognizing
+only schema-v2 Setup/Change-foundation journals with no gateway identity. Address apply binds
+the selected identity after approval and retains an unverified receipt on the injected 503;
+bound, partial, direct-Foundry and unrelated-action records cannot use this path. Targeted totals
+are now 17 installer, 28 flow and 79 address assertions on both hosts. The final gate follows
+this compatibility correction; the intermediate gate does not certify the later tree.
+All 102 mutations now pass on both hosts with full 79/31/28/17/20/6 selector counts. The
+additional draft mutations prove recognition, reject bound or unrelated records, and require
+the approved identity to be retained in the failure receipt. Installer permutations and
+documentation/source checks pass, and the architecture manifest is current.
+
+**Final round-3 gate at `1cd1567`: timeout, not pass.** The lock was acquired after 360.2 s and
+released in `finally`. The gate ran 2026-09-28 08:06:05-08:36:15 UTC and exited 1 after
+1,809.3 s: Test-All reached the unchanged 1,800-second limit; Bicep passed in 7.7 s.
+Scorecard: 21 passed, 2 warned, 1 failed, 2 skipped. The late Test-All timing file, written at
+08:37:32 UTC, reported 87 PASS, zero FAIL and the same two AUM-environment SKIPs (89 checks).
+That late result and the intermediate passing gate do not certify the final tree.
+
+The slowest final-run checks were business-unit mutations 0/4 (392.3 s), 3/4 (313.6 s),
+company-address mutations, all 102 cases (301.7 s), business-unit mutations 1/4 (300.1 s),
+2/4 (296.4 s), and Turnstile mutations 1/2 (220.5 s), 0/2 (218.3 s). Aggregate machine samples,
+including the gate, averaged 68.4% CPU, peaked at 100%, with a maximum processor queue of 82
+and minimum available memory of 14,372 MB. Receipts, load samples and timings are retained in
+session artifacts. No timeout, selector or detector was relaxed.
+
+The Coder correction and first-Setup compatibility tests are ready for re-review; the final
+packet remains blocked on gate duration. ROADMAP P69 is unticked and P74 remains deferred.
+
+### Council round 2 corrections
+
+The lead's five-seat review of `c82f951..1345956` (read-only, 2026-09-28) returned BLOCK.
+A1, Q1, U1 and S1 are closed by that review. P74 remains an accepted scope deferral, not done.
+The following corrections passed their targeted tests and mutations; the merged packet gate and
+council re-review follow. The review verdicts below are the supplied verdicts, not self-issued passes.
+
+| Seat | Verdict | Finding | Fix and regression required |
+|---|---|---|---|
+| Architect | BLOCK (A2 partial) | Only the owning decision advances; DesktopSignIn loses `deviceProfiles.regenerate` | `f3f6672`, `51ca117`: explicit cross-decision results; real DesktopSignIn and Models success/failure regressions |
+| Coder | BLOCK (C2 partial) | Foundation's Azure-transition result merges deletions back into old metadata | `f3f6672`: returned snapshots replace applied decisions; explicit property removals clear both address copies |
+| Coder | BLOCK (C1 partial) | Installer omits the receipt path; legacy Foundation-only subscription fails recovery | `6a2eee2`: real installer 503 after replacement leaves an unverified receipt; shared subscription resolver |
+| QA | PASS, coverage gaps noted | Single-decision fixture missed cross-decision writes and removal propagation | `4d7c4d0`: 94 full-selector-count mutations on both hosts, including every new boundary |
+| UX | BLOCK | Status, Guide and discovery read proposed answers | `f3f6672`: applied-only read consumers; only selected planning/apply decisions receive proposals |
+| Security | PASS for prior S1 | Validated PFX buffer and deadline cleanup retained | Preserve the passing round-1 detectors |
+
+Integration is normal merge `51ca117`, with parents `6a2eee2` and `f98f885` (P72 and P70), not a rebase.
+P72's refusal handling and Guide drift warning, P70's Models prepare/apply boundary, and the
+scoped address recovery exception are retained. Ledger differences against main must contain
+only P69's own contributions: additions to CHANGELOG/STATUS/ROADMAP, and the U30 row/detail in
+UNKNOWNS. U34-U36 and P73 remain unchanged. The Models integration exposed a PowerShell 5.1
+JSON round-trip array wrapper and loss of one-element arrays; recursive value copies now retain
+their shape without sharing nested objects. Model records are published after profile generation
+succeeds, and their return values declare both profile decisions and top-level model data.
+
+Both hosts pass `Test-CompanyAddress` 79, `Test-CompanyCertificate` 31, `Test-CompanyFlow` 27,
+`Test-CompanyInstaller` 13, `Test-FlowAppliedState` 20, `Test-AddressDeadline` 6 and
+`Test-CompanyMutationRunner` 5 assertions. The real P70 lifecycle suite passes 138 assertions
+on each host; P72's complete flow and installer permutation suites pass after their shadow
+repositories gained the new helper dependency. All 94 P69 mutations are caught, each running
+the full applicable 79/31/27/13/20/6 selectors (314.3 s PS7, 526.3 s PS5.1).
+
+**Lane evidence (ADR-0025).** Certificate, CompanyFlow, Installer and MutationRunner were
+inspected for writes, ports, native tools and process-wide state. They use GUID-named private
+scratch, mocked Azure/prices and process-local helpers; they neither write tracked source nor
+use live Azure, shared configuration or listening ports. Only those four checks moved to the
+parallel lane. The mutation harness and deadline probes remain exclusive; no timing-sensitive
+check was moved or omitted.
+
+The same Test-All scheduler and four registrations ran serially once, then three times at
+parallel throttle 4, each in a fresh process. All four full suites passed in every run.
+
+| Check / wall duration, seconds | Before: serial | Parallel 1 | Parallel 2 | Parallel 3 |
+|---|---:|---:|---:|---:|
+| Certificate | 3.7 | 2.4 | 2.3 | 2.0 |
+| CompanyFlow | 3.4 | 2.5 | 2.6 | 2.1 |
+| Installer | 4.8 | 4.9 | 5.0 | 4.0 |
+| MutationRunner | 1.3 | 1.5 | 1.3 | 1.2 |
+| Four-check wall | 13.3 | 5.2 | 5.3 | 4.2 |
+
+These are the selected-check lane measurements, not whole-suite timings. The unchanged
+1,800-second full-gate budget still applies.
+
+**Round 2 merged-tree gate: timed out, not passed.** At `51e816e`, the gate acquired the shared
+lock immediately and ran from 2026-09-28 04:52:43 to 05:22:57 UTC. Exit 1 after 1,814.5 s:
+21 passed, 2 warned, 1 failed, 2 skipped. Test-All reached the unchanged 1,800-second command
+limit; Bicep passed in 12.5 s. The lock was released in `finally`.
+
+The owned Test-All child finished at 05:26:20 UTC, about 2,017 seconds after gate start, and
+its timings file recorded 89 checks: 87 PASS, zero FAIL, two existing missing-environment SKIPs
+(AUM service and AUM Python environments). That late completion is not a passing packet gate.
+The timings and gate receipts are retained as session artifacts. No budget, selector or detector
+was relaxed, and the late child had exited before temporary files were removed.
+
+| Slowest checks from the late timings file | Seconds | Result |
+|---|---:|---|
+| Business-unit mutations, shard 0/4 | 513.7 | PASS |
+| Business-unit mutations, shard 1/4 | 387.9 | PASS |
+| Business-unit mutations, shard 2/4 | 377.5 | PASS |
+| Business-unit mutations, shard 3/4 | 376.2 | PASS |
+| Turnstile mutations, shard 1/2 | 358.8 | PASS |
+| Turnstile mutations, shard 0/2 | 352.1 | PASS |
+| Company-address mutations, all 94 cases | 304.3 | PASS |
+
+The round-2 functional corrections, normal main merge, dual-host mutations and lane measurements
+are ready for the lead's re-review. The merged packet remains blocked on the full-gate duration.
+P69 stays unticked in ROADMAP; the accepted P74 positive TLS proof remains deferred, not done.
+
+### Council round 1 corrections
+
+The lead's five-seat review of `aa7ed19..c82f951` (gpt-6-astra, read-only, 2026-09-28)
+returned BLOCK. The following corrections are implemented and targeted checks pass; a passing targeted test is not a
+council re-review verdict.
+
+**Round 1 correction gate: PASS** at `215d43a`, 2026-09-28 02:57:55-03:26:09 UTC.
+The lock was acquired after 840.4 s of 60-second retries and released in `finally`.
+`node .ironclad/gate.mjs --stage packet` exited 0 in 1,694.4 s: 22 passed, 2 warned,
+zero failed, 2 skipped. Test-All completed in 1,684.1 s with 85 registered checks:
+83 PASS, zero FAIL, two existing missing-environment SKIPs (AUM service and AUM Python environments).
+The 1,800-second budget is unchanged; Bicep passed in 8.6 s. The complete 82-mutation check
+passed in 213.5 s in this gate. The branch is ready for the lead's council re-review, not a
+claim that the deferred P74 live criterion is done.
+
+| ID | Seat | Finding | Required evidence |
+|---|---|---|---|
+| A1 | Architect | Inherited custom address writes escaped Foundation pricing and fingerprinting | `d2a61d5`: effective inputs are resolved once, passed exactly and fingerprinted; executable installer/Foundation mutations |
+| A2 | Architect | Proposed answers were saved as applied decisions and as history's previous value | `f469bbc`: generic real-orchestrator tests preserve pre-question history and applied state on failure |
+| C1 | Coder | Replacing the old hostname then failing proof made Change reject recovery as drift | `e030301`: integrity-checked unverified receipt; only matching Change address recovery, with fresh approval |
+| C2 | Coder | Returning to Azure retained company metadata and old generated settings | `d2a61d5`, `74fab21`: metadata, Foundation inputs and generated artifacts agree with the Azure URL |
+| Q1 | QA | Source-position assertions did not execute installer approval guards | `d2a61d5`, `387f2fd`: real installer with mocked Azure; deleting its fingerprint, decline or WhatIf guard fails the named test |
+| U1 | UX | A slow check could succeed after its advertised deadline | `a6b9d21`, `74fab21`: cancellable checks, bounded native reads, late-result refusal and parent-owned private-file cleanup |
+| S1 | Security | PFX bytes were reread after hash approval | `5128a28`: one validated/hashed buffer is uploaded despite file replacement during DNS waiting |
+
+Round 1 correction evidence, both PowerShell 7 and Windows PowerShell 5.1:
+
+| Test | Assertions or mutations |
+|---|---|
+| `Test-CompanyAddress.ps1` | 78/78 |
+| `Test-CompanyCertificate.ps1` | 31/31 |
+| `Test-CompanyFlow.ps1` | 27/27 |
+| `Test-CompanyInstaller.ps1` | 11/11, executing the real installer with external services stubbed |
+| `Test-FlowAppliedState.ps1` | 9/9, executing the real orchestrator for an arbitrary step |
+| `Test-AddressDeadline.ps1` | 6/6, including real child-process timeouts, native Azure-command stubs and private-directory ownership |
+| `Test-CompanyMutationRunner.ps1` | 5/5 |
+| `Test-CompanyAddressNegative.ps1` | 82/82; every case runs the full applicable 78/31/27/11/9/6 assertions |
+
+The 81 mutations took 257.1 s on PowerShell 7 and 437.6 s on Windows PowerShell 5.1.
+Each suite owns a temporary directory, including deliberately broken cleanup cases; no assertion
+or mutation is skipped. Native timeout checks include termination/cleanup time in the reported
+elapsed duration. Structured values, secure strings and PFX byte arrays also passed through the
+real worker transport on both hosts without being placed on a native command line.
+
+P72 merge boundary: the trap, Show-Status, main drift call and cancellation catch blocks were
+not rewritten. Shared changes are the applied-decision snapshot/serializer, history capture and
+the narrowly scoped recovery branch inside `Assert-RecordMatchesLive`.
+
+The first round-1 locked gate at `1adb5c6` completed Test-All in 1,226.3 s, below the unchanged
+1,800-second budget, but failed two checks (81 passed, 2 failed, 2 skipped). The format scanner
+found a regex fixture that resembled an invalid format alignment and emitted-script paths that
+were relative to the test source rather than its generated location. Both fixtures were corrected
+without changing either detector. The mutation baseline failed only under Test-All's nested
+temporary paths: Windows returned the user directory instead of an overlong worker TEMP path,
+and could not start its deeply nested `az.cmd` fixture. Workers and mutation copies now use
+short, unique per-user temporary directories; workers verify that the runtime directory matches
+their parent's owned path before executing. The nested-path reproduction passes. Final counts:
+82/82 mutations on both hosts, with full 78/31/27/11/9/6 assertions; `Test-AddressDeadline` is 6/6.
+The final packet gate follows this correction; the earlier failing result is not counted as pass.
+
+The next locked gate at `386bb22` hit the unchanged 1,800-second command deadline. Its child
+Test-All finished just after the gate timeout with 83 PASS, zero FAIL and two dependency SKIPs;
+that late completion is not a passing gate. The new mutation check passed in 222.1 s. The
+deadline probes were shortened without reducing coverage: the simulated blocked native command
+lasts 8 rather than 30 seconds, its required return bound is stricter (6 rather than 8 seconds),
+and the deadline mutation doubles rather than multiplies the wait by 100. All 82 mutations
+remain caught with full assertion counts (195.8 s PS7, 372.0 s PS5.1). The gate is rerun without
+changing its command budget or test selectors.
+
+- [x] U30 is closed with dated Microsoft Learn and Azure Retail Prices API evidence for every
+      v2 tier, certificate source, DNS record, update wait and component price; ADR-0033 records
+      the design before production code
+- [x] One script plans without writes and applies the hostname, certificate and DNS records;
+      existing hostname configurations and service/network properties survive the ARM update
+- [x] Azure DNS records are created in the selected writable zone; external DNS gets exact
+      records and a bounded resolution wait; every wait names its purpose, estimate and elapsed time
+- [x] Certificate choices match the selected tier; Key Vault access uses the gateway managed
+      identity; no certificate password, private key or token enters the record, plan or logs
+- [x] The installer asks for the address and certificate alongside its other choices, states
+      each component's cost before confirmation, and applies only after deployment
+- [x] `-Action Change -Change address` has an ADR-0030 plan, cost, fingerprint, apply and verification;
+      a successful HTTPS proof updates the onboarding address and developer-facing artifacts
+- [x] Offline tests run on PowerShell 7 and Windows PowerShell 5.1; every new detector is
+      negative-tested with the complete assertion count; each green is committed
+- [ ] **Deferred to P74, not done:** positive HTTPS through an owned, publicly delegated company
+      hostname with its matching certificate. The isolated authoritative CNAME and ownership
+      refusal were measured; all proof resources were deleted and the gateway purged below USD 5
+- [x] Redacted, inspected live terminal images numbered 40 onward are embedded in the updated
+      setup/flow documentation; architecture sources, images and manifest remain current
+- [x] The current merged tree's locked packet gate exits 0. Round 1 passed at `215d43a`;
+      round 2 at `51e816e` timed out at the then 1,800 s budget, and so did `1cd1567` and, on the
+      merge of `main` `040ca87`, `b4e970b` (at throttle 8 and at the default throttle), which led to
+      P77 ([ADR-0036](adr/0036-gate-budget-until-sharded.md)). Council round 4, all five seats PASS.
+      On `d73e3fd`, `b4e970b` with `main` `9635426` (P77) merged, 2026-09-28 16:43:46-17:17:30 IST
+      under the shared lock at the default throttle: 22 passed, 2 warned, 0 failed, 2 skipped;
+      Test-All passed in 2,015.2 s (89 PASS, 2 SKIP of 91 checks) within the 3,600 s budget, the
+      Bicep build in 7.2 s
+
+Implementation: `b10e945` (certificate/TLS), `99ade80` (shared script and installer/Change wiring),
+`e607df8` (unattended Foundation plan and price binding), `c6b5749` (DNS-before-binding and
+handover consistency), `643ae41` (negative detectors). Plan `c433f89`; contract `10c7a41`.
+
+| Evidence | PowerShell 7 | Windows PowerShell 5.1 |
+|---|---|---|
+| `Test-CompanyAddress.ps1` | 71/71 assertions | 71/71 assertions |
+| `Test-CompanyCertificate.ps1` | 30/30 assertions | 30/30 assertions |
+| `Test-CompanyFlow.ps1` | 24/24 assertions | 24/24 assertions |
+| `Test-CompanyAddressNegative.ps1` | 59/59 mutations caught | 59/59 mutations caught |
+| `Test-CompanyMutationRunner.ps1` | 5/5 assertions | 5/5 assertions |
+| Actual `Invoke-ClaudeAddressHttps`, read-only against the reference Azure hostname without a token | HTTP 401; trusted chain and exact pin; 0.91 s | HTTP 401; trusted chain and exact pin; 1.24 s |
+
+The first RED runs completed 61 address and 30 certificate assertions on both hosts, all failing
+for the absent implementation or empty-region price restriction. Unattended Foundation then
+failed three of 22 integration assertions before its wiring was added. The live DNS sequence
+failed its new offline ownership assertion before being corrected. Mutations run each complete
+suite in a private copy and restore the source after every case. One mutation initially survived:
+removing the discovery HTTPS-scheme check was concealed by the port check on ordinary HTTP.
+An HTTP URL explicitly using port 443 now isolates that detector. The full assertion counts
+above run under each mutation; no test is skipped.
+
+Related checks passed: `Test-NetworkTransport`, `Test-FlowContract`, `Test-AdminSurface`,
+`Test-FlowStart` (114 assertions, including its own PowerShell 5.1 probes), `Test-On-PS51` (real
+installer `-WhatIf` reaches the summary), `Test-DocReferences` and `Test-Architecture` (36
+assertions). The architecture generator rendered 15 specs and 17 PNG outputs with current
+source hashes. The new company-address diagram and images 40-42 were inspected after rendering;
+the screenshots' hashes and redacted command provenance are in
+`docs/guide/company-address-captures.json`.
+
+**Live resources and cleanup, all times UTC on 2026-09-27.** No resource outside the owned proof
+group was written. The existing Foundry account was only referenced by the template with
+`grantFoundryRole=false`; no Entra group or Key Vault was created.
+
+| Created | Time / scope | Deleted or purged |
+|---|---|---|
+| `<proof-resource-group>`, tag `purpose=p69-proof` | 20:38:41.905 | Delete requested 20:52:14.326; confirmed absent 20:55:00.080 (165.7 s) |
+| Azure DNS `<proof-zone>.test` | 20:38:49.248, in the proof group | With the group |
+| Basic v2 `<proof-apim>` | Template deployment finished 20:41:14.822; 148.0 s including final read | With the group; `az apim deletedservice purge` finished 20:56:31.515 (91.4 s); absence confirmed |
+| `<proof-workspace>`, `<proof-application-insights>`, and its Failure Anomalies smart-detector rule | Same template deployment, in the proof group | With the group |
+| Local, self-signed RSA PFX for the reserved test hostname | Supplied to APIM; never imported into a certificate store | Temporary PFX and public PEM removed after capture |
+
+The authoritative CNAME resolved after 15.1 s in the retry, and a separate
+`Resolve-DnsName -Type CNAME -Server <Azure-nameserver>` at 20:52:06.873 returned the planned
+target and TTL 300 in 0.576 s. Both PFX hostname PATCHes failed
+`CustomHostnameOwnershipCheckFailed`; the second failure followed that DNS readiness.
+`curl.exe --resolve <company-host>:443:<gateway-IP> --cacert <proof-public-certificate>` then
+failed the handshake, exit 35 (0.472 s). The isolated Azure hostname returned the policy's
+`401 A Microsoft Entra ID token is required`, TLS verification 0, in 6.770 s.
+**The positive company-hostname TLS acceptance is deferred to P74**, not passed, without an
+administrator-owned public domain. No ownership validation was bypassed and no domain was
+bought or borrowed.
+
+The proof group's 0.2717-hour lifetime gives an elapsed-time Basic v2 list-price estimate of
+USD 0.0558, plus one short-lived DNS zone, a handful of queries and unauthenticated telemetry;
+the USD 5 ceiling was retained. Invoice reconciliation is unavailable (**U2**). A first cleanup
+log calculation mixed local `DateTime` and UTC strings; a final UTC-offset calculation corrected
+it from USD 1.1860 to USD 0.0558. A read-only cleanup check at 21:27 UTC again found no resource
+group and no matching soft-deleted gateway.
+
+Council review and the decision about the blocked public-domain proof belong to the lead.
+The roadmap entry remains unticked.
+
+First locked packet gate, `e6ddf0d`: exit 1 after 1,817.3 s because Test-All exceeded its unchanged
+1,800-second budget. The P69 mutation check alone occupied 10 minutes 38 seconds in the serial
+lane, repeatedly starting native PowerShell processes. The gate's timed-out shell left its
+Test-All child running; only that verified P69 process tree was stopped by explicit process IDs.
+The fix retains every mutation and assertion but uses a fresh, disposable PowerShell runspace
+for each case. Dedicated runner tests cover exit codes, output, missing summaries and isolation.
+All 59 cases then passed in 82.9 s on PowerShell 7 and 164.8 s on Windows PowerShell 5.1, with
+the same 71/30/24 full assertion counts. The charter budget is not increased.
+
+**Prior handoff at c82f951: blocked, not packet-complete.** At `81508b1`, the corrected gate attempt retried
+the shared `.gate-lock` every 60 seconds for the full permitted 60 minutes. Another run retained
+the lock, so this attempt never started the packet gate and exited 1. That lock was not removed.
+The last executed packet gate therefore remains the timeout above: 21 passed, 2 warned, 1 failed,
+2 skipped, with the Bicep build passing in 15.2 s. Targeted checks and all 59 mutations pass after
+the speedup, but there is no passing full gate to claim. The lead still needs an available gate
+window, the five council verdicts, and a decision about the positive company-domain proof that
+requires a delegated domain. No merge, push, history rewrite or roadmap completion was performed.
 
 ## P68 the guided flow starts at once and gives the foundation to the installer, 2026-09-27
 

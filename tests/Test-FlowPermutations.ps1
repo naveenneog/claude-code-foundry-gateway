@@ -106,7 +106,7 @@ function Get-AzureRetailPrice {
 function Get-AzureRetailPriceUnavailableReason { '' }
 function ConvertTo-MonthlyPrice { param([decimal]$HourlyPrice, [int]$Units = 1) [math]::Round($HourlyPrice * 730 * $Units, 2) }
 '@
-$shadowFiles = @('Start-ClaudeGateway.ps1', 'scripts\ClaudeChoice.ps1', 'scripts\ClaudeGatewayRegion.ps1', 'scripts\Update-ClaudeGateway.ps1', 'scripts\flow\FlowContract.ps1', 'scripts\flow\Discovery.ps1', 'scripts\flow\Foundation.ps1', 'scripts\flow\lib\LifecycleCommon.ps1')
+$shadowFiles = @('Start-ClaudeGateway.ps1', 'scripts\ClaudeChoice.ps1', 'scripts\ClaudeGatewayRegion.ps1', 'scripts\ClaudeGatewayAddressInput.ps1', 'scripts\Update-ClaudeGateway.ps1', 'scripts\flow\FlowContract.ps1', 'scripts\flow\Discovery.ps1', 'scripts\flow\Foundation.ps1', 'scripts\flow\lib\LifecycleCommon.ps1')
 function New-Shadow([string]$Dir) {
     foreach ($d in 'scripts\flow\lib', 'onboarding') { New-Item -ItemType Directory -Force -Path (Join-Path $Dir $d) | Out-Null }
     foreach ($f in $shadowFiles) { if (Test-Path -LiteralPath (Join-Path $root $f)) { Copy-Item -LiteralPath (Join-Path $root $f) -Destination (Join-Path $Dir $f) } }

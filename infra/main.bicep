@@ -76,6 +76,9 @@ param apimLegacyPortalStatus string = 'Disabled'
 @description('Protocol and cipher settings the gateway already has. Empty for a new gateway.')
 param apimCustomProperties object = {}
 
+@description('Hostname bindings read from a template-owned gateway before redeployment. Unrelated bindings and their certificates are retained.')
+param apimHostnameConfigurations array = []
+
 @description('Deployment name of the Sonnet-class model in Foundry.')
 param sonnetDeployment string = 'claude-sonnet-5'
 
@@ -283,6 +286,8 @@ resource apimNew 'Microsoft.ApiManagement/service@2024-05-01' = if (createApim) 
     }
   }, empty(apimCustomProperties) ? {} : {
     customProperties: apimCustomProperties
+  }, empty(apimHostnameConfigurations) ? {} : {
+    hostnameConfigurations: apimHostnameConfigurations
   })
 }
 

@@ -1,0 +1,29 @@
+[
+  {
+    "image": "40-company-address-review.png",
+    "live": true,
+    "command": "Get-ClaudeAddressPlan -CertificateSource Pfx -IsolatedProof -DnsServer <Azure-nameserver> -ConnectAddress <gateway-IP>",
+    "captured_at_utc": "2026-09-27T20:50:10.0510979Z",
+    "sha256": "679833af9ec33253ed4db9d71cfd5493235a418495f0acec8a4344a6972b45a3",
+    "redacted": true,
+    "limitation": "Authoritative DNS and public-ownership refusal are live; no successful custom-hostname binding or TLS is claimed."
+  },
+  {
+    "image": "41-company-address-dns-and-boundary.png",
+    "live": true,
+    "command": "Resolve-DnsName <company-host> -Type CNAME -Server <Azure-nameserver>; curl.exe --resolve <company-host>:443:<gateway-IP> --cacert <proof-certificate> https://<company-host>/claude/v1/messages",
+    "captured_at_utc": "2026-09-27T20:52:06.8729485Z",
+    "sha256": "ce6128ab051865e35148e98c37f280126f2b5c7713137fd7bddc4151fc8954c9",
+    "redacted": true,
+    "limitation": "Authoritative DNS and public-ownership refusal are live; no successful custom-hostname binding or TLS is claimed."
+  },
+  {
+    "image": "42-company-address-cleanup.png",
+    "live": true,
+    "command": "az group exists --name rg-contoso-proof; az apim deletedservice list; UTC elapsed-time retail estimate",
+    "captured_at_utc": "2026-09-27T21:27:11.6667034Z",
+    "sha256": "bf38d9368c63978e89f42116d9f30dae911fdc60e89833b7fc072711edb1f554",
+    "redacted": true,
+    "limitation": "Authoritative DNS and public-ownership refusal are live; no successful custom-hostname binding or TLS is claimed."
+  }
+]

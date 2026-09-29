@@ -1580,7 +1580,7 @@ $mutations = @(
     @{ Suite = 'Test-AdminSurface.ps1'
        Name  = 'the declared population is never checked against the store'
        File  = 'Install-ClaudeGateway.ps1'
-       From  = 'This holds about {0} developers today'
+       From  = 'Named values hold about {0} developers, and you said {1}.'
        To    = 'Sizing looks fine for {0} developers' }
 
     @{ Suite = 'Test-AdminSurface.ps1'

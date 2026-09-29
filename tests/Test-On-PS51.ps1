@@ -1,65 +1,40 @@
-# Runs the wizard under Windows PowerShell 5.1 specifically.
-#
-# The reported failure only reproduces on 5.1, because PowerShell 7 quotes
-# arguments to .cmd shims differently. Development happened on 7, which is
-# exactly why it shipped broken - so this check exists to stop that recurring.
-
+# The real wizard crosses cmd.exe and a native az.cmd shim on PowerShell 5.1.
+# Its Azure and HTTP responses are fixtures; no operator session is consulted.
+$ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'TestAzureFixture.ps1')
 $ps51 = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
 if (-not (Test-Path $ps51)) { throw 'Windows PowerShell 5.1 not found.' }
-
 $root = Split-Path $PSScriptRoot -Parent
 $script = Join-Path $root 'Install-ClaudeGateway.ps1'
-
-Write-Host ''
-Write-Host 'Running the wizard under Windows PowerShell 5.1' -ForegroundColor Cyan
-Write-Host "  $ps51" -ForegroundColor DarkGray
-Write-Host ''
-
-# One file per run: a fixed name let a second run on the same machine find it
-# locked, and that error once stopped Test-All early (Test-RunnerIntegrity).
-$answers = Join-Path $env:TEMP ('wiz51-answers-' + [guid]::NewGuid().ToString('N') + '.txt')
-# y            use this subscription
-# (blank)      resource group default
-# (blank)      location default
-# 3            create a new gateway rather than reusing one
-# then blanks: SKU, name prefix, publisher email, five budgets, two groups
-@'
-y
-
-
-3
-
-
-
-
-
-
-
-
-
-
-'@ | Set-Content $answers -Encoding ASCII
-
-$out = try { cmd /c "`"$ps51`" -NoProfile -File `"$script`" -WhatIf < `"$answers`" 2>&1" | Out-String }
-finally { Remove-Item $answers -Force -ErrorAction SilentlyContinue }
-
+$scratch = Join-Path ([IO.Path]::GetTempPath()) ('wiz51-' + [guid]::NewGuid().ToString('N'))
+$out = ''; $code = 1; $calls = ''; $unexpected = $true; $fail = 0
+function Assert($Name, $Condition) {
+    if ($Condition) { Write-Host "  [OK]   PS51: $Name" -ForegroundColor Green }
+    else { Write-Host "  [FAIL] PS51: $Name" -ForegroundColor Red; $script:fail++ }
+}
+try {
+    $driver = New-TestAzureFixture -Directory $scratch
+    $answers = Join-Path $scratch 'answers.txt'
+    [IO.File]::WriteAllText($answers, ("y`r`n" + ("`r`n" * 64)), [Text.Encoding]::ASCII)
+    $command = "`"$ps51`" -NoProfile -File `"$driver`" -Script `"$script`" -Mode Wizard < `"$answers`" 2>&1"
+    $out = & $env:ComSpec /d /c $command | Out-String
+    $code = $LASTEXITCODE
+    $log = Join-Path $scratch 'az.calls'
+    if (Test-Path -LiteralPath $log) { $calls = [IO.File]::ReadAllText($log) }
+    $unexpected = Test-Path -LiteralPath (Join-Path $scratch 'unexpected.calls')
+}
+catch { $out += "`nFixture failed: $($_.Exception.Message)"; $code = 1 }
+finally {
+    if (Test-Path -LiteralPath $scratch) { Remove-Item -LiteralPath $scratch -Recurse -Force }
+}
 $out -split "`n" | ForEach-Object { $_.TrimEnd() }
-
-Write-Host ''
-Write-Host ('-' * 66) -ForegroundColor DarkGray
-if ($out -match 'unexpected at this time') {
-    Write-Host 'FAIL - the cmd.exe quoting bug is still present.' -ForegroundColor Red
-    exit 1
-}
-elseif ($out -match 'NativeCommandError|CategoryInfo') {
-    Write-Host 'FAIL - a native command error occurred under 5.1.' -ForegroundColor Red
-    exit 1
-}
-elseif ($out -match 'Summary') {
-    Write-Host 'PASS - reached the summary under Windows PowerShell 5.1.' -ForegroundColor Green
-}
-else {
-    Write-Host 'INCONCLUSIVE - did not reach the summary; read the output above.' -ForegroundColor Yellow
-    exit 1
-}
-Write-Host ''
+Assert 'the wizard process exits successfully' ($code -eq 0)
+Assert 'native discovery and the missing named value run without unregistered calls' (
+    $calls -match '(?m)^cognitiveservices account deployment list .+--query \[\]\.name' -and
+    $calls -match '(?m)^apim nv show .+--named-value-id entitlement-cache-seconds' -and -not $unexpected)
+Assert 'the real summary and the WhatIf stop are both reached' (
+    $out -match '(?m)^\s*Summary\s*$' -and $out -match 'WhatIf - stopping before any change')
+Assert 'native quoting and error handling remain intact' ($out -notmatch 'unexpected at this time|NativeCommandError|CategoryInfo')
+if ($fail) { Write-Host "$fail PS51 assertion(s) failed."; exit 1 }
+Write-Host 'PASS - reached the summary under Windows PowerShell 5.1 with offline native fixtures.' -ForegroundColor Green
+exit 0

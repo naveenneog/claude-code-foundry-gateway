@@ -109,8 +109,9 @@ Do not mutate repository files, use fixed scratch names, or share Azure CLI
 configuration from a parallel check. Add checks with the one-line `Invoke-Check`
 form; use `-SerialLane` only for a demonstrated shared-state/full-tree-scan need.
 [ADR-0025](adr/0025-parallel-test-suite.md#running-and-extending-the-suite)
-documents serial diagnostics, shards, timing receipts and the restored
-30-minute gate budget.
+documents serial diagnostics, shards and timing receipts;
+[ADR-0036](adr/0036-gate-budget-until-sharded.md) sets the gate command budget to
+60 minutes from 2026-09-28, until P78 shards the long exclusive checks.
 
 `Test-DocReferences.ps1` checks case-sensitive relative Markdown links, GitHub
 heading anchors (including duplicate, Unicode and explicit HTML anchors),

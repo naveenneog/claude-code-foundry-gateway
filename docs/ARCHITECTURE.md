@@ -49,6 +49,26 @@ writes the decision record after each completed step, verifies, and generates
 `onboarding/HOW-TO-USE.md`. It does not replace API Management, Foundry,
 Turnstile, AUM or the reporting jobs; it coordinates their setup and handover.
 
+## Optional company hostname
+
+![Company address control path: a priced installer or Change review creates DNS first, configures the supplied certificate and preserves APIM hostnames, then publishes the developer URL only after trusted TLS and a gateway HTTP 401.](images/architecture/company-address.png)
+
+Source: [15-company-address.json](architecture/15-company-address.json);
+[ADR-0033](adr/0033-company-address.md).
+
+The address path adds no inference proxy. Azure DNS maps the company hostname
+to the same gateway. A supplied PFX is uploaded to APIM, or the gateway's
+system-assigned identity reads the certificate's backing secret from Key Vault.
+The address script patches only the hostname collection, preserving other
+bindings and service/network properties. The decision record and generated
+handover artifacts change only after a DNS/TLS gateway proof. Public DNS
+ownership remains required; an authoritative-only `.test` zone was rejected
+on the isolated Basic v2 gateway ([U30](UNKNOWNS.md#u30--the-company-address--closed-2026-09-28)).
+The lead deferred the positive delegated-domain proof to P74. Proposed decisions
+are separate from applied state; a failed replacement has a separately recorded,
+unverified receipt for a new scoped recovery review. Deadline-bound workers
+include native reads and clean their private files when cancelled.
+
 ## Model lifecycle administration
 
 ![Model lifecycle: read Foundry and gateway state, approve a fingerprint, check ownership and snapshot, write the two model lists, preserve dated prices and records, then generate separate tier profiles for existing fleet and workstation routes.](images/architecture/model-lifecycle.png)
@@ -706,9 +726,11 @@ it does not use Azure CLI state or scan the entire working tree, and every mutat
 a uniquely named copy in the ignored `.shots-entra` area, never a repository source file.
 
 The current main runner follows [ADR-0025](adr/0025-parallel-test-suite.md): isolated
-parallel checks and complete mutation shards restored the 30-minute gate command budget.
-That supersedes [ADR-0024](adr/0024-test-suite-time-budget.md)'s temporary 60-minute
-budget. Use the merged contract, not a worktree-local timeout change.
+parallel checks and complete mutation shards, at a default throttle of four. ADR-0025 restored
+the 30-minute gate command budget after [ADR-0024](adr/0024-test-suite-time-budget.md)'s temporary
+60-minute one; [ADR-0036](adr/0036-gate-budget-until-sharded.md) sets 60 minutes again from
+2026-09-28, until P78 shards the long exclusive checks. Use the merged contract, not a
+worktree-local timeout change.
 
 Live screenshots are separate from deterministic diagrams. Current portal requirements
 are in `guide/captures/architecture.json` for the lead-operated batch after fresh sign-in;

@@ -30,10 +30,10 @@ function global:Get-ClaudeFlowLifecyclePolicyNamedValueReferences {
     param([string]$PolicyPath = (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'infra\policy.xml'))
     if (-not (Test-Path -LiteralPath $PolicyPath)) { throw "Policy file '$PolicyPath' does not exist." }
     $text = [IO.File]::ReadAllText($PolicyPath)
-    return @([regex]::Matches($text, '\{\{([^}]+)\}\}') |
+    # Code-point order: the Update migration plans and creates them in this order (P76).
+    return @(Sort-ClaudeFlowOrdinal -InputObject @([regex]::Matches($text, '\{\{([^}]+)\}\}') |
         ForEach-Object { $_.Groups[1].Value.Trim() } |
-        Where-Object { $_ } |
-        Sort-Object -Unique)
+        Where-Object { $_ }) -Unique)
 }
 
 function global:Get-ClaudeFlowLifecycleTemplateNamedValueDefaults {
