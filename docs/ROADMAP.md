@@ -80,6 +80,14 @@ premise does not carry over.
 
 ## Packets
 
+### Customer deployment follow-up, 2026-09-29
+
+| Packet | State | Deliverable |
+|---|---|---|
+| P84 | Builder active; owner requested 2026-09-29 | Projection deployment checks everything before it writes and never switches into an outage. Read-only preflight, fail-closed Graph, honest runner/app failures and a verified-reconciler switch guard on deployment, installer and guided flow. Offline tests and mutations; ADR-0040. |
+| P85 | Separate builder active | AUM TUI manages people, units, teams and budgets with full tests. |
+| P86 | Proposed; owner decision pending | Scheduled projection reconciler and tenant-admin pack: managed identity with Graph `GroupMember.Read.All` granted by a tenant admin, an hourly job and lease alerts. P84 verifies evidence but creates no schedule. |
+
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 
 | Packet | Milestone | Deliverable | Depends on |

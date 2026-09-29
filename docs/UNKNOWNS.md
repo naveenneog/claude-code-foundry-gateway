@@ -43,6 +43,15 @@ fails the release stage while any remain. Detail for each one follows below.
 
 ---
 
+## P84 research before implementation
+
+| ID | State | Question | Blocks |
+|---|---|---|---|
+| U54 | CLOSED | Researched 2026-09-29: Graph filtered collections distinguish empty success from errors; authorizationPolicy GET requires Policy.Read.All and explicitly exposes allowedToCreateApps. Member-user default permission is a sufficient check; role-delegated/unreadable cases require an existing app id, not a speculative write. CAE IP-variation remedies and sources are in [ADR-0040](adr/0040-projection-preflight-and-switch.md). | P84 contract defined; tenant policy is not measured live |
+| U55 | CLOSED | Researched 2026-09-29 against all three Bicep templates and Microsoft naming/RBAC docs: nine providers, a 1-37 character safe prefix, and three global name checks. Local Bicep build-params evaluates the existing uniqueString storage name without a deployment; fixture result stres52p2c4jfs43ig. [ADR-0040](adr/0040-projection-preflight-and-switch.md) records API shapes and citations. | P84 contract defined; regional capacity cannot be guaranteed |
+| U56 | ASSUMED | The version-1 contract binds the current pinned container template and destination environment to a recent succeeded execution of an hourly-or-faster scheduled ARM job. Assumption: that customer-controlled image performs the declared renewal; ARM success alone cannot prove application semantics or future health. Fresh population/comparison and a second expiry check bound P84's switch. P86 owns the tested image, Graph grant, job and alerts. [ADR-0040](adr/0040-projection-preflight-and-switch.md); owner acceptance pending. | P84 evidence contract; no override; live P86 integration remains unmeasured |
+| U57 | CLOSED | The existing native az.cmd/HTTP fixture pattern (tests/TestAzureFixture.ps1:2) isolates both hosts. P84 uses a fast stubbed suite and mutations of unique copies; a mutation must preserve the complete baseline assertion count and fail an assertion with valid syntax. Results remain pending RED/GREEN and mutation runs. | P84 verification method defined; proof pending |
+
 ## P78 research before implementation
 
 | ID | State | Question | Blocks |

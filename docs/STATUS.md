@@ -2,6 +2,38 @@
 
 **Active packets (2026-09-29, run in parallel worktrees):** P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)), P80 AUM shows every action it has, and P81 USD budgets are the primary enforcer, each on its own branch. The owner approved merging P71 and P80 on 2026-09-29; each merges after its council passes and its packet gate passes on the merged tree, P80 after P71. P81 merges only with the owner's explicit approval. Each has its own section on its branch; the section lands here when the packet merges. P78 the test suite runs in parallel on GitHub-hosted runners is merged with the owner's approval (`2737232`, [below](#p78-the-test-suite-runs-in-parallel-on-github-hosted-runners-2026-09-28)); ADR-0039's proposed charter change is not enacted. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)), and its follow-up, the installer permutation check reads only its own record (`05dea1b`, [below](#p79-follow-up-the-installer-permutation-check-reads-only-its-own-record-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
+## P84 Projection deployment checks everything before it writes and never switches into an outage, 2026-09-29
+
+**Builder work in progress.** The owner requested P84 after a partial customer deployment on
+2026-09-29. The branch is `p84-projection-preflight`, based on `30cdfd0`. The lead owns COUNCIL
+and GATE; the owner owns merge approval. This packet performs no live Azure writes.
+
+- [x] PLAN: A-F below define the packet; P85 belongs to another builder and P86 is proposed.
+- [x] CONTRACT: [ADR-0040](adr/0040-projection-preflight-and-switch.md) records the switch
+      evidence contract, with U54-U57 researched before implementation.
+- [ ] A: `-PreflightOnly` and normal deployment share a read-only preflight before any Azure
+      write. One table contains check, result, evidence, remedy and acting party. Checks cover
+      PowerShell 7, Azure sign-in/subscription, two Graph probes 20-30 seconds apart, tier
+      groups, resolver registration permission/identifier URI, providers, resource-group RBAC,
+      every derived name and global availability, local tools and regional-capacity limits.
+- [ ] B: Deployment, installer and guided Entitlement refuse a projection switch without a
+      verified reconciler. Refusal states the two-hour maximum lease, absolute expiry and
+      developer-wide 503 consequence. ARM reads verify schedule and recent success; no bypass
+      or scheduled resource is introduced.
+- [ ] C: Every shared Graph-membership caller fails on CAE, authorization and network errors;
+      only a positively empty lookup represents an absent optional group.
+- [ ] D: Apply/compare parsing and `ok:false` failures show the last 40 runner-output lines.
+      App creation failure never updates an empty id or reports a fictitious WhatIf failure.
+- [ ] E: A fast registered offline suite exercises A-D, with right-reason RED, passing related
+      projection/installer/Entitlement checks and count-preserving guard mutations.
+- [ ] F: STATUS, CHANGELOG, SECURE-PROJECTION, SCALE, UPDATE-AND-CHANGE, SETUP, GUIDED-FLOW,
+      ADR-0040, U54-U57 and ROADMAP record the behavior, evidence and remaining decisions.
+
+Architecture conclusion: no deployed component, identity, network path or schedule changes;
+only operator-side validation and switch admission change. U56 records the evidence-contract
+assumption and pending owner acceptance. The initial audit-only packet gate passed
+(20 passed, 2 warned, 0 failed, 4 command checks skipped); this is not the lead's packet gate.
+
 ## P78 the test suite runs in parallel on GitHub-hosted runners, 2026-09-28
 
 **Merged as `2737232` on 2026-09-29 with the owner's approval. Council round 1 passed and the local packet gate passed; ADR-0039's proposed charter change is not enacted.**
