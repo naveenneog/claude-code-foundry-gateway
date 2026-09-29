@@ -29,7 +29,7 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
-- **AUM terminal management (P85, builder work in progress).** People exposes
+- **AUM terminal management (P85, builder candidate; lead council/gate pending).** People exposes
   Remove person from team beside Add person to team, with `h` and a matching
   palette entry. Its preview names the resolved person, all tier/catalog group
   removals and the `allow-standard`/`allow-premium` publication targets. The
@@ -43,6 +43,12 @@ exact streaming cache-creation detail remains **U13**.
   polling. Direct person budgets retain their gateway meaning, USD results
   state that reconciliation is pending, and the USD palette entry follows its
   own selected-scope capability rather than catalog-write permission.
+  The install-first guide has separate task how-tos, existing destructive-scope
+  rules and estimated waits. Required Example snapshots are regenerated;
+  historical live captures remain unchanged. Twelve exact-test-identity
+  mutation probes detect removal and related receipt/discovery regressions.
+  Architecture boundaries are unchanged. P71's closed-presentation integration
+  requirements are recorded in STATUS without merging that branch.
 - **AUM action discovery (P80, owner-approved for integration after P71).** People and Budgets show
   Add person to team, Set budget, Set USD budget and Chargeback report, with
   matching Help and keyboard hints. The selected connection appears as

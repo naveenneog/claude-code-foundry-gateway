@@ -112,6 +112,81 @@ sequence in `finally` and refuses to overwrite an unexpected concurrent edit.
 Its receipt, case identities, per-probe JUnit and logs are under
 `$env:TEMP\p85-mutations`; the outer log is `$env:TEMP\p85-mutations.log`.
 
+### Architecture and capture provenance
+
+There is no new component, writer, identity, schedule, storage format or
+network path. The terminal now reaches the developer engine that the CLI
+already uses. The catalog rules, Direct bridge, delegated Turnstile publication
+and native USD authority remain unchanged; no ADR is needed for a boundary
+change. `node guide\render-architecture.mjs` regenerated provenance for the
+changed existing client inputs: 17 specifications and 19 PNGs verified, with
+no changed diagram specification or PNG bytes. Only the generated architecture
+manifest changes.
+
+The existing snapshot-manifest test failed on the changed
+`developer_screens.py` source hash (**1 failure, 0.74 s**), so capture
+regeneration was required by an existing test, not requested speculatively.
+`cli\finops\tools\capture.py` regenerated the Example-only manifest, grids and
+24 SVGs. Only the two People SVGs, their grids and source/output hashes differ.
+Both People sizes were rendered locally with network requests blocked and
+visually inspected: Add/Remove are adjacent, the full action text and two-line
+key map fit, and people rows remain visible at 80x24. Historical live AUM and
+portal captures were not regenerated. No live-capture claim is made.
+
+### P71 integration assessment, read-only
+
+The inspected `p71-aum-speed` HEAD was `860abc9`; its worktree also had
+uncommitted publication-widget, diagnostic-test and ledger work. This is a
+dated assessment of that observed contract, not a claim that the lead's future
+integration target is frozen. No P71 tracked file was changed and P71 was not
+merged. Its `publication_policy.py`, `publication_attributes.py` and
+`test_publication_structure.py` were evaluated against the five changed P85
+presentation files and against the same files at base `e630525`.
+
+That comparison produced seven new attribute findings (five distinct names)
+and one changed pinned context. The later integration needs:
+
+- Reviewed attribute coverage for `action_remove_developer` and
+  `open_remove_form`; the new `app.membership_unavailable_text` use also
+  depends on admitting P80's existing membership-explanation helper.
+- A reviewed protected transition for `switch_screen` in both membership
+  forms, or an equivalent sequence through P71's already-approved screen
+  APIs. The original directory/catalog guards still need to dominate it.
+- An exact safe-error exception and context fingerprint for
+  `app._error_text` in `DeveloperPicker.open_remove_form`, and a refreshed
+  constructor fingerprint for `DeveloperPicker.__init__`. Its existing
+  zero-argument `super().__init__()` remains a checked forwarding call;
+  no unrestricted-super exception is justified.
+- P71's wrapped layout/screen/widget imports and `PublicationApp` base when
+  combining files, rather than overwriting them with P80's earlier raw
+  Textual imports. The touched add-form fallback still inherits P80's raw
+  `notify`; integration needs P71's `publish_notification` under its guard.
+  P85 adds no raw-notify call.
+- No new import or builtin allowance is indicated by the P85 delta. The
+  added preview/result data uses existing engine APIs, `dict`/string values
+  and guarded sinks. The budget receipt changes introduce no new contract
+  finding. P80's inherited findings are separate from these additions.
+
+The normalized comparison is in `$env:TEMP\p85-p71-contract-delta.json`.
+The closed-contract tests and their context hashes remain unchanged here.
+The lead's integrated tree still requires its own contract run, council and
+packet gate.
+
+### Guide and provenance validation
+
+The existing install-first/prose/reference assertions and all Example
+snapshot checks passed **9 tests in 18.87 s**. Documentation references
+passed for **42 guides** with all built-in negative cases caught in
+**8.848 s wall time**. Architecture checks passed **36 assertions**,
+including isolated mutations, in **34.513 s wall time**.
+
+Local builder commits so far: `336b683` records PLAN/CONTRACT, `7f4b427`
+implements people removal and fixes membership-form completion, `809e7c8`
+covers catalog/budget flows and fixes native receipts, and `3eab7c1`
+records the mutation runner and strengthened retained-origin test.
+The full AUM regression run and final clean-tree handoff follow the guide
+and provenance commit. Council and the packet gate remain lead-owned.
+
 ## P80 AUM shows every action it has, connects in one step, and its guide starts with installation, 2026-09-28
 
 Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM guide set. Worktree: `accel-p80`, branch `p80-aum-usability`, based on P71 commit `bcf8554`. The owner approved merging P80 after P71 at 07:41 IST on 2026-09-29. The lead authorized merging pinned `origin/main` (`30cdfd0`) into this branch without rebasing; later P71 work remains separate. This builder is not authorized to push or merge to main.

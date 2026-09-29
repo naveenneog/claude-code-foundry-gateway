@@ -142,7 +142,7 @@ the main views; `0` opens Settings. `?` opens the current key map. The detailed 
 kept in [Tour the live terminal](#tour-the-live-terminal), including Overview,
 Budgets, People, Governance, Usage, Trends, Requests, Anomalies and Settings.
 Those live images are historical measurements with their original provenance.
-Current P80 layout examples use explicit Example data, not a live deployment:
+Current P85 layout examples use explicit Example data, not a live deployment:
 [People, 80x24](../cli/finops/tests/snapshots/svg/people-80x24.svg),
 [Budgets, 160x48](../cli/finops/tests/snapshots/svg/budgets-160x48.svg) and
 [Settings, 80x24](../cli/finops/tests/snapshots/svg/settings-80x24.svg).
@@ -159,8 +159,9 @@ scope. **Add person to team** (`g`) is available to owners through Direct and
 Turnstile-backed gateway configurations. If the search has no result and the
 caller has that action,
 the empty state offers `Add <email> to <team>`. The form searches Entra, loads
-the team/unit catalog on demand, previews tier and group membership changes, and
-then applies only after confirmation. The selected email and team are filled
+the team/unit catalog on demand, previews the chosen tier addition, other-tier
+removal and optional unit/team group addition, and writes only through Apply.
+The palette name is **Add developer**. The selected email and team are filled
 in the add flow. No prior visit to Budgets is required. Non-owners see a plain
 explanation rather than an add offer.
 The AUM-service backend does not support this membership flow:
@@ -168,6 +169,12 @@ The AUM-service backend does not support this membership flow:
 accepts only Direct and Turnstile-backed gateway configurations. People and
 Budgets disable **Add person to team** with that explanation on AUM service;
 neither its shortcut nor its command-palette entry opens a membership writer.
+Directory/catalog reads and preview have a 3-10 s estimate; apply has a
+3-30 s estimate. Done returns to People and refreshes its selected scope.
+People contains observed usage, not a directory roster: a newly added account
+can remain absent until an observed request is available. The
+[offline pilots](../cli/finops/tests/test_p85_people.py) exercise both
+authority paths and refreshed endpoint responses, not live ingestion latency.
 
 CLI:
 
@@ -177,12 +184,100 @@ aum developer add amara@contoso.com --tier standard --unit sales-emea --what-if
 aum developer add amara@contoso.com --tier standard --unit sales-emea --apply
 ```
 
+### Remove a person from a team
+
+In **People**, **Remove person from team** (`h`) sits beside the add action.
+The palette has the same name. An owner selects the resolved account in the
+Entra picker. The preview shows its object id and email/UPN, every planned
+tier and catalog unit/team group removal with the group's id, and the
+`allow-standard` and `allow-premium` publication targets. This removes
+gateway access across those groups, **not just the selected team**.
+Listed direct memberships that are already absent are no-ops; groups are not
+deleted. The resolved email/UPN is the required typed confirmation, including
+the resolved guest UPN when it differs from the searched email.
+
+Field edits invalidate the preview. A new Preview after the confirmation
+enables Apply; a blank or different confirmation is refused by the existing
+[`developer_change(remove=True)` engine](../cli/finops/src/claude_finops/developer_actions.py).
+Non-owners and the AUM service backend cannot open this writer. Directory and
+preview reads have a 3-10 s estimate; apply has a 3-30 s estimate. The result
+names the resolved account and publication path. Done refreshes People
+(estimate 3-10 s), whose historical observed rows can remain after removal.
+Removal does not erase usage or revoke an already-issued Entra token.
+
+Direct permits an empty allow list only for a changed tier whose last direct
+member was removed and whose post-write member read is empty. The other tier's
+empty-list guard remains in force. Turnstile retains its existing delegated
+publish-as-admin path. These rules come from the
+[membership engine](../cli/finops/src/claude_finops/developer_actions.py) and
+[access sync](../scripts/Sync-ClaudeAccess.ps1), and are covered by
+[engine tests](../cli/finops/tests/test_developers.py) and
+[terminal pilots](../cli/finops/tests/test_p85_people.py).
+
+CLI:
+
+```powershell
+aum developer remove amara@contoso.com --what-if
+aum developer remove amara@contoso.com --confirm amara@contoso.com --apply
+```
+
+### Create a unit or team
+
+The `:` palette entry **Add unit or team** opens GroupPicker. An Entra group
+prefix search and Enter select an assigned-membership security group; the
+catalog form carries its group id and name. The form's Unit/Team choice,
+stable id and display name describe the new scope. A team requires an existing
+parent unit. The separate **Find or create Entra security group** palette
+entry exposes group discovery/creation; creating a group alone does not add
+a catalog scope.
+
+Preview validates a fresh catalog and reports **Replace catalog**; the form
+shows the proposed scope, group and parent. Apply submits the complete
+catalog through the selected existing writer. Group search and preview have
+a 3-10 s estimate, and the save estimate is 3-30 s. Direct returns its verified
+receipt; Turnstile normally applies in about two minutes, with terminal
+following limited to three minutes. Done refreshes Governance. The
+[catalog pilots](../cli/finops/tests/test_p85_catalog.py) cover both a new unit
+and a team under an existing unit on Direct and Turnstile, including exact
+catalog request bodies.
+
+### Remove a unit or team
+
+In **Governance** (`4`), the selected unit/team and the `:` palette entry
+**Remove selected budget or scope** identify a catalog removal. The form
+requires the scope's stable id, not its display name. Preview reports
+**Replace catalog** after validating the current catalog; Apply checks the
+typed id and saves the remaining collection. The same palette entry in
+Budgets or People clears a budget instead of deleting a catalog scope.
+Preview has a 3-10 s estimate and the save estimate is 3-30 s. Turnstile
+normally applies in about two minutes, with terminal following limited to
+three minutes; Direct returns a verified receipt without that job.
+
+The [engine](../cli/finops/src/claude_finops/engine.py) refuses a unit while
+it has any child department, including a synthetic unit-direct department.
+It also refuses the default department and removal of the last business unit.
+It has no empty-Entra-membership requirement: an otherwise removable scope
+can still have members. Catalog removal does not delete the Entra group or
+remove those directory memberships. The
+[Direct/Turnstile pilots](../cli/finops/tests/test_p85_catalog.py) prove these
+rules, wrong-id refusal and the actual catalog-only writes.
+
 ### Set a person's budget
 
 In **People**, **Set budget** (`e`) opens a preview for the selected writable
 person. With no selected person, the button is disabled and its hint explains
 the required selection. A person with no row cannot be edited; membership and
-the selected team/month determine which observed rows are available.
+the selected team/month determine which observed rows are available. The
+palette entry is **Edit selected budget or governance row** for owners, or
+**Edit selected delegated budget** where delegated writes are permitted.
+Preview shows the previous/proposed token amounts and parent headroom.
+Direct person limits are daily gateway overrides; Turnstile person budgets
+are monthly server records, not gateway quotas. Destructive changes require
+the selected row's scope id. Preview has a 3-10 s estimate and save has a
+3-30 s estimate. Direct completes with its native receipt rather than a
+Turnstile-only message
+([engine](../cli/finops/src/claude_finops/engine.py),
+[pilots](../cli/finops/tests/test_p85_budgets.py)).
 
 CLI:
 
@@ -191,10 +286,22 @@ aum budget set user amara@contoso.com 100k --team sales-emea --what-if
 aum budget set user amara@contoso.com 100k --team sales-emea --apply
 ```
 
+Those email-key examples describe Turnstile rows. Direct uses the observed
+person's Entra object id from the selected row instead of the email.
+
 ### Set a team or unit budget
 
 In **Budgets**, **Set budget** (`e`) opens the selected unit or team.
-The preview checks parent headroom and current server state.
+The palette name is **Edit selected budget or governance row** for owners.
+The preview shows previous/proposed token amounts and parent headroom from
+current server state. Units and teams use monthly tokens. A reduction below
+observed usage or an unknown-usage change requires the stable scope id.
+Preview has a 3-10 s estimate and save has a 3-30 s estimate. Direct and AUM
+service return synchronous receipts; the service also requires an audit
+reason. Turnstile normally applies in about two minutes, with terminal
+following limited to three minutes
+([engine](../cli/finops/src/claude_finops/engine.py),
+[pilots](../cli/finops/tests/test_p85_budgets.py)).
 
 CLI:
 
@@ -212,6 +319,25 @@ and an explanation. Direct and AUM service USD writes also depend on the
 gateway's recorded authority and the caller's permissions. A connection change
 does not change that authority. Ordinary token-budget forms keep their existing
 default; USD is not made the default everywhere.
+The palette name is **Edit selected USD budget** and uses the same selected-
+scope permission as the button and key. Preview shows the old and proposed
+USD amounts and **Saved; awaiting reconciliation**; decimal text is preserved
+to nine fractional places. Units and teams are monthly; people can be daily
+or monthly. AUM service requires an audit reason and sends the reviewed
+revision through If-Match. Preview has a 3-10 s estimate and save has a
+3-30 s estimate. A successful save remains awaiting reconciliation and does
+not wait for a Turnstile apply job.
+
+The shipped service reconciliation timer runs every five minutes; the next
+scheduled run is therefore normally within about five minutes, plus its
+execution and gateway propagation time. Direct reconciliation is a separate
+action. Neither a save nor this schedule proves enforcement. Turnstile shows
+the existing disabled explanation, **USD budget writes need Direct or the
+AUM service. P81 brings USD to Turnstile.**, without substituting a token
+write
+([timer](../service/aum/function_app.py),
+[engine](../cli/finops/src/claude_finops/engine.py),
+[complete USD pilots](../cli/finops/tests/test_p85_budgets.py)).
 
 CLI:
 
