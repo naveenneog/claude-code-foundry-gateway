@@ -104,6 +104,14 @@ installer. The first bootstrap has a 2-5 minute estimate; cached dependency
 setup has a 10-60 s estimate. Bootstrap requires access to PyPI and uv's Python
 download hosts as well as the application's Azure endpoints.
 
+Bootstrap removes inherited `PIP_*`, `UV_*` and `XDG_*` settings, including
+`PIP_LOG`, before supplying its own HOME-local cache/config/data/state/runtime
+paths. `PYTHONUSERBASE` is also HOME-local; `PYTHONHOME`, `PYTHONPATH` and
+`VIRTUAL_ENV` do not redirect setup. Custom pip/uv configuration is therefore
+not an alternative output destination. The real-pip regression uses explicit
+offline flags and verifies that an inherited external log is not created
+([confinement tests](../cli/finops/tests/test_p85_council_env.py)).
+
 The storage-specific Microsoft Learn article describes `$HOME` persisted as
 an image in the attached Azure file share; that mode retains the venv between
 sessions. Ephemeral sessions without attached storage lose the venv and the

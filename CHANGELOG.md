@@ -29,6 +29,11 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P85 council round 1: installer destinations.** The Cloud Shell bootstrap
+  clears inherited pip/uv/XDG settings, including `PIP_LOG`, and pins Python's
+  user base and all controlled directories under HOME. A real-pip offline
+  regression and per-variable write probes replace the earlier incomplete
+  confinement evidence.
 - **P85 council round 1: removal-plan binding.** The terminal passes its
   reviewed plan to the existing membership engine. A difference against the
   exact resolved write snapshot is refused before Graph or publication

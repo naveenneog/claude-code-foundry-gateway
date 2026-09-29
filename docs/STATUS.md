@@ -60,6 +60,14 @@ errors (85.67 s): identity injection occurred before, rather than after,
 the apply re-preview's resolution. The injection was corrected while
 retaining the two-read and zero-write assertions.
 
+Launcher correction: inherited `PIP_*`, `UV_*` and `XDG_*` settings are
+removed before the launcher supplies canonical HOME-local destinations.
+`PYTHONUSERBASE` is pinned too. All **48 launcher/confinement cases passed
+in 129.31 s**, including real pip's offline failure with no external log,
+each of 19 inherited destinations, and escaping links for the added
+config/data/state/runtime/user-base directories. No package download or
+Azure call occurred in these tests.
+
 ### PLAN
 
 The People action bar gains Remove person from team beside Add person to team,

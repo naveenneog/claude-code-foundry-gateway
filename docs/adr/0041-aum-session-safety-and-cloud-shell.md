@@ -47,6 +47,13 @@ selected repository. Inherited Python/pip destinations do not redirect the
 bootstrap. This is a boundary for trusted tooling and the trusted checkout,
 not an operating-system sandbox for malicious package code.
 
+Council round 1 found that the original selective environment reset missed
+`PIP_LOG`. The corrected bootstrap removes inherited pip, uv and XDG namespaces,
+then supplies only canonical HOME-local destinations. Python's user base is
+also pinned under that root. Real pip runs with explicit no-network flags in
+the regression, alongside individual destination-write probes; fake argument
+inspection alone is not evidence that pip cannot create an external log.
+
 The launcher neither signs in nor changes Azure CLI configuration. AUM uses
 the Cloud Shell session's existing identity and the same governance writers.
 Cloud Shell hosting adds no Azure component to this repository's deployment.

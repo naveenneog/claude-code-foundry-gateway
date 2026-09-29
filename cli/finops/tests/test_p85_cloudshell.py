@@ -180,6 +180,7 @@ def test_cloudshell_preserves_aum_exit_status(tmp_path):
 
 @pytest.mark.parametrize("relative", [
     "", "tmp", "cache", "pycache", "python", "uv-0.12.20", "venv", "venv/lib",
+    "config", "data", "state", "run", "userbase",
 ])
 def test_cloudshell_refuses_escaping_destination_links_before_writing(tmp_path, relative):
     layout = setup(tmp_path)

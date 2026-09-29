@@ -28,6 +28,7 @@ uv="$bootstrap/bin/uv"
 venv="$state/venv"
 for path in "$state" "$bootstrap" "$bootstrap/bin" "$uv" "$state/tmp" "$state/cache" \
             "$state/cache/pip" "$state/cache/uv" "$state/pycache" "$state/python" \
+            "$state/config" "$state/data" "$state/state" "$state/run" "$state/userbase" \
             "$venv" "$venv/bin" "$venv/bin/python" "$venv/bin/aum" \
             "$venv/lib" "$venv/lib64" "$venv/pyvenv.cfg" \
             "$venv/lib/python3.12" "$venv/lib/python3.12/site-packages"; do
@@ -50,14 +51,20 @@ plan "$@"
 if "$dry_run"; then exit 0; fi
 
 umask 077
-unset PYTHONHOME PYTHONPATH VIRTUAL_ENV PIP_TARGET PIP_PREFIX PIP_USER
-unset UV_TARGET UV_PREFIX UV_SYSTEM_PYTHON UV_PROJECT_ENVIRONMENT UV_CONFIG_FILE UV_PYTHON
+unset PYTHONHOME PYTHONPATH VIRTUAL_ENV
+for variable in "${!PIP_@}" "${!UV_@}" "${!XDG_@}"; do
+    unset "$variable"
+done
 export HOME="$home"
 export TMPDIR="$state/tmp" TMP="$state/tmp" TEMP="$state/tmp"
 export XDG_CACHE_HOME="$state/cache" PIP_CACHE_DIR="$state/cache/pip"
+export XDG_CONFIG_HOME="$state/config" XDG_DATA_HOME="$state/data"
+export XDG_STATE_HOME="$state/state" XDG_RUNTIME_DIR="$state/run"
+export PYTHONUSERBASE="$state/userbase"
 export PYTHONPYCACHEPREFIX="$state/pycache" PIP_CONFIG_FILE=/dev/null
 export UV_CACHE_DIR="$state/cache/uv" UV_PYTHON_INSTALL_DIR="$state/python"
-mkdir -p -- "$TMPDIR" "$PIP_CACHE_DIR" "$UV_CACHE_DIR" "$PYTHONPYCACHEPREFIX"
+mkdir -p -- "$TMPDIR" "$PIP_CACHE_DIR" "$UV_CACHE_DIR" "$PYTHONPYCACHEPREFIX" \
+    "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_RUNTIME_DIR" "$PYTHONUSERBASE"
 printf 'Preparing AUM (estimate 2-5 minutes first run; 10-60 s with cached dependencies).\n'
 
 stage='uv bootstrap'
