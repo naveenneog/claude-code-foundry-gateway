@@ -154,6 +154,42 @@ The complete receipt, case identities and individual logs/JUnit files are
 under `$env:TEMP\p85-extension-mutations`; the outer log is
 `$env:TEMP\p85-extension-mutations.log`. The original evidence is retained.
 
+### Owner additions: final builder validation
+
+The full offline AUM suite at `2087762` passed **816 tests in 648.02 s**
+(**649.814 s wall time**), with **zero failures, errors or skips**. Its
+interpreter import was verified under `accel-p85`; the single full-suite
+command acquired and released only its own `.gate-lock`. No original CRUD
+test or guard was weakened. The original 682 cases and 134 added cases all
+ran, including the explicitly updated single-q behavior.
+
+| Surface | Passing cases | Summed JUnit case seconds |
+|---|---:|---:|
+| Item 7: Escape/quit/errors, palette and CAE boundaries | 111 | 176.032 |
+| Item 8: offline Cloud Shell launcher and confinement | 23 | 31.599 |
+| Original people/unit/team/budget pilots | 47 | 101.133 |
+| Existing guide and required capture tests | 9 | 19.337 |
+
+The item-7 file includes 105 Textual pilots and six boundary/control cases.
+The existing pending-read quit pilot also runs in the full suite. These
+per-item seconds are case totals, not separate elapsed measurements.
+All 26 mutations were caught as recorded above. The observed P71 HEAD and
+contract files remained unchanged on the final read-only check.
+
+Builder work for items 7 and 8 is complete and persistent. U61 intentionally
+remains OPEN for the requested owner-only live Cloud Shell check and the
+documented persistence uncertainty; no live session, Azure write, resource
+creation, merge or push is claimed. Council and the packet gate remain
+lead-owned. The launcher and its Python downloads are local setup, not a
+new governance authority or an automatically deployed Azure component.
+
+Addition commits: `0a9231b` (contract), `b56272c` (launcher), `f5c3abb`
+(Escape/quit/error fixes), `515aee8` (architecture/provenance/P71 notes), and
+`2087762` (combined mutation proof). Final JUnit/log:
+`$env:TEMP\p85-extension-full-aum.xml` and
+`$env:TEMP\p85-extension-full-aum.log`; the per-item summary is
+`$env:TEMP\p85-extension-final-summary.json`.
+
 ### Initial evidence and unknowns
 
 The inherited no-run audit passed: 20 checks passed, 2 warned, 0 failed,
