@@ -197,6 +197,69 @@ the global rejection callback directly and asserts that expired paint does not
 clear the current source. Its test identity is unchanged. The strengthened
 48-case control passed in **59.78 s** before the replacement removal probe.
 
+#### Round 10 mutation proof
+
+All **21 rules** have caught removal probes. Nineteen runtime probes each ran
+the same **48 collected and executed test identities**; two approval probes
+each ran the same **5 identities**. Every accepted probe failed its intended
+detector, with zero errors and skips. These are **922 test executions**.
+The runtime selector is `test_publication_native.py`,
+`test_publication_diagnostics.py`, the seven scheduler cases in
+`test_publication_widgets.py`, and the existing delayed `people-selector` case.
+The standard publication selector is the prior ten files plus the two new
+native/diagnostic files; it contains **362 cases**.
+
+| Removal | Failed / passed | Seconds |
+|---|---:|---:|
+| Native registration protection | 25 / 23 | 59.29 |
+| Exact native type approval | 8 / 40 | 62.66 |
+| Native method guards | 7 / 41 | 66.04 |
+| Native property guards | 6 / 42 | 60.33 |
+| Native constructor origin | 1 / 47 | 62.85 |
+| Native cached-render guard | 2 / 46 | 60.52 |
+| Passive-paint refusal isolation | 2 / 46 | 66.00 |
+| Native chrome content guards | 4 / 44 | 62.86 |
+| Static application titles | 2 / 46 | 62.47 |
+| Native command-search worker origin | 2 / 46 | 65.85 |
+| Native command input/selection origins | 1 / 47 | 63.36 |
+| Framework watcher origin | 2 / 46 | 61.48 |
+| Unused watcher coroutine cleanup | 2 / 46 | 62.41 |
+| Raw exit-message refusal | 3 / 45 | 64.35 |
+| Queued-message representation sealing | 6 / 42 | 60.94 |
+| Sealing messages already in the queue | 2 / 46 | 61.42 |
+| Payload-free normal representation | 7 / 41 | 61.84 |
+| Payload-free Rich representation | 3 / 45 | 65.33 |
+| Visible notifications in all seven scheduler cases | 7 / 41 | 80.35 |
+| Native boundary fingerprint | 2 / 3 | 2.49 |
+| Exact exception-context fingerprint | 2 / 3 | 4.79 |
+
+Failure totals can include an incidental navigation cancellation; a catch also
+requires the intended detector to fail. In addition to the uncounted paint
+probe above, an initial watcher removal also removed cleanup and produced a
+pytest teardown error (**3 failed, 45 passed, 1 error in 63.34 s**). It is not
+counted. The narrower watcher-origin probe retains cleanup and has no errors.
+All original receipts remain available.
+
+After the probes, the untouched production tree passed **48 runtime cases in
+60.17 s** and **5 approval cases in 4.55 s**. Each command acquired and released
+its own lock in `finally`, waiting 60 seconds between acquisition attempts.
+Mutations used isolated temporary source copies; imports were checked before
+each run. Identity lists, source hashes, stdout, JUnit, lock receipts and the
+runner persist in `.finops-evidence\p71-r10-resume`.
+
+| Round 10 BLOCK | Correction status; lead re-review still required |
+|---|---|
+| Architect B10a | Exact native receiver approval, registration/write/cache guards, query/query_one/children controls and guarded/static chrome |
+| Coder B10b | Raw exit text refused before shutdown; return values preserved |
+| Security B10c | Payload-free normal/Rich representations before posting and dispatch; real `TEXTUAL_LOG` posted/prequeued cases |
+| QA | Visible positive controls for all seven schedulers; native, exit and real-log counterexamples in the standard selector |
+| Maintenance | Receiver/effect review and exact fingerprint-update recipe in ADR-0035; approvals remain code-reviewed |
+
+The architecture source and manifest were regenerated, the AUM image was
+inspected, and **36 architecture assertions** passed. The pre-commit gate
+passed with **13 passed, 2 warnings, 0 failed**. This is not a new packet-gate
+or council verdict.
+
 The lead owns integration, the next council and the final packet gate. This
 worktree remains on `p71-aum-speed`; no merge or push is performed here.
 Each mutation and the one final full AUM run acquire and release their own
