@@ -93,8 +93,9 @@ function az {
     }
     if ($line -like 'ad app show*') {
         if ($FixtureCase -eq 'app-error') { $global:LASTEXITCODE = 1; return }
-        $uri = if ($FixtureCase -eq 'app-uri') { 'api://wrong' } else { "api://$FixtureApp" }
-        return (@{ appId = $(if ($FixtureCase -eq 'app-id') { $FixtureTenant } else { $FixtureApp }); identifierUris = @($uri) } | ConvertTo-Json -Compress)
+        $returnedAppId = if ($FixtureCase -eq 'app-id') { $FixtureTenant } else { $FixtureApp }
+        $uri = if ($FixtureCase -eq 'app-uri') { 'api://wrong' } else { "api://$returnedAppId" }
+        return (@{ appId = $returnedAppId; identifierUris = @($uri) } | ConvertTo-Json -Compress)
     }
     if ($line -like 'ad app create*') {
         if ($FixtureCase -eq 'app-create-denied') { $global:LASTEXITCODE = 1; return 'ERROR: Insufficient privileges to complete the operation.' }
@@ -149,8 +150,7 @@ function az {
     if ($line -like 'bicep build-params*') {
         $global:FixtureBicepExpression = Get-Content -LiteralPath $words[([array]::IndexOf($words, '--file') + 1)] -Raw
         if ($FixtureCase -in @('bicep-evaluation','tool:bicep')) { $global:LASTEXITCODE = 1; return }
-        if ($FixtureCase -eq 'bicep-shape') { return '{"parametersJson":"{}"}' }
-        $params = @{ parameters = @{ storageName = @{ value = 'stres52p2c4jfs43ig' } } } | ConvertTo-Json -Compress -Depth 5
+        $params = @{ parameters = @{ storageName = @{ value = $(if ($FixtureCase -eq 'bicep-shape') { 'bad_derived_name' } else { 'stres52p2c4jfs43ig' }) } } } | ConvertTo-Json -Compress -Depth 5
         return (@{ parametersJson = $params } | ConvertTo-Json -Compress)
     }
     if ($line -like 'container exec*') {
@@ -216,6 +216,17 @@ function Invoke-RestMethod {
         if ($FixtureCase -eq 'site-error') { throw 'Site availability lookup failed' }
         if ($FixtureCase -eq 'site-shape') { return [pscustomobject]@{} }
         return [pscustomobject]@{ nameAvailable = ($FixtureCase -notin @('site-taken','owned-names')); reason = 'AlreadyExists' }
+    }
+    if ($FixtureCase -eq 'foreign-job' -and $url.StartsWith("https://management.azure.com/subscriptions/$FixtureTenant/")) {
+        $foreignId = $FixtureJobId.Replace($FixtureSubscription, $FixtureTenant)
+        if ($url -like '*/executions?*') {
+            $execution = $FixtureExecution | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+            $execution.id = "$foreignId/executions/recent"
+            return [pscustomobject]@{ value=@($execution); nextLink=$null }
+        }
+        $job = $FixtureJob | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+        $job.id = $foreignId
+        return $job
     }
     if ($url -eq "https://management.azure.com${FixtureJobId}?api-version=2024-03-01") {
         if ($FixtureCase -eq 'job-error') { throw 'ARM 403 job read denied' }

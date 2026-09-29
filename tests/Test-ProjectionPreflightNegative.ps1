@@ -135,6 +135,9 @@ Add-Text 'actual snapshot expiry is passed' $deployFile '-ExpiresAt $snapshotExp
 Add-Text 'Entra drift refuses comparison' $deployFile '-ExportGatewayPath $gateway -FailOnDrift' '-ExportGatewayPath $gateway'
 Add-Text 'canonical storage hash input' $checksFile '$context.ResourceGroupId = [string]$rg.id' '$context.ResourceGroupId = "/subscriptions/$($context.SubscriptionId)/resourceGroups/$ResourceGroup"'
 Add-Text 'current execution wins over old success' $checksFile 'Sort-Object Start -Descending' 'Sort-Object Start'
+Add-Text 'Linux environment names are case sensitive' $checksFile '[StringComparer]::Ordinal)' '[StringComparer]::OrdinalIgnoreCase)'
+Add-Text 'ARM id casing is not a new destination' $checksFile '[StringComparison]::OrdinalIgnoreCase' '[StringComparison]::Ordinal'
+Add-Text 'installer resolves the gateway target' 'Install-ClaudeGateway.ps1' '$apimName = if ($ExistingApim) { $ExistingApim } else { "apim-$NamePrefix" }' ''
 $cases.Add(@{ Name='late switch guard'; File=$deployFile; Kind='command'; Command='Assert-ClaudeProjectionReconciler' })
 
 function Get-MutatedSource($Case, [string]$Text) {

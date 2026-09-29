@@ -85,6 +85,21 @@ before writes, resource-id/GUID values compare case-insensitively and environmen
 ordinally. GREEN: 239/239, 12.10 s; encoding 299/299. The earlier mutation run is not evidence
 for these later changes; final-tree probes remain required.
 
+**First mutation run and detector repair:** under its own shared-workstation lock,
+`80a639e` caught 99/108 probes in 1,378.02 s with all 236 assertions loaded and the restored
+baseline green. Nine survivors were recorded, not counted as catches: four prerequisite
+diagnostics were protected by later parameter binding, the wrong-app and bad-name fixtures
+also broke later checks, a missing-id diagnostic overlapped format validation, a foreign-job
+fixture failed before exercising subscription binding, and the flow argument assertion matched
+its earlier refusal call. Fixtures now isolate those conditions and require the precise
+diagnostic/forwarded argument. No assertion was removed or weakened.
+
+The current baseline is 240/240 (12.54 s); all nine former survivors plus three new binding
+probes are caught, **12/12**, with all 240 assertions loaded and the restored baseline green
+(176.34 s). All 111 final anchors parse. Windows CLI argument safety passes (8.86 s), docs
+references 34 (8.81 s), FlowLifecycle 33 (2.37 s), ProjectionInstaller 34 (0.67 s) and encoding
+299/299. The complete final-tree 111-probe run remains pending.
+
 ## P78 the test suite runs in parallel on GitHub-hosted runners, 2026-09-28
 
 **Merged as `2737232` on 2026-09-29 with the owner's approval. Council round 1 passed and the local packet gate passed; ADR-0039's proposed charter change is not enacted.**

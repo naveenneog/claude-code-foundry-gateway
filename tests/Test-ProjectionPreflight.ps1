@@ -123,6 +123,11 @@ Run-Preflight 'policy-false'
 Assert 'admin remedy includes portal registration and exact CLI handoff' ($CapturedOutput -match 'entra.microsoft.com' -and $CapturedOutput -match 'App registrations' -and $CapturedOutput -match 'Expose an API' -and $CapturedOutput -match 'az ad app create' -and $CapturedOutput -match 'az ad app update' -and $CapturedOutput -match '-ResolverAppId')
 Run-Preflight 'signed-out'
 Assert 'failed subscription discovery does not issue unscoped dependent reads' (($FixtureCalls -join "`n") -notmatch 'az (provider list|role assignment list|resource list|apim show)')
+Assert 'unverified dependent scopes have explicit evidence, not parameter-binding failures' (
+    $CapturedOutput -match 'gateway subscription is unverified' -and
+    $CapturedOutput -match 'Provider reads require the verified subscription' -and
+    $CapturedOutput -match 'Role evidence requires verified user and resource group ids' -and
+    $CapturedOutput -match 'Name availability requires the verified resource group')
 Run-Preflight 'token-error'
 Assert 'failed Graph token acquisition never sends an unauthenticated Graph request' (($FixtureCalls -join "`n") -notmatch 'HTTP .*https://graph.microsoft.com')
 foreach ($provider in 'Microsoft.App','Microsoft.DocumentDB','Microsoft.Web','Microsoft.ContainerInstance','Microsoft.Network','Microsoft.Storage','Microsoft.OperationalInsights','Microsoft.Insights','Microsoft.Authorization') {
@@ -215,7 +220,7 @@ foreach ($template in @($FixtureJob.properties.template,$FixtureExecution.proper
     ($template.containers[0].env | Where-Object name -eq 'PROJECTION_ACCOUNT_RESOURCE_ID').name = 'projection_account_resource_id'
 }
 Expect-Failure 'Linux environment binding names are case-sensitive' { Guard } 'environment binding'
-Expect-Failure 'missing reconciler refuses with expiry and developer-wide consequence' { Guard -JobId '' } 'at most 2 hours.*\d{4}-\d{2}-\d{2}.*every developer.*503'
+Expect-Failure 'missing reconciler refuses with expiry and developer-wide consequence' { Guard -JobId '' } 'ReconcilerResourceId is required.*at most 2 hours.*\d{4}-\d{2}-\d{2}.*every developer.*503'
 foreach ($cron in '* * * * *','*/30 * * * *','5,35 * * * *','59 * * * *') {
     Reset-ProjectionFixture; $FixtureJob.properties.configuration.scheduleTriggerConfig.cronExpression = $cron
     Capture { Guard }
@@ -279,7 +284,8 @@ Reset-ProjectionFixture
 Expect-Failure 'expired actual snapshot refuses' { Guard -ExpiresAt ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - 1) } 'expir|lease'
 Expect-Failure 'almost-expired snapshot has no runway for the next execution' { Guard -ExpiresAt ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + 60) } 'lease|remaining|runway'
 Expect-Failure 'explicit zero snapshot expiry never becomes a new estimated lease' { Guard -ExpiresAt 0 } 'actual snapshot|expiry'
-Expect-Failure 'job from another subscription refuses' { Guard -JobId $FixtureJobId.Replace($FixtureSubscription,$FixtureTenant) } 'subscription'
+Reset-ProjectionFixture 'foreign-job'
+Expect-Failure 'job from another subscription refuses' { Guard -JobId $FixtureJobId.Replace($FixtureSubscription,$FixtureTenant) } 'must share the verified subscription'
 Expect-Failure 'malformed job resource id fails before ARM' { Guard -JobId 'not-an-arm-id' } 'Microsoft.App/jobs ARM resource'
 Run-Preflight 'healthy' @{ FlipAfterCleanCompare = $true }
 Assert 'preflight blocks a requested flip without a reconciler before writes' ($CapturedError -and $CapturedOutput -match 'every developer.*503')
@@ -324,7 +330,7 @@ Assert 'both runner steps use the checked result parser' ([regex]::Matches($depl
 Assert 'projection sync rejects PS 5.1 explicitly' ($sync -match 'Assert-ClaudeProjectionPowerShell|PSVersion.*-lt 7' -and $sync -match 'pwsh|ClaudeProjectionChecks')
 Assert 'installer forwards the typed reconciler id and resolver app id' ($installer -match 'ProjectionReconcilerResourceId' -and $installer -match "'-ReconcilerResourceId'" -and $installer -match 'ProjectionResolverAppId' -and $installer -match "'-ResolverAppId'")
 Assert 'installer refuses a flip without evidence before foundation writes' ($installer -match '(?s)FlipProjectionAfterCleanCompare.*Assert-ClaudeProjectionReconciler.*az group create')
-Assert 'flow records and forwards reconciler evidence' ($flow -match 'reconcilerResourceId' -and $flow -match '-ReconcilerResourceId' -and $flow -match 'verified reconciler')
+Assert 'flow records and forwards reconciler evidence' ($flow -match 'reconcilerResourceId' -and $flow -match '-ReconcilerResourceId \$Plan.Data.ReconcilerResourceId' -and $flow -match 'verified reconciler')
 Assert 'AUM selected group lookup reuses positive Graph collection semantics' ((Get-Content (Join-Path $root 'scripts\Sync-AumMembership.ps1') -Raw) -match 'Get-ClaudeGraphGroup')
 Assert 'projection sync uses the checked Graph token helper' ($sync -match '\$graphToken = Get-GraphToken')
 Assert 'per-run deploy files are not keyed by PID alone' ($deploy -notmatch '\$NamePrefix-\$PID' -and $deploy -match 'NewGuid')
