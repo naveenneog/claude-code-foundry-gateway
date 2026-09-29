@@ -191,6 +191,7 @@ function Invoke-RestMethod {
         if ($FixtureCase -eq 'group-missing' -or ($FixtureCase -eq 'standard-missing' -and $url -match 'claude-code-standard') -or ($FixtureCase -eq 'premium-missing' -and $url -match 'claude-code-premium')) { return [pscustomobject]@{ value = @() } }
         $groups = @([pscustomobject]@{ id = $FixtureGroupId; displayName = 'fixture' })
         if ($FixtureCase -eq 'group-duplicate') { $groups += [pscustomobject]@{ id = $FixtureApp; displayName = 'fixture' } }
+        if ($FixtureCase -eq 'group-null-nextlink') { return [pscustomobject]@{ value=$groups; '@odata.nextLink'=$null } }
         return [pscustomobject]@{ value = $groups }
     }
     if ($url -like 'https://graph.microsoft.com/v1.0/groups/*/transitiveMembers/*') {

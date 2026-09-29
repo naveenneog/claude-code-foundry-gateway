@@ -46,6 +46,21 @@ AdminSurface 682 (4.42 s), Scale 211 (1.20 s). Encoding passed for 298 scripts.
 Installer permutations, projection negatives, additional integration proofs and mutations remain
 in progress. Evidence is offline, not a customer-tenant deployment proof.
 
+**Entry-point and API-shape follow-up:** implementation GREEN is `f7280e3`. Added cases loaded
+206 assertions and failed seven in 12.58 s: six exposed optional ARM/Graph fields, an explicit
+zero expiry being treated as an estimate, and missing subscription forwarding; one exposed an
+overbroad AST fixture selector, corrected without changing its assertion. GREEN is 206/206 in
+11.31 s. Actual child processes prove preflight-only success/failure and normal-run failure
+exit codes with zero Azure writes. Actual installer guard and Entitlement invocation refuse
+missing evidence before their next operation. The switch's three writes pin the subscription
+that preflight verified. FlowLifecycle 33 (2.23 s), ProjectionInstaller 34 (0.62 s),
+TestAllSharding 79 (2.11 s) and encoding (298 scripts) pass.
+
+Required existing checks also passed: InstallerPermutations 48 (46.06 s),
+ProjectionNegative 57/57 mutations (59.88 s), FlowPermutations 43 (90.64 s).
+The new registration uses the existing positive default shard weight; the hosted timing table
+is unchanged because P84 has no hosted timing receipt.
+
 ## P78 the test suite runs in parallel on GitHub-hosted runners, 2026-09-28
 
 **Merged as `2737232` on 2026-09-29 with the owner's approval. Council round 1 passed and the local packet gate passed; ADR-0039's proposed charter change is not enacted.**

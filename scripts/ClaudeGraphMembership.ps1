@@ -52,7 +52,8 @@ function Get-ClaudeGraphGroup {
         throw "Graph group '$GroupName' lookup returned an invalid collection, not a confirmed absence."
     }
     $groups = @($page.value)
-    if ($groups.Count -gt 1 -or $page.PSObject.Properties['@odata.nextLink']) { throw "Graph group '$GroupName' is ambiguous: multiple groups or incomplete lookup." }
+    $next = $page.PSObject.Properties['@odata.nextLink']
+    if ($groups.Count -gt 1 -or ($next -and $next.Value)) { throw "Graph group '$GroupName' is ambiguous: multiple groups or incomplete lookup." }
     if ($groups.Count -eq 0) { return $null }
     if (-not $groups[0].PSObject.Properties['id'] -or -not $groups[0].id) { throw "Graph group '$GroupName' has no id." }
     return $groups[0]

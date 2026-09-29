@@ -95,7 +95,7 @@ function Invoke-ClaudeFlowStep {
     $target = $Plan.Data.Target
     if ($Plan.Data.Desired -eq 'projection') {
         & (Join-Path (Get-ClaudeFlowLifecycleRepoRoot) 'scripts\Deploy-ClaudeProjection.ps1') -ResourceGroup $target.ResourceGroup -ApimName $target.ApimName -NamePrefix $target.ApimName -Sku $target.Sku -FlipAfterCleanCompare `
-            -ReconcilerResourceId $Plan.Data.ReconcilerResourceId -ResolverAppId $Plan.Data.ResolverAppId
+            -ReconcilerResourceId $Plan.Data.ReconcilerResourceId -ResolverAppId $Plan.Data.ResolverAppId -SubscriptionId $target.SubscriptionId
         if ($LASTEXITCODE -ne 0) { throw 'Deploy-ClaudeProjection.ps1 failed.' }
     }
     else {

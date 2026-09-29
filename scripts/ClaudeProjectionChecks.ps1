@@ -207,7 +207,8 @@ function Get-ClaudeProjectionContainerSignature {
     if ([string]$container.image -notmatch '@sha256:[0-9a-f]{64}$') { throw 'The reconciler image requires a SHA-256 digest, not a mutable tag.' }
     $environment = @{}
     foreach ($variable in @($container.env)) {
-        if (-not $variable.name -or $environment.ContainsKey([string]$variable.name) -or $variable.PSObject.Properties['secretRef']) { throw 'Reconciler environment binding must contain unique literal non-secret values.' }
+        $secret = $variable.PSObject.Properties['secretRef']
+        if (-not $variable.name -or $environment.ContainsKey([string]$variable.name) -or ($secret -and $secret.Value)) { throw 'Reconciler environment binding must contain unique literal non-secret values.' }
         $environment[[string]$variable.name] = [string]$variable.value
     }
     $canonical = [ordered]@{ name=$container.name; image=$container.image; command=@($container.command); args=@($container.args); env=@($environment.Keys | Sort-Object | ForEach-Object { "$_=$($environment[$_])" }) }
@@ -217,11 +218,12 @@ function Get-ClaudeProjectionContainerSignature {
 function Assert-ClaudeProjectionReconciler {
     param([string]$ReconcilerResourceId, [string]$GatewayResourceId, [string]$AccountResourceId, [string]$TenantId, [long]$ExpiresAt = 0)
     $now = [DateTimeOffset]::UtcNow
-    $estimated = $ExpiresAt -eq 0
+    $estimated = -not $PSBoundParameters.ContainsKey('ExpiresAt')
     if ($estimated) { $ExpiresAt = $now.ToUnixTimeSeconds() + 7200 }
     $expiry = [DateTimeOffset]::FromUnixTimeSeconds($ExpiresAt).ToString('yyyy-MM-ddTHH:mm:ssZ')
     $lease = "Records expire at most 2 hours after the scan, at $expiry$(if ($estimated) { ' (estimate for a scan starting now)' }); every developer gets 503 after that without successful reconciliation."
     try {
+        if (-not $estimated -and $ExpiresAt -le 0) { throw 'The actual snapshot has no valid expiry; no new lease is assumed.' }
         if (-not $ReconcilerResourceId) { throw 'ReconcilerResourceId is required; no scheduled reconciliation has been verified.' }
         $pattern = '^/subscriptions/([0-9a-fA-F-]{36})/resourceGroups/[A-Za-z0-9._-]+/providers/Microsoft.App/jobs/[A-Za-z0-9-]+$'
         if ($ReconcilerResourceId -notmatch $pattern) { throw 'ReconcilerResourceId must identify a Microsoft.App/jobs ARM resource.' }
@@ -255,7 +257,9 @@ function Assert-ClaudeProjectionReconciler {
             $page = Invoke-ClaudeNetworkArm -Url $next
             if (-not $page -or -not $page.PSObject.Properties['value'] -or $page.value -isnot [array]) { throw 'ARM returned an invalid execution collection.' }
             foreach ($execution in $page.value) {
-                if ($execution.id -notlike "$ReconcilerResourceId/executions/*") { throw 'ARM returned an execution for a different job.' }
+                $executionId = $execution.PSObject.Properties['id']
+                if ([string]$execution.name -notmatch '^[A-Za-z0-9._-]+$' -or
+                    ($executionId -and $executionId.Value -ne "$ReconcilerResourceId/executions/$($execution.name)")) { throw 'ARM returned an invalid execution name or an execution for a different job.' }
                 $start = [DateTimeOffset]::MinValue; $end = [DateTimeOffset]::MinValue
                 if (-not [DateTimeOffset]::TryParse([string]$execution.properties.startTime, [ref]$start) -or $start -gt $now) { throw 'Execution start time is malformed or future-dated.' }
                 if ($execution.properties.status -eq 'Running') { continue }

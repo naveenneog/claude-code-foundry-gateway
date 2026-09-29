@@ -78,7 +78,10 @@ literal non-secret environment values:
 A succeeded execution has valid start and end times, started less than 7,200 seconds ago, and
 ran the current container image, command, arguments and environment. An unrelated or old
 template's success does not count. A newer failed execution refuses the switch. Each page stays
-under the same ARM job path. The contract assumes the customer-controlled pinned image implements
+under the same ARM job path. Execution lists may omit the optional `id` (as the documented
+2024-03-01 example does); a safe execution name then identifies it under that verified job's
+list URL. A supplied id must match that name and job exactly. A null `secretRef` or final Graph
+`nextLink` is not a secret reference or another page. The contract assumes the customer-controlled pinned image implements
 the declared renewal operation: ARM status proves successful process termination, not application
 semantics. P86 must define and test that image, identity grant and monitoring.
 
@@ -90,6 +93,8 @@ the developer-wide 503 consequence after expiry. The installer passes
 `-ProjectionReconcilerResourceId`; the guided-flow decision records `reconcilerResourceId`.
 The deployer remains the final shared enforcement point. No override or acknowledgement bypass
 exists. No schedule is provisioned here.
+An explicitly supplied zero snapshot expiry is invalid, not an invitation to estimate a new
+lease. Each of the three switch writes pins the subscription verified during preflight.
 
 ## Options
 

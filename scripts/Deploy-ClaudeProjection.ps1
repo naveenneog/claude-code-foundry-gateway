@@ -233,9 +233,9 @@ try {
         $null = Assert-ClaudeProjectionReconciler -ReconcilerResourceId $ReconcilerResourceId `
             -GatewayResourceId $preflight.GatewayResourceId -AccountResourceId $preflight.AccountResourceId `
             -TenantId $apim.identity.tenantId -ExpiresAt $snapshotExpiry
-        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -Value $resolverUrl
-        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -Value $resolverAudience
-        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -Value 'projection'
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -Value $resolverUrl -SubscriptionId $preflight.SubscriptionId
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -Value $resolverAudience -SubscriptionId $preflight.SubscriptionId
+        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -Value 'projection' -SubscriptionId $preflight.SubscriptionId
     }
     Ok 'gateway now reads entitlement from the projection'
 }
