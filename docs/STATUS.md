@@ -129,6 +129,39 @@ across those bounded groups, under one separately acquired owned lock.
 The receipt records this recovery explicitly at
 `$env:TEMP\p85-r1-mutations\receipt.json`; original logs remain intact.
 
+Final round-1 builder verification at `3f26de9`: the complete standard AUM
+selector passed **865 tests in 902.67 s** (**905.162 s wall time**), with
+**zero failures, errors or skips**. This includes all affected pilot files,
+the council reproductions, the earlier 816 cases and 49 added cases.
+The interpreter import resolved inside `accel-p85`; the full-suite command
+held one owned `.gate-lock` and released it in the same invocation.
+
+| Council correction | Passing standard cases | Summed JUnit case seconds |
+|---|---:|---:|
+| Exact removal write-plan snapshot | 8 | 21.850 |
+| Quit deferral, visible saving state and retained results | 15 | 33.516 |
+| Per-destination and real offline pip confinement | 20 | 82.538 |
+| Expanded original launcher controls | 28 | 46.133 |
+| Bounded, unique restoration selector | 1 | 0.037 |
+
+These are case totals inside the full run, not separate wall-clock runs.
+Original people and Escape coverage also passed (17 and 111 cases).
+The P71 HEAD and inspected policy files still matched the read-only
+assessment. U58/U60 are closed for these measured corrections; U61 remains
+open only for the earlier owner-only live Cloud Shell/persistence check.
+
+The builder has addressed the four blocking seats' reproduced findings,
+without changing their recorded round-1 verdicts or claiming round-2 review.
+Commits: `ddad53f` contract, `396dad5` plan binding, `b3a0465` installer
+confinement, `f89deec` mutation lifetime/quit, `a0e8e3a` strengthened UX/exit
+detectors, `e5f821d` provenance/integration notes and `3f26de9` mutation proof.
+Round 2, packet gate and integration remain with the lead. No Azure write,
+resource creation, live Cloud Shell run, merge or push occurred.
+
+Evidence: `$env:TEMP\p85-r1-full-aum.xml`, `$env:TEMP\p85-r1-full-aum.log`
+and `$env:TEMP\p85-r1-final-summary.json`, alongside the raw RED/probe and
+explicit restoration-recovery records.
+
 ### PLAN
 
 The People action bar gains Remove person from team beside Add person to team,
