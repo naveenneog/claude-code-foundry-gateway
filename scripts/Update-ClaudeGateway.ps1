@@ -35,7 +35,8 @@ if (-not $SnapshotPath) {
     $SnapshotPath = Join-Path $root "backups\before-update-$($target.ApimName).json"
 }
 
-$migrationFiles = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'flow\migrations') -Filter '*.ps1' | Sort-Object Name)
+# Code-point order: the migrations' order feeds the plan's fingerprint (P76).
+$migrationFiles = @(Sort-ClaudeFlowOrdinal -InputObject @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'flow\migrations') -Filter '*.ps1') -Key { $_.Name })
 $plans = @()
 foreach ($file in $migrationFiles) {
     . $file.FullName

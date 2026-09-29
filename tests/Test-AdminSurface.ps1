@@ -360,13 +360,17 @@ Assert 'and an impossible figure is refused'         ($costModel -match 'is larg
 # The installer took a developer count, sized the SKU from it, and never checked
 # it against the store that actually holds identities. A population above the
 # named-value ceiling deployed happily and hit the wall weeks later, as a sync
-# refusing to write, by which time the gateway was in production.
-Assert 'the declared population is checked'      ($inst -match 'This holds about \{0\} developers today')
+# refusing to write, by which time the gateway was in production. Since P79 the
+# check follows the store choice: at the developer count it asked before the tier
+# and the store were chosen, and called the Cosmos store unbuilt after P61 built it.
+Assert 'the declared population is checked against the chosen store' ($inst -match 'Named values hold about \{0\} developers, and you said \{1\}' -and $inst -match "\`$EntitlementStore -eq 'named-value' -and \`$devCount -gt \`$buCeiling")
+Assert 'the check follows the store choice, not the developer count' ($inst.IndexOf('Named values hold about') -gt $inst.IndexOf('Select-ClaudeChoice -Parameter EntitlementStore') -and $inst.IndexOf('Select-ClaudeChoice -Parameter EntitlementStore') -gt 0)
+Assert 'the Cosmos store is named as the remedy, not as unbuilt' ($inst -notmatch 'is not built yet' -and $inst -match 'The Cosmos projection store holds them on every v2 tier')
 Assert 'against a derived ceiling, not a literal' ($inst -match '(?m)^\s*\$buCeiling = \[int\]\[math\]::Floor')
 Assert 'it says a bigger SKU does not help'      ($inst -match 'raising the SKU does not move it')
 Assert 'and names what would'                    ($inst -match 'docs/adr/0011')
 Assert 'it says the move is configuration'       ($inst -match 'configuration change rather than a redeployment')
-Assert 'and the operator can still proceed'      ($inst -match 'Continue anyway \(yes/no\)')
+Assert 'and the operator can still proceed with named values' ($inst -match 'Continue with named values \(yes/no\)')
 Assert 'or stop before anything is created'      ($inst -match 'Stopped before deploying. Nothing was created')
 
 Write-Host ''

@@ -24,6 +24,9 @@
     the format, never on the deployment name.
 #>
 
+# Sort-ClaudeFlowOrdinal gives one order on Windows PowerShell 5.1 and PowerShell 7 (P76).
+if (-not (Get-Command Sort-ClaudeFlowOrdinal -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot 'flow\FlowContract.ps1') }
+
 # Matching on both because either alone is wrong: a deployment of a Claude model
 # may be named "prod-1", and a customer may have named an OpenAI deployment
 # "claude-replacement". The model name is authoritative; format is the
@@ -171,7 +174,7 @@ function Get-DeployableClaudeModel {
         $_.name -and ($_.name -like "*$script:ClaudeModelPattern*" -or $_.format -eq $script:ClaudeFormat)
     })
 
-    return @($claude | ForEach-Object {
+    return @(Sort-ClaudeFlowOrdinal -Key { [string]$_.model } -Descending -InputObject @($claude | ForEach-Object {
         # A model may be offered under several SKUs. GlobalStandard is the
         # pay-as-you-go one and is what an accelerator should default to;
         # anything provisioned is a capacity commitment the operator should
@@ -210,9 +213,9 @@ function Get-DeployableClaudeModel {
             $g = @($_.Group)
             $pick = @($g | Where-Object { $_.isDefault })
             if (-not $pick.Count) { $pick = @($g | Where-Object { $_.hostedOn -eq 'azure' }) }
-            if (-not $pick.Count) { $pick = @($g | Sort-Object { $_.version } -Descending) }
+            if (-not $pick.Count) { $pick = @(Sort-ClaudeFlowOrdinal -InputObject $g -Key { $_.version } -Descending) }
             $pick[0]
-        } | Sort-Object model -Descending)
+        }))
 }
 
 # ARM version that carries modelProviderData on a deployment. Read and written

@@ -82,6 +82,56 @@ exact streaming cache-creation detail remains **U13**.
   from cancelling current reads without weakening provenance or payload redaction.
   Retained tab activations are ignored while main content is absent during
   remount or shutdown; current activations and publication checks remain unchanged.
+- **P84 projection deployment preflight and deferred switching.** `-PreflightOnly` and normal
+  deployment share read-only prerequisite checks before Azure writes. PowerShell 7 is required
+  for deployment/projection sync. Graph errors no longer count as absent groups; runner failures
+  show sanitized counts/hashed samples from at most 40 lines and 4,096 characters; failed app
+  creation cannot update an empty id. Council round 1 rejected ARM-only admission: a successful
+  scheduled dry-run can renew nothing. Deployment, installer and guided Entitlement now refuse
+  every projection switch until P86. [ADR-0040](docs/adr/0040-projection-preflight-and-switch.md)
+  proposes destination-bound Cosmos renewal evidence for that later packet.
+  Confirmed-absent premium passes, unproven app rights produce WARN, supplied app ids skip
+  policy reads, narrow reports use stacked records, and declined prerequisites abort.
+  Real-caller and locale tests cover en-GB/de-DE and supported PowerShell hosts. Earlier proof
+  receipts remain historical, not acceptance of the rejected design. Revised proof at `eca8b55`:
+  197 preflight assertions, 83 council assertions and 95/95 valid-syntax, count-preserving
+  mutations ([P84 status](docs/STATUS.md)).
+
+- **P78 parallel hosted checks.** Opt-in deterministic Test-All shards retain
+  isolated processes, exclusive checks and deadlines, with commit/tree-bound receipts and an
+  ordered, fail-closed coverage merge. A SHA-pinned, read-only GitHub workflow installs both AUM
+  Python environments and offline prerequisites. The remote helper validates exact-source jobs
+  and artifacts rather than a workflow badge. The wizard and preflight retain native Windows
+  boundaries through isolated fixtures instead of an operator's Azure session.
+  [Test execution](tests/README.md), [P78 evidence](docs/STATUS.md),
+  [draft ADR-0039](docs/adr/0039-test-suite-hosted-runners.md).
+  The charter, product scripts and deployed resources are unchanged.
+  The first hosted attempt exposed missing Chromium installation and an error-pattern assertion
+  that accepted the wrong exception; both have targeted regression coverage
+  (`tests/Test-RemoteTestAll.ps1`, `tests/Test-TestAllSharding.ps1`).
+  After P79 integration, [run 36457223984](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36457223984)
+  on exact `f829812` passed 95/95 registrations with 0 SKIP in 638 s queue-to-merge, including
+  both Python environments and 95 count-preserving infrastructure mutations (74 Core, 12 Runner,
+  nine Wizard). The timing table records its 95 passing durations. Evidence was accessed
+  2026-09-28. Council, gate and the proposed charter adoption remain with the lead and owner.
+
+- **P69 council corrections.** Inherited addresses are resolved before Foundation approval;
+  proposed decisions no longer overwrite applied state or history; failed replacements have a
+  narrowly scoped recovery review; Azure transitions reconcile metadata and generated settings.
+  Checks enforce remaining deadlines and clean private worker files on cancellation. PFX uploads
+  use the validated byte buffer. The positive delegated-domain TLS proof is explicitly deferred
+  to P74 by the lead, not marked complete.
+  Round 2 adds explicit cross-decision results and removals, applied-only Status/Guide/discovery,
+  installer recovery receipts and legacy subscription resolution. DesktopSignIn and Models retain
+  their profile decisions, and a failed Models profile generation does not publish proposed state.
+- **Company address in the installer and guided flow (P69).** The company choice now plans
+  and applies public DNS, a supplied PFX or Key Vault certificate, and a preserved APIM Proxy
+  hostname, with component prices before approval. `-Change address` uses the same fingerprinted
+  plan. A trusted, pinned HTTPS gateway response precedes publication to developer settings.
+  The isolated Basic v2 proof established authoritative DNS but could not bind its undelegated
+  `.test` name: Azure requires public CNAME ownership. No free managed certificate is available
+  on v2; the positive company TLS proof remains blocked without a delegated domain
+  ([Setup](docs/SETUP.md#company-address), [ADR-0033](docs/adr/0033-company-address.md)).
 - **Reviewed model lifecycle (P70).** `-Action Change -Change models` and
   `scripts/Sync-ClaudeModels.ps1` discover the selected Foundry account, show deployment
   model/version/SKU/capacity and price status, accept per-deployment tier choices, snapshot
@@ -811,6 +861,14 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Changed
 
+- **The gate's command budget is 60 minutes until the exclusive checks are sharded (P77).**
+  `.ironclad/charter.json` gave every gate command 1,800 seconds (ADR-0025). On 2026-09-28 four packet
+  gates passed in 1,368 to 1,688 seconds and three timed out at 1,800, the last at the default
+  throttle with no other gate or review running; throttle 8 was slower, with per-check timeouts.
+  A timeout ends only the gate's shell, and `Test-All` kept running for ten minutes after one.
+  `commandTimeoutMs` is 3,600,000; no check, mutation, throttle or per-check timeout changes. P78
+  shards the long exclusive checks and returns the budget to 1,800 seconds
+  ([ADR-0036](docs/adr/0036-gate-budget-until-sharded.md)).
 - **The guided flow starts at once (P68).** `Start-ClaudeGateway.ps1` listed every subscription,
   API Management instance, Foundry account, workspace and deployment before its first line, 66 s on
   the reference subscription, for lists no step read. Discovery now reads only the gateway the
@@ -885,6 +943,71 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **The guided flow's FinOps step failed for every tool but None (P79).** It stopped at "Applying
+  FinOps..." with "Cannot convert value to type System.String.": `& $path @($Command.arguments)`
+  passed the argument list as one array, which the advanced scripts it runs refuse for a `[string]`
+  parameter, and a string such as `-Accept` in a splatted array is a positional value to a script.
+  A PowerShell script's command now carries named parameters, splatted as a hashtable; `aum`
+  keeps its string arguments; a command's output is shown, not returned into the step's change
+  set. `tests/Test-FlowFinOpsApply.ps1` applies every choice on both shells against stubs that
+  carry the real scripts' parameter blocks.
+- **A relative record path meant the process's start directory (P79).** From the repository root,
+  `.\Update-ClaudeGateway.ps1` read `C:\Users\<name>\onboarding\claude-gateway.json`:
+  `[IO.File]` resolves a relative path against the directory PowerShell started in, which `cd`
+  does not change. `Read-` and `Write-ClaudeDecisionRecord` resolve it against PowerShell's current
+  folder, and the root Update shim resolves a relative `-RecordPath` against the repository, as
+  `Start-ClaudeGateway.ps1` does (`tests/Test-RelativeRecordPath.ps1`).
+- **The installer refused a record for another gateway only after every question (P79).** The
+  comparison now runs when the gateway is chosen; in a console the installer offers to keep that
+  record as `onboarding\claude-gateway.<resource group>-<instance>.json` and start a new one, and
+  `-ArchiveSavedRecord` does the same unattended.
+- **The developer count asked about a store that exists (P79).** Above about 93 developers the
+  installer asked "Continue anyway" before the tier and the entitlement store were chosen, saying
+  the Cosmos store "is not built yet"; P61 built it on every v2 tier. The count now prints a note,
+  and the confirmation follows the store question, only for named values.
+- **The installer permutation check read the checkout's own saved record (P79 follow-up).** After
+  P79 moved the saved-record comparison to the gateway question, 14 of the check's assertions failed
+  in any checkout whose `onboarding\claude-gateway.json` names another gateway, such as the main
+  worktree, with "Saved record ... names gateway ..."; packet worktrees have no record, so the P79
+  gate passed. `tests/Test-InstallerPermutations.ps1` runs a copy of the installer's inputs without
+  saved records and asserts the copy, the installer path and that the checkout's own record is
+  unchanged.
+- **The macOS/Linux installer approved every choice against a fixed price (P75).**
+  `install-claude-gateway.sh` printed "BasicV2 is about $150/month at list price" and "Provisioning
+  takes 30-45 minutes" whatever tier and region were chosen; `Install-ClaudeGateway.ps1` stopped
+  printing both before P68. It now lists the default region and the other regions in its
+  geography that publish an API Management v2 price, cheapest Basic v2 first, each with the three
+  tiers' monthly list price for one unit at 730 hours, from one Retail Prices API call and rounded
+  to the cent as the PowerShell installer rounds it on PowerShell 7 ([decimal] of the double, half to
+  even); prices the tier prompt and the summary; and
+  says so, with the reason, when the prices cannot be read or are not in the form the API
+  publishes. It reads a next page of the price list only on `https://prices.azure.com`. Its
+  record gains `mode`, `sku`, `location`, `foundryAccount`, `foundryResourceGroup` and
+  `requestsPerMinute`, and, run on its own in a terminal, it offers the FinOps tool
+  (`--choose-finops`, `--skip-finops-offer`). The admin preflight warns on jq 1.7.0, which reads a price
+  written with 17 significant digits through a 16-digit decimal. `tests/Test-BashInstaller.ps1` runs 21 installs in
+  Git Bash with stub `az`, `curl` and `pwsh`, and compares the region table with the one
+  `Install-ClaudeGateway.ps1` prints for the same list, over 170 prices, ten of them written with trailing
+  zeros, an exponent, 16 or 17 significant digits or above 10,000.
+- **jq.exe on Windows ends lines with CRLF (P75).** In Git Bash, command substitution drops the
+  carriage return of the last line only, so the last field of every other region line kept one,
+  and a price the region does not publish printed as USD 0.00. The region lines drop it before
+  they are split, and the test stubs refuse any `az` or `curl` argument that carries one.
+- **One plan still had two fingerprints on the two shells (P76).** A live `-PlanOnly` over the
+  reference record printed one review and two fingerprints: Monitoring sorted its workbooks with
+  `Sort-Object`, which compares by culture, and .NET Framework and .NET weigh a hyphen differently.
+  The named values of the Update migration `0002` had the same fault, and so did the order of the
+  step modules and of the migrations. Merged from P70 the same day, the model change sorted its
+  deployments, tier lists and questions the same way: on Windows PowerShell 5.1 a model change over
+  tier lists already in code-point order proposed rewriting both lists, and its fingerprint differed
+  from PowerShell 7's. The price-book entry a deployment takes, the region choice, the deployable
+  models and the installer's default tier lists had the same fault. All of them order by code point
+  through `Sort-ClaudeFlowOrdinal`, which now takes several keys, compares numbers, times and versions
+  by value, and has `-Descending`. `tests/Test-FlowOrdinalOrder.ps1` compares every shipped Setup step
+  and a model change on both shells, follows every script the plans load and lists each `Sort-Object`
+  left in them with its reason. For the shipped lists, PowerShell 7's culture order was already
+  code-point order (measured), so its plans keep their fingerprints; on Windows PowerShell 5.1 the
+  Monitoring and Update plans have new ones.
 - **`-AuthMode` skipped the installer's Claude Desktop sign-in section (P72).** The Desktop
   questions and the external IdP record sat inside the `else` branch that asks the developer
   sign-in, so `-AuthMode device -DesktopSignInKind external-idp-browser -DesktopEntraClientId <id>`

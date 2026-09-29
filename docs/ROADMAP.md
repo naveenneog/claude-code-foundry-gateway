@@ -80,6 +80,14 @@ premise does not carry over.
 
 ## Packets
 
+### Customer deployment follow-up, 2026-09-29
+
+| Packet | State | Deliverable |
+|---|---|---|
+| P84 | Merged (`3e4430b`) with the owner's approval on 2026-09-29, after council round 3 and the packet gate at `5612c94` | Projection deployment checks everything before it writes and never switches into an outage. Read-only preflight, fail-closed Graph, sanitized runner/app failures and unconditional switch refusal until P86, across deployer/installer/flow. ADR-0040 rejects ARM-only admission; 197 preflight assertions, 86 council assertions and 95 current mutations pass. |
+| P85 | Owner approved the merge on 2026-09-29 after council and gate; builder correcting council round 1 | AUM TUI manages people, units, teams and budgets with full tests. |
+| P86 | Proposed; owner decision pending | Scheduled projection reconciler and tenant-admin pack: managed identity with Graph `GroupMember.Read.All` granted by a tenant admin, an hourly job and lease alerts. Proposed admission reads destination-bound Cosmos oldest expiry and generation advances through the runner, with a tested image/entrypoint and dry-run overrides rejected. P84 refuses switching and creates no schedule. |
+
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 
 | Packet | Milestone | Deliverable | Depends on |
@@ -443,12 +451,14 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       numbered next steps are numbered. [ADR-0032](adr/0032-guided-flow-starts-at-once.md)
 - [ ] P69 the company address in the flow — acceptance: choosing a company address creates the
       custom hostname, certificate and DNS record, states their cost before creating them, and
-      proves a request through the new address (**U30**)
+      proves a request through the new address (**U30**). Merged as `69db07a` on 2026-09-28
+      without the last clause: Azure checks that the hostname's domain is publicly delegated, so
+      the proof needs an owned domain and is P74 ([ADR-0033](adr/0033-company-address.md))
 - [ ] The agreement's price sheet at each choice — acceptance: when the administrator holds a
       billing role that can read the agreement's price sheet, the flow and the installer show the
       agreement's prices and name the billing scope they came from; without the role they show
       Azure retail list prices, as P68 does (**U31**)
-- [ ] The macOS/Linux installer prices its choices — acceptance: `install-claude-gateway.sh` lists
+- [x] P75 the macOS/Linux installer prices its choices — acceptance: `install-claude-gateway.sh` lists
       the Foundry account's region and the rest of its geography with each v2 tier's monthly list
       price, prices the tier prompt, records `sku`, `location` and the Foundry account, and offers
       the FinOps tool at the end, as `Install-ClaudeGateway.ps1` does since P68
@@ -473,6 +483,33 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       invariants; the installer's summary reflects every combination of tier, entitlement store,
       developer sign-in, Desktop sign-in and address under `-WhatIf`, on PowerShell 7 and 5.1; each
       failure found is fixed test-first
+- [x] P76 one plan, one order on both shells — acceptance: every sort that feeds a plan in the guided
+      flow, the Update migrations, the model sync or the installer orders by code point on PowerShell 7
+      and Windows PowerShell 5.1, and a check follows every script those load and lists each remaining
+      `Sort-Object` with its reason; every step of Setup with the shipped modules, the Update migrations
+      and a model change plan the same canonical text on both shells, tested
+- [x] P77 a 60-minute gate budget while the exclusive checks are sharded — acceptance:
+      `.ironclad/charter.json` gives every gate command 3,600,000 ms; ADR-0036 records the measured
+      gates of 2026-09-28 (four passes between 1,368 and 1,688 s, three timeouts at 1,800 s, throttle
+      8 slower with per-check timeouts) and the load; no check, mutation, throttle or per-check
+      timeout changes; the next packet gate on main passes within the new budget
+- [x] P79 fixes from the owner's test on 2026-09-28 — acceptance: each FinOps choice in the guided
+      flow applies its commands with the parameters it plans, on both shells, and the step returns
+      only its change set; a decision record path given relative to PowerShell's current folder is
+      read and written there; the installer compares a saved record with the chosen gateway as soon
+      as the gateway is chosen, offers to archive it when attended and refuses without
+      `-ArchiveSavedRecord` when unattended; the developer count asks nothing about the entitlement
+      store, and the store's capacity is stated after the store is chosen; each fixed test-first
+- [x] P78 the test suite runs in parallel on GitHub-hosted runners — acceptance (replaced with the
+      owner's approval on 2026-09-29; the earlier acceptance was "the packet gate returns to 30
+      minutes"): the default Test-All registration runs as coverage-proven, deterministic shards on
+      GitHub-hosted Windows runners, with no check or mutation removed, machine-exclusive checks
+      still exclusive, both AUM environments installed, and complete exact-SHA/tree evidence; the
+      remote helper fails closed on dirty/unpushed source, failed/missing shards or invalid
+      coverage; hosted wall time, shard times and the local baseline are recorded; ADR-0039
+      proposes the gate's test command and 30-minute budget, and the owner decides whether to amend
+      the charter; hosted job cancellation bounds its process tree, and the local gate-shell timeout
+      limitation is not represented as fixed
 - [ ] P73 an installer re-run offers the gateway's live values — acceptance: over an existing
       gateway (`-ExistingApimName`, the reuse menu or `-Change foundation` in a console), the budget,
       request ceiling, tier group and Choices prompts default to the gateway's live named values and
@@ -481,6 +518,13 @@ guidance is to capture a business-unit identifier at a gateway, which is what th
       Enter through an attended re-run resets custom budgets and groups to the installer's defaults;
       `tests/Test-InstallerPermutations.ps1` gains the developer address dimension once P69's
       address parameter is merged
+- [ ] P74 positive company-address TLS proof on an owned, delegated domain — acceptance: the
+      administrator supplies an owned, publicly delegated DNS name and its trusted certificate;
+      the priced, fingerprinted address flow creates the CNAME and gateway binding, then proves
+      trusted HTTPS with the company SNI/Host and matching certificate, obtains a gateway 401 or
+      governed response, and only then publishes the developer URL. The proof records timings,
+      certificate/DNS behavior and cleanup or restoration without altering unrelated resources.
+      P69's authoritative-only `.test` run is not this proof ([ADR-0033](adr/0033-company-address.md))
 ### M3 — compliance retrieval
 - [x] P15 compliance retrieval — `scripts/Find-ClaudeUserData.ps1` reports what the gateway's
       telemetry holds about one person, per table, reading each table's plan from the workspace so

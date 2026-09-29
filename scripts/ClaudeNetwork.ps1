@@ -1,4 +1,6 @@
 # Shared discovery and validation. Importing this file performs no Azure writes.
+if (-not (Get-Command Sort-ClaudeFlowOrdinal -ErrorAction SilentlyContinue)) { . (Join-Path $PSScriptRoot 'flow\FlowContract.ps1') }
+
 function Invoke-ClaudeNetworkAz {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
@@ -23,7 +25,9 @@ function Invoke-ClaudeNetworkArm {
         [ValidateSet('get','put','patch','delete','post')][string]$Method = 'get',
         [object]$Body,
         [string]$StateDirectory,
-        [switch]$AllowNotFound
+        [switch]$AllowNotFound,
+        [string]$IfMatch,
+        [switch]$IfNoneMatch
     )
     if ($Url -notmatch '^https://management\.azure\.com/(subscriptions|providers)/') { throw 'Expected an Azure Resource Manager URL.' }
     $file = $null
@@ -42,6 +46,8 @@ function Invoke-ClaudeNetworkArm {
             $script:ClaudeNetworkTokens[$scope] = $cached
         }
         $request = @{Method=$Method;Uri=$Url;Headers=@{Authorization="Bearer $($cached.token)"};TimeoutSec=45;ErrorAction='Stop'}
+        if ($IfMatch) { $request.Headers['If-Match'] = $IfMatch }
+        if ($IfNoneMatch) { $request.Headers['If-None-Match'] = '*' }
         if ($null -ne $Body) {
             if (-not $StateDirectory -or -not (Test-Path $StateDirectory -PathType Container)) { throw 'A local state directory is required for ARM request files.' }
             $file = Join-Path $StateDirectory ('request-' + [guid]::NewGuid().ToString('N') + '.json')
@@ -220,7 +226,7 @@ function Get-ClaudeNetworkSkuLocation {
             if (-not $denied.Count) { $locations += $location }
         }
     }
-    return ,@($locations | Sort-Object -Unique)
+    return ,@(Sort-ClaudeFlowOrdinal -InputObject $locations -Unique)
 }
 
 function Assert-ClaudeNetworkWafExclusions {
@@ -254,7 +260,7 @@ function Get-ClaudeNetworkInventory {
     $resources = @()
     $groups = @()
     $subscriptions = Invoke-ClaudeNetworkAz @('account','list')
-    foreach ($scope in @(@($SubscriptionId) + @($DiscoverySubscriptionId) | Sort-Object -Unique)) {
+    foreach ($scope in @(Sort-ClaudeFlowOrdinal -InputObject (@($SubscriptionId) + @($DiscoverySubscriptionId)) -Unique)) {
         if (@($subscriptions | Where-Object { $_.id -eq $scope -and $_.state -eq 'Enabled' }).Count -ne 1) { throw "Discovery subscription '$scope' is not an enabled visible subscription." }
         $items = Get-ClaudeNetworkPages "$('https://management.azure.com/subscriptions')/$scope/resources?api-version=2021-04-01"
         $resources += $items
@@ -367,7 +373,7 @@ function Get-ClaudeNetworkOwnedNsgs {
     $vnet=Invoke-ClaudeNetworkArm "https://management.azure.com${VnetId}?api-version=2024-05-01" -AllowNotFound
     $owned=@()
     if (-not $vnet) { return ,$owned }
-    foreach ($id in @($vnet.properties.subnets | ForEach-Object { $_.properties.networkSecurityGroup.id } | Where-Object { $_ } | Sort-Object -Unique)) {
+    foreach ($id in @(Sort-ClaudeFlowOrdinal -InputObject @($vnet.properties.subnets | ForEach-Object { $_.properties.networkSecurityGroup.id } | Where-Object { $_ }) -Unique)) {
         if (-not $id.StartsWith("$ResourceGroupId/providers/Microsoft.Network/networkSecurityGroups/",[StringComparison]::OrdinalIgnoreCase)) { continue }
         $nsg=Invoke-ClaudeNetworkArm "https://management.azure.com${id}?api-version=2024-05-01"
         if ($nsg.tags.'claude-network-owner' -eq $OwnerId) { $owned += [pscustomobject]@{id=$id;apiVersion='2024-05-01';kind='tag';principalId=''} }

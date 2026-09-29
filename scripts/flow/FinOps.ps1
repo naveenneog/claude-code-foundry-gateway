@@ -81,8 +81,11 @@ function Get-ClaudeFlowStepQuestions {
 }
 
 function New-FinOpsFlowCommand {
-    param([string]$File, [string[]]$Arguments = @(), [string]$Tool = 'powershell')
-    [pscustomobject]@{ tool = $Tool; file = $File; arguments = @($Arguments) }
+    # A PowerShell script takes named parameters (-Parameters), splatted as a hashtable: in a splatted
+    # array a string such as '-Accept' is a positional value to a script, and an advanced script
+    # refuses an array for a [string] parameter (P79). A native command (aum) takes string arguments.
+    param([string]$File, [hashtable]$Parameters = @{}, [string[]]$Arguments = @(), [string]$Tool = 'powershell')
+    [pscustomobject]@{ tool = $Tool; file = $File; parameters = $Parameters; arguments = @($Arguments) }
 }
 
 function Get-ClaudeFlowStepPlan {
@@ -122,7 +125,7 @@ function Get-ClaudeFlowStepPlan {
             $actions.Add((New-ClaudeFlowAction -Verb Deploy -Target 'AUM service' -Detail 'Deploy-ClaudeAumService.ps1 deploys Functions, Storage and selected options.'))
             $requires.Add('App registration ownership and Azure resource deployment rights')
             $commands.Add((New-FinOpsFlowCommand -File 'scripts\New-ClaudeAumEntraApp.ps1'))
-            $commands.Add((New-FinOpsFlowCommand -File 'scripts\Deploy-ClaudeAumService.ps1' -Arguments @('-Accept','-Confirm:$false')))
+            $commands.Add((New-FinOpsFlowCommand -File 'scripts\Deploy-ClaudeAumService.ps1' -Parameters @{ Accept = $true; Confirm = $false }))
         }
         'Turnstile' {
             $actions.Add((New-ClaudeFlowAction -Verb Write -Target 'Turnstile connection' -Detail 'Connect-ClaudeTurnstile.ps1 records an existing Turnstile and its authorities.'))
@@ -136,7 +139,7 @@ function Get-ClaudeFlowStepPlan {
             $implications.Add('AUM is another Turnstile client; it is not a second writer.')
             $requires.Add('Existing Turnstile plus AUM client installation')
             $commands.Add((New-FinOpsFlowCommand -File 'scripts\Connect-ClaudeTurnstile.ps1'))
-            $commands.Add((New-FinOpsFlowCommand -File 'scripts\Install-ClaudeAum.ps1' -Arguments @('-NoConfigure')))
+            $commands.Add((New-FinOpsFlowCommand -File 'scripts\Install-ClaudeAum.ps1' -Parameters @{ NoConfigure = $true }))
             $commands.Add((New-FinOpsFlowCommand -Tool 'aum' -File 'aum' -Arguments @('configure','--backend','turnstile','--no-prompt','--save')))
         }
     }
@@ -148,13 +151,19 @@ function Get-ClaudeFlowStepPlan {
 
 function Invoke-FinOpsFlowCommand {
     param($Command)
+    $arguments = @(@($Command.arguments) | Where-Object { $null -ne $_ } | ForEach-Object { [string]$_ })
+    # A command's output is shown, not returned: the step returns only its change set.
+    $global:LASTEXITCODE = 0
     if ($Command.tool -eq 'aum') {
-        & $Command.file @($Command.arguments)
+        & $Command.file @arguments | Out-Host
         if ($LASTEXITCODE) { throw "Command failed: $($Command.file)." }
         return
     }
+    $parameters = @{}
+    if ($Command.parameters -is [System.Collections.IDictionary]) { foreach ($key in $Command.parameters.Keys) { $parameters[[string]$key] = $Command.parameters[$key] } }
+    elseif ($null -ne $Command.parameters) { foreach ($p in $Command.parameters.PSObject.Properties) { $parameters[$p.Name] = $p.Value } }
     $path = Join-Path $script:FlowRoot $Command.file
-    & $path @($Command.arguments)
+    & $path @parameters | Out-Host
     if ($LASTEXITCODE) { throw "Command failed: $($Command.file)." }
 }
 

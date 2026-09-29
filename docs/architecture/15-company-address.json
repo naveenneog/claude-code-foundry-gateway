@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "id": "company-address",
+  "kind": "flow",
+  "title": "Company address: DNS first, proof before publication",
+  "subtitle": "P69 / ADR-0033. No inference proxy, domain purchase or free managed certificate. Public DNS ownership is required on every v2 tier.",
+  "width": 1280,
+  "height": 924,
+  "outputs": ["docs/images/architecture/company-address.png"],
+  "sources": ["Install-ClaudeGateway.ps1", "Start-ClaudeGateway.ps1", "scripts/flow/Address.ps1", "scripts/flow/Foundation.ps1", "scripts/flow/Discovery.ps1", "scripts/flow/FlowContract.ps1", "scripts/ClaudeGatewayAddress.ps1", "scripts/ClaudeGatewayAddressInput.ps1", "scripts/ClaudeGatewayAddressRecovery.ps1", "scripts/ClaudeGatewayAddressWait.ps1", "scripts/ClaudeGatewayCertificate.ps1", "scripts/ClaudeNetwork.ps1", "scripts/AzureRetailPrice.ps1", "infra/main.bicep"],
+  "identifiers": {
+    "plan": {"label": "Get-ClaudeAddressPlan", "source": "scripts/ClaudeGatewayAddress.ps1", "match": "function Get-ClaudeAddressPlan"},
+    "change": {"label": "Address step", "source": "scripts/flow/Address.ps1", "match": "DecisionKey = 'address'"},
+    "fingerprint": {"label": "ApprovedPlanFingerprint", "source": "Start-ClaudeGateway.ps1", "match": "ApprovedPlanFingerprint"},
+    "dns": {"label": "CNAME", "source": "scripts/ClaudeGatewayAddress.ps1", "match": "CNAMERecord"},
+    "grant": {"label": "secret-read grant", "source": "scripts/ClaudeGatewayAddress.ps1", "match": "function Grant-ClaudeAddressCertificateRead"},
+    "patch": {"label": "hostnameConfigurations", "source": "scripts/ClaudeGatewayAddress.ps1", "match": "hostnameConfigurations = @($hosts) + @($Binding)"},
+    "proof": {"label": "Invoke-ClaudeAddressHttps", "source": "scripts/ClaudeGatewayCertificate.ps1", "match": "function Invoke-ClaudeAddressHttps"},
+    "publish": {"label": "gatewayUrl", "source": "scripts/ClaudeGatewayAddress.ps1", "match": "Set-ClaudeRecordProperty $record gatewayUrl $url"}
+  },
+  "groups": [
+    {"x": 0, "y": 0, "w": 1280, "h": 236, "tone": "purple", "title": "Review and approval - before resource writes"},
+    {"x": 0, "y": 276, "w": 1280, "h": 338, "tone": "blue", "title": "Apply - preserve existing service and unrelated configuration"},
+    {"x": 0, "y": 654, "w": 1280, "h": 218, "tone": "teal", "title": "Verify and publish - a failure leaves the previous recorded URL"}
+  ],
+  "nodes": [
+    {"id": "review", "x": 18, "y": 56, "w": 1244, "h": 158, "tone": "purple", "title": "1 - One costed address plan", "lines": [
+      "Installer company choice or [[change]] calls [[plan]].",
+      "DNS and Key Vault retail rates; issuer/provider charges remain separate and unknown when unpriced.",
+      "Installer summary or [[fingerprint]] approves effective inherited inputs; proposed decisions remain separate from applied state."
+    ]},
+    {"id": "dns", "x": 18, "y": 332, "w": 385, "h": 260, "tone": "blue", "title": "2 - Establish DNS ownership", "lines": [
+      "[[dns]] to <apim>.azure-api.net",
+      "Existing writable Azure public zone, or exact records for the external DNS provider.",
+      "Conditional write; bounded resolution wait. Authoritative-only DNS is insufficient."
+    ]},
+    {"id": "certificate", "x": 447, "y": 332, "w": 385, "h": 260, "tone": "blue", "title": "3 - Use a supplied certificate", "lines": [
+      "Uploaded PFX: private key, hostname and validity checked.",
+      "Key Vault: [[grant]] adds secret read to the gateway identity.",
+      "No password or certificate bytes in the plan or record."
+    ]},
+    {"id": "binding", "x": 876, "y": 332, "w": 385, "h": 260, "tone": "blue", "title": "4 - Patch the gateway binding", "lines": [
+      "Proxy [[patch]] only; retain other entries and all service/network properties.",
+      "Basic/Standard: explicit old-host replacement. Premium: additional hosts.",
+      "Bounded update; scoped recovery before proof."
+    ]},
+    {"id": "proof", "x": 18, "y": 710, "w": 600, "h": 142, "tone": "teal", "compact": true, "title": "5 - Prove the new address", "lines": [
+      "[[proof]] uses company SNI and Host.",
+      "Normal trust + exact certificate pin + unauthenticated HTTP 401.",
+      "This proves routing/TLS, not an entitled model request."
+    ]},
+    {"id": "publish", "x": 662, "y": 710, "w": 600, "h": 142, "tone": "teal", "compact": true, "title": "6 - Publish developer settings", "lines": [
+      "[[publish]] in claude-gateway.json; unknown fields retained.",
+      "Generated profiles, onboarding mail and package copies updated.",
+      "Already-deployed workstations need the redistributed package."
+    ]}
+  ],
+  "edges": [
+    {"from": "review", "to": "dns", "kind": "control", "points": [[212, 214], [212, 332]]},
+    {"from": "dns", "to": "certificate", "kind": "control", "points": [[403, 462], [447, 462]]},
+    {"from": "certificate", "to": "binding", "kind": "control", "points": [[832, 462], [876, 462]]},
+    {"from": "binding", "to": "proof", "kind": "control", "points": [[1068, 592], [1068, 634], [318, 634], [318, 710]]},
+    {"from": "proof", "to": "publish", "kind": "control", "points": [[618, 780], [662, 780]]}
+  ],
+  "notice": "Accepted deferral to P74, not done: Basic v2 rejected the undelegated .test hostname with CustomHostnameOwnershipCheckFailed after authoritative DNS succeeded. Positive company-hostname TLS requires an owned, delegated domain."
+}

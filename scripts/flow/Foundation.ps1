@@ -1,4 +1,5 @@
 . (Join-Path $PSScriptRoot 'lib\LifecycleCommon.ps1')
+. (Join-Path (Split-Path $PSScriptRoot -Parent) 'ClaudeGatewayAddressInput.ps1')
 
 # What Install-ClaudeGateway.ps1 asks, in its order. The attended review names these (ADR-0032);
 # tests/Test-FlowStart.ps1 maps every installer section that asks something to one of them.
@@ -11,6 +12,7 @@ $script:ClaudeFlowInstallerTopics = @(
     'the developer count and the API Management tier, with its monthly list price'
     'the name prefix and publisher email'
     'the entitlement store, revocation window, team budget behaviour, developers with no team, developer address, developer sign-in and Claude Desktop sign-in'
+    'the company hostname, certificate source and DNS hosting with their component costs, when custom is chosen'
     'the token budgets for each tier, the organisation ceiling and the request ceiling'
     'the Entra groups for each tier'
     'business units, after it deploys'
@@ -22,6 +24,7 @@ $script:ClaudeFlowInstallerUpdateTopics = @(
     'the Foundry account and its Claude deployments'
     'the models each tier may call'
     'the entitlement store, revocation window, team budget behaviour, developers with no team, developer address, developer sign-in and Claude Desktop sign-in'
+    'the company hostname, certificate source and DNS hosting with their component costs, when custom is chosen'
     'the token budgets for each tier, the organisation ceiling and the request ceiling'
     'the Entra groups for each tier'
     'business units, after it deploys'
@@ -135,6 +138,14 @@ function Get-ClaudeFlowFoundationInstallerMap {
         CallsPerMinute = 'callsPerMinute'
         StandardGroup = 'standardGroup'
         PremiumGroup = 'premiumGroup'
+        AddressMode = 'addressMode'
+        AddressHostname = 'addressHostname'
+        AddressCertificateSource = 'addressCertificateSource'
+        AddressKeyVaultCertificateId = 'addressKeyVaultCertificateId'
+        AddressPfxPath = 'addressPfxPath'
+        AddressDnsZoneResourceId = 'addressDnsZoneResourceId'
+        AddressDnsMode = 'addressDnsMode'
+        AddressReplaceHostname = 'addressReplaceHostname'
     }
 }
 
@@ -218,6 +229,10 @@ function Get-ClaudeFlowFoundationInstallerArgs {
     }
     # Unattended, the installer refuses the projection without its deployer.
     if (-not $Attended -and [string]$installerArgs['EntitlementStore'] -eq 'projection') { $installerArgs['DeployProjection'] = $true }
+    if (-not $Attended) {
+        $address = Resolve-ClaudeAddressInputs -Record $Record -Values $installerArgs
+        foreach ($key in $address.Keys) { $installerArgs[$key] = $address[$key] }
+    }
     # Without a console the installer cannot ask for the Desktop app, so the plan names what is missing
     # before it is approved, instead of the installer after.
     if (-not $Attended -and [string]$installerArgs['DesktopSignInKind'] -like 'external-idp-*') {
@@ -322,12 +337,35 @@ function Get-ClaudeFlowStepPlan {
         $summary = "Set up a $sku governed gateway"
         $costs = @(Get-ClaudeFlowFoundationCost -Sku $sku -Location $location)
     }
+    $addressPlan = $null
+    if ($installerArgs.AddressMode -eq 'custom') {
+        if (-not (Get-Command Get-ClaudeAddressPlan -ErrorAction SilentlyContinue)) { . (Join-Path (Split-Path $PSScriptRoot -Parent) 'ClaudeGatewayAddress.ps1') }
+        $addressArgs = @{
+            SubscriptionId = $installerArgs['SubscriptionId']; ResourceGroup = $installerArgs['ResourceGroup']
+            ApimName = $(if ($updateRecorded) { $Record.apimName } else { "apim-$($d.namePrefix)" })
+            Hostname = $installerArgs.AddressHostname; CertificateSource = $installerArgs.AddressCertificateSource
+            KeyVaultCertificateId = $installerArgs.AddressKeyVaultCertificateId; PfxPath = $installerArgs.AddressPfxPath
+            DnsZoneResourceId = $installerArgs.AddressDnsZoneResourceId; ReplaceHostname = $installerArgs.AddressReplaceHostname
+        }
+        if (Get-Variable AddressCertificatePassword -ErrorAction SilentlyContinue) { $addressArgs.CertificatePassword = Get-Variable AddressCertificatePassword -ValueOnly }
+        if (-not $updateRecorded) {
+            $addressArgs.Gateway = [pscustomobject]@{
+                id = "/subscriptions/$($addressArgs.SubscriptionId)/resourceGroups/$($addressArgs.ResourceGroup)/providers/Microsoft.ApiManagement/service/$($addressArgs.ApimName)"
+                name = $addressArgs.ApimName; location = $location; sku = @{ name = $sku }
+                properties = @{ provisioningState = 'Succeeded'; hostnameConfigurations = @() }
+            }
+        }
+        $addressPlan = Get-ClaudeAddressPlan @addressArgs
+        $costs += @($addressPlan.Costs)
+        $actions += @($addressPlan.Actions)
+        $installerArgs['AddressApprovedPlanFingerprint'] = Get-ClaudeFlowFingerprint @($addressPlan)
+    }
     New-ClaudeFlowPlan -Step Foundation -Summary $summary `
         -Actions $actions `
         -Costs $costs `
         -Implications @('All later choices are written into one decision record and developer handover.', 'Installer implementation remains Install-ClaudeGateway.ps1, run with -Yes: it takes the recorded values and its own defaults for the rest.') `
         -Requires $requires -Reversible $true -Rollback $rollback `
-        -Data @{ sku = $sku; entitlementStore = $d.entitlementStore; authMode = $d.authMode; desktopSignInKind = $d.desktopSignInKind; inputs = $inputs; installerArgs = $installerArgs; runsInstaller = $true; attended = $false; asksInConsole = $false }
+        -Data @{ sku = $sku; entitlementStore = $d.entitlementStore; authMode = $d.authMode; desktopSignInKind = $d.desktopSignInKind; inputs = $inputs; installerArgs = $installerArgs; addressPlan = $addressPlan; runsInstaller = $true; attended = $false; asksInConsole = $false }
 }
 function Get-ClaudeFlowFileStamp {
     param([string]$Path)
@@ -375,11 +413,16 @@ function Merge-ClaudeFlowFoundationDecision {
             elseif ($merged.Contains($fields[$field])) { $merged.Remove($fields[$field]) }
         }
     }
+    $address = Resolve-ClaudeAddressInputs -Record $Config
+    foreach ($pair in (Get-ClaudeFlowFoundationInstallerMap).GetEnumerator() | Where-Object { $_.Value -like 'address*' }) {
+        if ($address.Contains($pair.Key)) { $merged[$pair.Value] = $address[$pair.Key] }
+        else { $merged.Remove($pair.Value) }
+    }
     return [pscustomobject]$merged
 }
 
 function Invoke-ClaudeFlowStep {
-    param($Record, $Plan)
+    param($Record, $Plan, [securestring]$CertificatePassword)
     $d = Get-ClaudeDecision -Record $Record -Key foundation
     if (-not $d) { $d = [pscustomobject]@{} }
     # A recorded gateway is checked, not installed again; discovery has compared it with Azure.
@@ -390,6 +433,7 @@ function Invoke-ClaudeFlowStep {
     $written = Join-Path $repo 'onboarding\claude-gateway.json'
     $installerArgs = @{}
     foreach ($key in @($Plan.Data.installerArgs.Keys)) { $installerArgs[[string]$key] = $Plan.Data.installerArgs[$key] }
+    if ($CertificatePassword) { $installerArgs['AddressCertificatePassword'] = $CertificatePassword }
     $before = Get-ClaudeFlowFileStamp -Path $written
     & $installer @installerArgs
     if (-not (Test-Path -LiteralPath $written) -or (Get-ClaudeFlowFileStamp -Path $written) -eq $before) {
@@ -399,6 +443,8 @@ function Invoke-ClaudeFlowStep {
     $cfg = Get-Content -LiteralPath $written -Raw | ConvertFrom-Json
     $changes = @{}
     foreach ($p in $cfg.PSObject.Properties) { $changes[$p.Name] = $p.Value }
+    if (-not $changes.ContainsKey('decisions')) { $changes['decisions'] = [pscustomobject]@{} }
+    $changes['RemovedProperties'] = @('address','pendingAddress' | Where-Object { $cfg.PSObject.Properties.Name -notcontains $_ })
     $changes['foundation'] = Merge-ClaudeFlowFoundationDecision -Decision $d -Config $cfg
     return $changes
 }

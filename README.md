@@ -19,6 +19,12 @@ Start with [Setup](docs/SETUP.md) for deployment or
 > 954 writes/second; point reads cost 1 RU, p99 51 ms. This is a storage test,
 > **not 500,000 concurrent developers** or a completed directory scan.
 >
+> Projection deployment requires PowerShell 7. Its [read-only preflight](docs/SECURE-PROJECTION.md#one-command-deployment)
+> runs before Azure writes. **P84 refuses every automated projection switch** until the supported
+> scheduled reconciler proposed as P86 exists. Without renewal, records expire within two hours
+> and every developer receives 503. A clean comparison or successful ARM job is not renewal
+> evidence ([ADR-0040](docs/adr/0040-projection-preflight-and-switch.md)).
+>
 > The current two-always-ready-instance profile costs **$91.56/month at rest**.
 > Hourly lease renewal at 500,000 members adds about **365 million writes/month**,
 > about **$538/month** at the measured create RU charge and stated list price
@@ -37,6 +43,7 @@ Start with [Setup](docs/SETUP.md) for deployment or
 | Let one guided flow set up, update, change, diagnose and generate the handover guide | [Guided flow](docs/GUIDED-FLOW.md) — `Start-ClaudeGateway.ps1`, review fingerprint, resume and manual equivalents |
 | Use the CLI, VS Code or Desktop on Windows/macOS | [Developer setup](DEVELOPER.md) — prerequisites, setup, verification and fixes |
 | Stand up a gateway | [Setup](docs/SETUP.md) — required roles, installer and portal deployment |
+| Give developers a company gateway address | [Company address](docs/SETUP.md#company-address) — supplied certificate, DNS, component prices and proof before publishing the URL |
 | Update an older gateway or change tier, entitlement, network or Desktop sign-in | [Update and change](docs/UPDATE-AND-CHANGE.md) — fingerprinted plans, snapshots and rollback |
 | Operate people, tiers, teams, budgets or models | [Operations](docs/OPERATIONS.md) — task router and portal paths |
 | Make new Foundry deployments available to tiers and clients | [Models](docs/MODELS.md) — `-Action Change -Change models`, reviewed lists, prices and tier-specific workstation records |

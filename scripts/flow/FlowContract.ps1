@@ -79,6 +79,102 @@ function Get-ClaudeFlowTotalMonthlyUsd {
     [pscustomobject]@{ KnownMonthlyUsd = $known; Unknown = @($unknown) }
 }
 
+function Test-ClaudeFlowOrdinalNumber {
+    param($Value)
+    return ($Value -is [int] -or $Value -is [long] -or $Value -is [decimal] -or $Value -is [double] -or $Value -is [single] -or
+        $Value -is [int16] -or $Value -is [byte] -or $Value -is [sbyte] -or $Value -is [uint16] -or $Value -is [uint32] -or $Value -is [uint64])
+}
+
+function ConvertTo-ClaudeFlowOrdinalKey {
+    # Strings, numbers, times and versions are kept as they are; anything else becomes its string.
+    param($Value)
+    if ($null -eq $Value -or $Value -is [string] -or (Test-ClaudeFlowOrdinalNumber $Value) -or $Value -is [datetime] -or
+        $Value -is [datetimeoffset] -or $Value -is [timespan] -or $Value -is [version]) { return $Value }
+    if ($Value -is [bool]) { return [int]$Value }
+    return [string]$Value
+}
+
+function Compare-ClaudeFlowOrdinalKey {
+    # Strings by code point; numbers, times and versions by value; $null first; other pairs by the
+    # code points of their strings. No comparison here depends on the culture or the shell.
+    param($A, $B)
+    if ($null -eq $A) { if ($null -eq $B) { return 0 }; return -1 }
+    if ($null -eq $B) { return 1 }
+    if ($A -is [string] -and $B -is [string]) { return [Math]::Sign([string]::CompareOrdinal($A, $B)) }
+    $numberA = Test-ClaudeFlowOrdinalNumber $A; $numberB = Test-ClaudeFlowOrdinalNumber $B
+    if ($numberA -and $numberB) {
+        if ($A -is [double] -or $A -is [single] -or $B -is [double] -or $B -is [single]) { return [Math]::Sign(([double]$A).CompareTo([double]$B)) }
+        return [decimal]::Compare([decimal]$A, [decimal]$B)
+    }
+    if (-not $numberA -and -not $numberB -and $A -isnot [string] -and $B -isnot [string] -and $A.GetType() -eq $B.GetType() -and $A -is [System.IComparable]) {
+        return [Math]::Sign($A.CompareTo($B))
+    }
+    return [Math]::Sign([string]::CompareOrdinal([string]$A, [string]$B))
+}
+
+function Sort-ClaudeFlowOrdinal {
+    # Code-point order, ignoring case as Sort-Object does, the same on Windows PowerShell 5.1 and
+    # PowerShell 7. Sort-Object compares strings by culture, and .NET Framework (NLS) and .NET (ICU)
+    # weigh a hyphen differently, so one list had two orders and one plan two fingerprints (P76).
+    # -Key takes what Sort-Object's -Property takes: script blocks, property names, or hashtables with
+    # Expression and Descending. Strings compare by code point ignoring case; numbers,
+    # times and versions by value. Items equal on every key ignoring case are ordered by the keys'
+    # code points, then by input position, so the order never depends on the sort algorithm. The keys
+    # are compared as values, not joined: a separator character inside a key would reorder it.
+    # -Unique keeps the first item of each key ignoring case.
+    param([object[]]$InputObject = @(), [object[]]$Key = @({ [string]$_ }), [switch]$Descending, [switch]$Unique)
+    $items = @($InputObject | Where-Object { $null -ne $_ })
+    if (-not $items.Count) { return }
+    $specs = @(foreach ($k in @($Key)) {
+        $expression = $k; $down = [bool]$Descending
+        if ($k -is [System.Collections.IDictionary]) {
+            $expression = $k['Expression']
+            if ($k.Contains('Descending')) { $down = [bool]$k['Descending'] }
+        }
+        if ($expression -isnot [scriptblock] -and -not ($expression -is [string] -and $expression)) {
+            throw 'Sort-ClaudeFlowOrdinal: a key is a script block, a property name, or a hashtable whose Expression is one of those.'
+        }
+        [pscustomobject]@{ Expression = $expression; Down = $down }
+    })
+    $entries = [System.Collections.Generic.List[object]]::new()
+    for ($i = 0; $i -lt $items.Count; $i++) {
+        $raw = New-Object 'object[]' $specs.Count
+        $folded = New-Object 'object[]' $specs.Count
+        for ($n = 0; $n -lt $specs.Count; $n++) {
+            $expression = $specs[$n].Expression
+            $value = if ($expression -is [scriptblock]) { $items[$i] | ForEach-Object $expression } else { $items[$i].$expression }
+            $value = ConvertTo-ClaudeFlowOrdinalKey $value
+            $raw[$n] = $value
+            $folded[$n] = if ($value -is [string]) { $value.ToUpperInvariant() } else { $value }
+        }
+        $entries.Add([pscustomobject]@{ Folded = $folded; Raw = $raw; Index = $i; Item = $items[$i] })
+    }
+    $directions = @($specs | ForEach-Object { $_.Down })
+    $entries.Sort([System.Comparison[object]]{
+        param($x, $y)
+        $xs = $x.Folded; $ys = $y.Folded
+        for ($n = 0; $n -lt $directions.Count; $n++) {
+            $c = Compare-ClaudeFlowOrdinalKey $xs[$n] $ys[$n]
+            if ($c -ne 0) { if ($directions[$n]) { return -$c }; return $c }
+        }
+        $xs = $x.Raw; $ys = $y.Raw
+        for ($n = 0; $n -lt $directions.Count; $n++) {
+            $c = Compare-ClaudeFlowOrdinalKey $xs[$n] $ys[$n]
+            if ($c -ne 0) { if ($directions[$n]) { return -$c }; return $c }
+        }
+        return $x.Index.CompareTo($y.Index)
+    })
+    $kept = [System.Collections.Generic.List[object]]::new()
+    $previous = $null
+    foreach ($e in $entries) {
+        $same = $null -ne $previous
+        if ($same) { for ($n = 0; $n -lt $directions.Count; $n++) { if ((Compare-ClaudeFlowOrdinalKey $e.Folded[$n] $previous[$n]) -ne 0) { $same = $false; break } } }
+        if (-not $Unique -or -not $same) { $kept.Add($e.Item) }
+        $previous = $e.Folded
+    }
+    return $kept.ToArray()
+}
+
 function ConvertTo-ClaudeFlowJsonString {
     # A JSON string written the same way on every shell. ConvertTo-Json escapes ' < > & as \u0027 on
     # Windows PowerShell 5.1 and not on PowerShell 7, which gave one plan two fingerprints (P72).
@@ -133,12 +229,41 @@ function Get-ClaudeFlowFingerprint {
     return (-join ($bytes | ForEach-Object { $_.ToString('x2') }))
 }
 
+function Resolve-ClaudeFlowFilePath {
+    # .NET file methods resolve a relative path against the process's start directory, which `cd` in
+    # PowerShell does not change (P79): a relative path here means PowerShell's current folder.
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+}
+
 function Read-ClaudeDecisionRecord {
     param([Parameter(Mandatory = $true)][string]$Path)
+    $Path = Resolve-ClaudeFlowFilePath $Path
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
     $text = [IO.File]::ReadAllText($Path)
     try { return ($text | ConvertFrom-Json) }
     catch { throw "The decision record '$Path' is not valid JSON; fix or restore it before running the flow: $($_.Exception.Message)" }
+}
+
+function Copy-ClaudeFlowValue {
+    param($Value)
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [System.Collections.IDictionary]) {
+        $copy=[ordered]@{}
+        foreach($key in $Value.Keys){$copy[[string]$key]=Copy-ClaudeFlowValue $Value[$key]}
+        return [pscustomobject]$copy
+    }
+    if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) {
+        $items=New-Object 'Collections.Generic.List[object]'
+        foreach($item in $Value){$items.Add((Copy-ClaudeFlowValue $item))}
+        return ,$items.ToArray()
+    }
+    if ($Value -is [pscustomobject]) {
+        $copy=[ordered]@{}
+        foreach($p in $Value.PSObject.Properties){$copy[$p.Name]=Copy-ClaudeFlowValue $p.Value}
+        return [pscustomobject]$copy
+    }
+    return $Value
 }
 
 function Get-ClaudeDecisionRecordVersion {
@@ -207,6 +332,7 @@ function Write-ClaudeDecisionRecord {
     # Written beside the target and moved over it, so an interrupted write never leaves a half
     # record behind.
     param([Parameter(Mandatory = $true)]$Record, [Parameter(Mandatory = $true)][string]$Path)
+    $Path = Resolve-ClaudeFlowFilePath $Path
     $dir = Split-Path -Parent $Path
     if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     $temp = "$Path.tmp-$([guid]::NewGuid().ToString('N'))"

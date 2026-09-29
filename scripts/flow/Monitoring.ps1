@@ -19,8 +19,8 @@ function Get-ClaudeFlowStepInfo {
 
 function Get-MonitoringFlowWorkbookDefinitions {
     param([string]$Root = $script:FlowRoot)
-    @(Get-ChildItem -LiteralPath (Join-Path $Root 'infra') -Filter 'workbook*.json' -File |
-        Sort-Object Name |
+    # Code-point order: the plan lists these, and its fingerprint is compared across shells (P76).
+    @(Sort-ClaudeFlowOrdinal -InputObject @(Get-ChildItem -LiteralPath (Join-Path $Root 'infra') -Filter 'workbook*.json' -File) -Key { $_.Name } |
         ForEach-Object {
             $name = if ($_.BaseName -eq 'workbook') { 'Claude gateway' } else { 'Claude gateway - ' + ($_.BaseName -replace '^workbook-', '') }
             [pscustomobject]@{ Name = $name; Path = $_.FullName; RelativePath = $_.FullName.Substring($Root.Length + 1) }
@@ -29,8 +29,7 @@ function Get-MonitoringFlowWorkbookDefinitions {
 
 function Get-MonitoringFlowQueryDefinitions {
     param([string]$Root = $script:FlowRoot)
-    @(Get-ChildItem -LiteralPath (Join-Path $Root 'analytics') -Filter '*.kql' -File |
-        Sort-Object Name |
+    @(Sort-ClaudeFlowOrdinal -InputObject @(Get-ChildItem -LiteralPath (Join-Path $Root 'analytics') -Filter '*.kql' -File) -Key { $_.Name } |
         ForEach-Object { [pscustomobject]@{ Path = $_.FullName; RelativePath = $_.FullName.Substring($Root.Length + 1) } })
 }
 

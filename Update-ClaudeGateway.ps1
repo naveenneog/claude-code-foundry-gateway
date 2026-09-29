@@ -14,7 +14,8 @@ param(
 )
 
 $args = @{
-    RecordPath = $RecordPath
+    # Relative to the repository, as Start-ClaudeGateway.ps1 resolves it, from any folder (P79).
+    RecordPath = $(if ([IO.Path]::IsPathRooted($RecordPath)) { $RecordPath } else { Join-Path $PSScriptRoot $RecordPath })
 }
 if ($DiscoveryPath) { $args.DiscoveryPath = $DiscoveryPath }
 if ($ResourceGroup) { $args.ResourceGroup = $ResourceGroup }

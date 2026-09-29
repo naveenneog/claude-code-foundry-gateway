@@ -76,7 +76,7 @@ function Get-AzureRetailMeter {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][string]$ServiceName,
-        [Parameter(Mandatory = $true)][string]$Region,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Region,
         [int]$TimeoutSec = 90
     )
 
@@ -153,7 +153,7 @@ function Get-AzureRetailPrice {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][string]$ServiceName,
-        [Parameter(Mandatory = $true)][string]$Region,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Region,
         [Parameter(Mandatory = $true)][string]$MeterName,
         [string]$SkuName,
         [string]$ProductName,

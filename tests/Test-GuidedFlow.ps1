@@ -91,7 +91,7 @@ function Invoke-ClaudeFlowStep {
     }
     $counts['Foundation'] = 1 + $(if ($counts.ContainsKey('Foundation')) { [int]$counts['Foundation'] } else { 0 })
     if ($env:GUIDED_FLOW_COUNTS) { $counts | ConvertTo-Json | Set-Content -LiteralPath $env:GUIDED_FLOW_COUNTS -Encoding UTF8 }
-    @{ gatewayUrl = 'https://apim-contoso.azure-api.net/claude'; resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; foundationApplied = $true }
+    @{ gatewayUrl = 'https://apim-contoso.azure-api.net/claude'; resourceGroup = 'rg-contoso'; apimName = 'apim-contoso'; foundationApplied = $true; foundation = $Record.decisions.foundation }
 }
 function Test-ClaudeFlowStep { param($Record) [pscustomobject]@{ Step = 'Foundation'; Passed = $true; Checks = @(@{ Name = 'record'; Passed = $true; Evidence = 'applied'; Fix = '' }) } }
 '@ | Set-Content -LiteralPath (Join-Path $modules 'Foundation.ps1') -Encoding UTF8
