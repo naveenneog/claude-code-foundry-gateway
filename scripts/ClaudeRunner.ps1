@@ -54,9 +54,10 @@ function Invoke-RunnerCommand {
 
 function Write-ClaudeRunnerOutput {
     param([AllowEmptyString()][string]$RawOutput, [string]$Step)
+    # At most 40 lines and 4,096 characters in total: this heading and a truncation marker count.
     $lines = [Collections.Generic.List[string]]::new()
-    $lines.Add("$Step sanitized runner output (last 40 lines; maximum 4096 characters):")
-    foreach ($line in @($RawOutput.TrimEnd("`r", "`n") -split '\r?\n' | Select-Object -Last 40)) {
+    $lines.Add("$Step sanitized runner output (at most 40 lines and 4096 characters, this line included):")
+    foreach ($line in @($RawOutput.TrimEnd("`r", "`n") -split '\r?\n' | Select-Object -Last 39)) {
         $doc = $null
         if ($line.TrimStart().StartsWith('{')) {
             try { $doc = $line | ConvertFrom-Json -ErrorAction Stop }
@@ -82,7 +83,10 @@ function Write-ClaudeRunnerOutput {
         $lines.Add($safe -join '; ')
     }
     $output = $lines -join "`n"
-    if ($output.Length -gt 4096) { $output = $output.Substring(0, 4084) + "`n[truncated]" }
+    if ($output.Length -gt 4096) {
+        $kept = @($output.Substring(0, 4084) -split "`n" | Select-Object -First 39)
+        $output = ($kept -join "`n") + "`n[truncated]"
+    }
     Write-Host $output -ForegroundColor Yellow
 }
 

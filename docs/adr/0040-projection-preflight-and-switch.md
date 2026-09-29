@@ -53,7 +53,8 @@ A supplied ResolverAppId checks that app/URI without reading Policy.Read.All-cla
 Checks show result, evidence, remedy and acting party at the console width. Narrow consoles use
 stacked records. Every advertised wait has an estimate. Runner failure diagnostics expose
 whitelisted counts and hashed samples, never raw identity-to-unit mappings, and are capped at
-40 lines and 4,096 characters. Parsing failures cannot echo a private JSON fragment.
+40 lines and 4,096 characters in total, heading and truncation marker included. Parsing failures
+cannot echo a private JSON fragment.
 
 The existing provider, naming and resource-group RBAC checks remain. Bicep evaluates the
 storage name using ARM's canonical resource-group id. Regional capacity cannot be guaranteed.

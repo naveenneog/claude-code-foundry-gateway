@@ -501,7 +501,8 @@ Graph grant, hourly job and alerts are also P86 work. This is a proposal, not sh
 ([ADR-0040](adr/0040-projection-preflight-and-switch.md), U56).
 
 Apply/compare failure diagnostics expose counts and hashed samples, not raw email or unit values.
-They contain at most 40 input-line summaries and 4,096 characters. Unstructured output is
+They contain at most 40 lines and 4,096 characters in total, counting the heading line and any
+truncation marker, so at most 39 input-line summaries. Unstructured output is
 represented by a length and digest; full private content remains in the authorized runner logs
 (`scripts/ClaudeRunner.ps1:55`).
 

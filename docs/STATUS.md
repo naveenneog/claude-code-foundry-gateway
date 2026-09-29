@@ -4,9 +4,30 @@
 
 ## P84 Projection deployment checks everything before it writes and never switches into an outage, 2026-09-29
 
-**Council round 1 corrections complete; lead round 2 and gate pending.** All five seats blocked the earlier submission. The owner requested P84 after a partial customer deployment on
+**Council round 2: Architect, Coder, UX and Security PASS; QA's one BLOCK is corrected; the owner approved the merge on 2026-09-29 after council and gate.** All five seats blocked the earlier submission. The owner requested P84 after a partial customer deployment on
 2026-09-29. The branch is `p84-projection-preflight`, based on `30cdfd0`. The lead owns COUNCIL
 and GATE; the owner owns merge approval. This packet performs no live Azure writes.
+
+### Council round 2 corrections
+
+Round 2, over `10ff113..624ebd4`: Architect, Coder, UX and Security PASS. The three automated
+switch paths refuse unconditionally (`scripts/Deploy-ClaudeProjection.ps1:46`,
+`Install-ClaudeGateway.ps1:122-124`, `scripts/flow/Entitlement.ps1:77-79`); the manual named-value
+step in `docs/SCALE.md` keeps its warning. QA BLOCK: forty short runner summaries produced 41
+diagnostic lines, because the heading was added before forty summaries, and the tests allowed 42
+lines and 4,352 characters.
+
+- [x] RED: new assertions on the formatter's own output fail on `624ebd4` with `lines=41` for forty
+      short summaries and for eighty long lines
+- [x] GREEN: `Write-ClaudeRunnerOutput` keeps the heading and at most 39 summaries, and on
+      truncation keeps at most 39 lines before the marker, so the diagnostic is at most 40 lines and
+      4,096 characters in total. A sweep of fifteen summary widths reaches the case where truncation
+      cuts inside the fortieth line. The apply and compare assertions now allow only the failure
+      message beyond that. Council suite 86 of 86 in 65.8 s (all groups, three locales); preflight
+      197 of 197 in 16.2 s
+- [x] Mutations, each in a private copy, each running the baseline 70 Core assertions: 40 input
+      lines (4 fail), no line cap on truncation (1 fails: the sweep), the previous truncation length
+      (4 fail); 3 of 3 caught in 30 s (`p84-r2-mutate.ps1`)
 
 ### Council round 1 corrections
 

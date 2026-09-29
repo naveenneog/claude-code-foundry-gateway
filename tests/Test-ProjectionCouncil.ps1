@@ -134,11 +134,31 @@ foreach($step in 'apply','compare') {
         Capture { ConvertFrom-ClaudeRunnerResult -RawOutput $raw -Step $step }
         Assert "$step rejects unsuccessful/malformed output" ([bool]$Failure)
         Assert "$step hides email, unit and raw oid" ($Output -notmatch 'private@example.invalid|secret-finance-unit|secret-platform-unit' -and $Output -notmatch [regex]::Escape($oid))
-        Assert "$step diagnostic is capped in lines and characters" ($Output.Length -le 4352 -and @($Output -split '\r?\n' | Where-Object { $_ }).Count -le 42)
+        Assert "$step diagnostic is capped in lines and characters" ($Output.Length -le (4097 + $Failure.Length) -and @($Output -split '\r?\n' | Where-Object { $_ }).Count -le 41)
     }
 }
 Capture { Write-ClaudeRunnerOutput -RawOutput $summary -Step compare }
 Assert 'structured diagnostics retain useful counts and hashed samples' ($Output -match 'compared=5' -and $Output -match 'differences=1' -and $Output -match 'oid-sha256=[0-9a-f]{12}')
+# The heading counts: the diagnostic itself is at most 40 lines and 4096 characters, truncation marker included.
+$shortSummaries = (1..40 | ForEach-Object { '{"ok":false,"compared":1,"differences":1}' }) -join "`n"
+$longLines = (1..80 | ForEach-Object { 'private@example.invalid secret-finance-unit ' + ('x'*600) }) -join "`n"
+foreach ($diagCase in @(@{ Name='forty short summaries'; Raw=$shortSummaries }, @{ Name='eighty long lines'; Raw=$longLines }, @{ Name='eighty wide summaries'; Raw=((1..80 | ForEach-Object { $wide }) -join "`n") })) {
+    Capture { Write-ClaudeRunnerOutput -RawOutput $diagCase.Raw -Step compare }
+    $text = $Output.TrimEnd("`n")
+    $lineCount = @($text -split '\r?\n').Count
+    Assert "the diagnostic for $($diagCase.Name) is at most 40 lines, heading included, and 4096 characters" ($lineCount -le 40 -and $text.Length -le 4096) "lines=$lineCount chars=$($text.Length)"
+}
+# A sweep of summary widths reaches the case where truncation cuts inside the last of 40 lines.
+$sweepWorst = 0
+foreach ($digits in 1..15) {
+    $n = '9' * $digits
+    $raw = (1..39 | ForEach-Object { "{`"ok`":false,`"compared`":$n,`"projectionRecords`":$n,`"differences`":$n,`"resolved`":$n}" }) -join "`n"
+    Capture { Write-ClaudeRunnerOutput -RawOutput $raw -Step compare }
+    $text = $Output.TrimEnd("`n")
+    $sweepWorst = [math]::Max($sweepWorst, @($text -split '\r?\n').Count)
+    if ($text.Length -gt 4096) { $sweepWorst = 99 }
+}
+Assert 'truncation keeps every summary width within 40 lines and 4096 characters' ($sweepWorst -le 40) "worst lines=$sweepWorst"
 
 $source=Get-Content (Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1') -Raw
 $tokens=$null;$errors=$null
