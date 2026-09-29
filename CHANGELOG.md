@@ -29,6 +29,10 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P85 council round 2: sign-out completion.** A successful sign-out exits
+  from application-owned completion handling after registry release, even
+  when its modal worker was cancelled. Other mutations still finish first,
+  failures stay visible, and completed sign-out does not retain saving text.
 - **P85 council round 1: quit deferral.** Application-owned mutation tasks
   retain backend and receipt completion even when a modal worker is cancelled.
   All application exit routes defer during a save; the quit dialog explains

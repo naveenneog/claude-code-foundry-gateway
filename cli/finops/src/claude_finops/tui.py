@@ -78,6 +78,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
         self._refresh_serial = 0
         self._waiting = set()
         self._active_mutations = set()
+        self._signout_complete = False
         self.allowed_tabs = visible_tabs({})
         self.team = ""
         self.people_query = ""
@@ -757,6 +758,11 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
     @published(lambda self, task: self.safe_message_guard())
     def _mutation_finished(self, task):
         self._active_mutations.discard(task)
+        if not task.cancelled() and task.exception() is None and task.result() == "signout":
+            self._signout_complete = True
+        if self._signout_complete and not self.saving:
+            self.exit()
+            return
         for screen in self.screen_stack:
             if isinstance(screen, QuitScreen):
                 screen.refresh_saving()

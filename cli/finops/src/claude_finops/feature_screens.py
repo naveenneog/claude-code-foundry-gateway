@@ -154,9 +154,10 @@ class ActionForm(ModalScreen):
         self.busy = True
         reviewed_plan = self.preview
         operation = self.commit_action(reviewed_plan)
-        result = await self.app.run_mutation(operation) if self.mutation or self.local_write else await operation
-        if result == "signout":
-            self.app.exit()
+        if self.mutation or self.local_write:
+            await self.app.run_mutation(operation)
+        else:
+            await operation
 
     async def commit_action(self, reviewed_plan):
         self.query_one("#action-apply", Button).disabled = True
@@ -183,6 +184,10 @@ class ActionForm(ModalScreen):
                                                     revision=result["profile_revision"], reviewed=result["profile_change"])
                     return
                 if result["ui_action"] == "signout":
+                    with guarded_publish(self.app.safe_message_guard()):
+                        self.query_one("#action-status", Static).update(
+                            "Signed out. AUM exits after pending operations finish "
+                            "(estimate 3-30 s; an asynchronous apply can take up to 3 minutes).")
                     return "signout"
                 self.dismiss()
                 if result["ui_action"] == "view":

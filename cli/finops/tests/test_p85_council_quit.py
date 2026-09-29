@@ -6,6 +6,7 @@ from textual.widgets import Button, Static, TextArea
 
 from claude_finops.config import Config
 from claude_finops.engine import Engine
+from claude_finops.errors import FinOpsError
 from claude_finops.fake import FakeBackend
 from claude_finops.feature_screens import ActionForm
 from claude_finops.palette import FinOpsCommands
@@ -184,7 +185,8 @@ async def test_read_only_action_does_not_block_deliberate_quit():
             release.set()
 
 
-async def test_signout_exits_only_after_its_completed_mutation():
+@pytest.mark.parametrize("cancel_worker", [False, True])
+async def test_signout_exits_only_after_its_completed_mutation(cancel_worker):
     app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
     started, release = threading.Event(), threading.Event()
     effects = []
@@ -204,15 +206,87 @@ async def test_signout_exits_only_after_its_completed_mutation():
         await pilot.pause()
         await pilot.click("#action-preview")
         await settle(app, pilot)
-        app.screen.apply_action()
+        screen = app.screen
+        worker = screen.apply_action()
         try:
             await until(started.is_set, pilot)
+            if cancel_worker:
+                worker.cancel()
             await pilot.press("ctrl+q", "q")
             assert app.is_running and not effects
         finally:
             release.set()
-        await until(lambda: not app.is_running, pilot)
+        await until(lambda: not app.saving, pilot)
+        await pilot.pause()
+        assert not app.is_running, str(screen.query_one("#action-status", Static).render())
         assert effects == ["signed out"]
+
+
+async def test_cancelled_failed_signout_stays_running_without_stale_progress():
+    app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
+    started, release = threading.Event(), threading.Event()
+
+    def operation(values, apply):
+        if apply:
+            started.set()
+            release.wait(timeout=10)
+            raise FinOpsError("Offline sign-out failed.", 7)
+        return {"action": "Sign out"}
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await settle(app, pilot)
+        app.push_screen(ActionForm("Sign out", [], operation))
+        await pilot.pause()
+        await pilot.click("#action-preview")
+        await settle(app, pilot)
+        screen = app.screen
+        worker = screen.apply_action()
+        try:
+            await until(started.is_set, pilot)
+            worker.cancel()
+        finally:
+            release.set()
+        await until(lambda: not app.saving, pilot)
+        assert app.is_running and not screen.busy
+        assert "Offline sign-out failed" in str(screen.query_one("#action-status", Static).render())
+
+
+async def test_successful_signout_waits_for_other_mutation_then_exits():
+    app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
+    other_release = asyncio.Event()
+    closed = []
+
+    async def other_write():
+        await other_release.wait()
+        closed.append("other")
+
+    def signout(values, apply):
+        if apply:
+            closed.append("signout")
+            return {"ui_action": "signout"}
+        return {"action": "Sign out"}
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await settle(app, pilot)
+        app.run_worker(app.run_mutation(other_write()))
+        await until(lambda: app.saving, pilot)
+        app.push_screen(ActionForm("Sign out", [], signout))
+        await pilot.pause()
+        await pilot.click("#action-preview")
+        await pilot.pause()
+        screen = app.screen
+        await until(lambda: screen.preview is not None, pilot)
+        screen.apply_action()
+        try:
+            await until(lambda: "signout" in closed and not screen.busy, pilot)
+            assert app.is_running and closed == ["signout"]
+            message = str(screen.query_one("#action-status", Static).render())
+            assert "Signed out" in message and "Saving once" not in message
+        finally:
+            other_release.set()
+        await until(lambda: not app.saving, pilot)
+        await pilot.pause()
+        assert closed == ["signout", "other"] and not app.is_running
 
 
 async def test_assistant_request_is_also_a_tracked_mutation():

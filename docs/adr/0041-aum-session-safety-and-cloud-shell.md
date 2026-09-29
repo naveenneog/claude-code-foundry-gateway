@@ -41,6 +41,12 @@ confirmation is disabled and never automatically replayed after a save.
 Explicit sign-out retains its intentional exit after its own operation
 completes. Unexpected orphaned-task failures still reach error handling.
 
+Council round 2 moves that successful sign-out intent into application-owned
+completion handling after registry release. A cancelled modal worker cannot
+lose it. Other pending mutations finish before exit; failed sign-out does not
+request exit. The form replaces saving progress with completed-sign-out
+status while another operation remains.
+
 The Cloud Shell launcher installs a pinned uv wheel into a HOME-local
 bootstrap directory, uses its managed Python 3.12 to create/reuse the AUM
 venv, and installs the checked-out package in editable mode. Editable

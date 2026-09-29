@@ -243,6 +243,10 @@ does not automatically execute an earlier quit request. Ctrl+C can still be
 consumed by native copy handling; the application's quit entry follows the
 same deferral. Non-mutating work does not acquire this save lifetime
 ([quit regressions](../cli/finops/tests/test_p85_council_quit.py)).
+Successful sign-out completion is application-owned: cancellation of its
+modal worker does not lose the intended exit. Its registry entry is released
+first, other pending mutations finish, and the form no longer reports a save
+that has already completed. Failed sign-out leaves AUM running with its error.
 
 Expected refresh failures remain visible rather than terminating the terminal.
 Network/I/O failures and HTTP 401/403 have plain status explanations; an

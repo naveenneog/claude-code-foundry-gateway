@@ -33,6 +33,20 @@ reproductions join the requested standard selectors and gain mutation probes.
 U60 is reopened and U61 records the alias gap before implementation. The
 affected selectors and one full AUM run follow; round 3 remains lead-owned.
 
+RED: the exact reproductions and controls produced **3 failures and 3 passes
+in 14.38 s**: cancelled sign-out kept AUM running, successful sign-out behind
+another mutation showed stale saving text, and real offline pip created the
+external log from `PIP_--log`. The additional installer contract failed all
+three cases in **9.19 s**, proving inherited aliases reached pip/uv and pip
+lacked isolated/cache arguments.
+
+Sign-out GREEN: **60 affected lifecycle/profile/publication cases passed in
+57.34 s**. Completion is now consumed by the application callback after its
+registry entry is removed. The successful intent survives worker cancellation
+and waits for any other mutation; failure does not request exit. The form
+records the completed sign-out instead of stale saving progress. The same
+standard selector covers cancellation, another pending operation and failure.
+
 ### Council round 1 corrections
 
 The lead reviewed `f33eb0c` on 2026-09-29. Architect PASS; Coder, QA, UX and
