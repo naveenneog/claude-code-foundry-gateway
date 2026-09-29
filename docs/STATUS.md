@@ -227,8 +227,10 @@ unused label:
 & .\.venv-finops\Scripts\python.exe .\.finops-evidence\p71-startup-race\stress.py --label review-full --full --iterations 1 --burners 0 *> "$env:TEMP\p71-review-full.log"
 ```
 
-**Builder handoff:** Correction and proof complete; council and packet gates
-remain with the lead. ROADMAP P71 remains unticked. Nothing was pushed or merged.
+**Builder handoff:** Implementation and recorded proof are committed as
+`2be0973` (`fix(aum): preserve native message controls after sealing`).
+Council and packet gates remain with the lead. ROADMAP P71 remains unticked.
+Nothing was pushed or merged.
 
 ### Council round 10 corrections
 
