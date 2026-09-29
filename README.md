@@ -19,6 +19,11 @@ Start with [Setup](docs/SETUP.md) for deployment or
 > 954 writes/second; point reads cost 1 RU, p99 51 ms. This is a storage test,
 > **not 500,000 concurrent developers** or a completed directory scan.
 >
+> Projection deployment requires PowerShell 7. Its [read-only preflight](docs/SECURE-PROJECTION.md#one-command-deployment)
+> runs before Azure writes; switching requires a clean comparison and an existing verified
+> reconciler. Without renewal, records expire within two hours and every developer receives
+> 503. The deployer does not create the schedule ([ADR-0040](docs/adr/0040-projection-preflight-and-switch.md)).
+>
 > The current two-always-ready-instance profile costs **$91.56/month at rest**.
 > Hourly lease renewal at 500,000 members adds about **365 million writes/month**,
 > about **$538/month** at the measured create RU charge and stated list price

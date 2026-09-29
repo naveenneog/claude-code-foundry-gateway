@@ -61,6 +61,8 @@ param(
     [string]$ResolverInboundAccess,
     [switch]$DeployProjection,
     [switch]$FlipProjectionAfterCleanCompare,
+    [string]$ProjectionReconcilerResourceId,
+    [string]$ProjectionResolverAppId,
 
     [int]$TpmStandard,
     [int]$QuotaStandard,
@@ -871,6 +873,18 @@ if ($Yes -and $EntitlementStore -eq 'projection' -and -not $DeployProjection) {
 if ($FlipProjectionAfterCleanCompare -and -not $DeployProjection) {
     throw '-FlipProjectionAfterCleanCompare requires -DeployProjection.'
 }
+if ($DeployProjection -and -not $WhatIfPreference) {
+    . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
+    Assert-ClaudeProjectionPowerShell
+}
+if ($FlipProjectionAfterCleanCompare) {
+    . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
+    $projectionTenant = if ($ProjectionReconcilerResourceId) { (Invoke-ClaudeNetworkAz @('account','show')).tenantId } else { '' }
+    $projectionScope = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup"
+    $null = Assert-ClaudeProjectionReconciler -ReconcilerResourceId $ProjectionReconcilerResourceId `
+        -GatewayResourceId "$projectionScope/providers/Microsoft.ApiManagement/service/$apimName" `
+        -AccountResourceId "$projectionScope/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-$NamePrefix" -TenantId $projectionTenant
+}
 # Named values for more developers than they hold, said where the store is chosen (P79).
 if ($EntitlementStore -eq 'named-value' -and $devCount -gt $buCeiling) {
     Write-Host ''
@@ -1616,6 +1630,9 @@ if ($EntitlementStore -eq 'projection' -and $DeployProjection) {
         '-PremiumGroup', $PremiumGroup
     )
     if ($FlipProjectionAfterCleanCompare) { $projectionArgs += '-FlipAfterCleanCompare' }
+    if ($ProjectionReconcilerResourceId) { $projectionArgs += @('-ReconcilerResourceId', $ProjectionReconcilerResourceId) }
+    if ($ProjectionResolverAppId) { $projectionArgs += @('-ResolverAppId', $ProjectionResolverAppId) }
+    $projectionArgs += @('-SubscriptionId', $SubscriptionId)
     if ($WhatIfPreference) { $projectionArgs += '-WhatIf' }
     & (Join-Path $root 'scripts/Deploy-ClaudeProjection.ps1') @projectionArgs
     if ($LASTEXITCODE -ne 0) { throw 'Projection deployment failed. The gateway was not flipped.' }

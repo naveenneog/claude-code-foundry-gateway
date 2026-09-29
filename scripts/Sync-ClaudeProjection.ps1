@@ -74,6 +74,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ($PSVersionTable.PSVersion.Major -lt 7) { throw 'Projection sync requires PowerShell 7 or later; run in pwsh.' }
 . (Join-Path $PSScriptRoot 'ClaudeGraphMembership.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjection.ps1')
 
@@ -119,19 +120,15 @@ if ($acct.tenantId -ne $TenantId) {
     exit 1
 }
 
-$graphToken = az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv 2>$null
-if (-not $graphToken) { Bad 'Could not get a Microsoft Graph token.'; exit 1 }
+$graphToken = Get-GraphToken
 
 $cosmosToken = $null
 if (-not $ExportPath) {
     $cosmosToken = az account get-access-token --resource https://cosmos.azure.com --query accessToken -o tsv 2>$null
     if (-not $cosmosToken) { Bad 'Could not get a Cosmos data-plane token.'; exit 1 }
 }
-# Resolved once, here, rather than inside a message: a command substitution in
-# a string still runs under -WhatIf, and a redirect inside it makes PowerShell
-# prompt about writing a file that has nothing to do with this script.
-$signedInOid = az ad signed-in-user show --query id -o tsv 2>$null
-if ($signedInOid) { $signedInOid = $signedInOid.Trim() } else { $signedInOid = '<your-object-id>' }
+# This is only a placeholder in the role-grant example, not a directory lookup.
+$signedInOid = '<your-object-id>'
 Ok $(if ($ExportPath) { 'Graph token acquired (export only - Cosmos is not contacted)' } else { 'Graph and Cosmos tokens acquired' })
 
 # ---------------------------------------------------------------- 2. resolve

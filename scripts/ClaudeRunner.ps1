@@ -39,8 +39,36 @@ function Invoke-RunnerCommand {
     )
     $arguments = @('container','exec','-g',$ResourceGroup,'-n',$Name,'--container-name',$Container,'--exec-command',$Command)
     if ($SubscriptionId) { $arguments += @('--subscription',$SubscriptionId) }
-    $out = & az @arguments 2>&1 | Out-String
+    $saved = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $out = & az @arguments 2>&1 | Out-String
+        $code = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $saved }
+    if ($code -ne 0) {
+        Write-ClaudeRunnerOutput -RawOutput $out -Step 'runner transport'
+        throw "runner transport failed (az exit $code)."
+    }
     return $out.Trim()
+}
+
+function Write-ClaudeRunnerOutput {
+    param([AllowEmptyString()][string]$RawOutput, [string]$Step)
+    Write-Host "$Step raw runner output (last 40 lines):" -ForegroundColor Yellow
+    ($RawOutput.TrimEnd("`r", "`n") -split '\r?\n' | Select-Object -Last 40) | ForEach-Object { Write-Host $_ }
+}
+
+function ConvertFrom-ClaudeRunnerResult {
+    param([AllowEmptyString()][string]$RawOutput, [string]$Step)
+    try {
+        $last = $RawOutput.TrimEnd("`r", "`n") -split '\r?\n' | Select-Object -Last 1
+        $result = $last | ConvertFrom-Json -ErrorAction Stop
+        if (-not $result -or $result.ok -isnot [bool] -or -not $result.ok) { throw 'The runner summary must contain boolean ok:true.' }
+        return $result
+    } catch {
+        Write-ClaudeRunnerOutput -RawOutput $RawOutput -Step $Step
+        throw "$Step failed: $($_.Exception.Message)"
+    }
 }
 
 function Send-RunnerFile {

@@ -29,6 +29,16 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P84 projection deployment preflight and switch guard.** `-PreflightOnly` and normal
+  deployment share read-only prerequisite checks before Azure writes. PowerShell 7 is required
+  for deployment/projection sync. Graph errors no longer count as absent groups; runner failures
+  show their final 40 output lines and failed app creation cannot update an empty id. Deployment,
+  installer and guided Entitlement switches require current ARM evidence for a scheduled
+  reconciler bound to this projection, as specified in proposed
+  [ADR-0040](docs/adr/0040-projection-preflight-and-switch.md). No schedule or bypass is added;
+  provisioning and lease alerts are proposed P86 work. Initial offline proof:
+  `tests/Test-ProjectionPreflight.ps1:1`; [P84 status](docs/STATUS.md).
+
 - **P78 parallel hosted checks.** Opt-in deterministic Test-All shards retain
   isolated processes, exclusive checks and deadlines, with commit/tree-bound receipts and an
   ordered, fail-closed coverage merge. A SHA-pinned, read-only GitHub workflow installs both AUM

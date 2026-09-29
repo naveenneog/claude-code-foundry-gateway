@@ -11,18 +11,18 @@ and GATE; the owner owns merge approval. This packet performs no live Azure writ
 - [x] PLAN: A-F below define the packet; P85 belongs to another builder and P86 is proposed.
 - [x] CONTRACT: [ADR-0040](adr/0040-projection-preflight-and-switch.md) records the switch
       evidence contract, with U54-U57 researched before implementation.
-- [ ] A: `-PreflightOnly` and normal deployment share a read-only preflight before any Azure
+- [x] A: `-PreflightOnly` and normal deployment share a read-only preflight before any Azure
       write. One table contains check, result, evidence, remedy and acting party. Checks cover
       PowerShell 7, Azure sign-in/subscription, two Graph probes 20-30 seconds apart, tier
       groups, resolver registration permission/identifier URI, providers, resource-group RBAC,
       every derived name and global availability, local tools and regional-capacity limits.
-- [ ] B: Deployment, installer and guided Entitlement refuse a projection switch without a
+- [x] B: Deployment, installer and guided Entitlement refuse a projection switch without a
       verified reconciler. Refusal states the two-hour maximum lease, absolute expiry and
       developer-wide 503 consequence. ARM reads verify schedule and recent success; no bypass
       or scheduled resource is introduced.
-- [ ] C: Every shared Graph-membership caller fails on CAE, authorization and network errors;
+- [x] C: Every shared Graph-membership caller fails on CAE, authorization and network errors;
       only a positively empty lookup represents an absent optional group.
-- [ ] D: Apply/compare parsing and `ok:false` failures show the last 40 runner-output lines.
+- [x] D: Apply/compare parsing and `ok:false` failures show the last 40 runner-output lines.
       App creation failure never updates an empty id or reports a fictitious WhatIf failure.
 - [ ] E: A fast registered offline suite exercises A-D, with right-reason RED, passing related
       projection/installer/Entitlement checks and count-preserving guard mutations.
@@ -33,6 +33,18 @@ Architecture conclusion: no deployed component, identity, network path or schedu
 only operator-side validation and switch admission change. U56 records the evidence-contract
 assumption and pending owner acceptance. The initial audit-only packet gate passed
 (20 passed, 2 warned, 0 failed, 4 command checks skipped); this is not the lead's packet gate.
+
+**First RED/GREEN:** PLAN/CONTRACT is `89d9906`. The new offline check loaded 188 assertions,
+failed 165 in 12.35 s, and exposed the PS7 CAE diagnostic loss, a successful-looking nonzero
+runner exit, absent preflight/switch checks and missing raw output. The same 188 assertions
+passed in 7.79 s after implementation. Native `az.cmd` boundaries run on PowerShell 7 and 5.1;
+deployment and projection sync refuse 5.1 with `run in pwsh`.
+
+Focused existing checks passed: ProjectionInstaller 34 (0.73 s), FlowLifecycle 33 (2.48 s),
+ProjectionRules 34 (0.75 s), Teams 146 (2.25 s), SecureProjection 123 (12.45 s),
+AdminSurface 682 (4.42 s), Scale 211 (1.20 s). Encoding passed for 298 scripts.
+Installer permutations, projection negatives, additional integration proofs and mutations remain
+in progress. Evidence is offline, not a customer-tenant deployment proof.
 
 ## P78 the test suite runs in parallel on GitHub-hosted runners, 2026-09-28
 

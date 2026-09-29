@@ -10,21 +10,63 @@
     The request form here is not obvious and was arrived at by measurement.
     See the comment on the casts below.
 #>
+. (Join-Path $PSScriptRoot 'ClaudeNetwork.ps1')
+
+function Get-ClaudeGraphFailureRemedy {
+    param([string]$Message)
+    if ($Message -match 'LocationConditionEvaluationSatisfied|Continuous access evaluation resulted in challenge') {
+        return 'CAE location/IP variation: the operator stays fully on or off the VPN for sign-in and Graph. The network team checks split tunneling and IPv6/IPv4 egress. The customer Entra admin reviews the actual addresses in sign-in logs and the named location or a time-limited temporary exclusion. Azure Cloud Shell is an alternative only if its different outbound location is allowed; it is not a Conditional Access bypass and does not inherit private VNet access. Source: https://learn.microsoft.com/entra/identity/conditional-access/howto-continuous-access-evaluation-troubleshoot (2026-09-29).'
+    }
+    return 'The operator verifies az login and Graph connectivity; the customer Entra admin verifies directory read permission. A denied or failed read is not an absent group.'
+}
+
 function Get-GraphToken {
-    $t = az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv 2>$null
-    if (-not $t) { throw "Could not acquire a Microsoft Graph token. Run: az login" }
-    return $t.Trim()
+    try {
+        $result = Invoke-ClaudeNetworkAz @('account','get-access-token','--resource','https://graph.microsoft.com')
+        if (-not $result -or -not $result.accessToken) { throw 'No Microsoft Graph access token was returned.' }
+        return [string]$result.accessToken
+    } catch {
+        throw "Graph token acquisition failed: $($_.Exception.Message) $(Get-ClaudeGraphFailureRemedy $_.Exception.Message)"
+    }
+}
+
+function Invoke-ClaudeGraphRead {
+    param([string]$Uri, [string]$Token, [hashtable]$Headers = @{})
+    if ($Uri -notmatch '^https://graph\.microsoft\.com/v1\.0/') { throw 'Graph nextLink is outside the expected Graph endpoint.' }
+    $requestHeaders = @{ Authorization = "Bearer $Token" }
+    foreach ($key in $Headers.Keys) { $requestHeaders[$key] = $Headers[$key] }
+    try {
+        Invoke-RestMethod -Uri $Uri -Headers $requestHeaders -Method Get -TimeoutSec 30 -ErrorAction Stop
+    } catch {
+        throw "Graph read failed: $($_.Exception.Message) $(Get-ClaudeGraphFailureRemedy $_.Exception.Message)"
+    }
+}
+
+function Get-ClaudeGraphGroup {
+    param([string]$GroupName, [string]$Token)
+    if ([string]::IsNullOrWhiteSpace($GroupName)) { throw 'Graph group name is required.' }
+    $property = if ($GroupName -match '^[0-9a-fA-F-]{36}$') { 'id' } else { 'displayName' }
+    $filter = [uri]::EscapeDataString("$property eq '$($GroupName.Replace("'", "''"))'")
+    $page = Invoke-ClaudeGraphRead -Uri "https://graph.microsoft.com/v1.0/groups?`$filter=$filter&`$select=id&`$top=2" -Token $Token
+    if (-not $page -or -not $page.PSObject.Properties['value'] -or $page.value -isnot [array]) {
+        throw "Graph group '$GroupName' lookup returned an invalid collection, not a confirmed absence."
+    }
+    $groups = @($page.value)
+    if ($groups.Count -gt 1 -or $page.PSObject.Properties['@odata.nextLink']) { throw "Graph group '$GroupName' is ambiguous: multiple groups or incomplete lookup." }
+    if ($groups.Count -eq 0) { return $null }
+    if (-not $groups[0].PSObject.Properties['id'] -or -not $groups[0].id) { throw "Graph group '$GroupName' has no id." }
+    return $groups[0]
 }
 
 function Get-GroupMemberOids {
     param([string]$GroupName, [string]$Token)
 
-    $gid = az ad group show --group $GroupName --query id -o tsv 2>$null
-    if (-not $gid) {
+    $group = Get-ClaudeGraphGroup -GroupName $GroupName -Token $Token
+    if (-not $group) {
         Write-Warning "Group '$GroupName' not found - treating as empty."
         return @()
     }
-    $gid = $gid.Trim()
+    $gid = [string]$group.id
 
     # Transitive membership so nested groups work the way admins expect, and
     # cast so that nested groups themselves do not come back as members.
@@ -93,12 +135,21 @@ function Get-GroupMemberOids {
         $uri = "https://graph.microsoft.com/v1.0/groups/$gid/transitiveMembers/$($cast.Type)" +
                "?`$select=$($cast.Select)&`$top=999&`$count=true"
 
+        $seenLinks = @{}
         do {
-            $page = Invoke-RestMethod -Uri $uri -Headers $headers -Method Get -ErrorAction Stop
+            if ($seenLinks.ContainsKey($uri)) { throw 'Graph membership nextLink repeated; the scan is incomplete.' }
+            $seenLinks[$uri] = $true
+            $page = Invoke-ClaudeGraphRead -Uri $uri -Token $Token -Headers @{ ConsistencyLevel = $headers['ConsistencyLevel'] }
+            if (-not $page -or -not $page.PSObject.Properties['value'] -or $page.value -isnot [array]) {
+                throw "Graph membership for '$GroupName' returned an invalid collection."
+            }
             foreach ($m in $page.value) {
+                if (-not $m.PSObject.Properties['id'] -or -not $m.id) { throw "Graph membership for '$GroupName' contains an identity without an id." }
+                $upn = $m.PSObject.Properties['userPrincipalName']
+                $displayName = $m.PSObject.Properties['displayName']
                 $members += [pscustomobject]@{
                     Oid  = $m.id
-                    Name = if ($m.userPrincipalName) { $m.userPrincipalName } else { $m.displayName }
+                    Name = if ($upn -and $upn.Value) { $upn.Value } elseif ($displayName) { $displayName.Value } else { $m.id }
                 }
             }
             # A page is capped at 999, so a larger group arrives over several
