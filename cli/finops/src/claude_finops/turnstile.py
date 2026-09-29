@@ -1,6 +1,10 @@
 from urllib.parse import quote
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar
 
+from . import config as configuration
 from .http_backend import HttpBackend
+from .backend import in_read_cycle
 from .errors import FinOpsError
 from .rules import identifier, month_window, scope_type, query_window
 from .feature_routes import READ_ROUTES as FEATURE_READS, WRITE_ROUTES as FEATURE_WRITES
@@ -28,11 +32,37 @@ WRITE_ROUTES = {
     "apply": ("POST", "/api/v1/gateway-apply"),
 }
 
+_readiness_credential = ContextVar("turnstile_readiness_credential", default=None)
+
 
 class TurnstileBackend(HttpBackend):
     name = "Turnstile"
+    identity_path = READ_ROUTES["whoami"]
 
+    def _token_timeout(self):
+        return 2.5
+
+    def _request_timeout(self, method, path):
+        return 1.0 if method == "GET" and path == READ_ROUTES["whoami"] else super()._request_timeout(method, path)
+
+    def _unavailable_error(self, method, path, status=None):
+        if method == "GET" and path == READ_ROUTES["whoami"]:
+            from .readiness import database_failure
+            return database_failure(self.config, self._client, status, credential=_readiness_credential.get())
+        return super()._unavailable_error(method, path, status)
+
+    @in_read_cycle
     def read(self, resource, **params):
+        if resource == "whoami" and self.config.subscription and (
+                self.config.turnstile_resource_group or (self.config.resource_group and self.config.apim_name)):
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(configuration.resource_token, "https://management.azure.com/",
+                                     self.config.subscription, self.config.tenant_id, timeout=2.5)
+                context = _readiness_credential.set(future)
+                try:
+                    return self._request("GET", READ_ROUTES["whoami"])
+                finally:
+                    _readiness_credential.reset(context)
         if resource == "capabilities":
             identity = params.get("identity") or self.read("whoami")
             document = current_capabilities(identity)
@@ -50,7 +80,7 @@ class TurnstileBackend(HttpBackend):
                 registry = self._request("GET", FEATURE_READS["registry"], optional=True)
                 if registry and registry.get("gateways") and registry.get("models"):
                     document["features"]["advanced"] = dict(enabled=True, actions=["read"])
-            self._features = document
+            self.cache_read(_features=document)
             return document
         if resource in FEATURE_READS:
             path = FEATURE_READS[resource]

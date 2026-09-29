@@ -1,14 +1,21 @@
 import json
+import os
 from fnmatch import fnmatchcase
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from contextvars import ContextVar, copy_context
+from copy import deepcopy
+from threading import RLock
 
 import httpx
 
 from .backend import Backend
-from .config import az
+from .config import (az, resource_token, bind_resource_principal,
+                     invalidate_resource_principal, validate_resource_principal, resource_principal_guard)
 from .errors import FinOpsError, http_error
 from .rules import identifier, month_window, query_window
 from .capabilities import current_capabilities
@@ -24,15 +31,151 @@ class DirectBackend(Backend):
     native_modes = True
     person_budget_period = "day"
     budget_warning_threshold = False
+    identity_independent_reads = frozenset({
+        "overview", "budgets", "catalog", "tiers", "distribution", "trends",
+        "people", "requests", "request", "anomalies", "apply",
+    })
 
     def __init__(self, config):
         self.config = config.validate()
+        self._cycle = ContextVar("direct_read_cycle", default=None)
+        self._prepare_lock = RLock()
+        self._client = None
+        self._credential_context = None
         self.root = Path(config.repository) if config.repository else Path(__file__).resolve().parents[4]
         self.bridge = self.root / "scripts" / "Invoke-ClaudeFinOps.ps1"
         if not self.bridge.exists():
             raise FinOpsError("Direct mode needs the gateway repository. Set repository in config.")
         if not config.resource_group or not config.apim_name:
             raise FinOpsError("Run aum configure to discover the Direct gateway and workspace, or set resource_group and apim_name.")
+
+    @contextmanager
+    def read_cycle(self):
+        if self._cycle.get() is not None:
+            yield
+            if self._cycle.get().get("has_data"):
+                self._check_read_cycle()
+            return
+        context = self._cycle.set({"lock": RLock(), "account_lock": RLock()})
+        try:
+            yield
+            if self._cycle.get().get("has_data"):
+                self._check_read_cycle()
+        finally:
+            self._cycle.reset(context)
+
+    def _check_read_cycle(self):
+        cycle = self._cycle.get()
+        if cycle is not None:
+            credential = cycle.get("credential")
+            if credential is None:
+                raise FinOpsError("Azure sign-in changed. Start a new read cycle for the current principal.", 3)
+            self._check_credential(credential)
+
+    def read_guard(self):
+        cycle = self._cycle.get()
+
+        @contextmanager
+        def publish():
+            with self._prepare_lock:
+                credential = cycle.get("credential") if cycle is not None else None
+                if credential is not None:
+                    with resource_principal_guard(credential):
+                        self._check_credential(credential)
+                        yield
+                elif cycle is not None and cycle.get("has_data"):
+                    raise FinOpsError("Azure sign-in changed. Start a new read cycle before publishing data.", 3)
+                else:
+                    yield
+
+        return publish
+
+    def identity_update(self):
+        return self._prepare_lock
+
+    def _snapshot(self, resource="read"):
+        cycle = self._cycle.get()
+        if cycle is None:
+            return self._bridge(resource)
+        self.prepare_read(resource)
+        cycle["has_data"] = True
+        with cycle["lock"]:
+            if "value" not in cycle:
+                cycle["value"] = self._bridge("read", snapshot=True)
+            state = cycle["value"]
+            if resource == "read":
+                result = deepcopy(state)
+            else:
+                result = state.get("reads", {}).get(resource)
+                if not isinstance(result, dict):
+                    raise FinOpsError(f"Gateway snapshot has no {resource} result. Refresh the current gateway scripts.", 7)
+                if result.get("error"):
+                    raise FinOpsError(result["error"], result.get("exit_code", 7))
+                result = deepcopy(result)
+            self._check_read_cycle()
+            return result
+
+    def _invalidate_snapshot(self):
+        cycle = self._cycle.get()
+        if cycle is not None:
+            with cycle["lock"]:
+                cycle.pop("value", None)
+
+    def prepare_read(self, resource):
+        self._account()
+        if not self.config.subscription:
+            raise FinOpsError("Cannot determine the selected Azure subscription. Run aum configure before querying the gateway ledger.", 3)
+        if self._credential_context is None:
+            raise FinOpsError("Cannot verify the Azure principal. Run az login before querying current data.", 3)
+
+    def _account(self):
+        cycle = self._cycle.get()
+        with cycle["account_lock"] if cycle is not None else self._prepare_lock:
+            if cycle is not None and "credential" in cycle:
+                self._check_read_cycle()
+                return cycle["account"]
+            try:
+                with self._prepare_lock:
+                    account = json.loads(self._az("account", "show", "-o", "json"))
+                    if not isinstance(account, dict):
+                        raise ValueError()
+                    if not self.config.subscription and account.get("id"):
+                        self.config.subscription = str(UUID(account["id"]))
+                    tenant = account.get("tenantId") or self.config.tenant_id
+                    person = account.get("user", {}).get("name")
+                    if tenant and person:
+                        directory = Path(os.environ.get("AZURE_CONFIG_DIR", str(Path.home() / ".azure"))).resolve()
+                        session = f"{directory}|{self.config.subscription}|{self.config.tenant_id}"
+                        self._credential_context = bind_resource_principal((tenant, person), session)
+                        if cycle is not None:
+                            cycle["credential"] = self._credential_context
+                            cycle["account"] = account
+                    else:
+                        self.invalidate_credentials()
+                    return account
+            except (ValueError, KeyError, TypeError, AttributeError):
+                raise FinOpsError("Cannot verify the Azure account and subscription. Run aum configure before reading data.", 3) from None
+
+    def invalidate_credentials(self):
+        invalidate_resource_principal(self._credential_context)
+        self._credential_context = None
+        self._invalidate_snapshot()
+        cycle = self._cycle.get()
+        if cycle is not None:
+            with cycle["account_lock"]:
+                cycle.pop("account", None)
+
+    def _check_credential(self, credential):
+        validate_resource_principal(credential)
+        if credential != self._credential_context:
+            raise FinOpsError("Azure sign-in changed. Refresh the current principal before reading data.", 3)
+
+    def close(self):
+        self.invalidate_credentials()
+        with self._prepare_lock:
+            if self._client is not None:
+                self._client.close()
+                self._client = None
 
     def _bridge(self, action, body=None, **params):
         folder = self.root / ".finops-evidence"
@@ -67,12 +210,22 @@ class DirectBackend(Backend):
         if not self.config.workspace:
             raise FinOpsError("Usage requires workspace in config: the Log Analytics workspace customer id. Find it in Azure Portal > Log Analytics > Overview.")
         workspace = identifier(self.config.workspace)
-        access = self._az("account", "get-access-token", "--resource", "https://api.loganalytics.io",
-                         "--query", "accessToken", "-o", "tsv")
+        self.prepare_read("query")
+        cycle = self._cycle.get()
+        credential = cycle["credential"] if cycle is not None else self._credential_context
+        if credential is None:
+            raise FinOpsError("Azure sign-in changed. Refresh the current principal before reading data.", 3)
+        access = resource_token("https://api.loganalytics.io", self.config.subscription,
+                                self.config.tenant_id, runner=az, credential=credential)
         try:
-            with httpx.Client(timeout=90) as client:
-                response = client.post(f"https://api.loganalytics.io/v1/workspaces/{workspace}/query",
-                                       headers={"Authorization": "Bearer " + access}, json={"query": kql})
+            self._check_credential(credential)
+            with self._prepare_lock:
+                if self._client is None:
+                    self._client = httpx.Client(timeout=90)
+                client = self._client
+            response = client.post(f"https://api.loganalytics.io/v1/workspaces/{workspace}/query",
+                                   headers={"Authorization": "Bearer " + access}, json={"query": kql})
+            self._check_credential(credential)
             if not response.is_success:
                 raise http_error(response.status_code)
             payload = response.json()
@@ -104,10 +257,20 @@ class DirectBackend(Backend):
         return az(*args, *(("--subscription", self.config.subscription) if self.config.subscription else ()))
 
     def read(self, resource, **params):
+        cycle = self._cycle.get()
+        if cycle is not None and resource != "whoami":
+            self.prepare_read(resource)
+        result = self._read(resource, **params)
+        if cycle is not None and resource != "whoami":
+            cycle["has_data"] = True
+            self._check_read_cycle()
+        return result
+
+    def _read(self, resource, **params):
         if resource == "capabilities":
             identity = params.get("identity") or self.read("whoami")
             result = current_capabilities(identity)
-            state = self._bridge("read")
+            state = self._snapshot()
             writer = identity.get("role") == "owner" and state.get("authority") == "Gateway"
             result["authority"] = state.get("authority", "unknown")
             result["features"]["bulk_budget"] = {"enabled": False, "actions": []}
@@ -120,7 +283,7 @@ class DirectBackend(Backend):
             result["features"]["usd_budgets"] = {"enabled": bool(usd_actions), "actions": usd_actions}
             return result
         if resource == "whoami":
-            account = json.loads(self._az("account", "show", "-o", "json"))
+            account = self._account()
             if not self.config.subscription and account.get("id"):
                 self.config.subscription = account["id"]
             can_write = False
@@ -143,15 +306,18 @@ class DirectBackend(Backend):
         if resource == "apply":
             return dict(configured=False, direct=True, note="Direct writes verify named values and compensate on failure; no server apply job.", executions=[])
         if resource in {"usd_budgets", "usd_status", "usd_price_book"}:
-            return self._bridge(resource)
+            return self._snapshot(resource)
         if resource in {"catalog", "tiers", "budgets"}:
-            state = self._bridge("read")
             if resource == "catalog":
-                return state["catalog"]
+                return self._snapshot()["catalog"]
             if resource == "tiers":
-                return dict(items=state["tiers"])
+                return dict(items=self._snapshot()["tiers"])
             month = params["month"]
-            usage = self.query(self._ledger(month) + "\n| summarize used_tokens=sum(total_tokens) by business_unit")
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                pending = pool.submit(copy_context().run, self.query,
+                                      self._ledger(month) + "\n| summarize used_tokens=sum(total_tokens) by business_unit")
+                state = self._snapshot()
+                usage = pending.result()
             used = {r["business_unit"]: r["used_tokens"] for r in usage}
             rows = []
             for item in state["registry"]:
@@ -179,7 +345,7 @@ class DirectBackend(Backend):
             ledger += f"\n| where user_id == {value} or actor == {value}"
         needs_ledger = resource in {"people", "requests", "request"} or (resource == "trends" and params.get("interval") == "hour")
         if params.get("organization_id") and needs_ledger:
-            parents = self._bridge("read").get("parents", {})
+            parents = self._snapshot().get("parents", {})
             unit = params["organization_id"]
             leaves = [unit] + [key for key, parent in parents.items() if parent == unit]
             ledger += "\n| where business_unit in (" + ",".join(self._quote(key) for key in leaves) + ")"
@@ -259,9 +425,11 @@ class DirectBackend(Backend):
                 raise FinOpsError("Direct mode changes only the current month. Use Turnstile for historical budgets.")
         if resource == "apply":
             raise FinOpsError("Direct writes use the repository scripts immediately; there is no separate apply job.")
-        if resource in {"usd_budget", "usd_budget_remove", "usd_reconcile", "usd_price_book"}:
-            if resource == "usd_reconcile":
-                params.setdefault("workspace_id", self.config.workspace)
-                params.setdefault("subscription_id", self.config.subscription)
+        if resource == "usd_reconcile":
+            params.setdefault("workspace_id", self.config.workspace)
+            params.setdefault("subscription_id", self.config.subscription)
+        self._invalidate_snapshot()
+        try:
             return self._bridge(resource, body, **params)
-        return self._bridge(resource, body, **params)
+        finally:
+            self._invalidate_snapshot()

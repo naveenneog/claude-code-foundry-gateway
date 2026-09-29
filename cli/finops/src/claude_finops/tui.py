@@ -1,13 +1,13 @@
 import asyncio
-from datetime import datetime
 
 from rich.text import Text
 from textual import on, work
-from textual.app import App, ComposeResult
+from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal
 from textual.theme import Theme
-from textual.widgets import Button, DataTable, Input, Select, Static, TabbedContent, TabPane, TextArea
+from .publication_widgets import (
+    Button, DataTable, Horizontal, Input, Select, Static, TabbedContent, TabPane, TextArea, PublicationApp,
+)
 
 from .errors import FinOpsError
 from .accessibility import AsciiFilter
@@ -17,15 +17,18 @@ from .output import safe_text
 from .palette import FinOpsCommands
 from .rules import can_edit, can_budget_write
 from .redaction import Redactor
-from .scope import scope_label, visible_tabs
+from .scope import visible_tabs
 from .screens import ChangeScreen, DetailScreen, ExportScreen, LookupScreen, MonthScreen
 from .views import DIMENSIONS, TABS, view_rows
 from .ui_features import FeatureUI, EXTRA_TABS
 from .capabilities import enabled
 from .feature_screens import FilterChips
+from .progressive import ProgressiveRefresh
+from .guarded_publication import guarded_publish, published, guarded_deferred
+from .principal_ui import PrincipalUI
 
 
-class FinOpsApp(FeatureUI, App):
+class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
     TITLE = PRODUCT
     CSS_PATH = "terminal.tcss"
     COMMANDS = {FinOpsCommands}
@@ -55,11 +58,17 @@ class FinOpsApp(FeatureUI, App):
     def __init__(self, engine, config, no_color=False, preview_only=False, redact=False, first_run=None):
         super().__init__()
         self.animation_level = "none"
-        self.engine, self.config = engine, config
+        self.config = config
+        self._bind_engine(engine)
+        self._clearing_principal = False
+        self._principal_notice = False
         self.preview_only = preview_only
         self.redactor = Redactor(redact)
         self.identity = {}
         self.editable = False
+        self.verifying_identity = False
+        self._refresh_serial = 0
+        self._waiting = set()
         self.allowed_tabs = visible_tabs({})
         self.team = ""
         self.people_query = ""
@@ -70,6 +79,7 @@ class FinOpsApp(FeatureUI, App):
         self.dimension = "organization"
         self.interval = "day"
         self.data = {}
+        self._data_guards = {}
         self.records = {}
         self.pending_selection = None
         self.filters = {}
@@ -87,9 +97,10 @@ class FinOpsApp(FeatureUI, App):
                                   panel="#000000", warning="#FFFFFF", error="#FFFFFF", success="#FFFFFF", dark=True))
         self.theme = "no-color" if no_color else (config.theme if config.theme in self.available_themes else "gateway")
 
+    @published(lambda self: self.safe_message_guard())
     def compose(self) -> ComposeResult:
         yield Static(COMPACT, id="brand", markup=False)
-        yield Static("Signing in through Azure CLI...", id="identity", markup=False)
+        yield Static("Signing in through Azure CLI (estimate 3-5 s)...", id="identity", markup=False)
         yield FilterChips("", id="filter-chips", markup=False)
         yield Input(placeholder="Filter visible rows (Esc clears; / searches the server)", id="quick-filter",
                     password=self.redactor.enabled)
@@ -135,6 +146,7 @@ class FinOpsApp(FeatureUI, App):
         yield Static("1-8 / 0 tabs | Tab / Shift+Tab focus | Enter details | ? one-screen tour", id="status", markup=False)
         yield Static("", id="key-hints", markup=False)
 
+    @published(lambda self: self.safe_message_guard())
     def on_mount(self):
         if self.config.ascii:
             self.add_class("ascii")
@@ -145,6 +157,7 @@ class FinOpsApp(FeatureUI, App):
         for tab, _ in EXTRA_TABS:
             self.query_one("#main-tabs").hide_tab(tab)
 
+    @published(lambda self: self.safe_message_guard())
     def update_key_hints(self):
         if not self.query("#key-hints"):
             return
@@ -158,7 +171,9 @@ class FinOpsApp(FeatureUI, App):
         keys.extend(["? Help", "q Quit"])
         self.query_one("#key-hints", Static).update("  ".join(f"<{key}>" for key in keys))
 
+    @published(lambda self: self.safe_message_guard())
     def update_brand(self):
+        self._synchronize_principal()
         if not self.query("#brand") or not self.query("#main-tabs"):
             return
         show_art = self.size.width >= 80 and self.size.height >= 24
@@ -183,7 +198,8 @@ class FinOpsApp(FeatureUI, App):
     def on_resize(self):
         self.update_brand()
         if self.data.get("overview"):
-            self.call_after_refresh(self.render_tab, "overview", self.data["overview"])
+            self.call_after_refresh(guarded_deferred(self.cached_guard("overview"), self.render_tab),
+                                    "overview", self.data["overview"])
 
     def get_line_filters(self):
         filters = list(super().get_line_filters())
@@ -191,14 +207,13 @@ class FinOpsApp(FeatureUI, App):
             filters.append(AsciiFilter())
         return filters
 
-    def present(self, value):
-        return self.redactor.present(value)
-
     @property
     def active(self):
         return self.query_one("#main-tabs", TabbedContent).active
 
     def check_action(self, action, parameters):
+        if action in {"edit", "apply"} and self.verifying_identity:
+            return False
         if action == "tab":
             if len(self.screen_stack) > 1 or isinstance(self.focused, Input):
                 return False
@@ -233,25 +248,30 @@ class FinOpsApp(FeatureUI, App):
         if len(self.screen_stack) != 1 or tab not in self.allowed_tabs:
             return
         self.query_one("#main-tabs", TabbedContent).active = tab
+        if tab not in {"ask", "approvals", "advanced"}:
+            self.set_focus(self.query_one("#dash-kpis" if tab == "overview" else f"#table-{tab}"))
 
     @on(TabbedContent.TabActivated)
     def switched(self, event):
+        if not self.query("#main-tabs") or event.pane.id != self.active or self._principal_notice:
+            return
         self.update_brand()
         self.update_key_hints()
         self.query_one("#quick-filter", Input).display = False
         self.refresh_bindings()
         self.action_refresh()
 
-    def update_access(self, identity):
+    def update_access(self, identity, preserve_current=False):
         before = tuple(self.identity.get(key) for key in ("id", "email", "role", "manager_scope"))
         after = tuple(identity.get(key) for key in ("id", "email", "role", "manager_scope"))
         self.identity = identity
+        self.editable = can_edit(identity) and not self.redactor.enabled
         if before == after:
             return
-        self.editable = can_edit(identity) and not self.redactor.enabled
         self.allowed_tabs = visible_tabs(identity)
-        if before != after:
+        if before != after and not preserve_current:
             self.data.clear()
+            self._data_guards.clear()
             self.records.clear()
             self.clear_query_context()
             for tab, _ in TABS + EXTRA_TABS:
@@ -268,64 +288,12 @@ class FinOpsApp(FeatureUI, App):
         self.refresh_bindings()
         self.update_key_hints()
 
-    @work(exclusive=True, group="view")
-    async def action_refresh(self):
-        tab = self.active
-        self.query_one(f"#note-{tab}", Static).update("Loading current server data... (q still works)")
-        try:
-            identity = await asyncio.to_thread(self.engine.read, "whoami")
-            self.update_access(identity)
-            await self.refresh_features()
-            if tab not in self.allowed_tabs:
-                return
-            data = await self.load_tab(tab)
-            self.data[tab] = data
-            self.render_tab(tab, data)
-            stamp = "12:00 +00:00 example" if self.engine.backend.name == "Example" else datetime.now().astimezone().strftime("%H:%M:%S %z")
-            display_identity = self.present(self.identity)
-            who = display_identity.get("email", display_identity.get("name", "caller"))
-            scope = scope_label(display_identity)
-            prefix = f"{self.engine.month} | {self.engine.backend.name} | {self.identity.get('role', 'unknown')} | "
-            suffix = f" | @ {stamp}"
-            available = max(8, self.size.width - len(prefix) - len(suffix) - 2)
-            if len(who) > available:
-                who = who[:available - 3] + "..."
-            identity = prefix + who + suffix
-            if scope:
-                identity += " | " + scope
-            self.query_one("#identity", Static).update(safe_text(identity))
-            self.update_brand()
-            mode = "[redacted/read-only] " if self.redactor.enabled else ""
-            self.query_one("#status", Static).update(mode + "<Enter> details <Tab> panel </> lookup <r> refresh")
-            if tab == "overview":
-                self.query_one("#dash-kpis", DashboardPanel).focus()
-            else:
-                self.query_one(f"#table-{tab}", DataTable).focus()
-            self.maybe_tour()
-        except FinOpsError as error:
-            self.data.pop(tab, None)
-            self.records.pop(tab, None)
-            self.query_one(f"#table-{tab}", DataTable).clear(columns=True)
-            if tab == "overview":
-                self.query_one(Dashboard).clear()
-            self.query_one(f"#note-{tab}", Static).update(str(error))
-            fix = "Check managed scope in Settings; r refreshes." if error.code == 4 else "r retries; ? explains sign-in."
-            self.query_one("#status", Static).update(f"Read failed (exit {error.code}). {fix}")
-
     async def load_tab(self, tab):
         read = self.engine.read
         if tab in {"ask", "approvals", "advanced"}:
             return await self.load_feature_tab(tab)
         if tab == "overview":
-            overview, budgets, ranking, teams, trends, anomalies, catalog = await asyncio.gather(
-                asyncio.to_thread(read, "overview", **self.scope_filters), asyncio.to_thread(read, "budgets"),
-                self.optional_dashboard_read("usage_breakdown", "distribution", dimension=self.ranking_dimension, limit=10, **self.scope_filters),
-                self.optional_dashboard_read("usage_breakdown", "distribution", dimension="department", limit=10, **self.scope_filters),
-                asyncio.to_thread(read, "trends", interval="day", group_by="none", **self.scope_filters),
-                self.optional_dashboard_read("anomaly_findings", "anomalies", limit=10, **self.scope_filters),
-                asyncio.to_thread(read, "catalog"))
-            return dict(overview=overview, budgets=budgets, ranking=ranking, teams=teams,
-                        trends=trends, anomalies=anomalies, catalog=catalog)
+            return await self.load_overview()
         if tab == "budgets":
             budgets, catalog = await asyncio.gather(asyncio.to_thread(read, "budgets"), asyncio.to_thread(read, "catalog"))
             modes = {row["id"]: enforcement_badge(row) for key in ("organizations", "departments") for row in catalog[key]}
@@ -345,7 +313,7 @@ class FinOpsApp(FeatureUI, App):
                 self.team = ""
             if not self.team and departments:
                 self.team = departments[0]["id"]
-            with select.prevent(Select.Changed):
+            with guarded_publish(self.current_guard()), select.prevent(Select.Changed):
                 select.set_options([(label["name"], row["id"]) for row, label in zip(departments, labels)])
                 if self.team:
                     select.value = self.team
@@ -390,6 +358,18 @@ class FinOpsApp(FeatureUI, App):
                     accessibility="--plain, --no-color, --ascii; Tab/Shift+Tab; all states have words")
 
     def render_tab(self, tab, data):
+        previous = self._data_guards.get(tab)
+        if previous is not None and previous[0] is not data:
+            return
+        guard = previous[1] if previous is not None else self.current_guard()
+        try:
+            with guarded_publish(guard, on_rejected=lambda error: self._show_read_error(tab, error)):
+                self._render_tab(tab, data)
+        except FinOpsError as error:
+            self._show_read_error(tab, error)
+
+    @published(lambda self, tab, data: self.cached_guard(tab) if tab in self._data_guards else self.current_guard())
+    def _render_tab(self, tab, data):
         utc = self.engine.backend.name == "Example"
         _, _, records, _ = view_rows(tab, data, ascii_only=self.config.ascii, utc=utc)
         columns, rows, _, note = view_rows(tab, self.present(data), ascii_only=self.config.ascii, utc=utc)
@@ -433,9 +413,20 @@ class FinOpsApp(FeatureUI, App):
 
     @on(DataTable.RowHighlighted)
     def exact_on_focus(self, event):
+        self._synchronize_principal()
         if len(self.screen_stack) != 1 or not event.data_table.display or event.data_table.id != f"table-{self.active}":
             return
         row = self.selected()
+        if not row and self.active not in self.data:
+            return
+        try:
+            with guarded_publish(self.cached_guard(), on_rejected=lambda error: self._show_read_error(self.active, error)):
+                self._publish_highlight(row)
+        except FinOpsError:
+            return
+
+    @published(lambda self, row: self.cached_guard())
+    def _publish_highlight(self, row):
         key = row.get("scope_id", row.get("request_id", row.get("id", "")))
         parent = row.get("parent_scope_id")
         path = f"AUM / {self.active}" + (f" / {parent}" if parent else "") + (f" / {key}" if key else "")
@@ -443,6 +434,7 @@ class FinOpsApp(FeatureUI, App):
         prefix = "[redacted/read-only] " if self.redactor.enabled else ""
         self.query_one("#status", Static).update(self.redactor.text(prefix + path + "\n" + ", ".join(f"{k}={v}" for k, v in values.items())))
 
+    @published(lambda self: self.current_guard())
     def action_filter(self):
         field = self.query_one("#quick-filter", Input)
         field.display = True
@@ -461,7 +453,8 @@ class FinOpsApp(FeatureUI, App):
         self.query_one("#dash-kpis" if self.active == "overview" else f"#table-{self.active}").focus()
 
     def action_clear_filter(self):
-        self.query_one("#quick-filter", Input).value = ""
+        with guarded_publish(self.safe_message_guard()):
+            self.query_one("#quick-filter", Input).value = ""
         self.query_one("#quick-filter", Input).display = False
         self.filters.pop(self.active, None)
         if self.breadcrumbs:
@@ -513,13 +506,14 @@ class FinOpsApp(FeatureUI, App):
         self.action_refresh()
 
     def selected(self):
+        self._synchronize_principal()
         table = self.query_one(f"#table-{self.active}", DataTable)
         rows = self.records.get(self.active, [])
         return rows[table.cursor_row] if rows and table.cursor_row < len(rows) else {}
 
     @on(DataTable.RowSelected)
     def show_detail(self, event):
-        if len(self.screen_stack) != 1:
+        if len(self.screen_stack) != 1 or event.data_table.id != f"table-{self.active}":
             return
         row = self.selected()
         if row:
@@ -540,23 +534,42 @@ class FinOpsApp(FeatureUI, App):
         if row:
             self.open_detail(row)
 
+    def open_detail(self, row, *, read_guard=None):
+        tab = self.active
+        cached = self._data_guards.get(tab)
+        source_guard = read_guard if read_guard is not None else cached[1] if cached else None
+        return self._open_detail(row, tab, source_guard)
+
     @work(exclusive=True, group="detail")
-    async def open_detail(self, row):
+    async def _open_detail(self, row, tab, source_guard):
         try:
-            if self.active == "requests":
-                row = await asyncio.to_thread(self.engine.read, "request", request_id=row["request_id"])
-            elif self.active == "people" and row.get("scope_id"):
-                row = await asyncio.to_thread(self.engine.person_detail, row["scope_id"], row["parent_scope_id"])
-            elif self.active == "advanced" and self.advanced_view in {"releases", "subscriptions"}:
-                row = await asyncio.to_thread(self.engine.read, "release" if self.advanced_view == "releases" else "application", id=row["id"])
-            self.push_screen(DetailScreen("Exact values | Esc returns", row))
+            with self.engine.backend.read_cycle():
+                if source_guard:
+                    with source_guard():
+                        pass
+                guard = source_guard
+                if tab == "requests":
+                    row = await asyncio.to_thread(self.engine.read, "request", request_id=row["request_id"])
+                    guard = self.current_guard()
+                elif tab == "people" and row.get("scope_id"):
+                    row = await asyncio.to_thread(self.engine.person_detail, row["scope_id"], row["parent_scope_id"])
+                    guard = self.current_guard()
+                elif tab == "advanced" and self.advanced_view in {"releases", "subscriptions"}:
+                    row = await asyncio.to_thread(self.engine.read, "release" if self.advanced_view == "releases" else "application", id=row["id"])
+                    guard = self.current_guard()
+                if guard is None:
+                    raise FinOpsError("Current detail has no verified source. Refresh before opening it.", 3)
+                with guarded_publish(guard):
+                    self.push_screen(DetailScreen("Exact values | Esc returns", row, read_guard=guard))
         except FinOpsError as error:
-            self.query_one("#status", Static).update(str(error))
+            with guarded_publish(self.safe_message_guard()):
+                self.query_one("#status", Static).update(str(error))
 
     def action_lookup(self):
         self.push_screen(LookupScreen())
 
-    def open_lookup_result(self, result):
+    @published(lambda self, result, *, read_guard: read_guard)
+    def open_lookup_result(self, result, *, read_guard):
         if result["kind"] == "team":
             self.team = result["id"]
         elif result["kind"] == "person":
@@ -588,7 +601,7 @@ class FinOpsApp(FeatureUI, App):
         if not row:
             return
         kind = "budget" if self.active in {"budgets", "people"} else ("tier" if row.get("kind") == "tier" else "catalog")
-        self.push_screen(ChangeScreen(self.engine, kind, row, self.data.get("budgets", {}).get("items", [])))
+        self.open_cached_change(kind, row, rows=self.data.get("budgets", {}).get("items", []))
 
     def action_usd_edit(self):
         if self.redactor.enabled or not enabled(self.feature_caps, "usd_budgets", "write"):
@@ -596,7 +609,7 @@ class FinOpsApp(FeatureUI, App):
         row = self.selected()
         if not row or self.active not in {"budgets", "people"}:
             return
-        self.push_screen(ChangeScreen(self.engine, "usd_budget", row, self.data.get("budgets", {}).get("items", [])))
+        self.open_cached_change("usd_budget", row, rows=self.data.get("budgets", {}).get("items", []))
 
     def action_usd_reconcile(self):
         if enabled(self.feature_caps, "usd_budgets", "reconcile"):
@@ -608,10 +621,10 @@ class FinOpsApp(FeatureUI, App):
             return
         row = self.selected()
         if row.get("kind") == "tier":
-            self.notify("Tier removal is not supported by the gateway policy.")
+            self.publish_notification("Tier removal is not supported by the gateway policy.", origin=self.safe_message_guard())
             return
         kind = "budget" if self.active in {"budgets", "people"} else "catalog"
-        self.push_screen(ChangeScreen(self.engine, kind, row, remove=True))
+        self.open_cached_change(kind, row, remove=True)
 
     def action_add(self):
         if self.editable:
@@ -646,7 +659,7 @@ class FinOpsApp(FeatureUI, App):
                     self.action_refresh()
                 return
             if (self.request_page + 1) * 50 >= len(self.data.get("requests", {}).get("all_items", [])):
-                self.notify("End of server window. Set Before to see older requests.")
+                self.publish_notification("End of server window. Set Before to see older requests.", origin=self.cached_guard("requests"))
                 return
             self.request_page += 1
         self.action_refresh()

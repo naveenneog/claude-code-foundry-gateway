@@ -29,6 +29,59 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **AUM latency and readiness (P71).** Direct shares one named-value snapshot per
+  read cycle, reuses resource tokens until near expiry and overlaps independent
+  telemetry reads. The terminal displays arriving panels with named, estimated
+  waits and elapsed time. Turnstile readiness names an Azure-verified stopped
+  PostgreSQL server and its manual paid start command (exit 9); no resource is
+  started automatically. Windows Azure CLI deadlines include wrapper-child
+  cleanup. Existing scope checks, preview/write rules and settled terminal
+  snapshots remain. [AUM](docs/AUM.md#read-latency-and-progress),
+  [ADR-0035](docs/adr/0035-aum-bounded-readiness-and-progressive-reads.md).
+  Council fixes bind credential reuse to verified principal/session generations,
+  contain wrappers before execution, share one monotonic credential deadline,
+  and surface fatal query errors while identity/capabilities are pending.
+  Read cycles pin that generation immutably and reject obsolete snapshots and
+  complete multi-source aggregates after a verified principal change.
+  HTTP aggregate cycles and progressive publication now retain the same
+  generation through cache, screen and command/file output boundaries.
+  Cached dialogs/forms and request actions retain the item's originating guard;
+  connection closure invalidates deferred references to the old source.
+  Round-five publication uses one guarded execution boundary with an AST
+  contract; verified principal transitions clear all presentation/assistant
+  state before input, including highlighted status and outgoing history.
+  Round-six widget, terminal/file, clipboard and assistant-transport sinks
+  validate active origins at execution, including indirect calls. Explicit
+  deferral rechecks the source on execution; the structural detector also
+  covers lambda/def, dynamic attributes and partials. Sink decorators reject
+  coroutine and generator bodies rather than checking only their creation.
+  Round-seven `content` writes retain their source, and the structural contract
+  rejects unchecked descriptor/raw-state/dynamic-code paths, additional
+  scheduler spellings and partial methods. Refused timer, screen and event-loop
+  callbacks retain responsive input and report only the safe underlying error,
+  without rendering callback arguments or traceback locals.
+  Round-eight attachment validates retained widget origins before DOM
+  insertion, including copied and composed subtrees; protected instances
+  refuse class replacement. The structural contract now uses an explicit
+  import/member allowlist and checked metaprogramming exceptions instead of
+  trusting unrecognized spellings. Console, file and framework capabilities
+  remain inside the protected boundary modules.
+  Round-nine notifications retain their origin through queued delivery and
+  visible/cached toast rendering; principal changes clear old notifications.
+  Presentation attribute loads and literal reflection are now default-deny,
+  with checked internal exceptions and restricted superclass forwarding.
+  Round-ten native DOM receivers use an explicit reviewed class set; unsupported
+  content classes are refused before attachment. Native writes and cached
+  rendering retain their source. Application titles stay static, raw exit
+  messages are refused, and queued message/notification representations omit
+  backend text before Textual logging. The seven scheduler cases enable visible
+  notifications. [Corrections and evidence](docs/STATUS.md#council-round-10-corrections),
+  [approval recipe](docs/adr/0035-aum-bounded-readiness-and-progressive-reads.md#approval-recipe-for-attributes-and-builtins).
+  Diagnostic sealing now preserves Textual's exact-type message suppression
+  and disabled-message controls, preventing duplicate tab/selector refreshes
+  from cancelling current reads without weakening provenance or payload redaction.
+  Retained tab activations are ignored while main content is absent during
+  remount or shutdown; current activations and publication checks remain unchanged.
 - **P84 projection deployment preflight and deferred switching.** `-PreflightOnly` and normal
   deployment share read-only prerequisite checks before Azure writes. PowerShell 7 is required
   for deployment/projection sync. Graph errors no longer count as absent groups; runner failures

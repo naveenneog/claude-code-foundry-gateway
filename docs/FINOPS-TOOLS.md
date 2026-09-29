@@ -211,6 +211,15 @@ Details: [Budgets](BUDGETS.md), [Business units](BUSINESS-UNITS.md) and
 4. Changes preview first and are written only with `--apply`, through the same PowerShell
    serializers as flow 2, and read back.
 
+Direct shares one gateway snapshot per refresh, reuses resource tokens and
+overlaps independent telemetry queries. The terminal shows arriving panels and
+names pending sources with estimates. A Turnstile-backed profile reports a
+verified stopped PostgreSQL server with exit 9 and a manual paid start command;
+the client never starts it or switches authority automatically.
+[AUM latency and readiness](AUM.md#read-latency-and-progress) documents the
+behavior; [STATUS](STATUS.md#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28)
+records before/after measurements.
+
 Measured on the reference gateway on 2026-09-25, read-only: `whoami` returned role `owner`,
 method `azure-rbac`. `status` returned the month's 911 requests and 181,158 tokens, with each
 unit's budget and headroom. Estimated cost showed **unknown** because 10 usage rows had no

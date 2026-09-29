@@ -1,12 +1,13 @@
 """A monitoring dashboard: scoped facts, compact gauges, and focusable detail panels."""
 
-from textual.containers import Horizontal, Vertical
-from textual.widgets import Static
+from .publication_widgets import Horizontal, Static, Vertical
 from datetime import datetime, timezone
 
 from .rules import human
 from .rules import month_window
 from .views import money
+from .errors import FinOpsError
+from .guarded_publication import guarded_publish, published
 
 
 def budget_totals(rows):
@@ -65,19 +66,28 @@ class DashboardPanel(Static, can_focus=True):
         super().__init__("Loading live facts...", id=panel_id, classes="dashboard-panel", markup=False)
         self.border_title = title
         self.detail = {}
+        self.read_guard = None
 
     def on_key(self, event):
         if event.key in {"enter", "d"}:
             from .screens import DetailScreen
-            if event.key == "enter" and self.id in {"dash-rank", "dash-risks", "dash-anomalies"}:
-                from .dashboard_drill import DashboardRows
-                self.app.push_screen(DashboardRows(self))
-            else:
-                self.app.push_screen(DetailScreen(str(self.border_title) + " | exact source values", self.detail))
+            try:
+                if self.read_guard is None:
+                    raise FinOpsError("This panel has no verified current data. Wait for its read or refresh.", 3)
+                with guarded_publish(self.read_guard):
+                    if event.key == "enter" and self.id in {"dash-rank", "dash-risks", "dash-anomalies"}:
+                        from .dashboard_drill import DashboardRows
+                        self.app.push_screen(DashboardRows(self))
+                    else:
+                        self.app.push_screen(DetailScreen(str(self.border_title) + " | exact source values",
+                                                         self.detail, read_guard=self.read_guard))
+            except FinOpsError as error:
+                self.app.publish_notification(self.app._error_text(error), origin=self.app.safe_message_guard(), severity="error")
             event.stop()
 
 
 class Dashboard(Vertical):
+    @published(lambda self: self.app.safe_message_guard())
     def compose(self):
         yield DashboardPanel("Budget and month-to-date usage", "dash-kpis")
         with Horizontal(id="dash-main"):
@@ -88,13 +98,25 @@ class Dashboard(Vertical):
                 yield DashboardPanel("Budget risks", "dash-risks")
                 yield DashboardPanel("Recent anomalies", "dash-anomalies")
 
+    @published(lambda self: self.app.safe_message_guard())
     def clear(self):
         for panel in self.query(DashboardPanel):
             panel.update("No current data. Refresh an authorized view.")
             panel.detail = {}
+            panel.read_guard = None
 
+    @published(lambda self: self.app.safe_message_guard())
+    def begin_load(self):
+        for panel in self.query(DashboardPanel):
+            panel.update("Loading current facts (estimate 3-5 s)...")
+            panel.detail = {}
+            panel.read_guard = None
+
+    @published(lambda self, data, raw=None, query="": self.app.cached_guard("overview"))
     def update_data(self, data, raw=None, query=""):
         raw = raw or data
+        for panel in self.query(DashboardPanel):
+            panel.read_guard = self.app.cached_guard("overview")
         ascii_only = self.app.config.ascii
         totals = data.get("overview", {}).get("totals", {})
         budgets = data.get("budgets", {}).get("items", [])
@@ -107,16 +129,36 @@ class Dashboard(Vertical):
         quality = ""
         if self.size.width >= 120:
             quality = f"   Cache read {human(totals.get('cache_read_tokens'))}   P95 {human(totals.get('p95_latency_ms'))} ms"
-        kpis.update(
-            f"Tokens {human(totals.get('total_tokens'))}   Cost {money(totals.get('estimated_cost'))} est   Requests {human(totals.get('total_requests'))}{quality}\n"
-            + (f"Allocated scopes {gauge(used, limit, 16, ascii_only)}  {human(used)} / {human(limit)}"
-               if scopes else "Budget use unavailable: no allocated scope limit returned.")
-        )
+        budget_line = (f"Allocated scopes {gauge(used, limit, 16, ascii_only)}  {human(used)} / {human(limit)}"
+                       if scopes else "Budget use unavailable: no allocated scope limit returned.")
+        if "budgets" in data.get("_pending", []):
+            budget_line = "Loading gateway budgets (estimate ~5 s)..."
+        elif data.get("_errors", {}).get("budgets"):
+            budget_line = "Budget read failed: " + data["_errors"]["budgets"]
+        usage_line = f"Tokens {human(totals.get('total_tokens'))}   Cost {money(totals.get('estimated_cost'))} est   Requests {human(totals.get('total_requests'))}{quality}"
+        if "overview" in data.get("_pending", []):
+            usage_line = "Loading month usage (estimate ~3 s)..."
+        elif data.get("_errors", {}).get("overview"):
+            usage_line = "Usage read failed: " + data["_errors"]["overview"]
+        kpis.update(usage_line + "\n" + budget_line)
         self._trends(data, raw, ascii_only)
         self._rankings(data, raw, query, ascii_only)
         self._risks(data, raw, query)
         self._anomalies(data, raw, query)
+        for panel_id, sources in {
+            "dash-trend": ("trends",),
+            "dash-rank": ("ranking", "teams"), "dash-risks": ("budgets",),
+            "dash-anomalies": ("anomalies",),
+        }.items():
+            panel = self.query_one("#" + panel_id, DashboardPanel)
+            errors = [data["_errors"][key] for key in sources if key in data.get("_errors", {})]
+            pending = [key for key in sources if key in data.get("_pending", [])]
+            if errors:
+                panel.update("Read failed: " + "; ".join(errors))
+            elif len(pending) == len(sources):
+                panel.update("Loading " + ", ".join(pending) + " (estimate 3-5 s)...")
 
+    @published(lambda self, *args: self.app.cached_guard("overview"))
     def _trends(self, data, raw, ascii_only):
         panel = self.query_one("#dash-trend", DashboardPanel)
         panel.detail = {"trends": raw.get("trends"), "budgets": raw.get("budgets")}
@@ -154,6 +196,7 @@ class Dashboard(Vertical):
                 lines.append(data["trends"]["note"])
         panel.update("\n".join(lines))
 
+    @published(lambda self, *args: self.app.cached_guard("overview"))
     def _rankings(self, data, raw, query, ascii_only):
         panel = self.query_one("#dash-rank", DashboardPanel)
         panel.detail = {"units": raw.get("ranking"), "teams": raw.get("teams"), "catalog": raw.get("catalog")}
@@ -180,13 +223,15 @@ class Dashboard(Vertical):
             amount = row.get("total_tokens", 0)
             bar = ("#" if ascii_only else "━") * max(1, round(amount / maximum * 8))
             name = row.get("name", row["id"])[:20]
-            mode = modes.get(row["id"], "STRICT")
+            mode = ("mode pending" if "catalog" in data.get("_pending", []) else
+                    "mode unavailable" if "catalog" in data.get("_errors", {}) else modes.get(row["id"], "STRICT"))
             line = f"{kind} {name:<20} {bar:<8} {human(amount):>7}"
             if panel.size.width >= 64:
                 line += f" [{mode}]"
             lines.append(line)
         panel.update("\n".join(lines) or data.get("ranking", {}).get("note") or "No ranked usage in this window.")
 
+    @published(lambda self, *args: self.app.cached_guard("overview"))
     def _risks(self, data, raw, query):
         panel = self.query_one("#dash-risks", DashboardPanel)
         budget = data.get("budgets", {})
@@ -202,6 +247,7 @@ class Dashboard(Vertical):
         empty = f"{count} risk(s) reported; details unavailable." if count else budget.get("note") or "No budget warnings returned."
         panel.update("\n".join(lines) or empty)
 
+    @published(lambda self, *args: self.app.cached_guard("overview"))
     def _anomalies(self, data, raw, query):
         panel = self.query_one("#dash-anomalies", DashboardPanel)
         response = data.get("anomalies", {})

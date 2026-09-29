@@ -16,7 +16,7 @@
     "excerpt": "[project.scripts]\naum = \"claude_finops.cli:main\"\nclaude-finops = \"claude_finops.cli:legacy_main\""
   },
   "identifiers": {
-    "app": { "label": "FinOpsApp", "source": "cli/finops/src/claude_finops/tui.py", "match": "class FinOpsApp(FeatureUI, App):" },
+    "app": { "label": "FinOpsApp", "source": "cli/finops/src/claude_finops/tui.py", "match": "class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):" },
     "engine": { "label": "Engine", "source": "cli/finops/src/claude_finops/engine.py", "match": "class Engine(FeatureEngine):" },
     "turnstile": { "label": "TurnstileBackend", "source": "cli/finops/src/claude_finops/turnstile.py", "match": "class TurnstileBackend(HttpBackend):" },
     "aum": { "label": "AumServiceBackend", "source": "cli/finops/src/claude_finops/aum_service.py", "match": "class AumServiceBackend(HttpBackend):" },
@@ -36,7 +36,7 @@
     { "x": 978, "y": 890, "w": 302, "h": 394, "tone": "slate", "title": "Offline test boundary" }
   ],
   "nodes": [
-    { "id": "ui", "x": 16, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Textual terminal UI", "lines": ["[[app]]: tabs, search, preview and explicit Apply", "Owned-group selection, budget modes and real enforcement receipts"] },
+    { "id": "ui", "x": 16, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Textual terminal UI", "lines": ["[[app]]: progressive facts, named estimated waits", "Scope checks, preview and explicit Apply remain"] },
     { "id": "commands", "x": 692, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Command aum · Typer", "lines": ["Scriptable nouns and verbs over the same operations", "JSON and what-if; no silent write retry or authority fallback"] },
     { "id": "engine", "x": 248, "y": 272, "w": 784, "h": 202, "tone": "blue", "title": "One [[engine]]", "lines": [
       "Identity, scope and backend capability gates; explicit daily versus monthly budgets",
@@ -47,12 +47,12 @@
     { "id": "direct", "x": 0, "y": 558, "w": 302, "h": 278, "compact": true, "tone": "blue", "title": "Direct · default", "lines": [
       "[[direct]]",
       "Azure RBAC administrator",
-      "ARM, Graph and KQL",
+      "ARM, Graph and parallel KQL",
       "Developer add/remove",
       "updates Entra groups",
       "Existing writers via",
       "[[bridge]]",
-      "No FinOps server required"
+      "One read-cycle snapshot"
     ] },
     { "id": "aum", "x": 326, "y": 558, "w": 302, "h": 278, "compact": true, "tone": "teal", "title": "AUM service HTTP", "lines": [
       "[[aum]]",

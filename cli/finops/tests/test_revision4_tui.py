@@ -6,6 +6,7 @@ from claude_finops.engine import Engine
 from claude_finops.fake import FakeBackend
 from claude_finops.tui import FinOpsApp
 from claude_finops.feature_screens import TourScreen
+from claude_finops.guarded_publication import guarded_publish
 
 
 async def settle(app, pilot):
@@ -22,7 +23,8 @@ async def test_advertised_tabs_and_assistant_reply():
         assert {"ask", "approvals", "advanced"} <= app.allowed_tabs
         await pilot.press("a")
         await settle(app, pilot)
-        app.query_one("#ask-question", Input).value = "Show token usage"
+        with guarded_publish(app.current_guard()):
+            app.query_one("#ask-question", Input).value = "Show token usage"
         await pilot.click("#ask-send")
         await settle(app, pilot)
         assert "Sales" in app.query_one("#ask-answer", TextArea).text
@@ -49,9 +51,10 @@ async def test_owner_mode_form_preview_and_apply():
         await settle(app, pilot)
         app.action_mode()
         await pilot.pause(.3)
-        app.screen.query_one("#field-scope", Input).value = "sales-emea"
-        app.screen.query_one("#field-mode", Select).value = "allowance"
-        app.screen.query_one("#field-allowance", Input).value = "10"
+        with guarded_publish(app.current_guard()):
+            app.screen.query_one("#field-scope", Input).value = "sales-emea"
+            app.screen.query_one("#field-mode", Select).value = "allowance"
+            app.screen.query_one("#field-allowance", Input).value = "10"
         await pilot.click("#action-preview")
         await settle(app, pilot)
         assert not app.screen.query_one("#action-apply", Button).disabled
@@ -69,7 +72,8 @@ async def test_first_run_tour_and_identity_saved_view():
         assert app.preferences.toured
         app.action_save_view()
         await pilot.pause(.2)
-        app.screen.query_one("#field-name", Input).value = "My month"
+        with guarded_publish(app.current_guard()):
+            app.screen.query_one("#field-name", Input).value = "My month"
         await pilot.click("#action-preview")
         await settle(app, pilot)
         await pilot.click("#action-apply")
@@ -128,6 +132,7 @@ async def test_approval_paging_and_queue_change_reset_cursor():
         await pilot.press("n")
         await settle(app, pilot)
         assert len(app.records["approvals"]) == 5
-        app.query_one("#approval-view", Select).value = "history"
+        with guarded_publish(app.current_guard()):
+            app.query_one("#approval-view", Select).value = "history"
         await settle(app, pilot)
         assert app.feature_cursor is None and not app.feature_cursor_stack

@@ -1,5 +1,16 @@
 from abc import ABC, abstractmethod
+from contextlib import nullcontext
+from functools import wraps
 from typing import Any
+
+
+def in_read_cycle(operation):
+    @wraps(operation)
+    def read(self, *args, **kwargs):
+        backend = self if isinstance(self, Backend) else self.backend
+        with backend.read_cycle():
+            return operation(self, *args, **kwargs)
+    return read
 
 
 class Backend(ABC):
@@ -14,6 +25,7 @@ class Backend(ABC):
     unit_direct_departments = True
     native_user_budget_records = False
     maximum_boost_days = None
+    identity_independent_reads = frozenset()
 
     @abstractmethod
     def read(self, resource: str, **params: Any) -> dict:
@@ -25,6 +37,25 @@ class Backend(ABC):
 
     def close(self):
         pass
+
+    def read_cycle(self):
+        return nullcontext()
+
+    def read_guard(self):
+        """Capture the current cycle's validation/serialization boundary for publication."""
+        return nullcontext
+
+    def identity_update(self):
+        return nullcontext()
+
+    def pin_read_cycle(self):
+        """Bind a completed identity or cached result to the current cycle."""
+
+    def prepare_read(self, resource):
+        """Resolve address metadata needed before an identity-independent read."""
+
+    def invalidate_credentials(self):
+        """Discard credentials when the engine verifies a different identity."""
 
     def people_filter(self, scope_id):
         return {"department_id": scope_id}

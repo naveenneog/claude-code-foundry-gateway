@@ -1,9 +1,7 @@
 """Scriptable face; root options also work after a noun or verb."""
 
-from pathlib import Path
 import json
 import os
-import sys
 from typing import Annotated
 
 import typer
@@ -17,10 +15,9 @@ from .output import chargeback_csv, display
 from .brand import BANNER, PRODUCT, show_banner
 from . import __version__
 from .redaction import Redactor
-
-
-def terminal_output():
-    return sys.stdout.isatty()
+from .guarded_publication import guarded_publish
+from .publication_output import read_text, terminal_output, write_text
+from contextlib import nullcontext
 
 
 class EverywhereGroup(TyperGroup):
@@ -61,15 +58,20 @@ for noun in ("budget", "usd", "people", "developer", "governance", "tier", "requ
 def emit(ctx, operation, *, mutation=False):
     state = ctx.obj
     try:
-        result = operation(state["engine"])
-        if mutation and not result.get("preview", True) and result.get("requested_at"):
-            if result.get("scope_type") != "user" and not state["engine"].backend.immediate_writes:
-                result["apply_status"] = state["engine"].wait_for_apply(result["requested_at"])
-        display(state["redactor"].present(result), as_json=state["json"], plain=state["plain"], no_color=state["no_color"])
-        return result
+        with state["engine"].backend.read_cycle():
+            result = operation(state["engine"])
+            if mutation and not result.get("preview", True) and result.get("requested_at"):
+                if result.get("scope_type") != "user" and not state["engine"].backend.immediate_writes:
+                    result["apply_status"] = state["engine"].wait_for_apply(result["requested_at"])
+            shown = state["redactor"].present(result)
+            with guarded_publish(state["engine"].backend.read_guard()):
+                display(shown, as_json=state["json"], plain=state["plain"], no_color=state["no_color"])
+            return result
     except FinOpsError as error:
-        display(state["redactor"].present(dict(error=str(error), exit_code=error.code)),
-                as_json=state["json"], plain=state["plain"], no_color=True)
+        state["redactor"].present(error.details)
+        with guarded_publish(nullcontext):
+            display(state["redactor"].present(dict(error=str(error), exit_code=error.code)),
+                    as_json=state["json"], plain=state["plain"], no_color=True)
         raise typer.Exit(error.code) from None
 
 
@@ -77,7 +79,7 @@ def emit(ctx, operation, *, mutation=False):
 def root(ctx: typer.Context,
          backend: Annotated[str | None, typer.Option(help="direct, aum-service, turnstile or fake")] = None,
          month: str | None = None,
-         config: Path | None = None,
+         config: Annotated[str | None, typer.Option(metavar="PATH")] = None,
          url: str | None = None,
          scope: str | None = None,
          subscription: str | None = None,
@@ -98,11 +100,14 @@ def root(ctx: typer.Context,
     plain = plain or screen_reader
     if version:
         if show_banner(tty=terminal_output(), as_json=as_json, plain=plain, screen_reader=screen_reader):
-            typer.echo(BANNER)
+            with guarded_publish(nullcontext):
+                write_text(BANNER)
         if as_json:
-            display(dict(product=PRODUCT, version=__version__), as_json=True)
+            with guarded_publish(nullcontext):
+                display(dict(product=PRODUCT, version=__version__), as_json=True)
         else:
-            typer.echo(f"{PRODUCT} {__version__}")
+            with guarded_publish(nullcontext):
+                write_text(f"{PRODUCT} {__version__}")
         raise typer.Exit()
     redact = redact or os.environ.get("AUM_REDACT", "").lower() in {"1", "true", "yes"}
     if ctx.invoked_subcommand == "configure":
@@ -116,7 +121,8 @@ def root(ctx: typer.Context,
         engine = Engine(connect(settings), month)
         engine.change_reason = reason or ""
     except FinOpsError as error:
-        display(dict(error=str(error), exit_code=error.code), as_json=as_json, plain=plain, no_color=True)
+        with guarded_publish(nullcontext):
+            display(dict(error=str(error), exit_code=error.code), as_json=as_json, plain=plain, no_color=True)
         raise typer.Exit(error.code) from None
     ctx.obj = dict(engine=engine, config=settings, json=as_json, plain=plain, what_if=what_if, no_color=no_color,
                    redactor=Redactor(redact))
@@ -222,11 +228,11 @@ def usd_price_book_show(ctx: typer.Context):
 
 
 @price_book.command("set")
-def usd_price_book_set(ctx: typer.Context, file: Path, apply: bool = False):
+def usd_price_book_set(ctx: typer.Context, file: Annotated[str, typer.Argument(metavar="FILE")], apply: bool = False):
     """Replace the price book from a JSON file. Active budgets pin their tariff."""
     def operation(engine):
         try:
-            book = json.loads(file.read_text(encoding="utf-8"))
+            book = json.loads(read_text(file))
         except (OSError, ValueError) as error:
             raise FinOpsError("Read a JSON price-book file before applying.") from error
         return engine.usd_price_book_change(book, apply=apply and not ctx.obj["what_if"])
@@ -363,10 +369,14 @@ def report_chargeback(ctx: typer.Context, csv: Annotated[bool, typer.Option("--c
     """Export estimated cost, tokens and cache. Not an Azure invoice."""
     if csv and not ctx.obj["json"]:
         try:
-            rows = ctx.obj["engine"].chargeback(dimension)["items"]
-            typer.echo(chargeback_csv(ctx.obj["redactor"].present(rows), ctx.obj["engine"].month), nl=False)
+            with ctx.obj["engine"].backend.read_cycle():
+                rows = ctx.obj["engine"].chargeback(dimension)["items"]
+                output = chargeback_csv(ctx.obj["redactor"].present(rows), ctx.obj["engine"].month)
+                with guarded_publish(ctx.obj["engine"].backend.read_guard()):
+                    write_text(output, nl=False)
         except FinOpsError as error:
-            typer.echo(str(error), err=True)
+            with guarded_publish(nullcontext):
+                write_text(str(error), err=True)
             raise typer.Exit(error.code) from None
     else:
         emit(ctx, lambda e: e.chargeback(dimension))
@@ -387,7 +397,8 @@ register_groups(app, groups, emit)
 
 
 def legacy_main():
-    typer.echo("Deprecated: claude-finops is now aum (AUM - Azure Usage Management); this alias remains for one release.", err=True)
+    with guarded_publish(nullcontext):
+        write_text("Deprecated: claude-finops is now aum (AUM - Azure Usage Management); this alias remains for one release.", err=True)
     main()
 
 

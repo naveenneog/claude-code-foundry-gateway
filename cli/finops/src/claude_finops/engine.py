@@ -2,7 +2,11 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal
 import time
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
+from threading import RLock
 
+from .backend import in_read_cycle
 from .errors import FinOpsError
 from .rules import (allocation_left, apply_state, identifier, month_window, parse_tokens,
                     require_owner, require_budget_write, scope_type, validate_budget)
@@ -18,6 +22,11 @@ class Engine(FeatureEngine):
         self.month = month or datetime.now(timezone.utc).strftime("%Y-%m")
         self._identity = None
         self._capabilities = None
+        self._capabilities_guard = None
+        self._identity_lock = RLock()
+        self._capabilities_lock = RLock()
+        self.identity_revision = 0
+        self.identity_listeners = []
         self.change_reason = ""
         month_window(self.month)
 
@@ -30,15 +39,33 @@ class Engine(FeatureEngine):
         return {"reason": reason.strip()}
 
     def read(self, resource, **params):
+        with self.backend.read_cycle():
+            return self._read(resource, **params)
+
+    def _read(self, resource, **params):
         if resource == "whoami":
-            previous = self._identity
-            self._identity = self.backend.read(resource, month=self.month, **params)
-            identity_keys = ("id", "email", "role", "manager_scope")
-            if previous and tuple(previous.get(k) for k in identity_keys) != tuple(self._identity.get(k) for k in identity_keys):
-                self._capabilities = None
-            return self._identity
+            with self._identity_lock:
+                identity = self.backend.read(resource, month=self.month, **params)
+                with self.backend.identity_update():
+                    previous = self._identity
+                    identity_keys = ("id", "email", "tenant", "role", "manager_scope")
+                    if previous and tuple(previous.get(k) for k in identity_keys) != tuple(identity.get(k) for k in identity_keys):
+                        self._capabilities = None
+                        self._capabilities_guard = None
+                        self.backend.invalidate_credentials()
+                        self.identity_revision += 1
+                    self._identity = identity
+                    self.backend.pin_read_cycle()
+                    for listener in tuple(self.identity_listeners):
+                        listener(self, identity, self.identity_revision)
+                    return self._identity
+        if resource in self.backend.identity_independent_reads and not params.get("cursor"):
+            self.backend.prepare_read(resource)
+            return self.backend.read(resource, month=self.month, **params)
         if self._identity is None:
-            self.read("whoami")
+            with self._identity_lock:
+                if self._identity is None:
+                    self.read("whoami")
         if resource in READ_FEATURES:
             self.require_feature(READ_FEATURES[resource])
         else:
@@ -51,19 +78,28 @@ class Engine(FeatureEngine):
         return managed_catalog(self._identity, result) if resource == "catalog" else result
 
     def status(self):
-        budgets = self.read("budgets")
-        if self.has_feature("usd_budgets"):
-            try:
-                from .usd import merge_usd_into_budgets
-                budgets = merge_usd_into_budgets(budgets, self.read("usd_budgets"), self.read("usd_status"))
-            except FinOpsError:
-                pass
-        return dict(month=self.month, backend=self.backend.name, overview=self.read("overview"),
-                    budgets=budgets, apply=self.read("apply"))
+        if not self.backend.identity_independent_reads and self._identity is None:
+            self.read("whoami")
+        with self.backend.read_cycle(), ThreadPoolExecutor(max_workers=3) as pool:
+            pending = {name: pool.submit(copy_context().run, self.read, name)
+                       for name in ("budgets", "overview", "apply")}
+            has_usd = self.has_feature("usd_budgets")
+            result = dict(month=self.month, backend=self.backend.name,
+                          **{name: task.result() for name, task in pending.items()})
+            if has_usd:
+                try:
+                    from .usd import merge_usd_into_budgets
+                    result["budgets"] = merge_usd_into_budgets(
+                        result["budgets"], self.read("usd_budgets"), self.read("usd_status"))
+                except FinOpsError as error:
+                    result["usd_error"] = str(error)
+            return result
 
     def governance(self):
-        return dict(catalog=self.read("catalog"), tiers=self.read("tiers"), apply=self.read("apply"))
+        with self.backend.read_cycle():
+            return dict(catalog=self.read("catalog"), tiers=self.read("tiers"), apply=self.read("apply"))
 
+    @in_read_cycle
     def chargeback(self, dimension="organization"):
         if dimension not in {"organization", "department"}:
             raise FinOpsError("Complete chargeback supports organization or department. Use usage show for top-100 model/person rankings.")
@@ -332,6 +368,7 @@ class Engine(FeatureEngine):
             plan["result"] = self.backend.write(resource, body, **metadata)
         return plan
 
+    @in_read_cycle
     def lookup(self, text, department_id=None):
         text = text.strip()[:200]
         if not text:

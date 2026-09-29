@@ -3,6 +3,7 @@ from claude_finops.config import Config
 from claude_finops.engine import Engine
 from claude_finops.fake import FakeBackend
 from claude_finops.tui import FinOpsApp
+from claude_finops.guarded_publication import guarded_publish
 
 
 class FakeGraph:
@@ -22,7 +23,8 @@ async def test_add_scope_discovers_group_before_catalog_form():
         await app.workers.wait_for_complete()
         app.action_add()
         await pilot.pause()
-        app.screen.query_one("#group-search", Input).value = "contoso"
+        with guarded_publish(app.current_guard()):
+            app.screen.query_one("#group-search", Input).value = "contoso"
         await pilot.press("enter")
         await pilot.pause()
         await app.workers.wait_for_complete()
@@ -52,8 +54,9 @@ async def test_group_creation_form_previews_owner_implications_before_apply():
         await pilot.pause()
         await pilot.click("#group-create")
         await pilot.pause()
-        app.screen.query_one("#field-name", Input).value = "aum-e2e-unit-example"
-        app.screen.query_one("#field-confirm", Input).value = "aum-e2e-unit-example"
+        with guarded_publish(app.current_guard()):
+            app.screen.query_one("#field-name", Input).value = "aum-e2e-unit-example"
+            app.screen.query_one("#field-confirm", Input).value = "aum-e2e-unit-example"
         await pilot.click("#action-preview")
         await pilot.pause()
         await app.workers.wait_for_complete()

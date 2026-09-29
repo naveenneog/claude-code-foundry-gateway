@@ -6,12 +6,14 @@ from urllib.parse import quote
 from .capabilities import enabled, require
 from .errors import FinOpsError
 from .http_backend import HttpBackend
+from .backend import in_read_cycle
 from .rules import identifier, month_window, can_budget_write
 from . import service_models as models
 
 
 class AumServiceBackend(HttpBackend):
     name = "AUM service"
+    identity_path = "/api/v1/me"
     immediate_writes = True
     native_modes = True
     requires_reason = True
@@ -32,7 +34,7 @@ class AumServiceBackend(HttpBackend):
     def _get(self, path, params=None):
         result = self._request("GET", "/api/v1/" + path, params)
         if result.get("revision"):
-            self._revision = result["revision"]
+            self.cache_read(_revision=result["revision"])
         return result
 
     def people_filter(self, scope_id):
@@ -63,6 +65,7 @@ class AumServiceBackend(HttpBackend):
                 raise FinOpsError(f"The connected AUM service contract does not support the {key} filter.", 5)
         return values
 
+    @in_read_cycle
     def read(self, resource, **params):
         if resource == "whoami":
             current = self._get("me")
@@ -73,16 +76,18 @@ class AumServiceBackend(HttpBackend):
             self._identity = current
             return self._identity
         if resource == "capabilities":
-            self._features = models.capabilities(self._get("capabilities"))
-            return self._features
+            features = models.capabilities(self._get("capabilities"))
+            self.cache_read(_features=features)
+            return features
         if resource == "catalog":
-            self._catalog = self._get("catalog")
-            return dict(self._catalog, default_department_id=None)
+            catalog = self._get("catalog")
+            self.cache_read(_catalog=catalog)
+            return dict(catalog, default_department_id=None)
         if resource == "tiers":
             self._get("budgets")
             result = self._get("tiers")
-            self._tiers = result["items"]
-            return dict(items=[dict(row, name=row["id"], entra_group="") for row in self._tiers])
+            self.cache_read(_tiers=result["items"])
+            return dict(items=[dict(row, name=row["id"], entra_group="") for row in result["items"]])
         if resource == "budgets":
             catalog = self.read("catalog")
             result = self._get("budgets")
@@ -96,7 +101,7 @@ class AumServiceBackend(HttpBackend):
                     parent_scope_id=entity.get("parent_id"), budget_period=row.get("period", "month"),
                     used_tokens=None, remaining_tokens=None, status="unknown",
                     warning_threshold_percent=row.get("warning_threshold_percent", 80)))
-            self._budgets = rows
+            self.cache_read(_budgets=rows)
             return dict(items=rows, revision=result["revision"], period=params.get("month"),
                 note="Current gateway limits: units/teams monthly, people daily. This service response has no per-budget usage/risk totals.")
         if resource == "usd_budgets":
@@ -144,7 +149,7 @@ class AumServiceBackend(HttpBackend):
             result = self._get("requests", self._window(params))
             rows = [dict(row, user_name=row.get("actor"), model_name=row.get("model"),
                          runtime=row.get("client_surface"), estimated_cost=None) for row in result["items"]]
-            self._requests = {row["request_id"]: row for row in rows}
+            self.cache_read(_requests={row["request_id"]: row for row in rows})
             return dict(models.page(result, rows), note="Server-scoped, stable cursor; per-request cache/cost remain unknown.")
         if resource == "request":
             key = identifier(params["request_id"])

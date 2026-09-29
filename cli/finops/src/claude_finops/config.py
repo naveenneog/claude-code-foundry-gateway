@@ -5,6 +5,8 @@ import shutil
 import subprocess
 import base64
 import time
+from threading import RLock
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -12,18 +14,109 @@ from urllib.parse import urlsplit
 from .errors import FinOpsError
 
 
-def token_needs_refresh(value):
-    if not value:
-        return True
+@dataclass(frozen=True)
+class CredentialContext:
+    principal: tuple[str, ...]
+    session: str
+    generation: int
+
+
+_resource_tokens: dict[tuple[str, tuple[str, ...], CredentialContext], tuple[str, float]] = {}
+_credential_contexts: dict[str, CredentialContext] = {}
+_credential_generation = 0
+_resource_token_lock = RLock()
+
+
+def clear_resource_tokens():
+    with _resource_token_lock:
+        _resource_tokens.clear()
+        _credential_contexts.clear()
+
+
+def bind_resource_principal(principal: tuple[str, ...], session: str) -> CredentialContext:
+    global _credential_generation
+    if not session or not principal or any(not isinstance(value, str) or not value for value in principal):
+        raise FinOpsError("Cannot verify the Azure principal/session for credential reuse.", 3)
+    principal = tuple(value.casefold() for value in principal)
+    with _resource_token_lock:
+        current = _credential_contexts.get(session)
+        if current is None or current.principal != principal:
+            invalidate_resource_principal(current)
+            _credential_generation += 1
+            current = CredentialContext(principal, session, _credential_generation)
+            _credential_contexts[session] = current
+        return current
+
+
+def invalidate_resource_principal(credential: CredentialContext | None):
+    if credential is None:
+        return
+    with _resource_token_lock:
+        if _credential_contexts.get(credential.session) == credential:
+            _credential_contexts.pop(credential.session)
+        for key in list(_resource_tokens):
+            if key[2] == credential:
+                _resource_tokens.pop(key)
+
+
+def validate_resource_principal(credential: CredentialContext):
+    with _resource_token_lock:
+        if _credential_contexts.get(credential.session) != credential:
+            raise FinOpsError("Azure sign-in changed. Refresh the current principal before reading data.", 3)
+
+
+@contextmanager
+def resource_principal_guard(credential: CredentialContext):
+    with _resource_token_lock:
+        validate_resource_principal(credential)
+        yield
+
+
+def resource_token(resource, subscription="", tenant_id="", *, force=False, timeout=120, runner=None,
+                   credential: CredentialContext | None = None):
+    deadline = time.monotonic() + timeout
+    selected = ("--tenant", tenant_id) if tenant_id else ("--subscription", subscription) if subscription else ()
+    key = (resource, selected, credential)
+    if not _resource_token_lock.acquire(timeout=timeout):
+        raise FinOpsError("Waiting for an Azure resource token timed out. Retry after the current sign-in finishes.", 7)
+    try:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise FinOpsError("Waiting for an Azure resource token timed out. Retry after the current sign-in finishes.", 7)
+        if credential is not None and _credential_contexts.get(credential.session) != credential:
+            raise FinOpsError("Azure sign-in changed. Refresh the current principal before reading data.", 3)
+        value, acquired = _resource_tokens.get(key, ("", 0.0))
+        if (force or token_needs_refresh(value)
+                or (_token_expiry(value) is None and time.monotonic() - acquired >= 300)):
+            _resource_tokens.pop(key, None)
+            value = (runner or az)("account", "get-access-token", "--resource", resource,
+                                   "--query", "accessToken", "-o", "tsv", *selected, timeout=remaining)
+            if not value:
+                raise FinOpsError("No access token. Run az login in the selected backend's tenant.", 3)
+            if credential is not None:
+                _resource_tokens[key] = (value, time.monotonic())
+        return value
+    finally:
+        _resource_token_lock.release()
+
+
+def _token_expiry(value):
     try:
         payload = value.split(".")[1]
         expiry = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))["exp"]
-        return float(expiry) <= time.time() + 120
-    except (IndexError, KeyError, ValueError, TypeError):
-        return False
+        return float(expiry)
+    except (AttributeError, IndexError, KeyError, ValueError, TypeError):
+        return None
 
 
-def az(*args: str) -> str:
+def token_needs_refresh(value):
+    if not value:
+        return True
+    expiry = _token_expiry(value)
+    return expiry is not None and expiry <= time.time() + 120
+
+
+def az(*args: str, timeout: float = 120) -> str:
     # az is a cmd wrapper on Windows. A list alone does not neutralize cmd metacharacters.
     if any(re.search(r'[&|<>^%!"\r\n]', str(arg)) for arg in args):
         raise FinOpsError("Unsafe Azure CLI argument. Use a simple resource name or a JSON body file.")
@@ -31,20 +124,38 @@ def az(*args: str) -> str:
     if not executable:
         raise FinOpsError("Azure CLI is missing. Install Azure CLI, then run az login.", 3)
     try:
-        result = subprocess.run([executable, *map(str, args)], capture_output=True, text=True,
-                                encoding="utf-8", timeout=120, check=False)
-    except (OSError, subprocess.TimeoutExpired):
-        raise FinOpsError("Azure CLI did not finish. Check az account show and network access.", 7) from None
+        command = [executable, *map(str, args)]
+        environment = None
+        launcher = Path(executable)
+        python = launcher.parent.parent / "python.exe"
+        if launcher.suffix.lower() == ".cmd" and python.is_file():
+            script = launcher.read_text(encoding="utf-8-sig")
+            if '"%~dp0\\..\\python.exe" -IBm azure.cli %*' in script:
+                command = [str(python), "-IBm", "azure.cli", *map(str, args)]
+                environment = dict(os.environ, AZ_INSTALLER="MSI")
+        if os.name == "nt" and Path(command[0]).suffix.lower() in {".cmd", ".bat"}:
+            from .windows_process import run_wrapper
+            result = run_wrapper(command, timeout=timeout)
+        else:
+            result = subprocess.run(command, capture_output=True, text=True,
+                                    encoding="utf-8", timeout=timeout, check=False, env=environment)
+    except subprocess.TimeoutExpired:
+        raise FinOpsError("Azure CLI did not finish before its deadline. Check az account show and network access.", 7) from None
+    except OSError:
+        raise FinOpsError("Azure CLI could not start or contain its process. Check the installation and local process permissions.", 7) from None
     if result.returncode:
         if "AADSTS50105" in result.stderr:
             raise FinOpsError("AADSTS50105: no app role for the selected backend. Check the existing AUM or Turnstile app assignment; Azure administrators can choose Direct with existing RBAC.", 4)
         raise FinOpsError("Azure CLI refused the operation. Run az login in the correct tenant and check Azure role assignments.", 3)
+    if args[:1] == ("logout",):
+        clear_resource_tokens()
     return result.stdout.strip()
 
 
-def token(scope: str, subscription: str = "", tenant_id: str = "") -> str:
+def token(scope: str, subscription: str = "", tenant_id: str = "", *, timeout=120) -> str:
     selected = ("--tenant", tenant_id) if tenant_id else ("--subscription", subscription) if subscription else ()
-    value = az("account", "get-access-token", "--scope", scope, "--query", "accessToken", "-o", "tsv", *selected)
+    value = az("account", "get-access-token", "--scope", scope, "--query", "accessToken", "-o", "tsv", *selected,
+               timeout=timeout)
     if not value:
         raise FinOpsError("No access token. Run az login in the selected backend's tenant.", 3)
     return value
@@ -71,6 +182,7 @@ class Config:
     workspace: str = ""
     workspace_resource_id: str = ""
     tenant_id: str = ""
+    turnstile_resource_group: str = ""
     theme: str = "gateway"
     ascii: bool = False
 
@@ -87,6 +199,10 @@ class Config:
         for value in (self.resource_group, self.apim_name):
             if value and not re.fullmatch(r"[A-Za-z0-9._()-]+", value):
                 raise FinOpsError("Use a simple Azure resource group and APIM name.")
+        if self.turnstile_resource_group and (
+                not isinstance(self.turnstile_resource_group, str)
+                or not re.fullmatch(r"[A-Za-z0-9._-]{1,90}", self.turnstile_resource_group)):
+            raise FinOpsError("Use a simple Turnstile resource group name without shell metacharacters.")
         if self.subscription:
             from uuid import UUID
             try:
@@ -99,13 +215,15 @@ class Config:
         return asdict(self)
 
 
-def load_config(path: Path | None = None, **overrides) -> Config:
+def load_config(path: Path | str | None = None, **overrides) -> Config:
     if path is None:
         explicit = os.environ.get("AUM_CONFIG") or os.environ.get("CLAUDE_FINOPS_CONFIG")
         path = Path(explicit) if explicit else Path.home() / ".aum" / "config.json"
         legacy = Path.home() / ".claude-finops" / "config.json"
         if not explicit and not path.exists() and legacy.exists():
             path = legacy
+    else:
+        path = Path(path)
     values = {}
     if path.exists():
         try:
@@ -135,4 +253,5 @@ def load_config(path: Path | None = None, **overrides) -> Config:
         settings = parse_integration(raw)
         config.url = config.url or settings["url"]
         config.scope = config.scope or settings["scope"]
+        config.turnstile_resource_group = settings.get("resourceGroup", "")
     return config.validate()

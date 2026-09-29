@@ -10,6 +10,7 @@ from claude_finops.engine import Engine
 from claude_finops.fake import FakeBackend
 from claude_finops.tui import FinOpsApp
 from claude_finops.errors import FinOpsError
+from claude_finops.guarded_publication import guarded_publish
 
 
 async def settle(app, pilot):
@@ -26,7 +27,8 @@ async def test_ask_cannot_write_in_preview_or_redacted_mode(preview, redact):
         await settle(app, pilot)
         app.action_tab("ask")
         await settle(app, pilot)
-        app.query_one("#ask-question", Input).value = "Show usage"
+        with guarded_publish(app.current_guard()):
+            app.query_one("#ask-question", Input).value = "Show usage"
         await pilot.click("#ask-send")
         await settle(app, pilot)
         assert not backend.writes
@@ -43,7 +45,8 @@ async def test_bulk_file_change_invalidates_preview():
             await settle(app, pilot)
             app.action_bulk()
             await pilot.pause(.2)
-            app.screen.query_one("#field-file", Input).value = str(path)
+            with guarded_publish(app.current_guard()):
+                app.screen.query_one("#field-file", Input).value = str(path)
             await pilot.click("#action-preview")
             await settle(app, pilot)
             assert "200000" in str(app.screen.query_one("#action-status", Static).render())
@@ -65,7 +68,7 @@ async def test_same_tab_saved_view_refreshes_real_query_and_controls():
         await settle(app, pilot)
         count = len(backend.reads)
         app.restore_view(dict(tab="usage", month="2026-08", dimension="model",
-                              filters={"department_id": "sales-apac"}))
+                              filters={"department_id": "sales-apac"}), read_guard=app.current_guard())
         await settle(app, pilot)
         calls = backend.reads[count:]
         assert any(op == "distribution" and args["month"] == "2026-08" and args["dimension"] == "model"

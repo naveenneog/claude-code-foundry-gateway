@@ -7,6 +7,7 @@ from claude_finops.dashboard import DashboardPanel, budget_totals, enforcement_b
 from claude_finops.engine import Engine
 from claude_finops.fake import FakeBackend
 from claude_finops.tui import FinOpsApp
+from claude_finops.guarded_publication import guarded_publish
 
 
 def test_gauge_never_double_counts_unit_and_team():
@@ -104,7 +105,8 @@ async def test_local_filter_and_revision_four_slash_lookup():
         await pilot.pause(.25)
         await app.workers.wait_for_complete()
         await pilot.press("ctrl+f")
-        app.query_one("#quick-filter", Input).value = "sales-emea"
+        with guarded_publish(app.current_guard()):
+            app.query_one("#quick-filter", Input).value = "sales-emea"
         await pilot.pause()
         assert len(app.records["budgets"]) == 1
         await pilot.press("escape", "/")
@@ -160,7 +162,8 @@ async def test_redacted_queries_do_not_leak_through_input_or_filter_echo():
         await pilot.pause(.25)
         await app.workers.wait_for_complete()
         app.team = "sales-emea"
-        app.open_lookup_result(dict(kind="person", id=secret_id, name="Private Person", tab="people"))
+        app.open_lookup_result(dict(kind="person", id=secret_id, name="Private Person", tab="people"),
+                               read_guard=app.current_guard())
         await pilot.pause(.25)
         await app.workers.wait_for_complete()
         await pilot.pause(.25)
@@ -168,7 +171,8 @@ async def test_redacted_queries_do_not_leak_through_input_or_filter_echo():
         assert app.query_one("#people-query", Input).password
         assert secret_id not in app.export_screenshot()
         await pilot.press("ctrl+f")
-        app.query_one("#quick-filter", Input).value = "private@example.org"
+        with guarded_publish(app.current_guard()):
+            app.query_one("#quick-filter", Input).value = "private@example.org"
         await pilot.pause(.25)
         assert "private@example.org" not in app.export_screenshot()
 

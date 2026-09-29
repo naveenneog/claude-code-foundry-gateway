@@ -445,6 +445,159 @@ refresh once; a write is never automatically repeated. Settings offers an explic
 sign-out preview; `az logout` is the equivalent outside AUM. Both affect the shared
 Azure CLI session, not only AUM.
 
+### Read latency and progress
+
+Direct reuses resource tokens for a verified principal and Azure CLI session
+until two minutes before known expiry. Opaque tokens have a five-minute reuse
+limit. Each read cycle verifies the current account once; concurrent queries
+share that result and token acquisition without waiting for the RBAC permission
+label. Different resources, principals and sessions do not share credentials.
+An unverified caller obtains a fresh token rather than borrowing the cache.
+Tokens stay in memory; principal changes and explicit sign-out invalidate them.
+Obsolete in-flight results are not returned after a verified identity change.
+HTTP identity reads obtain current CLI credentials before identifying the caller.
+
+Each Direct refresh shares one gateway snapshot, obtained through one PowerShell
+bridge process and one named-value listing. Catalog, tiers, token limits and the
+existing USD converters read that snapshot. Independent Log Analytics queries
+overlap and reuse their HTTP client. A new refresh or any write invalidates the
+snapshot; write preflight, read-back and compensation still use current values.
+The cycle pins an immutable credential generation. A verified principal change
+invalidates every cycle holding the old generation; a cached account cannot
+rebind it. Catalog, tier and USD snapshots, pending budgets, and multi-source
+chargeback, lookup, trend and person-detail results are checked again before
+return. An obsolete aggregate is discarded with the existing sign-in-changed
+exit 3, and a new cycle verifies the current principal.
+HTTP cycles retain their generation through complete aggregates too. Publication
+checks occur before each progressive or final cache/render operation, not only
+at cycle exit. Capability/backend caches, deferred dialogs and selectors,
+assistant results, JSON and CSV exports use the same guard; a delayed response
+from a previous principal is not briefly displayed and then cleared.
+Cached details retain the original row's guard through deferred dialog
+composition. A new cycle that read no data does not supply a replacement.
+Dashboard dialogs, prefilled edit/request forms, chart pins and cached request
+copy/ledger actions follow the same rule; closing their source connection
+invalidates the retained guard. A stale dialog explains the sign-in change
+without displaying the previous principal's row or defaults.
+
+All backend-derived presentation and assistant-context reuse pass through
+`guarded_publish` with their originating guard. A verified principal change
+clears tables, selections, picker options, open forms/dialogs, cached
+capabilities/preferences and assistant conversation/history before another
+input is dispatched. Highlighted status, clipboard/ledger actions and assistant
+requests do not reuse the previous principal's data. Publication rejection
+clears the current view and explains the sign-in change.
+
+The offline structural test scans the presentation/output modules for direct
+widget/property/status/clipboard/export/assistant writes outside this boundary.
+Its exact, documented static-write allowlist covers local shell labels, resets
+and fixed controls, not whole handlers. JSON/linear/table formatters require an
+active guarded publication, and an async wait cannot be inside that write scope.
+The sinks also enforce this at runtime: widget updates and values, status,
+clipboard/links, final terminal/file writers and assistant HTTP egress check
+the active origin at the write. A lambda, dynamic attribute call or partial
+does not inherit permission from where it was created.
+The sink decorator rejects coroutine, generator and async-generator functions,
+whose bodies would execute after a creation-time check had ended
+([ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md)).
+Notifications use `publish_notification` with an originating guard. That
+guard survives queuing and is checked again when a toast is created and
+rendered, including cached rendering. A principal change clears old toasts.
+The raw framework `notify` path is not a presentation API.
+The same closed contract applies to object attributes and literal
+`getattr`/`hasattr` access. Console, stream, driver, private and unwrapped
+implementation capabilities are not ordinary approved members. Necessary
+internal accesses and superclass forwarding have exact, justified entries
+tied to the reviewed function body. An approved import does not grant
+unrestricted access to the objects it returns.
+The public `content` property also retains and validates its source. The
+structural contract rejects descriptor setters, raw widget-state access and
+dynamic code in presentation modules; those paths bypass provenance even
+when their surrounding function has a guard.
+`guarded_deferred(origin, callback)` checks the retained source when a callback
+runs. Async callbacks retain a scope lifetime without holding an identity lock
+across waits; each later sink checks again. The AST detector separately checks
+dynamic sink access and escaping callbacks for all supported schedulers. The
+51 exact static-write exceptions remain unchanged.
+Refused scheduled writes leave input available and report the safe underlying
+error. Application and app-owned event-loop exception handling recognize
+wrapped refusals before rendering a traceback or callback arguments. Unrelated
+errors retain their existing handling, and the event loop's previous handler
+is restored when the app closes.
+Attaching a retained widget checks its original source before DOM insertion,
+including shallow copies, composed children, reparenting and cached subtrees.
+The caller's current scope does not replace the widget's source. Protected
+instances refuse class replacement; current-origin writes and attachments
+retain their normal behavior.
+The source contract approves presentation imports and their member
+interfaces by name; aliases do not expand them. Raw consoles, streams,
+filesystem writers and framework widgets remain in the protected boundary
+modules. Computed reflection and other metaprogramming require exact,
+justified entries tied to the reviewed function body. New source modules
+need an explicit classification. This is a contract for maintained
+presentation code, not a sandbox for malicious code in the Python process
+([ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md)).
+
+Overview displays each source as it arrives. Pending panels name their source,
+and the progress line shows an estimate and elapsed time. Estimates are not
+network deadlines or ingestion guarantees. A delayed trend query no longer
+holds back current usage or budget rows; its failure remains visible alongside
+the other results. Pending catalog modes read as pending, not as an assumed
+strict mode. Settings remains readable while sign-in is pending.
+
+Direct's Azure-authorized facts can arrive before its identity label; edits
+remain disabled during identity verification. Scoped HTTP data still follows the
+current identity/scope check. A 401 or 403 clears partial protected data rather
+than preserving a previously wider view. Superseded refreshes cannot repaint the
+new view.
+Fatal data failures are observed while identity or capabilities are still
+pending; the denial is displayed immediately rather than waiting for metadata.
+
+The P71 live measurements and their method are in
+[STATUS](STATUS.md#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28).
+These captures use live read-only sources with display redaction, not examples:
+[provenance and hashes](guide/aum-p71-captures.json).
+Direct captures 61/62 were refreshed after the council's principal-binding fix.
+The stopped/running Turnstile captures 60/63 retain their original dated
+provenance; the correction round changed no database state.
+
+![Live Direct first data while the remaining sources are still pending.](guide/aum-61-direct-progressive.png)
+
+![Live Direct Overview after the current read completes.](guide/aum-62-direct-ready.png)
+
+### Turnstile database stopped
+
+Turnstile's `/health` is a liveness check and can return 200 while its database is
+stopped. AUM bounds the authenticated identity request instead. On a timeout or
+5xx, an Azure-selected profile can read PostgreSQL state through ARM using its
+existing Azure rights. No App Service secret or connection string is read.
+
+Discovery stores the integration's `resourceGroup` as
+`turnstile_resource_group` in the address-only profile. Older gateway-backed
+profiles resolve that group from the matching `turnstile-integration` named
+value. Exactly one validated server in that group, reported `Stopped` by Azure,
+produces exit **9** with its name and this manual command:
+
+```powershell
+az postgres flexible-server start -g <turnstile-resource-group> -n <server-name> --subscription <subscription-id>
+```
+
+The command resumes paid compute; AUM never runs it automatically. No backend
+fallback changes the selected authority. A profile with no Azure subscription,
+denied metadata reads, an ambiguous inventory or another server state retains
+exit 7 with the diagnostic limit stated. Authentication and scope denials retain
+their own codes. The single-server association is the explicit assumption
+recorded as **U37** in [UNKNOWNS](UNKNOWNS.md), not a connection-string match.
+
+![Live stopped-database failure with the manual start command visible at 80 columns.](guide/aum-60-turnstile-stopped.png)
+
+![Live Turnstile Overview after the separately authorized database start.](guide/aum-63-turnstile-ready.png)
+
+The reference database was started under the owner's separate P71 authorization,
+not by the client. That start does not change the external automation in **U32**.
+[Troubleshooting](TROUBLESHOOTING.md#turnstile-database-stopped) distinguishes this
+condition from the browser's tenant-consent failure.
+
 ### Direct gateway access
 
 ```json
@@ -1078,6 +1231,7 @@ Interactive `:` → **Export complete chargeback CSV** writes under
 | 6, conflict | Refresh and preview again |
 | 7, service/job failure | Check network, Azure access and job logs; do not blindly repeat a write |
 | 8, apply still pending | Follow `aum governance show`; the save may already have succeeded |
+| 9, verified stopped Turnstile database | Azure reports the named PostgreSQL server as `Stopped`; the message contains its explicit paid start command. AUM starts nothing automatically |
 | Unknown Direct cost | Check unpriced facts and the published `ClaudeCost` price book |
 
 ```powershell

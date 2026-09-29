@@ -147,6 +147,40 @@ its listener is not explicitly loopback-only. See
 
 ## Turnstile and offboarding
 
+### Turnstile database stopped
+
+On 2026-09-27 the reference Turnstile API returned 200 from `/health`, but
+authenticated `/api/v1/auth/me` waited about 30 seconds and returned 500.
+Azure reported its PostgreSQL Flexible Server as `Stopped`; application logs
+recorded a database-pool connection timeout. This is separate from **U19**,
+tenant-wide consent for the browser sign-in button.
+
+AUM's bounded readiness read now reports exit **9** when Azure verifies the
+single server in the recorded Turnstile deployment group is stopped. The
+terminal shows the same reason and manual start command, rather than empty
+panels followed only by exit 7. An Azure administrator's equivalent reads and
+explicit start are:
+
+```powershell
+az postgres flexible-server list -g <turnstile-resource-group> -o table
+az postgres flexible-server show -g <turnstile-resource-group> -n <server-name> --query state -o tsv
+az postgres flexible-server start -g <turnstile-resource-group> -n <server-name>
+```
+
+The resource group comes from `turnstile-integration`, not the gateway's own
+group. Starting resumes compute charges; AUM never performs it. An unavailable
+or ambiguous inventory remains an unverified diagnostic, not proof that a
+database stopped. Direct is a separate administrative Azure RBAC connection;
+it is not an automatic scoped-user fallback.
+
+P71 observed the nightly stop at 19:05:18-19:07:19Z and started the database at
+22:23:22Z on 2026-09-27, with `Ready` verified at 22:25:35Z. The database remains
+running for the owner's morning test. The external stop automation remains
+**U32**, not a client setting changed by this packet.
+Sources: [P71 measurements](STATUS.md#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28),
+[U32](UNKNOWNS.md#u32--the-turnstile-database-stops-every-evening--open),
+[Azure PostgreSQL start](https://learn.microsoft.com/cli/azure/postgres/flexible-server#az-postgres-flexible-server-start).
+
 | Symptom | Next action |
 |---|---|
 | Need admin approval at Microsoft sign-in | Use [Turnstile's CLI sign-in](TURNSTILE.md#viewers-and-managers), or have the tenant administrator grant approved web consent |

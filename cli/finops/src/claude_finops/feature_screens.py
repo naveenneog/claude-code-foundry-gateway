@@ -1,13 +1,11 @@
 import asyncio
 import json
-from pathlib import Path
 
 from textual import on, work
-from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Select, Static
+from .publication_widgets import Button, Horizontal, Input, Label, ModalScreen, Select, Static, Vertical, VerticalScroll
 
 from .errors import FinOpsError
+from .guarded_publication import guarded_publish, published
 
 
 class FilterChips(Static, can_focus=True):
@@ -23,14 +21,30 @@ class FilterChips(Static, can_focus=True):
 class ActionForm(ModalScreen):
     BINDINGS = [("escape", "cancel", "Cancel")]
 
-    def __init__(self, title, fields, operation, *, mutation=True):
+    @published(lambda self, title, fields, operation, *, mutation=True, read_guard=None:
+               read_guard if read_guard is not None else self.app.current_guard())
+    def __init__(self, title, fields, operation, *, mutation=True, read_guard=None):
         super().__init__()
         self.heading, self.fields, self.operation = title, fields, operation
         self.mutation = mutation
+        self.read_guard = read_guard if read_guard is not None else self.app.current_guard()
         self.preview = None
         self.busy = False
 
     def compose(self):
+        try:
+            with guarded_publish(self.read_guard):
+                yield from self.form_widgets()
+        except FinOpsError as error:
+            self.fields = []
+            with guarded_publish(self.app.safe_message_guard()):
+                with Vertical(id="change-dialog"):
+                    yield Label("Action unavailable", markup=False)
+                    yield Static(self.app._error_text(error), id="action-status", markup=False)
+                    yield Button("Cancel", id="action-cancel")
+
+    @published(lambda self: self.read_guard)
+    def form_widgets(self):
         if self.mutation and self.app.engine.backend.requires_reason and not any(name == "reason" for name, *_ in self.fields):
             self.fields = [*self.fields, ("reason", "Audit reason (required by AUM service)", self.app.engine.change_reason, None)]
         with Vertical(id="change-dialog"):
@@ -50,6 +64,8 @@ class ActionForm(ModalScreen):
                 yield Button("Apply" if self.mutation else "Open", id="action-apply", disabled=True, variant="primary")
 
     def values(self):
+        with self.read_guard():
+            pass
         values = {name: self.query_one(f"#field-{name}").value for name, *_ in self.fields}
         if self.app.engine.backend.requires_reason and "reason" in values:
             self.app.engine.change_reason = values["reason"]
@@ -70,11 +86,13 @@ class ActionForm(ModalScreen):
             text = json.dumps(self.app.present({key: value for key, value in self.preview.items()
                               if key in {"action", "count", "before", "after", "changes", "note"}}),
                               indent=2, ensure_ascii=True)
-            self.query_one("#action-status", Static).update(text or "Preview ready.")
+            with guarded_publish(self.read_guard):
+                self.query_one("#action-status", Static).update(text or "Preview ready.")
             self.query_one("#action-apply", Button).disabled = bool(self.mutation and
                 (self.app.preview_only or self.app.redactor.enabled))
         except (FinOpsError, ValueError) as error:
-            self.query_one("#action-status", Static).update(self.app.redactor.text(str(error)))
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one("#action-status", Static).update(self.app.redactor.text(str(error)))
 
     @on(Button.Pressed, "#action-apply")
     @work(exclusive=True)
@@ -95,7 +113,7 @@ class ActionForm(ModalScreen):
             if result.get("ui_action"):
                 self.dismiss()
                 if result["ui_action"] == "view":
-                    self.app.restore_view(result["view"])
+                    self.app.restore_view(result["view"], read_guard=self.read_guard)
                 elif result["ui_action"] == "compare":
                     self.app.set_comparison(result["month"])
                 elif result["ui_action"] == "profile":
@@ -108,13 +126,16 @@ class ActionForm(ModalScreen):
                 state = json.dumps(self.app.present({key: result.get(key) for key in
                     ("status_code", "headers", "usage", "error", "seconds")}), ensure_ascii=True, indent=2)
             if result.get("requested_at") and not self.app.engine.backend.immediate_writes:
-                self.query_one("#action-status", Static).update("Saved; following apply status...")
+                with guarded_publish(self.app.safe_message_guard()):
+                    self.query_one("#action-status", Static).update("Saved; following apply status...")
                 outcome = await asyncio.to_thread(self.app.engine.wait_for_apply, result["requested_at"])
                 state = outcome["state"]
-            self.query_one("#action-status", Static).update(self.app.redactor.text(state))
-            self.query_one("#action-cancel", Button).label = "Done"
+            with guarded_publish(self.read_guard):
+                self.query_one("#action-status", Static).update(self.app.redactor.text(state))
+                self.query_one("#action-cancel", Button).label = "Done"
         except (FinOpsError, ValueError) as error:
-            self.query_one("#action-status", Static).update(self.app.redactor.text(str(error)))
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one("#action-status", Static).update(self.app.redactor.text(str(error)))
         finally:
             self.busy = False
 
@@ -128,6 +149,7 @@ class ActionForm(ModalScreen):
 class FiltersScreen(ModalScreen):
     BINDINGS = [("escape", "dismiss", "Cancel")]
 
+    @published(lambda self: self.app.current_guard())
     def compose(self):
         with Vertical(id="change-dialog"):
             yield Label("Server filters — the server still enforces your scope")
@@ -158,7 +180,8 @@ class FiltersScreen(ModalScreen):
         try:
             query_window(self.app.engine.month, values.get("from"), values.get("to"))
         except FinOpsError as error:
-            self.query_one("#filter-status", Static).update(str(error))
+            with guarded_publish(self.app.safe_message_guard()):
+                self.query_one("#filter-status", Static).update(str(error))
             return
         self.app.scope_filters = values
         self.app.request_page = self.app.people_offset = 0
@@ -176,6 +199,7 @@ class FiltersScreen(ModalScreen):
 class TourScreen(ModalScreen):
     BINDINGS = [("escape", "finish", "Start")]
 
+    @published(lambda self: self.app.safe_message_guard())
     def compose(self):
         with Vertical(id="detail-dialog"):
             yield Label("Welcome to AUM — one engine, terminal and commands")

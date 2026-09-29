@@ -495,7 +495,8 @@ scheduled jobs (P49); a plan that needs those fails before it writes. See
 
 Source: [06-finops.json](architecture/06-finops.json), verified against the local
 [`cli/finops`](../cli/finops) implementation merged to main at `c7f0a29`. The design is
-recorded in [ADR-0018](adr/0018-terminal-finops.md).
+recorded in [ADR-0018](adr/0018-terminal-finops.md) and P71's
+[ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md).
 
 The product is **AUM - Azure Usage Management**, a terminal FinOps console with command
 **`aum`**. The naming packet on branch `aum` adds that command and retains `claude-finops`
@@ -523,6 +524,63 @@ A preview is not a write. A saved Turnstile value is not a completed gateway app
 Turnstile person budgets are not the gateway's per-person daily overrides. These distinctions
 belong in both terminal faces. The [AUM how-to](CLI-FINOPS.md) describes installation,
 configuration, commands and the first release's scope.
+
+P71 adds progressive source completion within the terminal and a read-cycle
+snapshot within Direct. Azure still authorizes each Direct request; HTTP scope
+verification still precedes protected data. Tokens remain in process memory,
+and writes invalidate read snapshots rather than using cached preflight state.
+The stopped-database diagnostic reads ARM metadata in the recorded Turnstile
+group after an authenticated readiness failure. Its credential may be acquired
+concurrently, but no healthy-path database inventory or automatic start is added.
+Council round 1 binds resource reuse to a verified principal/session, checks the
+Direct account once per read cycle, and rejects obsolete in-flight results.
+Fatal data errors are observed concurrently with identity and capability reads.
+Council round 2 pins that verified generation immutably to each Direct cycle.
+Snapshot completion and complete multi-source aggregates validate the same
+generation; cached account metadata cannot revive an invalidated cycle.
+Round 3 extends complete-cycle pinning to HTTP backends and adds captured
+publication guards before cache, partial/final rendering and command/file output.
+Deferred controls retain the source guard rather than checking only after display.
+Round 5 routes presentation and assistant-context reuse through one
+`guarded_publish` function. `PrincipalUI` clears prior-principal state before
+input dispatch; an AST test checks the publication boundary across UI/output
+modules with exact static-write exceptions.
+Round 6 adds sink-layer enforcement in `publication_widgets.py` and
+`publication_output.py`, with assistant egress checked at the HTTP transport.
+`publication_sink` delegates to the same publication boundary at each write.
+`guarded_deferred` re-enters a retained origin on execution; async work holds
+no identity lock while suspended. Framework input has narrowly identified
+handlers, not a general exemption for application callbacks. The AST contract
+checks indirect sinks and escaping callbacks as a second line of defense.
+Round 7 protects `content` provenance and rejects unchecked descriptor,
+raw-state and dynamic-code escapes. The shared application exception boundary
+unwraps publication refusals before Textual builds a fatal diagnostic. Its
+app-scoped loop handler covers event-loop callbacks and restores the prior
+owner on exit. Refused timers and screen callbacks retain input and show only
+the safe error, not callback arguments or traceback locals.
+Round 8 validates retained widget subtrees before registration inserts them
+into the DOM. Copied widgets keep their original source; a new caller scope
+does not reauthorize that data. Protected instances cannot change class.
+The source detector uses an explicit import/member allowlist and module
+classification. Native output and widget capabilities are confined to the
+reviewed, fingerprinted boundary modules. Exact metaprogramming exceptions
+also pin the function body on which their justification depends.
+Round 9 carries notification origins through the message queue, toast
+creation and cached rendering. Raw notification calls refuse; principal
+clearing removes prior-source notifications.
+Round 10 adapts only exact reviewed native DOM classes before attachment.
+Their properties, mutating methods and cached rendering validate their source;
+unsupported content widgets are refused. App titles stay static and raw exit
+messages are refused. Queued messages and notifications omit payloads from
+normal and Rich representations before Textual diagnostic logging. The receiver
+and effect approval procedure is in
+[ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md#approval-recipe-for-attributes-and-builtins).
+
+![AUM readiness uses bounded authenticated HTTP and read-only Azure diagnosis; Direct shares a snapshot and returns independent sources progressively.](images/architecture/aum-readiness.png)
+
+Source: [15-aum-readiness.json](architecture/15-aum-readiness.json). The Windows
+MSI launcher runs its existing Python entry point directly; other command
+wrappers are created suspended, assigned to their timeout job, then resumed.
 
 ## Optional independent AUM service (P55)
 

@@ -2,6 +2,8 @@ from copy import deepcopy
 from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 
+from .backend import in_read_cycle
+from .guarded_publication import guarded_publish
 from . import capabilities as cap
 from .errors import FinOpsError
 from .rules import identifier, month_window, parse_tokens, require_owner, scope_type
@@ -28,6 +30,7 @@ class FeatureEngine:
         prefix = f"@{tenant}/" if tenant else ""
         return "https://portal.azure.com/#" + prefix + "view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Members/groupId/" + group_id
 
+    @in_read_cycle
     def person_detail(self, person, team):
         people = self.read("people", **self.backend.people_filter(identifier(team) if team else ""), query=identifier(person), offset=0, limit=50)
         row = next((item for item in people["items"] if item["scope_id"] == person), None)
@@ -40,11 +43,20 @@ class FeatureEngine:
                     basis="Latest request in the selected month; no all-time last-seen value is guessed.")
 
     def capabilities(self, refresh=False):
-        if self._identity is None:
-            self.read("whoami")
-        if refresh or self._capabilities is None:
-            self._capabilities = self.backend.read("capabilities", identity=self._identity)
-        return self._capabilities
+        with self.backend.read_cycle(), self._capabilities_lock:
+            if self._identity is None:
+                self.read("whoami")
+            if refresh or self._capabilities is None:
+                result = self.backend.read("capabilities", identity=self._identity)
+                guard = self.backend.read_guard()
+                with guard():
+                    self._capabilities = result
+                    self._capabilities_guard = guard
+            if self._capabilities_guard is not None:
+                with self._capabilities_guard():
+                    self.backend.pin_read_cycle()
+                    return self._capabilities
+            return self._capabilities
 
     def has_feature(self, name, action="read"):
         return cap.enabled(self.capabilities(), name, action)
@@ -92,6 +104,7 @@ class FeatureEngine:
                 plan["result"] = self.backend.write("catalog", body, **metadata)
         return plan
 
+    @in_read_cycle
     def compare_trends(self, comparison, interval="day", group_by="none", **filters):
         month_window(comparison)
         current = self.read("trends", interval=interval, group_by=group_by, **filters)
@@ -193,8 +206,9 @@ class FeatureEngine:
         self.require_feature("assistant", "ask")
         if not isinstance(question, str) or not question.strip() or len(question) > 4000:
             raise FinOpsError("Ask a question of 1 to 4,000 characters.")
-        return self.backend.write("assistant_ask", dict(question=question.strip(), history=(history or [])[-20:],
-                                  conversation_id=conversation_id, timezone="UTC", locale="en"))
+        with guarded_publish(self.backend.read_guard()):
+            return self.backend.write("assistant_ask", dict(question=question.strip(), history=(history or [])[-20:],
+                                      conversation_id=conversation_id, timezone="UTC", locale="en"))
 
     def configure_assistant(self, model_id=None, auto_title=False, *, apply=False):
         self.require_feature("assistant", "configure")

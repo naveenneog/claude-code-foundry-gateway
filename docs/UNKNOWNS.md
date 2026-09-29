@@ -38,7 +38,8 @@ fails the release stage while any remain. Detail for each one follows below.
 | U29 | OPEN | What made Claude Desktop report `ENOTFOUND` on the owner's workstation on 2026-09-27? Not reproduced here. Its configuration then had no readable credential kind (U27). `Debug-ClaudeWorkstation.ps1` now shows Desktop's own recent `[custom-3p]` warnings and errors from `%LOCALAPPDATA%\Claude-3p\logs\main.log`, which name the failing host | P67 |
 | U30 | CLOSED | Can the guided flow create the company address itself, on each v2 tier, and at what cost? Researched 2026-09-28: all three support a custom gateway hostname with an uploaded PFX or Key Vault certificate; none supports a free managed certificate. A public CNAME is required before binding; Basic v2 also rejects an undelegated `.test` domain with `CustomHostnameOwnershipCheckFailed`, measured live. Azure DNS public list prices are USD 0.50/zone/month and USD 0.40/million queries; Key Vault operations USD 0.03/10,000, issuer charges separate. Positive company TLS proof is blocked without a delegated domain ([detail](#u30--the-company-address--closed-2026-09-28)) | P69, [ADR-0033](adr/0033-company-address.md) |
 | U31 | CLOSED | Can the flow show the customer's own prices (an agreement's price sheet) instead of Azure retail list prices, and with what role? Researched 2026-09-27: the price sheet of an Enterprise Agreement, Microsoft Customer Agreement or Microsoft Partner Agreement is readable only with a billing role (for MCA: billing profile owner, contributor, reader or invoice manager; for EA: as the Enterprise Admin's policy allows), not with a subscription role, and the API downloads the whole sheet as a file. The flow shows Azure Retail Prices API list prices, named as list prices, and names the price sheet as the authority ([detail](#u31--customer-prices--closed-2026-09-27)) | P68, [ADR-0032](adr/0032-guided-flow-starts-at-once.md) |
-| U32 | OPEN | What stops the reference Turnstile database every evening? Measured 2026-09-27 from the activity log: `pg-tsclaude-zpk4sh4prbsls` (rg-turnstile-claudegw) was stopped at 19:05Z on 09-23, 09-24 and 09-25 by an application whose token was issued by a tenant other than the subscription's. While stopped, Turnstile's `auth/me` waits about 30 s and returns 500, which AUM reports as `Read failed (exit 7)` ([detail](#u32--the-turnstile-database-stops-every-evening--open)) | f10, f11 |
+| U32 | OPEN | What stops the reference Turnstile database every evening? Measured 2026-09-27 from the activity log: `contoso-e8f7782d` in `contoso-534a5930` (synthetic aliases matching capture 60) was stopped at 19:05Z on 09-23, 09-24 and 09-25 by an application whose token was issued by a tenant other than the subscription's. P71 observed it Stopped at 20:13:35Z on 09-27; that evening's stop started at 19:05:18Z and succeeded at 19:07:19Z. While stopped, Turnstile's `auth/me` waits about 30 s and returns 500, which AUM reports as `Read failed (exit 7)` ([detail](#u32--the-turnstile-database-stops-every-evening--open)) | P71, f10, f11 |
+| U37 | ASSUMED | Can the client identify the Turnstile database without reading App Service secrets? The integration records a deployment resource group, not a database id. P71 treats exactly one valid PostgreSQL Flexible Server in that recorded group as the deployment's database; zero/multiple servers, missing metadata, denied reads or malformed names/state cannot establish a stopped database. Risk: an operator can repurpose a single-database group without updating its integration. Detectors cover every negative case, and the error reports Azure's observed state rather than claiming a connection-string match. Azure's inventory contract is documented in [Servers - List By Resource Group](https://learn.microsoft.com/rest/api/postgresql/servers/list-by-resource-group?view=rest-postgresql-2024-08-01), retrieved 2026-09-27 | P71, [ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md) |
 | U36 | CLOSED | Can `Start-ClaudeGateway.ps1` tell a top-level run from a call by another script, on both shells? Measured 2026-09-28: `$MyInvocation.PSCommandPath` is empty at top level and names the calling script otherwise, on PowerShell 7 and 5.1 | P72 unblocked |
 
 ---
@@ -86,6 +87,190 @@ The isolated resources, groups and exact shared-Foundry role assignment were del
 independent absence checks passed at 22:13:51Z.
 
 ## Detail
+
+### U26 - P71 observation, 2026-09-28
+
+The lead's 2026-09-30 follow-up identifies a second, independent lifecycle
+failure: the assistant-context case failed 4/12 times under 16 CPU burners
+on P85's `bcf8554` P71 base, without the later message-sealing change and
+without worker cancellation. `FinOpsApp.switched` queries `active` while
+`#main-tabs` is absent. Retained activations reproduce that exact error on
+real empty running and shut-down default screens. The new contract requires
+ignoring these stale events while preserving live activations; deterministic
+and loaded correction evidence is recorded in
+[STATUS](STATUS.md#stale-tab-activation-without-main-content-2026-09-30).
+Both deterministic cases failed before the presence check; the corrected
+targeted/contract selection passed all 14 cases. The expanded 16-burner proof
+passed 270 executions over 30 iterations, including both lifecycle cases and
+the assistant-context case. The full AUM suite passed all 831 cases.
+U26 remains OPEN for its other historical failures.
+
+During P71's refresh changes, full pytest runs identified the exact failing
+cases: `test_service_terminal_hides_unoffered_views_and_opens_real_core_tabs`,
+`test_preselected_people_team_does_not_trigger_refresh_loop`,
+`test_compact_rankings_keep_a_team_and_drill_into_server_filter` and
+`test_lookup_jumps_to_scope`. Queued widget focus could reactivate the previous
+pane after the worker completed; an already-dismissed modal's row event could
+then reach the destination table. P71 makes the focus handoff immediate and
+checks the row event's originating table. A deterministic queued-focus mutation
+and a modal-origin mutation each fail the full relevant selector; the restored
+full AUM run passes 408 tests. This is evidence for these observed failures,
+not a retrospective diagnosis of the unrecorded 2026-09-25/26 failures. The
+locked packet gate and any failure output are recorded in P71's STATUS section.
+The first P71 gate exceeded its 1,800 s suite deadline on 2026-09-27 at 23:33Z.
+The surviving runner's own timing receipt recorded AUM PASS in 249.5 s and
+guided-flow start FAIL in 225.2 s; the latter passed directly in 90.8 s afterward.
+The failed guided-flow assertion was not retained by the gate's timeout branch.
+No assertion or timeout was relaxed; the next run retains the original runner's
+stdout/stderr as separate evidence.
+That second gate passed at `84bddeb` on 2026-09-28 00:22:51Z, with complete
+output proving 408 AUM tests passed (192.82 s), and the guided-flow check passed.
+U26 remains open for the earlier unrecorded failures; the retry is not a
+retrospective explanation for them.
+P71 round 3's first integrated run identified two Windows descendant-fixture
+marker failures while 466 other cases passed. A direct probe measured venv
+interpreter startup above the fixed deadline; the fixture now uses the base
+interpreter without site imports, retaining all deadline, marker and process-exit
+assertions. All five original containment mutations were reconfirmed at seven
+cases each; the next full AUM run passed 468 tests. Exact timings and the failed
+run are in P71's STATUS section and private evidence.
+
+Round 6's reviewer observed
+`test_navigation_immediately_after_worker_completion_cannot_restore_old_pane`
+raise worker cancellation once in a 232-case affected run (1 failed, 231
+passed, 337.85 s), then pass alone. The bounded local attempt held the shared
+lock from **13:50:34Z to 13:53:17Z on 2026-09-28**. Thirty separate runs of that
+case passed, followed by **20 passed in 20.65 s** for `test_progressive_tui.py`.
+The attempt used a frozen copy of `829ef40`'s package (the reviewed `dd46186`
+production code), with its import path checked before running. No timeout,
+assertion or synchronization was changed. This attempt did not reproduce the
+reviewer's cancellation; U26 remains open for that result.
+
+The resumed round 6 full Python run on `36f3088`, under the shared lock from
+**16:30:27Z to 16:38:50Z on 2026-09-28**, executed 563 cases:
+**560 passed, 3 failed in 498.64 s** (502.38 s wall). The two
+`test_azure_deadline.py` cases
+`test_timeout_terminates_started_children_and_grandchildren` and
+`test_scheduling_delay_before_assignment_cannot_release_uncontained_children`
+failed because their child startup markers were absent.
+`test_dashboard.py::test_redacted_queries_do_not_leak_through_input_or_filter_echo`
+raised `WorkerCancelled` at the worker wait after the lookup handoff.
+All 115 publication cases, including the B4/B5 replays, passed in that run.
+The original stdout and JUnit report remain in
+`.finops-evidence\p71-r6-resume`; [STATUS](STATUS.md#resumed-round-6-proof-on-36f3088)
+records the full selection, timings and mutation proof. No second full run,
+deadline change or assertion change replaced those failures. Their cause is
+not established by this run; U26 remains open.
+
+The round 7 council reports that these three cases passed together with pinned
+P71 imports in **4.77 s**. The lead also reports that the round 6 full run
+overlapped its P79 gate, which ran at AboveNormal priority from **21:44 to
+22:28 IST on 2026-09-28**. This is an observed overlap, not a controlled
+reproduction of the cause. Round 7 leaves the assertions and deadlines
+unchanged and retains U26 as open after its requested final full-suite run.
+
+Round 7's restored publication selection passed **177 cases in 73.71 s**,
+then its one full AUM/FinOps Python run on `530a8dd` passed **625 cases in
+247.21 s** (248.95 s wall), from **21:07:43Z to 21:11:52Z on 2026-09-28**
+(**02:37:43-02:41:52 IST on 2026-09-29**). Each validation command acquired
+and released its own lock. This passing run is not a controlled proof that
+the earlier scheduling overlap caused the three failures.
+
+Eight of the 27 round 7 mutation runs also observed
+`test_cached_dialog_handoffs_retain_origin_during_deferred_composition[pin-chart]`
+raise `KeyError: 'ask'` at the precondition reading
+`app._data_guards[app.active]`. This was before the stale-origin assertions
+and was observed with several different removals, including AST-only changes.
+Each mutation also failed its intended detector case at the full 177-test
+count; the setup failures are excluded from the claimed mutation catches.
+The pin-chart case passed in the restored selector and full suite. Its cause
+is not established; no assertion, deadline or synchronization was changed.
+[STATUS](STATUS.md#final-round-7-proof-on-530a8dd) records the individual
+receipts and timings. U26 remains open.
+
+Round 8 again observed the pin-chart `KeyError: 'ask'` before the stale-origin
+probe (275/276 and 262/263 passed). Its fixture advertises no Ask view, yet
+invokes the assistant directly. The response has `ask_reply_guard`; focusing
+its answer can activate Ask without creating a view-cache guard. The test's
+control was therefore reading the wrong cache. It now uses the completed
+reply's guard, the same one used by `action_pin_chart`, and verifies that it
+is current before the principal change. All later guard and output assertions
+are retained. The corrected 263-case selection passed in 94.00 s.
+This is a test-control correction, not a production timing fix or a diagnosis
+of the earlier Windows marker and worker-cancellation failures. U26 remains
+open, with all failing receipts retained.
+
+Following that control correction, all 26 round 8 removal probes executed
+their complete 263-case selectors without the pin-chart setup failure.
+The restored selector passed **263 in 89.18 s**, and the requested one full
+AUM/FinOps run passed **711 in 267.15 s** (269.77 s wall), under its own lock
+from **00:57:04Z to 01:01:34Z on 2026-09-29** (**06:27:04-06:31:34 IST**).
+The failing pre-correction receipts remain in `.finops-evidence\p71-r8`.
+This supports the test-control correction; it does not establish the cause
+of the older Windows marker or worker-cancellation failures. U26 remains open.
+
+Round 9's restored selector passed **322 cases in 106.32 s**. Its requested
+one full AUM/FinOps run on `125f352` passed **770 cases in 283.15 s**
+(285.94 s wall), under its own lock from **03:43:39Z to 03:48:25Z on
+2026-09-29** (**09:13:39-09:18:25 IST**). All notification and prior
+publication cases were included. No historical failure was reproduced or
+diagnosed by that passing run; U26 remains open. The receipts are in
+`.finops-evidence\p71-r9` and the [round 9 STATUS record](STATUS.md#final-round-9-proof-on-125f352).
+
+Round 10's first expanded publication selector had **358 passed, 3 failed in
+166.58 s**. The request-action case raised `WorkerCancelled`, then `NoMatches`
+during shutdown, and passed in the isolated follow-up; that pass does not
+establish its cause. The people-selector failure was reproducible and traced
+to a new native cached-paint refusal cancelling a newer source read; the native
+adapter correction separates that paint refusal from write/input rejection.
+The notification failure preceded the current-toast assertion; the positive
+control now waits for visible text instead of assuming one pause completes
+mounting. The original receipts remain in the
+[round 10 record](STATUS.md#council-round-10-corrections). U26 stays open.
+Its second expanded selector had **358 passed, 4 failed in 172.79 s**:
+`test_cached_dialog_handoffs_retain_origin_during_deferred_composition`
+(`pin-chart`, `request-form`), the delayed `people-selector` case and
+`test_guarded_deferral_reenters_at_execution_and_keeps_input_usable`.
+Each raised `WorkerCancelled` at startup or after navigation; two also raised `NoMatches` during
+shutdown. The later 48-case runtime control passed, but that pass does not
+diagnose these intermittent cancellations.
+
+The requested one full round 10 run on `70b6919` executed **810 cases:
+806 passed, 4 failed in 360.31 s** (363.59 s wall), under its own lock from
+**2026-09-29 18:22:17Z to 18:28:21Z**. Both `budgets` and `requests` variants
+of `test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies`,
+`test_principal_change_closes_prior_forms_and_clears_state_before_input` and
+`test_approval_paging_and_queue_change_reset_cursor` raised `WorkerCancelled`
+at a worker wait. The first three also raised `NoMatches` during shutdown.
+All 40 new native/diagnostic cases passed. No timeout or assertion was relaxed,
+and no second full run replaced this result. The cause remains unproven; U26
+stays open. Full output, JUnit and the lock receipt are in
+`.finops-evidence\p71-r10-resume`; see the
+[round 10 full-run record](STATUS.md#final-round-10-full-aum-run-on-70b6919).
+
+The 2026-09-30 builder traced the four reported identities' first failure to
+exclusive refresh cancellation, with `NoMatches` occurring during shutdown.
+Round-10 diagnostic message subclasses evade Textual 6.12.0's exact-type
+`prevent()` and disabled-message checks. A direct prevention probe fails
+deterministically, and a single budgets navigation starts two workers and
+cancels the first. This identifies a concrete cause introduced by `f122985`.
+All 12 deterministic regressions failed before the correction; the initial
+16-case corrected selection passed. Loaded RED had 4 failures in 16 completed
+cases before another gate interrupted the harness. Loaded GREEN then passed
+30 complete iterations / 120 executions under four CPU burners with zero
+failures. The final complete AUM invocation passed all 829 cases in 585.16 s,
+including four 60-second gate pauses between tests, with no errors, skips or
+failed-test retries. Its production source matches the loaded proof; see the
+[startup correction](STATUS.md#startup-and-navigation-cancellation-correction-2026-09-30).
+The first complete corrected-source run had 828 passes and one
+`FooterKey-description` setup failure: Textual removes and asynchronously
+remounts footer keys after a binding change, outside worker completion.
+The existing privacy probe now awaits the native after-refresh callback and
+batch lock before accessing the current receiver; all original guard assertions stay.
+An event-held remove/remount gap produced 2 failures and 2 passes before that
+await; all 4 cases passed afterward, without a clock-based readiness allowance.
+It does not establish the cause of the older Windows marker, wizard,
+chargeback or unrecorded failures; U26 remains OPEN.
 
 ### U30 — The company address — CLOSED 2026-09-28
 
@@ -796,7 +981,8 @@ sheet for an administrator who holds a billing role is a roadmap entry, not P68.
 **Measurement.** AUM reads through the Turnstile backend named by the `turnstile-integration`
 named value. The Turnstile App Service answered `/health`, but the authenticated
 `GET /api/v1/auth/me` waited about 30 s for a database connection and returned 500. The
-PostgreSQL Flexible Server `pg-tsclaude-zpk4sh4prbsls` was in state `Stopped`. Its activity log
+PostgreSQL Flexible Server `contoso-e8f7782d` in `contoso-534a5930` was in state
+`Stopped`. These are the synthetic aliases in capture 60. Its activity log
 for the previous 7 days:
 
 | UTC | Operation | Caller |
@@ -807,6 +993,22 @@ for the previous 7 days:
 | 09-24 19:42–19:44 | start | the owner |
 | 09-25 19:05–19:08 | stop | the same application |
 | 09-27 08:15–08:17 | start | P67 session, owner's account |
+| 09-27 19:05:18–19:07:19 | stop | not re-attributed by P71; operation and timestamps read only |
+| 09-27 22:23:22–22:25:35 | start and Ready verification | P71, under the owner's explicit authorization |
+
+P71's read at **2026-09-27 20:13:35Z** found the server `Stopped`. This packet
+has authorization to start that server after measuring the stopped case and
+leave it running for the owner's morning test. That authorization does not
+cover the stopping automation, Turnstile settings or any other resource.
+That authorized start completed with `Ready` verified at **22:25:35Z**. The
+database was left running. P71's stopped terminal read rendered exit 9 and the
+manual command in **4.046 s** after refresh start (**4.725 s** including the
+Textual harness startup). Running Turnstile then returned identity in **4.126 s**
+and status in **8.938 s** from a fresh CLI process. Short credential/metadata
+deadlines can still produce an explicit unverified exit 7 under workstation or
+network load; they do not establish a stopped server. The external automation
+has not been changed.
+The final P71 read at **2026-09-28 00:23:34Z** still reported `Ready`.
 
 The stop token's claims name an application (`idtyp` `app`) issued by a tenant other than the
 subscription's, so the stop comes from an automation outside this

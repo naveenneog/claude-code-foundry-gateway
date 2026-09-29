@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "id": "aum-readiness",
+  "kind": "flow",
+  "title": "AUM: fast facts and bounded readiness",
+  "subtitle": "P71: Native DOM, deferred output and cached facts retain their source. Closed source approvals and payload-free diagnostics bound presentation.",
+  "width": 1280,
+  "height": 900,
+  "outputs": ["docs/images/architecture/aum-readiness.png"],
+  "sources": ["cli/finops/src/claude_finops/backend.py", "cli/finops/src/claude_finops/direct.py", "cli/finops/src/claude_finops/engine.py", "cli/finops/src/claude_finops/feature_engine.py", "cli/finops/src/claude_finops/config.py", "cli/finops/src/claude_finops/progressive.py", "cli/finops/src/claude_finops/dashboard.py", "cli/finops/src/claude_finops/http_backend.py", "cli/finops/src/claude_finops/turnstile.py", "cli/finops/src/claude_finops/readiness.py", "cli/finops/src/claude_finops/windows_process.py", "cli/finops/src/claude_finops/cli.py", "cli/finops/src/claude_finops/screens.py", "cli/finops/src/claude_finops/ui_features.py", "cli/finops/src/claude_finops/aum_service.py", "cli/finops/src/claude_finops/publication_widgets.py", "cli/finops/src/claude_finops/publication_output.py", "scripts/Invoke-ClaudeFinOps.ps1"],
+  "identifiers": {
+    "progress": {"label": "ProgressiveRefresh", "source": "cli/finops/src/claude_finops/progressive.py", "match": "class ProgressiveRefresh:"},
+    "diagnose": {"label": "database_failure", "source": "cli/finops/src/claude_finops/readiness.py", "match": "def database_failure("},
+    "tokens": {"label": "resource_token", "source": "cli/finops/src/claude_finops/config.py", "match": "def resource_token("},
+    "guard": {"label": "guarded_publish", "source": "cli/finops/src/claude_finops/guarded_publication.py", "match": "def guarded_publish("},
+    "sink": {"label": "publication_sink", "source": "cli/finops/src/claude_finops/guarded_publication.py", "match": "def publication_sink("},
+    "defer": {"label": "guarded_deferred", "source": "cli/finops/src/claude_finops/guarded_publication.py", "match": "def guarded_deferred("},
+    "principal": {"label": "PrincipalUI", "source": "cli/finops/src/claude_finops/principal_ui.py", "match": "class PrincipalUI:"},
+    "auth-me": {"label": "/api/v1/auth/me", "source": "cli/finops/src/claude_finops/turnstile.py", "match": "\"whoami\": \"/api/v1/auth/me\""},
+    "bridge": {"label": "Invoke-ClaudeFinOps.ps1", "source": "scripts/Invoke-ClaudeFinOps.ps1", "kind": "file"}
+  },
+  "groups": [
+    {"x": 0, "y": 0, "w": 620, "h": 860, "tone": "blue", "title": "Direct: existing Azure authorization"},
+    {"x": 660, "y": 0, "w": 620, "h": 860, "tone": "purple", "title": "Turnstile: existing server scope"}
+  ],
+  "nodes": [
+    {"id": "direct", "x": 20, "y": 62, "w": 580, "h": 160, "tone": "blue", "title": "One read cycle",
+     "lines": ["[[tokens]]: verified principal/session and one deadline", "One account check; immutable cycle credential generation", "Independent telemetry queries overlap; RBAC label can follow"]},
+    {"id": "sources", "x": 20, "y": 298, "w": 580, "h": 220, "tone": "blue", "title": "Existing sources, unchanged accounting",
+     "lines": ["[[bridge]] lists nonsecret named values once", "Shared catalog, tiers and token/USD converters", "Snapshots and complete aggregates validate their generation", "An obsolete cycle cannot rebind its cached account"]},
+    {"id": "panels", "x": 20, "y": 594, "w": 580, "h": 230, "tone": "teal", "title": "Current data, source by source",
+     "lines": ["[[progress]] uses [[guard]] for results", "[[principal]] clears old state before input", "[[sink]] checks each write; [[defer]] rechecks", "Native DOM, toasts and cached rendering retain origins", "Exit text refuses; diagnostic messages omit payloads"]},
+    {"id": "probe", "x": 680, "y": 62, "w": 580, "h": 160, "tone": "purple", "title": "Authenticated identity is readiness",
+     "lines": ["GET [[auth-me]] with a short timeout", "Azure credential may load concurrently in memory", "A healthy /health alone does not establish database readiness"]},
+    {"id": "diagnose", "x": 680, "y": 298, "w": 580, "h": 220, "tone": "purple", "title": "Timeout or 5xx: read-only ARM diagnosis",
+     "lines": ["[[diagnose]] uses the recorded deployment group", "The integration must match the selected origin and scope", "Exactly one validated PostgreSQL server; observed state only", "No redirects, connection strings or resource writes"]},
+    {"id": "result", "x": 680, "y": 594, "w": 580, "h": 230, "tone": "slate", "title": "An explicit reason, not an automatic action",
+     "lines": ["Stopped: exit 9, server name and manual paid start command", "Unverified, Ready or ambiguous: exit 7 with the limit stated", "401 / 403 remain authentication / scope errors", "The client never starts the database or changes authority"]}
+  ],
+  "edges": [
+    {"from": "direct", "to": "sources", "kind": "data", "points": [[310, 222], [310, 298]]},
+    {"from": "sources", "to": "panels", "kind": "data", "points": [[310, 518], [310, 594]]},
+    {"from": "probe", "to": "diagnose", "kind": "control", "points": [[970, 222], [970, 298]]},
+    {"from": "diagnose", "to": "result", "kind": "data", "points": [[970, 518], [970, 594]]}
+  ],
+  "notice": "Server state is a read-time observation. A single-server group is the recorded U37 deployment assumption, not a verified connection-string association. Token expiry, read snapshots, authorization, ingestion and gateway enforcement are separate facts."
+}

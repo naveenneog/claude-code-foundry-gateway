@@ -1,9 +1,8 @@
 import asyncio
 import json
-from pathlib import Path
 
-from textual.containers import Horizontal
-from textual.widgets import Button, Input, Select, Static, TextArea, DataTable
+from .publication_widgets import Button, Horizontal, Input, Select, Static, TextArea, DataTable
+from .publication_output import profile_path
 
 from .backend import connect
 from .bulk import budget_csv_plan
@@ -16,11 +15,35 @@ from .ledger import ledger_url
 from .preferences import Preferences
 from .screens import DetailScreen
 from .views import TABS
+from .guarded_publication import guarded_publish, published
 
 EXTRA_TABS = [("approvals", "9 Approvals"), ("ask", "a Ask"), ("advanced", "Advanced")]
 
 
 class FeatureUI:
+    def push_cached_form(self, title, fields, operation, *, read_guard=None):
+        try:
+            guard = read_guard if read_guard is not None else self.cached_guard()
+            with guarded_publish(guard):
+                self.push_screen(ActionForm(title, fields, operation, read_guard=guard))
+        except FinOpsError as error:
+            self.publish_notification(self._error_text(error), origin=self.safe_message_guard(), severity="error")
+
+    async def _publish_read(self, operation, publish, *args, **params):
+        with self.engine.backend.read_cycle():
+            guard = self.current_guard()
+            result = await asyncio.to_thread(operation, *args, **params)
+            with guarded_publish(guard):
+                return publish(result, guard)
+
+    async def _show_read_detail(self, title, resource, *, field=None, **params):
+        try:
+            await self._publish_read(self.engine.read, lambda result, guard: self.push_screen(
+                DetailScreen(title, result.get(field, []) if field else result, read_guard=guard)),
+                resource, **params)
+        except FinOpsError as error:
+            self.publish_notification(self._error_text(error), origin=self.safe_message_guard(), severity="error")
+
     def action_refresh_usage(self):
         if self.editable and self.engine.backend.name == "Turnstile":
             from datetime import datetime, timezone, timedelta
@@ -62,6 +85,7 @@ class FeatureUI:
         self.preferences = None
         self.first_run = first_run
         self.ask_reply = None
+        self.ask_reply_guard = None
         self.ask_history = []
         self.ask_conversation = None
         self.approvals_view = "mine"
@@ -80,7 +104,8 @@ class FeatureUI:
         if self.engine.backend.name == "Direct":
             self.usage_basis = "ledger"
             self.dimension = "department"
-            self.query_one("#dimension", Select).value = "department"
+            with guarded_publish(self.safe_message_guard()):
+                self.query_one("#dimension", Select).value = "department"
             self.action_tab("usage")
             self.action_refresh()
 
@@ -89,6 +114,7 @@ class FeatureUI:
         self.action_tab("usage")
         self.action_refresh()
 
+    @published(lambda self, tab: self.safe_message_guard())
     def compose_feature(self, tab):
         if tab == "ask":
             with Horizontal(classes="toolbar"):
@@ -109,7 +135,14 @@ class FeatureUI:
                 yield Button("Open", id="advanced-load")
 
     async def refresh_features(self):
-        self.feature_caps = await asyncio.to_thread(self.engine.capabilities, refresh=self.config.backend in {"direct", "aum-service"})
+        guard = self.current_guard()
+        features = await asyncio.to_thread(self.engine.capabilities, refresh=self.config.backend in {"direct", "aum-service"})
+        with guarded_publish(guard):
+            self._apply_features(features)
+
+    @published(lambda self, features: self.current_guard())
+    def _apply_features(self, features):
+        self.feature_caps = features
         supported = self.feature_caps.get("features", {}).get("supported_views")
         if supported:
             self.allowed_tabs &= set(supported["actions"]) | {key for key, _ in EXTRA_TABS}
@@ -183,6 +216,7 @@ class FeatureUI:
             self.people_cursor = cursor
         self.action_refresh()
 
+    @published(lambda self: self.safe_message_guard())
     def update_filter_chips(self):
         if not self.query("#filter-chips"):
             return
@@ -205,6 +239,7 @@ class FeatureUI:
         self.feature_cursor_stack = []
         self.reset_people_page()
 
+    @published(lambda self: self.safe_message_guard())
     def clear_query_context(self):
         self.reset_paging()
         self.scope_filters = {}
@@ -216,6 +251,7 @@ class FeatureUI:
         self.breadcrumbs = []
         self.ask_history = []
         self.ask_reply = self.ask_conversation = None
+        self.ask_reply_guard = None
         for selector in ("#request-model", "#request-before", "#people-query", "#ask-question"):
             self.query_one(selector, Input).value = ""
         self.query_one("#ask-answer", TextArea).load_text("Ask about the current authorized scope.")
@@ -234,7 +270,7 @@ class FeatureUI:
     def action_load_view(self):
         views = self.preferences.views()
         if not views:
-            self.notify("No saved views yet. Choose Save current view from the command palette.")
+            self.publish_notification("No saved views yet. Choose Save current view from the command palette.", origin=self.current_guard())
             return
         def run(values, apply):
             view = views[values["name"]]
@@ -244,7 +280,8 @@ class FeatureUI:
         self.push_screen(ActionForm("Open saved view", [("name", "View", next(iter(views)),
                                 [(name, name) for name in views])], run, mutation=False))
 
-    def restore_view(self, view):
+    @published(lambda self, view, *, read_guard: read_guard)
+    def restore_view(self, view, *, read_guard):
         self.engine.month = view.get("month", self.engine.month)
         self.scope_filters = view.get("filters", {})
         self.dimension = view.get("dimension", self.dimension)
@@ -287,11 +324,11 @@ class FeatureUI:
         def run(values, apply):
             allowance = int(values["allowance"]) if values["allowance"] else None
             return self.engine.mode_change(values["kind"], values["scope"], values["mode"], allowance, apply=apply)
-        self.push_screen(ActionForm("Set enforcement mode", [
+        self.push_cached_form("Set enforcement mode", [
             ("kind", "Scope kind", kind, [("unit", "Unit"), ("team", "Team")]),
             ("scope", "Stable scope id", key, None),
             ("mode", "Mode", "strict", [(m, m.title()) for m in ("strict", "allowance", "notify")]),
-            ("allowance", "Allowance percent (only allowance)", "", None)], run))
+            ("allowance", "Allowance percent (only allowance)", "", None)], run)
 
     def action_bulk(self):
         if not enabled(self.feature_caps, "bulk_budget", "write") or self.redactor.enabled:
@@ -299,55 +336,59 @@ class FeatureUI:
         self.push_screen(ActionForm("Import person budgets from CSV", [("file", "CSV: team, person, tokens, warning", "", None)],
             lambda values, apply: budget_csv_plan(self.engine, values["file"], apply=apply)))
 
-    def action_request_budget(self, amount="", row=None):
+    def action_request_budget(self, amount="", row=None, *, read_guard=None):
         if not enabled(self.feature_caps, "approvals", "request"):
             return
         row = row or (self.selected() if self.active in {"budgets", "people"} else {})
         kind = {"organization": "unit", "department": "team", "user": "person"}.get(row.get("scope_type"), "team")
-        self.push_screen(ActionForm("Request budget from the parent approver", [
+        self.push_cached_form("Request budget from the parent approver", [
             ("kind", "Scope", kind, [(k, k.title()) for k in ("unit", "team", "person")]),
             ("scope", "Scope id", row.get("scope_id", ""), None),
             ("amount", "Requested monthly tokens", amount, None),
             ("reason", "Reason", "", None)],
             lambda values, apply: self.engine.request_budget(values["kind"], values["scope"], values["amount"],
-                                                              values["reason"], apply=apply)))
+                                                              values["reason"], apply=apply), read_guard=read_guard)
 
     def action_decide(self, decision):
         if not enabled(self.feature_caps, "approvals", decision):
             return
         key = self.selected().get("id", "")
-        self.push_screen(ActionForm(decision.title() + " request", [
+        self.push_cached_form(decision.title() + " request", [
             ("request", "Request id", key, None), ("reason", "Reason", "", None)],
-            lambda values, apply: self.engine.decide_request(values["request"], decision, values["reason"], apply=apply)))
+            lambda values, apply: self.engine.decide_request(values["request"], decision, values["reason"], apply=apply))
 
     def action_boost(self):
         if not enabled(self.feature_caps, "boosts", "create"):
             return
         row = self.selected() if self.active == "people" else {}
-        self.push_screen(ActionForm("Temporary person boost", [
+        self.push_cached_form("Temporary person boost", [
             ("person", "Person id", row.get("scope_id", ""), None),
             ("team", "Team", self.team, None), ("amount", "Additional tokens", "", None),
             ("window", "Budget window", "daily" if self.engine.backend.person_budget_period == "day" else "monthly",
              [("daily", "Daily")] if self.engine.backend.person_budget_period == "day" else [("daily", "Daily"), ("monthly", "Monthly")]),
             ("until", "Expires at (UTC ISO date/time)", "", None), ("reason", "Reason", "", None)],
             lambda values, apply: self.engine.boost(values["person"], values["team"], values["amount"],
-                                                     values["until"], values["reason"], window=values["window"], apply=apply)))
+                                                     values["until"], values["reason"], window=values["window"], apply=apply))
 
     def action_disposition(self, status):
         action = "acknowledge" if status == "acknowledged" else "false_positive"
         if not enabled(self.feature_caps, "anomaly_dispositions", action):
             return
-        self.push_screen(ActionForm("Set anomaly disposition", [
+        self.push_cached_form("Set anomaly disposition", [
             ("id", "Finding id", self.selected().get("id", ""), None), ("reason", "Reason", "", None)],
-            lambda values, apply: self.engine.disposition(values["id"], status, values["reason"], apply=apply)))
+            lambda values, apply: self.engine.disposition(values["id"], status, values["reason"], apply=apply))
 
     def action_copy_request(self):
         if self.active != "requests" or self.redactor.enabled:
             return
         key = self.selected().get("request_id")
         if key:
-            self.copy_to_clipboard(key)
-            self.notify("Copied request id using the terminal clipboard protocol.")
+            try:
+                with guarded_publish(self.cached_guard("requests")):
+                    self.copy_to_clipboard(key)
+                    self.publish_notification("Copied request id using the terminal clipboard protocol.", origin=self.cached_guard("requests"))
+            except FinOpsError as error:
+                self.publish_notification(self._error_text(error), origin=self.safe_message_guard(), severity="error")
 
     def action_open_ledger(self):
         if self.active != "requests" or self.redactor.enabled:
@@ -355,18 +396,19 @@ class FeatureUI:
         key = self.selected().get("request_id")
         if key:
             try:
-                self.open_url(ledger_url(self.config.workspace_resource_id, self.config.tenant_id, key, self.engine.month))
+                with guarded_publish(self.cached_guard("requests")):
+                    self.open_url(ledger_url(self.config.workspace_resource_id, self.config.tenant_id, key, self.engine.month))
             except FinOpsError as error:
-                self.notify(str(error), severity="error")
+                self.publish_notification(str(error), origin=self.safe_message_guard(), severity="error")
 
     def action_profile(self):
         def run(values, apply):
-            config = load_config(Path(values["path"]), backend=values["backend"] or None)
+            config = load_config(values["path"], backend=values["backend"] or None)
             if apply:
                 return dict(ui_action="profile", config=config)
             return dict(preview=not apply, action="Switch profile/backend", after=config.public())
         self.push_screen(ActionForm("Switch profile or backend", [
-            ("path", "Profile JSON path", str(Path.home() / ".aum" / "config.json"), None),
+            ("path", "Profile JSON path", profile_path(), None),
             ("backend", "Backend", self.config.backend, [(b, b.title()) for b in ("direct", "aum-service", "turnstile", "fake")])],
             run, mutation=False))
 
@@ -379,13 +421,15 @@ class FeatureUI:
         except (FinOpsError, OSError, ValueError) as error:
             if backend is not None:
                 backend.close()
-            self.notify(self.redactor.text(str(error)), severity="error")
+            self.publish_notification(self._error_text(error), origin=self.safe_message_guard(), severity="error")
             return
         self.engine.backend.close()
-        self.engine, self.config = engine, config
+        self._bind_engine(engine)
+        self.config = config
         self.identity = {}
         self.preferences = None
         self.data.clear()
+        self._data_guards.clear()
         self.records.clear()
         self.clear_query_context()
         if len(self.screen_stack) > 1:
@@ -406,15 +450,19 @@ class FeatureUI:
         self.push_screen(ActionForm("Sign out of Azure CLI", [("confirm", "Type sign out (affects other CLI tools)", "", None)], run))
 
     async def ask_current(self):
-        if self.preview_only or self.redactor.enabled:
-            self.query_one("#ask-answer", TextArea).load_text(
-                "Preview/read-only mode: the question was not sent. Asking can incur model cost and store a conversation.")
-            return
         question = self.query_one("#ask-question", Input).value
-        self.query_one("#ask-answer", TextArea).load_text("Asking the server. No chart data is generated by the client...")
-        try:
-            reply = await asyncio.to_thread(self.engine.ask, question, self.ask_conversation, self.ask_history)
+        self._synchronize_principal()
+        if self.preview_only or self.redactor.enabled:
+            with guarded_publish(self.safe_message_guard()):
+                self.query_one("#ask-answer", TextArea).load_text(
+                    "Preview/read-only mode: the question was not sent. Asking can incur model cost and store a conversation.")
+            return
+        with guarded_publish(self.safe_message_guard()):
+            self.query_one("#ask-answer", TextArea).load_text("Asking the server. No chart data is generated by the client...")
+        @published(lambda reply, guard: guard)
+        def publish(reply, guard):
             self.ask_reply = dict(reply, question=question)
+            self.ask_reply_guard = guard
             self.ask_conversation = reply["conversation_id"]
             self.ask_history = (self.ask_history + [{"role": "user", "content": question},
                                {"role": "assistant", "content": reply["message"]}])[-20:]
@@ -422,25 +470,46 @@ class FeatureUI:
             text = shown["message"] + "\n\n" + "\n\n".join(json.dumps(c, indent=2, ensure_ascii=True) for c in shown.get("charts", []))
             self.query_one("#ask-answer", TextArea).load_text(text)
             self.query_one("#ask-answer", TextArea).focus()
+        try:
+            with self.engine.backend.read_cycle():
+                await asyncio.to_thread(self.engine.read, "whoami")
+                self._synchronize_principal()
+                origin = self.ask_reply_guard or self.current_guard()
+                with guarded_publish(origin):
+                    conversation, history = self.ask_conversation, list(self.ask_history)
+                await self._publish_read(self.engine.ask, publish, question, conversation, history)
         except FinOpsError as error:
-            self.query_one("#ask-answer", TextArea).load_text(str(error))
+            self.ask_reply = self.ask_conversation = None
+            self.ask_reply_guard = None
+            self.ask_history = []
+            with guarded_publish(self.safe_message_guard()):
+                self.query_one("#ask-answer", TextArea).load_text(str(error))
 
     def action_pin_chart(self):
         if not self.ask_reply or not self.ask_reply.get("charts"):
-            self.notify("Ask a question that returns a chart first.")
+            self.publish_notification("Ask a question that returns a chart first.", origin=self.safe_message_guard())
             return
-        charts = self.ask_reply["charts"]
-        self.push_screen(ActionForm("Pin server-authored chart", [
-            ("chart", "Chart", charts[0]["id"], [(c["id"], self.redactor.text(c["title"])) for c in charts]),
-            ("title", "Report title", "Usage report", None)],
-            lambda values, apply: self.engine.pin_chart(self.ask_reply, values["chart"], values["title"], apply=apply)))
+        try:
+            if self.ask_reply_guard is None:
+                raise FinOpsError("The cached assistant reply has no verified source. Ask again before pinning.", 3)
+            with guarded_publish(self.ask_reply_guard):
+                reply, guard = self.ask_reply, self.ask_reply_guard
+                charts = reply["charts"]
+                self.push_screen(ActionForm("Pin server-authored chart", [
+                    ("chart", "Chart", charts[0]["id"], [(c["id"], self.redactor.text(c["title"])) for c in charts]),
+                    ("title", "Report title", "Usage report", None)],
+                    lambda values, apply: self.engine.pin_chart(reply, values["chart"], values["title"], apply=apply),
+                    read_guard=guard))
+        except FinOpsError as error:
+            self.publish_notification(self._error_text(error), origin=self.safe_message_guard(), severity="error")
 
     async def load_feature_tab(self, tab):
         if tab == "ask":
             settings = await asyncio.to_thread(self.engine.read, "assistant_settings")
-            if not settings.get("model_available"):
-                self.query_one("#ask-answer", TextArea).load_text(
-                    "The assistant API exists, but no model is available. An Owner can choose an advertised model.")
+            with guarded_publish(self.current_guard()):
+                if not settings.get("model_available"):
+                    self.query_one("#ask-answer", TextArea).load_text(
+                        "The assistant API exists, but no model is available. An Owner can choose an advertised model.")
             return {"items": [{"setting": key, "value": value} for key, value in settings.items()], "note": "Server model, tools and cost; no client-invented chart rows."}
         if tab == "approvals":
             resource = "notifications" if self.approvals_view == "notifications" else "approval_requests"
@@ -492,6 +561,7 @@ class FeatureUI:
             self.feature_cursor = cursor
         self.action_refresh()
 
+    @published(lambda self, view: self.current_guard())
     def action_advanced(self, view):
         if enabled(self.feature_caps, "advanced"):
             self.advanced_view = view
@@ -499,22 +569,12 @@ class FeatureUI:
             self.action_tab("advanced")
 
     def action_assistant_history(self):
-        async def load():
-            try:
-                data = await asyncio.to_thread(self.engine.read, "conversations")
-                self.push_screen(DetailScreen("Assistant conversations", data))
-            except FinOpsError as error:
-                self.notify(str(error), severity="error")
-        self.run_worker(load(), group="history", exclusive=True)
+        self.run_worker(self._show_read_detail("Assistant conversations", "conversations"),
+                        group="history", exclusive=True)
 
     def action_assistant_pins(self):
-        async def load():
-            try:
-                data = await asyncio.to_thread(self.engine.read, "pinned_charts")
-                self.push_screen(DetailScreen("Pinned reports", data))
-            except FinOpsError as error:
-                self.notify(str(error), severity="error")
-        self.run_worker(load(), group="pins", exclusive=True)
+        self.run_worker(self._show_read_detail("Pinned reports", "pinned_charts"),
+                        group="pins", exclusive=True)
 
     def action_overview_rank(self, dimension):
         self.ranking_dimension = dimension
@@ -531,35 +591,31 @@ class FeatureUI:
         if not enabled(self.feature_caps, "notifications", "mark_read"):
             return
         key = self.selected().get("id", "") if self.active == "approvals" else ""
-        self.push_screen(ActionForm("Mark notification read", [("id", "Notification id", key, None)],
-            lambda values, apply: self.engine.mark_notification(values["id"], apply=apply)))
+        self.push_cached_form("Mark notification read", [("id", "Notification id", key, None)],
+            lambda values, apply: self.engine.mark_notification(values["id"], apply=apply))
 
     def action_show_boosts(self):
-        async def load():
-            try:
-                data = await asyncio.to_thread(self.engine.read, "boosts", limit=50)
-                self.push_screen(DetailScreen("Active and expired boosts", data))
-            except FinOpsError as error:
-                self.notify(str(error), severity="error")
-        self.run_worker(load(), group="boosts", exclusive=True)
+        self.run_worker(self._show_read_detail("Active and expired boosts", "boosts", limit=50),
+                        group="boosts", exclusive=True)
 
     def action_assistant_configure(self):
         if not self.editable:
             return
+        def publish(settings, guard):
+            choices = [("", "Automatic selection")] + [
+                (row["id"], f"{row['display_name']} (input {row.get('input_cost_per_million')}/M, output {row.get('output_cost_per_million')}/M)")
+                for row in settings.get("available_models", [])]
+            def operation(values, apply):
+                return self.engine.configure_assistant(values["model"], values["title"] == "yes", apply=apply)
+            self.push_screen(ActionForm("Assistant model and cost", [
+                ("model", "Model", settings.get("model_id") or "", choices),
+                ("title", "Auto-title conversations", "yes" if settings.get("auto_title") else "no",
+                 [("yes", "Yes"), ("no", "No")])], operation, read_guard=guard))
         async def load():
             try:
-                settings = await asyncio.to_thread(self.engine.read, "assistant_settings")
-                choices = [("", "Automatic selection")] + [
-                    (row["id"], f"{row['display_name']} (input {row.get('input_cost_per_million')}/M, output {row.get('output_cost_per_million')}/M)")
-                    for row in settings.get("available_models", [])]
-                def operation(values, apply):
-                    return self.engine.configure_assistant(values["model"], values["title"] == "yes", apply=apply)
-                self.push_screen(ActionForm("Assistant model and cost", [
-                    ("model", "Model", settings.get("model_id") or "", choices),
-                    ("title", "Auto-title conversations", "yes" if settings.get("auto_title") else "no",
-                     [("yes", "Yes"), ("no", "No")])], operation))
+                await self._publish_read(self.engine.read, publish, "assistant_settings")
             except FinOpsError as error:
-                self.notify(str(error), severity="error")
+                self.publish_notification(str(error), origin=self.safe_message_guard(), severity="error")
         self.run_worker(load(), group="assistant-settings", exclusive=True)
 
     def action_report_generate(self):
@@ -577,30 +633,27 @@ class FeatureUI:
                 formats=values["formats"], month_to_date=values["mtd"] == "yes", apply=apply)))
 
     def action_notifications(self):
-        async def load():
-            try:
-                records = await asyncio.to_thread(self.engine.read, "notifications", limit=50)
-                self.push_screen(DetailScreen("Your notifications", records))
-            except FinOpsError as error:
-                self.notify(str(error), severity="error")
-        self.run_worker(load(), group="notifications", exclusive=True)
+        self.run_worker(self._show_read_detail("Your notifications", "notifications", limit=50),
+                        group="notifications", exclusive=True)
 
     def action_membership(self):
         if self.active != "people" or self.redactor.enabled:
             return
+        @published(lambda link, guard: guard)
+        def publish(link, guard):
+            self.open_url(link)
+            self.publish_notification("Move members in Entra with existing group-owner rights, then refresh the gateway projection.", origin=guard)
         async def load():
             try:
-                link = await asyncio.to_thread(self.engine.membership_url, self.team)
-                self.open_url(link)
-                self.notify("Move members in Entra with existing group-owner rights, then refresh the gateway projection.")
+                await self._publish_read(self.engine.membership_url, publish, self.team)
             except FinOpsError as error:
-                self.notify(str(error), severity="error")
+                self.publish_notification(str(error), origin=self.safe_message_guard(), severity="error")
         self.run_worker(load(), group="membership", exclusive=True)
 
     def action_remove_view(self):
         views = self.preferences.views()
         if not views:
-            self.notify("There are no saved views for this identity/profile.")
+            self.publish_notification("There are no saved views for this identity/profile.", origin=self.current_guard())
             return
         def operation(values, apply):
             if apply:
@@ -610,14 +663,7 @@ class FeatureUI:
             [(name, name) for name in views])], operation, mutation=False))
 
     def action_budget_history(self):
-        async def load():
-            try:
-                if enabled(self.feature_caps, "audit_read"):
-                    result = await asyncio.to_thread(self.engine.read, "audit", limit=50)
-                    self.push_screen(DetailScreen("AUM service audit history", result))
-                else:
-                    result = await asyncio.to_thread(self.engine.read, "budgets")
-                    self.push_screen(DetailScreen("Budget audit history", result.get("history", [])))
-            except FinOpsError as error:
-                self.notify(str(error), severity="error")
-        self.run_worker(load(), group="budget-history", exclusive=True)
+        load = (self._show_read_detail("AUM service audit history", "audit", limit=50)
+                if enabled(self.feature_caps, "audit_read") else
+                self._show_read_detail("Budget audit history", "budgets", field="history"))
+        self.run_worker(load, group="budget-history", exclusive=True)
