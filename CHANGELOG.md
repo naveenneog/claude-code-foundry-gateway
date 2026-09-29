@@ -33,7 +33,10 @@ exact streaming cache-creation detail remains **U13**.
   confirmed quit and the Cloud Shell launcher retain P71's closed publication
   contract. Reviewed lifecycle interfaces have current/expired-origin,
   native-log and scratch-mutation controls; protected output boundaries,
-  existing rules and test budgets are unchanged.
+  existing rules and test budgets are unchanged. One integrated full-suite
+  measurement refreshes all 75 file weights; four planned shards remain
+  within 252 s each. Runtime publication/paging failures are recorded
+  separately rather than described as a passing suite.
 - **P85 packet gate 1: the AUM check runs in four shards.** The AUM pytest
   suite (871 tests, 860 s serially) exceeded Test-All's 600 s per-check
   timeout. Test-All now registers four checks, each running a longest-first

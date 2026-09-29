@@ -162,6 +162,71 @@ SVG/grid captures and their provenance manifest are regenerated; historical
 live captures are untouched. Evidence is under `%TEMP%\p85-int-*`, including
 the targeted XML/log and `p85-int-mutation-evidence\summary.json`.
 
+#### Single full serial run and shard plan
+
+The completed merge is **`ac333921feb2e7e543c3d38929b8ee57a4cd63cd`**,
+with parents `729a2492f46a1f47708d4395c8518236ff2bb36c` and
+`a405f69e1369295e4e3e4713a5432a484407a48e`. It includes the resolutions,
+reviewed approvals, counterexamples, ledgers and regenerated artifacts.
+Both required trailers are present. This is a merge into P85, not main.
+
+From that clean tree, the full AUM suite ran **once**, serially, from
+`cli\finops` using this worktree's `.venv-finops\Scripts\python.exe`:
+`python -m pytest tests -q -p no:cacheprovider --junitxml <TEMP report>`.
+The `p85-integration` lock interval was **02:51:41-03:07:46 IST on
+2026-09-30**. Result: **1,174 passed, 2 failed, 0 errors, 0 skips
+(1,176 cases), 961.82 s**. All **269 P85 cases passed**.
+The full suite was not repeated. Its complete log, XML and classification
+are `%TEMP%\p85-int-full-aum.log`, `p85-int-full-aum.xml` and
+`p85-int-full-summary.json`.
+
+| Lead-listed flaky IDs | Result in the single full run |
+|---|---|
+| `test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies[budgets]` and `[requests]` | Both PASS. |
+| `test_principal_change_closes_prior_forms_and_clears_state_before_input` | PASS. |
+| `test_assistant_context_is_cleared_before_b_request` | PASS. |
+| `test_native_chrome_content_requires_publication[FooterKey-key_display]` | PASS. |
+| `test_revision4_tui.py::test_approval_paging_and_queue_change_reset_cursor` | FAIL: `WorkerCancelled`; no repair or test relaxation in P85. |
+
+The **additional full-run failure**, outside that list, was
+`test_publication_generation.py::test_cached_request_actions_recheck_the_origin_not_an_empty_cycle[action_open_ledger]`.
+It raised `WorkerCancelled` at line **486**, during the Requests navigation
+settle, before exercising the cached action or changing principal. The test
+and ledger action are unchanged from P80. One bounded, unchanged follow-up
+of the two failing IDs yielded **1 passed, 1 failed in 5.21 s**: the cached
+ledger case passed, while the known paging case still cancelled.
+Neither this observation nor the earlier 3/3 run substitutes for a passing
+full suite or a clean aggregate publication run. These runtime failures
+remain for the lead/P71 builder; the publication contract is not weakened.
+
+`Update-FinOpsDurations.ps1` refreshed all **75** file weights from that
+single XML (all **1,176** cases, **959.3 s** summed case time, rounded up
+per file). The generator labels the UTC report date, 2026-09-29; this ledger
+uses IST. Four planned loads are **252, 252, 252 and 251 s**, owning
+**16, 19, 21 and 19** files. No load exceeds **300 s**, so the four Test-All
+registrations and four runner-integrity skip names remain; no fifth shard
+or timeout increase is needed. The whole-check timing table and shard guide
+now reflect that plan. `Test-FinOpsShards.ps1` passed **37/37** assertions.
+
+Final required checks on the refreshed plan: `Test-RunnerIntegrity.ps1`
+passed **68/68** assertions under the shared lock (03:13:29-03:16:11 IST);
+`Test-DocReferences.ps1` passed **34/34** assertions across **42 guides**,
+including its mutation controls; `Repair-ScriptEncoding.ps1 -Check` passed
+for **301 scripts**. The standalone architecture check still passes, and
+an exact comparison confirms both timing tables agree on all four <=300 s
+loads. Logs are `%TEMP%\p85-int-runner-integrity.log`,
+`p85-int-doc-references.log`, `p85-int-encoding.log` and
+`p85-int-architecture-final.log`.
+
+The follow-up evidence/timing commit changes no production or pytest source
+after the single full run. Builder work is recorded, but **the runtime suite
+is not green**: P71's known paging cancellation and the separately reported
+publication navigation cancellations still need lead/P71 resolution.
+The new integration council and packet gate remain lead-owned; they were
+not claimed or substituted by these focused checks. No push, merge to main,
+history rewrite, Azure call or other-worktree modification was performed.
+U61's owner-only live Cloud Shell/persistence verification remains open.
+
 ### Council round 3, packet gate 1 and the sharded AUM check
 
 Council round 3 passed all five seats at `329e459` on 2026-09-29. The lead's
