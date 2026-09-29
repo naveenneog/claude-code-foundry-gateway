@@ -83,6 +83,41 @@ fingerprint needs renewal. No new import, raw notification or superclass
 call is introduced beyond the previously recorded integration work.
 Details: `$env:TEMP\p85-p71-r2-delta.json`.
 
+Final round-2 builder verification at `64497e3`: the full AUM selector ran
+**once**, under one owned lock, and passed **871 tests in 841.98 s**
+(**843.956 s wall time**), with **zero failures, errors or skips**.
+The interpreter import resolved inside this worktree and the lock was
+released in the same command's `finally`.
+
+| Affected standard selector | Passing cases | Summed JUnit case seconds |
+|---|---:|---:|
+| Quit/mutation/sign-out lifecycle | 18 | 36.492 |
+| Real pip, aliases and process environment boundaries | 23 | 91.437 |
+| Original launcher controls | 28 | 48.191 |
+
+These are case totals inside the full run, not separate elapsed measurements.
+All 11 changed/new guard probes and their exact restoration passed as recorded
+above. The full suite also retains the prior plan-binding, deferral and
+principal/publication controls.
+
+P71 advanced during verification to `f122985`. A final read-only comparison
+against that contract found the same narrow round-2 additions: completed
+sign-out state and future/status operations in the completion callback, plus
+the constructor context fingerprint. The earlier round-1 integration list
+still applies. No P71 source or detector was edited. Updated evidence:
+`$env:TEMP\p85-p71-r2-final-delta.json`.
+
+Builder corrections are complete; the recorded round-2 verdicts remain
+unchanged and round 3 belongs to the lead. U60 is closed for the measured
+completion correction. U61 remains open only for the previously requested
+owner-side live Cloud Shell/network/persistence check. No Azure write,
+resource creation, live Cloud Shell claim, merge or push occurred.
+
+Commits: `f6f4a52` contract, `13425aa` owned completion, `1a0b7aa` installer
+allowlist/isolation, and `64497e3` probes/provenance. Final evidence:
+`$env:TEMP\p85-r2-full-aum.xml`, `$env:TEMP\p85-r2-full-aum.log` and
+`$env:TEMP\p85-r2-final-summary.json`.
+
 ### Council round 1 corrections
 
 The lead reviewed `f33eb0c` on 2026-09-29. Architect PASS; Coder, QA, UX and
