@@ -3,7 +3,7 @@
   "backend": "Example",
   "live": false,
   "hash_format": "utf8-lf-sha256",
-  "captured_at_utc": "2026-09-29T14:06:07.730137+00:00",
+  "captured_at_utc": "2026-09-29T16:36:15.741048+00:00",
   "sizes": [
     [
       80,
@@ -43,7 +43,7 @@
     "cli/finops/src/claude_finops/fake_features.py": "720b076848c504d28d59aaf5e6104eab41caa1e2371e859e4490963de34331be",
     "cli/finops/src/claude_finops/feature_engine.py": "ed3cabfa8efb02f17aae5a54791da09e7f88ed2b0b3a168afdca245bb49933ca",
     "cli/finops/src/claude_finops/feature_routes.py": "c63546e7a687b407547ad093d67f2f97d1624ad6537c8ff417d0076175ef8421",
-    "cli/finops/src/claude_finops/feature_screens.py": "19b2c58e14990a3d1c0d00a5fcbd7d241e40528d877f74432231171de47ddce3",
+    "cli/finops/src/claude_finops/feature_screens.py": "b4619b6c80173a5ec4e29082e780b66d9909867f303edf248f845d15f346bc72",
     "cli/finops/src/claude_finops/feature_views.py": "795dbca04cbeff692c44d105ad420ec3675826a2a70263c3c9e94e7c9e12d206",
     "cli/finops/src/claude_finops/gateway_probe.py": "5c8612ace85525c0dd2b76f2fc50f75f7cc1b64508359432cb3120087d84d805",
     "cli/finops/src/claude_finops/group_actions.py": "93fc92354528c6c430a0754362970069752257c3df27b8f37e448cbe5e496cd7",
@@ -71,7 +71,7 @@
     "cli/finops/src/claude_finops/service_models.py": "45a916f3d626b5937c3eed95ade666e1efb59e9aa03d678c520e23aa8be110aa",
     "cli/finops/src/claude_finops/service_writes.py": "fe3e703b2738f80289d6a5831b5383f11cc7c037f2157ff69b67df45facbc5b9",
     "cli/finops/src/claude_finops/terminal.tcss": "69cacb0f2f98abdcf0e6fc023e020df02f1ea98d0896a12d0a40d9b4eea3b58e",
-    "cli/finops/src/claude_finops/tui.py": "8215dc42d3cfa37965616b7b7b422aba4904a9346953298cb40287b6f8fb1e6a",
+    "cli/finops/src/claude_finops/tui.py": "83b5ef7a4766f97152cf9639cfd5297ec0e1f2ec3c14f6325eac6b3522751d6b",
     "cli/finops/src/claude_finops/turnstile.py": "17175ec955fdbd537d12ea883ae66574812f73f4e9b107e533aef0e78f8a0dc9",
     "cli/finops/src/claude_finops/ui_features.py": "cfd418e6f0f291e57b231b8b6311ee6de144c6bd7e7be1639d75143c55bd1767",
     "cli/finops/src/claude_finops/usage_refresh.py": "ef417762ce628010cb3932ed8f6c526bb7e6022c76bdb7cefe6a1b6dce982aa5",

@@ -57,6 +57,32 @@ receives the original Azure session context. Test-only controls now live in
 fixture files, not production environment exceptions. ADR-0041 records why
 this closes the alias class instead of extending a denylist.
 
+Mutation GREEN: the **11 changed/new round-two probes were all caught in
+118.219 s**, including baselines and restoration. Every mutant kept the
+same test identities and produced failures, with no errors/skips; the
+restored **9-case union passed in 27.625 s**. Probes cover owned completion,
+registry release, successful intent behind another mutation, failed
+sign-out, stale progress, pip/uv child environments, real malformed pip
+logging, isolated mode and the explicit cache argument. The standard
+runner retains all 44 probes; `--round-two` selects this changed set.
+Earlier denylist-target probes were updated to the effective allowlist
+boundary, not removed or treated as caught when redundant defenses held.
+Receipt: `$env:TEMP\p85-r2-mutations\receipt.json`.
+
+The existing capture-source test failed on the changed form hash (0.89 s),
+so the existing Example capture tool refreshed provenance. No SVG or PNG
+bytes changed. Ten capture/guide/restoration checks passed in **19.07 s**;
+architecture passed 36 assertions in **35.844 s wall time**; references passed
+for 42 guides with all ten negatives caught in **9.265 s wall time**.
+There is no new Azure component, writer or network path.
+
+The read-only P71 comparison still targets `860abc9`. Round 2 adds the
+successful-sign-out state and completion-handler uses of the existing
+future/status operations; the constructor's exact forwarding/context
+fingerprint needs renewal. No new import, raw notification or superclass
+call is introduced beyond the previously recorded integration work.
+Details: `$env:TEMP\p85-p71-r2-delta.json`.
+
 ### Council round 1 corrections
 
 The lead reviewed `f33eb0c` on 2026-09-29. Architect PASS; Coder, QA, UX and

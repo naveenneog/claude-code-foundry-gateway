@@ -21,7 +21,8 @@ def test_installer_child_environment_is_allowlisted_but_aum_keeps_azure_context(
     home, _, tools, _ = layout
     for filename in (tool, "aum-template"):
         path = tools / filename
-        capture = f'env -0 > "$HOME/{filename}-environment"\n'
+        tag = "uv-template-${2}" if filename == "uv-template" else filename
+        capture = f'env -0 > "$HOME/{tag}-environment"\n'
         path.write_text(path.read_text(encoding="utf-8").replace("set -eu\n", "set -eu\n" + capture, 1),
                         encoding="utf-8", newline="\n")
     azure = shell_path(home / "azure-session")
@@ -34,13 +35,16 @@ def test_installer_child_environment_is_allowlisted_but_aum_keeps_azure_context(
     def environment(filename):
         return dict(record.decode().split("=", 1) for record in (home / filename).read_bytes().split(b"\0") if record)
 
-    child = environment(f"{tool}-environment")
-    for name in (*aliases, "AZURE_CONFIG_DIR"):
-        assert name not in child
-    assert child["HOME"] == shell_path(home)
-    assert child["PIP_CONFIG_FILE"] == "/dev/null"
-    assert child["HTTPS_PROXY"] == "http://proxy.contoso.test:3128"
-    assert child["PIP_CACHE_DIR"].startswith(shell_path(home) + "/")
+    names = ["uv-template-venv-environment", "uv-template-pip-environment"] if tool == "uv-template" else [
+        "python3-environment"]
+    for name in names:
+        child = environment(name)
+        for key in (*aliases, "AZURE_CONFIG_DIR"):
+            assert key not in child
+        assert child["HOME"] == shell_path(home)
+        assert child["PIP_CONFIG_FILE"] == "/dev/null"
+        assert child["HTTPS_PROXY"] == "http://proxy.contoso.test:3128"
+        assert child["PIP_CACHE_DIR"].startswith(shell_path(home) + "/")
     assert environment("aum-template-environment")["AZURE_CONFIG_DIR"] == azure
 
 

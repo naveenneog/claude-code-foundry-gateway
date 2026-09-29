@@ -100,12 +100,15 @@ PROBES = [
           '*) fail "Refusing a destination outside HOME: $path" ;;', "*) : ;;",
           "test_p85_cloudshell.py", "test_cloudshell_refuses_escaping_destination_links_before_writing"),
     Probe("cloudshell-python-pip-environment", "aum-cloudshell.sh",
-          "unset PYTHONHOME PYTHONPATH VIRTUAL_ENV", ":",
-          "test_p85_cloudshell.py", "test_cloudshell_overrides_inherited_write_destinations"),
+          'env -i "${install_env[@]}" python3 -I -m pip --isolated install',
+          'env "${install_env[@]}" python3 -I -m pip --isolated install',
+          "test_p85_council_env.py",
+          "test_installer_child_environment_is_allowlisted_but_aum_keeps_azure_context[python3]"),
     Probe("cloudshell-uv-environment", "aum-cloudshell.sh",
-          'for variable in "${!PIP_@}" "${!UV_@}" "${!XDG_@}"; do',
-          'for variable in "${!PIP_@}" "${!XDG_@}"; do',
-          "test_p85_cloudshell.py", "test_cloudshell_overrides_inherited_write_destinations"),
+          'env -i "${install_env[@]}" "$uv" --no-config pip install',
+          'env "${install_env[@]}" "$uv" --no-config pip install',
+          "test_p85_council_env.py",
+          "test_installer_child_environment_is_allowlisted_but_aum_keeps_azure_context[uv-template]"),
     Probe("cloudshell-stage-failure", "aum-cloudshell.sh", "set -euo pipefail", "set -uo pipefail",
           "test_p85_cloudshell.py", "test_cloudshell_failed_stage_never_launches_aum"),
     Probe("cloudshell-runtime-floor", "aum-cloudshell.sh",
@@ -133,8 +136,8 @@ PROBES = [
     Probe("saving-explanation", "feature_screens.py", "Saving; wait for the result", "Quit whenever ready",
           "test_p85_council_quit.py", "test_all_quit_routes_wait_for_write_and_keep_receipt"),
     Probe("real-pip-log-isolation", "aum-cloudshell.sh",
-          'for variable in "${!PIP_@}" "${!UV_@}" "${!XDG_@}"; do',
-          'for variable in "${!UV_@}" "${!XDG_@}"; do',
+          'env -i "${install_env[@]}" python3 -I -m pip --isolated install',
+          'env "${install_env[@]}" python3 -I -m pip install',
           "test_p85_council_env.py", "test_real_pip_offline_cannot_write_inherited_external_log"),
     Probe("xdg-destination-isolation", "aum-cloudshell.sh",
           'for variable in "${!PIP_@}" "${!UV_@}" "${!XDG_@}"; do',
@@ -144,7 +147,37 @@ PROBES = [
           'export PYTHONUSERBASE="$state/userbase"', ":",
           "test_p85_council_env.py",
           "test_each_inherited_destination_is_unset_or_home_confined[PYTHONUSERBASE]"),
+    Probe("owned-signout-completion", "tui.py", 'task.result() == "signout"', "False",
+          "test_p85_council_quit.py", "test_signout_exits_only_after_its_completed_mutation"),
+    Probe("signout-registry-release", "tui.py", "self._active_mutations.discard(task)", "pass",
+          "test_p85_council_quit.py", "test_signout_exits_only_after_its_completed_mutation"),
+    Probe("signout-latched-intent", "tui.py", "if self._signout_complete and not self.saving:",
+          'if not task.cancelled() and task.exception() is None and task.result() == "signout" and not self.saving:',
+          "test_p85_council_quit.py", "test_successful_signout_waits_for_other_mutation_then_exits"),
+    Probe("failed-signout-does-not-exit", "tui.py", 'task.result() == "signout"',
+          'task.result() in ("signout", None)',
+          "test_p85_council_quit.py", "test_cancelled_failed_signout_stays_running_without_stale_progress"),
+    Probe("completed-signout-progress", "feature_screens.py",
+          "Signed out. AUM exits after pending operations finish", "Saving once; operation remains pending",
+          "test_p85_council_quit.py", "test_successful_signout_waits_for_other_mutation_then_exits"),
+    Probe("pip-isolated-mode", "aum-cloudshell.sh", "-m pip --isolated install", "-m pip install",
+          "test_p85_cloudshell.py", "test_cloudshell_creates_reuses_and_forwards_literal_arguments"),
+    Probe("pip-explicit-confined-cache", "aum-cloudshell.sh",
+          '--cache-dir "$PIP_CACHE_DIR" --target', "--target",
+          "test_p85_cloudshell.py", "test_cloudshell_creates_reuses_and_forwards_literal_arguments"),
+    Probe("uv-venv-environment", "aum-cloudshell.sh",
+          'env -i "${install_env[@]}" "$uv" --no-config venv',
+          'env "${install_env[@]}" "$uv" --no-config venv',
+          "test_p85_council_env.py",
+          "test_installer_child_environment_is_allowlisted_but_aum_keeps_azure_context[uv-template]"),
 ]
+
+ROUND_TWO = {
+    "cloudshell-python-pip-environment", "cloudshell-uv-environment", "real-pip-log-isolation",
+    "owned-signout-completion", "signout-registry-release", "signout-latched-intent",
+    "failed-signout-does-not-exit", "completed-signout-progress", "pip-isolated-mode",
+    "pip-explicit-confined-cache", "uv-venv-environment",
+}
 
 
 def run_tests(output, name, selectors):
@@ -205,13 +238,15 @@ def restore_tests(output, baselines):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--round-two", action="store_true", help="Run the changed/new round-two guard probes.")
     args = parser.parse_args()
     if not Path(claude_finops.__file__).resolve().is_relative_to(SOURCE):
         raise RuntimeError("The interpreter must import this worktree, not another editable checkout.")
     args.output.mkdir(parents=True, exist_ok=True)
     baselines, results = {}, []
     started = time.monotonic()
-    for probe in PROBES:
+    probes = [probe for probe in PROBES if not args.round_two or probe.name in ROUND_TWO]
+    for probe in probes:
         selector = str(TESTS / probe.test_file) + "::" + probe.selector
         if selector not in baselines:
             baseline = run_tests(args.output, f"baseline-{len(baselines) + 1}", [selector])
