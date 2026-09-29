@@ -176,6 +176,14 @@ The failing pre-correction receipts remain in `.finops-evidence\p71-r8`.
 This supports the test-control correction; it does not establish the cause
 of the older Windows marker or worker-cancellation failures. U26 remains open.
 
+Round 9's restored selector passed **322 cases in 106.32 s**. Its requested
+one full AUM/FinOps run on `125f352` passed **770 cases in 283.15 s**
+(285.94 s wall), under its own lock from **03:43:39Z to 03:48:25Z on
+2026-09-29** (**09:13:39-09:18:25 IST**). All notification and prior
+publication cases were included. No historical failure was reproduced or
+diagnosed by that passing run; U26 remains open. The receipts are in
+`.finops-evidence\p71-r9` and the [round 9 STATUS record](STATUS.md#final-round-9-proof-on-125f352).
+
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 
 **Answer: yes.** A constant `counter-key` is a single counter shared by every caller. P11 can

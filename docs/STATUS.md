@@ -205,6 +205,95 @@ publication selection passed **322 cases in 100.30 s** (102.65 s wall),
 including all B9 counterexamples, notification rendering and the prior
 identity, deferred-publication and source-policy cases.
 
+#### Final round 9 proof on `125f352`
+
+| Seat | Round 9 verdict | Finding | Correction |
+|---|---|---|---|
+| Architect | BLOCK | B9a: an object exposes the raw console stream through literal reflection | `125f352`: every attribute load and literal `getattr`/`hasattr` member needs approval; console, file and writer capabilities have no ordinary approval. |
+| Coder | BLOCK | B9b: parameterized `super` returns an unwrapped method that can be aliased | `125f352`: selected-base and escaping superclass access are rejected; existing zero-argument forwarding is exact and fingerprinted. |
+| QA | BLOCK | The default headless harness hides notification rendering | `ea98113` / `125f352`: exact A-to-B stream, superclass and notification replays, current-origin controls and visible notification tests are in the standard selector. |
+| UX | PASS | Existing scheduler refusal paths remain responsive | Prior liveness checks remain, with notification rendering enabled in the seven-scheduler regression. |
+| Security | BLOCK | B9c: raw notifications display prior-principal data | `ea98113`: `publish_notification` retains and checks the source through queuing, delivery and cached rendering; raw `notify` refuses and principal clearing removes old toasts. |
+
+**16/16 removal probes were caught.** Every probe executed the same **322
+test identities** as its green baseline, exited 1 with at least one failing
+test, and had zero pytest error or skip results. The code was syntax-checked
+before execution and restored byte-for-byte in `finally`; the final source
+SHA-256 values match their pre-mutation receipts.
+
+| Removed or broken rule | Failed / passed | Pytest seconds |
+|---|---|---|
+| Attribute-load allowlist | 15 / 307 | 100.81 |
+| Literal-reflection allowlist | 22 / 300 | 100.38 |
+| Both object-capability access checks | 37 / 285 | 101.49 |
+| Superclass-selection restriction | 4 / 318 | 102.05 |
+| Superclass-builtin escape restriction | 1 / 321 | 104.87 |
+| Exact attribute-exception context | 1 / 321 | 101.04 |
+| Raw-capability exclusion from the ordinary list | 2 / 320 | 101.61 |
+| Private-name exclusion from the ordinary list | 1 / 321 | 102.51 |
+| Raw-notification API refusal | 3 / 319 | 99.80 |
+| Notification enqueue-origin validation | 3 / 319 | 98.28 |
+| Retained notification origin through delivery | 4 / 318 | 100.20 |
+| Cached-toast origin validation | 3 / 319 | 99.33 |
+| Principal-change notification cleanup | 4 / 318 | 101.93 |
+| Blank rendering after a cached-toast refusal | 2 / 320 | 99.90 |
+| Protected notification caller route | 2 / 320 | 99.83 |
+| Capability policy wired into the standard selector | 97 / 225 | 99.76 |
+
+The probes took **1,613.79 s** in pytest (**1,651.63 s wall**), excluding
+lock waits. Removing both attribute access checks reproduces the actual
+stream write. Removing superclass selection reproduces the actual A-to-B
+screenshot. Replacing the retained notification delivery origin fails the
+accepted-but-not-yet-created and cached-render controls; removing the
+cached-strip origin check also fails the visible cached-toast replay.
+Changing a reviewed boundary additionally fails source-integrity checks.
+The blank-refusal fallback probe was caught by those integrity checks;
+the remaining hide/cleanup defenses prevented a separate output failure in
+that probe. It is not reported as another observed payload leak.
+
+| Selection | Result | Pytest seconds | Wall seconds |
+|---|---|---|---|
+| Capability RED | 46 failed, 8 passed | 8.02 | Not separately measured |
+| Notification-stage RED | 7 failed | 6.49 | Not separately measured |
+| Notification/liveness GREEN | 28 passed | 25.15 | Not separately measured |
+| Notification/identity/source GREEN | 202 passed | 58.32 | Not separately measured |
+| Attribute/source GREEN before final controls | 183 passed | 8.26 | Not separately measured |
+| Complete publication GREEN | 322 passed | 100.30 | 102.65 |
+| Locked pre-mutation baseline | 322 passed | 102.77 | 105.17 |
+| Restored publication selector | 322 passed | 106.32 | 108.75 |
+| Full AUM/FinOps Python suite, run once | **770 passed**, zero failures/errors/skips | **283.15** | **285.94** |
+
+The full run acquired its own lock at **2026-09-29 03:43:39Z
+(09:13:39 IST)** and released it at **03:48:25Z (09:18:25 IST)** in that
+same command's `finally`. Baseline, each probe, restored selection and full
+suite have separate acquisition/release receipts. No lock was reserved
+between commands or removed for another owner.
+
+All 322 publication cases were included and passed in the full suite.
+The references are
+[`test_publication_attributes.py`](../cli/finops/tests/test_publication_attributes.py)
+for the exact object-capability counterexamples and member/super rules,
+[`test_publication_notifications.py`](../cli/finops/tests/test_publication_notifications.py)
+for queue acceptance, deferred delivery, visible and cached rendering, and
+[`publication_attributes.py`](../cli/finops/tests/publication_attributes.py)
+for the reviewed member vocabulary and exact exception data. The earlier
+principal, attachment, import, renderer and scheduler regressions remain in
+the selector.
+
+The runner used `accel\.venv-finops\Scripts\python.exe` with
+`PYTHONPATH=accel-p71\cli\finops\src` and asserted the imported package path.
+The standard selector is the prior eight publication files plus
+`test_publication_attributes.py` and `test_publication_notifications.py`.
+The full command was `-m pytest cli\finops\tests -q -p no:cacheprovider
+--tb=short`, with JUnit receipts. Per-run output, exact test identities,
+source hashes and command-local lock receipts persist in
+`.finops-evidence\p71-r9`.
+
+U26 remains open for its historical failures; this passing run is not a
+cause diagnosis. Only the ledger update follows the full run. No push,
+merge, Test-All, packet gate, council invocation or Azure operation occurred.
+Round 10 remains with the lead, and ROADMAP P71 remains unticked.
+
 ### Council round 8 corrections
 
 The eighth review of `f89e1c0` returned UX PASS and Architect, Coder, QA and
