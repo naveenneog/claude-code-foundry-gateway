@@ -143,12 +143,20 @@ async def test_native_adapter_constructor_requires_an_origin(bearer_tui_estate):
             native_type("PRIVATE_CONSTRUCTOR")
 
 
-async def test_native_cached_render_rechecks_the_content_origin(bearer_tui_estate):
+async def test_native_cached_render_rechecks_the_content_origin(bearer_tui_estate, monkeypatch):
     engine, _ = bearer_tui_estate
     app = FinOpsApp(engine, Config(backend="fake"), first_run=False)
     async with app.run_test(size=(100, 30), notifications=True) as pilot:
         await pilot.pause()
         await app.workers.wait_for_complete()
+        rejected = []
+        reject = app._reject_publication
+
+        def record_rejection(error):
+            rejected.append(error)
+            return reject(error)
+
+        monkeypatch.setattr(app, "_reject_publication", record_rejection)
         with engine.backend.read_cycle():
             value = engine.read("budgets")["items"][0]["scope_name"]
             origin = app.current_guard()
@@ -163,6 +171,7 @@ async def test_native_cached_render_rechecks_the_content_origin(bearer_tui_estat
         engine.backend.invalidate_credentials()
         assert revision == engine.identity_revision
         assert value not in app.export_screenshot()
+        assert not rejected, "Expired native paint must not cancel or clear the current source."
         await pilot.pause()
         assert app.is_running and app._exception is None
 

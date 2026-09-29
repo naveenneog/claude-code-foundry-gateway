@@ -190,6 +190,13 @@ in 4.62 s**. Both ran every collected identity, without skips or collection
 errors. Native command search, current-source refresh after stale paint and
 real posted/prequeued Textual logging are included in that runtime baseline.
 
+An initial passive-paint isolation removal ran all **48 cases** and failed one
+navigation case in **65.07 s**, but did not reach its intended assertion. It
+is not counted as a caught mutation. The native cached-render case now records
+the global rejection callback directly and asserts that expired paint does not
+clear the current source. Its test identity is unchanged. The strengthened
+48-case control passed in **59.78 s** before the replacement removal probe.
+
 The lead owns integration, the next council and the final packet gate. This
 worktree remains on `p71-aum-speed`; no merge or push is performed here.
 Each mutation and the one final full AUM run acquire and release their own
