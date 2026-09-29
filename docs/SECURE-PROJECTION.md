@@ -70,7 +70,7 @@ resolver therefore cannot change who is entitled.
 | Region capacity | Cosmos regional capacity cannot be checked in advance or reserved by preflight. Measured: Canada Central and Canada East both refused with `ServiceUnavailable ... high demand ... To request region access for your subscription, please follow this link https://aka.ms/cosmosdbquota`. A private endpoint can point at an account in another region, so a Cosmos DB account elsewhere still stays private in the VNet. |
 | Subnets | See the next table. In most enterprises the network team creates them and hands over the resource IDs. |
 | Tools | PowerShell **7 or later** for `Deploy-ClaudeProjection.ps1` and `Sync-ClaudeProjection.ps1`; Azure CLI/Bicep, Node/npm and a ZIP-capable `tar`. Bicep `build-params` with `using none` evaluates the existing storage name locally. Shared Graph membership callers that manage named values still support Windows PowerShell 5.1. |
-| Rollout approval | A fresh configuration backup, a tested rollback while named-value lists still fit, and an existing verified scheduled reconciler. P84 does not create a schedule or lease alerts; those are proposed P86 work. |
+| Rollout approval | P84 refuses switching unconditionally. A supported scheduled reconciler, renewal evidence and lease alerts are proposed P86 work; no ARM job id is an admission override. |
 
 | Subnet | Size | Delegation | Notes |
 |---|---|---|---|
@@ -80,6 +80,12 @@ resolver therefore cannot change who is entitled.
 | Runner (optional) | /27 | `Microsoft.ContainerInstance/containerGroups` | The container that writes and tests the projection from inside the network. |
 
 ### One-command deployment
+
+**Projection switching is unavailable in P84.** Records expire at most **two hours after scan
+start**; without renewal, **every developer gets 503 after expiry**. Switching needs the
+supported scheduled reconciler proposed as **P86** in [ROADMAP](ROADMAP.md). A clean comparison,
+digest-pinned job, successful ARM execution or `-ReconcilerResourceId` does not change this
+refusal ([ADR-0040](adr/0040-projection-preflight-and-switch.md)).
 
 `-PreflightOnly` runs the same checks as a normal deployment, with no Azure writes, and exits
 nonzero on any FAIL. The normal estimate is **30-90 seconds**, including **25 seconds**
@@ -94,46 +100,69 @@ pwsh -NoProfile -File .\scripts\Deploy-ClaudeProjection.ps1 `
   -ResolverAppId <resolver-app-id> -PreflightOnly
 ```
 
-The single output table contains **check, result, evidence, remedy and who acts**. Missing or
-unreadable evidence is a FAIL, not a successful default. The checks cover the PowerShell host,
-local tools, selected subscription and gateway identity, two Graph probes, both tier groups,
+The report contains **check, result, evidence, remedy and who acts**, with stacked records on
+narrow consoles, including 100-column terminals. Failed resource/Graph checks remain FAIL.
+Unproven app-creation rights are WARN, not invented denial. The checks cover the PowerShell host,
+local tools, selected subscription and gateway identity, two Graph probes, the required standard
+group and optional premium group (confirmed absence passes with a note),
 resolver registration, providers, inherited/group-aware resource-group roles and derived names.
 The safe prefix is 1-37 lowercase letters/digits with separated hyphens and alphanumeric ends.
 Cosmos, Function and storage names have global availability checks; an existing exact resource
 in the target resource group is reusable. The storage hash uses ARM's canonical resource-group
 id, not the casing of the typed argument. Regional capacity is a NOTE, not a PASS.
 
-A run without `-PreflightOnly` performs these checks before its first app/resource write. A
-switch additionally requires an existing job that satisfies
-[ADR-0040](adr/0040-projection-preflight-and-switch.md):
+A run without `-PreflightOnly` performs these checks before its first app/resource write.
+The following deployment leaves named values authoritative:
 
 ```powershell
 pwsh -NoProfile -File .\scripts\Deploy-ClaudeProjection.ps1 `
   -SubscriptionId <subscription-id> `
   -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> `
   -Location eastus2 -Sku BasicV2 -ResolverInboundAccess public `
-  -ResolverAppId <resolver-app-id> `
-  -FlipAfterCleanCompare -ReconcilerResourceId <scheduled-projection-job-resource-id>
+  -ResolverAppId <resolver-app-id>
 ```
 
 For Standard v2 and Premium v2, omit `-ResolverInboundAccess` and the script
 chooses `private`. The command deploys private Cosmos, projection networking and
 the resolver, exports named-value decisions, populates from Entra, compares the
-projection against those decisions and flips only after a clean comparison and a second,
-current reconciliation check against the snapshot's actual expiry. This one-command path uses
-the gateway resource group for its projection resources.
-Without `-FlipAfterCleanCompare` it stops after the clean comparison and leaves
-`entitlement-source` unchanged. `-WhatIf` prints the planned operations without
+projection against those decisions and leaves `entitlement-source` unchanged. This one-command
+path uses the gateway resource group for its projection resources. `-FlipAfterCleanCompare`
+refuses before Azure discovery or writes, including with `-Confirm` or `-WhatIf`.
+A declined deployment/population/comparison prerequisite aborts the run; it does not fall through
+to a later step. `-WhatIf` without a switch request prints the planned operations without
 writing Azure resources. It does not require creating an app merely to preview the plan
 (`scripts/Deploy-ClaudeProjection.ps1:78`).
 
 #### Resolver registration and the customer's Entra admin
 
 With `-ResolverAppId`, the app must exist and expose `api://<id>`. Without it, an existing
-unambiguous registration is reusable; otherwise preflight requires a member user and explicitly
-true `authorizationPolicy.defaultUserRolePermissions.allowedToCreateApps`. That policy read
-requires Graph `Policy.Read.All`. A 403 or role-delegated case is reported as permission
-**unproven**, not as proof that the user has no directory role.
+unambiguous registration is reusable. A member user with explicitly true
+`authorizationPolicy.defaultUserRolePermissions.allowedToCreateApps` has positive default-role
+evidence. That read requires Graph `Policy.Read.All` and is skipped when an app id is supplied.
+An unreadable policy, disabled default, guest or delegated/custom-role case is WARN:
+"cannot confirm; if creation fails, the customer's admin creates the app and you pass
+-ResolverAppId". Default-role policy is not effective-role enumeration. Explicit app-resource
+or creation failures still stop the run rather than claiming success.
+
+#### Rights used by the checks
+
+| Check | Read permission or local capability |
+|---|---|
+| PowerShell, node/npm/tar, Bicep, prefix syntax | Local executable/repository access; no Azure role |
+| Azure sign-in and subscription | An Azure CLI sign-in for the selected subscription |
+| Gateway, resource group, providers, existing resources and global name availability | ARM read/name-availability access in the selected subscription and resource group; the required deployment roles are Owner, or Contributor plus User Access Administrator |
+| Role assignments, including inherited/group roles | Azure role-assignment read access and Graph membership access for group expansion; eligibility alone is not an active assignment |
+| Two Graph `/me` probes | Delegated `User.Read` or broader profile-read permission |
+| Tier group collections and shared membership readers | `GroupMember.Read.All` or broader group/directory-read permission; service-principal detail can require application-read access |
+| Gateway service principal; existing resolver app/id URI | Graph application/service-principal read permission, such as `Application.Read.All`, and applicable user/role access |
+| Default app-registration policy, only when no existing app is selected | `Policy.Read.All`; unreadable policy produces WARN, and `-ResolverAppId` avoids this read |
+| Switch flag | No Azure read can admit it in P84; the refusal is unconditional |
+
+Sources, accessed 2026-09-29: [user GET](https://learn.microsoft.com/graph/api/user-get?view=graph-rest-1.0),
+[group list](https://learn.microsoft.com/graph/api/group-list?view=graph-rest-1.0),
+[application GET](https://learn.microsoft.com/graph/api/application-get?view=graph-rest-1.0),
+[authorization policy GET](https://learn.microsoft.com/graph/api/authorizationpolicy-get?view=graph-rest-1.0)
+and [delegated app roles](https://learn.microsoft.com/entra/identity/role-based-access-control/delegate-app-roles).
 
 The admin's portal path is **https://entra.microsoft.com > Entra ID > App registrations >
 New registration > Accounts in this organizational directory only > Register**. **Overview**
@@ -461,20 +490,20 @@ Endpoints**), save, and repeat the verification above.
 
 **A successful initial scan does not supply renewal.** Records expire at most **two hours from
 scan start**, after which **every developer receives 503** unless reconciliation has renewed
-them. The deployer prints the absolute expiry and refuses `-FlipAfterCleanCompare` by default.
+them. P84 refuses `-FlipAfterCleanCompare` unconditionally; no job metadata can override it.
+The installer and guided Entitlement enforce the same refusal.
 
-An existing Container Apps scheduled job is evidence only when ARM reads prove a supported
-hourly-or-faster UTC cron, bounded timeout, the destination/tenant/contract bindings, a pinned
-container image and a recent succeeded execution of that same template. A newer failed
-execution, insufficient remaining snapshot lease or unreadable evidence refuses the switch.
-The same guard covers the installer and guided Entitlement. There is no override
-(`scripts/ClaudeProjectionChecks.ps1:226`, `scripts/Deploy-ClaudeProjection.ps1:233`,
-[ADR-0040](adr/0040-projection-preflight-and-switch.md)).
+ARM success can describe a dry-run and cannot prove actual renewal or continuing schedule
+activity. Proposed P86 admission reads destination-bound Cosmos evidence through the runner:
+oldest expiry has margin, generation advanced at least twice in two hours, and newest renewal
+is within 60 minutes. A tested image/entrypoint rejects dry-run overrides; the tenant-admin
+Graph grant, hourly job and alerts are also P86 work. This is a proposal, not shipped admission
+([ADR-0040](adr/0040-projection-preflight-and-switch.md), U56).
 
-The assumed part of this contract is explicit: the customer-controlled pinned image performs
-the declared renewal. ARM success proves process termination, not its application semantics or
-future health. P86 owns the tested reconciler image, tenant-admin Graph grant, hourly job and
-lease alerts. No such component or schedule is deployed by P84.
+Apply/compare failure diagnostics expose counts and hashed samples, not raw email or unit values.
+They contain at most 40 input-line summaries and 4,096 characters. Unstructured output is
+represented by a length and digest; full private content remains in the authorized runner logs
+(`scripts/ClaudeRunner.ps1:55`).
 
 ### 8. Populate the projection from inside the network
 

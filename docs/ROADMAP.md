@@ -84,9 +84,9 @@ premise does not carry over.
 
 | Packet | State | Deliverable |
 |---|---|---|
-| P84 | Builder scope complete; lead council/gate and owner approval pending | Projection deployment checks everything before it writes and never switches into an outage. Read-only preflight, fail-closed Graph, honest runner/app failures and a verified-reconciler switch guard on deployment, installer and guided flow. 240 offline assertions and 111 guard mutations; proposed ADR-0040. |
+| P84 | Council round 1 corrections; lead round 2/gate pending | Projection deployment checks everything before it writes and never switches into an outage. Read-only preflight, fail-closed Graph, sanitized runner/app failures and unconditional switch refusal until P86, across deployer/installer/flow. ADR-0040 rejects ARM-only admission; STATUS records revised proof. |
 | P85 | Separate builder active | AUM TUI manages people, units, teams and budgets with full tests. |
-| P86 | Proposed; owner decision pending | Scheduled projection reconciler and tenant-admin pack: managed identity with Graph `GroupMember.Read.All` granted by a tenant admin, an hourly job and lease alerts. P84 verifies evidence but creates no schedule. |
+| P86 | Proposed; owner decision pending | Scheduled projection reconciler and tenant-admin pack: managed identity with Graph `GroupMember.Read.All` granted by a tenant admin, an hourly job and lease alerts. Proposed admission reads destination-bound Cosmos oldest expiry and generation advances through the runner, with a tested image/entrypoint and dry-run overrides rejected. P84 refuses switching and creates no schedule. |
 
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 

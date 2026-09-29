@@ -20,9 +20,10 @@ Start with [Setup](docs/SETUP.md) for deployment or
 > **not 500,000 concurrent developers** or a completed directory scan.
 >
 > Projection deployment requires PowerShell 7. Its [read-only preflight](docs/SECURE-PROJECTION.md#one-command-deployment)
-> runs before Azure writes; switching requires a clean comparison and an existing verified
-> reconciler. Without renewal, records expire within two hours and every developer receives
-> 503. The deployer does not create the schedule ([ADR-0040](docs/adr/0040-projection-preflight-and-switch.md)).
+> runs before Azure writes. **P84 refuses every automated projection switch** until the supported
+> scheduled reconciler proposed as P86 exists. Without renewal, records expire within two hours
+> and every developer receives 503. A clean comparison or successful ARM job is not renewal
+> evidence ([ADR-0040](docs/adr/0040-projection-preflight-and-switch.md)).
 >
 > The current two-always-ready-instance profile costs **$91.56/month at rest**.
 > Hourly lease renewal at 500,000 members adds about **365 million writes/month**,

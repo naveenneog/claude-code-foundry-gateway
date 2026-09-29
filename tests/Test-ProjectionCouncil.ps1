@@ -1,4 +1,5 @@
-param([string]$CallerChild, [ValidateSet('Absent','Error')][string]$Case = 'Absent')
+param([string]$CallerChild, [ValidateSet('Absent','Error')][string]$Case = 'Absent',
+    [ValidateSet('All','Core','Callers','Cultures')][string]$Group = 'All')
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'TestProjectionFixture.ps1')
@@ -84,6 +85,7 @@ function Preflight($Scenario, [hashtable]$Extra=@{}) {
     Capture { Invoke-ClaudeProjectionPreflight @parameters }
 }
 
+if ($Group -in @('All','Core')) {
 foreach($scenario in 'premium-missing','policy-error','policy-false','policy-shape','guest') {
     Preflight $scenario
     Assert "preflight does not invent denial: $scenario" (-not $Failure) $Failure
@@ -126,8 +128,9 @@ Assert 'real Entitlement always refuses a clean comparison and job id' ($Failure
 $oid='11111111-2222-4333-8444-555555555555'
 $private='secret-finance-unit'
 $summary=@{ok=$false;compared=5;differences=1;sample=@(@{oid=$oid;email='private@example.invalid';kind='unit-drift';gateway=$private;projection='secret-platform-unit'})} | ConvertTo-Json -Depth 6 -Compress
+$wide=@{ok=$false;compared=999999999999;projectionRecords=999999999999;differences=999999999999;resolved=999999999999;existing=999999999999;toWrite=999999999999;toDelete=999999999999;keptOrphans=999999999999;unchanged=999999999999;written=999999999999;writeFailed=999999999999;deleted=999999999999;deleteFailed=999999999999} | ConvertTo-Json -Compress
 foreach($step in 'apply','compare') {
-    foreach($raw in @($summary, "prefix private@example.invalid $private`n{$private", ((1..80 | ForEach-Object { 'private@example.invalid secret-finance-unit ' + ('x'*600) }) -join "`n"))) {
+    foreach($raw in @($summary, "prefix private@example.invalid $private`n{$private", '{"private@example.invalid":{"secret-finance-unit":!', '{"ok":false,"compared":"private@example.invalid","differences":"secret-finance-unit"}', ((1..80 | ForEach-Object { 'private@example.invalid secret-finance-unit ' + ('x'*600) }) -join "`n"), ((1..80 | ForEach-Object { $wide }) -join "`n"))) {
         Capture { ConvertFrom-ClaudeRunnerResult -RawOutput $raw -Step $step }
         Assert "$step rejects unsuccessful/malformed output" ([bool]$Failure)
         Assert "$step hides email, unit and raw oid" ($Output -notmatch 'private@example.invalid|secret-finance-unit|secret-platform-unit' -and $Output -notmatch [regex]::Escape($oid))
@@ -148,31 +151,36 @@ foreach($step in $steps) {
 }
 Assert 'all seven prerequisite decisions are exercised' ($steps.Count -eq 7)
 Assert 'deployer binds the comparison Boolean rather than an absent switch value' ($source -match '-FailOnDrift:\$true')
+}
 
 $scratch=Join-Path ([IO.Path]::GetTempPath()) ('p84-council-'+[guid]::NewGuid().ToString('N'))
 $null=New-Item -ItemType Directory -Path $scratch
 try {
     $hosts=@((Microsoft.PowerShell.Core\Get-Command pwsh).Source, (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'))
-    foreach($shell in $hosts) {
-        foreach($caller in 'Sync-ClaudeAccess','Compare-ClaudeEntitlement','Sync-ClaudeProjection','Sync-AumMembership') {
-            if($caller -eq 'Sync-ClaudeProjection' -and $shell -like '*\powershell.exe'){continue}
-            foreach($caseName in 'Absent','Error') {
-                $log=Join-Path $scratch 'caller.log'
-                & $shell -NoProfile -NonInteractive -File $PSCommandPath -CallerChild $caller -Case $caseName *> $log
-                $code=$LASTEXITCODE;$text=Get-Content $log -Raw
-                $expectFailure=$caseName -eq 'Error' -or $caller -eq 'Sync-AumMembership'
-                $reason=if($caseName -eq 'Error'){'Graph 403 caller fixture'}elseif($caller -eq 'Sync-AumMembership'){'confirmed absent'}else{'R1_CALLER reads=[1-9]'}
-                Assert "$caller $caseName on $([IO.Path]::GetFileName($shell))" (($code -ne 0) -eq $expectFailure -and $text -match $reason -and $text -match 'writes=0') (($text -split "`n" | Where-Object { $_ -match 'R1_CALLER' }) -join '')
+    if ($Group -in @('All','Callers')) {
+        foreach($shell in $hosts) {
+            foreach($caller in 'Sync-ClaudeAccess','Compare-ClaudeEntitlement','Sync-ClaudeProjection','Sync-AumMembership') {
+                if($caller -eq 'Sync-ClaudeProjection' -and $shell -like '*\powershell.exe'){continue}
+                foreach($caseName in 'Absent','Error') {
+                    $log=Join-Path $scratch 'caller.log'
+                    & $shell -NoProfile -NonInteractive -File $PSCommandPath -CallerChild $caller -Case $caseName *> $log
+                    $code=$LASTEXITCODE;$text=Get-Content $log -Raw
+                    $expectFailure=$caseName -eq 'Error' -or $caller -eq 'Sync-AumMembership'
+                    $reason=if($caseName -eq 'Error'){'Graph 403 caller fixture'}elseif($caller -eq 'Sync-AumMembership'){'confirmed absent'}else{'R1_CALLER reads=[1-9]'}
+                    Assert "$caller $caseName on $([IO.Path]::GetFileName($shell))" (($code -ne 0) -eq $expectFailure -and $text -match $reason -and $text -match 'writes=0') (($text -split "`n" | Where-Object { $_ -match 'R1_CALLER' }) -join '')
+                }
             }
         }
     }
-    foreach($culture in 'en-US','en-GB','de-DE') {
-        $log=Join-Path $scratch "culture-$culture.log"
-        & $hosts[0] -NoProfile -File (Join-Path $PSScriptRoot 'Test-ProjectionPreflight.ps1') -Culture $culture *> $log
-        $code=$LASTEXITCODE;$text=Get-Content $log -Raw
-        $receipt=[regex]::Match($text,'P84 assertions=(\d+) failed=0')
-        if($culture -eq 'en-US'){$baselineCount=if($receipt.Success){$receipt.Groups[1].Value}else{''}}
-        Assert "complete preflight suite is culture-independent: $culture" ($code -eq 0 -and $receipt.Success -and $receipt.Groups[1].Value -eq $baselineCount)
+    if ($Group -in @('All','Cultures')) {
+        foreach($culture in 'en-US','en-GB','de-DE') {
+            $log=Join-Path $scratch "culture-$culture.log"
+            & $hosts[0] -NoProfile -File (Join-Path $PSScriptRoot 'Test-ProjectionPreflight.ps1') -Culture $culture *> $log
+            $code=$LASTEXITCODE;$text=Get-Content $log -Raw
+            $receipt=[regex]::Match($text,'P84 assertions=(\d+) failed=0')
+            if($culture -eq 'en-US'){$baselineCount=if($receipt.Success){$receipt.Groups[1].Value}else{''}}
+            Assert "complete preflight suite is culture-independent: $culture" ($code -eq 0 -and $receipt.Success -and $receipt.Groups[1].Value -eq $baselineCount)
+        }
     }
 } finally { Remove-Item -LiteralPath $scratch -Recurse -Force }
 Write-Host ("P84_COUNCIL assertions={0} failed={1} seconds={2:F2}" -f $count,$failed,$clock.Elapsed.TotalSeconds)

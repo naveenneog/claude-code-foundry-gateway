@@ -79,9 +79,14 @@ DNS. Do not delete the old gateway until rollback is no longer needed.
 ## 3. Move entitlement between named values and the projection
 
 Named values are the default and hold roughly 100 developers. The projection is the scale path.
+**Switching is unavailable in P84.** Records expire at most **two hours after scan start**;
+without renewal **every developer gets 503 after expiry**. The supported scheduled reconciler
+is proposed as **P86** in [ROADMAP](ROADMAP.md); a clean comparison or ARM job execution is not
+renewal evidence. All automated switching paths refuse unconditionally, with no override.
+
 The `Entitlement` step uses `scripts\Measure-ClaudeProjectionCost.ps1` for the operator's
-scenarios, then calls `scripts\Deploy-ClaudeProjection.ps1` to deploy beside, populate, compare,
-and flip only after a clean comparison and verified scheduled reconciliation. Deployment and
+scenarios and reports the blocked projection switch. The standalone deployer can still deploy
+beside, populate and compare while named values remain authoritative. Deployment and
 projection sync require PowerShell 7. `-PreflightOnly` runs the same read-only checks without
 Azure writes (normally 30-90 seconds, including the 25-second Graph probe interval).
 
@@ -103,18 +108,14 @@ Manual equivalent:
 .\scripts\Deploy-ClaudeProjection.ps1 `
   -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> `
   -SubscriptionId <subscription-id> -Sku BasicV2 -ResolverInboundAccess public `
-  -ResolverAppId <resolver-app-id> -FlipAfterCleanCompare `
-  -ReconcilerResourceId <scheduled-projection-job-resource-id>
+  -ResolverAppId <resolver-app-id>
 ```
 
-The guided step records the id as `reconcilerResourceId` and forwards it with the recorded
-subscription. The typed question is `projectionReconcilerResourceId`; an existing decision can
-also carry `entitlementStore.reconcilerResourceId` and `resolverAppId`. An empty id refuses the
-switch even with a clean comparison. Records expire at most two hours after scan start, then
-every developer receives 503 without renewal; the deployer prints the actual expiry.
-The [ADR-0040](adr/0040-projection-preflight-and-switch.md) job contract is verified through ARM
-reads, with no override. No schedule is created; P86 is proposed for the reconciler and alerts.
-Sources: `scripts/flow/Entitlement.ps1:53`, `scripts/ClaudeProjectionChecks.ps1:226`.
+`-FlipAfterCleanCompare` now returns the P86 refusal before Azure calls; a supplied historical
+reconciler id is not evaluated. The guided step no longer asks for an id that cannot authorize
+a switch. [ADR-0040](adr/0040-projection-preflight-and-switch.md) records the rejected ARM
+contract and proposed destination-bound Cosmos renewal evidence for P86. No schedule or
+admission machinery is created here.
 
 Reverse path: restore the named-value lists from the snapshot, then set `entitlement-source` to
 `named-value`. This can regrant stale list members if lists were not kept current while the

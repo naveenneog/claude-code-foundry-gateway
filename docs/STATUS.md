@@ -22,9 +22,9 @@ anything (`sync/src/apply-projection.mjs:136`). Those receipts did not prove saf
       existing app ids bypass Policy.Read.All reads. en-GB and de-DE regression runs are included.
 - [x] QA: confirmed-absent premium passes with a note; Graph errors still fail. Every real
       shared membership caller has absence and error cases on its supported hosts.
-- [ ] UX: a 100-column console has readable check/result/evidence/remedy/who records; lease,
+- [x] UX: a 100-column console has readable check/result/evidence/remedy/who records; lease,
       outage and reconciler warnings precede switching examples and replace stale setup advice.
-- [ ] Security: failure output contains counts and hashed samples, no email/unit values, at most
+- [x] Security: failure output contains counts and hashed samples, no email/unit values, at most
       40 lines and 4,096 characters. A declined prerequisite aborts; check permissions are documented.
 - [ ] RED/GREEN, relevant existing checks and valid-syntax/count-preserving mutations are recorded.
 
@@ -44,6 +44,23 @@ hosts. The reduced preflight count reflects retirement of the rejected ARM-admis
 not omitted active checks. ProjectionInstaller 34 (0.76 s), FlowLifecycle 33 (2.58 s),
 ProjectionRules 34 (0.78 s) and script encoding 300/300 pass. Changed-guard mutations and
 runbook completion are still pending.
+
+**Expanded proof and runbooks:** `4156090` commits the first correction GREEN. The council
+suite now has **83 assertions** (Core 66, real Callers 14, Cultures 3), including long structured
+diagnostics, private JSON parser paths and string values in count fields. Default `All` passed
+in **67.88 s**; group selection is only for bounded proof commands. The mutation matrix contains
+95 syntactically valid current guards; retired ARM admission probes are not counted.
+Five smoke probes caught character-cap, sample-hash, parser-message, PS5.1 array and declined
+comparison breakage with complete selected baselines (173.46 s). That smoke run still grouped
+culture cases with callers (17 assertions); the selector is corrected to separate Callers 14
+and Cultures 3 without changing default coverage.
+
+Current related results: InstallerPermutations 48/48 (55.96 s), FlowPermutations 43/43
+(104.63 s), ProjectionNegative 57/57 (62.34 s), SecureProjection 123/123 (11.90 s),
+DocReferences 34/34 (11.23 s) and TestAllSharding 79/79 (3.40 s).
+Runbooks now put the outage/refusal warning first, document read permissions and WARN semantics,
+and retain the explicitly unprotected manual SCALE operation. Complete current mutation proof
+remains pending.
 
 ### Historical builder submission, superseded by council round 1
 

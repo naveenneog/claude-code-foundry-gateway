@@ -264,25 +264,22 @@ cost and caller impact before applying.
 |---|---|---|---|
 | `foundation` | `Foundation.ps1` | Runs `Install-ClaudeGateway.ps1 -ExistingApimName <recorded gateway>`, which updates that gateway and keeps its region, tier, name and publisher. In a console the installer asks its other questions; without a console it runs with `-Yes` and the recorded choices. The review prices the live gateway, as already running | [Setup](SETUP.md) |
 | `sku` | `Tier.ps1` | API Management tier; Basic v2 and Standard v2 change in place | [Tier](UPDATE-AND-CHANGE.md#2-change-the-api-management-tier) |
-| `entitlementStore` | `Entitlement.ps1` | Named values to the Cosmos projection after a clean comparison and verified reconciler, or named-value rollback | [Entitlement](UPDATE-AND-CHANGE.md#3-move-entitlement-between-named-values-and-the-projection) |
+| `entitlementStore` | `Entitlement.ps1` | Projection switching is blocked until P86; named-value rollback remains available | [Entitlement](UPDATE-AND-CHANGE.md#3-move-entitlement-between-named-values-and-the-projection) |
 | `network` | `Network.ps1` | Enterprise network edge, through its own fingerprinted review | [Network](UPDATE-AND-CHANGE.md#4-change-the-enterprise-network-edge) |
 | `address` | `Address.ps1` | Company hostname, supplied certificate, DNS and verified developer URL | [Company address](SETUP.md#company-address) |
 | `desktopSignIn` | `DesktopSignIn.ps1` | Claude Desktop sign-in kind and gateway audience | [Desktop sign-in](UPDATE-AND-CHANGE.md#5-change-claude-desktop-sign-in) |
 | `models` | `Models.ps1` | Existing Foundry deployments, per-tier allowlists, dated price mappings, deployment records and tier-specific MDM/workstation profiles; snapshot and drift check before any write | [Models](MODELS.md) |
 | `deviceProfiles` | `DeviceProfiles.ps1` | Per-tier MDM payloads | [MDM](MDM.md) |
 
-The Entitlement question `projectionReconcilerResourceId` names an existing scheduled Container
-Apps projection job. The plan carries the id, and successful output records `reconcilerResourceId`;
-an existing structured entitlement decision can supply that field directly. The deployer runs
-its read-only preflight (normally 30-90 seconds, including two Graph reads 25 seconds apart),
-then requires the [ADR-0040](adr/0040-projection-preflight-and-switch.md) ARM evidence before
-switching. PowerShell 7 is required for projection deployment/sync.
+The Entitlement step refuses every projection switch in P84, even with a clean comparison or
+a historical reconciler id in the record. No supported scheduled reconciler ships here, and no
+override is available. Records expire at most two hours after scan start; without renewal every
+developer receives 503 after expiry. The plan and refusal identify P86 in ROADMAP.
 
-A clean comparison by itself is insufficient. The default refusal explains that records expire
-at most two hours after scan start and every developer receives 503 after expiry without renewal.
-The final guard prints the actual expiry. No override, automatic schedule or lease alerts are
-provided by this step; those operational components are proposed P86 work. Sources:
-`scripts/flow/Entitlement.ps1:53`, `scripts/Deploy-ClaudeProjection.ps1:233`.
+The standalone deployer can preflight, populate and compare without switching (normally 30-90
+seconds for preflight, including a 25-second Graph pause). PowerShell 7 is required for
+projection deployment/sync. [ADR-0040](adr/0040-projection-preflight-and-switch.md) describes
+the rejected ARM-only check and proposed P86 Cosmos renewal evidence, tested image and alerts.
 
 ### Change the company address
 
