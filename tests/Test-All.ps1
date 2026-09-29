@@ -6,10 +6,22 @@ param(
     [switch]$IncludeAzure,
     [switch]$Serial,
     [ValidateRange(1, 16)][int]$ThrottleLimit,
-    [ValidateRange(1, 3600)][int]$CheckTimeoutSeconds = 600
+    [ValidateRange(1, 3600)][int]$CheckTimeoutSeconds = 600,
+    [ValidateRange(0, 63)][int]$ShardIndex = 0,
+    [ValidateRange(1, 64)][int]$ShardCount = 1,
+    [switch]$LocalOnly,
+    [string]$ReceiptPath
 )
 
 $ErrorActionPreference = 'Stop'
+$sharded = $PSBoundParameters.ContainsKey('ShardIndex') -or $PSBoundParameters.ContainsKey('ShardCount')
+if ($PSBoundParameters.ContainsKey('ShardIndex') -xor $PSBoundParameters.ContainsKey('ShardCount')) {
+    throw 'ShardIndex and ShardCount must be supplied together.'
+}
+if ($sharded -and $ShardIndex -ge $ShardCount) { throw 'ShardIndex must be less than ShardCount (zero-based).' }
+if ($LocalOnly -and $sharded) { throw 'LocalOnly cannot be combined with shard coordinates.' }
+if (($sharded -or $LocalOnly) -and $IncludeAzure) { throw 'Sharded evidence covers the default offline suite, not IncludeAzure.' }
+if ($ReceiptPath -and -not ($sharded -or $LocalOnly)) { throw 'ReceiptPath requires shard coordinates or LocalOnly.' }
 if (-not $PSBoundParameters.ContainsKey('ThrottleLimit')) {
     $ThrottleLimit = [math]::Max(1, [math]::Min(4, [Environment]::ProcessorCount))
     if ($env:TEST_ALL_THROTTLE) {
@@ -29,6 +41,19 @@ $active = [Collections.Generic.List[object]]::new()
 $results = @()
 $runDirectory = Join-Path ([IO.Path]::GetTempPath()) ('test-all-' + [guid]::NewGuid().ToString('N'))
 $suiteClock = [Diagnostics.Stopwatch]::StartNew()
+$startedAt = [datetime]::UtcNow.ToString('o')
+$configuration = $null
+$identity = $null
+$selectedIndex = $ShardIndex
+if ($sharded -or $LocalOnly) {
+    . (Join-Path $PSScriptRoot 'TestAll-Sharding.ps1')
+    $identity = Get-TestAllIdentity -Root $root -RequireClean
+    $configuration = if ($sharded) { Get-TestAllConfiguration -ShardCount $ShardCount } else { Get-TestAllConfiguration }
+    if ($LocalOnly) { $selectedIndex = -1; $ShardCount = $configuration.ShardCount }
+    if (-not $ReceiptPath) {
+        $ReceiptPath = Join-Path ([IO.Path]::GetTempPath()) ("test-all-shard-$selectedIndex-of-$ShardCount-" + [guid]::NewGuid().ToString('N') + '.json')
+    }
+}
 
 function Invoke-Check {
     param(
@@ -38,6 +63,7 @@ function Invoke-Check {
     )
     $checks.Add([pscustomobject]@{
         Id = $checks.Count; Name = $Name; Script = $Script; Params = $Params
+        RegistrationId = $checks.Count
         Lane = $(if ($Azure) { 'Azure' } elseif ($SerialLane) { 'Exclusive' } else { 'Parallel' })
         SkipReason = $SkipReason
         Timeout = $(if ($TimeoutSeconds) { $TimeoutSeconds } else { $CheckTimeoutSeconds })
@@ -49,6 +75,7 @@ function Set-CheckResult($check, [string]$Status, [string]$Output = '', $ExitCod
     $seconds = if ($check.Clock) { [math]::Round($check.Clock.Elapsed.TotalSeconds, 1) } else { 0.0 }
     $result = [pscustomobject]@{
         Id = $check.Id; Name = $check.Name; Script = $check.Script
+        RegistrationId = $check.RegistrationId; SkipReason = $(if ($Status -eq 'SKIP') { $check.SkipReason } else { '' })
         Result = $Status; Seconds = $seconds; ExitCode = $ExitCode; Output = $Output
     }
     $script:results[$check.Id] = $result
@@ -163,6 +190,8 @@ try {
     # Recursive source scans and native Azure CLI users run before sandboxes.
     Invoke-Check 'Script encoding (PowerShell 5.1 safety)' 'Repair-ScriptEncoding.ps1' @{ Check = $true } -SerialLane
     Invoke-Check 'Test-All counts every check'             'Test-RunnerIntegrity.ps1'
+    Invoke-Check 'Test-All shards and receipt coverage'    'Test-TestAllSharding.ps1'
+    Invoke-Check 'Remote Test-All exact-source contract'   'Test-RemoteTestAll.ps1'
     Invoke-Check 'Mutation shards preserve every case'     'Test-MutationShards.ps1'
     Invoke-Check 'Format strings parse and run'            'Test-FormatStrings.ps1'
     Invoke-Check 'Screenshots and the docs that show them' 'Test-Screenshots.ps1'
@@ -284,6 +313,22 @@ Invoke-Check 'Tier groups follow their gateway'          'Test-TierGroupTarget.p
     }
     # END CHECK REGISTRATION
 
+    if ($configuration) {
+        if (-not (Test-TestAllNamesEqual @($checks.Name) @($configuration.Registration.Name))) {
+            throw 'Executed registration differs from its read-only inventory.'
+        }
+        $ownedIds = [Collections.Generic.HashSet[int]]::new()
+        foreach ($planned in $configuration.Plan) {
+            if ($planned.ShardIndex -eq $selectedIndex) { [void]$ownedIds.Add($planned.Id) }
+        }
+        $registeredChecks = $checks.ToArray()
+        $checks = [Collections.Generic.List[object]]::new()
+        foreach ($check in $registeredChecks) {
+            if ($ownedIds.Contains($check.RegistrationId)) { $check.Id = $checks.Count; $checks.Add($check) }
+        }
+        if (-not $checks.Count) { throw 'The selected shard/local lane owns no checks.' }
+        Write-Host "Shard $selectedIndex/$ShardCount owns $($checks.Count) of $($configuration.Registration.Count) registered checks."
+    }
     $results = [object[]]::new($checks.Count)
     # The first phase avoids source-scan/sandbox and Azure CLI config races.
     # Azure's mutable deployment is never part of the parallel phase.
@@ -341,6 +386,23 @@ $timings = Join-Path ([IO.Path]::GetTempPath()) ('test-all-timings-{0}-{1}-{2}.j
 ConvertTo-Json -InputObject @($reported | Select-Object Name, Result, Seconds, ExitCode) | Set-Content -LiteralPath $timings -Encoding ASCII
 Write-Host "  timings: $timings" -ForegroundColor DarkGray
 if (-not $IncludeAzure) { Write-Host '  Azure checks not run. Add -IncludeAzure once you are signed in.' -ForegroundColor DarkGray }
+
+if ($configuration) {
+    try {
+        $after = Get-TestAllIdentity -Root $root -RequireClean
+        if ($after.Commit -cne $identity.Commit -or $after.Tree -cne $identity.Tree) { throw 'Source changed during the shard run.' }
+    }
+    catch { $completed = $false; Write-Host "Receipt source check failed: $($_.Exception.Message)" -ForegroundColor Red }
+    [ordered]@{
+        SchemaVersion = 1; Mode = $(if ($LocalOnly) { 'local' } else { 'ci' })
+        Commit = $identity.Commit; Tree = $identity.Tree; ShardIndex = $selectedIndex; ShardCount = $ShardCount
+        RunId = [string]$env:GITHUB_RUN_ID; RunAttempt = $(if ($env:GITHUB_RUN_ATTEMPT) { [int]$env:GITHUB_RUN_ATTEMPT } else { 0 })
+        Completed = [bool]$completed; OwnedChecks = @($checks.Name)
+        StartedAt = $startedAt; FinishedAt = [datetime]::UtcNow.ToString('o'); Seconds = [math]::Round($suiteClock.Elapsed.TotalSeconds, 1)
+        Results = @($reported | Select-Object RegistrationId, Name, Script, Result, Seconds, ExitCode, SkipReason)
+    } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $ReceiptPath -Encoding utf8
+    Write-Host "  receipt: $ReceiptPath" -ForegroundColor DarkGray
+}
 
 Write-Host ''
 if (-not $completed) { Write-Host 'The run stopped before every check ran, so it proves nothing.' -ForegroundColor Red; exit 1 }

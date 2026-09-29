@@ -1,5 +1,163 @@
 # Status
 
+## P78 the test suite runs in parallel on GitHub-hosted runners, 2026-09-28
+
+**Council round 1 passed and the local packet gate passed; owner approval of ADR-0039 remains pending.**
+PLAN and CONTRACT are committed in `55e1b90`.
+Work is isolated to `p78-parallel-tests`, from `main` `0345e85`.
+The lead runs the council and gate; the owner decides the merge.
+[ADR-0039](adr/0039-test-suite-hosted-runners.md) is a draft, not a charter amendment.
+
+**Local packet gate, 2026-09-29:** `node .ironclad/gate.mjs --stage packet` passed at `fab1298`
+(main `17e488c` merged) between 01:18 and 01:46 IST: Test-All in 1,676 s, 22 passed, 2 warned
+(open unknowns), 0 failed. It ran under the shared workstation lock, with the lead raising only
+the gate's own processes to AboveNormal priority.
+
+**Council round 1, reported 2026-09-29:** Architect, Coder, QA, UX and Security all PASS at
+`6880d29`. The council supports owner approval of ADR-0039 as written; approval has not been
+given and no proposed command, timeout or ROADMAP change is enacted.
+
+**P79 follow-up integration, 2026-09-29:** main `17e488c` adds the isolated installer-input
+copy and saved-record assertions (`tests/Test-InstallerPermutations.ps1:92`). It is merged
+into P78 without rebasing. The default registration remains 95 checks across 12 shards;
+the complete ownership plan and committed timing-table bytes equal those at `6880d29`.
+The timing table retains its recorded hosted measurements rather than guessed replacements.
+The merged tree's local sharding suite passed 79 assertions in 3.7 s and the remote contract
+suite passed 37 in 2.5 s. Encoding passed for all 295 PowerShell scripts. No long local
+test command or gate ran, and this integration did not take the shared lock.
+
+**Follow-up hosted receipt:** [run 36472384417, attempt 1](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36472384417),
+accessed 2026-09-29, passed on the clean pushed merge HEAD
+`202ccde6787986eb53a06a2d055c5d72a8e295f1`, tree
+`f5b6403b74fbc25ed9db9547cf52f1478850f675`. `tests/Invoke-RemoteTestAll.ps1` downloaded
+the run's artifacts and independently revalidated exact commit/tree, ownership and ordered
+coverage: **95 PASS, 0 FAIL, 0 SKIP**, across all 12 shards and the successful merge job.
+Queue-to-merge wall time was **635 s (10 min 35 s)**, from 2026-09-28T19:27:37Z to
+19:38:12Z. The updated installer-permutation check passed in 38.8 s; no registration or
+ownership adjustment was needed, and the existing recorded timing table remains unchanged.
+The subsequent receipt-recording commit changes only this STATUS section. The local packet
+gate remains with the lead; ADR-0039 approval is pending and nothing in its proposal is enacted.
+
+Acceptance:
+
+- [x] Opt-in Test-All shards use deterministic longest-processing-time assignment from a
+      committed timing table, preserve process isolation, exclusive lanes and deadlines, and
+      record their complete ownership, results, commit and tree. The default invocation is unchanged.
+- [x] The receipt merger rejects missing, duplicate, failed, foreign-SHA/tree and unregistered
+      results; only a registered prerequisite reason permits SKIP. CI plus any explicitly listed
+      local-only evidence covers exactly the default registration, in registration order.
+- [x] A read-only-permissions, SHA-pinned Windows workflow runs all shards and a coverage merge;
+      both Python environments, Node dependencies and Bicep are installed without Azure sign-in.
+- [x] A clean, pushed exact HEAD can be verified remotely through `gh`, with progress and an
+      estimate; dirty/unpushed heads and incomplete or mismatched runs fail.
+- [x] Fast infrastructure tests and RunnerIntegrity pass under the shared workstation lock;
+      GitHub produces a green full-suite run and recorded queue-to-merge and per-shard timings.
+      Missing, duplicate, foreign-SHA and deliberately failing-check experiments all fail.
+- [x] Merge `main` before handoff. STATUS, CHANGELOG, tests README and ADR record evidence and
+      limitations. Product scripts, policies, ROADMAP and the charter are unchanged.
+
+**Proposed replacement ROADMAP P78 acceptance (owner approval required):** The default Test-All
+registration runs as coverage-proven, deterministic shards on GitHub-hosted Windows runners,
+with no check or mutation removed, machine-exclusive checks still exclusive, both AUM environments
+installed, and complete exact-SHA/tree evidence. The remote helper fails closed on dirty/unpushed
+source, failed/missing shards or invalid coverage. Record hosted wall time, shard times and the
+local baseline. Propose the gate's test command and 30-minute budget in ADR-0039; the owner decides
+whether to amend the charter. Hosted job cancellation bounds its process tree; the existing local
+gate-shell timeout limitation is not represented as fixed.
+
+**Validation history:** the resumed draft initially passed 49 sharding
+and 24 remote assertions, despite two absent dependency snapshots and live wizard/preflight
+boundaries. Added receipt-type/run-identity cases failed 8 of 65 assertions; corrected workflow
+setup failed 3 of 25, and offline-boundary cases failed 2 of 27 before their implementations.
+Targeted suites now pass 79 sharding and 37 remote assertions. The real wizard passes its
+four offline native-boundary assertions; preflight returns through the same fixtures on both
+PowerShell 7 and 5.1. Twenty isolated runner scenarios pass. Their local-only case first failed
+because the draft assigned -1 to the range-validated public `ShardIndex` variable; the internal
+selection index now leaves public validation intact. The actual exit-9 receipt fails the merger
+for its failed check.
+
+`ed62bef` commits the shard/receipt contracts; `1505b2e` commits the offline native boundary;
+`f728d86` commits the runner and its scenarios, including P79's process-start identity from
+`0e64028`. Main `449489b` (P79 merge `6468235`) is integrated before handoff. The resolution retains
+P79's final probe inside `try/finally`, compares the process start time obtained from the operating
+system, and includes both new P79 registrations. The default inventory now has 95 checks.
+Under P78's own shared lock, the merged sharding suite passed 79 assertions in 2.2 s, remote
+contracts 37 in 1.0 s and full RunnerIntegrity 68 in 214.0 s; the lock was removed in `finally`.
+With the shared lock previously occupied after its
+estimated release, the workflow also runs count-preserving Core, Runner and Wizard negative
+proofs on three of its existing VMs. Baseline-only diagnostics do not count as negative proofs.
+Hosted measurements follow below.
+
+The first hosted attempt, [36454004081](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36454004081)
+on `aee8fda`, found missing Playwright Chromium executables in the screenshot/redaction checks,
+and one uncaught core mutation: a removed declaration guard was hidden by an overly broad
+expected error pattern matching a later exception. Setup now installs Chromium explicitly and
+the declaration assertion matches the intended diagnostic. These failures are not green evidence.
+The completed attempt also exposed a shallow checkout with no release tags, and an unmutated
+projection Node baseline failure whose harness discarded its diagnostic. The hosted checkout
+now retains history/tags; the projection harness preserves failed-baseline output without
+changing its mutations or timeout. The same 46-test Node baseline passes locally on Node 26.1.0;
+the hosted Node 22 difference remains under investigation. Wizard/preflight proofs caught 9/9
+mutations and runner proofs caught 12/12, with their complete 4/2 and 20-assertion baselines.
+
+Run [36455666772](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36455666772)
+on `a9ebfd1` passed every product check except release ancestry: the later proof-baseline fetch
+with `--depth=1` made the otherwise full checkout shallow again. That redundant fetch is removed;
+the frozen baseline already exists in full history. The projection baseline and every mutation
+passed on Node 22 in that run, so the earlier failure's cause remains unproven rather than
+classified as a Node incompatibility. Its future diagnostic is retained. Core proofs passed
+73/73 locally under the shared lock at full 79/37 assertion counts; all restored suites passed.
+
+**Green hosted evidence:** [run 36457223984, attempt 1](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36457223984),
+accessed 2026-09-28, verified by the real `Invoke-RemoteTestAll.ps1` on the clean pushed HEAD
+`f82981270702f0af5eeceb41a4e8d776524acf28`, tree
+`aaac14f39655051693c3c51929f9841faec094af`. The downloaded receipt union passed **95/95
+registrations, 0 FAIL, 0 SKIP** in registration order, with no local-only exclusions.
+Queue-to-merge wall time was **638 s (10 min 38 s)**, from 17:18:45Z to 17:29:23Z.
+The merge job took 23 s. Setup before checks, excluding infrastructure proofs, ranged from
+87 to 212 s. Core, Runner and Wizard proof steps took 96, 282 and 60 s respectively.
+
+| Shard | Entire job, seconds | Test-All receipt, seconds |
+|---|---:|---:|
+| 0 | 459 | 232.4 |
+| 1 | 608 | 199.9 |
+| 2 | 391 | 226.8 |
+| 3 | 443 | 224.5 |
+| 4 | 289 | 191.2 |
+| 5 | 232 | 139.6 |
+| 6 | 390 | 240.1 |
+| 7 | 292 | 193.6 |
+| 8 | 312 | 211.0 |
+| 9 | 153 | 55.5 |
+| 10 | 340 | 232.4 |
+| 11 | 390 | 287.4 |
+
+The hosted run includes **74/74 Core, 12/12 Runner and 9/9 Wizard mutations caught** with
+baseline counts 79/37, 20 and 4/2 respectively; every restored suite passed. The real
+exit-9 check fails its shard and the merger. Missing/duplicate results and foreign SHA/tree
+receipts are rejected in the synthetic suite. The actual remote entry point also rejected a
+dirty worktree and a clean unpushed HEAD, and rejected failed hosted run 36454004081.
+The complete hosted suite includes 320 FinOps pytest tests, 127 AUM service unit tests and
+five service mutations, 512 business-unit mutations, 108 Turnstile mutations, 105 company-address
+mutations and 57 projection mutations; none was removed for CI.
+
+Compared with the approximately 44-minute loaded-workstation baseline (P79's passing gate
+records 2,666 s in Test-All below), the hosted end-to-end interval is 10 min 38 s. This is not
+a controlled same-machine benchmark: runner hardware, load, setup, Python-environment presence
+and infrastructure proof work differ. `tests/test-all-durations.json:1` now records all 95
+observed passing durations as future LPT weights; the default for a new check remains 60 s.
+
+**Limits and approval:** artifact retention is 14 days; Python snapshots pin versions rather
+than artifact hashes; GitHub queues and hosted images can change. The isolated unmutated
+projection failure in the first run has no recovered cause; two later hosted runs passed it,
+and the harness now preserves failure output. No local gate-shell process-tree fix or charter
+change is claimed. ADR-0039 remains a draft for owner approval, including the proposed remote
+test command, 30-minute budget and replacement ROADMAP acceptance. Product scripts, policies,
+ROADMAP and charter equal the integrated main; no Azure resource was accessed by P78.
+
+U50-U53 track hosted compatibility, timing, remote-run identity and detector evidence. No product architecture
+component changes; this is test execution and evidence transport, not an accelerator deployment.
+
 **Active packets (2026-09-28, run in parallel worktrees):** P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)); P78 the test suite runs in parallel on GitHub-hosted runners, P80 AUM shows every action it has, and P81 USD budgets are the primary enforcer, each on its own branch until the owner reviews it. Each has its own section on its branch; the section lands here when the packet merges. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)), and its follow-up, the installer permutation check reads only its own record (`05dea1b`, [below](#p79-follow-up-the-installer-permutation-check-reads-only-its-own-record-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P79 follow-up: the installer permutation check reads only its own record, 2026-09-28

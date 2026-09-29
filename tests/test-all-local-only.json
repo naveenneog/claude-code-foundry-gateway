@@ -1,0 +1,5 @@
+{
+  "SchemaVersion": 1,
+  "Checks": [],
+  "Reason": "Every default offline registration runs on hosted Windows, with fixture-backed native Azure CLI boundaries. The seven opt-in -IncludeAzure registrations are outside the default suite and require an operator-controlled Azure session; P78 never runs them."
+}
