@@ -4,9 +4,25 @@
 
 ## P84 Projection deployment checks everything before it writes and never switches into an outage, 2026-09-29
 
-**Council round 2: Architect, Coder, UX and Security PASS; QA's one BLOCK is corrected; the owner approved the merge on 2026-09-29 after council and gate.** All five seats blocked the earlier submission. The owner requested P84 after a partial customer deployment on
+**Council round 3 passed on all five seats and the packet gate passed at `5612c94`; the owner approved the merge on 2026-09-29.** All five seats blocked the earlier submission. The owner requested P84 after a partial customer deployment on
 2026-09-29. The branch is `p84-projection-preflight`, based on `30cdfd0`. The lead owns COUNCIL
 and GATE; the owner owns merge approval. This packet performs no live Azure writes.
+
+### Council round 3 and the packet gate
+
+- [x] Council round 3, over `624ebd4..f39524d`: all five seats PASS. QA's independent sweep of
+      fifteen summary widths reached truncation inside the fortieth line: 40 lines and 4,093
+      characters for the ten-digit case, and at most 40 lines and 4,096 characters overall
+- [x] Gate 1, at `f39524d` (19:22-19:48), failed six checks. The architecture manifest still held
+      input hashes from before P84 changed `Sync-ClaudeProjection.ps1`, `ClaudeAumDirectWrites.ps1`,
+      `Sync-AumMembership.ps1` and `Install-ClaudeGateway.ps1`. `Test-Scale.ps1` expected the manual
+      switch as `az apim nv update`, while `docs/SCALE.md` now documents the same single write through
+      `Set-ApimNamedValue`, which reads the value back. The four business-unit mutation shards failed
+      only because their unmutated `Test-Scale.ps1` copy failed. Fixed in `5612c94`: the manifest is
+      regenerated with no image change, and the assertion accepts either spelling of that one write;
+      with the switch command removed from SCALE.md it fails (1 of 211)
+- [x] Gate 2, at `5612c94` (20:05-20:35), the tree that merges: PASS. Test-All in 1,821 s; 22
+      passed, 2 warned (open unknowns), 0 failed
 
 ### Council round 2 corrections
 
