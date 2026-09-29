@@ -72,6 +72,47 @@ PROBES = [
     Probe("native-receipt-polling", "screens.py", 'elif self.engine.backend.immediate_writes:',
           'elif False:', "test_p85_budgets.py",
           "test_service_native_token_receipt_does_not_follow_turnstile_apply"),
+    Probe("refresh-transport-containment", "errors.py",
+          "READ_FAILURES = (FinOpsError, OSError, httpx.HTTPError)", "READ_FAILURES = (FinOpsError,)",
+          "test_p85_escape.py", "test_escape_triggered_refresh_errors_are_visible_not_fatal"),
+    Probe("plain-refresh-explanation", "progressive.py",
+          'f"{reason}Read failed (exit {error.code}). {self._error_text(error)} {fix}"',
+          'f"{reason}Read failed (exit {error.code}). {fix}"',
+          "test_p85_escape.py", "test_escape_triggered_refresh_errors_are_visible_not_fatal"),
+    Probe("cae-cli-preservation", "config.py", "if is_location_challenge(result.stderr):", "if False:",
+          "test_p85_escape.py", "test_azure_cli_preserves_actionable_cae_location_reason"),
+    Probe("cae-marker-specificity", "errors.py",
+          '"interactionrequired" in folded and "locationconditionevaluationsatisfied" in folded',
+          '"interactionrequired" in folded or "locationconditionevaluationsatisfied" in folded',
+          "test_p85_escape.py", "test_other_azure_cli_errors_are_not_labelled_cae"),
+    Probe("single-quit-confirmation", "tui.py", "self.push_screen(QuitScreen())", "self.exit()",
+          "test_p85_escape.py", "test_quit_requires_confirmation_and_escape_cancels_it"),
+    Probe("escape-cancels-quit", "feature_screens.py",
+          '("escape", "dismiss", "Stay")', '("escape", "confirm", "Quit")',
+          "test_p85_escape.py", "test_quit_requires_confirmation_and_escape_cancels_it"),
+    Probe("programming-error-distinction", "errors.py",
+          'raise TypeError("Only expected backend read failures can be normalized.")',
+          'return FinOpsError("Programming error hidden as a read failure.", 7)',
+          "test_p85_escape.py", "test_read_error_normalizer_rejects_programming_errors"),
+    Probe("cloudshell-dry-run", "aum-cloudshell.sh", 'if "$dry_run"; then exit 0; fi',
+          "if false; then exit 0; fi", "test_p85_cloudshell.py", "test_cloudshell_dry_run_has_plan_without_writes"),
+    Probe("cloudshell-home-boundary", "aum-cloudshell.sh",
+          '*) fail "Refusing a destination outside HOME: $path" ;;', "*) : ;;",
+          "test_p85_cloudshell.py", "test_cloudshell_refuses_escaping_destination_links_before_writing"),
+    Probe("cloudshell-python-pip-environment", "aum-cloudshell.sh",
+          "unset PYTHONHOME PYTHONPATH VIRTUAL_ENV PIP_TARGET PIP_PREFIX PIP_USER", ":",
+          "test_p85_cloudshell.py", "test_cloudshell_overrides_inherited_write_destinations"),
+    Probe("cloudshell-uv-environment", "aum-cloudshell.sh",
+          "unset UV_TARGET UV_PREFIX UV_SYSTEM_PYTHON UV_PROJECT_ENVIRONMENT UV_CONFIG_FILE UV_PYTHON", ":",
+          "test_p85_cloudshell.py", "test_cloudshell_overrides_inherited_write_destinations"),
+    Probe("cloudshell-stage-failure", "aum-cloudshell.sh", "set -euo pipefail", "set -uo pipefail",
+          "test_p85_cloudshell.py", "test_cloudshell_failed_stage_never_launches_aum"),
+    Probe("cloudshell-runtime-floor", "aum-cloudshell.sh",
+          "|| fail 'The AUM venv requires Python 3.12 or newer; the existing venv was not replaced.'",
+          "|| true", "test_p85_cloudshell.py", "test_cloudshell_rejects_reused_old_python"),
+    Probe("cloudshell-source-boundary", "aum-cloudshell.sh",
+          "*) fail 'The package source resolves outside the repository.' ;;", "*) : ;;",
+          "test_p85_cloudshell.py", "test_cloudshell_requires_source_in_selected_checkout"),
 ]
 
 
@@ -96,7 +137,18 @@ def run_tests(output, name, selectors):
 
 
 def clear_bytecode(path):
-    Path(importlib.util.cache_from_source(str(path))).unlink(missing_ok=True)
+    if path.suffix == ".py":
+        Path(importlib.util.cache_from_source(str(path))).unlink(missing_ok=True)
+
+
+def check_syntax(path, changed):
+    if path.suffix == ".py":
+        compile(changed, str(path), "exec")
+        return
+    sys.path.insert(0, str(TESTS))
+    from test_p85_cloudshell import bash, shell_path
+    subprocess.run([bash(), "--noprofile", "--norc", "-n", shell_path(path)],
+                   check=True, capture_output=True, timeout=20)
 
 
 def main():
@@ -116,15 +168,15 @@ def main():
                 raise RuntimeError(f"Baseline did not pass: {selector}; {baseline}")
             baselines[selector] = baseline
         baseline = baselines[selector]
-        path = SOURCE / probe.file
+        path = (ROOT / "scripts" if probe.file.endswith(".sh") else SOURCE) / probe.file
         original = path.read_bytes()
-        text = original.decode("utf-8")
+        text = original.decode("utf-8").replace("\r\n", "\n")
         if text.count(probe.before) != 1:
             raise RuntimeError(f"{probe.name}: expected exactly one mutation target")
         changed = text.replace(probe.before, probe.after).encode("utf-8")
-        compile(changed, str(path), "exec")
         try:
             path.write_bytes(changed)
+            check_syntax(path, changed)
             clear_bytecode(path)
             result = run_tests(args.output, probe.name, [selector])
         finally:

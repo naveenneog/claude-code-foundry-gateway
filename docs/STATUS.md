@@ -124,6 +124,36 @@ protected layout/screen imports when combined with that branch. No new
 builtin allowance, raw notification or unrestricted-super call was added.
 The detailed comparison is `$env:TEMP\p85-p71-extension-delta.json`.
 
+**Combined mutation proof:** all **26/26 probes** (the original 12 plus 14
+for items 7/8) were caught in **478.093 s**, including baselines and the
+restored union. Every probe retained its exact baseline test identities,
+compiled as Python or passed `bash -n`, and produced test failures with
+zero test/collection errors or skips. The restored **68-case union passed
+in 111.125 s wall time**. Each mutated source was restored byte-for-byte
+before the next probe, under one runner command's owned `.gate-lock`.
+
+| Added probe | Same cases | Failed cases |
+|---|---:|---:|
+| Raw transport/I/O no longer contained | 28 | 16 |
+| Plain refresh explanation removed | 28 | 28 |
+| Azure CLI CAE reason discarded | 2 | 2 |
+| Either CAE marker incorrectly treated as sufficient | 3 | 2 |
+| First q exits without confirmation | 4 | 4 |
+| Escape confirms quit instead of cancelling | 4 | 4 |
+| Programming error relabelled as an expected read failure | 1 | 1 |
+| Cloud Shell dry-run performs setup | 1 | 1 |
+| Canonical HOME boundary removed | 8 | 8 |
+| Inherited Python/pip destinations retained | 1 | 1 |
+| Inherited uv destinations retained | 1 | 1 |
+| Shell continues after a failed stage | 3 | 3 |
+| Old runtime accepted on reuse | 1 | 1 |
+| Escaped repository source accepted | 2 | 1 |
+
+The same `cli\finops\tools\probe_p85.py` now covers Python and Bash.
+The complete receipt, case identities and individual logs/JUnit files are
+under `$env:TEMP\p85-extension-mutations`; the outer log is
+`$env:TEMP\p85-extension-mutations.log`. The original evidence is retained.
+
 ### Initial evidence and unknowns
 
 The inherited no-run audit passed: 20 checks passed, 2 warned, 0 failed,
