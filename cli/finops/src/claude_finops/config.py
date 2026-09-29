@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from .errors import FinOpsError
+from .errors import FinOpsError, LOCATION_CHALLENGE, is_location_challenge
 
 
 @dataclass(frozen=True)
@@ -144,6 +144,8 @@ def az(*args: str, timeout: float = 120) -> str:
     except OSError:
         raise FinOpsError("Azure CLI could not start or contain its process. Check the installation and local process permissions.", 7) from None
     if result.returncode:
+        if is_location_challenge(result.stderr):
+            raise FinOpsError(LOCATION_CHALLENGE, 3)
         if "AADSTS50105" in result.stderr:
             raise FinOpsError("AADSTS50105: no app role for the selected backend. Check the existing AUM or Turnstile app assignment; Azure administrators can choose Direct with existing RBAC.", 4)
         raise FinOpsError("Azure CLI refused the operation. Run az login in the correct tenant and check Azure role assignments.", 3)

@@ -122,6 +122,7 @@ def link_directory(path, target):
 
 def test_cloudshell_shellcheck_or_bash_syntax():
     assert LAUNCHER.is_file(), "The Cloud Shell launcher has not been implemented."
+    assert b"\r" not in LAUNCHER.read_bytes(), "The launcher must also be executable by Linux Bash."
     checker = shutil.which("shellcheck")
     command = [checker, "--shell=bash", str(LAUNCHER)] if checker else [
         bash(), "--noprofile", "--norc", "-n", shell_path(LAUNCHER)]

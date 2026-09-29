@@ -221,6 +221,9 @@ async def test_quit_and_help_remain_responsive_while_data_is_pending():
             await pilot.press("?")
             assert len(app.screen_stack) == 2
             await pilot.press("escape", "q")
+            assert app.is_running
+            assert app.screen.query("#quit-message")
+            await pilot.press("enter")
             assert not app.is_running
         finally:
             backend.release()

@@ -21,6 +21,27 @@ class FilterChips(Static, can_focus=True):
         self.app.action_scope_filters()
 
 
+class QuitScreen(ModalScreen):
+    BINDINGS = [("escape", "dismiss", "Stay"), ("q", "confirm", "Quit"), ("enter", "confirm", "Quit")]
+
+    @published(lambda self: self.app.safe_message_guard())
+    def compose(self):
+        with Vertical(id="month-dialog"):
+            yield Label("Quit AUM?", markup=False)
+            yield Static("Press q again or Enter to quit; Esc to stay.", id="quit-message", markup=False)
+            with Horizontal(classes="buttons"):
+                yield Button("Quit", id="quit-confirm", variant="error")
+                yield Button("Stay", id="quit-stay")
+
+    @on(Button.Pressed, "#quit-confirm")
+    def action_confirm(self):
+        self.app.exit()
+
+    @on(Button.Pressed, "#quit-stay")
+    def stay(self):
+        self.dismiss()
+
+
 class ActionForm(ModalScreen):
     BINDINGS = [("escape", "cancel", "Cancel")]
 

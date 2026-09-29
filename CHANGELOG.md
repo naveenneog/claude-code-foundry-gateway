@@ -29,6 +29,13 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P85 owner additions: Escape and quit safety.** Rapid Escape remains
+  navigation/cancellation through the tested main/modal/slow/error paths.
+  Expected refresh transport failures no longer become fatal worker errors.
+  One `q` opens confirmation; a second `q` or Enter quits and Escape stays.
+  The palette includes quit, back/clear and page navigation. CAE location
+  challenges explain IP variation, VPN/IPv6 consistency and administrator
+  review without echoing transport details or retrying writes.
 - **P85 owner additions: Cloud Shell bootstrap.** A HOME-local launcher
   creates/reuses a managed Python 3.12 environment and installs the checked-out
   AUM package, retaining Cloud Shell's existing Azure CLI sign-in. Dry-run,

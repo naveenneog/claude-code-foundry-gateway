@@ -16,6 +16,8 @@ class FinOpsCommands(Provider):
             ("Filter the current view", self.app.action_filter, "Visible rows only; Esc clears"),
             ("Change month", self.app.action_month, "YYYY-MM"),
             ("Refresh current view", self.app.action_refresh, "Read the latest server state"),
+            ("Clear filter or go back", self.app.action_clear_filter, "The same navigation as Esc; never quits"),
+            ("Quit AUM", self.app.action_quit, "Confirmation required; Esc stays"),
             ("Help and key map", self.app.action_help, "Learn this screen"),
             ("Exact selected values", self.app.action_exact_detail, "Full precision and request-based person details"),
             ("Set server filter chips", self.app.action_scope_filters, "Unit, team, person, model, surface and tier"),
@@ -29,6 +31,9 @@ class FinOpsCommands(Provider):
         ]
         if self.app.active == "people" and not self.app.redactor.enabled:
             commands.append(("Open team membership in Entra", self.app.action_membership, "Directory rights are enforced by Entra"))
+        if self.app.check_action("next_page", ()):
+            commands += [("Next page", self.app.action_next_page, "The same navigation as n"),
+                         ("Previous page", self.app.action_previous_page, "The same navigation as p")]
         if self.app.engine.backend.name == "Direct":
             commands += [("Usage: request-time attribution", self.app.action_request_time_usage, "Stamped team at request time; no invented cost"),
                          ("Usage: current priced membership", self.app.action_priced_usage, "Published workspace price/membership function")]

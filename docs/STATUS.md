@@ -72,6 +72,35 @@ image, whereas the FAQ says HOME is deleted. [ADR-0041](adr/0041-aum-session-saf
 records the source conflict and the conservative live-verification boundary;
 no storage or networking resources are created by the launcher.
 
+**Item 7 GREEN:** **111 cases passed in 172.79 s**, covering the full Escape
+matrix, quit cancellation/confirmation, palette routes, CLI CAE recognition
+and the existing pending-read responsiveness case. The additional pre-fix
+palette/CAE selection had **4 failures and 4 passing controls in 4.48 s**.
+The fix is in the refresh boundary: only expected domain, HTTP-transport and
+I/O failures are normalized. Publication refusal still invalidates old data,
+and the programming-defect control still raises its original fatal error.
+There is no catch-all Textual fatal-handler override or mutation retry.
+Azure CLI CAE classification requires both error markers and never echoes
+raw stderr. Quit, back/clear and page actions now have palette routes.
+The focused existing readiness, Azure deadline, publication-structure,
+guide and helper/portability regressions then passed **62 cases in 24.60 s**.
+The reproduced failure was `WorkerFailed: ConnectError(...)` (also
+`OSError(...)`), not an Escape-to-quit binding. No detector or publication
+allowlist was changed. The bash working copy is LF as well as its Git blob.
+
+**Owner-only Cloud Shell verification (U61, pending):** an existing Bash
+Cloud Shell session with attached storage, an existing gateway and appropriate
+read permissions are the prerequisites. The estimated check takes 10-15
+minutes, including first bootstrap (2-5 minutes) and a session restart.
+The dry-run prints only a plan; configure saves only the local profile; an AUM
+run with `--what-if` displays the chosen backend and exercises navigation,
+repeated Escape and quit cancellation without governance writes. A restart
+checks reuse of the HOME-local venv. Actual Python/download availability,
+browser key handling, endpoint reachability, Conditional Access and HOME
+persistence remain unverified on Cloud Shell from this machine. Private
+endpoints require an already connected VNet Cloud Shell; this packet does
+not deploy one.
+
 ### Initial evidence and unknowns
 
 The inherited no-run audit passed: 20 checks passed, 2 warned, 0 failed,

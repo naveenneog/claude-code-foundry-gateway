@@ -220,6 +220,25 @@ The [snapshot manifest](../cli/finops/tests/snapshots/manifest.json) records
 source and output hashes for all 24 screen images. Text hashes normalize
 Windows CRLF and Unix LF line endings to the same UTF-8/LF representation.
 
+Escape clears a filter, returns along a breadcrumb or dismisses a modal; it
+does not request application exit. A single `q` opens a quit confirmation.
+A second `q` or Enter confirms; Escape stays in AUM. **Quit AUM**, **Clear
+filter or go back**, and the context-dependent **Next page** / **Previous
+page** actions are also in the `:` palette.
+
+Expected refresh failures remain visible rather than terminating the terminal.
+Network/I/O failures and HTTP 401/403 have plain status explanations; an
+explicit refresh (`r`, normally estimated at 3-5 s) retries the read, not a
+mutation. The CAE `InteractionRequired` / `LocationConditionEvaluationSatisfied`
+challenge gets an IP-variation explanation: consistent on/off VPN use,
+IPv4/IPv6 differences, and administrator review of a named location or an
+appropriate policy exclusion. No policy exception is granted by AUM.
+The Azure CLI boundary recognizes that challenge without echoing raw stderr
+([CAE guidance](https://learn.microsoft.com/entra/identity/conditional-access/howto-continuous-access-evaluation-troubleshoot#ip-address-configuration),
+accessed 2026-09-29;
+[error boundary](../cli/finops/src/claude_finops/errors.py),
+[pilot matrix](../cli/finops/tests/test_p85_escape.py)).
+
 ## How-to
 
 ### Add a person to a team

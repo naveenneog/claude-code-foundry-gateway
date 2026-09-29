@@ -8,7 +8,7 @@ from textual import work
 from .publication_widgets import DataTable, Static
 
 from .dashboard import Dashboard, DashboardPanel
-from .errors import FinOpsError
+from .errors import FinOpsError, READ_FAILURES, read_error
 from .output import safe_text
 from .scope import scope_label
 from .guarded_publication import guarded_publish, published, guarded_deferred
@@ -51,7 +51,7 @@ class ProgressiveRefresh:
         if elapsed > estimate:
             timing += " (longer than estimated)"
         prefix = "The sign-in changed; previous data cleared. " if self._principal_notice else ""
-        self.query_one("#status", Static).update(f"{prefix}Waiting for {names}\n{timing}. q quits; r retries.")
+        self.query_one("#status", Static).update(f"{prefix}Waiting for {names}\n{timing}. q asks to quit; r retries.")
 
     async def _tracked_read(self, key, operation, serial, tab):
         if self._current_refresh(serial, tab):
@@ -104,6 +104,7 @@ class ProgressiveRefresh:
 
     @published(lambda self, tab, error: self.safe_message_guard())
     def _show_read_error(self, tab, error):
+        error = read_error(error)
         self.editable = False
         self.data.pop(tab, None)
         self.records.pop(tab, None)
@@ -119,7 +120,8 @@ class ProgressiveRefresh:
         fix = "Check managed scope in Settings; r refreshes." if error.code == 4 else (
             "No resource started. r retries; 0 opens Settings." if error.code == 9 else "r retries; ? explains sign-in.")
         reason = "The sign-in changed. " if "sign-in changed" in str(error).lower() else ""
-        self.query_one("#status", Static).update(f"{reason}Read failed (exit {error.code}). {fix}")
+        self.query_one("#status", Static).update(
+            f"{reason}Read failed (exit {error.code}). {self._error_text(error)} {fix}")
 
     @work(exclusive=True, group="view")
     async def action_refresh(self):
@@ -157,7 +159,8 @@ class ProgressiveRefresh:
                 try:
                     identity = await self._metadata_or_data_error(lambda: self._tracked_read(
                         "identity", asyncio.to_thread(self.engine.read, "whoami"), serial, tab), data_task)
-                except FinOpsError as error:
+                except READ_FAILURES as error:
+                    error = read_error(error)
                     if data_task is not None and data_task.done():
                         data_task.result()
                     if not independent or data_task is None:
@@ -200,7 +203,7 @@ class ProgressiveRefresh:
                     self.set_focus(self.query_one("#dash-kpis", DashboardPanel) if tab == "overview"
                                    else self.query_one(f"#table-{tab}", DataTable))
                 self.maybe_tour()
-        except FinOpsError as error:
+        except READ_FAILURES as error:
             if self._current_refresh(serial, tab):
                 self._show_read_error(tab, error)
         finally:
@@ -237,7 +240,8 @@ class ProgressiveRefresh:
         async def fetch(key, operation):
             try:
                 return key, await self._tracked_read(key, operation, serial, tab), None
-            except FinOpsError as error:
+            except READ_FAILURES as error:
+                error = read_error(error)
                 if error.code in {3, 4, 9}:
                     raise
                 return key, None, self._error_text(error)

@@ -24,7 +24,7 @@ from .views import DIMENSIONS, TABS, view_rows
 from .ui_features import FeatureUI, EXTRA_TABS
 from .capabilities import enabled
 from .usd import can_usd_write
-from .feature_screens import FilterChips
+from .feature_screens import FilterChips, QuitScreen
 from .progressive import ProgressiveRefresh
 from .guarded_publication import guarded_publish, published, guarded_deferred
 from .principal_ui import PrincipalUI
@@ -723,6 +723,10 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
         if self.check_action("export", ()):
             self.push_screen(ExportScreen(auto_export=True))
 
+    @published(lambda self: self.safe_message_guard())
+    def action_quit(self):
+        self.push_screen(QuitScreen())
+
     def action_edit(self):
         if not self.check_action("edit", ()):
             return
@@ -824,7 +828,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
         keys = dict(tabs=", ".join(label for tab, label in TABS + EXTRA_TABS if tab in self.allowed_tabs),
                     navigation="Tab / Shift+Tab changes focus; arrows move; Enter opens exact values; Esc goes back.",
                     lookup="/ searches scopes, people, models and request:<id>; Ctrl+F filters rows; f sets server filters.",
-                    commands=": opens the command palette; m changes month; r refreshes; q quits.",
+                    commands=": opens the command palette; m changes month; r refreshes; q asks to quit. A second q or Enter confirms; Esc stays.",
                     current_view=self.active, role=self.identity.get("role", "unknown"),
                     pagination="n next / p previous; cursor pages when advertised, otherwise 200 requests per window.",
                     safety="Preview first, then Apply. Removing or lowering below usage requires the identifier.",
