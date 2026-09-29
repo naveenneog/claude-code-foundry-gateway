@@ -217,17 +217,17 @@ class Config:
         return asdict(self)
 
 
-def profile_path(path: Path | None = None) -> Path:
+def profile_path(path: Path | str | None = None) -> Path:
     if path is None:
         explicit = os.environ.get("AUM_CONFIG") or os.environ.get("CLAUDE_FINOPS_CONFIG")
         path = Path(explicit) if explicit else Path.home() / ".aum" / "config.json"
         legacy = Path.home() / ".claude-finops" / "config.json"
         if not explicit and not path.exists() and legacy.exists():
             path = legacy
-    return path.expanduser().resolve()
+    return Path(path).expanduser().resolve()
 
 
-def load_config(path: Path | None = None, **overrides) -> Config:
+def load_config(path: Path | str | None = None, **overrides) -> Config:
     path = profile_path(path)
     values = {}
     if path.exists():

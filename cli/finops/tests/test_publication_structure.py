@@ -5,20 +5,22 @@ import hashlib
 import json
 from pathlib import Path
 import pytest
+from publication_policy import PRESENTATION, inventory_failures, violations
 
 
 ROOT = Path(__file__).resolve().parents[1] / "src" / "claude_finops"
-UI_FILES = tuple(sorted(path.name for path in ROOT.glob("*.py") if path.name in {
-    "cli.py", "commands_local.py", "output.py", "feature_engine.py", "publication_output.py",
-} or any(isinstance(node, ast.ImportFrom) and (node.module or "").startswith("textual")
-         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))))))
+UI_FILES = tuple(sorted(PRESENTATION))
 SINKS = {"update", "load_text", "add_row", "set_options", "copy_to_clipboard",
          "open_url", "write", "write_text", "display", "render", "print", "echo", "ask",
-         "write_export", "write_renderable", "copy_with_helper"}
+         "write_export", "write_renderable", "copy_with_helper", "save_profile", "confirm_profile_replace",
+         "publication_scroll_home"}
 VALUE_WIDGETS = {"Label", "Static", "TextArea", "Input", "Select"}
-SINK_PROPERTIES = {"value", "text", "label", "border_title", "placeholder", "tooltip"}
+SINK_PROPERTIES = {"content", "value", "text", "label", "border_title", "placeholder", "tooltip"}
 SCHEDULERS = {"call_later", "call_after_refresh", "set_timer", "set_interval",
-              "run_worker", "post_message", "create_task", "call_soon"}
+              "run_worker", "post_message", "create_task", "call_soon", "call_at", "call_next", "Timer"}
+DEFERRED_FACTORIES = {"partial", "partialmethod"}
+RAW_ATTRIBUTES = {"fset", "__set__", "__setattr__", "__dict__"}
+UNCHECKED_BUILTINS = {"vars", "exec", "eval"}
 
 # Exact (file, qualified function, normalized call) exceptions for static/local
 # presentation only. Each entry needs its own factual reason, not a handler-wide exemption.
@@ -75,10 +77,10 @@ STATIC_WRITES = {
     ("developer_screens.py", "DeveloperPicker.compose", "Label('Add developer from Microsoft Entra directory', markup=False)"): "Fixed developer-picker heading.",
     ("developer_screens.py", "DeveloperPicker.compose", "Static('Bounded delegated directory search. Preview before any group membership write.', id='developer-status', markup=False)"): "Fixed directory-search and preview instruction.",
     # Command metadata exits never connect to a backend.
-    ("cli.py", "root", "typer.echo(BANNER)"): "Fixed product banner before connecting.",
+    ("cli.py", "root", "write_text(BANNER)"): "Fixed product banner before connecting.",
     ("cli.py", "root", "display(dict(product=PRODUCT, version=__version__), as_json=True)"): "Local package product/version metadata only.",
-    ("cli.py", "root", "typer.echo(f'{PRODUCT} {__version__}')"): "Local package product/version metadata only.",
-    ("cli.py", "legacy_main", "typer.echo('Deprecated: claude-finops is now aum (AUM - Azure Usage Management); this alias remains for one release.', err=True)"): "Fixed legacy-entry-point deprecation notice.",
+    ("cli.py", "root", "write_text(f'{PRODUCT} {__version__}')"): "Local package product/version metadata only.",
+    ("cli.py", "legacy_main", "write_text('Deprecated: claude-finops is now aum (AUM - Azure Usage Management); this alias remains for one release.', err=True)"): "Fixed legacy-entry-point deprecation notice.",
 }
 
 # The principal reset iterates a fixed tuple of cache field names, never widget
@@ -86,6 +88,28 @@ STATIC_WRITES = {
 DYNAMIC_ACCESSES = {
     ("principal_ui.py", "PrincipalUI._clear_principal_state", "getattr(screen, name)"):
         "Reads the fixed local cache-field tuple solely to avoid replacing callable methods during clearing.",
+}
+
+# These expressions implement the boundary itself, not presentation handlers.
+SINK_INTERNALS = {
+    ("publication_widgets.py", "PublicationWidget.__setattr__", "super().__setattr__(name, value)"):
+        "Only non-presentation attributes reach this base setter; presentation names use _set_presentation.",
+    ("publication_widgets.py", "PublicationWidget._set_presentation", "super().__setattr__(name, value)"):
+        "The synchronous publication sink validates first and retains the written content's origin.",
+    ("publication_widgets.py", "PublicationApp._dispatch_action", "cls.__dict__.get('action_' + action_name)"):
+        "Reads the fixed framework action MRO before invoking the retained input-origin wrapper.",
+    ("publication_widgets.py", "_protect_native_widget.set_presentation", "original.__setattr__(owner, name, value)"):
+        "The synchronous sink checks the origin before forwarding this approved native descriptor write.",
+    ("publication_widgets.py", "_protect_native_widget", "PublicationWidget.__setattr__(owner, name, value)"):
+        "The native adapter installs the guarded setter before any DOM registration.",
+    ("publication_widgets.py", "_protect_native_widget", "getattr(original, name, None)"):
+        "Wraps only the fixed write-method vocabulary of an exact approved native class.",
+    ("publication_widgets.py", "_protect_native_widget", "object.__setattr__(widget, '_publication_origin', origin)"):
+        "Retains the composing source before the native receiver enters the DOM.",
+    ("publication_widgets.py", "_protect_native_widget", "object.__setattr__(widget, '__class__', protected)"):
+        "Installs only the guarded native adapter; ordinary presentation class replacement remains forbidden.",
+    ("publication_widgets.py", "PublicationApp.__setattr__", "super().__setattr__(name, value)"):
+        "Only initial static title setup and non-title state reach the native application setter.",
 }
 
 
@@ -102,8 +126,8 @@ def call_name(node):
 
 def sinks(source, filename, allowed=None):
     allowed = STATIC_WRITES if allowed is None else allowed
-    failures = []
     tree = ast.parse(source)
+    failures = violations(tree, filename)
 
     class Check(ast.NodeVisitor):
         def __init__(self):
@@ -122,7 +146,7 @@ def sinks(source, filename, allowed=None):
                 return False
             if isinstance(node, ast.Lambda):
                 return True
-            if isinstance(node, ast.Call) and call_name(node.func) == "partial":
+            if isinstance(node, ast.Call) and call_name(node.func) in DEFERRED_FACTORIES:
                 return True
             if ast.unparse(node) in self.callbacks:
                 return True
@@ -179,13 +203,40 @@ def sinks(source, filename, allowed=None):
         def visit_Assign(self, node):
             if self.escaping(node.value):
                 self.callbacks.update(ast.unparse(target) for target in node.targets)
-            if not self.guarded and any(isinstance(target, ast.Attribute) and target.attr in {
-                    "value", "text", "label", "border_title", "placeholder", "tooltip"} for target in node.targets):
+            self.assignment(node, node.targets)
+
+        def visit_AnnAssign(self, node):
+            self.assignment(node, [node.target])
+
+        visit_AugAssign = visit_AnnAssign
+
+        def assignment(self, node, targets):
+            if not self.guarded and any(isinstance(target, ast.Attribute) and
+                                        target.attr in SINK_PROPERTIES for target in targets):
                 self.report(node)
             self.generic_visit(node)
 
+        def visit_Attribute(self, node):
+            if node.attr in RAW_ATTRIBUTES | UNCHECKED_BUILTINS:
+                self.report(node, "unchecked descriptor, raw state or dynamic code bypasses publication sinks")
+            self.generic_visit(node)
+
+        def visit_Name(self, node):
+            if isinstance(node.ctx, ast.Load) and node.id in UNCHECKED_BUILTINS:
+                self.report(node, "raw state or dynamic code bypasses publication sinks")
+
+        def visit_ImportFrom(self, node):
+            if any(alias.name in UNCHECKED_BUILTINS for alias in node.names):
+                self.report(node, "imported raw-state or dynamic-code alias bypasses publication sinks")
+
         def visit_Call(self, node):
             name = call_name(node.func)
+            key = (filename, ".".join(self.scope), ast.unparse(node))
+            arguments = [*node.args, *(keyword.value for keyword in node.keywords)]
+            if key in SINK_INTERNALS:
+                for argument in arguments:
+                    self.visit(argument)
+                return
             if name == "guarded_deferred":
                 previous, deferred = self.guarded, self.deferred
                 self.guarded = self.deferred = True
@@ -193,8 +244,11 @@ def sinks(source, filename, allowed=None):
                     self.visit(argument)
                 self.guarded, self.deferred = previous, deferred
                 return
-            if name in SCHEDULERS and any(self.escaping(argument) for argument in node.args):
+            if name in SCHEDULERS and any(self.escaping(argument) for argument in arguments):
                 self.report(node, "deferred callback requires guarded_deferred")
+            if name == "getattr" and len(node.args) > 1 and isinstance(node.args[1], ast.Constant):
+                if node.args[1].value in RAW_ATTRIBUTES | UNCHECKED_BUILTINS:
+                    self.report(node, "indirect raw-state or dynamic-code access bypasses publication sinks")
             if name == "getattr" and len(node.args) > 1 and not isinstance(node.args[1], ast.Constant):
                 key = (filename, ".".join(self.scope), ast.unparse(node))
                 if key not in DYNAMIC_ACCESSES:
@@ -203,7 +257,7 @@ def sinks(source, filename, allowed=None):
                 attribute = node.args[1]
                 if (not isinstance(attribute, ast.Constant) or attribute.value in SINK_PROPERTIES) and not self.guarded:
                     self.report(node)
-            if name == "partial" and node.args and call_name(node.args[0]) in SINKS and not self.deferred:
+            if name in DEFERRED_FACTORIES and node.args and call_name(node.args[0]) in SINKS and not self.deferred:
                 self.report(node, "partial of a sink requires guarded_deferred")
             sink = name in SINKS or (name in VALUE_WIDGETS and bool(node.args))
             if name == "run" and any(keyword.arg == "input" for keyword in node.keywords):
@@ -222,7 +276,7 @@ def sinks(source, filename, allowed=None):
 
 
 def test_all_presentation_modules_use_the_choke_point():
-    violations = []
+    violations = inventory_failures(ROOT)
     for name in UI_FILES:
         violations.extend(sinks((ROOT / name).read_text(encoding="utf-8"), name))
     assert not violations, "\n".join(violations)
@@ -258,7 +312,7 @@ def test_choke_point_dominates_widget_and_assistant_sinks():
 def handler(self, origin):
     with guarded_publish(origin):
         self.query_one('#status').update(self.row)
-        self.engine.ask(self.question, self.conversation, self.history)
+        self.engine.ask(self.people_query, self.ask_conversation, self.ask_history)
 """
     assert sinks(code, "example.py", {}) == []
 
@@ -267,7 +321,7 @@ def test_allowlist_entries_are_exact_and_explained():
     encoded = json.dumps(sorted((list(key), value) for key, value in STATIC_WRITES.items()),
                          ensure_ascii=True, separators=(",", ":")).encode()
     assert len(STATIC_WRITES) == 51
-    assert hashlib.sha256(encoded).hexdigest() == "64449781c059924cfb7bfbdc35866b4be7e3baa864761f8e070cfb11640911df"
+    assert hashlib.sha256(encoded).hexdigest() == "7246a855ce199b16162c941948fc8030217093293eed46cf5f32ba299bcc00cc"
     for key, reason in STATIC_WRITES.items():
         assert len(key) == 3 and len(reason.strip()) >= 20
         file, function, call = key
@@ -292,7 +346,7 @@ def test_alias_name_cannot_hide_a_widget_update():
     code = """
 def handler(self):
     result = self.query_one('#status')
-    result.update(self.cached_row)
+    result.update(self.row)
 """
     assert len(sinks(code, "example.py", {})) == 1
 
@@ -300,16 +354,20 @@ def handler(self):
 def test_clipboard_subprocess_and_assistant_backend_request_are_sinks():
     code = """
 def handler(self):
-    subprocess.run(['clipboard'], input=self.cached_id)
-    self.backend.write('assistant_ask', {'history': self.history})
+    subprocess.run(['clipboard'], input=self.key)
+    self.backend.write('assistant_ask', {'history': self.ask_history})
 """
-    assert len(sinks(code, "example.py", {})) == 2
+    found = sinks(code, "example.py", {})
+    assert len(found) == 3
+    assert sum("Unapproved presentation attribute: write" in failure for failure in found) == 1
+    assert sum(": subprocess.run(" in failure for failure in found) == 1
+    assert sum(": self.backend.write(" in failure for failure in found) == 1
 
 
 def test_widget_value_assignment_is_a_publication_sink():
     code = """
 def handler(self):
-    self.query_one('#person').value = self.cached_person
+    self.query_one('#person').value = self.people_query
 """
     assert len(sinks(code, "example.py", {})) == 1
 
@@ -318,17 +376,17 @@ def test_publication_scope_cannot_span_an_await():
     code = """
 async def handler(self, origin):
     with guarded_publish(origin):
-        await self.read_more()
+        await self.load_tab("budgets")
         self.query_one('#status').update(self.row)
 """
     assert len(sinks(code, "example.py", {})) == 1
 
 
 @pytest.mark.parametrize("body", [
-    "with guarded_publish(origin):\n        callback = lambda: widget.update(self.cached_row)\n        self.call_later(callback)",
-    "getattr(widget, 'update')(self.cached_row)",
-    "setattr(widget, 'value', self.cached_row)",
-    "with guarded_publish(origin):\n        callback = functools.partial(widget.update, self.cached_row)\n        self.call_later(callback)",
+    "with guarded_publish(origin):\n        callback = lambda: widget.update(self.row)\n        self.call_later(callback)",
+    "getattr(widget, 'update')(self.row)",
+    "setattr(widget, 'value', self.row)",
+    "with guarded_publish(origin):\n        callback = functools.partial(widget.update, self.row)\n        self.call_later(callback)",
 ])
 def test_round_six_indirect_and_deferred_probes_are_rejected(body):
     source = "def handler(self, widget, origin):\n    " + body + "\n"
@@ -344,7 +402,7 @@ def test_nested_callback_created_under_guard_cannot_escape_to_scheduler(schedule
 def handler(self, origin):
     with guarded_publish(origin):
         def callback():
-            return self.render_private_row(self.cached_row)
+            return self.render_tab(self.row)
         {scheduler}(callback)
 """
     assert sinks(source, "example.py", {}), scheduler
@@ -355,9 +413,9 @@ def test_computed_getattr_in_presentation_code_is_not_silently_trusted():
 
 
 @pytest.mark.parametrize("callback", [
-    "lambda: widget.update(self.cached_row)",
-    "partial(widget.update, self.cached_row)",
-    "functools.partial(getattr(widget, 'update'), self.cached_row)",
+    "lambda: widget.update(self.row)",
+    "partial(widget.update, self.row)",
+    "functools.partial(getattr(widget, 'update'), self.row)",
 ])
 def test_explicit_deferred_wrapper_is_the_only_callback_escape(callback):
     source = f"""
@@ -372,7 +430,7 @@ def test_callback_alias_does_not_erase_its_deferred_origin_requirement():
 def handler(self, origin):
     with guarded_publish(origin):
         def callback():
-            return self.render_private_row(self.cached_row)
+            return self.render_tab(self.row)
         alias = callback
     self.call_after_refresh(alias)
 """
@@ -383,7 +441,7 @@ def test_lambda_body_never_inherits_the_creation_scope():
     source = """
 def handler(self, widget, origin):
     with guarded_publish(origin):
-        self.callback = lambda: widget.update(self.cached_row)
+        self.callback = lambda: widget.update(self.row)
 """
     assert sinks(source, "example.py", {})
 
@@ -392,6 +450,89 @@ def test_partial_sink_reference_requires_explicit_deferral_without_a_scheduler()
     source = """
 def handler(self, widget, origin):
     with guarded_publish(origin):
-        self.callback = partial(widget.update, self.cached_row)
+        self.callback = partial(widget.update, self.row)
 """
     assert sinks(source, "example.py", {})
+
+
+@pytest.mark.parametrize("statement", [
+    "widget.content = value",
+    "widget.content: str = value",
+    "widget.content += value",
+    "setattr(widget, 'content', value)",
+])
+def test_content_assignment_is_a_publication_sink(statement):
+    assert sinks(f"def handler(widget, value):\n    {statement}\n", "example.py", {})
+
+
+@pytest.mark.parametrize("statement", [
+    "Static.content.fset(widget, value)",
+    "type(widget).content.__set__(widget, value)",
+    "object.__setattr__(widget, 'content', value)",
+    "Static.__setattr__(widget, 'content', value)",
+    "widget.__dict__['_Static__content'] = value",
+    "vars(widget)['_Static__content'] = value",
+    "getattr(widget, '__dict__')['_Static__content'] = value",
+    "getattr(Static.content, 'fset')(widget, value)",
+    "setter = Static.content.fset\nsetter(widget, value)",
+    "state = vars(widget)\nstate['_Static__content'] = value",
+])
+@pytest.mark.parametrize("guarded", [False, True])
+def test_descriptor_and_raw_state_escapes_are_rejected_even_under_a_guard(statement, guarded):
+    body = ("with guarded_publish(origin):\n    " + statement.replace("\n", "\n    ")) if guarded else statement
+    source = "def handler(widget, value, origin):\n    " + body.replace("\n", "\n    ") + "\n"
+    assert sinks(source, "example.py", {}), source
+
+
+@pytest.mark.parametrize("statement", [
+    "exec(code)",
+    "eval(code)",
+    "builtins.exec(code)",
+    "builtins.eval(code)",
+    "run = exec\nrun(code)",
+    "evaluate = eval\nevaluate(code)",
+    "getattr(builtins, 'exec')(code)",
+    "from builtins import exec as run\nrun(code)",
+    "from builtins import eval as evaluate\nevaluate(code)",
+])
+def test_dynamic_code_cannot_claim_a_presentation_guard(statement):
+    source = "def handler(origin, code):\n    with guarded_publish(origin):\n        "
+    source += statement.replace("\n", "\n        ") + "\n"
+    assert sinks(source, "example.py", {}), source
+
+
+@pytest.mark.parametrize("schedule", [
+    "self.call_next(callback)",
+    "loop.call_at(loop.time(), callback)",
+    "threading.Timer(0.01, callback)",
+    "threading.Timer(interval=0.01, function=callback)",
+    "self.set_timer(0.01, callback=callback)",
+])
+def test_additional_scheduler_routes_cannot_escape_the_origin(schedule):
+    source = f"""
+def handler(self, origin):
+    with guarded_publish(origin):
+        def callback():
+            return self.render_tab(self.row)
+        {schedule}
+"""
+    assert sinks(source, "example.py", {}), schedule
+
+
+@pytest.mark.parametrize("factory", ["partialmethod", "functools.partialmethod"])
+def test_partial_method_sink_cannot_escape_the_origin(factory):
+    source = f"""
+def handler(self, widget, origin):
+    with guarded_publish(origin):
+        self.callback = {factory}(widget.update, self.row)
+"""
+    assert sinks(source, "example.py", {}), factory
+
+
+def test_internal_setter_forwarding_is_not_a_handler_wide_escape():
+    source = """
+class PublicationWidget:
+    def __setattr__(self, name, value):
+        super().__setattr__('content', value)
+"""
+    assert sinks(source, "publication_widgets.py", {})

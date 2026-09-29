@@ -26,17 +26,22 @@ def unique_path(folder: Path, name: str) -> Path:
         index += 1
 
 
-def chargeback_export_path(month: str, folder: Path | None = None) -> Path:
-    return unique_path((folder or default_report_folder()).expanduser().resolve(), f"chargeback-{month}.csv")
+def chargeback_folder() -> str:
+    return str(default_report_folder().expanduser().resolve())
 
 
-def save_chargeback_csv(month: str, content: str, folder: Path | None = None, *, name: str | None = None) -> Path:
-    folder = (folder or default_report_folder()).expanduser().resolve()
-    folder.mkdir(parents=True, exist_ok=True)
+def chargeback_export_path(month: str, folder: str | Path | None = None) -> str:
+    folder = Path(folder) if folder is not None else default_report_folder()
+    return str(unique_path(folder.expanduser().resolve(), f"chargeback-{month}.csv"))
+
+
+def save_chargeback_csv(month: str, content: str, folder: str | Path | None = None, *, name: str | None = None) -> str:
+    folder = Path(folder) if folder is not None else default_report_folder()
+    folder = folder.expanduser().resolve()
     while True:
         path = unique_path(folder, name or f"chargeback-{month}.csv")
         try:
-            write_export(path, content)
-            return path
+            write_export(path, content, create_parents=True)
+            return str(path)
         except FileExistsError:
             continue

@@ -29,7 +29,7 @@ def make_app(path):
     backend = FakeBackend()
     config = Config(backend="turnstile", url="https://old.contoso.com", scope="api://old/Turnstile.Access")
     app = FinOpsApp(Engine(backend, "2026-09"), config, first_run=False)
-    app.profile_path = path
+    app.profile_path = str(path)
     return app
 
 
@@ -135,7 +135,7 @@ def test_terminal_keeps_the_selected_profile_path(tmp_path, monkeypatch, selecti
     args = ["--config", str(path)] if selection == "explicit" else []
     result = CliRunner().invoke(cli_app, args)
     assert result.exit_code == 0, result.output
-    assert seen == [path]
+    assert seen == [str(path)]
 
 
 async def test_connection_preview_saves_backup_and_verifies_before_live_switch(tmp_path, monkeypatch):
@@ -168,7 +168,7 @@ async def test_connection_preview_saves_backup_and_verifies_before_live_switch(t
         assert app.engine.backend is replacement
         assert app.config.backend == "aum-service"
         assert app.config.url == "https://new.contoso.com"
-        assert app.profile_path == path
+        assert app.profile_path == str(path)
         assert len(list(tmp_path.glob("*.bak.json"))) == 1
         assert next(tmp_path.glob("*.bak.json")).read_bytes() == OLD_PROFILE
         assert "via AUM service" in str(app.query_one("#identity", Static).render())
@@ -214,7 +214,7 @@ async def test_failed_connection_restores_disk_and_live_engine(tmp_path, monkeyp
 
 
 async def test_backup_failure_cannot_start_a_half_switch(tmp_path, monkeypatch):
-    from claude_finops import configure, ui_features
+    from claude_finops import publication_output, ui_features
 
     path = tmp_path / "config.json"
     path.write_bytes(OLD_PROFILE)
@@ -224,7 +224,7 @@ async def test_backup_failure_cannot_start_a_half_switch(tmp_path, monkeypatch):
     def cannot_backup(path):
         raise PermissionError("No backup permission")
 
-    monkeypatch.setattr(configure, "backup_profile", cannot_backup)
+    monkeypatch.setattr(publication_output, "backup_profile", cannot_backup)
     monkeypatch.setattr(ui_features, "connect", lambda config: pytest.fail("No connection before a successful backup"))
     async with app.run_test(size=(100, 34)) as pilot:
         await preview_connection(app, pilot)

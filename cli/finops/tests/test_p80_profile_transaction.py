@@ -1,5 +1,5 @@
 import asyncio
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import ctypes
 from ctypes import wintypes
 import hashlib
@@ -16,7 +16,8 @@ from textual.widgets import Static
 from claude_finops.config import Config
 from claude_finops.errors import FinOpsError
 from claude_finops.fake import FakeBackend
-from claude_finops import configure
+from claude_finops import configure, publication_output
+from claude_finops.guarded_publication import guarded_publish
 from test_p80_connection import OLD_PROFILE, make_app, preview_connection, settle
 
 
@@ -111,16 +112,16 @@ def test_profile_edit_during_backup_is_refused_before_replacement(tmp_path, monk
     path = tmp_path / "config.json"
     path.write_bytes(OLD_PROFILE)
     newer = OLD_PROFILE.replace(b"old.contoso.com", b"during-backup.contoso.com")
-    original = configure.backup_profile
+    original = publication_output.backup_profile
 
     def edit_during_backup(profile):
         backup = original(profile)
         profile.write_bytes(newer)
         return backup
 
-    monkeypatch.setattr(configure, "backup_profile", edit_during_backup)
+    monkeypatch.setattr(publication_output, "backup_profile", edit_during_backup)
     with pytest.raises(FinOpsError, match="changed since preview"):
-        with configure.profile_transaction(path, Config(backend="fake"), revision(OLD_PROFILE)):
+        with publication_output.profile_transaction(path, Config(backend="fake"), revision(OLD_PROFILE), origin=nullcontext):
             pytest.fail("A changed profile cannot reach connection verification")
     assert path.read_bytes() == newer
     assert next(tmp_path.glob("*.bak.json")).read_bytes() == OLD_PROFILE
@@ -131,7 +132,7 @@ def test_profile_commit_serializes_other_aum_writers(tmp_path, monkeypatch, writ
     path = tmp_path / "config.json"
     path.write_bytes(OLD_PROFILE)
     entered, release = Event(), Event()
-    original = configure.backup_profile
+    original = publication_output.backup_profile
     failures = []
 
     def paused_backup(profile):
@@ -139,11 +140,11 @@ def test_profile_commit_serializes_other_aum_writers(tmp_path, monkeypatch, writ
         assert release.wait(10), "The fixture must release the first writer"
         return original(profile)
 
-    monkeypatch.setattr(configure, "backup_profile", paused_backup)
+    monkeypatch.setattr(publication_output, "backup_profile", paused_backup)
 
     def first_writer():
         try:
-            with configure.profile_transaction(path, Config(backend="fake"), revision(OLD_PROFILE)):
+            with publication_output.profile_transaction(path, Config(backend="fake"), revision(OLD_PROFILE), origin=nullcontext):
                 pass
         except Exception as error:
             failures.append(error)
@@ -153,18 +154,21 @@ def test_profile_commit_serializes_other_aum_writers(tmp_path, monkeypatch, writ
     assert entered.wait(5), "The first writer must reach its protected backup"
     try:
         if writer == "thread":
-            monkeypatch.setattr(configure, "backup_profile", original)
-            with pytest.raises(FinOpsError, match="Another AUM"):
-                configure.save_profile(path, Config(backend="direct"))
+            monkeypatch.setattr(publication_output, "backup_profile", original)
+            with pytest.raises(FinOpsError, match="Another AUM"), guarded_publish(nullcontext):
+                publication_output.save_profile(path, Config(backend="direct"))
         else:
             code = """
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 from claude_finops.config import Config
-from claude_finops.configure import save_profile
+from claude_finops.publication_output import save_profile
+from claude_finops.guarded_publication import guarded_publish
 from claude_finops.errors import FinOpsError
 try:
-    save_profile(Path(sys.argv[1]), Config(backend='direct'))
+    with guarded_publish(nullcontext):
+        save_profile(Path(sys.argv[1]), Config(backend='direct'))
 except FinOpsError as error:
     assert error.code == 6 and 'Another AUM' in str(error)
     print('BUSY')
@@ -183,14 +187,15 @@ else:
     assert not failures, failures
     assert json.loads(path.read_bytes())["backend"] == "fake"
     assert next(tmp_path.glob("*.bak.json")).read_bytes() == OLD_PROFILE
-    configure.save_profile(path, Config(backend="direct"))
+    with guarded_publish(nullcontext):
+        publication_output.save_profile(path, Config(backend="direct"))
     assert json.loads(path.read_bytes())["backend"] == "direct"
 
 
 def test_post_replacement_read_failure_runs_verification_then_restores(tmp_path, monkeypatch):
     path = tmp_path / "config.json"
     path.write_bytes(OLD_PROFILE)
-    original_replace, original_read = configure.replace_profile, Path.read_bytes
+    original_replace, original_read = publication_output.replace_profile, Path.read_bytes
     state = {"saved": False, "failed": False}
     verified = []
 
@@ -204,10 +209,10 @@ def test_post_replacement_read_failure_runs_verification_then_restores(tmp_path,
             raise PermissionError("post-save read lock")
         return original_read(profile)
 
-    monkeypatch.setattr(configure, "replace_profile", replace)
+    monkeypatch.setattr(publication_output, "replace_profile", replace)
     monkeypatch.setattr(Path, "read_bytes", read)
     with pytest.raises((OSError, FinOpsError)):
-        with configure.profile_transaction(path, Config(backend="fake"), revision(OLD_PROFILE)):
+        with publication_output.profile_transaction(path, Config(backend="fake"), revision(OLD_PROFILE), origin=nullcontext):
             verified.append(True)
     assert verified == [True], "No post-save read belongs before rollback protection or whoami"
     assert state["failed"]
@@ -224,7 +229,7 @@ async def test_failed_restore_has_durable_backup_and_recovery_steps(tmp_path, mo
         path.write_bytes(OLD_PROFILE)
     app = make_app(path)
     old_engine = app.engine
-    original_replace, original_unlink = configure.replace_profile, Path.unlink
+    original_replace, original_unlink = publication_output.replace_profile, Path.unlink
     restored = []
 
     class Refused(FakeBackend):
@@ -246,7 +251,7 @@ async def test_failed_restore_has_durable_backup_and_recovery_steps(tmp_path, mo
         return original_unlink(profile, *args, **kwargs)
 
     monkeypatch.setattr(ui_features, "connect", lambda config: Refused())
-    monkeypatch.setattr(configure, "replace_profile", restore_denied)
+    monkeypatch.setattr(publication_output, "replace_profile", restore_denied)
     monkeypatch.setattr(Path, "unlink", unlink_denied)
     async with app.run_test(size=(100, 34)) as pilot:
         form = await preview_connection(app, pilot)
@@ -290,7 +295,7 @@ def windows_deny_read(path):
 def test_real_windows_read_lock_after_replace_is_not_an_unprotected_failure(tmp_path, monkeypatch):
     path = tmp_path / "config.json"
     path.write_bytes(OLD_PROFILE)
-    original = configure.replace_profile
+    original = publication_output.replace_profile
     locked = []
     verified = []
 
@@ -301,9 +306,9 @@ def test_real_windows_read_lock_after_replace_is_not_an_unprotected_failure(tmp_
             handle.__enter__()
             locked.append(handle)
 
-    monkeypatch.setattr(configure, "replace_profile", replace_then_lock)
+    monkeypatch.setattr(publication_output, "replace_profile", replace_then_lock)
     try:
-        with configure.profile_transaction(path, Config(backend="fake"), revision(OLD_PROFILE)):
+        with publication_output.profile_transaction(path, Config(backend="fake"), revision(OLD_PROFILE), origin=nullcontext):
             verified.append(True)
             with pytest.raises(PermissionError):
                 path.read_bytes()

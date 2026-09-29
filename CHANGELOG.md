@@ -29,6 +29,11 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P85/P80 publication integration.** People, catalog and budget workflows,
+  confirmed quit and the Cloud Shell launcher retain P71's closed publication
+  contract. Reviewed lifecycle interfaces have current/expired-origin,
+  native-log and scratch-mutation controls; protected output boundaries,
+  existing rules and test budgets are unchanged.
 - **P85 packet gate 1: the AUM check runs in four shards.** The AUM pytest
   suite (871 tests, 860 s serially) exceeded Test-All's 600 s per-check
   timeout. Test-All now registers four checks, each running a longest-first
@@ -92,6 +97,10 @@ exact streaming cache-creation detail remains **U13**.
   mutation probes detect removal and related receipt/discovery regressions.
   Architecture boundaries are unchanged. P71's closed-presentation integration
   requirements are recorded in STATUS without merging that branch.
+- **P80/P71 publication integration.** Existing AUM actions retain guarded notifications,
+  text-only report/profile paths, origin-checked local saves and recovery scrolling;
+  profile conflicts keep the current connection form instead of clearing its principal state.
+
 - **AUM action discovery (P80, owner-approved for integration after P71).** People and Budgets show
   Add person to team, Set budget, Set USD budget and Chargeback report, with
   matching Help and keyboard hints. The selected connection appears as
@@ -157,6 +166,33 @@ exact streaming cache-creation detail remains **U13**.
   Round-five publication uses one guarded execution boundary with an AST
   contract; verified principal transitions clear all presentation/assistant
   state before input, including highlighted status and outgoing history.
+  Round-six widget, terminal/file, clipboard and assistant-transport sinks
+  validate active origins at execution, including indirect calls. Explicit
+  deferral rechecks the source on execution; the structural detector also
+  covers lambda/def, dynamic attributes and partials. Sink decorators reject
+  coroutine and generator bodies rather than checking only their creation.
+  Round-seven `content` writes retain their source, and the structural contract
+  rejects unchecked descriptor/raw-state/dynamic-code paths, additional
+  scheduler spellings and partial methods. Refused timer, screen and event-loop
+  callbacks retain responsive input and report only the safe underlying error,
+  without rendering callback arguments or traceback locals.
+  Round-eight attachment validates retained widget origins before DOM
+  insertion, including copied and composed subtrees; protected instances
+  refuse class replacement. The structural contract now uses an explicit
+  import/member allowlist and checked metaprogramming exceptions instead of
+  trusting unrecognized spellings. Console, file and framework capabilities
+  remain inside the protected boundary modules.
+  Round-nine notifications retain their origin through queued delivery and
+  visible/cached toast rendering; principal changes clear old notifications.
+  Presentation attribute loads and literal reflection are now default-deny,
+  with checked internal exceptions and restricted superclass forwarding.
+  Round-ten native DOM receivers use an explicit reviewed class set; unsupported
+  content classes are refused before attachment. Native writes and cached
+  rendering retain their source. Application titles stay static, raw exit
+  messages are refused, and queued message/notification representations omit
+  backend text before Textual logging. The seven scheduler cases enable visible
+  notifications. [Corrections and evidence](docs/STATUS.md#council-round-10-corrections),
+  [approval recipe](docs/adr/0035-aum-bounded-readiness-and-progressive-reads.md#approval-recipe-for-attributes-and-builtins).
 
 - **P78 parallel hosted checks.** Opt-in deterministic Test-All shards retain
   isolated processes, exclusive checks and deadlines, with commit/tree-bound receipts and an

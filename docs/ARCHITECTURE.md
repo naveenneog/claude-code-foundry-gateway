@@ -571,6 +571,36 @@ Round 5 routes presentation and assistant-context reuse through one
 `guarded_publish` function. `PrincipalUI` clears prior-principal state before
 input dispatch; an AST test checks the publication boundary across UI/output
 modules with exact static-write exceptions.
+Round 6 adds sink-layer enforcement in `publication_widgets.py` and
+`publication_output.py`, with assistant egress checked at the HTTP transport.
+`publication_sink` delegates to the same publication boundary at each write.
+`guarded_deferred` re-enters a retained origin on execution; async work holds
+no identity lock while suspended. Framework input has narrowly identified
+handlers, not a general exemption for application callbacks. The AST contract
+checks indirect sinks and escaping callbacks as a second line of defense.
+Round 7 protects `content` provenance and rejects unchecked descriptor,
+raw-state and dynamic-code escapes. The shared application exception boundary
+unwraps publication refusals before Textual builds a fatal diagnostic. Its
+app-scoped loop handler covers event-loop callbacks and restores the prior
+owner on exit. Refused timers and screen callbacks retain input and show only
+the safe error, not callback arguments or traceback locals.
+Round 8 validates retained widget subtrees before registration inserts them
+into the DOM. Copied widgets keep their original source; a new caller scope
+does not reauthorize that data. Protected instances cannot change class.
+The source detector uses an explicit import/member allowlist and module
+classification. Native output and widget capabilities are confined to the
+reviewed, fingerprinted boundary modules. Exact metaprogramming exceptions
+also pin the function body on which their justification depends.
+Round 9 carries notification origins through the message queue, toast
+creation and cached rendering. Raw notification calls refuse; principal
+clearing removes prior-source notifications.
+Round 10 adapts only exact reviewed native DOM classes before attachment.
+Their properties, mutating methods and cached rendering validate their source;
+unsupported content widgets are refused. App titles stay static and raw exit
+messages are refused. Queued messages and notifications omit payloads from
+normal and Rich representations before Textual diagnostic logging. The receiver
+and effect approval procedure is in
+[ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md#approval-recipe-for-attributes-and-builtins).
 
 ![AUM readiness uses bounded authenticated HTTP and read-only Azure diagnosis; Direct shares a snapshot and returns independent sources progressively.](images/architecture/aum-readiness.png)
 

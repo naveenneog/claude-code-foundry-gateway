@@ -83,6 +83,10 @@ def publication_origin():
 
 def publication_sink(operation):
     """Enforce the active, current origin at the actual synchronous write."""
+    if (inspect.iscoroutinefunction(operation) or inspect.isgeneratorfunction(operation)
+            or inspect.isasyncgenfunction(operation)):
+        raise TypeError("Publication sinks must perform synchronous writes, not create deferred bodies.")
+
     @wraps(operation)
     def write(*args, **kwargs):
         try:

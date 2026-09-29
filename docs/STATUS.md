@@ -7,7 +7,160 @@
 Owner: @naveenneog. Builder worktree: `accel-p85`, branch
 `p85-aum-tui-manage`, based on owner-approved P80 `e630525` (includes main
 `30cdfd0`). P85 is the active packet on this branch. Council, the packet gate
-and integration belong to the lead; no merge or push is authorized here.
+and integration to main belong to the lead. The integration assignment below
+authorizes this builder's P80 merge into P85 and commits, but no push or main merge.
+
+### P80/P71 closed-contract integration, 2026-09-30
+
+PLAN / CONTRACT: merge P80 `a405f69` into `p85-aum-tui-manage` with
+`--no-ff`, without rebasing or modifying another worktree. This builder may
+commit that integration, but may not push or merge to main. Preserve P85's
+people/catalog/budget flows, reviewed removal plans, application-owned writes,
+repeated-Escape safety and HOME-local Cloud Shell launcher, together with
+P80's actions and P71's closed publication contract (ADR-0035). Keep both
+branches' ledger entries. Regenerate architecture and Example captures from
+the integrated source rather than merging generated hashes.
+
+RED: run the closed-contract tests before changing P85's publication paths.
+GREEN / REFACTOR: use existing guarded APIs; review each necessary named
+interface or exact-context approval under ADR-0035, with its receiver,
+effect, reason and negative control recorded here. No new trusted boundary,
+static-write exemption, weakened test, rule or budget is authorized.
+P71's known load races remain P71-owned. This is an integration review of
+maintained code, not authority to change the publication contract.
+
+Acceptance evidence: all `test_p85_*.py` and publication contract selectors;
+at least three scratch-copy mutation probes retaining the baseline collection;
+one locked full serial AUM suite with JUnit; refreshed per-file shard weights
+and <=300 s planned loads; runner integrity, document references, encoding
+and generated architecture checks. Council and the packet gate remain
+lead-owned. U61's owner-only live Cloud Shell/persistence check remains open;
+this task performs no Azure calls.
+
+#### ADR-0035 integration approval review
+
+The initial closed-contract run collected **186** cases: **184 passed, 2
+failed**. The source assertion enumerated **91 diagnostics** in seven files;
+the inventory found **nine** changed exact contexts. The three unapproved
+imports were `errors.READ_FAILURES`, `errors.read_error` and
+`feature_screens.QuitScreen`. Five palette callbacks needed named review,
+including removal; the other diagnostics came from P85's form replacement,
+read-failure handling and application-owned write lifecycle. New integration
+controls collected **33** cases: **15 passed, 18 failed**, exclusively on
+missing source approvals. Current/expired form attachment, orphaned completion,
+fresh-process native logging, error normalization and raw-exit refusal already
+passed. This is the RED evidence, not a waiver of the failing source checks.
+
+The following receiver/effect review follows ADR-0035's approval recipe.
+The two trusted output/widget boundaries and the 51 exact static writes
+remain unchanged. `screen` is not approved: quit uses the existing protected
+`screen_stack` interface. No private name or native scheduler is added to the
+ordinary-member set.
+
+| New named import | Receiver/value/effect and reason |
+|---|---|
+| `errors.READ_FAILURES` | Fixed domain, OS and HTTP exception-type tuple; only expected read failures are caught, not arbitrary exceptions. |
+| `errors.read_error` | Pure safe-value normalization: transport details never reach UI/logs, domain refusal codes survive, unexpected types raise. |
+| `feature_screens.QuitScreen` | Existing protected modal; guarded fixed text and task-state boolean, no raw widget or output capability. |
+
+| New ordinary member(s) | Supported receiver/effect and reason |
+|---|---|
+| `action_clear_filter`, `action_next_page`, `action_previous_page` | `FinOpsApp`'s existing navigation, retained-source redraws and capability-gated paging; no new publisher or authority. |
+| `action_quit`, `action_remove_developer` | `FinOpsApp` opens protected confirmation or owner-authorized removal controls; repeated Escape does not exit or authorize a write. |
+| `commit_action`, `commit_change`, `run_mutation` | `ActionForm`, `ChangeScreen` and `FinOpsApp` keep preview-first writes app-owned; every receipt retains its guarded source through modal cancellation. |
+| `open_remove_form` | `DeveloperPicker` checks the directory origin and owner capability before composing a protected, typed-confirmation form. |
+| `quit_message`, `refresh_saving`, `saving` | `QuitScreen`/`FinOpsApp` expose only fixed local messages, guarded button/text refresh and an owned-task boolean, not task payloads. |
+
+All **18 new exact-expression exceptions** below carry their factual reason
+and a literal enclosing-function digest in `publication_lifecycle.py`,
+consumed by the existing `publication_attributes.py` policy. This small
+fixture extraction keeps the approval inventory within the existing 800-line
+test-file budget without changing a rule or fingerprint.
+They do not approve the member elsewhere or the rest of a handler.
+
+| File / context | Exact expression(s) and reviewed effect |
+|---|---|
+| `developer_screens.py / DeveloperPicker.open_remove_form` | `app.switch_screen`: protected form registration under the directory origin; `app._error_text`: redacted domain refusal under the local-message guard. |
+| `developer_screens.py / DeveloperPicker.open_add_form` | `self.app.switch_screen`: protected form registration under both directory and catalog origins, preserving P85's single-modal stack. |
+| `tui.py / FinOpsApp.exit` | `super().exit(result, return_code=return_code, message=message)`: only the protected parent; its raw-exit-text refusal still applies after write deferral. |
+| `tui.py / FinOpsApp.saving` | `self._active_mutations`: local boolean only, no task escapes. |
+| `tui.py / FinOpsApp.run_mutation` | `self._active_mutations`, `task.add_done_callback`, `self._mutation_finished`, `asyncio.shield`, `asyncio.CancelledError`, `self._orphaned_mutation`: register before awaiting, preserve the operation, and bind both completion paths with `guarded_deferred`; cancellation is re-raised. |
+| `tui.py / FinOpsApp._mutation_finished` | `self._active_mutations`, `task.cancelled`, `task.exception`, `self._signout_complete`: release the completed task, distinguish success/failure, and preserve only successful sign-out intent; guarded fixed messages contain no result data. |
+| `tui.py / FinOpsApp._orphaned_mutation` | `task.cancelled`, `task.exception`, `self._handle_exception`: retrieve the failure only for the existing safe refusal boundary, never raw diagnostics. |
+
+The **six new contexts** are `DeveloperPicker.open_remove_form`,
+`FinOpsApp.exit`, `FinOpsApp.saving`, `FinOpsApp.run_mutation`,
+`FinOpsApp._mutation_finished` and `FinOpsApp._orphaned_mutation`.
+The **nine renewed contexts** retain their existing expression reasons:
+`DeveloperPicker.__init__` (removal mode), `DeveloperPicker.open_add_form`
+(guarded stack replacement), `ProgressiveRefresh._show_wait` (quit confirmation
+copy), `_show_read_error`, `action_refresh`, `load_overview` and its nested
+`fetch` (only expected read errors normalized before existing guarded sinks),
+`FinOpsApp.__init__` (owned-task set and sign-out flag), and
+`FeatureUI.ask_current` (app-owned request with unchanged source/egress guards).
+No P71 load-race implementation is changed.
+
+#### Merge resolutions and verification
+
+The `git merge --no-ff a405f69` operation started from clean `729a249`.
+Five conflicts were resolved without discarding either packet:
+`CHANGELOG.md` keeps both addition lists; `feature_screens.py` keeps P85's
+pinned `reviewed_plan` and P80's protected `publication_output.profile_conflict`;
+`06-finops.json` is structurally combined from UTF-8-decoded parent JSON,
+retaining Cloud Shell and the protected app/profile witnesses; both generated
+architecture and Example snapshot manifests are regenerated, not hand-merged.
+STATUS, UNKNOWNS and ADR entries from both sides are retained.
+
+The focused GREEN run passed **219/219 in 20.56 s**. REFACTOR extracted
+the exact lifecycle approvals into a 49-line test fixture; the main approval
+inventory is **780 lines**, below its unchanged 800-line budget. The scratch
+baseline and restored run both passed **219/219** on that refactored tree.
+The boundary implementations, their fingerprints, source detector, builtin
+rules and 51-entry static list are byte-identical to P80 `a405f69`.
+
+The complete P85/publication selector run executed **636** cases in
+**671.25 s**: **635 passed, 1 failed, 0 errors, 0 skips**. Every P85 case
+passed (**269/269**). Publication cases passed **366/367**; the only failure
+was the lead's known P71 race
+`test_publication_generation.py::test_principal_change_closes_prior_forms_and_clears_state_before_input`
+(`NoMatches` for `#main-tabs` on shutdown). No race, test or timeout was
+changed. A bounded publication-only follow-up is recorded below separately
+from this failing result.
+
+That unchanged publication-only follow-up ran **367** cases in **179.59 s**:
+**365 passed, 2 failed**. The known
+`test_assistant_context_is_cleared_before_b_request` again raised `NoMatches`.
+The additional, previously unlisted
+`test_cached_dialog_handoffs_retain_origin_during_deferred_composition[mode-form]`
+raised `WorkerCancelled` at `test_publication_generation.py:413`, during
+the Budgets navigation settle, before the form or principal-change probe.
+That test file and `action_mode` are unchanged from P80. One bounded run
+of these two IDs plus the earlier principal-change ID passed **3/3 in
+5.13 s**. These observations establish intermittency, not a clean aggregate
+contract run or permission to repair P71's load races here.
+
+Six scratch-copy probes reverted one compliance fix each. Every run
+collected **all 219 baseline identities** and executed all 219; there were
+**zero collection errors, execution errors or skips**. Each mutation was
+restored byte-for-byte before the next probe, and the final restored baseline
+passed. The scratch tree was removed.
+
+| Mutation | Passed / failed | Detector |
+|---|---|---|
+| M1 remove `READ_FAILURES` import approval | 217 / 2 | Named import control and whole-source contract. |
+| M2 remove `action_quit` member approval | 215 / 4 | Explicit member, exact-context controls and whole-source contract. |
+| M3 restore the old picker constructor fingerprint | 216 / 3 | Context justification and source-contract assertions. |
+| M4 register a raw completion callback | 215 / 4 | The guarded callback's exact source context is no longer approved. |
+| M5 replace the removal directory publication with a local-message guard | 216 / 3 | The source origin/context cannot be rebound by its prior approval. |
+| M6 restore the unprotected `configure.profile_conflict` import | 218 / 1 | Whole-source contract rejects the unsupported import. |
+
+The renderer and standalone architecture check pass: **17 specs, 19 PNGs**.
+The AUM diagram was visually inspected after explicit UTF-8 regeneration;
+it retains the Esc/quit and Cloud Shell paths as well as P80's local profile
+transaction. The temporary `node_modules` junction was removed. All 24 Example
+SVG/grid captures and their provenance manifest are regenerated; historical
+live captures are untouched. Evidence is under `%TEMP%\p85-int-*`, including
+the targeted XML/log and `p85-int-mutation-evidence\summary.json`.
 
 ### Council round 3, packet gate 1 and the sharded AUM check
 
@@ -724,6 +877,314 @@ write, Azure resource creation or reference-gateway operation occurred.
 ## P80 AUM shows every action it has, connects in one step, and its guide starts with installation, 2026-09-28
 
 Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM guide set. Worktree: `accel-p80`, branch `p80-aum-usability`, based on P71 commit `bcf8554`. The owner approved merging P80 after P71 at 07:41 IST on 2026-09-29. The lead authorized merging pinned `origin/main` (`30cdfd0`) into this branch without rebasing; later P71 work remains separate. This builder is not authorized to push or merge to main.
+
+### P71 closed-contract integration, 2026-09-30
+
+**Integration commit: `3454e6d`; the full AUM run is not green.** All 96 P80
+cases passed. The single full run was 904 passed / 3 failed: two of the lead's
+known P71 IDs and one additional P71 FooterKey fixture failure. The latter
+passed unchanged in a bounded follow-up, but the original full result remains
+the result. Council, gates and P71 stability remain lead-owned.
+
+**PLAN / CONTRACT:** Merge pinned P71 `e1586c5` without rebasing from clean
+P80 `e630525`, retaining ADR-0038's visible actions, complete non-overwriting
+CSV, selected-profile transaction and keyboard-readable recovery. Apply
+ADR-0035's closed import/member/publication contract to every P80 path;
+no rule, test, budget or authority is relaxed. Existing contract failures
+are the integration RED. Reviewed additions must name their receivers,
+effects, positive/negative controls and removal probes before fingerprints
+are updated. U38-U41 remain P80's unknowns; U26 and P71 readiness fixes
+remain with P71.
+
+The requested evidence is all P80 tests plus every publication contract
+test, at least three isolated count-preserving compliance removals, then
+one full AUM run after checking and merging any newer P71 tip. Architecture
+sources retain both packets and generated artifacts are regenerated, not
+hand-merged. Long commands use `with-gate-lock.ps1` as `p80-integration`;
+full logs and receipts are under `%TEMP%\p80-integration-*`. Council, packet
+gates, pushing and the later main merge remain lead-owned.
+
+#### Integration resolutions and RED
+
+`git merge --no-ff e1586c5` found 11 conflicts: CHANGELOG, UNKNOWNS,
+`cli.py`, `config.py`, `configure.py`, `feature_screens.py`, `screens.py`,
+`ui_features.py`, `test_publication_structure.py`, and the FinOps diagram
+and architecture manifest. The six production-file conflicts retain both
+P80 behavior and P71's protected imports, constructor origins and publication
+API. Config loading accepts path text while retaining selected/environment/
+legacy profile resolution. The local connection transaction still completes
+its final saved-revision check before adopting the candidate engine.
+
+Both ledger sides are retained, including the incoming P71 rounds 6-10,
+U26/U37 and the existing U30/U38-U41 records; STATUS merged automatically.
+The diagram source was resolved structurally from both parent JSON values:
+P80's local-file flows remain, the app witness uses P71's protected base,
+and the transaction witness follows its move to `publication_output.py`.
+The renderer, not a manual manifest merge, supplies the final hashes/images.
+
+The first source-contract run collected all **70 cases: 68 passed, 2 failed
+in 1.41 s**. Its complete inventory has **175 findings**: reports was
+unclassified; imports, path capabilities, profile file operations, members,
+raw notifications and changed exact-context fingerprints were not approved.
+The static-write digest also differed. Three raw P80 notification calls
+remained after the merge, in developer-catalog failure, dismissed export
+failure and connection failure; each now uses `publish_notification` with
+the safe-message origin. The earlier 17-call assessment was not the count
+on this merged tree.
+
+New file/prompt/transaction controls were **9 failed, 1 passed in 0.65 s**;
+the expired CSV probe proved that directory creation preceded the guard.
+Moving directory creation into `write_export` closes that effect. A first
+importing check also exposed the auto-merge's undefined CLI `Path` annotation;
+the option now passes text into the report boundary. The old path equality
+assertions now require the same exact absolute path as a string; their
+non-overwrite and selected-profile assertions were not relaxed.
+
+The first combined selection was **455 passed, 4 failed in 294.85 s**,
+with all P71 publication cases passing. Two failures identified real
+integration effects: a local revision conflict invoked principal-rejection
+cleanup and removed the form, and native recovery scrolling exposed expired
+cached content. The other two were the remaining Path-to-text test assertion
+and a new assertion looking for spaces in SVG rather than rendered widget
+text. A dedicated profile-conflict control then failed once on its unwanted
+rejection callback. Local file errors now propagate outside that callback;
+actual exit-3 source refusals still invoke it. The protected scroll sink
+validates the retained receiver and resets synchronously, without native
+deferral or animation. **94 focused cases passed in 22.88 s** after those
+corrections, including the original retained-form case and persistent
+Windows-handle recovery cases. A further one-case RED exposed empty CLI
+folder text falling back to the home folder; normalization now preserves
+the previous CLI `Path("")` current-directory meaning.
+
+#### ADR-0035 approval review
+
+These are explicit integration approvals, not a change to the closed
+contract. `configure.py` remains presentation; neither it nor a new module
+becomes a trusted output boundary. There are still exactly two boundary
+modules and 51 exact static writes. Raw `notify`, filesystem imports,
+private member access and native output receivers remain default-deny.
+No charter, rule, existing assertion or budget is loosened.
+
+Each newly approved import is listed here; approval exposes only the named
+value or protected effect, not the rest of the imported module.
+
+| Named import(s) | Reviewed receiver/value/effect and reason |
+|---|---|
+| `dataclasses.replace` | Copies the existing validated `Config` address values; no stream, path handle or output is returned. |
+| `configure.connection_config` | Validates/discovers address-only configuration without writing a profile or changing gateway authority. |
+| `publication_output.confirm_profile_replace` | A source-checked fixed replacement question returning only a boolean. |
+| `publication_output.preview_profile` | Returns immutable reviewed bytes, revision and path text; no filesystem capability escapes. |
+| `publication_output.profile_conflict` | Returns an actionable domain error with field names and revisions, not arbitrary file content. |
+| `publication_output.profile_transaction` | Explicit origin required at entry and final validation; OS lock spans verification, publication does not. Failed verification restores only this transaction's unchanged local bytes. |
+| `publication_output.save_profile` | Synchronous source-checked compare/backup/atomic-save operation returning backup path text. |
+| `reporting.report_available` | Existing generator discovery reduced to a boolean; no script or Path is returned. |
+| `reports.chargeback_export_path` | Non-overwriting filename preview returned as absolute text. |
+| `reports.chargeback_folder` | Platform-specific default folder returned as text for the guarded label. |
+| `reports.save_chargeback_csv` | Complete CSV and collision handling; every directory/file effect delegates to guarded `write_export`, returning only path text. |
+| `usd.can_usd_write` | Existing scope/capability predicate returns a boolean; no new USD writer or authority. |
+
+The output boundary alone gains native imports `typer.confirm` (guarded
+fixed prompt), `config.profile_path` (selected/environment/legacy resolution,
+converted to text before return), `hashlib.sha256` (value-only revisions),
+`os.name` (platform selection), `errno.EACCES`, `errno.EAGAIN` and
+`errno.EDEADLK` (explicit lock-contention classification), `msvcrt.locking`
+and `msvcrt.LK_NBLCK` (nonblocking Windows writer lock), and `fcntl.flock`,
+`fcntl.LOCK_EX` and `fcntl.LOCK_NB` (the existing nonblocking Unix equivalent).
+These imports remain unavailable outside the fingerprinted output boundary.
+`reports.py` is newly classified as an operator module because it computes
+names and delegates final writes to that boundary; no new presentation module
+can be omitted from the inventory.
+
+| New ordinary member(s) | Supported receiver and effect |
+|---|---|
+| `action_chargeback` | `FinOpsApp` opens the existing guarded complete-export flow. |
+| `apply_label`, `local_write`, `commit_preview` | `ActionForm`'s local label/flags preserve preview-first local writes and immutable reviewed input. |
+| `auto_export`, `export` | `ExportScreen`'s local flag and worker open the same origin-checked one-action export. |
+| `before`, `configuration`, `path`, `revision` | Immutable `ProfileChange`: original bytes, validated `Config`, path text and digest; no file handle. |
+| `connection_kind`, `connection_label` | `FinOpsApp` formats local connection metadata before guarded display. |
+| `membership_unavailable_text`, `usd_unavailable_text` | `FinOpsApp` returns fixed factual capability explanations, not backend output capabilities. |
+| `open_add_form`, `prefill_unit`, `prefill_user` | `DeveloperPicker` retains directory and catalog guards through the form; fields are local selected/typed values. |
+| `profile_path` | `FinOpsApp` stores path text, not a filesystem object. |
+| `resource_group`, `scope`, `validate` | `Config` address fields and pure validation; the validated result still passes through protected writers. |
+| `publication_scroll_home` | Protected `VerticalScroll` checks its original content/input and current app, then changes the viewport synchronously. Native `scroll_home` is not approved. |
+| `update_action_buttons` | `FinOpsApp` changes protected Button state/tooltips under its existing publication decorator and capability checks. |
+
+The four builtin approvals are `bytes` (immutable local profile snapshots),
+`FileNotFoundError` (only absence means no previous profile), `UnicodeError`
+(conflict diagnostics name invalid encoding without exposing bytes), and
+`RuntimeError` (connection failure retains/restores the previous state and
+prints only the fixed safe message). Other IO exceptions continue to surface.
+
+All **41 new exact-expression exceptions** are enumerated below. Each is
+bound to its enclosing function's literal AST digest in
+`tests/publication_attributes.py`; the reason there is part of the approval.
+Expressions in the same row share the stated receiver/effect, not an
+exemption for the rest of the function.
+
+| File / context | Exact expression(s) and reason |
+|---|---|
+| `developer_screens.py / DeveloperPicker.open_add_form` | `self.app._data_guards`: store catalog with its original guard; `self.app._error_text`: redacted domain refusal through status/retained notification. |
+| `screens.py / ExportScreen.__init__` | `super().__init__()`: only the protected empty modal shell; data composition remains guarded. |
+| `ui_features.py / FeatureUI.activate_profile` | `self._clear_principal_state`: discard partial candidate state after restoring the old engine, never republish failed candidate data. |
+| `publication_output.py / confirm_profile_replace` | `typer.confirm`: fixed question only after synchronous origin validation. |
+| `publication_output.py / profile_bytes` | `(json.dumps(config.validate().public(), indent=2) + '\n').encode`: immutable validated address bytes, no IO. |
+| `publication_output.py / read_profile` | `path.read_bytes`: operator-selected local read returns bytes, not a handle. |
+| `publication_output.py / content_revision` | `hashlib.sha256(content).hexdigest()`: exact reviewed-byte revision, no external effect. |
+| `publication_output.py / ProfileChange.configuration` | `self.content`: decode the immutable preview, without rediscovery or a file read. |
+| `publication_output.py / profile_lock` | `path.parent.mkdir(parents=True, exist_ok=True)`, `path.with_name`, `path.with_name(f'.{path.name}.lock').open`: create only the persistent sibling lock under the entering origin. |
+| `publication_output.py / profile_lock` | `handle.seek`, `handle.fileno`, `msvcrt.locking`, `msvcrt.LK_NBLCK`: fixed-byte nonblocking Windows lock on the private handle, always closed in `finally`. |
+| `publication_output.py / profile_lock` | `fcntl.flock`, `fcntl.LOCK_EX`, `fcntl.LOCK_NB`: corresponding exclusive nonblocking Unix lock; no handle returned. |
+| `publication_output.py / profile_lock` | `error.errno`, `errno.EACCES`, `errno.EAGAIN`, `errno.EDEADLK`: known contention becomes a fixed refusal; unexpected errors propagate. |
+| `publication_output.py / profile_conflict` | `Config.__dataclass_fields__`: only declared address-field names, not supplied reflection targets or raw profile contents. |
+| `publication_output.py / backup_profile` | `path.read_bytes`, `path.with_name`, `path.stem`, `path.suffix`, `backup.open`, `stream.write`: exact-byte exclusive sibling backup under both originating publication and writer lock. |
+| `publication_output.py / replace_profile` | `path.with_name`, `uuid4().hex`, `temporary.open`, `stream.write`, `temporary.unlink`: private same-directory temporary, guarded bytes, atomic rename, exact temporary cleanup. |
+| `publication_output.py / _save_profile_locked` | `path.exists`: choose backup only after checking the reviewed revision inside the guarded operation. |
+| `publication_output.py / profile_transaction` | `reviewed.content`: preserve immutable reviewed commit bytes; `path.unlink`, `backup.read_bytes`: rollback only the still-matching transaction-created profile or its exact prior local bytes. |
+| `publication_widgets.py / VerticalScroll.publication_scroll_home` | `self.input_origin`: retain receiver plus app authority; `super().scroll_home(animate=False, immediate=True)`: protected receiver only, no supplied callback, animation or deferred viewport write. |
+
+The **14 new context digests** are `DeveloperPicker.open_add_form`,
+`ExportScreen.__init__`, `VerticalScroll.publication_scroll_home`, and output
+`ProfileChange.configuration`, `_save_profile_locked`, `backup_profile`,
+`confirm_profile_replace`, `content_revision`, `profile_bytes`,
+`profile_conflict`, `profile_lock`, `profile_transaction`, `read_profile`,
+`replace_profile`. The **six renewed contexts** are
+`DeveloperPicker.__init__` (local prefills), `ActionForm.__init__` (P80 flags
+and retained constructor origin), `FinOpsApp.__init__` (text-only selected
+profile), `FinOpsApp._render_tab` (guarded P80 labels/actions),
+`FinOpsApp.update_access` (same cache clearing plus capability buttons), and
+`FeatureUI.activate_profile` (transaction before adoption and durable recovery).
+The obsolete exact `profile_path / Path.home` exception and its context are
+removed because that function now delegates address resolution and returns
+text. The output boundary fingerprint is
+`c1e8a81dcd9c188878e7e17c28c0228220873ac83b6623720b7dfcb66a8cc912`;
+the widget boundary fingerprint is
+`c6376fe90e655355c68590207a2241ff8f8f77d88bc2495efc1323a928ff95fa`.
+The merged 51-entry static list retains P80's already-reviewed 3-30 s export
+estimate and P71's protected CLI emitter names; its digest is
+`7246a855ce199b16162c941948fc8030217093293eed46cf5f32ba299bcc00cc`.
+
+Current/expired file, prompt and scroll controls are in
+`test_p80_publication_contract.py`. Original P80 tests retain the actual
+backup conflicts, writer contention, immutable preview, complete CSV,
+directory/catalog origin, owner/capability and 80x24 recovery effects.
+P71's notification cases render notifications, and its diagnostic cases
+retain their fresh-process `TEXTUAL_LOG` probes. The same-tree source contract,
+runtime controls and scratch removal receipts are required before the
+integration is handed back; the final validation/commit record follows here.
+
+#### Builder GREEN, REFACTOR and mutation evidence
+
+All **96 P80 cases passed** on the corrected tree in the second combined
+selection. That selection executed **463 cases: 461 passed, 2 failed in
+317.79 s**. Its two P71 failures were
+`test_principal_change_clears_cached_picker_options_before_input`
+(`WorkerCancelled`, then shutdown `NoMatches`) and
+`test_native_chrome_content_requires_publication[FooterKey-description]`
+(missing `FooterKey` at the fixture's query). They are **not** the lead's four
+known IDs. Both passed unchanged in a single bounded follow-up with the
+affected CLI/discovery/report/safety checks: **41 passed in 5.81 s**.
+The earlier output and JUnit remain intact. The same tree's passing assertion
+union covers all 463 selected IDs; this is not a diagnosis or a claim that
+P71's readiness race is fixed. No P71 timing test or readiness code was edited.
+
+REFACTOR keeps the profile transaction in the existing protected output module,
+removes raw path objects from presentation, gives local validation failures a
+narrow rethrow boundary, and makes recovery scrolling a synchronous protected
+receiver operation. No additional trusted boundary or handler exemption is used.
+The source review includes the installed Textual 6.12.0 `scroll_home`/`scroll_to`
+call chain, including its otherwise deferred callback.
+
+Seven isolated compliance removals were run from a scratch package/tests copy
+under `%TEMP%\p80-integration-mutations-7a77076335e0`. The interpreter's import
+was asserted inside that copy. The complete selector was
+`test_publication_structure.py`, the import/exception justification case in
+`test_publication_allowlist.py`, and `test_p80_publication_contract.py`.
+Baseline and restored runs each passed **92 cases** (11.938 and 12.031 s wall).
+Every mutant collected and executed those exact 92 IDs, without collection
+errors or skips, and failed its intended assertion. Files were byte-restored
+after each removal. The complete harness took **117.578 s** under the shared
+lock; its `receipt.json` retains identities, failures, timings and collection
+hash, with individual logs/XML alongside it.
+
+| Scratch removal | Executed / collected | Assertion failures | Intended detector |
+|---|---:|---:|---|
+| Restore export fallback's raw `notify` | 92 / 92 | 1 | Closed source rejects the raw notification member. |
+| Restore raw CLI `Path` import/option | 92 / 92 | 1 | Closed source rejects the filesystem import. |
+| Remove `reports.py` classification | 92 / 92 | 3 | Package inventory/source/approval coverage rejects an unclassified module. |
+| Restore CSV directory creation before its guard | 92 / 92 | 1 | Expired report origin must create neither file nor directory. |
+| Treat local file errors as principal rejection again | 92 / 92 | 3 | Local revision conflict must not invoke source-rejection cleanup; fingerprints also refuse the changed boundary. |
+| Remove recovery receiver's retained-origin check | 92 / 92 | 3 | Expired content cannot be exposed by scrolling; fingerprints also reject the changed implementation. |
+| Remove `publication_scroll_home` ordinary-member approval | 92 / 92 | 2 | Source contract and its positive guarded-call control require the explicit reviewed interface. |
+
+Architecture regeneration and checking passed: **17 specifications, 19 PNGs**,
+with source, image and renderer hashes, references, labels and resource coverage
+verified. The requested `node_modules` junction was created only for that
+locked command and removed in `finally`; the shared target was retained.
+The no-run Ironclad audit was 19 passed / 3 warnings / 0 failed, with four
+execution groups intentionally not run. It is not a council or packet gate.
+The initial merge commit, final P71-tip check and single full AUM result are
+recorded below after that final run.
+
+The final pre-full-suite snapshot check found the expected stale source
+manifest: **1 failed, 4 passed in 18.83 s**. All four existing exact screen-grid
+comparisons passed before any regeneration. The existing offline
+`tools/capture.py` then regenerated the 24 Example SVGs, four grid files and
+normalized source/output manifest; the snapshot plus P80 guide selection
+passed **9 cases in 18.65 s**. No assertion was changed and no historical live
+capture was relabelled. Documentation references passed for all 42 guides,
+including their ten negative cases. The generated FinOps and readiness images
+were visually inspected; their bytes match the respective P80 `e630525` and
+P71 `e1586c5` parent images. The standalone architecture check also passed
+after the ledger updates.
+
+#### Committed integration and single full AUM run
+
+The merge commit is **`3454e6d5e14dcd073694553b7e8cd4e4905fe7b9`**, with
+parents `e630525` and `e1586c5`. It contains the conflict resolutions,
+compliance fixes, reviewed approvals, counterexamples and regenerated
+artifacts. Both requested trailers are present. The branch remains
+`p80-aum-usability`; no push, main merge, history rewrite, Azure call or
+other-worktree edit was performed.
+
+The required P71 check returned
+`e1586c5bea7cd0741aead5abcf2ed4387f118e90` both before the final run and again
+**inside the acquired lock at 2026-09-30 01:47:14.859 IST**, immediately before
+pytest. No newer committed P71 tip was available to merge then. The working
+tree was asserted clean and the interpreter import was asserted under this
+worktree's `cli\finops\src`, not the P71 or main worktree.
+
+The full command, run **once**, was this worktree's
+`.venv-finops\Scripts\python.exe -B -m pytest tests -q --tb=short`, from
+`cli\finops`, with a JUnit output under TEMP. The owned lock interval was
+**01:47:14.309-01:55:06.662 IST**. It executed **907 cases: 904 passed,
+3 failed, 0 errors, 0 skips**, in **468.62 s pytest / 471.468 s process wall**.
+Every P80 case passed (**96/96**). The full log, XML and classified summary
+are `%TEMP%\p80-integration-full-aum.log`,
+`p80-integration-full-aum.xml` and `p80-integration-full-summary.json`.
+
+| The lead's four known IDs | Single full-run result |
+|---|---|
+| `test_publication_generation.py::test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies[budgets]` | PASS |
+| `test_publication_generation.py::test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies[requests]` | PASS |
+| `test_publication_generation.py::test_principal_change_closes_prior_forms_and_clears_state_before_input` | FAIL: `WorkerCancelled` at the worker wait. Not fixed or relaxed in P80. |
+| `test_revision4_tui.py::test_approval_paging_and_queue_change_reset_cursor` | FAIL: `WorkerCancelled` at the paging settle. Not fixed or relaxed in P80. |
+
+The **additional failure, outside those four IDs**, is
+`test_publication_native.py::test_native_chrome_content_requires_publication[FooterKey-key_display]`:
+`NoMatches` for `FooterKey` at line 240, after the principal transition and
+before the guarded-attribute assertion. That test file is unchanged from
+P71 `e1586c5`. One bounded follow-up ran all four native-chrome variants
+unchanged: **4 passed in 5.84 s**, under its own lock. That is evidence of the
+intermittent fixture observation, not a diagnosis, a waiver or a replacement
+for the full-suite failure. The lead/P71 review must account for this
+additional case as well as the two known failures.
+
+No second full suite was run, and no production code, test assertion, timeout
+or budget changed after the full run. This final update is the ledger only.
+The scratch source copy and temporary image previews were removed after
+inspection; the mutation logs/receipts remain under TEMP, and the dependency
+junction is absent. The historical P80 council/gate receipts in this section predate this
+integration and are not claimed for the new merge.
 
 **Council round 3, over `3ace1f7..80e7d4e`: all five seats PASS.** The council re-ran its
 round-2 probe with a real Windows read-denying handle held through a successful `whoami`, the
@@ -2082,6 +2543,704 @@ Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
 
 ## P71 AUM answers fast and says why it cannot, 2026-09-28
 
+### Council round 10 corrections
+
+The tenth review of `860abc9` returned UX PASS and Architect, Coder, QA and
+Security BLOCK. B9a/b/c and their receipts were accepted. Remaining paths:
+native content descendants obtained through approved DOM queries (B10a),
+Textual exit messages (B10b), and backend payloads in native diagnostic
+message representations before dispatch (B10c).
+
+The correction tests the real native child, exit renderer and `TEXTUAL_LOG`
+path before implementation. Native DOM content has a receiver-level
+publication boundary; unsupported content types cannot be attached without
+protection. Exit results remain values, while displayed exit text requires
+guarded publication. Queued messages/notifications have payload-free normal
+and Rich representations before framework logging.
+
+The round 9 scheduler claim was incorrect: the intended `notifications=True`
+edit did not reach the seven-scheduler case. This round changes that exact
+case and gives it a visible current-notification control, rather than relying
+on a flag or caplog alone. The earlier receipts remain historical results.
+
+The inherited tests were run against a frozen archive of `860abc9`'s source:
+**17 failed, 7 passed in 32.98 s**. The expanded set produced **33 failed,
+7 passed in 47.95 s**. Failures included the actual A-only caption, exit output
+and `TEXTUAL_LOG` payloads, not import or collection failures. The inherited
+implementation still failed **3 of 24 cases in 41.60 s**. Additional tests
+exposed its native class-prefix approval, unguarded chrome and cached rendering:
+**12 failed, 3 passed in 15.18 s**.
+
+The corrected runtime selection passed **41 cases in 49.82 s**. It covers
+native query aliases, supported and refused content families, fixed app titles,
+guarded chrome, cached output, exit values/messages, both object representations,
+the real Textual log and all seven notification-enabled scheduler cases.
+Source-contract approval, mutation and full-suite receipts follow below.
+
+The first expanded standard run had **358 passed, 3 failed in 166.58 s**.
+One failed people-selector precondition was reproducible: repainting a caption
+from a replaced backend entered the global refusal path and cancelled the new
+read. Cached paint now blanks the stale output and reports a fixed notice
+without cancelling that newer read. A separate command-palette check exposed
+an unguarded native search worker; its exact worker and input handlers now retain
+their source. The new search/selection control passed in **2.16 s**.
+Visible-notification controls now wait for their actual rendered text, within
+three seconds, rather than assuming one event-loop pause completes toast mounting.
+The isolated request-action case passed; the earlier worker cancellation and
+shutdown `NoMatches` remain recorded, not diagnosed by that pass.
+
+The next standard run had **358 passed, 4 failed in 172.79 s**. All 40 new
+native/diagnostic cases passed. The four failures were existing startup/navigation
+`WorkerCancelled` cases, with `NoMatches` during shutdown in two cases; their
+receipts are retained under U26. The final focused runtime baseline passed
+**48 cases in 65.11 s**; the exact source-approval baseline passed **5 cases
+in 4.62 s**. Both ran every collected identity, without skips or collection
+errors. Native command search, current-source refresh after stale paint and
+real posted/prequeued Textual logging are included in that runtime baseline.
+
+An initial passive-paint isolation removal ran all **48 cases** and failed one
+navigation case in **65.07 s**, but did not reach its intended assertion. It
+is not counted as a caught mutation. The native cached-render case now records
+the global rejection callback directly and asserts that expired paint does not
+clear the current source. Its test identity is unchanged. The strengthened
+48-case control passed in **59.78 s** before the replacement removal probe.
+
+#### Round 10 mutation proof
+
+All **21 rules** have caught removal probes. Nineteen runtime probes each ran
+the same **48 collected and executed test identities**; two approval probes
+each ran the same **5 identities**. Every accepted probe failed its intended
+detector, with zero errors and skips. These are **922 test executions**.
+The runtime selector is `test_publication_native.py`,
+`test_publication_diagnostics.py`, the seven scheduler cases in
+`test_publication_widgets.py`, and the existing delayed `people-selector` case.
+The standard publication selector is the prior ten files plus the two new
+native/diagnostic files; it contains **362 cases**.
+
+| Removal | Failed / passed | Seconds |
+|---|---:|---:|
+| Native registration protection | 25 / 23 | 59.29 |
+| Exact native type approval | 8 / 40 | 62.66 |
+| Native method guards | 7 / 41 | 66.04 |
+| Native property guards | 6 / 42 | 60.33 |
+| Native constructor origin | 1 / 47 | 62.85 |
+| Native cached-render guard | 2 / 46 | 60.52 |
+| Passive-paint refusal isolation | 2 / 46 | 66.00 |
+| Native chrome content guards | 4 / 44 | 62.86 |
+| Static application titles | 2 / 46 | 62.47 |
+| Native command-search worker origin | 2 / 46 | 65.85 |
+| Native command input/selection origins | 1 / 47 | 63.36 |
+| Framework watcher origin | 2 / 46 | 61.48 |
+| Unused watcher coroutine cleanup | 2 / 46 | 62.41 |
+| Raw exit-message refusal | 3 / 45 | 64.35 |
+| Queued-message representation sealing | 6 / 42 | 60.94 |
+| Sealing messages already in the queue | 2 / 46 | 61.42 |
+| Payload-free normal representation | 7 / 41 | 61.84 |
+| Payload-free Rich representation | 3 / 45 | 65.33 |
+| Visible notifications in all seven scheduler cases | 7 / 41 | 80.35 |
+| Native boundary fingerprint | 2 / 3 | 2.49 |
+| Exact exception-context fingerprint | 2 / 3 | 4.79 |
+
+Failure totals can include an incidental navigation cancellation; a catch also
+requires the intended detector to fail. In addition to the uncounted paint
+probe above, an initial watcher removal also removed cleanup and produced a
+pytest teardown error (**3 failed, 45 passed, 1 error in 63.34 s**). It is not
+counted. The narrower watcher-origin probe retains cleanup and has no errors.
+All original receipts remain available.
+
+After the probes, the untouched production tree passed **48 runtime cases in
+60.17 s** and **5 approval cases in 4.55 s**. Each command acquired and released
+its own lock in `finally`, waiting 60 seconds between acquisition attempts.
+Mutations used isolated temporary source copies; imports were checked before
+each run. Identity lists, source hashes, stdout, JUnit, lock receipts and the
+runner persist in `.finops-evidence\p71-r10-resume`.
+
+| Round 10 BLOCK | Correction status; lead re-review still required |
+|---|---|
+| Architect B10a | Exact native receiver approval, registration/write/cache guards, query/query_one/children controls and guarded/static chrome |
+| Coder B10b | Raw exit text refused before shutdown; return values preserved |
+| Security B10c | Payload-free normal/Rich representations before posting and dispatch; real `TEXTUAL_LOG` posted/prequeued cases |
+| QA | Visible positive controls for all seven schedulers; native, exit and real-log counterexamples in the standard selector |
+| Maintenance | Receiver/effect review and exact fingerprint-update recipe in ADR-0035; approvals remain code-reviewed |
+
+The architecture source and manifest were regenerated, the AUM image was
+inspected, and **36 architecture assertions** passed. The pre-commit gate
+passed with **13 passed, 2 warnings, 0 failed**. This is not a new packet-gate
+or council verdict.
+
+#### Final round 10 full AUM run on `70b6919`
+
+The requested single full AUM/FinOps run executed **810 cases: 806 passed,
+4 failed in 360.31 s** (**363.59 s wall**), with **0 errors and 0 skips**.
+The command-local lock was held from **2026-09-29 18:22:17Z to 18:28:21Z**
+(**23:52:17-23:58:21 IST**). All collected test identities ran, including all
+**40 new native/diagnostic cases**, which passed.
+
+The failures were:
+
+| File | Test identity | Observed failure |
+|---|---|---|
+| `test_publication_generation.py` | `test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies[budgets]` | `WorkerCancelled` at the worker wait, then `NoMatches` during shutdown |
+| `test_publication_generation.py` | `test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies[requests]` | `WorkerCancelled` at the worker wait, then `NoMatches` during shutdown |
+| `test_publication_generation.py` | `test_principal_change_closes_prior_forms_and_clears_state_before_input` | `WorkerCancelled` at the worker wait, then `NoMatches` during shutdown |
+| `test_revision4_tui.py` | `test_approval_paging_and_queue_change_reset_cursor` | `WorkerCancelled` while awaiting workers |
+
+The worktree's `.venv-finops` interpreter imported this worktree's package.
+From `cli\finops`, the full selector was `-m pytest tests -q
+-p no:cacheprovider --tb=short`, with the identity-recording plugin and JUnit
+receipt. The exact command, source hash, all identities, complete output and
+lock receipt persist as `full-aum.*` in `.finops-evidence\p71-r10-resume`.
+No second full run, timeout relaxation or production change follows this run.
+U26 remains open: these failures were retained, not diagnosed by a passing
+focused control. The full suite is not green and this packet is not merge-ready.
+
+The lead owns integration, the next council and the final packet gate. This
+worktree remains on `p71-aum-speed`; no merge or push is performed here.
+Each mutation and the one final full AUM run acquire and release their own
+shared lock in one command. U26 remains open.
+
+### Council round 9 corrections
+
+The ninth review of `b186cf3` returned UX PASS and Architect, Coder, QA and
+Security BLOCK. Imports were closed, but objects still exposed a console
+stream (B9a), an unwrapped superclass implementation (B9b), and raw
+notifications (B9c). The earlier probes, boundary/exception fingerprints and
+711-case full run were verified by the council.
+
+This correction closes attribute loads and literal reflection with an
+explicit member allowlist. Private names, streams, drivers, raw notification
+delivery and unwrapped implementations have no ambient approval. Necessary
+internal expressions use the existing reason and context-fingerprint
+mechanism. Parameterized `super` is not a presentation API. Notifications
+carry their source through queued delivery and visible rendering.
+
+The exact counterexamples and current-origin controls precede implementation,
+with notifications enabled. Every new rule has a same-test-ID removal probe.
+Each long command owns and releases its lock in its own `finally`; one full
+Python suite follows the fixes. No push, merge, Azure operation, packet gate
+or council invocation is part of this correction. Round 10 remains with the lead.
+
+The installed Textual 6.12.0 path was inspected on 2026-09-29:
+`App.notify` queues a `Notify` message; `_on_notify` adds its record and
+`_refresh_notifications` separately schedules `ToastRack.show`. A check only
+when `notify` is called therefore does not cover actual delivery. Native
+toasts also cache renderables. The correction retains the origin through
+both queue stages and the visible toast path. The initial read-only audit
+exited 0 (20 passed, two existing warnings, four skipped commands/checks).
+
+The capability RED selection reported **46 failed, 8 passed in 8.02 s**.
+It reproduced the stream write, superclass method alias and visible raw
+notification after B verification. The expanded notification-only RED file
+reported **7 failed in 6.49 s**, including queue acceptance and cached-toast
+rendering controls.
+
+`publish_notification` now requires an origin, stores it in the queued
+record, and validates it at acceptance, toast creation and rendering.
+Protected toasts recheck cached render strips; refusal clears/hides them and
+reports the safe error. Principal clearing also clears old notifications.
+All former presentation notification calls use the new API. Static/safe
+explanations use the local-message guard; action acknowledgements retain
+their request/reply origin. Raw `notify` refuses rather than borrowing the
+current identity.
+
+Notification/liveness verification passed **28 cases in 25.15 s**. The
+existing delayed-read observers were moved to the new API while still
+calling it; no outcome assertion was removed. The combined notification,
+lifecycle, structural and identity selection then passed **202 cases in
+58.32 s**. The seven scheduler tests now render notifications instead of
+relying on the headless default that hides them. Attribute enforcement
+follows as a separate correction.
+
+The notification correction is committed as `ea98113`. The attribute policy
+now approves 387 public member names and excludes console/stream/driver,
+private, raw-writer and raw-notification access by default. The reviewed
+inventory adds 190 exact internal/forwarding expressions with 103 function
+fingerprints; combined with the earlier entries there are 202 expressions
+and 106 contexts. A matching function name alone grants no exception.
+Parameterized or escaping `super` is rejected; forwarding exceptions use
+only zero-argument `super` in reviewed wrapper/adapter methods.
+
+The new attribute/source selection passed **183 cases in 8.26 s**. Synthetic
+legacy detector fixtures now use the actual approved UI member vocabulary,
+so an unrelated unknown-attribute finding cannot mask removal of the rule
+they test. The clipboard/backend fixture retains both original sink checks
+and additionally requires the new raw-`write` finding. The complete
+publication selection passed **322 cases in 100.30 s** (102.65 s wall),
+including all B9 counterexamples, notification rendering and the prior
+identity, deferred-publication and source-policy cases.
+
+#### Final round 9 proof on `125f352`
+
+| Seat | Round 9 verdict | Finding | Correction |
+|---|---|---|---|
+| Architect | BLOCK | B9a: an object exposes the raw console stream through literal reflection | `125f352`: every attribute load and literal `getattr`/`hasattr` member needs approval; console, file and writer capabilities have no ordinary approval. |
+| Coder | BLOCK | B9b: parameterized `super` returns an unwrapped method that can be aliased | `125f352`: selected-base and escaping superclass access are rejected; existing zero-argument forwarding is exact and fingerprinted. |
+| QA | BLOCK | The default headless harness hides notification rendering | `ea98113` / `125f352`: exact A-to-B stream, superclass and notification replays, current-origin controls and visible notification tests are in the standard selector. |
+| UX | PASS | Existing scheduler refusal paths remain responsive | Prior liveness checks remain, with notification rendering enabled in the seven-scheduler regression. |
+| Security | BLOCK | B9c: raw notifications display prior-principal data | `ea98113`: `publish_notification` retains and checks the source through queuing, delivery and cached rendering; raw `notify` refuses and principal clearing removes old toasts. |
+
+**16/16 removal probes were caught.** Every probe executed the same **322
+test identities** as its green baseline, exited 1 with at least one failing
+test, and had zero pytest error or skip results. The code was syntax-checked
+before execution and restored byte-for-byte in `finally`; the final source
+SHA-256 values match their pre-mutation receipts.
+
+| Removed or broken rule | Failed / passed | Pytest seconds |
+|---|---|---|
+| Attribute-load allowlist | 15 / 307 | 100.81 |
+| Literal-reflection allowlist | 22 / 300 | 100.38 |
+| Both object-capability access checks | 37 / 285 | 101.49 |
+| Superclass-selection restriction | 4 / 318 | 102.05 |
+| Superclass-builtin escape restriction | 1 / 321 | 104.87 |
+| Exact attribute-exception context | 1 / 321 | 101.04 |
+| Raw-capability exclusion from the ordinary list | 2 / 320 | 101.61 |
+| Private-name exclusion from the ordinary list | 1 / 321 | 102.51 |
+| Raw-notification API refusal | 3 / 319 | 99.80 |
+| Notification enqueue-origin validation | 3 / 319 | 98.28 |
+| Retained notification origin through delivery | 4 / 318 | 100.20 |
+| Cached-toast origin validation | 3 / 319 | 99.33 |
+| Principal-change notification cleanup | 4 / 318 | 101.93 |
+| Blank rendering after a cached-toast refusal | 2 / 320 | 99.90 |
+| Protected notification caller route | 2 / 320 | 99.83 |
+| Capability policy wired into the standard selector | 97 / 225 | 99.76 |
+
+The probes took **1,613.79 s** in pytest (**1,651.63 s wall**), excluding
+lock waits. Removing both attribute access checks reproduces the actual
+stream write. Removing superclass selection reproduces the actual A-to-B
+screenshot. Replacing the retained notification delivery origin fails the
+accepted-but-not-yet-created and cached-render controls; removing the
+cached-strip origin check also fails the visible cached-toast replay.
+Changing a reviewed boundary additionally fails source-integrity checks.
+The blank-refusal fallback probe was caught by those integrity checks;
+the remaining hide/cleanup defenses prevented a separate output failure in
+that probe. It is not reported as another observed payload leak.
+
+| Selection | Result | Pytest seconds | Wall seconds |
+|---|---|---|---|
+| Capability RED | 46 failed, 8 passed | 8.02 | Not separately measured |
+| Notification-stage RED | 7 failed | 6.49 | Not separately measured |
+| Notification/liveness GREEN | 28 passed | 25.15 | Not separately measured |
+| Notification/identity/source GREEN | 202 passed | 58.32 | Not separately measured |
+| Attribute/source GREEN before final controls | 183 passed | 8.26 | Not separately measured |
+| Complete publication GREEN | 322 passed | 100.30 | 102.65 |
+| Locked pre-mutation baseline | 322 passed | 102.77 | 105.17 |
+| Restored publication selector | 322 passed | 106.32 | 108.75 |
+| Full AUM/FinOps Python suite, run once | **770 passed**, zero failures/errors/skips | **283.15** | **285.94** |
+
+The full run acquired its own lock at **2026-09-29 03:43:39Z
+(09:13:39 IST)** and released it at **03:48:25Z (09:18:25 IST)** in that
+same command's `finally`. Baseline, each probe, restored selection and full
+suite have separate acquisition/release receipts. No lock was reserved
+between commands or removed for another owner.
+
+All 322 publication cases were included and passed in the full suite.
+The references are
+[`test_publication_attributes.py`](../cli/finops/tests/test_publication_attributes.py)
+for the exact object-capability counterexamples and member/super rules,
+[`test_publication_notifications.py`](../cli/finops/tests/test_publication_notifications.py)
+for queue acceptance, deferred delivery, visible and cached rendering, and
+[`publication_attributes.py`](../cli/finops/tests/publication_attributes.py)
+for the reviewed member vocabulary and exact exception data. The earlier
+principal, attachment, import, renderer and scheduler regressions remain in
+the selector.
+
+The runner used `accel\.venv-finops\Scripts\python.exe` with
+`PYTHONPATH=accel-p71\cli\finops\src` and asserted the imported package path.
+The standard selector is the prior eight publication files plus
+`test_publication_attributes.py` and `test_publication_notifications.py`.
+The full command was `-m pytest cli\finops\tests -q -p no:cacheprovider
+--tb=short`, with JUnit receipts. Per-run output, exact test identities,
+source hashes and command-local lock receipts persist in
+`.finops-evidence\p71-r9`.
+
+U26 remains open for its historical failures; this passing run is not a
+cause diagnosis. Only the ledger update follows the full run. No push,
+merge, Test-All, packet gate, council invocation or Azure operation occurred.
+Round 10 remains with the lead, and ROADMAP P71 remains unticked.
+
+### Council round 8 corrections
+
+The eighth review of `f89e1c0` returned UX PASS and Architect, Coder, QA and
+Security BLOCK. It verified the round 7 mutation and full-suite receipts and
+closed B7b. The remaining counterexamples are stale widget attachment/reuse
+(B8a), presentation-class mutation (B8b) and module-level raw-output aliases
+(B8c).
+
+The correction uses a closed presentation import contract, not another
+spelling denylist. Output and data-bearing widgets come from the protected
+modules; source-level metaprogramming has checked, justified exceptions only.
+The threat model is maintainer-written presentation code, not a sandbox for
+deliberately malicious code in the Python process. Runtime checks cover
+construction, writes, instance class changes, retained-widget attachment/reuse
+and deferred execution. [ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md)
+records the boundary.
+
+Exact A-to-B counterexamples and current-origin controls precede the fixes.
+Each new rule has a removal probe that executes the same test identities as
+its baseline. Every green implementation is committed locally. Each long
+validation command owns and releases its lock in that command's `finally`;
+one full AUM/FinOps Python run follows the fixes. Round 9 and the packet gate
+remain with the lead. No push, merge or Azure operation is part of this round.
+
+Textual 6.12.0 source inspection found that `_register_child` inserts a node
+before calling the child's `_attach` hook. The runtime boundary therefore
+validates retained widget subtrees before registration mutates the DOM, not
+only in a post-attach event. The renderer also caches visuals, which makes
+checking only the public `render` method insufficient for reuse. Sources:
+the installed `textual/app.py`, `textual/dom.py` and `textual/widget.py`,
+inspected on 2026-09-29. The initial read-only Ironclad audit exited 0
+(20 passed, two existing warnings, four skipped commands/checks).
+
+| Seat | Round 8 verdict | Finding | Correction |
+|---|---|---|---|
+| Architect | BLOCK | B8a: a retained or shallow-copied widget can attach after its principal changes | `970cd88`: original-source validation precedes DOM insertion and covers supplied subtrees, compose and reparent. |
+| Coder | BLOCK | B8b: class mutation can remove presentation enforcement | `970cd88`: protected instances refuse class replacement. `92b5de8`: the closed source policy rejects class/imported-namespace mutation and raw-state access. |
+| QA | BLOCK | Exact A-to-B counterexamples and current-origin controls were missing | `970cd88` / `92b5de8`: screenshot/output counterexamples and current-origin controls are in the standard selector. `2fe50e2` corrects the pin-chart control's source and adds module-interface controls. |
+| UX | PASS | Seven scheduler routes remain responsive; B7b is closed | All prior liveness and no-output-leak cases remain in the final selector and full run. |
+| Security | BLOCK | B8c: a raw imported output alias escapes the spelling detector | `92b5de8`: default-deny imports and member interfaces, a checked module inventory, and exact justified metaprogramming exceptions. |
+
+The first runtime RED run reported **6 failed, 4 passed in 9.75 s**
+(11.61 s wall), with `A_ONLY_BUDGET` visible in B's screenshot after mount,
+shallow copy, compose and reparent, plus both protected-instance class-change
+probes. The subtree extension reported **7 failed, 5 passed in 11.74 s**.
+Current-origin attachment controls already passed. Registration now holds the
+kept origins while validating the complete supplied subtree before insertion.
+Class changes fail independently of the caller's active scope. The compose
+fixture uses an approved protected parent; its retained child still has A's
+origin. Its screenshot and refusal assertions are unchanged.
+
+The first implementation run exposed a missing helper import; the next
+exposed the unwrapped test parent's stopped message pump. Neither result is
+credited as RED evidence or a mutation catch. With the shared import wired
+and composition using the protected parent, the runtime/reuse/lifecycle and
+existing publication selection passed **113 cases in 85.92 s** (88.24 s wall),
+including B4/B5 and all seven round 7 scheduler routes. The closed source
+contract and its exact import/exception controls follow separately.
+
+The retained-widget correction is committed as `970cd88`. Preparation for
+the import boundary moves console creation, prompting and profile/report
+filesystem effects behind the existing protected output module. Its readers
+return text/path values rather than stream or writer handles; configuration
+loading accepts path text without requiring presentation code to import
+`pathlib.Path`. The new interface tests reported **9 failed, 1 passed in
+0.46 s** before implementation, then the IO/runtime/CLI/structure selection
+passed **140 cases in 25.63 s** (26.94 s wall). Profile replacement still
+requires the explicit `force` choice, and stale origins create no directory,
+file or prompt.
+
+The IO adapters are committed as `e52d42a`. The closed-contract RED run
+reported **47 failed, 7 passed in 2.33 s**. It reproduced the module-level
+`typer.echo` alias printing A's value after B verification and class mutation
+putting the same value in B's screenshot. Unknown imports, raw IO classes,
+module escape, computed reflection, class mutation and dynamic code were
+accepted by the previous structural contract.
+
+`publication_policy.py` now declares all 59 source modules: 24 presentation
+modules and 35 explicitly classified non-presentation modules. Presentation
+imports and imported-member access are approved by name, independently of
+local aliases. The two native boundary modules have reviewed AST fingerprints;
+their filenames alone grant no exception. Metaprogramming exceptions name an
+exact expression, its reason and the fingerprint of its enclosing function.
+Changing the fixed cache-field tuple therefore invalidates its reflection
+exception. The 51 static presentation entries keep their scope; only the
+three command metadata writes changed from `typer.echo` to protected
+`write_text`, with the registry fingerprint updated.
+
+The source-policy selection passed **132 cases in 4.63 s**. Protected-widget
+and CLI rewiring passed **42 cases in 12.54 s**. The combined publication,
+snapshot and terminal selection reported **275 passed, 1 failed in
+138.82 s** (141.85 s wall): the previously recorded U26 pin-chart setup
+`KeyError: 'ask'`, before its stale-origin assertions. A bounded follow-up of
+that unchanged publication file passed **40 cases in 31.42 s**. No assertion,
+deadline or synchronization was changed, and this is not a cause diagnosis.
+The new B8 counterexamples, round 7 scheduler/output checks and settled
+snapshots passed in the combined run.
+
+The closed source contract and protected import wiring are committed as
+`92b5de8`. The first 263-case pre-mutation run again failed only at the
+pin-chart setup lookup (**262 passed, 1 failed in 95.05 s**, 97.89 s wall).
+Inspection found that the replay asks directly against a fixture that does
+not advertise the Ask view, then looks up the active view's guard. Focus can
+activate Ask without a corresponding view-cache entry. The completed reply
+already has `ask_reply_guard`, and `action_pin_chart` uses that guard, not the
+view-cache guard.
+
+The test control now selects the actual reply guard for pin-chart and asserts
+that it is current before B verification. All stale-origin, dialog, screenshot
+and no-A-data assertions are unchanged. No production synchronization or
+timeout changed. The corrected complete baseline passed **263 cases in
+94.00 s** (96.33 s wall). The earlier failing receipts remain; this fixture
+correction does not close U26's other historical failures. Module-namespace
+escape/immutability controls and the subtree's pre-insertion assertion are
+also included in that baseline.
+
+#### Final round 8 proof on `2fe50e2`
+
+**26/26 removal probes were caught.** Each ran the same **263 test identities**
+as the green baseline, exited 1 with at least one failing test, and had zero
+pytest error or skip results. Every mutation was syntax-checked first and
+restored byte-for-byte in `finally`; the final SHA-256 checks agree with the
+pre-mutation source. No collection failure or syntax error was counted.
+
+| Removed or broken rule | Failed / passed | Pytest seconds |
+|---|---|---|
+| Retained attachment origin, replaced with a local-message scope | 7 / 256 | 94.05 |
+| Pending-subtree prevalidation | 3 / 260 | 93.80 |
+| Protected-instance class identity | 4 / 259 | 96.11 |
+| Native-boundary implementation fingerprint | 1 / 262 | 91.19 |
+| Named-import allowlist | 20 / 243 | 97.27 |
+| Module-import allowlist | 2 / 261 | 97.97 |
+| Imported-member allowlist | 2 / 261 | 97.67 |
+| Module-name escape restriction | 1 / 262 | 94.11 |
+| Module-attribute escape restriction | 1 / 262 | 92.54 |
+| Class and imported-namespace assignment restriction | 3 / 260 | 88.90 |
+| Reflective class-mutation restriction | 3 / 260 | 88.07 |
+| Computed-reflection restriction | 3 / 260 | 89.34 |
+| Unapproved dunder-attribute restriction | 2 / 261 | 88.66 |
+| Literal raw-state reflection restriction | 2 / 261 | 90.28 |
+| Interpreter-namespace restriction | 1 / 262 | 87.99 |
+| Builtin-capability allowlist | 6 / 257 | 87.30 |
+| Metaprogramming exception-context fingerprint | 1 / 262 | 88.52 |
+| Metaprogramming exception justification | 2 / 261 | 90.89 |
+| Default rejection of unclassified source modules | 1 / 262 | 87.00 |
+| Import-approval justification | 1 / 262 | 86.74 |
+| Runtime IO origin check | 50 / 213 | 86.90 |
+| Explicit profile-overwrite choice | 3 / 260 | 89.94 |
+| Protected CLI output route | 2 / 261 | 88.53 |
+| Closed policy wired into the standard structural selector | 52 / 211 | 87.22 |
+| Direct module-registry restriction | 1 / 262 | 87.28 |
+| Reflective module-registry restriction | 1 / 262 | 86.99 |
+
+The probes took **2,355.26 s** in pytest (**2,417.39 s wall**). Altering a
+reviewed runtime boundary also fails its source-integrity checks; the runtime
+counterexamples still execute independently. Replacing the retained attachment
+origin reproduces all five stale-widget paths. Removing instance class
+protection reproduces both class-replacement cases. Removing the reflective
+class restriction reproduces the council's class-mutation screenshot, not
+only an AST assertion.
+
+| Selection | Result | Pytest seconds | Wall seconds |
+|---|---|---|---|
+| Runtime/reuse/lifecycle/publication GREEN | 113 passed | 85.92 | 88.24 |
+| IO/runtime/CLI/structure GREEN | 140 passed | 25.63 | 26.94 |
+| Closed source contract GREEN | 132 passed | 4.63 | Not separately measured |
+| Initial compatibility selection | 275 passed, 1 pin-chart setup failure | 138.82 | 141.85 |
+| Initial complete baseline | 262 passed, 1 pin-chart setup failure | 95.05 | 97.89 |
+| Corrected complete baseline | 263 passed | 94.00 | 96.33 |
+| Restored complete publication selector | 263 passed | 89.18 | 91.41 |
+| Full AUM/FinOps Python suite, run once | **711 passed**, zero failures/errors/skips | **267.15** | **269.77** |
+
+The requested full run acquired its own lock at **2026-09-29 00:57:04Z
+(06:27:04 IST)** and released it at **01:01:34Z (06:31:34 IST)** in that
+command's `finally`. Baseline, each removal probe, restored selection and
+full suite have separate acquisition/release receipts. No lock was reserved
+between validation commands or removed on behalf of another owner.
+
+All 263 publication cases were included in the full 711-case run. This
+includes B4/B5, every round 7 scheduler/liveness case, the no-traceback-payload
+proof, and the exact B8 screenshot/output controls:
+
+- [`test_publication_reuse.py`](../cli/finops/tests/test_publication_reuse.py)
+  checks current/stale mount, shallow copy, compose, reparent and nested
+  subtree paths, plus protected-instance class replacement. A rejection
+  precedes insertion; current origins still display their data.
+- [`test_publication_allowlist.py`](../cli/finops/tests/test_publication_allowlist.py)
+  gates the exact `setattr(type(widget), "render", ...)` and raw
+  `typer.echo`/`sys.modules` alias sources before execution. The original RED
+  runs displayed or printed A's value after B verification; the approved
+  current-origin output alias remains a positive control.
+- [`publication_policy.py`](../cli/finops/tests/publication_policy.py)
+  defines the closed import/member/builtin capabilities, module
+  classification, reviewed native boundaries and exact metaprogramming
+  exceptions. The existing lexical scope detector remains a second check,
+  not the default authority for unknown imports.
+
+Every runner asserted that `claude_finops.__file__` belongs to
+`accel-p71\cli\finops\src` while using the main worktree's interpreter.
+The standard selector is the prior five publication files plus
+`test_publication_reuse.py`, `test_publication_io.py` and
+`test_publication_allowlist.py`. The full command used `-m pytest
+cli\finops\tests -q -p no:cacheprovider --tb=short`, with JUnit receipts.
+Private stdout, source hashes, exact test identities and command-local lock
+receipts persist in `.finops-evidence\p71-r8`.
+
+No pin-chart setup failure occurred in the 26 removal runs, restored selector
+or final full suite after its control was bound to the completed reply's
+origin. U26 remains open for the other historical failures; no production
+timing fix is claimed. Only the ledger update follows this final full run.
+There was no push, merge, Test-All, packet gate, council invocation or Azure
+operation. Round 9 remains with the lead, and ROADMAP P71 remains unticked.
+
+### Council round 7 corrections
+
+The seventh review of `9fabf42` returned Architect PASS and Coder, QA, UX and
+Security BLOCK. The existing B4/B5 and round 6 protections remain required.
+
+| Seat | Round 7 verdict | Finding | Correction |
+|---|---|---|---|
+| Architect | PASS | Existing publication structure accepted | The component and source-guard boundary remain. |
+| Coder | BLOCK | B7a: `Static.content` writes bypass runtime and AST enforcement; descriptor/raw-state and additional deferred/dynamic spellings escape the detector | `bee62d2`: `content` validates and retains its source; the structural contract rejects unchecked descriptor setters, raw widget state, dynamic code, added scheduler spellings and partial methods. |
+| QA | BLOCK | Only `call_later` exercised refusal liveness | `95a6475`: seven actual scheduler routes retain responsive input and emit no payload. `530a8dd` adds finite cycle-removal probes and stopped-app loop ownership. |
+| UX | BLOCK | Timer and screen callbacks report exit 3, then terminate Textual | `95a6475`: shared application handling recognizes direct and wrapped refusals before fatal rendering; message dispatch and the owned loop preserve liveness. Unrelated errors retain their handling. |
+| Security | BLOCK | B7b: a refused Overview callback exposes its data arguments through error rendering | `95a6475`: only the safe underlying refusal is presented, never wrapper text, callback arguments or traceback locals. The real Overview replay makes zero renderer calls and emits no sentinel. |
+
+Each correction starts with failing behavior/structural cases. Each new rule
+has a removal probe that retains the baseline test identities, executes the
+suite and fails at least one test. Every green implementation is committed
+locally. The shared lock covers one long command at a time and is released in
+that command's `finally`, never reserved between validation commands. One final full
+AUM/FinOps Python run follows the fixes. Council round 8 and the packet gate
+remain with the lead; no push, merge, Azure read or Azure write is part of
+this correction.
+
+The installed Textual 6.12.0 source explains the observed error path:
+`Timer._tick`, next-callback dispatch and screen refresh callbacks can reach
+`App._handle_exception`; its fatal renderer includes traceback locals.
+`MessagePump.on_timer` can wrap a callback exception in `CallbackError`.
+Event-loop callbacks use the loop's separate exception handler. The correction
+therefore covers the application boundary and its owned event-loop lifetime,
+without changing process-wide handlers outside that lifetime. Sources:
+the installed `textual/app.py`, `textual/message_pump.py`,
+`textual/screen.py` and `textual/timer.py`, inspected on 2026-09-28.
+The initial read-only Ironclad audit exited 0 (20 passed, two existing
+warnings, four skipped commands/checks); no packet gate executed.
+
+B7a's first RED selection reported **41 failed, 66 passed in 47.50 s**
+(50.15 s wall). `content` was accepted by the live sink, the real `call_soon`
+probe wrote the old principal's value without refusal, and replacing content
+left the previous origin attached. The final structural RED selection,
+including imported `exec`/`eval` aliases and an altered internal setter call,
+reported **41 failed, 29 passed in 3.38 s**. These are behavior failures, not
+collection errors. With the runtime setter and structural rules implemented,
+the complete two-file selection passed **110 cases in 45.20 s** (47.15 s
+wall). The original 51 static exceptions are unchanged; only three exact
+sink-implementation expressions are recognized separately, as recorded in
+[ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md).
+
+B7a is committed as `bee62d2`. The refusal/liveness RED run reported
+**13 failed, 5 passed in 23.28 s** (25.01 s wall). Six newly exercised
+scheduler routes exposed `ROUND7_A_ONLY_COSTS` in fatal output or asyncio
+logging. The real Overview `on_resize`/screen-refresh reproduction made
+**zero renderer calls**, yet leaked its callback's argument through the
+fatal traceback. Direct, explicit-cause and implicit-context refusals also
+terminated the app. The initial shared-boundary GREEN selection passed
+**89 cases in 21.31 s** (22.78 s wall), covering the seven live scheduler
+routes, input after refusal, safe output, unrelated errors and loop ownership.
+The complete publication selector then passed **176 cases in 81.48 s**
+(83.42 s wall), including B4/B5, all previous runtime protections and a bounded
+exception-cycle control. That single command acquired and released its own
+lock. The architecture renderer verified 16 specs and 18 PNGs; the updated AUM
+readiness image was inspected. Final removal-probe results follow below.
+
+The refusal boundary is committed as `95a6475`. Mutation preparation adds a
+stopped-app ownership control and bounds the cyclic-exception fixtures: a
+removed cycle detector produces a failing test rather than hanging collection
+or the test process. The final pre-mutation baseline passed **177 cases in
+79.05 s** (80.99 s wall). Its command waited in one-minute intervals for the
+shared lock, then released the lock in `finally` before returning. The 27
+removal probes each ran that same complete selector in a separate command.
+
+#### Final round 7 proof on `530a8dd`
+
+**27/27 removal probes were caught.** Each executed the same **177 test
+identities** as the green baseline, exited 1 with at least one intended
+failing test, and had zero pytest error or skip results. Every mutation was
+syntax-checked before execution and restored byte-for-byte in `finally`;
+the final source SHA-256 values match the recorded originals.
+
+| Removed or broken rule | Intended failures / 177 | Other setup failures | Pytest seconds |
+|---|---|---|---|
+| `content` runtime check | 3 | 0 | 92.65 |
+| `content` origin retention | 1 | 0 | 86.85 |
+| `content` structural check | 4 | 1 | 87.01 |
+| Annotated and augmented assignment check | 2 | 0 | 73.24 |
+| Descriptor/raw attribute check | 15 | 1 | 72.80 |
+| Raw-state/dynamic-code name check | 8 | 0 | 73.64 |
+| Imported dynamic-code alias check | 2 | 0 | 73.78 |
+| Indirect raw-state access check | 5 | 0 | 72.68 |
+| Raw-access rejection inside a guard | 8 | 0 | 73.26 |
+| Exact internal-expression boundary | 1 | 0 | 73.48 |
+| `call_next` scheduler check | 1 | 1 | 71.63 |
+| `call_at` scheduler check | 1 | 0 | 72.37 |
+| `threading.Timer` scheduler check | 2 | 0 | 72.16 |
+| Keyword callback check | 2 | 0 | 73.07 |
+| `partialmethod` check | 2 | 0 | 72.59 |
+| Shared application refusal boundary | 11 | 0 | 73.07 |
+| Safe underlying error text | 2 | 0 | 73.59 |
+| Explicit-cause unwrapping | 1 | 1 | 72.71 |
+| Implicit-context unwrapping | 2 | 1 | 73.37 |
+| Exception-cycle detection | 2 | 0 | 74.70 |
+| Wrapped-message dispatch recovery | 1 | 1 | 74.08 |
+| Loop-refusal routing | 2 | 1 | 75.24 |
+| Foreign-app loop ownership | 1 | 0 | 74.80 |
+| Stopped-app loop ownership | 1 | 1 | 74.06 |
+| Previous loop-handler restoration | 3 | 0 | 73.31 |
+| Newer loop-handler ownership | 1 | 0 | 75.93 |
+| Unrelated exception forwarding | 3 | 0 | 74.82 |
+
+The probes took **2,030.89 s** in pytest (**2,077.67 s wall**), excluding
+lock waits. The eight additional setup failures all name
+`test_cached_dialog_handoffs_retain_origin_during_deferred_composition[pin-chart]`:
+`KeyError: 'ask'` at the precondition reading `app._data_guards[app.active]`,
+before that test's stale-origin assertions. They are not credited as mutation
+catches. This case passed in both the restored selector and the full suite;
+its intermittent setup failure remains recorded under U26, without a claimed
+cause or a changed assertion.
+
+| Scope | Result | Pytest seconds | Wall seconds |
+|---|---|---|---|
+| B7a structure/runtime GREEN | 110 passed | 45.20 | 47.15 |
+| Initial refusal/structure GREEN | 89 passed | 21.31 | 22.78 |
+| Complete publication GREEN before final fixture controls | 176 passed | 81.48 | 83.42 |
+| Final pre-mutation baseline | 177 passed | 79.05 | 80.99 |
+| Restored complete publication selector | 177 passed | 73.71 | 75.52 |
+| Full AUM/FinOps Python suite, run once | **625 passed**, zero failures/errors/skips | **247.21** | **248.95** |
+
+The final full run acquired its own lock at **2026-09-28 21:07:43Z
+(2026-09-29 02:37:43 IST)** and released it at **21:11:52Z
+(02:41:52 IST)**, in the same command's `finally`. Baseline, every mutation,
+restored selection and full run have separate acquisition/release receipts;
+the lock was never reserved between commands. Other owners' gate windows
+were left untouched, with retries every 60 s. No process priority was changed.
+
+All 177 publication cases were included and passed in the full run, including
+B4's pre-input clearing and B5's outgoing assistant-context protection.
+The regression references are:
+
+- [`test_runtime_publication_sinks.py`](../cli/finops/tests/test_runtime_publication_sinks.py):
+  `test_content_property_refuses_a_scheduled_old_principal_value` executes
+  the A-to-B `call_soon` reproduction; `test_content_assignment_replaces_and_retains_its_actual_source`
+  proves replacement of the previous origin and later invalidation of the
+  actual content origin.
+- [`test_publication_structure.py`](../cli/finops/tests/test_publication_structure.py):
+  content assignments, descriptor/raw-state operations both inside and outside
+  a guard, `exec`/`eval` aliases, new schedulers, keyword callbacks,
+  `partialmethod` and exact internal expressions each have failing-removal cases.
+- [`test_publication_widgets.py`](../cli/finops/tests/test_publication_widgets.py):
+  `test_rejected_raw_scheduled_publication_keeps_the_app_open_and_explains`
+  runs `call_later`, `set_timer`, `call_after_refresh`, `call_next`,
+  `loop.call_soon`, `loop.call_at` and a real wrapped timer event. Each case
+  observes callback execution, types into the terminal afterward and rejects
+  the sentinel in terminal/error consoles, captured stdout/stderr, logging and
+  the screen. `test_refused_overview_screen_callback_never_renders_its_arguments`
+  uses the real `on_resize`/screen-refresh path and requires zero renderer calls.
+
+Every run used `accel\.venv-finops\Scripts\python.exe` with
+`PYTHONPATH=accel-p71\cli\finops\src`; the runner asserted the imported
+`claude_finops.__file__` before executing pytest. The complete selector consists
+of `test_publication_generation.py`, `test_publication_structure.py`,
+`test_guarded_publication.py`, `test_runtime_publication_sinks.py` and
+`test_publication_widgets.py`. The full command was `-m pytest
+cli\finops\tests -q -p no:cacheprovider --tb=short`, with a JUnit receipt;
+it did not use the worktree-venv wrapper that would skip.
+
+Private stdout, JUnit, per-rule test identities, source hashes and individual
+lock receipts persist in `.finops-evidence\p71-r7`. U26 remains open: the
+passing full run does not establish the cause of the earlier failures.
+Only this ledger update follows the final full run. No push, merge,
+Test-All, packet gate, council invocation or Azure operation occurred.
+Round 8 remains with the lead, and ROADMAP P71 remains unticked.
+
 ### Council round 6 corrections
 
 The sixth review over `4cf7508..dd46186` confirmed the runtime B4/B5 fixes on
@@ -2091,28 +3250,30 @@ required boundary.
 
 | Seat | Round 6 verdict | Finding | Fix |
 |---|---|---|---|
-| Architect | BLOCK | A deferred callable can outlive a syntactically guarded scope | Pending: sink-layer validation and one explicit guarded deferral wrapper |
+| Architect | BLOCK | A deferred callable can outlive a syntactically guarded scope | `a7dc395` / `5c1eb74`: sink-layer validation and explicit guarded deferral |
 | Coder | PASS | Reviewed runtime implementation accepted | Retained |
-| QA | BLOCK | Lambda, dynamic attribute and partial spellings evade the detector | Pending: RED fixtures/runtime probes and full-selector mutations |
+| QA | BLOCK | Lambda, dynamic attribute and partial spellings evade the detector | `b6aef61`: RED fixtures and extended detector; 17/17 full-selector mutations caught on `36f3088`, below |
 | UX | PASS | Reviewed B4/B5 behavior accepted | Retained |
-| Security | BLOCK | B6a-d: deferred lambda/def, getattr, setattr and partial can publish outside their source guard | Pending: active/current-origin checks at every presentation sink |
+| Security | BLOCK | B6a-d: deferred lambda/def, getattr, setattr and partial can publish outside their source guard | `a7dc395` / `5c1eb74`: active/current-origin checks at presentation and egress sinks; `bcf8554`: explicit refusal without ending the UI message loop; `6056989`: synchronous sink functions cannot defer their bodies |
 
-All four probes become failing structural and runtime tests before the fix.
+All four probes failed as structural and runtime tests before the fix.
 The existing 51 exact static-write exceptions are retained. Heavier affected
 selections, repetition and mutation batches take the shared lock and release it
 in `finally`; single files and the publication selector remain the initial
-work. U26 records the bounded navigation-flake attempt. This round runs no
-Test-FinOps, Test-All, packet gate, main merge or push.
+work. U26 records the bounded navigation-flake attempt. The earlier correction
+pass ran no Test-FinOps, Test-All or packet gate. The resumed correction includes
+one full AUM/FinOps Python run under the shared lock. Council round 7, the packet
+gate and integration remain with the lead; this branch is not pushed or merged.
 
 The initial structural run on the reviewed detector reported **13 failed,
-10 passed**: the four B6 forms, eight scheduler variants and computed
+10 passed in 4.22 s**: the four B6 forms, eight scheduler variants and computed
 `getattr` were accepted. The extended detector reports **27 passed**,
 including explicit deferral and callback-alias controls. The exact 51-entry
 static registry is pinned by a digest. The initial real-Textual runtime
-reproductions reported **11 failed**, all from a missing sink refusal;
-runtime implementation and mutation receipts follow separately.
+reproductions reported **11 failed in 13.25 s**, all from a missing sink refusal.
+Final runtime and mutation receipts are below.
 
-The sink implementation's expanded RED run reported **25 failed** (21 missing
+The sink implementation's expanded RED run reported **25 failed in 19.55 s** (21 missing
 refusals and four missing explicit-deferral cases). Widget methods/properties,
 clipboard, links and the HTTP assistant transport now validate at execution.
 The runtime file passes **25 cases**; the existing publication file passes
@@ -2138,6 +3299,152 @@ The dispatch boundary now reports `FinOpsError` before the framework leaves
 that loop; both lifecycle cases pass, including 256 ordinary input edits.
 The original terminal/form file passes **11 cases** after its direct setup
 assignments declare their input origin. No outcome assertion changed.
+The remaining directly affected input fixtures also pass as individual files:
+Dashboard **19**, directory forms **4**, feature controls **7**, navigation **6**
+and review regressions **5**. These six files total **52 cases**. Only setup
+assignments gained an originating scope; all deadlines, assertions and
+requested values are unchanged. The architecture renderer verified 16 specs
+and 18 images; the changed AUM readiness image was inspected and contains
+generic component names, not deployment identifiers.
+
+The locked affected run on `3ceaa9f` passed **319 tests in 324.72 s** (328.95 s
+wall), 14:43:48Z-14:49:17Z. No full-suite runner or gate was invoked.
+A subsequent longer-input probe found that repeatedly wrapping a widget's
+previous input origin built a recursive guard chain: **1 failed, 2 passed**,
+with `RecursionError` during 1,024 ordinary edits. Input now retains one
+immutable content origin and replaces only the current-input check. The
+three lifecycle cases and all **37 runtime sink cases** pass; a separate
+control proves credential invalidation still rejects that original content
+even without an identity-revision change.
+
+The interrupted edit on `2f42fab`, completed in `6056989`, rejects coroutine, generator and
+async-generator functions at `publication_sink` decoration. Their bodies run
+after the creation-time check would have ended. The resumed RED run restored
+the committed implementation while retaining the three new cases:
+**3 failed, 3 passed in 3.05 s** (6.48 s wall), each failure
+`DID NOT RAISE TypeError`, with all six cases loaded. The completed restriction
+then passed the complete publication selection: **115 passed in 116.06 s**
+(120.96 s wall), including B4/B5, the 37 runtime-sink cases, 29 structural
+cases, six lifetime cases and three input/dispatch cases. No test assertion
+or deadline changed. This is a synchronous-sink contract correction within
+the existing publication component, with no new architecture path.
+The offline architecture check reported the changed source fingerprint
+(`SOURCE_STALE: aum-readiness: ...guarded_publication.py`) in 0.91 s.
+Rendering and checking again verified 16 specs and 18 unchanged PNGs in
+16.50 s. Only the manifest fingerprint changed; the AUM image was inspected.
+
+This worktree uses the main worktree's interpreter with its own source first
+on `PYTHONPATH`. The import check and targeted command were:
+
+```powershell
+$root = (Get-Location).Path
+$python = Join-Path (Split-Path $root) 'accel\.venv-finops\Scripts\python.exe'
+$env:PYTHONPATH = Join-Path $root 'cli\finops\src'
+$env:PYTHONDONTWRITEBYTECODE = '1'
+& $python -c "import claude_finops; from pathlib import Path; print(claude_finops.__file__); assert Path(claude_finops.__file__).resolve() == Path(r'cli\finops\src\claude_finops\__init__.py').resolve()"
+& $python -m pytest cli\finops\tests\test_publication_generation.py `
+    cli\finops\tests\test_publication_structure.py `
+    cli\finops\tests\test_guarded_publication.py `
+    cli\finops\tests\test_runtime_publication_sinks.py `
+    cli\finops\tests\test_publication_widgets.py -q -p no:cacheprovider --tb=short
+```
+
+The import check printed `accel-p71\cli\finops\src\claude_finops\__init__.py`,
+not the main worktree's package. The shared lock remained with P79 during
+these short targeted runs; no mutation batch or gate ran during that period.
+
+#### Resumed round 6 proof on `36f3088`
+
+The shared lock was acquired at **2026-09-28 15:55:10Z (21:25:10 IST)** after
+one-minute retries and released in `finally` at **16:38:50Z (22:08:50 IST)**.
+Only this run's lock was removed. Execution was serial and offline, with the
+P71 import assertion above. The read-only Ironclad audit (`--stage packet
+--no-run --json`) exited 0: 20 passed, two existing warnings, four skipped
+commands/checks. This is not an executed packet gate.
+
+Each B6 spelling has a case in
+[`test_round_six_indirect_and_deferred_probes_are_rejected`](../cli/finops/tests/test_publication_structure.py)
+and in
+[`test_raw_sink_refuses_deferred_backend_data_for_every_spelling`](../cli/finops/tests/test_runtime_publication_sinks.py).
+The runtime cases cover both unchanged and changed principals; both must
+refuse a raw callback after the originating scope ends. The historical RED
+failures above name every case, rather than a collection/import failure.
+
+| Item | Additional named test | Mutation proof on the complete 115-case selector |
+|---|---|---|
+| B6a: lambda/def through `call_later` | `test_lambda_body_never_inherits_the_creation_scope`; `test_nested_callback_created_under_guard_cannot_escape_to_scheduler` (eight schedulers); `test_rejected_raw_scheduled_publication_keeps_the_app_open_and_explains` | Restoring lambda scope inheritance fails 1/115; removing escaped-callback detection fails 9/115. Removing widget method enforcement fails 16/115, including both lambda and nested-def principal variants and the actual scheduled callback. |
+| B6b: `getattr` | `test_computed_getattr_in_presentation_code_is_not_silently_trusted` | Removing literal attribute resolution fails 1/115; removing computed-attribute detection fails 1/115. Removing widget method enforcement fails both runtime `getattr` principal variants. |
+| B6c: `setattr` | Runtime spelling `setattr`, both principal variants | Removing setter detection fails 1/115. Removing widget property enforcement fails 5/115, including both runtime `setattr` cases. |
+| B6d: `functools.partial` | `test_partial_sink_reference_requires_explicit_deferral_without_a_scheduler` | Removing partial-sink detection fails 1/115. Removing widget method enforcement fails both runtime partial principal variants. |
+
+**17/17 mutations were caught.** Every run loaded and executed the exact
+baseline's **115 test identities**, with at least one failing test,
+exit 1, zero skips and zero pytest error results. Each altered file was
+restored in `finally`, and its SHA-256 was compared with its pre-mutation
+bytes. An invalid syntax or changed test count did not count as a catch.
+The 51-entry static registry remained unchanged in the restored source.
+
+| Removed or broken protection | Failed / passed | Pytest seconds |
+|---|---|---|
+| Runtime `publication_sink` source check | 14 / 101 | 64.32 |
+| Deferred sink-body rejection | 3 / 112 | 93.69 |
+| Explicit backend-origin deferred wrapper | 5 / 110 | 125.21 |
+| Lambda creation-scope isolation | 1 / 114 | 79.51 |
+| Escaped callback scheduler detection | 9 / 106 | 114.65 |
+| Literal `getattr` sink resolution | 1 / 114 | 114.41 |
+| Computed `getattr` detection | 1 / 114 | 117.53 |
+| `setattr` sink detection | 1 / 114 | 109.34 |
+| Partial sink-reference detection | 1 / 114 | 116.09 |
+| Refusal recovery before Textual ends dispatch | 1 / 114 | 132.86 |
+| Bounded input-origin depth | 1 / 114 | 142.14 |
+| Original content credential guard | 1 / 114 | 118.13 |
+| Structural check of a new unguarded handler write | 1 / 114 | 116.40 |
+| Widget method sink enforcement | 16 / 99 | 112.43 |
+| Widget property sink enforcement | 5 / 110 | 105.45 |
+| Exact static-registry reason/digest | 1 / 114 | 86.58 |
+| Accepted explicit-deferral AST path | 3 / 112 | 126.06 |
+
+The 17 runs took **1,874.80 s** in pytest (**1,931.21 s wall**).
+The positive explicit-deferral controls still accept a current source and
+preserve ordinary input. Changed sources fail before writing, and the async
+control proves that identity verification can finish while the callback awaits.
+B4's pre-input row clearing and B5's B-authenticated assistant request remain
+green in both publication baselines and the full run.
+
+| Selection | Result | Pytest seconds | Wall seconds |
+|---|---|---|---|
+| Initial resumed publication selection | 115 passed | 116.06 | 120.96 |
+| Locked pre-mutation publication baseline | 115 passed | 66.64 | 69.00 |
+| Locked restored publication selection | 115 passed | 107.23 | 110.25 |
+| Full `cli\finops\tests`, run once | 560 passed, 3 failed; 563 total | 498.64 | 502.38 |
+
+**Full-suite validation is not green.** The requested one full Python run
+started at **16:30:27Z** and ended at **16:38:50Z**. All 115 publication tests
+passed in it, including B4/B5. Its three failures were:
+
+- `test_timeout_terminates_started_children_and_grandchildren`: the child
+  startup marker was absent.
+- `test_scheduling_delay_before_assignment_cannot_release_uncontained_children`:
+  the child startup marker was absent.
+- `test_redacted_queries_do_not_leak_through_input_or_filter_echo`:
+  `WorkerCancelled` at `app.workers.wait_for_complete()` after the lookup handoff.
+
+The missing startup markers and worker cancellation resemble earlier U26
+observations, but this run does not establish their cause. No deadline,
+assertion or synchronization was changed, and no second full run replaced
+the failure. [U26](UNKNOWNS.md#u26---p71-observation-2026-09-28) records the
+exact cases. The Python command was the same interpreter/environment above
+with `-m pytest cli\finops\tests -q -p no:cacheprovider --tb=short`.
+`Test-FinOps.ps1` was not used because its worktree-venv check would skip;
+pytest actually executed all 563 cases.
+
+Private per-run stdout, JUnit reports, source hashes, mutation test identities,
+and the lock receipt persist in `.finops-evidence\p71-r6-resume`.
+The earlier interrupted mutation logs remain historical, not the final proof.
+The branch remains unpushed and unmerged, with no Azure access or writes in
+this resumed work. Council round 7 and the packet gate remain with the lead;
+P71 is not marked complete in ROADMAP. No additional implementation or full
+test run follows this recorded handoff.
 
 ### Council round 5 corrections
 

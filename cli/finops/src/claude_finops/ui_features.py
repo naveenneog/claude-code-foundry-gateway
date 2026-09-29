@@ -2,10 +2,9 @@ import asyncio
 import json
 from contextlib import nullcontext
 from dataclasses import replace
-from pathlib import Path
 
-from textual.containers import Horizontal
-from .publication_widgets import Button, Input, Select, Static, TextArea, DataTable
+from .publication_widgets import Button, Horizontal, Input, Select, Static, TextArea, DataTable, VerticalScroll
+from .publication_output import preview_profile
 
 from .backend import connect
 from .bulk import budget_csv_plan
@@ -30,7 +29,7 @@ class FeatureUI:
             with guarded_publish(guard):
                 self.push_screen(ActionForm(title, fields, operation, read_guard=guard))
         except FinOpsError as error:
-            self.notify(self._error_text(error), severity="error")
+            self.publish_notification(self._error_text(error), origin=self.safe_message_guard(), severity="error")
 
     async def _publish_read(self, operation, publish, *args, **params):
         with self.engine.backend.read_cycle():
@@ -45,7 +44,7 @@ class FeatureUI:
                 DetailScreen(title, result.get(field, []) if field else result, read_guard=guard)),
                 resource, **params)
         except FinOpsError as error:
-            self.notify(self._error_text(error), severity="error")
+            self.publish_notification(self._error_text(error), origin=self.safe_message_guard(), severity="error")
 
     def action_refresh_usage(self):
         if self.editable and self.engine.backend.name == "Turnstile":
@@ -273,7 +272,7 @@ class FeatureUI:
     def action_load_view(self):
         views = self.preferences.views()
         if not views:
-            self.notify("No saved views yet. Choose Save current view from the command palette.")
+            self.publish_notification("No saved views yet. Choose Save current view from the command palette.", origin=self.current_guard())
             return
         def run(values, apply):
             view = views[values["name"]]
@@ -389,9 +388,9 @@ class FeatureUI:
             try:
                 with guarded_publish(self.cached_guard("requests")):
                     self.copy_to_clipboard(key)
-                    self.notify("Copied request id using the terminal clipboard protocol.")
+                    self.publish_notification("Copied request id using the terminal clipboard protocol.", origin=self.cached_guard("requests"))
             except FinOpsError as error:
-                self.notify(self._error_text(error), severity="error")
+                self.publish_notification(self._error_text(error), origin=self.safe_message_guard(), severity="error")
 
     def action_open_ledger(self):
         if self.active != "requests" or self.redactor.enabled:
@@ -402,17 +401,16 @@ class FeatureUI:
                 with guarded_publish(self.cached_guard("requests")):
                     self.open_url(ledger_url(self.config.workspace_resource_id, self.config.tenant_id, key, self.engine.month))
             except FinOpsError as error:
-                self.notify(str(error), severity="error")
+                self.publish_notification(str(error), origin=self.safe_message_guard(), severity="error")
 
     def action_profile(self):
-        from .configure import ProfileChange, connection_config, profile_bytes, read_profile
+        from .configure import connection_config
 
         def run(values, apply):
             if apply:
                 reviewed = values["profile_change"]
                 return dict(ui_action="profile", config=reviewed.configuration(), profile=str(reviewed.path),
                             profile_revision=reviewed.revision, profile_change=reviewed)
-            path = Path(values["path"]).expanduser().resolve()
             fields = {key: values[key].strip() for key in
                       ("backend", "url", "scope", "subscription", "resource_group", "apim_name", "tenant_id",
                        "workspace_resource_id")}
@@ -421,10 +419,10 @@ class FeatureUI:
             if fields["url"] != self.config.url or fields["backend"] != self.config.backend:
                 fields["turnstile_resource_group"] = ""
             config = connection_config(replace(self.config, **fields))
-            reviewed = ProfileChange(path, read_profile(path), profile_bytes(config))
+            reviewed = preview_profile(config, values["path"])
             return dict(preview=True, action="Change connection",
                         before=dict(connection=self.config.public(), profile_revision=reviewed.revision),
-                        after=dict(connection=config.public(), profile=str(path)),
+                        after=dict(connection=config.public(), profile=reviewed.path),
                         profile_change=reviewed,
                         note="Address-only profile; timestamped backup before saving. Failed whoami restores the previous profile and connection. Gateway authority does not change.")
         choices = [("direct", "Direct"), ("aum-service", "AUM service"), ("turnstile", "Turnstile")]
@@ -442,8 +440,8 @@ class FeatureUI:
             ("path", "Local profile path", str(self.profile_path), None)],
             run, mutation=False, local_write=True, apply_label="Save and connect", commit_preview=True))
 
-    async def activate_profile(self, config, *, profile=None, revision="", reviewed=None):
-        from .configure import profile_transaction
+    async def activate_profile(self, config, *, profile=None, revision="", reviewed=None, read_guard=None):
+        from .publication_output import profile_transaction
 
         backend = None
         previous_engine, previous_config, previous_path = self.engine, self.config, self.profile_path
@@ -451,7 +449,9 @@ class FeatureUI:
         with guarded_publish(self.safe_message_guard()):
             self.query_one("#status", Static).update("Verifying the new connection with whoami (estimate 3-10 s)...")
         try:
-            transaction = profile_transaction(profile, config, revision, reviewed=reviewed) if profile is not None else nullcontext()
+            origin = read_guard if read_guard is not None else self.current_guard()
+            transaction = (profile_transaction(profile, config, revision, reviewed=reviewed, origin=origin)
+                           if profile is not None else nullcontext())
             with transaction:
                 backend = connect(config)
                 engine = Engine(backend, self.engine.month)
@@ -483,14 +483,15 @@ class FeatureUI:
                     self.config, self.profile_path = previous_config, previous_path
                     self._clear_principal_state({})
                 self.query_one("#status", Static).update(f"{reason} The previous connection remains active.")
-                if self.screen.query("#action-status"):
-                    self.screen.query_one("#action-status", Static).update(f"{reason} The previous connection remains active.")
-                    if self.screen.query("#action-feedback"):
-                        feedback = self.screen.query_one("#action-feedback")
-                        feedback.scroll_home(animate=False)
+                screen = self.screen_stack[-1]
+                if screen.query("#action-status"):
+                    screen.query_one("#action-status", Static).update(f"{reason} The previous connection remains active.")
+                    if screen.query("#action-feedback"):
+                        feedback = screen.query_one("#action-feedback", VerticalScroll)
+                        feedback.publication_scroll_home()
                         feedback.focus()
                 else:
-                    self.notify(reason, severity="error")
+                    self.publish_notification(reason, origin=self.safe_message_guard(), severity="error")
         finally:
             if backend is not None and not switched:
                 backend.close()
@@ -548,7 +549,7 @@ class FeatureUI:
 
     def action_pin_chart(self):
         if not self.ask_reply or not self.ask_reply.get("charts"):
-            self.notify("Ask a question that returns a chart first.")
+            self.publish_notification("Ask a question that returns a chart first.", origin=self.safe_message_guard())
             return
         try:
             if self.ask_reply_guard is None:
@@ -562,7 +563,7 @@ class FeatureUI:
                     lambda values, apply: self.engine.pin_chart(reply, values["chart"], values["title"], apply=apply),
                     read_guard=guard))
         except FinOpsError as error:
-            self.notify(self._error_text(error), severity="error")
+            self.publish_notification(self._error_text(error), origin=self.safe_message_guard(), severity="error")
 
     async def load_feature_tab(self, tab):
         if tab == "ask":
@@ -676,7 +677,7 @@ class FeatureUI:
             try:
                 await self._publish_read(self.engine.read, publish, "assistant_settings")
             except FinOpsError as error:
-                self.notify(str(error), severity="error")
+                self.publish_notification(str(error), origin=self.safe_message_guard(), severity="error")
         self.run_worker(load(), group="assistant-settings", exclusive=True)
 
     def action_report_generate(self):
@@ -703,18 +704,18 @@ class FeatureUI:
         @published(lambda link, guard: guard)
         def publish(link, guard):
             self.open_url(link)
-            self.notify("Move members in Entra with existing group-owner rights, then refresh the gateway projection.")
+            self.publish_notification("Move members in Entra with existing group-owner rights, then refresh the gateway projection.", origin=guard)
         async def load():
             try:
                 await self._publish_read(self.engine.membership_url, publish, self.team)
             except FinOpsError as error:
-                self.notify(str(error), severity="error")
+                self.publish_notification(str(error), origin=self.safe_message_guard(), severity="error")
         self.run_worker(load(), group="membership", exclusive=True)
 
     def action_remove_view(self):
         views = self.preferences.views()
         if not views:
-            self.notify("There are no saved views for this identity/profile.")
+            self.publish_notification("There are no saved views for this identity/profile.", origin=self.current_guard())
             return
         def operation(values, apply):
             if apply:

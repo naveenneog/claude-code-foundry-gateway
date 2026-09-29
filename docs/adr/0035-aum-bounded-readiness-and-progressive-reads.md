@@ -243,10 +243,223 @@ lock across an await. The AST contract is a second line of defense: dynamic
 sink attributes, partials and guarded-scope callbacks escaping to schedulers
 must not bypass it. The 51 static exceptions remain exact and separate from
 documented framework-internal access needed to implement the sink layer.
+The concrete layers are `publication_widgets.py` (Textual methods, properties
+and app clipboard/links), `publication_output.py` (final text, rich, CSV file
+and clipboard-helper output), and the HTTP assistant-request transport.
+They delegate to `publication_sink`, which checks the active source through
+`guarded_publish` at the write. The sink decorator rejects coroutine, generator
+and async-generator functions: checking creation of a deferred body does not
+authorize its later execution. Six identified framework input/mount handlers
+and framework input actions use retained provenance; application handlers and
+layout/idle dispatch do not gain implicit authority. A refused scheduled write
+is handled before Textual abandons its message loop, clearing the view and
+retaining the explicit exit-3 explanation.
+Repeated input edits retain one immutable content origin rather than nesting
+the previous keystroke's wrapper. This bounds guard depth without replacing
+the original credential generation with an unpinned current-identity guard.
 
 The reported navigation cancellation is investigated with a bounded repeated
 test/file run under the shared lock. No timeout, assertion or suite budget is
-relaxed to conceal it. The lead retains full-suite and integration-gate ownership.
+relaxed to conceal it. The resumed correction runs the full AUM/FinOps Python
+suite once under the shared lock; council round 7 and the integration gate
+remain with the lead.
+
+## Council round 7 amendment, 2026-09-28
+
+The public `Static.content` setter has the same origin check and provenance
+retention as `update`, `value` and `text`. Descriptor setters and raw widget
+state are not supported presentation APIs: they bypass provenance even inside
+a syntactically guarded scope. The structural contract rejects those accesses,
+`exec`/`eval`, additional scheduler spellings and partial methods. Three exact
+internal operations remain necessary: the sink's base setter, its non-content
+attribute forwarding and the framework action MRO lookup. These are local,
+documented expressions, not module or handler exemptions; the 51 static
+presentation exceptions remain unchanged.
+
+Direct or wrapped publication refusals reach the application exception
+boundary before Textual constructs fatal diagnostics. The boundary presents
+only the safe refusal, not wrapper text, callback arguments or traceback
+locals. The app-owned event-loop handler routes the same refusals to that
+boundary and restores the previous handler when its lifetime ends. Other
+exceptions retain their existing application or loop handling. Actual
+scheduled callbacks test both liveness and absence of payload in output.
+
+The installed Textual 6.12.0 implementation was inspected on 2026-09-28:
+`App._handle_exception` calls a fatal renderer with `show_locals=True`;
+`Timer._tick`, `MessagePump._flush_next_callbacks` and screen callbacks reach
+that boundary, while `MessagePump.on_timer` may wrap the original error.
+Python event-loop callback errors have a separate loop handler. The ownership
+and restoration controls therefore accompany the refusal fix, rather than
+assuming that every scheduler runs through message dispatch.
+
+The shared lock is held for one long validation command and released in that
+command's `finally`. One full Python suite follows the fixes. Round 8 and the
+packet gate remain with the lead; no integration or Azure operation occurs.
+
+## Council round 8 amendment, 2026-09-29
+
+### Threat model and closed source contract
+
+Presentation modules are maintainer-written. The detector enforces a closed
+import allowlist and a metaprogramming ban. New modules and imports require
+an explicit classification/approval rather than being trusted because a
+known sink name did not match. Presentation output comes only from the
+protected output module; displayed controls use approved wrappers. Raw
+terminal streams, raw output functions, raw Rich consoles, unwrapped Textual
+widgets and direct file/clipboard writers are not presentation imports,
+regardless of aliases.
+
+`sys.modules`, computed `getattr`/`setattr`/`delattr`, writes to classes or
+raw instance state, `object.__setattr__`, dynamic code and dynamic imports
+are not presentation APIs. A necessary internal operation has an exact
+justification entry checked by the tests. This is not a handler-wide or
+module-wide metaprogramming exemption.
+
+The runtime guards cover construction, writes, protected-instance class
+changes, attachment/reuse of retained widgets, and scheduling through retained
+origins. Attachment checks the original source before DOM registration;
+the current caller's scope cannot replace that origin. Reused subtrees and
+compose results take the same path. The round 7 safe refusal and input
+liveness boundaries remain.
+
+Deliberately malicious in-process code is out of scope: Python code with
+access to the process can bypass an in-process check. The source contract
+prevents unsupported operations in maintained presentation code; it is not
+a sandbox or a claim that arbitrary Python reflection is contained.
+
+The maintained policy explicitly classifies all package source modules and
+approves named imports and member interfaces. Importing an approved module
+does not expose every member or permit passing the module object elsewhere.
+Raw implementation imports exist only in `publication_output.py` and
+`publication_widgets.py`; reviewed AST fingerprints bind those exceptions to
+their implementation, not just their filenames. Exact metaprogramming
+exceptions also bind the enclosing function's AST, including the fixed
+cache-field tuple and framework input checks on which their reasons depend.
+
+Layout containers, tabs and the application now come from the protected
+widget module too. An empty modal shell has a local-message origin when no
+publication is active. Data-bearing dialog constructors enter their explicit
+retained guard first, so that fallback does not replace the source of their
+cached facts; their children keep the same source. Terminal console creation,
+CLI prompting and profile/report writes stay inside the protected output
+module. Presentation passes path strings and receives values, not raw
+filesystem or stream capabilities.
+
+The installed Textual 6.12.0 `_register_child` implementation inserts into
+the parent's nodes and application registry before `_attach`. Prevalidation
+therefore occurs at the application's registration boundary. Checking only
+`on_mount` or `render` is too late or can miss cached visuals. These native
+paths were inspected on 2026-09-29 before implementation.
+
+## Council round 9 amendment, 2026-09-29
+
+The maintained presentation contract is closed at import, attribute and
+builtin level. Every attribute load and literal `getattr`/`hasattr` member
+needs approval; approving an imported object does not approve its entire
+interface. Raw console/stream/driver access, private and dunder members,
+`write`/`writelines` and raw `notify` are excluded from the ordinary member
+set. Necessary internal operations retain exact-expression justifications
+and reviewed context fingerprints. Parameterized `super` is rejected;
+ordinary constructor/adapter forwarding uses explicit checked contexts.
+The ordinary attribute set has no private names or raw output members.
+Existing internal cache/lifecycle accesses, backend operator writes and
+native sink operations are separate exact-expression exceptions, each with
+a factual reason and its function's AST fingerprint. They do not approve a
+private name elsewhere or exempt the rest of a handler. Synthetic detector
+fixtures use reviewed public names so that the import/attribute checks do
+not accidentally substitute for the specific lexical rule under test.
+
+`publish_notification` requires the originating guard and retains it in the
+queued notification. Acceptance, toast creation and visible rendering
+validate that same source. A principal transition clears old notifications.
+The standard selector enables notifications and observes their rendered
+output; headless mode alone does not establish notification safety.
+The native Textual 6.12.0 notification queue, rack and toast lifecycle were
+inspected on 2026-09-29 before these changes.
+
+This remains a contract for maintainer-written code, not a Python sandbox.
+Approved application/backend APIs and the two reviewed boundary modules
+remain trusted implementation. The checker does not infer data provenance
+from arbitrary Python values, and deliberate in-process code can bypass
+checks. Supported presentation paths carry and validate their actual source;
+the contract rejects access to capabilities outside those paths.
+
+## Council round 10 amendment, 2026-09-29
+
+Approval of a DOM query also includes the effects of the objects it returns.
+Native descendants that can display content require the same receiver-level
+publication enforcement as directly imported wrappers. Unsupported native
+content types are refused before attachment rather than trusted by omission.
+Framework chrome displays only static or source-guarded content.
+The native adapter accepts exact reviewed classes, not a module-name prefix or
+an inherited class name. It guards content properties, mutating methods and
+cached rendering. Application titles remain static after construction.
+Native-first inheritance preserves Python's instance layout when a framework
+child is adapted; ordinary code cannot replace a protected widget's class.
+Textual's asynchronous reactive watcher retains the publication origin on
+both widgets and the app. Initial Header watchers are scheduled on the watched
+app or screen, not necessarily the Header, and unused watcher coroutines are
+closed on refusal or shutdown.
+Expired cached paint returns blank output and emits one fixed refusal notice;
+it does not cancel a newer source read merely because an older native caption
+still needs repainting. Input/write refusals keep the existing application
+rejection path. Native command search recognizes only Textual's exact
+`CommandPalette._gather_commands` worker and receiver, retains that origin
+through awaits, and replaces its argument-bearing diagnostic description.
+Its three input/selection handlers use the same reviewed framework-input
+boundary. Arbitrary supplied workers do not acquire this authority.
+
+These effects were checked against installed Textual 6.12.0 on 2026-09-29:
+[`App._register_child` and exit rendering](https://github.com/Textualize/textual/blob/v6.12.0/src/textual/app.py),
+[`MessagePump._on_message` logging](https://github.com/Textualize/textual/blob/v6.12.0/src/textual/message_pump.py),
+[`reactive._watch` and `await_watcher`](https://github.com/Textualize/textual/blob/v6.12.0/src/textual/reactive.py),
+and the native Header/Footer implementations under `src/textual/widgets`.
+The command-search worker and handlers are in
+[`command.py`](https://github.com/Textualize/textual/blob/v6.12.0/src/textual/command.py).
+The local counterexamples are in `test_publication_native.py` and
+`test_publication_diagnostics.py`.
+
+`exit(result)` returns a value and remains supported. The optional
+Textual exit `message` is an output sink and is refused on the raw exit API.
+Any displayed farewell/error text takes the guarded publication path.
+Queued messages and notification records omit payloads from both normal and
+Rich representations before Textual logs them; this includes message/title
+and deferred callback arguments, not only the originating guard.
+
+### Approval recipe for attributes and builtins
+
+An approval is reviewed like code. The review identifies every supported
+receiver type, whether the member is read, invoked or assigned, and the value
+or capability it returns. The effects include terminal/error streams,
+diagnostic logs, notifications, exit rendering, files, clipboard, browser
+links, deferred callbacks and native descendants returned by queries.
+A member name alone does not establish that every receiver is protected.
+The resulting receiver/effect findings are recorded with the approval's
+reason and, for an exception, its exact expression and enclosing context.
+
+A new ordinary member/builtin needs a positive current-origin control and
+a negative expired/changed-origin or forbidden-capability control through
+its actual effect. Deferred paths include delivery/rendering, not only queue
+acceptance. Log-sensitive paths use a fresh process with `TEXTUAL_LOG`;
+notification paths enable rendering. A removal probe retains the baseline
+test identities and must fail a behavioral or source-contract assertion,
+not collection or syntax.
+
+Implementation changes precede fingerprint updates. The affected source and
+its call chain are inspected, the RED/GREEN evidence is retained, and
+`publication_policy.digest(ast.parse(source))` supplies the reviewed boundary
+fingerprint. Exact exception contexts use `digest(functions(tree)[scope])`.
+The changed reason/expression and literal fingerprint are reviewed together;
+a failing fingerprint is not updated merely to silence the detector.
+The source-contract tests and targeted runtime cases then pass on the same
+tree before the green commit. Changes to a diagram witness are followed by
+the existing architecture renderer and image review.
+
+The import, attribute and builtin contract remains a maintainer-code
+contract, not a malicious-Python sandbox or automatic taint analysis.
+Reviewed backend APIs, framework adapters and source guards are trusted
+implementation. Approvals that expose a new receiver/effect require the
+same review and counterexamples as a new sink.
 
 ## Consequences
 

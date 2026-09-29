@@ -5,7 +5,9 @@ from contextlib import nullcontext
 import pytest
 
 from claude_finops.errors import FinOpsError
-from claude_finops.guarded_publication import guarded_publish, published, enclosing_publication
+from claude_finops.guarded_publication import (
+    enclosing_publication, guarded_publish, publication_sink, published,
+)
 from test_publication_generation import http_estate, verify_b
 
 
@@ -16,6 +18,22 @@ def test_async_renderer_cannot_pretend_its_later_writes_are_guarded():
 
     with pytest.raises(TypeError, match="synchronous"):
         published(lambda: nullcontext)(unsafe)
+
+
+@pytest.mark.parametrize("kind", ["coroutine", "generator", "async-generator"])
+def test_sink_decorator_cannot_check_only_the_creation_of_a_deferred_body(kind):
+    async def coroutine():
+        return "private"
+
+    def generator():
+        yield "private"
+
+    async def async_generator():
+        yield "private"
+
+    operation = {"coroutine": coroutine, "generator": generator, "async-generator": async_generator}[kind]
+    with pytest.raises(TypeError, match="synchronous"):
+        publication_sink(operation)
 
 
 def test_deferred_child_cannot_inherit_an_expired_publication_scope():

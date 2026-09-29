@@ -2,9 +2,7 @@ import asyncio
 from contextlib import contextmanager
 
 from textual import on, work
-from textual.containers import Horizontal, Vertical
-from textual.screen import ModalScreen
-from .publication_widgets import Button, DataTable, Input, Label, Select, Static
+from .publication_widgets import Button, DataTable, Horizontal, Input, Label, ModalScreen, Select, Static, Vertical
 
 from .developer_actions import developer_change, developer_find
 from .errors import FinOpsError
@@ -192,4 +190,4 @@ class DeveloperPicker(ModalScreen):
                 if self.query("#developer-status"):
                     self.query_one("#developer-status", Static).update(self.app._error_text(error))
                 else:
-                    self.app.notify(self.app._error_text(error), severity="error")
+                    self.app.publish_notification(self.app._error_text(error), origin=self.app.safe_message_guard(), severity="error")

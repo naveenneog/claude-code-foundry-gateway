@@ -14,6 +14,10 @@ def report_generator(config) -> Path:
     return root / "scripts" / "New-ClaudeChargebackReport.ps1"
 
 
+def report_available(config) -> bool:
+    return report_generator(config).is_file()
+
+
 def report_plan(engine, config, *, month=None, units=None, output="finops-reports",
                 formats="CSV,HTML", month_to_date=False, send=False, apply=False):
     require_owner(engine.read("whoami"))

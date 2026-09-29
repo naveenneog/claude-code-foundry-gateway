@@ -1,11 +1,8 @@
 import asyncio
 import json
-from pathlib import Path
 
 from textual import on, work
-from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.screen import ModalScreen
-from .publication_widgets import Button, Input, Label, Select, Static
+from .publication_widgets import Button, Horizontal, Input, Label, ModalScreen, Select, Static, Vertical, VerticalScroll
 
 from .errors import FinOpsError
 from .guarded_publication import guarded_publish, published
@@ -59,6 +56,9 @@ class QuitScreen(ModalScreen):
 class ActionForm(ModalScreen):
     BINDINGS = [("escape", "cancel", "Cancel")]
 
+    @published(lambda self, title, fields, operation, *, mutation=True, read_guard=None,
+               local_write=False, apply_label=None, commit_preview=False:
+               read_guard if read_guard is not None else self.app.current_guard())
     def __init__(self, title, fields, operation, *, mutation=True, read_guard=None, local_write=False,
                  apply_label=None, commit_preview=False):
         super().__init__()
@@ -168,7 +168,7 @@ class ActionForm(ModalScreen):
             latest = await asyncio.to_thread(self.operation, self.values(), False)
             if any(latest.get(key) != reviewed_plan.get(key) for key in ("before", "after", "changes", "count")):
                 if self.commit_preview and "profile_change" in reviewed_plan and "profile_change" in latest:
-                    from .configure import profile_conflict
+                    from .publication_output import profile_conflict
                     reviewed, current = reviewed_plan["profile_change"], latest["profile_change"]
                     if reviewed.revision != current.revision:
                         raise profile_conflict(reviewed.path, reviewed.revision, reviewed.before, current.before)
@@ -180,8 +180,9 @@ class ActionForm(ModalScreen):
                 result = await asyncio.to_thread(self.operation, reviewed_plan if self.commit_preview else self.values(), True)
             if result.get("ui_action"):
                 if result["ui_action"] == "profile":
-                    await self.app.activate_profile(result["config"], profile=Path(result["profile"]),
-                                                    revision=result["profile_revision"], reviewed=result["profile_change"])
+                    await self.app.activate_profile(result["config"], profile=result["profile"],
+                                                    revision=result["profile_revision"], reviewed=result["profile_change"],
+                                                    read_guard=self.read_guard)
                     return
                 if result["ui_action"] == "signout":
                     with guarded_publish(self.app.safe_message_guard()):

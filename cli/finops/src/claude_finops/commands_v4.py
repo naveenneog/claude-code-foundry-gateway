@@ -1,6 +1,4 @@
-from pathlib import Path
-import json
-import subprocess
+from typing import Annotated
 import typer
 
 from .errors import FinOpsError
@@ -35,7 +33,7 @@ def register(app, groups, emit):
         emit(ctx, lambda e: e.mode_change(kind, key, value, allowance, apply=apply and not ctx.obj["what_if"]), mutation=True)
 
     @groups["budget"].command("import")
-    def bulk_import(ctx: typer.Context, csv_file: Path, apply: bool = False):
+    def bulk_import(ctx: typer.Context, csv_file: Annotated[str, typer.Argument(metavar="CSV_FILE")], apply: bool = False):
         emit(ctx, lambda e: budget_csv_plan(e, csv_file, apply=apply and not ctx.obj["what_if"]))
 
     @groups["people"].command("show")

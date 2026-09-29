@@ -1,9 +1,7 @@
 """Scriptable face; root options also work after a noun or verb."""
 
-from pathlib import Path
 import json
 import os
-import sys
 from typing import Annotated
 
 import typer
@@ -18,13 +16,9 @@ from .brand import BANNER, PRODUCT, show_banner
 from . import __version__
 from .redaction import Redactor
 from .guarded_publication import guarded_publish
-from .publication_output import write_text
+from .publication_output import read_text, terminal_output, write_text
 from .reports import chargeback_export_path, save_chargeback_csv
 from contextlib import nullcontext
-
-
-def terminal_output():
-    return sys.stdout.isatty()
 
 
 class EverywhereGroup(TyperGroup):
@@ -86,7 +80,7 @@ def emit(ctx, operation, *, mutation=False):
 def root(ctx: typer.Context,
          backend: Annotated[str | None, typer.Option(help="direct, aum-service, turnstile or fake")] = None,
          month: str | None = None,
-         config: Path | None = None,
+         config: Annotated[str | None, typer.Option(metavar="PATH")] = None,
          url: str | None = None,
          scope: str | None = None,
          subscription: str | None = None,
@@ -107,12 +101,14 @@ def root(ctx: typer.Context,
     plain = plain or screen_reader
     if version:
         if show_banner(tty=terminal_output(), as_json=as_json, plain=plain, screen_reader=screen_reader):
-            typer.echo(BANNER)
+            with guarded_publish(nullcontext):
+                write_text(BANNER)
         if as_json:
             with guarded_publish(nullcontext):
                 display(dict(product=PRODUCT, version=__version__), as_json=True)
         else:
-            typer.echo(f"{PRODUCT} {__version__}")
+            with guarded_publish(nullcontext):
+                write_text(f"{PRODUCT} {__version__}")
         raise typer.Exit()
     redact = redact or os.environ.get("AUM_REDACT", "").lower() in {"1", "true", "yes"}
     if ctx.invoked_subcommand == "configure":
@@ -234,11 +230,11 @@ def usd_price_book_show(ctx: typer.Context):
 
 
 @price_book.command("set")
-def usd_price_book_set(ctx: typer.Context, file: Path, apply: bool = False):
+def usd_price_book_set(ctx: typer.Context, file: Annotated[str, typer.Argument(metavar="FILE")], apply: bool = False):
     """Replace the price book from a JSON file. Active budgets pin their tariff."""
     def operation(engine):
         try:
-            book = json.loads(file.read_text(encoding="utf-8"))
+            book = json.loads(read_text(file))
         except (OSError, ValueError) as error:
             raise FinOpsError("Read a JSON price-book file before applying.") from error
         return engine.usd_price_book_change(book, apply=apply and not ctx.obj["what_if"])
@@ -372,7 +368,7 @@ def trends_show(ctx: typer.Context, interval: str = "day", group_by: str = "none
 @groups["report"].command("chargeback")
 def report_chargeback(ctx: typer.Context, csv: Annotated[bool, typer.Option("--csv")] = False,
                      dimension: str = "organization",
-                     output: Annotated[Path | None, typer.Option("--output", help="Folder for a complete chargeback CSV.")] = None):
+                     output: Annotated[str | None, typer.Option("--output", help="Folder for a complete chargeback CSV.")] = None):
     """Export estimated cost, tokens and cache. Not an Azure invoice."""
     if output is not None:
         try:
@@ -421,7 +417,8 @@ register_groups(app, groups, emit)
 
 
 def legacy_main():
-    typer.echo("Deprecated: claude-finops is now aum (AUM - Azure Usage Management); this alias remains for one release.", err=True)
+    with guarded_publish(nullcontext):
+        write_text("Deprecated: claude-finops is now aum (AUM - Azure Usage Management); this alias remains for one release.", err=True)
     main()
 
 

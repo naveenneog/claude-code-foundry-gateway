@@ -2,15 +2,15 @@ import asyncio
 
 from rich.text import Text
 from textual import on, work
-from textual.app import App, ComposeResult
+from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal
 from textual.theme import Theme
-from textual.widgets import TabbedContent, TabPane
-from .publication_widgets import Button, DataTable, Input, Select, Static, TextArea, PublicationApp
+from .publication_widgets import (
+    Button, DataTable, Horizontal, Input, Select, Static, TabbedContent, TabPane, TextArea, PublicationApp,
+)
 
 from .errors import FinOpsError
-from .config import profile_path as selected_profile_path
+from .publication_output import profile_path as selected_profile_path
 from .accessibility import AsciiFilter
 from .brand import BANNER, COMPACT, PRODUCT
 from .dashboard import Dashboard, DashboardPanel, enforcement_badge
@@ -30,7 +30,7 @@ from .guarded_publication import guarded_publish, published, guarded_deferred
 from .principal_ui import PrincipalUI
 
 
-class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App):
+class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
     TITLE = PRODUCT
     CSS_PATH = "terminal.tcss"
     COMMANDS = {FinOpsCommands}
@@ -727,8 +727,8 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
 
     @published(lambda self: self.safe_message_guard())
     def action_quit(self):
-        if isinstance(self.screen, QuitScreen):
-            self.screen.refresh_saving()
+        if isinstance(self.screen_stack[-1], QuitScreen):
+            self.screen_stack[-1].refresh_saving()
             return
         self.push_screen(QuitScreen())
 
@@ -798,7 +798,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
             return
         row = self.selected()
         if row.get("kind") == "tier":
-            self.notify("Tier removal is not supported by the gateway policy.")
+            self.publish_notification("Tier removal is not supported by the gateway policy.", origin=self.safe_message_guard())
             return
         kind = "budget" if self.active in {"budgets", "people"} else "catalog"
         self.open_cached_change(kind, row, remove=True)
@@ -847,7 +847,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
                     self.action_refresh()
                 return
             if (self.request_page + 1) * 50 >= len(self.data.get("requests", {}).get("all_items", [])):
-                self.notify("End of server window. Set Before to see older requests.")
+                self.publish_notification("End of server window. Set Before to see older requests.", origin=self.cached_guard("requests"))
                 return
             self.request_page += 1
         self.action_refresh()
