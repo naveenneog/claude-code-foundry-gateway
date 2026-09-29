@@ -38,6 +38,35 @@ function Get-ClaudeProjectionStorageName {
     } finally { if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force -WhatIf:$false } }
 }
 
+function Format-ClaudeProjectionChecks {
+    param([object[]]$Checks, [int]$Width = 100)
+    if ($Width -lt 40) { $Width = 100 }
+    if ($Width -ge 225) {
+        return ($Checks | Format-Table @{Label='Check';Expression={$_.Check};Width=24}, @{Label='Result';Expression={$_.Result};Width=6},
+            @{Label='Evidence';Expression={$_.Evidence};Width=74}, @{Label='Remedy';Expression={$_.Remedy};Width=96},
+            @{Label='Who';Expression={$_.Who};Width=21} -Wrap | Out-String -Width $Width).TrimEnd()
+    }
+    $lines = [Collections.Generic.List[string]]::new()
+    foreach ($check in $Checks) {
+        foreach ($field in 'Check','Result','Evidence','Remedy','Who') {
+            $text = "${field}: $($check.$field)" -replace '\s+', ' '
+            while ($text.Length -gt $Width) {
+                $cut = $text.LastIndexOf(' ', $Width)
+                if ($cut -lt 1) { $cut = $Width }
+                $lines.Add($text.Substring(0, $cut).TrimEnd())
+                $text = $text.Substring($cut).TrimStart()
+            }
+            $lines.Add($text)
+        }
+        $lines.Add('')
+    }
+    return ($lines -join "`n").TrimEnd()
+}
+
+function Stop-ClaudeProjectionSwitch {
+    throw 'Projection switching is unavailable in P84. Records expire at most 2 hours after scan start; every developer gets 503 after expiry without renewal. Switching needs the scheduled reconciler in P86 (docs/ROADMAP.md). No override is available.'
+}
+
 function Invoke-ClaudeProjectionPreflight {
     param(
         [string]$ResourceGroup, [string]$ApimName, [string]$NamePrefix, [string]$SubscriptionId,
@@ -46,21 +75,21 @@ function Invoke-ClaudeProjectionPreflight {
         [string]$PremiumGroup = 'claude-code-premium', [switch]$FlipAfterCleanCompare,
         [string]$ReconcilerResourceId
     )
-    Write-Host 'Projection preflight (about 30-90 s, including 25 s between Graph probes). No Azure writes.'
+    if ($FlipAfterCleanCompare) { Stop-ClaudeProjectionSwitch }
+    Write-Host 'Projection preflight (about 30-90 s, including a 25 s Graph pause). No Azure writes.'
     $checks = [Collections.Generic.List[object]]::new()
     $context = @{ Location = $Location; ResolverAppId = $ResolverAppId }
     function Check($Name, $Who, $Remedy, [scriptblock]$Read) {
         try {
             $evidence = & $Read
-            $checks.Add([pscustomobject]@{ Check=$Name; Result='PASS'; Evidence=($evidence -join '; '); Remedy='None'; Who=$Who })
+            $warning = $evidence -is [hashtable] -and $evidence.Result -eq 'WARN'
+            $checks.Add([pscustomobject]@{ Check=$Name; Result=$(if ($warning) { 'WARN' } else { 'PASS' }); Evidence=$(if ($warning) { $evidence.Evidence } else { $evidence -join '; ' }); Remedy=$(if ($warning) { $Remedy } else { 'None' }); Who=$Who })
         } catch {
             $checks.Add([pscustomobject]@{ Check=$Name; Result='FAIL'; Evidence=$_.Exception.Message; Remedy=$Remedy; Who=$Who })
         }
     }
     function Report {
-        $checks | Format-Table @{Label='Check';Expression={$_.Check};Width=24}, @{Label='Result';Expression={$_.Result};Width=6},
-            @{Label='Evidence';Expression={$_.Evidence};Width=74}, @{Label='Remedy';Expression={$_.Remedy};Width=96},
-            @{Label='Who';Expression={$_.Who};Width=21} -Wrap | Out-String -Width 240 | Write-Host
+        Format-ClaudeProjectionChecks -Checks $checks.ToArray() -Width $Host.UI.RawUI.WindowSize.Width | Write-Host
         $failed = @($checks | Where-Object Result -eq 'FAIL')
         if ($failed.Count) { throw "Projection preflight failed ($($failed.Count)): $(($failed | ForEach-Object { "$($_.Check): $($_.Evidence)" }) -join '; ')" }
     }
@@ -120,12 +149,13 @@ function Invoke-ClaudeProjectionPreflight {
             "Graph reached at $([DateTimeOffset]::UtcNow.ToString('o'))"
         }
     }
-    foreach ($groupName in @($StandardGroup,$PremiumGroup)) {
-        Check "Tier group: $groupName" 'customer Entra admin' 'An existing, unambiguous tier group and Graph group read permission are required.' {
+    foreach ($tier in @(@{Name=$StandardGroup;Optional=$false},@{Name=$PremiumGroup;Optional=$true})) {
+        $groupName = $tier.Name
+        Check "Tier group: $groupName" 'customer Entra admin' 'Graph group read permission is required. Standard must exist; premium may be confirmed absent.' {
             if (-not $context.GraphToken) { throw 'Graph token could not be acquired; group lookup is unverified.' }
             $group = Get-ClaudeGraphGroup -GroupName $groupName -Token $context.GraphToken
-            if (-not $group) { throw "Required tier group '$groupName' was confirmed absent." }
-            "$groupName = $($group.id)"
+            if (-not $group -and -not $tier.Optional) { throw "Required tier group '$groupName' was confirmed absent." }
+            if ($group) { "$groupName = $($group.id)" } else { "Optional premium group '$groupName' confirmed absent; no premium identities." }
         }
     }
     Check 'Resolver registration' 'customer Entra admin' (Get-ClaudeProjectionAppRemedy $NamePrefix) {
@@ -143,11 +173,15 @@ function Invoke-ClaudeProjectionPreflight {
             $context.ResolverAppId = [string]$app.appId
             "Existing resolver app: $($app.appId)"
         } else {
-            if (-not $context.User -or $context.User.userType -ne 'Member') { throw 'App creation permission is unproven: a member user or pre-created ResolverAppId is required.' }
-            $policy = Invoke-ClaudeGraphRead -Uri 'https://graph.microsoft.com/v1.0/policies/authorizationPolicy' -Token $context.GraphToken
+            $unconfirmed = "cannot confirm; if creation fails, the customer's admin creates the app and you pass -ResolverAppId."
+            if (-not $context.User -or $context.User.userType -ne 'Member') {
+                return @{ Result='WARN'; Evidence="App-registration rights $unconfirmed Effective guest/delegated rights were not enumerated." }
+            }
+            try { $policy = Invoke-ClaudeGraphRead -Uri 'https://graph.microsoft.com/v1.0/policies/authorizationPolicy' -Token $context.GraphToken }
+            catch { return @{ Result='WARN'; Evidence="App-registration rights $unconfirmed Policy.Read.All-class read unavailable: $($_.Exception.Message)" } }
             $allowed = $policy.defaultUserRolePermissions.allowedToCreateApps
-            if ($allowed -isnot [bool] -or -not $allowed) { throw 'App creation permission is unproven: allowedToCreateApps is not explicitly true. Role-delegated operators can supply an admin-created ResolverAppId.' }
-            'Member user; authorizationPolicy.allowedToCreateApps=true'
+            if ($allowed -is [bool] -and $allowed) { 'Member user; authorizationPolicy.allowedToCreateApps=true' }
+            else { @{ Result='WARN'; Evidence="App-registration rights $unconfirmed allowedToCreateApps does not establish effective delegated/custom-role permission." } }
         }
     }
     Check 'Resource providers' 'operator' 'Subscription admin registration: az provider register --namespace <provider>; registration commonly takes several minutes.' {
@@ -195,96 +229,7 @@ function Invoke-ClaudeProjectionPreflight {
         Remedy='A failed allocation may require regional access at https://aka.ms/cosmosdbquota or another region; successful preflight is not capacity reservation.'
         Who='operator'
     })
-    if ($FlipAfterCleanCompare) {
-        Check 'Reconciliation switch' 'operator' 'ReconcilerResourceId identifies an existing verified scheduled projection job (ADR-0040). No override exists; P86 owns provisioning.' {
-            $evidence = Assert-ClaudeProjectionReconciler -ReconcilerResourceId $ReconcilerResourceId -GatewayResourceId $context.GatewayResourceId -AccountResourceId $context.AccountResourceId -TenantId $context.Account.tenantId
-            "Verified $($evidence.ResourceId), execution $($evidence.Execution); scan-start expiry estimate $($evidence.ExpiresAt)."
-        }
-    }
     Report
     $context.Remove('GraphToken')
     return $context
-}
-
-function Get-ClaudeProjectionContainerSignature {
-    param($Template)
-    $containers = @($Template.containers)
-    if ($containers.Count -ne 1) { throw 'The reconciler contract requires exactly one container.' }
-    if ($Template.PSObject.Properties['initContainers'] -and @($Template.initContainers).Count) { throw 'The reconciler contract does not permit init containers.' }
-    $container = $containers[0]
-    if ([string]$container.image -notmatch '@sha256:[0-9a-f]{64}$') { throw 'The reconciler image requires a SHA-256 digest, not a mutable tag.' }
-    $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
-    foreach ($variable in @($container.env)) {
-        $secret = $variable.PSObject.Properties['secretRef']
-        if (-not $variable.name -or $environment.ContainsKey([string]$variable.name) -or ($secret -and $secret.Value)) { throw 'Reconciler environment binding must contain unique literal non-secret values.' }
-        $environment[[string]$variable.name] = [string]$variable.value
-    }
-    $canonical = [ordered]@{ name=$container.name; image=$container.image; command=@($container.command); args=@($container.args); env=@($environment.Keys | Sort-Object | ForEach-Object { "$_=$($environment[$_])" }) }
-    @{ Environment=$environment; Signature=($canonical | ConvertTo-Json -Depth 20 -Compress) }
-}
-
-function Assert-ClaudeProjectionReconciler {
-    param([string]$ReconcilerResourceId, [string]$GatewayResourceId, [string]$AccountResourceId, [string]$TenantId, [long]$ExpiresAt = 0)
-    $now = [DateTimeOffset]::UtcNow
-    $estimated = -not $PSBoundParameters.ContainsKey('ExpiresAt')
-    if ($estimated) { $ExpiresAt = $now.ToUnixTimeSeconds() + 7200 }
-    $expiry = [DateTimeOffset]::FromUnixTimeSeconds($ExpiresAt).ToString('yyyy-MM-ddTHH:mm:ssZ')
-    $lease = "Records expire at most 2 hours after the scan, at $expiry$(if ($estimated) { ' (estimate for a scan starting now)' }); every developer gets 503 after that without successful reconciliation."
-    try {
-        if (-not $estimated -and $ExpiresAt -le 0) { throw 'The actual snapshot has no valid expiry; no new lease is assumed.' }
-        if (-not $ReconcilerResourceId) { throw 'ReconcilerResourceId is required; no scheduled reconciliation has been verified.' }
-        $pattern = '^/subscriptions/([0-9a-fA-F-]{36})/resourceGroups/[A-Za-z0-9._-]+/providers/Microsoft.App/jobs/[A-Za-z0-9-]+$'
-        if ($ReconcilerResourceId -notmatch $pattern) { throw 'ReconcilerResourceId must identify a Microsoft.App/jobs ARM resource.' }
-        $subscription = $Matches[1]
-        if ($GatewayResourceId -notlike "/subscriptions/$subscription/*" -or $AccountResourceId -notlike "/subscriptions/$subscription/*") { throw 'Reconciler, gateway and Cosmos account must share the verified subscription.' }
-        $base = "https://management.azure.com$ReconcilerResourceId"
-        $job = Invoke-ClaudeNetworkArm -Url "${base}?api-version=2024-03-01"
-        if ($job.id -ne $ReconcilerResourceId -or $job.type -ne 'Microsoft.App/jobs') { throw 'ARM returned a different job resource id/type.' }
-        if ($job.properties.provisioningState -ne 'Succeeded') { throw 'Reconciler provisioning has not succeeded.' }
-        $configuration = $job.properties.configuration
-        if ($configuration.triggerType -ne 'Schedule') { throw 'Reconciler trigger must be Schedule.' }
-        $cron = [string]$configuration.scheduleTriggerConfig.cronExpression
-        if ($cron -notmatch '^(?:\*|\*/(?:[1-9]|[1-5][0-9])|(?:[0-5]?[0-9])(?:,[0-5]?[0-9])*) \* \* \* \*$') { throw 'Reconciler cron must be a supported UTC hourly-or-faster schedule (for example 0 * * * *).' }
-        $timeout = $configuration.replicaTimeout
-        if (($timeout -isnot [int] -and $timeout -isnot [long]) -or $timeout -lt 1 -or $timeout -gt 3600) { throw 'Reconciler replica timeout must be 1-3600 seconds, within the two-hour lease.' }
-        if ($ExpiresAt - $now.ToUnixTimeSeconds() -le (3600 + $timeout)) { throw 'The snapshot lease has insufficient remaining runway for an hourly execution plus its timeout.' }
-        $definition = Get-ClaudeProjectionContainerSignature $job.properties.template
-        $expected = @{
-            CLAUDE_PROJECTION_CONTRACT='1'; PROJECTION_GATEWAY_RESOURCE_ID=$GatewayResourceId
-            PROJECTION_ACCOUNT_RESOURCE_ID=$AccountResourceId; PROJECTION_TENANT_ID=$TenantId
-            PROJECTION_DATABASE='claude'; PROJECTION_CONTAINER='entitlement'; PROJECTION_MAX_AGE_SECONDS='7200'
-        }
-        foreach ($key in $expected.Keys) {
-            $actual = if ($definition.Environment.ContainsKey($key)) { $definition.Environment[$key] } else { $null }
-            $comparison = if ($key -in @('PROJECTION_GATEWAY_RESOURCE_ID','PROJECTION_ACCOUNT_RESOURCE_ID','PROJECTION_TENANT_ID')) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
-            if (-not [string]::Equals($actual, $expected[$key], $comparison)) { throw "Reconciler environment binding $key does not match the projection contract." }
-        }
-        $executions = [Collections.Generic.List[object]]::new()
-        $next = "$base/executions?api-version=2024-03-01"; $seen = @{}
-        do {
-            if ($next -notlike "$base/executions?*" -or $seen.ContainsKey($next) -or $seen.Count -ge 20) { throw 'ARM execution nextLink is foreign, repeated or exceeds 20 pages; evidence is incomplete.' }
-            $seen[$next] = $true
-            $page = Invoke-ClaudeNetworkArm -Url $next
-            if (-not $page -or -not $page.PSObject.Properties['value'] -or $page.value -isnot [array]) { throw 'ARM returned an invalid execution collection.' }
-            foreach ($execution in $page.value) {
-                $executionId = $execution.PSObject.Properties['id']
-                if ([string]$execution.name -notmatch '^[A-Za-z0-9._-]+$' -or
-                    ($executionId -and $executionId.Value -ne "$ReconcilerResourceId/executions/$($execution.name)")) { throw 'ARM returned an invalid execution name or an execution for a different job.' }
-                $start = [DateTimeOffset]::MinValue; $end = [DateTimeOffset]::MinValue
-                if (-not [DateTimeOffset]::TryParse([string]$execution.properties.startTime, [ref]$start) -or $start -gt $now) { throw 'Execution start time is malformed or future-dated.' }
-                if ($execution.properties.status -eq 'Running') { continue }
-                if (-not [DateTimeOffset]::TryParse([string]$execution.properties.endTime, [ref]$end) -or $end -lt $start -or $end -gt $now) { throw 'Execution end time is malformed, inverted or future-dated.' }
-                $executions.Add(@{ Item=$execution; Start=$start; End=$end })
-            }
-            $link = $page.PSObject.Properties['nextLink']
-            $next = if ($link) { [string]$link.Value } else { '' }
-        } while ($next)
-        $latest = $executions | Sort-Object Start -Descending | Select-Object -First 1
-        if (-not $latest -or $latest.Item.properties.status -ne 'Succeeded') { throw 'No latest succeeded execution: reconciliation is missing or its latest completed execution failed.' }
-        if (($now - $latest.Start).TotalSeconds -ge 7200) { throw 'Succeeded execution is outside the fresh scan-start lease window.' }
-        $ran = Get-ClaudeProjectionContainerSignature $latest.Item.properties.template
-        if ($ran.Signature -cne $definition.Signature) { throw 'Succeeded execution used a different container template from the current reconciler.' }
-        Write-Host "Verified reconciler $ReconcilerResourceId; execution $($latest.Item.name); cron $cron. $lease"
-        return @{ ResourceId=$ReconcilerResourceId; Execution=[string]$latest.Item.name; ExpiresAt=$expiry }
-    } catch { throw "Refusing projection switch: $($_.Exception.Message) $lease" }
 }

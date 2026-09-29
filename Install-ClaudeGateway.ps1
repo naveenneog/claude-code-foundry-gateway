@@ -119,6 +119,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
+if ($FlipProjectionAfterCleanCompare) {
+    . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
+    Stop-ClaudeProjectionSwitch
+}
 $desktopSignInHelper = Join-Path $root 'scripts/ClaudeDesktopSignIn.ps1'
 if (Test-Path $desktopSignInHelper) { . $desktopSignInHelper }
 
@@ -870,9 +874,6 @@ if (-not $EntitlementStore) {
 if ($Yes -and $EntitlementStore -eq 'projection' -and -not $DeployProjection) {
     throw 'Cannot choose projection unattended with -Yes unless -DeployProjection is also passed; projection requires a compare-gated deployer run. Nothing was created.'
 }
-if ($FlipProjectionAfterCleanCompare -and -not $DeployProjection) {
-    throw '-FlipProjectionAfterCleanCompare requires -DeployProjection.'
-}
 if ($DeployProjection -and -not $WhatIfPreference) {
     . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
     Assert-ClaudeProjectionPowerShell
@@ -1345,14 +1346,6 @@ if ($ExistingApim) {
 }
 Write-Host ''
 
-if ($FlipProjectionAfterCleanCompare) {
-    . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
-    $projectionTenant = if ($ProjectionReconcilerResourceId) { (Invoke-ClaudeNetworkAz @('account','show')).tenantId } else { '' }
-    $projectionScope = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup"
-    $null = Assert-ClaudeProjectionReconciler -ReconcilerResourceId $ProjectionReconcilerResourceId `
-        -GatewayResourceId "$projectionScope/providers/Microsoft.ApiManagement/service/$apimName" `
-        -AccountResourceId "$projectionScope/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-$NamePrefix" -TenantId $projectionTenant
-}
 if ($WhatIfPreference) { Write-Warn2 'WhatIf - stopping before any change.'; return }
 if (-not (Read-YesNo $(if ($ExistingApim) { 'Apply this to the existing gateway?' } else { 'Create these resources?' }) $true)) {
     Write-Host ''; Write-Host 'Cancelled.' -ForegroundColor Yellow; return
@@ -1629,8 +1622,6 @@ if ($EntitlementStore -eq 'projection' -and $DeployProjection) {
         '-StandardGroup', $StandardGroup,
         '-PremiumGroup', $PremiumGroup
     )
-    if ($FlipProjectionAfterCleanCompare) { $projectionArgs += '-FlipAfterCleanCompare' }
-    if ($ProjectionReconcilerResourceId) { $projectionArgs += @('-ReconcilerResourceId', $ProjectionReconcilerResourceId) }
     if ($ProjectionResolverAppId) { $projectionArgs += @('-ResolverAppId', $ProjectionResolverAppId) }
     $projectionArgs += @('-SubscriptionId', $SubscriptionId)
     if ($WhatIfPreference) { $projectionArgs += '-WhatIf' }

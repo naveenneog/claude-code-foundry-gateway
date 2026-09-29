@@ -4,9 +4,48 @@
 
 ## P84 Projection deployment checks everything before it writes and never switches into an outage, 2026-09-29
 
-**Builder scope complete; lead COUNCIL/GATE and owner approval pending.** The owner requested P84 after a partial customer deployment on
+**Council round 1: all five seats BLOCK; corrections in progress.** The owner requested P84 after a partial customer deployment on
 2026-09-29. The branch is `p84-projection-preflight`, based on `30cdfd0`. The lead owns COUNCIL
 and GATE; the owner owns merge approval. This packet performs no live Azure writes.
+
+### Council round 1 corrections
+
+The lead's 2026-09-29 decision supersedes the earlier ARM-admission contract and its passing
+receipts below. A digest-pinned scheduled dry-run can satisfy that contract without renewing
+anything (`sync/src/apply-projection.mjs:136`). Those receipts did not prove safe admission.
+
+- [x] PLAN/CONTRACT: P84 refuses every projection switch; proposed P86 admission requires
+      destination-bound Cosmos renewal observations, not ARM execution metadata alone.
+- [x] Architect: all three entry points refuse unconditionally with the two-hour lease,
+      developer-wide 503 and P86/ROADMAP explanation; the job-admission implementation is removed.
+- [x] Coder: policy unreadability/delegated rights produce an explicit WARN, not invented denial;
+      existing app ids bypass Policy.Read.All reads. en-GB and de-DE regression runs are included.
+- [x] QA: confirmed-absent premium passes with a note; Graph errors still fail. Every real
+      shared membership caller has absence and error cases on its supported hosts.
+- [ ] UX: a 100-column console has readable check/result/evidence/remedy/who records; lease,
+      outage and reconciler warnings precede switching examples and replace stale setup advice.
+- [ ] Security: failure output contains counts and hashed samples, no email/unit values, at most
+      40 lines and 4,096 characters. A declined prerequisite aborts; check permissions are documented.
+- [ ] RED/GREEN, relevant existing checks and valid-syntax/count-preserving mutations are recorded.
+
+No runtime component is added. The proposed P86 reconciler and Cosmos evidence are not implemented
+by this correction. The lead owns round 2 and the packet gate.
+
+**RED/GREEN:** the corrected RED loaded 65 council assertions and failed 39 in 51.76 s.
+It reproduced locale failures, silent declined prerequisites, leaked comparison samples, missing
+character bounds, denied optional premium and false app-permission refusals. Real-caller tests
+also exposed a Boolean `-FailOnDrift` being passed without a value and PowerShell 5.1 treating the
+AUM named-value JSON array as one element. Both are corrected. An earlier test draft's
+PSCmdlet substitution and Boolean fixture arguments were corrected before that RED receipt.
+
+GREEN: preflight **197/197, 11.52 s**; council **65/65, 51.60 s**, including en-US/en-GB/de-DE
+complete-suite runs and absence/error execution of all four real Graph callers on supported
+hosts. The reduced preflight count reflects retirement of the rejected ARM-admission feature,
+not omitted active checks. ProjectionInstaller 34 (0.76 s), FlowLifecycle 33 (2.58 s),
+ProjectionRules 34 (0.78 s) and script encoding 300/300 pass. Changed-guard mutations and
+runbook completion are still pending.
+
+### Historical builder submission, superseded by council round 1
 
 - [x] PLAN: A-F below define the packet; P85 belongs to another builder and P86 is proposed.
 - [x] CONTRACT: [ADR-0040](adr/0040-projection-preflight-and-switch.md) records the switch

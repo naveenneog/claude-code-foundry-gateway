@@ -1,156 +1,98 @@
-# ADR-0040: Projection preflight and evidence-gated switch
+# ADR-0040: P84 refuses projection switching; renewal admission belongs to P86
 
-- **Status:** Proposed; owner acceptance pending
+- **Status:** P84 decision directed by the lead after council round 1; P86 admission is proposed
 - **Date:** 2026-09-29
-- **Packet:** P84
+- **Packets:** P84; proposed P86
 - **Refines:** ADR-0017 and ADR-0028
 
-## Context
+## Context and rejected contract
 
-The owner's 2026-09-29 customer run reached Azure writes before discovering Graph Conditional
-Access failures and missing application-registration permission. A failed lookup was interpreted
-as an absent group; runner parsing hid the useful output. A clean initial comparison alone
-allowed a switch despite no scheduled renewal. ADR-0017 bounds each record's lease to 7,200
-seconds from scan start, after which the gateway refuses new requests with 503.
+The customer's deployment reached Azure writes before discovering Graph and app-registration
+failures. A clean comparison then permitted a switch without scheduled renewal. ADR-0017 gives
+records a maximum 7,200-second lease from scan start; expiry causes developer-wide 503 responses.
 
-## Decision
+Council round 1 blocked all five seats at `10ff113`. The original ARM-only admission contract
+was insufficient: a digest-pinned scheduled job can carry the expected environment strings,
+run `--whatif`, and have a matching succeeded execution without renewing any record.
+`sync/src/apply-projection.mjs:122` prints comparison samples; `:136` permits successful dry-run
+completion. Environment strings do not prove a write destination. Cron and one success cannot
+prove continued schedule activity. U56 records that limitation, not an accepted safety assumption.
 
-The implementation contract below precedes production changes. Owner acceptance of this
-proposed refinement remains with the lead's council and the owner.
+## P84 decision
 
-The deployment preflight is shared by normal and preflight-only invocations. Failed or
-unreadable evidence fails closed, before an Azure write. An unavailable capacity guarantee
-is reported as a limitation rather than a successful capacity test.
+No supported scheduled projection reconciler exists in this release. The deployer's
+`-FlipAfterCleanCompare`, the installer's `-FlipProjectionAfterCleanCompare`, and guided
+Entitlement's projection path all refuse unconditionally, before Azure writes. A reconciler id,
+clean comparison, confirmation, WhatIf or fabricated successful ARM evidence cannot admit a
+switch. There is no override. The refusal names the two-hour lease, developer-wide 503 after
+expiry, and the scheduled reconciler proposed as P86 in ROADMAP.
 
-Deployment and projection sync require PowerShell 7 or later. The shared membership reader
-continues to support Windows PowerShell 5.1 and 7. Native stderr and exit status are evaluated
-together; an HTTP error or an invalid collection cannot mean an empty group. Graph's filtered
-group collection distinguishes absence (`value: []`) from an unsuccessful request. Duplicate
-display names fail rather than selecting the first group. Both stability probes use Graph
-reads with a 25-second interval; the preflight estimate is 30-90 seconds, excluding slow
-customer networks.
+P84 can still preflight, deploy beside the gateway, populate and compare without switching.
+A declined prerequisite aborts that run rather than reusing old outputs or reporting success.
+The documented manual path retains the lease and reconciliation warning; it is not described
+as protected admission.
 
-An existing resolver app must have the expected client id and `api://<id>` identifier URI.
-Without an existing app, the signed-in account must be a member user and the readable
-authorization policy must explicitly allow app creation. This is a conservative sufficient
-check, not a directory-role evaluator: tenants that deny the policy read, disable default
-registration, or use role/custom delegation can supply an admin-created `-ResolverAppId`.
-An unavailable permission read is reported as unproven, not as proof of insufficient privileges.
+The old job-admission implementation, timestamp parsing and its positive-admission tests are
+retired by this explicit contract change. Their replacement proves unconditional refusal,
+including a fully matching digest-pinned dry-run. Previous receipts remain historical; they
+do not qualify the revised behavior.
 
-The provider set includes Microsoft.App, Microsoft.DocumentDB, Microsoft.Web,
-Microsoft.ContainerInstance, Microsoft.Network, Microsoft.Storage, Microsoft.OperationalInsights,
-Microsoft.Insights and Microsoft.Authorization. Role evidence is the built-in Owner role, or
-Contributor together with User Access Administrator, inherited or direct at the target resource
-group, including group memberships. Conditional assignments and custom roles are not substituted
-for this sufficient proof. Azure Policy, deny assignments, regional capacity and later permission
-changes can still reject a deployment.
-Management-group assignments count only as ancestors returned by that resource-group-scoped
-`--include-inherited` query, not by an unscoped subscription-wide role listing.
+## Preflight and operator contract
 
-The prefix uses the intersection of the three templates' naming rules: 1-37 lowercase letters,
-digits and separated hyphens, starting and ending in a letter or digit. The Cosmos name is the
-tightest length bound. Availability is checked for Cosmos, Functions and storage; an unavailable
-name is accepted only when the exact resource already belongs to the target resource group.
-The storage hash is evaluated locally by `az bicep build-params` with literal resource-group id
-and prefix. This preserves `resolver.bicep:112`, rather than reimplementing `uniqueString` or
-renaming existing accounts. The Web name-availability POST is a read-only query, not a deployment.
-The resource-group id comes from ARM's response, not operator casing: `uniqueString` inputs
-are case-sensitive even though ARM resource-id comparisons are not.
+Deployment and projection sync require PowerShell 7. Shared membership readers retain 5.1
+support. Graph errors remain errors; a successful empty collection is positive absence. The
+standard tier is required; a confirmed-absent premium tier passes with a note.
 
-### Switch evidence, version 1
+The app policy describes default-user rights, not effective custom/delegated roles. Explicitly
+true default permission for a member user is positive evidence. Unreadable policy, disabled
+default creation, guest or otherwise unproven rights produce WARN: "cannot confirm; if creation
+fails, the customer's admin creates the app and you pass -ResolverAppId". P84 does not claim
+to enumerate effective directory-role grants. Actual app-creation/resource denial still fails.
+A supplied ResolverAppId checks that app/URI without reading Policy.Read.All-class policy data.
 
-`-ReconcilerResourceId` identifies an existing `Microsoft.App/jobs` resource in the gateway
-subscription. Only ARM GETs read its definition and execution pages (API `2024-03-01`).
-The job has successful provisioning, a Schedule trigger and an explicit replica timeout.
-Supported UTC cron expressions have four trailing `*` fields and a minute field of `*`, a
-minute number/list, or `*/n` (1-59). Other expressions are refused rather than interpreted
-optimistically. This is a deliberately bounded at-least-hourly contract, not a general cron engine.
+Checks show result, evidence, remedy and acting party at the console width. Narrow consoles use
+stacked records. Every advertised wait has an estimate. Runner failure diagnostics expose
+whitelisted counts and hashed samples, never raw identity-to-unit mappings, and are capped at
+40 lines and 4,096 characters. Parsing failures cannot echo a private JSON fragment.
 
-The job has one container, no init containers, an image pinned by SHA-256 digest, and these
-literal non-secret environment values:
+The existing provider, naming and resource-group RBAC checks remain. Bicep evaluates the
+storage name using ARM's canonical resource-group id. Regional capacity cannot be guaranteed.
 
-| Name | Required value |
-|---|---|
-| `CLAUDE_PROJECTION_CONTRACT` | `1` |
-| `PROJECTION_GATEWAY_RESOURCE_ID` | The exact gateway ARM id |
-| `PROJECTION_ACCOUNT_RESOURCE_ID` | The exact Cosmos account ARM id |
-| `PROJECTION_TENANT_ID` | The gateway tenant |
-| `PROJECTION_DATABASE` | `claude` |
-| `PROJECTION_CONTAINER` | `entitlement` |
-| `PROJECTION_MAX_AGE_SECONDS` | `7200` |
+## Proposed P86 admission contract
 
-Environment variable names are case-sensitive, as in the Linux container. Resource-id and tenant
-GUID values compare case-insensitively; the contract version, database, container and lease
-values compare exactly. The installer checks the binding after resolving its actual gateway
-name but before any foundation write.
+The supported reconciler has a tested image and entrypoint, a tenant-admin-granted managed
+identity with Graph GroupMember.Read.All, at least hourly execution and lease alerts. Dry-run
+overrides in command, arguments or environment are rejected.
 
-A succeeded execution has valid start and end times, started less than 7,200 seconds ago, and
-ran the current container image, command, arguments and environment. An unrelated or old
-template's success does not count. A newer failed execution refuses the switch. Each page stays
-under the same ARM job path. Execution lists may omit the optional `id` (as the documented
-2024-03-01 example does); a safe execution name then identifies it under that verified job's
-list URL. A supplied id must match that name and job exactly. A null `secretRef` or final Graph
-`nextLink` is not a secret reference or another page. The contract assumes the customer-controlled pinned image implements
-the declared renewal operation: ARM status proves successful process termination, not application
-semantics. P86 must define and test that image, identity grant and monitoring.
+Admission reads renewal evidence from Cosmos itself through the runner, bound to the exact
+account resource, database, container and tenant being switched. It is not supplied as caller
+claims or inferred from job environment strings. The oldest lease expiry has enough margin
+for the next scheduled start, a bounded complete scan/apply and a documented safety margin.
+`reconciliationGeneration` has advanced at least twice within the last two hours, and the
+newest verified renewal is within 60 minutes. Observation history must distinguish real advances
+from replay. The precise margin and evidence/history storage remain P86 design and test work.
 
-The guard runs during preflight when a switch is requested, and again immediately before the
-first of the three named-value writes. The second guard uses the actual exported snapshot's
-absolute expiry, with sufficient remaining lease for a schedule interval plus the job's replica
-timeout. The first guard states the expiry of a scan starting now as an estimate. Both describe
-the developer-wide 503 consequence after expiry. The installer passes
-`-ProjectionReconcilerResourceId`; the guided-flow decision records `reconcilerResourceId`.
-The deployer remains the final shared enforcement point. No override or acknowledgement bypass
-exists. No schedule is provisioned here.
-An explicitly supplied zero snapshot expiry is invalid, not an invitation to estimate a new
-lease. Each of the three switch writes pins the subscription verified during preflight.
+ARM configuration/execution reads may supplement, but cannot replace, destination-bound renewal
+observations. Those observations still cannot guarantee future health; monitored lease alerts
+and the operating response remain part of P86. None of this admission machinery ships in P84.
 
-## Options
+## Architecture and sources
 
-A clean comparison alone retains the observed outage risk. A typed acknowledgement still
-permits switching with no renewal and is not selected. A verified existing scheduled job gives
-read-only evidence while keeping schedule provisioning in P86.
-
-## Architecture
-
-No deployed component, identity, network path or schedule is added or changed. P84 changes
-operator-side validation and switch admission. The existing diagrams remain applicable.
-
-## Evidence
+No deployed component, identity, network path or schedule changes in P84. Existing architecture
+diagrams remain applicable. The P86 design is not an implemented component.
 
 Microsoft documentation accessed 2026-09-29:
 
+- [Default user role permissions](https://learn.microsoft.com/graph/api/resources/defaultuserrolepermissions?view=graph-rest-1.0).
+- [Delegated app roles](https://learn.microsoft.com/entra/identity/role-based-access-control/delegate-app-roles):
+  Application Developer/custom roles can grant rights when default registration is disabled.
 - [Authorization policy GET](https://learn.microsoft.com/graph/api/authorizationpolicy-get?view=graph-rest-1.0):
-  `Policy.Read.All`, one object and `defaultUserRolePermissions.allowedToCreateApps`.
-- [Default user permissions](https://learn.microsoft.com/graph/api/resources/defaultuserrolepermissions?view=graph-rest-1.0)
-  and [application registration](https://learn.microsoft.com/entra/identity-platform/quickstart-register-app).
-- [Graph group collection](https://learn.microsoft.com/graph/api/group-list?view=graph-rest-1.0).
-- [CAE troubleshooting, IP address configuration](https://learn.microsoft.com/entra/identity/conditional-access/howto-continuous-access-evaluation-troubleshoot):
-  split tunneling, IPv4/IPv6 variation and trusted named locations.
-- [Resource naming](https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules),
-  [Cosmos CLI](https://learn.microsoft.com/cli/azure/cosmosdb#az-cosmosdb-check-name-exists),
-  [storage CLI](https://learn.microsoft.com/cli/azure/storage/account#az-storage-account-check-name),
-  [Web availability API](https://learn.microsoft.com/rest/api/appservice/check-name-availability/check-name-availability?view=rest-appservice-2024-04-01).
-- [Bicep parameters](https://learn.microsoft.com/azure/azure-resource-manager/bicep/parameter-files)
-  and [build-params](https://learn.microsoft.com/azure/azure-resource-manager/bicep/bicep-cli#build-params).
-  Local offline evaluation on 2026-09-29 produced `stres52p2c4jfs43ig` for the fixture's
-  resource-group id and `p84fixture`. Compilation returned `parametersJson`; no Azure request ran.
-- [Role assignment CLI](https://learn.microsoft.com/cli/azure/role/assignment#az-role-assignment-list)
-  and [privileged built-in role ids](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/privileged).
-- [Job GET](https://learn.microsoft.com/rest/api/resource-manager/containerapps/jobs/get?view=rest-resource-manager-containerapps-2024-03-01)
-  and [execution list](https://learn.microsoft.com/rest/api/resource-manager/containerapps/jobs-executions/list?view=rest-resource-manager-containerapps-2024-03-01):
-  `properties.configuration`, `properties.template`, execution `status`, `startTime`, `endTime`,
-  `template` and collection `nextLink`.
+  Policy.Read.All is required to read policy, not proof of permission to create an app.
+- [Graph groups](https://learn.microsoft.com/graph/api/group-list?view=graph-rest-1.0) and
+  [CAE troubleshooting](https://learn.microsoft.com/entra/identity/conditional-access/howto-continuous-access-evaluation-troubleshoot).
+- [Naming rules](https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules),
+  [Bicep parameter files](https://learn.microsoft.com/azure/azure-resource-manager/bicep/parameter-files),
+  [role assignments](https://learn.microsoft.com/cli/azure/role/assignment#az-role-assignment-list).
 
-The prior lease decision is `docs/adr/0017-projection-freshness-and-admission.md:10`.
-Provider/name inputs are `infra/projection.bicep:70`, `infra/projection-network.bicep:51` and
-`infra/resolver.bicep:110`. The offline native-fixture pattern is `tests/TestAzureFixture.ps1:2`.
-All P84 tests use offline Azure fixtures; no live availability or permissions claim follows
-from those tests. Successful preflight evidence is a point-in-time check, not a capacity or
-future availability guarantee.
-
-Offline measurement on 2026-09-29 at `4083c8b`: the complete 240-assertion suite passed, all
-111 valid-syntax mutations failed assertions without losing the baseline count, and the restored
-240 passed (`tests/Test-ProjectionPreflight.ps1:1`, `tests/Test-ProjectionPreflightNegative.ps1:1`).
-The first 99/108 proof and the detector corrections are retained in `docs/STATUS.md:5`.
-The lead's council/gate and owner acceptance remain pending; no live Azure proof was performed.
+RED/GREEN, real-caller, locale and mutation receipts are in the council correction block of
+`docs/STATUS.md:5`. All correction tests are offline; the lead owns round 2 and the packet gate.

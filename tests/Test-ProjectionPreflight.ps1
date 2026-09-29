@@ -1,4 +1,6 @@
-param([switch]$NativeChild, [string]$RepositoryRoot, [switch]$EntryChild, [string]$Fixture = 'healthy', [switch]$EntryNormal)
+param([switch]$NativeChild, [string]$RepositoryRoot, [switch]$EntryChild, [string]$Fixture = 'healthy', [switch]$EntryNormal, [string]$Culture = 'en-US')
+[Threading.Thread]::CurrentThread.CurrentCulture = [Globalization.CultureInfo]::GetCultureInfo($Culture)
+[Threading.Thread]::CurrentThread.CurrentUICulture = [Globalization.CultureInfo]::GetCultureInfo($Culture)
 $ErrorActionPreference = 'Stop'
 $root = if ($RepositoryRoot) { $RepositoryRoot } else { Split-Path $PSScriptRoot -Parent }
 $clock = [Diagnostics.Stopwatch]::StartNew()
@@ -31,7 +33,7 @@ if ($NativeChild) {
     Assert 'native fixture owns az' ((Get-Command az -CommandType Application | Select-Object -First 1).Source -eq (Join-Path $env:P84_NATIVE_DIRECTORY 'az.cmd'))
     Expect-Failure 'native Graph CAE remains an error' { Get-GraphToken } 'LocationConditionEvaluationSatisfied'
     Expect-Failure 'native runner nonzero remains an error' { Invoke-RunnerCommand -ResourceGroup rg-p84 -Name runner -Command 'node --version' } 'runner'
-    Assert 'native runner failure shows its raw output' ($CapturedOutput -match 'runner-native-output')
+    Assert 'native runner failure shows bounded sanitized evidence' ($CapturedOutput -match 'sha256=' -and $CapturedOutput -notmatch 'runner-native-output')
     $script:NativeGraphMode = 'absent'
     function Invoke-RestMethod {
         param($Uri, $Headers, $Method, $TimeoutSec, $ErrorAction)
@@ -79,14 +81,13 @@ function Run-Preflight([string]$Case = 'healthy', [hashtable]$Extra = @{}) {
 }
 function Guard {
     param([long]$ExpiresAt = ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + 7200), [string]$JobId = $FixtureJobId)
-    Assert-ClaudeProjectionReconciler -ReconcilerResourceId $JobId -GatewayResourceId $FixtureGatewayId `
-        -AccountResourceId $FixtureCosmosId -TenantId $FixtureTenant -ExpiresAt $ExpiresAt
+    Stop-ClaudeProjectionSwitch
 }
 
 Write-Host 'P84 preflight: every check is offline'
 Run-Preflight
 Assert 'healthy preflight passes' (-not $CapturedError) $CapturedError
-Assert 'one table includes evidence, remedy and acting party' (($CapturedOutput -match 'Check\s+Result\s+Evidence\s+Remedy\s+Who') -and ([regex]::Matches($CapturedOutput, 'Check\s+Result\s+Evidence\s+Remedy\s+Who').Count -eq 1))
+Assert 'report includes check, result, evidence, remedy and acting party' ($CapturedOutput -match 'Check' -and $CapturedOutput -match 'Result' -and $CapturedOutput -match 'Evidence' -and $CapturedOutput -match 'Remedy' -and $CapturedOutput -match 'Who')
 Assert 'Graph is read twice with one 25-second wait' ($FixtureProbes -eq 2 -and $FixtureWaits.Count -eq 1 -and $FixtureWaits[0] -eq 25)
 $calls = $FixtureCalls -join "`n"
 Assert 'Graph probes surround the wait' ($calls -match '(?s)HTTP Get https://graph.microsoft.com/v1.0/me.*sleep 25.*HTTP Get https://graph.microsoft.com/v1.0/me')
@@ -104,9 +105,8 @@ foreach ($case in @(
     @('wrong-tenant','tenant'), @('wrong-rg','Resource group id'), @('subscription-disabled','enabled subscription'), @('user-empty','user id'),
     @('cae','LocationConditionEvaluationSatisfied'), @('cae-second','LocationConditionEvaluationSatisfied'),
     @('token-error','Graph'), @('network','network'), @('standard-missing','claude-code-standard'),
-    @('premium-missing','claude-code-premium'), @('group-error','lookup'), @('group-duplicate','ambiguous|multiple'),
-    @('group-shape','collection|value'), @('group-no-id','no id'), @('duplicate-apps','ambiguous'), @('policy-false','allowedToCreateApps'), @('policy-error','Policy.Read.All'),
-    @('policy-shape','allowedToCreateApps'), @('guest','member user'), @('app-list-error','registration|app'),
+    @('group-error','lookup'), @('group-duplicate','ambiguous|multiple'),
+    @('group-shape','collection|value'), @('group-no-id','no id'), @('duplicate-apps','ambiguous'), @('app-list-error','registration|app'),
     @('contributor-only','Owner|User Access Administrator'), @('role-custom','Owner|User Access Administrator'),
     @('role-conditional','Owner|conditional'), @('role-child','Owner|scope'), @('role-error','role|RBAC'),
     @('cosmos-taken','cosmos-p84fixture'), @('cosmos-error','Cosmos|cosmos'), @('cosmos-shape','Cosmos|cosmos'),
@@ -117,6 +117,12 @@ foreach ($case in @(
     Run-Preflight $case[0]
     Assert "preflight FAIL: $($case[0])" ($CapturedError -and $CapturedOutput -match $case[1])
 }
+foreach ($case in 'policy-false','policy-error','policy-shape','guest') {
+    Run-Preflight $case
+    Assert "unproven app permission warns without denial: $case" (-not $CapturedError -and $CapturedOutput -match 'WARN' -and $CapturedOutput -match 'cannot confirm')
+}
+Run-Preflight 'premium-missing'
+Assert 'confirmed-absent premium is optional' (-not $CapturedError -and $CapturedOutput -match 'Optional premium group')
 Run-Preflight 'cae-second'
 Assert 'CAE has operator, network and admin remedies, not not-found' ($CapturedOutput -match 'VPN' -and $CapturedOutput -match 'IPv6' -and $CapturedOutput -match 'named location' -and $CapturedOutput -match 'temporary exclusion' -and $CapturedOutput -match 'Cloud Shell' -and $CapturedOutput -notmatch 'not found.*empty')
 Run-Preflight 'policy-false'
@@ -167,7 +173,7 @@ Assert 'Basic v2 cannot select an unreachable private resolver' ($CapturedError 
 Run-Preflight 'healthy' @{ ResolverAppId = 'not-an-app-id' }
 Assert 'invalid app id never reaches CLI' ($CapturedError -and ($FixtureCalls -join "`n") -notmatch 'ad app show.*not-an-app-id')
 Run-Preflight 'healthy' @{ FlipAfterCleanCompare=$true; ReconcilerResourceId='/subscriptions/00000000-0000-4000-8000-000000000084/resourceGroups/rg-p84/providers/Microsoft.App/jobs/projection-renewal' }
-Assert 'preflight permits a switch with verified matching evidence' (-not $CapturedError) $CapturedError
+Assert 'preflight refuses even matching ARM evidence' ($CapturedError -and $CapturedOutput -match 'P86.*ROADMAP' -and $FixtureCalls.Count -eq 0)
 Run-Preflight 'healthy' @{ ResourceGroup='RG-P84' }
 Assert 'Bicep storage hash uses the canonical ARM group id, not user casing' (-not $CapturedError -and $FixtureBicepExpression.Contains("uniqueString('$FixtureRgId',")) $CapturedError
 
@@ -197,96 +203,15 @@ Reset-ProjectionFixture 'group-null-nextlink'
 Capture { @(Get-GroupMemberOids -GroupName 'optional' -Token 'offline-token').Count }
 Assert 'a null final group nextLink is not ambiguity' (-not $CapturedError -and $CapturedResult -eq 2) $CapturedError
 
-Write-Host 'P84 switch evidence'
-Reset-ProjectionFixture
-Capture { Guard }
-Assert 'bound scheduled job with fresh matching success permits switch' (-not $CapturedError -and $CapturedResult.Execution -eq 'recent') $CapturedError
-Assert 'switch evidence uses only ARM reads' (($FixtureCalls -join "`n") -notmatch 'HTTP (Post|Put|Patch|Delete)')
-Reset-ProjectionFixture
-$FixtureExecution.PSObject.Properties.Remove('id')
-Capture { Guard }
-Assert 'ARM list execution name works when the optional id is absent' (-not $CapturedError -and $CapturedResult.Execution -eq 'recent') $CapturedError
-Reset-ProjectionFixture
-foreach ($template in @($FixtureJob.properties.template,$FixtureExecution.properties.template)) {
-    foreach ($variable in $template.containers[0].env) { $variable | Add-Member secretRef $null }
-}
-Capture { Guard }
-Assert 'ARM null secretRef is a literal environment value, not a secret binding' (-not $CapturedError) $CapturedError
-Reset-ProjectionFixture
-Capture { Assert-ClaudeProjectionReconciler -ReconcilerResourceId $FixtureJobId -GatewayResourceId $FixtureGatewayId.ToUpperInvariant() -AccountResourceId $FixtureCosmosId.ToUpperInvariant() -TenantId $FixtureTenant.ToUpperInvariant() }
-Assert 'ARM resource-id casing does not invent a different destination' (-not $CapturedError) $CapturedError
-Reset-ProjectionFixture
-foreach ($template in @($FixtureJob.properties.template,$FixtureExecution.properties.template)) {
-    ($template.containers[0].env | Where-Object name -eq 'PROJECTION_ACCOUNT_RESOURCE_ID').name = 'projection_account_resource_id'
-}
-Expect-Failure 'Linux environment binding names are case-sensitive' { Guard } 'environment binding'
-Expect-Failure 'missing reconciler refuses with expiry and developer-wide consequence' { Guard -JobId '' } 'ReconcilerResourceId is required.*at most 2 hours.*\d{4}-\d{2}-\d{2}.*every developer.*503'
-foreach ($cron in '* * * * *','*/30 * * * *','5,35 * * * *','59 * * * *') {
-    Reset-ProjectionFixture; $FixtureJob.properties.configuration.scheduleTriggerConfig.cronExpression = $cron
-    Capture { Guard }
-    Assert "supported hourly-or-faster schedule: $cron" (-not $CapturedError) $CapturedError
-}
-foreach ($cron in '0 */2 * * *','0 * * * 1','0 * 1 * *','0 * * 1 *','60 * * * *','*/0 * * * *','*/60 * * * *','not-cron') {
-    Reset-ProjectionFixture; $FixtureJob.properties.configuration.scheduleTriggerConfig.cronExpression = $cron
-    Expect-Failure "unsafe/unsupported schedule: $cron" { Guard } 'schedule|cron|hourly'
-}
-foreach ($entry in @(
-    @{ Name='wrong resource type'; Break={ $FixtureJob.type = 'Microsoft.App/containerApps' }; Match='job|resource' },
-    @{ Name='foreign resource id'; Break={ $FixtureJob.id = $FixtureJobId.Replace('projection-renewal','other-job') }; Match='id|job' },
-    @{ Name='unsuccessful provisioning'; Break={ $FixtureJob.properties.provisioningState = 'Failed' }; Match='provision' },
-    @{ Name='manual trigger'; Break={ $FixtureJob.properties.configuration.triggerType = 'Manual' }; Match='Schedule|schedule' },
-    @{ Name='absent timeout'; Break={ $FixtureJob.properties.configuration.replicaTimeout = $null }; Match='timeout|Timeout' },
-    @{ Name='excessive timeout'; Break={ $FixtureJob.properties.configuration.replicaTimeout = 7200 }; Match='timeout|Timeout|lease' },
-    @{ Name='image is only a tag'; Break={ $FixtureJob.properties.template.containers[0].image = 'example.invalid/projection:latest'; $FixtureExecution.properties.template.containers[0].image = 'example.invalid/projection:latest' }; Match='digest|SHA|image' },
-    @{ Name='multiple containers'; Break={ $FixtureJob.properties.template.containers += $FixtureJob.properties.template.containers[0] }; Match='container' },
-    @{ Name='init container'; Break={ $FixtureJob.properties.template.initContainers = @(@{ name='init' }) }; Match='init' },
-    @{ Name='secret environment binding'; Break={ $FixtureJob.properties.template.containers[0].env[0] | Add-Member secretRef secret }; Match='literal non-secret' },
-    @{ Name='duplicate environment binding'; Break={ $FixtureJob.properties.template.containers[0].env += $FixtureJob.properties.template.containers[0].env[0] }; Match='unique literal' },
-    @{ Name='failed execution'; Break={ $FixtureExecution.properties.status = 'Failed' }; Match='succeed|Succeeded|failed' },
-    @{ Name='no execution'; Break={ $global:FixtureExecutions = @() }; Match='succeed|Succeeded|execution' },
-    @{ Name='old execution start'; Break={ $FixtureExecution.properties.startTime = [DateTimeOffset]::UtcNow.AddSeconds(-7201).ToString('o') }; Match='lease|fresh|execution' },
-    @{ Name='future execution'; Break={ $FixtureExecution.properties.endTime = [DateTimeOffset]::UtcNow.AddHours(1).ToString('o') }; Match='time|future|execution' },
-    @{ Name='inverted execution times'; Break={ $FixtureExecution.properties.startTime = [DateTimeOffset]::UtcNow.AddMinutes(-1).ToString('o') }; Match='time|execution' },
-    @{ Name='bad execution timestamp'; Break={ $FixtureExecution.properties.startTime = 'not-a-time' }; Match='time|execution' },
-    @{ Name='foreign execution'; Break={ $FixtureExecution.id = $FixtureJobId.Replace('projection-renewal','other-job') + '/executions/recent' }; Match='execution|job' },
-    @{ Name='old image success'; Break={ $FixtureExecution.properties.template.containers[0].image = 'example.invalid/projection@sha256:' + ('b' * 64) }; Match='template|execution' },
-    @{ Name='changed command'; Break={ $FixtureExecution.properties.template.containers[0].command = @('echo') }; Match='template|execution' },
-    @{ Name='changed arguments'; Break={ $FixtureExecution.properties.template.containers[0].args = @('nothing') }; Match='template|execution' },
-    @{ Name='newer failed execution'; Break={
-        $failed = $FixtureExecution | ConvertTo-Json -Depth 20 | ConvertFrom-Json
-        $failed.properties.status = 'Failed'; $failed.properties.startTime = [DateTimeOffset]::UtcNow.AddMinutes(-2).ToString('o')
-        $failed.properties.endTime = [DateTimeOffset]::UtcNow.AddMinutes(-1).ToString('o')
-        $global:FixtureExecutions += $failed
-    }; Match='failed|failure' }
-)) {
-    Reset-ProjectionFixture; & $entry.Break
-    Expect-Failure "reconciler guard: $($entry.Name)" { Guard } $entry.Match
-}
-foreach ($field in @('CLAUDE_PROJECTION_CONTRACT','PROJECTION_GATEWAY_RESOURCE_ID','PROJECTION_ACCOUNT_RESOURCE_ID','PROJECTION_TENANT_ID','PROJECTION_DATABASE','PROJECTION_CONTAINER','PROJECTION_MAX_AGE_SECONDS')) {
-    Reset-ProjectionFixture
-    ($FixtureJob.properties.template.containers[0].env | Where-Object name -eq $field).value = 'wrong'
-    ($FixtureExecution.properties.template.containers[0].env | Where-Object name -eq $field).value = 'wrong'
-    Expect-Failure "destination/contract binding: $field" { Guard } 'binding|contract|environment'
-}
-foreach ($case in 'job-error','execution-error','execution-shape','execution-nextlink') {
+Write-Host 'P84 switch unavailable (council decision; ARM admission retired)'
+foreach ($case in 'healthy','job-error','execution-error','execution-shape','execution-nextlink','execution-page','foreign-job') {
     Reset-ProjectionFixture $case
-    Expect-Failure "unreadable/unsafe ARM evidence: $case" { Guard } 'ARM|execution|nextLink'
+    Expect-Failure "ARM evidence never admits a switch: $case" { Guard } '2 hours.*every developer.*503.*P86.*ROADMAP'
+    Assert "no ARM request can authorize P84: $case" ($FixtureCalls.Count -eq 0)
 }
-Reset-ProjectionFixture 'execution-foreign-path'
-Capture { Guard }
-Assert 'same-host foreign job pagination is rejected before HTTP' ($CapturedError -and ($FixtureCalls -join "`n") -notmatch 'HTTP .*foreign-job')
-Reset-ProjectionFixture 'execution-repeat'
-Expect-Failure 'repeated ARM pagination stops at the production guard' { Guard } 'ARM execution nextLink is foreign, repeated'
-Reset-ProjectionFixture 'execution-page'
-Capture { Guard }
-Assert 'execution pagination finds success on the second page' (-not $CapturedError -and ($FixtureCalls -join "`n") -match 'skiptoken=second') $CapturedError
-Reset-ProjectionFixture
-Expect-Failure 'expired actual snapshot refuses' { Guard -ExpiresAt ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() - 1) } 'expir|lease'
-Expect-Failure 'almost-expired snapshot has no runway for the next execution' { Guard -ExpiresAt ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds() + 60) } 'lease|remaining|runway'
-Expect-Failure 'explicit zero snapshot expiry never becomes a new estimated lease' { Guard -ExpiresAt 0 } 'actual snapshot|expiry'
-Reset-ProjectionFixture 'foreign-job'
-Expect-Failure 'job from another subscription refuses' { Guard -JobId $FixtureJobId.Replace($FixtureSubscription,$FixtureTenant) } 'must share the verified subscription'
-Expect-Failure 'malformed job resource id fails before ARM' { Guard -JobId 'not-an-arm-id' } 'Microsoft.App/jobs ARM resource'
+foreach ($id in @('', 'not-an-arm-id', $FixtureJobId)) {
+    Expect-Failure "all ids are refused: $id" { Guard -JobId $id } 'P86.*ROADMAP'
+}
 Run-Preflight 'healthy' @{ FlipAfterCleanCompare = $true }
 Assert 'preflight blocks a requested flip without a reconciler before writes' ($CapturedError -and $CapturedOutput -match 'every developer.*503')
 
@@ -299,7 +224,7 @@ foreach ($step in 'apply','compare') {
         $raw = ((1..50 | ForEach-Object { "raw-line-$_" }) -join "`n") + "`n$last"
         Capture { ConvertFrom-ClaudeRunnerResult -RawOutput $raw -Step $step }
         Assert "$step rejects malformed/unsuccessful summary [$last]" ([bool]$CapturedError)
-        Assert "$step prints only the final 40 raw lines [$last]" ($CapturedOutput -match 'raw-line-50' -and $CapturedOutput -notmatch 'raw-line-1\r?\n' -and ([regex]::Matches($CapturedOutput, '(?m)^raw-line-\d+').Count -le 40))
+        Assert "$step prints bounded sanitized last-line diagnostics [$last]" ($CapturedOutput -match 'sha256=' -and $CapturedOutput -notmatch 'raw-line-' -and $CapturedOutput.Length -le 4352 -and @($CapturedOutput -split '\r?\n' | Where-Object { $_ }).Count -le 42)
     }
 }
 foreach ($case in 'app-create-denied','app-create-empty') {
@@ -325,18 +250,18 @@ $flow = Get-Content (Join-Path $root 'scripts\flow\Entitlement.ps1') -Raw
 $register = Get-Content (Join-Path $root 'tests\Test-All.ps1') -Raw
 Assert 'offline check is registered' ($register -match "'Test-ProjectionPreflight.ps1'")
 Assert 'deployer checks before its first Azure write' ($deploy -match '(?s)Invoke-ClaudeProjectionPreflight.*if \(\$PreflightOnly\).*New-ClaudeProjectionResolverApp')
-Assert 'deployer rechecks the actual snapshot immediately before named-value writes' ($deploy -match '(?s)Assert-ClaudeProjectionReconciler[^\r\n]*[\s\S]*?-ExpiresAt \$snapshotExpiry[\s\S]*?Set-ApimNamedValue' -and $deploy -match 'snapshotExpiry.*expiresAt')
+Assert 'deployer has no projection-switch write path' ($deploy -notmatch 'Set-ApimNamedValue' -and $deploy -match 'if \(\$FlipAfterCleanCompare\) \{ Stop-ClaudeProjectionSwitch \}')
 Assert 'both runner steps use the checked result parser' ([regex]::Matches($deploy, 'ConvertFrom-ClaudeRunnerResult').Count -eq 2)
 Assert 'projection sync rejects PS 5.1 explicitly' ($sync -match 'Assert-ClaudeProjectionPowerShell|PSVersion.*-lt 7' -and $sync -match 'pwsh|ClaudeProjectionChecks')
-Assert 'installer forwards the typed reconciler id and resolver app id' ($installer -match 'ProjectionReconcilerResourceId' -and $installer -match "'-ReconcilerResourceId'" -and $installer -match 'ProjectionResolverAppId' -and $installer -match "'-ResolverAppId'")
-Assert 'installer refuses a flip without evidence before foundation writes' ($installer -match '(?s)FlipProjectionAfterCleanCompare.*Assert-ClaudeProjectionReconciler.*az group create')
-Assert 'flow records and forwards reconciler evidence' ($flow -match 'reconcilerResourceId' -and $flow -match '-ReconcilerResourceId \$Plan.Data.ReconcilerResourceId' -and $flow -match 'verified reconciler')
+Assert 'installer still forwards a supplied resolver app without job admission' ($installer -match 'ProjectionResolverAppId' -and $installer -match "'-ResolverAppId'" -and $installer -notmatch 'Assert-ClaudeProjectionReconciler')
+Assert 'installer refuses every flip before foundation writes' ($installer -match '(?s)if \(\$FlipProjectionAfterCleanCompare\).*Stop-ClaudeProjectionSwitch.*az group create')
+Assert 'flow refuses instead of forwarding admission claims' ($flow -match 'Stop-ClaudeProjectionSwitch' -and $flow -notmatch '-ReconcilerResourceId')
 Assert 'AUM selected group lookup reuses positive Graph collection semantics' ((Get-Content (Join-Path $root 'scripts\Sync-AumMembership.ps1') -Raw) -match 'Get-ClaudeGraphGroup')
 Assert 'projection sync uses the checked Graph token helper' ($sync -match '\$graphToken = Get-GraphToken')
 Assert 'per-run deploy files are not keyed by PID alone' ($deploy -notmatch '\$NamePrefix-\$PID' -and $deploy -match 'NewGuid')
-Assert 'all three switch writes pin the verified subscription' ([regex]::Matches($deploy, 'Set-ApimNamedValue[^\r\n]+-SubscriptionId \$preflight.SubscriptionId').Count -eq 3)
-Assert 'flow forwards its recorded target subscription' ($flow -match '-SubscriptionId \$target.SubscriptionId')
-Assert 'the Entra comparison explicitly fails on drift' ($deploy -match 'Compare-ClaudeEntitlement.ps1[\s\S]+?-ExportGatewayPath \$gateway -FailOnDrift')
+Assert 'ARM admission and its locale-sensitive timestamp parsing are removed' ((Get-Content $checksPath -Raw) -notmatch 'function Assert-ClaudeProjectionReconciler|Get-ClaudeProjectionContainerSignature|DateTimeOffset\]::TryParse')
+Assert 'flow retains only the named-value rollback write' ($flow -match "-Value 'named-value'" -and $flow -notmatch "-Value 'projection'")
+Assert 'the Entra comparison explicitly fails on drift' ($deploy -match 'Compare-ClaudeEntitlement.ps1[\s\S]+?-ExportGatewayPath \$gateway -FailOnDrift:\$true')
 $parseErrors = $null; $tokens = $null
 $deployAst = [Management.Automation.Language.Parser]::ParseInput($deploy, [ref]$tokens, [ref]$parseErrors)
 $roleGuard = $deployAst.Find({ param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Clauses[0].Item1.Extent.Text -eq '$LASTEXITCODE -ne 0' -and $node.Extent.Text -match "throw 'Runner Cosmos role assignment failed" }, $true)
@@ -352,14 +277,14 @@ $entDiscovery = [pscustomobject]@{ resourceGroup='rg-p84'; apimName='apim-p84'; 
 $plan = Get-ClaudeFlowStepPlan -Record $entRecord -Discovery $entDiscovery
 Expect-Failure 'actual Entitlement refuses a clean compare with no reconciler before backup' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'every developer.*503'
 $plan.Data.CleanComparison = $false
-Expect-Failure 'actual Entitlement requires clean comparison independently of schedule' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'clean projection comparison'
+Expect-Failure 'actual Entitlement also refuses a dirty comparison' { Invoke-ClaudeFlowStep -Record $entRecord -Plan $plan } 'P86.*ROADMAP'
 $entRecord.decisions.entitlementStore | Add-Member reconcilerResourceId $FixtureJobId
 $plan = Get-ClaudeFlowStepPlan -Record $entRecord -Discovery $entDiscovery
-Assert 'flow plan persists the selected reconciler id' ($plan.Data.ReconcilerResourceId -eq $FixtureJobId)
+Assert 'flow plan explains blocked admission rather than preserving an approving id' (($plan.Implications -join ' ') -match 'refused unconditionally')
 $installerAst = [Management.Automation.Language.Parser]::ParseInput($installer, [ref]$tokens, [ref]$parseErrors)
-$installerGuard = $installerAst.Find({ param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Clauses[0].Item1.Extent.Text -eq '$FlipProjectionAfterCleanCompare' -and $node.Extent.Text -match 'Assert-ClaudeProjectionReconciler' }, $true)
+$installerGuard = $installerAst.Find({ param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Clauses[0].Item1.Extent.Text -eq '$FlipProjectionAfterCleanCompare' -and $node.Extent.Text -match 'Stop-ClaudeProjectionSwitch' }, $true)
 $gatewayAssignment = $installerAst.Find({ param($node) $node -is [Management.Automation.Language.AssignmentStatementAst] -and $node.Left.Extent.Text -eq '$apimName' }, $true)
-Assert 'installer resolves the actual gateway name before checking its job binding' ($installerGuard -and $gatewayAssignment -and $installerGuard.Extent.StartOffset -gt $gatewayAssignment.Extent.EndOffset)
+Assert 'installer refusal precedes even gateway-name planning' ($installerGuard -and $gatewayAssignment -and $installerGuard.Extent.StartOffset -lt $gatewayAssignment.Extent.StartOffset)
 $FlipProjectionAfterCleanCompare = $true; $ProjectionReconcilerResourceId = ''
 $SubscriptionId = $FixtureSubscription; $ResourceGroup='rg-p84'; $apimName='apim-p84'; $NamePrefix='p84fixture'
 Expect-Failure 'actual installer guard refuses without evidence before foundation writes' {
@@ -367,19 +292,11 @@ Expect-Failure 'actual installer guard refuses without evidence before foundatio
     & ([scriptblock]::Create($installerGuard.Extent.Text))
 } 'every developer.*503'
 
-$flipBlock = $deployAst.Find({ param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Clauses[0].Item1.Extent.Text -match "ShouldProcess.+flip only projection named values" }, $true)
-$flipBody = if ($flipBlock) { [scriptblock]::Create(($flipBlock.Clauses[0].Item2.Statements | ForEach-Object { $_.Extent.Text }) -join "`n") } else { { throw 'Flip block is missing.' } }
-$script:FlipWrites = [Collections.Generic.List[object]]::new()
-function Set-ApimNamedValue { param($ResourceGroup,$ApimName,$Id,$Value,$SubscriptionId) $script:FlipWrites.Add(@{ Id=$Id; SubscriptionId=$SubscriptionId }) }
-Reset-ProjectionFixture
-$preflight = @{ GatewayResourceId=$FixtureGatewayId; AccountResourceId=$FixtureCosmosId; SubscriptionId=$FixtureSubscription }
-$apim = @{ identity=@{ tenantId=$FixtureTenant } }; $snapshotExpiry = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()+7200
-$resolverUrl = 'https://example.invalid/api'; $resolverAudience = "api://$FixtureApp"; $ReconcilerResourceId = ''
-Capture { & $flipBody }
-Assert 'actual switch block refuses before the first named-value write' ($CapturedError -and $CapturedOutput -match 'every developer.*503' -and $FlipWrites.Count -eq 0)
-$ReconcilerResourceId = $FixtureJobId
-Capture { & $flipBody }
-Assert 'actual switch block writes source last with verified subscription' (-not $CapturedError -and $FlipWrites.Count -eq 3 -and $FlipWrites[2].Id -eq 'entitlement-source' -and @($FlipWrites | Where-Object SubscriptionId -ne $FixtureSubscription).Count -eq 0) $CapturedError
+foreach ($id in @('', $FixtureJobId)) {
+    Reset-ProjectionFixture
+    Capture { & (Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1') -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -FlipAfterCleanCompare -ReconcilerResourceId $id }
+    Assert "real switch entry always refuses before Azure: $id" ($CapturedError -and $CapturedOutput -match 'P86.*ROADMAP' -and $FixtureCalls.Count -eq 0)
+}
 
 Reset-ProjectionFixture
 Capture { & (Join-Path $root 'scripts\Deploy-ClaudeProjection.ps1') -ResourceGroup rg-p84 -ApimName apim-p84 -NamePrefix p84fixture -PreflightOnly }

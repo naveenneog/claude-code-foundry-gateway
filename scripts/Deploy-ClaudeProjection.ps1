@@ -8,8 +8,8 @@
     deploys the resolver with SKU-valid inbound access, exports the gateway's
     current named-value decisions, populates the projection from Entra, compares
     the resolver records against those decisions, and flips only the projection
-    named values after a clean comparison, verified scheduled reconciliation
-    and an explicit switch. PreflightOnly performs the read-only checks alone.
+    leaves named values authoritative. P84 refuses switching until the supported
+    scheduled reconciler in P86 exists. PreflightOnly runs the checks alone.
 
     BasicV2 must use a public resolver endpoint because Basic v2 has no
     outbound VNet integration. The public endpoint is not anonymous: App Service
@@ -31,6 +31,7 @@ param(
     [string]$StandardGroup = 'claude-code-standard',
     [string]$PremiumGroup = 'claude-code-premium',
     [switch]$FlipAfterCleanCompare,
+    # Compatibility input only; ARM job evidence cannot admit a P84 switch.
     [string]$ReconcilerResourceId,
     [switch]$PreflightOnly,
     [ValidateRange(1,10)][int]$RetryCount = 3,
@@ -42,6 +43,7 @@ $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $PSScriptRoot 'ApimNamedValue.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeRunner.ps1')
 . (Join-Path $PSScriptRoot 'ClaudeProjectionChecks.ps1')
+if ($FlipAfterCleanCompare) { Stop-ClaudeProjectionSwitch }
 
 function Step($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
 function Note($m) { Write-Host "    $m" -ForegroundColor DarkGray }
@@ -81,7 +83,7 @@ $preflight = Invoke-ClaudeProjectionPreflight -ResourceGroup $ResourceGroup -Api
     -FlipAfterCleanCompare:$FlipAfterCleanCompare -ReconcilerResourceId $ReconcilerResourceId
 if ($PreflightOnly) { return }
 if ($WhatIfPreference) {
-    Note 'WhatIf: app registration if needed; private Cosmos/network; resolver publish; fresh snapshot/apply/compare; optional verified-reconciler switch. No Azure writes.'
+    Note 'WhatIf: app registration if needed; private Cosmos/network; resolver publish; fresh snapshot/apply/compare. No Azure writes or projection switch.'
     return
 }
 $Location = $preflight.Location
@@ -97,7 +99,7 @@ $gatewayAppId = $preflight.GatewayAppId
 if (-not $ResolverAppId) {
     if ($PSCmdlet.ShouldProcess("claude-projection-resolver-$NamePrefix", 'create resolver app registration')) {
         $ResolverAppId = New-ClaudeProjectionResolverApp -NamePrefix $NamePrefix
-    }
+    } else { throw 'Resolver registration was declined; no further steps run.' }
 }
 if (-not $ResolverAppId) { throw 'Resolver app registration was not created or selected. No projection deployment was attempted.' }
 
@@ -109,7 +111,7 @@ if ($PSCmdlet.ShouldProcess($projectionName, 'deploy projection.bicep with netwo
             --parameters namePrefix=$NamePrefix location=$Location networkAccess='private-only' -o none
         if ($LASTEXITCODE -ne 0) { throw 'projection deployment failed' }
     }
-}
+} else { throw 'Projection deployment was declined; no further steps run.' }
 $projection = Get-DeploymentOutput $projectionName
 $cosmosAccount = if ($projection.accountName) { $projection.accountName } else { "cosmos-$NamePrefix" }
 
@@ -121,7 +123,7 @@ if ($PSCmdlet.ShouldProcess($networkName, 'deploy private endpoints and DNS')) {
             --parameters namePrefix=$NamePrefix location=$Location cosmosAccountName=$cosmosAccount runnerEnabled=true -o none
         if ($LASTEXITCODE -ne 0) { throw 'projection network deployment failed' }
     }
-}
+} else { throw 'Projection network deployment was declined; no further steps run.' }
 $network = Get-DeploymentOutput $networkName
 
 Step 'Deploy resolver'
@@ -155,7 +157,7 @@ if ($PSCmdlet.ShouldProcess($resolverName, "deploy resolver.bicep inboundAccess=
             if ($LASTEXITCODE -ne 0) { throw 'resolver deployment failed' }
         }
     } finally { Remove-Item -LiteralPath $resolverParamFile -Force }
-}
+} else { throw 'Resolver deployment was declined; no further steps run.' }
 $resolver = Get-DeploymentOutput $resolverName
 $resolverUrl = [string]$resolver.resolverUrl
 $resolverAudience = [string]$resolver.resolverAudience
@@ -181,8 +183,7 @@ if ($PSCmdlet.ShouldProcess($resolver.siteName, 'package and publish resolver co
     finally {
         Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
     }
-}
-
+} else { throw 'Resolver publication was declined; no further steps run.' }
 $work = Join-Path ([IO.Path]::GetTempPath()) ("claude-projection-" + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 $snapshot = Join-Path $work 'snapshot.json'
@@ -195,7 +196,6 @@ try {
         & (Join-Path $PSScriptRoot 'Sync-ClaudeProjection.ps1') -Account $cosmosAccount -ApimName $ApimName -ResourceGroup $ResourceGroup `
             -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -ExportPath $snapshot
         if ($LASTEXITCODE -ne 0) { throw 'projection snapshot export failed' }
-        $snapshotExpiry = [long]((Get-Content -LiteralPath $snapshot -Raw | ConvertFrom-Json).expiresAt)
         if (-not $network.runnerName -or -not $network.runnerPrincipalId) { throw 'Projection network did not return an in-VNet runner.' }
         az cosmosdb sql role assignment create --account-name $cosmosAccount --resource-group $ResourceGroup `
             --scope /dbs/claude/colls/entitlement --principal-id $($network.runnerPrincipalId) `
@@ -210,34 +210,19 @@ try {
         Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command 'npm --prefix /work/sync install --omit=dev --no-audit --fund=false' | Out-Null
         $applyRaw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $($apim.identity.tenantId) --snapshot /work/snapshot.json"
         $apply = ConvertFrom-ClaudeRunnerResult -RawOutput $applyRaw -Step 'projection apply'
-    }
+    } else { throw 'Projection population was declined; no further steps run.' }
 
     Step 'Compare before flip'
     if ($PSCmdlet.ShouldProcess($ApimName, 'export gateway decisions and compare projection')) {
         & (Join-Path $PSScriptRoot 'Compare-ClaudeEntitlement.ps1') -ResourceGroup $ResourceGroup -ApimName $ApimName `
-            -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -ExportGatewayPath $gateway -FailOnDrift
+            -StandardGroup $StandardGroup -PremiumGroup $PremiumGroup -ExportGatewayPath $gateway -FailOnDrift:$true
         if ($LASTEXITCODE -ne 0) { throw 'named-value lists drift from Entra; refusing projection comparison and flip.' }
         Send-RunnerFile -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Path $gateway -Destination /work/gateway-decisions.json | Out-Null
         $compareRaw = Invoke-RunnerCommand -ResourceGroup $ResourceGroup -Name $($network.runnerName) -Command "node /work/sync/src/apply-projection.mjs --cosmos https://$cosmosAccount.documents.azure.com:443/ --tenant $($apim.identity.tenantId) --compare /work/gateway-decisions.json"
         $compare = ConvertFrom-ClaudeRunnerResult -RawOutput $compareRaw -Step 'Refusing to flip because projection drift remains'
         Ok "clean comparison: $($compare.compared) identities"
-    }
-
-    if (-not $FlipAfterCleanCompare) {
-        Note 'Clean comparison complete; named values remain authoritative. A switch requires -FlipAfterCleanCompare and a verified -ReconcilerResourceId (ADR-0040).'
-        return
-    }
-
-    Step 'Flip gateway'
-    if ($PSCmdlet.ShouldProcess($ApimName, 'flip only projection named values')) {
-        $null = Assert-ClaudeProjectionReconciler -ReconcilerResourceId $ReconcilerResourceId `
-            -GatewayResourceId $preflight.GatewayResourceId -AccountResourceId $preflight.AccountResourceId `
-            -TenantId $apim.identity.tenantId -ExpiresAt $snapshotExpiry
-        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-url' -Value $resolverUrl -SubscriptionId $preflight.SubscriptionId
-        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-resolver-audience' -Value $resolverAudience -SubscriptionId $preflight.SubscriptionId
-        Set-ApimNamedValue -ResourceGroup $ResourceGroup -ApimName $ApimName -Id 'entitlement-source' -Value 'projection' -SubscriptionId $preflight.SubscriptionId
-    }
-    Ok 'gateway now reads entitlement from the projection'
+    } else { throw 'Projection comparison was declined; no further steps run.' }
+    Note 'Clean comparison complete; named values remain authoritative. Projection switching is unavailable until the scheduled reconciler in P86 (docs/ROADMAP.md).'
 }
 finally {
     Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue

@@ -54,8 +54,43 @@ function Invoke-RunnerCommand {
 
 function Write-ClaudeRunnerOutput {
     param([AllowEmptyString()][string]$RawOutput, [string]$Step)
-    Write-Host "$Step raw runner output (last 40 lines):" -ForegroundColor Yellow
-    ($RawOutput.TrimEnd("`r", "`n") -split '\r?\n' | Select-Object -Last 40) | ForEach-Object { Write-Host $_ }
+    $lines = [Collections.Generic.List[string]]::new()
+    $lines.Add("$Step sanitized runner output (last 40 lines; maximum 4096 characters):")
+    foreach ($line in @($RawOutput.TrimEnd("`r", "`n") -split '\r?\n' | Select-Object -Last 40)) {
+        $doc = $null
+        if ($line.TrimStart().StartsWith('{')) {
+            try { $doc = $line | ConvertFrom-Json -ErrorAction Stop }
+            catch { $doc = $null }
+        }
+        $safe = [Collections.Generic.List[string]]::new()
+        if ($doc) {
+            foreach ($field in 'ok','whatIf','expired','compared','projectionRecords','differences','resolved','existing','toWrite','toDelete','keptOrphans','unchanged','written','writeFailed','deleted','deleteFailed','seconds') {
+                $property = $doc.PSObject.Properties[$field]
+                if ($property -and ($property.Value -is [bool] -or $property.Value -is [ValueType] -and $property.Value -isnot [DateTime] -and $property.Value -isnot [DateTimeOffset])) {
+                    $safe.Add("$field=$($property.Value)")
+                }
+            }
+            $samples = $doc.PSObject.Properties['sample']
+            if ($samples) {
+                foreach ($sample in @($samples.Value | Select-Object -First 3)) {
+                    $oid = $sample.PSObject.Properties['oid']
+                    if ($oid) { $safe.Add('oid-sha256=' + (Get-ClaudeRunnerDigest ([string]$oid.Value))) }
+                }
+            }
+        }
+        if (-not $safe.Count) { $safe.Add("redacted unstructured output: chars=$($line.Length), sha256=$(Get-ClaudeRunnerDigest $line)") }
+        $lines.Add($safe -join '; ')
+    }
+    $output = $lines -join "`n"
+    if ($output.Length -gt 4096) { $output = $output.Substring(0, 4084) + "`n[truncated]" }
+    Write-Host $output -ForegroundColor Yellow
+}
+
+function Get-ClaudeRunnerDigest {
+    param([AllowEmptyString()][string]$Text)
+    $hash = [Security.Cryptography.SHA256]::Create()
+    try { return [BitConverter]::ToString($hash.ComputeHash([Text.Encoding]::UTF8.GetBytes($Text))).Replace('-','').Substring(0,12).ToLowerInvariant() }
+    finally { $hash.Dispose() }
 }
 
 function ConvertFrom-ClaudeRunnerResult {
@@ -67,7 +102,7 @@ function ConvertFrom-ClaudeRunnerResult {
         return $result
     } catch {
         Write-ClaudeRunnerOutput -RawOutput $RawOutput -Step $Step
-        throw "$Step failed: $($_.Exception.Message)"
+        throw "$Step failed: runner summary is malformed or not boolean ok:true. Sanitized diagnostics are shown above."
     }
 }
 
