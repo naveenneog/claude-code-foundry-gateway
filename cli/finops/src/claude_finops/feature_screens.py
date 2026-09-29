@@ -28,14 +28,28 @@ class QuitScreen(ModalScreen):
     def compose(self):
         with Vertical(id="month-dialog"):
             yield Label("Quit AUM?", markup=False)
-            yield Static("Press q again or Enter to quit; Esc to stay.", id="quit-message", markup=False)
+            yield Static(self.quit_message(), id="quit-message", markup=False)
             with Horizontal(classes="buttons"):
-                yield Button("Quit", id="quit-confirm", variant="error")
+                yield Button("Quit", id="quit-confirm", variant="error", disabled=self.app.saving)
                 yield Button("Stay", id="quit-stay")
+
+    def quit_message(self):
+        if self.app.saving:
+            return "Saving; wait for the result (estimate 3-30 s; an asynchronous apply can take up to 3 minutes). Esc stays."
+        return "Press q again or Enter to quit; Esc returns to the previous screen and its result."
+
+    @published(lambda self: self.app.safe_message_guard())
+    def refresh_saving(self):
+        if self.query("#quit-confirm"):
+            self.query_one("#quit-confirm", Button).disabled = self.app.saving
+            self.query_one("#quit-message", Static).update(self.quit_message())
 
     @on(Button.Pressed, "#quit-confirm")
     def action_confirm(self):
-        self.app.exit()
+        if self.app.saving:
+            self.refresh_saving()
+        else:
+            self.app.exit()
 
     @on(Button.Pressed, "#quit-stay")
     def stay(self):
@@ -109,6 +123,8 @@ class ActionForm(ModalScreen):
     @on(Button.Pressed, "#action-preview")
     @work(exclusive=True)
     async def show_preview(self):
+        if self.busy:
+            return
         try:
             if self.local_write:
                 with guarded_publish(self.app.safe_message_guard()):
@@ -137,7 +153,14 @@ class ActionForm(ModalScreen):
             return
         self.busy = True
         reviewed_plan = self.preview
+        operation = self.commit_action(reviewed_plan)
+        result = await self.app.run_mutation(operation) if self.mutation or self.local_write else await operation
+        if result == "signout":
+            self.app.exit()
+
+    async def commit_action(self, reviewed_plan):
         self.query_one("#action-apply", Button).disabled = True
+        self.query_one("#action-preview", Button).disabled = True
         with guarded_publish(self.app.safe_message_guard()):
             self.query_one("#action-status", Static).update("Saving once (estimate 3-30 s)...")
         try:
@@ -159,13 +182,13 @@ class ActionForm(ModalScreen):
                     await self.app.activate_profile(result["config"], profile=Path(result["profile"]),
                                                     revision=result["profile_revision"], reviewed=result["profile_change"])
                     return
+                if result["ui_action"] == "signout":
+                    return "signout"
                 self.dismiss()
                 if result["ui_action"] == "view":
                     self.app.restore_view(result["view"], read_guard=self.read_guard)
                 elif result["ui_action"] == "compare":
                     self.app.set_comparison(result["month"])
-                elif result["ui_action"] == "signout":
-                    self.app.exit()
                 return
             state = result.get("message") or ("Saved." if self.mutation else "Opened.")
             if result.get("status_code"):
@@ -185,6 +208,8 @@ class ActionForm(ModalScreen):
                 self.query_one("#action-status", Static).update(self.app.redactor.text(message))
         finally:
             self.busy = False
+            if self.query("#action-preview"):
+                self.query_one("#action-preview", Button).disabled = False
 
     @on(Button.Pressed, "#action-cancel")
     def action_cancel(self):

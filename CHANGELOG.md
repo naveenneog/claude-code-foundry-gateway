@@ -29,6 +29,11 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P85 council round 1: quit deferral.** Application-owned mutation tasks
+  retain backend and receipt completion even when a modal worker is cancelled.
+  All application exit routes defer during a save; the quit dialog explains
+  the wait and disables confirmation. Results remain available after completion,
+  without an automatic deferred exit. Read-only work remains interruptible.
 - **P85 council round 1: installer destinations.** The Cloud Shell bootstrap
   clears inherited pip/uv/XDG settings, including `PIP_LOG`, and pins Python's
   user base and all controlled directories under HOME. A real-pip offline

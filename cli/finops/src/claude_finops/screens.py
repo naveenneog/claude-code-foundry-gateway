@@ -328,6 +328,9 @@ class ChangeScreen(ModalScreen):
         if self.applying or not self.preview_plan or self.saved or self.app.preview_only:
             return
         self.applying = True
+        await self.app.run_mutation(self.commit_change())
+
+    async def commit_change(self):
         self.query_one("#apply-change", Button).disabled = True
         self.query_one("#preview", Button).disabled = True
         with guarded_publish(self.app.safe_message_guard()):

@@ -538,7 +538,7 @@ class FeatureUI:
                 origin = self.ask_reply_guard or self.current_guard()
                 with guarded_publish(origin):
                     conversation, history = self.ask_conversation, list(self.ask_history)
-                await self._publish_read(self.engine.ask, publish, question, conversation, history)
+                await self.run_mutation(self._publish_read(self.engine.ask, publish, question, conversation, history))
         except FinOpsError as error:
             self.ask_reply = self.ask_conversation = None
             self.ask_reply_guard = None

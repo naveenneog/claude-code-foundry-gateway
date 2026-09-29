@@ -68,6 +68,24 @@ each of 19 inherited destinations, and escaping links for the added
 config/data/state/runtime/user-base directories. No package download or
 Azure call occurred in these tests.
 
+Quit correction: application-owned, shielded mutation tasks cover generic
+forms, native change forms and assistant writes through receipt publication.
+Cancelling the modal worker does not end that lifetime. The central exit
+check protects direct exits as well as q, inherited Ctrl+Q, the palette and
+the application's Ctrl+C entry. Native modal copy handling can consume the
+physical Ctrl+C first; the regression proves that key stays running, then
+exercises the application entry explicitly. No copy binding is overridden.
+The saving dialog disables both button and keyboard confirmation, and
+completion leaves the receipt available without replaying a quit request.
+
+The route matrix passed **12 cases in 27.92 s**. The expanded selection,
+including read-only control, completed sign-out, assistant mutation and
+existing profile/publication regressions, passed **78 cases in 137.31 s**.
+The initial quit correction selection had two over-specific Ctrl+C dialog
+assertions; the corrected test retains the physical-key no-exit assertion
+and separately covers the app entry. No production escape hatch or detector
+relaxation was used.
+
 ### PLAN
 
 The People action bar gains Remove person from team beside Add person to team,

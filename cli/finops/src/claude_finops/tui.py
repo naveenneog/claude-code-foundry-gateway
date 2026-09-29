@@ -77,6 +77,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
         self.verifying_identity = False
         self._refresh_serial = 0
         self._waiting = set()
+        self._active_mutations = set()
         self.allowed_tabs = visible_tabs({})
         self.team = ""
         self.people_query = ""
@@ -725,7 +726,44 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp, App)
 
     @published(lambda self: self.safe_message_guard())
     def action_quit(self):
+        if isinstance(self.screen, QuitScreen):
+            self.screen.refresh_saving()
+            return
         self.push_screen(QuitScreen())
+
+    def action_help_quit(self):
+        self.action_quit()
+
+    @property
+    def saving(self):
+        return bool(self._active_mutations)
+
+    def exit(self, result=None, return_code=0, message=None):
+        if self.is_running and self.saving:
+            self.action_quit()
+            return
+        super().exit(result, return_code=return_code, message=message)
+
+    async def run_mutation(self, operation):
+        task = asyncio.create_task(operation)
+        self._active_mutations.add(task)
+        task.add_done_callback(guarded_deferred(self.safe_message_guard(), self._mutation_finished))
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            task.add_done_callback(guarded_deferred(self.safe_message_guard(), self._orphaned_mutation))
+            raise
+
+    @published(lambda self, task: self.safe_message_guard())
+    def _mutation_finished(self, task):
+        self._active_mutations.discard(task)
+        for screen in self.screen_stack:
+            if isinstance(screen, QuitScreen):
+                screen.refresh_saving()
+
+    def _orphaned_mutation(self, task):
+        if not task.cancelled() and task.exception() is not None:
+            self._handle_exception(task.exception())
 
     def action_edit(self):
         if not self.check_action("edit", ()):

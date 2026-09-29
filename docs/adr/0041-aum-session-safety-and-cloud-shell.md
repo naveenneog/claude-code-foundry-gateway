@@ -32,6 +32,15 @@ handling does not grant a new publication origin or retry a mutation.
 Unexpected programming failures are not reclassified as successful reads.
 Quit requires a separate confirmation that Escape cancels.
 
+Council round 1 extends this to application-owned mutation lifetime. A
+cancelled modal worker does not cancel the transaction task or release quit
+deferral before the backend and receipt handling finish. Native change forms,
+generic mutation/local-write forms and assistant writes share that lifetime.
+Read-only work does not. Every application exit route checks it; pending
+confirmation is disabled and never automatically replayed after a save.
+Explicit sign-out retains its intentional exit after its own operation
+completes. Unexpected orphaned-task failures still reach error handling.
+
 The Cloud Shell launcher installs a pinned uv wheel into a HOME-local
 bootstrap directory, uses its managed Python 3.12 to create/reuse the AUM
 venv, and installs the checked-out package in editable mode. Editable
