@@ -66,11 +66,11 @@ resolver therefore cannot change who is entitled.
 |---|---|
 | Gateway tier | **Standard v2 or Premium v2** for the private resolver profile. **Basic v2** uses `inboundAccess=public` with App Service Authentication and exact gateway managed-identity allow lists; Cosmos remains private. |
 | Roles | Owner, or Contributor plus User Access Administrator, on deployment resources; network join/write rights on the supplied VNet/subnets/DNS; application registration/assignment rights in Entra ID. Azure subscription Owner is not a directory role. |
-| Resource provider | `Microsoft.App` registered: `az provider show -n Microsoft.App --query registrationState` |
-| Region capacity | Check Cosmos DB account creation in your region **before** planning around it. Measured: Canada Central and Canada East both refused with `ServiceUnavailable ... high demand ... To request region access for your subscription, please follow this link https://aka.ms/cosmosdbquota`. A private endpoint can point at an account in another region, so a Cosmos DB account elsewhere still stays private in your VNet. |
+| Resource providers | Registered: `Microsoft.App`, `Microsoft.DocumentDB`, `Microsoft.Web`, `Microsoft.ContainerInstance`, `Microsoft.Network`, `Microsoft.Storage`, `Microsoft.OperationalInsights`, `Microsoft.Insights` and `Microsoft.Authorization`. These cover the resources and delegations in `infra/projection.bicep:95`, `infra/projection-network.bicep:67` and `infra/resolver.bicep:137`. |
+| Region capacity | Cosmos regional capacity cannot be checked in advance or reserved by preflight. Measured: Canada Central and Canada East both refused with `ServiceUnavailable ... high demand ... To request region access for your subscription, please follow this link https://aka.ms/cosmosdbquota`. A private endpoint can point at an account in another region, so a Cosmos DB account elsewhere still stays private in the VNet. |
 | Subnets | See the next table. In most enterprises the network team creates them and hands over the resource IDs. |
-| Tools | Azure CLI/Bicep, PowerShell, Node/npm and a ZIP-capable `tar`; package scripts from the repository root |
-| Rollout approval | A fresh configuration backup, a tested rollback while named-value lists still fit, and an owner for scheduled reconciliation/expiry alerts |
+| Tools | PowerShell **7 or later** for `Deploy-ClaudeProjection.ps1` and `Sync-ClaudeProjection.ps1`; Azure CLI/Bicep, Node/npm and a ZIP-capable `tar`. Bicep `build-params` with `using none` evaluates the existing storage name locally. Shared Graph membership callers that manage named values still support Windows PowerShell 5.1. |
+| Rollout approval | A fresh configuration backup, a tested rollback while named-value lists still fit, and an existing verified scheduled reconciler. P84 does not create a schedule or lease alerts; those are proposed P86 work. |
 
 | Subnet | Size | Delegation | Notes |
 |---|---|---|---|
@@ -81,22 +81,100 @@ resolver therefore cannot change who is entitled.
 
 ### One-command deployment
 
-Use the guarded deployer when the installer has selected `projection`:
+`-PreflightOnly` runs the same checks as a normal deployment, with no Azure writes, and exits
+nonzero on any FAIL. The normal estimate is **30-90 seconds**, including **25 seconds**
+between two Graph reads. Slow customer networks can extend it. Local temporary files are removed
+after Bicep/name evaluation (`scripts/ClaudeProjectionChecks.ps1:41`).
 
 ```powershell
-./scripts/Deploy-ClaudeProjection.ps1 `
+pwsh -NoProfile -File .\scripts\Deploy-ClaudeProjection.ps1 `
+  -SubscriptionId <subscription-id> `
   -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> `
   -Location eastus2 -Sku BasicV2 -ResolverInboundAccess public `
-  -FlipAfterCleanCompare
+  -ResolverAppId <resolver-app-id> -PreflightOnly
+```
+
+The single output table contains **check, result, evidence, remedy and who acts**. Missing or
+unreadable evidence is a FAIL, not a successful default. The checks cover the PowerShell host,
+local tools, selected subscription and gateway identity, two Graph probes, both tier groups,
+resolver registration, providers, inherited/group-aware resource-group roles and derived names.
+The safe prefix is 1-37 lowercase letters/digits with separated hyphens and alphanumeric ends.
+Cosmos, Function and storage names have global availability checks; an existing exact resource
+in the target resource group is reusable. The storage hash uses ARM's canonical resource-group
+id, not the casing of the typed argument. Regional capacity is a NOTE, not a PASS.
+
+A run without `-PreflightOnly` performs these checks before its first app/resource write. A
+switch additionally requires an existing job that satisfies
+[ADR-0040](adr/0040-projection-preflight-and-switch.md):
+
+```powershell
+pwsh -NoProfile -File .\scripts\Deploy-ClaudeProjection.ps1 `
+  -SubscriptionId <subscription-id> `
+  -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> `
+  -Location eastus2 -Sku BasicV2 -ResolverInboundAccess public `
+  -ResolverAppId <resolver-app-id> `
+  -FlipAfterCleanCompare -ReconcilerResourceId <scheduled-projection-job-resource-id>
 ```
 
 For Standard v2 and Premium v2, omit `-ResolverInboundAccess` and the script
 chooses `private`. The command deploys private Cosmos, projection networking and
 the resolver, exports named-value decisions, populates from Entra, compares the
-projection against those decisions and flips only after a clean comparison.
+projection against those decisions and flips only after a clean comparison and a second,
+current reconciliation check against the snapshot's actual expiry. This one-command path uses
+the gateway resource group for its projection resources.
 Without `-FlipAfterCleanCompare` it stops after the clean comparison and leaves
 `entitlement-source` unchanged. `-WhatIf` prints the planned operations without
-writing resources.
+writing Azure resources. It does not require creating an app merely to preview the plan
+(`scripts/Deploy-ClaudeProjection.ps1:78`).
+
+#### Resolver registration and the customer's Entra admin
+
+With `-ResolverAppId`, the app must exist and expose `api://<id>`. Without it, an existing
+unambiguous registration is reusable; otherwise preflight requires a member user and explicitly
+true `authorizationPolicy.defaultUserRolePermissions.allowedToCreateApps`. That policy read
+requires Graph `Policy.Read.All`. A 403 or role-delegated case is reported as permission
+**unproven**, not as proof that the user has no directory role.
+
+The admin's portal path is **https://entra.microsoft.com > Entra ID > App registrations >
+New registration > Accounts in this organizational directory only > Register**. **Overview**
+supplies the Application (client) ID. **Expose an API > Application ID URI** contains
+`api://<that-client-id>`. The equivalent admin CLI sequence is:
+
+```powershell
+az login --tenant <tenant-id>
+$appId = az ad app create --display-name claude-projection-resolver-<prefix> `
+  --sign-in-audience AzureADMyOrg --query appId -o tsv
+if ($LASTEXITCODE -ne 0 -or -not $appId) { throw 'Resolver registration failed; no update attempted.' }
+az ad app update --id $appId --identifier-uris "api://$appId"
+if ($LASTEXITCODE -ne 0) { throw 'Resolver identifier URI update failed.' }
+```
+
+The operator's deployment uses `-ResolverAppId $appId`. Azure subscription Owner is not an Entra
+application-registration role. The deployer reports an actual creation failure, including
+insufficient privileges, and never updates an empty id (`scripts/ClaudeProjectionChecks.ps1:8`).
+Sources, accessed 2026-09-29:
+[authorization policy GET](https://learn.microsoft.com/graph/api/authorizationpolicy-get?view=graph-rest-1.0),
+[app registration](https://learn.microsoft.com/entra/identity-platform/quickstart-register-app),
+[Azure CLI app commands](https://learn.microsoft.com/cli/azure/ad/app).
+
+#### CAE and IP variation
+
+The diagnostic recognizes
+`Continuous access evaluation resulted in challenge with result: InteractionRequired and code: LocationConditionEvaluationSatisfied`.
+It does not translate this, a 401/403 or a network error into "group not found". Only a successful,
+empty Graph collection means an absent optional group (`scripts/ClaudeGraphMembership.ps1:45`).
+
+The operator's sign-in and Graph requests need a consistent VPN state, fully on or fully off.
+The network team's checks cover split tunneling and IPv4/IPv6 egress differences. The customer's
+Entra admin reviews the observed addresses, the named location and, if approved by that admin,
+a time-limited temporary exclusion. Azure Cloud Shell uses another network location and a
+temporary host; Conditional Access still applies, private VNet access is not automatic, and an
+interactive session is not a reconciler. Its documented idle timeout is 20 minutes.
+Sources, accessed 2026-09-29:
+[CAE IP address configuration](https://learn.microsoft.com/entra/identity/conditional-access/howto-continuous-access-evaluation-troubleshoot)
+and [Cloud Shell overview](https://learn.microsoft.com/azure/cloud-shell/overview);
+[Cloud Shell VNet isolation](https://learn.microsoft.com/azure/cloud-shell/vnet/overview)
+describes its separate private-network deployment and associated resources/costs.
 
 #### Basic v2 pictures, captured live
 
@@ -378,6 +456,25 @@ The reference account in this picture is shared with other workloads and is
 still public. That is the state this step changes: after the private endpoint
 and DNS are verified, select **Disabled** (or **Selected Networks and Private
 Endpoints**), save, and repeat the verification above.
+
+### Switch evidence before population
+
+**A successful initial scan does not supply renewal.** Records expire at most **two hours from
+scan start**, after which **every developer receives 503** unless reconciliation has renewed
+them. The deployer prints the absolute expiry and refuses `-FlipAfterCleanCompare` by default.
+
+An existing Container Apps scheduled job is evidence only when ARM reads prove a supported
+hourly-or-faster UTC cron, bounded timeout, the destination/tenant/contract bindings, a pinned
+container image and a recent succeeded execution of that same template. A newer failed
+execution, insufficient remaining snapshot lease or unreadable evidence refuses the switch.
+The same guard covers the installer and guided Entitlement. There is no override
+(`scripts/ClaudeProjectionChecks.ps1:226`, `scripts/Deploy-ClaudeProjection.ps1:233`,
+[ADR-0040](adr/0040-projection-preflight-and-switch.md)).
+
+The assumed part of this contract is explicit: the customer-controlled pinned image performs
+the declared renewal. ARM success proves process termination, not its application semantics or
+future health. P86 owns the tested reconciler image, tenant-admin Graph grant, hourly job and
+lease alerts. No such component or schedule is deployed by P84.
 
 ### 8. Populate the projection from inside the network
 

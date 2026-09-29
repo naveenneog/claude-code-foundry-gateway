@@ -76,6 +76,15 @@ mutation harness's five detector self-checks and all 108 mutation anchors/syntax
 mutation execution is still pending. A syntax error, missing summary, lost assertion, exit-only
 failure or assertion failure with exit zero cannot count as a catch. Encoding passes 299 scripts.
 
+**Installer target and binding follow-up:** the first 108-probe run is isolated at `80a639e`
+with its 236-assertion baseline. Independent integration investigation then added three cases:
+the installer had checked the job before assigning its gateway name, ARM id casing caused
+false refusals, and case-insensitive environment keys could attest the wrong Linux variable.
+RED: 239 assertions, three failures, 12.50 s. The guard now follows gateway-name resolution
+before writes, resource-id/GUID values compare case-insensitively and environment names compare
+ordinally. GREEN: 239/239, 12.10 s; encoding 299/299. The earlier mutation run is not evidence
+for these later changes; final-tree probes remain required.
+
 ## P78 the test suite runs in parallel on GitHub-hosted runners, 2026-09-28
 
 **Merged as `2737232` on 2026-09-29 with the owner's approval. Council round 1 passed and the local packet gate passed; ADR-0039's proposed charter change is not enacted.**

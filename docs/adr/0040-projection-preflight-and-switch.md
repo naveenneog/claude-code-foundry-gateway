@@ -79,6 +79,11 @@ literal non-secret environment values:
 | `PROJECTION_CONTAINER` | `entitlement` |
 | `PROJECTION_MAX_AGE_SECONDS` | `7200` |
 
+Environment variable names are case-sensitive, as in the Linux container. Resource-id and tenant
+GUID values compare case-insensitively; the contract version, database, container and lease
+values compare exactly. The installer checks the binding after resolving its actual gateway
+name but before any foundation write.
+
 A succeeded execution has valid start and end times, started less than 7,200 seconds ago, and
 ran the current container image, command, arguments and environment. An unrelated or old
 template's success does not count. A newer failed execution refuses the switch. Each page stays

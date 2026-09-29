@@ -877,14 +877,6 @@ if ($DeployProjection -and -not $WhatIfPreference) {
     . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
     Assert-ClaudeProjectionPowerShell
 }
-if ($FlipProjectionAfterCleanCompare) {
-    . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
-    $projectionTenant = if ($ProjectionReconcilerResourceId) { (Invoke-ClaudeNetworkAz @('account','show')).tenantId } else { '' }
-    $projectionScope = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup"
-    $null = Assert-ClaudeProjectionReconciler -ReconcilerResourceId $ProjectionReconcilerResourceId `
-        -GatewayResourceId "$projectionScope/providers/Microsoft.ApiManagement/service/$apimName" `
-        -AccountResourceId "$projectionScope/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-$NamePrefix" -TenantId $projectionTenant
-}
 # Named values for more developers than they hold, said where the store is chosen (P79).
 if ($EntitlementStore -eq 'named-value' -and $devCount -gt $buCeiling) {
     Write-Host ''
@@ -1353,6 +1345,14 @@ if ($ExistingApim) {
 }
 Write-Host ''
 
+if ($FlipProjectionAfterCleanCompare) {
+    . (Join-Path $root 'scripts\ClaudeProjectionChecks.ps1')
+    $projectionTenant = if ($ProjectionReconcilerResourceId) { (Invoke-ClaudeNetworkAz @('account','show')).tenantId } else { '' }
+    $projectionScope = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup"
+    $null = Assert-ClaudeProjectionReconciler -ReconcilerResourceId $ProjectionReconcilerResourceId `
+        -GatewayResourceId "$projectionScope/providers/Microsoft.ApiManagement/service/$apimName" `
+        -AccountResourceId "$projectionScope/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-$NamePrefix" -TenantId $projectionTenant
+}
 if ($WhatIfPreference) { Write-Warn2 'WhatIf - stopping before any change.'; return }
 if (-not (Read-YesNo $(if ($ExistingApim) { 'Apply this to the existing gateway?' } else { 'Create these resources?' }) $true)) {
     Write-Host ''; Write-Host 'Cancelled.' -ForegroundColor Yellow; return

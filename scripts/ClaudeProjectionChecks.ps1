@@ -213,7 +213,7 @@ function Get-ClaudeProjectionContainerSignature {
     if ($Template.PSObject.Properties['initContainers'] -and @($Template.initContainers).Count) { throw 'The reconciler contract does not permit init containers.' }
     $container = $containers[0]
     if ([string]$container.image -notmatch '@sha256:[0-9a-f]{64}$') { throw 'The reconciler image requires a SHA-256 digest, not a mutable tag.' }
-    $environment = @{}
+    $environment = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal)
     foreach ($variable in @($container.env)) {
         $secret = $variable.PSObject.Properties['secretRef']
         if (-not $variable.name -or $environment.ContainsKey([string]$variable.name) -or ($secret -and $secret.Value)) { throw 'Reconciler environment binding must contain unique literal non-secret values.' }
@@ -255,7 +255,9 @@ function Assert-ClaudeProjectionReconciler {
             PROJECTION_DATABASE='claude'; PROJECTION_CONTAINER='entitlement'; PROJECTION_MAX_AGE_SECONDS='7200'
         }
         foreach ($key in $expected.Keys) {
-            if (-not $definition.Environment.ContainsKey($key) -or $definition.Environment[$key] -cne $expected[$key]) { throw "Reconciler environment binding $key does not match the projection contract." }
+            $actual = if ($definition.Environment.ContainsKey($key)) { $definition.Environment[$key] } else { $null }
+            $comparison = if ($key -in @('PROJECTION_GATEWAY_RESOURCE_ID','PROJECTION_ACCOUNT_RESOURCE_ID','PROJECTION_TENANT_ID')) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+            if (-not [string]::Equals($actual, $expected[$key], $comparison)) { throw "Reconciler environment binding $key does not match the projection contract." }
         }
         $executions = [Collections.Generic.List[object]]::new()
         $next = "$base/executions?api-version=2024-03-01"; $seen = @{}

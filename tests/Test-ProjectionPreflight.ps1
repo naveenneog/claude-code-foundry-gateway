@@ -207,6 +207,14 @@ foreach ($template in @($FixtureJob.properties.template,$FixtureExecution.proper
 }
 Capture { Guard }
 Assert 'ARM null secretRef is a literal environment value, not a secret binding' (-not $CapturedError) $CapturedError
+Reset-ProjectionFixture
+Capture { Assert-ClaudeProjectionReconciler -ReconcilerResourceId $FixtureJobId -GatewayResourceId $FixtureGatewayId.ToUpperInvariant() -AccountResourceId $FixtureCosmosId.ToUpperInvariant() -TenantId $FixtureTenant.ToUpperInvariant() }
+Assert 'ARM resource-id casing does not invent a different destination' (-not $CapturedError) $CapturedError
+Reset-ProjectionFixture
+foreach ($template in @($FixtureJob.properties.template,$FixtureExecution.properties.template)) {
+    ($template.containers[0].env | Where-Object name -eq 'PROJECTION_ACCOUNT_RESOURCE_ID').name = 'projection_account_resource_id'
+}
+Expect-Failure 'Linux environment binding names are case-sensitive' { Guard } 'environment binding'
 Expect-Failure 'missing reconciler refuses with expiry and developer-wide consequence' { Guard -JobId '' } 'at most 2 hours.*\d{4}-\d{2}-\d{2}.*every developer.*503'
 foreach ($cron in '* * * * *','*/30 * * * *','5,35 * * * *','59 * * * *') {
     Reset-ProjectionFixture; $FixtureJob.properties.configuration.scheduleTriggerConfig.cronExpression = $cron
@@ -344,6 +352,8 @@ $plan = Get-ClaudeFlowStepPlan -Record $entRecord -Discovery $entDiscovery
 Assert 'flow plan persists the selected reconciler id' ($plan.Data.ReconcilerResourceId -eq $FixtureJobId)
 $installerAst = [Management.Automation.Language.Parser]::ParseInput($installer, [ref]$tokens, [ref]$parseErrors)
 $installerGuard = $installerAst.Find({ param($node) $node -is [Management.Automation.Language.IfStatementAst] -and $node.Clauses[0].Item1.Extent.Text -eq '$FlipProjectionAfterCleanCompare' -and $node.Extent.Text -match 'Assert-ClaudeProjectionReconciler' }, $true)
+$gatewayAssignment = $installerAst.Find({ param($node) $node -is [Management.Automation.Language.AssignmentStatementAst] -and $node.Left.Extent.Text -eq '$apimName' }, $true)
+Assert 'installer resolves the actual gateway name before checking its job binding' ($installerGuard -and $gatewayAssignment -and $installerGuard.Extent.StartOffset -gt $gatewayAssignment.Extent.EndOffset)
 $FlipProjectionAfterCleanCompare = $true; $ProjectionReconcilerResourceId = ''
 $SubscriptionId = $FixtureSubscription; $ResourceGroup='rg-p84'; $apimName='apim-p84'; $NamePrefix='p84fixture'
 Expect-Failure 'actual installer guard refuses without evidence before foundation writes' {

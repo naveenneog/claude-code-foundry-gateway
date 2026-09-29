@@ -81,7 +81,9 @@ DNS. Do not delete the old gateway until rollback is no longer needed.
 Named values are the default and hold roughly 100 developers. The projection is the scale path.
 The `Entitlement` step uses `scripts\Measure-ClaudeProjectionCost.ps1` for the operator's
 scenarios, then calls `scripts\Deploy-ClaudeProjection.ps1` to deploy beside, populate, compare,
-and flip only after a clean comparison.
+and flip only after a clean comparison and verified scheduled reconciliation. Deployment and
+projection sync require PowerShell 7. `-PreflightOnly` runs the same read-only checks without
+Azure writes (normally 30-90 seconds, including the 25-second Graph probe interval).
 
 SKU rules from P61:
 
@@ -95,13 +97,24 @@ Manual equivalent:
 .\scripts\Measure-ClaudeProjectionCost.ps1 -P61Scenarios
 .\scripts\Deploy-ClaudeProjection.ps1 `
   -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> `
-  -Sku BasicV2 -ResolverInboundAccess public
+  -SubscriptionId <subscription-id> -Sku BasicV2 -ResolverInboundAccess public `
+  -ResolverAppId <resolver-app-id> -PreflightOnly
 
-# Only after the clean comparison:
 .\scripts\Deploy-ClaudeProjection.ps1 `
   -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> `
-  -Sku BasicV2 -ResolverInboundAccess public -FlipAfterCleanCompare
+  -SubscriptionId <subscription-id> -Sku BasicV2 -ResolverInboundAccess public `
+  -ResolverAppId <resolver-app-id> -FlipAfterCleanCompare `
+  -ReconcilerResourceId <scheduled-projection-job-resource-id>
 ```
+
+The guided step records the id as `reconcilerResourceId` and forwards it with the recorded
+subscription. The typed question is `projectionReconcilerResourceId`; an existing decision can
+also carry `entitlementStore.reconcilerResourceId` and `resolverAppId`. An empty id refuses the
+switch even with a clean comparison. Records expire at most two hours after scan start, then
+every developer receives 503 without renewal; the deployer prints the actual expiry.
+The [ADR-0040](adr/0040-projection-preflight-and-switch.md) job contract is verified through ARM
+reads, with no override. No schedule is created; P86 is proposed for the reconciler and alerts.
+Sources: `scripts/flow/Entitlement.ps1:53`, `scripts/ClaudeProjectionChecks.ps1:226`.
 
 Reverse path: restore the named-value lists from the snapshot, then set `entitlement-source` to
 `named-value`. This can regrant stale list members if lists were not kept current while the

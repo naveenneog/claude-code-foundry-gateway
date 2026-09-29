@@ -742,14 +742,45 @@ effective identity before a bulk flip.
 
 ### 5. Flip one value
 
+The authority switch requires a clean comparison **and verified scheduled reconciliation**.
+The one-command deployer performs the shared preflight, population and comparison again before
+its guarded switch:
+
 ```powershell
-az apim nv update -g <rg> --service-name <apim> `
-  --named-value-id entitlement-source --value projection
+pwsh -NoProfile -File .\scripts\Deploy-ClaudeProjection.ps1 `
+  -SubscriptionId <subscription-id> `
+  -ResourceGroup <rg> -ApimName <apim> -NamePrefix <prefix> `
+  -Sku <gateway-v2-sku> -ResolverAppId <resolver-app-id> `
+  -FlipAfterCleanCompare -ReconcilerResourceId <scheduled-projection-job-resource-id>
 ```
 
-**Portal:** APIM > Named values > `entitlement-source` > `projection` > Save.
-Repeat the same action with `named-value` only under the rollback conditions
-below. Check real caller responses after propagation.
+This command expects the gateway and projection in the same resource group. A separately
+deployed manual estate can use the same guard with its explicit resource ids, after step 4's
+comparison and step 9 of the [private deployment guide](SECURE-PROJECTION.md):
+
+```powershell
+. .\scripts\ClaudeProjectionChecks.ps1
+$snapshotExpiry = [long](Get-Content .\snapshot.json -Raw | ConvertFrom-Json).expiresAt
+$null = Assert-ClaudeProjectionReconciler `
+  -ReconcilerResourceId <scheduled-projection-job-resource-id> `
+  -GatewayResourceId <gateway-resource-id> -AccountResourceId <cosmos-resource-id> `
+  -TenantId <tenant-id> -ExpiresAt $snapshotExpiry
+. .\scripts\ApimNamedValue.ps1
+Set-ApimNamedValue -ResourceGroup <gateway-rg> -ApimName <apim> `
+  -SubscriptionId <subscription-id> -Id entitlement-source -Value projection
+```
+
+Records expire at most **two hours from scan start**; after expiry **every developer gets 503**
+without renewal. Both paths report absolute expiry. ARM reads verify the existing job's cadence,
+destination binding and fresh succeeded execution; the actual snapshot also needs enough lease
+left for the next execution and timeout. No acknowledgement bypass or schedule creation exists.
+The image-semantic assumption and owner decision are in [ADR-0040](adr/0040-projection-preflight-and-switch.md);
+the scheduler and alerts are proposed P86 work. Source: `scripts/ClaudeProjectionChecks.ps1:226`,
+`scripts/Deploy-ClaudeProjection.ps1:233`.
+
+**Portal verification:** APIM > Named values shows `entitlement-source=projection`; Container Apps
+Jobs > the supplied job > Executions shows the recorded execution. The CLI guard, rather than a
+portal Save alone, is the documented forward switch. Rollback conditions remain below.
 
 Propagation to the running policy was measured at 9–18 seconds on Basic v2. On
 Premium v2 the write itself took 38 to 41 seconds, and the flip took effect

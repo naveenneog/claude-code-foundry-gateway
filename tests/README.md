@@ -11,6 +11,30 @@ pwsh -NoProfile -File .\tests\Test-All.ps1 -Serial
 pwsh -NoProfile -File .\tests\Test-All.ps1 -ThrottleLimit 2
 ```
 
+## Projection deployment safety (P84)
+
+The default suite registers `Test-ProjectionPreflight.ps1`. Its Azure CLI/HTTP boundaries are
+offline, including native `az.cmd` stderr under PowerShell 7 and Windows PowerShell 5.1.
+The deployer, installer guard, guided Entitlement refusal and final switch body are exercised
+without Azure resources (`tests/Test-ProjectionPreflight.ps1:1`).
+
+```powershell
+pwsh -NoProfile -File .\tests\Test-ProjectionPreflight.ps1
+pwsh -NoProfile -File .\tests\Test-ProjectionPreflightNegative.ps1 -ValidateAnchors
+pwsh -NoProfile -File .\tests\Test-ProjectionPreflightNegative.ps1 `
+  -ReceiptPath "$env:TEMP\p84-mutation-receipt.json"
+```
+
+The fast check takes approximately 15 seconds on the shared workstation. The full mutation
+proof is separate from default Test-All and takes approximately 25 minutes. It mutates a unique
+temporary copy, restores the original bytes after every probe, and reruns the restored baseline.
+A catch requires valid syntax, the full baseline assertion count, a failed assertion and nonzero
+exit. The receipt includes each probe's counts, timing and source commit.
+
+On the owner's shared workstation a single long invocation owns `<workspace>\.gate-lock`;
+creation is atomic, contention retries every 60 seconds, and only that invocation removes its
+own lock in `finally`. [P84 STATUS](../docs/STATUS.md) records the actual receipts and times.
+
 ## Deterministic shards
 
 The marked registration block is the authority. `Get-TestAllRegistration` parses its AST without
