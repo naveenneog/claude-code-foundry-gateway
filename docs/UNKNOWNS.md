@@ -167,6 +167,15 @@ This is a test-control correction, not a production timing fix or a diagnosis
 of the earlier Windows marker and worker-cancellation failures. U26 remains
 open, with all failing receipts retained.
 
+Following that control correction, all 26 round 8 removal probes executed
+their complete 263-case selectors without the pin-chart setup failure.
+The restored selector passed **263 in 89.18 s**, and the requested one full
+AUM/FinOps run passed **711 in 267.15 s** (269.77 s wall), under its own lock
+from **00:57:04Z to 01:01:34Z on 2026-09-29** (**06:27:04-06:31:34 IST**).
+The failing pre-correction receipts remain in `.finops-evidence\p71-r8`.
+This supports the test-control correction; it does not establish the cause
+of the older Windows marker or worker-cancellation failures. U26 remains open.
+
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 
 **Answer: yes.** A constant `counter-key` is a single counter shared by every caller. P11 can

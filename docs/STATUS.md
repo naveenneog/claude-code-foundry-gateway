@@ -168,6 +168,14 @@ the installed `textual/app.py`, `textual/dom.py` and `textual/widget.py`,
 inspected on 2026-09-29. The initial read-only Ironclad audit exited 0
 (20 passed, two existing warnings, four skipped commands/checks).
 
+| Seat | Round 8 verdict | Finding | Correction |
+|---|---|---|---|
+| Architect | BLOCK | B8a: a retained or shallow-copied widget can attach after its principal changes | `970cd88`: original-source validation precedes DOM insertion and covers supplied subtrees, compose and reparent. |
+| Coder | BLOCK | B8b: class mutation can remove presentation enforcement | `970cd88`: protected instances refuse class replacement. `92b5de8`: the closed source policy rejects class/imported-namespace mutation and raw-state access. |
+| QA | BLOCK | Exact A-to-B counterexamples and current-origin controls were missing | `970cd88` / `92b5de8`: screenshot/output counterexamples and current-origin controls are in the standard selector. `2fe50e2` corrects the pin-chart control's source and adds module-interface controls. |
+| UX | PASS | Seven scheduler routes remain responsive; B7b is closed | All prior liveness and no-output-leak cases remain in the final selector and full run. |
+| Security | BLOCK | B8c: a raw imported output alias escapes the spelling detector | `92b5de8`: default-deny imports and member interfaces, a checked module inventory, and exact justified metaprogramming exceptions. |
+
 The first runtime RED run reported **6 failed, 4 passed in 9.75 s**
 (11.61 s wall), with `A_ONLY_BUDGET` visible in B's screenshot after mount,
 shallow copy, compose and reparent, plus both protected-instance class-change
@@ -242,6 +250,103 @@ timeout changed. The corrected complete baseline passed **263 cases in
 correction does not close U26's other historical failures. Module-namespace
 escape/immutability controls and the subtree's pre-insertion assertion are
 also included in that baseline.
+
+#### Final round 8 proof on `2fe50e2`
+
+**26/26 removal probes were caught.** Each ran the same **263 test identities**
+as the green baseline, exited 1 with at least one failing test, and had zero
+pytest error or skip results. Every mutation was syntax-checked first and
+restored byte-for-byte in `finally`; the final SHA-256 checks agree with the
+pre-mutation source. No collection failure or syntax error was counted.
+
+| Removed or broken rule | Failed / passed | Pytest seconds |
+|---|---|---|
+| Retained attachment origin, replaced with a local-message scope | 7 / 256 | 94.05 |
+| Pending-subtree prevalidation | 3 / 260 | 93.80 |
+| Protected-instance class identity | 4 / 259 | 96.11 |
+| Native-boundary implementation fingerprint | 1 / 262 | 91.19 |
+| Named-import allowlist | 20 / 243 | 97.27 |
+| Module-import allowlist | 2 / 261 | 97.97 |
+| Imported-member allowlist | 2 / 261 | 97.67 |
+| Module-name escape restriction | 1 / 262 | 94.11 |
+| Module-attribute escape restriction | 1 / 262 | 92.54 |
+| Class and imported-namespace assignment restriction | 3 / 260 | 88.90 |
+| Reflective class-mutation restriction | 3 / 260 | 88.07 |
+| Computed-reflection restriction | 3 / 260 | 89.34 |
+| Unapproved dunder-attribute restriction | 2 / 261 | 88.66 |
+| Literal raw-state reflection restriction | 2 / 261 | 90.28 |
+| Interpreter-namespace restriction | 1 / 262 | 87.99 |
+| Builtin-capability allowlist | 6 / 257 | 87.30 |
+| Metaprogramming exception-context fingerprint | 1 / 262 | 88.52 |
+| Metaprogramming exception justification | 2 / 261 | 90.89 |
+| Default rejection of unclassified source modules | 1 / 262 | 87.00 |
+| Import-approval justification | 1 / 262 | 86.74 |
+| Runtime IO origin check | 50 / 213 | 86.90 |
+| Explicit profile-overwrite choice | 3 / 260 | 89.94 |
+| Protected CLI output route | 2 / 261 | 88.53 |
+| Closed policy wired into the standard structural selector | 52 / 211 | 87.22 |
+| Direct module-registry restriction | 1 / 262 | 87.28 |
+| Reflective module-registry restriction | 1 / 262 | 86.99 |
+
+The probes took **2,355.26 s** in pytest (**2,417.39 s wall**). Altering a
+reviewed runtime boundary also fails its source-integrity checks; the runtime
+counterexamples still execute independently. Replacing the retained attachment
+origin reproduces all five stale-widget paths. Removing instance class
+protection reproduces both class-replacement cases. Removing the reflective
+class restriction reproduces the council's class-mutation screenshot, not
+only an AST assertion.
+
+| Selection | Result | Pytest seconds | Wall seconds |
+|---|---|---|---|
+| Runtime/reuse/lifecycle/publication GREEN | 113 passed | 85.92 | 88.24 |
+| IO/runtime/CLI/structure GREEN | 140 passed | 25.63 | 26.94 |
+| Closed source contract GREEN | 132 passed | 4.63 | Not separately measured |
+| Initial compatibility selection | 275 passed, 1 pin-chart setup failure | 138.82 | 141.85 |
+| Initial complete baseline | 262 passed, 1 pin-chart setup failure | 95.05 | 97.89 |
+| Corrected complete baseline | 263 passed | 94.00 | 96.33 |
+| Restored complete publication selector | 263 passed | 89.18 | 91.41 |
+| Full AUM/FinOps Python suite, run once | **711 passed**, zero failures/errors/skips | **267.15** | **269.77** |
+
+The requested full run acquired its own lock at **2026-09-29 00:57:04Z
+(06:27:04 IST)** and released it at **01:01:34Z (06:31:34 IST)** in that
+command's `finally`. Baseline, each removal probe, restored selection and
+full suite have separate acquisition/release receipts. No lock was reserved
+between validation commands or removed on behalf of another owner.
+
+All 263 publication cases were included in the full 711-case run. This
+includes B4/B5, every round 7 scheduler/liveness case, the no-traceback-payload
+proof, and the exact B8 screenshot/output controls:
+
+- [`test_publication_reuse.py`](../cli/finops/tests/test_publication_reuse.py)
+  checks current/stale mount, shallow copy, compose, reparent and nested
+  subtree paths, plus protected-instance class replacement. A rejection
+  precedes insertion; current origins still display their data.
+- [`test_publication_allowlist.py`](../cli/finops/tests/test_publication_allowlist.py)
+  gates the exact `setattr(type(widget), "render", ...)` and raw
+  `typer.echo`/`sys.modules` alias sources before execution. The original RED
+  runs displayed or printed A's value after B verification; the approved
+  current-origin output alias remains a positive control.
+- [`publication_policy.py`](../cli/finops/tests/publication_policy.py)
+  defines the closed import/member/builtin capabilities, module
+  classification, reviewed native boundaries and exact metaprogramming
+  exceptions. The existing lexical scope detector remains a second check,
+  not the default authority for unknown imports.
+
+Every runner asserted that `claude_finops.__file__` belongs to
+`accel-p71\cli\finops\src` while using the main worktree's interpreter.
+The standard selector is the prior five publication files plus
+`test_publication_reuse.py`, `test_publication_io.py` and
+`test_publication_allowlist.py`. The full command used `-m pytest
+cli\finops\tests -q -p no:cacheprovider --tb=short`, with JUnit receipts.
+Private stdout, source hashes, exact test identities and command-local lock
+receipts persist in `.finops-evidence\p71-r8`.
+
+No pin-chart setup failure occurred in the 26 removal runs, restored selector
+or final full suite after its control was bound to the completed reply's
+origin. U26 remains open for the other historical failures; no production
+timing fix is claimed. Only the ledger update follows this final full run.
+There was no push, merge, Test-All, packet gate, council invocation or Azure
+operation. Round 9 remains with the lead, and ROADMAP P71 remains unticked.
 
 ### Council round 7 corrections
 
