@@ -9,6 +9,38 @@ Owner: @naveenneog. Builder worktree: `accel-p85`, branch
 `30cdfd0`). P85 is the active packet on this branch. Council, the packet gate
 and integration belong to the lead; no merge or push is authorized here.
 
+### Council round 3, packet gate 1 and the sharded AUM check
+
+Council round 3 passed all five seats at `329e459` on 2026-09-29. The lead's
+packet gate on that tree (17:36-18:10Z) failed one check: "AUM - commands,
+dashboard and pilot" reached Test-All's 600 s per-check timeout
+(`tests/Test-All.ps1:9`). A serial run of the same tree then passed
+**871 tests in 860.09 s**; `test_p85_escape.py` alone took 189 s.
+
+Raising the timeout would loosen a budget, so the check is split. Test-All
+registers `[0/4]` to `[3/4]` (`tests/Test-All.ps1:293`), and
+`Test-FinOps.ps1 -Shard i/n` passes one longest-first share of the test files
+to pytest, weighted by `tests/finops-test-durations.json` (per-file sums from
+that run's JUnit report, written by `tests/Update-FinOpsDurations.ps1`). The
+planned loads are 226, 225, 225 and 225 s. The new check "AUM shards run
+every test file once" (`tests/Test-FinOpsShards.ps1`) compares the
+registrations, the listings, the files on disk and pytest's collection, runs
+a synthetic suite whose passed counts identify the files each shard ran, and
+fails when a planned shard exceeds half the per-check timeout or a weight
+names a missing file. `Test-RunnerIntegrity.ps1` counts the four shards among
+the prerequisite SKIPs. Method: [tests/README.md](../tests/README.md#aum-test-shards).
+
+RED: the new check failed **3 of 34** assertions against the unsharded
+registration. GREEN: **34 of 34**. Twelve mutations (a missing or unsharded
+registration, a dropped file, a shard running shard 0's files or the whole
+directory, a stale or oversized weight, the planner's tie rule and weights,
+the updater's rounding, the reader's fraction check and the 16-shard limit)
+were each caught with all 34 assertions run. Removing one shard's skip reason
+failed `Test-RunnerIntegrity.ps1`. The four shards, run at once, passed
+**236, 246, 185 and 204 tests (871) in 224, 215, 214 and 217 s**.
+`Test-RunnerIntegrity.ps1`, `Test-TestAllSharding.ps1`,
+`Test-MutationShards.ps1`, the architecture check and the encoding check pass.
+
 ### Council round 2 corrections
 
 The lead reviewed `bbb6298` on 2026-09-29. Architect PASS; Coder, QA, UX

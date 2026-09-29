@@ -288,7 +288,13 @@ try {
     $finopsSkip = if (-not ((Test-Path $finopsPython) -or (Test-Path $finopsUnixPython))) {
         'AUM: Python or the worktree .venv-finops is missing. See docs/AUM.md to install.'
     } else { '' }
-    Invoke-Check 'AUM - commands, dashboard and pilot' 'Test-FinOps.ps1' -SkipReason $finopsSkip
+    # cli/finops/tests took 860 s serially on 2026-09-29, beyond the 600 s per-check timeout, so four
+    # checks each run a longest-first share of the files (tests/Select-FinOpsShard.ps1).
+    Invoke-Check 'AUM - commands, dashboard and pilot [0/4]' 'Test-FinOps.ps1' @{ Shard = '0/4' } -SkipReason $finopsSkip
+    Invoke-Check 'AUM - commands, dashboard and pilot [1/4]' 'Test-FinOps.ps1' @{ Shard = '1/4' } -SkipReason $finopsSkip
+    Invoke-Check 'AUM - commands, dashboard and pilot [2/4]' 'Test-FinOps.ps1' @{ Shard = '2/4' } -SkipReason $finopsSkip
+    Invoke-Check 'AUM - commands, dashboard and pilot [3/4]' 'Test-FinOps.ps1' @{ Shard = '3/4' } -SkipReason $finopsSkip
+    Invoke-Check 'AUM shards run every test file once'       'Test-FinOpsShards.ps1'
     Invoke-Check 'AUM install script'                        'Test-InstallAum.ps1'
     Invoke-Check 'Guided flow contract'                      'Test-FlowContract.ps1'
     Invoke-Check 'Guided flow FinOps modules'                'Test-FlowFinOps.ps1'

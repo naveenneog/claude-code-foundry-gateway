@@ -29,6 +29,11 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P85 packet gate 1: the AUM check runs in four shards.** The AUM pytest
+  suite (871 tests, 860 s serially) exceeded Test-All's 600 s per-check
+  timeout. Test-All now registers four checks, each running a longest-first
+  share of the test files by committed per-file weights, and a fifth check
+  proves every file runs in exactly one shard (`tests/README.md`).
 - **P85 council round 2: installer alias isolation.** Pip/uv processes use
   fresh explicit environments rather than relying on shell-name enumeration.
   Pip also uses isolated mode, null configuration and a confined cache.

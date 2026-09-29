@@ -38,6 +38,34 @@ belongs to CI. A future entry requires a registered name, a reason and a success
 local receipt; an exclusion is not permission to omit evidence. `-LocalOnly` selects that lane
 when it is nonempty. `-IncludeAzure` cannot be combined with sharding or local-only receipts.
 
+## AUM test shards
+
+The AUM pytest suite runs as four registered checks, `AUM - commands, dashboard and pilot [0/4]`
+to `[3/4]` (`tests/Test-All.ps1:293`). On 2026-09-29 its 871 tests took 860 s serially, beyond
+the 600 s per-check timeout (`tests/Test-All.ps1:9`). `Test-FinOps.ps1 -Shard i/n` passes one
+share of the top-level `cli/finops/tests` files to pytest; without `-Shard` it runs the whole
+directory as before (`tests/Test-FinOps.ps1:4`).
+
+Files are assigned longest first to the least-loaded shard, by whole-second weights in
+[finops-test-durations.json](finops-test-durations.json). Equal weights keep ordinal file order,
+equal loads choose the lower shard, and a file without a weight takes `DefaultSeconds`
+(`tests/Select-FinOpsShard.ps1:49`). A weight only moves a file between shards; no file is run
+twice or left out.
+
+`Test-FinOpsShards.ps1` compares the registrations, the listings, the files on disk and pytest's
+own collection, and runs a synthetic suite in which each shard's passed count identifies the files
+it ran. It fails when a planned shard exceeds half the per-check timeout or a weight names a
+missing file.
+
+```powershell
+pwsh -NoProfile -File .\tests\Test-FinOps.ps1 -Shard 1/4 -ListFiles
+pwsh -NoProfile -File .\tests\Test-FinOpsShards.ps1
+.\.venv-finops\Scripts\python.exe -m pytest cli\finops\tests -q -p no:cacheprovider --junitxml $env:TEMP\aum.xml
+pwsh -NoProfile -File .\tests\Update-FinOpsDurations.ps1 -JUnitXml $env:TEMP\aum.xml
+```
+
+The last two lines refresh the weights from one complete serial run.
+
 ## Receipts and coverage
 
 A shard writes a versioned receipt with its exact Git commit and tree, coordinates, ordered
