@@ -92,6 +92,9 @@ class ActionForm(ModalScreen):
             if self.local_write:
                 with guarded_publish(self.app.safe_message_guard()):
                     self.query_one("#action-status", Static).update("Preparing connection preview (estimate 3-30 s)...")
+            else:
+                with guarded_publish(self.app.safe_message_guard()):
+                    self.query_one("#action-status", Static).update("Preparing preview (estimate 3-10 s)...")
             self.preview = await asyncio.to_thread(self.operation, self.values(), False)
             text = json.dumps(self.app.present({key: value for key, value in self.preview.items()
                               if key in {"action", "count", "before", "after", "changes", "note"}}),
@@ -113,6 +116,8 @@ class ActionForm(ModalScreen):
             return
         self.busy = True
         self.query_one("#action-apply", Button).disabled = True
+        with guarded_publish(self.app.safe_message_guard()):
+            self.query_one("#action-status", Static).update("Saving once (estimate 3-30 s)...")
         try:
             latest = await asyncio.to_thread(self.operation, self.values(), False)
             if any(latest.get(key) != self.preview.get(key) for key in ("before", "after", "changes", "count")):
@@ -140,7 +145,7 @@ class ActionForm(ModalScreen):
                 elif result["ui_action"] == "signout":
                     self.app.exit()
                 return
-            state = "Saved." if self.mutation else "Opened."
+            state = result.get("message") or ("Saved." if self.mutation else "Opened.")
             if result.get("status_code"):
                 state = json.dumps(self.app.present({key: result.get(key) for key in
                     ("status_code", "headers", "usage", "error", "seconds")}), ensure_ascii=True, indent=2)

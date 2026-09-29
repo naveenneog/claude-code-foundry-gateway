@@ -49,6 +49,9 @@ class FinOpsCommands(Provider):
             ]
         if self.app.check_action("add_developer", ()):
             commands.append(("Add developer", self.app.action_add_developer, "Find an Entra user, preview tier/unit group writes, then publish"))
+        if self.app.check_action("remove_developer", ()):
+            commands.append(("Remove person from team", self.app.action_remove_developer,
+                             "Preview all gateway tier/unit group removals, confirm the email/UPN, then publish"))
         if self.app.editable:
             commands += [
                 ("Edit selected budget or governance row", self.app.action_edit, "Preview, then apply"),

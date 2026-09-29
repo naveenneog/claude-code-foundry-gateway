@@ -40,6 +40,8 @@ DataTable { height: 1fr; }
 .toolbar Input { width: 1fr; }
 .toolbar Button { min-width: 8; width: 10; }
 .toolbar.actions Button { min-width: 0; width: auto; padding: 0 1; }
+#people .toolbar.actions { height: 1; }
+#people .toolbar.actions Button { height: 1; border: none; }
 .toolbar-note { width: 1fr; padding: 1 1; }
 #status { height: 2; padding: 0 1; color: $foreground; background: $surface; }
 #ask-answer { height: 1fr; }

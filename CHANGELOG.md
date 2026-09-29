@@ -29,6 +29,14 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **AUM terminal management (P85, builder work in progress).** People exposes
+  Remove person from team beside Add person to team, with `h` and a matching
+  palette entry. Its preview names the resolved person, all tier/catalog group
+  removals and the `allow-standard`/`allow-premium` publication targets. The
+  existing engine checks owner authority and typed email/UPN confirmation;
+  AUM service membership remains unavailable. Done returns from both membership
+  forms to a refreshed People view. Observed usage is not a membership roster
+  and can remain after access removal.
 - **AUM action discovery (P80, owner-approved for integration after P71).** People and Budgets show
   Add person to team, Set budget, Set USD budget and Chargeback report, with
   matching Help and keyboard hints. The selected connection appears as

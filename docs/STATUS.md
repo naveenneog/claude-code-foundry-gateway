@@ -37,6 +37,30 @@ copied into this worktree; editable FinOps paths target this worktree.
 No live Azure reads or writes, Azure resources or reference-gateway operation
 are part of the builder's validation.
 
+### RED / implementation
+
+The complete initial people selection ran **17 tests in 27.16 s**; all failed,
+with no collection errors or skips. The remove cases found no removal button,
+binding or palette entry. The two add cases reached the existing engine writer,
+then found `len(app.screen_stack) == 2` after Done: the directory picker still
+covered the refreshed People view. Both paths now replace that picker with the
+existing preview/apply form.
+
+Source inspection distinguishes membership from observed usage: Direct's People
+rows come from `direct_analytics.people`, not an Entra roster. The complete
+pilots explicitly change the fake endpoint's next observed response after the
+write to prove row refresh. They do not claim live ingestion latency or deletion
+of historical usage on membership removal. Named-value targets are
+`allow-standard` and `allow-premium` in `scripts/Sync-ClaudeAccess.ps1`.
+
+GREEN: **90 tests passed in 86.85 s**, comprising 17 P85 people pilots plus
+the P80 usability/council UI, publication-structure and developer-engine
+regressions. The fixed cases include both complete add paths, both complete
+remove paths, blank/wrong confirmation, owner/service/redaction/preview-only
+refusals, stale directory/form guards and the 80x24 action layout. The new
+membership rows use compact buttons so the People table remains visible.
+No publication detector or allowlist was weakened.
+
 ## P80 AUM shows every action it has, connects in one step, and its guide starts with installation, 2026-09-28
 
 Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM guide set. Worktree: `accel-p80`, branch `p80-aum-usability`, based on P71 commit `bcf8554`. The owner approved merging P80 after P71 at 07:41 IST on 2026-09-29. The lead authorized merging pinned `origin/main` (`30cdfd0`) into this branch without rebasing; later P71 work remains separate. This builder is not authorized to push or merge to main.
