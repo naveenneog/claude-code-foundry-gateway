@@ -441,8 +441,135 @@ ATTRIBUTE_EXCEPTIONS = {
         'Formats the existing safe domain error through redaction; this is not access to a raw error console or traceback renderer.',
     ('ui_features.py', 'FeatureUI.refresh_features', 'self._apply_features'):
         'Uses the existing principal or refresh state/helper in this exact reviewed lifecycle context, without exposing framework IO.',
+    ('publication_widgets.py', '_PayloadFreeRepresentation.__repr__', 'type(self).__name__'):
+        'Reports only the framework type name, never a payload or callback argument.',
+    ('publication_widgets.py', '_seal_message', 'original.__name__'):
+        'Preserves the message type name while replacing both diagnostic representations.',
+    ('publication_widgets.py', '_seal_message', 'original.__module__'):
+        'Preserves framework message identity for dispatch; it does not import or expose the module.',
+    ('publication_widgets.py', '_seal_message', 'original.__qualname__'):
+        'Preserves framework message identity while keeping its diagnostic payload opaque.',
+    ('publication_widgets.py', '_seal_message', 'original.bubble'):
+        'Copies the existing message routing flag without changing its delivery semantics.',
+    ('publication_widgets.py', '_seal_message', 'original.verbose'):
+        'Preserves the framework diagnostic level; payload removal does not disable logging.',
+    ('publication_widgets.py', '_seal_message', 'original.no_dispatch'):
+        'Preserves whether the original message dispatches; only its representations change.',
+    ('publication_widgets.py', '_seal_message', 'protected.handler_name = original.handler_name'):
+        'Copies the existing handler name to the private cached adapter so dispatch remains unchanged.',
+    ('publication_widgets.py', '_seal_message', 'message.__class__ = protected'):
+        'Seals this queued Message before framework logging; only its payload-free adapter is assigned.',
+    ('publication_widgets.py', '_retained_framework_watcher', 'callback.func'):
+        'Recognizes only the exact Textual await_watcher function, not arbitrary deferred callbacks.',
+    ('publication_widgets.py', '_retained_framework_watcher', 'callback.args'):
+        'Checks the watcher owner before retaining its origin; this does not display callback arguments.',
+    ('publication_widgets.py', '_retained_framework_watcher', 'owner._publication_origin'):
+        'Retains the protected widget source for the exact framework watcher callback.',
+    ('publication_widgets.py', '_RetainedWatcher.__call__', 'self.origin'):
+        'Re-enters the captured source at watcher execution rather than using the later caller.',
+    ('publication_widgets.py', '_RetainedWatcher.__call__', 'self.owner._publication_rejected'):
+        'Reports only the safe domain refusal and keeps the framework message loop alive.',
+    ('publication_widgets.py', '_RetainedWatcher.close', 'self.callback.args'):
+        'Finds the coroutine in the already-validated await_watcher binding for deterministic cleanup.',
+    ('publication_widgets.py', '_RetainedWatcher.close', 'inspect.iscoroutine(pending)'):
+        'Classifies only the retained watcher awaitable so an unused coroutine can be closed.',
+    ('publication_widgets.py', '_RetainedWatcher.close', 'pending.cr_running'):
+        'Never closes a running coroutine while disposing of a refused or abandoned watcher.',
+    ('publication_widgets.py', 'PublicationDispatch.post_message', 'super().post_message(message)'):
+        'Forwards the same message only after its payload-free representations have been installed.',
+    ('publication_widgets.py', 'PublicationWidget._get_dispatch_methods', "getattr(type(self), '_publication_native_type', None)"):
+        'Recognizes an already-approved native adapter for the fixed framework lifecycle handlers.',
+    ('publication_widgets.py', 'PublicationWidget._get_dispatch_methods', 'cls.__module__'):
+        'Limits retained-origin lifecycle dispatch to the reviewed framework implementation.',
+    ('publication_widgets.py', 'PublicationWidget.get_child_by_type', "getattr(actual, '_publication_native_type', None)"):
+        'Restores exact native child-type lookup without returning an unprotected receiver.',
+    ('publication_widgets.py', '_protect_native_widget.initialize', 'original.__init__(owner, *args, **kwargs)'):
+        'Calls the exact approved native constructor only inside the publication sink.',
+    ('publication_widgets.py', '_protect_native_widget.set_presentation', 'original.__setattr__(owner, name, value)'):
+        'Writes through the native descriptor only after the receiver publication sink validates the source.',
+    ('publication_widgets.py', '_protect_native_widget.render', 'owner._publication_origin'):
+        'Validates the retained native content source before fresh rendering.',
+    ('publication_widgets.py', '_protect_native_widget.render', 'owner._cached_publication_rejected'):
+        'Reports stale native paint without cancelling a newer source read; refused output stays blank.',
+    ('publication_widgets.py', '_protect_native_widget.render_lines', 'owner._publication_origin'):
+        'Validates the retained native source before returning even cached render strips.',
+    ('publication_widgets.py', '_protect_native_widget.render_lines', 'original.render_lines'):
+        'Reads native cached strips only within the retained source guard.',
+    ('publication_widgets.py', '_protect_native_widget.render_lines', 'owner._cached_publication_rejected'):
+        'Reports stale cached paint without clearing newer facts or returning any cached payload.',
+    ('publication_widgets.py', '_protect_native_widget.render_lines', 'Strip.blank'):
+        'Returns empty fixed-width strips after an explicit domain refusal, never cached content.',
+    ('publication_widgets.py', '_protect_native_widget.post_message', 'original.post_message'):
+        'Forwards a native receiver message only after payload-free sealing.',
+    ('publication_widgets.py', '_protect_native_widget.dispatch', 'original._dispatch_message'):
+        'Seals the message before entering the original native dispatch and logging path.',
+    ('publication_widgets.py', '_protect_native_widget.dispatch', 'owner.app._handle_exception'):
+        'Routes only recognized publication refusals to the existing safe application handler.',
+    ('publication_widgets.py', '_protect_native_widget.dispatch_methods', 'original._get_dispatch_methods'):
+        'Enumerates native handlers so only the fixed reviewed lifecycle and input handlers gain an origin.',
+    ('publication_widgets.py', '_protect_native_widget.dispatch_methods', 'operation.__name__'):
+        'Matches the fixed reviewed framework handler vocabulary, not arbitrary application callbacks.',
+    ('publication_widgets.py', '_protect_native_widget.dispatch_methods', 'cls.__module__'):
+        'Restricts native lifecycle authority to framework methods of an explicitly approved receiver.',
+    ('publication_widgets.py', '_protect_native_widget.dispatch_methods', 'owner.input_origin'):
+        'Combines the retained content source and current input authority for real framework input events.',
+    ('publication_widgets.py', '_protect_native_widget.dispatch_methods', 'owner._publication_origin'):
+        'Keeps composition and mount callbacks attached to their original widget source.',
+    ('publication_widgets.py', '_protect_native_widget.dispatch_methods', 'owner._framework_callback'):
+        'Wraps the exact selected native handler in retained-origin deferred execution.',
+    ('publication_widgets.py', '_protect_native_widget', 'PublicationWidget.__setattr__(owner, name, value)'):
+        'Forwards to the protected receiver setter in the native-first adapter; it never exposes the raw setter.',
+    ('publication_widgets.py', '_protect_native_widget', 'PublicationWidget.get_child_by_type'):
+        'Installs exact protected-child lookup while preserving native framework type expectations.',
+    ('publication_widgets.py', '_protect_native_widget', 'getattr(original, name, None)'):
+        'Looks up only the fixed native write-method set on an exact approved framework type for wrapping.',
+    ('publication_widgets.py', '_protect_native_widget', 'inspect.iscoroutinefunction(operation)'):
+        'Keeps the synchronous sink wrapper off asynchronous bodies; unsupported content types are refused.',
+    ('publication_widgets.py', '_protect_native_widget', 'original.__name__'):
+        'Names the private cached native adapter without opening any new import or member capability.',
+    ('publication_widgets.py', '_protect_native_widget', "object.__setattr__(widget, '_publication_origin', origin)"):
+        'Retains the composing source before the approved native receiver enters the DOM.',
+    ('publication_widgets.py', '_protect_native_widget', "object.__setattr__(widget, '__class__', protected)"):
+        'Adapts only the exact approved native type before registration; ordinary class replacement stays refused.',
+    ('publication_widgets.py', 'PublicationApp.__init__', 'super().__init__(*args, **kwargs)'):
+        'Forwards native application construction before freezing the fixed framework title metadata.',
+    ('publication_widgets.py', 'PublicationApp.__setattr__', "getattr(self, '_publication_static_titles', False)"):
+        'Checks only whether initial native title setup is complete before refusing later title writes.',
+    ('publication_widgets.py', 'PublicationApp.__setattr__', 'super().__setattr__(name, value)'):
+        'Forwards non-title state and initial static title setup; later title output is explicitly refused.',
+    ('publication_widgets.py', 'PublicationApp._register', 'parent._publication_origin'):
+        'Native descendants inherit the protected composing parent source, not a replacement caller identity.',
+    ('publication_widgets.py', 'PublicationWidget._cached_publication_rejected', "getattr(self, '_publication_render_refused', False)"):
+        'Emits one fixed refusal notice per expired render origin instead of repeatedly clearing current data.',
+    ('publication_widgets.py', '_protect_native_widget.run_worker', 'work.func'):
+        'Recognizes only the exact native command-search coroutine, never an arbitrary supplied worker.',
+    ('publication_widgets.py', '_protect_native_widget.run_worker', 'CommandPalette._gather_commands.__wrapped__'):
+        'Identifies the reviewed Textual search worker before retaining its source and removing diagnostic arguments.',
+    ('publication_widgets.py', '_protect_native_widget.run_worker', 'work.args'):
+        'Requires the exact native receiver as the search worker owner before granting deferred authority.',
+    ('publication_widgets.py', '_protect_native_widget.run_worker', 'owner._publication_origin'):
+        'Retains the native search source through awaits rather than authorizing later unrelated callbacks.',
 }
 ATTRIBUTE_CONTEXTS = {
+    ('publication_widgets.py', 'PublicationWidget._cached_publication_rejected'): '24237ea443e6c2f109ab9fa1e40ac8d5707977be96fd34f50a33e012bf4be5fc',
+    ('publication_widgets.py', '_protect_native_widget.run_worker'): '269748d99db8daf61176eb72ca37aa81be93d1d336ef2591c585c4ebb24f4b5d',
+    ('publication_widgets.py', 'PublicationApp.__init__'): '9701aaa1c5d249d98401fd341b50fbb0133770e1fd1e73783b31c7f8f7bc0dda',
+    ('publication_widgets.py', 'PublicationApp.__setattr__'): 'f5b2bfd2c557ef7e19f73c3bf82553137f1f45a62e94efc4710942671a4d2df1',
+    ('publication_widgets.py', 'PublicationDispatch.post_message'): '2a5441ede1674c938ff5175d2be0ed4ec198202697f097b252ebdc300e77971b',
+    ('publication_widgets.py', 'PublicationWidget.get_child_by_type'): 'd1e385a67bb390f5c7b96469cd3ea3ab15c2194e6f6eecb0eed6e91211dda85f',
+    ('publication_widgets.py', '_PayloadFreeRepresentation.__repr__'): 'e6954331835e9a3a585c65e83a9690d25b91e96877c0bd9c1aa768e27a047958',
+    ('publication_widgets.py', '_RetainedWatcher.__call__'): 'c8aff46b4df6f505e8fbdf387824c69ec90750b487aeac21864065eda5e2e816',
+    ('publication_widgets.py', '_RetainedWatcher.close'): 'a39203a536255e38e7edf4c69d04702dd542f773f1928e6b14b8caf45defd376',
+    ('publication_widgets.py', '_protect_native_widget'): 'cba53a09add3fd5a5d3d7f686328302fbb7440d04920ea92c548661b1f0d8030',
+    ('publication_widgets.py', '_protect_native_widget.dispatch'): 'd19fc177e9a9bde62f7f98ea4e20dbc70f7656498e06c269328bef639860c9dd',
+    ('publication_widgets.py', '_protect_native_widget.dispatch_methods'): '10b456c47e68838d2648e0fbcc036b24935be53a38c26d1a2c07a96485ef8897',
+    ('publication_widgets.py', '_protect_native_widget.initialize'): '4ca3c1a9da32da47dbe3b4203c25f485a5c094dc86577e4c023735038776b093',
+    ('publication_widgets.py', '_protect_native_widget.post_message'): 'ea00931f053c16705fcde3aeb7b2b3da8f30f171ef5ba06597f2e6ce38ce89dd',
+    ('publication_widgets.py', '_protect_native_widget.render'): 'e5af0b5f1cc06d0904bf20371617f054fd6f5f8bf33adf06d2f8dcbcbef496b4',
+    ('publication_widgets.py', '_protect_native_widget.render_lines'): '23443c53b369982621aef601f7ca7bcdbdfaf405e2bdf910643fc24679fa5407',
+    ('publication_widgets.py', '_protect_native_widget.set_presentation'): '6987f8ebf6c3776ddaf4a185ac5424daa4c0c0838e86b01addea5c1f21897a2b',
+    ('publication_widgets.py', '_retained_framework_watcher'): '2365ea2e3c2b2ac7e9f27d554760775d3beb26a69cbf0bee1d65c1d860741eb7',
+    ('publication_widgets.py', '_seal_message'): 'e9b892df4ed328ed211200076f4e26d1fae130c4d16f57704c25e869faebfdcb',
     ('cli.py', 'EverywhereGroup.parse_args'): 'd10e78ca848e9299a6b3c9a6efc486a9e2fa02efb3571ec87eb43d045502f87b',
     ('dashboard.py', 'Dashboard.update_data'): 'be12412345ec48f8a805d810ed95bad3ac8e8dca6c14a7074a3adbf956ad9a95',
     ('dashboard.py', 'DashboardPanel.__init__'): '409ebef128440592c40bfb334773b9be8dbc52cd0e4fa4ce91408ac660fe9409',
@@ -502,17 +629,17 @@ ATTRIBUTE_CONTEXTS = {
     ('publication_widgets.py', 'PublicationApp._process_messages.handle'): 'd5fd13eff6bfbe900c3a7baf1345d6a26602cee07e40536aca25184e3b65cbd2',
     ('publication_widgets.py', 'PublicationApp._publication_rejected'): 'f84c66cd68baf3a6dcd2f55ee42f477cdf112aff7337baf44cbb14481b552430',
     ('publication_widgets.py', 'PublicationApp._refresh_notifications'): 'b56ba96124f9f7d837eff0ecb1ab4add9595dd5e47ca75d11f0ac278fb4cf504',
-    ('publication_widgets.py', 'PublicationApp._register'): '388960e694675007d9b3acc3aaea974982b6a49c881750f83fa04501d7acdfed',
+    ('publication_widgets.py', 'PublicationApp._register'): 'a68ef34b05b2bc343ea2aa0eacc825be84ce7b103372b63a960d24fdd469ee61',
     ('publication_widgets.py', 'PublicationApp.clear_publication_notifications'): 'dbc84d36715000cb40b502cabd770d496adacc92fdb4bd787766fb63b0687a09',
     ('publication_widgets.py', 'PublicationApp.copy_to_clipboard'): '18f077938eb4cbad65fb1395d4900db5e83305a1bb203eb5329bd23f0329970e',
     ('publication_widgets.py', 'PublicationApp.open_url'): '42505798f856f5d4d189314f3b1e34ae9bf69637609b2551026bbb0c3761b35b',
     ('publication_widgets.py', 'PublicationApp.publish_notification'): '4dae2f23afbeb1a1d2ea7f7b258924583f5c7fa266076b7f61e3090be0531123',
-    ('publication_widgets.py', 'PublicationDispatch._dispatch_message'): '13dff47e4bf9a753b5b013bafd1522f347ad9d520e3182d147b50e3e94b4612a',
+    ('publication_widgets.py', 'PublicationDispatch._dispatch_message'): 'cf41b29ee53a381db26a4c3232c711c0112a18350753d01777e37270f9161880',
     ('publication_widgets.py', 'PublicationWidget.__init__'): '49490e4591b1efad794d640d3b724e6e7266c552e3c665f928e2bb100f1c5de9',
-    ('publication_widgets.py', 'PublicationWidget.__setattr__'): '42a9888f5ce632625e1ca2f6ba408bdfe127ec9fafc88614fc895c97f255b289',
+    ('publication_widgets.py', 'PublicationWidget.__setattr__'): '83030a2170f14ea1b59df50eb930dab2df22990d6872371ccf72443481975b46',
     ('publication_widgets.py', 'PublicationWidget._framework_callback'): '8fc30bf7c935793e9933d8220ec9ae25b8e999c9ec31dff018a61f4118d51742',
     ('publication_widgets.py', 'PublicationWidget._framework_callback.run'): '495e9403bc6a9f46cb67439dfd8ea77e173bf9c01072a51a17a72eb1d436a4d0',
-    ('publication_widgets.py', 'PublicationWidget._get_dispatch_methods'): 'e39aef5ed0e04460ced7564b108c2cce2651ea732b880500eec077faf96ad18d',
+    ('publication_widgets.py', 'PublicationWidget._get_dispatch_methods'): '9cf1b253c9985477c598b24681b5d374f8a5c0e59eb72d136cc3d683b1846053',
     ('publication_widgets.py', 'PublicationWidget._publication_rejected'): '7414337ed89ef015d3de4d5ccfc3adf4b293a754862f682ba885410aa4ab189f',
     ('publication_widgets.py', 'PublicationWidget.input_origin'): '36b3d9168fe3273563f8cc6b40b34b86ad7b85fc6c2eed40ad9fccf687f9176e',
     ('publication_widgets.py', '_PublicationToast._discard'): 'eee1437b642c2b25c739f930a4817d550d9811889942895a4bd1402165aa413a',

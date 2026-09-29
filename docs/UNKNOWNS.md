@@ -184,6 +184,24 @@ publication cases were included. No historical failure was reproduced or
 diagnosed by that passing run; U26 remains open. The receipts are in
 `.finops-evidence\p71-r9` and the [round 9 STATUS record](STATUS.md#final-round-9-proof-on-125f352).
 
+Round 10's first expanded publication selector had **358 passed, 3 failed in
+166.58 s**. The request-action case raised `WorkerCancelled`, then `NoMatches`
+during shutdown, and passed in the isolated follow-up; that pass does not
+establish its cause. The people-selector failure was reproducible and traced
+to a new native cached-paint refusal cancelling a newer source read; the native
+adapter correction separates that paint refusal from write/input rejection.
+The notification failure preceded the current-toast assertion; the positive
+control now waits for visible text instead of assuming one pause completes
+mounting. The original receipts remain in the
+[round 10 record](STATUS.md#council-round-10-corrections). U26 stays open.
+Its second expanded selector had **358 passed, 4 failed in 172.79 s**:
+`test_cached_dialog_handoffs_retain_origin_during_deferred_composition`
+(`pin-chart`, `request-form`), the delayed `people-selector` case and
+`test_guarded_deferral_reenters_at_execution_and_keeps_input_usable`.
+Each raised `WorkerCancelled` at startup or after navigation; two also raised `NoMatches` during
+shutdown. The later 48-case runtime control passed, but that pass does not
+diagnose these intermittent cancellations.
+
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 
 **Answer: yes.** A constant `counter-key` is a single counter shared by every caller. P11 can

@@ -7,7 +7,7 @@ from claude_finops.config import Config
 from claude_finops.errors import FinOpsError
 from claude_finops.tui import FinOpsApp
 from test_publication_generation import bearer_tui_estate
-from test_publication_widgets import capture_consoles
+from test_publication_widgets import capture_consoles, wait_for_notification
 
 
 async def test_raw_notify_cannot_publish_a_previous_principals_value(bearer_tui_estate, capsys, caplog):
@@ -57,11 +57,13 @@ async def test_notification_retains_origin_until_visible_delivery(
             if delivery == "queued":
                 engine.backend.invalidate_credentials()
             elif delivery == "shown":
-                await pilot.pause()
+                await wait_for_notification(app, pilot, value)
                 assert value in app.export_screenshot() and app.query(Toast)
                 principal[0] = "b"
                 await asyncio.to_thread(engine.read, "whoami")
         await pilot.pause()
+        if delivery == "current":
+            await wait_for_notification(app, pilot, value)
         screenshot = app.export_screenshot()
         captured = capsys.readouterr()
         if delivery == "current":
@@ -112,7 +114,7 @@ async def test_cached_toast_checks_its_origin_without_an_identity_revision_chang
             value = engine.read("budgets")["items"][0]["scope_name"]
             origin = app.current_guard()
         app.publish_notification(value, origin=origin, timeout=60)
-        await pilot.pause()
+        await wait_for_notification(app, pilot, value)
         assert value in app.export_screenshot()
         revision = engine.identity_revision
         engine.backend.invalidate_credentials()

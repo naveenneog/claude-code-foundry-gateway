@@ -70,6 +70,13 @@ exact streaming cache-creation detail remains **U13**.
   visible/cached toast rendering; principal changes clear old notifications.
   Presentation attribute loads and literal reflection are now default-deny,
   with checked internal exceptions and restricted superclass forwarding.
+  Round-ten native DOM receivers use an explicit reviewed class set; unsupported
+  content classes are refused before attachment. Native writes and cached
+  rendering retain their source. Application titles stay static, raw exit
+  messages are refused, and queued message/notification representations omit
+  backend text before Textual logging. The seven scheduler cases enable visible
+  notifications. [Corrections and evidence](docs/STATUS.md#council-round-10-corrections),
+  [approval recipe](docs/adr/0035-aum-bounded-readiness-and-progressive-reads.md#approval-recipe-for-attributes-and-builtins).
 - **Reviewed model lifecycle (P70).** `-Action Change -Change models` and
   `scripts/Sync-ClaudeModels.ps1` discover the selected Foundry account, show deployment
   model/version/SKU/capacity and price status, accept per-deployment tier choices, snapshot

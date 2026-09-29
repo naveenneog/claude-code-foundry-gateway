@@ -384,6 +384,83 @@ from arbitrary Python values, and deliberate in-process code can bypass
 checks. Supported presentation paths carry and validate their actual source;
 the contract rejects access to capabilities outside those paths.
 
+## Council round 10 amendment, 2026-09-29
+
+Approval of a DOM query also includes the effects of the objects it returns.
+Native descendants that can display content require the same receiver-level
+publication enforcement as directly imported wrappers. Unsupported native
+content types are refused before attachment rather than trusted by omission.
+Framework chrome displays only static or source-guarded content.
+The native adapter accepts exact reviewed classes, not a module-name prefix or
+an inherited class name. It guards content properties, mutating methods and
+cached rendering. Application titles remain static after construction.
+Native-first inheritance preserves Python's instance layout when a framework
+child is adapted; ordinary code cannot replace a protected widget's class.
+Textual's asynchronous reactive watcher retains the publication origin on
+both widgets and the app. Initial Header watchers are scheduled on the watched
+app or screen, not necessarily the Header, and unused watcher coroutines are
+closed on refusal or shutdown.
+Expired cached paint returns blank output and emits one fixed refusal notice;
+it does not cancel a newer source read merely because an older native caption
+still needs repainting. Input/write refusals keep the existing application
+rejection path. Native command search recognizes only Textual's exact
+`CommandPalette._gather_commands` worker and receiver, retains that origin
+through awaits, and replaces its argument-bearing diagnostic description.
+Its three input/selection handlers use the same reviewed framework-input
+boundary. Arbitrary supplied workers do not acquire this authority.
+
+These effects were checked against installed Textual 6.12.0 on 2026-09-29:
+[`App._register_child` and exit rendering](https://github.com/Textualize/textual/blob/v6.12.0/src/textual/app.py),
+[`MessagePump._on_message` logging](https://github.com/Textualize/textual/blob/v6.12.0/src/textual/message_pump.py),
+[`reactive._watch` and `await_watcher`](https://github.com/Textualize/textual/blob/v6.12.0/src/textual/reactive.py),
+and the native Header/Footer implementations under `src/textual/widgets`.
+The command-search worker and handlers are in
+[`command.py`](https://github.com/Textualize/textual/blob/v6.12.0/src/textual/command.py).
+The local counterexamples are in `test_publication_native.py` and
+`test_publication_diagnostics.py`.
+
+`exit(result)` returns a value and remains supported. The optional
+Textual exit `message` is an output sink and is refused on the raw exit API.
+Any displayed farewell/error text takes the guarded publication path.
+Queued messages and notification records omit payloads from both normal and
+Rich representations before Textual logs them; this includes message/title
+and deferred callback arguments, not only the originating guard.
+
+### Approval recipe for attributes and builtins
+
+An approval is reviewed like code. The review identifies every supported
+receiver type, whether the member is read, invoked or assigned, and the value
+or capability it returns. The effects include terminal/error streams,
+diagnostic logs, notifications, exit rendering, files, clipboard, browser
+links, deferred callbacks and native descendants returned by queries.
+A member name alone does not establish that every receiver is protected.
+The resulting receiver/effect findings are recorded with the approval's
+reason and, for an exception, its exact expression and enclosing context.
+
+A new ordinary member/builtin needs a positive current-origin control and
+a negative expired/changed-origin or forbidden-capability control through
+its actual effect. Deferred paths include delivery/rendering, not only queue
+acceptance. Log-sensitive paths use a fresh process with `TEXTUAL_LOG`;
+notification paths enable rendering. A removal probe retains the baseline
+test identities and must fail a behavioral or source-contract assertion,
+not collection or syntax.
+
+Implementation changes precede fingerprint updates. The affected source and
+its call chain are inspected, the RED/GREEN evidence is retained, and
+`publication_policy.digest(ast.parse(source))` supplies the reviewed boundary
+fingerprint. Exact exception contexts use `digest(functions(tree)[scope])`.
+The changed reason/expression and literal fingerprint are reviewed together;
+a failing fingerprint is not updated merely to silence the detector.
+The source-contract tests and targeted runtime cases then pass on the same
+tree before the green commit. Changes to a diagram witness are followed by
+the existing architecture renderer and image review.
+
+The import, attribute and builtin contract remains a maintainer-code
+contract, not a malicious-Python sandbox or automatic taint analysis.
+Reviewed backend APIs, framework adapters and source guards are trusted
+implementation. Approvals that expose a new receiver/effect require the
+same review and counterexamples as a new sink.
+
 ## Consequences
 
 No server deployment, account switch, consent, resource grant or authority

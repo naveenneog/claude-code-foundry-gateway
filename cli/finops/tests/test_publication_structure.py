@@ -97,6 +97,18 @@ SINK_INTERNALS = {
         "The synchronous publication sink validates first and retains the written content's origin.",
     ("publication_widgets.py", "PublicationApp._dispatch_action", "cls.__dict__.get('action_' + action_name)"):
         "Reads the fixed framework action MRO before invoking the retained input-origin wrapper.",
+    ("publication_widgets.py", "_protect_native_widget.set_presentation", "original.__setattr__(owner, name, value)"):
+        "The synchronous sink checks the origin before forwarding this approved native descriptor write.",
+    ("publication_widgets.py", "_protect_native_widget", "PublicationWidget.__setattr__(owner, name, value)"):
+        "The native adapter installs the guarded setter before any DOM registration.",
+    ("publication_widgets.py", "_protect_native_widget", "getattr(original, name, None)"):
+        "Wraps only the fixed write-method vocabulary of an exact approved native class.",
+    ("publication_widgets.py", "_protect_native_widget", "object.__setattr__(widget, '_publication_origin', origin)"):
+        "Retains the composing source before the native receiver enters the DOM.",
+    ("publication_widgets.py", "_protect_native_widget", "object.__setattr__(widget, '__class__', protected)"):
+        "Installs only the guarded native adapter; ordinary presentation class replacement remains forbidden.",
+    ("publication_widgets.py", "PublicationApp.__setattr__", "super().__setattr__(name, value)"):
+        "Only initial static title setup and non-title state reach the native application setter.",
 }
 
 

@@ -427,13 +427,13 @@
         "cli/finops/src/claude_finops/principal_ui.py": "2241df1ce92a010cdb33bde6f7f17c70f24e806fa182e087de22b1ee37ec2f34",
         "cli/finops/src/claude_finops/progressive.py": "8e3b8bab364df999ef118fa38ce607f699d42883e48760df87adf507da7c8359",
         "cli/finops/src/claude_finops/publication_output.py": "55ad738d6cecfa265ce6f6b5639fae1ef1b949cec831a5b3702e5228e504f2b1",
-        "cli/finops/src/claude_finops/publication_widgets.py": "28e59ac994fcf4b8c892cd644aca6b6aa9102ac0aebfb50153fc0b3f2dc9d631",
+        "cli/finops/src/claude_finops/publication_widgets.py": "085274e14fff9a82f35adec015478168da43b87f633286436e3012029622f3e5",
         "cli/finops/src/claude_finops/readiness.py": "563f6642c2a2b1307c239dc00cbe51cb6d18227cc290bef00b3fedb520017449",
         "cli/finops/src/claude_finops/screens.py": "9bd786fe41ca2cf6beacf68a3544277d05a6a16c2b92e8f6a6f40d7e7da51929",
         "cli/finops/src/claude_finops/turnstile.py": "17175ec955fdbd537d12ea883ae66574812f73f4e9b107e533aef0e78f8a0dc9",
         "cli/finops/src/claude_finops/ui_features.py": "1c31bcc2e3d56c378637d57a92dc9e8d54e31ee5f7f0822b4c37e3a04acc9b98",
         "cli/finops/src/claude_finops/windows_process.py": "715ae99c16240a107aba89d6a6b7c35996c2d96a39d52a3d724febd81e0122e6",
-        "docs/architecture/15-aum-readiness.json": "8a2df44eb8f1f2dc44edc735e5967a0a7f96c9bc991401f5e9102282ff6ff761",
+        "docs/architecture/15-aum-readiness.json": "53618c7d31b4cf1645cbb0aa10fb676ed5405cb21a099052760cd40b13279d85",
         "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
         "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
         "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
@@ -443,7 +443,7 @@
       "outputs": [
         {
           "path": "docs/images/architecture/aum-readiness.png",
-          "sha256": "fd44575e42fdbf059614fe843eeb2e86b1652e3eedbdf4e6d9229d80b25f367a"
+          "sha256": "e372b67e598d56f8b25172aa98a09a4b348056915bf3df66c3d4e09ed2e22dda"
         }
       ]
     },

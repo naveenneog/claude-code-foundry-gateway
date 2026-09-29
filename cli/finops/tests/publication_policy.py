@@ -139,13 +139,21 @@ BOUNDARIES = {
         "pathlib": {"Path"}, "rich.console": {"Console", "RenderableType"},
         "subprocess": {"run"}, "sys": {"stdout"}, "typer": {"echo", "prompt"},
     }),
-    "publication_widgets.py": ("Native framework classes are wrapped here before presentation can import them.", "500b135726d1edacbeaaad2f8908e50775f9eb4b4cdebb47fb73bfbe19d13cbc", {
+    "publication_widgets.py": ("Native receivers are explicitly approved, guarded before attachment and sealed before diagnostic dispatch.", "5f323961f130b0c662e4f5bf2fb9e120126b8989c54ea6dfc7b1c7e3878e92a7", {
         "textual._context": {"active_app"}, "textual.app": {"App"}, "textual.widget": {"Widget"},
-        "textual.containers": {"Horizontal", "Vertical", "VerticalScroll"},
-        "textual.screen": {"ModalScreen"},
-        "textual.widgets": {"Button", "DataTable", "Input", "Label", "Select", "Static", "TabPane", "TabbedContent", "TextArea"},
+        "textual.containers": {"Container", "HorizontalGroup", "Horizontal", "Vertical", "VerticalScroll"},
+        "textual.screen": {"Screen", "ModalScreen"},
+        "textual.widgets": {"Button", "DataTable", "Input", "Label", "Select", "Static", "TabPane", "TabbedContent", "TextArea",
+                            "ContentSwitcher", "Footer", "Header", "LoadingIndicator", "OptionList", "Tab", "Tabs"},
         "textual.notifications": {"Notification", "Notify"},
-        "textual.strip": {"Strip"},
+        "textual.strip": {"Strip"}, "textual.message": {"Message"},
+        "textual.reactive": {"await_watcher"}, "textual.css.query": {"NoMatches"},
+        "textual.command": {"CommandInput", "CommandList", "CommandPalette", "SearchIcon"},
+        "textual.widgets._footer": {"FooterKey", "FooterLabel", "KeyGroup"},
+        "textual.widgets._header": {"HeaderClock", "HeaderClockSpace", "HeaderIcon", "HeaderTitle"},
+        "textual.widgets._select": {"SelectCurrent", "SelectOverlay"},
+        "textual.widgets._tabbed_content": {"ContentTab", "ContentTabs"},
+        "textual.widgets._tabs": {"Underline"}, "textual.widgets._tooltip": {"Tooltip"},
         "textual.widgets._toast": {"Toast", "ToastHolder", "ToastRack"},
     }),
 }
@@ -197,9 +205,9 @@ META_EXCEPTIONS = {
 META_CONTEXTS = {
     ("publication_widgets.py", "_publication_refusal"): "107fdfc3030e7d9a8199aee158d31b90d86d04150748717cab1ae7e0b2479bf8",
     ("principal_ui.py", "PrincipalUI._clear_principal_state"): "cdb93970fa0d2e3c5755b9717d1222ca8ef7a14dba27cc6ecb2d913d7c9ae585",
-    ("publication_widgets.py", "PublicationWidget.__setattr__"): "42a9888f5ce632625e1ca2f6ba408bdfe127ec9fafc88614fc895c97f255b289",
+    ("publication_widgets.py", "PublicationWidget.__setattr__"): "83030a2170f14ea1b59df50eb930dab2df22990d6872371ccf72443481975b46",
     ("publication_widgets.py", "PublicationWidget._set_presentation"): "82fc2c3430ecef1cd23d1f13be6ed3de39c173aabec21d140aa74369fe90c850",
-    ("publication_widgets.py", "PublicationWidget._get_dispatch_methods"): "e39aef5ed0e04460ced7564b108c2cce2651ea732b880500eec077faf96ad18d",
+    ("publication_widgets.py", "PublicationWidget._get_dispatch_methods"): "9cf1b253c9985477c598b24681b5d374f8a5c0e59eb72d136cc3d683b1846053",
     ("publication_widgets.py", "PublicationApp._dispatch_action"): "b1dadd3415f4d1237c5297abfc2002390df965668a4b2556612b26f6d97eec4d",
     ("commands_v4.py", "register"): "ea2480863f81f3dc165d61dea27046d8872a959b6dc2b4c990927707e4ed35bc",
 }

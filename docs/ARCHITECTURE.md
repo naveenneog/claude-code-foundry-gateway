@@ -548,6 +548,13 @@ also pin the function body on which their justification depends.
 Round 9 carries notification origins through the message queue, toast
 creation and cached rendering. Raw notification calls refuse; principal
 clearing removes prior-source notifications.
+Round 10 adapts only exact reviewed native DOM classes before attachment.
+Their properties, mutating methods and cached rendering validate their source;
+unsupported content widgets are refused. App titles stay static and raw exit
+messages are refused. Queued messages and notifications omit payloads from
+normal and Rich representations before Textual diagnostic logging. The receiver
+and effect approval procedure is in
+[ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md#approval-recipe-for-attributes-and-builtins).
 
 ![AUM readiness uses bounded authenticated HTTP and read-only Azure diagnosis; Direct shares a snapshot and returns independent sources progressively.](images/architecture/aum-readiness.png)
 

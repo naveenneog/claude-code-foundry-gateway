@@ -135,6 +135,66 @@ Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
 
 ## P71 AUM answers fast and says why it cannot, 2026-09-28
 
+### Council round 10 corrections
+
+The tenth review of `860abc9` returned UX PASS and Architect, Coder, QA and
+Security BLOCK. B9a/b/c and their receipts were accepted. Remaining paths:
+native content descendants obtained through approved DOM queries (B10a),
+Textual exit messages (B10b), and backend payloads in native diagnostic
+message representations before dispatch (B10c).
+
+The correction tests the real native child, exit renderer and `TEXTUAL_LOG`
+path before implementation. Native DOM content has a receiver-level
+publication boundary; unsupported content types cannot be attached without
+protection. Exit results remain values, while displayed exit text requires
+guarded publication. Queued messages/notifications have payload-free normal
+and Rich representations before framework logging.
+
+The round 9 scheduler claim was incorrect: the intended `notifications=True`
+edit did not reach the seven-scheduler case. This round changes that exact
+case and gives it a visible current-notification control, rather than relying
+on a flag or caplog alone. The earlier receipts remain historical results.
+
+The inherited tests were run against a frozen archive of `860abc9`'s source:
+**17 failed, 7 passed in 32.98 s**. The expanded set produced **33 failed,
+7 passed in 47.95 s**. Failures included the actual A-only caption, exit output
+and `TEXTUAL_LOG` payloads, not import or collection failures. The inherited
+implementation still failed **3 of 24 cases in 41.60 s**. Additional tests
+exposed its native class-prefix approval, unguarded chrome and cached rendering:
+**12 failed, 3 passed in 15.18 s**.
+
+The corrected runtime selection passed **41 cases in 49.82 s**. It covers
+native query aliases, supported and refused content families, fixed app titles,
+guarded chrome, cached output, exit values/messages, both object representations,
+the real Textual log and all seven notification-enabled scheduler cases.
+Source-contract approval, mutation and full-suite receipts follow below.
+
+The first expanded standard run had **358 passed, 3 failed in 166.58 s**.
+One failed people-selector precondition was reproducible: repainting a caption
+from a replaced backend entered the global refusal path and cancelled the new
+read. Cached paint now blanks the stale output and reports a fixed notice
+without cancelling that newer read. A separate command-palette check exposed
+an unguarded native search worker; its exact worker and input handlers now retain
+their source. The new search/selection control passed in **2.16 s**.
+Visible-notification controls now wait for their actual rendered text, within
+three seconds, rather than assuming one event-loop pause completes toast mounting.
+The isolated request-action case passed; the earlier worker cancellation and
+shutdown `NoMatches` remain recorded, not diagnosed by that pass.
+
+The next standard run had **358 passed, 4 failed in 172.79 s**. All 40 new
+native/diagnostic cases passed. The four failures were existing startup/navigation
+`WorkerCancelled` cases, with `NoMatches` during shutdown in two cases; their
+receipts are retained under U26. The final focused runtime baseline passed
+**48 cases in 65.11 s**; the exact source-approval baseline passed **5 cases
+in 4.62 s**. Both ran every collected identity, without skips or collection
+errors. Native command search, current-source refresh after stale paint and
+real posted/prequeued Textual logging are included in that runtime baseline.
+
+The lead owns integration, the next council and the final packet gate. This
+worktree remains on `p71-aum-speed`; no merge or push is performed here.
+Each mutation and the one final full AUM run acquire and release their own
+shared lock in one command. U26 remains open.
+
 ### Council round 9 corrections
 
 The ninth review of `b186cf3` returned UX PASS and Architect, Coder, QA and

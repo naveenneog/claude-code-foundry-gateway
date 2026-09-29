@@ -53,6 +53,10 @@ Start with [Setup](docs/SETUP.md) for deployment or
 | Evaluate Foundry without governance | [Foundry direct](docs/FOUNDRY-DIRECT.md) — not the governed production path |
 | Resolve a known error / find an unknown failure layer | [Troubleshooting](docs/TROUBLESHOOTING.md) / [Debugging](docs/DEBUGGING.md) |
 
+AUM's maintained presentation contract covers native DOM descendants, exit text
+and queued diagnostic representations. Its limits and approval procedure are in
+[ADR-0035](docs/adr/0035-aum-bounded-readiness-and-progressive-reads.md#council-round-10-amendment-2026-09-29).
+
 ### Running it day to day
 
 A **tier** controls permitted models and personal token limits. A **business

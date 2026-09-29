@@ -66,6 +66,12 @@ def capture_consoles(app):
     return terminal, errors
 
 
+async def wait_for_notification(app, pilot, text):
+    async with asyncio.timeout(3):
+        while text not in app.export_screenshot():
+            await pilot.pause()
+
+
 @pytest.mark.parametrize("scheduler", [
     "call_later", "set_timer", "call_after_refresh", "call_next", "call_soon", "call_at", "timer_event",
 ])
@@ -85,9 +91,12 @@ async def test_rejected_raw_scheduled_publication_keeps_the_app_open_and_explain
             executed.set()
 
     try:
-        async with app.run_test(size=(100, 30)) as pilot:
+        async with app.run_test(size=(100, 30), notifications=True) as pilot:
             await pilot.pause()
             await app.workers.wait_for_complete()
+            app.publish_notification("CURRENT_NOTICE_CONTROL", origin=app.current_guard(), timeout=60)
+            await wait_for_notification(app, pilot, "CURRENT_NOTICE_CONTROL")
+            assert "CURRENT_NOTICE_CONTROL" in app.export_screenshot()
             with guarded_publish(app.current_guard()):
                 callback = partial(publish, payload)
             schedule_callback(app, scheduler, callback)
