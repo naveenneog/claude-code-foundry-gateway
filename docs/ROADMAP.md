@@ -80,6 +80,14 @@ premise does not carry over.
 
 ## Packets
 
+### Customer deployment follow-up, 2026-09-29
+
+| Packet | State | Deliverable |
+|---|---|---|
+| P84 | Council passed (round 3) and packet gate passed at `5612c94`; owner approved the merge on 2026-09-29 | Projection deployment checks everything before it writes and never switches into an outage. Read-only preflight, fail-closed Graph, sanitized runner/app failures and unconditional switch refusal until P86, across deployer/installer/flow. ADR-0040 rejects ARM-only admission; 197 preflight assertions, 86 council assertions and 95 current mutations pass. |
+| P85 | Separate builder active | AUM TUI manages people, units, teams and budgets with full tests. |
+| P86 | Proposed; owner decision pending | Scheduled projection reconciler and tenant-admin pack: managed identity with Graph `GroupMember.Read.All` granted by a tenant admin, an hourly job and lease alerts. Proposed admission reads destination-bound Cosmos oldest expiry and generation advances through the runner, with a tested image/entrypoint and dry-run overrides rejected. P84 refuses switching and creates no schedule. |
+
 M0 is shipped. The table below is the queue; the checklist under it is what the gate tracks.
 
 | Packet | Milestone | Deliverable | Depends on |
