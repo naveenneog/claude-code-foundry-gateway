@@ -9,6 +9,30 @@ Owner: @naveenneog. Builder worktree: `accel-p85`, branch
 `30cdfd0`). P85 is the active packet on this branch. Council, the packet gate
 and integration belong to the lead; no merge or push is authorized here.
 
+### Council round 2 corrections
+
+The lead reviewed `bbb6298` on 2026-09-29. Architect PASS; Coder, QA, UX
+and Security BLOCK. The council's 75 targeted cases verified ordinary quit
+deferral, completion/failure cleanup, no hang and the 19 enumerated
+destinations. Two narrower reproductions remain: cancelled sign-out loses
+its final exit and leaves stale progress; real pip accepts an inherited
+`PIP_--log` alias that shell-identifier enumeration does not remove.
+
+PLAN / CONTRACT: successful sign-out completion belongs to the application-
+owned task completion path, after its registry entry is removed, not the
+cancelled modal worker. Failed sign-out does not request exit; other pending
+mutations still finish before an intentional sign-out exit. Progress text
+must describe the completed sign-out instead of a nonexistent save.
+
+The installer uses a fresh `env -i` environment for pip and uv, with only
+explicit HOME/PATH/locale, confined destinations and named proxy/TLS settings.
+Bootstrap pip also receives `--isolated`, `PIP_CONFIG_FILE=/dev/null` and an
+explicit confined `--cache-dir`. AUM itself retains the existing Azure CLI
+session environment. ADR-0041 records this allowlist decision. Both exact
+reproductions join the requested standard selectors and gain mutation probes.
+U60 is reopened and U61 records the alias gap before implementation. The
+affected selectors and one full AUM run follow; round 3 remains lead-owned.
+
 ### Council round 1 corrections
 
 The lead reviewed `f33eb0c` on 2026-09-29. Architect PASS; Coder, QA, UX and
