@@ -33,8 +33,8 @@ PROBES = [
     Probe("remove-engine-route", "developer_screens.py", 'row["id"], remove=True,',
           'row["id"], remove=False,', "test_p85_people.py",
           "test_remove_person_preview_confirm_apply_and_refresh"),
-    Probe("confirmation-forwarding", "developer_screens.py", 'apply=apply, confirm=values["confirm"])',
-          'apply=apply, confirm="")', "test_p85_people.py",
+    Probe("confirmation-forwarding", "developer_screens.py", 'apply=apply, confirm=confirmation,',
+          'apply=apply, confirm="",', "test_p85_people.py",
           "test_remove_person_preview_confirm_apply_and_refresh"),
     Probe("confirmation-refusal", "developer_actions.py",
           'if remove and confirm != person["user_principal_name"]:',
@@ -63,8 +63,8 @@ PROBES = [
           'app.push_screen(ActionForm("Remove person from team", [',
           "test_p85_people.py", "test_remove_person_preview_confirm_apply_and_refresh"),
     Probe("retained-directory-origin", "developer_screens.py",
-          '], operation, read_guard=directory_guard))',
-          '], operation, read_guard=app.current_guard()))',
+          '], operation, read_guard=directory_guard, commit_preview=True))',
+          '], operation, read_guard=app.current_guard(), commit_preview=True))',
           "test_p85_people.py", "test_remove_person_stale_form_cannot_preview_or_apply"),
     Probe("usd-readonly-discovery", "palette.py", 'if self.app.check_action("usd_edit", ()):',
           'if True:', "test_p85_budgets.py",
@@ -100,10 +100,11 @@ PROBES = [
           '*) fail "Refusing a destination outside HOME: $path" ;;', "*) : ;;",
           "test_p85_cloudshell.py", "test_cloudshell_refuses_escaping_destination_links_before_writing"),
     Probe("cloudshell-python-pip-environment", "aum-cloudshell.sh",
-          "unset PYTHONHOME PYTHONPATH VIRTUAL_ENV PIP_TARGET PIP_PREFIX PIP_USER", ":",
+          "unset PYTHONHOME PYTHONPATH VIRTUAL_ENV", ":",
           "test_p85_cloudshell.py", "test_cloudshell_overrides_inherited_write_destinations"),
     Probe("cloudshell-uv-environment", "aum-cloudshell.sh",
-          "unset UV_TARGET UV_PREFIX UV_SYSTEM_PYTHON UV_PROJECT_ENVIRONMENT UV_CONFIG_FILE UV_PYTHON", ":",
+          'for variable in "${!PIP_@}" "${!UV_@}" "${!XDG_@}"; do',
+          'for variable in "${!PIP_@}" "${!XDG_@}"; do',
           "test_p85_cloudshell.py", "test_cloudshell_overrides_inherited_write_destinations"),
     Probe("cloudshell-stage-failure", "aum-cloudshell.sh", "set -euo pipefail", "set -uo pipefail",
           "test_p85_cloudshell.py", "test_cloudshell_failed_stage_never_launches_aum"),
@@ -113,6 +114,36 @@ PROBES = [
     Probe("cloudshell-source-boundary", "aum-cloudshell.sh",
           "*) fail 'The package source resolves outside the repository.' ;;", "*) : ;;",
           "test_p85_cloudshell.py", "test_cloudshell_requires_source_in_selected_checkout"),
+    Probe("reviewed-write-plan-equality", "developer_actions.py", "if reviewed != current:", "if False:",
+          "test_p85_council_plan.py", "test_remove_rejects_drift_after_apply_repreview_before_write"),
+    Probe("reviewed-plan-forwarding", "developer_screens.py", "reviewed_plan=values if apply else None",
+          "reviewed_plan=None", "test_p85_council_plan.py",
+          "test_remove_rejects_drift_after_apply_repreview_before_write"),
+    Probe("central-quit-deferral", "tui.py", "if self.is_running and self.saving:", "if False:",
+          "test_p85_council_quit.py", "test_all_quit_routes_wait_for_write_and_keep_receipt"),
+    Probe("keyboard-quit-deferral", "feature_screens.py",
+          "def action_confirm(self):\n        if self.app.saving:",
+          "def action_confirm(self):\n        if False:",
+          "test_p85_council_quit.py", "test_all_quit_routes_wait_for_write_and_keep_receipt"),
+    Probe("mutation-cancellation-shield", "tui.py", "return await asyncio.shield(task)", "return await task",
+          "test_p85_council_quit.py", "test_cancelled_modal_worker_does_not_end_mutation_lifetime"),
+    Probe("saving-confirmation-disabled", "feature_screens.py",
+          'variant="error", disabled=self.app.saving', 'variant="error", disabled=False',
+          "test_p85_council_quit.py", "test_all_quit_routes_wait_for_write_and_keep_receipt"),
+    Probe("saving-explanation", "feature_screens.py", "Saving; wait for the result", "Quit whenever ready",
+          "test_p85_council_quit.py", "test_all_quit_routes_wait_for_write_and_keep_receipt"),
+    Probe("real-pip-log-isolation", "aum-cloudshell.sh",
+          'for variable in "${!PIP_@}" "${!UV_@}" "${!XDG_@}"; do',
+          'for variable in "${!UV_@}" "${!XDG_@}"; do',
+          "test_p85_council_env.py", "test_real_pip_offline_cannot_write_inherited_external_log"),
+    Probe("xdg-destination-isolation", "aum-cloudshell.sh",
+          'for variable in "${!PIP_@}" "${!UV_@}" "${!XDG_@}"; do',
+          'for variable in "${!PIP_@}" "${!UV_@}"; do',
+          "test_p85_council_env.py", "test_each_inherited_destination_is_unset_or_home_confined"),
+    Probe("python-user-base-isolation", "aum-cloudshell.sh",
+          'export PYTHONUSERBASE="$state/userbase"', ":",
+          "test_p85_council_env.py",
+          "test_each_inherited_destination_is_unset_or_home_confined[PYTHONUSERBASE]"),
 ]
 
 
@@ -149,6 +180,26 @@ def check_syntax(path, changed):
     from test_p85_cloudshell import bash, shell_path
     subprocess.run([bash(), "--noprofile", "--norc", "-n", shell_path(path)],
                    check=True, capture_output=True, timeout=20)
+
+
+def restore_tests(output, baselines):
+    groups = {}
+    for selector in baselines:
+        if "[" in selector and selector.split("[", 1)[0] in baselines:
+            continue
+        groups.setdefault(selector.split("::", 1)[0], []).append(selector)
+    runs = [run_tests(output, f"restored-{index}", selectors)
+            for index, selectors in enumerate(groups.values(), 1)]
+    restored = dict(
+        exit=max(run["exit"] for run in runs),
+        seconds=round(sum(run["seconds"] for run in runs), 3),
+        ids=sorted(case for run in runs for case in run["ids"]),
+        **{key: sum(run[key] for run in runs) for key in ("failures", "errors", "skipped")},
+    )
+    expected = sorted({tuple(case) for baseline in baselines.values() for case in baseline["ids"]})
+    restored_ok = (restored["exit"] == 0 and restored["ids"] == expected
+                   and not any(restored[key] for key in ("failures", "errors", "skipped")))
+    return restored, restored_ok
 
 
 def main():
@@ -190,10 +241,7 @@ def main():
         print(f"{probe.name}: {'CAUGHT' if caught else 'NOT CAUGHT'}; "
               f"{len(result['ids'])} identical cases; {result['failures']} failures; {result['seconds']} s",
               flush=True)
-    restored = run_tests(args.output, "restored", list(baselines))
-    expected = sorted(case for baseline in baselines.values() for case in baseline["ids"])
-    restored_ok = (restored["exit"] == 0 and restored["ids"] == expected
-                   and not any(restored[key] for key in ("failures", "errors", "skipped")))
+    restored, restored_ok = restore_tests(args.output, baselines)
     receipt = dict(baselines=baselines, probes=results, restored=restored, restored_ok=restored_ok,
                    seconds=round(time.monotonic() - started, 3))
     (args.output / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")

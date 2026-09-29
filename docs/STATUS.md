@@ -111,6 +111,24 @@ failures must use P71's protected diagnostic path rather than a broad raw
 handler allowance. No P71 policy was edited; the precise comparison is
 `$env:TEMP\p85-p71-r1-delta.json`.
 
+Mutation proof: all **36/36 probes** were caught with their baseline case
+identities preserved, at least one test failure and zero errors/skips.
+The ten new probes cover engine plan equality/forwarding, central and keyboard
+quit deferral, cancellation shielding, disabled confirmation, visible saving
+feedback, real-pip logging, XDG destinations and Python user-base isolation.
+Measured probe execution totals **462.109 s**, excluding baseline/restoration.
+
+The original final aggregate restoration hit its 180 s runner deadline;
+that is recorded as a failed validation command, not a green run. Every
+source had already been restored. The runner now partitions restoration by
+test file and removes overlapping parameter selectors, preserving the same
+180 s per-command deadline rather than increasing it. Its regression passed
+in 0.52 s. All original raw probe XML and CAUGHT/exit checks were revalidated;
+the exact unique restoration union then passed **109 cases in 265.875 s**
+across those bounded groups, under one separately acquired owned lock.
+The receipt records this recovery explicitly at
+`$env:TEMP\p85-r1-mutations\receipt.json`; original logs remain intact.
+
 ### PLAN
 
 The People action bar gains Remove person from team beside Add person to team,
