@@ -211,20 +211,29 @@ async def test_remove_person_stale_form_cannot_preview_or_apply(monkeypatch, tmp
     async with app.run_test(size=(100, 36)) as pilot:
         await settle(app, pilot)
         await pilot.press("h")
-        await select_developer(app, pilot)
-        await fill(app, pilot, "#field-confirm", EMAIL)
-        await pilot.click("#action-preview")
+        await pilot.pause()
+        await fill(app, pilot, "#developer-search", EMAIL)
+        await pilot.press("enter")
         await settle(app, pilot)
+        origin = {"current": True}
 
         @contextmanager
         def stale():
-            raise FinOpsError("Directory sign-in changed. Search again.", 3)
+            if not origin["current"]:
+                raise FinOpsError("Directory sign-in changed. Search again.", 3)
             yield
 
         app.screen.read_guard = stale
+        await pilot.press("enter")
+        await settle(app, pilot)
+        await fill(app, pilot, "#field-confirm", EMAIL)
+        await pilot.click("#action-preview")
+        await settle(app, pilot)
+        origin["current"] = False
         await pilot.click("#action-apply")
         await settle(app, pilot)
         assert "sign-in changed" in str(app.screen.query_one("#action-status", Static).render())
+        await pilot.pause(app.screen.query_one("#action-preview", Button).active_effect_duration)
         await pilot.click("#action-preview")
         await settle(app, pilot)
         assert "sign-in changed" in str(app.screen.query_one("#action-status", Static).render())

@@ -78,6 +78,40 @@ apply polling; Direct person budgets are no longer labelled Turnstile-only.
 The USD palette entry uses the same selected-scope capability check as its
 button and key, with a read-only-selection negative test.
 
+### Mutation probes
+
+All **12 probes were caught in 138.250 s**, including their clean baselines
+and restoration. Each mutant compiled, ran the same test-case identities as
+its baseline, and produced at least one test failure with no collection
+errors, test errors or skips. The restored selector union passed **14 cases
+in 30.359 s wall time**. The directory-origin test retains a mutable origin
+from picker selection through preview and apply, rather than replacing the
+form's guard after construction.
+
+| Probe | Same cases | Failed cases | Seconds |
+|---|---:|---:|---:|
+| Remove routed to add | 2 | 2 | 5.782 |
+| Typed confirmation not forwarded | 2 | 2 | 7.235 |
+| Engine confirmation refusal bypassed | 4 | 4 | 10.703 |
+| Owner admission bypassed | 2 | 2 | 4.015 |
+| AUM service admission bypassed | 1 | 1 | 3.000 |
+| Removal key changed | 4 | 4 | 7.266 |
+| Removal palette entry hidden | 2 | 2 | 4.047 |
+| Last-member scoped empty permission suppressed | 2 | 1 | 7.719 |
+| Picker left beneath the completed removal form | 2 | 2 | 8.062 |
+| Original directory guard replaced with a fresh guard | 1 | 1 | 3.609 |
+| USD palette ignores the selected read-only scope | 1 | 1 | 2.906 |
+| Native receipt enters asynchronous apply polling | 1 | 1 | 3.922 |
+
+The reproducible runner is
+`cli\finops\tools\probe_p85.py <output-directory>`. The caller acquires
+`.gate-lock` with `New-Item -ErrorAction Stop`, retries contention every 60 s,
+and releases only its own lock in the same command's `finally`. This run held
+the lock for that one runner command. It restores each exact source byte
+sequence in `finally` and refuses to overwrite an unexpected concurrent edit.
+Its receipt, case identities, per-probe JUnit and logs are under
+`$env:TEMP\p85-mutations`; the outer log is `$env:TEMP\p85-mutations.log`.
+
 ## P80 AUM shows every action it has, connects in one step, and its guide starts with installation, 2026-09-28
 
 Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM guide set. Worktree: `accel-p80`, branch `p80-aum-usability`, based on P71 commit `bcf8554`. The owner approved merging P80 after P71 at 07:41 IST on 2026-09-29. The lead authorized merging pinned `origin/main` (`30cdfd0`) into this branch without rebasing; later P71 work remains separate. This builder is not authorized to push or merge to main.
