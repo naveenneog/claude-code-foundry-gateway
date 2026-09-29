@@ -155,6 +155,18 @@ is not established; no assertion, deadline or synchronization was changed.
 [STATUS](STATUS.md#final-round-7-proof-on-530a8dd) records the individual
 receipts and timings. U26 remains open.
 
+Round 8 again observed the pin-chart `KeyError: 'ask'` before the stale-origin
+probe (275/276 and 262/263 passed). Its fixture advertises no Ask view, yet
+invokes the assistant directly. The response has `ask_reply_guard`; focusing
+its answer can activate Ask without creating a view-cache guard. The test's
+control was therefore reading the wrong cache. It now uses the completed
+reply's guard, the same one used by `action_pin_chart`, and verifies that it
+is current before the principal change. All later guard and output assertions
+are retained. The corrected 263-case selection passed in 94.00 s.
+This is a test-control correction, not a production timing fix or a diagnosis
+of the earlier Windows marker and worker-cancellation failures. U26 remains
+open, with all failing receipts retained.
+
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 
 **Answer: yes.** A constant `counter-key` is a single counter shared by every caller. P11 can

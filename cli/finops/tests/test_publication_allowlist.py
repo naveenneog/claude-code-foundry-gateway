@@ -60,6 +60,7 @@ def test_only_approved_presentation_imports_are_available(source):
     "type(widget).render = lambda self: value",
     "kind = type(widget)\nkind.render = lambda self: value",
     "kind = type\nsetattr(kind(widget), 'render', lambda self: value)",
+    "import json\njson.dumps = lambda value: value",
     "setattr(widget, '__class__', RawStatic)",
     "delattr(widget, '__class__')",
     "sys.modules[__name__]",
@@ -212,6 +213,7 @@ def test_changed_exception_context_does_not_inherit_its_old_approval():
     "import typer as api\nother = api\nother.echo(value)",
     "import json as api\nmodule = api",
     "import json as api\napi.unreviewed_member(value)",
+    "import textual.events\nprovider = textual.events",
 ])
 def test_module_approval_does_not_approve_its_unlisted_members_or_escape(source):
     assert sinks(source, "example.py", {}), source

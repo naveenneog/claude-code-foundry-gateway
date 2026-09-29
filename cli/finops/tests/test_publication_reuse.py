@@ -75,6 +75,8 @@ async def test_retained_widget_attachment_checks_its_original_principal(
             await app.screen.mount(target)
         except FinOpsError as error:
             record(error)
+        if changed_principal and route == "subtree":
+            assert not app.query("#reuse-container"), "A retained subtree is validated before any insertion."
         await pilot.pause()
         screenshot = app.export_screenshot()
         captured = capsys.readouterr()
@@ -84,8 +86,6 @@ async def test_retained_widget_attachment_checks_its_original_principal(
             assert value not in output
             assert refused and all(isinstance(error, FinOpsError) and error.code == 3 for error in refused)
             assert not app.query("#reuse-proof"), "Rejection must precede insertion into the DOM."
-            if route == "subtree":
-                assert not app.query("#reuse-container"), "A retained subtree is validated before any insertion."
         else:
             assert not refused
             assert value in screenshot

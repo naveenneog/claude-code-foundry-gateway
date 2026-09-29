@@ -225,6 +225,24 @@ deadline or synchronization was changed, and this is not a cause diagnosis.
 The new B8 counterexamples, round 7 scheduler/output checks and settled
 snapshots passed in the combined run.
 
+The closed source contract and protected import wiring are committed as
+`92b5de8`. The first 263-case pre-mutation run again failed only at the
+pin-chart setup lookup (**262 passed, 1 failed in 95.05 s**, 97.89 s wall).
+Inspection found that the replay asks directly against a fixture that does
+not advertise the Ask view, then looks up the active view's guard. Focus can
+activate Ask without a corresponding view-cache entry. The completed reply
+already has `ask_reply_guard`, and `action_pin_chart` uses that guard, not the
+view-cache guard.
+
+The test control now selects the actual reply guard for pin-chart and asserts
+that it is current before B verification. All stale-origin, dialog, screenshot
+and no-A-data assertions are unchanged. No production synchronization or
+timeout changed. The corrected complete baseline passed **263 cases in
+94.00 s** (96.33 s wall). The earlier failing receipts remain; this fixture
+correction does not close U26's other historical failures. Module-namespace
+escape/immutability controls and the subtree's pre-insertion assertion are
+also included in that baseline.
+
 ### Council round 7 corrections
 
 The seventh review of `9fabf42` returned Architect PASS and Coder, QA, UX and
