@@ -37,6 +37,14 @@ termination. Three tests prove the check itself: a process that is still ending 
 ends, a recorded process that keeps running fails after 300 ms, and a reused id is not waited on.
 The timeout code is unchanged.
 
+**Results.** GREEN: the file's 10 tests pass (4.7 s). Five mutations were each caught with all 10
+tests collected: no job termination in `run_wrapper`, no creation-time check, a 0 ms wait, no
+wait assertion, and 3 s descendants. Under load, the file passed 200 of 200 test runs with 4 CPU
+burners and 200 of 200 with 8. With 16 burners on 16 logical processors, the tests as merged
+failed their start precondition 60 of 60 times, because the child had not written its marker
+within the 0.75 s deadline; that precondition fails with its own message rather than passing,
+and the hosted failure was not of that kind. The five-seat council passed all seats on `37d68aa`.
+
 ## P84 Projection deployment checks everything before it writes and never switches into an outage, 2026-09-29
 
 **Merged as `3e4430b` on 2026-09-29 with the owner's approval. Council round 3 passed on all five seats and the packet gate passed at `5612c94`.** All five seats blocked the earlier submission. The owner requested P84 after a partial customer deployment on
