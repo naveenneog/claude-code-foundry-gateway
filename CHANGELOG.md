@@ -1089,6 +1089,12 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **AUM lookups could cancel their own view refresh (P71 follow-up).** A changed
+  tab and its caller both started exclusive refresh workers. Lookup, breadcrumb,
+  saved-view, comparison, usage-basis, ranking and dashboard navigation now
+  refresh once; Advanced navigation also suppresses its programmatic selector
+  echo. Same-tab actions still reload. Redaction assertions and publication
+  guards are unchanged; hosted run 36670519226 is recorded in STATUS.
 - **The AUM deadline tests raced process teardown on hosted runners (P71 follow-up).** Two tests
   in `cli/finops/tests/test_azure_deadline.py` checked, with a zero-millisecond wait, that each
   descendant had exited right after the Azure CLI deadline. `TerminateJobObject` starts

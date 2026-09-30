@@ -2,6 +2,75 @@
 
 **Active packet (2026-09-30):** P81 USD budgets are the primary enforcer ([ROADMAP](ROADMAP.md)), on its own branch; it merges only with the owner's explicit approval. Each packet has its own section on its branch; the section lands here when the packet merges. P85 AUM's terminal UI manages people, units, teams and budgets end to end, with tests is merged with the owner's approval (`171b248`, [below](#p85-aums-terminal-ui-manages-people-units-teams-and-budgets-end-to-end-with-tests-2026-09-29)). P80 AUM shows every action it has, connects in one step, and its guide starts with installation is merged with the owner's approval (`3f77754`, [below](#p80-aum-shows-every-action-it-has-connects-in-one-step-and-its-guide-starts-with-installation-2026-09-28)). P71 AUM answers fast and says why it cannot is merged with the owner's approval (`01bb6c7`, [below](#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28)), and its follow-up, the deadline tests prove termination without racing it (`dc0e311`, [below](#p71-follow-up-the-deadline-tests-prove-termination-without-racing-it-2026-09-30)). P84 projection deployment checks everything before it writes and never switches into an outage is merged with the owner's approval (`3e4430b`, [below](#p84-projection-deployment-checks-everything-before-it-writes-and-never-switches-into-an-outage-2026-09-29)); switching entitlement to the projection waits for P86. P78 the test suite runs in parallel on GitHub-hosted runners is merged with the owner's approval (`2737232`, [below](#p78-the-test-suite-runs-in-parallel-on-github-hosted-runners-2026-09-28)); ADR-0039's proposed charter change is not enacted. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)), and its follow-up, the installer permutation check reads only its own record (`05dea1b`, [below](#p79-follow-up-the-installer-permutation-check-reads-only-its-own-record-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
+## P71 follow-up: a lookup starts one refresh, 2026-09-30
+
+This is the active correction on `p71c-lookup-refresh`, based on main `9741d41`.
+[Hosted run 36670519226](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36670519226),
+hosted shard 3/12, failed `AUM - commands, dashboard and pilot [3/4]` at
+`test_dashboard.py::test_redacted_queries_do_not_leak_through_input_or_filter_echo`.
+The worker wait after `open_lookup_result` raised `WorkerCancelled`.
+
+PLAN / CONTRACT: one non-request lookup or compound tab/filter action starts one `view`
+refresh. Changing tabs leaves that refresh to the existing activation handler;
+an already-selected tab still reloads after its query state changes. The
+person input remains masked and private values stay out of screenshots.
+No worker cancellation is caught or ignored to obtain a passing result.
+ADR-0035's publication guards and closed capability approvals remain.
+
+The source has two triggers: `open_lookup_result` calls `action_refresh`
+directly after `action_tab`, and the queued `TabActivated` calls it again
+through `switched`. The People input listens for submission, not change, so
+setting that query alone is not the second trigger.
+
+The scan also found paired navigation/refresh in breadcrumb return, saved
+views, comparison, usage basis, overview ranking and dashboard drill-down.
+Advanced-view navigation combines a tab activation with a Select change.
+These are covered by changed-tab and current-tab controls. Current-tab search,
+team/dimension/interval selection, request filters, paging and month/filter
+dialogs already request one refresh. Request lookup retains its separate
+detail worker. One possible additional path is listed, not changed:
+`FeatureUI.activate_profile` (`ui_features.py:443`) refreshes after
+`update_access` can force a different permitted tab. Its engine/authority
+transition needs a separate guarded lifecycle change.
+
+RED: the held lookup started two real exclusive view workers, one cancelled
+and one successful (**1 failed in 3.19 s**). The initial compound-action matrix
+had **14 failed, 14 passed in 36.54 s**: every changed-tab case duplicated the
+refresh; same-tab cases still refreshed. A same-choice Advanced control
+separately failed with zero workers (**2.10 s**).
+
+GREEN: `action_tab` reports whether it changed the tab. Compound callers let
+the activation handler own a changed-tab refresh and explicitly refresh an
+unchanged tab. Saved-view state is prepared before navigation. Advanced
+selection suppresses its programmatic Select echo. Keyboard tab behavior,
+publication guards, rejected-navigation behavior and redaction assertions
+remain. All **31 runtime cases passed in 40.81 s**; the closed-contract checks
+passed without changing an approval or fingerprint.
+
+Four isolated-source mutation probes ran the same 31 identities. Forcing an
+unchanged result, forcing a changed result, restoring the lookup's unconditional
+refresh and removing Advanced Select suppression produced **15, 15, 4 and 2
+failures**, respectively. Every probe hit a worker-count assertion with zero
+errors or skips. The working source was never mutated for these probes.
+
+The loaded run passed **930/930 executions: 30 iterations, four CPU burners,
+all 31 identities each time**, with zero failures, skips or identity mismatches.
+The final complete AUM run passed **1,230 cases in 1,012.62 s** (1,015.86 s wall),
+with no errors or skips. The first full result is retained: **1,229 passed,
+one stale snapshot-source manifest failure in 1,082.23 s**. The existing
+capture tool regenerated that witness; all grids and SVGs were unchanged and
+all five snapshot checks passed before the final full run.
+
+Architecture generation verified 17 specs / 19 PNGs; only source witnesses
+changed. The measured shard table now includes all 76 files once, with planned
+loads of **266, 265, 265 and 265 s**, below the unchanged 300 s planning limit.
+Shard coverage passed. Receipts and JUnit identities are retained in
+`.finops-evidence\p71c-lookup-refresh`; long output is under TEMP.
+
+All long jobs use `with-gate-lock.ps1 -Owner p71c`. Council, packet gates and
+integration remain with the lead; this builder does not push or merge.
+U26 remains OPEN for unrelated observations and the listed authority-transition path.
+
 ## P85 AUM's terminal UI manages people, units, teams and budgets end to end, with tests, 2026-09-29
 
 **Merged as `171b248` on 2026-09-30 with the owner's approval.** Council round 5 passed on all

@@ -131,6 +131,23 @@ independent absence checks passed at 22:13:51Z.
 
 ## Detail
 
+### U26 - P71 lookup refresh follow-up, 2026-09-30
+
+[Hosted run 36670519226](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36670519226)
+failed the redacted dashboard lookup case with `WorkerCancelled` after
+`open_lookup_result`. That action directly requests a view refresh and also
+queues one by changing tabs. Held view completion counted two real workers
+before the correction. The changed-tab/current-tab controls and original
+redaction assertion then passed; four mutations were caught, the four-burner
+stress passed 930 executions, and the final full suite passed 1,230 cases.
+The first full run's stale snapshot-source witness failure is retained, with
+unchanged grids/SVGs verified after regeneration. The evidence is recorded in
+[STATUS](STATUS.md#p71-follow-up-a-lookup-starts-one-refresh-2026-09-30).
+The scan lists a possible separate duplicate during connection adoption:
+`activate_profile` refreshes after `update_access` can force a permitted tab.
+That engine/authority transition is not changed here. U26 remains OPEN for it
+and the unrelated historical observations.
+
 ### U26 - P71 observation, 2026-09-28
 
 The lead's 2026-09-30 follow-up identifies a second, independent lifecycle

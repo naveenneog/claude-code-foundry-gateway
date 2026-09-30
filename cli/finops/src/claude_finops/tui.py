@@ -296,10 +296,13 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
 
     def action_tab(self, tab):
         if len(self.screen_stack) != 1 or tab not in self.allowed_tabs:
-            return
-        self.query_one("#main-tabs", TabbedContent).active = tab
+            return False
+        tabs = self.query_one("#main-tabs", TabbedContent)
+        changed = tabs.active != tab
+        tabs.active = tab
         if tab not in {"ask", "approvals", "advanced"}:
             self.set_focus(self.query_one("#dash-kpis" if tab == "overview" else f"#table-{tab}"))
+        return changed
 
     @on(TabbedContent.TabActivated)
     def switched(self, event):
@@ -587,8 +590,8 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
         if self.breadcrumbs:
             tab, parent = self.breadcrumbs.pop()
             self.budget_parent = parent
-            self.action_tab(tab)
-            self.action_refresh()
+            if not self.action_tab(tab):
+                self.action_refresh()
             return
         if self.active in self.data:
             self.render_tab(self.active, self.data[self.active])
@@ -708,10 +711,10 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
             self.query_one("#dimension", Select).value = "model"
             self.request_filters = {"model_id": result["id"]}
         self.pending_selection = result["id"]
-        self.action_tab(result["tab"])
+        changed = self.action_tab(result["tab"])
         if result["kind"] == "request":
             self.open_detail({"request_id": result["id"]})
-        else:
+        elif not changed:
             self.action_refresh()
 
     def action_month(self):

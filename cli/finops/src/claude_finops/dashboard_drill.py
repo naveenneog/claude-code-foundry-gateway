@@ -127,9 +127,9 @@ class DashboardRows(ModalScreen):
         if kind == "budget":
             self.app.budget_parent = None
             self.app.pending_selection = row.get("scope_id")
-            self.app.action_tab("budgets")
+            changed = self.app.action_tab("budgets")
         elif kind == "anomaly":
-            self.app.action_tab("anomalies")
+            changed = self.app.action_tab("anomalies")
             self.app.open_detail(row, read_guard=self.read_guard)
         else:
             field = {"organization": "organization_id", "department": "department_id", "user": "user_id",
@@ -138,6 +138,7 @@ class DashboardRows(ModalScreen):
             self.app.scope_filters[field] = value
             self.app.reset_paging()
             self.app.update_filter_chips()
-            self.app.action_tab("usage")
+            changed = self.app.action_tab("usage")
         self.app.query_one(f"#table-{self.app.active}", DataTable).focus()
-        self.app.action_refresh()
+        if not changed:
+            self.app.action_refresh()

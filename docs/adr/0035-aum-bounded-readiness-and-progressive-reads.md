@@ -459,6 +459,16 @@ retain their existing principal-notice and active-pane checks. Deterministic
 running-gap and shutdown cases include a live-activation positive control.
 This lifecycle rule does not grant a new publication capability.
 
+### Compound view refresh correction, 2026-09-30
+
+A compound navigation action prepares its query state before requesting one
+view refresh. Tab selection reports whether it changed the active pane: a
+changed tab is refreshed by the existing activation handler, while a caller
+whose tab did not change may refresh explicitly. Keyboard tab actions keep
+their existing behavior. Programmatic selector changes must not add another
+refresh to that same action. No publication origin, output permission or
+worker-cancellation error handling changes as part of this scheduling rule.
+
 ### Approval recipe for attributes and builtins
 
 An approval is reviewed like code. The review identifies every supported
