@@ -45,6 +45,14 @@ failed their start precondition 60 of 60 times, because the child had not writte
 within the 0.75 s deadline; that precondition fails with its own message rather than passing,
 and the hosted failure was not of that kind. The five-seat council passed all seats on `37d68aa`.
 
+**Packet gate 1** on `660e158` (07:21-07:49 IST) failed one check, "AUM - commands, dashboard
+and pilot [1/4]", with 100 of 101 passing. pytest's cache named
+`test_p71_public_evidence.py::test_p71_and_u32_public_text_use_the_inspected_capture_aliases`.
+That test found the P71 section by the heading prefix `## P71`, and this follow-up's heading, now
+first in STATUS, matched before P71's own. It now names the full heading, "P71 AUM answers fast
+and says why it cannot". Restoring the prefix lookup fails it with this section present (1 failed,
+2 passed); the full heading passes all 3.
+
 ## P84 Projection deployment checks everything before it writes and never switches into an outage, 2026-09-29
 
 **Merged as `3e4430b` on 2026-09-29 with the owner's approval. Council round 3 passed on all five seats and the packet gate passed at `5612c94`.** All five seats blocked the earlier submission. The owner requested P84 after a partial customer deployment on
