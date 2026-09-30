@@ -29,6 +29,24 @@ collected: returning the typed id failed 2, and selecting without `request_id` f
 `engine.py` is a backend module, outside the presentation contract
 (`cli/finops/tests/publication_policy.py:20`), so no approval or fingerprint changed.
 
+### Packet gate 1: an unrelated chargeback failure
+
+The packet gate on `edbf6cb` (20:03-20:36 IST) passed the council-reviewed change's checks,
+including all four AUM shards (317.1, 325.3, 300.4 and 296.0 s), and failed one other check:
+"Chargeback report generation" exited 1 after 5.2 s; 100 of 101 checks passed. Test-All keeps no
+output for a failed check, so the failing assertion is not known. U26 lists earlier lone failures
+of this check, one with "Access to the path '...\empty\.building-<id>' is denied" from a
+directory move. Eight concurrent direct runs of the check with the gate's environment then passed.
+
+The check writes its scratch folder under the repository root, and the report publishes by
+moving a staged folder (`scripts/ClaudeChargebackReport.ps1:227`). A lead stress run with another
+process reading files inside that scratch folder failed 22 of 40 runs with "being used by another
+process" at `ClaudeChargebackReport.ps1:227` and `:235`: the publisher does not tolerate a file
+held open by another process. Which process, if any, held a file during the gate is not known.
+On this workstation Windows Search indexes both the repository and TEMP, and Defender real-time
+protection is on. The check exercises none of this change's files. Packet gate 2 ran on the same
+source with these records added.
+
 ### Council round 2: request lookup follows rule A
 
 On `adee1f7`, Security passed and the other four seats blocked the request
