@@ -10,7 +10,80 @@ hosted shard 3/12, failed `AUM - commands, dashboard and pilot [3/4]` at
 `test_dashboard.py::test_redacted_queries_do_not_leak_through_input_or_filter_echo`.
 The worker wait after `open_lookup_result` raised `WorkerCancelled`.
 
-PLAN / CONTRACT: one non-request lookup or compound tab/filter action starts one `view`
+### Council correction: a principal notice cannot drop a current lookup
+
+On `c003014`, Security passed and Architect, Coder, QA and UX blocked the
+changed-tab handoff: `switched` refuses native activations while the principal
+notice is set, so a true "tab changed" result does not establish refresh
+ownership. The earlier one-refresh claim below did not cover that branch.
+
+PLAN / CONTRACT: the notice is a UI latch, not permission. `PrincipalUI`
+clears old data and closes old dialogs on a verified identity transition;
+current source guards still authorize fresh results, and old guards remain
+invalid. A current guarded lookup may therefore refresh immediately while
+the notice remains visible. It must not clear the notice to force activation.
+Every compound navigation will own one explicit refresh after preparing its
+state, suppressing the redundant programmatic tab activation rather than
+delegating to a message that may be ignored.
+
+Lookup selection dismisses its modal and applies the guarded result
+synchronously while main content is available. A missing main tree during
+shutdown/remount is not another usable lookup destination. Late native
+activations remain stale and ignored; they must not own, duplicate or undo
+the already-requested read. RED cases cover notice-present lookup, feature
+and dashboard paths, plus suppressed/late stale and missing-main activations.
+An expired-result control keeps lookup authorization separate from the notice.
+RED: lookup, comparison and dashboard navigation each started zero workers;
+both non-delivering-activation cases also failed. The expired-source refusal
+passed: **5 failed, 1 passed in 6.58 s**. The first corrected selection,
+including ordinary navigation controls, passed **10 cases in 11.63 s**.
+The shared tab action now explicitly owns compound refreshes and suppresses
+their `TabActivated`; queued native activations retain every prior guard.
+Only the exact private-helper call contexts are approved, not a new ordinary
+member.
+
+The first notice-correction stress result is retained: **1 failure in 1,920
+executions** (30 iterations, four burners). Run 23 failed the unchanged hosted
+redaction test with `WorkerCancelled`. A separate native focus path can still
+retarget the view: Textual's `TabPane.Focused` handler accepts a delayed
+overview event even when the current focus is already People. A deterministic
+probe observed `people -> overview` while focus stayed `table-people`.
+The correction must reject that obsolete focus before it can create another
+activation, without changing current native focus behavior. Updated proof is pending.
+Queued native-focus tests reproduced the retarget in both ordinary and
+notice modes: **2 failed in 5.05 s**, with `people -> overview -> people`.
+The protected tab receiver now checks actual descendant focus before
+forwarding the native handler, and prevents the base dispatcher from handling
+the rejected event again. The same two cases, the hosted redaction case and
+ordinary navigation controls passed **5/5 in 7.06 s**.
+
+Final GREEN: all **66 runtime cases passed in 91.06 s**, including every
+compound path with/without a notice and on changed/current tabs, both late
+activation cases, stale-focus delivery, expired lookup origin and the unchanged
+hosted redaction test. Exact publication-contract controls passed **47/47**.
+Four isolated-source removal probes retained all 66 identities and produced
+**31, 16, 30 and 2 failures**: dropped notice reads, activation echo, clearing
+the notice and accepting obsolete focus. They hit their intended assertions
+with zero errors or skips; working sources were not mutated.
+
+The final loaded run passed **1,980/1,980 executions**, 30 iterations with
+four CPU burners and no failures, skips or identity mismatches. The complete
+AUM run passed **1,269 tests in 1,062.92 s** (1,066.43 s wall), with zero
+failures, errors or skips. Exact pytest collection matches every JUnit identity.
+The driver initially expected 1,268 and stopped after the passing pytest run;
+that bookkeeping check was corrected without rerunning or changing a test.
+The earlier 1/1,920 stress failure remains recorded above.
+
+Snapshot and architecture generators refreshed the source witnesses without
+changing their images/grids. Timing weights were refreshed from the full run;
+the 76-file plan is **278, 278, 277 and 277 s**, below the unchanged 300 s
+planning limit. Shard coverage and architecture checks pass. Final evidence is
+retained in `.finops-evidence\p71c-notice-refresh`; all long jobs used the lead's
+lock wrapper with owner `p71c`. Council and integration remain with the lead.
+
+### Initial correction and evidence
+
+Initial plan (superseded by the council correction above): one non-request lookup or compound tab/filter action starts one `view`
 refresh. Changing tabs leaves that refresh to the existing activation handler;
 an already-selected tab still reloads after its query state changes. The
 person input remains masked and private values stay out of screenshots.
@@ -39,7 +112,7 @@ had **14 failed, 14 passed in 36.54 s**: every changed-tab case duplicated the
 refresh; same-tab cases still refreshed. A same-choice Advanced control
 separately failed with zero workers (**2.10 s**).
 
-GREEN: `action_tab` reports whether it changed the tab. Compound callers let
+Initial GREEN (the notice branch was missing): `action_tab` reports whether it changed the tab. Compound callers let
 the activation handler own a changed-tab refresh and explicitly refresh an
 unchanged tab. Saved-view state is prepared before navigation. Advanced
 selection suppresses its programmatic Select echo. Keyboard tab behavior,

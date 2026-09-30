@@ -69,6 +69,12 @@ EXCLUDED_ATTRIBUTES = frozenset({
 
 # Filled by the reviewed AST inventory, then checked against the exact source.
 ATTRIBUTE_EXCEPTIONS = {
+    ('publication_widgets.py', 'TabbedContent._on_tab_pane_focused', 'event.prevent_default()'):
+        'Stops duplicate native base dispatch; the current-focus branch explicitly forwards the original handler exactly once.',
+    ('publication_widgets.py', 'TabbedContent._on_tab_pane_focused', 'event.tab_pane.has_focus_within'):
+        'Checks the event pane against the current screen focus before allowing a delayed native focus message to retarget the view.',
+    ('publication_widgets.py', 'TabbedContent._on_tab_pane_focused', 'super()._on_tab_pane_focused(event)'):
+        'Forwards only current pane focus to the fixed native handler after rejecting obsolete focus; no supplied base or source authority is accepted.',
     ('cli.py', 'EverywhereGroup.parse_args', 'super().parse_args(ctx, prefix + rest)'):
         'Forwards the fixed superclass operation on self in this reviewed wrapper/adapter; no supplied class or instance selects a base implementation.',
     ('dashboard.py', 'Dashboard.update_data', 'self._anomalies'):
@@ -407,6 +413,10 @@ ATTRIBUTE_EXCEPTIONS = {
         'Uses the existing principal or refresh state/helper in this exact reviewed lifecycle context, without exposing framework IO.',
     ('tui.py', 'FinOpsApp.switched', 'self._principal_notice'):
         'Retains the principal-change input barrier after checking main-content presence; this read grants no publication authority.',
+    ('tui.py', 'FinOpsApp.switched', 'self._refresh_active_tab'):
+        'Refreshes only the current mounted tab after the existing notice and stale-activation checks; output still uses its original publication guards.',
+    ('tui.py', 'FinOpsApp.action_tab', 'self._refresh_active_tab'):
+        'Owns one explicit current-tab refresh for an accepted compound action after suppressing its native activation; it does not clear notices or grant a source origin.',
     ('tui.py', 'FinOpsApp.update_access', 'self._data_guards'):
         'Reads the data-to-origin cache used by the existing guarded publication path; the cache is not a raw output handle.',
     ('tui.py', 'FinOpsApp.update_brand', 'self._synchronize_principal'):
@@ -649,6 +659,7 @@ ATTRIBUTE_EXCEPTIONS = {
 ATTRIBUTE_EXCEPTIONS.update(LIFECYCLE_EXCEPTIONS)
 
 ATTRIBUTE_CONTEXTS = {
+    ('publication_widgets.py', 'TabbedContent._on_tab_pane_focused'): '5e1206c10dc02097805572f97399714f96abe77a53591ada08909393c27527f3',
     ('developer_screens.py', 'DeveloperPicker.open_add_form'): '5f095d01dbc48d70b45242154692faab781b14444b3977ad0693834a913a4faf',
     ('publication_output.py', 'ProfileChange.configuration'): '5f90fbf786853cee55bce5cf1e8e1cdc076b3a90741dc704e013aeed326eba50',
     ('publication_output.py', '_save_profile_locked'): '5b0d2aabacd92fd3eafc27ab722474e445bdd8894cf2b73f4954a00b18b2c3fd',
@@ -770,7 +781,8 @@ ATTRIBUTE_CONTEXTS = {
     ('tui.py', 'FinOpsApp.open_detail'): '89b0f5eecb96737f7641a70282bae37c6a11b0093f95b7b3bb74e89848548139',
     ('tui.py', 'FinOpsApp.render_tab'): '5448838e8112922ee13f18c049ccb23b1db127e192ad21e4b2163525f843e301',
     ('tui.py', 'FinOpsApp.selected'): 'aaabeb7380b0aa463cad5ae649b3cb1639a7ff8d358cef8555e4ede5a75aab75',
-    ('tui.py', 'FinOpsApp.switched'): '4281adb59bec8d2f19a73bf4bab44f08f2dba575f4905add86447ca82eb880cc',
+    ('tui.py', 'FinOpsApp.switched'): '4a9fba8560cea68ef062e4f9c80cf9942c8bd410d06baf340e6568ccd55d7e7f',
+    ('tui.py', 'FinOpsApp.action_tab'): '871d86e795d9266ac3221a60378c0b8a33d516b44a91fb841729c64154a27146',
     ('tui.py', 'FinOpsApp.update_access'): 'add588ab82d0da215820a1f1e80d55c6a8c253517b274c25017e48cc4e1c9bdc',
     ('tui.py', 'FinOpsApp.update_brand'): '9806807c341ff6d1aee402ae1caad4c7da676c8433a8e39b90d304d4421f0b8a',
     ('ui_features.py', 'FeatureUI._show_read_detail'): 'aef63453cc8cd45ef32a54395e705da868fc900617262793672c5fa7ec57c974',

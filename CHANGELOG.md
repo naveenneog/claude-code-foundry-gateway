@@ -1095,6 +1095,10 @@ exact streaming cache-creation detail remains **U13**.
   refresh once; Advanced navigation also suppresses its programmatic selector
   echo. Same-tab actions still reload. Redaction assertions and publication
   guards are unchanged; hosted run 36670519226 is recorded in STATUS.
+  Council correction: accepted compound navigation now owns an explicit refresh
+  even while a principal notice suppresses native activation. The notice is not
+  cleared to obtain a read, expired lookup origins remain refused, and obsolete
+  native pane-focus events cannot retarget or cancel the newer lookup.
 - **The Cloud Shell launcher tests depended on Git Bash's /tmp mount (P85 follow-up).** The tests
   converted paths with `cygpath -u`, which names a folder under the Windows temp folder `/tmp/...`.
   One test starts Git Bash with `TMP` and `TEMP` set to a missing folder; the hosted runner's Git

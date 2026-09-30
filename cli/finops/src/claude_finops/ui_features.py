@@ -108,13 +108,11 @@ class FeatureUI:
             self.dimension = "department"
             with guarded_publish(self.safe_message_guard()):
                 self.query_one("#dimension", Select).value = "department"
-            if not self.action_tab("usage"):
-                self.action_refresh()
+            self.action_tab("usage", refresh=True)
 
     def action_priced_usage(self):
         self.usage_basis = "priced"
-        if not self.action_tab("usage"):
-            self.action_refresh()
+        self.action_tab("usage", refresh=True)
 
     @published(lambda self, tab: self.safe_message_guard())
     def compose_feature(self, tab):
@@ -297,8 +295,7 @@ class FeatureUI:
             self.query_one("#dimension", Select).value = self.dimension
         with self.query_one("#interval", Select).prevent(Select.Changed):
             self.query_one("#interval", Select).value = self.interval
-        if not self.action_tab(view.get("tab", "overview")):
-            self.action_refresh()
+        self.action_tab(view.get("tab", "overview"), refresh=True)
 
     def action_compare(self):
         def run(values, apply):
@@ -314,8 +311,7 @@ class FeatureUI:
         self.scope_filters.pop("from", None)
         self.scope_filters.pop("to", None)
         self.update_filter_chips()
-        if not self.action_tab("trends"):
-            self.action_refresh()
+        self.action_tab("trends", refresh=True)
 
     def action_mode(self):
         if not self.editable or not enabled(self.feature_caps, "budget_modes", "write"):
@@ -630,8 +626,7 @@ class FeatureUI:
             selector = self.query_one("#advanced-view", Select)
             with selector.prevent(Select.Changed):
                 selector.value = view
-            if not self.action_tab("advanced"):
-                self.action_refresh()
+            self.action_tab("advanced", refresh=True)
 
     def action_assistant_history(self):
         self.run_worker(self._show_read_detail("Assistant conversations", "conversations"),
@@ -643,8 +638,7 @@ class FeatureUI:
 
     def action_overview_rank(self, dimension):
         self.ranking_dimension = dimension
-        if not self.action_tab("overview"):
-            self.action_refresh()
+        self.action_tab("overview", refresh=True)
 
     def action_revoke_boost(self):
         if not enabled(self.feature_caps, "boosts", "revoke"):

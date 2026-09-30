@@ -150,7 +150,7 @@ BOUNDARIES = {
         "errno": {"EACCES", "EAGAIN", "EDEADLK"},
         "msvcrt": {"locking", "LK_NBLCK"}, "fcntl": {"flock", "LOCK_EX", "LOCK_NB"},
     }),
-    "publication_widgets.py": ("Native receivers retain guarded attachment and recovery scrolling; payload-free adapters preserve original exact-type delivery controls without exposing raw receivers.", "adeb80ffa2738f128805295627ce986c8c133bb7470b6d04b1ddb95a2660b0ef", {
+    "publication_widgets.py": ("Native receivers retain guarded attachment and recovery scrolling; payload-free adapters preserve delivery controls and discard obsolete pane focus without exposing raw receivers.", "a288d606d2cb80974f6d889f98f481c5b2b6badf5e01f9f925549eb114b9609c", {
         "textual._context": {"active_app"}, "textual.app": {"App"}, "textual.widget": {"Widget"},
         "textual.containers": {"Container", "HorizontalGroup", "Horizontal", "Vertical", "VerticalScroll"},
         "textual.screen": {"Screen", "ModalScreen"},
