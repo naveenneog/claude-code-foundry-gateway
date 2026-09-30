@@ -133,6 +133,21 @@ independent absence checks passed at 22:13:51Z.
 
 ### U26 - P71 lookup refresh follow-up, 2026-09-30
 
+Council found that a principal notice can suppress the activation to which the
+initial lookup fix delegated its read. A tab change was therefore not evidence
+of refresh ownership. Accepted current-source compound actions now request one
+explicit refresh and suppress their redundant activation; the notice is not
+cleared, and expired lookup guards still refuse the operation.
+The first council-correction stress run retained one WorkerCancelled failure
+in 1,920 executions. A delayed native overview-focus event was then shown to
+retarget a People lookup despite current focus already being in People.
+The protected receiver now checks actual current focus before forwarding.
+Final proof passed 1,980 loaded executions and all 1,269 full-suite cases;
+four mutation probes caught dropped reads, duplicate activation, notice clearing
+and obsolete-focus acceptance. U26 remains OPEN for other observations and the
+listed connection-adoption transition. See the current council correction in
+[STATUS](STATUS.md#council-correction-a-principal-notice-cannot-drop-a-current-lookup).
+
 [Hosted run 36670519226](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36670519226)
 failed the redacted dashboard lookup case with `WorkerCancelled` after
 `open_lookup_result`. That action directly requests a view refresh and also

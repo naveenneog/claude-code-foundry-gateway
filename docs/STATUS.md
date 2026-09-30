@@ -80,6 +80,8 @@ the 76-file plan is **278, 278, 277 and 277 s**, below the unchanged 300 s
 planning limit. Shard coverage and architecture checks pass. Final evidence is
 retained in `.finops-evidence\p71c-notice-refresh`; all long jobs used the lead's
 lock wrapper with owner `p71c`. Council and integration remain with the lead.
+Implementation and recorded council-correction proof: `5977237`
+(`fix(aum): own compound refreshes across principal notices`).
 
 ### Initial correction and evidence
 

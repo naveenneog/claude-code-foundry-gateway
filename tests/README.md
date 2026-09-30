@@ -79,6 +79,8 @@ share of the top-level `cli/finops/tests` files to pytest; without `-Shard` it r
 directory as before (`tests/Test-FinOps.ps1:4`).
 The [lookup-refresh follow-up](../docs/STATUS.md#p71-follow-up-a-lookup-starts-one-refresh-2026-09-30)
 then passed all 1,230 cases serially in 1,012.62 s, including its 30 new compound-action cases.
+Its [council correction](../docs/STATUS.md#council-correction-a-principal-notice-cannot-drop-a-current-lookup)
+passed all 1,269 cases in 1,062.92 s, including notice-present navigation and delayed-focus controls.
 
 Files are assigned longest first to the least-loaded shard, by whole-second weights in
 [finops-test-durations.json](finops-test-durations.json). Equal weights keep ordinal file order,
@@ -86,7 +88,7 @@ equal loads choose the lower shard, and a file without a weight takes `DefaultSe
 (`tests/Select-FinOpsShard.ps1:49`). A weight only moves a file between shards; no file is run
 twice or left out.
 
-The refreshed plan assigns all 76 files once, with shard loads of 266, 265, 265 and 265 s.
+The refreshed plan assigns all 76 files once, with shard loads of 278, 278, 277 and 277 s.
 All remain below 300 s, so four registrations and their four prerequisite skip names remain;
 a fifth shard is not needed for this measurement. Test-All's whole-check timing table uses
 the same planned loads.
