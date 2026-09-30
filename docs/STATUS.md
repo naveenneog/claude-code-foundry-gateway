@@ -1,6 +1,6 @@
 # Status
 
-**Active packets (2026-09-30, run in parallel worktrees):** P85 AUM's terminal UI manages people, units, teams and budgets ([ROADMAP](ROADMAP.md)) and P81 USD budgets are the primary enforcer, each on its own branch. The owner approved merging P85 on 2026-09-29; it merges after its council passes and its packet gate passes on the merged tree. P81 merges only with the owner's explicit approval. Each has its own section on its branch; the section lands here when the packet merges. P80 AUM shows every action it has, connects in one step, and its guide starts with installation is merged with the owner's approval (`3f77754`, [below](#p80-aum-shows-every-action-it-has-connects-in-one-step-and-its-guide-starts-with-installation-2026-09-28)). P71 AUM answers fast and says why it cannot is merged with the owner's approval (`01bb6c7`, [below](#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28)). P84 projection deployment checks everything before it writes and never switches into an outage is merged with the owner's approval (`3e4430b`, [below](#p84-projection-deployment-checks-everything-before-it-writes-and-never-switches-into-an-outage-2026-09-29)); switching entitlement to the projection waits for P86. P78 the test suite runs in parallel on GitHub-hosted runners is merged with the owner's approval (`2737232`, [below](#p78-the-test-suite-runs-in-parallel-on-github-hosted-runners-2026-09-28)); ADR-0039's proposed charter change is not enacted. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)), and its follow-up, the installer permutation check reads only its own record (`05dea1b`, [below](#p79-follow-up-the-installer-permutation-check-reads-only-its-own-record-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets (2026-09-30, run in parallel worktrees):** P85 AUM's terminal UI manages people, units, teams and budgets ([ROADMAP](ROADMAP.md)) and P81 USD budgets are the primary enforcer, each on its own branch. The owner approved merging P85 on 2026-09-29; it merges after its council passes and its packet gate passes on the merged tree. P81 merges only with the owner's explicit approval. Each has its own section on its branch; the section lands here when the packet merges. P80 AUM shows every action it has, connects in one step, and its guide starts with installation is merged with the owner's approval (`3f77754`, [below](#p80-aum-shows-every-action-it-has-connects-in-one-step-and-its-guide-starts-with-installation-2026-09-28)). P71 AUM answers fast and says why it cannot is merged with the owner's approval (`01bb6c7`, [below](#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28)), and its follow-up, the deadline tests prove termination without racing it (`dc0e311`, [below](#p71-follow-up-the-deadline-tests-prove-termination-without-racing-it-2026-09-30)). P84 projection deployment checks everything before it writes and never switches into an outage is merged with the owner's approval (`3e4430b`, [below](#p84-projection-deployment-checks-everything-before-it-writes-and-never-switches-into-an-outage-2026-09-29)); switching entitlement to the projection waits for P86. P78 the test suite runs in parallel on GitHub-hosted runners is merged with the owner's approval (`2737232`, [below](#p78-the-test-suite-runs-in-parallel-on-github-hosted-runners-2026-09-28)); ADR-0039's proposed charter change is not enacted. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)), and its follow-up, the installer permutation check reads only its own record (`05dea1b`, [below](#p79-follow-up-the-installer-permutation-check-reads-only-its-own-record-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P85 AUM's terminal UI manages people, units, teams and budgets end to end, with tests, 2026-09-29
 
@@ -9,6 +9,43 @@ Owner: @naveenneog. Builder worktree: `accel-p85`, branch
 `30cdfd0`). P85 is the active packet on this branch. Council, the packet gate
 and integration to main belong to the lead. The integration assignment below
 authorizes this builder's integration merges into P85 and commits, but no push or main merge.
+
+### Final P71 follow-up integration and builder validation, 2026-09-30
+
+PLAN / CONTRACT: the lead now authorizes merging pinned main **`bf92ca3`**
+(`dc0e311` plus its record) into clean P85 **`3f321de`**, with `--no-ff`
+and no rebase. This supersedes the previous step's stop before full validation.
+The prior bounded P80 merge **`ca39e98`**, recorded by **`3f321de`**, remains
+documented below rather than being replaced.
+
+Keep both ledger histories. Keep the complete P85 section first, followed by
+P71's new deadline-test follow-up and the other merged sections. Preserve the
+incoming public-evidence test's full P71-heading lookup so the new follow-up
+heading cannot shadow P71's original evidence. Import the two reviewed
+test-only changes unchanged; no production or publication approval change
+is planned. U26 retains both P85's earlier gate observation and P71's new
+asynchronous-termination finding in one row.
+
+Run the full AUM suite serially **once**, under
+`with-gate-lock.ps1 -Owner p85-integration`, with `-p no:cacheprovider`
+and JUnit. Refresh weights from that full report, align the AUM whole-check
+entries and shard-guide numbers, then run shard coverage (<=300 s per planned
+shard), locked RunnerIntegrity, documentation references, encoding and
+architecture checks. Architecture uses a temporary dependency junction;
+regenerate only if its check fails, then remove the junction.
+The lead retains delta council, packet gate and merge-to-main ownership.
+No push, Azure call, history rewrite or other-worktree modification is authorized.
+
+The merge has **one conflict**, U26 in `UNKNOWNS.md`. Its common history
+and both branches' distinct additions are retained in a single unique row.
+STATUS and CHANGELOG merge both histories. Moving P85 above the follow-up
+preserves every packet section byte-for-byte. Both imported Python test files
+match `bf92ca3` exactly; production and charter files are unchanged.
+The reordered public-evidence tests passed **3/3 in 0.12 s**.
+The initial architecture check passed with the temporary junction, so
+**no manifest regeneration was needed**; the junction was removed.
+Evidence: `%TEMP%\p85-int-final-public-evidence.log` and
+`p85-int-final-architecture-initial.log`.
 
 ### P80 main merge before the deadline-test follow-up, 2026-09-30
 
@@ -1175,6 +1212,65 @@ The full JUnit/log are `$env:TEMP\p85-full-aum.xml` and
 `$env:TEMP\p85-final-test-summary.json`. The branch is
 `p85-aum-tui-manage` in `accel-p85`. No merge, push, history rewrite, Azure
 write, Azure resource creation or reference-gateway operation occurred.
+
+## P71 follow-up: the deadline tests prove termination without racing it, 2026-09-30
+
+**Merged as `dc0e311` on 2026-09-30, as a follow-up to P71, which the owner approved.** The
+five-seat council passed the change and its delta. Packet gate 2 passed on `abe4ca4`: 101 of 101
+Test-All checks in 1,739.5 s. The merge tree is the gated tree. Hosted run
+[36656314101](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36656314101)
+on `a4f6ec9`, the P80 merge, failed the same way before this merge:
+`test_scheduling_delay_before_assignment_cannot_release_uncontained_children` reported
+"Owned descendant 856 is still running" (1 failed, 177 passed in shard 11).
+
+Hosted run [36646539868](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36646539868)
+on main `3b7c192` failed shard 10's "AUM - commands, dashboard and pilot" with 2 failed and 829
+passed; the receipt merge then refused the incomplete coverage.
+`test_timeout_terminates_started_children_and_grandchildren` reported "Owned descendant 9288 is
+still running", and `test_scheduling_delay_before_assignment_cannot_release_uncontained_children`
+reported the same for 4984. Both markers existed, and both calls returned within their time bounds.
+
+**Cause.** The check opened each recorded process id and waited 0 ms for it right after
+`run_wrapper` returned. `run_wrapper` ends the tree with `TerminateJobObject`
+(`cli/finops/src/claude_finops/windows_process.py`), and termination is asynchronous: "it
+initiates termination and returns immediately. If you need to be sure the process has
+terminated, call the WaitForSingleObject function with a handle to the process"
+([TerminateProcess](https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess)).
+A probe on the lead's workstation put three Python processes in a job and terminated it 40 times
+for each kind: 120 of 120 sleeping and 120 of 120 spinning processes were still unsignaled at
+0 ms, and all 240 were signaled within 5 s. Locally, the time `run_wrapper` spends collecting the
+wrapper's output usually covered the teardown; on the hosted runner it did not. The check also
+took any process holding the recorded id as the descendant, so an id reused by another process
+would read as a survivor.
+
+**RED.** With the check as merged, a process that was still ending (a 1.5 s sleeper) and this
+process's own id each reported "still running".
+
+**Change, tests only.** In `cli/finops/tests/test_azure_deadline.py`, each descendant writes its
+id and creation time to its marker, through a temporary file and a rename, and sleeps 60 s
+instead of 3 s. The check waits up to 10 s for the recorded process to be signaled. A missing
+process, an id this user cannot open, or a different creation time means the recorded process
+no longer exists. A fixture stops any survivor after a failed check, and a guard keeps the
+descendants' lifetime at least three times the wait, so a natural exit cannot pass for
+termination. Three tests prove the check itself: a process that is still ending passes once it
+ends, a recorded process that keeps running fails after 300 ms, and a reused id is not waited on.
+The timeout code is unchanged.
+
+**Results.** GREEN: the file's 10 tests pass (4.7 s). Five mutations were each caught with all 10
+tests collected: no job termination in `run_wrapper`, no creation-time check, a 0 ms wait, no
+wait assertion, and 3 s descendants. Under load, the file passed 200 of 200 test runs with 4 CPU
+burners and 200 of 200 with 8. With 16 burners on 16 logical processors, the tests as merged
+failed their start precondition 60 of 60 times, because the child had not written its marker
+within the 0.75 s deadline; that precondition fails with its own message rather than passing,
+and the hosted failure was not of that kind. The five-seat council passed all seats on `37d68aa`.
+
+**Packet gate 1** on `660e158` (07:21-07:49 IST) failed one check, "AUM - commands, dashboard
+and pilot [1/4]", with 100 of 101 passing. pytest's cache named
+`test_p71_public_evidence.py::test_p71_and_u32_public_text_use_the_inspected_capture_aliases`.
+That test found the P71 section by the heading prefix `## P71`, and this follow-up's heading, now
+first in STATUS, matched before P71's own. It now names the full heading, "P71 AUM answers fast
+and says why it cannot". Restoring the prefix lookup fails it with this section present (1 failed,
+2 passed); the full heading passes all 3.
 
 ## P84 Projection deployment checks everything before it writes and never switches into an outage, 2026-09-29
 
