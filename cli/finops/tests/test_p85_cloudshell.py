@@ -25,8 +25,13 @@ def bash():
 def shell_path(path):
     if os.name != "nt":
         return str(path)
-    return subprocess.check_output([bash(), "--noprofile", "--norc", "-c", 'cygpath -u "$1"',
-                                    "_", str(path)], text=True).strip()
+    # cygpath names a path under the Windows temp folder /tmp/..., and some Git Bash builds resolve
+    # /tmp from the process's TEMP, which these tests set to other folders. The drive form
+    # (/c/Users/...) names the same folder without the /tmp mount.
+    drive, rest = os.path.splitdrive(os.path.abspath(path))
+    root = subprocess.check_output([bash(), "--noprofile", "--norc", "-c", 'cygpath -u "$1"',
+                                    "_", drive + "\\"], text=True).strip()
+    return root.rstrip("/") + "/" + rest.strip("\\").replace("\\", "/")
 
 
 PYTHON = r"""#!/usr/bin/env bash
@@ -127,6 +132,19 @@ def link_directory(path, target):
                        check=True, capture_output=True)
     else:
         path.symlink_to(target, target_is_directory=True)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Git Bash's /tmp mount is a Windows concern.")
+def test_shell_paths_do_not_depend_on_the_tmp_mount(tmp_path):
+    # Hosted run 36668853983: a Git Bash that resolves /tmp from the process's TEMP could not find
+    # /tmp/pytest-of-.../aum-cloudshell.sh once the test handed the launcher another TEMP.
+    target = tmp_path / "checkout with spaces" / "scripts"
+    target.mkdir(parents=True)
+    converted = shell_path(target)
+    assert not converted.startswith("/tmp/"), converted
+    back = subprocess.check_output([bash(), "--noprofile", "--norc", "-c", 'cygpath -w "$1"', "_", converted],
+                                   text=True).strip()
+    assert os.path.normcase(back) == os.path.normcase(str(target))
 
 
 def test_cloudshell_shellcheck_or_bash_syntax():
