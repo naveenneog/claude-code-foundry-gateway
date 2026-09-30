@@ -430,8 +430,17 @@ The measurement/coverage pipeline owned the shared lock from
 **06:20:43.353 to 06:24:30.475 IST**. Every check has a separate complete log
 and timing record in `%TEMP%\p80-sharding-measure-receipt.json` or
 `p80-sharding-checks-receipt.json`. The three copied helper hashes were checked
-again after validation and remained byte-identical. The final commit record
-follows once this reviewed merge is recorded.
+again after validation and remained byte-identical.
+
+**Committed as `8cdba3f`**, a no-rebase merge with parents `a405f69` and
+`3b7c192`. It contains the reviewed combined publication fingerprint, the
+P85 `c9ae1c8` / `729a249` port, P80's measured weights, regenerated manifests
+and the complete validation record. Both required Copilot trailers are
+present. The branch is still `p80-aum-usability`; no push, merge to main,
+other-worktree edit or Azure call occurred. The scratch copy was removed,
+its logs/receipts retained under TEMP, and no dependency junction remains.
+This final commit-reference update is ledger-only; no executable code, test,
+weight, timeout or assertion changed after the passing checks.
 
 ### P71 closed-contract integration, 2026-09-30
 
