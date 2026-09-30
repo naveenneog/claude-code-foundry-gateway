@@ -115,6 +115,21 @@ def test_bounded_people_lookup():
     assert all(call[1].get("limit", 20) <= 50 for call in backend.reads)
 
 
+class CanonicalRequestBackend(FakeBackend):
+    """Matches a request id in any letter case and returns the id in its own form."""
+
+    def read(self, resource, **params):
+        if resource == "request":
+            params = dict(params, request_id=params["request_id"].lower())
+        return super().read(resource, **params)
+
+
+def test_request_lookup_returns_the_backends_canonical_id():
+    result = Engine(CanonicalRequestBackend(), "2026-09").lookup("request:CONTOSO-REQUEST-007")
+    assert [row for row in result if row["kind"] == "request"] == [
+        dict(kind="request", id="contoso-request-007", name="contoso-request-007", tab="requests")]
+
+
 def test_fake_budget_save_recomputes_remaining():
     backend = FakeBackend()
     engine = Engine(backend, "2026-09")

@@ -4,11 +4,30 @@
 
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 
-This is the active correction on `p71c-lookup-refresh`, based on main `9741d41`.
+This is the active correction on `p71c-lookup-refresh`, based on main `9741d41`, with main
+`6f00135` merged in (`c003014`).
 [Hosted run 36670519226](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36670519226),
 hosted shard 3/12, failed `AUM - commands, dashboard and pilot [3/4]` at
 `test_dashboard.py::test_redacted_queries_do_not_leak_through_input_or_filter_echo`.
 The worker wait after `open_lookup_result` raised `WorkerCancelled`.
+
+### Council round 3: a request lookup carries the backend's id
+
+On `2f701f9`, Security passed and Architect, Coder, QA and UX blocked. `Engine.lookup` returned
+a request's id as typed (`id=key`), and the requests table selects the row whose `request_id`
+equals that id. A backend that matches ids in any letter case therefore opened the right detail
+but left the cursor on another row. The council reproduced this with a backend that lowercases the
+id: the detail showed `contoso-request-007`, and the cursor stayed on `contoso-request-000`.
+
+The lookup now returns the id the backend read back, `request["request_id"]`, as both `id` and
+`name` (`cli/finops/src/claude_finops/engine.py:408`). RED: against such a backend, a lookup of
+`request:CONTOSO-REQUEST-007` returned the typed id, and the end-to-end test left the cursor on
+another row; 2 failed. GREEN: both pass, and the tests that call `Engine.lookup`
+(`test_backends.py`, `test_manager_scope.py`, `test_revision4_contracts.py`,
+`test_principal_tokens.py`) pass 77 of 77. Two mutations were each caught with the same 10 tests
+collected: returning the typed id failed 2, and selecting without `request_id` failed 9.
+`engine.py` is a backend module, outside the presentation contract
+(`cli/finops/tests/publication_policy.py:20`), so no approval or fingerprint changed.
 
 ### Council round 2: request lookup follows rule A
 

@@ -3,7 +3,7 @@
   "backend": "Example",
   "live": false,
   "hash_format": "utf8-lf-sha256",
-  "captured_at_utc": "2026-09-30T12:43:18.008895+00:00",
+  "captured_at_utc": "2026-09-30T14:30:06.951907+00:00",
   "sizes": [
     [
       80,
@@ -37,7 +37,7 @@
     "cli/finops/src/claude_finops/direct.py": "60bdbdf6b12007a4cc65fd245dd6a1db93d4c34dbee582436fde0020c314323c",
     "cli/finops/src/claude_finops/direct_analytics.py": "285efa2be07977978703046df4515904a1bb7fdf24a1ff942cdde0fe74d55183",
     "cli/finops/src/claude_finops/discovery.py": "6541d986f110dce7c8dc61223e0341ce82a95794200801158095120616e29629",
-    "cli/finops/src/claude_finops/engine.py": "69341f446f4d25b8a414f4819f296d830bbc916d3f48bcee91dc45d5a9484962",
+    "cli/finops/src/claude_finops/engine.py": "8cb95474b6e71b241f70c16456b17959256b6c92b2c544f01ea8d787f0606f8a",
     "cli/finops/src/claude_finops/errors.py": "6ef8fcc0c43bbf30b4a2126076a092fd8be3903c71f647d28f21c7e51b2a8a60",
     "cli/finops/src/claude_finops/fake.py": "40f86e34f0507e12ac3d9d970f80cffabd6ca9bc8a8be90cab8d8f7faeb4bf43",
     "cli/finops/src/claude_finops/fake_features.py": "720b076848c504d28d59aaf5e6104eab41caa1e2371e859e4490963de34331be",

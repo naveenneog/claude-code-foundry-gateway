@@ -343,6 +343,36 @@ async def test_request_lookup_refreshes_once_and_keeps_detail_and_paging(monkeyp
             assert app._principal_notice
 
 
+async def test_request_lookup_in_another_letter_case_selects_the_canonical_row(pane_focus):
+    from test_backends import CanonicalRequestBackend
+    app = FinOpsApp(Engine(CanonicalRequestBackend(), "2026-09"), Config(backend="fake"), first_run=False)
+    async with app.run_test(size=(100, 32)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pane_focus["overview"].wait()
+        app.action_tab("requests")
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pane_focus["requests"].wait()
+        canonical = app.records["requests"][7]["request_id"]
+        assert canonical != canonical.upper(), "The detector needs an id whose letter case can differ."
+        app.action_tab("overview")
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pane_focus["overview"].wait()
+        found = await asyncio.to_thread(app.engine.lookup, "request:" + canonical.upper())
+        result = next(row for row in found if row["kind"] == "request")
+        app.open_lookup_result(result, read_guard=app.current_guard())
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert isinstance(app.screen, DetailScreen) and app.screen.data["request_id"] == canonical
+        assert app.active == "requests" and app.pending_selection is None
+        table = app.query_one("#table-requests", DataTable)
+        assert app.records["requests"][table.cursor_row]["request_id"] == canonical, (
+            "A lookup typed in another letter case must select the row the backend returned.")
+
+
 async def test_first_lookup_input_clears_notice_before_action(monkeypatch, pane_focus):
     app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
     async with app.run_test(size=(100, 32)) as pilot:
