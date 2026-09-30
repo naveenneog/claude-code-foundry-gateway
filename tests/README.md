@@ -68,6 +68,47 @@ belongs to CI. A future entry requires a registered name, a reason and a success
 local receipt; an exclusion is not permission to omit evidence. `-LocalOnly` selects that lane
 when it is nonempty. `-IncludeAzure` cannot be combined with sharding or local-only receipts.
 
+## AUM test shards
+
+The AUM pytest suite runs as four registered checks, `AUM - commands, dashboard and pilot [0/4]`
+to `[3/4]` in `tests/Test-All.ps1`. This is ported from P85 `c9ae1c8` and `729a249`;
+`Select-FinOpsShard.ps1`, `Test-FinOpsShards.ps1` and `Update-FinOpsDurations.ps1` retain
+their reviewed bytes. P80's 2026-09-30 serial run passed all 928 tests in 518.76 s
+(521.713 s process wall). At the lead's observed P71 gate multiplier of 1.14, that would
+be about 591.4 s against the unchanged 600 s per-check
+timeout (`tests/Test-All.ps1:9`). This estimate motivates sharding; it is not a measured P80 gate.
+`Test-FinOps.ps1 -Shard i/n` passes one share of the top-level `cli/finops/tests` files to pytest;
+without `-Shard` it runs the whole directory as before (`tests/Test-FinOps.ps1:4`).
+
+Files are assigned longest first to the least-loaded shard, by whole-second weights in
+[finops-test-durations.json](finops-test-durations.json). Equal weights keep ordinal file order,
+equal loads choose the lower shard, and a file without a weight takes `DefaultSeconds`
+(`tests/Select-FinOpsShard.ps1:49`). A weight only moves a file between shards; no file is run
+twice or left out. P80's weights come from its own complete serial measurement, not P85's files.
+
+The 65 measured files sum to 516.6 s of JUnit case time before rounding. The current plans are
+`0/4`: 16 files / 141 s, `1/4`: 16 / 140 s, `2/4`: 16 / 140 s, and `3/4`: 17 / 140 s.
+The coverage check passed in 14.444 s locally. Those planned weights and the rounded 14.4 s
+coverage-check measurement replace only the old unsharded AUM entry in
+`test-all-durations.json`; its other historical check timings remain unchanged.
+
+`Test-FinOpsShards.ps1` compares the registrations, the listings, the files on disk and pytest's
+own collection, and runs a synthetic suite in which each shard's passed count identifies the files
+it ran. One synthetic shard runs with pytest's colour on and one with it off (`PY_COLORS`), because
+the packet gate runs Test-All with `FORCE_COLOR=0` (`.ironclad/gate.mjs:340`) and pytest colours its
+output for any non-empty `FORCE_COLOR` (`tests/Test-FinOpsShards.ps1:185`). It fails when a planned
+shard exceeds half the per-check timeout (300 s) or a weight names a missing file. Planned
+seconds are not a measurement of concurrent gate wall time.
+
+```powershell
+pwsh -NoProfile -File .\tests\Test-FinOps.ps1 -Shard 1/4 -ListFiles
+pwsh -NoProfile -File .\tests\Test-FinOpsShards.ps1
+.\.venv-finops\Scripts\python.exe -m pytest cli\finops\tests -q -p no:cacheprovider --junitxml $env:TEMP\aum.xml
+pwsh -NoProfile -File .\tests\Update-FinOpsDurations.ps1 -JUnitXml $env:TEMP\aum.xml
+```
+
+The last two lines refresh the weights from one complete serial run.
+
 ## Receipts and coverage
 
 A shard writes a versioned receipt with its exact Git commit and tree, coordinates, ordered

@@ -44,6 +44,39 @@ fails the release stage while any remain. Detail for each one follows below.
 
 ---
 
+## P80 research before resumed implementation
+
+These four entries were recorded at resume on 2026-09-28, before corrections
+to the earlier P80 implementation. They do not retrospectively claim research
+or RED evidence for the five existing P80 commits.
+
+| ID | State | Question | Blocks |
+|---|---|---|---|
+| U38 | CLOSED | People uses the existing `Engine.read("budgets")` catalog on demand. `DeveloperPicker.open_add_form` retains the directory and catalog guards through `ActionForm`; owner restrictions and preview-first membership remain. Offline tests on 2026-09-28 cover owner/non-owner entry, filled email/team, visible catalog errors and refusal of a stale directory result. [Source](../cli/finops/src/claude_finops/developer_screens.py), [tests](../cli/finops/tests/test_p80_usability.py), [ADR-0038](adr/0038-aum-actions-and-connection.md). This does not establish live directory-scale latency. | P80 add-person flow resolved |
+| U39 | CLOSED | `Engine.chargeback` enumerates authorized catalog scopes rather than top rankings. One terminal action now saves its CSV through exclusive creation and numbered collision handling; tests cover 137 returned rows, existing/racing files, custom names, JSON metadata and no-write preview. An installed P50 generator appears with its existing owner check and preview. [Engine](../cli/finops/src/claude_finops/engine.py), [file helper](../cli/finops/src/claude_finops/reports.py), [tests](../cli/finops/tests/test_p80_reports.py), inspected and measured offline 2026-09-28. This proves the tested output shape, not live scale or invoice reconciliation. | P80 chargeback flow resolved |
+| U40 | CLOSED | Round 2's missing path is reproduced with successful whoami and a real Windows handle held through final validation, failed restoration and UI inspection. Adoption now follows successful transaction exit. Tests retain the old engine/configuration, identity, preferences, capabilities, data, records and modal on failure; a successful-save control proves validation precedes adoption. Reverting that order fails all three new cases. Measured 2026-09-29: all 635 AUM cases passed and all seven new negative probes were caught. [Source](../cli/finops/src/claude_finops/ui_features.py), [end-to-end regressions](../cli/finops/tests/test_p80_connection_recovery.py). | P80 round 2 adoption ordering corrected; round 3 pending |
+| U41 | CLOSED | The retained form uses a focusable VerticalScroll feedback area at 80x24. The end-to-end test reconstructs every rendered recovery character using keyboard scrolling while the read-denying Windows handle remains held, including the complete backup path and final recovery step. Clipping, dismissal, missing focus and duplicate notification mutations are caught; top/bottom fixture captures were inspected. The original Settings-label and membership corrections remain. [Recovery tests](../cli/finops/tests/test_p80_connection_recovery.py), [architecture](ARCHITECTURE.md#aum-azure-usage-management---terminal-finops-console), measured 2026-09-29. | P80 round 2 recovery visibility corrected; round 3 pending |
+
+Integration research, 2026-09-30: U39's report-directory creation must be inside
+the guarded writer, not before it. U40's local revision errors must surface
+without being mistaken for an expired principal; actual exit-3 origin failures
+still reject publication. U41's native `scroll_home` defers by default, so
+recovery now uses the protected receiver's origin-checked synchronous reset.
+The RED counterexamples, current/expired controls and seven count-preserving
+removal probes are recorded in [P80 STATUS](STATUS.md#p71-closed-contract-integration-2026-09-30)
+and [ADR-0038](adr/0038-aum-actions-and-connection.md#p71-integration-authorization-2026-09-30).
+These are offline client-boundary findings, not new live Azure or directory
+claims. U38-U41 remain P80's IDs; the separate P71 timing observations are
+retained in STATUS without closing U26.
+
+The lead's 2026-09-30 final-main/sharding follow-up retains those four P80
+contracts. P71's final exact-type message and absent-main-tab corrections are
+reviewed against ADR-0035. P80's complete serial run passed 928 cases in
+518.76 s and supplied all 65 file weights; none were assumed from P85.
+Its four shard plans are 141/140/140/140 s. The reviewed P85 planner's 300 s
+limit is a planned-weight bound, not a measurement of concurrent gate wall
+time; that risk remains visible in the P80 STATUS and test-runner documentation.
+
 ## P84 research before implementation
 
 | ID | State | Question | Blocks |

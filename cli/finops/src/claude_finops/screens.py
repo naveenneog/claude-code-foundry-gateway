@@ -12,7 +12,8 @@ from .errors import FinOpsError
 from .output import chargeback_csv, safe_text
 from .rules import allocation_left, apply_state, human, month_window, parse_tokens
 from .guarded_publication import guarded_publish, published
-from .publication_output import write_export
+from .reports import chargeback_folder, save_chargeback_csv
+from .reporting import report_available
 
 
 class DetailScreen(ModalScreen):
@@ -380,20 +381,35 @@ class ChangeScreen(ModalScreen):
 class ExportScreen(ModalScreen):
     BINDINGS = [("escape", "dismiss", "Back")]
 
+    def __init__(self, *, auto_export=False):
+        super().__init__()
+        self.auto_export = auto_export
+        self.busy = False
+
     @published(lambda self: self.app.safe_message_guard())
     def compose(self):
-        with Vertical(id="month-dialog"):
+        with Vertical(id="month-dialog", classes="export-dialog"):
             yield Label("Export complete chargeback (managed scopes only)")
             yield Input(f"chargeback-{self.app.engine.month}.csv", id="export-name", password=self.app.redactor.enabled)
-            yield Static("Saved under finops-reports in the current folder. Existing files are never overwritten.",
+            yield Static(f"Saved under {chargeback_folder()}. Existing files are never overwritten.",
                          id="export-status", markup=False)
             with Horizontal(classes="buttons"):
                 yield Button("Cancel", id="cancel-export")
                 yield Button("Export CSV", id="export-csv", variant="primary")
+            if report_available(self.app.config):
+                with Horizontal(classes="buttons"):
+                    yield Button("Generate reconciled chargeback report", id="export-reconciled",
+                                 disabled=not self.app.editable)
+
+    def on_mount(self):
+        if self.auto_export:
+            self.export()
 
     @on(Button.Pressed, "#export-csv")
     @work(exclusive=True, group="export")
     async def export(self):
+        if self.busy:
+            return
         name = self.query_one("#export-name", Input).value
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,100}\.csv", name):
             with guarded_publish(self.app.safe_message_guard()):
@@ -401,21 +417,37 @@ class ExportScreen(ModalScreen):
             return
         button = self.query_one("#export-csv", Button)
         button.disabled = True
+        self.busy = True
         with guarded_publish(self.app.safe_message_guard()):
-            self.query_one("#export-status", Static).update("Reading every catalog scope, not just the top ranking...")
+            self.query_one("#export-status", Static).update("Reading every catalog scope (estimate 3-30 s); not just the top ranking...")
         try:
             with self.app.engine.backend.read_cycle():
                 result = await asyncio.to_thread(self.app.engine.chargeback)
-                content = chargeback_csv(self.app.present(result["items"]), self.app.engine.month)
                 with guarded_publish(self.app.current_guard()):
-                    write_export(name, content, directory="finops-reports")
+                    content = chargeback_csv(self.app.present(result["items"]), self.app.engine.month)
+                    if self.app.preview_only:
+                        self.query_one("#export-status", Static).update("Preview-only mode: no report file was created.")
+                        return
+                    path = save_chargeback_csv(self.app.engine.month, content, name=name)
                     self.query_one("#export-status", Static).update(
-                        self.app.redactor.text(f"Exported {len(result['items'])} scopes to finops-reports\\{name}."))
+                        self.app.redactor.text(f"Exported {len(result['items'])} scopes to {path}."))
         except (OSError, FinOpsError) as error:
-            message = str(error) if isinstance(error, FinOpsError) else "Cannot create that file. Choose a new name and a writable current folder."
+            message = str(error) if isinstance(error, FinOpsError) else "Cannot create the report file. Check permissions on the report folder."
             with guarded_publish(self.app.safe_message_guard()):
-                self.query_one("#export-status", Static).update(message)
-            button.disabled = False
+                if self.is_mounted:
+                    self.query_one("#export-status", Static).update(message)
+                else:
+                    self.app.publish_notification(message, origin=self.app.safe_message_guard(), severity="error")
+        finally:
+            self.busy = False
+            if self.is_mounted:
+                button.disabled = False
+
+    @on(Button.Pressed, "#export-reconciled")
+    def reconciled(self):
+        if self.app.editable:
+            self.dismiss()
+            self.app.action_report_generate()
 
     @on(Button.Pressed, "#cancel-export")
     def cancel(self):

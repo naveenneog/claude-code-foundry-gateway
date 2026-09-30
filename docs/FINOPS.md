@@ -128,17 +128,16 @@ dollar stop; see [Scale](SCALE.md#the-budget-is-a-delayed-kill-switch-not-a-hard
   and delegated management are separate from the inference request path.
   [Viewers and managers](TURNSTILE.md#viewers-and-managers) explains roles and
   `scripts/Open-ClaudeTurnstile.ps1` when web consent is unavailable.
-- **AUM (Azure Usage Management):** the [terminal FinOps console](CLI-FINOPS.md)
+- **AUM (Azure Usage Management):** the [terminal FinOps console](AUM.md)
   supplies interactive views and scriptable reports/commands over Turnstile,
-  direct gateway access or isolated example data. Managers and viewers remain
-  read-only in its first release, even where Turnstile's web console permits
-  manager budget edits. Direct mode requires Azure permissions and is not a
-  delegated-manager boundary. Preview and apply are separate; follow the job
-  result rather than treating a saved budget as enforced.
-  The merged first release exposes `claude-finops`; the product rename changes
-  the preferred command to `aum`, retaining `claude-finops` as a deprecated alias.
-  Use the linked guide for the command available in your checkout. Its
-  `CLI-FINOPS.md` address remains the stable entry point during the guide move.
+  direct gateway access, the AUM service or isolated example data.
+  [Install](AUM.md#install) and [Connect](AUM.md#connect) contain the shared
+  setup steps. Task sections cover [budgets](AUM.md#set-a-team-or-unit-budget),
+  [USD budgets](AUM.md#set-a-usd-budget), [people](AUM.md#add-a-person-to-a-team)
+  and [chargeback reports](AUM.md#create-a-chargeback-report). Direct mode
+  requires Azure permissions and is not a delegated-manager boundary. Preview
+  and apply are separate; a saved budget is not proof of enforcement.
+  `claude-finops` remains a deprecated alias.
   `scripts/Manage-ClaudeBusinessUnits.ps1` remains the narrower unit-management
   script, not another name for AUM.
 - **Grafana:** optional [existing-instance publication](MONITORING.md#if-you-would-rather-use-grafana).
@@ -184,6 +183,6 @@ for that separate live acceptance.
 ## Next steps
 
 - [Monitoring](MONITORING.md) — saved functions, workbooks, alerts and empty data.
-- [AUM](CLI-FINOPS.md) — terminal setup, scoped reads and safe command workflows.
+- [AUM](AUM.md#install) — terminal setup, backend connection and safe command workflows.
 - [Turnstile](TURNSTILE.md) — browser-based governance and consent troubleshooting.
 - [Scale](SCALE.md) — what the 500,000-record test did and did not measure.

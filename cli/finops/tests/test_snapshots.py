@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,21 @@ from claude_finops.views import TABS
 from claude_finops.ui_features import EXTRA_TABS
 
 BASE = Path(__file__).parent / "snapshots"
+
+
+def test_snapshot_manifest_matches_sources_and_every_output():
+    root = Path(__file__).resolve().parents[3]
+    manifest = json.loads((BASE / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["backend"] == "Example" and manifest["live"] is False
+    assert manifest["sizes"] == [[80, 24], [160, 48]]
+    assert len(manifest["outputs"]) == 28
+    assert "cli/finops/src/claude_finops/tui.py" in manifest["sources"]
+    assert "cli/finops/src/claude_finops/terminal.tcss" in manifest["sources"]
+    for group in ("sources", "outputs"):
+        for name, digest in manifest[group].items():
+            canonical = (root / name).read_bytes().replace(b"\r\n", b"\n")
+            assert hashlib.sha256(canonical).hexdigest() == digest, name
+    assert manifest["hash_format"] == "utf8-lf-sha256"
 
 
 @pytest.mark.parametrize("size", [(80, 24), (160, 48)])

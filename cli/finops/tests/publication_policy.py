@@ -27,7 +27,7 @@ NON_PRESENTATION = {
     "operator": ("Explicit operator APIs own configuration, directory actions, reports and preferences.", {
         "bulk.py", "config.py", "developer_actions.py", "developers.py", "discovery.py",
         "gateway_probe.py", "group_actions.py", "groups.py", "preferences.py", "reporting.py",
-        "usage_refresh.py",
+        "reports.py", "usage_refresh.py",
     }),
     "boundaries": ("Credential, publication and process lifetime primitives are tested at their boundaries.", {
         "guarded_publication.py", "readiness.py", "windows_process.py",
@@ -52,7 +52,8 @@ APPROVED = {
     "contextlib": approval("Explicit publication and local-message context lifetimes.",
                           "AbstractContextManager ExitStack contextmanager nullcontext"),
     "copy": approval("Deep copies preserve ordinary backend value objects, not raw widget classes.", "deepcopy"),
-    "dataclasses": approval("Immutable provenance and input-origin data records.", "dataclass field"),
+    "dataclasses": approval("Immutable provenance records and value-only copies of validated address configuration.",
+                           "dataclass field replace"),
     "datetime": approval("Date values, UTC metadata and local display formatting.", "datetime timezone timedelta"),
     "functools": approval("Named callback binding and wrapper metadata preserve existing callable APIs.", "partial wraps"),
     "inspect": approval("Coroutine classification and fixed CLI signature metadata, not dynamic imports.",
@@ -92,7 +93,8 @@ APPROVED = {
     ".commands_local": approval("Local commands register with the guarded command emitter.", "register"),
     ".commands_v4": approval("Capability commands register with the guarded command emitter.", "register"),
     ".config": approval("Address configuration and explicit Azure operations use their existing boundary.", "Config az load_config"),
-    ".configure": approval("The discovery command uses protected output and profile writers.", "configure"),
+    ".configure": approval("Discovery returns validated address values; the command delegates every write and prompt to protected output.",
+                            "configure connection_config"),
     ".dashboard": approval("Dashboard controls derive from approved protected widgets.", "Dashboard DashboardPanel enforcement_badge"),
     ".dashboard_drill": approval("Detail rows retain their originating panel's guard.", "DashboardRows"),
     ".developer_actions": approval("Directory action APIs validate input and preserve explicit apply semantics.", "developer_change developer_find"),
@@ -116,11 +118,14 @@ APPROVED = {
     ".principal_ui": approval("Principal transitions clear cached presentation before later input.", "PrincipalUI"),
     ".progressive": approval("Progressive refresh retains the originating generation at every result.", "ProgressiveRefresh"),
     ".publication_output": approval("Only these value-returning readers and guarded writers are exported to presentation.",
-                                    "copy_with_helper profile_path prompt_number read_text terminal_output write_export write_profile write_renderable write_text"),
+                                    "confirm_profile_replace copy_with_helper preview_profile profile_conflict profile_path profile_transaction prompt_number read_text save_profile terminal_output write_export write_profile write_renderable write_text"),
     ".publication_widgets": approval("Only the protected application, layout and display classes are presentation imports.",
                                      "Button DataTable Horizontal Input Label ModalScreen PublicationApp Select Static TabbedContent TabPane TextArea Vertical VerticalScroll Widget"),
     ".redaction": approval("Redaction transforms values before guarded publication.", "Redactor"),
-    ".reporting": approval("The existing report operator API retains preview/apply semantics.", "report_plan"),
+    ".reporting": approval("Report availability returns only a boolean; the existing operator API retains preview/apply semantics.",
+                          "report_available report_plan"),
+    ".reports": approval("Report locations are strings; complete CSV creation delegates all filesystem effects to the origin-checked writer.",
+                        "chargeback_export_path chargeback_folder save_chargeback_csv"),
     ".rules": approval("Validation, formatting and authorization predicates return data.",
                        "allocation_left apply_state can_budget_write can_edit human identifier month_window parse_tokens query_window require_owner scope_type"),
     ".scope": approval("Scope labels and permitted-tab selection retain the backend's scope model.", "scope_label visible_tabs"),
@@ -129,17 +134,22 @@ APPROVED = {
     ".tui": approval("The terminal app derives from the protected application boundary.", "FinOpsApp"),
     ".ui_features": approval("Optional UI actions use the same protected publication surfaces.", "EXTRA_TABS FeatureUI"),
     ".usage_refresh": approval("The explicit usage-refresh operator action keeps its existing authorization.", "refresh_usage"),
+    ".usd": approval("The existing per-scope USD authorization predicate returns only a boolean, never a writer.",
+                     "can_usd_write"),
     ".views": approval("Core view formatting produces ordinary values, not output handles.", "DIMENSIONS TABS money view_rows"),
 }
 
 # Only these small boundary modules may import native output implementations.
 # Their reviewed AST hashes prevent filename-based laundering of new code.
 BOUNDARIES = {
-    "publication_output.py": ("Final effects validate the active origin; readers return values, never writer handles.", "8fb60520df95b9c747468b12473a656ba6139fa8452f903b7bbfdd50a19c30be", {
+    "publication_output.py": ("Final effects validate the active origin; local profile recovery restores only its own bytes, and readers expose no writer handles.", "c1e8a81dcd9c188878e7e17c28c0228220873ac83b6623720b7dfcb66a8cc912", {
         "pathlib": {"Path"}, "rich.console": {"Console", "RenderableType"},
-        "subprocess": {"run"}, "sys": {"stdout"}, "typer": {"echo", "prompt"},
+        "subprocess": {"run"}, "sys": {"stdout"}, "typer": {"confirm", "echo", "prompt"},
+        ".config": {"profile_path"}, "hashlib": {"sha256"}, "os": {"name"},
+        "errno": {"EACCES", "EAGAIN", "EDEADLK"},
+        "msvcrt": {"locking", "LK_NBLCK"}, "fcntl": {"flock", "LOCK_EX", "LOCK_NB"},
     }),
-    "publication_widgets.py": ("Native receivers retain guarded origins; payload-free message adapters preserve original exact-type delivery controls.", "0c3e63fdb3c8decab8143f9c51672718fe9caba6de404e4c6b70ca99c60ea15f", {
+    "publication_widgets.py": ("Native receivers retain guarded origins and synchronous recovery scrolling; sealed messages preserve exact-type delivery controls.", "adeb80ffa2738f128805295627ce986c8c133bb7470b6d04b1ddb95a2660b0ef", {
         "textual._context": {"active_app"}, "textual.app": {"App"}, "textual.widget": {"Widget"},
         "textual.containers": {"Container", "HorizontalGroup", "Horizontal", "Vertical", "VerticalScroll"},
         "textual.screen": {"Screen", "ModalScreen"},
@@ -169,8 +179,8 @@ APPROVED_MEMBERS = {
     ".publication_widgets.TabbedContent.TabActivated",
 }
 SAFE_BUILTINS = {
-    "BaseException", "Exception", "FileExistsError", "OSError", "ValueError", "__name__",
-    "all", "any", "bool", "callable", "dict", "enumerate", "float", "getattr", "hasattr",
+    "BaseException", "Exception", "FileExistsError", "FileNotFoundError", "OSError", "RuntimeError", "UnicodeError", "ValueError", "__name__",
+    "all", "any", "bool", "bytes", "callable", "dict", "enumerate", "float", "getattr", "hasattr",
     "id", "int", "isinstance", "iter", "len", "list", "map", "max", "min", "next", "ord",
     "property", "range", "round", "set", "setattr", "delattr", "sorted", "staticmethod",
     "str", "sum", "super", "tuple", "type", "zip",

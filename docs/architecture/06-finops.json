@@ -17,6 +17,8 @@
   },
   "identifiers": {
     "app": { "label": "FinOpsApp", "source": "cli/finops/src/claude_finops/tui.py", "match": "class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):" },
+    "profile": { "label": "Rollback", "source": "cli/finops/src/claude_finops/publication_output.py", "match": "def profile_transaction(" },
+    "csv": { "label": "Complete CSV", "source": "cli/finops/src/claude_finops/reports.py", "match": "def save_chargeback_csv(" },
     "engine": { "label": "Engine", "source": "cli/finops/src/claude_finops/engine.py", "match": "class Engine(FeatureEngine):" },
     "turnstile": { "label": "TurnstileBackend", "source": "cli/finops/src/claude_finops/turnstile.py", "match": "class TurnstileBackend(HttpBackend):" },
     "aum": { "label": "AumServiceBackend", "source": "cli/finops/src/claude_finops/aum_service.py", "match": "class AumServiceBackend(HttpBackend):" },
@@ -36,13 +38,18 @@
     { "x": 978, "y": 890, "w": 302, "h": 394, "tone": "slate", "title": "Offline test boundary" }
   ],
   "nodes": [
-    { "id": "ui", "x": 16, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Textual terminal UI", "lines": ["[[app]]: progressive facts, named estimated waits", "Scope checks, preview and explicit Apply remain"] },
-    { "id": "commands", "x": 692, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Command aum · Typer", "lines": ["Scriptable nouns and verbs over the same operations", "JSON and what-if; no silent write retry or authority fallback"] },
+    { "id": "ui", "x": 16, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Textual terminal UI", "lines": ["[[app]]: visible actions and preview-first forms", "Guarded reads; named estimated waits"] },
+    { "id": "commands", "x": 692, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Command aum · Typer", "lines": ["Scriptable nouns/verbs, JSON and complete chargeback CSV", "No silent write retry or authority fallback"] },
     { "id": "engine", "x": 248, "y": 272, "w": 784, "h": 202, "tone": "blue", "title": "One [[engine]]", "lines": [
       "Identity, scope and backend capability gates; explicit daily versus monthly budgets",
       "Preview first; confirm destructive changes and audit reasons where required.",
       "Saved, verified, propagated and ingested are distinct facts.",
       "The gateway or selected server remains the authorization boundary."
+    ] },
+    { "id": "local-files", "x": 1048, "y": 272, "w": 216, "h": 202, "compact": true, "tone": "slate", "title": "Local files", "lines": [
+      "Locked profile + backup",
+      "[[profile]]; [[csv]]",
+      "No stored tokens"
     ] },
     { "id": "direct", "x": 0, "y": 558, "w": 302, "h": 278, "compact": true, "tone": "blue", "title": "Direct · default", "lines": [
       "[[direct]]",
@@ -105,6 +112,8 @@
   "edges": [
     { "from": "ui", "to": "engine", "kind": "control", "points": [[400, 204], [400, 272]] },
     { "from": "commands", "to": "engine", "kind": "control", "points": [[880, 204], [880, 272]] },
+    { "from": "ui", "to": "local-files", "kind": "data", "points": [[588, 133], [652, 133], [652, 235], [1156, 235], [1156, 272]] },
+    { "from": "commands", "to": "local-files", "kind": "data", "points": [[1156, 204], [1156, 272]] },
     { "from": "engine", "to": "direct", "kind": "data", "points": [[330, 474], [330, 518], [151, 518], [151, 558]] },
     { "from": "engine", "to": "aum", "kind": "data", "points": [[477, 474], [477, 558]] },
     { "from": "engine", "to": "turnstile", "kind": "data", "points": [[803, 474], [803, 558]] },

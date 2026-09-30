@@ -29,6 +29,65 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P80 final-main integration and AUM test sharding.** P71's final exact-type message
+  controls and absent-main-tab handling retain P80's protected actions and recovery.
+  Four duration-weighted AUM checks and their coverage proof are ported from P85
+  `c9ae1c8` / `729a249`, using P80's own serial JUnit timings rather than P85's weights;
+  the 600 s check timeout and every existing test remain unchanged.
+  The main `3b7c192` integration passes all 928 serial AUM cases in 518.76 s.
+  Its 65 files plan at 141/140/140/140 s across four complete shards; coverage,
+  runner integrity, mutation ownership, documentation, encoding and architecture
+  checks pass. The combined publication fingerprint review and source-preserving
+  removal proofs are recorded in [P80 STATUS](docs/STATUS.md#final-main-integration-and-reviewed-aum-test-shards-2026-09-30).
+
+- **P80/P71 publication integration.** Existing AUM actions retain guarded notifications,
+  text-only report/profile paths, origin-checked local saves and recovery scrolling;
+  profile conflicts keep the current connection form instead of clearing its principal state.
+
+- **AUM action discovery (P80, owner-approved for integration after P71).** People and Budgets show
+  Add person to team, Set budget, Set USD budget and Chargeback report, with
+  matching Help and keyboard hints. The selected connection appears as
+  `via Direct`, `via AUM service` or `via Turnstile`. Add person loads the
+  catalog without a Budgets visit, keeps directory/catalog publication guards
+  and shows read errors. The existing authority rules and preview-first
+  writers remain; Turnstile has no USD writer.
+  Settings has one connection form with preview, exact-byte timestamped
+  backups, atomic local replacement and rollback after failed identity
+  verification. It retains the selected profile path. The configure command
+  honors explicit HTTP URL/scope, asks before attended replacement and keeps
+  the unattended `--force` requirement.
+  Council round 1 corrections preserve the reviewed candidate and revision
+  through commit, serialize profile writers and protect post-replacement
+  failures. Failed rollback keeps the old live connection and displays the
+  backup path and recovery steps instead of claiming restoration.
+  Settings now has a wrapping, guarded connection label independent of table
+  width caches. AUM-service membership is explicitly unavailable in the
+  controls, shortcut, command palette and guide; no membership writer is added.
+  Council round 2 corrections delay UI adoption until saved-revision validation
+  finishes. A post-whoami file failure retains the old identity, cached state
+  and connection form; its complete recovery text is keyboard-scrollable at
+  80x24 instead of being clipped in the application status.
+  One Chargeback report action writes the complete month CSV to the local
+  reports folder with an absolute path and non-overwrite naming. The installed
+  reconciled-report action retains its existing permissions. CLI report output
+  supports JSON path metadata and a no-file `--what-if` preview.
+  The AUM guide starts with installation, connection and first run, then tasks,
+  reference and troubleshooting. Historical live evidence remains dated;
+  regenerated Example screens have separate source/output hashes. Related
+  FinOps guides link to the shared setup. The architecture diagram records
+  local backup/report flows without adding an Azure component or authority.
+  Initial builder evidence was 614 offline AUM tests and 49 caught reversion
+  probes. Round-1 corrections passed all 632 AUM tests, 19 additional negative
+  probes and ten consecutive Settings visibility runs. Round-2 council, the
+  full packet gate and post-deployment owner review remained pending at that
+  handoff. Round-2 corrections passed all 635 AUM cases and seven additional
+  negative probes, including end-to-end persistent-lock recovery at 80x24.
+  Round-3 council passed on all five seats, and the packet gate passed at
+  `5e31cd3`. The owner approved integration after P71 on 2026-09-29.
+  Main `30cdfd0` is integrated into the P80 branch without rebasing; its
+  requested documentation, architecture, encoding and 635-test AUM checks pass.
+  The lead owns final P71 integration and the merge to main.
+  [AUM](docs/AUM.md), [ADR-0038](docs/adr/0038-aum-actions-and-connection.md).
 - **AUM latency and readiness (P71).** Direct shares one named-value snapshot per
   read cycle, reuses resource tokens until near expiry and overlaps independent
   telemetry reads. The terminal displays arriving panels with named, estimated

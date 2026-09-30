@@ -17,6 +17,7 @@ from . import __version__
 from .redaction import Redactor
 from .guarded_publication import guarded_publish
 from .publication_output import read_text, terminal_output, write_text
+from .reports import chargeback_export_path, save_chargeback_csv
 from contextlib import nullcontext
 
 
@@ -112,7 +113,7 @@ def root(ctx: typer.Context,
     redact = redact or os.environ.get("AUM_REDACT", "").lower() in {"1", "true", "yes"}
     if ctx.invoked_subcommand == "configure":
         ctx.obj = dict(configure=dict(backend=backend, subscription=subscription, resource_group=resource_group,
-                                     apim_name=apim_name, path=config), tty=terminal_output(),
+                                     apim_name=apim_name, path=config, url=url, scope=scope), tty=terminal_output(),
                        json=as_json, plain=plain, what_if=what_if, no_color=no_color, redactor=Redactor(redact))
         return
     try:
@@ -133,7 +134,8 @@ def root(ctx: typer.Context,
             emit(ctx, lambda e: dict(identity=e.read("whoami"), **e.status()))
         else:
             from .tui import FinOpsApp
-            FinOpsApp(engine, settings, no_color=no_color, preview_only=what_if, redact=redact).run()
+            FinOpsApp(engine, settings, no_color=no_color, preview_only=what_if, redact=redact,
+                      profile_path=config).run()
 
 
 @app.command()
@@ -365,9 +367,27 @@ def trends_show(ctx: typer.Context, interval: str = "day", group_by: str = "none
 
 @groups["report"].command("chargeback")
 def report_chargeback(ctx: typer.Context, csv: Annotated[bool, typer.Option("--csv")] = False,
-                     dimension: str = "organization"):
+                     dimension: str = "organization",
+                     output: Annotated[str | None, typer.Option("--output", help="Folder for a complete chargeback CSV.")] = None):
     """Export estimated cost, tokens and cache. Not an Azure invoice."""
-    if csv and not ctx.obj["json"]:
+    if output is not None:
+        try:
+            with ctx.obj["engine"].backend.read_cycle():
+                rows = ctx.obj["engine"].chargeback(dimension)["items"]
+                content = chargeback_csv(ctx.obj["redactor"].present(rows), ctx.obj["engine"].month)
+                with guarded_publish(ctx.obj["engine"].backend.read_guard()):
+                    preview = ctx.obj["what_if"]
+                    path = (chargeback_export_path(ctx.obj["engine"].month, output) if preview else
+                            save_chargeback_csv(ctx.obj["engine"].month, content, output))
+                    if ctx.obj["json"]:
+                        display(dict(preview=preview, path=str(path), scopes=len(rows)), as_json=True)
+                    else:
+                        write_text(f"{'Would save' if preview else 'Saved'} complete chargeback CSV to {path}")
+        except (FinOpsError, OSError) as error:
+            with guarded_publish(nullcontext):
+                write_text(str(error) if isinstance(error, FinOpsError) else "Cannot create the chargeback report file.", err=True)
+            raise typer.Exit(error.code if isinstance(error, FinOpsError) else 7) from None
+    elif csv and not ctx.obj["json"]:
         try:
             with ctx.obj["engine"].backend.read_cycle():
                 rows = ctx.obj["engine"].chargeback(dimension)["items"]
