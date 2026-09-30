@@ -32,8 +32,8 @@ try {
     foreach($id in $ScopeIds){
         $scope=@($registry|Where-Object Id -eq $id)
         if($scope.Count -ne 1){throw 'Choose one existing scope id.'}
-        $group=az ad group show --group $scope[0].Group --query id -o tsv
-        if($LASTEXITCODE -ne 0 -or -not $group){throw 'Selected group lookup failed. No membership was written.'}
+        $group=Get-ClaudeGraphGroup -GroupName $scope[0].Group -Token $graphToken
+        if(-not $group){throw 'Selected group was confirmed absent. No membership was written.'}
         $members[$id]=@((Get-GroupMemberOids -GroupName $scope[0].Group -Token $graphToken).Oid)
     }
 } finally {$graphToken=$null}

@@ -1,10 +1,437 @@
 # Status
 
-**Active packets (2026-09-29, run in parallel worktrees):** P71 AUM answers fast and says why it cannot ([ROADMAP](ROADMAP.md)), P80 AUM shows every action it has, and P81 USD budgets are the primary enforcer, each on its own branch. The owner approved merging P71 and P80 on 2026-09-29; each merges after its council passes and its packet gate passes on the merged tree, P80 after P71. P81 merges only with the owner's explicit approval. Each has its own section on its branch; the section lands here when the packet merges. P78 the test suite runs in parallel on GitHub-hosted runners is merged with the owner's approval (`2737232`, [below](#p78-the-test-suite-runs-in-parallel-on-github-hosted-runners-2026-09-28)); ADR-0039's proposed charter change is not enacted. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)), and its follow-up, the installer permutation check reads only its own record (`05dea1b`, [below](#p79-follow-up-the-installer-permutation-check-reads-only-its-own-record-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets (2026-09-30, run in parallel worktrees):** P80 AUM shows every action it has ([ROADMAP](ROADMAP.md)), P85 AUM's terminal UI manages people, units, teams and budgets, and P81 USD budgets are the primary enforcer, each on its own branch. The owner approved merging P80 and P85 on 2026-09-29; each merges after its council passes and its packet gate passes on the merged tree, P85 after P80. P81 merges only with the owner's explicit approval. Each has its own section on its branch; the section lands here when the packet merges. P71 AUM answers fast and says why it cannot is merged with the owner's approval (`01bb6c7`, [below](#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28)). P84 projection deployment checks everything before it writes and never switches into an outage is merged with the owner's approval (`3e4430b`, [below](#p84-projection-deployment-checks-everything-before-it-writes-and-never-switches-into-an-outage-2026-09-29)); switching entitlement to the projection waits for P86. P78 the test suite runs in parallel on GitHub-hosted runners is merged with the owner's approval (`2737232`, [below](#p78-the-test-suite-runs-in-parallel-on-github-hosted-runners-2026-09-28)); ADR-0039's proposed charter change is not enacted. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)), and its follow-up, the installer permutation check reads only its own record (`05dea1b`, [below](#p79-follow-up-the-installer-permutation-check-reads-only-its-own-record-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+
+## P84 Projection deployment checks everything before it writes and never switches into an outage, 2026-09-29
+
+**Merged as `3e4430b` on 2026-09-29 with the owner's approval. Council round 3 passed on all five seats and the packet gate passed at `5612c94`.** All five seats blocked the earlier submission. The owner requested P84 after a partial customer deployment on
+2026-09-29. The branch is `p84-projection-preflight`, based on `30cdfd0`. The lead owns COUNCIL
+and GATE; the owner owns merge approval. This packet performs no live Azure writes.
+
+### Council round 3 and the packet gate
+
+- [x] Council round 3, over `624ebd4..f39524d`: all five seats PASS. QA's independent sweep of
+      fifteen summary widths reached truncation inside the fortieth line: 40 lines and 4,093
+      characters for the ten-digit case, and at most 40 lines and 4,096 characters overall
+- [x] Gate 1, at `f39524d` (19:22-19:48), failed six checks. The architecture manifest still held
+      input hashes from before P84 changed `Sync-ClaudeProjection.ps1`, `ClaudeAumDirectWrites.ps1`,
+      `Sync-AumMembership.ps1` and `Install-ClaudeGateway.ps1`. `Test-Scale.ps1` expected the manual
+      switch as `az apim nv update`, while `docs/SCALE.md` now documents the same single write through
+      `Set-ApimNamedValue`, which reads the value back. The four business-unit mutation shards failed
+      only because their unmutated `Test-Scale.ps1` copy failed. Fixed in `5612c94`: the manifest is
+      regenerated with no image change, and the assertion accepts either spelling of that one write;
+      with the switch command removed from SCALE.md it fails (1 of 211)
+- [x] Gate 2, at `5612c94` (20:05-20:35), the tree that merges: PASS. Test-All in 1,821 s; 22
+      passed, 2 warned (open unknowns), 0 failed
+
+### Council round 2 corrections
+
+Round 2, over `10ff113..624ebd4`: Architect, Coder, UX and Security PASS. The three automated
+switch paths refuse unconditionally (`scripts/Deploy-ClaudeProjection.ps1:46`,
+`Install-ClaudeGateway.ps1:122-124`, `scripts/flow/Entitlement.ps1:77-79`); the manual named-value
+step in `docs/SCALE.md` keeps its warning. QA BLOCK: forty short runner summaries produced 41
+diagnostic lines, because the heading was added before forty summaries, and the tests allowed 42
+lines and 4,352 characters.
+
+- [x] RED: new assertions on the formatter's own output fail on `624ebd4` with `lines=41` for forty
+      short summaries and for eighty long lines
+- [x] GREEN: `Write-ClaudeRunnerOutput` keeps the heading and at most 39 summaries, and on
+      truncation keeps at most 39 lines before the marker, so the diagnostic is at most 40 lines and
+      4,096 characters in total. A sweep of fifteen summary widths reaches the case where truncation
+      cuts inside the fortieth line. The apply and compare assertions now allow only the failure
+      message beyond that. Council suite 86 of 86 in 65.8 s (all groups, three locales); preflight
+      197 of 197 in 16.2 s
+- [x] Mutations, each in a private copy, each running the baseline 70 Core assertions: 40 input
+      lines (4 fail), no line cap on truncation (1 fails: the sweep), the previous truncation length
+      (4 fail); 3 of 3 caught in 30 s (`p84-r2-mutate.ps1`)
+
+### Council round 1 corrections
+
+The lead's 2026-09-29 decision supersedes the earlier ARM-admission contract and its passing
+receipts below. A digest-pinned scheduled dry-run can satisfy that contract without renewing
+anything (`sync/src/apply-projection.mjs:136`). Those receipts did not prove safe admission.
+
+- [x] PLAN/CONTRACT: P84 refuses every projection switch; proposed P86 admission requires
+      destination-bound Cosmos renewal observations, not ARM execution metadata alone.
+- [x] Architect: all three entry points refuse unconditionally with the two-hour lease,
+      developer-wide 503 and P86/ROADMAP explanation; the job-admission implementation is removed.
+- [x] Coder: policy unreadability/delegated rights produce an explicit WARN, not invented denial;
+      existing app ids bypass Policy.Read.All reads. en-GB and de-DE regression runs are included.
+- [x] QA: confirmed-absent premium passes with a note; Graph errors still fail. Every real
+      shared membership caller has absence and error cases on its supported hosts.
+- [x] UX: a 100-column console has readable check/result/evidence/remedy/who records; lease,
+      outage and reconciler warnings precede switching examples and replace stale setup advice.
+- [x] Security: failure output contains counts and hashed samples, no email/unit values, at most
+      40 lines and 4,096 characters. A declined prerequisite aborts; check permissions are documented.
+- [x] RED/GREEN, relevant existing checks and valid-syntax/count-preserving mutations are recorded.
+
+**Final correction proof, 2026-09-29:** `eca8b55` caught **95/95** current mutations in
+**1,356.35 s**, under one owned shared-workstation lock released in that command's `finally`.
+Every mutant parsed, retained its selected suite's complete assertion count, failed an assertion
+and exited nonzero. Independent receipt verification found zero invalid catches.
+
+| Proof group | Baseline | Restored |
+|---|---|---|
+| Preflight | 197/197, 14.61 s | 197/197, 16.57 s |
+| Council Core | 66/66, 3.00 s | 66/66, 2.34 s |
+| Real Graph Callers | 14/14, 15.80 s | 14/14, 16.80 s |
+
+Default council `All` also passes all 83 assertions, including complete preflight runs under
+en-US, en-GB and de-DE. It does not omit groups for the default Test-All registration.
+Receipt: `$env:TEMP\p84-r1-mutations.json`, with persistent session copy
+`files\p84-r1-mutation-receipt.json`; SHA-256
+`2c3298ab63bf4398863835360b4cbdf8cffaef135cd507ea876f6c65de2ac3c9`.
+`4156090` implements the corrections; `eca8b55` updates proof and runbooks.
+Final ledger validation: DocReferences 34/34 (9.75 s), encoding 300/300 (7.53 s).
+The main Active packets line is unchanged; tested PowerShell inputs match the proof commit.
+
+No runtime component is added. The proposed P86 reconciler and Cosmos evidence are not implemented
+by this correction. The lead owns round 2 and the packet gate.
+
+**RED/GREEN:** the corrected RED loaded 65 council assertions and failed 39 in 51.76 s.
+It reproduced locale failures, silent declined prerequisites, leaked comparison samples, missing
+character bounds, denied optional premium and false app-permission refusals. Real-caller tests
+also exposed a Boolean `-FailOnDrift` being passed without a value and PowerShell 5.1 treating the
+AUM named-value JSON array as one element. Both are corrected. An earlier test draft's
+PSCmdlet substitution and Boolean fixture arguments were corrected before that RED receipt.
+
+GREEN: preflight **197/197, 11.52 s**; council **65/65, 51.60 s**, including en-US/en-GB/de-DE
+complete-suite runs and absence/error execution of all four real Graph callers on supported
+hosts. The reduced preflight count reflects retirement of the rejected ARM-admission feature,
+not omitted active checks. ProjectionInstaller 34 (0.76 s), FlowLifecycle 33 (2.58 s),
+ProjectionRules 34 (0.78 s) and script encoding 300/300 pass. Changed-guard mutations and
+runbook completion followed, as recorded above.
+
+**Expanded proof and runbooks:** `4156090` commits the first correction GREEN. The council
+suite now has **83 assertions** (Core 66, real Callers 14, Cultures 3), including long structured
+diagnostics, private JSON parser paths and string values in count fields. Default `All` passed
+in **67.88 s**; group selection is only for bounded proof commands. The mutation matrix contains
+95 syntactically valid current guards; retired ARM admission probes are not counted.
+Five smoke probes caught character-cap, sample-hash, parser-message, PS5.1 array and declined
+comparison breakage with complete selected baselines (173.46 s). That smoke run still grouped
+culture cases with callers (17 assertions); the selector is corrected to separate Callers 14
+and Cultures 3 without changing default coverage.
+
+Current related results: InstallerPermutations 48/48 (55.96 s), FlowPermutations 43/43
+(104.63 s), ProjectionNegative 57/57 (62.34 s), SecureProjection 123/123 (11.90 s),
+DocReferences 34/34 (11.23 s) and TestAllSharding 79/79 (3.40 s).
+Runbooks now put the outage/refusal warning first, document read permissions and WARN semantics,
+and retain the explicitly unprotected manual SCALE operation. The complete current mutation
+proof is recorded above.
+
+### Historical builder submission, superseded by council round 1
+
+- [x] PLAN: A-F below define the packet; P85 belongs to another builder and P86 is proposed.
+- [x] CONTRACT: [ADR-0040](adr/0040-projection-preflight-and-switch.md) records the switch
+      evidence contract, with U54-U57 researched before implementation.
+- [x] A: `-PreflightOnly` and normal deployment share a read-only preflight before any Azure
+      write. One table contains check, result, evidence, remedy and acting party. Checks cover
+      PowerShell 7, Azure sign-in/subscription, two Graph probes 20-30 seconds apart, tier
+      groups, resolver registration permission/identifier URI, providers, resource-group RBAC,
+      every derived name and global availability, local tools and regional-capacity limits.
+- [x] B: Deployment, installer and guided Entitlement refuse a projection switch without a
+      verified reconciler. Refusal states the two-hour maximum lease, absolute expiry and
+      developer-wide 503 consequence. ARM reads verify schedule and recent success; no bypass
+      or scheduled resource is introduced.
+- [x] C: Every shared Graph-membership caller fails on CAE, authorization and network errors;
+      only a positively empty lookup represents an absent optional group.
+- [x] D: Apply/compare parsing and `ok:false` failures show the last 40 runner-output lines.
+      App creation failure never updates an empty id or reports a fictitious WhatIf failure.
+- [x] E: A fast registered offline suite exercises A-D, with right-reason RED, passing related
+      projection/installer/Entitlement checks and count-preserving guard mutations.
+- [x] F: STATUS, CHANGELOG, SECURE-PROJECTION, SCALE, UPDATE-AND-CHANGE, SETUP, GUIDED-FLOW,
+      ADR-0040, U54-U57 and ROADMAP record the behavior, evidence and remaining decisions.
+
+Architecture conclusion: no deployed component, identity, network path or schedule changes;
+only operator-side validation and switch admission change. U56 records the evidence-contract
+assumption and pending owner acceptance. The initial audit-only packet gate passed
+(20 passed, 2 warned, 0 failed, 4 command checks skipped); this is not the lead's packet gate.
+
+**Final builder receipt, 2026-09-29:** the complete proof at `4083c8b` caught **111/111**
+mutations in **1,444.66 s**, under one owned shared-workstation lock released in that command's
+`finally`. Every mutant parsed, loaded all **240** baseline assertions, failed at least one
+assertion and exited nonzero; independent receipt validation found zero invalid catches.
+Baseline: 240/240 in **14.51 s**; restored: 240/240 in **11.91 s**. Each host also executes
+nine native Graph/stderr assertions. The receipt is `$env:TEMP\p84-mutations-final.json`;
+the reproducible detector is `tests/Test-ProjectionPreflightNegative.ps1:1`.
+Receipt SHA-256: `2cf0661c7a958f428039fe33bbc0a3d43f78298b4c42aa39127a7a0899f1ecde`.
+The persistent session artifact is `files\p84-final-mutation-receipt.json`.
+
+| Final related check | Result | Seconds |
+|---|---|---|
+| InstallerPermutations | 48/48 | 62.71 |
+| FlowPermutations | 43/43 | 102.46 |
+| FlowLifecycle, including Entitlement | 33/33 | 2.87 |
+| SecureProjection | 123/123 | 14.25 |
+| Existing ProjectionNegative | 57/57 mutations | 59.20 |
+| Documentation references | 34/34 | 8.32 |
+| Windows CLI argument safety | PASS | 8.86 |
+| Script encoding | 299/299 | 6.93 |
+
+The evidence contract remains proposed in ADR-0040: an existing hourly-or-faster scheduled job,
+destination/tenant bindings, pinned current image/template, recent succeeded execution and
+remaining snapshot lease, with no override. U56 explicitly assumes that the customer-controlled
+image performs renewal; ARM exit status cannot prove its semantics or future health. P86 owns
+the tested reconciler, tenant-admin Graph grant and alerts. U54, U55 and U57 are closed; no P84
+unknown is silently treated as a live Azure proof. No Azure write, resource creation, push or
+merge was performed. The full packet gate and five council verdicts belong to the lead.
+
+Commits before the final ledger: `89d9906` PLAN/CONTRACT; `f7280e3` implementation;
+`c50c21c` API shapes and subscription pinning; `c633046` canonical names/inherited roles;
+`80a639e` mutation harness; `d3225d0` resolved installer target, binding case and runbooks;
+`4083c8b` independently observable guard probes.
+
+Commit metadata note: these earlier bodies contain both requested trailer lines, separated by
+a blank paragraph. `git interpret-trailers --parse` recognizes only the final Copilot-Session
+line. No history was rewritten; the handoff ledger commit uses adjacent trailer lines.
+
+**First RED/GREEN:** PLAN/CONTRACT is `89d9906`. The new offline check loaded 188 assertions,
+failed 165 in 12.35 s, and exposed the PS7 CAE diagnostic loss, a successful-looking nonzero
+runner exit, absent preflight/switch checks and missing raw output. The same 188 assertions
+passed in 7.79 s after implementation. Native `az.cmd` boundaries run on PowerShell 7 and 5.1;
+deployment and projection sync refuse 5.1 with `run in pwsh`.
+
+Focused existing checks passed: ProjectionInstaller 34 (0.73 s), FlowLifecycle 33 (2.48 s),
+ProjectionRules 34 (0.75 s), Teams 146 (2.25 s), SecureProjection 123 (12.45 s),
+AdminSurface 682 (4.42 s), Scale 211 (1.20 s). Encoding passed for 298 scripts.
+Installer permutations, projection negatives, additional integration proofs and mutations were
+still in progress at that first GREEN. Evidence is offline, not a customer-tenant deployment proof.
+
+**Entry-point and API-shape follow-up:** implementation GREEN is `f7280e3`. Added cases loaded
+206 assertions and failed seven in 12.58 s: six exposed optional ARM/Graph fields, an explicit
+zero expiry being treated as an estimate, and missing subscription forwarding; one exposed an
+overbroad AST fixture selector, corrected without changing its assertion. GREEN is 206/206 in
+11.31 s. Actual child processes prove preflight-only success/failure and normal-run failure
+exit codes with zero Azure writes. Actual installer guard and Entitlement invocation refuse
+missing evidence before their next operation. The switch's three writes pin the subscription
+that preflight verified. FlowLifecycle 33 (2.23 s), ProjectionInstaller 34 (0.62 s),
+TestAllSharding 79 (2.11 s) and encoding (298 scripts) pass.
+
+Required existing checks also passed: InstallerPermutations 48 (46.06 s),
+ProjectionNegative 57/57 mutations (59.88 s), FlowPermutations 43 (90.64 s).
+The new registration uses the existing positive default shard weight; the hosted timing table
+is unchanged because P84 has no hosted timing receipt.
+
+**Name and inherited-role follow-up:** `c50c21c` commits the API/entry-point fixes. Expanded
+negative cases loaded 225 assertions; two failed in 11.47 s. User casing was reaching the
+case-sensitive storage hash, and a management-group Owner returned by the scoped inherited-role
+query was being rejected. Canonical ARM ids now seed the hash, and that scoped query's
+management-group ancestors count. GREEN: 225/225 in 11.28 s; encoding remains 298/298.
+The added pagination assertions also verify that foreign HTTP calls never receive the token.
+
+**Mutation preparation:** `c633046` commits canonical naming and inherited-role handling.
+The complete offline regression check now passes 236 assertions in 13.54 s, including the
+actual switch block (zero writes on refusal; three subscription-pinned writes with source last
+on success). Each native host independently passes nine stderr/Graph assertions. The new
+mutation harness's five detector self-checks and all 108 mutation anchors/syntax checks pass;
+mutation execution was still pending then. A syntax error, missing summary, lost assertion, exit-only
+failure or assertion failure with exit zero cannot count as a catch. Encoding passes 299 scripts.
+
+**Installer target and binding follow-up:** the first 108-probe run is isolated at `80a639e`
+with its 236-assertion baseline. Independent integration investigation then added three cases:
+the installer had checked the job before assigning its gateway name, ARM id casing caused
+false refusals, and case-insensitive environment keys could attest the wrong Linux variable.
+RED: 239 assertions, three failures, 12.50 s. The guard now follows gateway-name resolution
+before writes, resource-id/GUID values compare case-insensitively and environment names compare
+ordinally. GREEN: 239/239, 12.10 s; encoding 299/299. The earlier mutation run is not evidence
+for these later changes; it was followed by the final-tree proof above.
+
+**First mutation run and detector repair:** under its own shared-workstation lock,
+`80a639e` caught 99/108 probes in 1,378.02 s with all 236 assertions loaded and the restored
+baseline green. Nine survivors were recorded, not counted as catches: four prerequisite
+diagnostics were protected by later parameter binding, the wrong-app and bad-name fixtures
+also broke later checks, a missing-id diagnostic overlapped format validation, a foreign-job
+fixture failed before exercising subscription binding, and the flow argument assertion matched
+its earlier refusal call. Fixtures now isolate those conditions and require the precise
+diagnostic/forwarded argument. No assertion was removed or weakened.
+
+The current baseline is 240/240 (12.54 s); all nine former survivors plus three new binding
+probes are caught, **12/12**, with all 240 assertions loaded and the restored baseline green
+(176.34 s). All 111 final anchors parse. Windows CLI argument safety passes (8.86 s), docs
+references 34 (8.81 s), FlowLifecycle 33 (2.37 s), ProjectionInstaller 34 (0.67 s) and encoding
+299/299. The complete final-tree 111-probe run followed, as recorded above.
 
 ## P80 AUM shows every action it has, connects in one step, and its guide starts with installation, 2026-09-28
 
 Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM guide set. Worktree: `accel-p80`, branch `p80-aum-usability`, based on P71 commit `bcf8554`. The owner approved merging P80 after P71 at 07:41 IST on 2026-09-29. The lead authorized merging pinned `origin/main` (`30cdfd0`) into this branch without rebasing; later P71 work remains separate. This builder is not authorized to push or merge to main.
+
+### Final-main integration and reviewed AUM test shards, 2026-09-30
+
+**Builder checks GREEN:** the one serial run passed **928/928**; all four
+shards plan **141/140/140/140 s**, and every requested follow-up check passed.
+This supersedes the earlier integration's non-green run below, without
+removing that historical evidence. Council and packet-gate execution remain
+with the lead.
+
+**Council round 4 on `a405f69`: Architect, Coder, QA, UX and Security all PASS,**
+as reported by the lead at 05:12 IST on 2026-09-30. This records the lead's
+integration council; the builder did not run another council or packet gate.
+
+**PLAN / CONTRACT:** Merge pinned main `3b7c192` without rebasing, retaining
+P71's `2be0973` exact-type message controls and `7a28b74` absent-main-tabs
+handling together with P80's guarded actions, profile transaction and recovery
+scrolling. Resolve approved contexts by actual function, review the combined
+boundary under ADR-0035, and regenerate architecture and Example provenance.
+Keep both ledgers and every existing contract/budget.
+
+Port the reviewed sharding implementation from P85 **`c9ae1c8` / `729a249`**,
+not P85's duration data. The selector, coverage test and duration updater are
+copied byte-identically; only P80's one new complete serial run supplies its
+weights. Four registered shards must cover every discovered/pytest-collected
+file exactly once and each plan at most **300 s**, preserving Test-All's
+**600 s** per-check timeout. P80's previous 468.62 s serial run projects to
+about 534 s using the lead's observed P71 gate multiplier of 1.14; this
+motivates the port but is not a P80 gate measurement. Actual concurrent shard
+wall time is not inferred from planned weights.
+
+All long work uses `with-gate-lock.ps1 -Owner p80-integration`. The serial
+command is `python -m pytest tests -q -p no:cacheprovider --junitxml <file>`,
+run once from `cli\finops`. Requested runner, shard, reference, encoding and
+architecture checks follow the measurement. Full output is retained in
+`%TEMP%\p80-main-*` and `%TEMP%\p80-sharding-*`. No other worktree is edited;
+there is no push, main merge or Azure call.
+
+#### Merge and publication review
+
+The merge from clean `a405f69` found five conflicts: CHANGELOG,
+`publication_attributes.py`, `publication_policy.py`, UNKNOWNS and the
+architecture manifest. Production Python merged automatically. Both P80 and
+main ledger entries remain: the current main U26/P84 history is retained,
+P80's research block is copied verbatim, and the duplicate U30 history was
+confirmed text-identical before retaining main's placement. STATUS keeps
+main's current Active packets line and both packet sections.
+
+The approval-map conflict is resolved by function, not by taking a whole side:
+`FinOpsApp.switched` uses main's absent-view guard and reviewed digest, while
+`FinOpsApp.update_access` retains P80's capability-button behavior and digest
+`add588ab82d0da215820a1f1e80d55c6a8c253517b274c25017e48cc4e1c9bdc`.
+P80's profile boundary remains unchanged. Source inspection confirmed that
+the combined widget module differs from main only by P80's already-reviewed
+`VerticalScroll.publication_scroll_home`.
+
+| Reviewed fingerprint | Value / reason |
+|---|---|
+| Combined `publication_widgets.py` boundary, renewed here | `adeb80ffa2738f128805295627ce986c8c133bb7470b6d04b1ddb95a2660b0ef`: P71's original-type message filtering and payload-free diagnostics coexist with P80's retained-origin synchronous recovery scrolling. |
+| `_seal_message`, inherited renewal from `2be0973` | `59d057e1fb94be6f3bf1f2dae6333b710d8ff6acafec9ea51f2e3a222bfe3581`: remember the original type when creating a diagnostic-only adapter. |
+| `_protect_native_widget`, inherited renewal from `2be0973` | `eaf78d15a4ed9b4ee67c5ee5e54157359ce261be5d2d1c9a36a9b23fc18f0d69`: adapted native receivers preserve their original eligibility checks as well as exact-type controls. |
+| `FinOpsApp.switched`, inherited renewal from `7a28b74` | `4281adb59bec8d2f19a73bf4bab44f08f2dba575f4905add86447ca82eb880cc`: check main-view presence before reading the active pane; retain principal-notice handling. |
+
+The incoming `_message_enabled`, `PublicationDispatch.check_message_enabled`
+and `_protect_native_widget.check_message_enabled` context approvals and
+their exact-expression reasons are retained unchanged from P71. No new
+ordinary member, builtin, import, raw receiver or static-write exception is
+introduced by this follow-up; `check_message_enabled` remains default-deny
+outside the reviewed internal contexts. The 51 static writes and both
+boundary-module restrictions remain.
+
+The combined-source RED was **2 failed / 69 passed in 3.72 s**, specifically
+the stale widget-boundary digest and the resulting closed-source refusal.
+After inspecting the changed call chain, the digest was computed with
+`publication_policy.digest(ast.parse(source))`; every function-context digest
+matched its actual merged body. Two scratch removal probes then passed the
+ADR-0035 recipe: **85 baseline cases passed**, removal of original-type
+filtering failed **12 assertions**, and removal of the absent-main-tabs guard
+failed **4 assertions**. Both mutants collected/executed the same 85 IDs
+without errors or skips; byte restoration was followed by **85 passed**.
+The full harness took **52.907 s** and its receipt/logs are under
+`%TEMP%\p80-main-review-fbe784019d9f`. The selector includes the P80 retained
+scrolling controls alongside P71's delivery/lifecycle controls and the source
+contract, so neither parent behavior is inferred from a fingerprint alone.
+
+#### Reviewed shard port
+
+The P85 commits were read with `git -C accel-p85 show`; that worktree was
+not edited. Its three helper files have no difference from `729a249` and
+were copied byte-identically:
+
+| Helper | SHA-256 of both worktree copies |
+|---|---|
+| `Select-FinOpsShard.ps1` | `0B4D06C40634E9ED8D09435C05F8DC7DDA21155E0CDA57FAABF9FA59AEF88023` |
+| `Test-FinOpsShards.ps1` | `DAEA65DAB72812719A497409F08D920DBEA7E6CE21F617DFDBC0A2718ABB824C` |
+| `Update-FinOpsDurations.ps1` | `D07995811A9F3FF386868CB74CE7145CDC69B459815AF65C1434EDC519AF147A` |
+
+The wrapper, four literal `[0/4]` through `[3/4]` registrations, separate
+coverage check and five optional-environment skip names follow P85's reviewed
+changes. P85's coloured/plain synthetic-pytest controls are unchanged.
+Before that port, two safe AST checks failed on the single unsharded
+registration and missing wrapper parameters; afterward both passed. The old
+wrapper was deliberately not invoked with `-ListFiles` during RED, because
+it lacked a parameter block and would otherwise have executed the full suite.
+No full serial run or P85 timing data was used to manufacture that RED.
+
+#### Serial measurement, own weights and checks
+
+Before regenerating Example provenance, the existing snapshots were
+**1 failed / 4 passed in 19.30 s**: only the source-hash manifest was stale;
+all four exact rendered-grid comparisons passed. The existing
+`tools/capture.py` regenerated its 24 Example SVGs, four grids and manifest,
+and the snapshot/P80-guide selection passed **9 cases** (19.590 s process
+wall). The rendered artifacts stayed byte-identical; only source provenance
+changed. Historical live evidence was not relabelled.
+
+The same locked pipeline regenerated and checked architecture: **17 specs,
+19 PNGs**, all source/renderer/image hashes, references, labels and resource
+coverage valid. No PNG changed from the previously reviewed `a405f69` tree.
+The requested dependency junction was created only for rendering and removed
+in `finally`; the shared target remains intact.
+
+The full AUM suite ran **serially, exactly once**, from `cli\finops`, with
+the requested command:
+
+```powershell
+..\..\.venv-finops\Scripts\python.exe -m pytest tests -q -p no:cacheprovider `
+  --junitxml "$env:TEMP\p80-sharding-serial-full.xml"
+```
+
+The command above names the worktree interpreter; its actual invocation used
+the absolute `accel-p80\.venv-finops\Scripts\python.exe` path from the package
+directory. Its `claude_finops` import was asserted inside this worktree's
+`cli\finops\src`. Result: **928 passed, 0 failed, 0 errors, 0 skipped**, in
+**518.76 s pytest / 521.713 s process wall**. In particular, no failure from
+the previous integration's known-ID or FooterKey lists recurred in this run.
+The XML/log are `%TEMP%\p80-sharding-serial-full.xml` and
+`%TEMP%\p80-sharding-serial-full.log`; no rerun replaced this result.
+
+The byte-identical upstream `Update-FinOpsDurations.ps1 -JUnitXml <report>`
+generated **65 own file weights** from those 928 cases: **516.6 s** summed
+case time, rounded up per file to **561 whole seconds**. No P85-only filename
+or P85 timing was copied. `test-all-durations.json` replaces only its former
+130.4 s unsharded AUM entry with the following four planned values and the
+locally measured coverage-check weight, **14.4 s** (14.444 s measured).
+Every other historical weight and its hosted-run provenance is retained.
+
+| Registered AUM shard | Files | Planned seconds | Required maximum |
+|---|---:|---:|---:|
+| `0/4` | 16 | 141 | 300 |
+| `1/4` | 16 | 140 | 300 |
+| `2/4` | 16 | 140 | 300 |
+| `3/4` | 17 | 140 | 300 |
+
+`Test-FinOpsShards.ps1` passed: all **65** files are listed and assigned
+exactly once, pytest's own collection names the same files, no committed
+weight names a missing file, and both coloured and plain synthetic invocations
+run exactly their listed files (**31 synthetic cases in total**). No pytest
+part was skipped. The maximum plan is **141 s**, not an asserted concurrent
+gate duration. The 600 s timeout, shard count 12 of the outer runner, defaults,
+existing tests and all publication budgets remain unchanged.
+
+| Requested check | Result | Process wall seconds |
+|---|---|---:|
+| `tests\Test-FinOpsShards.ps1` | PASS; four complete plans at or below 300 s | 14.444 |
+| `tests\Test-RunnerIntegrity.ps1` | PASS; optional-environment skip identities and negative probes retained | 196.125 |
+| `tests\Test-TestAllSharding.ps1` | PASS; deterministic ownership and complete exact-source coverage | 2.233 |
+| `tests\Test-MutationShards.ps1` | PASS; complete mutation set without duplicate ownership | 9.592 |
+| `tests\Test-DocReferences.ps1` | PASS; 42 guides and all ten negative cases | 9.058 |
+| `scripts\Repair-ScriptEncoding.ps1 -Check` | PASS; 306 scripts safe for PowerShell 5.1 | 8.434 |
+| `node guide/check-architecture.mjs` | PASS after the port and timing-table updates | 0.623 |
+
+The measurement/coverage pipeline owned the shared lock from
+**06:05:18.981 to 06:15:13.445 IST**; the remaining six checks owned it from
+**06:20:43.353 to 06:24:30.475 IST**. Every check has a separate complete log
+and timing record in `%TEMP%\p80-sharding-measure-receipt.json` or
+`p80-sharding-checks-receipt.json`. The three copied helper hashes were checked
+again after validation and remained byte-identical. The final commit record
+follows once this reviewed merge is recorded.
 
 ### P71 closed-contract integration, 2026-09-30
 
@@ -1670,6 +2097,168 @@ open-unknowns warnings), 0 failed, 2 skipped (AUM, no worktree venv). Test-All p
 Merged to main as `cac1260` (`--no-ff`; the merge tree is the branch tree).
 
 ## P71 AUM answers fast and says why it cannot, 2026-09-28
+
+**Merged as `01bb6c7` on 2026-09-30 with the owner's approval.** Council round 11 passed on
+all five seats at `0e88d19`. The packet gate passed on `72607c8`, the merge of `0e88d19` with main
+`844a786`: 97 of 97 Test-All checks in 1,883.7 s, the AUM check in 401.2 s. The merge tree is
+the gated tree.
+
+### Stale tab activation without main content, 2026-09-30
+
+**PLAN / CONTRACT:** A retained `TabActivated` must be ignored when the
+default screen has no `#main-tabs`, both during a running remount gap and
+after shutdown. It must not query `active`, write presentation or start a read.
+A current activation with mounted main content must still refresh normally.
+This is a separate lifecycle correction, not a relaxation of publication guards.
+
+The lead reproduced the assistant-context case **4 times in 12 runs** on P85's
+`bcf8554` P71 base under 16 CPU burners, without `WorkerCancelled` or the
+later `f122985` sealing change. Local history shows `d7cd2f2` added the
+`event.pane.id != self.active` comparison and `89852aa` added the principal
+notice clause. The comparison dereferences main content before deciding an
+activation is stale. Two short probes reproduce the exact `NoMatches` against
+real empty default screens while running and after shutdown. The earlier
+record's secondary-error diagnosis applies to its captured cancellation
+traces, not to every missing-main-content failure.
+
+**RED:** Both deterministic lifecycle cases failed in **2.44 s** with the
+exact missing-`#main-tabs` error, without a cancelled worker.
+The new guard uses the existing approved DOM query before `active`; only the
+changed function's exact context fingerprint is renewed.
+
+An initial nine-case control had 7 passes and 2 failures in the earlier
+single-refresh detector. A message trace identified its distinct test setup
+race: worker completion precedes the initial overview `TabPane.Focused`
+message being handled, so it counted an overview refresh along with the
+requested budgets/requests refresh. That detector now awaits completion of
+the real native initial-focus handler before measuring the next activation;
+its one-worker and non-cancellation assertions are unchanged.
+
+**GREEN / REFACTOR:** All **14 targeted lifecycle, navigation, assistant and
+closed-contract cases passed in 16.93 s**. No new ordinary member, exception
+capability, sleep, retry or timeout allowance was introduced. The lifecycle
+cases join the existing standard diagnostics selector.
+
+The lead's stress harness completed **30 iterations with 16 CPU burners:
+270/270 executions passed**, with zero failures, errors, skips or identity
+mismatches. Every iteration ran the two missing-main cases, two live-navigation
+controls, the assistant-context case and the prior four identities. The full
+AUM suite then passed **all 831 cases in 350.98 s** (353.722 s wall), with no
+errors or skips. Both proofs used the same production source.
+Receipts and exact JUnit identities persist in
+`.finops-evidence\p71-stale-tabs`; long raw logs remain under TEMP.
+
+The existing architecture witness was regenerated and checked (16 specs /
+18 PNGs). Only the witnessed TUI source hash changed; there is no new component,
+data flow or diagram imagery.
+
+All long jobs now use the lead's `with-gate-lock.ps1` wrapper with owner
+`p71-r10b`; it acquires the shared lock and releases only its own token.
+This supersedes the earlier absence-only and between-test-pause protocols.
+The earlier pause plugin is not used while holding the wrapper's lock.
+The loaded run held the wrapper lock from 03:56:31 to 04:17:04 +05:30; the
+architecture/full run held it from 04:17:49 to 04:23:57 +05:30 on 2026-09-30.
+Council, packet gates and integration remain with the lead. U26 remains OPEN
+for other historical failures; no merge or push was performed.
+Implementation and recorded proof: `7a28b74`
+(`fix(aum): ignore tab activations without main content`).
+
+### Startup and navigation cancellation correction, 2026-09-30
+
+**PLAN:** Reproduce the round-10 cancellation deterministically, preserve the
+closed publication contract, and prove the four reported identities under four
+CPU burners for at least 30 iterations plus one complete AUM run. The lead owns
+council and packet gates; this builder does not push or merge.
+
+**CONTRACT / investigation:** The saved full-run traceback first raises
+`WorkerCancelled` after navigation; `NoMatches` is a secondary shutdown error
+in `FinOpsApp.switched`, not evidence of an uncomposed initial screen.
+Round-10 commit `f122985` added `_seal_message`, whose diagnostic subclasses
+change `type(message)`. Textual 6.12.0 filters disabled/prevented messages by
+exact type in `MessagePump.check_message_enabled` and
+`Widget.check_message_enabled`. Sealed `Tabs.TabActivated` and `Select.Changed`
+therefore evade the framework's suppression and start replacement exclusive
+refresh workers. A short trace on `e1586c5` observed two refresh workers for
+one budgets navigation, cancelling the first even though that run passed.
+A read-only probe also posted a supposedly prevented `Select.Changed`.
+The compatibility rule and its positive/negative tests are recorded in
+[ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md).
+
+**RED:** All **12 deterministic regressions failed in 2.70 s** on unchanged
+`e1586c5` production source: ten original/forwarded message-control cases and
+two event-held real navigation cases. Loaded RED completed **4 iterations,
+16 cases: 4 failures across 3 iterations**, with four owned CPU burners.
+The requested 20-iteration baseline stopped when another gate appeared;
+uncompleted iterations are not counted. An earlier gate-aborted load attempt
+and an aborted combined short invocation are retained but excluded from proof.
+
+**GREEN / REFACTOR:** The initial **16-case** selection (the 12 regressions and
+four reported identities) passed in **11.84 s**. Four additional native
+disabled-widget press/scroll controls passed in **0.63 s**. The adapter retains
+an exact reverse type mapping, checks original suppression/disabled types and
+still delegates every other native eligibility rule. The reverse mapping is
+initialized before its adapter can be reused by another posting thread.
+The boundary and changed exact-context fingerprints were reviewed with these
+counterexamples; no ordinary member or publication guard is newly allowed.
+The exact source-contract/default-deny selection passed **44 cases in 4.96 s**.
+
+The first complete corrected-source AUM run was retained: **828 passed,
+1 failed in 342.66 s** (345.50 s wall). The native `FooterKey-description`
+probe queried a child during Textual's post-refresh footer rebuild, before its
+guard assertion. `Footer.bindings_changed` schedules `recompose`, which removes
+then asynchronously remounts keys under `Widget.batch`'s lock; a worker wait
+does not await that lifecycle. Event-held native mounting reproduces that
+exact gap without a clock: **2 failed, 2 passed in 5.42 s** before the await.
+The probe now awaits the footer's after-refresh callback and acquires the same
+batch lock, then tests the current attached receiver. Direct recomposition
+from the app's test task was rejected by Textual's reactive binding-owner
+check; the final probe keeps the native footer callback context. Its
+refusal, payload-absence and app-liveness assertions are unchanged. No production
+change or timing allowance was needed for this additional test precondition.
+All **4 event-held chrome cases passed in 5.25 s**.
+
+**Final proof:** With the same four-burner load as RED, **30 completed
+iterations / 120 executions passed, with zero failures, errors or skips**.
+The completed batches were 7 and 23 iterations; a gate-interrupted partial
+iteration was excluded. The complete AUM invocation then passed **all 829
+cases in 585.16 s** (587.95 s wall), including four 60-second gate pauses
+between tests. Every case ran once, with zero errors or skips. Its production
+source hash matches the loaded proof. The earlier 828/829 result is retained,
+not replaced by the final pass.
+
+The deterministic regressions are in the existing standard diagnostics/native
+selectors; the three new default-deny cases stay in the existing attribute
+selector. There is no new architecture component, data flow, identity or
+network path. The existing source witness was regenerated and checked
+(16 specs / 18 PNGs); diagram images are unchanged and the AUM image was inspected.
+
+All long output stays under TEMP, with receipts and the rerunnable harness in
+`.finops-evidence\p71-startup-race`. The lock was never created or deleted;
+the stress harness also stops its own load if a new gate starts. Repeated gate
+arrivals interrupted full-suite attempts, so the final evidence-only pytest
+hook yields the machine between completed cases, polling the lock every 60 s
+before starting the next case. It does not retry, skip, change in-test timing
+or alter results; the longest case in the first complete run was 6.526 s.
+The hook was checked with a simulated lock, without changing the real lock.
+The original aborted attempts and their output remain available.
+U26 stays OPEN for historical failures outside this diagnosed regression.
+No sleep, retry, relaxed
+assertion or readiness timeout is added to application or test synchronization.
+
+Private receipts: `stress-red-v2.json`, `stress-green-total.json`,
+`full-green-batch-04.json` and `full-gate-aware.json`; their JUnit results are
+preserved alongside the harness. Reproduce from this worktree root with an
+unused label:
+
+```powershell
+& .\.venv-finops\Scripts\python.exe .\.finops-evidence\p71-startup-race\stress.py --label review-stress --iterations 30 --burners 4 *> "$env:TEMP\p71-review-stress.log"
+& .\.venv-finops\Scripts\python.exe .\.finops-evidence\p71-startup-race\stress.py --label review-full --full --iterations 1 --burners 0 *> "$env:TEMP\p71-review-full.log"
+```
+
+**Builder handoff:** Implementation and recorded proof are committed as
+`2be0973` (`fix(aum): preserve native message controls after sealing`).
+Council and packet gates remain with the lead. ROADMAP P71 remains unticked.
+Nothing was pushed or merged.
 
 ### Council round 10 corrections
 

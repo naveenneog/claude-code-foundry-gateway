@@ -66,7 +66,7 @@ function Get-AumNamedValueMap {
     if ($LASTEXITCODE -ne 0) { throw 'Cannot read named-value state; no safe write or rollback is possible.' }
     $map = @{}
     $values = $raw | ConvertFrom-Json
-    foreach ($value in @($values)) {
+    foreach ($value in $values) {
         if (-not $value.secret) { $map[[string]$value.name] = [string]$value.value }
         elseif ($value.name -match '^(bu-|quota-|tpm-|models-|allow-|turnstile-integration$)') {
             throw 'Governance named values must be nonsecret. Inspect the gateway configuration.'

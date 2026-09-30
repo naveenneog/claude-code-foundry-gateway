@@ -149,7 +149,7 @@ BOUNDARIES = {
         "errno": {"EACCES", "EAGAIN", "EDEADLK"},
         "msvcrt": {"locking", "LK_NBLCK"}, "fcntl": {"flock", "LOCK_EX", "LOCK_NB"},
     }),
-    "publication_widgets.py": ("Native receivers are guarded before attachment, logging and retained recovery scrolling; no raw receiver capability escapes.", "c6376fe90e655355c68590207a2241ff8f8f77d88bc2495efc1323a928ff95fa", {
+    "publication_widgets.py": ("Native receivers retain guarded origins and synchronous recovery scrolling; sealed messages preserve exact-type delivery controls.", "adeb80ffa2738f128805295627ce986c8c133bb7470b6d04b1ddb95a2660b0ef", {
         "textual._context": {"active_app"}, "textual.app": {"App"}, "textual.widget": {"Widget"},
         "textual.containers": {"Container", "HorizontalGroup", "Horizontal", "Vertical", "VerticalScroll"},
         "textual.screen": {"Screen", "ModalScreen"},

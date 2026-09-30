@@ -11,6 +11,36 @@ pwsh -NoProfile -File .\tests\Test-All.ps1 -Serial
 pwsh -NoProfile -File .\tests\Test-All.ps1 -ThrottleLimit 2
 ```
 
+## Projection deployment safety (P84)
+
+The default suite registers `Test-ProjectionPreflight.ps1` and `Test-ProjectionCouncil.ps1`.
+Their Azure CLI/HTTP boundaries are
+offline, including native `az.cmd` stderr under PowerShell 7 and Windows PowerShell 5.1.
+The deployer/installer/flow refusal, declined prerequisites, narrow rendering, redacted output,
+all four real Graph callers and en-US/en-GB/de-DE suites run without Azure resources.
+
+```powershell
+pwsh -NoProfile -File .\tests\Test-ProjectionPreflight.ps1
+pwsh -NoProfile -File .\tests\Test-ProjectionCouncil.ps1
+pwsh -NoProfile -File .\tests\Test-ProjectionPreflightNegative.ps1 -ValidateAnchors
+pwsh -NoProfile -File .\tests\Test-ProjectionPreflightNegative.ps1 `
+  -ReceiptPath "$env:TEMP\p84-mutation-receipt.json"
+```
+
+The preflight check takes approximately 15 seconds and the full council check approximately
+one minute on the shared workstation. The full mutation proof is separate from default Test-All
+and takes approximately 15-25 minutes. It mutates a unique
+temporary copy, restores the original bytes after every probe, and reruns the restored baseline.
+A catch requires valid syntax, the selected suite's full baseline assertion count, a failed
+assertion and nonzero exit. Council selectors `Core`, `Callers` and `Cultures` support bounded
+proof commands; the default `All` still runs every group. The receipt records each probe's suite,
+counts, timing and source commit. The removed ARM-admission probes are historical; their
+replacement proves unconditional refusal under the lead's explicit contract change.
+
+On the owner's shared workstation a single long invocation owns `<workspace>\.gate-lock`;
+creation is atomic, contention retries every 60 seconds, and only that invocation removes its
+own lock in `finally`. [P84 STATUS](../docs/STATUS.md) records the actual receipts and times.
+
 ## Deterministic shards
 
 The marked registration block is the authority. `Get-TestAllRegistration` parses its AST without
@@ -37,6 +67,47 @@ The [local-only manifest](test-all-local-only.json) is empty. Every default regi
 belongs to CI. A future entry requires a registered name, a reason and a successful matching
 local receipt; an exclusion is not permission to omit evidence. `-LocalOnly` selects that lane
 when it is nonempty. `-IncludeAzure` cannot be combined with sharding or local-only receipts.
+
+## AUM test shards
+
+The AUM pytest suite runs as four registered checks, `AUM - commands, dashboard and pilot [0/4]`
+to `[3/4]` in `tests/Test-All.ps1`. This is ported from P85 `c9ae1c8` and `729a249`;
+`Select-FinOpsShard.ps1`, `Test-FinOpsShards.ps1` and `Update-FinOpsDurations.ps1` retain
+their reviewed bytes. P80's 2026-09-30 serial run passed all 928 tests in 518.76 s
+(521.713 s process wall). At the lead's observed P71 gate multiplier of 1.14, that would
+be about 591.4 s against the unchanged 600 s per-check
+timeout (`tests/Test-All.ps1:9`). This estimate motivates sharding; it is not a measured P80 gate.
+`Test-FinOps.ps1 -Shard i/n` passes one share of the top-level `cli/finops/tests` files to pytest;
+without `-Shard` it runs the whole directory as before (`tests/Test-FinOps.ps1:4`).
+
+Files are assigned longest first to the least-loaded shard, by whole-second weights in
+[finops-test-durations.json](finops-test-durations.json). Equal weights keep ordinal file order,
+equal loads choose the lower shard, and a file without a weight takes `DefaultSeconds`
+(`tests/Select-FinOpsShard.ps1:49`). A weight only moves a file between shards; no file is run
+twice or left out. P80's weights come from its own complete serial measurement, not P85's files.
+
+The 65 measured files sum to 516.6 s of JUnit case time before rounding. The current plans are
+`0/4`: 16 files / 141 s, `1/4`: 16 / 140 s, `2/4`: 16 / 140 s, and `3/4`: 17 / 140 s.
+The coverage check passed in 14.444 s locally. Those planned weights and the rounded 14.4 s
+coverage-check measurement replace only the old unsharded AUM entry in
+`test-all-durations.json`; its other historical check timings remain unchanged.
+
+`Test-FinOpsShards.ps1` compares the registrations, the listings, the files on disk and pytest's
+own collection, and runs a synthetic suite in which each shard's passed count identifies the files
+it ran. One synthetic shard runs with pytest's colour on and one with it off (`PY_COLORS`), because
+the packet gate runs Test-All with `FORCE_COLOR=0` (`.ironclad/gate.mjs:340`) and pytest colours its
+output for any non-empty `FORCE_COLOR` (`tests/Test-FinOpsShards.ps1:185`). It fails when a planned
+shard exceeds half the per-check timeout (300 s) or a weight names a missing file. Planned
+seconds are not a measurement of concurrent gate wall time.
+
+```powershell
+pwsh -NoProfile -File .\tests\Test-FinOps.ps1 -Shard 1/4 -ListFiles
+pwsh -NoProfile -File .\tests\Test-FinOpsShards.ps1
+.\.venv-finops\Scripts\python.exe -m pytest cli\finops\tests -q -p no:cacheprovider --junitxml $env:TEMP\aum.xml
+pwsh -NoProfile -File .\tests\Update-FinOpsDurations.ps1 -JUnitXml $env:TEMP\aum.xml
+```
+
+The last two lines refresh the weights from one complete serial run.
 
 ## Receipts and coverage
 

@@ -78,6 +78,7 @@ class _PayloadFreeRepresentation:
 
 
 _MESSAGE_TYPES = {}
+_MESSAGE_ORIGINALS = {}
 
 
 def _seal_message(message):
@@ -90,8 +91,16 @@ def _seal_message(message):
             "__slots__": (), "__module__": original.__module__, "__qualname__": original.__qualname__,
         }, bubble=original.bubble, verbose=original.verbose, no_dispatch=original.no_dispatch)
         protected.handler_name = original.handler_name
+        _MESSAGE_ORIGINALS[protected] = original
         _MESSAGE_TYPES[original] = protected
     message.__class__ = protected
+
+
+def _message_enabled(owner, message):
+    """Keep exact-type delivery controls despite diagnostic-only subclassing."""
+    original = _MESSAGE_ORIGINALS.get(type(message), type(message))
+    return (original not in owner._disabled_messages
+            and (not isinstance(owner, TextualWidget) or not owner._is_prevented(original)))
 
 
 @dataclass(kw_only=True, repr=False)
@@ -141,6 +150,9 @@ class _RetainedWatcher(_PayloadFreeRepresentation):
 
 
 class PublicationDispatch:
+    def check_message_enabled(self, message):
+        return _message_enabled(self, message) and super().check_message_enabled(message)
+
     def call_next(self, callback, *args, **kwargs):
         return super().call_next(_retained_framework_watcher(self, callback), *args, **kwargs)
 
@@ -296,6 +308,9 @@ def _protect_native_widget(widget, origin):
             _seal_message(message)
             return original.post_message(owner, message)
 
+        def check_message_enabled(owner, message):
+            return _message_enabled(owner, message) and original.check_message_enabled(owner, message)
+
         def call_next(owner, callback, *args, **kwargs):
             return original.call_next(owner, _retained_framework_watcher(owner, callback), *args, **kwargs)
 
@@ -335,6 +350,7 @@ def _protect_native_widget(widget, origin):
             "render": render,
             "render_lines": render_lines,
             "post_message": post_message,
+            "check_message_enabled": check_message_enabled,
             "call_next": call_next,
             "run_worker": run_worker,
             "_dispatch_message": dispatch,

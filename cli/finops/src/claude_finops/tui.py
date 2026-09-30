@@ -291,7 +291,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
 
     @on(TabbedContent.TabActivated)
     def switched(self, event):
-        if event.pane.id != self.active or self._principal_notice:
+        if not self.query("#main-tabs") or event.pane.id != self.active or self._principal_notice:
             return
         self.update_brand()
         self.update_key_hints()

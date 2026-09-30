@@ -29,6 +29,17 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P80 final-main integration and AUM test sharding.** P71's final exact-type message
+  controls and absent-main-tab handling retain P80's protected actions and recovery.
+  Four duration-weighted AUM checks and their coverage proof are ported from P85
+  `c9ae1c8` / `729a249`, using P80's own serial JUnit timings rather than P85's weights;
+  the 600 s check timeout and every existing test remain unchanged.
+  The main `3b7c192` integration passes all 928 serial AUM cases in 518.76 s.
+  Its 65 files plan at 141/140/140/140 s across four complete shards; coverage,
+  runner integrity, mutation ownership, documentation, encoding and architecture
+  checks pass. The combined publication fingerprint review and source-preserving
+  removal proofs are recorded in [P80 STATUS](docs/STATUS.md#final-main-integration-and-reviewed-aum-test-shards-2026-09-30).
+
 - **P80/P71 publication integration.** Existing AUM actions retain guarded notifications,
   text-only report/profile paths, origin-checked local saves and recovery scrolling;
   profile conflicts keep the current connection form instead of clearing its principal state.
@@ -125,6 +136,25 @@ exact streaming cache-creation detail remains **U13**.
   backend text before Textual logging. The seven scheduler cases enable visible
   notifications. [Corrections and evidence](docs/STATUS.md#council-round-10-corrections),
   [approval recipe](docs/adr/0035-aum-bounded-readiness-and-progressive-reads.md#approval-recipe-for-attributes-and-builtins).
+  Diagnostic sealing now preserves Textual's exact-type message suppression
+  and disabled-message controls, preventing duplicate tab/selector refreshes
+  from cancelling current reads without weakening provenance or payload redaction.
+  Retained tab activations are ignored while main content is absent during
+  remount or shutdown; current activations and publication checks remain unchanged.
+- **P84 projection deployment preflight and deferred switching.** `-PreflightOnly` and normal
+  deployment share read-only prerequisite checks before Azure writes. PowerShell 7 is required
+  for deployment/projection sync. Graph errors no longer count as absent groups; runner failures
+  show sanitized counts/hashed samples from at most 40 lines and 4,096 characters; failed app
+  creation cannot update an empty id. Council round 1 rejected ARM-only admission: a successful
+  scheduled dry-run can renew nothing. Deployment, installer and guided Entitlement now refuse
+  every projection switch until P86. [ADR-0040](docs/adr/0040-projection-preflight-and-switch.md)
+  proposes destination-bound Cosmos renewal evidence for that later packet.
+  Confirmed-absent premium passes, unproven app rights produce WARN, supplied app ids skip
+  policy reads, narrow reports use stacked records, and declined prerequisites abort.
+  Real-caller and locale tests cover en-GB/de-DE and supported PowerShell hosts. Earlier proof
+  receipts remain historical, not acceptance of the rejected design. Revised proof at `eca8b55`:
+  197 preflight assertions, 83 council assertions and 95/95 valid-syntax, count-preserving
+  mutations ([P84 status](docs/STATUS.md)).
 
 - **P78 parallel hosted checks.** Opt-in deterministic Test-All shards retain
   isolated processes, exclusive checks and deadlines, with commit/tree-bound receipts and an

@@ -223,7 +223,7 @@ async def test_framework_chrome_contains_only_guarded_receivers(bearer_tui_estat
     ("HeaderIcon", "icon"), ("FooterKey", "description"),
     ("FooterKey", "key_display"), ("Screen", "title"),
 ])
-async def test_native_chrome_content_requires_publication(bearer_tui_estate, chrome, field):
+async def test_native_chrome_content_requires_publication(bearer_tui_estate, monkeypatch, chrome, field):
     engine, principal = bearer_tui_estate
     app = FinOpsApp(engine, Config(backend="fake"), first_run=False)
     async with app.run_test(size=(100, 30), notifications=True) as pilot:
@@ -234,12 +234,34 @@ async def test_native_chrome_content_requires_publication(bearer_tui_estate, chr
         await pending
         await pilot.pause()
         value = engine.read("budgets")["items"][0]["scope_name"]
-        principal[0] = "b"
-        await asyncio.to_thread(engine.read, "whoami")
-        await pilot.pause()
-        widget = app.screen if chrome == "Screen" else app.query_one(chrome)
-        with pytest.raises(FinOpsError):
-            setattr(widget, field, value)
+        footer = app.query_one(Footer)
+        mounting, release = asyncio.Event(), asyncio.Event()
+        mount_all = footer.mount_all
+
+        async def mount_after_release(*args, **kwargs):
+            mounting.set()
+            await release.wait()
+            return await mount_all(*args, **kwargs)
+
+        async def check_current_receiver():
+            async with footer.batch():
+                widget = app.screen if chrome == "Screen" else app.query_one(chrome)
+                with pytest.raises(FinOpsError):
+                    setattr(widget, field, value)
+
+        monkeypatch.setattr(footer, "mount_all", mount_after_release)
+        try:
+            principal[0] = "b"
+            await asyncio.to_thread(engine.read, "whoami")
+            await mounting.wait()
+            assert not footer.query("FooterKey"), "The probe must reach the real remove/remount gap."
+            release.set()
+            ready = asyncio.get_running_loop().create_future()
+            assert footer.call_after_refresh(
+                lambda: ready.set_result(asyncio.create_task(check_current_receiver())))
+            await (await ready)
+        finally:
+            release.set()
         await pilot.pause()
         assert value not in app.export_screenshot()
         assert app.is_running and app._exception is None

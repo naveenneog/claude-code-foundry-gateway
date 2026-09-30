@@ -263,6 +263,8 @@ try {
     Invoke-Check 'Network prices are discovered, not guessed' 'Test-NetworkCost.ps1'
     Invoke-Check 'Network edge checks detect breakage'       'Test-NetworkEdgeNegative.ps1'
     Invoke-Check 'Projection checks detect breakage'        'Test-ProjectionNegative.ps1'
+    Invoke-Check 'Projection preflight and safe switch'     'Test-ProjectionPreflight.ps1'
+    Invoke-Check 'Projection council corrections'           'Test-ProjectionCouncil.ps1'
     Invoke-Check 'Claude Desktop sign-in choice'             'Test-DesktopSignIn.ps1'
     Invoke-Check 'Workstation clients read what setup writes' 'Test-WorkstationClients.ps1' -SerialLane
     Invoke-Check 'Workstation model retirement agrees across shells' 'Test-WorkstationModels.ps1'
@@ -288,7 +290,13 @@ try {
     $finopsSkip = if (-not ((Test-Path $finopsPython) -or (Test-Path $finopsUnixPython))) {
         'AUM: Python or the worktree .venv-finops is missing. See docs/AUM.md to install.'
     } else { '' }
-    Invoke-Check 'AUM - commands, dashboard and pilot' 'Test-FinOps.ps1' -SkipReason $finopsSkip
+    # P80's 928 tests took 518.76 s serially, leaving little headroom below 600 s; port P85's reviewed
+    # four-way file assignment (c9ae1c8/729a249), weighted by P80's own JUnit measurement.
+    Invoke-Check 'AUM - commands, dashboard and pilot [0/4]' 'Test-FinOps.ps1' @{ Shard = '0/4' } -SkipReason $finopsSkip
+    Invoke-Check 'AUM - commands, dashboard and pilot [1/4]' 'Test-FinOps.ps1' @{ Shard = '1/4' } -SkipReason $finopsSkip
+    Invoke-Check 'AUM - commands, dashboard and pilot [2/4]' 'Test-FinOps.ps1' @{ Shard = '2/4' } -SkipReason $finopsSkip
+    Invoke-Check 'AUM - commands, dashboard and pilot [3/4]' 'Test-FinOps.ps1' @{ Shard = '3/4' } -SkipReason $finopsSkip
+    Invoke-Check 'AUM shards run every test file once'       'Test-FinOpsShards.ps1'
     Invoke-Check 'AUM install script'                        'Test-InstallAum.ps1'
     Invoke-Check 'Guided flow contract'                      'Test-FlowContract.ps1'
     Invoke-Check 'Guided flow FinOps modules'                'Test-FlowFinOps.ps1'

@@ -69,6 +69,23 @@ These are offline client-boundary findings, not new live Azure or directory
 claims. U38-U41 remain P80's IDs; the separate P71 timing observations are
 retained in STATUS without closing U26.
 
+The lead's 2026-09-30 final-main/sharding follow-up retains those four P80
+contracts. P71's final exact-type message and absent-main-tab corrections are
+reviewed against ADR-0035. P80's complete serial run passed 928 cases in
+518.76 s and supplied all 65 file weights; none were assumed from P85.
+Its four shard plans are 141/140/140/140 s. The reviewed P85 planner's 300 s
+limit is a planned-weight bound, not a measurement of concurrent gate wall
+time; that risk remains visible in the P80 STATUS and test-runner documentation.
+
+## P84 research before implementation
+
+| ID | State | Question | Blocks |
+|---|---|---|---|
+| U54 | CLOSED | Council correction, researched 2026-09-29: allowedToCreateApps describes the default user role, not effective delegated/custom-role permission. Policy.Read.All denial is not app-creation denial. Unreadable, false-default, guest or otherwise unproven rights produce WARN; a supplied ResolverAppId avoids that policy read. Explicit resource/creation denial still fails. Confirmed-absent optional premium is distinct from a failed Graph lookup. Sources and access date: [ADR-0040](adr/0040-projection-preflight-and-switch.md). | P84 revised contract; no live tenant permission claim |
+| U55 | CLOSED | Researched 2026-09-29 against all three Bicep templates and Microsoft naming/RBAC docs: nine providers, a 1-37 character safe prefix, and three global name checks. Local Bicep build-params evaluates the existing uniqueString storage name without a deployment; fixture result stres52p2c4jfs43ig. [ADR-0040](adr/0040-projection-preflight-and-switch.md) records API shapes and citations. | P84 contract defined; regional capacity cannot be guaranteed |
+| U56 | OPEN | Council demonstrated that ARM cron, bindings, a digest and a succeeded execution can describe a dry-run that renews nothing. ARM metadata proves neither the destination of writes nor continuing schedule activity. P84 now refuses switching unconditionally. P86 admission is proposed to read destination-bound Cosmos evidence through the runner: oldest expiry has margin, reconciliationGeneration advanced twice in two hours, newest renewal within 60 minutes, and a tested image/entrypoint with dry-run overrides rejected. [ADR-0040](adr/0040-projection-preflight-and-switch.md). | P86 renewal evidence and monitored operation; not a P84 admission assumption |
+| U57 | CLOSED | Council round 1 invalidated the earlier safety conclusion despite 240 assertions and 111 mutations. Revised offline proof at eca8b55, 2026-09-29: preflight 197; council 83 including every real Graph caller, en-US/en-GB/de-DE, 100-column output, identity-safe bounded diagnostics and declined confirmation. All 95 current mutations retained complete selected baselines (197/66/14), parsed, failed assertions and exited nonzero; restored suites passed, total 1,356.35 s. Earlier receipts remain historical in STATUS, not proof of rejected admission. | P84 correction proof complete; lead round 2 pending; no Azure writes |
+
 ## P78 research before implementation
 
 | ID | State | Question | Blocks |
@@ -105,6 +122,21 @@ independent absence checks passed at 22:13:51Z.
 ## Detail
 
 ### U26 - P71 observation, 2026-09-28
+
+The lead's 2026-09-30 follow-up identifies a second, independent lifecycle
+failure: the assistant-context case failed 4/12 times under 16 CPU burners
+on P85's `bcf8554` P71 base, without the later message-sealing change and
+without worker cancellation. `FinOpsApp.switched` queries `active` while
+`#main-tabs` is absent. Retained activations reproduce that exact error on
+real empty running and shut-down default screens. The new contract requires
+ignoring these stale events while preserving live activations; deterministic
+and loaded correction evidence is recorded in
+[STATUS](STATUS.md#stale-tab-activation-without-main-content-2026-09-30).
+Both deterministic cases failed before the presence check; the corrected
+targeted/contract selection passed all 14 cases. The expanded 16-burner proof
+passed 270 executions over 30 iterations, including both lifecycle cases and
+the assistant-context case. The full AUM suite passed all 831 cases.
+U26 remains OPEN for its other historical failures.
 
 During P71's refresh changes, full pytest runs identified the exact failing
 cases: `test_service_terminal_hides_unoffered_views_and_opens_real_core_tabs`,
@@ -146,55 +178,6 @@ The attempt used a frozen copy of `829ef40`'s package (the reviewed `dd46186`
 production code), with its import path checked before running. No timeout,
 assertion or synchronization was changed. This attempt did not reproduce the
 reviewer's cancellation; U26 remains open for that result.
-
-### U30 — The company address — CLOSED 2026-09-28
-
-**Answer.** Basic v2, Standard v2 and Premium v2 support custom gateway domains, using either an
-uploaded PFX or a certificate held in Key Vault. The [v2 overview][u30-v2] explicitly lists
-"Free, managed TLS certificate" as unavailable. The [custom-domain article][u30-domain] says the
-same, even though its managed-certificate section also discusses a temporary issuance suspension
-ending on June 30, 2026. Ending that suspension does not add v2 support.
-
-| Question | Researched result |
-|---|---|
-| Gateway hostname on each v2 tier | Supported on all three. Basic v2 and Standard v2 support one custom gateway hostname; Premium v2 supports multiple. The default `<apim>.azure-api.net` gateway remains available ([domain][u30-domain], [feature table][u30-features]). |
-| Uploaded certificate | PFX, triple-DES encrypted, private RSA key at least 2,048 bits, hostname in subject/SAN, and complete certificate chain. A password is optional. The issuer's charge is separate ([domain][u30-domain]). |
-| Key Vault | The certificate is imported/created as a **certificate**, not an unrelated secret. APIM references its backing `application/x-pkcs12` secret URL in `keyVaultId`. A versionless URL permits rotation; a versioned URL pins a version. Its managed identity needs secret get/list, or the **Key Vault Secrets User** RBAC role. Automatic pickup can take 1-2 days; manual synchronization is available ([domain][u30-domain], [ARM update][u30-arm]). |
-| DNS | CNAME from the company hostname to `<apim>.azure-api.net`. `apimuid.<hostname>` TXT with the domain-ownership identifier is needed only for the free managed certificate, which these tiers cannot use. The chosen CA may impose its own issuance records; those belong to issuance, not APIM binding ([domain][u30-domain]). |
-| Public or private DNS | The domain article explicitly requires publicly resolvable custom gateway names on Standard v2 and Premium v2. Basic v2 also requires the public CNAME, measured 2026-09-27 at 20:44 UTC: `CustomHostnameOwnershipCheckFailed` for the isolated `.test` hostname. DNS creation and resolution must precede binding; an authoritative-only Azure DNS zone is insufficient. |
-| Update duration | Infrastructure changes can take 15 minutes or longer, with longer waits for larger deployments. The v2 overview describes faster certificate/hostname updates but gives no fixed SLA. P69 announces an estimate and uses a bounded 45-minute wait, reporting elapsed time. The gateway continues serving existing requests while updating ([domain][u30-domain], [v2][u30-v2]). |
-| Preserving the service | ARM `PATCH` accepts `properties.hostnameConfigurations`. A patch changes that collection without a service `PUT`; P69 retains the other entries in the collection and does not send network, tier or portal settings ([ARM update][u30-arm]). |
-
-**Prices read from the [Azure Retail Prices API][u30-retail] on 2026-09-27 at 20:11 UTC
-(2026-09-28 locally).** Consumption rows, USD; these are list prices, not the agreement's price
-sheet (**U31**). Public DNS uses `armRegionName = ''`, not an assumed regional meter. Key Vault
-below uses `eastus2`, product `Key Vault`, SKU `Standard`, not Managed HSM's hourly instance meter.
-
-| Component and published meter | First tier | Later tier / qualification |
-|---|---|---|
-| Azure DNS, Public, `Public Zone` | USD 0.50 per zone/month, first 25 zones | USD 0.10 beyond 25. Adding a record to an existing zone does not add another zone. |
-| Azure DNS, Public, `Public Queries` | USD 0.40 per million queries | USD 0.20 after 1,000 million. Request count and DNS query count are not interchangeable. |
-| Key Vault, Standard, `Operations` | USD 0.03 per 10,000 operations | Usage-based, not a fixed monthly vault fee. |
-| Key Vault, Standard, `Certificate Renewal Request` | USD 3 per renewal request | Certificate-authority charges are separate; not every imported certificate uses integrated renewal. |
-| API Management, `Basic v2 Unit`, eastus2 | USD 0.20548/hour; USD 150.00 at 730 hours | The existing gateway tier charge continues. A custom domain is a supported feature, not a separate custom-domain retail meter. |
-| Certificate issuer / external DNS provider / domain registration | Not priced by these Azure meters | P69 reports this as provider-dependent, not USD 0. No domain is purchased. |
-
-P69 binds a certificate the administrator already owns; it does not claim that Azure issues a
-public certificate on v2. DNS and certificate usage stay usage-based in the review. Missing retail
-data stays unknown. The isolated proof uses a reserved `.test` name, an uploaded self-signed PFX,
-authoritative nameserver queries and a pinned certificate with SNI; it cannot establish public
-delegation, public trust or certificate renewal. Azure refused the Basic v2 hostname before TLS
-could be measured. No supported way to bypass its ownership validation was found in the cited
-custom-domain and ARM references. A positive company-hostname proof needs an administrator-owned,
-publicly delegated DNS name; no domain is purchased for P69.
-
-[u30-domain]: https://learn.microsoft.com/azure/api-management/configure-custom-domain
-[u30-v2]: https://learn.microsoft.com/azure/api-management/v2-service-tiers-overview
-[u30-features]: https://learn.microsoft.com/azure/api-management/api-management-features
-[u30-arm]: https://learn.microsoft.com/rest/api/apimanagement/api-management-service/update?view=rest-apimanagement-2024-05-01
-[u30-retail]: https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices
-
-### U26 - P71 rounds 6-10 validation
 
 The resumed round 6 full Python run on `36f3088`, under the shared lock from
 **16:30:27Z to 16:38:50Z on 2026-09-28**, executed 563 cases:
@@ -297,6 +280,77 @@ and no second full run replaced this result. The cause remains unproven; U26
 stays open. Full output, JUnit and the lock receipt are in
 `.finops-evidence\p71-r10-resume`; see the
 [round 10 full-run record](STATUS.md#final-round-10-full-aum-run-on-70b6919).
+
+The 2026-09-30 builder traced the four reported identities' first failure to
+exclusive refresh cancellation, with `NoMatches` occurring during shutdown.
+Round-10 diagnostic message subclasses evade Textual 6.12.0's exact-type
+`prevent()` and disabled-message checks. A direct prevention probe fails
+deterministically, and a single budgets navigation starts two workers and
+cancels the first. This identifies a concrete cause introduced by `f122985`.
+All 12 deterministic regressions failed before the correction; the initial
+16-case corrected selection passed. Loaded RED had 4 failures in 16 completed
+cases before another gate interrupted the harness. Loaded GREEN then passed
+30 complete iterations / 120 executions under four CPU burners with zero
+failures. The final complete AUM invocation passed all 829 cases in 585.16 s,
+including four 60-second gate pauses between tests, with no errors, skips or
+failed-test retries. Its production source matches the loaded proof; see the
+[startup correction](STATUS.md#startup-and-navigation-cancellation-correction-2026-09-30).
+The first complete corrected-source run had 828 passes and one
+`FooterKey-description` setup failure: Textual removes and asynchronously
+remounts footer keys after a binding change, outside worker completion.
+The existing privacy probe now awaits the native after-refresh callback and
+batch lock before accessing the current receiver; all original guard assertions stay.
+An event-held remove/remount gap produced 2 failures and 2 passes before that
+await; all 4 cases passed afterward, without a clock-based readiness allowance.
+It does not establish the cause of the older Windows marker, wizard,
+chargeback or unrecorded failures; U26 remains OPEN.
+
+### U30 — The company address — CLOSED 2026-09-28
+
+**Answer.** Basic v2, Standard v2 and Premium v2 support custom gateway domains, using either an
+uploaded PFX or a certificate held in Key Vault. The [v2 overview][u30-v2] explicitly lists
+"Free, managed TLS certificate" as unavailable. The [custom-domain article][u30-domain] says the
+same, even though its managed-certificate section also discusses a temporary issuance suspension
+ending on June 30, 2026. Ending that suspension does not add v2 support.
+
+| Question | Researched result |
+|---|---|
+| Gateway hostname on each v2 tier | Supported on all three. Basic v2 and Standard v2 support one custom gateway hostname; Premium v2 supports multiple. The default `<apim>.azure-api.net` gateway remains available ([domain][u30-domain], [feature table][u30-features]). |
+| Uploaded certificate | PFX, triple-DES encrypted, private RSA key at least 2,048 bits, hostname in subject/SAN, and complete certificate chain. A password is optional. The issuer's charge is separate ([domain][u30-domain]). |
+| Key Vault | The certificate is imported/created as a **certificate**, not an unrelated secret. APIM references its backing `application/x-pkcs12` secret URL in `keyVaultId`. A versionless URL permits rotation; a versioned URL pins a version. Its managed identity needs secret get/list, or the **Key Vault Secrets User** RBAC role. Automatic pickup can take 1-2 days; manual synchronization is available ([domain][u30-domain], [ARM update][u30-arm]). |
+| DNS | CNAME from the company hostname to `<apim>.azure-api.net`. `apimuid.<hostname>` TXT with the domain-ownership identifier is needed only for the free managed certificate, which these tiers cannot use. The chosen CA may impose its own issuance records; those belong to issuance, not APIM binding ([domain][u30-domain]). |
+| Public or private DNS | The domain article explicitly requires publicly resolvable custom gateway names on Standard v2 and Premium v2. Basic v2 also requires the public CNAME, measured 2026-09-27 at 20:44 UTC: `CustomHostnameOwnershipCheckFailed` for the isolated `.test` hostname. DNS creation and resolution must precede binding; an authoritative-only Azure DNS zone is insufficient. |
+| Update duration | Infrastructure changes can take 15 minutes or longer, with longer waits for larger deployments. The v2 overview describes faster certificate/hostname updates but gives no fixed SLA. P69 announces an estimate and uses a bounded 45-minute wait, reporting elapsed time. The gateway continues serving existing requests while updating ([domain][u30-domain], [v2][u30-v2]). |
+| Preserving the service | ARM `PATCH` accepts `properties.hostnameConfigurations`. A patch changes that collection without a service `PUT`; P69 retains the other entries in the collection and does not send network, tier or portal settings ([ARM update][u30-arm]). |
+
+**Prices read from the [Azure Retail Prices API][u30-retail] on 2026-09-27 at 20:11 UTC
+(2026-09-28 locally).** Consumption rows, USD; these are list prices, not the agreement's price
+sheet (**U31**). Public DNS uses `armRegionName = ''`, not an assumed regional meter. Key Vault
+below uses `eastus2`, product `Key Vault`, SKU `Standard`, not Managed HSM's hourly instance meter.
+
+| Component and published meter | First tier | Later tier / qualification |
+|---|---|---|
+| Azure DNS, Public, `Public Zone` | USD 0.50 per zone/month, first 25 zones | USD 0.10 beyond 25. Adding a record to an existing zone does not add another zone. |
+| Azure DNS, Public, `Public Queries` | USD 0.40 per million queries | USD 0.20 after 1,000 million. Request count and DNS query count are not interchangeable. |
+| Key Vault, Standard, `Operations` | USD 0.03 per 10,000 operations | Usage-based, not a fixed monthly vault fee. |
+| Key Vault, Standard, `Certificate Renewal Request` | USD 3 per renewal request | Certificate-authority charges are separate; not every imported certificate uses integrated renewal. |
+| API Management, `Basic v2 Unit`, eastus2 | USD 0.20548/hour; USD 150.00 at 730 hours | The existing gateway tier charge continues. A custom domain is a supported feature, not a separate custom-domain retail meter. |
+| Certificate issuer / external DNS provider / domain registration | Not priced by these Azure meters | P69 reports this as provider-dependent, not USD 0. No domain is purchased. |
+
+P69 binds a certificate the administrator already owns; it does not claim that Azure issues a
+public certificate on v2. DNS and certificate usage stay usage-based in the review. Missing retail
+data stays unknown. The isolated proof uses a reserved `.test` name, an uploaded self-signed PFX,
+authoritative nameserver queries and a pinned certificate with SNI; it cannot establish public
+delegation, public trust or certificate renewal. Azure refused the Basic v2 hostname before TLS
+could be measured. No supported way to bypass its ownership validation was found in the cited
+custom-domain and ARM references. A positive company-hostname proof needs an administrator-owned,
+publicly delegated DNS name; no domain is purchased for P69.
+
+[u30-domain]: https://learn.microsoft.com/azure/api-management/configure-custom-domain
+[u30-v2]: https://learn.microsoft.com/azure/api-management/v2-service-tiers-overview
+[u30-features]: https://learn.microsoft.com/azure/api-management/api-management-features
+[u30-arm]: https://learn.microsoft.com/rest/api/apimanagement/api-management-service/update?view=rest-apimanagement-2024-05-01
+[u30-retail]: https://learn.microsoft.com/rest/api/cost-management/retail-prices/azure-retail-prices
 
 ### U1 — Does APIM support a shared counter across all principals? — CLOSED 2026-09-02
 
