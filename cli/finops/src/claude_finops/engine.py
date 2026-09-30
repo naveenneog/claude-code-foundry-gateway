@@ -404,7 +404,8 @@ class Engine(FeatureEngine):
             key = text.removeprefix("request:")
             try:
                 request = self.read("request", request_id=key)
-                result.append(dict(kind="request", id=key, name=request["request_id"], tab="requests"))
+                # The backend's form of the id, so the selected row and the detail agree whatever case was typed.
+                result.append(dict(kind="request", id=request["request_id"], name=request["request_id"], tab="requests"))
             except FinOpsError as error:
                 if error.code != 5:
                     raise

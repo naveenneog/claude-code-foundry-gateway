@@ -52,7 +52,8 @@ async def test_round_nine_object_capabilities_cannot_publish_after_b(
 
 @pytest.mark.parametrize("name", [
     "console", "error_console", "file", "stdout", "stderr", "_driver",
-    "_unreviewed_private", "__wrapped__", "writelines", "write", "notify", "unreviewed_member", "check_message_enabled",
+    "_unreviewed_private", "__wrapped__", "writelines", "write", "notify", "unreviewed_member",
+    "check_message_enabled", "_refresh_active_tab",
 ])
 @pytest.mark.parametrize("form", ["attribute", "getattr", "hasattr"])
 def test_object_attributes_are_default_deny(name, form):

@@ -459,6 +459,35 @@ retain their existing principal-notice and active-pane checks. Deterministic
 running-gap and shutdown cases include a live-activation positive control.
 This lifecycle rule does not grant a new publication capability.
 
+### Compound view refresh correction, 2026-09-30
+
+A compound navigation action prepares its query state before requesting one
+explicit view refresh. Every accepted lookup follows this rule, including
+request lookups; a request lookup also opens one detail worker. A refresh
+preserves request paging/cursors and consumes its pending selection, matching
+request rows by `request_id`. An open detail modal remains open during the read.
+Keyboard tab actions keep their existing behavior. Programmatic selector
+changes must not add another refresh to that same action. No publication origin,
+output permission or worker-cancellation error handling changes.
+
+"Tab changed" is not proof that its later activation will refresh.
+A principal notice, a newer active pane or removed main content can
+cause `switched` to ignore that message. Accepted compound actions instead own
+one explicit refresh of their fully prepared current state and suppress their
+redundant native activation. Ordinary native activations keep all existing
+notice, stale-pane and missing-main checks. The notice remains an advisory
+latch, never a source credential: fresh guarded lookups are usable, while
+expired guards still refuse old results before navigation or input publication.
+`PrincipalUI.on_event` clears the notice on the first `InputEvent`, before
+dispatching its action. A normal user-started lookup therefore sees it cleared;
+the notice-present rule covers non-input direct calls and guarded callbacks.
+No read is resurrected by a late event after the view has been removed.
+Native pane-focus delivery is also asynchronous. The protected tab receiver
+checks that the event pane still contains the current focus before forwarding
+the native focus handler once. An obsolete focus message cannot retarget a
+newer lookup or create a replacement refresh. This changes no source origin
+or content-write permission; exact receiver/effect approvals cover the adapter.
+
 ### Approval recipe for attributes and builtins
 
 An approval is reviewed like code. The review identifies every supported

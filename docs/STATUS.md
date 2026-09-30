@@ -2,6 +2,235 @@
 
 **Active packet (2026-09-30):** P81 USD budgets are the primary enforcer ([ROADMAP](ROADMAP.md)), on its own branch; it merges only with the owner's explicit approval. Each packet has its own section on its branch; the section lands here when the packet merges. P85 AUM's terminal UI manages people, units, teams and budgets end to end, with tests is merged with the owner's approval (`171b248`, [below](#p85-aums-terminal-ui-manages-people-units-teams-and-budgets-end-to-end-with-tests-2026-09-29)), and its follow-up, the Cloud Shell tests name paths without Git Bash's /tmp mount (`db11723`, [below](#p85-follow-up-the-cloud-shell-tests-name-paths-without-git-bashs-tmp-mount-2026-09-30)). P80 AUM shows every action it has, connects in one step, and its guide starts with installation is merged with the owner's approval (`3f77754`, [below](#p80-aum-shows-every-action-it-has-connects-in-one-step-and-its-guide-starts-with-installation-2026-09-28)). P71 AUM answers fast and says why it cannot is merged with the owner's approval (`01bb6c7`, [below](#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28)), and its follow-up, the deadline tests prove termination without racing it (`dc0e311`, [below](#p71-follow-up-the-deadline-tests-prove-termination-without-racing-it-2026-09-30)). P84 projection deployment checks everything before it writes and never switches into an outage is merged with the owner's approval (`3e4430b`, [below](#p84-projection-deployment-checks-everything-before-it-writes-and-never-switches-into-an-outage-2026-09-29)); switching entitlement to the projection waits for P86. P78 the test suite runs in parallel on GitHub-hosted runners is merged with the owner's approval (`2737232`, [below](#p78-the-test-suite-runs-in-parallel-on-github-hosted-runners-2026-09-28)); ADR-0039's proposed charter change is not enacted. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)), and its follow-up, the installer permutation check reads only its own record (`05dea1b`, [below](#p79-follow-up-the-installer-permutation-check-reads-only-its-own-record-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
+## P71 follow-up: a lookup starts one refresh, 2026-09-30
+
+This is the active correction on `p71c-lookup-refresh`, based on main `9741d41`, with main
+`6f00135` merged in (`c003014`).
+[Hosted run 36670519226](https://github.com/naveenneog/claude-code-foundry-gateway/actions/runs/36670519226),
+hosted shard 3/12, failed `AUM - commands, dashboard and pilot [3/4]` at
+`test_dashboard.py::test_redacted_queries_do_not_leak_through_input_or_filter_echo`.
+The worker wait after `open_lookup_result` raised `WorkerCancelled`.
+
+### Council round 3: a request lookup carries the backend's id
+
+On `2f701f9`, Security passed and Architect, Coder, QA and UX blocked. `Engine.lookup` returned
+a request's id as typed (`id=key`), and the requests table selects the row whose `request_id`
+equals that id. A backend that matches ids in any letter case therefore opened the right detail
+but left the cursor on another row. The council reproduced this with a backend that lowercases the
+id: the detail showed `contoso-request-007`, and the cursor stayed on `contoso-request-000`.
+
+The lookup now returns the id the backend read back, `request["request_id"]`, as both `id` and
+`name` (`cli/finops/src/claude_finops/engine.py:408`). RED: against such a backend, a lookup of
+`request:CONTOSO-REQUEST-007` returned the typed id, and the end-to-end test left the cursor on
+another row; 2 failed. GREEN: both pass, and the tests that call `Engine.lookup`
+(`test_backends.py`, `test_manager_scope.py`, `test_revision4_contracts.py`,
+`test_principal_tokens.py`) pass 77 of 77. Two mutations were each caught with the same 10 tests
+collected: returning the typed id failed 2, and selecting without `request_id` failed 9.
+`engine.py` is a backend module, outside the presentation contract
+(`cli/finops/tests/publication_policy.py:20`), so no approval or fingerprint changed.
+
+### Packet gate 1: an unrelated chargeback failure
+
+The packet gate on `edbf6cb` (20:03-20:36 IST) passed the council-reviewed change's checks,
+including all four AUM shards (317.1, 325.3, 300.4 and 296.0 s), and failed one other check:
+"Chargeback report generation" exited 1 after 5.2 s; 100 of 101 checks passed. Test-All keeps no
+output for a failed check, so the failing assertion is not known. U26 lists earlier lone failures
+of this check, one with "Access to the path '...\empty\.building-<id>' is denied" from a
+directory move. Eight concurrent direct runs of the check with the gate's environment then passed.
+
+The check writes its scratch folder under the repository root, and the report publishes by
+moving a staged folder (`scripts/ClaudeChargebackReport.ps1:227`). A lead stress run with another
+process reading files inside that scratch folder failed 22 of 40 runs with "being used by another
+process" at `ClaudeChargebackReport.ps1:227` and `:235`: the publisher does not tolerate a file
+held open by another process. Which process, if any, held a file during the gate is not known.
+On this workstation Windows Search indexes both the repository and TEMP, and Defender real-time
+protection is on. The check exercises none of this change's files. Packet gate 2 ran on the same
+source with these records added.
+
+### Council round 2: request lookup follows rule A
+
+On `adee1f7`, Security passed and the other four seats blocked the request
+exception: it bypassed explicit refresh ownership, so changed/current/notice
+lookups did not follow the same rule. Rule A is selected: every accepted lookup
+owns one target-view refresh; a request lookup also opens its detail once.
+`load_tab("requests")` reads, but does not reset, the offset/cursor/filter state.
+`action_refresh` only moves focus when no modal is open. Rendering consumes
+`pending_selection`; its request-row match must use `request_id` as well as
+scope/id keys so a present target is selected instead of leaving a stale intent.
+
+The notice branch applies to calls made without a preceding input event.
+`PrincipalUI.on_event` clears `_principal_notice` for `events.InputEvent`
+before dispatch (`principal_ui.py:121-125`); normal user-started lookup
+therefore enters with the notice cleared. The non-input branch is still
+required for direct calls and guarded callbacks. The real-input test observed
+the notice cleared at lookup-action entry, not merely on the final screen.
+
+RED-first cases cover changed/current tabs and notice-present direct calls,
+both offset and cursor paging, one view worker, one detail worker, pending
+selection consumption, preserved paging and a detail modal that remains open
+while the held view refresh completes. RED had **8 failed, 1 passed in 15.69 s**:
+six request cases started no view worker, and the two changed-tab controls
+selected request 050 instead of requested 057. The real-input notice-clear
+control passed. After applying rule A and matching pending rows by
+`request_id`, all **9 cases passed in 15.43 s**. Only the existing renderer's
+exact source-context fingerprint is renewed; no capability is newly allowed.
+The final runtime baseline passed **10/10 in 18.33 s**, including the unchanged
+redaction case. Four isolated-source mutations retained those ten identities:
+restoring the request exception, omitting detail, removing the request selection
+key and resetting paging produced **6, 8, 8 and 8 failures**, respectively.
+Each hit its intended assertion with zero errors or skips.
+
+The loaded run passed **300/300 executions**, 30 iterations with four CPU
+burners and no failures, skips or identity mismatches. The full AUM suite passed
+all **1,278 collected identities in 1,122.80 s** (1,126.14 s wall), with no
+failures, errors or skips. Source witnesses were regenerated; terminal grids
+and SVGs are unchanged. The measured 76-file plan is **293, 293, 293 and 292 s**,
+below the unchanged 300 s limit, so four shards remain. Shard coverage,
+RunnerIntegrity, architecture and final ledger/contract checks passed.
+Evidence is retained in `.finops-evidence\p71c-request-refresh`; long output
+remains under TEMP. All long jobs used `with-gate-lock.ps1 -Owner p71c`.
+Implementation and recorded rule-A proof: `17e0ef7`
+(`fix(aum): refresh request lookups and select their rows`).
+
+### Council correction: a principal notice cannot drop a current lookup
+
+On `c003014`, Security passed and Architect, Coder, QA and UX blocked the
+changed-tab handoff: `switched` refuses native activations while the principal
+notice is set, so a true "tab changed" result does not establish refresh
+ownership. The earlier one-refresh claim below did not cover that branch.
+
+PLAN / CONTRACT: the notice is a UI latch, not permission. `PrincipalUI`
+clears old data and closes old dialogs on a verified identity transition;
+current source guards still authorize fresh results, and old guards remain
+invalid. A current guarded lookup may therefore refresh immediately while
+the notice remains visible. It must not clear the notice to force activation.
+Every accepted compound navigation now owns one explicit refresh after preparing its
+state, suppressing the redundant programmatic tab activation rather than
+delegating to a message that may be ignored.
+
+Lookup selection dismisses its modal and applies the guarded result
+synchronously while main content is available. A missing main tree during
+shutdown/remount is not another usable lookup destination. Late native
+activations remain stale and ignored; they must not own, duplicate or undo
+the already-requested read. RED cases cover notice-present lookup, feature
+and dashboard paths, plus suppressed/late stale and missing-main activations.
+An expired-result control keeps lookup authorization separate from the notice.
+RED: lookup, comparison and dashboard navigation each started zero workers;
+both non-delivering-activation cases also failed. The expired-source refusal
+passed: **5 failed, 1 passed in 6.58 s**. The first corrected selection,
+including ordinary navigation controls, passed **10 cases in 11.63 s**.
+The shared tab action now explicitly owns compound refreshes and suppresses
+their `TabActivated`; queued native activations retain every prior guard.
+Only the exact private-helper call contexts are approved, not a new ordinary
+member.
+
+The first notice-correction stress result is retained: **1 failure in 1,920
+executions** (30 iterations, four burners). Run 23 failed the unchanged hosted
+redaction test with `WorkerCancelled`. A separate native focus path can still
+retarget the view: Textual's `TabPane.Focused` handler accepts a delayed
+overview event even when the current focus is already People. A deterministic
+probe observed `people -> overview` while focus stayed `table-people`.
+The correction must reject that obsolete focus before it can create another
+activation, without changing current native focus behavior. Updated proof is pending.
+Queued native-focus tests reproduced the retarget in both ordinary and
+notice modes: **2 failed in 5.05 s**, with `people -> overview -> people`.
+The protected tab receiver now checks actual descendant focus before
+forwarding the native handler, and prevents the base dispatcher from handling
+the rejected event again. The same two cases, the hosted redaction case and
+ordinary navigation controls passed **5/5 in 7.06 s**.
+
+Final GREEN: all **66 runtime cases passed in 91.06 s**, including every
+compound path with/without a notice and on changed/current tabs, both late
+activation cases, stale-focus delivery, expired lookup origin and the unchanged
+hosted redaction test. Exact publication-contract controls passed **47/47**.
+Four isolated-source removal probes retained all 66 identities and produced
+**31, 16, 30 and 2 failures**: dropped notice reads, activation echo, clearing
+the notice and accepting obsolete focus. They hit their intended assertions
+with zero errors or skips; working sources were not mutated.
+
+The final loaded run passed **1,980/1,980 executions**, 30 iterations with
+four CPU burners and no failures, skips or identity mismatches. The complete
+AUM run passed **1,269 tests in 1,062.92 s** (1,066.43 s wall), with zero
+failures, errors or skips. Exact pytest collection matches every JUnit identity.
+The driver initially expected 1,268 and stopped after the passing pytest run;
+that bookkeeping check was corrected without rerunning or changing a test.
+The earlier 1/1,920 stress failure remains recorded above.
+
+Snapshot and architecture generators refreshed the source witnesses without
+changing their images/grids. Timing weights were refreshed from the full run;
+the 76-file plan is **278, 278, 277 and 277 s**, below the unchanged 300 s
+planning limit. Shard coverage and architecture checks pass. Final evidence is
+retained in `.finops-evidence\p71c-notice-refresh`; all long jobs used the lead's
+lock wrapper with owner `p71c`. Council and integration remain with the lead.
+Implementation and recorded council-correction proof: `5977237`
+(`fix(aum): own compound refreshes across principal notices`).
+
+### Initial correction and evidence
+
+The initial plan delegated changed-tab reads to native activation; both council
+corrections above supersede that approach. The current rule is one explicit
+view refresh for every accepted lookup, with an additional detail read for a
+request. The person input remains masked and private values stay out of screenshots.
+No worker cancellation is caught or ignored to obtain a passing result.
+ADR-0035's publication guards and closed capability approvals remain.
+
+The original source had two triggers: `open_lookup_result` called
+`action_refresh` directly after `action_tab`, and queued `TabActivated`
+called it again through `switched`. The People input listens for submission,
+not change, so setting that query alone was not the second trigger.
+
+The scan also found paired navigation/refresh in breadcrumb return, saved
+views, comparison, usage basis, overview ranking and dashboard drill-down.
+Advanced-view navigation combines a tab activation with a Select change.
+These are covered by changed-tab and current-tab controls. Current-tab search,
+team/dimension/interval selection, request filters, paging and month/filter
+dialogs already request one refresh. Under rule A, request lookup owns the
+same view refresh and additionally retains its separate detail worker.
+One possible additional path is listed, not changed:
+`FeatureUI.activate_profile` (`ui_features.py:443`) refreshes after
+`update_access` can force a different permitted tab. Its engine/authority
+transition needs a separate guarded lifecycle change.
+
+RED: the held lookup started two real exclusive view workers, one cancelled
+and one successful (**1 failed in 3.19 s**). The initial compound-action matrix
+had **14 failed, 14 passed in 36.54 s**: every changed-tab case duplicated the
+refresh; same-tab cases still refreshed. A same-choice Advanced control
+separately failed with zero workers (**2.10 s**).
+
+Initial GREEN (notice and request branches were not covered): `action_tab`
+reported a tab change, and callers delegated changed-tab reads to activation.
+That ownership rule was replaced by the council corrections above. Saved-view
+preparation and Advanced selector suppression remain. At that stage, **31
+runtime cases passed in 40.81 s**, and closed-contract checks passed without
+an approval or fingerprint change. These are historical results, not proof
+of the later notice and request branches.
+
+Four isolated-source mutation probes ran the same 31 identities. Forcing an
+unchanged result, forcing a changed result, restoring the lookup's unconditional
+refresh and removing Advanced Select suppression produced **15, 15, 4 and 2
+failures**, respectively. Every probe hit a worker-count assertion with zero
+errors or skips. The working source was never mutated for these probes.
+
+The loaded run passed **930/930 executions: 30 iterations, four CPU burners,
+all 31 identities each time**, with zero failures, skips or identity mismatches.
+The final complete AUM run passed **1,230 cases in 1,012.62 s** (1,015.86 s wall),
+with no errors or skips. The first full result is retained: **1,229 passed,
+one stale snapshot-source manifest failure in 1,082.23 s**. The existing
+capture tool regenerated that witness; all grids and SVGs were unchanged and
+all five snapshot checks passed before the final full run.
+
+Architecture generation verified 17 specs / 19 PNGs; only source witnesses
+changed. The measured shard table now includes all 76 files once, with planned
+loads of **266, 265, 265 and 265 s**, below the unchanged 300 s planning limit.
+Shard coverage passed. Receipts and JUnit identities are retained in
+`.finops-evidence\p71c-lookup-refresh`; long output is under TEMP.
+
+All long jobs use `with-gate-lock.ps1 -Owner p71c`. Council, packet gates and
+integration remain with the lead; this builder does not push or merge.
+U26 remains OPEN for unrelated observations and the listed authority-transition path.
+Implementation and recorded proof: `9d8e838`
+(`fix(aum): start one refresh for compound navigation`).
+
 ## P85 follow-up: the Cloud Shell tests name paths without Git Bash's /tmp mount, 2026-09-30
 
 **Merged as `db11723` on 2026-09-30, as a follow-up to P85, which the owner approved.** The

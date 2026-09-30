@@ -1089,6 +1089,22 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **AUM lookups could cancel their own view refresh (P71 follow-up).** A changed
+  tab and its caller both started exclusive refresh workers. Lookup, breadcrumb,
+  saved-view, comparison, usage-basis, ranking and dashboard navigation now
+  refresh once; Advanced navigation also suppresses its programmatic selector
+  echo. Same-tab actions still reload. Redaction assertions and publication
+  guards are unchanged; hosted run 36670519226 is recorded in STATUS.
+  Council correction: accepted compound navigation now owns an explicit refresh
+  even while a principal notice suppresses native activation. The notice is not
+  cleared to obtain a read, expired lookup origins remain refused, and obsolete
+  native pane-focus events cannot retarget or cancel the newer lookup.
+  Request lookups follow the same rule: one target-view refresh and one detail
+  read for changed/current tabs and non-input calls under a notice. Refresh
+  preserves offset/cursor paging and consumes request-row selection. Normal
+  input clears the notice before the lookup action is dispatched. A request
+  lookup returns the id its backend read back, so a request typed in another
+  letter case selects the backend's row.
 - **The Cloud Shell launcher tests depended on Git Bash's /tmp mount (P85 follow-up).** The tests
   converted paths with `cygpath -u`, which names a folder under the Windows temp folder `/tmp/...`.
   One test starts Git Bash with `TMP` and `TEMP` set to a missing folder; the hosted runner's Git

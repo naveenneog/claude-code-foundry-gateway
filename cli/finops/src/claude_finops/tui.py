@@ -294,17 +294,24 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
             return self.active == "requests" and not self.redactor.enabled
         return True
 
-    def action_tab(self, tab):
+    def action_tab(self, tab, *, refresh=False):
         if len(self.screen_stack) != 1 or tab not in self.allowed_tabs:
             return
-        self.query_one("#main-tabs", TabbedContent).active = tab
+        tabs = self.query_one("#main-tabs", TabbedContent)
+        with tabs.prevent(TabbedContent.TabActivated) if refresh else tabs.prevent():
+            tabs.active = tab
         if tab not in {"ask", "approvals", "advanced"}:
             self.set_focus(self.query_one("#dash-kpis" if tab == "overview" else f"#table-{tab}"))
+        if refresh:
+            self._refresh_active_tab()
 
     @on(TabbedContent.TabActivated)
     def switched(self, event):
         if not self.query("#main-tabs") or event.pane.id != self.active or self._principal_notice:
             return
+        self._refresh_active_tab()
+
+    def _refresh_active_tab(self):
         self.update_brand()
         self.update_key_hints()
         self.query_one("#quick-filter", Input).display = False
@@ -484,7 +491,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
         self.query_one(f"#note-{tab}", Static).update(safe_text(note))
         if self.pending_selection:
             for index, row in enumerate(records):
-                if row.get("scope_id", row.get("id")) == self.pending_selection:
+                if row.get("scope_id", row.get("request_id", row.get("id"))) == self.pending_selection:
                     table.move_cursor(row=index)
                     break
             self.pending_selection = None
@@ -587,8 +594,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
         if self.breadcrumbs:
             tab, parent = self.breadcrumbs.pop()
             self.budget_parent = parent
-            self.action_tab(tab)
-            self.action_refresh()
+            self.action_tab(tab, refresh=True)
             return
         if self.active in self.data:
             self.render_tab(self.active, self.data[self.active])
@@ -708,11 +714,9 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
             self.query_one("#dimension", Select).value = "model"
             self.request_filters = {"model_id": result["id"]}
         self.pending_selection = result["id"]
-        self.action_tab(result["tab"])
+        self.action_tab(result["tab"], refresh=True)
         if result["kind"] == "request":
             self.open_detail({"request_id": result["id"]})
-        else:
-            self.action_refresh()
 
     def action_month(self):
         self.push_screen(MonthScreen())

@@ -591,7 +591,12 @@ class VerticalScroll(PublicationWidget, TextualVerticalScroll):
 
 
 class TabbedContent(PublicationWidget, TextualTabbedContent):
-    pass
+    def _on_tab_pane_focused(self, event):
+        event.prevent_default()
+        if not event.tab_pane.has_focus_within:
+            event.stop()
+            return
+        super()._on_tab_pane_focused(event)
 
 
 class TabPane(PublicationWidget, TextualTabPane):
