@@ -87,6 +87,73 @@ for **17 specs and 19 PNGs**. The manifest is generated from the integrated
 sources, and the temporary `node_modules` junction is removed.
 Complete selector and single-full-run results follow; no test or budget is relaxed.
 
+#### Committed merge and complete validation
+
+Merge commit **`2c61178ea52ea92f41c21fd3921958cc044d913f`** has parents
+`0b9b48d876873b52e78f677c7b205170029a8ecd` and pinned main
+`3b7c192f57e1e372fd2a76aeaea43ed56188acfc`. Both requested trailers are
+present. This is a merge into `p85-aum-tui-manage`, not main.
+
+All requested selectors, plus P80's publication controls, passed together:
+**678/678 in 765.62 s**, under the shared lock from **05:28:58 to
+05:41:51 IST**. They comprise **269 P85**, **348 publication**, **40 runtime
+publication-sink** and **21 P80 publication-contract** cases. There were no
+failures, errors or skips. Evidence: `%TEMP%\p85-int-main-targeted.log`
+and `p85-int-main-targeted.xml`.
+
+The full suite then ran **once**, serially, on that clean merge, from
+`cli\finops` with this worktree's `.venv-finops\Scripts\python.exe`:
+`python -m pytest tests -q -p no:cacheprovider --junitxml <TEMP report>`.
+The shared-lock interval was **05:43:19-06:01:20 IST on 2026-09-30**.
+Result: **1,197 passed, 0 failed, 0 errors, 0 skips in 1,077.53 s**.
+All **269 P85 cases** passed again. A report-existence guard prevented an
+accidental repeat; no full-suite rerun was made.
+
+| Previously reported ID | Result in this single full run |
+|---|---|
+| `test_publication_generation.py::test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies[budgets]` | PASS |
+| `test_publication_generation.py::test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies[requests]` | PASS |
+| `test_publication_generation.py::test_principal_change_closes_prior_forms_and_clears_state_before_input` | PASS |
+| `test_publication_generation.py::test_assistant_context_is_cleared_before_b_request` | PASS |
+| `test_revision4_tui.py::test_approval_paging_and_queue_change_reset_cursor` | PASS |
+| `test_publication_native.py::test_native_chrome_content_requires_publication[FooterKey-key_display]` | PASS |
+| Earlier additional `test_cached_dialog_handoffs_retain_origin_during_deferred_composition[mode-form]` | PASS |
+| Earlier additional `test_cached_request_actions_recheck_the_origin_not_an_empty_cycle[action_open_ledger]` | PASS |
+
+The last two cases are also in `test_publication_generation.py`. All eight
+identities were explicitly found and checked in the XML, rather than inferred
+from a smaller selector or an absent failure list. Full evidence:
+`%TEMP%\p85-int-main-full-aum.log`, `p85-int-main-full-aum.xml` and
+`p85-int-main-full-summary.json`. The older non-green records below are
+historical evidence from before P71's final fixes, not this tree's result.
+
+`Update-FinOpsDurations.ps1` refreshed all **75** file weights from that one
+JUnit report: **1,197 cases**, **1,075.3 s** summed case time, rounded up
+per file. The four planned loads are **281 / 281 / 281 / 281 s**, owning
+**16 / 19 / 20 / 20** files. Every load is <=300 s, so four registrations
+and their four prerequisite skip names remain; no fifth shard or relaxed
+timeout is needed. The whole-check timing table and shard guide match the
+new measurement. `Test-FinOpsShards.ps1` passed **37/37** assertions.
+
+Final required checks: `Test-RunnerIntegrity.ps1` passed **68/68**
+assertions under the shared lock (**06:15:33-06:18:21 IST**);
+`Test-DocReferences.ps1` passed **34/34** assertions across **42 guides**,
+including its mutation controls; `Repair-ScriptEncoding.ps1 -Check` passed
+for **306 scripts**. The standalone architecture check passes, and an exact
+comparison confirms all four whole-check weights equal their **281 s**
+file-plan loads. Evidence is `%TEMP%\p85-int-main-refresh-shards.log`,
+`p85-int-main-runner-integrity.log`, `p85-int-main-doc-references.log`,
+`p85-int-main-encoding.log` and `p85-int-main-architecture-final.log`.
+
+The final follow-up changes only ledgers, shard documentation and timing
+data; production and pytest source remain identical to the clean full-run
+merge. The charter and existing structural enforcement rules are unchanged.
+Temporary helper scripts and the dependency junction are removed; audit logs
+and XML remain under TEMP. All requested validation is green. No push,
+merge to main, rebase, Azure call or other-worktree modification was made.
+The next council/packet gate and later P80-final integration remain with the
+lead; round 4's approval is recorded only for its reviewed earlier tree.
+
 ### P80/P71 closed-contract integration, 2026-09-30
 
 PLAN / CONTRACT: merge P80 `a405f69` into `p85-aum-tui-manage` with

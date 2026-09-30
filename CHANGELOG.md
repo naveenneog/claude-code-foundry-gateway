@@ -29,6 +29,12 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P85 includes P71's final main fixes.** Native message suppression and
+  missing-main-tab handling now coexist with P80's guarded recovery and
+  P85's management, Escape/quit and Cloud Shell behavior. The composed
+  widget boundary is reviewed under ADR-0035. All 1,197 offline AUM cases
+  pass in one full serial run; refreshed weights keep four planned shards
+  at 281 s each. The earlier integration evidence remains in STATUS.
 - **P85/P80 publication integration.** People, catalog and budget workflows,
   confirmed quit and the Cloud Shell launcher retain P71's closed publication
   contract. Reviewed lifecycle interfaces have current/expired-origin,
