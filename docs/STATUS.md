@@ -93,6 +93,16 @@ remains historical evidence from the previous step. Stop after this merge
 and its ledger record; the next main merge and full validation await the
 lead's assignment after the deadline-test follow-up lands.
 
+The bounded merge is **`ca39e98a152514c7bb61c4a1d7e1fc81798746a3`**,
+with parents `f3e950325617a85418aad6e27d87218067ccbdd5` and pinned main
+`a4f6ec98742bc9005bb05eff543212af3462bd5c`. Both requested trailers are
+present. Only four ledger/documentation files differ from P85 after the
+resolutions; production, pytest, shard/runner code, measurements and images
+remain unchanged. Temporary merge/render helpers and the dependency junction
+are removed; TEMP audit logs and XML remain. No push, main merge, rebase or
+Azure call was made. This records the assigned stop point, not completion
+of the deferred full-suite or RunnerIntegrity work.
+
 ### Council round 4 and final P71 main integration, 2026-09-30
 
 The lead reports that P85's integration council, round 4, reviewed
