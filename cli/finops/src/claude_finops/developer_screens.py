@@ -13,17 +13,21 @@ from .guarded_publication import guarded_publish, published, guarded_deferred
 class DeveloperPicker(ModalScreen):
     BINDINGS = [("escape", "dismiss", "Back")]
 
-    def __init__(self, prefill_user="", prefill_unit=""):
+    def __init__(self, prefill_user="", prefill_unit="", *, remove=False):
         super().__init__()
         self.prefill_user = prefill_user
         self.prefill_unit = prefill_unit
+        self.removing = remove
         self.rows, self.cursor, self.search_text = [], None, ""
         self.debounce = None
 
     @published(lambda self: self.app.safe_message_guard())
     def compose(self):
         with Vertical(id="detail-dialog"):
-            yield Label("Add developer from Microsoft Entra directory", markup=False)
+            if self.removing:
+                yield Label("Remove person from gateway teams and tiers", markup=False)
+            else:
+                yield Label("Add developer from Microsoft Entra directory", markup=False)
             yield Input(placeholder="Email, UPN or display name; Enter searches Graph", id="developer-search",
                         password=self.app.redactor.enabled)
             yield Static("Bounded delegated directory search. Preview before any group membership write.",
@@ -94,7 +98,52 @@ class DeveloperPicker(ModalScreen):
         event.stop()
         if event.cursor_row >= len(self.rows):
             return
-        self.open_add_form(self.rows[event.cursor_row], self.read_guard)
+        if self.removing:
+            self.open_remove_form(self.rows[event.cursor_row], self.read_guard)
+        else:
+            self.open_add_form(self.rows[event.cursor_row], self.read_guard)
+
+    def open_remove_form(self, row, directory_guard):
+        app = self.app
+        try:
+            with directory_guard():
+                pass
+            if not app.check_action("remove_developer", ()):
+                raise FinOpsError(app.membership_unavailable_text() if app.config.backend == "aum-service"
+                                  else "Only owners can remove people from teams.", 4)
+
+            def operation(values, apply):
+                confirmation = values["confirmation"] if apply else values["confirm"]
+                result = developer_change(app.engine, app.config, row["id"], remove=True,
+                                          apply=apply, confirm=confirmation,
+                                          reviewed_plan=values if apply else None)
+                if not apply:
+                    result["confirmation"] = confirmation
+                result["before"] = {"id": result["developer"]["id"], "email": result["confirm_upn"]}
+                result["after"] = {
+                    "allow_lists": ["allow-standard", "allow-premium"],
+                    "publication": ("Direct selected-scope membership refresh and tier allow-list sync"
+                                    if app.engine.backend.name == "Direct" else
+                                    "Turnstile delegated publish-as-admin"),
+                }
+                result["note"] = (
+                    "Removes gateway access, not just the selected team. Every listed direct tier and "
+                    "unit/team membership is removed if present; Entra groups are not deleted. "
+                    "Direct permits an empty allow list only for a changed tier whose last member was removed. "
+                    + result["token_note"])
+                if apply:
+                    result["message"] = (
+                        f"Removed {result['confirm_upn']}. {result['publication_path']}. "
+                        "Done refreshes People (estimate 3-10 s); observed usage can remain after removal.")
+                return result
+
+            with guarded_publish(directory_guard):
+                app.switch_screen(ActionForm("Remove person from team", [
+                    ("confirm", f"Type the resolved email/UPN: {row['user_principal_name']}", "", None),
+                ], operation, read_guard=directory_guard, commit_preview=True))
+        except FinOpsError as error:
+            with guarded_publish(app.safe_message_guard()):
+                self.query_one("#developer-status", Static).update(app._error_text(error))
 
     @work(exclusive=True, group="developer-catalog")
     async def open_add_form(self, row, directory_guard):
@@ -135,7 +184,7 @@ class DeveloperPicker(ModalScreen):
                                         unit=values["unit"] or None, apply=apply)
 
             with guarded_publish(form_guard):
-                self.app.push_screen(ActionForm("Add developer", fields, operation, read_guard=form_guard))
+                self.app.switch_screen(ActionForm("Add developer", fields, operation, read_guard=form_guard))
         except FinOpsError as error:
             with guarded_publish(self.app.safe_message_guard()):
                 if self.query("#developer-status"):

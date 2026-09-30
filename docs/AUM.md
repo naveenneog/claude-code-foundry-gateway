@@ -72,6 +72,89 @@ az login --tenant <your-tenant-id>
 The [prerequisites](#prerequisites) describe backend-specific roles. `pipx`
 is not required.
 
+### Run AUM in Azure Cloud Shell
+
+The [Cloud Shell launcher](../scripts/aum-cloudshell.sh) runs from a checkout
+of this repository in a Cloud Shell **Bash** session. It uses the session's
+already authenticated `az`; it does not run `az login`, change the selected
+Azure account, create storage or deploy an Azure resource.
+
+```bash
+bash scripts/aum-cloudshell.sh --dry-run
+bash scripts/aum-cloudshell.sh -- configure --backend direct \
+  --resource-group "$GATEWAY_RESOURCE_GROUP" --apim-name "$GATEWAY_NAME" \
+  --save --no-prompt
+bash scripts/aum-cloudshell.sh
+```
+
+`GATEWAY_RESOURCE_GROUP` and `GATEWAY_NAME` identify an existing gateway.
+The configure command discovers its connection addresses and saves the local
+profile; existing-profile replacement retains AUM's normal confirmation and
+backup rules. An existing saved profile can be used by the last command
+without another configure step. Arguments after `--` are passed literally
+to AUM, including HTTP-backend options.
+
+The launcher creates or reuses `$HOME/.aum-cloudshell/venv`. Its pinned uv
+bootstrap, managed Python 3.12, downloads, temporary files, bytecode and caches
+also stay under `$HOME/.aum-cloudshell`; editable package metadata stays in
+the checkout. The documented Cloud Shell image lists Python 3.9, which is
+below AUM's requirement, so the launcher does not assume the system Python
+can run AUM. uv comes from a pinned binary wheel, not a downloaded shell
+installer. The first bootstrap has a 2-5 minute estimate; cached dependency
+setup has a 10-60 s estimate. Bootstrap requires access to PyPI and uv's Python
+download hosts as well as the application's Azure endpoints.
+
+Every pip and uv invocation starts in a fresh `env -i` environment containing
+only HOME, PATH, locale, explicit HOME-local destinations and named HTTP
+proxy/TLS settings. Bootstrap pip also uses `--isolated`,
+`PIP_CONFIG_FILE=/dev/null` and an explicit confined `--cache-dir`.
+Malformed inherited names such as `PIP_--log` cannot bypass this allowlist.
+Python runtime validation uses the same environment; the final AUM process
+retains the Azure CLI session context. Ordinary shell-identifier pip/uv/XDG
+settings are also reset, but enumeration alone is not the isolation boundary.
+The real-pip regressions use explicit offline flags and verify that neither
+the ordinary nor malformed inherited log name creates an external file
+([confinement tests](../cli/finops/tests/test_p85_council_env.py),
+[decision](adr/0041-aum-session-safety-and-cloud-shell.md)).
+
+The storage-specific Microsoft Learn article describes `$HOME` persisted as
+an image in the attached Azure file share; that mode retains the venv between
+sessions. Ephemeral sessions without attached storage lose the venv and the
+checkout when the session ends. The current FAQ's HOME wording conflicts with
+the storage-specific article and Features page; this discrepancy and the
+unperformed live persistence check are recorded in
+[ADR-0041](adr/0041-aum-session-safety-and-cloud-shell.md) and U61 in
+[UNKNOWNS](UNKNOWNS.md). No live Cloud Shell success is claimed.
+
+Direct uses public ARM (`management.azure.com`), Log Analytics
+(`api.loganalytics.io`) and Graph (`graph.microsoft.com`) endpoints, with the
+same existing caller permissions as a workstation. An AUM service or
+Turnstile endpoint behind private networking requires Cloud Shell deployed
+into a connected Azure VNet, including the required DNS/routing. The launcher
+does not provision that VNet deployment. Conditional Access location rules
+can still apply to the Azure egress addresses used by Cloud Shell; it is not
+an exemption from the tenant's policies.
+
+Cloud Shell sessions end after about **20 minutes without interactive
+activity**. A long-running command or terminal redraw is not a persistence
+guarantee. Browser and Cloud Shell shortcuts can intercept keys; the `:`
+command palette reaches AUM's available actions without depending on those
+browser shortcuts. Native field editing and modal buttons remain accessible
+with Tab and Enter.
+
+Sources, accessed 2026-09-29:
+[Cloud Shell features/tools and automatic authentication](https://learn.microsoft.com/azure/cloud-shell/features),
+[persisted HOME and clouddrive](https://learn.microsoft.com/azure/cloud-shell/persisting-shell-storage),
+[ephemeral sessions](https://learn.microsoft.com/azure/cloud-shell/get-started/ephemeral),
+[idle timeout](https://learn.microsoft.com/azure/cloud-shell/faq-troubleshooting),
+[Deploy Azure Cloud Shell in a virtual network](https://learn.microsoft.com/azure/cloud-shell/vnet/deployment),
+[private-network reachability](https://learn.microsoft.com/azure/cloud-shell/vnet/overview),
+[terminal/browser shortcuts](https://learn.microsoft.com/azure/cloud-shell/use-the-shell-window),
+[CAE and differing IP addresses](https://learn.microsoft.com/entra/identity/conditional-access/howto-continuous-access-evaluation-troubleshoot#ip-address-configuration).
+The AUM endpoint facts come from
+[Direct](../cli/finops/src/claude_finops/direct.py) and
+[Graph](../cli/finops/src/claude_finops/groups.py).
+
 ## Connect
 
 Each gateway has one budget/governance write authority. P80 does not change the authority
@@ -142,13 +225,46 @@ the main views; `0` opens Settings. `?` opens the current key map. The detailed 
 kept in [Tour the live terminal](#tour-the-live-terminal), including Overview,
 Budgets, People, Governance, Usage, Trends, Requests, Anomalies and Settings.
 Those live images are historical measurements with their original provenance.
-Current P80 layout examples use explicit Example data, not a live deployment:
+Current P85 layout examples use explicit Example data, not a live deployment:
 [People, 80x24](../cli/finops/tests/snapshots/svg/people-80x24.svg),
 [Budgets, 160x48](../cli/finops/tests/snapshots/svg/budgets-160x48.svg) and
 [Settings, 80x24](../cli/finops/tests/snapshots/svg/settings-80x24.svg).
 The [snapshot manifest](../cli/finops/tests/snapshots/manifest.json) records
 source and output hashes for all 24 screen images. Text hashes normalize
 Windows CRLF and Unix LF line endings to the same UTF-8/LF representation.
+
+Escape clears a filter, returns along a breadcrumb or dismisses a modal; it
+does not request application exit. A single `q` opens a quit confirmation.
+A second `q` or Enter confirms; Escape stays in AUM. **Quit AUM**, **Clear
+filter or go back**, and the context-dependent **Next page** / **Previous
+page** actions are also in the `:` palette.
+
+While a mutation is in flight, application quit routes defer confirmation.
+The dialog shows **Saving; wait for the result**, with a 3-30 s estimate
+(an asynchronous apply can take up to three minutes), and its Quit button is
+disabled. Keyboard confirmation and direct application exit requests are
+also refused until completion. The result remains in its form; completion
+does not automatically execute an earlier quit request. Ctrl+C can still be
+consumed by native copy handling; the application's quit entry follows the
+same deferral. Non-mutating work does not acquire this save lifetime
+([quit regressions](../cli/finops/tests/test_p85_council_quit.py)).
+Successful sign-out completion is application-owned: cancellation of its
+modal worker does not lose the intended exit. Its registry entry is released
+first, other pending mutations finish, and the form no longer reports a save
+that has already completed. Failed sign-out leaves AUM running with its error.
+
+Expected refresh failures remain visible rather than terminating the terminal.
+Network/I/O failures and HTTP 401/403 have plain status explanations; an
+explicit refresh (`r`, normally estimated at 3-5 s) retries the read, not a
+mutation. The CAE `InteractionRequired` / `LocationConditionEvaluationSatisfied`
+challenge gets an IP-variation explanation: consistent on/off VPN use,
+IPv4/IPv6 differences, and administrator review of a named location or an
+appropriate policy exclusion. No policy exception is granted by AUM.
+The Azure CLI boundary recognizes that challenge without echoing raw stderr
+([CAE guidance](https://learn.microsoft.com/entra/identity/conditional-access/howto-continuous-access-evaluation-troubleshoot#ip-address-configuration),
+accessed 2026-09-29;
+[error boundary](../cli/finops/src/claude_finops/errors.py),
+[pilot matrix](../cli/finops/tests/test_p85_escape.py)).
 
 ## How-to
 
@@ -159,8 +275,9 @@ scope. **Add person to team** (`g`) is available to owners through Direct and
 Turnstile-backed gateway configurations. If the search has no result and the
 caller has that action,
 the empty state offers `Add <email> to <team>`. The form searches Entra, loads
-the team/unit catalog on demand, previews tier and group membership changes, and
-then applies only after confirmation. The selected email and team are filled
+the team/unit catalog on demand, previews the chosen tier addition, other-tier
+removal and optional unit/team group addition, and writes only through Apply.
+The palette name is **Add developer**. The selected email and team are filled
 in the add flow. No prior visit to Budgets is required. Non-owners see a plain
 explanation rather than an add offer.
 The AUM-service backend does not support this membership flow:
@@ -168,6 +285,12 @@ The AUM-service backend does not support this membership flow:
 accepts only Direct and Turnstile-backed gateway configurations. People and
 Budgets disable **Add person to team** with that explanation on AUM service;
 neither its shortcut nor its command-palette entry opens a membership writer.
+Directory/catalog reads and preview have a 3-10 s estimate; apply has a
+3-30 s estimate. Done returns to People and refreshes its selected scope.
+People contains observed usage, not a directory roster: a newly added account
+can remain absent until an observed request is available. The
+[offline pilots](../cli/finops/tests/test_p85_people.py) exercise both
+authority paths and refreshed endpoint responses, not live ingestion latency.
 
 CLI:
 
@@ -177,12 +300,105 @@ aum developer add amara@contoso.com --tier standard --unit sales-emea --what-if
 aum developer add amara@contoso.com --tier standard --unit sales-emea --apply
 ```
 
+### Remove a person from a team
+
+In **People**, **Remove person from team** (`h`) sits beside the add action.
+The palette has the same name. An owner selects the resolved account in the
+Entra picker. The preview shows its object id and email/UPN, every planned
+tier and catalog unit/team group removal with the group's id, and the
+`allow-standard` and `allow-premium` publication targets. This removes
+gateway access across those groups, **not just the selected team**.
+Listed direct memberships that are already absent are no-ops; groups are not
+deleted. The resolved email/UPN is the required typed confirmation, including
+the resolved guest UPN when it differs from the searched email.
+
+Field edits invalidate the preview. A new Preview after the confirmation
+enables Apply; a blank or different confirmation is refused by the existing
+[`developer_change(remove=True)` engine](../cli/finops/src/claude_finops/developer_actions.py).
+Apply passes the reviewed engine plan and its typed confirmation into that
+same writer. The writer compares every operation-plan field, apart from the
+preview flag, against the resolved snapshot it then uses for group writes.
+A changed person, tier group or catalog group is refused before membership
+or publication writes, including a change after the form's last re-preview.
+Non-owners and the AUM service backend cannot open this writer. Directory and
+preview reads have a 3-10 s estimate; apply has a 3-30 s estimate. The result
+names the resolved account and publication path. Done refreshes People
+(estimate 3-10 s), whose historical observed rows can remain after removal.
+Removal does not erase usage or revoke an already-issued Entra token.
+
+Direct permits an empty allow list only for a changed tier whose last direct
+member was removed and whose post-write member read is empty. The other tier's
+empty-list guard remains in force. Turnstile retains its existing delegated
+publish-as-admin path. These rules come from the
+[membership engine](../cli/finops/src/claude_finops/developer_actions.py) and
+[access sync](../scripts/Sync-ClaudeAccess.ps1), and are covered by
+[engine tests](../cli/finops/tests/test_developers.py) and
+[terminal pilots](../cli/finops/tests/test_p85_people.py).
+
+CLI:
+
+```powershell
+aum developer remove amara@contoso.com --what-if
+aum developer remove amara@contoso.com --confirm amara@contoso.com --apply
+```
+
+### Create a unit or team
+
+The `:` palette entry **Add unit or team** opens GroupPicker. An Entra group
+prefix search and Enter select an assigned-membership security group; the
+catalog form carries its group id and name. The form's Unit/Team choice,
+stable id and display name describe the new scope. A team requires an existing
+parent unit. The separate **Find or create Entra security group** palette
+entry exposes group discovery/creation; creating a group alone does not add
+a catalog scope.
+
+Preview validates a fresh catalog and reports **Replace catalog**; the form
+shows the proposed scope, group and parent. Apply submits the complete
+catalog through the selected existing writer. Group search and preview have
+a 3-10 s estimate, and the save estimate is 3-30 s. Direct returns its verified
+receipt; Turnstile normally applies in about two minutes, with terminal
+following limited to three minutes. Done refreshes Governance. The
+[catalog pilots](../cli/finops/tests/test_p85_catalog.py) cover both a new unit
+and a team under an existing unit on Direct and Turnstile, including exact
+catalog request bodies.
+
+### Remove a unit or team
+
+In **Governance** (`4`), the selected unit/team and the `:` palette entry
+**Remove selected budget or scope** identify a catalog removal. The form
+requires the scope's stable id, not its display name. Preview reports
+**Replace catalog** after validating the current catalog; Apply checks the
+typed id and saves the remaining collection. The same palette entry in
+Budgets or People clears a budget instead of deleting a catalog scope.
+Preview has a 3-10 s estimate and the save estimate is 3-30 s. Turnstile
+normally applies in about two minutes, with terminal following limited to
+three minutes; Direct returns a verified receipt without that job.
+
+The [engine](../cli/finops/src/claude_finops/engine.py) refuses a unit while
+it has any child department, including a synthetic unit-direct department.
+It also refuses the default department and removal of the last business unit.
+It has no empty-Entra-membership requirement: an otherwise removable scope
+can still have members. Catalog removal does not delete the Entra group or
+remove those directory memberships. The
+[Direct/Turnstile pilots](../cli/finops/tests/test_p85_catalog.py) prove these
+rules, wrong-id refusal and the actual catalog-only writes.
+
 ### Set a person's budget
 
 In **People**, **Set budget** (`e`) opens a preview for the selected writable
 person. With no selected person, the button is disabled and its hint explains
 the required selection. A person with no row cannot be edited; membership and
-the selected team/month determine which observed rows are available.
+the selected team/month determine which observed rows are available. The
+palette entry is **Edit selected budget or governance row** for owners, or
+**Edit selected delegated budget** where delegated writes are permitted.
+Preview shows the previous/proposed token amounts and parent headroom.
+Direct person limits are daily gateway overrides; Turnstile person budgets
+are monthly server records, not gateway quotas. Destructive changes require
+the selected row's scope id. Preview has a 3-10 s estimate and save has a
+3-30 s estimate. Direct completes with its native receipt rather than a
+Turnstile-only message
+([engine](../cli/finops/src/claude_finops/engine.py),
+[pilots](../cli/finops/tests/test_p85_budgets.py)).
 
 CLI:
 
@@ -191,10 +407,22 @@ aum budget set user amara@contoso.com 100k --team sales-emea --what-if
 aum budget set user amara@contoso.com 100k --team sales-emea --apply
 ```
 
+Those email-key examples describe Turnstile rows. Direct uses the observed
+person's Entra object id from the selected row instead of the email.
+
 ### Set a team or unit budget
 
 In **Budgets**, **Set budget** (`e`) opens the selected unit or team.
-The preview checks parent headroom and current server state.
+The palette name is **Edit selected budget or governance row** for owners.
+The preview shows previous/proposed token amounts and parent headroom from
+current server state. Units and teams use monthly tokens. A reduction below
+observed usage or an unknown-usage change requires the stable scope id.
+Preview has a 3-10 s estimate and save has a 3-30 s estimate. Direct and AUM
+service return synchronous receipts; the service also requires an audit
+reason. Turnstile normally applies in about two minutes, with terminal
+following limited to three minutes
+([engine](../cli/finops/src/claude_finops/engine.py),
+[pilots](../cli/finops/tests/test_p85_budgets.py)).
 
 CLI:
 
@@ -212,6 +440,25 @@ and an explanation. Direct and AUM service USD writes also depend on the
 gateway's recorded authority and the caller's permissions. A connection change
 does not change that authority. Ordinary token-budget forms keep their existing
 default; USD is not made the default everywhere.
+The palette name is **Edit selected USD budget** and uses the same selected-
+scope permission as the button and key. Preview shows the old and proposed
+USD amounts and **Saved; awaiting reconciliation**; decimal text is preserved
+to nine fractional places. Units and teams are monthly; people can be daily
+or monthly. AUM service requires an audit reason and sends the reviewed
+revision through If-Match. Preview has a 3-10 s estimate and save has a
+3-30 s estimate. A successful save remains awaiting reconciliation and does
+not wait for a Turnstile apply job.
+
+The shipped service reconciliation timer runs every five minutes; the next
+scheduled run is therefore normally within about five minutes, plus its
+execution and gateway propagation time. Direct reconciliation is a separate
+action. Neither a save nor this schedule proves enforcement. Turnstile shows
+the existing disabled explanation, **USD budget writes need Direct or the
+AUM service. P81 brings USD to Turnstile.**, without substituting a token
+write
+([timer](../service/aum/function_app.py),
+[engine](../cli/finops/src/claude_finops/engine.py),
+[complete USD pilots](../cli/finops/tests/test_p85_budgets.py)).
 
 CLI:
 

@@ -24,7 +24,7 @@ from .views import DIMENSIONS, TABS, view_rows
 from .ui_features import FeatureUI, EXTRA_TABS
 from .capabilities import enabled
 from .usd import can_usd_write
-from .feature_screens import FilterChips
+from .feature_screens import FilterChips, QuitScreen
 from .progressive import ProgressiveRefresh
 from .guarded_publication import guarded_publish, published, guarded_deferred
 from .principal_ui import PrincipalUI
@@ -50,6 +50,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
         Binding("m", "month", "Month"),
         Binding("e", "edit", "Edit"),
         Binding("g", "add_developer", "Add person to team", show=False),
+        Binding("h", "remove_developer", "Remove person from team", show=False),
         Binding("u", "usd_edit", "Set USD budget", show=False),
         Binding("x", "chargeback", "Chargeback report", show=False),
         Binding("ctrl+a", "apply", "Apply"),
@@ -76,6 +77,8 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
         self.verifying_identity = False
         self._refresh_serial = 0
         self._waiting = set()
+        self._active_mutations = set()
+        self._signout_complete = False
         self.allowed_tabs = visible_tabs({})
         self.team = ""
         self.people_query = ""
@@ -129,6 +132,8 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
                             yield Button("Find", id="find-people")
                         with Horizontal(classes="toolbar actions"):
                             yield Button("Add person to team", id="action-add-person")
+                            yield Button("Remove person from team", id="action-remove-person")
+                        with Horizontal(classes="toolbar actions"):
                             yield Button("Set budget", id="action-set-budget")
                             yield Button("Set USD budget", id="action-set-usd-budget")
                             yield Button("Chargeback report", id="action-chargeback")
@@ -185,6 +190,13 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
         if actions_visible:
             if self.identity.get("role") == "owner" and not self.redactor.enabled:
                 keys.append("g Add person to team" if self.check_action("add_developer", ()) else "Add person to team")
+                if self.active == "people":
+                    keys.append("h Remove person from team" if self.check_action("remove_developer", ()) else
+                                "Remove person from team")
+                    membership_line = " | ".join(keys) + " | : Cmd | ? Help"
+                    budget_line = "e Set budget | u Set USD budget | x Chargeback report | n/p Page | q Quit"
+                    self.query_one("#key-hints", Static).update(membership_line + "\n" + budget_line)
+                    return
             keys.extend(["e Set budget", "u Set USD budget", "x Chargeback report"])
         elif self.check_action("edit", ()):
             keys.append("e Edit")
@@ -251,7 +263,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
             return bool(parameters) and parameters[0] in self.allowed_tabs
         if action in {"export", "chargeback"}:
             return "overview" in self.allowed_tabs
-        if action == "add_developer":
+        if action in {"add_developer", "remove_developer"}:
             return (self.config.backend != "aum-service" and self.identity.get("role") == "owner"
                     and not self.redactor.enabled and not self.verifying_identity)
         if action == "usd_edit":
@@ -340,6 +352,11 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
                 button.disabled = not can_add
                 button.tooltip = (self.membership_unavailable_text() if self.config.backend == "aum-service" else
                                   "" if can_add else "Only owners can add people to teams.")
+            elif button.id == "action-remove-person":
+                can_remove = self.check_action("remove_developer", ())
+                button.disabled = not can_remove
+                button.tooltip = (self.membership_unavailable_text() if self.config.backend == "aum-service" else
+                                  "" if can_remove else "Only owners can remove people from teams.")
             elif button.id == "action-set-budget":
                 button.disabled = not selected or not self.check_action("edit", ())
                 button.tooltip = "" if selected else "Select a person or scope first."
@@ -491,12 +508,13 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
 
     @staticmethod
     def membership_unavailable_text():
-        return "Add person unavailable on AUM service: no membership writer."
+        return "Add person unavailable on AUM service: no membership writer. Remove person is also unavailable."
 
     @on(Button.Pressed)
     def extra_button(self, event):
         actions = {
             "action-add-person": self.action_add_developer,
+            "action-remove-person": self.action_remove_developer,
             "action-set-budget": self.action_edit,
             "action-set-usd-budget": self.action_usd_edit,
             "action-chargeback": self.action_chargeback,
@@ -707,6 +725,52 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
         if self.check_action("export", ()):
             self.push_screen(ExportScreen(auto_export=True))
 
+    @published(lambda self: self.safe_message_guard())
+    def action_quit(self):
+        if isinstance(self.screen_stack[-1], QuitScreen):
+            self.screen_stack[-1].refresh_saving()
+            return
+        self.push_screen(QuitScreen())
+
+    def action_help_quit(self):
+        self.action_quit()
+
+    @property
+    def saving(self):
+        return bool(self._active_mutations)
+
+    def exit(self, result=None, return_code=0, message=None):
+        if self.is_running and self.saving:
+            self.action_quit()
+            return
+        super().exit(result, return_code=return_code, message=message)
+
+    async def run_mutation(self, operation):
+        task = asyncio.create_task(operation)
+        self._active_mutations.add(task)
+        task.add_done_callback(guarded_deferred(self.safe_message_guard(), self._mutation_finished))
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            task.add_done_callback(guarded_deferred(self.safe_message_guard(), self._orphaned_mutation))
+            raise
+
+    @published(lambda self, task: self.safe_message_guard())
+    def _mutation_finished(self, task):
+        self._active_mutations.discard(task)
+        if not task.cancelled() and task.exception() is None and task.result() == "signout":
+            self._signout_complete = True
+        if self._signout_complete and not self.saving:
+            self.exit()
+            return
+        for screen in self.screen_stack:
+            if isinstance(screen, QuitScreen):
+                screen.refresh_saving()
+
+    def _orphaned_mutation(self, task):
+        if not task.cancelled() and task.exception() is not None:
+            self._handle_exception(task.exception())
+
     def action_edit(self):
         if not self.check_action("edit", ()):
             return
@@ -753,6 +817,12 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
             elif self.active == "budgets":
                 prefill_unit = prefill_unit or self.selected().get("scope_id", "")
             self.push_screen(DeveloperPicker(prefill_user=prefill_user, prefill_unit=prefill_unit))
+
+    def action_remove_developer(self):
+        if self.check_action("remove_developer", ()):
+            from .developer_screens import DeveloperPicker
+            self.push_screen(DeveloperPicker(
+                prefill_user=self.people_query if self.active == "people" else "", remove=True))
 
     def action_apply(self):
         if self.editable and not self.engine.backend.immediate_writes:
@@ -802,7 +872,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
         keys = dict(tabs=", ".join(label for tab, label in TABS + EXTRA_TABS if tab in self.allowed_tabs),
                     navigation="Tab / Shift+Tab changes focus; arrows move; Enter opens exact values; Esc goes back.",
                     lookup="/ searches scopes, people, models and request:<id>; Ctrl+F filters rows; f sets server filters.",
-                    commands=": opens the command palette; m changes month; r refreshes; q quits.",
+                    commands=": opens the command palette; m changes month; r refreshes; q asks to quit. A second q or Enter confirms; Esc stays.",
                     current_view=self.active, role=self.identity.get("role", "unknown"),
                     pagination="n next / p previous; cursor pages when advertised, otherwise 200 requests per window.",
                     safety="Preview first, then Apply. Removing or lowering below usage requires the identifier.",
@@ -814,9 +884,9 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
                     access="Direct is Azure RBAC admin access; optional servers enforce viewer/manager roles and writable scope.")
         keys["actions"] = ("g Add person to team (owners); e Set budget; "
                            "u Set USD budget (when permitted); x Chargeback report. "
-                           "People and Budgets show the same actions. Settings: Change connection.")
+                           "People also shows h Remove person from team (owners). Settings: Change connection.")
         if self.config.backend == "aum-service":
-            keys["actions"] = ("Add person to team unavailable; e Set budget; "
+            keys["actions"] = ("Add person to team and Remove person from team unavailable; e Set budget; "
                                "u Set USD budget (when permitted); x Chargeback report. Settings: Change connection.")
             keys["membership_availability"] = self.membership_unavailable_text()
         if not enabled(self.feature_caps, "usd_budgets", "write"):

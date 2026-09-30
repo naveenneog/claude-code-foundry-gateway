@@ -3,11 +3,39 @@
   "id": "terminal-finops",
   "kind": "flow",
   "title": "AUM (Azure Usage Management)",
-  "subtitle": "An independent terminal FinOps tool. Textual and Typer share one engine: Direct by default, optional AUM service or Turnstile, and an explicit test backend. Never in the model inference path.",
+  "subtitle": "An independent terminal FinOps tool on a workstation or Cloud Shell. Textual and Typer share one engine: Direct by default, optional AUM service or Turnstile. Never in the model inference path.",
   "width": 1280,
   "height": 1300,
-  "outputs": ["docs/images/architecture/terminal-finops.png"],
-  "sources": ["scripts/New-ClaudeTurnstileEntraApp.ps1", "scripts/New-ClaudeAumEntraApp.ps1", "scripts/Set-ClaudeTier.ps1", "scripts/Set-ClaudeBudget.ps1", "scripts/Set-ClaudeDeveloper.ps1", "scripts/ClaudeAumDirectWrites.ps1", "scripts/Sync-AumMembership.ps1", "scripts/Sync-ClaudeAccess.ps1", "scripts/ApimNamedValue.ps1", "analytics/chargeback-ledger.kql", "cli/finops/pyproject.toml", "cli/finops/src/claude_finops/cli.py", "cli/finops/src/claude_finops/config.py", "cli/finops/src/claude_finops/ui_features.py", "cli/finops/src/claude_finops/direct.py", "cli/finops/src/claude_finops/direct_analytics.py", "cli/finops/src/claude_finops/scope.py", "cli/finops/src/claude_finops/service_models.py", "cli/finops/src/claude_finops/service_writes.py", "cli/finops/src/claude_finops/groups.py", "cli/finops/src/claude_finops/group_actions.py", "cli/finops/src/claude_finops/developers.py", "cli/finops/src/claude_finops/developer_actions.py", "cli/finops/src/claude_finops/gateway_probe.py", "cli/finops/src/claude_finops/commands_groups.py"],
+  "outputs": [
+    "docs/images/architecture/terminal-finops.png"
+  ],
+  "sources": [
+    "scripts/New-ClaudeTurnstileEntraApp.ps1",
+    "scripts/New-ClaudeAumEntraApp.ps1",
+    "scripts/Set-ClaudeTier.ps1",
+    "scripts/Set-ClaudeBudget.ps1",
+    "scripts/Set-ClaudeDeveloper.ps1",
+    "scripts/ClaudeAumDirectWrites.ps1",
+    "scripts/Sync-AumMembership.ps1",
+    "scripts/Sync-ClaudeAccess.ps1",
+    "scripts/ApimNamedValue.ps1",
+    "analytics/chargeback-ledger.kql",
+    "cli/finops/pyproject.toml",
+    "cli/finops/src/claude_finops/cli.py",
+    "cli/finops/src/claude_finops/config.py",
+    "cli/finops/src/claude_finops/ui_features.py",
+    "cli/finops/src/claude_finops/direct.py",
+    "cli/finops/src/claude_finops/direct_analytics.py",
+    "cli/finops/src/claude_finops/scope.py",
+    "cli/finops/src/claude_finops/service_models.py",
+    "cli/finops/src/claude_finops/service_writes.py",
+    "cli/finops/src/claude_finops/groups.py",
+    "cli/finops/src/claude_finops/group_actions.py",
+    "cli/finops/src/claude_finops/developers.py",
+    "cli/finops/src/claude_finops/developer_actions.py",
+    "cli/finops/src/claude_finops/gateway_probe.py",
+    "cli/finops/src/claude_finops/commands_groups.py"
+  ],
   "namingEvidence": {
     "repository": "naveenneog/claude-code-foundry-gateway",
     "revision": "8b79830462701fcaef71e7422ca77add4abdd8f1",
@@ -16,112 +44,524 @@
     "excerpt": "[project.scripts]\naum = \"claude_finops.cli:main\"\nclaude-finops = \"claude_finops.cli:legacy_main\""
   },
   "identifiers": {
-    "app": { "label": "FinOpsApp", "source": "cli/finops/src/claude_finops/tui.py", "match": "class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):" },
-    "profile": { "label": "Rollback", "source": "cli/finops/src/claude_finops/publication_output.py", "match": "def profile_transaction(" },
-    "csv": { "label": "Complete CSV", "source": "cli/finops/src/claude_finops/reports.py", "match": "def save_chargeback_csv(" },
-    "engine": { "label": "Engine", "source": "cli/finops/src/claude_finops/engine.py", "match": "class Engine(FeatureEngine):" },
-    "turnstile": { "label": "TurnstileBackend", "source": "cli/finops/src/claude_finops/turnstile.py", "match": "class TurnstileBackend(HttpBackend):" },
-    "aum": { "label": "AumServiceBackend", "source": "cli/finops/src/claude_finops/aum_service.py", "match": "class AumServiceBackend(HttpBackend):" },
-    "http": { "label": "HttpBackend", "source": "cli/finops/src/claude_finops/http_backend.py", "match": "class HttpBackend(Backend):" },
-    "direct": { "label": "DirectBackend", "source": "cli/finops/src/claude_finops/direct.py", "match": "class DirectBackend(Backend):" },
-    "fake": { "label": "FakeBackend", "source": "cli/finops/src/claude_finops/fake.py", "match": "class FakeBackend(FakeFeatures, Backend):" },
-    "bridge": { "label": "Invoke-ClaudeFinOps.ps1", "source": "scripts/Invoke-ClaudeFinOps.ps1", "kind": "file" },
-    "scope": { "label": "Turnstile.Manage", "source": "scripts/New-ClaudeTurnstileEntraApp.ps1", "match": "[string]$ScopeValue = 'Turnstile.Manage'" },
-    "aum-scope": { "label": "AUM.Access", "source": "scripts/New-ClaudeAumEntraApp.ps1", "match": "value='AUM.Access'" },
-    "ledger": { "label": "chargeback-ledger.kql", "source": "analytics/chargeback-ledger.kql", "kind": "file" }
+    "app": {
+      "label": "FinOpsApp",
+      "source": "cli/finops/src/claude_finops/tui.py",
+      "match": "class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):"
+    },
+    "cloudshell": {
+      "label": "aum-cloudshell.sh",
+      "source": "scripts/aum-cloudshell.sh",
+      "kind": "file"
+    },
+    "profile": {
+      "label": "Rollback",
+      "source": "cli/finops/src/claude_finops/publication_output.py",
+      "match": "def profile_transaction("
+    },
+    "csv": {
+      "label": "Complete CSV",
+      "source": "cli/finops/src/claude_finops/reports.py",
+      "match": "def save_chargeback_csv("
+    },
+    "engine": {
+      "label": "Engine",
+      "source": "cli/finops/src/claude_finops/engine.py",
+      "match": "class Engine(FeatureEngine):"
+    },
+    "turnstile": {
+      "label": "TurnstileBackend",
+      "source": "cli/finops/src/claude_finops/turnstile.py",
+      "match": "class TurnstileBackend(HttpBackend):"
+    },
+    "aum": {
+      "label": "AumServiceBackend",
+      "source": "cli/finops/src/claude_finops/aum_service.py",
+      "match": "class AumServiceBackend(HttpBackend):"
+    },
+    "http": {
+      "label": "HttpBackend",
+      "source": "cli/finops/src/claude_finops/http_backend.py",
+      "match": "class HttpBackend(Backend):"
+    },
+    "direct": {
+      "label": "DirectBackend",
+      "source": "cli/finops/src/claude_finops/direct.py",
+      "match": "class DirectBackend(Backend):"
+    },
+    "fake": {
+      "label": "FakeBackend",
+      "source": "cli/finops/src/claude_finops/fake.py",
+      "match": "class FakeBackend(FakeFeatures, Backend):"
+    },
+    "bridge": {
+      "label": "Invoke-ClaudeFinOps.ps1",
+      "source": "scripts/Invoke-ClaudeFinOps.ps1",
+      "kind": "file"
+    },
+    "scope": {
+      "label": "Turnstile.Manage",
+      "source": "scripts/New-ClaudeTurnstileEntraApp.ps1",
+      "match": "[string]$ScopeValue = 'Turnstile.Manage'"
+    },
+    "aum-scope": {
+      "label": "AUM.Access",
+      "source": "scripts/New-ClaudeAumEntraApp.ps1",
+      "match": "value='AUM.Access'"
+    },
+    "ledger": {
+      "label": "chargeback-ledger.kql",
+      "source": "analytics/chargeback-ledger.kql",
+      "kind": "file"
+    }
   },
   "groups": [
-    { "x": 0, "y": 0, "w": 1280, "h": 498, "tone": "slate", "title": "Operator's terminal · local process, not an authorization boundary" },
-    { "x": 0, "y": 890, "w": 302, "h": 394, "tone": "blue", "title": "Existing Azure resources" },
-    { "x": 326, "y": 890, "w": 302, "h": 394, "tone": "teal", "title": "Optional AUM authority" },
-    { "x": 652, "y": 890, "w": 302, "h": 394, "tone": "purple", "title": "Optional Turnstile" },
-    { "x": 978, "y": 890, "w": 302, "h": 394, "tone": "slate", "title": "Offline test boundary" }
+    {
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 498,
+      "tone": "slate",
+      "title": "Operator's terminal \u00b7 local process, not an authorization boundary"
+    },
+    {
+      "x": 0,
+      "y": 890,
+      "w": 302,
+      "h": 394,
+      "tone": "blue",
+      "title": "Existing Azure resources"
+    },
+    {
+      "x": 326,
+      "y": 890,
+      "w": 302,
+      "h": 394,
+      "tone": "teal",
+      "title": "Optional AUM authority"
+    },
+    {
+      "x": 652,
+      "y": 890,
+      "w": 302,
+      "h": 394,
+      "tone": "purple",
+      "title": "Optional Turnstile"
+    },
+    {
+      "x": 978,
+      "y": 890,
+      "w": 302,
+      "h": 394,
+      "tone": "slate",
+      "title": "Offline test boundary"
+    }
   ],
   "nodes": [
-    { "id": "ui", "x": 16, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Textual terminal UI", "lines": ["[[app]]: visible actions and preview-first forms", "Guarded reads; named estimated waits"] },
-    { "id": "commands", "x": 692, "y": 62, "w": 572, "h": 142, "tone": "slate", "title": "Command aum · Typer", "lines": ["Scriptable nouns/verbs, JSON and complete chargeback CSV", "No silent write retry or authority fallback"] },
-    { "id": "engine", "x": 248, "y": 272, "w": 784, "h": 202, "tone": "blue", "title": "One [[engine]]", "lines": [
-      "Identity, scope and backend capability gates; explicit daily versus monthly budgets",
-      "Preview first; confirm destructive changes and audit reasons where required.",
-      "Saved, verified, propagated and ingested are distinct facts.",
-      "The gateway or selected server remains the authorization boundary."
-    ] },
-    { "id": "local-files", "x": 1048, "y": 272, "w": 216, "h": 202, "compact": true, "tone": "slate", "title": "Local files", "lines": [
-      "Locked profile + backup",
-      "[[profile]]; [[csv]]",
-      "No stored tokens"
-    ] },
-    { "id": "direct", "x": 0, "y": 558, "w": 302, "h": 278, "compact": true, "tone": "blue", "title": "Direct · default", "lines": [
-      "[[direct]]",
-      "Azure RBAC administrator",
-      "ARM, Graph and parallel KQL",
-      "Developer add/remove",
-      "updates Entra groups",
-      "Existing writers via",
-      "[[bridge]]",
-      "One read-cycle snapshot"
-    ] },
-    { "id": "aum", "x": 326, "y": 558, "w": 302, "h": 278, "compact": true, "tone": "teal", "title": "AUM service HTTP", "lines": [
-      "[[aum]]",
-      "[[http]] + [[aum-scope]]",
-      "Own Admin / Viewer / Manager",
-      "Native scope and cursors",
-      "Reason + If-Match revision",
-      "No Turnstile dependency"
-    ] },
-    { "id": "turnstile", "x": 652, "y": 558, "w": 302, "h": 278, "compact": true, "tone": "purple", "title": "Turnstile HTTP", "lines": [
-      "[[turnstile]]",
-      "[[http]] + [[scope]]",
-      "Existing role/scope authority",
-      "Catalog and budget APIs",
-      "Background gateway apply",
-      "Optional assistant/Advanced"
-    ] },
-    { "id": "fake", "x": 978, "y": 558, "w": 302, "h": 278, "compact": true, "tone": "slate", "title": "Example (explicit)", "lines": [
-      "[[fake]]",
-      "Deterministic Contoso data",
-      "Pilot and contract tests",
-      "Snapshots at both sizes",
-      "Never a real-service fallback",
-      "Not live evidence"
-    ] },
-    { "id": "azure", "x": 16, "y": 946, "w": 270, "h": 312, "compact": true, "tone": "blue", "title": "Azure enforces access", "lines": [
-      "Named-value read-back and conflict-aware compensation",
-      "[[ledger]]",
-      "Hourly token facts; daily statistical cost candidates",
-      "Direct is not a unit-scoped manager boundary."
-    ] },
-    { "id": "authority", "x": 342, "y": 946, "w": 270, "h": 312, "compact": true, "tone": "teal", "title": "Functions + storage", "lines": [
-      "Server resolves manager groups on each request.",
-      "MI writes the selected gateway; clients need app roles.",
-      "Native approvals, expiring boosts and audit facts",
-      "Unprovided API views stay hidden."
-    ] },
-    { "id": "server", "x": 668, "y": 946, "w": 270, "h": 312, "compact": true, "tone": "purple", "title": "Web FinOps authority", "lines": [
-      "API checks roles and manager scope.",
-      "PostgreSQL holds console state.",
-      "Apply job publishes to APIM.",
-      "Explicit delegated-admin bootstrap uses existing rights."
-    ] },
-    { "id": "fixtures", "x": 994, "y": 946, "w": 270, "h": 312, "compact": true, "tone": "slate", "title": "No tenant/model calls", "lines": [
-      "Fixture writes stay in memory.",
-      "Native/future API contracts are tested explicitly.",
-      "Live screenshots have separate provenance and privacy guards."
-    ] }
+    {
+      "id": "ui",
+      "x": 16,
+      "y": 62,
+      "w": 572,
+      "h": 142,
+      "tone": "slate",
+      "title": "Textual terminal UI",
+      "lines": [
+        "[[app]]: visible actions and preview-first forms",
+        "Esc stays; quit requires confirmation"
+      ]
+    },
+    {
+      "id": "commands",
+      "x": 692,
+      "y": 62,
+      "w": 572,
+      "h": 142,
+      "tone": "slate",
+      "title": "Command aum \u00b7 Typer",
+      "lines": [
+        "[[cloudshell]]: HOME-local Python 3.12 / venv",
+        "Existing az sign-in; JSON and complete chargeback CSV"
+      ]
+    },
+    {
+      "id": "engine",
+      "x": 248,
+      "y": 272,
+      "w": 784,
+      "h": 202,
+      "tone": "blue",
+      "title": "One [[engine]]",
+      "lines": [
+        "Identity, scope and backend capability gates; explicit daily versus monthly budgets",
+        "Preview first; confirm destructive changes and audit reasons where required.",
+        "Saved, verified, propagated and ingested are distinct facts.",
+        "The gateway or selected server remains the authorization boundary."
+      ]
+    },
+    {
+      "id": "local-files",
+      "x": 1048,
+      "y": 272,
+      "w": 216,
+      "h": 202,
+      "compact": true,
+      "tone": "slate",
+      "title": "Local files",
+      "lines": [
+        "Locked profile + backup",
+        "[[profile]]; [[csv]]",
+        "HOME: venv / caches",
+        "No tokens in profiles"
+      ]
+    },
+    {
+      "id": "direct",
+      "x": 0,
+      "y": 558,
+      "w": 302,
+      "h": 278,
+      "compact": true,
+      "tone": "blue",
+      "title": "Direct \u00b7 default",
+      "lines": [
+        "[[direct]]",
+        "Azure RBAC administrator",
+        "ARM, Graph and parallel KQL",
+        "Developer add/remove",
+        "updates Entra groups",
+        "Existing writers via",
+        "[[bridge]]",
+        "One read-cycle snapshot"
+      ]
+    },
+    {
+      "id": "aum",
+      "x": 326,
+      "y": 558,
+      "w": 302,
+      "h": 278,
+      "compact": true,
+      "tone": "teal",
+      "title": "AUM service HTTP",
+      "lines": [
+        "[[aum]]",
+        "[[http]] + [[aum-scope]]",
+        "Own Admin / Viewer / Manager",
+        "Native scope and cursors",
+        "Reason + If-Match revision",
+        "No Turnstile dependency"
+      ]
+    },
+    {
+      "id": "turnstile",
+      "x": 652,
+      "y": 558,
+      "w": 302,
+      "h": 278,
+      "compact": true,
+      "tone": "purple",
+      "title": "Turnstile HTTP",
+      "lines": [
+        "[[turnstile]]",
+        "[[http]] + [[scope]]",
+        "Existing role/scope authority",
+        "Catalog and budget APIs",
+        "Background gateway apply",
+        "Optional assistant/Advanced"
+      ]
+    },
+    {
+      "id": "fake",
+      "x": 978,
+      "y": 558,
+      "w": 302,
+      "h": 278,
+      "compact": true,
+      "tone": "slate",
+      "title": "Example (explicit)",
+      "lines": [
+        "[[fake]]",
+        "Deterministic Contoso data",
+        "Pilot and contract tests",
+        "Snapshots at both sizes",
+        "Never a real-service fallback",
+        "Not live evidence"
+      ]
+    },
+    {
+      "id": "azure",
+      "x": 16,
+      "y": 946,
+      "w": 270,
+      "h": 312,
+      "compact": true,
+      "tone": "blue",
+      "title": "Azure enforces access",
+      "lines": [
+        "Named-value read-back and conflict-aware compensation",
+        "[[ledger]]",
+        "Hourly token facts; daily statistical cost candidates",
+        "Direct is not a unit-scoped manager boundary."
+      ]
+    },
+    {
+      "id": "authority",
+      "x": 342,
+      "y": 946,
+      "w": 270,
+      "h": 312,
+      "compact": true,
+      "tone": "teal",
+      "title": "Functions + storage",
+      "lines": [
+        "Server resolves manager groups on each request.",
+        "MI writes the selected gateway; clients need app roles.",
+        "Native approvals, expiring boosts and audit facts",
+        "Unprovided API views stay hidden."
+      ]
+    },
+    {
+      "id": "server",
+      "x": 668,
+      "y": 946,
+      "w": 270,
+      "h": 312,
+      "compact": true,
+      "tone": "purple",
+      "title": "Web FinOps authority",
+      "lines": [
+        "API checks roles and manager scope.",
+        "PostgreSQL holds console state.",
+        "Apply job publishes to APIM.",
+        "Explicit delegated-admin bootstrap uses existing rights."
+      ]
+    },
+    {
+      "id": "fixtures",
+      "x": 994,
+      "y": 946,
+      "w": 270,
+      "h": 312,
+      "compact": true,
+      "tone": "slate",
+      "title": "No tenant/model calls",
+      "lines": [
+        "Fixture writes stay in memory.",
+        "Native/future API contracts are tested explicitly.",
+        "Live screenshots have separate provenance and privacy guards."
+      ]
+    }
   ],
   "edges": [
-    { "from": "ui", "to": "engine", "kind": "control", "points": [[400, 204], [400, 272]] },
-    { "from": "commands", "to": "engine", "kind": "control", "points": [[880, 204], [880, 272]] },
-    { "from": "ui", "to": "local-files", "kind": "data", "points": [[588, 133], [652, 133], [652, 235], [1156, 235], [1156, 272]] },
-    { "from": "commands", "to": "local-files", "kind": "data", "points": [[1156, 204], [1156, 272]] },
-    { "from": "engine", "to": "direct", "kind": "data", "points": [[330, 474], [330, 518], [151, 518], [151, 558]] },
-    { "from": "engine", "to": "aum", "kind": "data", "points": [[477, 474], [477, 558]] },
-    { "from": "engine", "to": "turnstile", "kind": "data", "points": [[803, 474], [803, 558]] },
-    { "from": "engine", "to": "fake", "kind": "data", "points": [[950, 474], [950, 518], [1129, 518], [1129, 558]] },
-    { "from": "direct", "to": "azure", "kind": "identity", "points": [[151, 836], [151, 946]] },
-    { "from": "aum", "to": "authority", "kind": "identity", "points": [[477, 836], [477, 946]] },
-    { "from": "turnstile", "to": "server", "kind": "identity", "points": [[803, 836], [803, 946]] },
-    { "from": "fake", "to": "fixtures", "kind": "data", "points": [[1129, 836], [1129, 946]] }
+    {
+      "from": "ui",
+      "to": "engine",
+      "kind": "control",
+      "points": [
+        [
+          400,
+          204
+        ],
+        [
+          400,
+          272
+        ]
+      ]
+    },
+    {
+      "from": "commands",
+      "to": "engine",
+      "kind": "control",
+      "points": [
+        [
+          880,
+          204
+        ],
+        [
+          880,
+          272
+        ]
+      ]
+    },
+    {
+      "from": "ui",
+      "to": "local-files",
+      "kind": "data",
+      "points": [
+        [
+          588,
+          133
+        ],
+        [
+          652,
+          133
+        ],
+        [
+          652,
+          235
+        ],
+        [
+          1156,
+          235
+        ],
+        [
+          1156,
+          272
+        ]
+      ]
+    },
+    {
+      "from": "commands",
+      "to": "local-files",
+      "kind": "data",
+      "points": [
+        [
+          1156,
+          204
+        ],
+        [
+          1156,
+          272
+        ]
+      ]
+    },
+    {
+      "from": "engine",
+      "to": "direct",
+      "kind": "data",
+      "points": [
+        [
+          330,
+          474
+        ],
+        [
+          330,
+          518
+        ],
+        [
+          151,
+          518
+        ],
+        [
+          151,
+          558
+        ]
+      ]
+    },
+    {
+      "from": "engine",
+      "to": "aum",
+      "kind": "data",
+      "points": [
+        [
+          477,
+          474
+        ],
+        [
+          477,
+          558
+        ]
+      ]
+    },
+    {
+      "from": "engine",
+      "to": "turnstile",
+      "kind": "data",
+      "points": [
+        [
+          803,
+          474
+        ],
+        [
+          803,
+          558
+        ]
+      ]
+    },
+    {
+      "from": "engine",
+      "to": "fake",
+      "kind": "data",
+      "points": [
+        [
+          950,
+          474
+        ],
+        [
+          950,
+          518
+        ],
+        [
+          1129,
+          518
+        ],
+        [
+          1129,
+          558
+        ]
+      ]
+    },
+    {
+      "from": "direct",
+      "to": "azure",
+      "kind": "identity",
+      "points": [
+        [
+          151,
+          836
+        ],
+        [
+          151,
+          946
+        ]
+      ]
+    },
+    {
+      "from": "aum",
+      "to": "authority",
+      "kind": "identity",
+      "points": [
+        [
+          477,
+          836
+        ],
+        [
+          477,
+          946
+        ]
+      ]
+    },
+    {
+      "from": "turnstile",
+      "to": "server",
+      "kind": "identity",
+      "points": [
+        [
+          803,
+          836
+        ],
+        [
+          803,
+          946
+        ]
+      ]
+    },
+    {
+      "from": "fake",
+      "to": "fixtures",
+      "kind": "data",
+      "points": [
+        [
+          1129,
+          836
+        ],
+        [
+          1129,
+          946
+        ]
+      ]
+    }
   ],
   "notice": "Choose one write authority for budgets/governance. Entra developer membership is still owned by Entra groups and can be changed by AUM or scripts with the signed-in admin's rights. Direct and AUM service person limits are daily; Turnstile person budgets are monthly console records. Published workspace cost and gateway request attribution are distinct bases. Read-back is not an exact runtime counter or invoice guarantee."
 }

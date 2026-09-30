@@ -2,6 +2,1263 @@
 
 **Active packets (2026-09-30, run in parallel worktrees):** P85 AUM's terminal UI manages people, units, teams and budgets ([ROADMAP](ROADMAP.md)) and P81 USD budgets are the primary enforcer, each on its own branch. The owner approved merging P85 on 2026-09-29; it merges after its council passes and its packet gate passes on the merged tree. P81 merges only with the owner's explicit approval. Each has its own section on its branch; the section lands here when the packet merges. P80 AUM shows every action it has, connects in one step, and its guide starts with installation is merged with the owner's approval (`3f77754`, [below](#p80-aum-shows-every-action-it-has-connects-in-one-step-and-its-guide-starts-with-installation-2026-09-28)). P71 AUM answers fast and says why it cannot is merged with the owner's approval (`01bb6c7`, [below](#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28)), and its follow-up, the deadline tests prove termination without racing it (`dc0e311`, [below](#p71-follow-up-the-deadline-tests-prove-termination-without-racing-it-2026-09-30)). P84 projection deployment checks everything before it writes and never switches into an outage is merged with the owner's approval (`3e4430b`, [below](#p84-projection-deployment-checks-everything-before-it-writes-and-never-switches-into-an-outage-2026-09-29)); switching entitlement to the projection waits for P86. P78 the test suite runs in parallel on GitHub-hosted runners is merged with the owner's approval (`2737232`, [below](#p78-the-test-suite-runs-in-parallel-on-github-hosted-runners-2026-09-28)); ADR-0039's proposed charter change is not enacted. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)), and its follow-up, the installer permutation check reads only its own record (`05dea1b`, [below](#p79-follow-up-the-installer-permutation-check-reads-only-its-own-record-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
+## P85 AUM's terminal UI manages people, units, teams and budgets end to end, with tests, 2026-09-29
+
+Owner: @naveenneog. Builder worktree: `accel-p85`, branch
+`p85-aum-tui-manage`, based on owner-approved P80 `e630525` (includes main
+`30cdfd0`). P85 is the active packet on this branch. Council, the packet gate
+and integration to main belong to the lead. The integration assignment below
+authorizes this builder's integration merges into P85 and commits, but no push or main merge.
+
+### Final P71 follow-up integration and builder validation, 2026-09-30
+
+PLAN / CONTRACT: the lead now authorizes merging pinned main **`bf92ca3`**
+(`dc0e311` plus its record) into clean P85 **`3f321de`**, with `--no-ff`
+and no rebase. This supersedes the previous step's stop before full validation.
+The prior bounded P80 merge **`ca39e98`**, recorded by **`3f321de`**, remains
+documented below rather than being replaced.
+
+Keep both ledger histories. Keep the complete P85 section first, followed by
+P71's new deadline-test follow-up and the other merged sections. Preserve the
+incoming public-evidence test's full P71-heading lookup so the new follow-up
+heading cannot shadow P71's original evidence. Import the two reviewed
+test-only changes unchanged; no production or publication approval change
+is planned. U26 retains both P85's earlier gate observation and P71's new
+asynchronous-termination finding in one row.
+
+Run the full AUM suite serially **once**, under
+`with-gate-lock.ps1 -Owner p85-integration`, with `-p no:cacheprovider`
+and JUnit. Refresh weights from that full report, align the AUM whole-check
+entries and shard-guide numbers, then run shard coverage (<=300 s per planned
+shard), locked RunnerIntegrity, documentation references, encoding and
+architecture checks. Architecture uses a temporary dependency junction;
+regenerate only if its check fails, then remove the junction.
+The lead retains delta council, packet gate and merge-to-main ownership.
+No push, Azure call, history rewrite or other-worktree modification is authorized.
+
+The merge has **one conflict**, U26 in `UNKNOWNS.md`. Its common history
+and both branches' distinct additions are retained in a single unique row.
+STATUS and CHANGELOG merge both histories. Moving P85 above the follow-up
+preserves every packet section byte-for-byte. Both imported Python test files
+match `bf92ca3` exactly; production and charter files are unchanged.
+The reordered public-evidence tests passed **3/3 in 0.12 s**.
+The initial architecture check passed with the temporary junction, so
+**no manifest regeneration was needed**; the junction was removed.
+Evidence: `%TEMP%\p85-int-final-public-evidence.log` and
+`p85-int-final-architecture-initial.log`.
+
+#### Final merge and single full-run evidence
+
+Merge **`8139c067e9a69cb268019c356cac779b3444d56e`** has parents
+`3f321de5fc535909c5c947ba5273fd7db4e8ad6e` and pinned main
+`bf92ca3e1e2704121401bd754837050ce0417f23`. Both requested trailers are
+present. The prior `3f321de` merge record remains intact below.
+
+The full suite ran **once**, serially, on this clean merge, from `cli\finops`
+using this worktree's `.venv-finops\Scripts\python.exe`:
+`python -m pytest tests -q -p no:cacheprovider --junitxml <TEMP report>`.
+The shared-lock interval was **08:47:29-09:03:58 IST on 2026-09-30**.
+Result: **1,200 passed, 0 failed, 0 errors, 0 skips in 985.41 s**.
+All **269 P85** cases passed, as did all **10 deadline** and **3 P71 public-
+evidence** cases imported from the follow-up. A report-existence guard
+prevented an accidental repeat; no full-suite rerun was made. Evidence:
+`%TEMP%\p85-int-final-full-aum.log`, `p85-int-final-full-aum.xml` and
+`p85-int-final-full-summary.json`.
+
+`Update-FinOpsDurations.ps1` refreshed all **75** file weights from this
+single JUnit report: **1,200 cases**, **983.3 s** summed case time, rounded
+up per file. The four planned loads are **259 / 259 / 258 / 258 s**, owning
+**16 / 20 / 19 / 20** files. Every planned load is <=300 s; the four
+registrations and prerequisite skip names remain unchanged. The four AUM
+entries in the whole-check table and the AUM shard guide now match.
+`Test-FinOpsShards.ps1` passed **37/37** assertions. Shard evidence:
+`%TEMP%\p85-int-final-refresh-shards.log` and `p85-int-final-shard-plan.json`.
+
+Final required checks are green: `Test-RunnerIntegrity.ps1` passed
+**68/68** assertions under the shared lock (**09:09:57-09:12:41 IST**);
+`Test-DocReferences.ps1` passed **34/34** across **42 guides**;
+`Repair-ScriptEncoding.ps1 -Check` passed for **306 scripts**.
+The final `check-architecture.mjs` ran with the dependency junction and
+passed; the junction was removed. Neither architecture check required
+regeneration, so its sources, manifest and images remain unchanged.
+An exact comparison confirms both timing tables agree on all four <=300 s
+loads. Final logs: `%TEMP%\p85-int-final-runner-integrity.log`,
+`p85-int-final-doc-references.log`, `p85-int-final-encoding.log` and
+`p85-int-final-architecture-check.log`.
+
+The follow-up evidence/timing commit changes no production or pytest source
+after the full run. All requested builder validation is complete; the lead
+still owns delta council, packet gate and merging P85 to main. No push,
+merge to main, rebase, Azure call or other-worktree modification was made.
+The prior bounded merge record and every incoming follow-up section remain
+below this final P85 record.
+
+### P80 main merge before the deadline-test follow-up, 2026-09-30
+
+PLAN / CONTRACT: the lead assigns a bounded merge of pinned main **`a4f6ec9`**
+(`3f77754` plus its record) into clean P85 **`f3e9503`**, with `--no-ff`
+and no rebase. P80 has ported P85's reviewed AUM sharding but carries its own
+measurements. Keep P85's helper/runner implementation and its existing
+**75-file, four-by-281-second** plan; do not regenerate weights from a partial
+selector. Preserve both ledger histories and regenerate the architecture
+manifest through the temporary dependency junction, removing it afterward.
+
+The next P71 `test_azure_deadline.py` follow-up has not landed in this pinned
+main and is outside this step. Run only contract/publication/P85 selectors,
+shard coverage, documentation references and encoding. **Do not run the full
+AUM suite or `Test-RunnerIntegrity.ps1` here.** Both are explicitly deferred
+until the lead assigns the later main merge.
+
+Five of the six requested helper/runner files have identical Git blobs on
+both sides. `Test-All.ps1` differs only in its two-line historical timing
+comment; its registrations are identical, and P85's whole file is retained.
+Audit all approved function and boundary fingerprints against the resulting
+source under ADR-0035; a differing ledger comment is not a new approval.
+No code, test, publication rule or budget may be weakened. No push, merge to
+main, Azure call, or other-worktree modification is authorized.
+
+#### Conflict and approval review
+
+The merge produced **ten conflicts**. `CHANGELOG.md` and `UNKNOWNS.md`
+use Git's union merge, keeping both sides; the repeated U30 chapter is
+deduplicated only after verifying identical bytes. STATUS auto-merges both
+histories, with P85 still the first packet section.
+
+`Test-All.ps1`, both timing tables and the AUM README section keep P85's
+values. The non-AUM timing entries were compared and are identical, so no
+incoming measurement outside AUM is lost. All three shard helpers,
+`Test-FinOps.ps1`, `Test-All.ps1` and `Test-RunnerIntegrity.ps1` match P85.
+Both timing tables retain **281 / 281 / 281 / 281 s** from P85's earlier
+1,197-pass full run, not P80's 928-case measurement.
+
+The two approval-table conflicts preserve P85's reviewed
+`DeveloperPicker.open_add_form` context
+`5f095d01dbc48d70b45242154692faab781b14444b3977ad0693834a913a4faf`
+and its widget-boundary reason/digest
+`adeb80ffa2738f128805295627ce986c8c133bb7470b6d04b1ddb95a2660b0ef`.
+The picker retains P85's guarded stack replacement; incoming P80's digest
+describes its older push behavior. Both branches already agree on the widget
+digest. **Zero fingerprints are renewed and zero approvals are added**:
+all function and boundary digests were recalculated and match, and there is
+no production-source or capture-tool change relative to `f3e9503`.
+No RED implementation cycle is invented for an unchanged function.
+
+The Example snapshot-manifest conflict keeps P85's existing manifest only
+after proving that every source, capture tool and snapshot output is unchanged.
+The architecture manifest is instead regenerated using the required renderer;
+it is not hand-merged. All eleven preserved approval/helper/runner/timing/
+snapshot files and the entire AUM README section were explicitly compared
+with P85. Preservation evidence is `%TEMP%\p85-int-p80-preservation.json`.
+
+#### Bounded validation and stop point
+
+The selected contract/publication/P85 run passed **701/701 in 692.07 s**,
+with no failures, errors or skips. It includes all `test_p85_*.py`,
+`test_publication*.py`, `test_*contract*.py` (including revision-four and
+P80 publication contracts), and `test_runtime_publication_sinks.py`, with
+duplicate file selections removed. The shared lock was held from
+**07:50:17 to 08:01:52 IST on 2026-09-30**. Evidence:
+`%TEMP%\p85-int-p80-targeted.log` and `p85-int-p80-targeted.xml`.
+
+`Test-FinOpsShards.ps1` passed **37/37**, using the unchanged P85 measurements.
+`Test-DocReferences.ps1` passed **34/34** across **42 guides**;
+`Repair-ScriptEncoding.ps1 -Check` passed for **306 scripts**.
+The renderer and architecture check passed under the shared lock
+(**08:04:48-08:05:04 IST**): **17 specs, 19 PNGs**. The dependency junction
+was removed. Reports are `%TEMP%\p85-int-p80-shards.log`,
+`p85-int-p80-doc-references.log`, `p85-int-p80-encoding.log` and
+`p85-int-p80-render.log`.
+
+**No full AUM suite, RunnerIntegrity run, or duration refresh was performed
+in this step.** The shard coverage check's full collection and synthetic
+fixtures are not a full AUM execution. P85's 1,197-case measurement below
+remains historical evidence from the previous step. Stop after this merge
+and its ledger record; the next main merge and full validation await the
+lead's assignment after the deadline-test follow-up lands.
+
+The bounded merge is **`ca39e98a152514c7bb61c4a1d7e1fc81798746a3`**,
+with parents `f3e950325617a85418aad6e27d87218067ccbdd5` and pinned main
+`a4f6ec98742bc9005bb05eff543212af3462bd5c`. Both requested trailers are
+present. Only four ledger/documentation files differ from P85 after the
+resolutions; production, pytest, shard/runner code, measurements and images
+remain unchanged. Temporary merge/render helpers and the dependency junction
+are removed; TEMP audit logs and XML remain. No push, main merge, rebase or
+Azure call was made. This records the assigned stop point, not completion
+of the deferred full-suite or RunnerIntegrity work.
+
+### Council round 4 and final P71 main integration, 2026-09-30
+
+The lead reports that P85's integration council, round 4, reviewed
+`729a249` + `ac33392` + `0b9b48d` and **passed all five seats**:
+Architect PASS, Coder PASS, QA PASS, UX PASS and Security PASS.
+That approval applies to the preceding integration tree, not a new council
+or gate verdict on the main merge below.
+
+PLAN / CONTRACT: from clean `0b9b48d`, merge pinned main **`3b7c192`**
+(`01bb6c7` plus its merge record) with `--no-ff`, without rebasing.
+Retain P71's final message-control correction (`2be0973`) and missing-main-tab
+activation barrier (`7a28b74`), P80's guarded profile/export/recovery behavior,
+and P85's management, Escape/quit and Cloud Shell behavior. Keep both ledger
+histories and regenerate architecture and Example provenance, never
+hand-merging generated hashes. P80's later final-branch merge is a separate
+lead assignment and is not included here.
+
+ADR-0035 remains closed. Before renewing a combined fingerprint, inspect its
+source/call chain, reproduce the source-contract failure, and exercise the
+existing current/expired-origin and native message controls on the same tree.
+No new boundary, capability, static exception, relaxed assertion or budget is
+authorized. List each inherited/renewed approval and its reason below.
+
+Acceptance: all P85 and publication selectors; one serial full AUM run under
+`with-gate-lock.ps1 -Owner p85-integration`, with JUnit and results for all
+six formerly flaky IDs; timing refresh from that one run; each planned shard
+<=300 s (five shards only if needed); shard coverage, locked runner integrity,
+documentation references and encoding checks. Council/gates, any push, and
+integration to main remain lead-owned. No Azure calls or other-worktree edits.
+
+#### Closed-contract merge review
+
+Five conflicts: `CHANGELOG.md`, `docs/UNKNOWNS.md`,
+`tests/publication_attributes.py`, `tests/publication_policy.py` (both under
+`cli/finops`), and the generated architecture manifest. The ledger conflicts
+use Git's union merge, retaining both histories; its duplicate U30 chapter is
+removed only after a byte-identical comparison. P85 is moved back to the first
+packet section with every packet block preserved byte-for-byte.
+
+The source merge keeps P71's original-message-type map, native and protected
+receiver delivery checks, and the absent-`#main-tabs` barrier. P80's retained-
+origin recovery scrolling remains. The approval conflict keeps both sets of
+exact expressions/contexts: `FinOpsApp.switched` takes P71's reviewed
+`4281adb59bec8d2f19a73bf4bab44f08f2dba575f4905add86447ca82eb880cc`,
+while `FinOpsApp.update_access` retains P80/P85's unchanged capability-button
+context `add588ab82d0da215820a1f1e80d55c6a8c253517b274c25017e48cc4e1c9bdc`.
+All inherited function contexts were recalculated and match their selected
+literal fingerprints; no combined function requires an additional renewal.
+
+The **one renewed approval** is the composed `publication_widgets.py` boundary,
+whose digest is now
+`adeb80ffa2738f128805295627ce986c8c133bb7470b6d04b1ddb95a2660b0ef`.
+Neither parent's module digest describes both P71's message filtering and
+P80's protected recovery method. Its reviewed reason covers protected
+attachment, retained-origin scrolling, payload-free diagnostics and native
+exact-type delivery controls. `_message_enabled` reads only the owning pump's
+disabled/prevented type state; it grants no publication authority. Registration
+still validates retained sources, and recovery still checks `input_origin`
+before synchronous scrolling. No named import, ordinary member, builtin,
+static exception, trusted boundary or enforcement rule is newly granted here.
+
+RED, before that renewal: **243 collected, 241 passed, 2 failed in 23.44 s**.
+Only the boundary-fingerprint justification and whole-source contract failed;
+the P80/P85 current/expired-origin runtime controls passed. This evidence
+precedes the literal digest change. GREEN passed **243/243 in 28.01 s**.
+REFACTOR removes only the duplicate historical U30 chapter and keeps the
+combined approval reason precise; all inherited function contexts still
+match, and the approval helper remains **791 lines**, below its unchanged
+800-line budget. No production refactor or additional capability is needed.
+
+The Example capture generator and architecture renderer completed under the
+shared lock. All 24 Example SVG/grid captures and their source manifest are
+regenerated; historical live captures are untouched. Architecture checks pass
+for **17 specs and 19 PNGs**. The manifest is generated from the integrated
+sources, and the temporary `node_modules` junction is removed.
+Complete selector and single-full-run results follow; no test or budget is relaxed.
+
+#### Committed merge and complete validation
+
+Merge commit **`2c61178ea52ea92f41c21fd3921958cc044d913f`** has parents
+`0b9b48d876873b52e78f677c7b205170029a8ecd` and pinned main
+`3b7c192f57e1e372fd2a76aeaea43ed56188acfc`. Both requested trailers are
+present. This is a merge into `p85-aum-tui-manage`, not main.
+
+All requested selectors, plus P80's publication controls, passed together:
+**678/678 in 765.62 s**, under the shared lock from **05:28:58 to
+05:41:51 IST**. They comprise **269 P85**, **348 publication**, **40 runtime
+publication-sink** and **21 P80 publication-contract** cases. There were no
+failures, errors or skips. Evidence: `%TEMP%\p85-int-main-targeted.log`
+and `p85-int-main-targeted.xml`.
+
+The full suite then ran **once**, serially, on that clean merge, from
+`cli\finops` with this worktree's `.venv-finops\Scripts\python.exe`:
+`python -m pytest tests -q -p no:cacheprovider --junitxml <TEMP report>`.
+The shared-lock interval was **05:43:19-06:01:20 IST on 2026-09-30**.
+Result: **1,197 passed, 0 failed, 0 errors, 0 skips in 1,077.53 s**.
+All **269 P85 cases** passed again. A report-existence guard prevented an
+accidental repeat; no full-suite rerun was made.
+
+| Previously reported ID | Result in this single full run |
+|---|---|
+| `test_publication_generation.py::test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies[budgets]` | PASS |
+| `test_publication_generation.py::test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies[requests]` | PASS |
+| `test_publication_generation.py::test_principal_change_closes_prior_forms_and_clears_state_before_input` | PASS |
+| `test_publication_generation.py::test_assistant_context_is_cleared_before_b_request` | PASS |
+| `test_revision4_tui.py::test_approval_paging_and_queue_change_reset_cursor` | PASS |
+| `test_publication_native.py::test_native_chrome_content_requires_publication[FooterKey-key_display]` | PASS |
+| Earlier additional `test_cached_dialog_handoffs_retain_origin_during_deferred_composition[mode-form]` | PASS |
+| Earlier additional `test_cached_request_actions_recheck_the_origin_not_an_empty_cycle[action_open_ledger]` | PASS |
+
+The last two cases are also in `test_publication_generation.py`. All eight
+identities were explicitly found and checked in the XML, rather than inferred
+from a smaller selector or an absent failure list. Full evidence:
+`%TEMP%\p85-int-main-full-aum.log`, `p85-int-main-full-aum.xml` and
+`p85-int-main-full-summary.json`. The older non-green records below are
+historical evidence from before P71's final fixes, not this tree's result.
+
+`Update-FinOpsDurations.ps1` refreshed all **75** file weights from that one
+JUnit report: **1,197 cases**, **1,075.3 s** summed case time, rounded up
+per file. The four planned loads are **281 / 281 / 281 / 281 s**, owning
+**16 / 19 / 20 / 20** files. Every load is <=300 s, so four registrations
+and their four prerequisite skip names remain; no fifth shard or relaxed
+timeout is needed. The whole-check timing table and shard guide match the
+new measurement. `Test-FinOpsShards.ps1` passed **37/37** assertions.
+
+Final required checks: `Test-RunnerIntegrity.ps1` passed **68/68**
+assertions under the shared lock (**06:15:33-06:18:21 IST**);
+`Test-DocReferences.ps1` passed **34/34** assertions across **42 guides**,
+including its mutation controls; `Repair-ScriptEncoding.ps1 -Check` passed
+for **306 scripts**. The standalone architecture check passes, and an exact
+comparison confirms all four whole-check weights equal their **281 s**
+file-plan loads. Evidence is `%TEMP%\p85-int-main-refresh-shards.log`,
+`p85-int-main-runner-integrity.log`, `p85-int-main-doc-references.log`,
+`p85-int-main-encoding.log` and `p85-int-main-architecture-final.log`.
+
+The final follow-up changes only ledgers, shard documentation and timing
+data; production and pytest source remain identical to the clean full-run
+merge. The charter and existing structural enforcement rules are unchanged.
+Temporary helper scripts and the dependency junction are removed; audit logs
+and XML remain under TEMP. All requested validation is green. No push,
+merge to main, rebase, Azure call or other-worktree modification was made.
+The next council/packet gate and later P80-final integration remain with the
+lead; round 4's approval is recorded only for its reviewed earlier tree.
+
+### P80/P71 closed-contract integration, 2026-09-30
+
+PLAN / CONTRACT: merge P80 `a405f69` into `p85-aum-tui-manage` with
+`--no-ff`, without rebasing or modifying another worktree. This builder may
+commit that integration, but may not push or merge to main. Preserve P85's
+people/catalog/budget flows, reviewed removal plans, application-owned writes,
+repeated-Escape safety and HOME-local Cloud Shell launcher, together with
+P80's actions and P71's closed publication contract (ADR-0035). Keep both
+branches' ledger entries. Regenerate architecture and Example captures from
+the integrated source rather than merging generated hashes.
+
+RED: run the closed-contract tests before changing P85's publication paths.
+GREEN / REFACTOR: use existing guarded APIs; review each necessary named
+interface or exact-context approval under ADR-0035, with its receiver,
+effect, reason and negative control recorded here. No new trusted boundary,
+static-write exemption, weakened test, rule or budget is authorized.
+P71's known load races remain P71-owned. This is an integration review of
+maintained code, not authority to change the publication contract.
+
+Acceptance evidence: all `test_p85_*.py` and publication contract selectors;
+at least three scratch-copy mutation probes retaining the baseline collection;
+one locked full serial AUM suite with JUnit; refreshed per-file shard weights
+and <=300 s planned loads; runner integrity, document references, encoding
+and generated architecture checks. Council and the packet gate remain
+lead-owned. U61's owner-only live Cloud Shell/persistence check remains open;
+this task performs no Azure calls.
+
+#### ADR-0035 integration approval review
+
+The initial closed-contract run collected **186** cases: **184 passed, 2
+failed**. The source assertion enumerated **91 diagnostics** in seven files;
+the inventory found **nine** changed exact contexts. The three unapproved
+imports were `errors.READ_FAILURES`, `errors.read_error` and
+`feature_screens.QuitScreen`. Five palette callbacks needed named review,
+including removal; the other diagnostics came from P85's form replacement,
+read-failure handling and application-owned write lifecycle. New integration
+controls collected **33** cases: **15 passed, 18 failed**, exclusively on
+missing source approvals. Current/expired form attachment, orphaned completion,
+fresh-process native logging, error normalization and raw-exit refusal already
+passed. This is the RED evidence, not a waiver of the failing source checks.
+
+The following receiver/effect review follows ADR-0035's approval recipe.
+The two trusted output/widget boundaries and the 51 exact static writes
+remain unchanged. `screen` is not approved: quit uses the existing protected
+`screen_stack` interface. No private name or native scheduler is added to the
+ordinary-member set.
+
+| New named import | Receiver/value/effect and reason |
+|---|---|
+| `errors.READ_FAILURES` | Fixed domain, OS and HTTP exception-type tuple; only expected read failures are caught, not arbitrary exceptions. |
+| `errors.read_error` | Pure safe-value normalization: transport details never reach UI/logs, domain refusal codes survive, unexpected types raise. |
+| `feature_screens.QuitScreen` | Existing protected modal; guarded fixed text and task-state boolean, no raw widget or output capability. |
+
+| New ordinary member(s) | Supported receiver/effect and reason |
+|---|---|
+| `action_clear_filter`, `action_next_page`, `action_previous_page` | `FinOpsApp`'s existing navigation, retained-source redraws and capability-gated paging; no new publisher or authority. |
+| `action_quit`, `action_remove_developer` | `FinOpsApp` opens protected confirmation or owner-authorized removal controls; repeated Escape does not exit or authorize a write. |
+| `commit_action`, `commit_change`, `run_mutation` | `ActionForm`, `ChangeScreen` and `FinOpsApp` keep preview-first writes app-owned; every receipt retains its guarded source through modal cancellation. |
+| `open_remove_form` | `DeveloperPicker` checks the directory origin and owner capability before composing a protected, typed-confirmation form. |
+| `quit_message`, `refresh_saving`, `saving` | `QuitScreen`/`FinOpsApp` expose only fixed local messages, guarded button/text refresh and an owned-task boolean, not task payloads. |
+
+All **18 new exact-expression exceptions** below carry their factual reason
+and a literal enclosing-function digest in `publication_lifecycle.py`,
+consumed by the existing `publication_attributes.py` policy. This small
+fixture extraction keeps the approval inventory within the existing 800-line
+test-file budget without changing a rule or fingerprint.
+They do not approve the member elsewhere or the rest of a handler.
+
+| File / context | Exact expression(s) and reviewed effect |
+|---|---|
+| `developer_screens.py / DeveloperPicker.open_remove_form` | `app.switch_screen`: protected form registration under the directory origin; `app._error_text`: redacted domain refusal under the local-message guard. |
+| `developer_screens.py / DeveloperPicker.open_add_form` | `self.app.switch_screen`: protected form registration under both directory and catalog origins, preserving P85's single-modal stack. |
+| `tui.py / FinOpsApp.exit` | `super().exit(result, return_code=return_code, message=message)`: only the protected parent; its raw-exit-text refusal still applies after write deferral. |
+| `tui.py / FinOpsApp.saving` | `self._active_mutations`: local boolean only, no task escapes. |
+| `tui.py / FinOpsApp.run_mutation` | `self._active_mutations`, `task.add_done_callback`, `self._mutation_finished`, `asyncio.shield`, `asyncio.CancelledError`, `self._orphaned_mutation`: register before awaiting, preserve the operation, and bind both completion paths with `guarded_deferred`; cancellation is re-raised. |
+| `tui.py / FinOpsApp._mutation_finished` | `self._active_mutations`, `task.cancelled`, `task.exception`, `self._signout_complete`: release the completed task, distinguish success/failure, and preserve only successful sign-out intent; guarded fixed messages contain no result data. |
+| `tui.py / FinOpsApp._orphaned_mutation` | `task.cancelled`, `task.exception`, `self._handle_exception`: retrieve the failure only for the existing safe refusal boundary, never raw diagnostics. |
+
+The **six new contexts** are `DeveloperPicker.open_remove_form`,
+`FinOpsApp.exit`, `FinOpsApp.saving`, `FinOpsApp.run_mutation`,
+`FinOpsApp._mutation_finished` and `FinOpsApp._orphaned_mutation`.
+The **nine renewed contexts** retain their existing expression reasons:
+`DeveloperPicker.__init__` (removal mode), `DeveloperPicker.open_add_form`
+(guarded stack replacement), `ProgressiveRefresh._show_wait` (quit confirmation
+copy), `_show_read_error`, `action_refresh`, `load_overview` and its nested
+`fetch` (only expected read errors normalized before existing guarded sinks),
+`FinOpsApp.__init__` (owned-task set and sign-out flag), and
+`FeatureUI.ask_current` (app-owned request with unchanged source/egress guards).
+No P71 load-race implementation is changed.
+
+#### Merge resolutions and verification
+
+The `git merge --no-ff a405f69` operation started from clean `729a249`.
+Five conflicts were resolved without discarding either packet:
+`CHANGELOG.md` keeps both addition lists; `feature_screens.py` keeps P85's
+pinned `reviewed_plan` and P80's protected `publication_output.profile_conflict`;
+`06-finops.json` is structurally combined from UTF-8-decoded parent JSON,
+retaining Cloud Shell and the protected app/profile witnesses; both generated
+architecture and Example snapshot manifests are regenerated, not hand-merged.
+STATUS, UNKNOWNS and ADR entries from both sides are retained.
+
+The focused GREEN run passed **219/219 in 20.56 s**. REFACTOR extracted
+the exact lifecycle approvals into a 49-line test fixture; the main approval
+inventory is **780 lines**, below its unchanged 800-line budget. The scratch
+baseline and restored run both passed **219/219** on that refactored tree.
+The boundary implementations, their fingerprints, source detector, builtin
+rules and 51-entry static list are byte-identical to P80 `a405f69`.
+
+The complete P85/publication selector run executed **636** cases in
+**671.25 s**: **635 passed, 1 failed, 0 errors, 0 skips**. Every P85 case
+passed (**269/269**). Publication cases passed **366/367**; the only failure
+was the lead's known P71 race
+`test_publication_generation.py::test_principal_change_closes_prior_forms_and_clears_state_before_input`
+(`NoMatches` for `#main-tabs` on shutdown). No race, test or timeout was
+changed. A bounded publication-only follow-up is recorded below separately
+from this failing result.
+
+That unchanged publication-only follow-up ran **367** cases in **179.59 s**:
+**365 passed, 2 failed**. The known
+`test_assistant_context_is_cleared_before_b_request` again raised `NoMatches`.
+The additional, previously unlisted
+`test_cached_dialog_handoffs_retain_origin_during_deferred_composition[mode-form]`
+raised `WorkerCancelled` at `test_publication_generation.py:413`, during
+the Budgets navigation settle, before the form or principal-change probe.
+That test file and `action_mode` are unchanged from P80. One bounded run
+of these two IDs plus the earlier principal-change ID passed **3/3 in
+5.13 s**. These observations establish intermittency, not a clean aggregate
+contract run or permission to repair P71's load races here.
+
+Six scratch-copy probes reverted one compliance fix each. Every run
+collected **all 219 baseline identities** and executed all 219; there were
+**zero collection errors, execution errors or skips**. Each mutation was
+restored byte-for-byte before the next probe, and the final restored baseline
+passed. The scratch tree was removed.
+
+| Mutation | Passed / failed | Detector |
+|---|---|---|
+| M1 remove `READ_FAILURES` import approval | 217 / 2 | Named import control and whole-source contract. |
+| M2 remove `action_quit` member approval | 215 / 4 | Explicit member, exact-context controls and whole-source contract. |
+| M3 restore the old picker constructor fingerprint | 216 / 3 | Context justification and source-contract assertions. |
+| M4 register a raw completion callback | 215 / 4 | The guarded callback's exact source context is no longer approved. |
+| M5 replace the removal directory publication with a local-message guard | 216 / 3 | The source origin/context cannot be rebound by its prior approval. |
+| M6 restore the unprotected `configure.profile_conflict` import | 218 / 1 | Whole-source contract rejects the unsupported import. |
+
+The renderer and standalone architecture check pass: **17 specs, 19 PNGs**.
+The AUM diagram was visually inspected after explicit UTF-8 regeneration;
+it retains the Esc/quit and Cloud Shell paths as well as P80's local profile
+transaction. The temporary `node_modules` junction was removed. All 24 Example
+SVG/grid captures and their provenance manifest are regenerated; historical
+live captures are untouched. Evidence is under `%TEMP%\p85-int-*`, including
+the targeted XML/log and `p85-int-mutation-evidence\summary.json`.
+
+#### Single full serial run and shard plan
+
+The completed merge is **`ac333921feb2e7e543c3d38929b8ee57a4cd63cd`**,
+with parents `729a2492f46a1f47708d4395c8518236ff2bb36c` and
+`a405f69e1369295e4e3e4713a5432a484407a48e`. It includes the resolutions,
+reviewed approvals, counterexamples, ledgers and regenerated artifacts.
+Both required trailers are present. This is a merge into P85, not main.
+
+From that clean tree, the full AUM suite ran **once**, serially, from
+`cli\finops` using this worktree's `.venv-finops\Scripts\python.exe`:
+`python -m pytest tests -q -p no:cacheprovider --junitxml <TEMP report>`.
+The `p85-integration` lock interval was **02:51:41-03:07:46 IST on
+2026-09-30**. Result: **1,174 passed, 2 failed, 0 errors, 0 skips
+(1,176 cases), 961.82 s**. All **269 P85 cases passed**.
+The full suite was not repeated. Its complete log, XML and classification
+are `%TEMP%\p85-int-full-aum.log`, `p85-int-full-aum.xml` and
+`p85-int-full-summary.json`.
+
+| Lead-listed flaky IDs | Result in the single full run |
+|---|---|
+| `test_deferred_detail_retains_cached_or_fresh_origin_after_b_verifies[budgets]` and `[requests]` | Both PASS. |
+| `test_principal_change_closes_prior_forms_and_clears_state_before_input` | PASS. |
+| `test_assistant_context_is_cleared_before_b_request` | PASS. |
+| `test_native_chrome_content_requires_publication[FooterKey-key_display]` | PASS. |
+| `test_revision4_tui.py::test_approval_paging_and_queue_change_reset_cursor` | FAIL: `WorkerCancelled`; no repair or test relaxation in P85. |
+
+The **additional full-run failure**, outside that list, was
+`test_publication_generation.py::test_cached_request_actions_recheck_the_origin_not_an_empty_cycle[action_open_ledger]`.
+It raised `WorkerCancelled` at line **486**, during the Requests navigation
+settle, before exercising the cached action or changing principal. The test
+and ledger action are unchanged from P80. One bounded, unchanged follow-up
+of the two failing IDs yielded **1 passed, 1 failed in 5.21 s**: the cached
+ledger case passed, while the known paging case still cancelled.
+Neither this observation nor the earlier 3/3 run substitutes for a passing
+full suite or a clean aggregate publication run. These runtime failures
+remain for the lead/P71 builder; the publication contract is not weakened.
+
+`Update-FinOpsDurations.ps1` refreshed all **75** file weights from that
+single XML (all **1,176** cases, **959.3 s** summed case time, rounded up
+per file). The generator labels the UTC report date, 2026-09-29; this ledger
+uses IST. Four planned loads are **252, 252, 252 and 251 s**, owning
+**16, 19, 21 and 19** files. No load exceeds **300 s**, so the four Test-All
+registrations and four runner-integrity skip names remain; no fifth shard
+or timeout increase is needed. The whole-check timing table and shard guide
+now reflect that plan. `Test-FinOpsShards.ps1` passed **37/37** assertions.
+
+Final required checks on the refreshed plan: `Test-RunnerIntegrity.ps1`
+passed **68/68** assertions under the shared lock (03:13:29-03:16:11 IST);
+`Test-DocReferences.ps1` passed **34/34** assertions across **42 guides**,
+including its mutation controls; `Repair-ScriptEncoding.ps1 -Check` passed
+for **301 scripts**. The standalone architecture check still passes, and
+an exact comparison confirms both timing tables agree on all four <=300 s
+loads. Logs are `%TEMP%\p85-int-runner-integrity.log`,
+`p85-int-doc-references.log`, `p85-int-encoding.log` and
+`p85-int-architecture-final.log`.
+
+The follow-up evidence/timing commit changes no production or pytest source
+after the single full run. Builder work is recorded, but **the runtime suite
+is not green**: P71's known paging cancellation and the separately reported
+publication navigation cancellations still need lead/P71 resolution.
+The new integration council and packet gate remain lead-owned; they were
+not claimed or substituted by these focused checks. No push, merge to main,
+history rewrite, Azure call or other-worktree modification was performed.
+U61's owner-only live Cloud Shell/persistence verification remains open.
+
+### Council round 3, packet gate 1 and the sharded AUM check
+
+Council round 3 passed all five seats at `329e459` on 2026-09-29. The lead's
+packet gate on that tree (17:36-18:10Z) failed one check: "AUM - commands,
+dashboard and pilot" reached Test-All's 600 s per-check timeout
+(`tests/Test-All.ps1:9`). A serial run of the same tree then passed
+**871 tests in 860.09 s**; `test_p85_escape.py` alone took 189 s.
+
+Raising the timeout would loosen a budget, so the check is split. Test-All
+registers `[0/4]` to `[3/4]` (`tests/Test-All.ps1:293`), and
+`Test-FinOps.ps1 -Shard i/n` passes one longest-first share of the test files
+to pytest, weighted by `tests/finops-test-durations.json` (per-file sums from
+that run's JUnit report, written by `tests/Update-FinOpsDurations.ps1`). The
+planned loads are 226, 225, 225 and 225 s. The new check "AUM shards run
+every test file once" (`tests/Test-FinOpsShards.ps1`) compares the
+registrations, the listings, the files on disk and pytest's collection, runs
+a synthetic suite whose passed counts identify the files each shard ran, and
+fails when a planned shard exceeds half the per-check timeout or a weight
+names a missing file. `Test-RunnerIntegrity.ps1` counts the four shards among
+the prerequisite SKIPs. Method: [tests/README.md](../tests/README.md#aum-test-shards).
+
+RED: the new check failed **3 of 34** assertions against the unsharded
+registration. GREEN: **34 of 34**. Twelve mutations (a missing or unsharded
+registration, a dropped file, a shard running shard 0's files or the whole
+directory, a stale or oversized weight, the planner's tie rule and weights,
+the updater's rounding, the reader's fraction check and the 16-shard limit)
+were each caught with all 34 assertions run. Removing one shard's skip reason
+failed `Test-RunnerIntegrity.ps1`. The four shards, run at once, passed
+**236, 246, 185 and 204 tests (871) in 224, 215, 214 and 217 s**.
+`Test-RunnerIntegrity.ps1`, `Test-TestAllSharding.ps1`,
+`Test-MutationShards.ps1`, the architecture check and the encoding check pass.
+
+### Delta council and packet gate 2
+
+The five-seat council reviewed `329e459..c9ae1c8` on 2026-09-29: all five
+PASS. The UX/Docs seat first blocked on `tests/Test-TestAllSharding.ps1` as a
+missing file; the file exists and is tracked, and the seat passed on
+re-verification.
+
+The packet gate on `c9ae1c8` (18:47-19:17Z) ran Test-All in 1,790.7 s:
+97 checks passed and 2 failed.
+
+"AUM shards run every test file once" failed because of the gate's
+environment. The gate runs commands with `CI=1` and `FORCE_COLOR=0`
+(`.ironclad/gate.mjs:340`). pytest colours its output for any non-empty
+`FORCE_COLOR`, so `\b([0-9]+) passed\b` found no match after the colour
+code, and both synthetic shards read -1 passed. With that environment the
+failure reproduced (3 assertions); without it the check passed. The check now
+runs one synthetic shard with `PY_COLORS=1` and one with `PY_COLORS=0`, and
+removes terminal control sequences before counting. RED: **2 of 36** failed,
+with and without the gate's variables. GREEN: **36 of 36**, then **37 of 37**
+after an assertion that one coloured and one plain output were read. That
+assertion was added because making both shards plain (M15) was first missed.
+All fifteen mutations (the twelve above, the uncoloured count, both shards
+plain, both coloured) were caught with all 37 assertions run
+(`files/p85-shard-mutations.ps1` in the lead's session).
+
+"AUM - commands, dashboard and pilot [3/4]" kept no output: gate.mjs prints
+only the tail of Test-All's output. pytest's `lastfailed` cache in
+`cli/finops/.pytest_cache`, which the four shards share, named
+`test_publication_generation.py::test_assistant_context_is_cleared_before_b_request`.
+It also held `test_remove_person_wrong_confirmation_is_refused[direct]` and
+`[turnstile]`; those ids no longer exist (the test now also takes
+`confirmation`), so they are older entries. The four shards and this check,
+started together with Test-All's per-check `TEMP` and the gate's environment,
+passed. With 16 CPU burners on 16 logical processors, the publication test
+failed **4 of 12** runs and the four removal cases passed **48 of 48**. Each
+failure was `NoMatches: No nodes match '#main-tabs'`, raised in
+`FinOpsApp.switched` (`cli/finops/src/claude_finops/tui.py:306`) through
+`active` (`:253`) and re-raised when `run_test` exits. That comparison in
+`switched` came from P71 (`89852aa`, `d7cd2f2`) and is not on main, so the
+correction belongs to P71; the lead passed the finding to the P71 builder.
+P85's next gate runs after P85 takes P71's correction through P80.
+
+### Council round 2 corrections
+
+The lead reviewed `bbb6298` on 2026-09-29. Architect PASS; Coder, QA, UX
+and Security BLOCK. The council's 75 targeted cases verified ordinary quit
+deferral, completion/failure cleanup, no hang and the 19 enumerated
+destinations. Two narrower reproductions remain: cancelled sign-out loses
+its final exit and leaves stale progress; real pip accepts an inherited
+`PIP_--log` alias that shell-identifier enumeration does not remove.
+
+PLAN / CONTRACT: successful sign-out completion belongs to the application-
+owned task completion path, after its registry entry is removed, not the
+cancelled modal worker. Failed sign-out does not request exit; other pending
+mutations still finish before an intentional sign-out exit. Progress text
+must describe the completed sign-out instead of a nonexistent save.
+
+The installer uses a fresh `env -i` environment for pip and uv, with only
+explicit HOME/PATH/locale, confined destinations and named proxy/TLS settings.
+Bootstrap pip also receives `--isolated`, `PIP_CONFIG_FILE=/dev/null` and an
+explicit confined `--cache-dir`. AUM itself retains the existing Azure CLI
+session environment. ADR-0041 records this allowlist decision. Both exact
+reproductions join the requested standard selectors and gain mutation probes.
+U60 is reopened and U61 records the alias gap before implementation. The
+affected selectors and one full AUM run follow; round 3 remains lead-owned.
+
+RED: the exact reproductions and controls produced **3 failures and 3 passes
+in 14.38 s**: cancelled sign-out kept AUM running, successful sign-out behind
+another mutation showed stale saving text, and real offline pip created the
+external log from `PIP_--log`. The additional installer contract failed all
+three cases in **9.19 s**, proving inherited aliases reached pip/uv and pip
+lacked isolated/cache arguments.
+
+Sign-out GREEN: **60 affected lifecycle/profile/publication cases passed in
+57.34 s**. Completion is now consumed by the application callback after its
+registry entry is removed. The successful intent survives worker cancellation
+and waits for any other mutation; failure does not request exit. The form
+records the completed sign-out instead of stale saving progress. The same
+standard selector covers cancellation, another pending operation and failure.
+
+Installer GREEN: **51 affected launcher/environment cases passed in
+140.82 s**, including real offline pip for both `PIP_LOG` and `PIP_--log`.
+Pip and every uv invocation use fresh allowlisted environments; pip is also
+isolated with null configuration and an explicit confined cache. Tests
+capture actual child environments, prove malformed/unrelated/Azure variables
+are absent there, preserve named proxy settings, and verify AUM still
+receives the original Azure session context. Test-only controls now live in
+fixture files, not production environment exceptions. ADR-0041 records why
+this closes the alias class instead of extending a denylist.
+
+Mutation GREEN: the **11 changed/new round-two probes were all caught in
+118.219 s**, including baselines and restoration. Every mutant kept the
+same test identities and produced failures, with no errors/skips; the
+restored **9-case union passed in 27.625 s**. Probes cover owned completion,
+registry release, successful intent behind another mutation, failed
+sign-out, stale progress, pip/uv child environments, real malformed pip
+logging, isolated mode and the explicit cache argument. The standard
+runner retains all 44 probes; `--round-two` selects this changed set.
+Earlier denylist-target probes were updated to the effective allowlist
+boundary, not removed or treated as caught when redundant defenses held.
+Receipt: `$env:TEMP\p85-r2-mutations\receipt.json`.
+
+The existing capture-source test failed on the changed form hash (0.89 s),
+so the existing Example capture tool refreshed provenance. No SVG or PNG
+bytes changed. Ten capture/guide/restoration checks passed in **19.07 s**;
+architecture passed 36 assertions in **35.844 s wall time**; references passed
+for 42 guides with all ten negatives caught in **9.265 s wall time**.
+There is no new Azure component, writer or network path.
+
+The read-only P71 comparison still targets `860abc9`. Round 2 adds the
+successful-sign-out state and completion-handler uses of the existing
+future/status operations; the constructor's exact forwarding/context
+fingerprint needs renewal. No new import, raw notification or superclass
+call is introduced beyond the previously recorded integration work.
+Details: `$env:TEMP\p85-p71-r2-delta.json`.
+
+Final round-2 builder verification at `64497e3`: the full AUM selector ran
+**once**, under one owned lock, and passed **871 tests in 841.98 s**
+(**843.956 s wall time**), with **zero failures, errors or skips**.
+The interpreter import resolved inside this worktree and the lock was
+released in the same command's `finally`.
+
+| Affected standard selector | Passing cases | Summed JUnit case seconds |
+|---|---:|---:|
+| Quit/mutation/sign-out lifecycle | 18 | 36.492 |
+| Real pip, aliases and process environment boundaries | 23 | 91.437 |
+| Original launcher controls | 28 | 48.191 |
+
+These are case totals inside the full run, not separate elapsed measurements.
+All 11 changed/new guard probes and their exact restoration passed as recorded
+above. The full suite also retains the prior plan-binding, deferral and
+principal/publication controls.
+
+P71 advanced during verification to `f122985`. A final read-only comparison
+against that contract found the same narrow round-2 additions: completed
+sign-out state and future/status operations in the completion callback, plus
+the constructor context fingerprint. The earlier round-1 integration list
+still applies. No P71 source or detector was edited. Updated evidence:
+`$env:TEMP\p85-p71-r2-final-delta.json`.
+
+Builder corrections are complete; the recorded round-2 verdicts remain
+unchanged and round 3 belongs to the lead. U60 is closed for the measured
+completion correction. U61 remains open only for the previously requested
+owner-side live Cloud Shell/network/persistence check. No Azure write,
+resource creation, live Cloud Shell claim, merge or push occurred.
+
+Commits: `f6f4a52` contract, `13425aa` owned completion, `1a0b7aa` installer
+allowlist/isolation, and `64497e3` probes/provenance. Final evidence:
+`$env:TEMP\p85-r2-full-aum.xml`, `$env:TEMP\p85-r2-full-aum.log` and
+`$env:TEMP\p85-r2-final-summary.json`.
+
+### Council round 1 corrections
+
+The lead reviewed `f33eb0c` on 2026-09-29. Architect PASS; Coder, QA, UX and
+Security BLOCK. Every reported defect was reproduced by the council. The
+earlier green evidence does not establish these missing guarantees.
+
+| Seat | Verdict | Required correction |
+|---|---|---|
+| Architect | PASS | Existing writer delegation, exact expected-error types and principal guards remain. |
+| Coder | BLOCK | The removal writer can reread a changed catalog after the form's comparison; inherited quit can exit while a write finishes. |
+| QA | BLOCK | Standard selectors need the three reproductions and mutations for plan equality and quit deferral. |
+| UX | BLOCK | Pending-write quit shows ordinary wording and enables confirmation instead of explaining the save. |
+| Security | BLOCK | Inherited `PIP_LOG` directs real bootstrap pip outside HOME/repo; other write-destination variables require coverage. |
+
+PLAN / CONTRACT: the reviewed removal plan reaches the existing
+`developer_change` engine. Equality is checked against the same resolved
+snapshot whose changes are written, before any group write or publication.
+No second writer is introduced. Application-owned mutation lifetime covers
+all asynchronous apply paths through receipt presentation, independent of
+modal lifetime. Every quit route defers confirmation during that lifetime;
+the dialog states "Saving; wait for the result" with an estimate and a
+disabled confirmation. Completion retains the result and does not silently
+execute an earlier quit request.
+
+Launcher tests include real pip with networking explicitly disabled, plus
+an outside-path case for every inherited Python/pip/uv/XDG destination.
+Controlled destinations remain canonical HOME children; unnecessary inherited
+destinations are removed. U58/U60 are reopened and U61 records the additional
+bootstrap gap before implementation. RED, GREEN, exact-identity mutations and
+commits follow here. Round 2 remains lead-owned; no merge, push or Azure
+operation is authorized.
+
+RED: the standard council selectors produced **30 failures and 10 passing
+controls in 110.34 s**, with no errors or skips. The catalog-race pilot
+recorded the unreviewed group's actual Graph removal; the quit pilot found
+an enabled confirmation during a blocked real engine write; real pip, with
+`--no-index --no-deps --no-build-isolation`, created the external `PIP_LOG`
+before its expected offline package-resolution failure. The per-variable
+probe also found uncontrolled Python user-base, uv tool and XDG destinations.
+
+Removal correction: the form pins its reviewed plan and confirmation;
+`developer_change` compares all engine operation-plan fields except the
+preview flag against its own resolved write snapshot before touching Graph.
+UI-only decorations are not writer inputs. The existing CLI's explicit
+fresh-apply path remains available; no second writer is introduced.
+All **8** early/late catalog, tier and identity pilots passed in **21.27 s**.
+The first related run passed 73 cases and exposed two identity-probe timing
+errors (85.67 s): identity injection occurred before, rather than after,
+the apply re-preview's resolution. The injection was corrected while
+retaining the two-read and zero-write assertions.
+
+Launcher correction: inherited `PIP_*`, `UV_*` and `XDG_*` settings are
+removed before the launcher supplies canonical HOME-local destinations.
+`PYTHONUSERBASE` is pinned too. All **48 launcher/confinement cases passed
+in 129.31 s**, including real pip's offline failure with no external log,
+each of 19 inherited destinations, and escaping links for the added
+config/data/state/runtime/user-base directories. No package download or
+Azure call occurred in these tests.
+
+Quit correction: application-owned, shielded mutation tasks cover generic
+forms, native change forms and assistant writes through receipt publication.
+Cancelling the modal worker does not end that lifetime. The central exit
+check protects direct exits as well as q, inherited Ctrl+Q, the palette and
+the application's Ctrl+C entry. Native modal copy handling can consume the
+physical Ctrl+C first; the regression proves that key stays running, then
+exercises the application entry explicitly. No copy binding is overridden.
+The saving dialog disables both button and keyboard confirmation, and
+completion leaves the receipt available without replaying a quit request.
+
+The route matrix passed **12 cases in 27.92 s**. The expanded selection,
+including read-only control, completed sign-out, assistant mutation and
+existing profile/publication regressions, passed **78 cases in 137.31 s**.
+The initial quit correction selection had two over-specific Ctrl+C dialog
+assertions; the corrected test retains the physical-key no-exit assertion
+and separately covers the app entry. No production escape hatch or detector
+relaxation was used.
+
+The final strengthened affected pilot selection passed **40 cases in
+109.38 s**. It reads the actually rendered saving prompt at 80x24 and
+asserts disabled keyboard confirmation issues no exit request, separately
+from the central exit guard. The new council files are ordinary `test_*.py`
+modules in the standard AUM selector, not a private reproduction harness.
+
+Provenance: the existing capture check failed on the changed membership
+engine hash (1.24 s), so the existing Example capture tool regenerated its
+manifest. No SVG or architecture PNG bytes changed. All five snapshot cases
+passed; the guide's four cases passed after a factual "Non-mutating" wording
+correction (0.09 s). Architecture passed 36 assertions in 48.829 s wall;
+references passed for 42 guides with all ten negatives caught in 10.968 s.
+The engine-plan and application-lifetime corrections add no Azure component,
+identity, network path or writer. Only existing source provenance changes.
+
+P71 remains a read-only integration target (`860abc9`). The added mutation
+lifecycle needs reviewed `asyncio.shield` / `CancelledError`, future callbacks,
+the new task/state/commit-method attributes and an exact checked
+`super().exit(...)` forwarding context. `FinOpsApp.__init__` and
+`FeatureUI.ask_current` context fingerprints change. The moved profile-conflict
+handling still carries P80's integration requirements. Orphaned unexpected
+failures must use P71's protected diagnostic path rather than a broad raw
+handler allowance. No P71 policy was edited; the precise comparison is
+`$env:TEMP\p85-p71-r1-delta.json`.
+
+Mutation proof: all **36/36 probes** were caught with their baseline case
+identities preserved, at least one test failure and zero errors/skips.
+The ten new probes cover engine plan equality/forwarding, central and keyboard
+quit deferral, cancellation shielding, disabled confirmation, visible saving
+feedback, real-pip logging, XDG destinations and Python user-base isolation.
+Measured probe execution totals **462.109 s**, excluding baseline/restoration.
+
+The original final aggregate restoration hit its 180 s runner deadline;
+that is recorded as a failed validation command, not a green run. Every
+source had already been restored. The runner now partitions restoration by
+test file and removes overlapping parameter selectors, preserving the same
+180 s per-command deadline rather than increasing it. Its regression passed
+in 0.52 s. All original raw probe XML and CAUGHT/exit checks were revalidated;
+the exact unique restoration union then passed **109 cases in 265.875 s**
+across those bounded groups, under one separately acquired owned lock.
+The receipt records this recovery explicitly at
+`$env:TEMP\p85-r1-mutations\receipt.json`; original logs remain intact.
+
+Final round-1 builder verification at `3f26de9`: the complete standard AUM
+selector passed **865 tests in 902.67 s** (**905.162 s wall time**), with
+**zero failures, errors or skips**. This includes all affected pilot files,
+the council reproductions, the earlier 816 cases and 49 added cases.
+The interpreter import resolved inside `accel-p85`; the full-suite command
+held one owned `.gate-lock` and released it in the same invocation.
+
+| Council correction | Passing standard cases | Summed JUnit case seconds |
+|---|---:|---:|
+| Exact removal write-plan snapshot | 8 | 21.850 |
+| Quit deferral, visible saving state and retained results | 15 | 33.516 |
+| Per-destination and real offline pip confinement | 20 | 82.538 |
+| Expanded original launcher controls | 28 | 46.133 |
+| Bounded, unique restoration selector | 1 | 0.037 |
+
+These are case totals inside the full run, not separate wall-clock runs.
+Original people and Escape coverage also passed (17 and 111 cases).
+The P71 HEAD and inspected policy files still matched the read-only
+assessment. U58/U60 are closed for these measured corrections; U61 remains
+open only for the earlier owner-only live Cloud Shell/persistence check.
+
+The builder has addressed the four blocking seats' reproduced findings,
+without changing their recorded round-1 verdicts or claiming round-2 review.
+Commits: `ddad53f` contract, `396dad5` plan binding, `b3a0465` installer
+confinement, `f89deec` mutation lifetime/quit, `a0e8e3a` strengthened UX/exit
+detectors, `e5f821d` provenance/integration notes and `3f26de9` mutation proof.
+Round 2, packet gate and integration remain with the lead. No Azure write,
+resource creation, live Cloud Shell run, merge or push occurred.
+
+Evidence: `$env:TEMP\p85-r1-full-aum.xml`, `$env:TEMP\p85-r1-full-aum.log`
+and `$env:TEMP\p85-r1-final-summary.json`, alongside the raw RED/probe and
+explicit restoration-recovery records.
+
+### PLAN
+
+The People action bar gains Remove person from team beside Add person to team,
+with a key and palette entry. The existing developer engine remains the only
+membership writer. Offline Textual pilots cover complete management journeys
+and assert the writes received by the existing fake boundaries, rather than
+only rendered labels. The guide retains P80's install-first structure.
+
+The owner added items 7 and 8 at 16:04 IST on 2026-09-29, after the initial
+builder handoff at `1b07329`. The packet is reopened for Escape/quit safety
+and an offline-tested Cloud Shell bootstrap. The earlier evidence remains
+the baseline, not proof of these additions. No live Cloud Shell session is
+available from this workstation.
+
+### CONTRACT / acceptance
+
+| Task | Observable result |
+|---|---|
+| Remove person | An owner selects a directory person, previews the tier and catalog-group removals and publication, types the resolved email/UPN, applies through `developer_change(remove=True)`, sees the result and refreshed People rows. |
+| Refusals | A non-owner, the AUM service backend, a wrong confirmation and a stale read cannot apply membership writes. Direct and Turnstile keep their existing authority paths and last-tier-member behavior. |
+| Complete pilots | Add/remove people, create/remove units and teams, and unit/team/person token budgets exercise preview and apply on Direct and supported Turnstile fixtures. USD edits exercise Direct and AUM service; Turnstile exposes its disabled explanation. Every flow checks actual fake writes. |
+| Destructive scope rule | Tests and the guide state the existing engine behavior for a unit that still has teams or members; P85 does not invent a different deletion policy. |
+| Negative probes | Remove routing, owner authorization, typed confirmation and backend refusal mutations run the same collected test IDs as their clean baselines; a catch requires a failing test, not an error or skip. |
+| Ledger and integration | Task how-tos include key, palette entry, preview contents and estimated waits. STATUS, CHANGELOG, unknowns and architecture/capture conclusions are recorded. P71's final closed-presentation contract is inspected read-only and its integration changes listed. |
+| 7. Escape and deliberate quit | Pilots first reproduce the reported exit, with 1/2/5/10 rapid Esc presses at the main screen, every modal, a slow refresh, and network/401/403/CAE failures. Esc leaves the app running. One `q` only requests confirmation; a second `q` or Enter confirms and Esc cancels. Expected backend/publication failures remain visible without a fatal exit; the CAE location challenge explains IP variation, consistent VPN use, IPv6 and administrator-managed named locations/exclusions. Programming errors are not silently swallowed. |
+| 8. Azure Cloud Shell | A small bash launcher creates/reuses a HOME-local venv, installs the checked-out package and launches AUM with the existing signed-in Azure CLI. Offline shell/fake-command tests cover dry-run, reuse, argument forwarding, failure handling and writes confined to HOME/repo. The guide cites researched networking, storage, authentication, shortcut and idle-session facts. A live owner verification remains an explicit U58-U61-range unknown, not a claimed test. |
+
+### Items 7 and 8: PLAN / CONTRACT
+
+U60 is reopened for the Escape/refresh failure mechanism before implementation.
+U61 retains its completed P71/capture research and is reopened for researched
+Cloud Shell constraints plus the unavailable live verification. Expected
+network/authentication errors and publication refusals are distinct from
+unexpected programming failures. The current writers, authority checks and
+P71 branch stay unchanged. Every new guard receives a negative test; mutation
+probes retain exact test identities and require failures rather than
+collection errors or skips. Long runs retain the one-command owned-lock rule.
+
+**Item 7 RED:** the full initial burst matrix ran under an owned lock after
+contention, with **39 failures and 64 passes in 170.35 s**. All 1/2/5/10-key
+main/modal and slow-refresh controls stayed alive. Escape-triggered refresh
+allowed raw transport/I/O/HTTP-status exceptions to become fatal Textual
+worker failures; cancelling a pending change preview exposed the same refresh
+path. Wrapped 401/403 and CAE errors stayed alive but lacked the required
+plain status explanation. One `q` still exited immediately. This reproduces
+an offline exit mechanism, not a claim to possess the owner's original crash log.
+
+**Item 8 RED/GREEN:** 20 initial cases failed because the launcher did not
+exist (**0.88 s**, no collection failures). The implemented launcher and
+expanded negative cases passed **23 tests in 30.80 s**, with fake commands
+only. Shellcheck is unavailable here, so the existing Git Bash ran `bash -n`.
+Tests prove dry-run writes nothing, venv reuse, literal argument forwarding,
+stage/exit failures, old/incomplete-runtime refusal, escaped-source refusal,
+canonical HOME-bound destinations and inherited-destination isolation.
+
+Research found Cloud Shell's documented Python 3.9 below AUM's 3.12 floor.
+The HOME-local uv 0.12.20 wheel supports Python >=3.8 and provisions the
+managed 3.12 venv. Microsoft Learn also conflicts on HOME persistence:
+the storage-specific article and Features page describe an attached disk
+image, whereas the FAQ says HOME is deleted. [ADR-0041](adr/0041-aum-session-safety-and-cloud-shell.md)
+records the source conflict and the conservative live-verification boundary;
+no storage or networking resources are created by the launcher.
+
+**Item 7 GREEN:** **111 cases passed in 172.79 s**, covering the full Escape
+matrix, quit cancellation/confirmation, palette routes, CLI CAE recognition
+and the existing pending-read responsiveness case. The additional pre-fix
+palette/CAE selection had **4 failures and 4 passing controls in 4.48 s**.
+The fix is in the refresh boundary: only expected domain, HTTP-transport and
+I/O failures are normalized. Publication refusal still invalidates old data,
+and the programming-defect control still raises its original fatal error.
+There is no catch-all Textual fatal-handler override or mutation retry.
+Azure CLI CAE classification requires both error markers and never echoes
+raw stderr. Quit, back/clear and page actions now have palette routes.
+The focused existing readiness, Azure deadline, publication-structure,
+guide and helper/portability regressions then passed **62 cases in 24.60 s**.
+The reproduced failure was `WorkerFailed: ConnectError(...)` (also
+`OSError(...)`), not an Escape-to-quit binding. No detector or publication
+allowlist was changed. The bash working copy is LF as well as its Git blob.
+
+**Owner-only Cloud Shell verification (U61, pending):** an existing Bash
+Cloud Shell session with attached storage, an existing gateway and appropriate
+read permissions are the prerequisites. The estimated check takes 10-15
+minutes, including first bootstrap (2-5 minutes) and a session restart.
+The dry-run prints only a plan; configure saves only the local profile; an AUM
+run with `--what-if` displays the chosen backend and exercises navigation,
+repeated Escape and quit cancellation without governance writes. A restart
+checks reuse of the HOME-local venv. Actual Python/download availability,
+browser key handling, endpoint reachability, Conditional Access and HOME
+persistence remain unverified on Cloud Shell from this machine. Private
+endpoints require an already connected VNet Cloud Shell; this packet does
+not deploy one.
+
+**Required captures and architecture:** the existing capture-source check
+failed on the changed `config.py` hash (**0.83 s**), so the existing
+Example-only capture tool was rerun. All nine guide/capture checks passed
+in **18.08 s**. Historical live images remain unchanged. The terminal
+architecture now names the Cloud Shell launcher, HOME-local runtime/cache
+and quit confirmation; it adds no Azure resource or governance writer.
+The generated terminal diagram was visually inspected. Architecture passed
+**36 assertions in 32.223 s wall time**; references passed for **42 guides**
+with all ten built-in negatives caught in **6.606 s wall time**.
+
+**Additional P71 integration list:** the read-only comparison against the
+same `860abc9` contract, relative to the initial P85 handoff, adds the imports
+`errors.READ_FAILURES`, `errors.read_error` and `feature_screens.QuitScreen`,
+plus palette references to `action_quit`, `action_clear_filter`,
+`action_next_page` and `action_previous_page`. Five existing progressive
+contexts changed: `_show_wait`, `_show_read_error`, `action_refresh`,
+`load_overview` and its nested `fetch`. Their exact, reviewed exception
+fingerprints need renewal after integration; their private attributes do
+not justify a blanket allowlist. The new quit screen still needs P71's
+protected layout/screen imports when combined with that branch. No new
+builtin allowance, raw notification or unrestricted-super call was added.
+The detailed comparison is `$env:TEMP\p85-p71-extension-delta.json`.
+
+**Combined mutation proof:** all **26/26 probes** (the original 12 plus 14
+for items 7/8) were caught in **478.093 s**, including baselines and the
+restored union. Every probe retained its exact baseline test identities,
+compiled as Python or passed `bash -n`, and produced test failures with
+zero test/collection errors or skips. The restored **68-case union passed
+in 111.125 s wall time**. Each mutated source was restored byte-for-byte
+before the next probe, under one runner command's owned `.gate-lock`.
+
+| Added probe | Same cases | Failed cases |
+|---|---:|---:|
+| Raw transport/I/O no longer contained | 28 | 16 |
+| Plain refresh explanation removed | 28 | 28 |
+| Azure CLI CAE reason discarded | 2 | 2 |
+| Either CAE marker incorrectly treated as sufficient | 3 | 2 |
+| First q exits without confirmation | 4 | 4 |
+| Escape confirms quit instead of cancelling | 4 | 4 |
+| Programming error relabelled as an expected read failure | 1 | 1 |
+| Cloud Shell dry-run performs setup | 1 | 1 |
+| Canonical HOME boundary removed | 8 | 8 |
+| Inherited Python/pip destinations retained | 1 | 1 |
+| Inherited uv destinations retained | 1 | 1 |
+| Shell continues after a failed stage | 3 | 3 |
+| Old runtime accepted on reuse | 1 | 1 |
+| Escaped repository source accepted | 2 | 1 |
+
+The same `cli\finops\tools\probe_p85.py` now covers Python and Bash.
+The complete receipt, case identities and individual logs/JUnit files are
+under `$env:TEMP\p85-extension-mutations`; the outer log is
+`$env:TEMP\p85-extension-mutations.log`. The original evidence is retained.
+
+### Owner additions: final builder validation
+
+The full offline AUM suite at `2087762` passed **816 tests in 648.02 s**
+(**649.814 s wall time**), with **zero failures, errors or skips**. Its
+interpreter import was verified under `accel-p85`; the single full-suite
+command acquired and released only its own `.gate-lock`. No original CRUD
+test or guard was weakened. The original 682 cases and 134 added cases all
+ran, including the explicitly updated single-q behavior.
+
+| Surface | Passing cases | Summed JUnit case seconds |
+|---|---:|---:|
+| Item 7: Escape/quit/errors, palette and CAE boundaries | 111 | 176.032 |
+| Item 8: offline Cloud Shell launcher and confinement | 23 | 31.599 |
+| Original people/unit/team/budget pilots | 47 | 101.133 |
+| Existing guide and required capture tests | 9 | 19.337 |
+
+The item-7 file includes 105 Textual pilots and six boundary/control cases.
+The existing pending-read quit pilot also runs in the full suite. These
+per-item seconds are case totals, not separate elapsed measurements.
+All 26 mutations were caught as recorded above. The observed P71 HEAD and
+contract files remained unchanged on the final read-only check.
+
+Builder work for items 7 and 8 is complete and persistent. U61 intentionally
+remains OPEN for the requested owner-only live Cloud Shell check and the
+documented persistence uncertainty; no live session, Azure write, resource
+creation, merge or push is claimed. Council and the packet gate remain
+lead-owned. The launcher and its Python downloads are local setup, not a
+new governance authority or an automatically deployed Azure component.
+
+Addition commits: `0a9231b` (contract), `b56272c` (launcher), `f5c3abb`
+(Escape/quit/error fixes), `515aee8` (architecture/provenance/P71 notes), and
+`2087762` (combined mutation proof). Final JUnit/log:
+`$env:TEMP\p85-extension-full-aum.xml` and
+`$env:TEMP\p85-extension-full-aum.log`; the per-item summary is
+`$env:TEMP\p85-extension-final-summary.json`.
+
+### Initial evidence and unknowns
+
+The inherited no-run audit passed: 20 checks passed, 2 warned, 0 failed,
+4 execution checks skipped by `--no-run`. This is not the packet gate.
+U58-U61 below were logged before implementation. Both Python environments are
+copied into this worktree; editable FinOps paths target this worktree.
+No live Azure reads or writes, Azure resources or reference-gateway operation
+are part of the builder's validation.
+
+### RED / implementation
+
+The complete initial people selection ran **17 tests in 27.16 s**; all failed,
+with no collection errors or skips. The remove cases found no removal button,
+binding or palette entry. The two add cases reached the existing engine writer,
+then found `len(app.screen_stack) == 2` after Done: the directory picker still
+covered the refreshed People view. Both paths now replace that picker with the
+existing preview/apply form.
+
+Source inspection distinguishes membership from observed usage: Direct's People
+rows come from `direct_analytics.people`, not an Entra roster. The complete
+pilots explicitly change the fake endpoint's next observed response after the
+write to prove row refresh. They do not claim live ingestion latency or deletion
+of historical usage on membership removal. Named-value targets are
+`allow-standard` and `allow-premium` in `scripts/Sync-ClaudeAccess.ps1`.
+
+GREEN: **90 tests passed in 86.85 s**, comprising 17 P85 people pilots plus
+the P80 usability/council UI, publication-structure and developer-engine
+regressions. The fixed cases include both complete add paths, both complete
+remove paths, blank/wrong confirmation, owner/service/redaction/preview-only
+refusals, stale directory/form guards and the 80x24 action layout. The new
+membership rows use compact buttons so the People table remains visible.
+No publication detector or allowlist was weakened.
+
+The first catalog/budget run passed **25 tests and failed 4 in 59.86 s**.
+Catalog creation/removal and its existing guards passed without production
+changes. New budget pilots found a Direct daily-person receipt incorrectly
+labelled Turnstile, a missing USD reconciliation reminder, the service USD
+palette entry incorrectly gated by unrelated catalog-write permission, and
+the service's synchronous write followed by a nonexistent asynchronous
+`requested_at` (`KeyError`). Corrections retain the engine's receipts and
+capability/selected-scope checks; neither USD nor membership gets a new writer.
+
+GREEN: **104 tests passed in 103.54 s**. This includes all 18 new catalog
+pilots and 12 new budget pilots, plus the existing TUI, group, USD, AUM service
+and publication-structure suites. USD saves keep the engine's awaiting-
+reconciliation result. Native synchronous receipts no longer enter Turnstile
+apply polling; Direct person budgets are no longer labelled Turnstile-only.
+The USD palette entry uses the same selected-scope capability check as its
+button and key, with a read-only-selection negative test.
+
+### Mutation probes
+
+All **12 probes were caught in 138.250 s**, including their clean baselines
+and restoration. Each mutant compiled, ran the same test-case identities as
+its baseline, and produced at least one test failure with no collection
+errors, test errors or skips. The restored selector union passed **14 cases
+in 30.359 s wall time**. The directory-origin test retains a mutable origin
+from picker selection through preview and apply, rather than replacing the
+form's guard after construction.
+
+| Probe | Same cases | Failed cases | Seconds |
+|---|---:|---:|---:|
+| Remove routed to add | 2 | 2 | 5.782 |
+| Typed confirmation not forwarded | 2 | 2 | 7.235 |
+| Engine confirmation refusal bypassed | 4 | 4 | 10.703 |
+| Owner admission bypassed | 2 | 2 | 4.015 |
+| AUM service admission bypassed | 1 | 1 | 3.000 |
+| Removal key changed | 4 | 4 | 7.266 |
+| Removal palette entry hidden | 2 | 2 | 4.047 |
+| Last-member scoped empty permission suppressed | 2 | 1 | 7.719 |
+| Picker left beneath the completed removal form | 2 | 2 | 8.062 |
+| Original directory guard replaced with a fresh guard | 1 | 1 | 3.609 |
+| USD palette ignores the selected read-only scope | 1 | 1 | 2.906 |
+| Native receipt enters asynchronous apply polling | 1 | 1 | 3.922 |
+
+The reproducible runner is
+`cli\finops\tools\probe_p85.py <output-directory>`. The caller acquires
+`.gate-lock` with `New-Item -ErrorAction Stop`, retries contention every 60 s,
+and releases only its own lock in the same command's `finally`. This run held
+the lock for that one runner command. It restores each exact source byte
+sequence in `finally` and refuses to overwrite an unexpected concurrent edit.
+Its receipt, case identities, per-probe JUnit and logs are under
+`$env:TEMP\p85-mutations`; the outer log is `$env:TEMP\p85-mutations.log`.
+
+### Architecture and capture provenance
+
+There is no new component, writer, identity, schedule, storage format or
+network path. The terminal now reaches the developer engine that the CLI
+already uses. The catalog rules, Direct bridge, delegated Turnstile publication
+and native USD authority remain unchanged; no ADR is needed for a boundary
+change. `node guide\render-architecture.mjs` regenerated provenance for the
+changed existing client inputs: 17 specifications and 19 PNGs verified, with
+no changed diagram specification or PNG bytes. Only the generated architecture
+manifest changes.
+
+The existing snapshot-manifest test failed on the changed
+`developer_screens.py` source hash (**1 failure, 0.74 s**), so capture
+regeneration was required by an existing test, not requested speculatively.
+`cli\finops\tools\capture.py` regenerated the Example-only manifest, grids and
+24 SVGs. Only the two People SVGs, their grids and source/output hashes differ.
+Both People sizes were rendered locally with network requests blocked and
+visually inspected: Add/Remove are adjacent, the full action text and two-line
+key map fit, and people rows remain visible at 80x24. Historical live AUM and
+portal captures were not regenerated. No live-capture claim is made.
+
+### P71 integration assessment, read-only
+
+The inspected `p71-aum-speed` HEAD was `860abc9`; its worktree also had
+uncommitted publication-widget, diagnostic-test and ledger work. This is a
+dated assessment of that observed contract, not a claim that the lead's future
+integration target is frozen. No P71 tracked file was changed and P71 was not
+merged. Its `publication_policy.py`, `publication_attributes.py` and
+`test_publication_structure.py` were evaluated against the five changed P85
+presentation files and against the same files at base `e630525`.
+
+That comparison produced seven new attribute findings (five distinct names)
+and one changed pinned context. The later integration needs:
+
+- Reviewed attribute coverage for `action_remove_developer` and
+  `open_remove_form`; the new `app.membership_unavailable_text` use also
+  depends on admitting P80's existing membership-explanation helper.
+- A reviewed protected transition for `switch_screen` in both membership
+  forms, or an equivalent sequence through P71's already-approved screen
+  APIs. The original directory/catalog guards still need to dominate it.
+- An exact safe-error exception and context fingerprint for
+  `app._error_text` in `DeveloperPicker.open_remove_form`, and a refreshed
+  constructor fingerprint for `DeveloperPicker.__init__`. Its existing
+  zero-argument `super().__init__()` remains a checked forwarding call;
+  no unrestricted-super exception is justified.
+- P71's wrapped layout/screen/widget imports and `PublicationApp` base when
+  combining files, rather than overwriting them with P80's earlier raw
+  Textual imports. The touched add-form fallback still inherits P80's raw
+  `notify`; integration needs P71's `publish_notification` under its guard.
+  P85 adds no raw-notify call.
+- No new import or builtin allowance is indicated by the P85 delta. The
+  added preview/result data uses existing engine APIs, `dict`/string values
+  and guarded sinks. The budget receipt changes introduce no new contract
+  finding. P80's inherited findings are separate from these additions.
+
+The normalized comparison is in `$env:TEMP\p85-p71-contract-delta.json`.
+The closed-contract tests and their context hashes remain unchanged here.
+The lead's integrated tree still requires its own contract run, council and
+packet gate.
+
+### Guide and provenance validation
+
+The existing install-first/prose/reference assertions and all Example
+snapshot checks passed **9 tests in 18.87 s**. Documentation references
+passed for **42 guides** with all built-in negative cases caught in
+**8.848 s wall time**. Architecture checks passed **36 assertions**,
+including isolated mutations, in **34.513 s wall time**.
+
+Local builder commits so far: `336b683` records PLAN/CONTRACT, `7f4b427`
+implements people removal and fixes membership-form completion, `809e7c8`
+covers catalog/budget flows and fixes native receipts, and `3eab7c1`
+records the mutation runner and strengthened retained-origin test.
+The guide and provenance commit is `58ea5ac`. Council and the packet gate
+remain lead-owned.
+
+### Initial-scope builder validation and handoff
+
+The complete offline AUM suite at `58ea5ac` passed **682 tests in 440.85 s**
+(**442.647 s wall time**), with **0 failures, 0 errors and 0 skips**. This is
+the 635-case inherited suite plus 47 P85 pilots. The interpreter printed and
+asserted its import beneath `accel-p85\cli\finops\src`. The run acquired its
+own `.gate-lock` and released it in the same command's `finally`.
+
+| Acceptance surface | Passing cases | JUnit case seconds |
+|---|---:|---:|
+| Add/remove people, exact writes, refresh and refusals | 17 | 38.656 |
+| Unit/team creation/removal, confirmation and existing rules | 18 | 37.631 |
+| Unit/team/person token budgets; Direct/service USD and Turnstile refusal | 12 | 24.818 |
+| Install-first factual guide and required capture checks | 9 | 18.678 |
+
+These per-item seconds are summed JUnit case durations inside the full run,
+not independent wall-clock runs. The separate guide-reference check covered
+42 guides and caught all **10** built-in negative cases; architecture passed
+36 assertions as recorded above. All 12 P85 mutations were caught with
+identical case identities and clean restoration. The P71 HEAD and the three
+inspected contract files were unchanged when checked again after the full run.
+
+All initial-scope builder acceptance work is complete: PLAN/CONTRACT, RED/GREEN evidence,
+47 complete/negative pilots, mutations, task how-tos, required Example
+captures, CHANGELOG, U58-U61 and architecture/P71 conclusions. The final
+production diff was reviewed against `e630525`; no writer implementation or
+policy/allowlist was replaced. The roadmap checkbox remains open for the
+lead-owned council, packet gate and integration. No council verdict or packet
+gate pass is claimed here.
+
+The full JUnit/log are `$env:TEMP\p85-full-aum.xml` and
+`$env:TEMP\p85-full-aum.log`; per-item totals are in
+`$env:TEMP\p85-final-test-summary.json`. The branch is
+`p85-aum-tui-manage` in `accel-p85`. No merge, push, history rewrite, Azure
+write, Azure resource creation or reference-gateway operation occurred.
+
 ## P71 follow-up: the deadline tests prove termination without racing it, 2026-09-30
 
 **Merged as `dc0e311` on 2026-09-30, as a follow-up to P71, which the owner approved.** The

@@ -1,5 +1,7 @@
 """Reviewed presentation members; internal exceptions are exact, never name-wide."""
 
+from publication_lifecycle import ATTRIBUTE_EXCEPTIONS as LIFECYCLE_EXCEPTIONS, ATTRIBUTE_CONTEXTS as LIFECYCLE_CONTEXTS
+
 APPROVED_ATTRIBUTES = frozenset("""
 Argument BLANK Changed Context DictWriter Exit FIRST_COMPLETED InputEvent Option Pressed
 RowHighlighted RowSelected StringIO Submitted TabActivated Typer WRITE_FEATURES
@@ -56,6 +58,8 @@ action_chargeback apply_label auto_export before commit_preview configuration co
 connection_label export local_write membership_unavailable_text open_add_form path prefill_unit
 prefill_user profile_path publication_scroll_home resource_group revision scope update_action_buttons
 usd_unavailable_text validate
+action_clear_filter action_next_page action_previous_page action_quit action_remove_developer
+commit_action commit_change open_remove_form quit_message refresh_saving run_mutation saving
 """.split())
 
 EXCLUDED_ATTRIBUTES = frozenset({
@@ -642,8 +646,10 @@ ATTRIBUTE_EXCEPTIONS = {
     ('publication_widgets.py', 'VerticalScroll.publication_scroll_home', 'super().scroll_home(animate=False, immediate=True)'):
         'Forwards only this protected scroll receiver synchronously, without animation, deferred scroll work or supplied callbacks.',
 }
+ATTRIBUTE_EXCEPTIONS.update(LIFECYCLE_EXCEPTIONS)
+
 ATTRIBUTE_CONTEXTS = {
-    ('developer_screens.py', 'DeveloperPicker.open_add_form'): 'a3f74227c2581e667b0fa8d96cfaaea0fddd436336034f8bd1d64cb197a185b7',
+    ('developer_screens.py', 'DeveloperPicker.open_add_form'): '5f095d01dbc48d70b45242154692faab781b14444b3977ad0693834a913a4faf',
     ('publication_output.py', 'ProfileChange.configuration'): '5f90fbf786853cee55bce5cf1e8e1cdc076b3a90741dc704e013aeed326eba50',
     ('publication_output.py', '_save_profile_locked'): '5b0d2aabacd92fd3eafc27ab722474e445bdd8894cf2b73f4954a00b18b2c3fd',
     ('publication_output.py', 'backup_profile'): 'd2ed1be45ec060b62a2e1098a487c380acf6bded01aea25fe3345c083c37907f',
@@ -689,7 +695,7 @@ ATTRIBUTE_CONTEXTS = {
     ('dashboard_drill.py', 'DashboardRows.on_mount'): '426ca553cf12cd5b8a3b90300ef467803caeba127ded8e2045585f79a3bc020b',
     ('dashboard_drill.py', 'DashboardRows.open_row'): '6305b433f789d0b5c30f1ab69058549d00da069c877c7d50074f1ceef4aa59af',
     ('dashboard_drill.py', 'DashboardRows.open_selected'): '8db895bcf0cdacd59c656469371aa7e09363430d0957d115702658b5fd198d62',
-    ('developer_screens.py', 'DeveloperPicker.__init__'): '84c49b5d5a8308c3508989c221ca555b4992f6e00841b4f3417962b657066403',
+    ('developer_screens.py', 'DeveloperPicker.__init__'): 'd7082afa3edc5752dd73a59159ce1531cdbc91c6e57a5c4a862b7f962bd246bf',
     ('feature_engine.py', 'FeatureEngine._feature_change'): '5d0686937c2a8b6d45e1d314f3b459c51fd26a516400299ba41dabd2af22d180',
     ('feature_engine.py', 'FeatureEngine.ask'): '54d86e79629def67dffe4fc3c94f5cc09bd28d9309916da1c78f21b87768f968',
     ('feature_engine.py', 'FeatureEngine.boost'): '1330944cf23f58d07a3ab013fac411a3c351685ea35c76e722a9aee0bd2e6170',
@@ -715,12 +721,12 @@ ATTRIBUTE_CONTEXTS = {
     ('principal_ui.py', 'PrincipalUI.on_event'): 'f3fe81daef1f596373e495524a50173caba0be62276d25966a7d3fe0a187eb2a',
     ('principal_ui.py', 'PrincipalUI.open_cached_change'): '6dbb72353333971be37c0755ec4bbd45e3dda6d2c8a81628c917704b78bccdb6',
     ('progressive.py', 'ProgressiveRefresh._current_refresh'): '2a1971ab657dac72fb1dd6d40046b841378e281fceeb6f0ddc86cf7b53d6b70a',
-    ('progressive.py', 'ProgressiveRefresh._show_read_error'): 'dfd88350aa0ec9e710a05c95e84d5dd9836a5d211feeef8a23346588fc6f4dae',
-    ('progressive.py', 'ProgressiveRefresh._show_wait'): 'cf9cdda7a3bb13372138cb82e8ebdbac267541985638254cabd04bc69f12992c',
+    ('progressive.py', 'ProgressiveRefresh._show_read_error'): '727dd4e7af4e44957262fd2f0fc4c5d764aecbf39fce99b1dc4034f3a457e3d0',
+    ('progressive.py', 'ProgressiveRefresh._show_wait'): 'e35274ad9da884f67a1096c8e37d4412cdb0189ce315e1e29674510dedf0548d',
     ('progressive.py', 'ProgressiveRefresh._tracked_read'): '04d923bb0665832eb4b1e044ceaf0c1713e7b6b194126220509e98cdd18ae5e9',
-    ('progressive.py', 'ProgressiveRefresh.action_refresh'): '90311b79837b2489c857f8759cc10f85686c7c5e94becbe030e7a024b8e8cfe0',
-    ('progressive.py', 'ProgressiveRefresh.load_overview'): 'a35f1a7d07aec20d059ffe0ddb0c67c3b1804e29bbdc285afabc8a204fdbf235',
-    ('progressive.py', 'ProgressiveRefresh.load_overview.fetch'): '14b8321bbbf02ebd4bc6e1e296a07c4725f40c4641051cb5350ba7b648195366',
+    ('progressive.py', 'ProgressiveRefresh.action_refresh'): '0bc1376f510ff9b56eb7875d97678ffd7d6d0bc398a30fc3e21fa8c1047a0ba2',
+    ('progressive.py', 'ProgressiveRefresh.load_overview'): '19b05a92adf8c4899251509eb807e4edadbd6b7d5a8f5879482ebdff078f3408',
+    ('progressive.py', 'ProgressiveRefresh.load_overview.fetch'): '20d5959d4d45d10d03089c1a952a9ed0362b7c0d5b0306b4c9e9b36d4516ed6b',
     ('progressive.py', 'ProgressiveRefresh.publish_tab'): 'f210a2a794ad60753a042656f1993310c040b4594aaad203e0cf65ddf556ca93',
     ('publication_output.py', 'prompt_number'): '00a172a88ca4a0cc53ea83e07bf62929275633cf8810da9f8b8c18a215f3ccce',
     ('publication_output.py', 'read_text'): '5cc6a57edd8b1c47d8edd88032b1a187b6ef62a362a16936d44748cc7ea72334',
@@ -757,7 +763,7 @@ ATTRIBUTE_CONTEXTS = {
     ('screens.py', 'ChangeScreen.compose'): '529e672af713d7b991b4640c048243fa07cf347540bda62079097192531aa72e',
     ('screens.py', 'DetailScreen.__init__'): 'dd31bf5cb795be5af1c6abba7ced5276e8bd278a80e03c65025473a277b80543',
     ('screens.py', 'DetailScreen.compose'): 'c89c146c6eaaf6df8a9e5e5992123a72478c13ffec37407411084e427dd7913c',
-    ('tui.py', 'FinOpsApp.__init__'): 'aac2027c260c54f403aa0321ad11c3b38accd77b0af8edf27069f8893f156396',
+    ('tui.py', 'FinOpsApp.__init__'): 'a87d8917947de9aeb7e48721556bfdbe0e3f7652ebcb7c71b05c32a41a7cb586',
     ('tui.py', 'FinOpsApp._render_tab'): '60b28c3dbafc5a5c82c977964c82917711229265ab2919b84df96c34ef9f860e',
     ('tui.py', 'FinOpsApp.exact_on_focus'): 'fdf137f632ecb8766aa376c600e118cb6e87fa6ea5b3efe859bda17ae80faf1e',
     ('tui.py', 'FinOpsApp.get_line_filters'): '2394c7bf33b07584c30c1f1dfa0b10d9ea280f39fc2fdeca44ecb8d8f55fa31b',
@@ -778,7 +784,8 @@ ATTRIBUTE_CONTEXTS = {
     ('ui_features.py', 'FeatureUI.action_pin_chart'): '42661d673f908a16707f49a6a1505a32e09d4b9771c72d9d55d75f23527b7cc3',
     ('ui_features.py', 'FeatureUI.action_show_boosts'): '77b980e224cc2108aad80a340dbca76b77bf34e60b95df22e82e9356912ab1df',
     ('ui_features.py', 'FeatureUI.activate_profile'): '9350254e40174c17e418b42607c4a37bc6ecc341aff8ddb15091a52e010381b7',
-    ('ui_features.py', 'FeatureUI.ask_current'): 'f34c31b92df73ffd20bfeb5e53aa3c19906ee4bcd9fa246816b63ac24c357d58',
+    ('ui_features.py', 'FeatureUI.ask_current'): 'a993530a85f74f65a65c51548bd41089d44da02d89acf952b590f7bdbbf92194',
     ('ui_features.py', 'FeatureUI.push_cached_form'): 'e1654e7510bf051892756abcdcab3564f6f547b34b28aaa3b8c905f46123c2ca',
     ('ui_features.py', 'FeatureUI.refresh_features'): '948b1a3795aa207880802188bab8ba5db8f19a5289f8af08980c78b256665138',
 }
+ATTRIBUTE_CONTEXTS.update(LIFECYCLE_CONTEXTS)

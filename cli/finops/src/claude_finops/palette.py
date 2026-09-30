@@ -16,6 +16,8 @@ class FinOpsCommands(Provider):
             ("Filter the current view", self.app.action_filter, "Visible rows only; Esc clears"),
             ("Change month", self.app.action_month, "YYYY-MM"),
             ("Refresh current view", self.app.action_refresh, "Read the latest server state"),
+            ("Clear filter or go back", self.app.action_clear_filter, "The same navigation as Esc; never quits"),
+            ("Quit AUM", self.app.action_quit, "Confirmation required; Esc stays"),
             ("Help and key map", self.app.action_help, "Learn this screen"),
             ("Exact selected values", self.app.action_exact_detail, "Full precision and request-based person details"),
             ("Set server filter chips", self.app.action_scope_filters, "Unit, team, person, model, surface and tier"),
@@ -29,6 +31,9 @@ class FinOpsCommands(Provider):
         ]
         if self.app.active == "people" and not self.app.redactor.enabled:
             commands.append(("Open team membership in Entra", self.app.action_membership, "Directory rights are enforced by Entra"))
+        if self.app.check_action("next_page", ()):
+            commands += [("Next page", self.app.action_next_page, "The same navigation as n"),
+                         ("Previous page", self.app.action_previous_page, "The same navigation as p")]
         if self.app.engine.backend.name == "Direct":
             commands += [("Usage: request-time attribution", self.app.action_request_time_usage, "Stamped team at request time; no invented cost"),
                          ("Usage: current priced membership", self.app.action_priced_usage, "Published workspace price/membership function")]
@@ -49,6 +54,11 @@ class FinOpsCommands(Provider):
             ]
         if self.app.check_action("add_developer", ()):
             commands.append(("Add developer", self.app.action_add_developer, "Find an Entra user, preview tier/unit group writes, then publish"))
+        if self.app.check_action("remove_developer", ()):
+            commands.append(("Remove person from team", self.app.action_remove_developer,
+                             "Preview all gateway tier/unit group removals, confirm the email/UPN, then publish"))
+        if self.app.check_action("usd_edit", ()):
+            commands.append(("Edit selected USD budget", self.app.action_usd_edit, "Preview, then save; reconciliation is separate"))
         if self.app.editable:
             commands += [
                 ("Edit selected budget or governance row", self.app.action_edit, "Preview, then apply"),
@@ -67,8 +77,6 @@ class FinOpsCommands(Provider):
                 commands.append(("Import person budgets from CSV", self.app.action_bulk, "Preview full parent allocation"))
             if enabled(self.app.feature_caps, "budget_modes", "write"):
                 commands.append(("Set budget enforcement mode", self.app.action_mode, "Strict, allowance or notify"))
-            if enabled(self.app.feature_caps, "usd_budgets", "write"):
-                commands.append(("Edit selected USD budget", self.app.action_usd_edit, "Preview, then save; reconciliation is separate"))
             if enabled(self.app.feature_caps, "usd_budgets", "reconcile"):
                 commands.append(("Reconcile USD budgets now", self.app.action_usd_reconcile, "Runs the advertised gateway reconciler"))
         elif self.app.check_action("edit", ()):

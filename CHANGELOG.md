@@ -29,6 +29,93 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Final P85 follow-up integration.** P71's owned-process deadline probes and
+  precise public-evidence section lookup are merged without production changes.
+  The single full AUM run passes all 1,200 cases; refreshed file and whole-check
+  weights retain four planned shards at 259, 259, 258 and 258 seconds.
+  P85 remains first in STATUS, with both follow-up and earlier merge records kept.
+- **P85 takes merged P80 without replacing its shard measurements.** The
+  bounded merge keeps P85's reviewed helpers, approvals, capture provenance
+  and four 281-second planned shards while retaining both ledger histories.
+  Contract/publication/P85 checks pass; a new full AUM run, weight refresh
+  and RunnerIntegrity are deferred until the pending deadline-test follow-up.
+- **P85 includes P71's final main fixes.** Native message suppression and
+  missing-main-tab handling now coexist with P80's guarded recovery and
+  P85's management, Escape/quit and Cloud Shell behavior. The composed
+  widget boundary is reviewed under ADR-0035. All 1,197 offline AUM cases
+  pass in one full serial run; refreshed weights keep four planned shards
+  at 281 s each. The earlier integration evidence remains in STATUS.
+- **P85/P80 publication integration.** People, catalog and budget workflows,
+  confirmed quit and the Cloud Shell launcher retain P71's closed publication
+  contract. Reviewed lifecycle interfaces have current/expired-origin,
+  native-log and scratch-mutation controls; protected output boundaries,
+  existing rules and test budgets are unchanged. One integrated full-suite
+  measurement refreshes all 75 file weights; four planned shards remain
+  within 252 s each. Runtime publication/paging failures are recorded
+  separately rather than described as a passing suite.
+- **P85 packet gate 1: the AUM check runs in four shards.** The AUM pytest
+  suite (871 tests, 860 s serially) exceeded Test-All's 600 s per-check
+  timeout. Test-All now registers four checks, each running a longest-first
+  share of the test files by committed per-file weights, and a fifth check
+  proves every file runs in exactly one shard (`tests/README.md`). That check
+  reads pytest's results with colour on and off, as the packet gate forces
+  colour through `FORCE_COLOR=0`.
+- **P85 council round 2: installer alias isolation.** Pip/uv processes use
+  fresh explicit environments rather than relying on shell-name enumeration.
+  Pip also uses isolated mode, null configuration and a confined cache.
+  Real offline pip and child-environment tests cover malformed aliases while
+  the final AUM process retains its Azure CLI session context.
+- **P85 council round 2: sign-out completion.** A successful sign-out exits
+  from application-owned completion handling after registry release, even
+  when its modal worker was cancelled. Other mutations still finish first,
+  failures stay visible, and completed sign-out does not retain saving text.
+- **P85 council round 1: quit deferral.** Application-owned mutation tasks
+  retain backend and receipt completion even when a modal worker is cancelled.
+  All application exit routes defer during a save; the quit dialog explains
+  the wait and disables confirmation. Results remain available after completion,
+  without an automatic deferred exit. Read-only work remains interruptible.
+- **P85 council round 1: installer destinations.** The Cloud Shell bootstrap
+  clears inherited pip/uv/XDG settings, including `PIP_LOG`, and pins Python's
+  user base and all controlled directories under HOME. A real-pip offline
+  regression and per-variable write probes replace the earlier incomplete
+  confinement evidence.
+- **P85 council round 1: removal-plan binding.** The terminal passes its
+  reviewed plan to the existing membership engine. A difference against the
+  exact resolved write snapshot is refused before Graph or publication
+  writes, including catalog changes after the form's apply-time re-preview.
+- **P85 owner additions: Escape and quit safety.** Rapid Escape remains
+  navigation/cancellation through the tested main/modal/slow/error paths.
+  Expected refresh transport failures no longer become fatal worker errors.
+  One `q` opens confirmation; a second `q` or Enter quits and Escape stays.
+  The palette includes quit, back/clear and page navigation. CAE location
+  challenges explain IP variation, VPN/IPv6 consistency and administrator
+  review without echoing transport details or retrying writes.
+- **P85 owner additions: Cloud Shell bootstrap.** A HOME-local launcher
+  creates/reuses a managed Python 3.12 environment and installs the checked-out
+  AUM package, retaining Cloud Shell's existing Azure CLI sign-in. Dry-run,
+  canonical destination checks and offline fake-command tests cover setup,
+  reuse and failures. The guide records networking, idle and persistence
+  limits with dated sources; live Cloud Shell verification remains owner-only.
+- **AUM terminal management (P85, builder candidate; lead council/gate pending).** People exposes
+  Remove person from team beside Add person to team, with `h` and a matching
+  palette entry. Its preview names the resolved person, all tier/catalog group
+  removals and the `allow-standard`/`allow-premium` publication targets. The
+  existing engine checks owner authority and typed email/UPN confirmation;
+  AUM service membership remains unavailable. Done returns from both membership
+  forms to a refreshed People view. Observed usage is not a membership roster
+  and can remain after access removal.
+  Complete offline pilots cover unit/team creation and removal, unit/team/person
+  token budgets, and Direct/service USD saves with actual adapter-write
+  assertions. Native synchronous receipts no longer enter Turnstile apply
+  polling. Direct person budgets retain their gateway meaning, USD results
+  state that reconciliation is pending, and the USD palette entry follows its
+  own selected-scope capability rather than catalog-write permission.
+  The install-first guide has separate task how-tos, existing destructive-scope
+  rules and estimated waits. Required Example snapshots are regenerated;
+  historical live captures remain unchanged. Twelve exact-test-identity
+  mutation probes detect removal and related receipt/discovery regressions.
+  Architecture boundaries are unchanged. P71's closed-presentation integration
+  requirements are recorded in STATUS without merging that branch.
 - **P80 final-main integration and AUM test sharding.** P71's final exact-type message
   controls and absent-main-tab handling retain P80's protected actions and recovery.
   Four duration-weighted AUM checks and their coverage proof are ported from P85

@@ -497,12 +497,22 @@ Source: [06-finops.json](architecture/06-finops.json), verified against the loca
 [`cli/finops`](../cli/finops) implementation merged to main at `c7f0a29`. The design is
 recorded in [ADR-0018](adr/0018-terminal-finops.md), P71's
 [ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md), and P80's
-[ADR-0038](adr/0038-aum-actions-and-connection.md).
+[ADR-0038](adr/0038-aum-actions-and-connection.md). P85 adds the Cloud Shell
+launch surface and deliberate session controls in
+[ADR-0041](adr/0041-aum-session-safety-and-cloud-shell.md).
 
 The product is **AUM - Azure Usage Management**, a terminal FinOps console with command
 **`aum`**. `claude-finops` remains a deprecated alias; the internal package stays
 `claude_finops`. The [AUM terminal guide](AUM.md#install) starts with installation
 and connection setup. The [legacy guide URL](CLI-FINOPS.md) remains a pointer.
+
+The [Cloud Shell launcher](../scripts/aum-cloudshell.sh) provisions only a
+HOME-local Python/venv/cache and an editable install from the checkout, using
+the existing Azure CLI sign-in. It does not deploy Cloud Shell, a VNet or
+storage, and does not introduce a governance writer. Its hosted terminal uses
+the same backend endpoints and permissions. Private endpoints require an
+appropriately connected VNet Cloud Shell. Runtime/bootstrap and actual HOME
+persistence verification remain owner-only in U61.
 
 The Textual `FinOpsApp` and Typer commands share `Engine` for period selection, scope,
 budget validation, previews and explicit writes. The backend is a choice, not an

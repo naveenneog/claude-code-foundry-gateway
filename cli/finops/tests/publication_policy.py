@@ -101,9 +101,10 @@ APPROVED = {
     ".developer_screens": approval("The developer picker uses protected widgets and scoped reads.", "DeveloperPicker"),
     ".discovery": approval("Read-only address discovery precedes a backend session.", "discover"),
     ".engine": approval("The engine retains provider authorization and immutable read generations.", "Engine"),
-    ".errors": approval("Only safe, actionable domain errors are presented.", "FinOpsError"),
+    ".errors": approval("Expected backend failures are classified and normalized to safe domain values before guarded presentation.",
+                        "FinOpsError READ_FAILURES read_error"),
     ".feature_screens": approval("Forms and filters retain source guards before constructing protected children.",
-                                 "ActionForm FilterChips FiltersScreen TourScreen"),
+                                 "ActionForm FilterChips FiltersScreen QuitScreen TourScreen"),
     ".feature_views": approval("Optional-view formatting returns ordinary value rows.", "feature_rows"),
     ".group_actions": approval("Explicit directory and gateway actions own their validation and authorization.",
                                "group_call membership_refresh probe_gateway publish_as_signed_in_admin"),
@@ -149,7 +150,7 @@ BOUNDARIES = {
         "errno": {"EACCES", "EAGAIN", "EDEADLK"},
         "msvcrt": {"locking", "LK_NBLCK"}, "fcntl": {"flock", "LOCK_EX", "LOCK_NB"},
     }),
-    "publication_widgets.py": ("Native receivers retain guarded origins and synchronous recovery scrolling; sealed messages preserve exact-type delivery controls.", "adeb80ffa2738f128805295627ce986c8c133bb7470b6d04b1ddb95a2660b0ef", {
+    "publication_widgets.py": ("Native receivers retain guarded attachment and recovery scrolling; payload-free adapters preserve original exact-type delivery controls without exposing raw receivers.", "adeb80ffa2738f128805295627ce986c8c133bb7470b6d04b1ddb95a2660b0ef", {
         "textual._context": {"active_app"}, "textual.app": {"App"}, "textual.widget": {"Widget"},
         "textual.containers": {"Container", "HorizontalGroup", "Horizontal", "Vertical", "VerticalScroll"},
         "textual.screen": {"Screen", "ModalScreen"},

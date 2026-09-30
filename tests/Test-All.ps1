@@ -290,8 +290,8 @@ try {
     $finopsSkip = if (-not ((Test-Path $finopsPython) -or (Test-Path $finopsUnixPython))) {
         'AUM: Python or the worktree .venv-finops is missing. See docs/AUM.md to install.'
     } else { '' }
-    # P80's 928 tests took 518.76 s serially, leaving little headroom below 600 s; port P85's reviewed
-    # four-way file assignment (c9ae1c8/729a249), weighted by P80's own JUnit measurement.
+    # cli/finops/tests took 860 s serially on 2026-09-29, beyond the 600 s per-check timeout, so four
+    # checks each run a longest-first share of the files (tests/Select-FinOpsShard.ps1).
     Invoke-Check 'AUM - commands, dashboard and pilot [0/4]' 'Test-FinOps.ps1' @{ Shard = '0/4' } -SkipReason $finopsSkip
     Invoke-Check 'AUM - commands, dashboard and pilot [1/4]' 'Test-FinOps.ps1' @{ Shard = '1/4' } -SkipReason $finopsSkip
     Invoke-Check 'AUM - commands, dashboard and pilot [2/4]' 'Test-FinOps.ps1' @{ Shard = '2/4' } -SkipReason $finopsSkip

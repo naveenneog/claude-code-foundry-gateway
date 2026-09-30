@@ -1,3 +1,6 @@
+import httpx
+
+
 class FinOpsError(Exception):
     """A safe, actionable message; never include raw transport errors or tokens."""
 
@@ -5,6 +8,30 @@ class FinOpsError(Exception):
         super().__init__(message)
         self.code = code
         self.details = details or {}
+
+
+READ_FAILURES = (FinOpsError, OSError, httpx.HTTPError)
+LOCATION_CHALLENGE = (
+    "IP variation can trigger CAE. Stay fully on/off VPN; check IPv6. "
+    "Ask the admin about a named location or exclusion."
+)
+
+
+def is_location_challenge(text: str) -> bool:
+    folded = text.casefold()
+    return "interactionrequired" in folded and "locationconditionevaluationsatisfied" in folded
+
+
+def read_error(error: FinOpsError | OSError | httpx.HTTPError) -> FinOpsError:
+    if isinstance(error, FinOpsError):
+        return FinOpsError(LOCATION_CHALLENGE, 3) if is_location_challenge(str(error)) else error
+    if isinstance(error, httpx.HTTPStatusError):
+        return http_error(error.response.status_code)
+    if isinstance(error, httpx.HTTPError):
+        return FinOpsError("Network read failed. Check the connection, VPN and endpoint access; r retries.", 7)
+    if isinstance(error, OSError):
+        return FinOpsError("Backend I/O failed. Check the connection and local tool installation; r retries.", 7)
+    raise TypeError("Only expected backend read failures can be normalized.")
 
 
 def http_error(status: int) -> FinOpsError:

@@ -18,6 +18,41 @@ class FilterChips(Static, can_focus=True):
         self.app.action_scope_filters()
 
 
+class QuitScreen(ModalScreen):
+    BINDINGS = [("escape", "dismiss", "Stay"), ("q", "confirm", "Quit"), ("enter", "confirm", "Quit")]
+
+    @published(lambda self: self.app.safe_message_guard())
+    def compose(self):
+        with Vertical(id="month-dialog"):
+            yield Label("Quit AUM?", markup=False)
+            yield Static(self.quit_message(), id="quit-message", markup=False)
+            with Horizontal(classes="buttons"):
+                yield Button("Quit", id="quit-confirm", variant="error", disabled=self.app.saving)
+                yield Button("Stay", id="quit-stay")
+
+    def quit_message(self):
+        if self.app.saving:
+            return "Saving; wait for the result (estimate 3-30 s; an asynchronous apply can take up to 3 minutes). Esc stays."
+        return "Press q again or Enter to quit; Esc returns to the previous screen and its result."
+
+    @published(lambda self: self.app.safe_message_guard())
+    def refresh_saving(self):
+        if self.query("#quit-confirm"):
+            self.query_one("#quit-confirm", Button).disabled = self.app.saving
+            self.query_one("#quit-message", Static).update(self.quit_message())
+
+    @on(Button.Pressed, "#quit-confirm")
+    def action_confirm(self):
+        if self.app.saving:
+            self.refresh_saving()
+        else:
+            self.app.exit()
+
+    @on(Button.Pressed, "#quit-stay")
+    def stay(self):
+        self.dismiss()
+
+
 class ActionForm(ModalScreen):
     BINDINGS = [("escape", "cancel", "Cancel")]
 
@@ -88,10 +123,15 @@ class ActionForm(ModalScreen):
     @on(Button.Pressed, "#action-preview")
     @work(exclusive=True)
     async def show_preview(self):
+        if self.busy:
+            return
         try:
             if self.local_write:
                 with guarded_publish(self.app.safe_message_guard()):
                     self.query_one("#action-status", Static).update("Preparing connection preview (estimate 3-30 s)...")
+            else:
+                with guarded_publish(self.app.safe_message_guard()):
+                    self.query_one("#action-status", Static).update("Preparing preview (estimate 3-10 s)...")
             self.preview = await asyncio.to_thread(self.operation, self.values(), False)
             text = json.dumps(self.app.present({key: value for key, value in self.preview.items()
                               if key in {"action", "count", "before", "after", "changes", "note"}}),
@@ -112,13 +152,24 @@ class ActionForm(ModalScreen):
                                                (self.app.preview_only or self.app.redactor.enabled)):
             return
         self.busy = True
+        reviewed_plan = self.preview
+        operation = self.commit_action(reviewed_plan)
+        if self.mutation or self.local_write:
+            await self.app.run_mutation(operation)
+        else:
+            await operation
+
+    async def commit_action(self, reviewed_plan):
         self.query_one("#action-apply", Button).disabled = True
+        self.query_one("#action-preview", Button).disabled = True
+        with guarded_publish(self.app.safe_message_guard()):
+            self.query_one("#action-status", Static).update("Saving once (estimate 3-30 s)...")
         try:
             latest = await asyncio.to_thread(self.operation, self.values(), False)
-            if any(latest.get(key) != self.preview.get(key) for key in ("before", "after", "changes", "count")):
-                if self.commit_preview:
+            if any(latest.get(key) != reviewed_plan.get(key) for key in ("before", "after", "changes", "count")):
+                if self.commit_preview and "profile_change" in reviewed_plan and "profile_change" in latest:
                     from .publication_output import profile_conflict
-                    reviewed, current = self.preview["profile_change"], latest["profile_change"]
+                    reviewed, current = reviewed_plan["profile_change"], latest["profile_change"]
                     if reviewed.revision != current.revision:
                         raise profile_conflict(reviewed.path, reviewed.revision, reviewed.before, current.before)
                 raise FinOpsError("State changed since preview. Cancel and refresh.", 6)
@@ -126,22 +177,26 @@ class ActionForm(ModalScreen):
                 from .bulk import apply_budget_plan
                 result = dict(latest, preview=False, results=await asyncio.to_thread(apply_budget_plan, self.app.engine, latest))
             else:
-                result = await asyncio.to_thread(self.operation, self.preview if self.commit_preview else self.values(), True)
+                result = await asyncio.to_thread(self.operation, reviewed_plan if self.commit_preview else self.values(), True)
             if result.get("ui_action"):
                 if result["ui_action"] == "profile":
                     await self.app.activate_profile(result["config"], profile=result["profile"],
                                                     revision=result["profile_revision"], reviewed=result["profile_change"],
                                                     read_guard=self.read_guard)
                     return
+                if result["ui_action"] == "signout":
+                    with guarded_publish(self.app.safe_message_guard()):
+                        self.query_one("#action-status", Static).update(
+                            "Signed out. AUM exits after pending operations finish "
+                            "(estimate 3-30 s; an asynchronous apply can take up to 3 minutes).")
+                    return "signout"
                 self.dismiss()
                 if result["ui_action"] == "view":
                     self.app.restore_view(result["view"], read_guard=self.read_guard)
                 elif result["ui_action"] == "compare":
                     self.app.set_comparison(result["month"])
-                elif result["ui_action"] == "signout":
-                    self.app.exit()
                 return
-            state = "Saved." if self.mutation else "Opened."
+            state = result.get("message") or ("Saved." if self.mutation else "Opened.")
             if result.get("status_code"):
                 state = json.dumps(self.app.present({key: result.get(key) for key in
                     ("status_code", "headers", "usage", "error", "seconds")}), ensure_ascii=True, indent=2)
@@ -159,6 +214,8 @@ class ActionForm(ModalScreen):
                 self.query_one("#action-status", Static).update(self.app.redactor.text(message))
         finally:
             self.busy = False
+            if self.query("#action-preview"):
+                self.query_one("#action-preview", Button).disabled = False
 
     @on(Button.Pressed, "#action-cancel")
     def action_cancel(self):
