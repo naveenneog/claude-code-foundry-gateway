@@ -495,15 +495,14 @@ scheduled jobs (P49); a plan that needs those fails before it writes. See
 
 Source: [06-finops.json](architecture/06-finops.json), verified against the local
 [`cli/finops`](../cli/finops) implementation merged to main at `c7f0a29`. The design is
-recorded in [ADR-0018](adr/0018-terminal-finops.md) and P71's
-[ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md).
+recorded in [ADR-0018](adr/0018-terminal-finops.md), P71's
+[ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md), and P80's
+[ADR-0038](adr/0038-aum-actions-and-connection.md).
 
 The product is **AUM - Azure Usage Management**, a terminal FinOps console with command
-**`aum`**. The naming packet on branch `aum` adds that command and retains `claude-finops`
-as a deprecated alias. Its entry points were verified at `a1f0836`; that packet is not
-yet merged into this checkout. The terminal implementation itself is no longer pending.
-Follow the [AUM terminal guide](CLI-FINOPS.md), whose existing URL remains valid as a
-pointer when the guide moves to `docs/AUM.md`.
+**`aum`**. `claude-finops` remains a deprecated alias; the internal package stays
+`claude_finops`. The [AUM terminal guide](AUM.md#install) starts with installation
+and connection setup. The [legacy guide URL](CLI-FINOPS.md) remains a pointer.
 
 The Textual `FinOpsApp` and Typer commands share `Engine` for period selection, scope,
 budget validation, previews and explicit writes. The backend is a choice, not an
@@ -511,6 +510,8 @@ automatic fallback:
 
 - **Turnstile HTTP:** Azure CLI token, role/scope checks at the server, bounded API reads
   and explicit writes. A failed GET can refresh its token once; writes are not retried.
+- **AUM service HTTP:** its existing Entra roles, native capability contract and
+  server-resolved management scope; the service is independent of Turnstile.
 - **Direct Azure:** ARM, Log Analytics and `Invoke-ClaudeFinOps.ps1`, reusing the
   repository's gateway scripts and chargeback query. AUM developer add/remove uses the
   signed-in administrator's delegated Graph token to update Entra group membership,
@@ -524,6 +525,21 @@ A preview is not a write. A saved Turnstile value is not a completed gateway app
 Turnstile person budgets are not the gateway's per-person daily overrides. These distinctions
 belong in both terminal faces. The [AUM how-to](CLI-FINOPS.md) describes installation,
 configuration, commands and the first release's scope.
+
+P80 changes local interaction and file flows, not Azure architecture. The
+People/Budgets controls retain existing authorization and preview-first writers.
+Directory and catalog results keep their publication guards through the add
+form. Connection settings use an address-only local profile, a timestamped
+backup and atomic replacement. An OS-held sibling-file lock serializes AUM
+profile writers; the reviewed candidate/revision is not rediscovered at commit.
+Both `whoami` and the saved profile revision are checked before the UI adopts
+the candidate. Failure keeps the previous engine, identity and cached UI and
+attempts profile restoration. Failed restoration retains the connection form
+with focused, keyboard-scrollable backup/recovery instructions.
+Complete chargeback CSVs use exclusive file creation
+with numbered collision handling. No Azure component, identity, schedule,
+network destination or write authority is added. The diagram's local-files
+node records these paths; Turnstile still has no USD writer.
 
 P71 adds progressive source completion within the terminal and a read-cycle
 snapshot within Direct. Azure still authorizes each Direct request; HTTP scope

@@ -584,7 +584,10 @@ class Vertical(PublicationWidget, TextualVertical):
 
 
 class VerticalScroll(PublicationWidget, TextualVerticalScroll):
-    pass
+    @publication_sink
+    def publication_scroll_home(self):
+        with guarded_publish(self.input_origin()):
+            super().scroll_home(animate=False, immediate=True)
 
 
 class TabbedContent(PublicationWidget, TextualTabbedContent):

@@ -52,6 +52,10 @@ tier_change time title to_thread total_seconds toured tzinfo update update_acces
 update_data update_filter_chips update_key_hints upper url usage_basis usd_budget_change
 usd_price_book_change usd_reconcile usd_status utc value values verifying_identity views wait
 wait_for_apply which width workspace_resource_id writeheader writerow
+action_chargeback apply_label auto_export before commit_preview configuration connection_kind
+connection_label export local_write membership_unavailable_text open_add_form path prefill_unit
+prefill_user profile_path publication_scroll_home resource_group revision scope update_action_buttons
+usd_unavailable_text validate
 """.split())
 
 EXCLUDED_ATTRIBUTES = frozenset({
@@ -229,8 +233,6 @@ ATTRIBUTE_EXCEPTIONS = {
         'Reads the data-to-origin cache used by the existing guarded publication path; the cache is not a raw output handle.',
     ('progressive.py', 'ProgressiveRefresh.publish_tab', 'self._show_read_error'):
         'Uses the existing principal or refresh state/helper in this exact reviewed lifecycle context, without exposing framework IO.',
-    ('publication_output.py', 'profile_path', 'Path.home'):
-        'Builds the local profile location as a string without returning filesystem capabilities.',
     ('publication_output.py', 'prompt_number', 'typer.prompt'):
         'The CLI prompt is an explicit protected IO operation, not a terminal-UI-thread read.',
     ('publication_output.py', 'read_text', 'Path(path).read_text'):
@@ -557,8 +559,104 @@ ATTRIBUTE_EXCEPTIONS = {
         'Requires the exact native receiver as the search worker owner before granting deferred authority.',
     ('publication_widgets.py', '_protect_native_widget.run_worker', 'owner._publication_origin'):
         'Retains the native search source through awaits rather than authorizing later unrelated callbacks.',
+    ('developer_screens.py', 'DeveloperPicker.open_add_form', 'self.app._data_guards'):
+        'Stores the catalog together with its original read guard before the combined directory/catalog form is published.',
+    ('developer_screens.py', 'DeveloperPicker.open_add_form', 'self.app._error_text'):
+        'Formats a redacted domain refusal for the protected status or retained-origin notification, never raw diagnostics.',
+    ('screens.py', 'ExportScreen.__init__', 'super().__init__()'):
+        'Initializes only the protected empty modal shell; source-backed content is composed under its explicit guard.',
+    ('ui_features.py', 'FeatureUI.activate_profile', 'self._clear_principal_state'):
+        'Clears a partially adopted candidate after restoring the previous engine; no failed candidate data is republished.',
+    ('publication_output.py', 'confirm_profile_replace', 'typer.confirm'):
+        'The synchronous publication sink validates the source before the fixed replacement question is printed or read.',
+    ('publication_output.py', 'profile_bytes', "(json.dumps(config.validate().public(), indent=2) + '\\n').encode"):
+        'Encodes validated address-only configuration into immutable bytes, without opening or returning a file.',
+    ('publication_output.py', 'read_profile', 'path.read_bytes'):
+        'Reads an operator-selected local profile inside the output boundary and returns bytes, never its Path or handle.',
+    ('publication_output.py', 'content_revision', 'hashlib.sha256(content).hexdigest()'):
+        'Computes a value-only revision of the exact reviewed profile bytes for compare-before-write checks.',
+    ('publication_output.py', 'ProfileChange.configuration', 'self.content'):
+        'Decodes immutable reviewed address bytes into validated configuration without rediscovery or filesystem access.',
+    ('publication_output.py', 'profile_lock', 'path.parent.mkdir(parents=True, exist_ok=True)'):
+        'Creates the lock directory only during an explicit originating publication before transaction entry.',
+    ('publication_output.py', 'profile_lock', 'path.with_name'):
+        'Derives the persistent sibling lock path from the selected local profile; no path capability leaves the boundary.',
+    ('publication_output.py', 'profile_lock', "path.with_name(f'.{path.name}.lock').open"):
+        'Opens the persistent OS-lock handle only under the entering source guard, and closes it in finally.',
+    ('publication_output.py', 'profile_lock', 'handle.seek'):
+        'Positions the private Windows lock handle at the fixed first byte before nonblocking lock acquisition.',
+    ('publication_output.py', 'profile_lock', 'handle.fileno'):
+        'Passes only the private lock descriptor to the platform lock API; no descriptor is returned to presentation.',
+    ('publication_output.py', 'profile_lock', 'msvcrt.locking'):
+        'Acquires the existing nonblocking Windows profile writer lock under the entering publication guard.',
+    ('publication_output.py', 'profile_lock', 'msvcrt.LK_NBLCK'):
+        'Uses only the fixed nonblocking Windows lock mode, preserving immediate concurrent-writer refusal.',
+    ('publication_output.py', 'profile_lock', 'fcntl.flock'):
+        'Acquires the Unix profile writer lock under the entering guard; the private handle lifetime releases it.',
+    ('publication_output.py', 'profile_lock', 'fcntl.LOCK_EX'):
+        'Requests only an exclusive lock on the private profile-lock descriptor, not an arbitrary file operation.',
+    ('publication_output.py', 'profile_lock', 'fcntl.LOCK_NB'):
+        'Keeps Unix acquisition nonblocking so another writer is explicitly refused rather than hidden by a wait.',
+    ('publication_output.py', 'profile_lock', 'error.errno'):
+        'Classifies the OS lock error by number; unexpected errors propagate without printing sensitive diagnostics.',
+    ('publication_output.py', 'profile_lock', 'errno.EACCES'):
+        'Recognizes the existing access-denied lock contention code and returns the fixed actionable refusal.',
+    ('publication_output.py', 'profile_lock', 'errno.EAGAIN'):
+        'Recognizes the existing would-block lock contention code and returns the fixed actionable refusal.',
+    ('publication_output.py', 'profile_lock', 'errno.EDEADLK'):
+        'Recognizes the existing Windows lock contention code and returns the fixed actionable refusal.',
+    ('publication_output.py', 'profile_conflict', 'Config.__dataclass_fields__'):
+        'Reads only the declared address-field names to describe a conflict, never arbitrary profile bytes or reflection targets.',
+    ('publication_output.py', 'backup_profile', 'path.read_bytes'):
+        'Reads the exact previous profile bytes while the publication and OS writer locks protect backup creation.',
+    ('publication_output.py', 'backup_profile', 'path.with_name'):
+        'Builds a timestamped sibling backup name; exclusive creation refuses existing files and increments the suffix.',
+    ('publication_output.py', 'backup_profile', 'path.stem'):
+        'Uses the selected profile basename solely to form the non-overwriting timestamped backup filename.',
+    ('publication_output.py', 'backup_profile', 'path.suffix'):
+        'Preserves the selected profile extension in the sibling backup filename, without exposing a writer.',
+    ('publication_output.py', 'backup_profile', 'backup.open'):
+        'Creates a backup exclusively after the synchronous sink validates origin; the handle stays inside the boundary.',
+    ('publication_output.py', 'backup_profile', 'stream.write'):
+        'Writes only the exact previous profile bytes under the synchronous publication sink and OS writer lock.',
+    ('publication_output.py', 'replace_profile', 'path.with_name'):
+        'Derives a unique same-directory temporary file for atomic replacement of the selected local profile.',
+    ('publication_output.py', 'replace_profile', 'uuid4().hex'):
+        'Formats a fresh local temporary-name nonce, with no terminal, network or file capability in the returned value.',
+    ('publication_output.py', 'replace_profile', 'temporary.open'):
+        'Exclusively creates the private temporary file after origin validation, before its atomic rename.',
+    ('publication_output.py', 'replace_profile', 'stream.write'):
+        'Writes reviewed address bytes only inside the synchronous publication sink before atomic profile replacement.',
+    ('publication_output.py', 'replace_profile', 'temporary.unlink'):
+        'Removes only the private temporary file in finally after a guarded write attempt, never a wildcard or parent path.',
+    ('publication_output.py', '_save_profile_locked', 'path.exists'):
+        'Chooses whether a backup is needed inside the guarded transaction after checking the reviewed revision.',
+    ('publication_output.py', 'profile_transaction', 'reviewed.content'):
+        'Uses the immutable reviewed bytes for commit; final validation compares that same content before UI adoption.',
+    ('publication_output.py', 'profile_transaction', 'path.unlink'):
+        'Rollback removes only this transaction-created profile after its written revision still matches under the OS lock.',
+    ('publication_output.py', 'profile_transaction', 'backup.read_bytes'):
+        'Rollback restores the exact local backup bytes only after confirming no newer writer replaced the candidate.',
+    ('publication_widgets.py', 'VerticalScroll.publication_scroll_home', 'self.input_origin'):
+        'Validates both the protected recovery container content origin and the current app before exposing another cached viewport.',
+    ('publication_widgets.py', 'VerticalScroll.publication_scroll_home', 'super().scroll_home(animate=False, immediate=True)'):
+        'Forwards only this protected scroll receiver synchronously, without animation, deferred scroll work or supplied callbacks.',
 }
 ATTRIBUTE_CONTEXTS = {
+    ('developer_screens.py', 'DeveloperPicker.open_add_form'): 'a3f74227c2581e667b0fa8d96cfaaea0fddd436336034f8bd1d64cb197a185b7',
+    ('publication_output.py', 'ProfileChange.configuration'): '5f90fbf786853cee55bce5cf1e8e1cdc076b3a90741dc704e013aeed326eba50',
+    ('publication_output.py', '_save_profile_locked'): '5b0d2aabacd92fd3eafc27ab722474e445bdd8894cf2b73f4954a00b18b2c3fd',
+    ('publication_output.py', 'backup_profile'): 'd2ed1be45ec060b62a2e1098a487c380acf6bded01aea25fe3345c083c37907f',
+    ('publication_output.py', 'confirm_profile_replace'): '95ecc41813ad7c4746282bd1bff8215dc0cb0ffeb1204a97fd9b43b0e966ffef',
+    ('publication_output.py', 'content_revision'): 'ac111b9b7216c6659d8f2016d3a874493761df2b5533d49fd97aa95b1c398afa',
+    ('publication_output.py', 'profile_bytes'): 'f7327adf997cef566979b2575b04292a47e679637f58586e5cfc24170253b475',
+    ('publication_output.py', 'profile_conflict'): '1222d364c76fc13c039108d95ccf296bc1dc59018b846d8f723a1769ed446458',
+    ('publication_output.py', 'profile_lock'): '867c87ef851ad95bef2afa073282ce17e3dc2c4245092ae4def7a6f71b1c1fc7',
+    ('publication_output.py', 'profile_transaction'): 'b8574bbcc83b0740515e3f28979616333ed550c7a520000dee58aaf5d34c6e16',
+    ('publication_output.py', 'read_profile'): '76c288c5e86915f8c5e7ff1390febbc9e21f7a387afd9f7318d2752dd269209a',
+    ('publication_output.py', 'replace_profile'): '6396cdc80f654d0fe96df17c1eeef917ad883348dfe0564dd1000acab7f1d718',
+    ('screens.py', 'ExportScreen.__init__'): '56e994644d8fbad53584de68d225bdfe6ba95e80973c13cd2556b6ac3d24e863',
+    ('publication_widgets.py', 'VerticalScroll.publication_scroll_home'): 'b71b677c2cfd7b8e6a87595d79b0cd39fa29be34c11fc8a75bbefecd2f2f95d1',
     ('publication_widgets.py', '_message_enabled'): '01d4cc1caaa7372d65df50064cba4527168da3ffba2f1870936832e17db518d1',
     ('publication_widgets.py', 'PublicationDispatch.check_message_enabled'): 'ed16e59100f9c191039027ac761947afa3eb6f7472b1198c0c52c8ba69155b3f',
     ('publication_widgets.py', '_protect_native_widget.check_message_enabled'): '88a9922ea440f7f626deda525881fef9988299509502f0318d6c64d8b0bb8a3f',
@@ -591,7 +689,7 @@ ATTRIBUTE_CONTEXTS = {
     ('dashboard_drill.py', 'DashboardRows.on_mount'): '426ca553cf12cd5b8a3b90300ef467803caeba127ded8e2045585f79a3bc020b',
     ('dashboard_drill.py', 'DashboardRows.open_row'): '6305b433f789d0b5c30f1ab69058549d00da069c877c7d50074f1ceef4aa59af',
     ('dashboard_drill.py', 'DashboardRows.open_selected'): '8db895bcf0cdacd59c656469371aa7e09363430d0957d115702658b5fd198d62',
-    ('developer_screens.py', 'DeveloperPicker.__init__'): '848289ed461f8acd6ce10128259997b03bb7040302092c82d9378881444fabb3',
+    ('developer_screens.py', 'DeveloperPicker.__init__'): '84c49b5d5a8308c3508989c221ca555b4992f6e00841b4f3417962b657066403',
     ('feature_engine.py', 'FeatureEngine._feature_change'): '5d0686937c2a8b6d45e1d314f3b459c51fd26a516400299ba41dabd2af22d180',
     ('feature_engine.py', 'FeatureEngine.ask'): '54d86e79629def67dffe4fc3c94f5cc09bd28d9309916da1c78f21b87768f968',
     ('feature_engine.py', 'FeatureEngine.boost'): '1330944cf23f58d07a3ab013fac411a3c351685ea35c76e722a9aee0bd2e6170',
@@ -604,7 +702,7 @@ ATTRIBUTE_CONTEXTS = {
     ('feature_engine.py', 'FeatureEngine.pin_chart'): '000114661bc0b1069846e0492237457c12422218d723c0bee6f14c87fec39174',
     ('feature_engine.py', 'FeatureEngine.request_budget'): 'c26b85f7722ab365a40b2f0d663dd34a3596b591cf8c02db18bf3649e7e6bcfd',
     ('feature_engine.py', 'FeatureEngine.revoke_boost'): 'a04f79e206de2415dae599719e4c405d4fc0740cee13339ad3dd7bec2cad7c4c',
-    ('feature_screens.py', 'ActionForm.__init__'): 'faa0efddad05609059f30db9fb5800a0593aa414ae085ccc2ef97cf8e26018bb',
+    ('feature_screens.py', 'ActionForm.__init__'): 'a839a5f3d955014051dd450f48ae4b5901ece173d848d4a99b077db1979889ff',
     ('feature_screens.py', 'ActionForm.compose'): 'cfdf3703927613ca2e76faba1e624ad54fe189f43471b27a28926067b5010996',
     ('group_screens.py', 'GroupPicker.__init__'): '310cb3961ed8fb1379ff8cbe564803d3599bfb8cc9f1afd28c1b19e1fca9e4f0',
     ('principal_ui.py', 'PrincipalUI._bind_engine'): 'e7f6c85caf4d9105aa9fc9f32411883fef36773cd426b30bd04673da4aac7bcf',
@@ -624,7 +722,6 @@ ATTRIBUTE_CONTEXTS = {
     ('progressive.py', 'ProgressiveRefresh.load_overview'): 'a35f1a7d07aec20d059ffe0ddb0c67c3b1804e29bbdc285afabc8a204fdbf235',
     ('progressive.py', 'ProgressiveRefresh.load_overview.fetch'): '14b8321bbbf02ebd4bc6e1e296a07c4725f40c4641051cb5350ba7b648195366',
     ('progressive.py', 'ProgressiveRefresh.publish_tab'): 'f210a2a794ad60753a042656f1993310c040b4594aaad203e0cf65ddf556ca93',
-    ('publication_output.py', 'profile_path'): '11df8e1d3a3dbbbfd6ae5b990d0425d24d2115ab5749043f23c5a0cbccf49567',
     ('publication_output.py', 'prompt_number'): '00a172a88ca4a0cc53ea83e07bf62929275633cf8810da9f8b8c18a215f3ccce',
     ('publication_output.py', 'read_text'): '5cc6a57edd8b1c47d8edd88032b1a187b6ef62a362a16936d44748cc7ea72334',
     ('publication_output.py', 'terminal_output'): '1dc19be8472bf998795ed7041aa493fe3518a99d5645a030c062f6d01719f0f9',
@@ -660,15 +757,15 @@ ATTRIBUTE_CONTEXTS = {
     ('screens.py', 'ChangeScreen.compose'): '529e672af713d7b991b4640c048243fa07cf347540bda62079097192531aa72e',
     ('screens.py', 'DetailScreen.__init__'): 'dd31bf5cb795be5af1c6abba7ced5276e8bd278a80e03c65025473a277b80543',
     ('screens.py', 'DetailScreen.compose'): 'c89c146c6eaaf6df8a9e5e5992123a72478c13ffec37407411084e427dd7913c',
-    ('tui.py', 'FinOpsApp.__init__'): 'cfa31d1df8fe62e203f08a1cf653e83050ea57f65b4cbc3d6082ace8e5023047',
-    ('tui.py', 'FinOpsApp._render_tab'): '66be26fba63404cf0ce81a31d94cba4bc5986d97d121a11fd4adef0d813e1243',
+    ('tui.py', 'FinOpsApp.__init__'): 'aac2027c260c54f403aa0321ad11c3b38accd77b0af8edf27069f8893f156396',
+    ('tui.py', 'FinOpsApp._render_tab'): '60b28c3dbafc5a5c82c977964c82917711229265ab2919b84df96c34ef9f860e',
     ('tui.py', 'FinOpsApp.exact_on_focus'): 'fdf137f632ecb8766aa376c600e118cb6e87fa6ea5b3efe859bda17ae80faf1e',
     ('tui.py', 'FinOpsApp.get_line_filters'): '2394c7bf33b07584c30c1f1dfa0b10d9ea280f39fc2fdeca44ecb8d8f55fa31b',
     ('tui.py', 'FinOpsApp.open_detail'): '89b0f5eecb96737f7641a70282bae37c6a11b0093f95b7b3bb74e89848548139',
     ('tui.py', 'FinOpsApp.render_tab'): '5448838e8112922ee13f18c049ccb23b1db127e192ad21e4b2163525f843e301',
     ('tui.py', 'FinOpsApp.selected'): 'aaabeb7380b0aa463cad5ae649b3cb1639a7ff8d358cef8555e4ede5a75aab75',
     ('tui.py', 'FinOpsApp.switched'): '4281adb59bec8d2f19a73bf4bab44f08f2dba575f4905add86447ca82eb880cc',
-    ('tui.py', 'FinOpsApp.update_access'): 'c8a8240c02605aaa4683d3f73a2f6aa39f7bcbc26971857421107e8115f2365b',
+    ('tui.py', 'FinOpsApp.update_access'): 'add588ab82d0da215820a1f1e80d55c6a8c253517b274c25017e48cc4e1c9bdc',
     ('tui.py', 'FinOpsApp.update_brand'): '9806807c341ff6d1aee402ae1caad4c7da676c8433a8e39b90d304d4421f0b8a',
     ('ui_features.py', 'FeatureUI._show_read_detail'): 'aef63453cc8cd45ef32a54395e705da868fc900617262793672c5fa7ec57c974',
     ('ui_features.py', 'FeatureUI.action_assistant_configure.load'): '15fcdb739620f6af70a1129e762b6417abf9df9ca38a18dd352de577b5112d7c',
@@ -680,7 +777,7 @@ ATTRIBUTE_CONTEXTS = {
     ('ui_features.py', 'FeatureUI.action_notifications'): '970f5d13a035708e43ca5bbde3ba52ebe6732e659f3cfce65f6c966d5f02e011',
     ('ui_features.py', 'FeatureUI.action_pin_chart'): '42661d673f908a16707f49a6a1505a32e09d4b9771c72d9d55d75f23527b7cc3',
     ('ui_features.py', 'FeatureUI.action_show_boosts'): '77b980e224cc2108aad80a340dbca76b77bf34e60b95df22e82e9356912ab1df',
-    ('ui_features.py', 'FeatureUI.activate_profile'): '422c0f549dfa763b7353dba7040387abd327b82712e0b3bb4d7f25dd6dc4df0f',
+    ('ui_features.py', 'FeatureUI.activate_profile'): '9350254e40174c17e418b42607c4a37bc6ecc341aff8ddb15091a52e010381b7',
     ('ui_features.py', 'FeatureUI.ask_current'): 'f34c31b92df73ffd20bfeb5e53aa3c19906ee4bcd9fa246816b63ac24c357d58',
     ('ui_features.py', 'FeatureUI.push_cached_form'): 'e1654e7510bf051892756abcdcab3564f6f547b34b28aaa3b8c905f46123c2ca',
     ('ui_features.py', 'FeatureUI.refresh_features'): '948b1a3795aa207880802188bab8ba5db8f19a5289f8af08980c78b256665138',

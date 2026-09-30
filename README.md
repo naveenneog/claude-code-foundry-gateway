@@ -49,7 +49,7 @@ Start with [Setup](docs/SETUP.md) for deployment or
 | Make new Foundry deployments available to tiers and clients | [Models](docs/MODELS.md) — `-Action Change -Change models`, reviewed lists, prices and tier-specific workstation records |
 | Own monthly chargeback or the FinOps process | [FinOps](docs/FINOPS.md) — close a month, investigate gaps and set allocations |
 | Diagnose an admin deployment or developer workstation | [Diagnostics](docs/DIAGNOSE.md) — read-only checks, exact fixes and redacted support bundles |
-| Use a terminal FinOps console or automate reports | [AUM (Azure Usage Management)](docs/CLI-FINOPS.md) — terminal views and scriptable commands |
+| Use a terminal FinOps console or automate reports | [AUM (Azure Usage Management)](docs/AUM.md#install) — installation, connection setup, terminal actions and scriptable commands |
 | Deploy clients and managed settings with MDM | [Fleet deployment with Intune, Jamf or Group Policy](docs/MDM.md) — profiles, apps, assignments, verification and rollback |
 | Manage a business unit or view its usage | [Turnstile: viewers and managers](docs/TURNSTILE.md#viewers-and-managers) — assigned roles and sign-in without web consent |
 | Review security, identities or revocation | [Authentication](docs/AUTHENTICATION.md), then [Network](docs/NETWORK.md) |
@@ -226,8 +226,10 @@ is the reporting view, not a reconciled invoice.
 
 [Business-unit commands](docs/BUSINESS-UNITS.md) manage allocations;
 [Turnstile](docs/TURNSTILE.md) optionally provides a browser console and delegated
-management. [AUM (Azure Usage Management)](docs/CLI-FINOPS.md) provides the
-terminal FinOps console and scriptable commands over Turnstile or the gateway.
+management. [AUM (Azure Usage Management)](docs/AUM.md#install) provides the
+terminal FinOps console and scriptable commands over Direct, the AUM service
+or Turnstile. Its guide starts with [installation](docs/AUM.md#install) and
+[connection setup](docs/AUM.md#connect), followed by people, budgets and reports.
 Its [progressive reads and bounded readiness](docs/AUM.md#read-latency-and-progress)
 show arriving data and name an Azure-verified stopped Turnstile database without
 starting it automatically.

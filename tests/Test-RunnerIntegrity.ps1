@@ -169,11 +169,12 @@ try {
     Assert 'a passing full offline registration passes' ($r.Exit -eq 0) "exit $($r.Exit): $($r.Output.Substring(0, [math]::Min(350, $r.Output.Length)))"
     Assert 'every registered check is summarized once in registration order' (Has-CompleteSummary $r $registered)
     Assert 'every non-skipped check runs in its own process' ($r.Ran.Count -eq $expectedRan -and @($r.Ran.Proc | Sort-Object -Unique).Count -eq $expectedRan) "$($r.Ran.Count) of $expectedRan"
-    $expectedSkips = @('AUM service - authority, API and mutations', 'AUM - commands, dashboard and pilot')
+    $expectedSkips = @('AUM service - authority, API and mutations') +
+        @(0..3 | ForEach-Object { "AUM - commands, dashboard and pilot [$_/4]" })
     Assert 'both optional Python environments are explicit counted SKIPs' (
         $skipped.Count -eq $expectedSkips.Count -and
         ($skipped.Name -join '|') -ceq ($expectedSkips -join '|') -and
-        $r.Output -match '2 check\(s\) skipped')
+        $r.Output -match "\b$($expectedSkips.Count) check\(s\) skipped")
     Assert 'each result has a duration, including skips' (@($r.Timings | Where-Object { $null -eq $_.Seconds -or $_.Seconds -lt 0 }).Count -eq 0)
     Assert 'the five slowest checks and timings path remain visible' ($r.Output -match '(?s)slowest:\s*(?:[^\r\n]+\r?\n\s*){5}timings:')
     Assert 'several independent checks really overlap' ((Get-MaxOverlap $r.Ran) -gt 1)

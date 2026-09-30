@@ -1,43 +1,315 @@
 ---
-title: Use AUM - Azure Usage Management
+title: AUM - Azure Usage Management
 description: Monitor live Claude gateway usage, budgets and governance in a keyboard-first Azure terminal dashboard.
 ms.topic: how-to
 ---
 
-# Use AUM - Azure Usage Management
+# AUM - Azure Usage Management
 
 AUM is an independent FinOps tool for an existing Claude gateway. It provides a
 terminal dashboard and scriptable commands over one engine. **Turnstile is not a
 prerequisite.** Without an explicitly configured HTTP backend, AUM defaults to
 **Direct**: Azure CLI, the gateway's named values, Log Analytics and the repository's
-PowerShell writers. Run `aum` for the console, or add a noun and verb for automation.
+PowerShell writers. `aum` opens the console; a noun and verb select a scriptable
+operation.
 
 An optional **AUM service** adds its own Entra roles and server-enforced scoped
 management, without Turnstile. Administrators can instead choose Turnstile as
 their web FinOps tool; AUM can optionally use its API as another keyboard-facing
 client. Example data is an explicit test backend, never the production default.
 
-## Choose the FinOps tool and authority
+## Install
+
+AUM requires Python 3.12 or later and Azure CLI. Direct also requires
+PowerShell 7 and this repository. The
+[package manifest](../cli/finops/pyproject.toml) defines the Python requirement;
+the [installer](../scripts/Install-ClaudeAum.ps1) reads that requirement rather
+than pinning one interpreter.
+
+### Windows
+
+The repository installer creates or reuses `.venv-finops`, installs AUM,
+checks its version and Azure CLI sign-in, and starts read-only connection
+discovery. It lists compatible installed interpreters (`py -0p`, then PATH)
+when `-Python` is omitted. No Azure resource is created or changed.
+
+```powershell
+.\scripts\Install-ClaudeAum.ps1
+```
+
+`-WhatIf` prints the installation plan without writing. `-NoConfigure` stops
+after the installation check, and `-WithTests` includes test dependencies.
+The equivalent manual installation and sign-in commands are:
+
+```powershell
+python -m venv .venv-finops
+.\.venv-finops\Scripts\python.exe -m pip install -e 'cli/finops[test]'
+.\.venv-finops\Scripts\Activate.ps1
+az login --tenant <your-tenant-id>
+aum --version
+aum --help
+```
+
+Without activation, the executable is `.\.venv-finops\Scripts\aum.exe`.
+The signed-in Azure CLI account supplies Direct credentials and the existing
+app tokens for HTTP backends
+([credential implementation](../cli/finops/src/claude_finops/config.py)).
+
+### macOS and Linux
+
+The Python package uses the same engine and command entry point on macOS and
+Linux. The equivalent shell commands from the repository root are:
+
+```bash
+python3 -m venv .venv-finops
+. .venv-finops/bin/activate
+python -m pip install -e cli/finops
+aum --version
+az login --tenant <your-tenant-id>
+```
+
+`--plain` and `--screen-reader` select linear output without the terminal UI.
+The [prerequisites](#prerequisites) describe backend-specific roles. `pipx`
+is not required.
+
+## Connect
+
+Each gateway has one budget/governance write authority. P80 does not change the authority
+rules in [ADR-0026](adr/0026-usd-budget-reconciliation.md) or the publication
+rules in [ADR-0035](adr/0035-aum-bounded-readiness-and-progressive-reads.md).
+
+| Backend | Token budgets | USD budgets | Add a person | Chargeback | Managers | Cost and where it runs |
+|---|---|---|---|---|---|---|
+| Direct | Yes, through repository scripts and gateway named values | Yes when the gateway owns USD budgets | Yes, with the signed-in admin's delegated Graph rights | Yes, local CSV; reconciled P50 report when installed | No unit-scoped boundary; Azure RBAC is administrative | No AUM server. Runs on the operator workstation; existing gateway and Log Analytics costs remain |
+| AUM service | Yes, through the service's revisioned API | Yes when advertised by capabilities | Unavailable; this backend has no membership writer | Yes; service-scoped data plus local report generation | Yes, through `AUM.Manager` and manager groups | Azure Functions and Storage, plus selected monitoring/network resources |
+| Turnstile | Yes, through Turnstile's API and apply job | Unavailable; no USD writer is added in P80 | Directory membership remains the AUM/script/portal path | Yes for authorized Turnstile data | Yes, through Turnstile roles and manager groups | Existing Turnstile App Service, PostgreSQL and jobs; the AUM client adds no server |
+| Example | Demonstration data only | Demonstration data only when tests enable it | No production directory | Demonstration CSV | No production role | Local tests only |
+
+The connection commands are:
+
+```powershell
+aum configure --backend direct --save
+aum configure --backend aum-service --url https://<function-app>.azurewebsites.net --scope api://<app-id>/AUM.Access --save
+aum configure --backend turnstile --url https://<turnstile-app>.azurewebsites.net --scope api://<app-id>/Turnstile.Manage --save
+```
+
+In the terminal, **Settings > Change connection** opens one form for the backend
+and its address fields, without requiring an existing JSON file. The screen
+names the current backend as `via Direct`, `via AUM service` or `via Turnstile`.
+A preview shows the current and proposed profile. **Save and connect** keeps
+an exact-byte timestamped backup, replaces the selected local profile atomically
+and verifies both `whoami` and the saved profile revision before adopting the
+connection or dismissing the form. A failed verification
+keeps the prior live connection and attempts to restore its file; with no prior
+profile, recovery removes the new file. A failed restore remains an error in
+the form, with the backup path and steps to release the file lock and restore
+the old file or remove an unverified first profile. The previous identity,
+configuration and cached UI remain active. Recovery feedback receives keyboard
+focus; Up/Down, Page Up/Page Down and Home/End scroll its complete wrapped text
+at 80x24. The form stays open until the operator closes it or a later connection
+succeeds.
+
+The reviewed candidate bytes and prior revision remain unchanged through
+Apply. AUM writers share an OS-held lock on a sibling `.config.json.lock`
+file for comparison, backup, replacement and verification. The lock is released
+when its handle closes; the empty sibling file remains. Another active AUM
+writer is refused rather than retried. Changed address-field names and both
+revisions appear in a conflict message; a detected newer file is not overwritten.
+The expected saved revision comes from the written bytes, so a post-save read
+failure stays inside rollback protection. This lock coordinates AUM writers,
+not external editors that ignore it
+([ADR-0038](adr/0038-aum-actions-and-connection.md#council-round-1-amendment)).
+The normal discovery-preview estimate is 3-30 s; identity verification shows
+a 3-10 s estimate. These are progress estimates, not availability guarantees.
+
+An attended `aum configure --save` asks before replacing a profile and keeps
+the same backup. Unattended replacement requires `--force`. Explicit HTTP
+URL/scope pairs do not require Azure resource discovery. Profiles contain
+addresses, not tokens. `--config`, `AUM_CONFIG` and the legacy fallbacks are
+described in [Configure a backend](#configure-a-backend).
+
+## First run and screen tour
+
+The terminal entry point is:
+
+```powershell
+aum
+```
+
+The header shows the month, backend and role, for example
+`2026-09 | via Turnstile | owner | admin@contoso.com`. `1` through `8` select
+the main views; `0` opens Settings. `?` opens the current key map. The detailed screen tour is
+kept in [Tour the live terminal](#tour-the-live-terminal), including Overview,
+Budgets, People, Governance, Usage, Trends, Requests, Anomalies and Settings.
+Those live images are historical measurements with their original provenance.
+Current P80 layout examples use explicit Example data, not a live deployment:
+[People, 80x24](../cli/finops/tests/snapshots/svg/people-80x24.svg),
+[Budgets, 160x48](../cli/finops/tests/snapshots/svg/budgets-160x48.svg) and
+[Settings, 80x24](../cli/finops/tests/snapshots/svg/settings-80x24.svg).
+The [snapshot manifest](../cli/finops/tests/snapshots/manifest.json) records
+source and output hashes for all 24 screen images. Text hashes normalize
+Windows CRLF and Unix LF line endings to the same UTF-8/LF representation.
+
+## How-to
+
+### Add a person to a team
+
+In **People**, the team selector and email/UPN search identify the intended
+scope. **Add person to team** (`g`) is available to owners through Direct and
+Turnstile-backed gateway configurations. If the search has no result and the
+caller has that action,
+the empty state offers `Add <email> to <team>`. The form searches Entra, loads
+the team/unit catalog on demand, previews tier and group membership changes, and
+then applies only after confirmation. The selected email and team are filled
+in the add flow. No prior visit to Budgets is required. Non-owners see a plain
+explanation rather than an add offer.
+The AUM-service backend does not support this membership flow:
+[`developer_actions.py`](../cli/finops/src/claude_finops/developer_actions.py)
+accepts only Direct and Turnstile-backed gateway configurations. People and
+Budgets disable **Add person to team** with that explanation on AUM service;
+neither its shortcut nor its command-palette entry opens a membership writer.
+
+CLI:
+
+```powershell
+aum developer find amara@contoso.com
+aum developer add amara@contoso.com --tier standard --unit sales-emea --what-if
+aum developer add amara@contoso.com --tier standard --unit sales-emea --apply
+```
+
+### Set a person's budget
+
+In **People**, **Set budget** (`e`) opens a preview for the selected writable
+person. With no selected person, the button is disabled and its hint explains
+the required selection. A person with no row cannot be edited; membership and
+the selected team/month determine which observed rows are available.
+
+CLI:
+
+```powershell
+aum budget set user amara@contoso.com 100k --team sales-emea --what-if
+aum budget set user amara@contoso.com 100k --team sales-emea --apply
+```
+
+### Set a team or unit budget
+
+In **Budgets**, **Set budget** (`e`) opens the selected unit or team.
+The preview checks parent headroom and current server state.
+
+CLI:
+
+```powershell
+aum budget set unit engineering 30M --what-if
+aum budget set team sales-emea 8M --apply
+```
+
+### Set a USD budget
+
+**Set USD budget** (`u`) is available where the backend advertises
+`usd_budgets.write`. USD is the default budget unit on that form. If the backend
+does not advertise the writer, People and Budgets show a disabled USD action
+and an explanation. Direct and AUM service USD writes also depend on the
+gateway's recorded authority and the caller's permissions. A connection change
+does not change that authority. Ordinary token-budget forms keep their existing
+default; USD is not made the default everywhere.
+
+CLI:
+
+```powershell
+aum usd set unit engineering 250.00 --what-if
+aum usd set team sales-emea 75.00 --apply
+```
+
+### Create a chargeback report
+
+**Chargeback report** (`x`) in People or Budgets writes the
+complete chargeback CSV for the current month to a default local report folder
+and shows its full path without another Export click. The folder is
+`Documents/AUM` under the Windows home directory, or `~/aum-reports` on macOS
+and Linux. Existing files remain unchanged; collisions get numbered names,
+including a collision during exclusive file creation. **Export complete
+chargeback CSV** in the command palette retains the optional custom filename.
+
+When the P50 generator is installed, **Generate reconciled chargeback report**
+opens its existing preview-first form for authorized owners. This is separate
+from the CSV action and does not send email by default. The complete-scope read
+shows a 3-30 s progress estimate; the [dated report measurement](#command-reference)
+is not a runtime promise for another deployment.
+
+CLI:
+
+```powershell
+aum report chargeback --month 2026-09 --output "$HOME\Documents\AUM"
+aum report generate --month 2026-09 --output finops-reports --formats CSV,HTML --what-if
+```
+
+### Change the connection
+
+**Settings > Change connection** displays the current `via ...` connection and
+the replacement fields. Its preview, backup, verification and rollback are
+described in [Connect](#connect).
+
+CLI:
+
+```powershell
+aum configure --backend direct --save
+aum configure --backend turnstile --url https://<turnstile-app>.azurewebsites.net --scope api://<app-id>/Turnstile.Manage --save
+```
+
+### Remove a person
+
+The developer removal command previews Entra membership removal and requires
+confirmation. The terminal's **Remove selected budget or scope** action removes
+the selected budget or catalog scope, not the person's Entra membership.
+
+CLI:
+
+```powershell
+aum developer remove amara@contoso.com --what-if
+aum developer remove amara@contoso.com --apply --confirm amara@contoso.com
+```
+
+### Find someone
+
+In **People**, the selected team and **Search people** field define the query;
+Enter submits it. `/` opens a bounded lookup across scopes, people, models and
+requests.
+
+CLI:
+
+```powershell
+aum people find amara@contoso.com --team sales-emea
+aum lookup amara@contoso.com --team sales-emea
+```
+
+## Reference
+
+Command syntax is in [Command reference](#command-reference). Backend-specific
+details remain in [Direct gateway access](#direct-gateway-access),
+[Optional independent AUM service](#optional-independent-aum-service) and
+[Optional workflows by selected authority](#optional-workflows-by-selected-authority).
+
+### Choose the FinOps tool and authority
 
 | Choice | What it offers | Who signs in | Additional Azure resources and cost |
 |---|---|---|---|
 | **AUM Direct** | Terminal/commands, gateway budgets and modes, observed-people search, hourly token facts, daily statistical cost findings, reports; no FinOps server | Azure administrators with gateway permissions and workspace query access | No additional server infrastructure. Existing API Management, logging and applicable workspace-query charges continue |
 | **AUM + AUM service** | Independent scoped authority, current gateway budgets, audited conditional changes, native requests/approvals, expiring boosts and warning facts | Its own `AUM.Admin`, `AUM.Viewer`, `AUM.Manager` roles; manager groups resolved by the service | Functions and Storage, plus chosen monitoring/network features. Region, execution/storage volume, always-ready instances, private endpoints and DNS determine cost |
-| **Turnstile** | Web FinOps console, richer charts, assistant and optional model-gateway pages | Its own Turnstile roles and server-resolved manager scope | App Service, PostgreSQL and background-job resources. Its standard deployer may create another gateway; do not accidentally pay for or overwrite a second one |
+| **Turnstile** | Web FinOps console, charts, assistant and optional model-gateway pages | Its own Turnstile roles and server-resolved manager scope | App Service, PostgreSQL and background-job resources. Its standard deployer may create another gateway with separate cost and configuration |
 | **Turnstile + AUM client** | The same Turnstile authority with a terminal/automation face | Existing Turnstile role through the Azure CLI token | The CLI adds no server infrastructure; Turnstile costs remain. No AUM service is required |
 
 These are deployment choices, not permission upgrades performed by AUM.
-Use one write authority for a gateway. Direct and the AUM service respect an
+A gateway has one write authority. Direct and the AUM service respect an
 existing Turnstile ownership setting rather than silently bypassing it.
 
 > [!IMPORTANT]
 > Direct is an **administrative Azure RBAC connection, not a unit-scoped boundary**.
 > Azure roles do not restrict a caller to some business units inside one gateway.
-> To add scoped managers or viewers, choose the AUM service or Turnstile.
+> Scoped managers and viewers require the AUM service or Turnstile.
 > Settings states this explicitly. An AUM service user with an app role does not
 > need the service managed identity's Azure permissions.
 
-## Create owned groups and register governed scopes from AUM
+### Create owned groups and register governed scopes from AUM
 
 This flow uses the signed-in administrator's existing delegated Graph access.
 AUM does not grant consent, assign directory roles or create an application
@@ -45,21 +317,21 @@ credential. New groups are ordinary, non-mail-enabled security groups. Their
 verified owner is the signed-in person; group ownership does not itself grant a
 Turnstile/AUM service app role.
 
-1. In **Governance**, open `:` and choose **Add unit or team**.
-2. Enter an Entra group-name prefix. The picker searches Graph server-side;
-   **Next page** follows its bounded continuation. Select an existing assigned
-   security group, or choose **Create new**.
-3. For a new group, enter a name and description, review the signed-in owner and
-   membership-refresh implications, and type the entire name before **Apply**.
-   Search again to select the newly created group.
-4. In the scope form, choose **Unit** or **Team**, supply a stable scope id and
-   display label, and select the parent unit for a team. Preview, then Apply.
-5. Set the unit/team monthly token budgets and choose the enforcement mode.
+1. **Governance > : > Add unit or team** opens the group picker.
+2. The picker searches Graph server-side by Entra group-name prefix;
+   **Next page** follows its bounded continuation. An existing assigned
+   security group or **Create new** supplies the group.
+3. A new group needs a name and description. Its preview names the signed-in
+   owner and membership-refresh implications; **Apply** requires the full name.
+   A subsequent search returns the newly created group.
+4. The scope form records **Unit** or **Team**, a stable scope id and display
+   label, and the parent unit for a team. Preview precedes Apply.
+5. Unit/team monthly token budgets and enforcement modes are separate settings.
    Direct verifies named values immediately; Turnstile follows the apply job;
    the AUM service requires a reason and current revision.
 6. Group membership is not effective at the gateway merely because Graph saved
-   it. Use **Refresh selected group membership** in Direct, or the selected
-   server authority's membership publication path. Preview any reassignment.
+   it. **Refresh selected group membership** in Direct, or the selected
+   server authority's publication path, publishes it. Reassignment has a preview.
 
 Equivalent AUM commands:
 
@@ -91,7 +363,7 @@ Unrelated mappings and tier entitlement remain intact. Existing assignments that
 move require explicit `--allow-reassignment`. A lookup error is not treated as an
 empty group. Projection-backed gateways must use their projection pipeline.
 
-## Add and remove developers
+### Add and remove developers
 
 Developer entitlement is ordinary Entra group membership followed by gateway
 publication. AUM uses the signed-in administrator's delegated Microsoft Graph
@@ -113,7 +385,7 @@ search uses the documented advanced-query shape: `ConsistencyLevel: eventual`
 with `$count=true` for advanced filters, and `$search` support varies by entity
 ([Graph search](https://learn.microsoft.com/graph/search-query-parameter),
 [advanced queries](https://learn.microsoft.com/graph/aad-advanced-queries),
-retrieved 2026-09-26). The terminal People command **Add developer** uses the
+retrieved 2026-09-26). The terminal People action **Add person to team** uses the
 same bounded search and refreshes as the operator types; redacted capture mode
 hides the action.
 
@@ -149,11 +421,11 @@ new requests.
 
 Manual Azure portal path:
 
-1. Open **Microsoft Entra ID > Groups > All groups**.
-2. Open the recorded tier, unit or team group.
-3. Choose **Members > Add members** or select the member and **Remove**.
-4. Publish with `Sync-ClaudeAccess.ps1` or the selected authority's publication
-   path, then verify a real gateway request.
+1. **Microsoft Entra ID > Groups > All groups** lists the directory groups.
+2. The recorded tier, unit or team group contains its member list.
+3. **Members > Add members** and the selected member's **Remove** action change membership.
+4. `Sync-ClaudeAccess.ps1` or the selected authority's publication path publishes
+   the change. A real gateway response is the enforcement evidence.
 
 CLI equivalent:
 
@@ -165,19 +437,19 @@ az ad group member add --group $standard --member-id $user
 ```
 Direct refresh refuses when Turnstile owns publication.
 
-### Manual Azure portal and Azure CLI path
+#### Manual Azure portal and Azure CLI path
 
-1. Open **Microsoft Entra ID > Groups > All groups**. Search the same prefix;
-   inspect **Group type**, **Membership type** and **Owners** before selecting.
-2. To create one, select **New group**, set **Group type** to **Security**,
-   enter **Group name** and **Group description**, and choose **Assigned**
-   membership. Under **Owners**, select the signed-in person. Select **Create**.
-3. Reopen the group, choose **Owners**, and verify the owner. In **Members**,
-   choose **Add members** and add only the intended test account.
-4. Register the group in the correct governance authority as described in the
-   manual governance steps later in this guide; do not override another authority.
-5. After cleanup, remove only the temporary member, remove the test scopes,
-   select **Delete** on each test group and verify it no longer appears.
+1. **Microsoft Entra ID > Groups > All groups** supports the same prefix search
+   and exposes **Group type**, **Membership type** and **Owners**.
+2. **New group** accepts **Group type: Security**, **Group name**, **Group
+   description**, **Assigned** membership and the signed-in person under
+   **Owners**. **Create** submits those values.
+3. The reopened group's **Owners** list verifies ownership. **Members >
+   Add members** adds the intended test account.
+4. Registration belongs to the selected governance authority, as described
+   in the manual governance reference; it does not override another authority.
+5. Cleanup removes the temporary member and test scopes, then **Delete** removes
+   each test group. An absence check verifies deletion.
 
 Native Azure CLI equivalents:
 
@@ -205,7 +477,7 @@ AUM verifies this rather than assuming the directory behavior. If ownership
 verification fails, it attempts to remove only the newly created group and reports
 any incomplete cleanup. A transport failure is never automatically retried.
 
-## Verify budget enforcement with a tiny real request
+### Verify budget enforcement with a tiny real request
 
 `aum requests probe --what-if` explains the operation without obtaining a token
 or sending a request. `--apply` sends one real request through the discovered
@@ -218,12 +490,11 @@ aum requests probe --what-if
 aum requests probe --apply --json
 ```
 
-In the terminal, choose **Probe gateway budget enforcement** in `:`, Preview,
-then Apply. To perform the same action manually, open the gateway's **APIs >
-Claude API > Test** pane only if it supports the required bearer request without
-revealing a credential. Otherwise use the direct HTTPS request below from an
-authenticated shell; the Azure portal is not a replacement for the data-plane
-request or evidence of its response headers.
+In the terminal, **: > Probe gateway budget enforcement** has Preview and Apply.
+The gateway's **APIs > Claude API > Test** pane is a manual equivalent only when
+it supports the required bearer request without revealing a credential.
+The direct HTTPS example below uses an authenticated shell; the portal itself
+is not evidence of the data-plane response or its headers.
 
 ```powershell
 $gatewayUrl = az apim show --subscription $sub -g $rg -n $apim --query gatewayUrl -o tsv
@@ -241,23 +512,24 @@ try {
 } finally { $access=$null }
 ```
 
-Never print the bearer token. Strict should refuse an exhausted test scope,
+The bearer token stays in memory and is not printed. Strict should refuse an exhausted test scope,
 allowance may report `estimated-over-budget`, and notify reports `usage-reported`
 without a scope limiter. These are delayed token counters, not precise spend
 guarantees. A mode save is not proof of effect until the actual gateway response
-confirms it. Allow for membership/policy propagation and ledger ingestion.
+confirms it. Membership/policy propagation and ledger ingestion have separate
+delays; the measured intervals are in [Timings and what they prove](#timings-and-what-they-prove).
 
 The reference gateway reports an exhausted strict unit as **HTTP 403** with
 `error.type=rate_limit_error`, `error.budget=business unit`, and the specific
-unit/team in its message. Do not confuse that data-plane quota response with
-an AUM/Turnstile API 403 scope denial. An acceptance probe must verify the body
+unit/team in its message. That data-plane quota response differs from
+an AUM/Turnstile API 403 scope denial. An acceptance probe verifies the body
 and target scope, not assume every limiter uses HTTP 429.
 
-### If the Turnstile apply identity cannot read a new group
+#### If the Turnstile apply identity cannot read a new group
 
 The background job may complete while deliberately leaving a group it cannot
-verify unapplied. A completed execution is not enough: check the actual registry
-and subsequent gateway response. With existing Azure-administrator and delegated
+verify unapplied. The actual registry and subsequent gateway response, rather
+than execution completion alone, establish publication. With existing Azure-administrator and delegated
 Graph rights, AUM offers an explicit alternative:
 
 ```powershell
@@ -280,19 +552,19 @@ The manual CLI equivalent is:
   -ResourceGroup $rg -ApimName $apim
 ```
 
-In the portal, inspect **Container Apps Jobs > the discovered apply job >
-Execution history** and its logs, then **API Management > Named values**.
+The portal evidence is in **Container Apps Jobs > the discovered apply job >
+Execution history**, its logs, and **API Management > Named values**.
 The portal has no button that lends a signed-in person's delegated Graph token
-to a managed-identity job. Use the explicit administrator path above instead
-of asking for new consent or treating an unverified group as valid.
+to a managed-identity job. The explicit administrator path above uses existing
+rights; it neither grants new consent nor treats an unverified group as valid.
 
-### Refresh a bounded usage window without waiting for the hourly schedule
+#### Refresh a bounded usage window without waiting for the hourly schedule
 
-1. In `:`, choose **Refresh recent Turnstile usage**. Enter an explicit UTC
-   start/end window of no more than two hours and Preview.
-2. Verify the discovered existing exporter job and the **usage-only** implication.
-   Apply starts one execution using its already-authorized managed identity.
-3. Inspect the execution result and then the request ids in AUM. The job definition,
+1. **: > Refresh recent Turnstile usage** accepts an explicit UTC start/end
+   window of no more than two hours and produces a preview.
+2. The preview identifies the discovered exporter job and its **usage-only**
+   operation. Apply starts one execution using its already-authorized managed identity.
+3. The execution result and request ids in AUM provide the result evidence. The job definition,
    cron schedule and governance are not changed.
 
 ```powershell
@@ -304,13 +576,14 @@ Manual portal path: **Container Apps Jobs > discovered exporter > Execution
 history** verifies the run and result. **Run now** runs the normal configured
 window. The Azure portal does not support a one-execution configuration override;
 the equivalent CLI is `az containerapp job start --yaml <reviewed-template>`.
-For a reviewed execution-only template, retain the existing image, identity,
-resources and bootstrap, and invoke only `Export-ClaudeTurnstileUsage.ps1`
+A reviewed execution-only template retains the existing image, identity,
+resources and bootstrap, and invokes only `Export-ClaudeTurnstileUsage.ps1`
 with `-From`, `-To` and `-NoCacheEvents`, never the governance scheduler.
-See [Azure's documented execution override](https://learn.microsoft.com/azure/container-apps/jobs#start-a-job-execution-on-demand).
+[Azure's execution override documentation](https://learn.microsoft.com/azure/container-apps/jobs#start-a-job-execution-on-demand)
+describes this operation.
 
-Do not change job secrets or grants. Do not repeat a start after an uncertain
-transport result until execution history proves no execution was created.
+Job secrets and grants remain unchanged. An uncertain start result requires
+an execution-history check before another start; a retry can create another execution.
 
 ```text
  _____ _____ _____
@@ -332,7 +605,7 @@ or launch a full-screen application.
 > not an Azure invoice. A successful save is not proof that every gateway control
 > is in effect; AUM reports the apply job's actual status.
 
-## Prerequisites
+### Prerequisites
 
 - Python 3.12 or later and an 80x24 or larger terminal.
 - Azure CLI signed in as a person in the relevant Microsoft Entra tenant.
@@ -352,41 +625,20 @@ For an app-role user with no Azure subscriptions, the sign-in equivalent is
 specify `tenant_id`; token acquisition then selects that tenant rather than
 requiring access to the administrator's subscription.
 
-## Install and sign in
+### Install and sign in
 
-One command, from the repository root:
-
-```powershell
-./scripts/Install-ClaudeAum.ps1
-```
-
-It reads the Python version the package requires from `cli/finops/pyproject.toml`, lists the
-interpreters on the machine that meet it (`py -0p`, then PATH) and asks which one, creates or
-reuses `.venv-finops`, installs `cli/finops`, checks `aum --version` and the Azure CLI sign-in,
-and runs `aum configure`. `-WhatIf` prints the plan only; `-NoConfigure` stops after the check;
-`-WithTests` adds the test extras. The same steps by hand:
-
-```powershell
-python -m venv .venv-finops
-.\.venv-finops\Scripts\python.exe -m pip install -e 'cli/finops[test]'
-.\.venv-finops\Scripts\Activate.ps1
-az login --tenant <your-tenant-id>
-aum --version
-aum --help
-```
-
-Without activation, use `.\.venv-finops\Scripts\aum.exe`. On Linux, activate
-`.venv-finops/bin/activate`. `pipx` is not required.
+The installer, its options and the equivalent manual commands are in
+[Install](#install).
 
 `claude-finops` remains an alias for one release and emits a deprecation notice
 on stderr. The package distribution is `azure-usage-management`; the internal
 `cli/finops`, `claude_finops` and `.venv-finops` names are intentionally retained
 to avoid disrupting imports, existing configurations and the repository test runner.
 
-## Configure a backend
+### Configure a backend
 
-Use discovery instead of guessing a deployment name. Choose one backend; use
-different `--config` paths if you want to keep more than one profile:
+Discovery lists real deployment names. Separate `--config` paths keep separate
+backend profiles:
 
 ```powershell
 aum configure
@@ -402,20 +654,21 @@ gateways, API Management instances and workspaces. It prefers the current
 subscription, the deployment recorded by `Get-ClaudeGatewayTarget.ps1`, and the
 workspace referenced by the gateway's actual diagnostic/logger. Parameters
 make the same choices reproducible. It never changes the global Azure CLI
-account. `--what-if` never writes even a local profile; `--force` is required
-to replace an existing profile.
+account. `--what-if` never writes even a local profile. An attended replacement
+asks for confirmation and keeps a timestamped backup; unattended replacement
+requires `--force`.
 
 For `aum-service`, it discovers Function apps tagged `component=aum-service`.
 It reads only four nonsecret address/identity settings, then follows that
-service's **actual gateway**, which need not be the old Turnstile target. Use
-`--service-app <listed-name>` to select among several apps non-interactively.
+service's **actual gateway**, which need not be the old Turnstile target.
+`--service-app <listed-name>` selects among several apps non-interactively.
 Explicitly mismatched gateway parameters are refused, not silently ignored.
 
 ![Live Azure discovery with names and ids redacted.](images/aum/direct-configure-110x60-after.svg)
 
 The wizard writes `%USERPROFILE%\.aum\config.json` (`~/.aum/config.json` on Linux).
-If writing a profile by hand, use your discovered values, not these illustrative
-Contoso names or zero ids:
+The JSON fields below illustrate the format; deployment-specific names and ids
+come from discovery rather than these Contoso placeholders:
 
 ```json
 {
@@ -428,7 +681,7 @@ Contoso names or zero ids:
 }
 ```
 
-Select another profile with `--config .\contoso-aum.json` or `AUM_CONFIG`.
+`--config .\contoso-aum.json` or `AUM_CONFIG` selects another profile.
 `CLAUDE_FINOPS_CONFIG` and `~/.claude-finops/config.json` remain fallbacks.
 Command-line options take precedence. Config stores addresses, never tokens.
 
@@ -437,15 +690,15 @@ aum whoami --backend turnstile --url https://api-turnstile.contoso.com `
   --scope api://00000000-0000-0000-0000-000000000000/Turnstile.Manage
 ```
 
-Alternatively, configure `resource_group` and `apim_name`; an administrator can
+With `resource_group` and `apim_name`, an administrator can
 discover URL and scope from the gateway's `turnstile-integration` named value.
 
-AUM obtains a bearer token in memory with Azure CLI. Read authentication can
+AUM obtains a bearer token in memory with Azure CLI. Authentication for reads can
 refresh once; a write is never automatically repeated. Settings offers an explicit
 sign-out preview; `az logout` is the equivalent outside AUM. Both affect the shared
 Azure CLI session, not only AUM.
 
-### Read latency and progress
+#### Read latency and progress
 
 Direct reuses resource tokens for a verified principal and Azure CLI session
 until two minutes before known expiry. Opaque tokens have a five-minute reuse
@@ -565,7 +818,7 @@ provenance; the correction round changed no database state.
 
 ![Live Direct Overview after the current read completes.](guide/aum-62-direct-ready.png)
 
-### Turnstile database stopped
+#### Turnstile database stopped
 
 Turnstile's `/health` is a liveness check and can return 200 while its database is
 stopped. AUM bounds the authenticated identity request instead. On a timeout or
@@ -598,7 +851,7 @@ not by the client. That start does not change the external automation in **U32**
 [Troubleshooting](TROUBLESHOOTING.md#turnstile-database-stopped) distinguishes this
 condition from the browser's tenant-consent failure.
 
-### Direct gateway access
+#### Direct gateway access
 
 ```json
 {
@@ -611,8 +864,8 @@ condition from the browser's tenant-consent failure.
 ```
 
 `workspace` is the Log Analytics Workspace ID, not an ARM resource id.
-Publish the repository's `ClaudeCost` function with
-`scripts/Publish-ClaudeQueries.ps1` first. It contains the generated price book
+The repository's `ClaudeCost` function, published by
+`scripts/Publish-ClaudeQueries.ps1`, contains the generated price book
 and membership map. Request detail reuses `analytics/chargeback-ledger.kql`.
 
 The existing `scripts/Invoke-ClaudeFinOps.ps1` bridge keeps its filename for
@@ -642,7 +895,7 @@ Direct mode differs from Turnstile:
 - New scopes have no monthly budget until one is assigned. Names come from
   their Entra groups; direct mode is not a delegated-manager security boundary.
 
-### Standalone daily person budgets and modes
+#### Standalone daily person budgets and modes
 
 ```powershell
 aum people find dev --team <observed-team-id> --backend direct --limit 50
@@ -663,14 +916,15 @@ Direct governance verifies control-plane state. Gateway propagation can lag,
 so read-back is not claimed as a measured runtime counter result. No separate
 Turnstile apply job is required.
 
-For request-time acceptance evidence, choose **Usage: request-time attribution**
-in `:` or run `aum usage show --basis ledger --dimension department`. This
+**: > Usage: request-time attribution** and
+`aum usage show --basis ledger --dimension department` provide request-time
+acceptance evidence. This
 reads the team stamped on each request rather than substituting a possibly older
 published cost-function membership map. Cost/cache remain unknown on this basis.
 **Usage: current priced membership** returns to the existing priced workspace
 view; the two bases answer different questions and are labelled separately.
 
-### Dollar budgets in AUM
+#### Dollar budgets in AUM
 
 Dollar budgets are separate from token budgets. They use the gateway's P59 USD
 definition and reconciled-state named values, price every observed category with
@@ -751,20 +1005,20 @@ az apim nv show -g $rg --service-name $apim --named-value-id usd-budget-state `
 ```
 
 The named values are base64-encoded ASCII JSON so policy literals remain safe.
-Edit them by script or AUM, not by hand. If Turnstile owns budgets or governance,
+The shared script or AUM performs encoding and validation. If Turnstile owns budgets or governance,
 the shared authority guard refuses Direct dollar writes and reconciliation.
 
-### Direct anomaly method and accounting scope
+#### Direct anomaly method and accounting scope
 
 `aum anomalies list --backend direct` runs
 [`series_decompose_anomalies()`](https://learn.microsoft.com/kusto/query/series-decompose-anomalies-function)
 over daily estimated cost by unit and team:
 
-1. Read the selected period from published `ClaudeCost`.
-2. Exclude the unfinished UTC day and series with any unpriced facts.
-3. Require at least 14 active priced days, then build one-day bins.
-4. Use residual threshold **3**, weekly seasonality **7**, and a linear trend.
-5. Return bounded positive/negative candidates with the observed cost, baseline,
+1. The source is the selected period from published `ClaudeCost`.
+2. The unfinished UTC day and series with unpriced facts are excluded.
+3. At least 14 active priced days are required; bins cover one day.
+4. The residual threshold is **3**, with weekly seasonality **7** and a linear trend.
+5. Bounded positive/negative candidates contain the observed cost, baseline,
    score and date; absolute score 6 or greater is labelled critical.
 
 These are statistical candidates, not confirmed incidents. Missing days are
@@ -773,12 +1027,12 @@ unpriced series are excluded; no returned findings is **not** an all-clear.
 
 Request-level Direct facts are constrained to the discovered gateway's resource
 id. Priced daily facts come from the **published workspace function** and its
-current membership/price book. In a shared workspace, validate that function's
-source before treating its cost as one gateway's cost. The dashboard labels
+current membership/price book. Its source determines whether a shared workspace
+figure represents one gateway. The dashboard labels
 **Workspace usage | selected gateway budgets** to keep those bases separate.
 Unpriced aggregate cost and per-request cache remain unknown.
 
-### Optional independent AUM service
+#### Optional independent AUM service
 
 An administrator can discover the existing service:
 
@@ -831,9 +1085,9 @@ With the AUM service, **All authorized observed people** searches its ledger eve
 when the gateway catalog is empty. Unparented observations are readable, not
 automatically writable. The service applies scope on every request and page.
 
-### Live independent-backend evidence
+#### Live independent-backend evidence
 
-All images below are **live**, display-redacted and recorded in the same
+All images below are historical **live**, display-redacted captures recorded in the same
 [provenance manifest](images/aum/manifest.json). Empty results are not seeded
 with examples. The service target differs from the reference Direct gateway;
 their totals are not presented as interchangeable.
@@ -864,15 +1118,17 @@ the native service returned one observed person despite an empty catalog.
 No remote writes were performed. Direct anomaly output contained no candidates;
 pricing/coverage exclusions mean this is not a health or security verdict.
 
-## Tour the live terminal
+### Tour the live terminal
 
-The images below are captured from **live backends with display redaction on**.
+The images below are historical captures from **live backends with display redaction on**.
 Their [manifest](images/aum/manifest.json) records backend, UTC capture time,
-source commit, dimensions and redaction state. Example renders are kept beside
-the snapshot tests, not presented as live documentation. The recaptured Direct
+source commit, dimensions and redaction state. They preserve the measured
+layouts rather than claiming to show the P80 controls. Current Example renders
+are linked in [First run and screen tour](#first-run-and-screen-tour) and are
+not live evidence. The recaptured Direct
 Overview and Budgets images show the compact ASCII-art header at 80x24 and 160x48.
 
-### Overview
+#### Overview
 
 The KPI strip separates monthly usage from allocated-scope budget use. Daily
 token and estimated-cost charts share the same time window. Forecast comes from
@@ -889,42 +1145,42 @@ timestamp and fetch timestamp are distinct: fetching does not eliminate ledger l
 [Wide Overview](images/aum/turnstile-overview-160x48-after.svg) ·
 [Before the redesign, live and redacted](images/aum/turnstile-overview-80x24-before.svg)
 
-### Budgets
+#### Budgets
 
-Read the unit/team hierarchy with used tokens, budget, remaining usage and
+The unit/team hierarchy shows used tokens, budget, remaining usage and
 unallocated parent headroom. These are different quantities. The mode badge
 shows `STRICT`, `ALLOW +N%` or `NOTIFY` from the catalog's `enforcement` and
 `allowance_percent` attributes; absent enforcement means strict.
 
 ![Live redacted budget hierarchy.](images/aum/turnstile-budgets-80x24-after.svg)
 
-### People
+#### People
 
-Choose a team and search on the server, 50 rows at a time. Parent headroom uses
+People searches the selected team on the server, 50 rows at a time. Parent headroom uses
 the complete server allocation total, never just the visible page.
 
 ![Live redacted People view.](images/aum/turnstile-people-80x24-after.svg)
 
-### Governance
+#### Governance
 
-Read units, teams, member and manager groups, enforcement badges, tiers and apply
-status. Owners can edit with `e` or choose add/remove/apply in `:` command mode.
+Governance shows units, teams, member and manager groups, enforcement badges,
+tiers and apply status. Owners can edit with `e` or choose add/remove/apply in `:` command mode.
 Owners choose **Set budget enforcement mode** in `:` to preview strict, allowance
 (1–100 percent) or notify. Direct uses the repository's `Set-ClaudeBusinessUnit.ps1`
 with `-Mode` and `-AllowancePercent`; it never duplicates the registry serializer.
 
 ![Live redacted Governance view.](images/aum/turnstile-governance-80x24-after.svg)
 
-### Usage
+#### Usage
 
-Pivot between units, teams, people, models, surfaces and tiers. Rankings are explicitly
+Usage pivots between units, teams, people, models, surfaces and tiers. Rankings are explicitly
 top 100. Chargeback export instead enumerates every authorized catalog scope.
 
 ![Live redacted Usage view.](images/aum/turnstile-usage-80x24-after.svg)
 
-### Trends
+#### Trends
 
-Choose daily, hourly or weekly buckets. Bars compare volume inside the selected
+Trends offers daily, hourly or weekly buckets. Bars compare volume inside the selected
 month; Enter retains full precision. **Compare trend periods** in `:` compares
 returned month buckets, without filling missing values with invented zeroes.
 `f` chooses an explicit time range. Dates display local time and UTC offset;
@@ -932,18 +1188,18 @@ month accounting remains UTC.
 
 ![Live redacted Trends view.](images/aum/turnstile-trends-80x24-after.svg)
 
-### Requests
+#### Requests
 
-Filter by model or an ISO Before timestamp. A server window holds at most 200
+Requests has model and ISO Before-timestamp filters. A server window holds at most 200
 requests; AUM pages it in groups of 50. When the server advertises the cursor
 contract, AUM instead follows its snapshot-bound pages, including tied timestamps.
-Until then this is not an exhaustive history export. Keep timestamp overlap
-when inspecting older windows. `c` copies the real id and `o` opens its discovered
+Until then this is not an exhaustive history export. Overlapping timestamps
+preserve boundary rows when inspecting older windows. `c` copies the real id and `o` opens its discovered
 Log Analytics workspace. Both are hidden during redacted capture.
 
 ![Live redacted Requests view.](images/aum/turnstile-requests-80x24-after.svg)
 
-### Anomalies
+#### Anomalies
 
 Severity, scope, time and details come from the read-only usage-anomalies API.
 Acknowledgment and false-positive disposition appear in `:` only when the server
@@ -951,21 +1207,25 @@ advertises the corresponding scoped API.
 
 ![Live redacted Anomalies view.](images/aum/turnstile-anomalies-80x24-after.svg)
 
-### Settings
+#### Settings
 
-Inspect identity, role, managed scope, backend and config. Change the session
-theme, open **Profile / backend**, or preview **Sign out**. A replacement profile
-is authenticated before the working connection is closed. **Tour** repeats the
+Settings shows identity, role, managed scope, connection and configuration.
+The connection kind and address appear in a wrapping guarded label separate
+from the table, including at 80x24; cached table widths do not determine their visibility.
+It offers a session theme, **Change connection** and a **Sign out** preview.
+The connection form's local backup and rollback are described in
+[Connect](#connect). A replacement identity is verified before the working
+connection is closed. **Tour** repeats the
 first-run keyboard introduction.
 
 ![Live redacted Settings view.](images/aum/turnstile-settings-80x24-after.svg)
 
-### Ask, Approvals and Advanced
+#### Ask, Approvals and Advanced
 
-**Ask** (`a`) appears when the permitted assistant API exists. Enter a question,
-then choose **Ask**. Requests can incur model cost and create conversation history.
+**Ask** (`a`) appears when the permitted assistant API exists. Its question field
+and **Ask** button send the request. Requests can incur model cost and create conversation history.
 The answer and chart rows are the server's response, not client-generated facts.
-Choose **Pin** to preview a chart pin; `:` also opens history, pinned reports and
+**Pin** previews a chart pin; `:` also opens history, pinned reports and
 Owner-only model settings. Redacted and `--what-if` sessions never send a question.
 
 ![Live assistant availability and settings, redacted; no model query submitted.](images/aum/turnstile-ask-80x24-after.svg)
@@ -980,12 +1240,12 @@ authorized, configured model gateway. Models, backend pools, releases and
 application subscriptions belong to that gateway, not the Claude governance
 registry. AUM does not reveal keys or offer model-gateway mutations.
 
-The current live **Turnstile** connection does not advertise Approvals or expose
+The recorded live **Turnstile** connection did not advertise Approvals or expose
 a configured Advanced registry. Their Turnstile contract screenshots are test
 baselines, not mislabelled live documentation. The independent AUM service does
 offer native Approvals; its actual live queue appears in the table above.
 
-### Direct Overview
+#### Direct Overview
 
 This capture comes from the gateway's own ledger and published cost function.
 Its accounting basis can differ from Turnstile's ingestion. Unknown prices are
@@ -993,7 +1253,7 @@ not replaced by guessed costs.
 
 ![Live Direct Overview with redaction.](images/aum/direct-overview-80x24-after.svg)
 
-## Keyboard, accessibility and safe edits
+### Keyboard, accessibility and safe edits
 
 The following interaction evidence was also captured against the live backend,
 not FakeBackend:
@@ -1032,6 +1292,9 @@ not FakeBackend:
 | `:` | Search available commands and actions |
 | `m`, `r`, `?`, `q` | Month, refresh, help, quit |
 | `e` | Edit a selected budget/tier/catalog row when authorized |
+| `g` | Add person to team, for owners; People preserves the searched email and selected team |
+| `u` | Set USD budget on a selected writable row when the capability is available |
+| `x` | Chargeback report: save the complete month CSV to a non-overwriting local path |
 | `Ctrl+A` | Preview Apply now on Governance |
 | `a`, `9` | Ask and Approvals, only when available and authorized |
 | `c`, `o`, `d` | Copy request id, open ledger, exact selected details |
@@ -1047,12 +1310,12 @@ preview; server state and role are rechecked. Removal and lowering below usage
 require typing the scope id. Apply follows the job without retrying the write.
 Whole-catalog/tier writes send `If-Match` only when the server advertises conditional
 writes and returns an ETag. A 412 requires a fresh preview; no write is retried.
-Until that contract is advertised, avoid concurrent collection editors.
+Without that contract, concurrent collection edits do not have an ETag conflict guard.
 
 Person monthly budgets are **saved in Turnstile**, not claimed as gateway
 per-person quota enforcement.
 
-### Scoped managers
+#### Scoped managers
 
 `manager_scope: null` is unrestricted; an object is scoped even if its lists are
 empty. Member alone does not imply a manager. AUM refreshes assignments, clears
@@ -1066,7 +1329,7 @@ Parent units shown for context are not authorized unit filters. Scoped exports
 query managed departments, not those context parents. A 403 means **Not in your
 scope / not permitted for this sign-in**, never zero usage or token expiry.
 
-## Publish safe live screenshots
+### Publish safe live screenshots
 
 ```powershell
 aum --redact
@@ -1080,7 +1343,7 @@ pseudonyms. Free-form private descriptions and query-field text are hidden;
 selected person ids are still sent unchanged to the API, not echoed into captures.
 Redacted interactive
 sessions are intentionally read-only to prevent pseudonyms being mistaken for
-write targets. Turn redaction off when making an authorized edit.
+write targets. Authorized edits require a non-redacted session.
 
 ```powershell
 .\.venv-finops\Scripts\python.exe cli\finops\tools\capture_live.py `
@@ -1095,13 +1358,14 @@ The guard rejects undocumented images, live images without redaction, non-Contos
 addresses, GUIDs and Azure service hostnames. A mutation test turns redaction off
 and proves that the guard catches it.
 
-## Command reference
+### Command reference
 
 `--json`, `--plain`, `--what-if`, `--redact`, `--month`, `--backend`, `--config`,
 `--url`, `--scope`, `--resource-group`, `--apim-name`, `--theme`, `--no-color`
 and `--ascii` work before or after the noun/verb. `--reason` supplies native
 AUM-service audit text for budget/configuration changes. `--what-if` wins over `--apply`.
-Use token suffixes `k`, `M`, `B`; USD strings are rejected.
+Token-budget amounts accept suffixes `k`, `M`, `B` and reject USD strings.
+The separate `aum usd` commands accept decimal USD amounts.
 
 | Task | Example |
 |---|---|
@@ -1135,6 +1399,7 @@ Use token suffixes `k`, `M`, `B`; USD strings are rejected.
 | Usage | `aum usage show --dimension model --split-by department` |
 | Trends | `aum trends show --interval day --group-by department` |
 | Unit chargeback | `aum report chargeback --month 2026-09 --csv > chargeback.csv` |
+| Non-overwriting saved CSV | `aum report chargeback --month 2026-09 --output finops-reports --json` |
 | Team chargeback | `aum report chargeback --dimension department --csv` |
 | Global/bounded lookup | `aum lookup sales-emea --team sales-emea --json` |
 | Person detail | `aum people show dev@contoso.com --team sales-emea` |
@@ -1189,7 +1454,7 @@ team,person,tokens,warning
 sales-emea,dev@contoso.com,200000,80
 ```
 
-### Optional workflows by selected authority
+#### Optional workflows by selected authority
 
 These clients are implemented and tested. Turnstile needs the advertised
 contracts; the AUM service already supplies its native request/approval/boost
@@ -1209,61 +1474,34 @@ rather than calling an unadvertised mutation route.
 | Finding disposition | `aum anomalies set-status <id> acknowledged "Reviewed" --apply` (or `false_positive`) | `anomaly_dispositions` |
 | Continue request page | `aum requests list --cursor <opaque-cursor>` | `request_cursor` |
 
-Choose a real approved expiry; the far-future sample is syntax only for the
-proposed Turnstile contract. With AUM service, use `--window daily` and an expiry
-within 31 days. The server
+The far-future sample is syntax only for the proposed Turnstile contract;
+an actual expiry is an approved date. AUM service requires `--window daily`
+and an expiry within 31 days. The server
 must reserve headroom and restore the baseline at expiry/revocation. The client
 refuses self-approval and tracks a returned gateway apply anchor, but does not
 pretend to enforce a server-side quota itself.
 
-Interactive `:` → **Export complete chargeback CSV** writes under
-`finops-reports` and never overwrites an existing file.
+Interactive **Chargeback report** writes to the platform's default report
+folder and never overwrites an existing file. The command palette's explicit
+CSV export also accepts a custom filename
+([report behavior](#create-a-chargeback-report)).
 
-## Troubleshoot and validate
-
-| Exit / symptom | Fix |
-|---|---|
-| 2, invalid input | Check month, stable id, token amount and parent headroom |
-| 3, 401 | Run `az login` in the correct tenant |
-| 4, AADSTS50105 | Ask an existing administrator to check your Turnstile assignment |
-| 4, 403 | Choose an assigned scope; see Settings |
-| 5, missing scope/route | Check month/id and the selected backend's advertised API version; do not install another authority to bypass an unavailable route |
-| 6, conflict | Refresh and preview again |
-| 7, service/job failure | Check network, Azure access and job logs; do not blindly repeat a write |
-| 8, apply still pending | Follow `aum governance show`; the save may already have succeeded |
-| 9, verified stopped Turnstile database | Azure reports the named PostgreSQL server as `Stopped`; the message contains its explicit paid start command. AUM starts nothing automatically |
-| Unknown Direct cost | Check unpriced facts and the published `ClaudeCost` price book |
-
-```powershell
-.\.venv-finops\Scripts\python.exe -m pytest cli\finops\tests -q
-node .ironclad\gate.mjs --stage packet --verbose
-```
-
-Test-All uses the worktree `.venv-finops` or reports an explicit skip. Fake SVGs
-and exact screen grids live under `cli/finops/tests/snapshots`; regenerate them
-deliberately with `cli/finops/tools/capture.py`. Live evidence is separate.
-
-The [revision-4 parity manifest](../cli/finops/src/claude_finops/parity.json)
-distinguishes implemented current APIs from named server dependencies. Exact
-future request/response contracts ship in
-[`contracts.json`](../cli/finops/src/claude_finops/contracts.json).
-
-## Do the same Azure steps by hand
+### Do the same Azure steps by hand
 
 These paths use the resources you discover, not the redacted names in the
 screenshots. AUM does not create VNets, subnets, DNS zones, Key Vaults or gateways;
 there is no hidden infrastructure deployment to reproduce.
 
-### 1. Choose the subscription, resource group and gateway
+#### 1. Choose the subscription, resource group and gateway
 
-1. In the Azure portal, open **Subscriptions** and select the subscription you
-   already manage. Check the signed-in account and directory in the top-right menu.
-2. Open **Resource groups**, choose the group containing the existing gateway,
-   and open its **API Management service**.
-3. On **Overview**, verify **Status**, **Resource group**, **Location**,
+1. The portal's **Subscriptions** list identifies an already-managed
+   subscription. The top-right menu shows the signed-in account and directory.
+2. **Resource groups > the gateway's group > API Management service** locates
+   the existing gateway.
+3. **Overview** displays **Status**, **Resource group**, **Location**,
    **Subscription**, **Subscription ID**, **Gateway URL** and **Tier**.
-4. Record your own values locally. The screenshot deliberately replaces names,
-   hostnames and ids; do not copy its Contoso placeholders.
+4. Deployment values belong to that selected resource. The screenshot replaces
+   names, hostnames and ids with Contoso placeholders, not configuration values.
 
 ![Live API Management Overview, with deployment and account values redacted.](images/aum-portal/gateway-overview.png)
 
@@ -1282,16 +1520,14 @@ az apim show --subscription $sub -g $rg -n $apim `
 Verification: the CLI's resource, location and tier match **Overview**. AUM
 passes the selected subscription explicitly rather than running `az account set`.
 
-### 2. Read the Turnstile connection and governance authority
+#### 2. Read the Turnstile connection and governance authority
 
-1. In the gateway's left menu, expand **APIs** and select **Named values**.
-2. Use **Search to filter items by display name and name** to find
-   `turnstile-integration`.
-3. Open that named value and read **Value**. Copy its `url` and `scope` fields
-   into the local AUM profile. Read `governanceAuthority` and `budgetAuthority`
-   before deciding where a change belongs.
-4. Do not reveal or copy unrelated secret named values. This connection is
-   address metadata, not a bearer token.
+1. The gateway's **APIs > Named values** page lists its configuration.
+2. **Search to filter items by display name and name** locates `turnstile-integration`.
+3. Its **Value** contains the profile's `url` and `scope`, plus
+   `governanceAuthority` and `budgetAuthority`, which determine where changes belong.
+4. This connection is address metadata, not a bearer token. Unrelated secret
+   named values are not part of the procedure.
 
 ![Live Named values, redacted before publication.](images/aum-portal/gateway-named-values.png)
 
@@ -1318,16 +1554,16 @@ Verification: `/auth/me` reports the expected role and method. This native
 `az rest --resource` path was run live as Owner; the CLI obtains the token
 without putting it in your command arguments or printing it.
 
-### 3. Find the actual telemetry workspace
+#### 3. Find the actual telemetry workspace
 
-1. In API Management, expand **APIs**, then select **APIs**. Select the Claude
-   API and inspect **Settings** / its Application Insights diagnostic.
-2. Open the referenced **Application Insights** resource, not another resource
-   with a similar name.
-3. On its **Overview**, find **Logs workspace** and open that workspace.
-4. On the workspace's **Overview**, verify **Workspace name**, **Workspace ID**,
+1. **API Management > APIs > APIs > Claude API > Settings** exposes the
+   Application Insights diagnostic.
+2. That diagnostic references the **Application Insights** resource; a similar
+   name is not evidence of the relationship.
+3. Its **Overview > Logs workspace** link identifies the workspace.
+4. The workspace's **Overview** shows **Workspace name**, **Workspace ID**,
    **Subscription**, **Location** and **Access control mode**.
-5. Put **Workspace ID** in AUM's `workspace` field. This is not the ARM resource id.
+5. **Workspace ID** is AUM's `workspace` field, not its ARM resource id.
 
 ![Live Application Insights with its Logs workspace link.](images/aum-portal/insights-overview.png)
 
@@ -1353,19 +1589,19 @@ az rest --method get --subscription $sub `
   --query '{name:name,workspaceId:properties.customerId}' -o json
 ```
 
-If the API has no diagnostic, inspect the service-level
-`$apimId/diagnostics/applicationinsights` instead. The wizard performs that
+If the API has no diagnostic, the service-level
+`$apimId/diagnostics/applicationinsights` is the fallback. The wizard performs that
 fallback and offers accessible workspaces when no logger reference can be read.
 
-### 4. Query usage and export a report
+#### 4. Query usage and export a report
 
-1. Open the selected workspace and choose **Logs**.
-2. Close **Welcome to Log Analytics** if shown. In the current preview,
-   turn **Agent** off and choose **Use Query** when prompted.
-3. Select **Simple mode** in the query toolbar, then **KQL mode**.
-4. Enter the query below and select **Run** (or **Shift+Enter**).
-5. Verify the returned scope, token, cache and cost columns. Use the result
-   export control to save CSV. Unknown prices must remain unknown.
+1. The selected workspace's **Logs** page contains the editor.
+2. The recorded portal preview shows the editor after **Welcome to Log Analytics**
+   is closed, **Agent** is off and **Use Query** is selected.
+3. **Simple mode > KQL mode** switches the query toolbar.
+4. **Run** (or **Shift+Enter**) executes the query below.
+5. Returned scope, token, cache and cost columns are the result evidence.
+   The result export control saves CSV. Unknown prices remain unknown.
 
 ```kusto
 ClaudeCost(startofmonth(now()), now())
@@ -1385,8 +1621,8 @@ blank editors, welcome screens and onboarding overlays are rejected.
 
 ![Live KQL editor and actual query results, with redacted resource and scope names.](images/aum-portal/workspace-logs.png)
 
-Equivalent Azure CLI: write the KQL into `query.kql`, then send the JSON body
-through a file so shell pipes never become Azure CLI arguments:
+The equivalent Azure CLI request reads KQL from `query.kql` and sends a JSON
+body file, so shell pipes do not become Azure CLI arguments:
 
 ```powershell
 $workspaceId = Read-Host 'Workspace ID verified above'
@@ -1400,18 +1636,17 @@ az rest --method post --resource https://api.loganalytics.io `
 AUM's equivalent is `aum report chargeback --csv`. Its complete-catalog export,
 and the underlying Direct queries, were run live.
 
-### 5. Inspect or change governance in the correct control plane
+#### 5. Inspect or change governance in the correct control plane
 
-1. Read the authority in step 2. If Turnstile is authoritative, **do not edit
-   the gateway's named values to bypass it**.
-2. In the Azure portal, open the discovered Turnstile **App Service**.
-   On **Overview**, verify **Status** and **Runtime status**, then select
-   **View app** (called **Browse** in the classic portal experience).
-3. In Turnstile, use **Budget Management** for scope budgets and
-   **Gateway governance** for units, teams, groups and tiers. Preview the exact
-   scope and amount, save, then follow the gateway apply result.
-4. If normal web sign-in requires tenant consent that you do not hold, use the
-   existing consent-free Azure CLI sign-in path described in [Turnstile](TURNSTILE.md).
+1. The authority from step 2 determines the writer. Direct named-value edits
+   would bypass an authoritative Turnstile configuration.
+2. The discovered Turnstile **App Service > Overview** shows **Status** and
+   **Runtime status**. **View app** (**Browse** in the classic portal) opens it.
+3. Turnstile's **Budget Management** owns scope budgets; **Gateway governance**
+   owns units, teams, groups and tiers. The preview identifies scope and amount;
+   the gateway apply result follows the save.
+4. The existing consent-free Azure CLI sign-in path in [Turnstile](TURNSTILE.md)
+   remains available when normal web sign-in requires unavailable tenant consent.
    AUM itself uses that already-authorized CLI token, not a new grant.
 
 ![Live App Service Overview after its onboarding overlay was closed.](images/aum-portal/turnstile-overview.png)
@@ -1420,12 +1655,12 @@ The Azure portal does not contain native fields for Turnstile's business-unit,
 team or person budgets. **View app** opens the actual management GUI; a portal
 database edit would bypass its validation and is not an equivalent safe procedure.
 
-For Gateway authority only, use **API Management > APIs > Named values**:
+For Gateway authority only, **API Management > APIs > Named values** contains:
 `tpm-standard` / `tpm-premium` are per-minute tier limits; `quota-standard` /
 `quota-premium` are daily limits; `models-*` are model allowlists; `bu-registry`
-and `bu-parents` hold the unit/team hierarchy. Open the item, edit **Value** and
-select **Save**, preserving every unrelated entry. Check parent allocation
-before changing a team. Read the value back after saving.
+and `bu-parents` hold the unit/team hierarchy. The item's **Value** editor and
+**Save** action change its value. A valid change preserves unrelated entries
+and parent allocation; read-back establishes the saved value.
 
 Equivalent Azure CLI for a direct tier value:
 
@@ -1439,7 +1674,7 @@ az apim nv show --subscription $sub -g $rg --service-name $apim `
 ```
 
 For Turnstile authority, the equivalent REST operation is authenticated by
-Azure CLI. Read the original first, write a body file, and follow apply:
+Azure CLI. The sequence below reads the original, writes a body file and reads apply status:
 
 ```powershell
 $month = Read-Host 'Month YYYY-MM'
@@ -1454,28 +1689,27 @@ az rest --method get --url "$api/api/v1/gateway-apply" --resource $audience `
   --subscription $sub -o json
 ```
 
-`9000000` is an illustrative amount, not a deployment default. Choose the
-approved value within the parent budget and retain the original for rollback.
-Never print a bearer token or manually edit a secret named value to perform
-these operations.
+`9000000` is an illustrative amount, not a deployment default. An approved
+value stays within the parent budget; the original is the rollback source.
+These operations neither print a bearer token nor require a secret named-value edit.
 
 Installation, terminal themes, local filters, the banner and screenshot
 rendering are local software operations; there is no Azure portal equivalent
 because they do not change an Azure resource.
 
-### 6. Change a mode or allocate person budgets
+#### 6. Change a mode or allocate person budgets
 
-1. Follow **App Service > Overview > View app** to the authoritative Turnstile
-   console. In **Gateway governance**, select the existing unit or team.
-2. Inspect the current enforcement setting. Choose **strict**, **allowance** or
-   **notify**. For allowance, enter an integer percentage from 1 through 100.
-   Preserve the member and manager groups and all unrelated scopes.
-3. Save, then inspect the gateway apply job. Verify the saved mode and, after
-   completion, the gateway's **Named values > bu-modes > Value**. Absence of a
+1. **App Service > Overview > View app** opens the authoritative Turnstile
+   console. **Gateway governance** contains the existing units and teams.
+2. The current enforcement setting supports **strict**, **allowance** or
+   **notify**. Allowance requires an integer percentage from 1 through 100.
+   Member/manager groups and unrelated scopes remain unchanged.
+3. The save is followed by the gateway apply job. Its result and the gateway's
+   **Named values > bu-modes > Value** establish publication. Absence of a
    scope in this value means strict; allowance is serialized as
    `scope-id=allowance:10` between sentinel commas.
-4. For person allocation, use **Budget Management**, choose the team and search
-   the person before editing. The displayed parent allocation must accommodate
+4. Person allocation is in **Budget Management**, under the selected team's
+   person search. The displayed parent allocation must accommodate
    the entire change, not just the visible page. A person budget is a Turnstile
    budget record, not proof of a new gateway person-counter quota.
 
@@ -1502,10 +1736,10 @@ az rest --method get --url "$api/api/v1/gateway-apply" --resource $audience `
   --subscription $sub -o json
 ```
 
-Read and retain the original before editing. `10` is an illustrative approved
-percentage, not a deployment default. For strict or notify, remove
-`allowance_percent`; it is invalid outside allowance mode. If conditional writes
-are advertised, include the current ETag as `If-Match`; a conflict requires rereading.
+The original catalog is the rollback source. `10` is an illustrative approved
+percentage, not a deployment default. `allowance_percent` is absent for strict
+and notify, because it is invalid outside allowance mode. Advertised conditional
+writes require the current ETag as `If-Match`; a conflict requires rereading.
 
 For bulk person allocation, the equivalent supported API is:
 
@@ -1525,25 +1759,24 @@ az rest --method post --url "$api/api/v1/budgets/users/bulk" `
 ```
 
 `200000` and `80` are illustrative, not defaults read from a deployment.
-Verify with `GET /api/v1/budgets/users?period=...&department_id=...&query=...`.
-The portal has no native Turnstile bulk-budget blade; do not replace the
-validated endpoint with a database edit. AUM's CSV client groups only the
+`GET /api/v1/budgets/users?period=...&department_id=...&query=...` reads the result.
+The portal has no native Turnstile bulk-budget blade; a database edit bypasses
+the validated endpoint. AUM's CSV client groups only the
 prevalidated people/amounts and reports partial failure without retrying a write.
 
-### 7. Inspect a request or move team membership
+#### 7. Inspect a request or move team membership
 
-1. In **Log Analytics workspace > Logs**, use **KQL mode** and the repository's
-   `analytics/chargeback-ledger.kql` query. Add a filter for the selected
-   `request_id`. Select **Run** and verify the request id, timestamp and unit/team
-   fields against the terminal detail.
+1. **Log Analytics workspace > Logs > KQL mode** runs the repository's
+   `analytics/chargeback-ledger.kql` query with a selected `request_id` filter.
+   Its request id, timestamp and unit/team fields correspond to terminal detail.
 2. AUM's `o` action builds this workspace link from the discovered ARM workspace
    id and tenant. `c` copies only the selected id; it does not modify Azure.
-3. For membership, open **Microsoft Entra ID > Groups > All groups**, select the
-   team member group recorded in the catalog, and open **Members**.
-4. Only with existing group-owner/directory rights, use **Add members** on the
-   target group and **Remove** on the former group. Verify both member lists.
+3. Membership is in **Microsoft Entra ID > Groups > All groups > the catalog's
+   team member group > Members**.
+4. Existing group-owner/directory rights permit **Add members** on the target
+   group and **Remove** on the former group. Both member lists provide verification.
    Directory propagation and gateway projection refresh are separate from the
-   budget apply job. Do not grant yourself permissions to make this example work.
+   budget apply job. This example authorizes no additional permission grant.
 
 Azure CLI equivalents:
 
@@ -1564,16 +1797,16 @@ remove that person from unrelated groups. The final membership set matched the
 starting set. Gateway/Turnstile Owner alone does not imply directory rights;
 AUM verifies group ownership and never requests broader grants.
 
-### 8. Ask, pin and inspect optional model-gateway views
+#### 8. Ask, pin and inspect optional model-gateway views
 
-1. Open the actual Turnstile GUI through **App Service > Overview > View app**.
-   Choose **FinOps Assistant** with an unrestricted authorized sign-in. Scoped
+1. **App Service > Overview > View app** opens the Turnstile GUI.
+   **FinOps Assistant** requires an unrestricted authorized sign-in. Scoped
    manager profiles do not gain access by opening the URL directly.
-2. Review the selected model/cost settings. Submit a question only when its
-   model cost and persistence are intended. Pin a chart actually returned by
-   that conversation; the client must not fabricate chart rows.
-3. If the connected Turnstile operates its own model gateway, open its model,
-   backend-pool, release or subscription views. AUM exposes those same
+2. The selected model/cost settings determine the model invocation. A submitted
+   question incurs its model cost and persistence. A pin uses an actual returned
+   chart, not client-generated rows.
+3. A connected Turnstile with its own model gateway exposes model,
+   backend-pool, release and subscription views. AUM exposes those same
    authorized reads, never key-reveal or provisioning operations.
 
 Equivalent Azure CLI reads, with token acquisition kept inside Azure CLI:
@@ -1590,27 +1823,27 @@ az rest --method get --url "$api/api/v1/model-management" `
 ```
 
 The last read may return 403 or no configured models; that is not an instruction
-to request broader permissions. For an intended assistant invocation, write
-`question`, `history`, `conversation_id`, `timezone` and `locale` to a JSON body
-file and POST `/api/v1/assistant/ask`. A pin POSTs `title`, `description`,
+to request broader permissions. An assistant invocation POSTs a JSON body with
+`question`, `history`, `conversation_id`, `timezone` and `locale`
+to `/api/v1/assistant/ask`. A pin POSTs `title`, `description`,
 `original_question` and the exact returned `chart` to
 `/api/v1/assistant/pinned-charts`. The matching `aum ask` commands avoid hand-copying
 response charts. This packet's live assistant evidence is read/preview evidence;
 it is not a claim that a model invocation or pin write was performed.
 
-### 9. Reports, local preferences and future service workflows
+#### 9. Reports, local preferences and future service workflows
 
-1. For a manual usage CSV, use **Log Analytics workspace > Logs > Run** and the
-   result export control in step 4. This is a raw query export, not a substitute
+1. **Log Analytics workspace > Logs > Run** and the result export control in
+   step 4 produce a manual usage CSV. This raw query export is not a substitute
    for P50's streaming reconciliation, provenance manifest and per-unit files.
 2. `aum report generate` runs that existing generator. The report output remains
    local unless explicit `--send` is requested. No Azure portal blade performs
    the whole local reconciliation algorithm; the GUI path inspects its saved
    query functions and exported results instead.
-3. Profiles, saved views and tour state are local to AUM. Use **Settings >
-   Profile / backend**, `v` or `:`. Azure CLI's equivalent sign-in/session reads
+3. Profiles, saved views and tour state are local to AUM. **Settings >
+   Change connection**, `v` and `:` expose them. Azure CLI's equivalent sign-in/session reads
    are `az account show` and `az account list`; `az logout` is the explicit shared
-   session sign-out, not a harmless preview.
+   session sign-out, not a preview.
 4. Turnstile does not yet advertise the proposed approvals/boosts/notification
    workflows on this connection. The independent AUM service offers native
    workflow endpoints with a different explicit contract. Neither authority
@@ -1620,7 +1853,142 @@ The current portal manifest covers all required gateway, workspace, verified
 KQL-result and unobscured App Service pages, plus the created group's Overview,
 Owners and Members. It records UTC times, source commits and image hashes.
 
-## Measured end-to-end acceptance: create, enforce, restore
+#### 10. Configure AUM Direct without any Turnstile service
+
+1. **Subscriptions > your subscription > Resource groups > your existing
+   API Management service** exposes the **Overview** fields from step 1.
+   Its configured **Application Insights** diagnostic identifies the
+   **Logs workspace**, as in step 3.
+2. **API Management > APIs > Named values** contains `bu-registry`,
+   `bu-parents`, `bu-modes`, `quota-overrides`, `quota-*`, `tpm-*` and `models-*`.
+   None requires a Turnstile installation. If a `turnstile-integration` value
+   exists, its recorded write authority still applies.
+3. `aum configure --backend direct --save` generates a profile containing
+   your selected subscription, gateway and workspace, never a token.
+4. `aum whoami`, `aum status` and `aum people find <query> --team <team-id>` read
+   the identity, status and people. Settings identifies Direct/Azure RBAC and
+   explains the optional manager authorities.
+
+The equivalent discovery CLI is the `az account list`, `az apim list`,
+diagnostic/logger traversal and workspace query sequence in steps 1–4. No
+deployment-specific resource name is a script default.
+
+Daily person overrides are in **Named values > quota-overrides > Value**.
+The format is a comma-sentinel map of Entra object ids to daily tokens, limited
+to 4,096 characters. A valid edit preserves unrelated entries. Removing one entry restores
+that person's tier default; it does not change membership or per-minute tier
+limits. The CLI equivalent uses the existing validated serializer/writer:
+
+```powershell
+aum budget set person <observed-object-id> 200k --team <team-id> --backend direct --what-if
+# Only after reviewing the preview:
+aum budget set person <observed-object-id> 200k --team <team-id> --backend direct --apply
+```
+
+Equivalent native Azure CLI after preparing and validating the complete map:
+
+```powershell
+$existing = az apim nv show --subscription $sub -g $rg --service-name $apim `
+  --named-value-id quota-overrides --query value -o tsv
+# Retain $existing for rollback. $updated must preserve every unrelated object id.
+$updated = Read-Host 'Reviewed complete override sentinel map'
+az apim nv update --subscription $sub -g $rg --service-name $apim `
+  --named-value-id quota-overrides --value $updated -o none
+$actual = az apim nv show --subscription $sub -g $rg --service-name $apim `
+  --named-value-id quota-overrides --query value -o tsv
+if ($actual -cne $updated) { throw 'Read-back mismatch: inspect and restore the retained original.' }
+```
+
+Multi-value rollback uses exact old values in reverse order after a failed save.
+A changed value from another operator requires manual reconciliation rather
+than an overwrite.
+The AUM writer automates these checks and reports an incomplete restore as an error.
+
+#### 11. Query hourly facts or statistical candidates manually
+
+1. The editor is **Log Analytics workspace > Logs > KQL mode**.
+2. `analytics/chargeback-ledger.kql` supplies the base query, with the selected
+   time bounds and discovered API Management resource-id filter before projection.
+3. The following suffix aggregates hourly results:
+
+```kusto
+| summarize total_tokens=sum(total_tokens), total_requests=count()
+    by bucket_start=bin(timestamp, 1h)
+| order by bucket_start asc
+```
+
+The Azure CLI equivalent uses a `query.kql` file and `az rest --body
+'@query-body.json'` as in step 4. The hourly token/request buckets do not
+establish hourly cost or cache, which the request ledger does not contain.
+
+For statistical findings, the exact server query is composed in
+[`direct_analytics.py::anomalies`](../cli/finops/src/claude_finops/direct_analytics.py).
+That KQL runs in the same **Logs** editor with selected dates and preserved
+pricing-exclusion/14-day guards. Its method and limits are described above.
+The live query-result screenshot above is separate from the terminal/KQL API
+proof; neither is substituted for the other.
+
+#### 12. Inspect the independent AUM service and call its native API
+
+1. **Azure portal > Function App** lists the deployed app with
+   `component=aum-service` in **Tags**. Its **Overview** displays the default
+   domain and running state.
+2. **Settings > Environment variables > App settings** contains
+   `AUM_CLIENT_ID`, `AUM_TENANT_ID`, `AUM_APIM_RESOURCE_ID` and `AUM_WORKSPACE_ID`.
+   These are address/identity metadata. Unrelated connection strings or
+   credentials are not part of discovery.
+3. `AUM_APIM_RESOURCE_ID` identifies the governed gateway. An older recorded gateway default is not proof
+   that the service governs that gateway.
+4. **Microsoft Entra ID > Enterprise applications > the existing AUM app >
+   Users and groups** displays the already-assigned role. Admin, Viewer and
+   Manager precedence is enforced by the service; this guide does not authorize
+   assigning new roles or granting consent.
+5. `aum configure --backend aum-service --save` records the discovered profile;
+   `aum session show --json` displays it. A supplied profile also works for app-role users without Azure
+   resource-management rights.
+
+Native Azure CLI reads:
+
+```powershell
+az functionapp list --subscription $sub --query "[?tags.component=='aum-service'].{name:name,group:resourceGroup,host:defaultHostName}" -o table
+$functionGroup = Read-Host 'Selected Function App resource group'
+$functionName = Read-Host 'Selected Function App name'
+az functionapp config appsettings list --subscription $sub -g $functionGroup -n $functionName `
+  --query "[?contains(['AUM_CLIENT_ID','AUM_TENANT_ID','AUM_APIM_RESOURCE_ID','AUM_WORKSPACE_ID'], name)].{name:name, value:value}" -o json
+```
+
+The following calls use the discovered endpoint and audience, not a function key:
+
+```powershell
+$aumApi = Read-Host 'Discovered AUM HTTPS origin'
+$aumAudience = Read-Host 'api:// followed by the discovered AUM_CLIENT_ID'
+az rest --method get --url "$aumApi/api/v1/me" --resource $aumAudience -o json
+az rest --method get --url "$aumApi/api/v1/capabilities" --resource $aumAudience -o json
+$budgets = az rest --method get --url "$aumApi/api/v1/budgets" --resource $aumAudience -o json | ConvertFrom-Json
+$etag = '"' + $budgets.revision + '"'
+@{ token_limit=200000; reason='Approved daily capacity' } | ConvertTo-Json |
+  Set-Content -Encoding utf8 .\aum-budget-body.json
+# Example mutation; choose an existing authorized object and review before running:
+az rest --method put --url "$aumApi/api/v1/budgets/user/<object-id>" --resource $aumAudience `
+  --headers "If-Match=$etag" --body '@aum-budget-body.json' -o json
+```
+
+`/api/v1/budgets` and its new revision provide native mutation read-back;
+an Admin may inspect `/api/v1/audit`. No Turnstile apply endpoint is involved.
+A request uses POST `/api/v1/budget-requests` with scope, absolute `token_limit`
+and reason; decisions POST `/api/v1/budget-requests/{id}/approve|reject|escalate`
+with reason and the current integer `version`. A boost POSTs `/api/v1/boosts`
+with the current `If-Match`, absolute raised limit and an expiry within 31 days.
+The service's timer owns expiry restoration.
+
+There is no native Azure portal form for these application workflows. The AUM
+terminal is their GUI; Azure CLI REST is the manual API path. The Function App
+portal verifies deployment and identity metadata, not application authorization
+by editing its storage. At the culminating run the earlier native-service
+deployment had been removed (`ResourceGroupNotFound`); no service deployment
+or live mutation evidence is fabricated from the earlier read-only screenshots.
+
+### Measured end-to-end acceptance: create, enforce, restore
 
 On **2026-09-25**, AUM completed the owner-approved journey through Direct and
 Turnstile. Each used uniquely named `aum-e2e-*` security groups, verified the
@@ -1648,7 +2016,7 @@ The live portal ownership/membership proof contains only the verified test ident
 
 ![Live temporary test membership, removed during cleanup.](images/aum-portal/group-members.png)
 
-### Timings and what they prove
+#### Timings and what they prove
 
 | Backend | Strict mode save → confirmed refusal | Allowance save → confirmed notice | Notify save → confirmed notice |
 |---|---:|---:|---:|
@@ -1679,7 +2047,7 @@ culminating window: its endpoint was unreachable and its resource group returned
 `ResourceGroupNotFound`. Its current contract/client tests remain, but no native
 service group/budget mutation journey is claimed without an active target.
 
-### Cleanup and operational pitfalls
+#### Cleanup and operational pitfalls
 
 The runner restores in `finally` even when a step fails. It preserves exact
 `bu-registry`, `bu-members`, `bu-modes`, `bu-parents`, integration authority,
@@ -1715,137 +2083,42 @@ Historical usage and audit facts from real test requests are retained, not delet
 to make the test disappear. Operational configuration, memberships and groups
 are what the cleanup restores.
 
-### 10. Configure AUM Direct without any Turnstile service
 
-1. Use **Subscriptions > your subscription > Resource groups > your existing
-   API Management service**. Verify the gateway **Overview** fields shown in
-   step 1. Follow its configured **Application Insights** diagnostic to the
-   **Logs workspace** as in step 3.
-2. Choose **API Management > APIs > Named values**. Read `bu-registry`,
-   `bu-parents`, `bu-modes`, `quota-overrides`, `quota-*`, `tpm-*` and `models-*`.
-   None requires a Turnstile installation. If a `turnstile-integration` value
-   exists and declares another write authority, do not bypass it.
-3. Run `aum configure --backend direct --save`. The generated profile stores
-   your selected subscription, gateway and workspace, never a token.
-4. Run `aum whoami`, `aum status` and `aum people find --team <team-id>`.
-   Settings must say Direct/Azure RBAC and explain the optional manager authorities.
+## Troubleshooting
 
-The equivalent discovery CLI is the `az account list`, `az apim list`,
-diagnostic/logger traversal and workspace query sequence in steps 1–4. No
-deployment-specific resource name is a script default.
+[Troubleshoot and validate](#troubleshoot-and-validate) lists exit codes.
+[Read latency and progress](#read-latency-and-progress) and
+[Turnstile database stopped](#turnstile-database-stopped) describe startup
+failures. [Do the same Azure steps by hand](#do-the-same-azure-steps-by-hand)
+contains the independent verification paths.
 
-For a daily person override, use **Named values > quota-overrides > Value**.
-The format is a comma-sentinel map of Entra object ids to daily tokens. Preserve
-all other entries and stay within 4,096 characters. Removing one entry restores
-that person's tier default; it does not change membership or per-minute tier
-limits. The safer CLI equivalent invokes the existing serializer/writer:
+### Troubleshoot and validate
 
-```powershell
-aum budget set person <observed-object-id> 200k --team <team-id> --backend direct --what-if
-# Only after reviewing the preview:
-aum budget set person <observed-object-id> 200k --team <team-id> --backend direct --apply
-```
-
-Equivalent native Azure CLI after preparing and validating the complete map:
+| Exit / symptom | Meaning and recovery |
+|---|---|
+| 2, invalid input | Month, stable id, amount or parent headroom failed validation |
+| 3, 401 | `az login` supplies a new session in the selected tenant |
+| 4, AADSTS50105 | The selected application's existing role assignment is missing or incorrect |
+| 4, 403 | The requested scope is not permitted; Settings shows the current assignment |
+| 5, missing scope/route | Month/id or advertised API version does not supply the requested object; another authority is not a permission bypass |
+| 6, conflict | Current state differs from the preview; a fresh read and preview are required |
+| 7, service/job failure | Network, Azure access or job failure; existing job history determines whether a write already ran |
+| 8, apply still pending | `aum governance show` reports progress; the save may already have succeeded |
+| 9, verified stopped Turnstile database | Azure reports the named PostgreSQL server as `Stopped`; the message contains its explicit paid start command. AUM starts nothing automatically |
+| Unknown Direct cost | Unpriced facts or the published `ClaudeCost` price book leave the amount unknown |
+| Failed connection verification | The prior local profile and live connection remain active; a restore error names the backup for manual recovery |
 
 ```powershell
-$existing = az apim nv show --subscription $sub -g $rg --service-name $apim `
-  --named-value-id quota-overrides --query value -o tsv
-# Retain $existing for rollback. $updated must preserve every unrelated object id.
-$updated = Read-Host 'Reviewed complete override sentinel map'
-az apim nv update --subscription $sub -g $rg --service-name $apim `
-  --named-value-id quota-overrides --value $updated -o none
-$actual = az apim nv show --subscription $sub -g $rg --service-name $apim `
-  --named-value-id quota-overrides --query value -o tsv
-if ($actual -cne $updated) { throw 'Read-back mismatch: inspect and restore the retained original.' }
+.\.venv-finops\Scripts\python.exe -m pytest cli\finops\tests -q
+node .ironclad\gate.mjs --stage packet --verbose
 ```
 
-For a multi-value manual edit, retain the exact old values and restore them in
-reverse order when a later save fails. Reread first; if another operator changed
-a value, stop for manual reconciliation rather than overwriting that change.
-The AUM writer automates these checks and reports an incomplete restore as an error.
+Test-All uses the worktree `.venv-finops` or reports an explicit skip. Fake SVGs
+and exact screen grids live under `cli/finops/tests/snapshots`;
+`cli/finops/tools/capture.py` regenerates them and their source/output manifest.
+Live evidence is separate and retains its original timestamps.
 
-### 11. Query hourly facts or statistical candidates manually
-
-1. Open **Log Analytics workspace > Logs > KQL mode**.
-2. Start from `analytics/chargeback-ledger.kql`, replace its time bounds and add
-   the discovered API Management resource-id filter before projecting the LLM log.
-3. Append the following and choose **Run**:
-
-```kusto
-| summarize total_tokens=sum(total_tokens), total_requests=count()
-    by bucket_start=bin(timestamp, 1h)
-| order by bucket_start asc
-```
-
-The Azure CLI equivalent uses a `query.kql` file and `az rest --body
-'@query-body.json'` as in step 4. Inspect hourly token/request buckets; do not
-claim hourly cost or cache that the request ledger does not contain.
-
-For statistical findings, the exact server query is composed in
-[`direct_analytics.py::anomalies`](../cli/finops/src/claude_finops/direct_analytics.py).
-Use that KQL in the same **Logs** editor, with your selected dates and preserved
-pricing-exclusion/14-day guards. Its method and limits are described above.
-The live query-result screenshot above is separate from the terminal/KQL API
-proof; neither is substituted for the other.
-
-### 12. Inspect the independent AUM service and call its native API
-
-1. In **Azure portal > Function App**, choose the deployed app whose **Tags**
-   include `component=aum-service`. Open **Overview** and verify its default
-   domain and running state.
-2. Open **Settings > Environment variables > App settings**. Read only
-   `AUM_CLIENT_ID`, `AUM_TENANT_ID`, `AUM_APIM_RESOURCE_ID` and `AUM_WORKSPACE_ID`.
-   These are address/identity metadata. Do not reveal or export unrelated
-   connection strings or credentials.
-3. Follow `AUM_APIM_RESOURCE_ID` to the actual governed gateway and verify it
-   matches the intended target. An older recorded gateway default is not proof
-   that the service governs that gateway.
-4. In **Microsoft Entra ID > Enterprise applications > the existing AUM app >
-   Users and groups**, inspect the already-assigned role. Admin, Viewer and
-   Manager precedence is enforced by the service; this guide does not authorize
-   assigning new roles or granting consent.
-5. Run `aum configure --backend aum-service --save`, then `aum session show
-   --json`. A supplied profile also works for app-role users without Azure
-   resource-management rights.
-
-Native Azure CLI reads:
-
-```powershell
-az functionapp list --subscription $sub --query "[?tags.component=='aum-service'].{name:name,group:resourceGroup,host:defaultHostName}" -o table
-$functionGroup = Read-Host 'Selected Function App resource group'
-$functionName = Read-Host 'Selected Function App name'
-az functionapp config appsettings list --subscription $sub -g $functionGroup -n $functionName `
-  --query "[?contains(['AUM_CLIENT_ID','AUM_TENANT_ID','AUM_APIM_RESOURCE_ID','AUM_WORKSPACE_ID'], name)].{name:name, value:value}" -o json
-```
-
-Use the discovered endpoint and audience for the following, never a function key:
-
-```powershell
-$aumApi = Read-Host 'Discovered AUM HTTPS origin'
-$aumAudience = Read-Host 'api:// followed by the discovered AUM_CLIENT_ID'
-az rest --method get --url "$aumApi/api/v1/me" --resource $aumAudience -o json
-az rest --method get --url "$aumApi/api/v1/capabilities" --resource $aumAudience -o json
-$budgets = az rest --method get --url "$aumApi/api/v1/budgets" --resource $aumAudience -o json | ConvertFrom-Json
-$etag = '"' + $budgets.revision + '"'
-@{ token_limit=200000; reason='Approved daily capacity' } | ConvertTo-Json |
-  Set-Content -Encoding utf8 .\aum-budget-body.json
-# Example mutation; choose an existing authorized object and review before running:
-az rest --method put --url "$aumApi/api/v1/budgets/user/<object-id>" --resource $aumAudience `
-  --headers "If-Match=$etag" --body '@aum-budget-body.json' -o json
-```
-
-Verify a native mutation by rereading `/api/v1/budgets` and its new revision;
-an Admin may inspect `/api/v1/audit`. No Turnstile apply endpoint is involved.
-A request uses POST `/api/v1/budget-requests` with scope, absolute `token_limit`
-and reason; decisions POST `/api/v1/budget-requests/{id}/approve|reject|escalate`
-with reason and the current integer `version`. A boost POSTs `/api/v1/boosts`
-with the current `If-Match`, absolute raised limit and an expiry within 31 days.
-The service's timer owns expiry restoration.
-
-There is no native Azure portal form for these application workflows. The AUM
-terminal is their GUI; Azure CLI REST is the manual API path. The Function App
-portal verifies deployment and identity metadata, not application authorization
-by editing its storage. At the culminating run the earlier native-service
-deployment had been removed (`ResourceGroupNotFound`); no service deployment
-or live mutation evidence is fabricated from the earlier read-only screenshots.
+The [revision-4 parity manifest](../cli/finops/src/claude_finops/parity.json)
+distinguishes implemented current APIs from named server dependencies. Exact
+future request/response contracts ship in
+[`contracts.json`](../cli/finops/src/claude_finops/contracts.json).

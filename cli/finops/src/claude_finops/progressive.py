@@ -91,7 +91,7 @@ class ProgressiveRefresh:
         display_identity = self.present(self.identity)
         who = display_identity.get("email", display_identity.get("name", "caller"))
         scope = scope_label(display_identity)
-        prefix = f"{self.engine.month} | {self.engine.backend.name} | {self.identity.get('role', 'unknown')} | "
+        prefix = f"{self.engine.month} | via {self.connection_kind()} | {self.identity.get('role', 'unknown')} | "
         suffix = f" | @ {stamp}"
         available = max(8, self.size.width - len(prefix) - len(suffix) - 2)
         if len(who) > available:

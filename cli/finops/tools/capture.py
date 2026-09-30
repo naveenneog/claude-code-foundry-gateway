@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import hashlib
+from datetime import datetime, timezone
 from pathlib import Path
 
 from textual.widgets import TabbedContent
@@ -21,6 +23,7 @@ async def capture():
     images = snapshots / "svg"
     images.mkdir(parents=True, exist_ok=True)
     snapshots.mkdir(exist_ok=True)
+    written = []
     for optional in (False, True):
         tabs = EXTRA_TABS if optional else TABS
         features = dict(assistant=True, approvals=True, advanced=True) if optional else {}
@@ -38,9 +41,25 @@ async def capture():
                     await pilot.wait_for_scheduled_animations()
                     await pilot.pause(0.25)
                     grids[tab] = [strip.text for strip in app.screen._compositor.render_strips()]
-                    app.save_screenshot(f"{tab}-{size[0]}x{size[1]}.svg", path=str(images))
+                    name = f"{tab}-{size[0]}x{size[1]}.svg"
+                    app.save_screenshot(name, path=str(images))
+                    written.append(images / name)
             prefix = "optional-" if optional else ""
-            (snapshots / f"{prefix}{size[0]}x{size[1]}.json").write_text(json.dumps(grids, ensure_ascii=True), encoding="utf-8")
+            grid = snapshots / f"{prefix}{size[0]}x{size[1]}.json"
+            grid.write_text(json.dumps(grids, ensure_ascii=True), encoding="utf-8")
+            written.append(grid)
+    source_root = ROOT / "cli" / "finops" / "src" / "claude_finops"
+    sources = [Path(__file__).resolve(), *sorted(path for path in source_root.iterdir()
+                                               if path.suffix in {".py", ".json", ".tcss"})]
+
+    def hashes(paths):
+        return {path.relative_to(ROOT).as_posix(): hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+                for path in sorted(paths)}
+
+    manifest = dict(version=1, backend="Example", live=False, hash_format="utf8-lf-sha256",
+                    captured_at_utc=datetime.now(timezone.utc).isoformat(),
+                    sizes=[[80, 24], [160, 48]], sources=hashes(sources), outputs=hashes(written))
+    (snapshots / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print("Recorded 24 FakeBackend SVGs and 24 terminal-grid snapshots, including conditional tabs.")
 
 
