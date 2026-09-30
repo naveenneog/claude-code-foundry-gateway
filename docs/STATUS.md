@@ -70,6 +70,8 @@ Shard coverage passed. Receipts and JUnit identities are retained in
 All long jobs use `with-gate-lock.ps1 -Owner p71c`. Council, packet gates and
 integration remain with the lead; this builder does not push or merge.
 U26 remains OPEN for unrelated observations and the listed authority-transition path.
+Implementation and recorded proof: `9d8e838`
+(`fix(aum): start one refresh for compound navigation`).
 
 ## P85 AUM's terminal UI manages people, units, teams and budgets end to end, with tests, 2026-09-29
 
