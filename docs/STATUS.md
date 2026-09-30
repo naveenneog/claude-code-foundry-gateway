@@ -52,6 +52,8 @@ below the unchanged 300 s limit, so four shards remain. Shard coverage,
 RunnerIntegrity, architecture and final ledger/contract checks passed.
 Evidence is retained in `.finops-evidence\p71c-request-refresh`; long output
 remains under TEMP. All long jobs used `with-gate-lock.ps1 -Owner p71c`.
+Implementation and recorded rule-A proof: `17e0ef7`
+(`fix(aum): refresh request lookups and select their rows`).
 
 ### Council correction: a principal notice cannot drop a current lookup
 
