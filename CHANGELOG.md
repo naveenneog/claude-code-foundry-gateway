@@ -29,6 +29,11 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **Final P85 follow-up integration.** P71's owned-process deadline probes and
+  precise public-evidence section lookup are merged without production changes.
+  The single full AUM run passes all 1,200 cases; refreshed file and whole-check
+  weights retain four planned shards at 259, 259, 258 and 258 seconds.
+  P85 remains first in STATUS, with both follow-up and earlier merge records kept.
 - **P85 takes merged P80 without replacing its shard measurements.** The
   bounded merge keeps P85's reviewed helpers, approvals, capture provenance
   and four 281-second planned shards while retaining both ledger histories.

@@ -47,6 +47,52 @@ The initial architecture check passed with the temporary junction, so
 Evidence: `%TEMP%\p85-int-final-public-evidence.log` and
 `p85-int-final-architecture-initial.log`.
 
+#### Final merge and single full-run evidence
+
+Merge **`8139c067e9a69cb268019c356cac779b3444d56e`** has parents
+`3f321de5fc535909c5c947ba5273fd7db4e8ad6e` and pinned main
+`bf92ca3e1e2704121401bd754837050ce0417f23`. Both requested trailers are
+present. The prior `3f321de` merge record remains intact below.
+
+The full suite ran **once**, serially, on this clean merge, from `cli\finops`
+using this worktree's `.venv-finops\Scripts\python.exe`:
+`python -m pytest tests -q -p no:cacheprovider --junitxml <TEMP report>`.
+The shared-lock interval was **08:47:29-09:03:58 IST on 2026-09-30**.
+Result: **1,200 passed, 0 failed, 0 errors, 0 skips in 985.41 s**.
+All **269 P85** cases passed, as did all **10 deadline** and **3 P71 public-
+evidence** cases imported from the follow-up. A report-existence guard
+prevented an accidental repeat; no full-suite rerun was made. Evidence:
+`%TEMP%\p85-int-final-full-aum.log`, `p85-int-final-full-aum.xml` and
+`p85-int-final-full-summary.json`.
+
+`Update-FinOpsDurations.ps1` refreshed all **75** file weights from this
+single JUnit report: **1,200 cases**, **983.3 s** summed case time, rounded
+up per file. The four planned loads are **259 / 259 / 258 / 258 s**, owning
+**16 / 20 / 19 / 20** files. Every planned load is <=300 s; the four
+registrations and prerequisite skip names remain unchanged. The four AUM
+entries in the whole-check table and the AUM shard guide now match.
+`Test-FinOpsShards.ps1` passed **37/37** assertions. Shard evidence:
+`%TEMP%\p85-int-final-refresh-shards.log` and `p85-int-final-shard-plan.json`.
+
+Final required checks are green: `Test-RunnerIntegrity.ps1` passed
+**68/68** assertions under the shared lock (**09:09:57-09:12:41 IST**);
+`Test-DocReferences.ps1` passed **34/34** across **42 guides**;
+`Repair-ScriptEncoding.ps1 -Check` passed for **306 scripts**.
+The final `check-architecture.mjs` ran with the dependency junction and
+passed; the junction was removed. Neither architecture check required
+regeneration, so its sources, manifest and images remain unchanged.
+An exact comparison confirms both timing tables agree on all four <=300 s
+loads. Final logs: `%TEMP%\p85-int-final-runner-integrity.log`,
+`p85-int-final-doc-references.log`, `p85-int-final-encoding.log` and
+`p85-int-final-architecture-check.log`.
+
+The follow-up evidence/timing commit changes no production or pytest source
+after the full run. All requested builder validation is complete; the lead
+still owns delta council, packet gate and merging P85 to main. No push,
+merge to main, rebase, Azure call or other-worktree modification was made.
+The prior bounded merge record and every incoming follow-up section remain
+below this final P85 record.
+
 ### P80 main merge before the deadline-test follow-up, 2026-09-30
 
 PLAN / CONTRACT: the lead assigns a bounded merge of pinned main **`a4f6ec9`**

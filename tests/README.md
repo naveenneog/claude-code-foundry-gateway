@@ -71,9 +71,9 @@ when it is nonempty. `-IncludeAzure` cannot be combined with sharding or local-o
 ## AUM test shards
 
 The AUM pytest suite runs as four registered checks, `AUM - commands, dashboard and pilot [0/4]`
-to `[3/4]` (`tests/Test-All.ps1:295`). On 2026-09-30 IST its 1,197 cases took 1,077.53 s serially,
-beyond the 600 s per-check timeout (`tests/Test-All.ps1:9`). All 1,197 cases passed after
-P85 integrated the final P71 main fixes; [P85's integration evidence](../docs/STATUS.md#council-round-4-and-final-p71-main-integration-2026-09-30)
+to `[3/4]` (`tests/Test-All.ps1:295`). On 2026-09-30 IST its 1,200 cases took 985.41 s serially,
+beyond the 600 s per-check timeout (`tests/Test-All.ps1:9`). All 1,200 cases passed after
+P85 integrated P71's deadline-test follow-up; [P85's integration evidence](../docs/STATUS.md#final-p71-follow-up-integration-and-builder-validation-2026-09-30)
 records that single full run and the earlier results. `Test-FinOps.ps1 -Shard i/n` passes one
 share of the top-level `cli/finops/tests` files to pytest; without `-Shard` it runs the whole
 directory as before (`tests/Test-FinOps.ps1:4`).
@@ -84,7 +84,7 @@ equal loads choose the lower shard, and a file without a weight takes `DefaultSe
 (`tests/Select-FinOpsShard.ps1:49`). A weight only moves a file between shards; no file is run
 twice or left out.
 
-The refreshed plan assigns all 75 files once, with four planned shard loads of 281 s each.
+The refreshed plan assigns all 75 files once, with shard loads of 259, 259, 258 and 258 s.
 All remain below 300 s, so four registrations and their four prerequisite skip names remain;
 a fifth shard is not needed for this measurement. Test-All's whole-check timing table uses
 the same planned loads.
