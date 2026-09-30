@@ -1002,6 +1002,13 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Fixed
 
+- **The AUM deadline tests raced process teardown on hosted runners (P71 follow-up).** Two tests
+  in `cli/finops/tests/test_azure_deadline.py` checked, with a zero-millisecond wait, that each
+  descendant had exited right after the Azure CLI deadline. `TerminateJobObject` starts
+  termination and returns before the processes are signaled, so hosted run 36646539868 on main
+  `3b7c192` reported a terminated descendant as still running. The descendants now record their
+  creation time and outlive the test, and the check waits up to 10 s for the recorded process to
+  end; a reused process id no longer counts as the descendant. The timeout code is unchanged.
 - **The guided flow's FinOps step failed for every tool but None (P79).** It stopped at "Applying
   FinOps..." with "Cannot convert value to type System.String.": `& $path @($Command.arguments)`
   passed the argument list as one array, which the advanced scripts it runs refuse for a `[string]`
