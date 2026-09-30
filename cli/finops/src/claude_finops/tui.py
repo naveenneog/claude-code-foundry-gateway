@@ -491,7 +491,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
         self.query_one(f"#note-{tab}", Static).update(safe_text(note))
         if self.pending_selection:
             for index, row in enumerate(records):
-                if row.get("scope_id", row.get("id")) == self.pending_selection:
+                if row.get("scope_id", row.get("request_id", row.get("id"))) == self.pending_selection:
                     table.move_cursor(row=index)
                     break
             self.pending_selection = None
@@ -714,7 +714,7 @@ class FinOpsApp(PrincipalUI, ProgressiveRefresh, FeatureUI, PublicationApp):
             self.query_one("#dimension", Select).value = "model"
             self.request_filters = {"model_id": result["id"]}
         self.pending_selection = result["id"]
-        self.action_tab(result["tab"], refresh=result["kind"] != "request")
+        self.action_tab(result["tab"], refresh=True)
         if result["kind"] == "request":
             self.open_detail({"request_id": result["id"]})
 

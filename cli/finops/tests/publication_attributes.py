@@ -775,7 +775,7 @@ ATTRIBUTE_CONTEXTS = {
     ('screens.py', 'DetailScreen.__init__'): 'dd31bf5cb795be5af1c6abba7ced5276e8bd278a80e03c65025473a277b80543',
     ('screens.py', 'DetailScreen.compose'): 'c89c146c6eaaf6df8a9e5e5992123a72478c13ffec37407411084e427dd7913c',
     ('tui.py', 'FinOpsApp.__init__'): 'a87d8917947de9aeb7e48721556bfdbe0e3f7652ebcb7c71b05c32a41a7cb586',
-    ('tui.py', 'FinOpsApp._render_tab'): '60b28c3dbafc5a5c82c977964c82917711229265ab2919b84df96c34ef9f860e',
+    ('tui.py', 'FinOpsApp._render_tab'): '555c6b8f97a42d3aeece195a42abf71b98d48bfa8eb7ded3efa4b7e2fbed06f8',
     ('tui.py', 'FinOpsApp.exact_on_focus'): 'fdf137f632ecb8766aa376c600e118cb6e87fa6ea5b3efe859bda17ae80faf1e',
     ('tui.py', 'FinOpsApp.get_line_filters'): '2394c7bf33b07584c30c1f1dfa0b10d9ea280f39fc2fdeca44ecb8d8f55fa31b',
     ('tui.py', 'FinOpsApp.open_detail'): '89b0f5eecb96737f7641a70282bae37c6a11b0093f95b7b3bb74e89848548139',

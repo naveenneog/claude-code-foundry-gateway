@@ -10,6 +10,49 @@ hosted shard 3/12, failed `AUM - commands, dashboard and pilot [3/4]` at
 `test_dashboard.py::test_redacted_queries_do_not_leak_through_input_or_filter_echo`.
 The worker wait after `open_lookup_result` raised `WorkerCancelled`.
 
+### Council round 2: request lookup follows rule A
+
+On `adee1f7`, Security passed and the other four seats blocked the request
+exception: it bypassed explicit refresh ownership, so changed/current/notice
+lookups did not follow the same rule. Rule A is selected: every accepted lookup
+owns one target-view refresh; a request lookup also opens its detail once.
+`load_tab("requests")` reads, but does not reset, the offset/cursor/filter state.
+`action_refresh` only moves focus when no modal is open. Rendering consumes
+`pending_selection`; its request-row match must use `request_id` as well as
+scope/id keys so a present target is selected instead of leaving a stale intent.
+
+The notice branch applies to calls made without a preceding input event.
+`PrincipalUI.on_event` clears `_principal_notice` for `events.InputEvent`
+before dispatch (`principal_ui.py:121-125`); normal user-started lookup
+therefore enters with the notice cleared. The non-input branch is still
+required for direct calls and guarded callbacks. The real-input test observed
+the notice cleared at lookup-action entry, not merely on the final screen.
+
+RED-first cases cover changed/current tabs and notice-present direct calls,
+both offset and cursor paging, one view worker, one detail worker, pending
+selection consumption, preserved paging and a detail modal that remains open
+while the held view refresh completes. RED had **8 failed, 1 passed in 15.69 s**:
+six request cases started no view worker, and the two changed-tab controls
+selected request 050 instead of requested 057. The real-input notice-clear
+control passed. After applying rule A and matching pending rows by
+`request_id`, all **9 cases passed in 15.43 s**. Only the existing renderer's
+exact source-context fingerprint is renewed; no capability is newly allowed.
+The final runtime baseline passed **10/10 in 18.33 s**, including the unchanged
+redaction case. Four isolated-source mutations retained those ten identities:
+restoring the request exception, omitting detail, removing the request selection
+key and resetting paging produced **6, 8, 8 and 8 failures**, respectively.
+Each hit its intended assertion with zero errors or skips.
+
+The loaded run passed **300/300 executions**, 30 iterations with four CPU
+burners and no failures, skips or identity mismatches. The full AUM suite passed
+all **1,278 collected identities in 1,122.80 s** (1,126.14 s wall), with no
+failures, errors or skips. Source witnesses were regenerated; terminal grids
+and SVGs are unchanged. The measured 76-file plan is **293, 293, 293 and 292 s**,
+below the unchanged 300 s limit, so four shards remain. Shard coverage,
+RunnerIntegrity, architecture and final ledger/contract checks passed.
+Evidence is retained in `.finops-evidence\p71c-request-refresh`; long output
+remains under TEMP. All long jobs used `with-gate-lock.ps1 -Owner p71c`.
+
 ### Council correction: a principal notice cannot drop a current lookup
 
 On `c003014`, Security passed and Architect, Coder, QA and UX blocked the
@@ -22,7 +65,7 @@ clears old data and closes old dialogs on a verified identity transition;
 current source guards still authorize fresh results, and old guards remain
 invalid. A current guarded lookup may therefore refresh immediately while
 the notice remains visible. It must not clear the notice to force activation.
-Every compound navigation will own one explicit refresh after preparing its
+Every accepted compound navigation now owns one explicit refresh after preparing its
 state, suppressing the redundant programmatic tab activation rather than
 delegating to a message that may be ignored.
 
@@ -85,25 +128,26 @@ Implementation and recorded council-correction proof: `5977237`
 
 ### Initial correction and evidence
 
-Initial plan (superseded by the council correction above): one non-request lookup or compound tab/filter action starts one `view`
-refresh. Changing tabs leaves that refresh to the existing activation handler;
-an already-selected tab still reloads after its query state changes. The
-person input remains masked and private values stay out of screenshots.
+The initial plan delegated changed-tab reads to native activation; both council
+corrections above supersede that approach. The current rule is one explicit
+view refresh for every accepted lookup, with an additional detail read for a
+request. The person input remains masked and private values stay out of screenshots.
 No worker cancellation is caught or ignored to obtain a passing result.
 ADR-0035's publication guards and closed capability approvals remain.
 
-The source has two triggers: `open_lookup_result` calls `action_refresh`
-directly after `action_tab`, and the queued `TabActivated` calls it again
-through `switched`. The People input listens for submission, not change, so
-setting that query alone is not the second trigger.
+The original source had two triggers: `open_lookup_result` called
+`action_refresh` directly after `action_tab`, and queued `TabActivated`
+called it again through `switched`. The People input listens for submission,
+not change, so setting that query alone was not the second trigger.
 
 The scan also found paired navigation/refresh in breadcrumb return, saved
 views, comparison, usage basis, overview ranking and dashboard drill-down.
 Advanced-view navigation combines a tab activation with a Select change.
 These are covered by changed-tab and current-tab controls. Current-tab search,
 team/dimension/interval selection, request filters, paging and month/filter
-dialogs already request one refresh. Request lookup retains its separate
-detail worker. One possible additional path is listed, not changed:
+dialogs already request one refresh. Under rule A, request lookup owns the
+same view refresh and additionally retains its separate detail worker.
+One possible additional path is listed, not changed:
 `FeatureUI.activate_profile` (`ui_features.py:443`) refreshes after
 `update_access` can force a different permitted tab. Its engine/authority
 transition needs a separate guarded lifecycle change.
@@ -114,13 +158,13 @@ had **14 failed, 14 passed in 36.54 s**: every changed-tab case duplicated the
 refresh; same-tab cases still refreshed. A same-choice Advanced control
 separately failed with zero workers (**2.10 s**).
 
-Initial GREEN (the notice branch was missing): `action_tab` reports whether it changed the tab. Compound callers let
-the activation handler own a changed-tab refresh and explicitly refresh an
-unchanged tab. Saved-view state is prepared before navigation. Advanced
-selection suppresses its programmatic Select echo. Keyboard tab behavior,
-publication guards, rejected-navigation behavior and redaction assertions
-remain. All **31 runtime cases passed in 40.81 s**; the closed-contract checks
-passed without changing an approval or fingerprint.
+Initial GREEN (notice and request branches were not covered): `action_tab`
+reported a tab change, and callers delegated changed-tab reads to activation.
+That ownership rule was replaced by the council corrections above. Saved-view
+preparation and Advanced selector suppression remain. At that stage, **31
+runtime cases passed in 40.81 s**, and closed-contract checks passed without
+an approval or fingerprint change. These are historical results, not proof
+of the later notice and request branches.
 
 Four isolated-source mutation probes ran the same 31 identities. Forcing an
 unchanged result, forcing a changed result, restoring the lookup's unconditional

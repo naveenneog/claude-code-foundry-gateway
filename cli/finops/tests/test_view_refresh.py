@@ -2,7 +2,7 @@ import asyncio
 from functools import wraps
 
 import pytest
-from textual.widgets import Input, TabbedContent, TabPane
+from textual.widgets import DataTable, Input, TabbedContent, TabPane
 
 from claude_finops.config import Config
 from claude_finops.dashboard import DashboardPanel
@@ -10,6 +10,7 @@ from claude_finops.dashboard_drill import DashboardRows
 from claude_finops.engine import Engine
 from claude_finops.errors import FinOpsError
 from claude_finops.fake import FakeBackend
+from claude_finops.screens import DetailScreen, LookupScreen
 from claude_finops.tui import FinOpsApp
 
 
@@ -76,7 +77,7 @@ def invoke_compound_action(app, drill, surface, target):
 
 @pytest.fixture
 def pane_focus(monkeypatch):
-    focused = {tab: asyncio.Event() for tab in ("overview", "people", "budgets", "usage", "trends", "anomalies", "advanced")}
+    focused = {tab: asyncio.Event() for tab in ("overview", "people", "budgets", "usage", "trends", "requests", "anomalies", "advanced")}
     focus_pane = TabbedContent._on_tab_pane_focused
 
     @wraps(focus_pane)
@@ -263,3 +264,102 @@ async def test_delayed_pane_focus_cannot_retarget_a_lookup(monkeypatch, pane_foc
         assert len(workers) == 1 and not workers[0].is_cancelled
         assert app.active == "people" and app.people_query == SECRET_PERSON
         assert "people" in app.data
+
+
+@pytest.mark.parametrize("navigation", ["switch", "current", "notice-switch", "notice-current"])
+@pytest.mark.parametrize("paging", ["offset", "cursor"])
+async def test_request_lookup_refreshes_once_and_keeps_detail_and_paging(monkeypatch, pane_focus, navigation, paging):
+    backend = FakeBackend(features={"request_cursor": paging == "cursor"})
+    app = FinOpsApp(Engine(backend, "2026-09"), Config(backend="fake"), first_run=False)
+    async with app.run_test(size=(100, 32)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pane_focus["overview"].wait()
+        app.action_tab("requests")
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pane_focus["requests"].wait()
+        app.request_page = 1
+        app.request_cursor = "50"
+        app.cursor_stack = [None]
+        app.request_before = "2026-09-25T00:00:00Z"
+        app.request_filters = {"model_id": "claude-sonnet-5"}
+        await app.action_refresh().wait()
+        request_id = app.records["requests"][7]["request_id"]
+        if navigation.endswith("switch"):
+            app.action_tab("overview")
+            await pilot.pause()
+            await app.workers.wait_for_complete()
+            await pane_focus["overview"].wait()
+
+        before = (app.request_page, app.request_cursor, list(app.cursor_stack),
+                  app.request_before, dict(app.request_filters))
+        views, details = [], []
+        release = asyncio.Event()
+        refresh, detail, load = app.action_refresh, app._open_detail, app.load_tab
+
+        def record_view():
+            worker = refresh()
+            views.append(worker)
+            return worker
+
+        def record_detail(*args, **kwargs):
+            worker = detail(*args, **kwargs)
+            details.append(worker)
+            return worker
+
+        async def held_view(tab):
+            await release.wait()
+            return await load(tab)
+
+        monkeypatch.setattr(app, "action_refresh", record_view)
+        monkeypatch.setattr(app, "_open_detail", record_detail)
+        monkeypatch.setattr(app, "load_tab", held_view)
+        if navigation.startswith("notice-"):
+            app._principal_notice = True
+        try:
+            app.open_lookup_result(dict(kind="request", id=request_id, tab="requests"),
+                                   read_guard=app.current_guard())
+            await pilot.pause()
+            assert len(views) == 1, "Every request lookup must own one view refresh."
+            assert len(details) == 1, "A request lookup must open its detail exactly once."
+            await details[0].wait()
+            await pilot.pause()
+            modal = app.screen
+            assert isinstance(modal, DetailScreen) and modal.data["request_id"] == request_id
+        finally:
+            release.set()
+        await views[0].wait()
+        await pilot.pause()
+        assert len(views) == len(details) == 1
+        assert not views[0].is_cancelled and not details[0].is_cancelled
+        assert app.screen is modal and modal.data["request_id"] == request_id
+        assert app.active == "requests" and app.pending_selection is None
+        assert before == (app.request_page, app.request_cursor, list(app.cursor_stack),
+                          app.request_before, app.request_filters), "Request lookup reset paging or filters."
+        table = app.query_one("#table-requests", DataTable)
+        assert app.records["requests"][table.cursor_row]["request_id"] == request_id
+        if navigation.startswith("notice-"):
+            assert app._principal_notice
+
+
+async def test_first_lookup_input_clears_notice_before_action(monkeypatch, pane_focus):
+    app = FinOpsApp(Engine(FakeBackend(), "2026-09"), Config(backend="fake"), first_run=False)
+    async with app.run_test(size=(100, 32)) as pilot:
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        await pane_focus["overview"].wait()
+        notices = []
+        lookup = app.action_lookup
+
+        def record_lookup():
+            notices.append(app._principal_notice)
+            return lookup()
+
+        monkeypatch.setattr(app, "action_lookup", record_lookup)
+        app._principal_notice = True
+        await pilot.press("/")
+        await pilot.pause()
+        await app.workers.wait_for_complete()
+        assert notices == [False], "Input must clear the notice before dispatching the lookup action."
+        assert isinstance(app.screen, LookupScreen)

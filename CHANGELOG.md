@@ -1099,6 +1099,10 @@ exact streaming cache-creation detail remains **U13**.
   even while a principal notice suppresses native activation. The notice is not
   cleared to obtain a read, expired lookup origins remain refused, and obsolete
   native pane-focus events cannot retarget or cancel the newer lookup.
+  Request lookups follow the same rule: one target-view refresh and one detail
+  read for changed/current tabs and non-input calls under a notice. Refresh
+  preserves offset/cursor paging and consumes request-row selection. Normal
+  input clears the notice before the lookup action is dispatched.
 - **The Cloud Shell launcher tests depended on Git Bash's /tmp mount (P85 follow-up).** The tests
   converted paths with `cygpath -u`, which names a folder under the Windows temp folder `/tmp/...`.
   One test starts Git Bash with `TMP` and `TEMP` set to a missing folder; the hosted runner's Git

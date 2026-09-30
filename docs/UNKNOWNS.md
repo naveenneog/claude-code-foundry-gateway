@@ -133,6 +133,17 @@ independent absence checks passed at 22:13:51Z.
 
 ### U26 - P71 lookup refresh follow-up, 2026-09-30
 
+Round 2 applies one rule to request-kind results too: one target-view refresh
+and one detail read, without resetting paging or closing the detail modal.
+Pending request selection is consumed by matching `request_id`. The
+notice-present branch is for calls made without input; `PrincipalUI.on_event`
+clears the notice before dispatching a normal user-started lookup. Eight
+request cases failed before the correction (missing view reads or wrong
+selection); those cases and the real-input control passed afterward.
+The final rule-A proof passed 300 loaded executions and all 1,278 full-suite
+identities. Four request mutations were caught without changing test identities.
+Current evidence is in [STATUS](STATUS.md#council-round-2-request-lookup-follows-rule-a).
+
 Council found that a principal notice can suppress the activation to which the
 initial lookup fix delegated its read. A tab change was therefore not evidence
 of refresh ownership. Accepted current-source compound actions now request one
