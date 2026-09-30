@@ -78,6 +78,15 @@ and [ADR-0038](adr/0038-aum-actions-and-connection.md#p71-integration-authorizat
 These are offline client-boundary findings, not new live Azure or directory
 claims. U38-U41 remain P80's IDs; the separate P71 timing observations are
 retained in STATUS without closing U26.
+
+The lead's 2026-09-30 final-main/sharding follow-up retains those four P80
+contracts. P71's final exact-type message and absent-main-tab corrections are
+reviewed against ADR-0035. P80's complete serial run passed 928 cases in
+518.76 s and supplied all 65 file weights; none were assumed from P85.
+Its four shard plans are 141/140/140/140 s. The reviewed P85 planner's 300 s
+limit is a planned-weight bound, not a measurement of concurrent gate wall
+time; that risk remains visible in the P80 STATUS and test-runner documentation.
+
 ## P84 research before implementation
 
 | ID | State | Question | Blocks |

@@ -29,6 +29,11 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P85 takes merged P80 without replacing its shard measurements.** The
+  bounded merge keeps P85's reviewed helpers, approvals, capture provenance
+  and four 281-second planned shards while retaining both ledger histories.
+  Contract/publication/P85 checks pass; a new full AUM run, weight refresh
+  and RunnerIntegrity are deferred until the pending deadline-test follow-up.
 - **P85 includes P71's final main fixes.** Native message suppression and
   missing-main-tab handling now coexist with P80's guarded recovery and
   P85's management, Escape/quit and Cloud Shell behavior. The composed
@@ -106,6 +111,17 @@ exact streaming cache-creation detail remains **U13**.
   mutation probes detect removal and related receipt/discovery regressions.
   Architecture boundaries are unchanged. P71's closed-presentation integration
   requirements are recorded in STATUS without merging that branch.
+- **P80 final-main integration and AUM test sharding.** P71's final exact-type message
+  controls and absent-main-tab handling retain P80's protected actions and recovery.
+  Four duration-weighted AUM checks and their coverage proof are ported from P85
+  `c9ae1c8` / `729a249`, using P80's own serial JUnit timings rather than P85's weights;
+  the 600 s check timeout and every existing test remain unchanged.
+  The main `3b7c192` integration passes all 928 serial AUM cases in 518.76 s.
+  Its 65 files plan at 141/140/140/140 s across four complete shards; coverage,
+  runner integrity, mutation ownership, documentation, encoding and architecture
+  checks pass. The combined publication fingerprint review and source-preserving
+  removal proofs are recorded in [P80 STATUS](docs/STATUS.md#final-main-integration-and-reviewed-aum-test-shards-2026-09-30).
+
 - **P80/P71 publication integration.** Existing AUM actions retain guarded notifications,
   text-only report/profile paths, origin-checked local saves and recovery scrolling;
   profile conflicts keep the current connection form instead of clearing its principal state.

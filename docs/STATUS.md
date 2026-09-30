@@ -1,6 +1,6 @@
 # Status
 
-**Active packets (2026-09-30, run in parallel worktrees):** P80 AUM shows every action it has ([ROADMAP](ROADMAP.md)), P85 AUM's terminal UI manages people, units, teams and budgets, and P81 USD budgets are the primary enforcer, each on its own branch. The owner approved merging P80 and P85 on 2026-09-29; each merges after its council passes and its packet gate passes on the merged tree, P85 after P80. P81 merges only with the owner's explicit approval. Each has its own section on its branch; the section lands here when the packet merges. P71 AUM answers fast and says why it cannot is merged with the owner's approval (`01bb6c7`, [below](#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28)). P84 projection deployment checks everything before it writes and never switches into an outage is merged with the owner's approval (`3e4430b`, [below](#p84-projection-deployment-checks-everything-before-it-writes-and-never-switches-into-an-outage-2026-09-29)); switching entitlement to the projection waits for P86. P78 the test suite runs in parallel on GitHub-hosted runners is merged with the owner's approval (`2737232`, [below](#p78-the-test-suite-runs-in-parallel-on-github-hosted-runners-2026-09-28)); ADR-0039's proposed charter change is not enacted. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)), and its follow-up, the installer permutation check reads only its own record (`05dea1b`, [below](#p79-follow-up-the-installer-permutation-check-reads-only-its-own-record-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
+**Active packets (2026-09-30, run in parallel worktrees):** P85 AUM's terminal UI manages people, units, teams and budgets ([ROADMAP](ROADMAP.md)) and P81 USD budgets are the primary enforcer, each on its own branch. The owner approved merging P85 on 2026-09-29; it merges after its council passes and its packet gate passes on the merged tree. P81 merges only with the owner's explicit approval. Each has its own section on its branch; the section lands here when the packet merges. P80 AUM shows every action it has, connects in one step, and its guide starts with installation is merged with the owner's approval (`3f77754`, [below](#p80-aum-shows-every-action-it-has-connects-in-one-step-and-its-guide-starts-with-installation-2026-09-28)). P71 AUM answers fast and says why it cannot is merged with the owner's approval (`01bb6c7`, [below](#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28)). P84 projection deployment checks everything before it writes and never switches into an outage is merged with the owner's approval (`3e4430b`, [below](#p84-projection-deployment-checks-everything-before-it-writes-and-never-switches-into-an-outage-2026-09-29)); switching entitlement to the projection waits for P86. P78 the test suite runs in parallel on GitHub-hosted runners is merged with the owner's approval (`2737232`, [below](#p78-the-test-suite-runs-in-parallel-on-github-hosted-runners-2026-09-28)); ADR-0039's proposed charter change is not enacted. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)), and its follow-up, the installer permutation check reads only its own record (`05dea1b`, [below](#p79-follow-up-the-installer-permutation-check-reads-only-its-own-record-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
 ## P85 AUM's terminal UI manages people, units, teams and budgets end to end, with tests, 2026-09-29
 
@@ -9,6 +9,89 @@ Owner: @naveenneog. Builder worktree: `accel-p85`, branch
 `30cdfd0`). P85 is the active packet on this branch. Council, the packet gate
 and integration to main belong to the lead. The integration assignment below
 authorizes this builder's integration merges into P85 and commits, but no push or main merge.
+
+### P80 main merge before the deadline-test follow-up, 2026-09-30
+
+PLAN / CONTRACT: the lead assigns a bounded merge of pinned main **`a4f6ec9`**
+(`3f77754` plus its record) into clean P85 **`f3e9503`**, with `--no-ff`
+and no rebase. P80 has ported P85's reviewed AUM sharding but carries its own
+measurements. Keep P85's helper/runner implementation and its existing
+**75-file, four-by-281-second** plan; do not regenerate weights from a partial
+selector. Preserve both ledger histories and regenerate the architecture
+manifest through the temporary dependency junction, removing it afterward.
+
+The next P71 `test_azure_deadline.py` follow-up has not landed in this pinned
+main and is outside this step. Run only contract/publication/P85 selectors,
+shard coverage, documentation references and encoding. **Do not run the full
+AUM suite or `Test-RunnerIntegrity.ps1` here.** Both are explicitly deferred
+until the lead assigns the later main merge.
+
+Five of the six requested helper/runner files have identical Git blobs on
+both sides. `Test-All.ps1` differs only in its two-line historical timing
+comment; its registrations are identical, and P85's whole file is retained.
+Audit all approved function and boundary fingerprints against the resulting
+source under ADR-0035; a differing ledger comment is not a new approval.
+No code, test, publication rule or budget may be weakened. No push, merge to
+main, Azure call, or other-worktree modification is authorized.
+
+#### Conflict and approval review
+
+The merge produced **ten conflicts**. `CHANGELOG.md` and `UNKNOWNS.md`
+use Git's union merge, keeping both sides; the repeated U30 chapter is
+deduplicated only after verifying identical bytes. STATUS auto-merges both
+histories, with P85 still the first packet section.
+
+`Test-All.ps1`, both timing tables and the AUM README section keep P85's
+values. The non-AUM timing entries were compared and are identical, so no
+incoming measurement outside AUM is lost. All three shard helpers,
+`Test-FinOps.ps1`, `Test-All.ps1` and `Test-RunnerIntegrity.ps1` match P85.
+Both timing tables retain **281 / 281 / 281 / 281 s** from P85's earlier
+1,197-pass full run, not P80's 928-case measurement.
+
+The two approval-table conflicts preserve P85's reviewed
+`DeveloperPicker.open_add_form` context
+`5f095d01dbc48d70b45242154692faab781b14444b3977ad0693834a913a4faf`
+and its widget-boundary reason/digest
+`adeb80ffa2738f128805295627ce986c8c133bb7470b6d04b1ddb95a2660b0ef`.
+The picker retains P85's guarded stack replacement; incoming P80's digest
+describes its older push behavior. Both branches already agree on the widget
+digest. **Zero fingerprints are renewed and zero approvals are added**:
+all function and boundary digests were recalculated and match, and there is
+no production-source or capture-tool change relative to `f3e9503`.
+No RED implementation cycle is invented for an unchanged function.
+
+The Example snapshot-manifest conflict keeps P85's existing manifest only
+after proving that every source, capture tool and snapshot output is unchanged.
+The architecture manifest is instead regenerated using the required renderer;
+it is not hand-merged. All eleven preserved approval/helper/runner/timing/
+snapshot files and the entire AUM README section were explicitly compared
+with P85. Preservation evidence is `%TEMP%\p85-int-p80-preservation.json`.
+
+#### Bounded validation and stop point
+
+The selected contract/publication/P85 run passed **701/701 in 692.07 s**,
+with no failures, errors or skips. It includes all `test_p85_*.py`,
+`test_publication*.py`, `test_*contract*.py` (including revision-four and
+P80 publication contracts), and `test_runtime_publication_sinks.py`, with
+duplicate file selections removed. The shared lock was held from
+**07:50:17 to 08:01:52 IST on 2026-09-30**. Evidence:
+`%TEMP%\p85-int-p80-targeted.log` and `p85-int-p80-targeted.xml`.
+
+`Test-FinOpsShards.ps1` passed **37/37**, using the unchanged P85 measurements.
+`Test-DocReferences.ps1` passed **34/34** across **42 guides**;
+`Repair-ScriptEncoding.ps1 -Check` passed for **306 scripts**.
+The renderer and architecture check passed under the shared lock
+(**08:04:48-08:05:04 IST**): **17 specs, 19 PNGs**. The dependency junction
+was removed. Reports are `%TEMP%\p85-int-p80-shards.log`,
+`p85-int-p80-doc-references.log`, `p85-int-p80-encoding.log` and
+`p85-int-p80-render.log`.
+
+**No full AUM suite, RunnerIntegrity run, or duration refresh was performed
+in this step.** The shard coverage check's full collection and synthetic
+fixtures are not a full AUM execution. P85's 1,197-case measurement below
+remains historical evidence from the previous step. Stop after this merge
+and its ledger record; the next main merge and full validation await the
+lead's assignment after the deadline-test follow-up lands.
 
 ### Council round 4 and final P71 main integration, 2026-09-30
 
@@ -1334,7 +1417,199 @@ references 34 (8.81 s), FlowLifecycle 33 (2.37 s), ProjectionInstaller 34 (0.67 
 
 ## P80 AUM shows every action it has, connects in one step, and its guide starts with installation, 2026-09-28
 
+**Merged as `3f77754` on 2026-09-30 with the owner's approval.** Council round 5 passed on all
+five seats at `8a3e704`. The packet gate passed on `8a3e704`: 101 of 101 Test-All checks in
+1,704.0 s, with the four AUM shards at 112.3, 131.4, 134.6 and 140.4 s. The merge tree is the
+gated tree.
+
 Owner test target: AUM terminal and CLI usability in `cli/finops`, plus the AUM guide set. Worktree: `accel-p80`, branch `p80-aum-usability`, based on P71 commit `bcf8554`. The owner approved merging P80 after P71 at 07:41 IST on 2026-09-29. The lead authorized merging pinned `origin/main` (`30cdfd0`) into this branch without rebasing; later P71 work remains separate. This builder is not authorized to push or merge to main.
+
+### Final-main integration and reviewed AUM test shards, 2026-09-30
+
+**Builder checks GREEN:** the one serial run passed **928/928**; all four
+shards plan **141/140/140/140 s**, and every requested follow-up check passed.
+This supersedes the earlier integration's non-green run below, without
+removing that historical evidence. Council and packet-gate execution remain
+with the lead.
+
+**Council round 4 on `a405f69`: Architect, Coder, QA, UX and Security all PASS,**
+as reported by the lead at 05:12 IST on 2026-09-30. This records the lead's
+integration council; the builder did not run another council or packet gate.
+
+**PLAN / CONTRACT:** Merge pinned main `3b7c192` without rebasing, retaining
+P71's `2be0973` exact-type message controls and `7a28b74` absent-main-tabs
+handling together with P80's guarded actions, profile transaction and recovery
+scrolling. Resolve approved contexts by actual function, review the combined
+boundary under ADR-0035, and regenerate architecture and Example provenance.
+Keep both ledgers and every existing contract/budget.
+
+Port the reviewed sharding implementation from P85 **`c9ae1c8` / `729a249`**,
+not P85's duration data. The selector, coverage test and duration updater are
+copied byte-identically; only P80's one new complete serial run supplies its
+weights. Four registered shards must cover every discovered/pytest-collected
+file exactly once and each plan at most **300 s**, preserving Test-All's
+**600 s** per-check timeout. P80's previous 468.62 s serial run projects to
+about 534 s using the lead's observed P71 gate multiplier of 1.14; this
+motivates the port but is not a P80 gate measurement. Actual concurrent shard
+wall time is not inferred from planned weights.
+
+All long work uses `with-gate-lock.ps1 -Owner p80-integration`. The serial
+command is `python -m pytest tests -q -p no:cacheprovider --junitxml <file>`,
+run once from `cli\finops`. Requested runner, shard, reference, encoding and
+architecture checks follow the measurement. Full output is retained in
+`%TEMP%\p80-main-*` and `%TEMP%\p80-sharding-*`. No other worktree is edited;
+there is no push, main merge or Azure call.
+
+#### Merge and publication review
+
+The merge from clean `a405f69` found five conflicts: CHANGELOG,
+`publication_attributes.py`, `publication_policy.py`, UNKNOWNS and the
+architecture manifest. Production Python merged automatically. Both P80 and
+main ledger entries remain: the current main U26/P84 history is retained,
+P80's research block is copied verbatim, and the duplicate U30 history was
+confirmed text-identical before retaining main's placement. STATUS keeps
+main's current Active packets line and both packet sections.
+
+The approval-map conflict is resolved by function, not by taking a whole side:
+`FinOpsApp.switched` uses main's absent-view guard and reviewed digest, while
+`FinOpsApp.update_access` retains P80's capability-button behavior and digest
+`add588ab82d0da215820a1f1e80d55c6a8c253517b274c25017e48cc4e1c9bdc`.
+P80's profile boundary remains unchanged. Source inspection confirmed that
+the combined widget module differs from main only by P80's already-reviewed
+`VerticalScroll.publication_scroll_home`.
+
+| Reviewed fingerprint | Value / reason |
+|---|---|
+| Combined `publication_widgets.py` boundary, renewed here | `adeb80ffa2738f128805295627ce986c8c133bb7470b6d04b1ddb95a2660b0ef`: P71's original-type message filtering and payload-free diagnostics coexist with P80's retained-origin synchronous recovery scrolling. |
+| `_seal_message`, inherited renewal from `2be0973` | `59d057e1fb94be6f3bf1f2dae6333b710d8ff6acafec9ea51f2e3a222bfe3581`: remember the original type when creating a diagnostic-only adapter. |
+| `_protect_native_widget`, inherited renewal from `2be0973` | `eaf78d15a4ed9b4ee67c5ee5e54157359ce261be5d2d1c9a36a9b23fc18f0d69`: adapted native receivers preserve their original eligibility checks as well as exact-type controls. |
+| `FinOpsApp.switched`, inherited renewal from `7a28b74` | `4281adb59bec8d2f19a73bf4bab44f08f2dba575f4905add86447ca82eb880cc`: check main-view presence before reading the active pane; retain principal-notice handling. |
+
+The incoming `_message_enabled`, `PublicationDispatch.check_message_enabled`
+and `_protect_native_widget.check_message_enabled` context approvals and
+their exact-expression reasons are retained unchanged from P71. No new
+ordinary member, builtin, import, raw receiver or static-write exception is
+introduced by this follow-up; `check_message_enabled` remains default-deny
+outside the reviewed internal contexts. The 51 static writes and both
+boundary-module restrictions remain.
+
+The combined-source RED was **2 failed / 69 passed in 3.72 s**, specifically
+the stale widget-boundary digest and the resulting closed-source refusal.
+After inspecting the changed call chain, the digest was computed with
+`publication_policy.digest(ast.parse(source))`; every function-context digest
+matched its actual merged body. Two scratch removal probes then passed the
+ADR-0035 recipe: **85 baseline cases passed**, removal of original-type
+filtering failed **12 assertions**, and removal of the absent-main-tabs guard
+failed **4 assertions**. Both mutants collected/executed the same 85 IDs
+without errors or skips; byte restoration was followed by **85 passed**.
+The full harness took **52.907 s** and its receipt/logs are under
+`%TEMP%\p80-main-review-fbe784019d9f`. The selector includes the P80 retained
+scrolling controls alongside P71's delivery/lifecycle controls and the source
+contract, so neither parent behavior is inferred from a fingerprint alone.
+
+#### Reviewed shard port
+
+The P85 commits were read with `git -C accel-p85 show`; that worktree was
+not edited. Its three helper files have no difference from `729a249` and
+were copied byte-identically:
+
+| Helper | SHA-256 of both worktree copies |
+|---|---|
+| `Select-FinOpsShard.ps1` | `0B4D06C40634E9ED8D09435C05F8DC7DDA21155E0CDA57FAABF9FA59AEF88023` |
+| `Test-FinOpsShards.ps1` | `DAEA65DAB72812719A497409F08D920DBEA7E6CE21F617DFDBC0A2718ABB824C` |
+| `Update-FinOpsDurations.ps1` | `D07995811A9F3FF386868CB74CE7145CDC69B459815AF65C1434EDC519AF147A` |
+
+The wrapper, four literal `[0/4]` through `[3/4]` registrations, separate
+coverage check and five optional-environment skip names follow P85's reviewed
+changes. P85's coloured/plain synthetic-pytest controls are unchanged.
+Before that port, two safe AST checks failed on the single unsharded
+registration and missing wrapper parameters; afterward both passed. The old
+wrapper was deliberately not invoked with `-ListFiles` during RED, because
+it lacked a parameter block and would otherwise have executed the full suite.
+No full serial run or P85 timing data was used to manufacture that RED.
+
+#### Serial measurement, own weights and checks
+
+Before regenerating Example provenance, the existing snapshots were
+**1 failed / 4 passed in 19.30 s**: only the source-hash manifest was stale;
+all four exact rendered-grid comparisons passed. The existing
+`tools/capture.py` regenerated its 24 Example SVGs, four grids and manifest,
+and the snapshot/P80-guide selection passed **9 cases** (19.590 s process
+wall). The rendered artifacts stayed byte-identical; only source provenance
+changed. Historical live evidence was not relabelled.
+
+The same locked pipeline regenerated and checked architecture: **17 specs,
+19 PNGs**, all source/renderer/image hashes, references, labels and resource
+coverage valid. No PNG changed from the previously reviewed `a405f69` tree.
+The requested dependency junction was created only for rendering and removed
+in `finally`; the shared target remains intact.
+
+The full AUM suite ran **serially, exactly once**, from `cli\finops`, with
+the requested command:
+
+```powershell
+..\..\.venv-finops\Scripts\python.exe -m pytest tests -q -p no:cacheprovider `
+  --junitxml "$env:TEMP\p80-sharding-serial-full.xml"
+```
+
+The command above names the worktree interpreter; its actual invocation used
+the absolute `accel-p80\.venv-finops\Scripts\python.exe` path from the package
+directory. Its `claude_finops` import was asserted inside this worktree's
+`cli\finops\src`. Result: **928 passed, 0 failed, 0 errors, 0 skipped**, in
+**518.76 s pytest / 521.713 s process wall**. In particular, no failure from
+the previous integration's known-ID or FooterKey lists recurred in this run.
+The XML/log are `%TEMP%\p80-sharding-serial-full.xml` and
+`%TEMP%\p80-sharding-serial-full.log`; no rerun replaced this result.
+
+The byte-identical upstream `Update-FinOpsDurations.ps1 -JUnitXml <report>`
+generated **65 own file weights** from those 928 cases: **516.6 s** summed
+case time, rounded up per file to **561 whole seconds**. No P85-only filename
+or P85 timing was copied. `test-all-durations.json` replaces only its former
+130.4 s unsharded AUM entry with the following four planned values and the
+locally measured coverage-check weight, **14.4 s** (14.444 s measured).
+Every other historical weight and its hosted-run provenance is retained.
+
+| Registered AUM shard | Files | Planned seconds | Required maximum |
+|---|---:|---:|---:|
+| `0/4` | 16 | 141 | 300 |
+| `1/4` | 16 | 140 | 300 |
+| `2/4` | 16 | 140 | 300 |
+| `3/4` | 17 | 140 | 300 |
+
+`Test-FinOpsShards.ps1` passed: all **65** files are listed and assigned
+exactly once, pytest's own collection names the same files, no committed
+weight names a missing file, and both coloured and plain synthetic invocations
+run exactly their listed files (**31 synthetic cases in total**). No pytest
+part was skipped. The maximum plan is **141 s**, not an asserted concurrent
+gate duration. The 600 s timeout, shard count 12 of the outer runner, defaults,
+existing tests and all publication budgets remain unchanged.
+
+| Requested check | Result | Process wall seconds |
+|---|---|---:|
+| `tests\Test-FinOpsShards.ps1` | PASS; four complete plans at or below 300 s | 14.444 |
+| `tests\Test-RunnerIntegrity.ps1` | PASS; optional-environment skip identities and negative probes retained | 196.125 |
+| `tests\Test-TestAllSharding.ps1` | PASS; deterministic ownership and complete exact-source coverage | 2.233 |
+| `tests\Test-MutationShards.ps1` | PASS; complete mutation set without duplicate ownership | 9.592 |
+| `tests\Test-DocReferences.ps1` | PASS; 42 guides and all ten negative cases | 9.058 |
+| `scripts\Repair-ScriptEncoding.ps1 -Check` | PASS; 306 scripts safe for PowerShell 5.1 | 8.434 |
+| `node guide/check-architecture.mjs` | PASS after the port and timing-table updates | 0.623 |
+
+The measurement/coverage pipeline owned the shared lock from
+**06:05:18.981 to 06:15:13.445 IST**; the remaining six checks owned it from
+**06:20:43.353 to 06:24:30.475 IST**. Every check has a separate complete log
+and timing record in `%TEMP%\p80-sharding-measure-receipt.json` or
+`p80-sharding-checks-receipt.json`. The three copied helper hashes were checked
+again after validation and remained byte-identical.
+
+**Committed as `8cdba3f`**, a no-rebase merge with parents `a405f69` and
+`3b7c192`. It contains the reviewed combined publication fingerprint, the
+P85 `c9ae1c8` / `729a249` port, P80's measured weights, regenerated manifests
+and the complete validation record. Both required Copilot trailers are
+present. The branch is still `p80-aum-usability`; no push, merge to main,
+other-worktree edit or Azure call occurred. The scratch copy was removed,
+its logs/receipts retained under TEMP, and no dependency junction remains.
+This final commit-reference update is ledger-only; no executable code, test,
+weight, timeout or assertion changed after the passing checks.
 
 ### P71 closed-contract integration, 2026-09-30
 
