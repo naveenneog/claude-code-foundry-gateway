@@ -1095,6 +1095,12 @@ exact streaming cache-creation detail remains **U13**.
   refresh once; Advanced navigation also suppresses its programmatic selector
   echo. Same-tab actions still reload. Redaction assertions and publication
   guards are unchanged; hosted run 36670519226 is recorded in STATUS.
+- **The Cloud Shell launcher tests depended on Git Bash's /tmp mount (P85 follow-up).** The tests
+  converted paths with `cygpath -u`, which names a folder under the Windows temp folder `/tmp/...`.
+  One test starts Git Bash with `TMP` and `TEMP` set to a missing folder; the hosted runner's Git
+  Bash then could not resolve `/tmp`, and the launcher's path did not exist (hosted run
+  36668853983). The tests now use the drive form (`/c/...`) for every path. The launcher is
+  unchanged.
 - **The AUM deadline tests raced process teardown on hosted runners (P71 follow-up).** Two tests
   in `cli/finops/tests/test_azure_deadline.py` checked, with a zero-millisecond wait, that each
   descendant had exited right after the Azure CLI deadline. `TerminateJobObject` starts
