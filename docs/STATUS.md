@@ -2,6 +2,72 @@
 
 **Active packet (2026-09-30):** P81 USD budgets are the primary enforcer ([ROADMAP](ROADMAP.md)), on its own branch; it merges only with the owner's explicit approval. Each packet has its own section on its branch; the section lands here when the packet merges. P85 AUM's terminal UI manages people, units, teams and budgets end to end, with tests is merged with the owner's approval (`171b248`, [below](#p85-aums-terminal-ui-manages-people-units-teams-and-budgets-end-to-end-with-tests-2026-09-29)), and its follow-up, the Cloud Shell tests name paths without Git Bash's /tmp mount (`db11723`, [below](#p85-follow-up-the-cloud-shell-tests-name-paths-without-git-bashs-tmp-mount-2026-09-30)). P80 AUM shows every action it has, connects in one step, and its guide starts with installation is merged with the owner's approval (`3f77754`, [below](#p80-aum-shows-every-action-it-has-connects-in-one-step-and-its-guide-starts-with-installation-2026-09-28)). P71 AUM answers fast and says why it cannot is merged with the owner's approval (`01bb6c7`, [below](#p71-aum-answers-fast-and-says-why-it-cannot-2026-09-28)), with its follow-ups: the deadline tests prove termination without racing it (`dc0e311`, [below](#p71-follow-up-the-deadline-tests-prove-termination-without-racing-it-2026-09-30)), and a lookup starts one refresh (`b5c2120`, [below](#p71-follow-up-a-lookup-starts-one-refresh-2026-09-30)). P84 projection deployment checks everything before it writes and never switches into an outage is merged with the owner's approval (`3e4430b`, [below](#p84-projection-deployment-checks-everything-before-it-writes-and-never-switches-into-an-outage-2026-09-29)); switching entitlement to the projection waits for P86. P78 the test suite runs in parallel on GitHub-hosted runners is merged with the owner's approval (`2737232`, [below](#p78-the-test-suite-runs-in-parallel-on-github-hosted-runners-2026-09-28)); ADR-0039's proposed charter change is not enacted. P79 fixes from the owner's test on 2026-09-28 is merged (`6468235`, [below](#p79-fixes-from-the-owners-test-on-2026-09-28)), and its follow-up, the installer permutation check reads only its own record (`05dea1b`, [below](#p79-follow-up-the-installer-permutation-check-reads-only-its-own-record-2026-09-28)). P69 the company address in the flow is merged (`69db07a`, [below](#p69-the-company-address-in-the-flow-2026-09-28)); its proof of a request through a company address needs an owned, publicly delegated domain and is P74. P77 a 60-minute gate budget while the exclusive checks are sharded is merged (`e393487`, [below](#p77-a-60-minute-gate-budget-while-the-exclusive-checks-are-sharded-2026-09-28)). P75 the macOS/Linux installer prices its choices is merged (`5d1cd03`, [below](#p75-the-macoslinux-installer-prices-its-choices-2026-09-28)). P76 one plan, one order on both shells is merged (`d731023`, [below](#p76-one-plan-one-order-on-both-shells-2026-09-28)). P70 newly deployed models reach the tiers and the workstations is merged (`bb75aab`, [below](#p70-newly-deployed-models-reach-the-tiers-and-the-workstations-2026-09-28)). P72 permutation tests of the guided flow and the installer is merged (`cac1260`, [below](#p72-permutation-tests-of-the-guided-flow-and-the-installer-2026-09-28)). P68 the guided flow starts at once and gives the foundation to the installer is merged (`fc9c86c`, [below](#p68-the-guided-flow-starts-at-once-and-gives-the-foundation-to-the-installer-2026-09-27)). P67 developer workstation fixes from the owner's test are merged ([below](#p67-developer-workstation-fixes-from-the-owners-test-2026-09-27)). P66 guided flow is merged ([below](#p66-guided-flow-2026-09-27)); the owner's test on 2026-09-27 reopened its user experience as P68. Every packet started for the owner on 2026-09-25 and 2026-09-26 before P66 is merged ([ROADMAP](ROADMAP.md) lists what stays open). Merged on 2026-09-26: P62 dollar budgets in AUM ([below](#p62-dollar-budgets-in-aum-merged-2026-09-26)), P61 the Cosmos entitlement store on every v2 tier ([below](#p61-the-cosmos-entitlement-store-on-every-v2-tier-merged-2026-09-26)), P64 adding and removing developers from AUM by email ([below](#p64-add-and-remove-developers-from-aum-by-email-merged-2026-09-26)), P60 Claude Desktop sign-in chosen by the admin ([below](#p60-claude-desktop-sign-in-chosen-by-the-admin-merged-2026-09-26)), P65 fleet deployment with Intune, Jamf or Group Policy ([below](#p65-fleet-deployment-with-intune-jamf-or-group-policy-merged-2026-09-26)), P59 dollar budgets at the gateway ([below](#p59-dollar-budgets-at-the-gateway-merged-2026-09-26)) and P52 AUM ([below](#p52-aum-azure-usage-management-merged-2026-09-26)). P54, the enterprise network edge, merged on 2026-09-25 ([below](#p54-the-enterprise-network-2026-09-25)). P46 is complete: managers scoped to their units and teams (fork `c0c345a`), budget modes in the gateway (`3ee0bd3`), and the live manager-only sign-in (P53, 2026-09-25) ([TURNSTILE.md](TURNSTILE.md#managers), [BUSINESS-UNITS.md](BUSINESS-UNITS.md), [ADR-0016](adr/0016-delegated-management.md), [ADR-0019](adr/0019-budget-enforcement-modes.md)).
 
+## P91 installer checkpoint and resume, 2026-10-01
+
+**Builder work in progress on `p91-installer-checkpoint`, based on main `0fed315`; nothing is pushed,
+and the merge waits for the owner's approval.** The owner asked on 2026-10-01 for script
+checkpointing that works on Windows, Linux, macOS and Azure Cloud Shell. When P87 merges first, this
+section moves to `docs/status/P91.md` under P87's ADR-0042.
+
+- [x] PLAN: acceptance criteria A1-A10 below, one for each requirement R1-R10 of the lead's brief.
+- [x] CONTRACT: [ADR-0046](adr/0046-installer-checkpoint-and-resume.md) (proposed), U63-U74
+      ([UNKNOWNS](UNKNOWNS.md#p91-research-before-implementation)), RED checks in ADR-0046 "Tests".
+- [ ] RED, GREEN, REFACTOR, COUNCIL (five seats), GATE, LOG.
+
+Acceptance criteria, for both installers unless one is named:
+
+- A1 A completed step is skipped only when a live read shows its result; an absent result runs it
+  again; an unreadable one runs an idempotent step again or refuses. The read-backs of
+  `Install-ClaudeGateway.ps1:1401-1512` run before every deployment.
+- A2 A resume reuses the recorded non-secret answers and shows them in the summary; attended it asks
+  "Resume from <step>?"; `-Yes`/`--yes` resumes only on a full binding match;
+  `-Restart`/`--restart` sets the checkpoint aside.
+- A3 A different tenant, subscription, resource group, gateway name or prefix, installer version or
+  installer refuses and names the field.
+- A4 The deployment name is in the checkpoint before `az deployment group create`; a running
+  deployment is awaited for up to 3,600 s, a succeeded one supplies its outputs, a failed or
+  cancelled one is shown and replaced; no run starts a main.bicep deployment while another runs in
+  the resource group.
+- A5 Entra groups, the Desktop and resolver app ids and the Foundry role assignment have receipts
+  with their origin, and a resume reads them by id.
+- A6 One owner-only checkpoint per checkout in the platform directory of ADR-0046 decision 1
+  (`clouddrive` in Cloud Shell), written atomically, with a PID-and-start-time lock and stale-lock
+  takeover; without `clouddrive` the run warns and prints the resume command.
+- A7 The checkpoint holds no token, key, password, certificate or connection string (scan check).
+- A8 Both installers share the schema and refuse each other's checkpoint; the bash code passes
+  `bash -n` on bash 3.2 with no bash 4 or GNU-only construct.
+- A9 A resume prints the completed steps with UTC times and the step it resumes at; a refusal and
+  the resume command are one line each.
+- A10 SETUP, README, GUIDED-FLOW, ADR-0046, UNKNOWNS, CHANGELOG, this section and ARCHITECTURE (the
+  checkpoint is a new operator-side data store) record the behaviour.
+
+Lead decision requested before RED: the bash installer reads nothing back before a deployment
+(`install-claude-gateway.sh:559-575`). ADR-0046 decision 9 refuses a resumed deployment against an
+APIM that the run did not create, and leaves the same gap on a first run outside P91.
+
+Owner-attended Cloud Shell procedure. The lead runs it after the owner approves, in a throwaway
+resource group:
+
+1. Storage-backed Bash session: `echo "$AZUREPS_HOST_ENVIRONMENT" "$ACC_CLOUD"`, `ls -ld ~/clouddrive`,
+   `mount | grep clouddrive`, and probes of `chmod 600`, `mv -f` over a file, a `set -C` exclusive
+   create and `touch` in `~/clouddrive` (U64, U66).
+2. The branch cloned into `~/claude-code-foundry-gateway`; `./install-claude-gateway.sh` stopped
+   with Ctrl+C during the gateway deployment; `ls -l ~/clouddrive/.claude-gateway` (A4, A6).
+3. The tab left without input for more than 20 minutes and reopened; whether the checkout survived
+   (U61, U63, U73); a clone at the same commit when it did not; the rerun's resume lines; and
+   `az deployment group list -g <rg> --query "[].{n:name,s:properties.provisioningState}" -o table`
+   showing no second running `claude-gw-` deployment.
+4. Steps 2 and 3 again in Cloud Shell PowerShell with `./Install-ClaudeGateway.ps1`.
+5. An ephemeral session ("No storage account required"): the warning and the resume command,
+   then that command in a new ephemeral session (A6).
+6. Read-only stderr of `az deployment group show` for a missing name, `az group show` for a missing
+   group, `az ad group show --group` for an unused GUID, and `az rest --method get` on a missing role
+   assignment id (U70).
+7. The throwaway resource group and the groups whose receipts say `created` are deleted.
+
+Architecture: the checkpoint is a new operator-side data store, so `docs/ARCHITECTURE.md` and a
+diagram spec change in LOG; no Azure component, identity, network path or schedule changes.
+
 ## P71 follow-up: a lookup starts one refresh, 2026-09-30
 
 **Merged as `b5c2120` on 2026-09-30, as a follow-up to P71, which the owner approved.** Council
