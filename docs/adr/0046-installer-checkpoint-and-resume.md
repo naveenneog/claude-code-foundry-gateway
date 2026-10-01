@@ -1,7 +1,9 @@
 # ADR-0046: The installers keep a per-checkout checkpoint and resume after the last verified step
 
-- **Status:** Proposed. P91 contract, 2026-10-01. Nothing below is implemented at the commit that
-  adds this record; the lead reviews it before RED, and the owner approves the merge.
+- **Status:** Proposed. P91 contract, 2026-10-01, amended the same day after the lead's review (the
+  installer version is shown, not refused; templates are bound per step; `clouddrive` access; the
+  Graph refusal text; the Cloud Shell wait line). The lead reviews it before the council, and the
+  owner approves the merge.
 - **Date:** 2026-10-01
 - **Packet:** P91
 - **Deciders:** owner (merge), lead (review), P91 builder
@@ -110,7 +112,11 @@ Decisions 7 and 10.
   full control, inherited by its files. On POSIX a checkpoint or lock that is not owned by the
   current user (`test -O`) or is group- or other-writable (`find -perm -020`, `-perm -002`) is
   refused, except under `clouddrive`, where the mount sets the mode and the storage account's access
-  control applies (U66); there the installer prints the measured mode once.
+  control applies (U66); there the installer prints the measured mode once. Files in `clouddrive`
+  are readable by every principal with access to the Cloud Shell storage account: "users with
+  sufficient access rights in the subscription can access the storage accounts and file shares"
+  ([Persist files](https://learn.microsoft.com/azure/cloud-shell/persisting-shell-storage#securing-storage-access)).
+  The no-secrets rule (Decision 15) is what makes that acceptable.
 - **Atomic writes.** Each write goes to `install-<key>.json.tmp-<random>` in the same directory and
   replaces the checkpoint by rename: `[IO.File]::Replace` when the file exists and `[IO.File]::Move`
   when it does not (PowerShell 5.1 and 7), `mv -f` in bash. A reader sees the old file or the new
@@ -187,17 +193,38 @@ Decisions 7 and 10.
 
 | Field | Compared when | Source of the current value |
 |---|---|---|
-| `installer` | before sign-in | the running installer |
-| `installerFingerprint` | before sign-in | SHA-256 over the sorted list of (path, SHA-256 of content with CRLF read as LF) for the installer, its checkpoint library, `infra/main.bicep`, `infra/foundry-role.bicep` and `infra/policy.xml` |
+| `installer` | before sign-in | the running installer (Decision 13) |
 | `tenantId` | after sign-in | `az account show` |
 | `subscriptionId` | after sign-in | `-SubscriptionId`/`--subscription` when passed, else the recorded value is set and read back |
 | `resourceGroup` | when known | the parameter when passed, else the recorded value |
 | `apimName`, `namePrefix`, `reusedApim` | when known | `-ExistingApimName`/`-NamePrefix`/`--name-prefix` when passed, else the recorded values |
 
 A difference refuses on one line that names the field and both values, says that nothing was
-changed, and ends with the `-Restart` (`--restart`) command. `installerCommit` is shown and never
-compared: a checkout without git has none (`Get-ClaudeFlowReleaseInfo`,
-`scripts/flow/FlowContract.ps1:346-364`).
+changed, and ends with the `-Restart` (`--restart`) command.
+
+The installer version is recorded and shown, and never refused, attended or under `-Yes`: the common
+rerun follows a fix pulled after a failure. `installerFingerprint` is SHA-256 over the sorted list of
+(path, SHA-256 of the content with CRLF read as LF) for the installer and its checkpoint library;
+`installerCommit` comes from git when the checkout has it (`Get-ClaudeFlowReleaseInfo`,
+`scripts/flow/FlowContract.ps1:346-364`). When either differs, the summary prints one line,
+"checkpoint written by <installer> <commit or fingerprint>; running <installer> <commit or
+fingerprint>".
+
+Templates are bound per step instead. The `inputHash` of a step that deploys a template includes the
+same kind of hash over its files:
+
+- `gateway-deployment`: `infra/main.bicep` and every file it references, found by reading its
+  `module` declarations and `loadTextContent`, `loadJsonContent` and `loadFileAsBase64` calls,
+  recursively (today `infra/foundry-role.bicep`, `infra/main.bicep:506`, and `infra/policy.xml`,
+  `:427`);
+- `projection`: `infra/projection.bicep`, `infra/projection-network.bicep` and `infra/resolver.bicep`
+  (`scripts/Deploy-ClaudeProjection.ps1:110`, `:122`, `:155`).
+
+A template change therefore runs that step again through the read-backs, while every unchanged step
+is still verified live (Decision 7).
+
+Step ids are a stable contract: renaming or removing one needs a `schemaVersion` bump, and an unknown
+id is a corrupt checkpoint (Decision 2).
 
 ### 6. Answers and defaults
 
@@ -218,9 +245,9 @@ compared: a checkout without git has none (`Get-ClaudeFlowReleaseInfo`,
 - Attended (a console without `-Yes`): the summary question "Resume from <step>?" replaces "Create
   these resources?" (`Install-ClaudeGateway.ps1:1350`; `install-claude-gateway.sh:546`); Enter resumes,
   `n` stops with nothing changed and prints the `-Restart` command.
-- `-Yes` / `--yes` (`ASSUME_YES=1`): resumes without a question when every binding field matches; a
-  mismatch, a corrupt checkpoint, a held lock or another installer's checkpoint refuses. Nothing is
-  discarded without `-Restart`.
+- `-Yes` / `--yes` (`ASSUME_YES=1`): resumes without a question when every binding field matches,
+  whatever the installer version; a mismatch, a corrupt checkpoint, a held lock or another
+  installer's checkpoint refuses. Nothing is discarded without `-Restart`.
 - `-Restart` / `--restart`: renames the checkpoint to `install-<key>.discarded-<yyyyMMddTHHmmssZ>.json`
   and runs as a first run. A held lock refuses it.
 - Precedent: the guided flow resumes a matching `activeRun` without asking
@@ -299,8 +326,10 @@ outside P91.
 | read error | refuse; nothing is created |
 
 `CLAUDE_GATEWAY_DEPLOY_POLL_SECONDS` and `CLAUDE_GATEWAY_DEPLOY_WAIT_SECONDS` override the interval
-and the bound for tests. In Cloud Shell the session can end during the wait (U73); the checkpoint in
-`clouddrive` and the ARM deployment outlive it.
+and the bound for tests. Cloud Shell ends a session after 20 minutes without interactive activity
+(U63, U73), which a wait of up to 3,600 s exceeds. In Cloud Shell, before any wait that can last
+longer than 60 s (this wait and `az deployment group create` itself), the installer prints one line:
+that fact, that the checkpoint and the ARM deployment outlive the session, and the resume command.
 
 ### 11. Receipts
 
@@ -312,7 +341,9 @@ resume finds every object by id:
   pre-existing only when its `displayName` equals the requested name exactly; a prefix match counts
   as not found, and the step creates the exact group. A group this run created that Graph does not
   return by id is inconclusive, so the run refuses instead of creating a second group with the same
-  name (U74). `az ad group create` without `--force` returns an existing group only when Graph's
+  name (U74). The refusal is one line: a group created moments ago can take time to appear in
+  Microsoft Graph, a rerun later continues without creating a second group, and the resume command.
+  `az ad group create` without `--force` returns an existing group only when Graph's
   display-name and mail-nickname filter already sees it (`role/custom.py:1877-1888`, az 2.86.0).
 - Role assignment: after a successful deployment, `az role assignment list --assignee-object-id <APIM
   principal> --scope <Foundry id> --role "Cognitive Services User"`, called only with both values
@@ -336,8 +367,8 @@ receipts cover the other steps.
 ### 13. Resume across installers
 
 Both installers write the same schema. A checkpoint whose `installer` differs from the running one
-is refused, naming the installer that wrote it. Their steps, answers and fingerprints differ
-(Decisions 5, 8 and 9). `-Restart`/`--restart` of either installer sets it aside.
+is refused, naming the installer that wrote it, because their steps and answers differ (Decisions 8
+and 9). `-Restart`/`--restart` of either installer sets it aside.
 
 ### 14. Output
 
@@ -389,7 +420,8 @@ the installer reads and a fresh `CLAUDE_GATEWAY_STATE_DIR`.
 | S2 | identity error resumes with read-backs before a new deployment name | no deployment name is recorded; run 2 asks every question |
 | S3 | business-unit refusal resumes at business units | run 2 asks every question and redeploys |
 | S4 | running deployment is awaited, not created again; past the bound it refuses on one line; an unrecorded running `claude-gw-` deployment is awaited | run 2 creates a second deployment |
-| S5 | binding mismatch names the field: tenant, subscription, resource group, gateway, installer version, installer | there is no refusal |
+| S5 | binding mismatch names the field: tenant, subscription, resource group, gateway, installer; a different installer version resumes and prints "checkpoint written by ...; running ..." | there is no refusal |
+| Amendment 1 | a template change between runs reruns the deployment step with read-backs; an installer-only change resumes | run 2 starts over |
 | S6 | completed step missing live runs again: resource group, gateway, pre-existing group | nothing is recorded as completed |
 | S7 | live read error never skips: deployment read, group read by id, resource-group read | nothing is verified |
 | S8 | corrupt checkpoint refuses and keeps the file (truncated, schema version, unknown step, unsafe answer); `-Restart` sets it aside | there is no checkpoint reader |
@@ -413,8 +445,9 @@ A prepared, unpushed workflow runs the bash checks and the POSIX permission and 
 
 - A rerun after any of the five field cases resumes after the last step whose result Azure still
   shows, with the same answers, and never starts a second main.bicep deployment.
-- A rerun after `git pull` refuses on the installer version until `-Restart`; the restarted run then
-  relies on the live checks, the deployment guard and the read-backs.
+- A rerun after `git pull` resumes. When the pull changed a template, the step that deploys it runs
+  again through the read-backs; every other step is verified live and skipped. A fix to step logic
+  without a template change does not re-run a completed step whose result Azure still shows.
 - Each platform gets a state directory that a support case needs to know about; the run prints its
   path.
 - Bash keeps its missing read-back on a first run; P91 refuses only the resume case.
@@ -425,8 +458,11 @@ A prepared, unpushed workflow runs the bash checks and the POSIX permission and 
 
 ## How we'd know this was wrong
 
-- Operators run `-Restart` after most `git pull`s: the fingerprint binding is too strict and a
-  compatible-version rule would serve better.
+- A fix shipped in installer logic, not in a template, is not applied by a resume to a step that had
+  already completed, and a support case needs `-Restart` to get it: version-aware step inputs would
+  then serve better than template hashes alone.
+- A template that main.bicep reaches by a reference the module scan does not read changes without
+  the deployment step running again.
 - The attended Cloud Shell run shows `clouddrive` rename, exclusive create or `chmod` behaving
   otherwise than U66 assumes, or the detection variables absent (U64).
 - A support case shows a second main.bicep deployment, a duplicate Entra group or a skipped step

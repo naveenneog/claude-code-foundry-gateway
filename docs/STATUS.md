@@ -22,8 +22,9 @@ Acceptance criteria, for both installers unless one is named:
 - A2 A resume reuses the recorded non-secret answers and shows them in the summary; attended it asks
   "Resume from <step>?"; `-Yes`/`--yes` resumes only on a full binding match;
   `-Restart`/`--restart` sets the checkpoint aside.
-- A3 A different tenant, subscription, resource group, gateway name or prefix, installer version or
-  installer refuses and names the field.
+- A3 A different tenant, subscription, resource group, gateway name or prefix, or installer refuses
+  and names the field. A different installer version is shown on one line and resumes; a template
+  change reruns the step that deploys it through the read-backs.
 - A4 The deployment name is in the checkpoint before `az deployment group create`; a running
   deployment is awaited for up to 3,600 s, a succeeded one supplies its outputs, a failed or
   cancelled one is shown and replaced; no run starts a main.bicep deployment while another runs in
@@ -41,9 +42,9 @@ Acceptance criteria, for both installers unless one is named:
 - A10 SETUP, README, GUIDED-FLOW, ADR-0046, UNKNOWNS, CHANGELOG, this section and ARCHITECTURE (the
   checkpoint is a new operator-side data store) record the behaviour.
 
-Lead decision requested before RED: the bash installer reads nothing back before a deployment
-(`install-claude-gateway.sh:559-575`). ADR-0046 decision 9 refuses a resumed deployment against an
-APIM that the run did not create, and leaves the same gap on a first run outside P91.
+Lead decision, 2026-10-01: decision 9 is accepted. A bash resume redeploys only over an APIM the
+run created, and otherwise refuses and names `Install-ClaudeGateway.ps1 -ExistingApimName`; the
+first-run gap has its own ROADMAP row.
 
 Owner-attended Cloud Shell procedure. The lead runs it after the owner approves, in a throwaway
 resource group:
