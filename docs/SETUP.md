@@ -45,6 +45,10 @@ shows the fields used for the gateway lookup.
 
 ---
 
+### Option D — Azure CLI commands only
+
+The customer-deployment command guide is [Azure CLI commands for a customer gateway setup](AZ-COMMANDS.md). It mirrors the installer, setup and administration scripts in Cloud Shell bash, with one-line purpose statements, `az` commands, verification commands, expected results and source script references. Its current status is commands checked against Azure CLI help and the templates; not yet run end to end.
+
 ## 1. Prerequisites
 
 ### Azure resources you must already have

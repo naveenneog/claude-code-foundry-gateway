@@ -29,6 +29,11 @@ exact streaming cache-creation detail remains **U13**.
 
 ### Added
 
+- **P89 Azure CLI setup guide.** `docs/AZ-COMMANDS.md` mirrors the installer and
+  in-scope administration scripts with Cloud Shell bash commands, verification
+  commands, expected results and source references; `Test-AzCommandsGuide.ps1`
+  checks the documented `az` command paths and flags, named-value parity, Bicep
+  parameters and relative links.
 - **Final P85 follow-up integration.** P71's owned-process deadline probes and
   precise public-evidence section lookup are merged without production changes.
   The single full AUM run passes all 1,200 cases; refreshed file and whole-check
