@@ -515,6 +515,31 @@
           "sha256": "395f296ab8e5440a0984fa406d1f05ac6f426e29b996e47e1c83615eae2e6ea5"
         }
       ]
+    },
+    {
+      "id": "install-checkpoint",
+      "source": "docs/architecture/16-install-checkpoint.json",
+      "inputs": {
+        "Install-ClaudeGateway.ps1": "2696e922bab06afe12866dc175e25b151c0b9340a3280eef18ca34cd1f4ed856",
+        "docs/architecture/16-install-checkpoint.json": "fe8397de3362ee958fdde7af1cd6a1dc73d73fade2af7afa09291bb0790270ba",
+        "guide/architecture-layout.mjs": "f92e22236a7ed60e53ec20dcb89e5f957e3fe154ce7b6a35e24e79ffc225cd96",
+        "guide/architecture-model.mjs": "0e0eaae2845867a5b596b1d057ef5969c09775273fd109803d693ab370154ef6",
+        "guide/render-architecture.mjs": "4f04a72861e4285cbdfe5b1dc5a5677b2e5d65659b7154d3abfd8e69545ce21c",
+        "infra/main.bicep": "c449423ad43d86c9c15b56c19d18ece9d7681cd627efb7110b38d06b6b0ba82b",
+        "install-claude-gateway.sh": "c3d63b3c210273fcb692d7e24e3fef4d26fe98536f89e7456f86995aca88e80b",
+        "package-lock.json": "8fa9cdbcdda8de7cc8f1a8e395faf2bcd0b8a7eeff64f1ee672b6435164ef34d",
+        "scripts/ClaudeInstallCheckpoint.ps1": "d080f74838adc6298805d4543dba99d8b3f71a105e48d3d9595806a9a3d7f31b",
+        "scripts/ClaudeInstallResume.ps1": "583f859332559f459b87c83a4c10ab5a6560b50c2c83a3191ff890f42991f93d",
+        "scripts/flow/Foundation.ps1": "fb0d43ee4fbe00a140410bf3f9594b1a6d43bc4f226748f8231c6f23743c7ed4",
+        "scripts/install-checkpoint.sh": "21b6c4015287e5df8c32c3abbab27571b9da31a00da2f7af7b72d266e0ddf5a9",
+        "scripts/install-resume.sh": "d2a5b54b3c85afb9e31f2b4ee2def76267e3711fcf20d385d9f171b01bae5a8f"
+      },
+      "outputs": [
+        {
+          "path": "docs/images/architecture/install-checkpoint.png",
+          "sha256": "682341deddfe5f079104196d83de0aee980e3d68a17ad6f8f8a3360a88ada564"
+        }
+      ]
     }
   ]
 }

@@ -86,6 +86,49 @@ not just the top-level generator. The installer persists the same per-tier
 lists that later model changes use, and both workstation setup implementations
 remove aliases for families that are no longer selected.
 
+## Install checkpoint and resume (P91)
+
+![Install checkpoint: the guided flow and both installers keep one checkpoint per checkout in a per-user state directory; the first write follows the confirmed summary; a rerun skips a step only when a live Azure read shows its result.](images/architecture/install-checkpoint.png)
+
+Source: [16-install-checkpoint.json](architecture/16-install-checkpoint.json);
+[ADR-0046](adr/0046-installer-checkpoint-and-resume.md); [Setup](SETUP.md#resume-after-a-failure).
+
+The install checkpoint is an operator-side data store: one JSON file per checkout in
+a per-user state directory on the machine or Cloud Shell session that runs the
+installer (ADR-0046 decision 1). It holds the binding (tenant, subscription, resource
+group, gateway), the non-secret answers, each step's state and input hash, and
+receipts: deployment names, Entra group ids, the role assignment id, the Desktop
+client id and the projection resolver app id (decisions 4 and 11). It holds no
+tokens, keys or connection strings; both checkpoint suites check that (S10,
+decision 15). The decision record `onboarding/claude-gateway.json` still holds
+applied values only ([ADR-0030](adr/0030-guided-flow.md)).
+
+- **Components.** `scripts/ClaudeInstallCheckpoint.ps1` and
+  `scripts/install-checkpoint.sh` keep the store, the lock and the answers;
+  `scripts/ClaudeInstallResume.ps1` and `scripts/install-resume.sh` hold the live
+  reads and step actions (decision 17). Each installer resumes only its own
+  checkpoint (decision 13).
+- **Identities.** P91 adds no Azure resource, identity or role. The live reads run
+  under the operator's Azure CLI sign-in, as the installers' other calls do.
+- **Data flow.** The first write follows the confirmed summary
+  ([ADR-0032](adr/0032-guided-flow-starts-at-once.md)), and each step records its
+  state. The deployment name is recorded before `az deployment group create`
+  (decision 10). A rerun skips a step only when a live read returns present; absent
+  reruns the step, and inconclusive refuses unless the step is idempotent (decision 7).
+- **Failures.** A refusal is one line that names the field or reason and the resume
+  command (decision 14). A corrupt checkpoint is refused and kept (decision 2). A
+  lock held by a live process refuses, and a stale lock is renamed (decision 3). A
+  deployment that is still running is waited on for up to 3,600 s; the run then stops
+  with the resume command (decision 10).
+- **Cloud Shell.** The checkpoint is in `$HOME/clouddrive/.claude-gateway`. Files in
+  `clouddrive` are readable by principals with access to the Cloud Shell storage
+  account ([Persist files](https://learn.microsoft.com/azure/cloud-shell/persisting-shell-storage#securing-storage-access)).
+  Without `clouddrive`, the installer prints a warning and a resume command that
+  carries the answers; before a wait longer than 60 s it prints the 20-minute idle
+  limit ([Cloud Shell FAQ](https://learn.microsoft.com/azure/cloud-shell/faq-troubleshooting)).
+- **Deviation.** The POSIX owner and mode refusal of decision 2 is not implemented
+  (decision 17); it is an unassigned row in the [ROADMAP](ROADMAP.md).
+
 ## Request path
 
 ![Six request hops: sign in, admit, serve, meter, attribute and observe. Four budget layers and projection admission, absence and expiry outcomes are shown, followed by the components each optional profile adds.](images/architecture/request-path.png)
