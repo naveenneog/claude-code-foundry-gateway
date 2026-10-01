@@ -55,8 +55,9 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
   `macos-latest`; committed, not pushed and not run.
 - LOG docs, 2026-10-01: SETUP "Resume after a failure", README, GUIDED-FLOW, CHANGELOG, ARCHITECTURE
   with `docs/architecture/16-install-checkpoint.json` (rendered and inspected; no other image
-  changed), U75, a ROADMAP row for the POSIX owner and mode check (ADR-0046 Decision 17), and the
-  two suites' Test-All seconds in `tests/test-all-durations.json` (265.3 and 89.6).
+  changed), U75, and the two suites' Test-All seconds in `tests/test-all-durations.json` (265.3 and
+  89.6). The ROADMAP row it added for the POSIX owner and mode check left with council round 1,
+  which implemented the check.
 - Council round 1 on `eb8a96e` (code) and `56f2867` (docs), 2026-10-01: Architect PASS; Coder,
   Security, UX and QA BLOCK (QA's independent run caught 14 of 18 mutations). RED for the fixes:
   `Test-InstallerCheckpoint.ps1` 68 checks, 11 failed; `Test-BashInstallerCheckpoint.ps1` 38, 8
@@ -68,6 +69,26 @@ section moves to `docs/status/P91.md` under P87's ADR-0042.
   install run holds the lock ... Nothing was changed."); "R6 a state directory that cannot be created"
   (PowerShell: "Cannot find path"); "The term 'Assert-ClaudeInstallStorePath' is not recognized";
   "ckpt_perm_check_: command not found".
+- Council round 1 fixes, 2026-10-01: GREEN `e572ab3`, checks tightened in `078968a`, LOG after them.
+
+  | Seat | Verdict | Finding | Fix |
+  |---|---|---|---|
+  | Coder | BLOCK | A Graph read error read as "group absent" | lookup by `az ad group list --display-name`: one exact name (ignoring case) reused, none or only longer names created, a failed read or two groups with the name refuse |
+  | Security | BLOCK | The store trusted without a permission check | ADR-0046 decision 2 implemented: POSIX owner, mode and symbolic-link refusal outside `clouddrive`; Windows access rules for accounts other than the user, SYSTEM and Administrators refused; Decision 17 trimmed |
+  | UX | BLOCK | Cloud Shell line without `clouddrive`; held-lock refusal without a next step; Cloud Shell wording, jargon and refusal docs | the PowerShell line matches bash; the lock refusal says when a later run takes the lock over and ends with the resume command; docs reworded with descriptive ADR links |
+  | QA | BLOCK | C12-C14 (bash subscription, unrecorded deployment, corrupt checkpoints); C05 (`-ExistingApimName`) | checks added |
+  | Architect | PASS | step ids in two libraries; bash directory failure without a resume command | drift check; both installers print the resume command |
+  | Builder | | receipts not validated on read | receipt shapes checked on read, both installers |
+
+  Where the tests run: `Test-InstallerCheckpoint.ps1` 68 checks on Windows (Test-All);
+  `Test-BashInstallerCheckpoint.ps1` 38 on Windows Git Bash (Test-All) and 39 on `ubuntu-latest` and
+  `macos-latest` with the real-mode store check (`installer-unix.yml`); `Test-InstallerCheckpointStore.ps1`
+  (new) 9 on Windows (probe seam, drift, real access rules; Test-All) and 9 on Linux and macOS (probe
+  seam, drift, real modes; `installer-unix.yml`). Mutations at `078968a`, one per new check: 36 of 36
+  caught (13 PowerShell, 14 bash, 9 store), each at its suite's baseline count with its own check
+  among the failures; every bash mutant passes `bash -n` ([measurement](measurements/p91-mutations-council1.json)).
+  The three Linux and macOS checks were not mutation-run here. `docs/SETUP.md` lines 760, 787 and 804
+  predate P91 (`0874024`, `e001e30`) and are unchanged.
 
 Acceptance criteria, for both installers unless one is named:
 
